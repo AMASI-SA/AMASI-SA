@@ -12,6 +12,10 @@ from fastapi import Request, HTTPException
 JWT_ALGORITHM = "HS256"
 PRIVILEGED_MFA_ROLES = {"owner", "admin"}
 BCRYPT_MAX_SECRET_BYTES = 72
+ACCESS_TOKEN_TTL = timedelta(hours=12)
+REFRESH_TOKEN_TTL = timedelta(days=30)
+ACCESS_COOKIE_MAX_AGE_SECONDS = int(ACCESS_TOKEN_TTL.total_seconds())
+REFRESH_COOKIE_MAX_AGE_SECONDS = int(REFRESH_TOKEN_TTL.total_seconds())
 logger = logging.getLogger(__name__)
 
 from meta_reviewer_access import (
@@ -81,7 +85,7 @@ def create_access_token(user_id: str, email: str, *, mfa_verified: bool = False)
         "email": email,
         "mfa": bool(mfa_verified),
         "iat": now,
-        "exp": now + timedelta(minutes=60 * 12),
+        "exp": now + ACCESS_TOKEN_TTL,
         "type": "access",
     }
     return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
@@ -93,7 +97,7 @@ def create_refresh_token(user_id: str, *, mfa_verified: bool = False) -> str:
         "sub": user_id,
         "mfa": bool(mfa_verified),
         "iat": now,
-        "exp": now + timedelta(days=7),
+        "exp": now + REFRESH_TOKEN_TTL,
         "type": "refresh",
     }
     return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
@@ -106,7 +110,7 @@ def set_auth_cookies(response, access_token: str, refresh_token: str) -> None:
         httponly=True,
         secure=True,
         samesite="none",
-        max_age=60 * 60 * 12,
+        max_age=ACCESS_COOKIE_MAX_AGE_SECONDS,
         path="/",
     )
     response.set_cookie(
@@ -115,7 +119,7 @@ def set_auth_cookies(response, access_token: str, refresh_token: str) -> None:
         httponly=True,
         secure=True,
         samesite="none",
-        max_age=60 * 60 * 24 * 7,
+        max_age=REFRESH_COOKIE_MAX_AGE_SECONDS,
         path="/",
     )
 
@@ -143,6 +147,70 @@ def _extract_token(request: Request) -> Optional[str]:
     return token
 
 
+def _token_predates_password_change(payload: dict, user: dict) -> bool:
+    """Return whether a token must be revoked after a password change."""
+    changed_at = _as_utc_timestamp(user.get("password_updated_at"))
+    issued_at = payload.get("iat")
+    return changed_at is not None and (
+        not isinstance(issued_at, (int, float)) or float(issued_at) <= changed_at
+    )
+
+
+async def refresh_browser_session(request: Request, response, db) -> dict:
+    """Rotate a valid browser refresh cookie into a fresh 30-day session.
+
+    Refresh tokens are accepted only from the HttpOnly cookie, never from an
+    Authorization header. Account disabling, reviewer expiry, password-change
+    revocation, and MFA/OTP policy are re-checked on every rotation so a long
+    browser session never bypasses current security state.
+    """
+    token = request.cookies.get("refresh_token")
+    if not token:
+        clear_auth_cookies(response)
+        raise HTTPException(status_code=401, detail="Refresh token missing")
+
+    try:
+        payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
+        if payload.get("type") != "refresh":
+            raise HTTPException(status_code=401, detail="Invalid token type")
+
+        user_id = payload.get("sub")
+        user = await db.users.find_one({"id": user_id})
+        if not user or account_is_disabled(user):
+            raise HTTPException(status_code=401, detail="Account disabled")
+        if _token_predates_password_change(payload, user):
+            raise HTTPException(status_code=401, detail="Session revoked")
+
+        mfa_verified = payload.get("mfa") is True
+        role = str(user.get("role") or "").strip().lower()
+        if role in PRIVILEGED_MFA_ROLES and not mfa_verified:
+            raise HTTPException(status_code=401, detail="MFA verification required")
+
+        if not mfa_verified:
+            from email_otp_policy import requires_email_otp
+
+            if await requires_email_otp(db, user):
+                raise HTTPException(status_code=401, detail="Email OTP verification required")
+
+        access = create_access_token(
+            user["id"],
+            user["email"],
+            mfa_verified=mfa_verified,
+        )
+        refresh = create_refresh_token(user["id"], mfa_verified=mfa_verified)
+        set_auth_cookies(response, access, refresh)
+        return {"ok": True}
+    except jwt.ExpiredSignatureError:
+        clear_auth_cookies(response)
+        raise HTTPException(status_code=401, detail="Refresh token expired")
+    except jwt.InvalidTokenError:
+        clear_auth_cookies(response)
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+    except HTTPException:
+        clear_auth_cookies(response)
+        raise
+
+
 async def get_current_user_from_db(request: Request, db) -> dict:
     token = _extract_token(request)
     if not token:
@@ -160,11 +228,7 @@ async def get_current_user_from_db(request: Request, db) -> dict:
 
         # Password changes revoke every token minted before the change. Legacy
         # tokens without iat are rejected once password_updated_at exists.
-        changed_at = _as_utc_timestamp(user.get("password_updated_at"))
-        issued_at = payload.get("iat")
-        if changed_at is not None and (
-            not isinstance(issued_at, (int, float)) or float(issued_at) <= changed_at
-        ):
+        if _token_predates_password_change(payload, user):
             raise HTTPException(status_code=401, detail="Session revoked")
 
         if is_meta_reviewer(user) and not reviewer_api_path_allowed(request.url.path):
