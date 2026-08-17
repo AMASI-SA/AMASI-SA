@@ -1,4 +1,6 @@
 import axios from "axios";
+import fs from "fs";
+import path from "path";
 import api from "./api";
 
 jest.mock("axios", () => {
@@ -114,4 +116,12 @@ describe("browser session refresh interceptor", () => {
         await expect(Promise.all([first, second])).resolves.toHaveLength(2);
         expect(api.request).toHaveBeenCalledTimes(2);
     });
+});
+
+
+test("optional dashboard enrichments have a bounded latency budget", () => {
+    const source = fs.readFileSync(path.join(__dirname, "api.js"), "utf8");
+    expect(source).toContain("DASHBOARD_ENRICHMENT_TIMEOUT_MS = 2_500");
+    expect(source).toContain("withinDashboardEnrichmentDeadline(");
+    expect(source).toContain("dashboard_enrichment_timeout");
 });

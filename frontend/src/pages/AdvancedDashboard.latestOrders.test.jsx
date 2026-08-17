@@ -206,3 +206,9 @@ test("advanced ads card reads original hourly platform series", () => {
     expect(source).toContain("row.hour");
     expect(source).toContain('connectNulls={false}');
 });
+
+
+test("transient dashboard load failures preserve the last verified snapshot", () => {
+    expect(source).toContain("Never erase");
+    expect(source).not.toContain("if (!background && requestSequence === requestSequenceRef.current) setData(null)");
+});
