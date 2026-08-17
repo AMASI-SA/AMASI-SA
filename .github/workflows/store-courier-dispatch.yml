@@ -48,8 +48,12 @@ jobs:
           fastapi==0.110.1
           pydantic==2.13.4
           pymongo==4.5.0
+          httpx
           openpyxl
           pytest
+          pytest-asyncio
+          python-dateutil
+          tzdata
       - name: Compile store courier modules
         working-directory: backend
         run: >-
@@ -60,10 +64,20 @@ jobs:
           tests/test_store_courier_dispatch.py
       - name: Run store courier contract tests
         working-directory: backend
-        run: >-
-          python -m pytest
-          tests/test_store_courier_dispatch.py
-          -q --tb=short
+        shell: bash
+        run: |
+          set +e
+          python -m pytest tests/test_store_courier_dispatch.py -q --tb=short > /tmp/store-courier-pytest.log 2>&1
+          status=$?
+          cat /tmp/store-courier-pytest.log
+          exit "$status"
+      - name: Upload store courier pytest log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: store-courier-pytest-log
+          path: /tmp/store-courier-pytest.log
+          if-no-files-found: ignore
 
   frontend-test-and-build:
     runs-on: ubuntu-latest
@@ -82,12 +96,20 @@ jobs:
       - name: Run fulfillment permission and routing tests
         env:
           CI: "true"
-        run: >-
-          yarn test
-          --watchAll=false
-          --runInBand
-          --runTestsByPath
-          src/pages/FulfillmentV2.test.jsx
+        shell: bash
+        run: |
+          set +e
+          yarn test --watchAll=false --runInBand --runTestsByPath src/pages/FulfillmentV2.test.jsx > /tmp/store-courier-jest.log 2>&1
+          status=$?
+          cat /tmp/store-courier-jest.log
+          exit "$status"
+      - name: Upload store courier Jest log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: store-courier-jest-log
+          path: /tmp/store-courier-jest.log
+          if-no-files-found: ignore
       - name: Build frontend
         env:
           CI: "false"
