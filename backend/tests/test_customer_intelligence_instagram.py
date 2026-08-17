@@ -9,7 +9,6 @@ from datetime import datetime, timezone
 
 import pytest
 from fastapi import FastAPI
-from fastapi.routing import APIRoute
 from httpx import ASGITransport, AsyncClient
 
 from customer_intelligence.channel_gateway import (
@@ -68,6 +67,29 @@ class SpyGateway:
             customer_id="cust-instagram-1",
             conversation_id="conv-instagram-1",
             message_id="msg-instagram-1",
+        )
+
+
+class EventIdDeduplicatingGateway:
+    """Small router-boundary stand-in for the gateway's provider Event ID key."""
+
+    def __init__(self):
+        self.event_ids = set()
+        self.created_event_ids = []
+
+    async def ingest_inbound(self, *, context, message):
+        del context
+        event_id = message.external_message_id.get_secret_value()
+        duplicate = event_id in self.event_ids
+        if not duplicate:
+            self.event_ids.add(event_id)
+            self.created_event_ids.append(event_id)
+        return InboundIngestResult(
+            duplicate=duplicate,
+            provider="instagram",
+            customer_id="cust-instagram-1",
+            conversation_id="conv-instagram-1",
+            message_id=f"stored:{event_id}",
         )
 
 
@@ -270,6 +292,10 @@ async def test_instagram_webhook_routes_verify_and_ingest_without_send_operation
             content=body,
             headers={"x-hub-signature-256": _signature(body)},
         )
+        send = await client.post(
+            "/api/customer-intelligence/v1/channels/instagram/send",
+            json={"text": "must never leave Mezan"},
+        )
 
     assert challenge.status_code == 200
     assert challenge.text == "challenge-instagram-123"
@@ -289,22 +315,49 @@ async def test_instagram_webhook_routes_verify_and_ingest_without_send_operation
         "commerce_mutation_allowed": False,
     }
     assert len(gateway.calls) == 2
+    assert send.status_code in {404, 405}
 
-    routes = [
-        route
-        for route in app.routes
-        if isinstance(route, APIRoute) and "instagram/webhook" in route.path
+
+@pytest.mark.asyncio
+async def test_retried_instagram_message_and_comment_event_ids_are_not_created_twice():
+    db = FakeDB(_channel())
+    gateway = EventIdDeduplicatingGateway()
+    app = FastAPI()
+    app.include_router(
+        make_instagram_inbound_router(
+            db,
+            adapter=_adapter(db),
+            gateway=gateway,
+        ),
+        prefix="/api",
+    )
+    body = _body()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        first = await client.post(
+            "/api/customer-intelligence/v1/channels/instagram/webhook",
+            content=body,
+            headers={"x-hub-signature-256": _signature(body)},
+        )
+        retry = await client.post(
+            "/api/customer-intelligence/v1/channels/instagram/webhook",
+            content=body,
+            headers={"x-hub-signature-256": _signature(body)},
+        )
+
+    assert first.status_code == 200
+    assert first.json()["events_created"] == 2
+    assert first.json()["duplicates"] == 0
+    assert retry.status_code == 200
+    assert retry.json()["events_created"] == 0
+    assert retry.json()["duplicates"] == 2
+    assert gateway.created_event_ids == [
+        "ig_mid_message_1",
+        "comment:ig_comment_1",
     ]
-    assert {(route.path, frozenset(route.methods)) for route in routes} == {
-        (
-            "/api/customer-intelligence/v1/channels/instagram/webhook",
-            frozenset({"GET"}),
-        ),
-        (
-            "/api/customer-intelligence/v1/channels/instagram/webhook",
-            frozenset({"POST"}),
-        ),
-    }
 
 
 @pytest.mark.asyncio
