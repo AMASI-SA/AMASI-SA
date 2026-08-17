@@ -4,6 +4,7 @@ import IntegrationCardV2 from "./IntegrationCardV2";
 
 jest.mock("../../services/metaIntegrationsV2", () => ({
     getMetaAccountSelection: jest.fn(() => new Promise(() => {})),
+    getMetaManagementReadiness: jest.fn(() => new Promise(() => {})),
     saveMetaAccountSelection: jest.fn(),
     startMetaReportingSync: jest.fn(),
 }));
@@ -42,6 +43,8 @@ test("renders the Meta account selection and reporting control inside Integratio
     expect(html).toContain('data-testid="meta-reporting-control-host"');
     expect(html).toContain('data-testid="meta-reporting-control"');
     expect(html).toContain("حسابات وتقارير Meta المباشرة");
+    expect(html).toContain('data-testid="meta-management-readiness"');
+    expect(html).toContain("جاهزية إدارة حملات Meta");
 });
 
 test("does not render the Meta control for Snapchat", () => {

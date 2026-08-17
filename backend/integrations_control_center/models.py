@@ -17,6 +17,7 @@ COLLECTION_NAMES = (
     "mezan_integration_sync_runs_v2",
     "mezan_integration_errors_v2",
     "mezan_campaign_product_links_v2",
+    "mezan_meta_management_proposals_v1",
 )
 
 
@@ -100,6 +101,7 @@ async def ensure_integrations_control_center_indexes(db: Any) -> None:
     # Keep the governed Snapchat write journal durable before either the
     # scheduler or a user action can append its first event.
     from .snapchat_campaign_management import ensure_snapchat_management_indexes
+    from .meta_campaign_management import ensure_meta_management_indexes
     from .snapchat_campaign_preview_async import ensure_snapchat_preview_job_indexes
     from .snapchat_decision_ledger import ensure_ad_decision_indexes
     from .campaign_product_associations import (
@@ -107,6 +109,7 @@ async def ensure_integrations_control_center_indexes(db: Any) -> None:
     )
 
     await ensure_snapchat_management_indexes(db)
+    await ensure_meta_management_indexes(db)
     await ensure_snapchat_preview_job_indexes(db)
     await ensure_ad_decision_indexes(db)
     await ensure_campaign_product_association_indexes(db)

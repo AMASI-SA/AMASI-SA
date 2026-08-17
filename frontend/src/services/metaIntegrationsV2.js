@@ -85,6 +85,118 @@ export async function getMetaAccountSelection() {
     return normalizeMetaAccountSelection(response.data);
 }
 
+export function normalizeMetaManagementReadiness(payload = {}) {
+    assertReadOnlyEnvelope(payload, "unsafe_meta_management_readiness_response");
+    const capabilities = payload.capabilities && typeof payload.capabilities === "object"
+        ? Object.fromEntries(Object.entries(payload.capabilities).map(([key, value]) => [key, value === true]))
+        : {};
+    const accounts = Array.isArray(payload.accounts) ? payload.accounts.map((account) => ({
+        account_id: String(account?.account_id || "").trim(),
+        display_name: account?.display_name || null,
+        currency: account?.currency || null,
+        timezone: account?.timezone || null,
+        account_status: account?.account_status ?? null,
+        disable_reason: account?.disable_reason ?? null,
+        readable: account?.readable === true,
+        role_verified: account?.role_verified === true,
+        tasks: Array.isArray(account?.tasks) ? account.tasks.map(String) : [],
+        write_task_present: account?.write_task_present === true,
+        ready: account?.ready === true,
+        errors: Array.isArray(account?.errors) ? account.errors.map(String) : [],
+    })).filter((account) => account.account_id) : [];
+    return {
+        provider: "meta_ads",
+        checked_at: payload.checked_at || null,
+        token_valid: payload.token_valid === true,
+        scopes: Array.isArray(payload.scopes) ? payload.scopes.map(String) : [],
+        missing_scopes: Array.isArray(payload.missing_scopes) ? payload.missing_scopes.map(String) : [],
+        accounts,
+        capabilities,
+        write_ready: payload.write_ready === true,
+        read_only_check: payload.read_only_check === true,
+        source_only: true,
+        provider_write_reached: false,
+        campaign_write_reached: false,
+        accounting_write_reached: false,
+        qoyod_write_reached: false,
+    };
+}
+
+export async function getMetaManagementReadiness() {
+    const response = await api.get("/integrations-v2/meta_ads/management-readiness");
+    return normalizeMetaManagementReadiness(response.data);
+}
+
+function normalizeMetaEntity(row = {}) {
+    const safe = row && typeof row === "object" ? row : {};
+    return {
+        id: String(safe.id || "").trim(),
+        name: safe.name || null,
+        campaign_id: safe.campaign_id ? String(safe.campaign_id) : null,
+        adset_id: safe.adset_id ? String(safe.adset_id) : null,
+        status: safe.status || null,
+        effective_status: safe.effective_status || null,
+        objective: safe.objective || null,
+        buying_type: safe.buying_type || null,
+        daily_budget: safe.daily_budget ?? null,
+        lifetime_budget: safe.lifetime_budget ?? null,
+        budget_remaining: safe.budget_remaining ?? null,
+        bid_amount: safe.bid_amount ?? null,
+        bid_strategy: safe.bid_strategy || null,
+        billing_event: safe.billing_event || null,
+        optimization_goal: safe.optimization_goal || null,
+        start_time: safe.start_time || null,
+        stop_time: safe.stop_time || safe.end_time || null,
+        creative: safe.creative && typeof safe.creative === "object"
+            ? { id: safe.creative.id || null, name: safe.creative.name || null }
+            : null,
+    };
+}
+
+export async function getMetaManagementHierarchy(accountId) {
+    const normalized = String(accountId || "").trim();
+    if (!normalized) throw new Error("meta_account_id_required");
+    const response = await api.get("/integrations-v2/meta_ads/management-hierarchy", {
+        params: { account_id: normalized },
+    });
+    assertReadOnlyEnvelope(response.data, "unsafe_meta_management_hierarchy_response");
+    return {
+        account_id: String(response.data?.account_id || normalized),
+        campaigns: Array.isArray(response.data?.campaigns)
+            ? response.data.campaigns.map(normalizeMetaEntity).filter((row) => row.id)
+            : [],
+        adsets: Array.isArray(response.data?.adsets)
+            ? response.data.adsets.map(normalizeMetaEntity).filter((row) => row.id)
+            : [],
+        ads: Array.isArray(response.data?.ads)
+            ? response.data.ads.map(normalizeMetaEntity).filter((row) => row.id)
+            : [],
+        counts: response.data?.counts || {},
+        fetched_at: response.data?.fetched_at || null,
+    };
+}
+
+export async function previewMetaManagementMutation(input) {
+    const response = await api.post(
+        "/integrations-v2/meta_ads/management-proposals",
+        input,
+    );
+    const safe = response.data && typeof response.data === "object" ? response.data : {};
+    if (safe.provider_write_reached === true || safe.status !== "previewed") {
+        throw new Error("unsafe_meta_management_preview_response");
+    }
+    return safe;
+}
+
+export async function approveAndExecuteMetaManagementProposal(proposalId) {
+    const normalized = String(proposalId || "").trim();
+    if (!normalized) throw new Error("meta_proposal_id_required");
+    const response = await api.post(
+        `/integrations-v2/meta_ads/management-proposals/${encodeURIComponent(normalized)}/approve-and-execute`,
+    );
+    return response.data && typeof response.data === "object" ? response.data : {};
+}
+
 export async function saveMetaAccountSelection(accountIds) {
     const normalized = [...new Set(
         (Array.isArray(accountIds) ? accountIds : [])

@@ -31,6 +31,8 @@ from .meta_catalog_native import install_meta_native_catalog
 from .meta_connections import attach_meta_connection_routes
 from .meta_dashboard_summary_routes import attach_meta_dashboard_summary_routes
 from .meta_native_reporting_routes import attach_meta_native_reporting_routes
+from .meta_management_readiness import attach_meta_management_readiness_routes
+from .meta_campaign_management import attach_meta_campaign_management_routes
 from .snapchat_account_delivery_refresh import (
     install_snapchat_account_delivery_refresh,
     install_snapchat_effective_delivery_report,
@@ -184,6 +186,12 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
     attach_meta_connection_routes(router, db, current_user, _require_meta_integration_access)
     attach_meta_account_selection_routes(router, db, current_user, _require_meta_integration_access)
     attach_meta_native_reporting_routes(router, db, current_user, _require_meta_integration_access)
+    attach_meta_management_readiness_routes(
+        router, db, current_user, _require_meta_integration_access
+    )
+    attach_meta_campaign_management_routes(
+        router, db, current_user, _require_owner
+    )
     attach_meta_dashboard_summary_routes(router, db, current_user, _require_meta_integration_access)
     attach_snapchat_connection_routes(router, db, current_user, _require_owner)
     attach_snapchat_native_data_routes(router, db, current_user, _require_owner)
