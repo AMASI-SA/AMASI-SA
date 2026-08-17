@@ -94,15 +94,25 @@ export function buildMissingMezanCostHref(productCost, filters = {}) {
     const missing = Array.isArray(productCost?.missing_products)
         ? productCost.missing_products
         : [];
+    const productIds = [...new Set(missing
+        .filter((product) => product?.catalog_product_found !== false)
+        .map((product) => product?.salla_product_id || product?.mezan_product_id)
+        .map((value) => String(value || "").trim())
+        .filter(Boolean))];
+    if (productIds.length) {
+        // Dashboard V2 owns the filtered sold cohort. Products V2 keeps this
+        // snapshot intact, then revalidates only current Mezan/Salla costs.
+        params.set("product_ids", productIds.join(","));
+    }
     if (missing.length === 1 && missing[0]?.catalog_product_found !== false) {
         const directHref = buildMezanProductCostHref(
             { ...missing[0], cost_status: "salla_fallback" },
             filters,
         );
-        return directHref;
+        const [path, search = ""] = directHref.split("?");
+        const directParams = new URLSearchParams(search);
+        if (productIds.length) directParams.set("product_ids", productIds.join(","));
+        return `${path}?${directParams.toString()}`;
     }
-    // The backend is the source of truth for the sold/missing-Mezan cohort.
-    // Never copy dashboard product IDs into the URL: that can freeze a stale
-    // or narrower "missing everywhere" subset and silently change the filter.
     return `/products-v2?${params.toString()}`;
 }

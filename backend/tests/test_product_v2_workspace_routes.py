@@ -6,6 +6,7 @@ from product_v2_workspace_routes import (
     make_product_v2_workspace_router,
     _mongo_id_values,
     _parse_product_ids,
+    _requested_missing_mezan_cost_products,
     _restrict_missing_rows,
     _sku_number,
     _sold_missing_mezan_cost_products,
@@ -143,6 +144,45 @@ def test_sold_salla_fallback_product_is_returned_as_missing_mezan(monkeypatch):
     assert result["p-3"]["uses_salla_fallback"] is False
     assert result["p-3"]["missing_everywhere"] is True
     assert result["p-3"]["calculation_cost_available"] is False
+
+
+def test_dashboard_snapshot_cohort_keeps_salla_fallback_and_drops_current_mezan_cost():
+    db = _Db({
+        PRODUCTS: [
+            {
+                "id": "m-fallback",
+                "mezan_product_id": "m-fallback",
+                "salla_product_id": "p-fallback",
+                "name": "تكلفة سلة فقط",
+                "variants": [],
+                "raw_salla_details": {"cost_price": 31.5},
+            },
+            {
+                "id": "m-mezan",
+                "mezan_product_id": "m-mezan",
+                "salla_product_id": "p-mezan",
+                "name": "اكتملت تكلفة ميزان",
+                "cost_price_from_salla": 40,
+                "variants": [],
+            },
+        ],
+        COST_PROFILES: [
+            {"salla_product_id": "p-mezan", "base_cost": 18},
+        ],
+    })
+
+    result = asyncio.run(_requested_missing_mezan_cost_products(
+        db,
+        "owner-1",
+        ["p-fallback", "p-mezan"],
+    ))
+
+    assert list(result) == ["p-fallback"]
+    assert result["p-fallback"]["uses_salla_fallback"] is True
+    assert result["p-fallback"]["missing_everywhere"] is False
+    assert result["p-fallback"]["calculation_cost_available"] is True
+    assert result["p-fallback"]["fallback_sources"] == ["salla_product_fallback"]
+    assert result["p-fallback"]["cohort_source"] == "dashboard_snapshot_product_ids"
 
 
 def test_sold_missing_cohort_resolves_historical_line_from_current_full_snapshot(monkeypatch):

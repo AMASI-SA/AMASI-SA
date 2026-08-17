@@ -21,6 +21,7 @@ from order_option_cost_snapshot_routes import (
     classify_base_unit_cost,
 )
 from product_catalog_cost_resolution import (
+    enrich_current_salla_cost,
     index_current_catalog_products,
     resolve_current_catalog_line_product,
 )
@@ -284,6 +285,86 @@ async def _sold_missing_mezan_cost_products(
     }
 
 
+async def _requested_missing_mezan_cost_products(
+    db: Any,
+    user_id: str,
+    requested_ids: list[str],
+) -> dict[str, dict[str, Any]]:
+    """Revalidate a Dashboard V2 sold cohort against the current catalogue.
+
+    ``product_ids`` is a snapshot of the exact sold/missing-Mezan cohort that
+    Dashboard V2 already calculated with its order filters.  Re-reading orders
+    here would create a second, potentially different cohort.  We therefore
+    preserve that snapshot and only revalidate the current Mezan/Salla cost
+    axes before returning products.
+    """
+    if not requested_ids:
+        return {}
+
+    identity_values = _mongo_id_values(requested_ids)
+    products = await db[PRODUCTS].find(
+        {
+            "user_id": user_id,
+            "archived": {"$ne": True},
+            "$or": [
+                {"salla_product_id": {"$in": identity_values}},
+                {"mezan_product_id": {"$in": requested_ids}},
+                {"id": {"$in": requested_ids}},
+            ],
+        },
+        {
+            "_id": 0,
+            "id": 1,
+            "mezan_product_id": 1,
+            "salla_product_id": 1,
+            "name": 1,
+            "sku": 1,
+            "cost_price_from_salla": 1,
+            "cost_price": 1,
+            "cost": 1,
+            "variants": 1,
+            "raw_salla_details": 1,
+            "raw_salla": 1,
+        },
+    ).to_list(length=min(500, max(1, len(requested_ids))))
+
+    product_ids = [
+        str(product.get("salla_product_id") or "").strip()
+        for product in products
+        if product.get("salla_product_id") not in (None, "")
+    ]
+    profiles = await db[COST_PROFILES].find(
+        {"user_id": user_id, "salla_product_id": {"$in": product_ids}},
+        {"_id": 0},
+    ).to_list(length=max(1, len(product_ids)))
+    profile_map = {str(row.get("salla_product_id") or ""): row for row in profiles}
+
+    missing: dict[str, dict[str, Any]] = {}
+    for raw_product in products:
+        product = enrich_current_salla_cost(raw_product)
+        salla_id = str(product.get("salla_product_id") or "").strip()
+        if not salla_id:
+            continue
+        status = classify_base_unit_cost({}, profile_map.get(salla_id), product)
+        if not status["mezan_cost_missing"]:
+            continue
+        missing[salla_id] = {
+            "salla_product_id": salla_id,
+            "mezan_product_id": str(
+                product.get("mezan_product_id") or product.get("id") or ""
+            ),
+            "name": product.get("name") or "منتج بدون اسم",
+            "uses_salla_fallback": bool(status["uses_salla_fallback"]),
+            "missing_everywhere": not bool(status["calculation_cost_available"]),
+            "calculation_cost_available": bool(status["calculation_cost_available"]),
+            "fallback_sources": [status["source"]]
+            if status["uses_salla_fallback"] else [],
+            "sold_lines": None,
+            "cohort_source": "dashboard_snapshot_product_ids",
+        }
+    return missing
+
+
 class SkuApplyRequest(BaseModel):
     prefix: str = Field(default=DEFAULT_PREFIX, min_length=1, max_length=12, pattern=r"^[A-Za-z]+$")
     width: int = Field(default=DEFAULT_WIDTH, ge=3, le=10)
@@ -327,6 +408,7 @@ def make_product_v2_workspace_router(db: Any, current_user: Callable[..., Any]) 
         effective_from = from_date
         effective_to = to_date
         requested_product_ids = _parse_product_ids(product_ids)
+        cohort_source = "workspace_orders"
         if missing_mezan_cost and sold_only:
             today = datetime.now(timezone.utc).astimezone(ZoneInfo("Asia/Riyadh")).date()
             effective_from = effective_from or today.replace(day=1).isoformat()
@@ -337,18 +419,22 @@ def make_product_v2_workspace_router(db: Any, current_user: Callable[..., Any]) 
             shipping_company_list = [
                 part.strip() for part in (shipping_companies or "").split(",") if part.strip()
             ]
-            missing_cost_rows = await _sold_missing_mezan_cost_products(
-                db,
-                user_id,
-                from_date=effective_from,
-                to_date=effective_to,
-                payment_methods=payment_method_list,
-                shipping_companies=shipping_company_list,
-            )
-            missing_cost_rows = _restrict_missing_rows(
-                missing_cost_rows,
-                requested_product_ids,
-            )
+            if requested_product_ids:
+                cohort_source = "dashboard_snapshot_product_ids"
+                missing_cost_rows = await _requested_missing_mezan_cost_products(
+                    db,
+                    user_id,
+                    requested_product_ids,
+                )
+            else:
+                missing_cost_rows = await _sold_missing_mezan_cost_products(
+                    db,
+                    user_id,
+                    from_date=effective_from,
+                    to_date=effective_to,
+                    payment_methods=payment_method_list,
+                    shipping_companies=shipping_company_list,
+                )
             query["salla_product_id"] = {
                 "$in": _mongo_id_values(list(missing_cost_rows))
             }
@@ -417,6 +503,7 @@ def make_product_v2_workspace_router(db: Any, current_user: Callable[..., Any]) 
                 "shipping_companies": shipping_companies,
                 "matched_sold_products": len(missing_cost_rows),
                 "requested_product_ids_count": len(requested_product_ids),
+                "cohort_source": cohort_source,
                 "cost_semantics": {
                     "version": COST_SEMANTICS_VERSION,
                     "missing_mezan_cost": "explicit_mezan_cost_only",
