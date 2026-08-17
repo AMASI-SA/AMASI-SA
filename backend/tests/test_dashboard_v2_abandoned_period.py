@@ -1,7 +1,4 @@
-from backend.dashboard_v2_routes import (
-    latest_active_abandoned_carts,
-    select_abandoned_carts_for_period,
-)
+from backend.dashboard_v2_routes import select_abandoned_carts_for_period
 
 
 def test_select_abandoned_carts_for_period_returns_active_rows_and_counts():
@@ -77,49 +74,6 @@ def test_select_abandoned_carts_for_period_uses_riyadh_business_day():
     assert [row["cart_id"] for row in active] == ["after-midnight-riyadh"]
     assert abandoned_count == 1
     assert recovered_count == 0
-
-
-def test_latest_active_abandoned_carts_keeps_dashboard_rail_populated():
-    rows = [
-        {
-            "cart_id": "active-old",
-            "purchased": False,
-            "cart_updated_at": "2026-08-14T10:00:00+00:00",
-        },
-        {
-            "cart_id": "recovered-new",
-            "purchased": True,
-            "cart_updated_at": "2026-08-16T11:00:00+00:00",
-        },
-        {
-            "cart_id": "active-new",
-            "purchased": False,
-            "cart_updated_at": "2026-08-15T10:00:00+00:00",
-        },
-    ]
-
-    latest = latest_active_abandoned_carts(rows, limit=5)
-
-    assert [row["cart_id"] for row in latest] == ["active-new", "active-old"]
-
-
-def test_latest_active_abandoned_carts_orders_official_salla_dates_chronologically():
-    rows = [
-        {
-            "cart_id": "new-tuesday",
-            "purchased": False,
-            "cart_updated_at": "Tue Mar 25 2025 11:59:37 GMT+0300",
-        },
-        {
-            "cart_id": "old-wednesday",
-            "purchased": False,
-            "cart_updated_at": "Wed Mar 19 2025 11:59:37 GMT+0300",
-        },
-    ]
-
-    latest = latest_active_abandoned_carts(rows, limit=5)
-
-    assert [row["cart_id"] for row in latest] == ["new-tuesday", "old-wednesday"]
 
 
 def test_period_selection_falls_back_to_live_receipt_time_when_provider_time_missing():

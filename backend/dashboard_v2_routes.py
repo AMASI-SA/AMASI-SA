@@ -10,6 +10,7 @@ payment fee formulae stay inherited from the legacy dashboard response.
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable
@@ -46,7 +47,12 @@ from salla_marketing_attribution import (
     SALLA_RAW_ATTRIBUTION_PROJECTION,
     attach_projected_salla_attribution,
 )
-from salla_integration.abandoned_carts import parse_salla_datetime
+from salla_integration.abandoned_carts import (
+    AbandonedCartScopeError,
+    parse_salla_datetime,
+    reconcile_recent_abandoned_carts,
+)
+from salla_integration.service import SallaError, call_salla
 
 
 SNAP_FACTS = "mezan_snapchat_performance_daily_v2"
@@ -58,6 +64,7 @@ PROVIDER_IDS = {
     "meta": META_PROVIDER_ID,
     "tiktok": TIKTOK_PROVIDER_ID,
 }
+log = logging.getLogger("mezan.dashboard_v2")
 
 PRODUCT_COST_CATALOG_PROJECTION = {
     "_id": 0,
@@ -180,19 +187,6 @@ def select_abandoned_carts_for_period(
         reverse=True,
     )
     return active_rows, len(abandoned_rows), len(recovered_rows)
-
-
-def latest_active_abandoned_carts(
-    rows: list[dict[str, Any]],
-    *,
-    limit: int = 50,
-) -> list[dict[str, Any]]:
-    """Return the latest active carts for the read-only dashboard fallback."""
-    return sorted(
-        (row for row in rows if row.get("purchased") is not True),
-        key=lambda row: _cart_activity_at(row) or datetime.min.replace(tzinfo=timezone.utc),
-        reverse=True,
-    )[:max(0, limit)]
 
 
 async def _to_list(cursor: Any, length: int) -> list[dict[str, Any]]:
@@ -1216,6 +1210,37 @@ def make_dashboard_v2_router(
         end = to_date or start
         if end < start:
             start, end = end, start
+        live_sync: dict[str, Any] = {
+            "attempted": False,
+            "reason": "historical_period",
+        }
+        if end >= today_s:
+            try:
+                live_sync = await asyncio.wait_for(
+                    reconcile_recent_abandoned_carts(
+                        db,
+                        str(current["id"]),
+                        call_provider=call_salla,
+                    ),
+                    timeout=12,
+                )
+            except AbandonedCartScopeError:
+                live_sync = {"attempted": False, "reason": "scope_not_granted"}
+            except asyncio.TimeoutError:
+                live_sync = {"attempted": True, "reason": "provider_timeout"}
+            except SallaError as exc:
+                live_sync = {
+                    "attempted": True,
+                    "reason": "provider_error",
+                    "status_code": int(getattr(exc, "status_code", 0) or 0),
+                }
+            except Exception as exc:  # noqa: BLE001 - keep dashboard readable
+                log.warning(
+                    "abandoned_cart_live_reconcile_failed user_id=%s error_type=%s",
+                    str(current["id"]),
+                    type(exc).__name__,
+                )
+                live_sync = {"attempted": True, "reason": "unexpected_error"}
         all_rows = await _to_list(
             db.salla_abandoned_carts_v1.find(
                 {"user_id": str(current["id"])},
@@ -1242,13 +1267,6 @@ def make_dashboard_v2_router(
             start=start,
             end=end,
         )
-        # The header remains scoped to the selected business period.  When the
-        # period has no active cart, keep the dashboard rail useful by showing
-        # the latest still-active carts instead of an empty card.  This is a
-        # read-only fallback and does not alter the period counters.
-        showing_latest_active_fallback = not rows
-        if showing_latest_active_fallback:
-            rows = latest_active_abandoned_carts(all_rows)
         identity_ids = sorted({
             str(row.get("customer_identity_id"))
             for row in rows
@@ -1322,7 +1340,8 @@ def make_dashboard_v2_router(
             "abandoned_count": abandoned_count,
             "recovered_count": recovered_count,
             "period": {"from": start, "to": end},
-            "showing_latest_active_fallback": showing_latest_active_fallback,
+            "showing_latest_active_fallback": False,
+            "live_sync": live_sync,
             "live": True,
         }
 
