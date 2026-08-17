@@ -6,12 +6,13 @@ not import the control plane's eager router composition at startup.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import logging
 import os
 import re
-from typing import Any
+from typing import Any, Awaitable
 
 import httpx
 
@@ -19,6 +20,14 @@ import httpx
 META_CREDENTIALS_COLLECTION = "mezan_meta_oauth_credentials_v2"
 META_DEFAULT_GRAPH_VERSION = "v25.0"
 INSTAGRAM_WEBHOOK_FIELDS = ("messages", "comments")
+# The activation endpoint performs three sequential Graph API calls.  Without
+# a per-call wall-clock deadline, the previous 25-second transport timeout could
+# keep one browser request open for up to roughly 75 seconds.  The production
+# origin may terminate its worker first, which surfaces to the browser as an
+# unparseable Cloudflare origin response instead of a controlled JSON error.
+# Five seconds per Graph call keeps the complete operation below the origin
+# request budget while leaving ample time for normal server-to-server traffic.
+META_REQUEST_DEADLINE_SECONDS = 5.0
 
 logger = logging.getLogger(__name__)
 
@@ -165,6 +174,28 @@ async def _json(
     return payload
 
 
+async def _request_with_deadline(
+    request: Awaitable[httpx.Response],
+    *,
+    operation: str,
+) -> httpx.Response:
+    """Bound one Graph request by wall-clock time, including connect + read."""
+    try:
+        return await asyncio.wait_for(
+            request,
+            timeout=META_REQUEST_DEADLINE_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        logger.warning(
+            "instagram_webhook_meta_timeout operation=%s timeout_seconds=%s",
+            operation,
+            META_REQUEST_DEADLINE_SECONDS,
+        )
+        raise MetaInstagramWebhookError(
+            "instagram_webhook_subscription_failed"
+        ) from None
+
+
 async def subscribe_instagram_webhooks(
     db: Any,
     *,
@@ -190,17 +221,20 @@ async def subscribe_instagram_webhooks(
         raise MetaInstagramWebhookError("meta_configuration_invalid")
 
     owns_client = client is None
-    http = client or httpx.AsyncClient(timeout=25.0)
+    http = client or httpx.AsyncClient(timeout=META_REQUEST_DEADLINE_SECONDS)
     try:
         pages_payload = await _json(
-            await http.get(
-                f"{_graph_base()}/me/accounts",
-                params={
-                    "fields": "id,access_token,instagram_business_account{id}",
-                    "limit": "100",
-                    "access_token": user_token,
-                    "appsecret_proof": _appsecret_proof(user_token),
-                },
+            await _request_with_deadline(
+                http.get(
+                    f"{_graph_base()}/me/accounts",
+                    params={
+                        "fields": "id,access_token,instagram_business_account{id}",
+                        "limit": "100",
+                        "access_token": user_token,
+                        "appsecret_proof": _appsecret_proof(user_token),
+                    },
+                ),
+                operation="resolve_linked_instagram_account",
             ),
             operation="resolve_linked_instagram_account",
         )
@@ -228,13 +262,16 @@ async def subscribe_instagram_webhooks(
         # is never persisted or exposed in errors.
         edge = f"{_graph_base()}/{instagram_account_id}/subscribed_apps"
         subscribed_fields = ",".join(INSTAGRAM_WEBHOOK_FIELDS)
-        install_response = await http.post(
-            edge,
-            params={
-                "subscribed_fields": subscribed_fields,
-                "access_token": page_token,
-                "appsecret_proof": _appsecret_proof(page_token),
-            },
+        install_response = await _request_with_deadline(
+            http.post(
+                edge,
+                params={
+                    "subscribed_fields": subscribed_fields,
+                    "access_token": page_token,
+                    "appsecret_proof": _appsecret_proof(page_token),
+                },
+            ),
+            operation="subscribe_instagram_account",
         )
         installed = await _json(
             install_response,
@@ -247,13 +284,16 @@ async def subscribe_instagram_webhooks(
                 payload=installed,
             )
 
-        verify_response = await http.get(
-            edge,
-            params={
-                "fields": "id,subscribed_fields",
-                "access_token": page_token,
-                "appsecret_proof": _appsecret_proof(page_token),
-            },
+        verify_response = await _request_with_deadline(
+            http.get(
+                edge,
+                params={
+                    "fields": "id,subscribed_fields",
+                    "access_token": page_token,
+                    "appsecret_proof": _appsecret_proof(page_token),
+                },
+            ),
+            operation="verify_instagram_account_subscription",
         )
         verified = await _json(
             verify_response,
@@ -295,6 +335,7 @@ async def subscribe_instagram_webhooks(
 
 __all__ = [
     "INSTAGRAM_WEBHOOK_FIELDS",
+    "META_REQUEST_DEADLINE_SECONDS",
     "MetaInstagramWebhookError",
     "subscribe_instagram_webhooks",
 ]
