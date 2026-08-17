@@ -10,6 +10,7 @@ import {
 import ProviderMark from "./ProviderMark";
 import SnapchatAccountScope from "./SnapchatAccountScope";
 import MetaReportingControl from "./MetaReportingControl";
+import MetaManagementReadiness from "./MetaManagementReadiness";
 import TikTokReportingSyncControl from "./TikTokReportingSyncControl";
 import { CONNECTION_PROVENANCE_LABELS } from "../../services/integrationsV2";
 
@@ -467,7 +468,8 @@ export default function IntegrationCard({
             </div>
 
             {showMetaReporting && (
-                <div className="mt-4" data-testid="meta-reporting-control-host">
+                <div className="mt-4 space-y-3" data-testid="meta-reporting-control-host">
+                    <MetaManagementReadiness />
                     <MetaReportingControl integration={integration} />
                 </div>
             )}
