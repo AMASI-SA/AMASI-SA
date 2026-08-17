@@ -68,7 +68,7 @@ jobs:
           exit $status
       - name: Upload payment freshness test log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: qoyod-payment-freshness-log
           path: /tmp/qoyod-payment-freshness.log
