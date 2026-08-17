@@ -13,18 +13,37 @@ test("root and authenticated public redirects land on the advanced dashboard", (
     expect(app).not.toContain('<Route path="/" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />');
 });
 
-test("the advanced dashboard keeps an explicit path back to the old dashboard", () => {
-    const advanced = read("src/pages/AdvancedDashboard.jsx");
-    expect(advanced).toContain('to="/dashboard-v2"');
-    expect(advanced).toContain("لوحة التحكم القديمة");
+test("legacy dashboard URLs are compatibility aliases with no old runtime", () => {
+    const app = read("src/App.js");
+    const retired = read("src/pages/Dashboard.jsx");
+
+    expect(app).toContain('<Route path="/legacy-dashboard" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />');
+    expect(app).toContain('path="/dashboard-v2"');
+    expect(retired).toContain('return <Navigate to="/dashboard-advanced" replace />;');
+    expect(retired).toContain('import "./retiredDashboard.css";');
+
+    [
+        "api.get(",
+        "api.post(",
+        "setInterval(",
+        "setTimeout(",
+        "useEffect(",
+        "useState(",
+    ].forEach((forbidden) => expect(retired).not.toContain(forbidden));
 });
 
-test("legacy dashboard remains reachable only through its explicit legacy route", () => {
-    const app = read("src/App.js");
-    const sidebar = read("src/components/Sidebar.jsx");
-    expect(app).toContain('<Route path="/legacy-dashboard" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />');
-    expect(sidebar).toContain('{ to: "/legacy-dashboard", label: "لوحة التحكم القديمة", icon: House, testid: "nav-dashboard" }');
-    expect(sidebar).not.toContain('{ to: "/", label: "لوحة التحكم", icon: House, testid: "nav-dashboard" }');
+test("obsolete dashboard controls are removed from the visible navigation", () => {
+    const css = read("src/pages/retiredDashboard.css");
+    expect(css).toContain('[data-testid="advanced-dashboard-page"] > header a[href="/dashboard-v2"]');
+    expect(css).toContain('[data-testid="nav-dashboard"]');
+    expect(css).toContain("display: none !important");
+});
+
+test("advanced dashboard remains the only dashboard UI while keeping its governed data API", () => {
+    const advanced = read("src/pages/AdvancedDashboard.jsx");
+    expect(advanced).toContain('data-testid="advanced-dashboard-page"');
+    expect(advanced).toContain("لوحة التحكم المتقدمة");
+    expect(advanced).toContain('api.get(`/dashboard-v2?${query.toString()}`');
 });
 
 test("Mezan 2 supplier accounts use backend permissions instead of an owner-only page gate", () => {
