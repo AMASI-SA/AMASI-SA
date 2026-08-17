@@ -1,10 +1,21 @@
-import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import {
+    createContext,
+    useContext,
+    useEffect,
+    useState,
+    useCallback,
+    useRef,
+} from "react";
 import api, { formatApiErrorDetail } from "../lib/api";
 import {
     AUTH_SESSION_REQUEST_TIMEOUT_MS,
     isAuthBootstrapAbort,
     runBoundedAuthBootstrap,
 } from "./authBootstrap";
+import {
+    authRecoveryDelayMs,
+    browserCanRetryAuth,
+} from "./authRecoveryPolicy";
 
 const AuthContext = createContext(null);
 
@@ -32,6 +43,8 @@ export function AuthProvider({ children }) {
     const [authStatus, setAuthStatus] = useState("checking");
     const [authError, setAuthError] = useState(null);
     const [probeGeneration, setProbeGeneration] = useState(0);
+    const automaticRecoveryAttemptRef = useRef(0);
+    const automaticRecoveryLastTriggerAtRef = useRef(0);
     const loading = authStatus === "checking";
 
     const loadCurrentUser = useCallback(async ({
@@ -111,11 +124,75 @@ export function AuthProvider({ children }) {
         };
     }, [loadCurrentUser, probeGeneration]);
 
-    const retryAuth = useCallback(() => {
+    const startAuthProbe = useCallback(() => {
         setAuthError(null);
         setAuthStatus("checking");
         setProbeGeneration((generation) => generation + 1);
     }, []);
+
+    const retryAuth = useCallback(() => {
+        automaticRecoveryAttemptRef.current = 0;
+        automaticRecoveryLastTriggerAtRef.current = 0;
+        startAuthProbe();
+    }, [startAuthProbe]);
+
+    useEffect(() => {
+        if (authStatus === "authenticated" || authStatus === "anonymous") {
+            automaticRecoveryAttemptRef.current = 0;
+            automaticRecoveryLastTriggerAtRef.current = 0;
+        }
+    }, [authStatus]);
+
+    useEffect(() => {
+        if (authStatus !== "unavailable") return undefined;
+
+        let active = true;
+        let timer = null;
+
+        const triggerAutomaticRecovery = ({ resetBackoff = false } = {}) => {
+            if (!active || !browserCanRetryAuth()) return;
+
+            const now = Date.now();
+            // Focus and visibility events are often emitted together. Collapse
+            // them into one probe so a recovered origin is not hit twice.
+            if (now - automaticRecoveryLastTriggerAtRef.current < 1_000) return;
+            automaticRecoveryLastTriggerAtRef.current = now;
+
+            if (resetBackoff) automaticRecoveryAttemptRef.current = 0;
+            else automaticRecoveryAttemptRef.current += 1;
+            startAuthProbe();
+        };
+
+        const delay = authRecoveryDelayMs(
+            automaticRecoveryAttemptRef.current,
+        );
+        timer = window.setTimeout(
+            () => triggerAutomaticRecovery(),
+            delay,
+        );
+
+        const retryImmediately = () => {
+            triggerAutomaticRecovery({ resetBackoff: true });
+        };
+        const handleVisibilityChange = () => {
+            if (!document.hidden) retryImmediately();
+        };
+
+        window.addEventListener("online", retryImmediately);
+        window.addEventListener("focus", retryImmediately);
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+
+        return () => {
+            active = false;
+            if (timer !== null) window.clearTimeout(timer);
+            window.removeEventListener("online", retryImmediately);
+            window.removeEventListener("focus", retryImmediately);
+            document.removeEventListener(
+                "visibilitychange",
+                handleVisibilityChange,
+            );
+        };
+    }, [authStatus, startAuthProbe]);
 
     const login = async (email, password, mfaBootstrapCode = "", forceTotp = false) => {
         const payload = { email, password };
