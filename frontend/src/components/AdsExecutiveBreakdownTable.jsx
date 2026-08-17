@@ -114,7 +114,7 @@ export default function AdsExecutiveBreakdownTable({ data }) {
                         سلة: الطلبات والمبيعات
                     </span>
                     <span className="rounded bg-rose-50 px-2 py-1 text-rose-700">
-                        المنصة: الصرف
+                        المنصة: الصرف وتكلفة الطلب
                     </span>
                 </div>
             </div>
