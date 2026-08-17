@@ -20,6 +20,10 @@ from order_option_cost_snapshot_routes import (
     COST_SEMANTICS_VERSION,
     classify_base_unit_cost,
 )
+from product_catalog_cost_resolution import (
+    index_current_catalog_products,
+    resolve_current_catalog_line_product,
+)
 from product_v2_details_routes import COST_PROFILES
 from product_v2_routes import PRODUCTS, ensure_product_v2_indexes
 from salla_integration.service import SallaError, call_salla
@@ -182,33 +186,16 @@ async def _sold_missing_mezan_cost_products(
             "name": 1,
             "sku": 1,
             "cost_price_from_salla": 1,
+            "cost_price": 1,
+            "cost": 1,
             "variants": 1,
+            "raw_salla_details": 1,
+            "raw_salla": 1,
         },
     ).to_list(length=100000)
-    products_by_id: dict[str, dict[str, Any]] = {}
-    products_by_variant: dict[str, dict[str, Any]] = {}
-    products_by_sku: dict[str, dict[str, Any]] = {}
-    for product in products:
-        for key in (
-            product.get("salla_product_id"),
-            product.get("mezan_product_id"),
-            product.get("id"),
-        ):
-            identity = str(key or "").strip()
-            if identity:
-                products_by_id[identity] = product
-        sku = str(product.get("sku") or "").strip().casefold()
-        if sku:
-            products_by_sku[sku] = product
-        for variant in product.get("variants") or []:
-            if not isinstance(variant, dict):
-                continue
-            variant_id = str(variant.get("id") or "").strip()
-            if variant_id:
-                products_by_variant[variant_id] = product
-            variant_sku = str(variant.get("sku") or "").strip().casefold()
-            if variant_sku:
-                products_by_sku[variant_sku] = product
+    products_by_id, products_by_variant, products_by_sku = (
+        index_current_catalog_products(products)
+    )
 
     product_ids = [
         str(product.get("salla_product_id") or "").strip()
@@ -251,11 +238,12 @@ async def _sold_missing_mezan_cost_products(
         for item in order.get("products") or []:
             if not isinstance(item, dict):
                 continue
-            product = _line_product(
+            product = resolve_current_catalog_line_product(
                 item,
                 products_by_id=products_by_id,
                 products_by_variant=products_by_variant,
                 products_by_sku=products_by_sku,
+                base_resolver=_line_product,
             )
             if not product:
                 continue
