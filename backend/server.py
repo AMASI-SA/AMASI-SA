@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 59628)
-Total output lines: 5126
-
 """Hesab — accounting backend for Salla-platform analytics."""
 from dotenv import load_dotenv
 from pathlib import Path
@@ -1267,7 +1264,2626 @@ async def financial_input_hub_recent(
         ]).to_list(5000)
         for row in agg:
             pid = row["_id"]["party"]
-            kind =…29628 tokens truncated… they default
+            kind = row["_id"]["kind"]
+            sub = float(row.get("total") or 0)
+            bucket = party_balances.setdefault(
+                pid, {"owed_to_party": 0.0, "owed_from_party": 0.0})
+            if kind in OWE_THEM_KINDS:
+                bucket["owed_to_party"] += sub
+            elif kind in THEY_OWE_KINDS:
+                bucket["owed_from_party"] += sub
+
+    # Step 4 — attach to each feed item.
+    for it in items:
+        party_id = item_to_party.get(it.get("ref_id"))
+        bal = party_balances.get(party_id, {}) if party_id else {}
+        owed_to = round(bal.get("owed_to_party", 0), 2)
+        owed_from = round(bal.get("owed_from_party", 0), 2)
+        it["party_id"] = party_id
+        it["owed_to_party"] = owed_to        # كم له
+        it["owed_from_party"] = owed_from    # كم عليه
+        # Keep legacy field for backward compatibility (net open balance).
+        it["party_open_balance"] = round(owed_to - owed_from, 2) \
+            if party_id else None
+        # Beneficiary — clean canonical name (supplier or employee).
+        it["beneficiary_name"] = party_name_map.get(party_id) or None
+
+    # Step 5 — totals across the FULL filtered feed.  Each party counted
+    # once (not per operation row) to avoid double-counting when the same
+    # party appears in multiple rows.
+    total_owed_to = round(
+        sum(b.get("owed_to_party", 0) for b in party_balances.values()), 2)
+    total_owed_from = round(
+        sum(b.get("owed_from_party", 0) for b in party_balances.values()), 2)
+    net_balance = round(total_owed_to - total_owed_from, 2)
+
+    return {
+        "items": items,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "total_pages": max(1, (total + page_size - 1) // page_size),
+        "totals": {
+            "owed_to_party": total_owed_to,
+            "owed_from_party": total_owed_from,
+            "net_balance": net_balance,
+            "unique_parties": len(party_balances),
+        },
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Iter-159d — Party (Counterparty / Employee) Details Drawer
+# ─────────────────────────────────────────────────────────────────────────────
+# Returns a 360° view of a single party — used by the "المستفيد" column in the
+# Financial Input Hub recent-entries table.  Aggregates open balances,
+# liability history and bank-transaction history in one call.
+@api.get("/parties/{party_id}/details")
+async def party_details(party_id: str, user: dict = Depends(current_user)):
+    uid = user["id"]
+
+    # Try counterparty first, then operating_salaries.
+    party = None
+    party_type = None
+    cp = await db.counterparties.find_one(
+        {"id": party_id, "user_id": uid}, {"_id": 0})
+    if cp:
+        party = cp
+        party_type = "counterparty"
+    else:
+        es = await db.operating_salaries.find_one(
+            {"id": party_id, "user_id": uid}, {"_id": 0})
+        if es:
+            party = es
+            party_type = "employee"
+
+    if not party:
+        raise HTTPException(status_code=404, detail="الجهة غير موجودة")
+
+    # All liabilities for this party (open + closed, latest first).
+    liab_query = {
+        "user_id": uid,
+        "$or": [
+            {"counterparty_id": party_id},
+            {"employee_salary_id": party_id},
+        ],
+    }
+    liabs = await db.liabilities.find(liab_query, {"_id": 0}) \
+        .sort("created_at", -1).to_list(2000)
+
+    # All bank transactions linked via peer_liability_id ∈ this party's
+    # liabilities. (Transactions don't store party_id directly.)
+    liab_ids = [l["id"] for l in liabs]
+    txs = []
+    if liab_ids:
+        txs = await db.account_transactions.find(
+            {"user_id": uid, "peer_liability_id": {"$in": liab_ids}},
+            {"_id": 0},
+        ).sort("created_at", -1).to_list(2000)
+
+    # Compute directional balances.
+    OWE_THEM_KINDS = ("supplier", "salary", "ad_account")
+    THEY_OWE_KINDS = ("salary_advance", "receivable")
+    owed_to = 0.0
+    owed_from = 0.0
+    for l in liabs:
+        if l.get("status") not in ("unpaid", "partial"):
+            continue
+        rem = float(l.get("expected_amount") or 0) - \
+              float(l.get("paid_amount") or 0)
+        kind = l.get("kind")
+        if kind in OWE_THEM_KINDS:
+            owed_to += rem
+        elif kind in THEY_OWE_KINDS:
+            owed_from += rem
+
+    # Last activity = newest of liabs.created_at or txs.created_at.
+    last_activity = None
+    for src in (liabs, txs):
+        if src and src[0].get("created_at"):
+            ts = src[0]["created_at"]
+            if last_activity is None or ts > last_activity:
+                last_activity = ts
+
+    return {
+        "party": {
+            "id": party["id"],
+            "type": party_type,
+            "name": party.get("name"),
+            "kind": party.get("kind"),                # counterparty kind
+            "category": party.get("category"),        # employee category
+            "country": party.get("country"),
+            "monthly_amount": party.get("monthly_amount"),
+            "status": party.get("status"),
+            "notes": party.get("notes"),
+            "created_at": party.get("created_at"),
+        },
+        "totals": {
+            "owed_to_party": round(owed_to, 2),
+            "owed_from_party": round(owed_from, 2),
+            "net_balance": round(owed_to - owed_from, 2),
+        },
+        "liabilities": liabs,
+        "transactions": txs,
+        "last_activity": last_activity,
+        "counts": {
+            "liabilities": len(liabs),
+            "transactions": len(txs),
+        },
+    }
+
+
+# ── Global App Config (singleton — affects all users) ────────────────────────
+# `app_config` is a single-document collection (id='global'). It holds settings
+# that affect the public-facing UI (e.g. whether the "create new account" link
+# is visible on /login). Only the Owner can modify it.
+APP_CONFIG_DEFAULTS = {
+    "show_register_link": False,  # Single-store deployment by default — public
+                                  # registration is hidden but the endpoint
+                                  # still works (UI-level toggle only).
+}
+
+
+async def _get_app_config() -> dict:
+    """Fetch the singleton config doc, creating it with defaults if missing."""
+    doc = await db.app_config.find_one({"_id": "global"}) or {}
+    return {**APP_CONFIG_DEFAULTS, **{k: v for k, v in doc.items() if k != "_id"}}
+
+
+@api.get("/public/login-config")
+async def public_login_config():
+    """Public, unauthenticated endpoint that exposes only the flags needed by
+    the /login screen. Kept intentionally minimal to avoid leaking any other
+    app config to anonymous visitors."""
+    cfg = await _get_app_config()
+    return {"show_register_link": bool(cfg.get("show_register_link", False))}
+
+
+class AppConfigIn(BaseModel):
+    show_register_link: Optional[bool] = None
+
+
+@api.get("/app-config")
+async def get_app_config(user: dict = Depends(current_user)):
+    """Owner-only — full app config readback for the Settings page."""
+    _require_owner(user)
+    return await _get_app_config()
+
+
+@api.put("/app-config")
+async def update_app_config(payload: AppConfigIn, user: dict = Depends(current_user)):
+    _require_owner(user)
+    update_doc = {"updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": user["id"]}
+    if payload.show_register_link is not None:
+        update_doc["show_register_link"] = bool(payload.show_register_link)
+    await db.app_config.update_one({"_id": "global"}, {"$set": update_doc}, upsert=True)
+    return await _get_app_config()
+
+
+@api.get("/order-statuses")
+async def list_order_statuses(user: dict = Depends(current_user)):
+    """Return distinct order_status values observed in the user's unified_orders
+    plus their counts. Used by Settings to power the multi-select that decides
+    which statuses are included in dashboard/reports KPIs.
+    """
+    pipeline = [
+        {"$match": {"user_id": user["id"]}},
+        {"$group": {"_id": "$order_status", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+    ]
+    items = []
+    async for doc in db.unified_orders.aggregate(pipeline):
+        name = (doc.get("_id") or "").strip()
+        if not name:
+            continue
+        items.append({"name": name, "count": int(doc.get("count") or 0)})
+
+    # Also surface statuses present only in legacy analyses (orders_sample)
+    # so the user can still configure them.
+    seen = {i["name"] for i in items}
+    async for a in db.analyses.find({"user_id": user["id"]}, {"_id": 0, "report.orders_sample": 1}):
+        for o in (a.get("report", {}) or {}).get("orders_sample", []) or []:
+            st = (o.get("status") or "").strip()
+            if st and st not in seen:
+                items.append({"name": st, "count": 0})
+                seen.add(st)
+    return {"statuses": items}
+
+
+@api.get("/shipping-companies/discover")
+async def discover_shipping_companies(user: dict = Depends(current_user)):
+    """Compare shipping_companies configured in settings vs the company values
+    actually present in `unified_orders`.
+
+    Returns:
+      configured: list of {name, cost, vat_rate, is_deferred, status}
+        status ∈ {"ok", "missing_cost"} — flag for the UI.
+      observed: distinct shipping_company strings in user's orders.
+      unconfigured: observed names that don't match any configured company
+        (case-insensitive partial match). UI can offer "Add to settings".
+    """
+    settings = await ensure_user_settings(db, user["id"])
+    configured_raw = settings.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES) or []
+
+    # Aggregate distinct shipping companies from orders + their order counts
+    pipeline = [
+        {"$match": {"user_id": user["id"]}},
+        {"$group": {
+            "_id": "$shipping_company",
+            "count": {"$sum": 1},
+            "sum_cost": {"$sum": {"$ifNull": ["$shipping_cost", 0]}},
+        }},
+        {"$sort": {"count": -1}},
+    ]
+    observed_raw: list[dict] = []
+    async for doc in db.unified_orders.aggregate(pipeline):
+        name = (doc.get("_id") or "").strip()
+        if not name:
+            continue
+        observed_raw.append({
+            "name": name,
+            "orders_count": int(doc.get("count") or 0),
+            "sum_shipping_cost": round(float(doc.get("sum_cost") or 0), 2),
+            "avg_shipping_cost": round((doc.get("sum_cost") or 0) / max(int(doc.get("count") or 0), 1), 2),
+        })
+
+    # Build a normalised lookup from settings to match observed names
+    def _norm(s: str) -> str:
+        return (s or "").strip().lower()
+
+    cfg_index = {}
+    for c in configured_raw:
+        n = (c.get("name") or "").strip()
+        if n:
+            cfg_index[_norm(n)] = c
+
+    def _resolve(observed_name: str):
+        n = _norm(observed_name)
+        if n in cfg_index:
+            return cfg_index[n]
+        # substring match
+        for k, c in cfg_index.items():
+            if k and (k in n or n in k):
+                return c
+        return None
+
+    # Configured list with status flag
+    configured = []
+    for c in configured_raw:
+        cost = c.get("cost")
+        # None or 0 → flag as missing_cost
+        try:
+            cost_f = float(cost) if cost is not None else 0.0
+        except (TypeError, ValueError):
+            cost_f = 0.0
+        is_def = bool(c.get("is_deferred"))
+        configured.append({
+            "name": (c.get("name") or "").strip(),
+            "cost": cost_f,
+            "vat_rate": float(c.get("vat_rate") or 0),
+            "is_deferred": is_def,
+            "payment_mode": "deferred" if is_def else "prepaid",
+            "status": "ok" if cost_f > 0 else "missing_cost",
+        })
+
+    # Unconfigured = observed but no settings entry matches
+    unconfigured = []
+    for o in observed_raw:
+        if _resolve(o["name"]) is None:
+            unconfigured.append(o)
+
+    return {
+        "configured": configured,
+        "observed": observed_raw,
+        "unconfigured": unconfigured,
+    }
+
+
+class ShippingAutoDiscoverIn(BaseModel):
+    # Optional whitelist of names to add. If omitted, adds ALL unconfigured.
+    names: Optional[List[str]] = None
+
+
+@api.post("/shipping-companies/autodiscover")
+async def autodiscover_shipping_companies(
+    payload: ShippingAutoDiscoverIn,
+    user: dict = Depends(current_user),
+):
+    """Append shipping company entries to settings for every name observed
+    in the user's orders that isn't already configured.
+
+    New entries default to: cost = avg_shipping_cost from orders (rounded),
+    vat_rate = 0.15, is_deferred = False. The user can then fine-tune
+    each row from the Settings UI.
+    """
+    discover = await discover_shipping_companies(user)
+    settings = await ensure_user_settings(db, user["id"])
+    existing = list(settings.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES) or [])
+
+    target_names = set((payload.names or [])) if payload.names is not None else None
+    added = []
+    for u_item in discover["unconfigured"]:
+        name = u_item["name"]
+        if target_names is not None and name not in target_names:
+            continue
+        cost = float(u_item.get("avg_shipping_cost") or 0)
+        existing.append({
+            "name": name,
+            "cost": round(cost, 2),
+            "vat_rate": 0.15,
+            "is_deferred": False,
+        })
+        added.append({"name": name, "cost": round(cost, 2)})
+
+    if added:
+        await db.settings.update_one(
+            {"user_id": user["id"]},
+            {"$set": {
+                "shipping_companies": existing,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }},
+            upsert=True,
+        )
+    return {"added": added, "count": len(added)}
+
+
+@api.get("/balances")
+async def balances_endpoint(
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    payment_methods: Optional[str] = None,
+    shipping_companies: Optional[str] = None,
+    user: dict = Depends(current_user),
+):
+    """Shipping & COD balance splits (approved/unapproved) based on order_status."""
+    s = await ensure_user_settings(db, user["id"])
+    shipping_approved = s.get("shipping_approved_statuses", DEFAULT_SHIPPING_APPROVED)
+    cod_approved = s.get("cod_approved_statuses", DEFAULT_COD_APPROVED)
+
+    pm_list = [x.strip() for x in (payment_methods or "").split(",") if x.strip()]
+    ship_list = [x.strip() for x in (shipping_companies or "").split(",") if x.strip()]
+
+    q = {"user_id": user["id"]}
+    if from_date or to_date:
+        q["order_date"] = {}
+        if from_date:
+            q["order_date"]["$gte"] = from_date
+        if to_date:
+            q["order_date"]["$lte"] = to_date
+    if s.get("hide_inferred_date_orders"):
+        q["order_date_inferred"] = {"$ne": True}
+
+    orders = await db.unified_orders.find(q, {"_id": 0, "raw_by_source": 0}).to_list(50000)
+    if pm_list or ship_list:
+        def _any(v, allowed):
+            if not allowed:
+                return True
+            vv = (v or "").strip().lower()
+            return any(a.strip().lower() in vv or vv in a.strip().lower() for a in allowed if a.strip())
+        orders = [
+            o for o in orders
+            if _any(o.get("payment_method", ""), pm_list)
+            and _any(o.get("shipping_company", ""), ship_list)
+        ]
+    # Honour the user-configured "report_included_statuses" filter so balances
+    # are computed only on the same scope as dashboard/reports.
+    included_statuses = s.get("report_included_statuses") or []
+    if included_statuses:
+        def _any2(v, allowed):
+            vv = (v or "").strip().lower()
+            return any(a.strip().lower() in vv or vv in a.strip().lower() for a in allowed if a.strip())
+        orders = [o for o in orders if _any2(o.get("order_status", ""), included_statuses)]
+    # SSOT — pass company VAT configs so shipping balance = base + tax.
+    from shipping_cost_ssot import get_company_configs
+    company_cfgs = await get_company_configs(db, user["id"])
+    return compute_balances(orders, shipping_approved, cod_approved,
+                              company_cfgs=company_cfgs)
+
+
+# ── Daily Costs ───────────────────────────────────────────────────────────────
+@api.get("/daily-costs")
+async def list_daily_costs(user: dict = Depends(current_user)):
+    items = await db.daily_costs.find({"user_id": user["id"]}, {"_id": 0}).sort("date", -1).to_list(1000)
+    return items
+
+
+@api.post("/daily-costs")
+async def upsert_daily_costs(payload: DailyCostsIn, user: dict = Depends(current_user)):
+    doc = {
+        "user_id": user["id"],
+        "date": payload.date,
+        "snapchat_ads": payload.snapchat_ads,
+        "snapchat_ads_2": payload.snapchat_ads_2,
+        "tiktok_ads": payload.tiktok_ads,
+        "instagram_ads": payload.instagram_ads,
+        "google_ads": payload.google_ads,
+        "product_costs": payload.product_costs,
+        "notes": payload.notes or "",
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.daily_costs.update_one(
+        {"user_id": user["id"], "date": payload.date},
+        {"$set": doc, "$setOnInsert": {"id": str(uuid.uuid4()), "created_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True,
+    )
+    doc["id"] = (await db.daily_costs.find_one({"user_id": user["id"], "date": payload.date}, {"_id": 0, "id": 1}))["id"]
+    return doc
+
+
+@api.delete("/daily-costs/{date}")
+async def delete_daily_costs(date: str, user: dict = Depends(current_user)):
+    await db.daily_costs.delete_one({"user_id": user["id"], "date": date})
+    return {"ok": True}
+
+
+# ── Analyses (Excel upload) ───────────────────────────────────────────────────
+
+
+@api.post("/analyses")
+async def create_analysis(
+    file: UploadFile = File(...),
+    name: str = "",
+    date: Optional[str] = None,
+    snapchat_ads: float = 0.0,
+    tiktok_ads: float = 0.0,
+    instagram_ads: float = 0.0,
+    product_costs: float = 0.0,
+    user: dict = Depends(current_user),
+):
+    """Accept an Excel upload and process it in the background.
+
+    Iter-59: returns within ~50 ms with a job_id. The actual parse +
+    upsert loop runs in an `asyncio.create_task` so Make.com webhook
+    ingestion is never blocked by a long upload.
+    """
+    content = await read_safe_xlsx_upload(file, max_bytes=15 * 1024 * 1024)
+
+    job = await create_import_job(
+        db,
+        user_id=user["id"],
+        filename=file.filename,
+        total_rows=0,  # filled in once parse completes
+        params={
+            "name": name,
+            "date": date,
+            "snapchat_ads": snapchat_ads,
+            "tiktok_ads": tiktok_ads,
+            "instagram_ads": instagram_ads,
+            "product_costs": product_costs,
+        },
+    )
+    schedule_excel_job(
+        db=db,
+        job_id=job["id"],
+        user_id=user["id"],
+        file_content=content,
+        filename=file.filename,
+        params=job["params"],
+    )
+    return {
+        "job_id": job["id"],
+        "status": "queued",
+        "message": "تم استلام الملف وجاري المعالجة في الخلفية.",
+    }
+
+
+@api.get("/analyses")
+async def list_analyses(user: dict = Depends(current_user)):
+    items = await db.analyses.find(
+        {"user_id": user["id"]},
+        {"_id": 0, "report.orders_sample": 0},
+    ).sort("created_at", -1).to_list(500)
+    return items
+
+
+@api.get("/analyses/{analysis_id}")
+async def get_analysis(analysis_id: str, user: dict = Depends(current_user)):
+    item = await db.analyses.find_one({"id": analysis_id, "user_id": user["id"]}, {"_id": 0})
+    if not item:
+        raise HTTPException(status_code=404, detail="التحليل غير موجود")
+    return item
+
+
+@api.delete("/analyses/{analysis_id}")
+async def delete_analysis(analysis_id: str, user: dict = Depends(current_user)):
+    res = await db.analyses.delete_one({"id": analysis_id, "user_id": user["id"]})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="التحليل غير موجود")
+    return {"ok": True}
+
+
+@api.post("/analyses/{analysis_id}/reprocess")
+async def reprocess_analysis(
+    analysis_id: str,
+    file: UploadFile = File(...),
+    user: dict = Depends(current_user),
+):
+    """Re-upload the original Excel file for a legacy analysis.
+
+    Re-parses the file with the current parser (which captures column Q as the
+    order-creation date) and writes every individual order into
+    `unified_orders`. Replaces the legacy analysis with an updated record that
+    includes `orders_imported > 0` so the dashboard's legacy fallback no
+    longer counts this analysis twice.
+    """
+    existing = await db.analyses.find_one({"id": analysis_id, "user_id": user["id"]}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="التحليل غير موجود")
+
+    content = await read_safe_xlsx_upload(file, max_bytes=15 * 1024 * 1024)
+    try:
+        parsed = parse_salla_excel(content)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logging.exception("reprocess parse error")
+        raise HTTPException(status_code=400, detail=f"تعذر قراءة الملف: {e}")
+
+    settings = await ensure_user_settings(db, user["id"])
+    report = _build_report(
+        parsed,
+        settings.get("payment_methods", DEFAULT_PAYMENT_METHODS),
+        settings.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES),
+        0.0, 0.0, 0.0, 0.0,
+    )
+
+    excel_individual = parsed.get("orders_individual") or []
+    orders_imported = 0
+    orders_updated = 0
+    for o in excel_individual:
+        order_number = (o.get("order_number") or "").strip()
+        if not order_number:
+            continue
+        order_date = _normalize_date_str(o.get("order_date_raw") or "")
+        incoming = {
+            "order_id": o.get("order_id") or "",
+            "order_date": order_date,
+            "order_date_raw": o.get("order_date_raw") or "",
+            "order_date_inferred": False,  # Excel = authoritative Salla export
+            "order_status": o.get("order_status") or "",
+            "customer_name": o.get("customer_name") or "",
+            "customer_mobile": o.get("customer_mobile") or "",
+            "payment_method": o.get("payment_method") or "",
+            "shipping_company": o.get("shipping_company") or "",
+            "shipping_cost": float(o.get("shipping_cost") or 0),
+            "subtotal": float(o.get("subtotal") or 0),
+            "discount": float(o.get("discount") or 0),
+            "total_amount": float(o.get("total_amount") or 0),
+            "currency": o.get("currency") or "",
+            "source": o.get("source") or "",
+        }
+        res = await upsert_order(db, user["id"], order_number, incoming, source="excel", raw=o)
+        if res["created"]:
+            orders_imported += 1
+        else:
+            orders_updated += 1
+
+    # Replace the analysis in-place (preserve id/name/date for continuity)
+    await db.analyses.update_one(
+        {"id": analysis_id, "user_id": user["id"]},
+        {"$set": {
+            "filename": file.filename,
+            "report": report,
+            "orders_imported": orders_imported,
+            "orders_updated": orders_updated,
+            "reprocessed_at": datetime.now(timezone.utc).isoformat(),
+        }},
+    )
+    return {
+        "ok": True,
+        "orders_imported": orders_imported,
+        "orders_updated": orders_updated,
+        "analysis_id": analysis_id,
+    }
+
+
+@api.get("/analyses/{analysis_id}/export/excel")
+async def export_excel(analysis_id: str, user: dict = Depends(current_user)):
+    item = await db.analyses.find_one({"id": analysis_id, "user_id": user["id"]}, {"_id": 0})
+    if not item:
+        raise HTTPException(status_code=404, detail="التحليل غير موجود")
+    blob = export_report_excel(item["report"])
+    return StreamingResponse(
+        iter([blob]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=hesab-report-{analysis_id}.xlsx"},
+    )
+
+
+@api.get("/analyses/{analysis_id}/export/pdf")
+async def export_pdf(analysis_id: str, user: dict = Depends(current_user)):
+    item = await db.analyses.find_one({"id": analysis_id, "user_id": user["id"]}, {"_id": 0})
+    if not item:
+        raise HTTPException(status_code=404, detail="التحليل غير موجود")
+    blob = export_report_pdf(item["report"])
+    return StreamingResponse(
+        iter([blob]),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=hesab-report-{analysis_id}.pdf"},
+    )
+
+
+# ── Dashboard aggregate ───────────────────────────────────────────────────────
+@api.get("/dashboard")
+async def dashboard(
+    user: dict = Depends(current_user),
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    payment_methods: Optional[str] = None,
+    shipping_companies: Optional[str] = None,
+    include_legacy_analyses: bool = Query(default=True, include_in_schema=False),
+    allow_self_heal: bool = Query(default=True, include_in_schema=False),
+):
+    """Return aggregated totals from unified_orders (single source of truth).
+
+    All KPI cards reflect actual order-level data filtered by each order's
+    own `order_date` (i.e. the date the order was created on Salla). Excel
+    uploads and Make.com webhook orders are both included.
+
+    Optional filters:
+      - from_date / to_date (YYYY-MM-DD) on per-order `order_date`
+      - payment_methods: comma-separated names
+      - shipping_companies: comma-separated names
+
+    `daily_costs` are still filtered by the day (`date`) the cost is logged
+    against, and `recent_analyses` returns the 5 most recent uploads as a
+    convenience list.
+    """
+    pm_list = [s.strip() for s in (payment_methods or "").split(",") if s.strip()]
+    ship_list = [s.strip() for s in (shipping_companies or "").split(",") if s.strip()]
+
+    def _matches_any(value: str, allowed: list[str]) -> bool:
+        if not allowed:
+            return True
+        v = (value or "").strip().lower()
+        for a in allowed:
+            a_lc = a.strip().lower()
+            if a_lc and (a_lc == v or a_lc in v or v in a_lc):
+                return True
+        return False
+
+    settings = await ensure_user_settings(db, user["id"])
+
+    # ── Unified orders aggregation (THE source of truth) ─────────────────────
+    orders_q = {"user_id": user["id"]}
+    if from_date or to_date:
+        orders_q["order_date"] = {}
+        if from_date:
+            orders_q["order_date"]["$gte"] = from_date
+        if to_date:
+            orders_q["order_date"]["$lte"] = to_date
+    # User opt-in: exclude orders whose date was inferred (Make.com webhook
+    # without created_at). When enabled, only authoritatively-dated orders
+    # are counted in dashboard KPIs.
+    if settings.get("hide_inferred_date_orders"):
+        orders_q["order_date_inferred"] = {"$ne": True}
+
+    all_orders = await db.unified_orders.find(
+        orders_q, {"_id": 0, "raw_by_source": 0}
+    ).to_list(100000)
+    if all_orders:
+        attribution_rows = await db.unified_orders.find(
+            orders_q,
+            SALLA_RAW_ATTRIBUTION_PROJECTION,
+        ).to_list(100000)
+        attach_projected_salla_attribution(all_orders, attribution_rows)
+
+    # Iteration 31: data_source self-heal. Past orders whose data_source
+    # was demoted to "excel" by Excel re-imports (pre-iteration-31 bug)
+    # are re-promoted to "make" whenever their data_sources[] history
+    # contains any Make write. This corrects historical bucketing
+    # WITHOUT requiring a manual recompute or migration script.
+    ds_promoted = 0
+    if allow_self_heal:
+        for o in all_orders:
+            if o.get("data_source") == "excel":
+                history = o.get("data_sources") or []
+                if any((s or {}).get("source") == "make" for s in history):
+                    o["data_source"] = "make"
+                    ds_promoted += 1
+                    # Persist for next request so we don't repeat the work.
+                    try:
+                        await db.unified_orders.update_one(
+                            {"user_id": user["id"], "order_number": o["order_number"]},
+                            {"$set": {"data_source": "make"}},
+                        )
+                    except Exception:
+                        pass  # never fail dashboard on heal
+        if ds_promoted:
+            logger.info("Dashboard: promoted %d orders excel→make", ds_promoted)
+
+    # Iteration 27: lazy self-heal. Any order in the filtered range
+    # whose `total_product_cost` is still null/missing → re-run
+    # attach_cost_to_order_doc. This guarantees the Dashboard always
+    # reflects the latest cost data, even for orders that arrived
+    # before a cost was added (or on environments without the
+    # iteration-26 auto-recompute hooks). Idempotent + only touches
+    # stale rows so it's effectively free when data is healthy.
+    if allow_self_heal:
+        try:
+            from product_costs import attach_cost_to_order_doc as _attach_pc
+            stale_indexes: list[int] = []
+            for i, o in enumerate(all_orders):
+                if o.get("total_product_cost") is None:
+                    stale_indexes.append(i)
+            for i in stale_indexes[:500]:  # cap heal-per-request for safety
+                o = all_orders[i]
+                patch = await _attach_pc(db, user["id"], o)
+                await db.unified_orders.update_one(
+                    {"user_id": user["id"], "order_number": o["order_number"]},
+                    {"$set": patch},
+                )
+                o.update(patch)  # refresh in-memory copy so totals use new values
+        except Exception as _exc:
+            logger.warning("Dashboard cost self-heal skipped: %s", _exc)
+
+    if pm_list or ship_list:
+        all_orders = [
+            o for o in all_orders
+            if _matches_any(o.get("payment_method", ""), pm_list)
+            and _matches_any(o.get("shipping_company", ""), ship_list)
+        ]
+
+    # Apply user-configured "report_included_statuses" filter:
+    # if non-empty, only orders whose order_status matches any of the configured
+    # statuses (case-insensitive partial match) are counted in dashboard KPIs.
+    included_statuses = settings.get("report_included_statuses") or []
+    # Iter-207c — Snapshot the Salla-reference universe BEFORE the
+    # status filter so the UI can render a transparency badge:
+    #   "+X طلب معلَّق/ملغى بقيمة Y ر.س"
+    salla_ref_orders_count = len(all_orders)
+    salla_ref_gross = round(
+        sum(float(o.get("total_amount") or 0) for o in all_orders), 2,
+    )
+    if included_statuses:
+        all_orders = [
+            o for o in all_orders
+            if _matches_any(o.get("order_status", ""), included_statuses)
+        ]
+
+    parsed_all = orders_to_parsed(all_orders)
+    matched_all = match_settings(
+        parsed_all,
+        settings.get("payment_methods", DEFAULT_PAYMENT_METHODS),
+        settings.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES),
+    )
+
+    # ── iter-256 — Shipping cost SSOT consolidation ───────────────────
+    # Replace match_settings' shipping breakdown with the canonical
+    # `shipping_cost_ssot.aggregate_breakdown()` so the dashboard
+    # ALWAYS agrees with /api/shipping-ledger (same per-order/per-company
+    # math: total = base + tax). Payment breakdown is unrelated and stays
+    # on match_settings.
+    from shipping_cost_ssot import (
+        aggregate_breakdown as _ssot_agg,
+        get_company_configs as _ssot_cfgs,
+    )
+    _ssot_company_cfgs = await _ssot_cfgs(db, user["id"])
+    _ssot_agg_result = _ssot_agg(all_orders, _ssot_company_cfgs)
+    _ssot_breakdown = []
+    _ssot_deferred = 0.0
+    for pc in _ssot_agg_result["per_company"].values():
+        cfg = _ssot_company_cfgs.get(pc["name"]) or {}
+        is_deferred = bool(cfg.get("is_deferred", False))
+        cfg_has_cost = (
+            cfg.get("cost_per_order") is not None
+            or cfg.get("cost") is not None
+        )
+        row = {
+            "name":           pc["name"],
+            "orders_count":   pc["orders_count"],
+            # Dashboard-legacy fields (kept for backward-compat with
+            # /api/dashboard consumers and _merge_breakdown):
+            "cost_per_order": pc["cost_per_unit"],
+            "base_cost":      pc["base"],
+            "vat_amount":     pc["tax"],
+            "vat_percent":    round(pc["vat_rate"] * 100, 2),
+            "total_cost":     pc["total"],
+            "matched":        cfg_has_cost,
+            "is_deferred":    is_deferred,
+            # SSOT canonical per-unit fields — used by the new unified
+            # breakdown table in ProfitSummaryCard:
+            "cost_per_unit":  pc["cost_per_unit"],
+            "tax_per_unit":   pc["tax_per_unit"],
+            "total_per_unit": pc["total_per_unit"],
+            "vat_rate":       pc["vat_rate"],
+        }
+        if is_deferred:
+            _ssot_deferred += pc["total"]
+        _ssot_breakdown.append(row)
+    # Authoritative shipping numbers (SSOT-driven):
+    matched_all["shipping_breakdown"]      = _ssot_breakdown
+    matched_all["total_shipping_cost"]     = round(
+        _ssot_agg_result["total_with_tax"], 2)
+    matched_all["deferred_shipping_cost"]  = round(_ssot_deferred, 2)
+
+    total_sales = parsed_all["total_sales"]
+    total_orders = parsed_all["total_orders"]
+    total_fees = matched_all["total_payment_fees"]
+    total_shipping = matched_all["total_shipping_cost"]
+    deferred_shipping = matched_all.get("deferred_shipping_cost", 0.0)
+
+    # BNPL / electronic / COD split — iter-64 uses the unified
+    # normalize_payment_method() so the same classification logic powers
+    # Dashboard, Accounts, and Reports.
+    from payment_methods import normalize_payment_method as _npm
+    total_vat = 0.0
+    bnpl_fees = tamara_fees = tabby_fees = emkan_fees = 0.0
+    other_payment_fees = 0.0
+    bnpl_sales = other_payment_sales = cod_sales = cod_fees = 0.0
+    # iter-47 — Bank transfer split into its own KPI card.
+    bank_sales = bank_fees = 0.0
+    for p in matched_all.get("payment_breakdown", []):
+        total_vat += float(p.get("vat_amount", 0) or 0)
+        raw_name = p.get("name", "") or ""
+        fee = float(p.get("fee_amount", 0) or 0)
+        sales = float(p.get("total_sales", 0) or 0)
+        sub_key, _disp, parent = _npm(raw_name)
+        # Effective bucket: bank rails / salla rails collapse to their parent.
+        if parent == "bank_transfer" or sub_key == "bank_transfer":
+            bank_fees += fee; bank_sales += sales
+        elif sub_key == "tamara":
+            tamara_fees += fee; bnpl_fees += fee; bnpl_sales += sales
+        elif sub_key == "tabby":
+            tabby_fees += fee; bnpl_fees += fee; bnpl_sales += sales
+        elif sub_key == "emkan":
+            emkan_fees += fee; bnpl_fees += fee; bnpl_sales += sales
+        elif sub_key == "cash_on_delivery":
+            cod_fees += fee; cod_sales += sales
+        else:
+            other_payment_fees += fee; other_payment_sales += sales
+    for sh in matched_all.get("shipping_breakdown", []):
+        total_vat += float(sh.get("vat_amount", 0) or 0)
+
+    # ── iter-45 — Electronic Net status filter ─────────────────────────────
+    # The default `other_payment_sales` / `other_payment_fees` above include
+    # EVERY order, even cancelled/refunded/failed ones. Salla's "غير المفوترة"
+    # screen only shows transactions actually captured by the gateway. We
+    # recompute `other_payment_sales` & `other_payment_fees` using a status
+    # filter that mirrors Salla's behaviour. The other buckets (BNPL/COD)
+    # stay untouched so we don't break the existing tests/cards.
+    elec_excluded_terms = settings.get(
+        "electronic_net_excluded_statuses",
+    )
+    if elec_excluded_terms is None:
+        elec_excluded_terms = DEFAULT_ELECTRONIC_NET_EXCLUDED_STATUSES
+
+    def _is_electronic_method(payment_method: str) -> bool:
+        """Electronic = Salla card rails (mada, Apple Pay, STC Pay, cards,
+        wallet). Bank transfer, BNPL providers, and COD are NOT electronic."""
+        sub_key, _disp, parent = _npm(payment_method or "")
+        if not sub_key:
+            return False
+        # The 'salla' parent groups all electronic card rails.
+        return parent == "salla"
+
+    # Build a filtered electronic-only order list.
+    electronic_orders_included: list[dict] = []
+    electronic_orders_excluded: list[dict] = []
+    for o in all_orders:
+        if not _is_electronic_method(o.get("payment_method", "")):
+            continue
+        if _is_excluded_for_electronic_net(o.get("order_status", ""), elec_excluded_terms):
+            electronic_orders_excluded.append(o)
+        else:
+            electronic_orders_included.append(o)
+
+    if electronic_orders_included or electronic_orders_excluded:
+        parsed_elec = orders_to_parsed(electronic_orders_included)
+        matched_elec = match_settings(
+            parsed_elec,
+            settings.get("payment_methods", DEFAULT_PAYMENT_METHODS),
+            settings.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES),
+        )
+        # Override electronic sales/fees with the filtered figures.
+        filtered_elec_sales = 0.0
+        filtered_elec_fees = 0.0
+        for p in matched_elec.get("payment_breakdown", []):
+            filtered_elec_sales += float(p.get("total_sales", 0) or 0)
+            filtered_elec_fees += float(p.get("fee_amount", 0) or 0)
+        # Stash the pre-filter values for transparency in the response.
+        electronic_net_breakdown = {
+            "included_count": len(electronic_orders_included),
+            "excluded_count": len(electronic_orders_excluded),
+            "excluded_statuses_active": list(elec_excluded_terms),
+            "gross_before_filter": round(other_payment_sales, 2),
+            "fees_before_filter": round(other_payment_fees, 2),
+            "gross_after_filter": round(filtered_elec_sales, 2),
+            "fees_after_filter": round(filtered_elec_fees, 2),
+        }
+        other_payment_sales = filtered_elec_sales
+        other_payment_fees = filtered_elec_fees
+    else:
+        electronic_net_breakdown = {
+            "included_count": 0,
+            "excluded_count": 0,
+            "excluded_statuses_active": list(elec_excluded_terms),
+            "gross_before_filter": round(other_payment_sales, 2),
+            "fees_before_filter": round(other_payment_fees, 2),
+            "gross_after_filter": round(other_payment_sales, 2),
+            "fees_after_filter": round(other_payment_fees, 2),
+        }
+
+    # ── Legacy analyses fallback ────────────────────────────────────────────
+    # Older Excel uploads (pre unified_orders migration) wrote ONLY aggregate
+    # summaries into `analyses` without saving the per-order details, so they
+    # don't appear in unified_orders. To prevent the dashboard from showing
+    # less data than the Reports page, we add those legacy summaries here.
+    # Filter is by analysis.date because per-order dates aren't available.
+    #
+    # IMPORTANT: when `report_included_statuses` is configured, legacy analyses
+    # CANNOT be filtered by per-order status (they lack the data), so we
+    # exclude them entirely to avoid skewing the user-curated totals. Users
+    # who want their old data filtered by status must reprocess those analyses.
+    legacy_analyses: list[dict] = []
+    # Keyword sets used by the legacy-analyses payment_breakdown
+    # classifier below. Defined here (not in the inline loop) so the
+    # references survive even when the new normalize_payment_method
+    # path skips the legacy branch.
+    tamara_keywords = ("تمارا", "tamara")
+    tabby_keywords = ("تابي", "tabby")
+    emkan_keywords = ("إمكان", "امكان", "emkan", "amkan")
+    cod_keywords = ("عند الاستلام", "عند الاستلم", "cod",
+                     "cash on delivery", "cash_on_delivery")
+    bank_keywords = (
+        "تحويل بنكي", "حوالة بنكية", "تحويل البنك", "تحويل بنوك",
+        "bank transfer", "bank_transfer", "wire transfer",
+    )
+    if include_legacy_analyses and not included_statuses:
+        legacy_q: dict = {
+            "user_id": user["id"],
+            "$or": [
+                {"orders_imported": {"$exists": False}},
+                {"orders_imported": {"$in": [None, 0]}},
+            ],
+        }
+        if from_date or to_date:
+            legacy_q["date"] = {}
+            if from_date:
+                legacy_q["date"]["$gte"] = from_date
+            if to_date:
+                legacy_q["date"]["$lte"] = to_date
+        legacy_analyses = await db.analyses.find(
+            legacy_q, {"_id": 0, "report.orders_sample": 0}
+        ).to_list(1000)
+
+        for a in legacy_analyses:
+            rep = a.get("report") or {}
+            s = rep.get("summary") or {}
+            total_sales += float(s.get("total_sales") or 0)
+            total_orders += int(s.get("total_orders") or 0)
+            total_fees += float(s.get("total_payment_fees") or 0)
+            total_shipping += float(s.get("total_shipping_cost") or 0)
+            deferred_shipping += float(s.get("deferred_shipping_cost") or 0)
+            for p in rep.get("payment_breakdown", []) or []:
+                total_vat += float(p.get("vat_amount", 0) or 0)
+                name_lc = (p.get("name", "") or "").strip().lower()
+                fee = float(p.get("fee_amount", 0) or 0)
+                sales = float(p.get("total_sales", 0) or 0)
+                if any(k in name_lc for k in tamara_keywords):
+                    tamara_fees += fee; bnpl_fees += fee; bnpl_sales += sales
+                elif any(k in name_lc for k in tabby_keywords):
+                    tabby_fees += fee; bnpl_fees += fee; bnpl_sales += sales
+                elif any(k in name_lc for k in emkan_keywords):
+                    emkan_fees += fee; bnpl_fees += fee; bnpl_sales += sales
+                elif any(k in name_lc for k in cod_keywords):
+                    cod_fees += fee; cod_sales += sales
+                elif any(k in name_lc for k in bank_keywords) or name_lc == "bank":
+                    bank_fees += fee; bank_sales += sales
+                else:
+                    other_payment_fees += fee; other_payment_sales += sales
+            for sh in rep.get("shipping_breakdown", []) or []:
+                total_vat += float(sh.get("vat_amount", 0) or 0)
+
+    # ── Shipping & COD balance splits (Phase 1) ──────────────────────────────
+    from shipping_cost_ssot import get_company_configs as _ssot_get_cfgs
+    _ssot_cfgs = await _ssot_get_cfgs(db, user["id"])
+    balances = compute_balances(
+        all_orders,
+        settings.get("shipping_approved_statuses", DEFAULT_SHIPPING_APPROVED),
+        settings.get("cod_approved_statuses", DEFAULT_COD_APPROVED),
+        company_cfgs=_ssot_cfgs,
+    )
+    shipping_balance_approved = balances["shipping"]["total_approved"]
+    shipping_balance_unapproved = balances["shipping"]["total_unapproved"]
+    cod_balance_approved = balances["cod"]["total_approved"]
+    cod_balance_unapproved = balances["cod"]["total_unapproved"]
+
+    # ── Daily costs (still keyed by `date` field) ────────────────────────────
+    daily_q = {"user_id": user["id"]}
+    if from_date or to_date:
+        date_filter = {}
+        if from_date:
+            date_filter["$gte"] = from_date
+        if to_date:
+            date_filter["$lte"] = to_date
+        daily_q["date"] = date_filter
+    daily = await db.daily_costs.find(daily_q, {"_id": 0}).to_list(1000)
+
+    # ── TikTok Ads daily (pushed by Make.com via /api/webhook/tiktok/...) ────
+    tt_q = {"user_id": user["id"]}
+    if from_date or to_date:
+        df = {}
+        if from_date: df["$gte"] = from_date
+        if to_date: df["$lte"] = to_date
+        tt_q["date"] = df
+    tt_rows = await db.tiktok_ads_daily.find(tt_q, {"_id": 0}).to_list(1000)
+    # Iter-160 SSOT (Message #737): TikTok spend from ledger only.
+    _fd = from_date or "0000-01-01"
+    _td = to_date or "9999-12-31"
+    _tt_ledger = await _spend_by_date_from_ledger(
+        db, user["id"], ("tiktok",), _fd, _td,
+    )
+    tiktok_spend = sum(_tt_ledger.values())
+    tiktok_purchases = sum(int(r.get("purchases") or 0) for r in tt_rows)
+    tiktok_revenue = sum(float(r.get("revenue") or 0) for r in tt_rows)
+    tiktok_roas = round(tiktok_revenue / tiktok_spend, 2) if tiktok_spend > 0 else 0.0
+
+    # ── Meta Ads daily (pulled via /api/meta/sync from Meta Marketing API) ──
+    meta_q = {"user_id": user["id"]}
+    if from_date or to_date:
+        df = {}
+        if from_date: df["$gte"] = from_date
+        if to_date: df["$lte"] = to_date
+        meta_q["date"] = df
+    meta_rows = await db.meta_ads_daily.find(meta_q, {"_id": 0}).to_list(2000)
+    # Iter-160 SSOT (Message #737): Meta spend from ledger only.
+    _meta_ledger = await _spend_by_date_from_ledger(
+        db, user["id"], ("meta", "facebook", "instagram"), _fd, _td,
+    )
+    meta_spend_total = sum(_meta_ledger.values())
+    meta_purchases_total = sum(int(r.get("purchases") or 0) for r in meta_rows)
+    meta_revenue_total = sum(float(r.get("revenue") or 0) for r in meta_rows)
+
+    # ── Total ads cost across all platforms ──────────────────────────────
+    # Iter-160 SSOT (Message #737): all ad spend must come from
+    # ad_account_ledger. We no longer read daily_costs.snapchat_ads/
+    # snapchat_ads_2 / instagram_ads / google_ads / tiktok_ads for the
+    # aggregate spend. Those manual-entry fields are deprecated for
+    # accounting purposes — only the unified ledger counts.
+    _snap_ledger = await _spend_by_date_from_ledger(
+        db, user["id"], ("snapchat", "snap"), _fd, _td,
+    )
+    snap_spend_total = sum(_snap_ledger.values())
+    # Other providers (google/twitter/other) from ledger as well.
+    _other_ledger = await _spend_by_date_from_ledger(
+        db, user["id"], ("google", "twitter", "other"), _fd, _td,
+    )
+    other_spend_total = sum(_other_ledger.values())
+    daily_ads_total = (snap_spend_total + tiktok_spend
+                       + meta_spend_total + other_spend_total)
+    daily_products_total = sum((d.get("product_costs", 0) or 0) for d in daily)
+
+    # ── Computed product cost from order line-items (iteration 19) ─────────
+    # When `unified_orders.total_product_cost` is populated (via webhook
+    # ingestion → product_costs.attach_cost_to_order_doc), prefer THAT as
+    # the source of truth for product cost — it reflects real SKU-level
+    # costs. The legacy `daily_costs.product_costs` (manual entry) stays
+    # as a fallback so single-merchant flows without per-SKU costs still
+    # work. We take max() per the same dedupe-via-bigger pattern used for
+    # TikTok webhook vs daily_costs.
+    # Iter-91 Phase 1: subtract COGS for cancelled/refunded orders and
+    # scale partial-refund orders proportionally so the profit KPI no
+    # longer over-charges product cost on returned goods.
+    from order_status_policy import (
+        effective_product_cost as _effective_pc,
+        get_policy_map as _get_policy_map,
+    )
+    policy_overrides_pc = await _get_policy_map(db, user["id"])
+    computed_product_cost = round(sum(
+        _effective_pc(o, policy_overrides_pc) for o in all_orders
+    ), 2)
+    # Distinct missing-cost lines across the filtered orders (UI badge).
+    missing_cost_skus: set = set()
+    for o in all_orders:
+        for ln in (o.get("missing_product_cost_lines") or []):
+            key = (ln.get("sku") or ln.get("product_id") or ln.get("name") or "").strip().upper()
+            if key:
+                missing_cost_skus.add(key)
+    # ── Profit-status counts (iteration 24) ───────────────────────────────
+    # `profit_status` is set per-order by attach_cost_to_order_doc. It
+    # tells the dashboard whether the order's REAL profit can be trusted:
+    #   - complete                : every product matched a cost entry
+    #   - incomplete_missing_cost : ≥1 product has no cost (UI prompts add)
+    #   - incomplete_no_products  : no products[] (typically Excel orders)
+    incomplete_profit_orders_count = 0
+    no_products_orders_count = 0
+    excel_no_products_count = 0
+    for o in all_orders:
+        ps = (o.get("profit_status") or "").strip()
+        ds = (o.get("data_source") or "").strip().lower()
+        # Fallback: if profit_status was never written (legacy orders),
+        # infer it from products[] presence so the UI still works for
+        # pre-iteration-24 data without forcing a backfill.
+        if not ps:
+            if not (o.get("products") or []):
+                ps = "incomplete_no_products"
+            elif (o.get("missing_product_cost_lines") or []):
+                ps = "incomplete_missing_cost"
+            else:
+                ps = "complete"
+        if ps != "complete":
+            incomplete_profit_orders_count += 1
+        if ps == "incomplete_no_products":
+            no_products_orders_count += 1
+            if ds in ("excel", ""):
+                excel_no_products_count += 1
+    product_cost_effective = max(computed_product_cost, daily_products_total)
+    daily_totals = daily_ads_total + product_cost_effective
+
+    # ── Operating Expenses (المصروفات التشغيلية) ─────────────────────────────
+    # Aggregate the per-day salary + rental + variable-expense costs over the
+    # active date range. When no range is supplied we still aggregate so the
+    # dashboard reflects month-to-date operating cost.
+    today_d = datetime.now(timezone.utc).date()
+    fd = _parse_date_or(from_date, today_d.replace(day=1))
+    td = _parse_date_or(to_date, today_d)
+    if td < fd:
+        fd, td = td, fd
+    op_range = await compute_operating_expenses_for_range(db, user["id"], fd, td)
+    operating_expenses_total = float(op_range.get("operating_total") or 0)
+    operating_salaries_total = float(op_range.get("salaries_total") or 0)
+    operating_rentals_total = float(op_range.get("rentals_total") or 0)
+    operating_prepaid_total = float(op_range.get("prepaid_total") or 0)
+    operating_daily_other_total = float(op_range.get("daily_other_total") or 0)
+
+    # Net profit (orders P&L − daily ads − product cost (computed or manual) − operating expenses)
+    orders_profit = total_sales - total_fees - total_shipping
+    net_profit_adjusted = (
+        orders_profit
+        - daily_ads_total
+        - product_cost_effective
+        - operating_expenses_total
+    )
+
+    # ── Phase 3: configurable "صافي المبيعات" KPI ────────────────────────────
+    # Merchants disagree on what counts as "net sales" — some treat shipping
+    # collected as revenue, others net it out; some deduct VAT, others don't.
+    # Settings.net_sales_config gives them 7 independent toggles.
+    cfg = settings.get("net_sales_config") or DEFAULT_NET_SALES_CONFIG
+    regular_shipping = total_shipping - deferred_shipping
+    net_sales = total_sales
+    if cfg.get("deduct_payment_fees", True):
+        net_sales -= total_fees
+    if cfg.get("deduct_shipping", True):
+        net_sales -= regular_shipping
+    if cfg.get("deduct_deferred_shipping", False):
+        net_sales -= deferred_shipping
+    if cfg.get("deduct_ads", True):
+        net_sales -= daily_ads_total
+    if cfg.get("deduct_product_costs", True):
+        net_sales -= product_cost_effective
+    if cfg.get("deduct_vat", False):
+        net_sales -= total_vat
+    if cfg.get("deduct_daily_expenses", False):
+        # daily_expenses_total is currently aliased to daily_products_total;
+        # keep this independent for future expansion.
+        pass
+    if cfg.get("deduct_operating_expenses", True):
+        net_sales -= operating_expenses_total
+
+    # ── Monthly trend from unified orders + legacy analyses ─────────────────
+    from collections import defaultdict
+    monthly_sales = defaultdict(float)
+    for o in all_orders:
+        d = (o.get("order_date") or "")[:7]
+        if not d:
+            continue
+        monthly_sales[d] += float(o.get("total_amount") or 0)
+    for a in legacy_analyses:
+        d = (a.get("date") or a.get("created_at") or "")[:7]
+        if not d:
+            continue
+        monthly_sales[d] += float(((a.get("report") or {}).get("summary") or {}).get("total_sales") or 0)
+    monthly = sorted([
+        {"month": k, "sales": round(v, 2), "profit": 0}
+        for k, v in monthly_sales.items()
+    ], key=lambda x: x["month"])
+
+    # Recent analyses (informational only — independent of date filter)
+    recent = await db.analyses.find(
+        {"user_id": user["id"]},
+        {"_id": 0, "report.orders_sample": 0},
+    ).sort("created_at", -1).to_list(5)
+
+    # Source breakdown (excel vs make vs unified)
+    src_counts = {"excel": 0, "make": 0, "unified": 0}
+    for o in all_orders:
+        ds = o.get("data_source") or "unified"
+        src_counts[ds] = src_counts.get(ds, 0) + 1
+
+    # Merge live + legacy breakdowns into a single payload
+    def _merge_breakdown(live: list[dict], legacy_list: list[dict], key: str) -> list[dict]:
+        m: dict[str, dict] = {}
+        for b in live:
+            n = (b.get("name") or "").strip()
+            if not n:
+                continue
+            cur = m.setdefault(n, {**b, "name": n})
+            # ensure numeric sums (live already aggregated; just copy)
+        for a in legacy_list:
+            for b in (a.get("report") or {}).get(key, []) or []:
+                n = (b.get("name") or "").strip()
+                if not n:
+                    continue
+                if n in m:
+                    cur = m[n]
+                    for f in ("total_sales", "total_cost", "fee_amount", "orders_count", "vat_amount"):
+                        if f in b and isinstance(b.get(f), (int, float)):
+                            cur[f] = float(cur.get(f, 0) or 0) + float(b.get(f) or 0)
+                else:
+                    m[n] = {**b, "name": n}
+        return list(m.values())
+
+    payment_breakdown_merged = _merge_breakdown(
+        matched_all.get("payment_breakdown", []), legacy_analyses, "payment_breakdown",
+    )
+    shipping_breakdown_merged = _merge_breakdown(
+        matched_all.get("shipping_breakdown", []), legacy_analyses, "shipping_breakdown",
+    )
+
+    # iter-64 — Roll the per-raw-name payment_breakdown rows up into the
+    # SAME canonical buckets used by Accounts (سلة, تحويل بنكي, تابي, …).
+    # Each bucket keeps a `sub_methods` array so the UI can still show the
+    # original Salla rail / specific bank inside the row.
+    def _rollup_payment_breakdown(rows: list[dict]) -> list[dict]:
+        buckets: dict[str, dict] = {}
+        for r in rows:
+            raw = (r.get("name") or "").strip()
+            sub_key, sub_disp, parent = _npm(raw)
+            if not sub_key:
+                # Skip null/unknown markers — they'd pollute the table.
+                continue
+            top_key = parent or sub_key
+            top_disp = PARENT_LABELS.get(parent, sub_disp) if parent else sub_disp
+            b = buckets.setdefault(top_key, {
+                "name": top_disp,
+                "key": top_key,
+                "total_sales": 0.0,
+                "fee_amount": 0.0,
+                "vat_amount": 0.0,
+                "orders_count": 0,
+                "commission_percent": r.get("commission_percent"),
+                "fixed_fee": r.get("fixed_fee"),
+                "vat_percent": r.get("vat_percent"),
+                "sub_methods": [],
+            })
+            sales = float(r.get("total_sales") or 0)
+            fee   = float(r.get("fee_amount") or 0)
+            vat   = float(r.get("vat_amount") or 0)
+            cnt   = int(r.get("orders_count") or 0)
+            b["total_sales"] += sales
+            b["fee_amount"]  += fee
+            b["vat_amount"]  += vat
+            b["orders_count"] += cnt
+            # Aggregate sub-methods by their CANONICAL key so multiple raw
+            # spellings of e.g. الراجحي collapse into one sub-row.
+            sm_idx = {s["key"]: i for i, s in enumerate(b["sub_methods"])}
+            if sub_key in sm_idx:
+                s = b["sub_methods"][sm_idx[sub_key]]
+                s["total_sales"] += sales
+                s["fee_amount"]  += fee
+                s["orders_count"] += cnt
+            else:
+                b["sub_methods"].append({
+                    "key": sub_key,
+                    "display": sub_disp,
+                    "name": sub_disp,
+                    "total_sales": sales,
+                    "fee_amount": fee,
+                    "orders_count": cnt,
+                })
+        # Sort sub_methods by sales desc, round everything for the response.
+        out = []
+        for b in buckets.values():
+            b["sub_methods"].sort(key=lambda s: s["total_sales"], reverse=True)
+            for s in b["sub_methods"]:
+                s["total_sales"] = round(s["total_sales"], 2)
+                s["fee_amount"]  = round(s["fee_amount"], 2)
+            b["total_sales"] = round(b["total_sales"], 2)
+            b["fee_amount"]  = round(b["fee_amount"], 2)
+            b["vat_amount"]  = round(b["vat_amount"], 2)
+            out.append(b)
+        out.sort(key=lambda x: x["total_sales"], reverse=True)
+        return out
+
+    from payment_methods import PARENT_LABELS
+    payment_breakdown_merged = _rollup_payment_breakdown(payment_breakdown_merged)
+
+    # ── Iter-44: Cross-platform ROAS + Average Cost Per Order ────────────
+    # ROAS (Return On Ad Spend) — how many SAR of revenue each SAR of ad
+    # spend produced. Industry-standard formula is gross sales ÷ total
+    # ad spend (matches GA, Meta, TikTok, Snap conventions); merchants
+    # who prefer net-sales-based ROAS can flip a setting later.
+    # CPA (متوسط تكلفة الطلب) — total ad spend ÷ number of orders.
+    # Both surfaced as null when the denominator is 0 so the UI can show
+    # "—" instead of "Infinity" or "NaN".
+    overall_roas = round(total_sales / daily_ads_total, 2) if daily_ads_total > 0 else None
+    avg_cost_per_order = (
+        round(daily_ads_total / total_orders, 2) if total_orders > 0 and daily_ads_total > 0 else None
+    )
+
+    # ── iter-56 — Payment Adjustments (الاسترجاعات/التسويات) ────────────────
+    # Subtract any partial refunds / item removals / cancellations that were
+    # recorded against orders in the period (or even pre-period orders whose
+    # adjustment date falls in the period — matching Salla's actual wallet
+    # behavior). This affects per-provider NET sales; gross sales remain
+    # untouched so totals stay traceable to raw orders.
+    settlements_by_provider = await aggregate_settlements_by_provider(
+        db, user["id"], from_date, to_date
+    )
+    salla_adj         = settlements_by_provider["salla"]["total_adjustment"]
+    tamara_adj        = settlements_by_provider["tamara"]["total_adjustment"]
+    tabby_adj         = settlements_by_provider["tabby"]["total_adjustment"]
+    emkan_adj         = settlements_by_provider["emkan"]["total_adjustment"]
+    bank_adj          = settlements_by_provider["bank_transfer"]["total_adjustment"]
+    cod_adj           = settlements_by_provider["cod"]["total_adjustment"]
+    other_adj         = settlements_by_provider["other"]["total_adjustment"]
+
+    # iter-73 — surface refunded_amount + refunds_count per provider on the
+    # payment_breakdown rows so the Reports commission cards can show how
+    # much was reversed via settlements for each gateway. The keys of
+    # `settlements_by_provider` are the same canonical names used by the
+    # rollup ('salla', 'tamara', 'tabby', 'emkan', 'bank_transfer', 'cod').
+    _settlement_key_map = {
+        "salla": "salla",
+        "tamara": "tamara",
+        "tabby": "tabby",
+        "emkan": "emkan",
+        "bank_transfer": "bank_transfer",
+        "cash_on_delivery": "cod",
+    }
+    for _b in payment_breakdown_merged:
+        _sk = _settlement_key_map.get(_b.get("key"))
+        _agg = settlements_by_provider.get(_sk) if _sk else None
+        _b["refunded_amount"] = round(float(_agg.get("total_adjustment") or 0), 2) if _agg else 0.0
+        _b["refunds_count"]   = int(_agg.get("count") or 0) if _agg else 0
+    total_adjustments = round(
+        salla_adj + tamara_adj + tabby_adj + emkan_adj + bank_adj + cod_adj + other_adj, 2,
+    )
+
+    # Salla-specific: split adjustments by whether the original order is
+    # still within Salla's 14-day pending wallet. Used by the "Salla wallet
+    # alert" badge to explain reference mismatches.
+    salla_settle_inside = salla_settle_outside = 0.0
+    salla_settle_docs = await db.payment_adjustments.find(
+        {
+            "user_id": user["id"],
+            "provider": "salla",
+            **({"adjusted_at": {**({"$gte": from_date} if from_date else {}),
+                                **({"$lte": to_date} if to_date else {})}}
+               if (from_date or to_date) else {}),
+        },
+        {"_id": 0, "adjustment_amount": 1, "order_created_at": 1},
+    ).to_list(20000)
+    for d in salla_settle_docs:
+        if classify_14d_window(d.get("order_created_at", "")) == "inside_14d":
+            salla_settle_inside += float(d.get("adjustment_amount", 0) or 0)
+        else:
+            salla_settle_outside += float(d.get("adjustment_amount", 0) or 0)
+
+    return {
+        "range": {"from_date": from_date, "to_date": to_date},
+        "totals": {
+            "total_sales": round(total_sales, 2),
+            "net_sales": round(net_sales, 2),
+            "total_orders": int(total_orders),
+            # iter-44 — cross-platform marketing KPIs
+            "overall_roas": overall_roas,
+            "avg_cost_per_order": avg_cost_per_order,
+            "total_payment_fees": round(total_fees, 2),
+            "bnpl_fees": round(bnpl_fees, 2),
+            "tamara_fees": round(tamara_fees, 2),
+            "tabby_fees": round(tabby_fees, 2),
+            "emkan_fees": round(emkan_fees, 2),
+            "other_payment_fees": round(other_payment_fees, 2),
+            # iter-56 — electronic_net now subtracts Salla settlements too
+            "electronic_net": round(
+                other_payment_sales - other_payment_fees - salla_adj, 2,
+            ),
+            "electronic_net_before_settlements": round(
+                other_payment_sales - other_payment_fees, 2,
+            ),
+            # iter-45 — visible filtering metadata for the UI
+            "electronic_net_breakdown": electronic_net_breakdown,
+            "salla_electronic_net_reference": settings.get("salla_electronic_net_reference"),
+            # iter-56 — per-provider adjustment totals + breakdown
+            "settlements_total": total_adjustments,
+            "settlements_by_provider": settlements_by_provider,
+            "salla_settlements_inside_14d": round(salla_settle_inside, 2),
+            "salla_settlements_outside_14d": round(salla_settle_outside, 2),
+            "bnpl_net": round(bnpl_sales - bnpl_fees - tamara_adj - tabby_adj - emkan_adj, 2),
+            # iter-47 — Bank transfer is now a dedicated KPI; the figures
+            # below give the UI everything it needs to render the new card.
+            "bank_sales": round(bank_sales, 2),
+            "bank_fees": round(bank_fees, 2),
+            "bank_net": round(bank_sales - bank_fees - bank_adj, 2),
+            "total_shipping_cost": round(total_shipping, 2),
+            "deferred_shipping_cost": round(deferred_shipping, 2),
+            "regular_shipping_cost": round(total_shipping - deferred_shipping, 2),
+            "expected_salla_transfer": round(
+                total_sales - total_fees - (total_shipping - deferred_shipping), 2
+            ),
+            "total_ads_cost": round(daily_ads_total, 2),
+            "total_product_cost": round(product_cost_effective, 2),
+            "computed_product_cost": round(computed_product_cost, 2),
+            "manual_product_cost": round(daily_products_total, 2),
+            "missing_product_cost_count": len(missing_cost_skus),
+            # ── Iteration 24: profit-completeness flags ───────────────────
+            "incomplete_profit_orders_count": int(incomplete_profit_orders_count),
+            "no_products_orders_count": int(no_products_orders_count),
+            "excel_no_products_count": int(excel_no_products_count),
+            # ── Iter-207c — Salla-reference transparency block ─────────────
+            # The platform (Salla) counts every order it creates regardless
+            # of status. We count only orders that pass
+            # `report_included_statuses`. Surface the gap so the UI can
+            # render a badge "+X معلَّق/ملغى بقيمة Y ر.س" next to the main
+            # orders count, and a tooltip explaining the methodology.
+            "salla_reference_orders_count": int(salla_ref_orders_count),
+            "salla_reference_gross": float(salla_ref_gross),
+            "excluded_orders_count": int(
+                max(0, salla_ref_orders_count - total_orders)),
+            "excluded_gross": round(
+                max(0.0, salla_ref_gross - float(total_sales)), 2),
+            "daily_expenses_total": round(daily_products_total, 2),
+            "net_profit": round(net_profit_adjusted, 2),
+            "total_vat": round(total_vat, 2),
+            "daily_costs_total": round(daily_totals, 2),
+            "daily_ads_total": round(daily_ads_total, 2),
+            "daily_products_total": round(daily_products_total, 2),
+            # ── Operating Expenses (المصروفات التشغيلية اليومية) ──────────────
+            "operating_expenses_total": round(operating_expenses_total, 2),
+            "operating_salaries_total": round(operating_salaries_total, 2),
+            "operating_salaries_employee": float(op_range.get("salaries_employee") or 0),
+            "operating_salaries_household": float(op_range.get("salaries_household") or 0),
+            "operating_salaries_charity": float(op_range.get("salaries_charity") or 0),
+            "operating_rentals_total": round(operating_rentals_total, 2),
+            "operating_prepaid_total": round(operating_prepaid_total, 2),
+            "operating_prepaid_by_type": op_range.get("prepaid_by_type") or {},
+            "operating_daily_other_total": round(operating_daily_other_total, 2),
+            "orders_excel_count": src_counts.get("excel", 0),
+            "orders_make_count": src_counts.get("make", 0),
+            "legacy_analyses_count": len(legacy_analyses),
+            "report_included_statuses_active": bool(included_statuses),
+            # ── TikTok Ads (pushed via Make.com webhook) ────────────────────
+            "tiktok_spend": round(tiktok_spend, 2),
+            "tiktok_purchases": int(tiktok_purchases),
+            "tiktok_revenue": round(tiktok_revenue, 2),
+            "tiktok_roas": tiktok_roas,
+            # ── Meta Ads aggregated total (over the active date range) ──────
+            "meta_spend": round(meta_spend_total, 2),
+            "meta_purchases": int(meta_purchases_total),
+            "meta_revenue": round(meta_revenue_total, 2),
+            "meta_roas": round(meta_revenue_total / meta_spend_total, 2) if meta_spend_total > 0 else 0.0,
+            # Backward-compatible aliases used by older UI code
+            "analyses_count": len(recent),
+            "make_orders_count": src_counts.get("make", 0),
+            # ── Phase 1: shipping & COD balance splits ───────────────────────
+            "shipping_approved": shipping_balance_approved,
+            "shipping_unapproved": shipping_balance_unapproved,
+            "cod_approved": cod_balance_approved,
+            "cod_unapproved": cod_balance_unapproved,
+        },
+        "net_sales_config": cfg,
+        "hide_inferred_date_orders": bool(settings.get("hide_inferred_date_orders")),
+        "monthly": monthly,
+        "payment_breakdown": payment_breakdown_merged,
+        "shipping_breakdown": shipping_breakdown_merged,
+        "source_breakdown": [
+            {"name": k, "count": v} for k, v in src_counts.items() if v > 0
+        ],
+        "recent_analyses": [
+            {
+                "id": a["id"],
+                "name": a.get("name"),
+                "date": a.get("date"),
+                "filename": a.get("filename"),
+                "total_sales": a["report"]["summary"]["total_sales"],
+                "net_profit": a["report"]["summary"]["net_profit"],
+                "total_orders": a["report"]["summary"]["total_orders"],
+                "orders_imported": int(a.get("orders_imported") or 0),
+                "is_legacy": not bool(a.get("orders_imported")),
+            } for a in recent
+        ],
+    }
+
+
+# ── Iter-207d — Excluded Orders Drill-down ────────────────────────────────
+@api.get("/dashboard/excluded-orders")
+async def excluded_orders_list(
+    user: dict = Depends(current_user),
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+):
+    """Return the orders that the Dashboard's `total_orders` /
+    `total_sales` figures EXCLUDED (because their status didn't match
+    `report_included_statuses` OR they were classified pending /
+    cancelled).
+
+    Used by the transparency badge on `ProfitSummaryCard` and
+    `UnifiedPaymentGatewaysCard` to let the merchant inspect exactly
+    which 3 orders cause the 554.56 ر.س gap with the Salla platform.
+    """
+    settings = await ensure_user_settings(db, user["id"])
+    included_statuses = settings.get("report_included_statuses") or []
+    # Pull every order in the window; we'll classify in Python so we
+    # can mirror the EXACT semantics of the dashboard filter.
+    q: dict = {"user_id": user["id"]}
+    if from_date or to_date:
+        q["order_date"] = {}
+        if from_date:
+            q["order_date"]["$gte"] = from_date
+        if to_date:
+            q["order_date"]["$lte"] = to_date
+    all_orders = await db.unified_orders.find(
+        q, {"_id": 0, "raw_by_source": 0},
+    ).to_list(50000)
+
+    excluded: list = []
+    for o in all_orders:
+        status = (o.get("order_status") or "").strip()
+        # Same case-insensitive partial-match logic used by
+        # /api/dashboard (line ~1842-1846).
+        if included_statuses:
+            if not _matches_any(status, included_statuses):
+                excluded.append(o)
+                continue
+        # No-status orders are also excluded by the dashboard
+        # filter when included_statuses is non-empty.
+        # If included_statuses is empty we still bucket pending/
+        # cancelled separately to mirror the gateway endpoint's
+        # behaviour. Resolve via the existing order_status_policy.
+        from order_status_policy import (
+            get_policy_map as _gp,
+            resolve_category as _rc,
+        )
+        # Cache the policy map across the loop for perf.
+        if "_policy" not in locals():
+            _policy = await _gp(db, user["id"])
+        else:
+            _policy = locals()["_policy"]
+        cat = _rc(status, _policy)
+        if cat in ("pending", "cancelled"):
+            excluded.append(o)
+
+    # Slim payload — only fields the modal needs to render the table.
+    rows = []
+    total_value = 0.0
+    for o in excluded:
+        amt = float(o.get("total_amount") or 0)
+        total_value += amt
+        rows.append({
+            "order_number": str(o.get("order_number") or ""),
+            "order_date": o.get("order_date") or "",
+            "order_status": (o.get("order_status") or "").strip(),
+            "payment_method": (o.get("payment_method") or "غير محدد").strip()
+                              or "غير محدد",
+            "shipping_company": (o.get("shipping_company") or "—").strip()
+                                or "—",
+            "customer_name": (o.get("customer_name") or "").strip()
+                             or (o.get("customer") or {}).get("name") or "",
+            "total_amount": round(amt, 2),
+        })
+    rows.sort(key=lambda x: (x["order_date"], x["order_number"]))
+    return {
+        "from_date": from_date,
+        "to_date": to_date,
+        "included_statuses": included_statuses,
+        "orders_count": len(rows),
+        "total_amount": round(total_value, 2),
+        "orders": rows,
+    }
+
+
+# ── Ads-cost breakdown — drill-down for ProfitSummaryCard ───────────────────
+@api.get("/dashboard/ads-cost-breakdown")
+async def ads_cost_breakdown(
+    user: dict = Depends(current_user),
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+):
+    """READ-ONLY drill-down for the "إجمالي تكاليف الإعلانات" tile on
+    the dashboard. Returns every `ad_account_ledger.type=spend` row in
+    the inclusive date window [from_date, to_date], joined with the
+    counterparty (so the UI can show ad-account name + provider).
+
+    Same accounting source the Dashboard total uses (Iter-160 SSOT —
+    `ad_account_ledger`), so the totals always reconcile with the
+    aggregated KPI value.
+    """
+    uid = user["id"]
+    q: dict = {"user_id": uid, "type": "spend"}
+    if from_date or to_date:
+        q["date"] = {}
+        if from_date:
+            q["date"]["$gte"] = from_date
+        if to_date:
+            q["date"]["$lte"] = to_date
+
+    rows = await db.ad_account_ledger.find(
+        q,
+        {"_id": 0, "id": 1, "counterparty_id": 1, "amount": 1,
+         "date": 1, "description": 1, "breakdown": 1, "created_at": 1,
+         "balance_after": 1, "debt_after": 1},
+    ).sort([("date", -1), ("created_at", -1)]).to_list(5000)
+
+    cp_ids = list({r.get("counterparty_id") for r in rows
+                   if r.get("counterparty_id")})
+    cp_map: dict = {}
+    if cp_ids:
+        async for cp in db.counterparties.find(
+            {"user_id": uid, "id": {"$in": cp_ids}},
+            {"_id": 0, "id": 1, "name": 1, "ad_provider": 1},
+        ):
+            cp_map[cp["id"]] = {
+                "name": cp.get("name") or "—",
+                "ad_provider": cp.get("ad_provider") or "—",
+            }
+
+    items = []
+    grand = 0.0
+    by_provider: dict = {}
+    by_account: dict = {}
+    for r in rows:
+        cp_id = r.get("counterparty_id")
+        cp_info = cp_map.get(cp_id, {"name": "—", "ad_provider": "—"})
+        amount = round(float(r.get("amount") or 0), 2)
+        bd = r.get("breakdown") or {}
+        source_tag = (
+            "cron (مزامنة تلقائية)"
+            if bd.get("auto_cron") else "manual"
+        )
+        items.append({
+            "id": r.get("id"),
+            "date": r.get("date"),
+            "ad_account_id": cp_id,
+            "ad_account_name": cp_info["name"],
+            "ad_provider": cp_info["ad_provider"],
+            "amount": amount,
+            "description": r.get("description") or "",
+            "source": source_tag,
+            "covered_from_balance": round(
+                float(bd.get("from_balance") or 0), 2),
+            "created_debt": round(
+                float(bd.get("created_debt")
+                      or bd.get("uncovered") or 0), 2),
+            "platform_total": round(
+                float(bd.get("platform_total") or 0), 2),
+            "balance_after": round(
+                float(r.get("balance_after") or 0), 2),
+            "debt_after": round(float(r.get("debt_after") or 0), 2),
+            "created_at": r.get("created_at"),
+        })
+        grand += amount
+        by_provider[cp_info["ad_provider"]] = (
+            by_provider.get(cp_info["ad_provider"], 0.0) + amount)
+        by_account[cp_info["name"]] = (
+            by_account.get(cp_info["name"], 0.0) + amount)
+
+    return {
+        "ok": True,
+        "from_date": from_date,
+        "to_date": to_date,
+        "total_amount": round(grand, 2),
+        "total_entries": len(items),
+        "by_provider": {k: round(v, 2) for k, v in by_provider.items()},
+        "by_account": {k: round(v, 2) for k, v in by_account.items()},
+        "items": items,
+    }
+
+
+# ── iter-45 — Electronic Net debug / verification endpoint ────────────────
+@api.get("/dashboard/electronic-net-debug")
+async def electronic_net_debug(
+    user: dict = Depends(current_user),
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+):
+    """Return a fully-itemized breakdown of the "صافي المدفوعات الإلكترونية"
+    KPI so the merchant can audit it against Salla's "غير المفوترة" screen.
+    """
+    settings = await ensure_user_settings(db, user["id"])
+    elec_excluded_terms = settings.get("electronic_net_excluded_statuses")
+    if elec_excluded_terms is None:
+        elec_excluded_terms = DEFAULT_ELECTRONIC_NET_EXCLUDED_STATUSES
+
+    orders_q: dict = {"user_id": user["id"]}
+    if from_date or to_date:
+        orders_q["order_date"] = {}
+        if from_date:
+            orders_q["order_date"]["$gte"] = from_date
+        if to_date:
+            orders_q["order_date"]["$lte"] = to_date
+    all_orders = await db.unified_orders.find(orders_q, {"_id": 0}).to_list(20000)
+
+    if settings.get("hide_inferred_date_orders"):
+        all_orders = [o for o in all_orders if not bool(o.get("order_date_inferred"))]
+
+    included_statuses = settings.get("report_included_statuses") or []
+    if included_statuses:
+        # Substring match (case-insensitive) — inlined here because
+        # the dashboard's `_matches_any` helper is a nested function and
+        # not in this module's scope.
+        included_lower = [s.strip().lower() for s in included_statuses if s and s.strip()]
+        all_orders = [
+            o for o in all_orders
+            if any(t in (o.get("order_status", "") or "").strip().lower()
+                   for t in included_lower)
+        ]
+
+    tamara_keywords = ("تمارا", "tamara")
+    tabby_keywords = ("تابي", "tabby")
+    emkan_keywords = ("إمكان", "امكان", "emkan", "amkan")
+    cod_keywords = ("عند الاستلام", "عند الاستلم", "cod", "cash on delivery", "cash_on_delivery")
+    # iter-47 — bank transfer is excluded from the electronic-net audit
+    bank_keywords = (
+        "تحويل بنكي", "حوالة بنكية", "تحويل البنك", "تحويل بنوك",
+        "bank transfer", "bank_transfer", "wire transfer",
+    )
+
+    def _is_electronic(name: str) -> bool:
+        n = (name or "").strip().lower()
+        if not n:
+            return False
+        if any(k in n for k in tamara_keywords):
+            return False
+        if any(k in n for k in tabby_keywords):
+            return False
+        if any(k in n for k in emkan_keywords):
+            return False
+        if any(k in n for k in cod_keywords):
+            return False
+        # iter-47 — bank has its own KPI; never count in electronic-net.
+        if any(k in n for k in bank_keywords):
+            return False
+        if n == "bank":
+            return False
+        return True
+
+    electronic_total = 0
+    electronic_included: list[dict] = []
+    electronic_excluded: list[dict] = []
+    status_excluded_counts: dict[str, int] = {}
+
+    for o in all_orders:
+        pm = o.get("payment_method", "")
+        if not _is_electronic(pm):
+            continue
+        electronic_total += 1
+        status = (o.get("order_status") or "").strip()
+        if _is_excluded_for_electronic_net(status, elec_excluded_terms):
+            electronic_excluded.append(o)
+            key = status or "(فارغ)"
+            status_excluded_counts[key] = status_excluded_counts.get(key, 0) + 1
+        else:
+            electronic_included.append(o)
+
+    def _compute_with_fees(orders: list[dict]) -> tuple[float, float, list[dict]]:
+        parsed = orders_to_parsed(orders)
+        matched = match_settings(
+            parsed,
+            settings.get("payment_methods", DEFAULT_PAYMENT_METHODS),
+            settings.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES),
+        )
+        gross = sum(float(p.get("total_sales", 0) or 0) for p in matched.get("payment_breakdown", []))
+        fees = sum(float(p.get("fee_amount", 0) or 0) for p in matched.get("payment_breakdown", []))
+        return gross, fees, matched.get("payment_breakdown", [])
+
+    all_electronic_orders = electronic_included + electronic_excluded
+    pre_gross, pre_fees, _ = _compute_with_fees(all_electronic_orders)
+    post_gross, post_fees, post_breakdown = _compute_with_fees(electronic_included)
+
+    def _short(o: dict, *, reason: Optional[str] = None) -> dict:
+        d = {
+            "order_number": o.get("order_number") or "",
+            "order_date": o.get("order_date") or "",
+            "payment_method": o.get("payment_method") or "",
+            "order_status": o.get("order_status") or "",
+            "total_amount": round(float(o.get("total_amount") or 0), 2),
+        }
+        if reason:
+            d["exclusion_reason"] = reason
+        return d
+
+    excluded_sample = [
+        _short(o, reason=_first_match_reason(o.get("order_status", ""), elec_excluded_terms))
+        for o in electronic_excluded[:50]
+    ]
+    included_sample = [_short(o) for o in electronic_included[:50]]
+
+    ref = settings.get("salla_electronic_net_reference")
+    computed_net = round(post_gross - post_fees, 2)
+    gap = None
+    gap_pct = None
+    if isinstance(ref, (int, float)) and ref > 0:
+        gap = round(computed_net - float(ref), 2)
+        gap_pct = round((gap / float(ref)) * 100, 2) if ref else None
+
+    return {
+        "range": {"from_date": from_date, "to_date": to_date},
+        "excluded_statuses_active": list(elec_excluded_terms),
+        "totals": {
+            "electronic_orders_total": electronic_total,
+            "electronic_orders_included": len(electronic_included),
+            "electronic_orders_excluded": len(electronic_excluded),
+            "pre_filter_gross": round(pre_gross, 2),
+            "pre_filter_fees": round(pre_fees, 2),
+            "pre_filter_net": round(pre_gross - pre_fees, 2),
+            "post_filter_gross": round(post_gross, 2),
+            "post_filter_fees": round(post_fees, 2),
+            "post_filter_net": computed_net,
+        },
+        "salla_reference": {
+            "value": ref,
+            "gap_vs_computed": gap,
+            "gap_percent": gap_pct,
+        },
+        "excluded_by_status": [
+            {"status": k, "count": v}
+            for k, v in sorted(status_excluded_counts.items(), key=lambda x: -x[1])
+        ],
+        "payment_breakdown_after_filter": [
+            {
+                "name": p.get("name"),
+                "orders_count": int(p.get("orders_count") or 0),
+                "total_sales": round(float(p.get("total_sales") or 0), 2),
+                "fee_amount": round(float(p.get("fee_amount") or 0), 2),
+                "net_amount": round(
+                    float(p.get("total_sales") or 0) - float(p.get("fee_amount") or 0), 2,
+                ),
+                "commission_percent": float(p.get("commission_percent") or 0),
+                "fixed_fee": float(p.get("fixed_fee") or 0),
+                "vat_percent": float(p.get("vat_percent") or 0),
+            }
+            for p in post_breakdown
+        ],
+        "excluded_orders_sample": excluded_sample,
+        "included_orders_sample": included_sample,
+    }
+
+
+def _first_match_reason(status: str, excluded_terms: list[str]) -> str:
+    """Return the first excluded-term that matched this status."""
+    s = (status or "").strip().lower()
+    if not s:
+        return ""
+    for t in excluded_terms:
+        if t and t.strip().lower() in s:
+            return t
+    return ""
+
+
+# ── iter-45 — One-click "Sync to Salla" preset ────────────────────────────
+@api.post("/settings/electronic-net/sync-to-salla")
+async def electronic_net_sync_to_salla(user: dict = Depends(current_user)):
+    """Restore the Salla-compatible default exclusion list."""
+    new_list = list(DEFAULT_ELECTRONIC_NET_EXCLUDED_STATUSES)
+    await db.settings.update_one(
+        {"user_id": user["id"]},
+        {"$set": {
+            "electronic_net_excluded_statuses": new_list,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+        upsert=True,
+    )
+    return {"ok": True, "electronic_net_excluded_statuses": new_list}
+
+
+
+
+# ── Shared attribution helper ─────────────────────────────────────────────
+# Used by snapchat-summary / tiktok-summary / meta-summary to backfill
+# orders + revenue from `unified_orders` when the platform's Pixel
+# numbers come back zero (very common for fresh accounts, accounts
+# without Pixel setup, or specific date ranges where attribution is
+# missing). Without this fallback the merchant sees `0 orders` on the
+# card despite spend > 0 and real attributed orders in the store
+# (iteration 21 bug fix).
+async def _attributed_orders_from_store(
+    db, uid: str, source_aliases: tuple, start: str, end: str,
+) -> tuple[int, float]:
+    """Count orders + revenue using normalized and raw Salla source paths.
+
+    Source matching includes the current ``source_details.utm_source`` shape
+    as well as durable normalized fields (case-insensitive, partial-match).
+    Date filter uses `order_date` BETWEEN start and end (inclusive).
+
+    Returns (orders, revenue).
+    """
+    if not source_aliases:
+        return 0, 0.0
+    # Build case-insensitive regex matching ANY alias substring.
+    pattern = "|".join(source_aliases)
+    source_paths = (
+        "utm_source",
+        "source_native",
+        "traffic_source",
+        "marketing_source",
+        "ad_platform_source",
+        "raw_by_source.salla_direct.utm_source",
+        "raw_by_source.salla_direct.source_details.utm_source",
+        "raw_by_source.salla_direct.utm.source",
+        "raw_by_source.salla_direct.marketing.utm_source",
+        "raw_by_source.salla_direct.attribution.utm_source",
+        "raw_by_source.salla_direct.campaign.source",
+    )
+    pipeline = [
+        {"$match": {
+            "user_id": uid,
+            "order_date": {"$gte": start, "$lte": end},
+            "$or": [
+                {path: {"$regex": pattern, "$options": "i"}}
+                for path in source_paths
+            ],
+        }},
+        {"$group": {"_id": None,
+                    "orders": {"$sum": 1},
+                    "revenue": {"$sum": {"$ifNull": ["$total_amount", 0]}}}},
+    ]
+    async for d in db.unified_orders.aggregate(pipeline):
+        return int(d.get("orders", 0)), round(float(d.get("revenue", 0)), 2)
+    return 0, 0.0
+
+
+# ── Iter-160 (Message #737 directive) ────────────────────────────────────────
+# Single Source of Truth: ad spend on the Dashboard MUST be aggregated
+# strictly from `ad_account_ledger` (type=spend). Old paths reading from
+# `daily_costs.snapchat_ads`, `snapchat_ads_daily`, `meta_ads_daily`,
+# `tiktok_ads_daily` are deprecated for spend totals. The raw API
+# collections remain for purchases/impressions/clicks (NON-accounting
+# metrics) but NEVER for the spend figure shown to merchants.
+async def _spend_by_date_from_ledger(
+    db, uid: str, providers: tuple, start: str, end: str,
+) -> dict[str, float]:
+    """Return {date_iso: total_spend} aggregated from ad_account_ledger
+    for the given user, ad_provider aliases, and date window.
+
+    Joins `ad_account_ledger.counterparty_id` → `counterparties.id` to
+    filter by `ad_provider`. Returns ONE row per calendar date with
+    the sum across all accounts of that provider for that user.
+    """
+    if not providers:
+        return {}
+    # Resolve counterparty ids matching any of these provider aliases.
+    cps = await db.counterparties.find(
+        {"user_id": uid, "kind": "ad_account",
+         "ad_provider": {"$in": list(providers)}},
+        {"_id": 0, "id": 1},
+    ).to_list(200)
+    cp_ids = [c["id"] for c in cps]
+    if not cp_ids:
+        return {}
+    pipeline = [
+        {"$match": {
+            "user_id": uid,
+            "counterparty_id": {"$in": cp_ids},
+            "type": "spend",
+            "date": {"$gte": start, "$lte": end},
+        }},
+        {"$group": {
+            "_id": "$date",
+            "spend": {"$sum": "$amount"},
+        }},
+    ]
+    out: dict[str, float] = {}
+    async for row in db.ad_account_ledger.aggregate(pipeline):
+        out[row["_id"]] = float(row.get("spend") or 0)
+    return out
+
+
+# ── Snapchat Ads dashboard summary ────────────────────────────────────────────
+@api.get("/dashboard/snapchat-summary")
+async def snapchat_summary(user: dict = Depends(current_user)):
+    """Auto-computed Snapchat Ads card data: today + this-month spend
+    (from daily_costs.snapchat_ads + snapchat_ads_2) and the matching
+    store performance (orders + revenue from unified_orders). Plus a
+    30-day history strip so the UI can render a sparkline. Mirrors the
+    TikTok card behavior — auto-refreshes when the dashboard polls.
+
+    All dates use Asia/Riyadh timezone (matches the merchant's locale and
+    the date used by both the Snapchat bulk fetch and the browser refresh
+    button — so a 02:00 AM Riyadh refresh updates the card immediately
+    instead of writing to tomorrow's UTC date)."""
+    uid = user["id"]
+    today_d = _local_today_date()
+    today_str = today_d.isoformat()
+    month_start_str = today_str[:8] + "01"
+    d30_start_str = (today_d - timedelta(days=29)).isoformat()
+
+    # 1) Snapchat spend — STRICTLY from ad_account_ledger (Iter-160 SSOT).
+    #    Old reads from daily_costs.snapchat_ads* are no longer used to
+    #    prevent double-counting between manual entries and API syncs.
+    by_date_spend = await _spend_by_date_from_ledger(
+        db, uid, ("snapchat", "snap"), d30_start_str, today_str,
+    )
+
+    spend_today = round(by_date_spend.get(today_str, 0.0), 2)
+    spend_month = round(sum(v for k, v in by_date_spend.items() if k >= month_start_str), 2)
+    spend_30d = round(sum(by_date_spend.values()), 2)
+
+    # Display Snapchat spend in BOTH currencies. Stored values are SAR
+    # (already converted at ingest), USD is derived using the user's
+    # preferred USD→SAR rate from `ads_currency_settings` (Iter-243).
+    # Falls back to 3.752 when no setting exists.
+    _ads_cfg = await db.ads_currency_settings.find_one(
+        {"user_id": uid}, {"_id": 0, "usd_to_sar_rate": 1},
+    ) or {}
+    USD_RATE = float(_ads_cfg.get("usd_to_sar_rate") or 3.752)
+
+    def _to_usd(sar: float) -> float:
+        return round(sar / USD_RATE, 2) if sar else 0.0
+
+    # 2) Orders + revenue — prefer Snapchat's own Pixel-reported conversions
+    #    (stored in snapchat_daily_stats by the bulk fetch). Fall back to
+    #    unified_orders only when the Snapchat-side numbers are completely
+    #    absent (legacy users who haven't fetched yet).
+    settings = await ensure_user_settings(db, uid)
+    snap_stats_rows = await db.snapchat_daily_stats.find(
+        {"user_id": uid, "date": {"$gte": d30_start_str, "$lte": today_str}},
+        {"_id": 0, "date": 1, "purchases": 1, "revenue": 1},
+    ).to_list(60)
+    snap_by_date: dict = {r["date"]: r for r in snap_stats_rows}
+
+    def _snap_agg(start: str, end: str):
+        rows = [r for k, r in snap_by_date.items() if start <= k <= end]
+        orders = sum(int(r.get("purchases") or 0) for r in rows)
+        revenue = round(sum(float(r.get("revenue") or 0) for r in rows), 2)
+        return orders, revenue, len(rows) > 0
+
+    orders_today, revenue_today, has_today = _snap_agg(today_str, today_str)
+    orders_month, revenue_month, has_month = _snap_agg(month_start_str, today_str)
+    orders_30d, revenue_30d, has_30d = _snap_agg(d30_start_str, today_str)
+    snap_pixel_active = has_30d  # any data within 30d → snap pixel is reporting
+
+    # Backfill from unified_orders when Pixel returned 0 (iteration 21 fix).
+    # We backfill PER-WINDOW so a window with real Pixel data is preserved,
+    # while a window where Pixel returned 0 falls back to store attribution.
+    SNAP_ALIASES = ("snapchat", "snap")
+    if orders_today == 0 and revenue_today == 0:
+        orders_today, revenue_today = await _attributed_orders_from_store(
+            db, uid, SNAP_ALIASES, today_str, today_str,
+        )
+    if orders_month == 0 and revenue_month == 0:
+        orders_month, revenue_month = await _attributed_orders_from_store(
+            db, uid, SNAP_ALIASES, month_start_str, today_str,
+        )
+    if orders_30d == 0 and revenue_30d == 0:
+        orders_30d, revenue_30d = await _attributed_orders_from_store(
+            db, uid, SNAP_ALIASES, d30_start_str, today_str,
+        )
+
+    # Legacy fallback: ONLY if there's no Pixel data AT ALL anywhere in
+    # the last 30d AND the utm-based attribution above didn't yield
+    # anything either, fall back to ALL store orders (un-attributed). This
+    # is the original behaviour for users with no Pixel setup and no UTMs.
+    if not has_30d:
+        base_q = {"user_id": uid}
+        if settings.get("hide_inferred_date_orders"):
+            base_q["order_date_inferred"] = {"$ne": True}
+
+        async def _summarize(q):
+            pipeline = [
+                {"$match": q},
+                {"$group": {"_id": None,
+                            "orders": {"$sum": 1},
+                            "revenue": {"$sum": {"$ifNull": ["$total_amount", 0]}}}},
+            ]
+            async for d in db.unified_orders.aggregate(pipeline):
+                return int(d.get("orders", 0)), round(float(d.get("revenue", 0)), 2)
+            return 0, 0.0
+
+        if not has_today:
+            orders_today, revenue_today = await _summarize({**base_q, "order_date": today_str})
+        if not has_month:
+            orders_month, revenue_month = await _summarize({**base_q,
+                "order_date": {"$gte": month_start_str, "$lte": today_str}})
+        orders_30d, revenue_30d = await _summarize({**base_q,
+            "order_date": {"$gte": d30_start_str, "$lte": today_str}})
+
+    # Build 30-day spend history (filled with zeros for missing days)
+    history: list = []
+    for i in range(29, -1, -1):
+        d = (today_d - timedelta(days=i)).isoformat()
+        history.append({"date": d, "spend": round(by_date_spend.get(d, 0.0), 2)})
+
+    # Pick the most recent update_at across this month's daily_costs rows for
+    # the "آخر تحديث" line on the dashboard.
+    last_fetched_doc = await db.daily_costs.find_one(
+        {"user_id": uid, "snapchat_ads": {"$gt": 0}},
+        {"_id": 0, "updated_at": 1, "created_at": 1},
+        sort=[("updated_at", -1)],
+    )
+    last_fetched_at = None
+    if last_fetched_doc:
+        last_fetched_at = last_fetched_doc.get("updated_at") or last_fetched_doc.get("created_at")
+
+    def _roas(rev: float, spend: float) -> float:
+        return round(rev / spend, 2) if spend > 0 else 0.0
+
+    def _cpo(spend: float, orders: int) -> Optional[float]:
+        """Iter-89 — Cost per order = spend / orders.
+        Returns None when either is zero so the UI shows '—'."""
+        if not orders or not spend:
+            return None
+        return round(spend / orders, 2)
+
+    return {
+        "today": {
+            "date": today_str,
+            "spend": spend_today,
+            "spend_usd": _to_usd(spend_today),
+            "orders": orders_today,
+            "revenue": revenue_today,
+            "roas": _roas(revenue_today, spend_today),
+            "cost_per_order": _cpo(spend_today, orders_today),
+        },
+        "month": {
+            "start": month_start_str,
+            "spend": spend_month,
+            "spend_usd": _to_usd(spend_month),
+            "orders": orders_month,
+            "revenue": revenue_month,
+            "roas": _roas(revenue_month, spend_month),
+            "cost_per_order": _cpo(spend_month, orders_month),
+        },
+        "last_30d": {
+            "start": d30_start_str,
+            "spend": spend_30d,
+            "spend_usd": _to_usd(spend_30d),
+            "orders": orders_30d,
+            "revenue": revenue_30d,
+            "roas": _roas(revenue_30d, spend_30d),
+            "cost_per_order": _cpo(spend_30d, orders_30d),
+        },
+        "usd_rate": USD_RATE,
+        "last_fetched_at": last_fetched_at,
+        "source": "snapchat_pixel" if snap_pixel_active else "store_orders",
+        "history": history,
+    }
+
+
+# ── Iter-159j — Per-Snapchat-account dashboard summary ─────────────────
+# Same numbers as `snapchat-summary` but BROKEN OUT per ad-account so the
+# merchant can see each account's contribution independently in the
+# dashboard. Orders + revenue are prorated by spend share (Snapchat Pixel
+# doesn't report which ad-account drove each conversion).
+@api.get("/dashboard/snapchat-accounts-summary")
+async def snapchat_accounts_summary(user: dict = Depends(current_user)):
+    uid = user["id"]
+    today_d = _local_today_date()
+    today_str = today_d.isoformat()
+    month_start_str = today_str[:8] + "01"
+
+    # All snapchat ad-account counterparties for this user.
+    accts = await db.counterparties.find(
+        {"user_id": uid, "kind": "ad_account", "ad_provider": "snapchat"},
+        {"_id": 0, "id": 1, "name": 1, "external_account_id": 1,
+         "credit_limit": 1, "alert_threshold_pct": 1,
+         "currency": 1, "apply_bank_commission": 1},
+    ).sort("name", 1).to_list(50)
+
+    if not accts:
+        return {"accounts": [], "month_start": month_start_str,
+                "today": today_str}
+
+    # Per-account month spend — from ad_account_ledger.type=spend.
+    spend_pipeline = await db.ad_account_ledger.aggregate([
+        {"$match": {"user_id": uid, "type": "spend",
+                    "date": {"$gte": month_start_str, "$lte": today_str},
+                    "counterparty_id": {"$in": [a["id"] for a in accts]}}},
+        {"$group": {"_id": "$counterparty_id",
+                    "spend": {"$sum": "$amount"}}},
+    ]).to_list(100)
+    spend_by_acct = {r["_id"]: float(r["spend"] or 0) for r in spend_pipeline}
+
+    # Combined Snapchat orders + revenue this month (Pixel → fallback store).
+    snap_stats = await db.snapchat_daily_stats.find(
+        {"user_id": uid, "date": {"$gte": month_start_str, "$lte": today_str}},
+        {"_id": 0, "purchases": 1, "revenue": 1},
+    ).to_list(60)
+    total_orders = sum(int(r.get("purchases") or 0) for r in snap_stats)
+    total_revenue = round(
+        sum(float(r.get("revenue") or 0) for r in snap_stats), 2)
+    if total_orders == 0 and total_revenue == 0:
+        # Fallback to store attribution
+        total_orders, total_revenue = await _attributed_orders_from_store(
+            db, uid, ("snapchat", "snap"), month_start_str, today_str,
+        )
+
+    # NOTE: `total_spend` (in raw account currency) was misleading
+    # and removed in Iter-246l.  See `total_spend_sar` below, computed
+    # AFTER per-account conversion.
+
+    # Per-account open debt (for the "near limit" indicator).
+    debt_pipeline = await db.liabilities.aggregate([
+        {"$match": {"user_id": uid, "kind": "ad_account",
+                    "counterparty_id": {"$in": [a["id"] for a in accts]},
+                    "status": {"$in": ["unpaid", "partial"]}}},
+        {"$group": {"_id": "$counterparty_id",
+                    "open": {"$sum": {"$subtract": [
+                        "$expected_amount", "$paid_amount"]}}}},
+    ]).to_list(100)
+    debt_by_acct = {r["_id"]: round(float(r["open"] or 0), 2)
+                    for r in debt_pipeline}
+
+    # Iter-246l — FX + bank-commission normalisation per account.
+    # The ledger stores raw `amount` in the account's billing currency
+    # (USD for most Snapchat accounts).  Without this normalisation
+    # the per-account card showed «0.00 ر.س ≈ 420.65 USD» while the
+    # aggregated card converted properly, hence the merchant's report.
+    fx_doc = await db.ads_currency_settings.find_one(
+        {"user_id": uid}, {"_id": 0})
+    usd_to_sar = float(
+        (fx_doc or {}).get("usd_to_sar_rate") or 3.7544)
+    default_bank_pct = float(
+        (fx_doc or {}).get("bank_commission_pct") or 0.0)
+
+    def _to_sar(spend_raw: float, currency: str,
+                apply_bank: bool) -> tuple[float, float, float]:
+        """Returns (sar_no_fees, bank_fee, total_sar)."""
+        if not spend_raw:
+            return 0.0, 0.0, 0.0
+        if (currency or "USD").upper() == "USD":
+            sar = spend_raw * usd_to_sar
+        else:
+            sar = spend_raw
+        fee = sar * (default_bank_pct / 100.0) if apply_bank else 0.0
+        return round(sar, 2), round(fee, 2), round(sar + fee, 2)
+
+    rows = []
+    # First pass: convert each row to SAR so we can build a real total.
+    converted: list[dict] = []
+    for a in accts:
+        spend_raw = round(spend_by_acct.get(a["id"], 0.0), 2)
+        cur = (a.get("currency") or "USD").upper()
+        apply_bank = bool(a.get("apply_bank_commission", True))
+        sar_amount, bank_fee, spend_sar = _to_sar(
+            spend_raw, cur, apply_bank)
+        converted.append({
+            "acct": a, "spend_raw": spend_raw, "currency": cur,
+            "apply_bank": apply_bank, "sar_amount": sar_amount,
+            "bank_fee": bank_fee, "spend_sar": spend_sar,
+        })
+    total_spend_sar = round(
+        sum(c["spend_sar"] for c in converted), 2)
+
+    for c in converted:
+        a = c["acct"]
+        spend_sar = c["spend_sar"]
+        share = (spend_sar / total_spend_sar) if total_spend_sar > 0 else 0
+        # Prorate orders + revenue by SAR-spend share so the cards
+        # never split a percentage of zero or mix USD vs SAR.
+        acc_orders = int(round(total_orders * share)) if share else 0
+        acc_revenue = round(total_revenue * share, 2) if share else 0.0
+        cpo = (round(spend_sar / acc_orders, 2)
+               if acc_orders > 0 and spend_sar > 0 else None)
+        roas = (round(acc_revenue / spend_sar, 2)
+                if spend_sar > 0 else 0.0)
+        rows.append({
+            "id": a["id"],
+            "name": a.get("name"),
+            "external_account_id": a.get("external_account_id"),
+            # `spend` keeps backward-compat — now the SAR total.
+            "spend": spend_sar,
+            "spend_raw": c["spend_raw"],
+            "spend_currency": c["currency"],
+            "spend_sar": c["sar_amount"],
+            "bank_fee_sar": c["bank_fee"],
+            "spend_total_sar": spend_sar,
+            "fx_rate_used": usd_to_sar if c["currency"] == "USD" else 1.0,
+            "bank_commission_pct_used": (
+                default_bank_pct if c["apply_bank"] else 0.0),
+            "spend_share_pct": round(share * 100, 1),
+            "orders": acc_orders,
+            "revenue": acc_revenue,
+            "cost_per_order": cpo,
+            "roas": roas,
+            "open_debt": debt_by_acct.get(a["id"], 0.0),
+            "credit_limit": a.get("credit_limit"),
+            "alert_threshold_pct": a.get("alert_threshold_pct"),
+        })
+
+    return {
+        "accounts": rows,
+        "month_start": month_start_str,
+        "today": today_str,
+        "totals": {
+            "spend": total_spend_sar,
+            "spend_sar": total_spend_sar,
+            "spend_raw_usd": round(
+                sum(c["spend_raw"] for c in converted
+                    if c["currency"] == "USD"), 2),
+            "orders": total_orders,
+            "revenue": total_revenue,
+            "fx_rate_used": usd_to_sar,
+            "bank_commission_pct_used": default_bank_pct,
+        },
+    }
+
+
+# ── Meta Ads dashboard summary ────────────────────────────────────────────────
+@api.get("/dashboard/meta-summary")
+async def meta_summary(user: dict = Depends(current_user)):
+    """Auto-computed Meta Ads card data: today + this-month + last 30d.
+    Pulled directly from meta_ads_daily (populated by the Meta Marketing
+    API direct integration). Also returns a per-campaign breakdown for
+    the dedicated Meta report page.
+
+    All dates use Asia/Riyadh timezone — same rationale as snapchat-summary:
+    matches the merchant's locale and the date written by the meta /sync
+    endpoint, so "today" lines up across browser, fetch, and aggregation."""
+    uid = user["id"]
+    today_d = _local_today_date()
+    today_str = today_d.isoformat()
+    month_start_str = today_str[:8] + "01"
+    d30_start_str = (today_d - timedelta(days=29)).isoformat()
+
+    rows = await db.meta_ads_daily.find(
+        {"user_id": uid, "date": {"$gte": d30_start_str, "$lte": today_str}},
+        {"_id": 0},
+    ).to_list(2000)
+
+    # Iter-160 SSOT: spend now comes from ad_account_ledger (not from
+    # meta_ads_daily). Other Meta metrics (purchases, impressions, clicks,
+    # purchase_value) still come from meta_ads_daily as those are
+    # non-accounting performance metrics.
+    spend_by_date = await _spend_by_date_from_ledger(
+        db, uid, ("meta", "facebook", "instagram"), d30_start_str, today_str,
+    )
+
+    def _agg(start: str, end: str):
+        bucket = {"spend": 0.0, "purchases": 0, "purchase_value": 0.0,
+                  "impressions": 0, "clicks": 0}
+        for r in rows:
+            if start <= r["date"] <= end:
+                # NOTE: spend is intentionally NOT taken from r["spend"]
+                # anymore. We aggregate spend from the ledger below.
+                bucket["purchases"] += int(r.get("purchases") or 0)
+                bucket["purchase_value"] += float(r.get("purchase_value") or 0)
+                bucket["impressions"] += int(r.get("impressions") or 0)
+                bucket["clicks"] += int(r.get("clicks") or 0)
+        # Aggregate spend from ledger for this window
+        for d, s in spend_by_date.items():
+            if start <= d <= end:
+                bucket["spend"] += s
+        spend = round(bucket["spend"], 2)
+        purchases = bucket["purchases"]
+        revenue = round(bucket["purchase_value"], 2)
+        impressions = bucket["impressions"]
+        clicks = bucket["clicks"]
+        return {
+            "spend": spend,
+            "orders": purchases,
+            "revenue": revenue,
+            "impressions": impressions,
+            "clicks": clicks,
+            "roas": round(revenue / spend, 2) if spend > 0 else 0.0,
+            "cpa": round(spend / purchases, 2) if purchases > 0 else 0.0,
+            "cost_per_order": (
+                round(spend / purchases, 2)
+                if spend > 0 and purchases > 0 else None
+            ),
+            # CPC = spend / clicks
+            "cpc": round(spend / clicks, 2) if clicks > 0 else 0.0,
+            # CPM = (spend / impressions) * 1000
+            "cpm": round((spend / impressions) * 1000, 2) if impressions > 0 else 0.0,
+            # CTR = (clicks / impressions) * 100
+            "ctr": round((clicks / impressions) * 100, 2) if impressions > 0 else 0.0,
+        }
+
+    # 30-day spend history for sparkline — STRICTLY from ledger now.
+    by_date_spend = spend_by_date
+    history: list = []
+    for i in range(29, -1, -1):
+        d = (today_d - timedelta(days=i)).isoformat()
+        history.append({"date": d, "spend": round(by_date_spend.get(d, 0.0), 2)})
+
+    # Per-campaign breakdown (current month)
+    campaigns_map: dict = {}
+    for r in rows:
+        if r["date"] >= month_start_str:
+            key = (r.get("campaign_id") or "_default", r.get("campaign_name") or "بدون اسم")
+            c = campaigns_map.setdefault(key, {
+                "campaign_id": key[0], "campaign_name": key[1],
+                "spend": 0.0, "purchases": 0, "revenue": 0.0,
+                "impressions": 0, "clicks": 0,
+            })
+            c["spend"] += float(r.get("spend") or 0)
+            c["purchases"] += int(r.get("purchases") or 0)
+            c["revenue"] += float(r.get("purchase_value") or 0)
+            c["impressions"] += int(r.get("impressions") or 0)
+            c["clicks"] += int(r.get("clicks") or 0)
+    campaigns = []
+    for c in campaigns_map.values():
+        c["spend"] = round(c["spend"], 2)
+        c["revenue"] = round(c["revenue"], 2)
+        c["roas"] = round(c["revenue"] / c["spend"], 2) if c["spend"] > 0 else 0.0
+        campaigns.append(c)
+    campaigns.sort(key=lambda x: x["spend"], reverse=True)
+
+    # Last sync timestamp + connection health (so the dashboard can show
+    # an "expired link" banner instead of a confusing 0.00 figure).
+    last_sync = None
+    latest = await db.meta_ads_daily.find_one(
+        {"user_id": uid}, {"_id": 0, "updated_at": 1},
+        sort=[("updated_at", -1)],
+    )
+    if latest:
+        last_sync = latest.get("updated_at")
+
+    meta_conn = await db.meta_connections.find_one(
+        {"user_id": uid},
+        {"_id": 0, "connection_status": 1, "last_error_message": 1, "last_error_at": 1},
+    )
+    connection_status = (meta_conn or {}).get("connection_status") or "ok"
+    last_error_message = (meta_conn or {}).get("last_error_message")
+    last_error_at = (meta_conn or {}).get("last_error_at")
+
+    # utm-source attribution fallback (iteration 21 fix) — applied when
+    # Meta API returns 0 purchases for a window despite spend > 0. Meta
+    # bundles Facebook + Instagram, so we match both source aliases.
+    META_ALIASES = ("facebook", "fb", "instagram", "ig", "meta")
+
+    async def _agg_with_fallback(start: str, end: str) -> dict:
+        b = _agg(start, end)
+        if b["orders"] == 0 and b["revenue"] == 0:
+            attr_orders, attr_rev = await _attributed_orders_from_store(
+                db, uid, META_ALIASES, start, end,
+            )
+            if attr_orders or attr_rev:
+                b["orders"] = attr_orders
+                b["revenue"] = attr_rev
+                b["roas"] = round(attr_rev / b["spend"], 2) if b["spend"] > 0 else 0.0
+                b["cpa"] = round(b["spend"] / attr_orders, 2) if attr_orders > 0 else 0.0
+                b["cost_per_order"] = (
+                    round(b["spend"] / attr_orders, 2)
+                    if b["spend"] > 0 and attr_orders > 0 else None
+                )
+        return b
+
+    return {
+        "today": {"date": today_str, **(await _agg_with_fallback(today_str, today_str))},
+        "month": {"start": month_start_str, **(await _agg_with_fallback(month_start_str, today_str))},
+        "last_30d": {"start": d30_start_str, **(await _agg_with_fallback(d30_start_str, today_str))},
+        "history": history,
+        "campaigns": campaigns,
+        "last_sync_at": last_sync,
+        "connection_status": connection_status,
+        "last_error_message": last_error_message,
+        "last_error_at": last_error_at,
+    }
+
+
+# ── TikTok Ads dashboard summary ──────────────────────────────────────────────
+@api.get("/dashboard/tiktok-summary")
+async def tiktok_summary(user: dict = Depends(current_user)):
+    """Auto-computed TikTok Ads card data: today + this-month + last 30d.
+
+    Aggregates from `tiktok_ads_daily` (currently populated by Make.com
+    webhook — direct TikTok Marketing API integration is on the roadmap)
+    plus the local `daily_costs.tiktok_ads` field as a fallback for legacy
+    manually-entered spend.
+
+    All dates use Asia/Riyadh timezone (matches Snapchat/Meta cards)."""
+    uid = user["id"]
+    today_d = _local_today_date()
+    today_str = today_d.isoformat()
+    month_start_str = today_str[:8] + "01"
+    d30_start_str = (today_d - timedelta(days=29)).isoformat()
+
+    # Iter-160 SSOT: TikTok spend now comes STRICTLY from
+    # ad_account_ledger (Message #737 directive). tiktok_ads_daily is
+    # retained ONLY for the non-accounting metrics (purchases, revenue).
+    # Note: TikTok counterparties may have ad_provider="tiktok".
+    tt_rows = await db.tiktok_ads_daily.find(
+        {"user_id": uid, "date": {"$gte": d30_start_str, "$lte": today_str}},
+        {"_id": 0},
+    ).to_list(500)
+    tt_by_date: dict = {}
+    for r in tt_rows:
+        d = r.get("date")
+        if not d:
+            continue
+        agg = tt_by_date.setdefault(d, {"purchases": 0, "revenue": 0.0})
+        agg["purchases"] += int(r.get("purchases") or 0)
+        agg["revenue"] += float(r.get("revenue") or 0)
+
+    # Spend by date — STRICTLY from ledger.
+    spend_by_date = await _spend_by_date_from_ledger(
+        db, uid, ("tiktok",), d30_start_str, today_str,
+    )
+
+    def _row_spend(date_key: str) -> float:
+        return float(spend_by_date.get(date_key) or 0)
+
+    def _agg(start: str, end: str):
+        date_keys = {k for k in tt_by_date if start <= k <= end} \
+                    | {k for k in spend_by_date if start <= k <= end}
+        spend = 0.0
+        purchases = 0
+        revenue = 0.0
+        for k in date_keys:
+            spend += _row_spend(k)
+            row = tt_by_date.get(k) or {}
+            purchases += int(row.get("purchases") or 0)
+            revenue += float(row.get("revenue") or 0)
+        roas = round(revenue / spend, 2) if spend > 0 else 0.0
+        cpa = round(spend / purchases, 2) if purchases > 0 else 0.0
+        cost_per_order = (
+            round(spend / purchases, 2)
+            if spend > 0 and purchases > 0 else None
+        )
+        return {"spend": round(spend, 2), "orders": int(purchases),
+                "revenue": round(revenue, 2), "roas": roas, "cpa": cpa,
+                "cost_per_order": cost_per_order}
+
+    # 30-day spend history (for the sparkline)
+    history: list = []
+    for i in range(29, -1, -1):
+        d = (today_d - timedelta(days=i)).isoformat()
+        history.append({"date": d, "spend": round(_row_spend(d), 2)})
+
+    # Last update timestamp from tiktok_ads_daily
+    last_doc = await db.tiktok_ads_daily.find_one(
+        {"user_id": uid}, {"_id": 0, "updated_at": 1, "received_at": 1},
+        sort=[("updated_at", -1)],
+    )
+    last_fetched_at = None
+    if last_doc:
+        last_fetched_at = last_doc.get("updated_at") or last_doc.get("received_at")
+
+    # Apply utm-source attribution fallback when webhook reports 0 orders
+    # for a window despite spend > 0 (iteration 21 fix — same root cause
+    # as the Snap card: TikTok webhook from Make.com often omits
+    # `purchases`/`revenue` even when Salla has attributed orders).
+    TIKTOK_ALIASES = ("tiktok", "tik_tok", "tik-tok")
+
+    async def _agg_with_fallback(start: str, end: str) -> dict:
+        b = _agg(start, end)
+        if b["orders"] == 0 and b["revenue"] == 0:
+            attr_orders, attr_rev = await _attributed_orders_from_store(
+                db, uid, TIKTOK_ALIASES, start, end,
+            )
+            if attr_orders or attr_rev:
+                b["orders"] = attr_orders
+                b["revenue"] = attr_rev
+                b["roas"] = round(attr_rev / b["spend"], 2) if b["spend"] > 0 else 0.0
+                b["cpa"] = round(b["spend"] / attr_orders, 2) if attr_orders > 0 else 0.0
+                b["cost_per_order"] = (
+                    round(b["spend"] / attr_orders, 2)
+                    if b["spend"] > 0 and attr_orders > 0 else None
+                )
+        return b
+
+    return {
+        "today": {"date": today_str, **(await _agg_with_fallback(today_str, today_str))},
+        "month": {"start": month_start_str, **(await _agg_with_fallback(month_start_str, today_str))},
+        "last_30d": {"start": d30_start_str, **(await _agg_with_fallback(d30_start_str, today_str))},
+        "history": history,
+        "last_fetched_at": last_fetched_at,
+        "source": "make_webhook",
+        "has_data": len(tt_by_date) > 0 or any(v > 0 for v in spend_by_date.values()),
+    }
+
+
+# ── Unified Ads Report (Snap + TikTok + Meta) ────────────────────────────────
+@api.get("/reports/ads")
+async def unified_ads_report(
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    user: dict = Depends(current_user),
+):
+    """Unified daily/comparison report for all three ad platforms.
+
+    Returns per-platform aggregates over [from_date, to_date] (defaults to
+    current month-to-date) plus a per-day series so the UI can chart
+    spend/ROAS comparisons. Each platform reports the same metric shape:
+      spend, impressions, clicks, purchases, revenue,
+      cpc, cpm, ctr, cpa, roas.
+
+    Snapchat numbers come from `daily_costs.snapchat_ads(+_2)` (spend) and
+    `snapchat_daily_stats` (purchases/revenue from Pixel). Performance
+    metrics (CPC/CPM/CTR/CPA) for Snap aren't fetched yet — they default
     to 0 until we hit the Marketing API stats endpoint. TikTok and Meta
     expose the full metric set from their daily collections.
     """
