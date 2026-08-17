@@ -4474,9 +4474,11 @@ async def on_startup():
         start_campaign_ai_worker as _start_campaign_ai_worker,
     )
     await _ensure_campaign_ai_indexes(db)
-    app.state.campaign_ai_monitor_task = _start_campaign_ai_worker(
-        db,
-        business_context_loader=dashboard,
+    # Production stability: long-running provider/AI analysis must not run
+    # inside the FastAPI web process. Interactive API availability wins.
+    app.state.campaign_ai_monitor_task = None
+    logger.warning(
+        "production stability: campaign AI background worker disabled in web process"
     )
     # Customer Intelligence conversation core.  This creates only Mongo
     # indexes and reuses the encrypted customer identity vault; it does not
@@ -4490,10 +4492,12 @@ async def on_startup():
         queue_existing_channel_evidence as _queue_existing_customer_evidence,
         start_worker as _start_customer_learning_worker,
     )
-    queued_customer_evidence = await _queue_existing_customer_evidence(db)
-    if any(queued_customer_evidence.values()):
-        logger.info("Queued existing customer-channel evidence for governed AI analysis: %s", queued_customer_evidence)
-    app.state.customer_learning_task = _start_customer_learning_worker(db)
+    # Production stability: AI learning is deferred to a separate worker.
+    # Inbound channel/webhook ingestion remains enabled.
+    app.state.customer_learning_task = None
+    logger.warning(
+        "production stability: customer AI learning worker disabled in web process"
+    )
     # ── Qoyod Invoice MVP (Day 1) — create indexes on the 5 new
     # `qoyod_*` collections. Idempotent — safe to call on every boot.
     # See ADR-001 (architecture principles) and integrations/qoyod/models.py.
@@ -4566,7 +4570,9 @@ async def on_startup():
                 continue
             await _asyncio.sleep(AD_ACCOUNT_SYNC_INTERVAL_SECONDS)
 
-    _asyncio.create_task(_ad_account_halfhour_sync())
+    logger.warning(
+        "production stability: ad-account background sync disabled in web process"
+    )
 
     # ── Iter-215 — Ad-spend AM/PM window posting (Snap/Meta) ─────────
     # The half-hour cron (above) is now FETCH-ONLY for Snap/Meta. The
@@ -4723,7 +4729,9 @@ async def on_startup():
                 )
             await _asyncio.sleep(300)  # 5-minute heartbeat
 
-    _asyncio.create_task(_ad_spend_window_post_loop())
+    logger.warning(
+        "production stability: ad-spend catch-up worker disabled in web process"
+    )
 
     # ── Iter-117 — Hourly BNPL auto-sync (Tabby + Tamara) ────────
     # Runs every hour to fetch new/updated payments and refunds
@@ -4754,7 +4762,9 @@ async def on_startup():
                 continue
             await _asyncio.sleep(SYNC_INTERVAL_SECONDS)
 
-    _asyncio.create_task(_bnpl_hourly_auto_sync())
+    logger.warning(
+        "production stability: BNPL hourly scheduler disabled in web process"
+    )
 
     # ── Iter-147 — Daily Tamara attribution sweep ───────────────────
     # Re-derives `effective_settlement_date` + `settlement_source` for
@@ -4784,7 +4794,9 @@ async def on_startup():
                 continue
             await _asyncio.sleep(DAILY_SECONDS)
 
-    _asyncio.create_task(_tamara_attribution_daily_sweep())
+    logger.warning(
+        "production stability: Tamara daily sweep disabled in web process"
+    )
 
     # ── Iter-147 — One-shot startup migration ────────────────────────
     # Backfills `effective_settlement_date` + `settlement_source` on
@@ -4842,7 +4854,9 @@ async def on_startup():
         except Exception as e:
             logger.exception("iter-147: startup migration failed: %s", e)
 
-    _asyncio.create_task(_tamara_attribution_startup_migration())
+    logger.warning(
+        "production stability: Tamara startup sweep disabled in web process"
+    )
 
     # iter-262 — Qoyod Pipeline Worker. Auto-advances `integration_inbox`
     # rows from NORMALIZED → CUSTOMER_RESOLVED → INVOICE_CREATED →
