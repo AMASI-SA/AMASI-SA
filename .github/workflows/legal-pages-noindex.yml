@@ -11,6 +11,8 @@ on:
       - "frontend/public/_headers"
       - "frontend/public/.well-known/security.txt"
       - "frontend/vite.config.js"
+      - "frontend/package.json"
+      - "frontend/yarn.lock"
       - ".github/workflows/legal-pages-noindex.yml"
   push:
     branches:
@@ -22,12 +24,45 @@ on:
       - "frontend/public/_headers"
       - "frontend/public/.well-known/security.txt"
       - "frontend/vite.config.js"
+      - "frontend/package.json"
+      - "frontend/yarn.lock"
       - ".github/workflows/legal-pages-noindex.yml"
 
 permissions:
   contents: read
 
 jobs:
+  production-runtime:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install production runtime dependencies only
+        run: yarn install --frozen-lockfile --non-interactive --production=true
+      - name: Build with production dependencies only
+        run: yarn build
+      - name: Start the supervisor frontend command with production dependencies only
+        run: |
+          set -euo pipefail
+          yarn start >/tmp/mezan-production-vite.log 2>&1 &
+          VITE_PID=$!
+          trap 'kill "$VITE_PID" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl -fsS -o /dev/null http://127.0.0.1:3000/; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/mezan-production-vite.log >&2
+          exit 1
+
   frontend-build:
     runs-on: ubuntu-24.04
     defaults:
