@@ -8,6 +8,19 @@ on:
       - "frontend/src/publicLegalNoIndex.js"
       - "frontend/src/index.jsx"
       - "frontend/index.html"
+      - "frontend/public/_headers"
+      - "frontend/public/.well-known/security.txt"
+      - "frontend/vite.config.js"
+      - ".github/workflows/legal-pages-noindex.yml"
+  push:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "frontend/src/publicLegalNoIndex.js"
+      - "frontend/src/index.jsx"
+      - "frontend/index.html"
+      - "frontend/public/_headers"
+      - "frontend/public/.well-known/security.txt"
       - "frontend/vite.config.js"
       - ".github/workflows/legal-pages-noindex.yml"
 
@@ -33,10 +46,17 @@ jobs:
         run: node --check vite.config.js
       - name: Build Production frontend
         run: yarn build
-      - name: Verify built crawler directives
+      - name: Verify built browser security contract
         run: |
           grep -q 'noindex, nofollow, noarchive, nosnippet, noimageindex' build/index.html
           grep -q 'Content-Security-Policy' build/index.html
+          test -f build/_headers
+          test -f build/.well-known/security.txt
+          grep -q "frame-ancestors 'none'" build/_headers
+          grep -q 'X-Frame-Options: DENY' build/_headers
+          grep -q 'Permissions-Policy: camera=(self)' build/_headers
+          grep -q 'X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex' build/_headers
+          grep -q 'Canonical: https://mezansalla.com/.well-known/security.txt' build/.well-known/security.txt
 
   source-contract:
     runs-on: ubuntu-24.04
@@ -48,10 +68,14 @@ jobs:
           SERVER=frontend/vite.config.js
           INDEX=frontend/src/index.jsx
           HTML=frontend/index.html
-          grep -q 'noindex, nofollow, noarchive, nosnippet, noimageindex' "$META" "$HTML"
+          HEADERS=frontend/public/_headers
+          SECURITY_TXT=frontend/public/.well-known/security.txt
+          grep -q 'noindex, nofollow, noarchive, nosnippet, noimageindex' "$META" "$HTML" "$HEADERS"
           grep -q 'applyPublicLegalNoIndex(window.location.pathname)' "$INDEX"
           grep -q 'res.setHeader("X-Robots-Tag", LEGAL_NOINDEX_DIRECTIVES)' "$SERVER"
           grep -q '"/privacy-policy"' "$META" "$SERVER"
           grep -q '"/data-deletion"' "$META" "$SERVER"
           grep -q '"/terms"' "$META" "$SERVER"
+          grep -q "frame-ancestors 'none'" "$HEADERS"
+          grep -q '^Contact: https://github.com/AMASI-SA/AMASI-SA/security/advisories/new$' "$SECURITY_TXT"
           ! grep -q 'Disallow: /privacy-policy\|Disallow: /data-deletion\|Disallow: /terms' frontend/public/robots.txt 2>/dev/null || false
