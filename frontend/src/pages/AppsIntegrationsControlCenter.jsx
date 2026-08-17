@@ -534,7 +534,7 @@ export default function AppsIntegrationsControlCenter() {
                     </section>
 
                     {visibleProviders.length ? (
-                        <section className="grid gap-4 xl:grid-cols-2" aria-label={accountsWorkspace ? "بطاقات الحسابات الإعلانية" : "بطاقات التطبيقات"}>
+                        <section className={`grid gap-4 ${focusedProvider || isMetaReviewer ? "" : "xl:grid-cols-2"}`} aria-label={accountsWorkspace ? "بطاقات الحسابات الإعلانية" : "بطاقات التطبيقات"}>
                             {visibleProviders.map((integration) => (
                                 <IntegrationCard
                                     key={integration.provider}

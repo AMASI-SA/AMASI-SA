@@ -22,7 +22,10 @@ from typing import Any, Callable, Literal
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
-from openai import AsyncOpenAI
+try:
+    from openai import AsyncOpenAI
+except ImportError:  # Optional in focused test/runtime images that never call OpenAI.
+    AsyncOpenAI = None
 from pydantic import BaseModel, Field, ValidationError
 from pymongo.errors import DuplicateKeyError
 
@@ -1392,6 +1395,8 @@ async def _ask_openai(
     prior_decisions: dict[str, Any],
     business_profit: dict[str, Any],
 ) -> RecommendationOutput:
+    if AsyncOpenAI is None:
+        raise RuntimeError("openai_sdk_missing")
     api_key = os.environ.get("OPENAI_API_KEY", "").strip()
     if not api_key:
         raise RuntimeError("openai_api_key_missing")

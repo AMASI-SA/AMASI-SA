@@ -31,7 +31,7 @@ import {
     rollbackSnapchatManagementProposal,
 } from "../../services/snapchatCampaignManagement";
 import { listProductsV2 } from "../../services/mezanProductsV2";
-import { useAuth } from "../../context/AuthContext";
+import { useOptionalAuth } from "../../context/AuthContext";
 
 const ACTIONS = [
     ["campaign.create", "إنشاء حملة"],
@@ -491,7 +491,10 @@ export default function SnapchatCampaignManagementPanel({
     selectedAdSquad = null,
     onChanged,
 }) {
-    const { user } = useAuth();
+    // The application always supplies AuthProvider. Component tests and other
+    // read-only embeddings may intentionally render this panel in isolation;
+    // keep those surfaces non-owner instead of crashing before they can render.
+    const user = useOptionalAuth()?.user;
     const ownerId = String(user?.id || "").trim();
     const preferredAction = entityLevel === "ads"
         ? "ad.create"
