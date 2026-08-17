@@ -119,9 +119,10 @@ describe("browser session refresh interceptor", () => {
 });
 
 
-test("optional dashboard enrichments have a bounded latency budget", () => {
+test("optional dashboard reads are stale-while-revalidate and never inline-block core data", () => {
     const source = fs.readFileSync(path.join(__dirname, "api.js"), "utf8");
-    expect(source).toContain("DASHBOARD_ENRICHMENT_TIMEOUT_MS = 2_500");
-    expect(source).toContain("withinDashboardEnrichmentDeadline(");
-    expect(source).toContain("dashboard_enrichment_timeout");
+    expect(source).toContain("dashboard_optional_snapshot_pending");
+    expect(source).toContain("scheduleOptionalRead");
+    expect(source).toContain("OPTIONAL_REFRESH_MIN_INTERVAL_MS");
+    expect(source).not.toContain("withinDashboardEnrichmentDeadline(");
 });
