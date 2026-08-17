@@ -15,6 +15,14 @@ const FRONTEND_SECURITY_HEADERS = Object.freeze({
   "X-Robots-Tag": FRONTEND_NOINDEX_DIRECTIVES,
 });
 
+// Emergent Preview hostnames are generated per cluster and can change between
+// sessions. Allow only the two Preview suffixes controlled by Emergent rather
+// than hard-coding one cluster hostname or disabling Vite's host validation.
+const EMERGENT_PREVIEW_ALLOWED_HOSTS = [
+  ".preview.emergentcf.cloud",
+  ".preview.emergent.host",
+];
+
 function legacyJsxLoader() {
   return {
     name: "mezan-legacy-jsx-loader",
@@ -44,9 +52,12 @@ export default defineConfig(({ mode }) => {
     server: {
       host: "0.0.0.0",
       port: 3000,
+      allowedHosts: EMERGENT_PREVIEW_ALLOWED_HOSTS,
       headers: FRONTEND_SECURITY_HEADERS,
     },
     preview: {
+      host: "0.0.0.0",
+      allowedHosts: EMERGENT_PREVIEW_ALLOWED_HOSTS,
       headers: FRONTEND_SECURITY_HEADERS,
     },
     build: {
