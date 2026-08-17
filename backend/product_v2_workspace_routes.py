@@ -216,7 +216,7 @@ async def _sold_missing_mezan_cost_products(
     settings = await _user_reporting_settings(db, user_id)
     if settings.get("hide_inferred_date_orders"):
         order_query["order_date_inferred"] = {"$ne": True}
-    orders = await db["unified_orders"].find(
+    orders_cursor = db["unified_orders"].find(
         order_query,
         {
             "_id": 0,
@@ -225,11 +225,11 @@ async def _sold_missing_mezan_cost_products(
             "shipping_company": 1,
             "products": 1,
         },
-    ).to_list(length=100000)
+    )
     included_statuses = settings.get("report_included_statuses") or []
 
     missing: dict[str, dict[str, Any]] = {}
-    for order in orders:
+    async for order in orders_cursor:
         if (
             not _matches_any(order.get("order_status", ""), included_statuses)
             or not _matches_any(order.get("payment_method", ""), payment_methods or [])
