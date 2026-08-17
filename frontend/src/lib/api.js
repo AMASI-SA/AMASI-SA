@@ -43,6 +43,35 @@ const api = axios.create({
     withCredentials: true,
 });
 
+let authRefreshPromise = null;
+
+function shouldRefreshBrowserSession(error) {
+    const status = error?.response?.status;
+    const config = error?.config || {};
+    const url = String(config.url || "");
+    return status === 401
+        && config._mezanAuthRetried !== true
+        && !url.includes("/auth/login")
+        && !url.includes("/auth/logout")
+        && !url.includes("/auth/refresh")
+        && !url.includes("/auth/mfa/")
+        && !url.includes("/auth/email-otp/")
+        && !url.includes("/auth/passkey/");
+}
+
+async function refreshBrowserSessionOnce() {
+    if (!authRefreshPromise) {
+        authRefreshPromise = axios.post(
+            `${API_BASE}/auth/refresh`,
+            {},
+            { withCredentials: true },
+        ).finally(() => {
+            authRefreshPromise = null;
+        });
+    }
+    return authRefreshPromise;
+}
+
 const dashboardV2ResponseBroker = createLatestResponseBroker();
 
 function currentAccessToken() {
@@ -270,6 +299,21 @@ api.interceptors.response.use(
         return response;
     },
     async (error) => {
+        if (shouldRefreshBrowserSession(error)) {
+            try {
+                await refreshBrowserSessionOnce();
+                return api.request({
+                    ...error.config,
+                    _mezanAuthRetried: true,
+                });
+            } catch {
+                // Preserve the original 401. AuthContext is the authority that
+                // decides whether the browser is anonymous; background API
+                // failures must not force navigation on their own.
+                return Promise.reject(error);
+            }
+        }
+
         const recovered = await recoverSnapchatSyncAfterTransportFailure({
             error,
             loadRuns: async () => {

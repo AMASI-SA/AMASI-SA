@@ -20,6 +20,7 @@ META_REVIEWER_API_PREFIXES = (
 )
 META_REVIEWER_AUTH_PATHS = frozenset({
     "/api/auth/me",
+    "/api/auth/refresh",
     "/api/auth/logout",
 })
 

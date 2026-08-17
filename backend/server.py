@@ -50,6 +50,7 @@ from auth import (
     create_refresh_token,
     set_auth_cookies,
     clear_auth_cookies,
+    refresh_browser_session,
     get_current_user_from_db,
     seed_admin,
     ensure_user_settings,
@@ -601,6 +602,11 @@ async def login(payload: LoginIn, response: Response):
 async def logout(response: Response, user: dict = Depends(current_user)):
     clear_auth_cookies(response)
     return {"ok": True}
+
+
+@api.post("/auth/refresh")
+async def refresh_session(request: Request, response: Response):
+    return await refresh_browser_session(request, response, db)
 
 
 @api.get("/auth/me")
