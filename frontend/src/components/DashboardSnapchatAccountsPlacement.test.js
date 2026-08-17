@@ -2,7 +2,6 @@ const fs = require("fs");
 const path = require("path");
 
 const componentsDir = __dirname;
-const layoutSource = fs.readFileSync(path.join(componentsDir, "Layout.jsx"), "utf8");
 const placementSource = fs.readFileSync(
     path.join(componentsDir, "DashboardSnapchatAccountsPlacement.jsx"),
     "utf8",
@@ -12,29 +11,15 @@ const cardsSource = fs.readFileSync(
     "utf8",
 );
 
-test("Layout mounts the Snapchat standalone placement on dashboard routes", () => {
-    expect(layoutSource).toContain(
-        'import DashboardSnapchatAccountsPlacement from "./DashboardSnapchatAccountsPlacement"',
-    );
-    expect(layoutSource).toContain(
-        "<DashboardSnapchatAccountsPlacement active={showsDashboardAnalytics} />",
-    );
+test("retired dashboard placement mounts no Snapchat portal or polling side effect", () => {
+    expect(placementSource).toContain("return null;");
+    expect(placementSource).not.toContain("createPortal");
+    expect(placementSource).not.toContain("MutationObserver");
+    expect(placementSource).not.toContain("setInterval(");
+    expect(placementSource).not.toContain("SnapchatStandaloneAccountCards");
 });
 
-test("merged Snapchat card is hidden only after isolated account data is ready", () => {
-    expect(placementSource).toContain(
-        "'[data-testid=\"snapchat-ads-section\"]'",
-    );
-    expect(placementSource).toContain("onReadyChange={setReady}");
-    expect(placementSource).toContain(
-        'mergedCard.style.setProperty("display", "none", "important")',
-    );
-    expect(placementSource).toContain(
-        'candidate.insertAdjacentElement("afterend", currentHost)',
-    );
-});
-
-test("standalone cards do not allocate orders or revenue by spend share", () => {
+test("standalone cards remain isolated for their dedicated supported surfaces", () => {
     expect(cardsSource).toContain("لا يوجد دمج بين الحسابات");
     expect(cardsSource).toContain('periodKey="today"');
     expect(cardsSource).toContain('periodKey="month"');
