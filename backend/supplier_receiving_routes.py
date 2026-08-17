@@ -2518,6 +2518,9 @@ def make_supplier_receiving_router(
                     "barcode": barcode,
                     "available_quantity": len(candidates),
                     "quantity_options": list(range(1, len(candidates) + 1)),
+                    "supplier_reassignment_confirmed": (
+                        payload.confirm_supplier_reassignment
+                    ),
                     "piece": _public_piece(piece),
                     "product": {
                         "product_id": piece.get("product_id"),
