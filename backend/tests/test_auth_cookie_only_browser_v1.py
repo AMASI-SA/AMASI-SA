@@ -29,6 +29,27 @@ def test_shared_api_uses_credentials_cookie_transport():
     assert "withCredentials: true" in source
 
 
+def test_browser_401_uses_single_flight_cookie_refresh_before_retry():
+    source = API_JS.read_text(encoding="utf-8")
+
+    assert "authRefreshPromise" in source
+    assert '`${API_BASE}/auth/refresh`' in source
+    assert "_mezanAuthRetried" in source
+    assert "return api.request" in source
+
+
+def test_transient_auth_probe_never_marks_browser_anonymous():
+    source = AUTH_CONTEXT.read_text(encoding="utf-8")
+
+    catch_start = source.index("} catch (error) {")
+    retry_comment = source.index("temporary network/origin failure", catch_start)
+    throw_pos = source.index("throw error;", retry_comment)
+    false_pos = source.index("setUser(false);", catch_start)
+
+    assert false_pos < retry_comment < throw_pos
+    assert "window.setTimeout(probe, 2000)" in source
+
+
 def test_login_and_register_still_refresh_full_user_after_cookie_is_set():
     source = AUTH_CONTEXT.read_text(encoding="utf-8")
 
