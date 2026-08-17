@@ -1,0 +1,75 @@
+name: Apply Snapchat AI recommendation status root fix
+
+on:
+  push:
+    branches:
+      - fix/snap-ai-recommendations-status-root-20260817
+    paths:
+      - .github/workflows/apply-snap-ai-recommendations-status-root.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-snap-ai-recommendations-status-root-20260817
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out prepared branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/snap-ai-recommendations-status-root-20260817
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify patch preconditions
+        run: python scripts/apply_snapchat_ai_recommendations_root_fix.py --check
+
+      - name: Apply root fix and compile affected Python files
+        run: python scripts/apply_snapchat_ai_recommendations_root_fix.py
+
+      - name: Validate generated diff
+        run: |
+          git diff --check
+          python - <<'PY'
+          from pathlib import Path
+          monitor = Path('backend/campaign_ai_monitor.py').read_text(encoding='utf-8')
+          tests = Path('backend/tests/test_campaign_ai_monitor.py').read_text(encoding='utf-8')
+          required_monitor = [
+              'def _normalized_status(value: Any) -> str:',
+              '"normalized_status": _normalized_status(status)',
+              'item.get("delivery_state")',
+              '"لا يتم التسليم"',
+          ]
+          required_tests = [
+              'test_real_snapchat_arabic_delivery_status_reaches_ai_candidates',
+              'test_snapchat_negative_delivery_status_wins_before_active_words',
+          ]
+          missing = [value for value in required_monitor if value not in monitor]
+          missing += [value for value in required_tests if value not in tests]
+          if missing:
+              raise SystemExit(f'Missing generated safeguards: {missing}')
+          print('Generated Snapchat recommendation status safeguards are present.')
+          PY
+
+      - name: Remove one-time staging files
+        run: |
+          rm scripts/apply_snapchat_ai_recommendations_root_fix.py
+          rm .github/workflows/apply-snap-ai-recommendations-status-root.yml
+
+      - name: Commit prepared implementation
+        run: |
+          git config user.name "mezan-release-bot"
+          git config user.email "amasi.jewelery@gmail.com"
+          git add backend/campaign_ai_monitor.py backend/tests/test_campaign_ai_monitor.py
+          git add -u scripts/apply_snapchat_ai_recommendations_root_fix.py .github/workflows/apply-snap-ai-recommendations-status-root.yml
+          git diff --cached --check
+          git commit -m "fix: restore Snapchat AI campaign recommendations"
+          git push origin HEAD:fix/snap-ai-recommendations-status-root-20260817
