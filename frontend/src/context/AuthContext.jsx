@@ -31,18 +31,39 @@ export function AuthProvider({ children }) {
             const { data } = await api.get("/auth/me");
             setUser(data);
             return data;
-        } catch {
-            setUser(false);
-            return null;
+        } catch (error) {
+            const status = error?.response?.status;
+            if (status === 401 || status === 403) {
+                setUser(false);
+                return null;
+            }
+
+            // A temporary network/origin failure is not proof that the cookie
+            // session ended. Keep the last authenticated user and let the
+            // bootstrap probe retry instead of redirecting to /login.
+            throw error;
         }
     }, []);
 
     useEffect(() => {
-        (async () => {
+        let cancelled = false;
+        let retryTimer = null;
+
+        const probe = async () => {
             clearLegacyBrowserAccessToken();
-            await refreshUser();
-            setLoading(false);
-        })();
+            try {
+                await refreshUser();
+                if (!cancelled) setLoading(false);
+            } catch {
+                if (!cancelled) retryTimer = window.setTimeout(probe, 2000);
+            }
+        };
+
+        probe();
+        return () => {
+            cancelled = true;
+            if (retryTimer) window.clearTimeout(retryTimer);
+        };
     }, [refreshUser]);
 
     const login = async (email, password, mfaBootstrapCode = "", forceTotp = false) => {
