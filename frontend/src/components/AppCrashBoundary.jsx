@@ -7,6 +7,8 @@ import {
 const SOFT_RETRY_DELAY_MS = 250;
 const STABLE_RESET_DELAY_MS = 10_000;
 const HARD_RECOVERY_FALLBACK_MS = 4_000;
+const HEALTH_RETRY_INTERVAL_MS = 5_000;
+const MAX_HEALTH_RETRY_ATTEMPTS = 24;
 
 export default class AppCrashBoundary extends React.Component {
   constructor(props) {
@@ -18,9 +20,12 @@ export default class AppCrashBoundary extends React.Component {
       retryNonce: 0,
     };
     this.softRetryUsed = false;
+    this.healthRetryUsed = false;
+    this.healthRetryAttempts = 0;
     this.softRetryTimer = 0;
     this.stableResetTimer = 0;
     this.hardRecoveryFallbackTimer = 0;
+    this.healthRetryTimer = 0;
   }
 
   static getDerivedStateFromError(error) {
@@ -29,6 +34,52 @@ export default class AppCrashBoundary extends React.Component {
       recoveryPhase: "recovering",
     };
   }
+
+  scheduleHealthRecovery = () => {
+    if (
+      this.healthRetryUsed
+      || this.healthRetryTimer
+      || this.healthRetryAttempts >= MAX_HEALTH_RETRY_ATTEMPTS
+    ) {
+      return;
+    }
+
+    this.healthRetryTimer = window.setTimeout(async () => {
+      this.healthRetryTimer = 0;
+      this.healthRetryAttempts += 1;
+      try {
+        const response = await window.fetch(
+          `/api/health?spa_recovery=${Date.now()}`,
+          {
+            method: "GET",
+            credentials: "same-origin",
+            cache: "no-store",
+            headers: { Accept: "application/json" },
+          },
+        );
+        let payload = null;
+        try {
+          payload = await response.json();
+        } catch {
+          payload = null;
+        }
+        if (response.ok && payload?.ok === true) {
+          this.healthRetryUsed = true;
+          this.setState((previous) => ({
+            error: null,
+            failureId: null,
+            recoveryPhase: "healthy",
+            retryNonce: previous.retryNonce + 1,
+          }));
+          return;
+        }
+      } catch {
+        // The origin may still be restarting. Keep the manual fallback visible
+        // and retry the public health probe with a bounded interval.
+      }
+      this.scheduleHealthRecovery();
+    }, HEALTH_RETRY_INTERVAL_MS);
+  };
 
   componentDidCatch(error, info) {
     const failure = recordSpaFailure("react_render_error", error, {
@@ -66,14 +117,19 @@ export default class AppCrashBoundary extends React.Component {
       recoveryPhase: reloadScheduled ? "reloading" : "failed",
     });
 
-    // If the browser refuses or cannot complete the reload, do not leave the
-    // user on an endless recovery spinner. Fall back to the manual actions.
-    if (reloadScheduled) {
-      this.hardRecoveryFallbackTimer = window.setTimeout(() => {
-        this.hardRecoveryFallbackTimer = 0;
-        this.setState({ recoveryPhase: "failed" });
-      }, HARD_RECOVERY_FALLBACK_MS);
+    if (!reloadScheduled) {
+      this.scheduleHealthRecovery();
+      return;
     }
+
+    // If the browser refuses or cannot complete the reload, do not leave the
+    // user on an endless recovery spinner. Fall back to the manual actions and
+    // keep watching for the public origin to become healthy again.
+    this.hardRecoveryFallbackTimer = window.setTimeout(() => {
+      this.hardRecoveryFallbackTimer = 0;
+      this.setState({ recoveryPhase: "failed" });
+      this.scheduleHealthRecovery();
+    }, HARD_RECOVERY_FALLBACK_MS);
   }
 
   componentDidUpdate(_previousProps, previousState) {
@@ -82,6 +138,8 @@ export default class AppCrashBoundary extends React.Component {
       this.stableResetTimer = window.setTimeout(() => {
         this.stableResetTimer = 0;
         this.softRetryUsed = false;
+        this.healthRetryUsed = false;
+        this.healthRetryAttempts = 0;
       }, STABLE_RESET_DELAY_MS);
     }
   }
@@ -92,6 +150,7 @@ export default class AppCrashBoundary extends React.Component {
     if (this.hardRecoveryFallbackTimer) {
       window.clearTimeout(this.hardRecoveryFallbackTimer);
     }
+    if (this.healthRetryTimer) window.clearTimeout(this.healthRetryTimer);
   }
 
   reloadPage = () => {
