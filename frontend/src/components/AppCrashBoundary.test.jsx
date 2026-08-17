@@ -12,15 +12,25 @@ function TransientPage() {
   return <div data-testid="recovered-page">تمت الاستعادة</div>;
 }
 
+let delayedPageReady = false;
+function DelayedOriginPage() {
+  if (!delayedPageReady) throw new Error("origin is still restarting");
+  return <div data-testid="origin-recovered-page">عاد الخادم</div>;
+}
+
 describe("AppCrashBoundary", () => {
   let container;
   let root;
   let consoleError;
+  let originalFetch;
 
   beforeEach(() => {
     global.IS_REACT_ACT_ENVIRONMENT = true;
     jest.useFakeTimers();
     transientPageReady = false;
+    delayedPageReady = false;
+    originalFetch = window.fetch;
+    window.fetch = jest.fn();
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -34,6 +44,8 @@ describe("AppCrashBoundary", () => {
     });
     consoleError.mockRestore();
     container.remove();
+    if (originalFetch === undefined) delete window.fetch;
+    else window.fetch = originalFetch;
     jest.useRealTimers();
   });
 
@@ -62,6 +74,50 @@ describe("AppCrashBoundary", () => {
     expect(
       container.querySelector('[data-testid="app-crash-recovery-pending"]'),
     ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="app-crash-recovery"]'),
+    ).toBeNull();
+  });
+
+  test("retries the route when the public origin becomes healthy after the fallback appeared", async () => {
+    window.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true }),
+    });
+
+    await act(async () => {
+      root.render(
+        <AppCrashBoundary>
+          <DelayedOriginPage />
+        </AppCrashBoundary>,
+      );
+    });
+
+    await act(async () => {
+      jest.advanceTimersByTime(300);
+    });
+    expect(
+      container.querySelector('[data-testid="app-crash-recovery"]'),
+    ).not.toBeNull();
+
+    delayedPageReady = true;
+    await act(async () => {
+      jest.advanceTimersByTime(5_000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(window.fetch).toHaveBeenCalledWith(
+      expect.stringMatching(/^\/api\/health\?spa_recovery=\d+$/),
+      expect.objectContaining({
+        method: "GET",
+        credentials: "same-origin",
+        cache: "no-store",
+      }),
+    );
+    expect(
+      container.querySelector('[data-testid="origin-recovered-page"]'),
+    ).not.toBeNull();
     expect(
       container.querySelector('[data-testid="app-crash-recovery"]'),
     ).toBeNull();
