@@ -145,6 +145,53 @@ def test_sold_salla_fallback_product_is_returned_as_missing_mezan(monkeypatch):
     assert result["p-3"]["calculation_cost_available"] is False
 
 
+def test_sold_missing_cohort_resolves_historical_line_from_current_full_snapshot(monkeypatch):
+    async def settings(_db, _user_id):
+        return {"report_included_statuses": ["تم التنفيذ"]}
+
+    monkeypatch.setattr(
+        "product_v2_workspace_routes._user_reporting_settings",
+        settings,
+    )
+    db = _Db({
+        PRODUCTS: [
+            {
+                "id": "m-current",
+                "mezan_product_id": "m-current",
+                "salla_product_id": "p-current",
+                "name": "فستان بناتي أخضر لليوم الوطني",
+                "variants": [],
+                "raw_salla_details": {"cost_price": 31.5},
+            },
+        ],
+        COST_PROFILES: [],
+        "unified_orders": [
+            {
+                "order_status": "تم التنفيذ",
+                "products": [
+                    {
+                        "product_id": "historical-product-id",
+                        "name": "فستان بناتي أخضر لليوم الوطني",
+                        "quantity": 1,
+                    },
+                ],
+            },
+        ],
+    })
+
+    result = asyncio.run(_sold_missing_mezan_cost_products(
+        db,
+        "owner-1",
+        from_date="2026-08-16",
+        to_date="2026-08-16",
+    ))
+
+    assert list(result) == ["p-current"]
+    assert result["p-current"]["uses_salla_fallback"] is True
+    assert result["p-current"]["missing_everywhere"] is False
+    assert result["p-current"]["calculation_cost_available"] is True
+
+
 def test_sold_missing_products_use_same_payment_and_shipping_cohort(monkeypatch):
     async def settings(_db, _user_id):
         return {"report_included_statuses": ["تم التنفيذ"]}
