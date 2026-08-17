@@ -4,17 +4,30 @@ import {
   recordSpaFailure,
 } from "../spaRuntimeRecovery";
 
+const SOFT_RETRY_DELAY_MS = 250;
+const STABLE_RESET_DELAY_MS = 10_000;
+const HARD_RECOVERY_FALLBACK_MS = 4_000;
+
 export default class AppCrashBoundary extends React.Component {
   constructor(props) {
     super(props);
     this.state = {
       error: null,
       failureId: null,
+      recoveryPhase: "healthy",
+      retryNonce: 0,
     };
+    this.softRetryUsed = false;
+    this.softRetryTimer = 0;
+    this.stableResetTimer = 0;
+    this.hardRecoveryFallbackTimer = 0;
   }
 
   static getDerivedStateFromError(error) {
-    return { error };
+    return {
+      error,
+      recoveryPhase: "recovering",
+    };
   }
 
   componentDidCatch(error, info) {
@@ -22,11 +35,63 @@ export default class AppCrashBoundary extends React.Component {
       componentStack: info?.componentStack,
       source: "react_error_boundary",
     });
-    this.setState({ failureId: failure.id });
-    attemptAutomaticRecovery({
+
+    // A navigation can briefly render against stale/transitional state after
+    // an origin recovery or route switch. Retry the React subtree once before
+    // showing a blocking crash card or reloading the entire application.
+    if (!this.softRetryUsed) {
+      this.softRetryUsed = true;
+      this.setState({
+        failureId: failure.id,
+        recoveryPhase: "retrying",
+      });
+      this.softRetryTimer = window.setTimeout(() => {
+        this.softRetryTimer = 0;
+        this.setState((previous) => ({
+          error: null,
+          failureId: null,
+          recoveryPhase: "healthy",
+          retryNonce: previous.retryNonce + 1,
+        }));
+      }, SOFT_RETRY_DELAY_MS);
+      return;
+    }
+
+    const reloadScheduled = attemptAutomaticRecovery({
       reason: "react_render_error",
-      delayMs: 900,
+      delayMs: 500,
     });
+    this.setState({
+      failureId: failure.id,
+      recoveryPhase: reloadScheduled ? "reloading" : "failed",
+    });
+
+    // If the browser refuses or cannot complete the reload, do not leave the
+    // user on an endless recovery spinner. Fall back to the manual actions.
+    if (reloadScheduled) {
+      this.hardRecoveryFallbackTimer = window.setTimeout(() => {
+        this.hardRecoveryFallbackTimer = 0;
+        this.setState({ recoveryPhase: "failed" });
+      }, HARD_RECOVERY_FALLBACK_MS);
+    }
+  }
+
+  componentDidUpdate(_previousProps, previousState) {
+    if (previousState.error && !this.state.error) {
+      if (this.stableResetTimer) window.clearTimeout(this.stableResetTimer);
+      this.stableResetTimer = window.setTimeout(() => {
+        this.stableResetTimer = 0;
+        this.softRetryUsed = false;
+      }, STABLE_RESET_DELAY_MS);
+    }
+  }
+
+  componentWillUnmount() {
+    if (this.softRetryTimer) window.clearTimeout(this.softRetryTimer);
+    if (this.stableResetTimer) window.clearTimeout(this.stableResetTimer);
+    if (this.hardRecoveryFallbackTimer) {
+      window.clearTimeout(this.hardRecoveryFallbackTimer);
+    }
   }
 
   reloadPage = () => {
@@ -37,8 +102,39 @@ export default class AppCrashBoundary extends React.Component {
     window.location.assign("/dashboard-v2");
   };
 
+  renderRecoveryPending() {
+    return (
+      <main
+        className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-10"
+        dir="rtl"
+        data-mezan-crash-recovery="true"
+        data-testid="app-crash-recovery-pending"
+      >
+        <section className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-7 text-center shadow-lg sm:p-9">
+          <div className="mx-auto h-11 w-11 animate-spin rounded-full border-4 border-emerald-100 border-t-emerald-700" />
+          <h1 className="mt-5 text-xl font-black text-slate-950">
+            جاري استعادة الصفحة…
+          </h1>
+          <p className="mt-2 text-sm font-semibold leading-7 text-slate-500">
+            نعيد تهيئة واجهة ميزان تلقائيًا دون فقدان الجلسة.
+          </p>
+        </section>
+      </main>
+    );
+  }
+
   render() {
-    if (!this.state.error) return this.props.children;
+    if (!this.state.error) {
+      return (
+        <React.Fragment key={this.state.retryNonce}>
+          {this.props.children}
+        </React.Fragment>
+      );
+    }
+
+    if (this.state.recoveryPhase !== "failed") {
+      return this.renderRecoveryPending();
+    }
 
     return (
       <main
@@ -55,7 +151,7 @@ export default class AppCrashBoundary extends React.Component {
             تعذر عرض الصفحة مؤقتًا
           </h1>
           <p className="mt-3 text-sm font-semibold leading-7 text-slate-600">
-            واجهة ميزان واجهت خطأ أثناء التنقل. سيحاول النظام استعادة الصفحة تلقائيًا مرة واحدة، ويمكنك إعادة تحميلها الآن دون انتظار.
+            تعذر على ميزان استعادة الواجهة تلقائيًا. أعد تحميل الصفحة، وإن تكرر الخطأ استخدم رقم التشخيص للمراجعة.
           </p>
           <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
             <button
