@@ -57,12 +57,35 @@ jobs:
           grep -q 'Permissions-Policy: camera=(self)' build/_headers
           grep -q 'X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex' build/_headers
           grep -q 'Canonical: https://mezansalla.com/.well-known/security.txt' build/.well-known/security.txt
+      - name: Verify Vite origin emits HTTP security headers
+        run: |
+          set -euo pipefail
+          yarn vite --host 127.0.0.1 --port 4175 >/tmp/mezan-vite.log 2>&1 &
+          VITE_PID=$!
+          trap 'kill "$VITE_PID" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl -fsS -o /dev/null http://127.0.0.1:4175/; then
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS -D /tmp/mezan-headers.txt -o /dev/null http://127.0.0.1:4175/
+          grep -Fi "content-security-policy: default-src 'self';" /tmp/mezan-headers.txt
+          grep -Fi "frame-ancestors 'none'" /tmp/mezan-headers.txt
+          grep -Fi "strict-transport-security: max-age=63072000; includeSubDomains; preload" /tmp/mezan-headers.txt
+          grep -Fi "x-frame-options: DENY" /tmp/mezan-headers.txt
+          grep -Fi "x-content-type-options: nosniff" /tmp/mezan-headers.txt
+          grep -Fi "x-permitted-cross-domain-policies: none" /tmp/mezan-headers.txt
+          grep -Fi "referrer-policy: strict-origin-when-cross-origin" /tmp/mezan-headers.txt
+          grep -Fi "permissions-policy: camera=(self), microphone=(), geolocation=(), payment=(), usb=()" /tmp/mezan-headers.txt
+          grep -Fi "x-robots-tag: noindex, nofollow, noarchive, nosnippet, noimageindex" /tmp/mezan-headers.txt
+          curl -fsS http://127.0.0.1:4175/.well-known/security.txt | grep -F 'Canonical: https://mezansalla.com/.well-known/security.txt'
 
   source-contract:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Enforce exact route scope and crawler-visible noindex
+      - name: Enforce crawler-visible noindex and HTTP header contract
         run: |
           META=frontend/src/publicLegalNoIndex.js
           SERVER=frontend/vite.config.js
@@ -70,12 +93,15 @@ jobs:
           HTML=frontend/index.html
           HEADERS=frontend/public/_headers
           SECURITY_TXT=frontend/public/.well-known/security.txt
-          grep -q 'noindex, nofollow, noarchive, nosnippet, noimageindex' "$META" "$HTML" "$HEADERS"
+          grep -q 'noindex, nofollow, noarchive, nosnippet, noimageindex' "$META" "$HTML" "$HEADERS" "$SERVER"
           grep -q 'applyPublicLegalNoIndex(window.location.pathname)' "$INDEX"
-          grep -q 'res.setHeader("X-Robots-Tag", LEGAL_NOINDEX_DIRECTIVES)' "$SERVER"
-          grep -q '"/privacy-policy"' "$META" "$SERVER"
-          grep -q '"/data-deletion"' "$META" "$SERVER"
-          grep -q '"/terms"' "$META" "$SERVER"
-          grep -q "frame-ancestors 'none'" "$HEADERS"
+          grep -q '"/privacy-policy"' "$META"
+          grep -q '"/data-deletion"' "$META"
+          grep -q '"/terms"' "$META"
+          grep -q "frame-ancestors 'none'" "$HEADERS" "$SERVER"
+          grep -q '"X-Frame-Options": "DENY"' "$SERVER"
+          grep -q '"Permissions-Policy": "camera=(self), microphone=(), geolocation=(), payment=(), usb=()"' "$SERVER"
+          grep -q '"X-Robots-Tag": FRONTEND_NOINDEX_DIRECTIVES' "$SERVER"
+          grep -q 'headers: FRONTEND_SECURITY_HEADERS' "$SERVER"
           grep -q '^Contact: https://github.com/AMASI-SA/AMASI-SA/security/advisories/new$' "$SECURITY_TXT"
           ! grep -q 'Disallow: /privacy-policy\|Disallow: /data-deletion\|Disallow: /terms' frontend/public/robots.txt 2>/dev/null || false

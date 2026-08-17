@@ -2,8 +2,18 @@ import { defineConfig, loadEnv, transformWithOxc } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
 
-const LEGAL_NOINDEX_PATHS = new Set(["/privacy-policy", "/data-deletion", "/terms"]);
-const LEGAL_NOINDEX_DIRECTIVES = "noindex, nofollow, noarchive, nosnippet, noimageindex";
+const FRONTEND_NOINDEX_DIRECTIVES = "noindex, nofollow, noarchive, nosnippet, noimageindex";
+const FRONTEND_CSP = "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https: wss:; frame-src 'self' https:; form-action 'self' https:; upgrade-insecure-requests";
+const FRONTEND_SECURITY_HEADERS = Object.freeze({
+  "Content-Security-Policy": FRONTEND_CSP,
+  "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
+  "X-Frame-Options": "DENY",
+  "X-Content-Type-Options": "nosniff",
+  "X-Permitted-Cross-Domain-Policies": "none",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Permissions-Policy": "camera=(self), microphone=(), geolocation=(), payment=(), usb=()",
+  "X-Robots-Tag": FRONTEND_NOINDEX_DIRECTIVES,
+});
 
 function legacyJsxLoader() {
   return {
@@ -16,30 +26,10 @@ function legacyJsxLoader() {
   };
 }
 
-function legalNoIndexHeaders() {
-  return {
-    name: "mezan-legal-noindex-headers",
-    configureServer(server) {
-      server.middlewares.use((req, res, next) => {
-        const pathname = new URL(req.url || "/", "http://localhost").pathname.replace(/\/$/, "") || "/";
-        if (LEGAL_NOINDEX_PATHS.has(pathname)) res.setHeader("X-Robots-Tag", LEGAL_NOINDEX_DIRECTIVES);
-        next();
-      });
-    },
-    configurePreviewServer(server) {
-      server.middlewares.use((req, res, next) => {
-        const pathname = new URL(req.url || "/", "http://localhost").pathname.replace(/\/$/, "") || "/";
-        if (LEGAL_NOINDEX_PATHS.has(pathname)) res.setHeader("X-Robots-Tag", LEGAL_NOINDEX_DIRECTIVES);
-        next();
-      });
-    },
-  };
-}
-
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   return {
-    plugins: [legacyJsxLoader(), react(), legalNoIndexHeaders()],
+    plugins: [legacyJsxLoader(), react()],
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "src"),
@@ -54,6 +44,10 @@ export default defineConfig(({ mode }) => {
     server: {
       host: "0.0.0.0",
       port: 3000,
+      headers: FRONTEND_SECURITY_HEADERS,
+    },
+    preview: {
+      headers: FRONTEND_SECURITY_HEADERS,
     },
     build: {
       outDir: "build",
