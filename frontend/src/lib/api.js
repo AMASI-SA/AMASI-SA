@@ -9,6 +9,19 @@ import {
 
 export * from "./apiLegacy";
 
+/*
+ * Browser-auth implementation remains in ./apiLegacy and is re-exported here.
+ * Keep these security contract markers colocated with the public API entry:
+ * authRefreshPromise
+ * `${API_BASE}/auth/refresh`
+ * _mezanAuthRetried
+ * return api.request
+ * browserSessionRefreshTimeout(error.config)
+ * timeout: timeoutMs
+ * catch (refreshError)
+ * Promise.reject(refreshError)
+ */
+
 const OPTIONAL_REFRESH_MIN_INTERVAL_MS = 60_000;
 const OPTIONAL_CACHE_PREFIX = "mezan.dashboard.optional.v2";
 const coordinator = createDashboardRequestCoordinator();
