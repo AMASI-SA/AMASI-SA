@@ -297,7 +297,7 @@ async def test_meta_subscription_uses_transient_page_token_and_verifies_app(monk
 
 @pytest.mark.asyncio
 async def test_missing_new_meta_permissions_requires_reauthorization_without_write():
-    db = FakeDB(scopes={"instagram_basic"})
+    db = FakeDB(scopes=INSTAGRAM_REQUIRED_PERMISSIONS - {"pages_messaging"})
     service = InstagramProvisioningService(db, now=lambda: NOW)
 
     setup = await service.setup(owner_user_id=OWNER_ID)

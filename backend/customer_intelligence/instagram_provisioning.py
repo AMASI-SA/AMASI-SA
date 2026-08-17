@@ -35,6 +35,7 @@ INSTAGRAM_REQUIRED_PERMISSIONS = frozenset(
         "instagram_manage_comments",
         "instagram_manage_messages",
         "pages_manage_metadata",
+        "pages_messaging",
     }
 )
 INSTAGRAM_PROVISION_CONFIRMATION = "CONNECT_RECEIVE_ONLY_INSTAGRAM"
