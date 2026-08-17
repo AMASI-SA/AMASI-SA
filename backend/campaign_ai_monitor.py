@@ -114,10 +114,47 @@ def _text(value: Any, *, limit: int = 180) -> str:
     return " ".join(str(value or "").split()).strip()[:limit]
 
 
+def _status_text(value: Any) -> str:
+    if isinstance(value, dict):
+        priority = (
+            "effective_status", "delivery_state", "delivery_status",
+            "configured_status", "status", "state", "code", "label",
+        )
+        ordered = [value.get(key) for key in priority if value.get(key) is not None]
+        ordered.extend(item for key, item in value.items() if key not in priority)
+        value = ordered
+    if isinstance(value, (list, tuple, set)):
+        value = " ".join(_status_text(item) for item in value)
+    rendered = _text(value, limit=600).casefold()
+    for marker in ("_", "-", "/", "—", "–", ":", "|", "،", ",", "."):
+        rendered = rendered.replace(marker, " ")
+    return " ".join(rendered.split())
+
+
+def _normalized_status(value: Any) -> str:
+    rendered = _status_text(value)
+    inactive = (
+        "not delivering", "not active", "inactive", "paused", "disabled",
+        "stopped", "ended", "deleted", "archived", "rejected",
+        "disapproved", "out of budget", "pending review", "draft",
+        "لا يتم التسليم", "لا تسليم", "غير نشط", "غير نشطة",
+        "غير فعال", "غير فعالة", "متوقف", "متوقفة", "موقوف",
+        "موقوفة", "محذوف", "مرفوض", "منتهي", "قيد المراجعة",
+        "بانتظار المراجعة", "نفدت الميزانية",
+    )
+    if any(marker in rendered for marker in inactive):
+        return "inactive"
+    active = (
+        "active", "enabled", "running", "delivering", "live", "serving",
+        "يتم التسليم", "قيد التسليم", "جاري التسليم", "جار التسليم",
+        "نشط", "نشطة", "مفعل", "مفعلة", "فعال", "فعالة",
+        "مرحلة التعلم",
+    )
+    return "active" if any(marker in rendered for marker in active) else "unknown"
+
+
 def _active(value: Any) -> bool:
-    return _text(value).upper() in {
-        "ACTIVE", "ENABLED", "RUNNING", "DELIVERING",
-    }
+    return _normalized_status(value) == "active"
 
 
 def _safe_metric(value: Any, digits: int = 2) -> float | None:
@@ -688,6 +725,7 @@ def _entity(
         "entity_name": _text(entity_name) or clean_id,
         "parent_name": _text(parent_name) or None,
         "status": _text(status, limit=60) or "unknown",
+        "normalized_status": _normalized_status(status),
         "active": _active(status),
         "spend_sar": spend,
         "revenue_sar": revenue,
@@ -768,7 +806,12 @@ async def _campaign_entities(
             entity_id=item.get("campaign_id"),
             entity_name=item.get("campaign_name"),
             parent_name=None,
-            status=item.get("delivery_status") or item.get("status"),
+            status=(
+                item.get("effective_status")
+                or item.get("delivery_state")
+                or item.get("delivery_status")
+                or item.get("status")
+            ),
             spend_sar=item.get("spend_sar_equivalent"),
             revenue_sar=item.get("revenue_sar_equivalent"),
             purchases=item.get("purchases"),
@@ -812,7 +855,13 @@ async def _snapchat_child_entities(
             row = _entity(
                 provider="snapchat", level="ad_group",
                 entity_id=item.get("ad_squad_id"), entity_name=item.get("ad_squad_name"),
-                parent_name=item.get("campaign_name"), status=item.get("delivery_status") or item.get("status"),
+                parent_name=item.get("campaign_name"),
+                status=(
+                    item.get("effective_status")
+                    or item.get("delivery_state")
+                    or item.get("delivery_status")
+                    or item.get("status")
+                ),
                 spend_sar=item.get("spend_sar"), revenue_sar=item.get("sales_sar"),
                 purchases=item.get("orders"), impressions=item.get("impressions"), clicks=item.get("swipes"),
                 observed_days=item.get("observed_days"), data_complete=item.get("data_complete"),
@@ -827,7 +876,12 @@ async def _snapchat_child_entities(
                 provider="snapchat", level="ad",
                 entity_id=item.get("ad_id"), entity_name=item.get("ad_name"),
                 parent_name=item.get("ad_squad_name") or item.get("campaign_name"),
-                status=item.get("delivery_status") or item.get("status"),
+                status=(
+                    item.get("effective_status")
+                    or item.get("delivery_state")
+                    or item.get("delivery_status")
+                    or item.get("status")
+                ),
                 spend_sar=item.get("spend_sar"), revenue_sar=item.get("sales_sar"),
                 purchases=item.get("orders"), impressions=item.get("impressions"), clicks=item.get("swipes"),
                 observed_days=item.get("observed_days"), data_complete=item.get("data_complete"),
