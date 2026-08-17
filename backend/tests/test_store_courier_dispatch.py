@@ -1,5 +1,39 @@
+import sys
+import types
+
 from fastapi import HTTPException
 import pytest
+
+# The tests below exercise the store-courier permission and state contracts.
+# Stub the heavy Order Engine package before importing the route module so this
+# focused unit suite does not initialize every Salla integration through
+# order_engine.__init__. Production/release workflows still import the real app
+# with the complete dependency set.
+order_engine_package = types.ModuleType("order_engine")
+order_engine_package.__path__ = []
+repository_module = types.ModuleType("order_engine.repository")
+service_module = types.ModuleType("order_engine.service")
+
+
+class _MongoOrderRepository:
+    def __init__(self, db):
+        self.db = db
+
+
+class _OrderNotFoundError(LookupError):
+    pass
+
+
+async def _get_order(*args, **kwargs):  # pragma: no cover - not used here
+    raise _OrderNotFoundError()
+
+
+repository_module.MongoOrderRepository = _MongoOrderRepository
+service_module.OrderNotFoundError = _OrderNotFoundError
+service_module.get_order = _get_order
+sys.modules.setdefault("order_engine", order_engine_package)
+sys.modules.setdefault("order_engine.repository", repository_module)
+sys.modules.setdefault("order_engine.service", service_module)
 
 from ai_store_access_contract import ROLE_CATALOG
 from store_courier_dispatch_routes import (
