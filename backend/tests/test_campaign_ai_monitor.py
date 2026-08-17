@@ -11,6 +11,7 @@ from campaign_ai_monitor import (
     RecommendationOutput,
     _bounded_account_sample,
     _ask_openai,
+    _active,
     _deterministic_recommendations,
     _govern_output,
     _monitored_user_ids,
@@ -73,6 +74,26 @@ def test_zero_spend_entities_never_reach_openai_candidates():
 
 def test_paused_entity_is_not_recommended_for_another_change():
     assert deterministic_candidates([entity(status="PAUSED", active=False)]) == []
+
+
+def test_real_snapchat_arabic_delivery_status_reaches_ai_candidates():
+    assert _active("يتم التسليم — مرحلة التعلم") is True
+    row = entity(
+        entity_id="snap-live",
+        status="يتم التسليم — مرحلة التعلم",
+        active=_active("يتم التسليم — مرحلة التعلم"),
+    )
+    assert [item["entity_id"] for item in deterministic_candidates([row])] == ["snap-live"]
+
+
+def test_snapchat_negative_delivery_status_wins_before_active_words():
+    assert _active("NOT_DELIVERING") is False
+    assert _active("غير نشط — لا يتم التسليم") is False
+    assert _active({
+        "configured_status": "ACTIVE",
+        "delivery_state": "NOT_DELIVERING",
+        "delivery_status": "لا يتم التسليم",
+    }) is False
 
 
 def test_governance_discards_a_stale_pause_for_an_entity_now_stopped():

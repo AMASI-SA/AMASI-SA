@@ -24,6 +24,7 @@ from supplier_receiving_routes import (
     EDIT_PRODUCT_PRICE_PERMISSION,
     EDIT_SERVICE_PRICE_PERMISSION,
     SUPPLIER_INVOICES,
+    SupplierPieceScanRequest,
     SupplierReceivingInvoiceLineRequest,
     SupplierReceivingInvoiceServiceRequest,
     _share_evidence_signature_matches,
@@ -94,6 +95,17 @@ def test_multi_quantity_batch_card_uses_first_piece_as_its_scan_anchor():
     assert line.barcode_payload == preparation_piece_barcode(
         **{**_identity(), "unit_index": 1}
     )
+
+
+def test_supplier_reassignment_requires_an_explicit_scan_confirmation():
+    default_request = SupplierPieceScanRequest(barcode="piece-1")
+    confirmed_request = SupplierPieceScanRequest(
+        barcode="piece-1",
+        confirm_supplier_reassignment=True,
+    )
+
+    assert default_request.confirm_supplier_reassignment is False
+    assert confirmed_request.confirm_supplier_reassignment is True
 
 
 def test_receiving_rejects_duplicate_cancelled_and_blocked_pieces():
@@ -179,6 +191,8 @@ def test_receipt_cancel_snapshot_restores_the_exact_previous_piece_state():
     assert "supplier_receiving_session_id" in rollback["$unset"]
     assert "receipt_event_id" in rollback["$unset"]
     assert "received_at" in rollback["$unset"]
+    assert "supplier_reassigned_from_id" in rollback["$unset"]
+    assert "supplier_reassignment_session_id" in rollback["$unset"]
 
 
 def test_piece_services_must_be_covered_by_selected_mezan_supplier():

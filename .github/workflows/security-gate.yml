@@ -65,7 +65,9 @@ jobs:
             backend/tests/test_login_security_v1.py \
             backend/tests/test_mfa_security_v1.py \
             backend/tests/test_passkey_security_v1.py \
-            backend/tests/test_progressive_login_security_v1.py
+            backend/tests/test_progressive_login_security_v1.py \
+            backend/tests/test_customer_intelligence_instagram_provisioning.py \
+            backend/tests/test_customer_intelligence_instagram_ingress.py
 
   frontend-security:
     name: Frontend dependency and CSP checks

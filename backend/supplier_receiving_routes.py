@@ -81,6 +81,12 @@ RECEIPT_PIECE_FIELDS = (
     "supplier_name",
     "supplier_service_ids",
     "supplier_service_link_status",
+    "supplier_reassigned_from_id",
+    "supplier_reassigned_from_name",
+    "supplier_reassigned_at",
+    "supplier_reassigned_by_id",
+    "supplier_reassigned_by_name",
+    "supplier_reassignment_session_id",
     "supplier_receiving_scanned_barcode",
     "receipt_event_id",
     "updated_at",
@@ -103,6 +109,7 @@ class SupplierPieceScanRequest(BaseModel):
 
     barcode: str = Field(min_length=1, max_length=500)
     quantity: int | None = Field(default=None, ge=1, le=5000)
+    confirm_supplier_reassignment: bool = False
 
 
 class SupplierReceivingInvoiceServiceRequest(BaseModel):
@@ -1651,6 +1658,7 @@ async def supplier_scan_group_candidates(
     scanned_piece: dict[str, Any],
     session: dict[str, Any],
     allow_service_addition: bool,
+    allow_supplier_reassignment: bool = False,
 ) -> list[dict[str, Any]]:
     """Return interchangeable unreserved pieces for one quantity choice.
 
@@ -1697,7 +1705,12 @@ async def supplier_scan_group_candidates(
     for row in rows:
         if piece_scan_blocker(row):
             continue
-        if supplier_receiving_dispatch_blocker(row, supplier_id):
+        dispatch_blocker = supplier_receiving_dispatch_blocker(row, supplier_id)
+        if dispatch_blocker and not (
+            allow_supplier_reassignment
+            and _text(dispatch_blocker.get("code"))
+            == "supplier_piece_dispatched_to_different_supplier"
+        ):
             continue
         if supplier_piece_service_blocker(
             row,
@@ -2406,6 +2419,7 @@ def make_supplier_receiving_router(
                 allow_service_addition=(
                     ADD_PRODUCT_SERVICE_PERMISSION in context["permissions"]
                 ),
+                allow_supplier_reassignment=payload.confirm_supplier_reassignment,
             )
             # The card QR anchors to its first physical piece. If that piece
             # was already completed, the first still-eligible piece on the
@@ -2439,7 +2453,25 @@ def make_supplier_receiving_router(
                 or session.get("supplier_id"),
             )
             if dispatch_blocker:
-                raise HTTPException(status_code=409, detail=dispatch_blocker)
+                is_supplier_mismatch = (
+                    _text(dispatch_blocker.get("code"))
+                    == "supplier_piece_dispatched_to_different_supplier"
+                )
+                if not (
+                    is_supplier_mismatch
+                    and payload.confirm_supplier_reassignment
+                ):
+                    supplier = dict(session.get("supplier_snapshot") or {})
+                    detail = dict(dispatch_blocker)
+                    if is_supplier_mismatch:
+                        detail.update({
+                            "requires_supplier_reassignment_confirmation": True,
+                            "new_supplier_id": _text(supplier.get("id"))
+                            or _text(session.get("supplier_id")),
+                            "new_supplier_name": _text(supplier.get("company_name"))
+                            or "المورد الجديد",
+                        })
+                    raise HTTPException(status_code=409, detail=detail)
             reserved_session_id = _text(piece.get("supplier_receiving_session_id"))
             if reserved_session_id:
                 raise HTTPException(
@@ -2486,6 +2518,9 @@ def make_supplier_receiving_router(
                     "barcode": barcode,
                     "available_quantity": len(candidates),
                     "quantity_options": list(range(1, len(candidates) + 1)),
+                    "supplier_reassignment_confirmed": (
+                        payload.confirm_supplier_reassignment
+                    ),
                     "piece": _public_piece(piece),
                     "product": {
                         "product_id": piece.get("product_id"),
@@ -2551,8 +2586,27 @@ def make_supplier_receiving_router(
                 })
 
             now = _now()
+            receiving_supplier = dict(session.get("supplier_snapshot") or {})
+            receiving_supplier_id = (
+                _text(receiving_supplier.get("id"))
+                or _text(session.get("supplier_id"))
+            )
+            receiving_supplier_name = (
+                _text(receiving_supplier.get("company_name"))
+                or "المورد الجديد"
+            )
             for original_piece in selected_candidates:
                 piece_id = _text(original_piece.get("piece_id"))
+                candidate_dispatch_blocker = supplier_receiving_dispatch_blocker(
+                    original_piece,
+                    receiving_supplier_id,
+                )
+                supplier_reassigned = bool(
+                    candidate_dispatch_blocker
+                    and _text(candidate_dispatch_blocker.get("code"))
+                    == "supplier_piece_dispatched_to_different_supplier"
+                    and payload.confirm_supplier_reassignment
+                )
                 patch = supplier_receipt_piece_patch(
                     session=session,
                     actor=user,
@@ -2560,11 +2614,27 @@ def make_supplier_receiving_router(
                     barcode=barcode,
                     received_at=now,
                 )
+                if supplier_reassigned:
+                    patch.update({
+                        "supplier_id": receiving_supplier_id,
+                        "supplier_name": receiving_supplier_name,
+                        "supplier_reassigned_from_id": _text(
+                            original_piece.get("supplier_id")
+                        ) or None,
+                        "supplier_reassigned_from_name": _text(
+                            original_piece.get("supplier_name")
+                        ) or None,
+                        "supplier_reassigned_at": now,
+                        "supplier_reassigned_by_id": context["actor_id"],
+                        "supplier_reassigned_by_name": _actor_name(user),
+                        "supplier_reassignment_session_id": session_id,
+                    })
                 updated_piece = await db[PIECES].find_one_and_update(
                     {
                         "user_id": context["merchant_id"],
                         "piece_id": piece_id,
                         "status": {"$in": sorted(ELIGIBLE_PIECE_STATUSES)},
+                        "supplier_id": original_piece.get("supplier_id"),
                         "$or": [
                             {"supplier_receiving_session_id": {"$exists": False}},
                             {"supplier_receiving_session_id": None},
@@ -2672,6 +2742,16 @@ def make_supplier_receiving_router(
                     ),
                     "supplier_context": dict(session.get("supplier_snapshot") or {}),
                     "supplier_service_link_status": "draft_not_recorded",
+                    "supplier_reassigned": (
+                        _text(original_piece.get("supplier_id"))
+                        != _text(updated_piece.get("supplier_id"))
+                    ),
+                    "supplier_reassigned_from_id": (
+                        _text(original_piece.get("supplier_id")) or None
+                    ),
+                    "supplier_reassigned_from_name": (
+                        _text(original_piece.get("supplier_name")) or None
+                    ),
                     "scanned_barcode": barcode,
                     "scanned_group_quantity": selected_quantity,
                     "occurred_at": now,
