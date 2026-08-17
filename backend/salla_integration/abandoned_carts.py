@@ -13,8 +13,10 @@ import asyncio
 import hashlib
 import json
 import re
+import time
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Iterable
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
 
@@ -48,6 +50,11 @@ ABANDONED_CART_SCHEMA_VERSION = 2
 MAX_BACKFILL_PAGES = 500
 SALLA_PAGE_SIZE = 30
 SALLA_PAGE_REQUEST_TIMEOUT_SECONDS = 45
+RECENT_RECONCILE_PAGE_SIZE = 15
+RECENT_RECONCILE_MIN_INTERVAL_SECONDS = 30
+
+_recent_reconcile_locks: dict[str, asyncio.Lock] = {}
+_recent_reconcile_last_attempt: dict[str, float] = {}
 
 
 class AbandonedCartScopeError(RuntimeError):
@@ -92,6 +99,15 @@ def parse_salla_datetime(value: Any) -> datetime | None:
     at the ingestion boundary prevents valid carts from becoming timeless and
     therefore impossible to sort on the dashboard.
     """
+    timezone_hint = None
+    if isinstance(value, dict):
+        timezone_hint = _text(value.get("timezone"))
+        value = _first(
+            value.get("date"),
+            value.get("datetime"),
+            value.get("value"),
+            value.get("timestamp"),
+        )
     if isinstance(value, datetime):
         parsed = value
     elif isinstance(value, (int, float)) and not isinstance(value, bool):
@@ -135,6 +151,13 @@ def parse_salla_datetime(value: Any) -> datetime | None:
     else:
         return None
     if parsed.tzinfo is None:
+        if timezone_hint:
+            try:
+                return parsed.replace(tzinfo=ZoneInfo(timezone_hint)).astimezone(
+                    timezone.utc
+                )
+            except ZoneInfoNotFoundError:
+                pass
         return parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
 
@@ -983,6 +1006,160 @@ def _total_pages(payload: dict[str, Any]) -> int | None:
     return int(number) if number is not None and number >= 1 else None
 
 
+async def reconcile_recent_abandoned_carts(
+    db: Any,
+    user_id: str,
+    *,
+    call_provider: Callable[..., Awaitable[dict[str, Any]]],
+    per_page: int = RECENT_RECONCILE_PAGE_SIZE,
+    min_interval_seconds: float = RECENT_RECONCILE_MIN_INTERVAL_SECONDS,
+) -> dict[str, Any]:
+    """Reconcile Salla's newest cart page when webhook delivery is delayed.
+
+    Webhooks remain the immediate source. This bounded, read-only provider
+    check closes the operational gap when Salla does not deliver a cart event:
+    only page one is read and only new or changed snapshots are persisted.
+    """
+    owner_id = str(user_id)
+    lock = _recent_reconcile_locks.setdefault(owner_id, asyncio.Lock())
+    async with lock:
+        now_monotonic = time.monotonic()
+        last_attempt = _recent_reconcile_last_attempt.get(owner_id)
+        if (
+            last_attempt is not None
+            and min_interval_seconds > 0
+            and now_monotonic - last_attempt < min_interval_seconds
+        ):
+            return {
+                "ok": True,
+                "attempted": False,
+                "reason": "throttled",
+                "rows_seen": 0,
+                "rows_changed": 0,
+                "provider_write_reached": False,
+            }
+        integration = await require_carts_read(db, owner_id)
+        merchant_id = _text(integration.get("store_id"))
+        if not merchant_id:
+            return {
+                "ok": False,
+                "attempted": False,
+                "reason": "merchant_id_missing",
+                "rows_seen": 0,
+                "rows_changed": 0,
+                "provider_write_reached": False,
+            }
+
+        _recent_reconcile_last_attempt[owner_id] = now_monotonic
+        bounded_per_page = max(1, min(int(per_page), RECENT_RECONCILE_PAGE_SIZE))
+        payload = await call_provider(
+            db,
+            owner_id,
+            "GET",
+            "/carts/abandoned",
+            params={"page": 1, "per_page": bounded_per_page},
+        )
+        rows = _payload_rows(payload)
+        records_by_cart_id: dict[str, dict[str, Any]] = {}
+        rows_by_cart_id: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            event_body = {
+                "event": "abandoned.cart",
+                "merchant": merchant_id,
+                "created_at": _first(row.get("updated_at"), row.get("created_at")),
+                "data": row,
+            }
+            record = normalize_abandoned_cart_event(
+                event_body,
+                ingestion_source="salla_abandoned_carts_live_reconcile",
+            )
+            if not record or not record.get("cart_id"):
+                continue
+            cart_id = str(record["cart_id"])
+            records_by_cart_id[cart_id] = record
+            rows_by_cart_id[cart_id] = row
+
+        existing_rows: list[dict[str, Any]] = []
+        if records_by_cart_id:
+            cursor = getattr(db, ABANDONED_CART_COLLECTION).find(
+                {
+                    "merchant_id": merchant_id,
+                    "cart_id": {"$in": sorted(records_by_cart_id)},
+                },
+                {
+                    "_id": 0,
+                    "cart_id": 1,
+                    "cart_updated_at": 1,
+                    "status": 1,
+                    "purchased": 1,
+                    "total": 1,
+                    "items": 1,
+                },
+            )
+            if hasattr(cursor, "to_list"):
+                existing_rows = await cursor.to_list(length=len(records_by_cart_id))
+            else:
+                existing_rows = [row async for row in cursor]
+        existing_by_cart_id = {
+            str(row.get("cart_id")): row
+            for row in existing_rows
+            if row.get("cart_id") is not None
+        }
+
+        changed_ids: list[str] = []
+        for cart_id, record in records_by_cart_id.items():
+            existing = existing_by_cart_id.get(cart_id)
+            if existing is None or any(
+                existing.get(key) != record.get(key)
+                for key in (
+                    "cart_updated_at",
+                    "status",
+                    "purchased",
+                    "total",
+                    "items",
+                )
+            ):
+                changed_ids.append(cart_id)
+
+        created = 0
+        updated = 0
+        errors_count = 0
+        for cart_id in changed_ids:
+            row = rows_by_cart_id[cart_id]
+            result = await persist_abandoned_cart_event(
+                db,
+                {
+                    "event": "abandoned.cart",
+                    "merchant": merchant_id,
+                    "created_at": _first(
+                        row.get("updated_at"), row.get("created_at")
+                    ),
+                    "data": row,
+                },
+                user_id=owner_id,
+                source="salla_abandoned_carts_live_reconcile",
+            )
+            if result.get("synced"):
+                created += int(bool(result.get("created")))
+                updated += int(not bool(result.get("created")))
+            else:
+                errors_count += 1
+
+        return {
+            "ok": errors_count == 0,
+            "attempted": True,
+            "reason": "page_one_reconciled",
+            "rows_seen": len(rows),
+            "rows_changed": len(changed_ids),
+            "created": created,
+            "updated": updated,
+            "errors_count": errors_count,
+            "provider_write_reached": False,
+            "pii_stored": False,
+            "plaintext_pii_stored": False,
+        }
+
+
 async def backfill_abandoned_carts(
     db: Any,
     user_id: str,
@@ -1254,6 +1431,7 @@ __all__ = [
     "normalize_abandoned_cart_event",
     "persist_abandoned_cart_event",
     "parse_salla_datetime",
+    "reconcile_recent_abandoned_carts",
     "reconcile_purchased_cart_flags",
     "require_carts_read",
     "split_scopes",

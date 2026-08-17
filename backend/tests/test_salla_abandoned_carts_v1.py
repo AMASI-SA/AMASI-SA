@@ -235,6 +235,18 @@ def _cart_event(*, event="abandoned.cart", updated_at="2026-08-09T10:00:00Z"):
     }
 
 
+def test_parse_salla_datetime_supports_api_datetime_object_timezone():
+    parsed = module.parse_salla_datetime(
+        {
+            "date": "2026-08-17 16:42:56.000000",
+            "timezone_type": 3,
+            "timezone": "Asia/Riyadh",
+        }
+    )
+
+    assert parsed.isoformat() == "2026-08-17T13:42:56+00:00"
+
+
 @pytest.mark.asyncio
 async def test_live_only_mode_closes_running_historical_import_without_deleting_data():
     db = FakeDB()
@@ -616,6 +628,108 @@ async def test_backfill_reads_pages_sequentially_and_marks_api_provenance():
     assert rerun["created"] == 0
     assert rerun["updated"] == 2
     assert rerun["rows_saved"] == 2
+
+
+@pytest.mark.asyncio
+async def test_recent_reconcile_reads_only_first_page_and_skips_unchanged_rows():
+    db = FakeDB(
+        [
+            {
+                "user_id": "owner-1",
+                "store_id": 123,
+                "scope": "orders.read_write carts.read",
+            }
+        ]
+    )
+    calls = []
+    api_row = {
+        **_cart_event()["data"],
+        "id": "live-cart-1",
+        "created_at": {
+            "date": "2026-08-17 16:42:56.000000",
+            "timezone_type": 3,
+            "timezone": "Asia/Riyadh",
+        },
+        "updated_at": {
+            "date": "2026-08-17 16:46:41.000000",
+            "timezone_type": 3,
+            "timezone": "Asia/Riyadh",
+        },
+    }
+
+    async def provider(db_arg, user_id, method, path, *, params):
+        calls.append((db_arg, user_id, method, path, params))
+        return {"data": [deepcopy(api_row)]}
+
+    first = await module.reconcile_recent_abandoned_carts(
+        db,
+        "owner-1",
+        call_provider=provider,
+        min_interval_seconds=0,
+    )
+    second = await module.reconcile_recent_abandoned_carts(
+        db,
+        "owner-1",
+        call_provider=provider,
+        min_interval_seconds=0,
+    )
+
+    assert len(calls) == 2
+    assert all(call[2:4] == ("GET", "/carts/abandoned") for call in calls)
+    assert all(call[4] == {"page": 1, "per_page": 15} for call in calls)
+    assert first["rows_seen"] == 1
+    assert first["rows_changed"] == 1
+    assert first["created"] == 1
+    assert second["rows_seen"] == 1
+    assert second["rows_changed"] == 0
+    snapshots = db.collections[module.ABANDONED_CART_COLLECTION].documents
+    assert len(snapshots) == 1
+    assert snapshots[0]["cart_id"] == "live-cart-1"
+    assert snapshots[0]["cart_created_at"] == "2026-08-17T13:42:56+00:00"
+    assert snapshots[0]["cart_updated_at"] == "2026-08-17T13:46:41+00:00"
+    assert snapshots[0]["source"] == "salla_abandoned_carts_live_reconcile"
+
+
+@pytest.mark.asyncio
+async def test_recent_reconcile_throttles_repeat_dashboard_poll():
+    db = FakeDB(
+        [
+            {
+                "user_id": "owner-throttled",
+                "store_id": 123,
+                "scope": "carts.read",
+            }
+        ]
+    )
+    calls = []
+
+    async def provider(*args, **kwargs):
+        calls.append((args, kwargs))
+        return {"data": []}
+
+    first = await module.reconcile_recent_abandoned_carts(
+        db,
+        "owner-throttled",
+        call_provider=provider,
+        min_interval_seconds=30,
+    )
+    second = await module.reconcile_recent_abandoned_carts(
+        db,
+        "owner-throttled",
+        call_provider=provider,
+        min_interval_seconds=30,
+    )
+
+    assert first["attempted"] is True
+    assert second == {
+        "ok": True,
+        "attempted": False,
+        "reason": "throttled",
+        "rows_seen": 0,
+        "rows_changed": 0,
+        "provider_write_reached": False,
+    }
+    assert len(calls) == 1
 
 
 @pytest.mark.asyncio
