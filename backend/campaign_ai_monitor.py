@@ -1697,6 +1697,13 @@ async def run_campaign_ai_monitor(
 
 
 async def _monitored_user_ids(db: Any) -> list[str]:
+    def _owners(values: Any) -> set[str]:
+        return {
+            owner
+            for value in values or []
+            if (owner := _text(value, limit=120))
+        }
+
     values = await db.mezan_integration_accounts_v2.distinct(
         "user_id",
         {
@@ -1709,12 +1716,39 @@ async def _monitored_user_ids(db: Any) -> list[str]:
             "connection_status": {"$in": ["connected", "needs_reauth"]},
         },
     )
-    if not values:
+    owners = _owners(values)
+    if not owners:
         values = await db.mezan_integrations_v2.distinct(
             "user_id",
             {"provider": {"$in": ["snapchat_ads", "meta_ads"]}, "connection_status": "connected"},
         )
-    return [_text(value, limit=120) for value in values if _text(value, limit=120)][:100]
+        owners = _owners(values)
+    if not owners:
+        # Existing merchants can have healthy provider credentials and current
+        # campaign facts in the legacy connector collections without a V2
+        # projection.  Do not make recommendations disappear merely because a
+        # user connected before V2 was introduced.  Credentials remain in the
+        # legacy stores; this only discovers owner ids and writes nothing.
+        snapchat_owners, meta_owners = await asyncio.gather(
+            db.snapchat_connections.distinct(
+                "user_id",
+                {"refresh_token": {"$exists": True, "$nin": ["", None]}},
+            ),
+            db.meta_connections.distinct(
+                "user_id",
+                {
+                    "access_token": {"$exists": True, "$nin": ["", None]},
+                    # Match the legacy reader: an absent status is not proof
+                    # of a failed connection, while explicit errors must not
+                    # be scheduled as active marketing accounts.
+                    "connection_status": {
+                        "$nin": ["error", "failed", "last_check_failed"],
+                    },
+                },
+            ),
+        )
+        owners = _owners(snapchat_owners) | _owners(meta_owners)
+    return sorted(owners)[:100]
 
 
 async def _acquire_scheduler_lease(db: Any) -> str | None:
