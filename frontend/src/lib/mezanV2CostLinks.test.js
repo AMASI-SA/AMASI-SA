@@ -46,7 +46,7 @@ test("multiple missing products open the filtered sold-products list with dashbo
 });
 
 
-test("dashboard link prioritizes products missing both Mezan and Salla costs", () => {
+test("dashboard link leaves the missing-Mezan cohort to the backend source of truth", () => {
     const href = buildMissingMezanCostHref({
         missing_products: [
             { salla_product_id: "p-fallback-1", uses_salla_fallback: true, missing_everywhere: false },
@@ -56,10 +56,10 @@ test("dashboard link prioritizes products missing both Mezan and Salla costs", (
         ],
     }, { from: "2026-08-16", to: "2026-08-16" });
 
-    expect(href).toContain("missing_all_cost=1");
-    expect(decodeURIComponent(href)).toContain("product_ids=p-hard-1,p-hard-2");
-    expect(href).not.toContain("p-fallback-1");
-    expect(href).not.toContain("p-fallback-2");
+    expect(href).not.toContain("missing_all_cost");
+    expect(href).not.toContain("product_ids");
+    expect(href).toContain("missing_mezan_cost=1");
+    expect(href).toContain("sold_only=1");
 });
 
 
@@ -136,9 +136,13 @@ test("rejects an all-products response while the sold-missing filter is active",
         items: [{ salla_product_id: "p-unsold" }],
         pagination: { total: 2006 },
         meta: {
-            contract_version: "sold-missing-cost-v2",
+            contract_version: "sold-missing-cost-v3",
             missing_mezan_cost: true,
             sold_only: true,
+            cost_semantics: {
+                missing_mezan_cost: "explicit_mezan_cost_only",
+                calculation_cost: "mezan_then_salla_fallback",
+            },
         },
     }, "p-1,p-2")).toBe(false);
 });
@@ -152,9 +156,13 @@ test("accepts only marked sold-missing products inside the dashboard cohort", ()
         ],
         pagination: { total: 2 },
         meta: {
-            contract_version: "sold-missing-cost-v2",
+            contract_version: "sold-missing-cost-v3",
             missing_mezan_cost: true,
             sold_only: true,
+            cost_semantics: {
+                missing_mezan_cost: "explicit_mezan_cost_only",
+                calculation_cost: "mezan_then_salla_fallback",
+            },
         },
     }, "p-1,p-2")).toBe(true);
 });
