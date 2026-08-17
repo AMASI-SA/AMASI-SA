@@ -17,12 +17,21 @@ export default function AuthRecoveryScreen({ onRetry }) {
                     id="auth-unavailable-title"
                     className="mt-4 text-xl font-black text-slate-950"
                 >
-                    تعذر التحقق من الجلسة
+                    تعذر التحقق من الجلسة مؤقتًا
                 </h1>
                 <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">
-                    الاتصال بخادم ميزان لم يكتمل. لم يتم تسجيل خروجك، ولن نعرض
-                    أي بيانات محمية حتى ينجح التحقق.
+                    يعيد ميزان الاتصال بالخادم تلقائيًا. لم يتم تسجيل خروجك،
+                    ولن نعرض أي بيانات محمية حتى ينجح التحقق من الجلسة.
                 </p>
+                <div
+                    className="mt-4 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-800"
+                    role="status"
+                    aria-live="polite"
+                    data-testid="auth-auto-recovery-status"
+                >
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-600" />
+                    جاري إعادة الاتصال تلقائيًا
+                </div>
                 <div className="mt-5 grid gap-2 sm:grid-cols-2">
                     <button
                         type="button"
@@ -30,7 +39,7 @@ export default function AuthRecoveryScreen({ onRetry }) {
                         className="rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-black text-white transition hover:bg-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-300"
                         data-testid="auth-retry"
                     >
-                        إعادة المحاولة
+                        إعادة المحاولة الآن
                     </button>
                     <button
                         type="button"
