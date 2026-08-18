@@ -15,6 +15,7 @@ import campaign_ai_execution_retry as _execution_retry
 import campaign_ai_monitor_legacy as _legacy
 import campaign_ai_policy_v2 as _policy
 from campaign_ai_runtime_context_v3 import (
+    get_runtime_context as _get_v3_context,
     reset_runtime_context as _reset_v3_context,
     set_runtime_context as _set_v3_context,
 )
@@ -70,10 +71,10 @@ def _recommendation_explanation(item: Any, row: dict[str, Any]) -> dict[str, Any
 _policy._recommendation_explanation = _recommendation_explanation
 _legacy._recommendation_explanation = _recommendation_explanation
 
-# Keep the former aligned/repairing call only for the established direct unit
-# tests that monkeypatch ``monitor._ask_openai``. It is NOT installed into the
-# Production monitor runtime below and therefore cannot author a Production
-# recommendation snapshot.
+# Keep the former aligned/repairing call for established direct unit tests and
+# diagnostics that intentionally invoke the OpenAI boundary without a tenant
+# runtime context. It is never used by the Production monitor because the
+# monitor wrapper below always installs ContextVar(db,user_id) first.
 _legacy_test_aligned_ask = _alignment.build_aligned_ask_openai(_legacy, _policy)
 _legacy_test_repairing_ask = _execution_retry.build_repairing_ask_openai(
     _legacy_test_aligned_ask,
@@ -89,8 +90,25 @@ _v3_ask_openai = _decision_v3.build_decision_v3_ask_openai(
     _policy,
     _alignment,
 )
-_policy._ask_openai = _v3_ask_openai
-_legacy._ask_openai = _v3_ask_openai
+
+
+async def _runtime_ask_dispatch(*args: Any, **kwargs: Any):
+    """Use V3 in a tenant monitor task; preserve old direct-test contracts only.
+
+    ContextVar is task-local, so concurrent tenant monitor tasks cannot route one
+    another through the wrong decision engine. A missing context means this is a
+    direct diagnostic/unit-test call rather than a Production monitor run.
+    """
+    _legacy.AsyncOpenAI = AsyncOpenAI
+    try:
+        _get_v3_context()
+    except RuntimeError:
+        return await _legacy_test_repairing_ask(*args, **kwargs)
+    return await _v3_ask_openai(*args, **kwargs)
+
+
+_policy._ask_openai = _runtime_ask_dispatch
+_legacy._ask_openai = _runtime_ask_dispatch
 
 # The V2 monitor signature remains unchanged. ContextVar supplies db/user_id to
 # V3 without process-global tenant state or changes to worker/cadence/snapshot.
@@ -123,13 +141,13 @@ _legacy.run_campaign_ai_monitor = run_campaign_ai_monitor
 
 
 async def _ask_openai(*args: Any, **kwargs: Any):
-    """Legacy direct-test helper; Production runtime does not call this symbol."""
+    """Established direct-test helper; Production monitor uses the dispatcher."""
     _legacy.AsyncOpenAI = AsyncOpenAI
     return await _legacy_test_repairing_ask(*args, **kwargs)
 
 
 async def _ask_openai_v3(*args: Any, **kwargs: Any):
-    """Direct V3 diagnostic hook for focused V3 tests/evals."""
+    """Direct V3 diagnostic hook; caller must establish runtime context."""
     _legacy.AsyncOpenAI = AsyncOpenAI
     return await _v3_ask_openai(*args, **kwargs)
 
