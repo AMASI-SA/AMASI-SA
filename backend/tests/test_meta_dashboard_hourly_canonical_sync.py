@@ -16,4 +16,4 @@ def test_meta_hourly_projection_stays_inside_existing_meta_sync_not_new_schedule
     scheduler = Path("backend/integrations_control_center/ads_auto_sync_scheduler.py").read_text()
     assert scheduler.count("async def auto_sync_loop(") == 1
     assert scheduler.count("async def _refresh_meta(") == 1
-    assert "result = {**result, "hourly": hourly}" in scheduler
+    assert 'result = {**result, "hourly": hourly}' in scheduler
