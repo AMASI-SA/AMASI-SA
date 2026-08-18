@@ -1,0 +1,41 @@
+name: Build National Day banner asset
+
+on:
+  push:
+    branches:
+      - store-assets-national-day-96-20260818
+
+permissions:
+  contents: write
+
+jobs:
+  build-banner:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out asset branch
+        uses: actions/checkout@v4
+
+      - name: Reconstruct and verify banner
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p assets/storefront
+          cat .asset-build/banner.part.00 .asset-build/banner.part.01 \
+            | tr -d '\n\r' \
+            | base64 --decode \
+            > assets/storefront/amasi-national-day-96-banner.webp
+
+          test "$(stat -c%s assets/storefront/amasi-national-day-96-banner.webp)" = "18006"
+          echo "02f6be578830cfc3c44bb5e0b4d6261ad700f6cc0195c2bf5708f2a39b7ac9ab  assets/storefront/amasi-national-day-96-banner.webp" | sha256sum --check
+
+      - name: Commit generated storefront asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/storefront/amasi-national-day-96-banner.webp
+          git diff --cached --quiet && exit 0
+          git commit -m "Add Amasi National Day 96 storefront banner"
+          git push
