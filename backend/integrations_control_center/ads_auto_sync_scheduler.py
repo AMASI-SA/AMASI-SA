@@ -29,6 +29,14 @@ from .meta_native_reporting import (
     run_meta_reporting_sync,
 )
 from .meta_oauth_security import META_PROVIDER_ID, meta_oauth_configured
+from .google_ads_reporting import (
+    GOOGLE_ADS_PROVIDER_ID,
+    GOOGLE_ADS_REPORTING_SOURCE_MODE,
+    GoogleAdsReportingError,
+    google_ads_reporting_enabled,
+    run_google_ads_reporting_sync,
+)
+from .google_oauth_security import google_oauth_configured
 from .tiktok_native_reporting import (
     TIKTOK_REPORTING_SOURCE_MODE,
     TikTokReportingError,
@@ -77,6 +85,7 @@ TRIGGER = "server_scheduler_5m"
 META_RUN_TYPE = "meta_reporting_async"
 SNAP_RUN_TYPE = "analytics_refresh"
 TIKTOK_RUN_TYPE = "tiktok_reporting_async"
+GOOGLE_RUN_TYPE = "google_ads_reporting_async"
 ACTIVE_STATUSES = ("queued", "running")
 TERMINAL_STATUSES = ("complete", "partial", "failed", "skipped")
 
@@ -188,6 +197,7 @@ async def _targets(db: Any) -> list[tuple[str, str]]:
                 META_PROVIDER_ID,
                 SNAPCHAT_PROVIDER_ID,
                 TIKTOK_PROVIDER_ID,
+                GOOGLE_ADS_PROVIDER_ID,
             ]},
             "connection_status": "connected",
             "connection_provenance": "api_connection",
@@ -202,6 +212,7 @@ async def _targets(db: Any) -> list[tuple[str, str]]:
             META_PROVIDER_ID,
             SNAPCHAT_PROVIDER_ID,
             TIKTOK_PROVIDER_ID,
+            GOOGLE_ADS_PROVIDER_ID,
         }:
             pairs.add((user_id, provider))
     return sorted(pairs)
@@ -609,6 +620,93 @@ async def _refresh_tiktok(
         }
 
 
+async def _refresh_google(
+    db: Any,
+    *,
+    user_id: str,
+    start_date: date,
+    end_date: date,
+    now: datetime,
+) -> dict[str, Any]:
+    if not google_oauth_configured() or not google_ads_reporting_enabled():
+        return {
+            "provider": GOOGLE_ADS_PROVIDER_ID,
+            "status": "skipped",
+            "reason": "disabled",
+        }
+    active = await _active_run(
+        db, user_id=user_id, provider=GOOGLE_ADS_PROVIDER_ID, now=now
+    )
+    if active:
+        return {
+            "provider": GOOGLE_ADS_PROVIDER_ID,
+            "status": "skipped",
+            "reason": "sync_in_progress",
+            "run_id": active.get("run_id"),
+        }
+    run_id = await _start_run(
+        db,
+        user_id=user_id,
+        provider=GOOGLE_ADS_PROVIDER_ID,
+        run_type=GOOGLE_RUN_TYPE,
+        source_mode=GOOGLE_ADS_REPORTING_SOURCE_MODE,
+        start_date=start_date,
+        end_date=end_date,
+        now=now,
+    )
+    try:
+        result = await run_google_ads_reporting_sync(
+            db,
+            user_id,
+            date_from=start_date.isoformat(),
+            date_to=end_date.isoformat(),
+        )
+        status = str(result.get("status") or "complete")
+        if status not in {"complete", "partial", "failed"}:
+            status = "complete"
+        await _finish_run(
+            db, user_id=user_id, run_id=run_id, status=status, result=result
+        )
+        return {
+            "provider": GOOGLE_ADS_PROVIDER_ID,
+            "run_id": run_id,
+            "status": status,
+            **_safe_summary(result),
+        }
+    except GoogleAdsReportingError as exc:
+        error_id = await _record_error(
+            db,
+            user_id=user_id,
+            provider=GOOGLE_ADS_PROVIDER_ID,
+            run_id=run_id,
+            source_mode=GOOGLE_ADS_REPORTING_SOURCE_MODE,
+            code=exc.code,
+            message=exc.message,
+            retryable=exc.retryable,
+        )
+        await _finish_run(
+            db,
+            user_id=user_id,
+            run_id=run_id,
+            status="failed",
+            result=exc.result,
+            error={
+                "error_id": error_id,
+                "code": exc.code,
+                "message": exc.message,
+                "retryable": exc.retryable,
+            },
+        )
+        if exc.code == "google_ads_needs_reauth":
+            await _mark_needs_reauth(db, user_id, GOOGLE_ADS_PROVIDER_ID)
+        return {
+            "provider": GOOGLE_ADS_PROVIDER_ID,
+            "run_id": run_id,
+            "status": "failed",
+            "code": exc.code,
+        }
+
+
 async def _refresh_snapchat(
     db: Any,
     *,
@@ -747,11 +845,6 @@ async def _refresh_snapchat(
             == snapchat_hourly.CAMPAIGN_FACTS_SCHEMA_VERSION
             for item in items
         )
-        # Outcome evaluation is deliberately not part of this provider-sync
-        # critical section.  Historical Salla/profit reconstruction can be
-        # expensive as the journal grows and must not hold the five-minute sync
-        # lock or make fresh reporting appear stuck.  Owner-triggered reads and
-        # the bounded outcome worker perform this learning step separately.
         decision_outcomes = {
             "status": (
                 "queued_outside_sync"
@@ -810,9 +903,6 @@ async def _refresh_snapchat(
             db, user_id=user_id, run_id=run_id, status=status, result=result
         )
         if status == "complete":
-            # `_finish_run` above releases the durable sync lock first.  This
-            # bounded read-only batch can therefore never make the five-minute
-            # provider refresh appear stuck or block the next refresh cycle.
             decision_outcomes = await _evaluate_snapchat_outcomes_after_sync(
                 db,
                 user_id,
@@ -871,6 +961,14 @@ async def run_auto_sync_cycle(
                 )
             if provider == TIKTOK_PROVIDER_ID:
                 return await _refresh_tiktok(
+                    db,
+                    user_id=user_id,
+                    start_date=start_date,
+                    end_date=end_date,
+                    now=started,
+                )
+            if provider == GOOGLE_ADS_PROVIDER_ID:
+                return await _refresh_google(
                     db,
                     user_id=user_id,
                     start_date=start_date,
@@ -1062,6 +1160,7 @@ async def auto_sync_status(db: Any, user_id: str) -> dict[str, Any]:
                 META_PROVIDER_ID,
                 SNAPCHAT_PROVIDER_ID,
                 TIKTOK_PROVIDER_ID,
+                GOOGLE_ADS_PROVIDER_ID,
             ]},
         },
         {"_id": 0},
@@ -1094,11 +1193,6 @@ async def auto_sync_status(db: Any, user_id: str) -> dict[str, Any]:
             "last_started_at": scheduler.get("last_started_at"),
             "last_finished_at": scheduler.get("last_finished_at"),
             "next_due_at": scheduler.get("next_due_at"),
-            # The scheduler lease is global across every tenant.  Its persisted
-            # result contains one row per tenant/provider, including run and ad
-            # account identifiers.  Only expose infrastructure-level cycle
-            # health here; tenant details come exclusively from `providers`,
-            # whose query above is scoped by `user_id`.
             "last_result": (
                 {
                     "status": global_last_result.get("status"),
