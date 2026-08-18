@@ -11,19 +11,16 @@ const analyticsPlacementSource = read("components/DashboardAnalyticsPlacement.js
 const snapchatPlacementSource = read("components/DashboardSnapchatAccountsPlacement.jsx");
 
 
-test("Mezan 2 renders the advanced dashboard instead of the retired implementation", () => {
-    expect(dashboardCompatibilitySource).toContain(
-        'import AdvancedDashboard from "./AdvancedDashboard"',
-    );
-    expect(dashboardCompatibilitySource).toContain(
-        'if (sourceMode === "mezan_v2") return <AdvancedDashboard />;',
-    );
+test("all retired dashboard compatibility routes redirect to the advanced dashboard", () => {
     expect(dashboardCompatibilitySource).toContain(
         '<Navigate to="/dashboard-advanced" replace />',
     );
+    expect(dashboardCompatibilitySource).not.toContain("AdvancedDashboard");
     expect(dashboardCompatibilitySource).not.toMatch(/api\.(get|post|put|patch|delete)\(/);
     expect(dashboardCompatibilitySource).not.toContain("setInterval(");
     expect(dashboardCompatibilitySource).not.toContain("setTimeout(");
+    expect(dashboardCompatibilitySource).not.toContain("useEffect(");
+    expect(dashboardCompatibilitySource).not.toContain("useState(");
 });
 
 
