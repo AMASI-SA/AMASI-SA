@@ -292,3 +292,377 @@ aside { scrollbar-width: thin; }
 /* Variant: compact (smaller padding — apply on the <table>) */
 .mezan-table.compact thead th { padding-top: 0.5rem; padding-bottom: 0.5rem; }
 .mezan-table.compact tbody td { padding-top: 0.4rem; padding-bottom: 0.4rem; }
+
+/* ─────────────────────────────────────────────────────────────
+   Advanced Dashboard — executive profit summary visual refresh.
+   Scoped deliberately to this one card; no data/logic/API changes.
+   ───────────────────────────────────────────────────────────── */
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    border: 1px solid rgba(16, 185, 129, 0.24) !important;
+    border-radius: 1.75rem !important;
+    background:
+        radial-gradient(circle at 10% 10%, rgba(16, 185, 129, 0.10), transparent 34%),
+        radial-gradient(circle at 92% 30%, rgba(14, 165, 233, 0.08), transparent 30%),
+        linear-gradient(145deg, #f3fdf9 0%, #f5faff 52%, #fff8ea 100%) !important;
+    box-shadow:
+        0 20px 48px rgba(15, 93, 70, 0.12),
+        0 3px 10px rgba(15, 23, 42, 0.05) !important;
+}
+
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:first-child {
+    min-height: 76px;
+    height: auto !important;
+    padding: 1rem 1.5rem !important;
+    border-bottom-color: rgba(255, 255, 255, 0.12) !important;
+    background:
+        radial-gradient(circle at 8% -30%, rgba(52, 211, 153, 0.34), transparent 36%),
+        linear-gradient(105deg, #109b6e 0%, #087858 52%, #056146 100%) !important;
+    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.10);
+}
+
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:first-child h2 {
+    gap: 0.65rem !important;
+    font-size: clamp(1.2rem, 2vw, 1.75rem) !important;
+    font-weight: 900 !important;
+    letter-spacing: -0.025em;
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.10);
+}
+
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:first-child h2 svg {
+    width: 1.45rem;
+    height: 1.45rem;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.16));
+}
+
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:first-child > span {
+    font-size: 0.72rem !important;
+    font-weight: 800 !important;
+    color: rgba(236, 253, 245, 0.90) !important;
+}
+
+/* Top KPI cards */
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) {
+    gap: 0.8rem !important;
+    padding: 1rem !important;
+    border-bottom: 0 !important;
+    background: transparent !important;
+}
+
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div {
+    position: relative;
+    display: block !important;
+    min-height: 142px;
+    overflow: hidden;
+    padding: 1rem !important;
+    border-radius: 1.25rem !important;
+    border-width: 1px !important;
+    box-shadow:
+        0 10px 24px rgba(15, 23, 42, 0.06),
+        inset 0 1px 0 rgba(255, 255, 255, 0.72) !important;
+}
+
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div:nth-child(1) {
+    border-color: rgba(245, 158, 11, 0.34) !important;
+    background: linear-gradient(145deg, rgba(255, 251, 235, 0.98), rgba(254, 243, 199, 0.74)) !important;
+}
+
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div:nth-child(2) {
+    border-color: rgba(56, 189, 248, 0.34) !important;
+    background: linear-gradient(145deg, rgba(240, 249, 255, 0.98), rgba(224, 242, 254, 0.78)) !important;
+}
+
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div:nth-child(3) {
+    border-color: rgba(16, 185, 129, 0.32) !important;
+    background: linear-gradient(145deg, rgba(240, 253, 250, 0.98), rgba(209, 250, 229, 0.76)) !important;
+}
+
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div:nth-child(4) {
+    border-color: rgba(139, 92, 246, 0.28) !important;
+    background: linear-gradient(145deg, rgba(250, 245, 255, 0.98), rgba(237, 233, 254, 0.74)) !important;
+}
+
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div > div:first-child {
+    min-width: 0;
+    padding-top: 0.1rem;
+}
+
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div > div:first-child > p:first-child {
+    min-height: 2.35rem;
+    padding-inline-end: 3.25rem;
+    color: #334155 !important;
+    font-size: 0.8rem !important;
+    font-weight: 800 !important;
+    line-height: 1.45 !important;
+    text-align: right;
+}
+
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div > div:first-child > p:last-child {
+    display: block !important;
+    margin-top: 0.7rem !important;
+    color: #0f172a;
+    font-size: clamp(1.75rem, 2.5vw, 2.45rem) !important;
+    font-weight: 900 !important;
+    line-height: 1 !important;
+    text-align: center;
+    letter-spacing: -0.025em;
+}
+
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div:nth-child(1) > div:first-child > p:last-child { color: #b45309 !important; }
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div:nth-child(2) > div:first-child > p:last-child { color: #0369a1 !important; }
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div:nth-child(3) > div:first-child > p:last-child { color: #047857 !important; }
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div:nth-child(4) > div:first-child > p:last-child { color: #6d28d9 !important; }
+
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div > span:last-child {
+    position: absolute;
+    top: 0.9rem;
+    right: 0.9rem;
+    width: 2.7rem !important;
+    height: 2.7rem !important;
+    border-radius: 0.9rem !important;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.78),
+        0 5px 12px rgba(15, 23, 42, 0.08);
+}
+
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div > span:last-child svg {
+    width: 1.25rem !important;
+    height: 1.25rem !important;
+}
+
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div:nth-child(1) > span:last-child { background: #fef3c7 !important; color: #b45309 !important; }
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div:nth-child(2) > span:last-child { background: #e0f2fe !important; color: #0369a1 !important; }
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div:nth-child(3) > span:last-child { background: #d1fae5 !important; color: #047857 !important; }
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div:nth-child(4) > span:last-child { background: #ede9fe !important; color: #6d28d9 !important; }
+
+/* Profit / cost breakdown surface */
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(3) {
+    margin: 0.2rem 1rem 0;
+    padding: 0.35rem 1rem !important;
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: 1.35rem;
+    background: linear-gradient(145deg, rgba(248, 252, 250, 0.92), rgba(245, 249, 253, 0.94)) !important;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.72),
+        0 8px 18px rgba(15, 23, 42, 0.035);
+}
+
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] [data-testid^="advanced-profit-row-"] {
+    min-height: 72px !important;
+    padding: 0.8rem 0.2rem !important;
+    gap: 0.8rem !important;
+    border-bottom-color: rgba(148, 163, 184, 0.16) !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+}
+
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] [data-testid^="advanced-profit-row-"]:hover {
+    background: rgba(255, 255, 255, 0.38) !important;
+}
+
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] [data-testid^="advanced-profit-row-"] > span:first-child {
+    width: 2.65rem !important;
+    height: 2.65rem !important;
+    border-radius: 0.85rem !important;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.75),
+        0 4px 10px rgba(15, 23, 42, 0.05);
+}
+
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] [data-testid^="advanced-profit-row-"] > span:first-child svg {
+    width: 1.15rem !important;
+    height: 1.15rem !important;
+}
+
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] [data-testid="advanced-profit-row-sales"] > span:first-child { background: #d1fae5 !important; color: #047857 !important; }
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] [data-testid="advanced-profit-row-products"] > span:first-child { background: #fef3c7 !important; color: #b45309 !important; }
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] [data-testid="advanced-profit-row-ads"] > span:first-child { background: #ffe4e6 !important; color: #be123c !important; }
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] [data-testid="advanced-profit-row-shipping"] > span:first-child { background: #e0f2fe !important; color: #0369a1 !important; }
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] [data-testid="advanced-profit-row-payment"] > span:first-child { background: #ede9fe !important; color: #6d28d9 !important; }
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] [data-testid="advanced-profit-row-operating"] > span:first-child { background: #ffedd5 !important; color: #c2410c !important; }
+
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] [data-testid^="advanced-profit-row-"] > p {
+    color: #334155 !important;
+    font-size: 0.9rem !important;
+    font-weight: 850 !important;
+    line-height: 1.5;
+}
+
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] [data-testid^="advanced-profit-row-"] > div:last-child {
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.38rem !important;
+    font-size: clamp(1.18rem, 2vw, 1.55rem) !important;
+    font-weight: 900 !important;
+    line-height: 1 !important;
+}
+
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] [data-testid^="advanced-profit-row-"] > div:last-child > span:nth-child(2) {
+    font-size: 0.7rem !important;
+    font-weight: 800 !important;
+}
+
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] [data-testid^="advanced-profit-row-"]:not([data-testid="advanced-profit-row-sales"]) > div:last-child > span:last-child {
+    order: -1;
+    min-width: 4.5rem;
+    margin-left: 0 !important;
+    padding: 0.42rem 0.58rem !important;
+    border: 1px solid transparent;
+    border-radius: 0.7rem !important;
+    font-size: 0.7rem !important;
+    font-weight: 900 !important;
+    line-height: 1;
+    text-align: center;
+    opacity: 1 !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] [data-testid="advanced-profit-row-products"] > div:last-child > span:last-child { border-color: #f8d58c !important; background: #fff1cc !important; color: #b45309 !important; }
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] [data-testid="advanced-profit-row-ads"] > div:last-child > span:last-child { border-color: #fecdd3 !important; background: #ffe4e8 !important; color: #be123c !important; }
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] [data-testid="advanced-profit-row-shipping"] > div:last-child > span:last-child { border-color: #bae6fd !important; background: #e0f2fe !important; color: #0369a1 !important; }
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] [data-testid="advanced-profit-row-payment"] > div:last-child > span:last-child { border-color: #ddd6fe !important; background: #ede9fe !important; color: #6d28d9 !important; }
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] [data-testid="advanced-profit-row-operating"] > div:last-child > span:last-child { border-color: #fed7aa !important; background: #ffedd5 !important; color: #c2410c !important; }
+
+/* Net profit hero card */
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(4) {
+    position: relative;
+    isolation: isolate;
+    min-height: 138px !important;
+    overflow: hidden;
+    margin: 1rem !important;
+    padding: 1.25rem 1.4rem !important;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 1.35rem !important;
+    background:
+        radial-gradient(circle at 84% 12%, rgba(255, 255, 255, 0.13), transparent 24%),
+        linear-gradient(115deg, #10a66f 0%, #07855f 50%, #075c45 100%) !important;
+    box-shadow:
+        0 18px 34px rgba(5, 112, 79, 0.24),
+        inset 0 1px 0 rgba(255, 255, 255, 0.13) !important;
+}
+
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(4)::before,
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(4)::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    pointer-events: none;
+    border-radius: 50%;
+}
+
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(4)::before {
+    width: 72%;
+    height: 105%;
+    left: -12%;
+    bottom: -72%;
+    background: rgba(52, 211, 153, 0.28);
+    transform: rotate(-5deg);
+}
+
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(4)::after {
+    width: 58%;
+    height: 78%;
+    right: -18%;
+    bottom: -54%;
+    border: 2px solid rgba(110, 231, 183, 0.25);
+    box-shadow: 0 -8px 0 rgba(16, 185, 129, 0.10);
+}
+
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(4) > p:first-child {
+    display: flex !important;
+    align-items: baseline;
+    gap: 0.45rem !important;
+    color: #ffffff;
+    font-size: clamp(2rem, 4vw, 2.9rem) !important;
+    font-weight: 900 !important;
+    line-height: 1 !important;
+    letter-spacing: -0.03em;
+    text-shadow: 0 2px 5px rgba(0, 0, 0, 0.13);
+}
+
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(4) > p:first-child > span:last-child {
+    font-size: 0.95rem !important;
+    font-weight: 800 !important;
+    opacity: 0.92;
+}
+
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(4) > div:last-child {
+    position: relative;
+    z-index: 1;
+    min-width: 0;
+}
+
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(4) > div:last-child > p:first-child {
+    color: #ffffff;
+    font-size: clamp(1.2rem, 2.3vw, 1.65rem) !important;
+    font-weight: 900 !important;
+    line-height: 1.15;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.10);
+}
+
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(4) > div:last-child > p:last-child {
+    margin-top: 0.35rem;
+    color: rgba(236, 253, 245, 0.88) !important;
+    font-size: 0.76rem !important;
+    font-weight: 700;
+}
+
+@media (max-width: 639px) {
+    [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] {
+        border-radius: 1.35rem !important;
+    }
+
+    [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:first-child {
+        min-height: 66px;
+        padding: 0.85rem 1rem !important;
+    }
+
+    [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:first-child h2 {
+        font-size: 1.12rem !important;
+    }
+
+    [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div {
+        min-height: 126px;
+    }
+
+    [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div > div:first-child > p:last-child {
+        font-size: 1.6rem !important;
+    }
+
+    [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(3) {
+        margin-inline: 0.7rem;
+        padding-inline: 0.65rem !important;
+    }
+
+    [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] [data-testid^="advanced-profit-row-"] {
+        min-height: 66px !important;
+        gap: 0.55rem !important;
+    }
+
+    [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] [data-testid^="advanced-profit-row-"] > p {
+        font-size: 0.76rem !important;
+    }
+
+    [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] [data-testid^="advanced-profit-row-"] > div:last-child {
+        gap: 0.28rem !important;
+        font-size: 1rem !important;
+    }
+
+    [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] [data-testid^="advanced-profit-row-"]:not([data-testid="advanced-profit-row-sales"]) > div:last-child > span:last-child {
+        min-width: 3.8rem;
+        padding: 0.34rem 0.42rem !important;
+        font-size: 0.62rem !important;
+    }
+
+    [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(4) {
+        min-height: 120px !important;
+        margin: 0.8rem !important;
+        padding: 1rem !important;
+    }
+
+    [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(4) > p:first-child {
+        font-size: 1.8rem !important;
+    }
+}
