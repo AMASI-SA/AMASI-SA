@@ -245,13 +245,19 @@ function AdsCard({ ads, filters }) {
     const [chartData, setChartData] = useState(null);
     useEffect(() => {
         let active = true;
+        let timer = null;
         const fromDate = filters?.from;
         const toDate = filters?.to || fromDate;
         if (!fromDate || !toDate) return () => { active = false; };
-        getDashboardAdsSpend({ dateFrom: fromDate, dateTo: toDate, refresh: false })
+        const loadSpend = () => getDashboardAdsSpend({ dateFrom: fromDate, dateTo: toDate, refresh: false })
             .then((result) => { if (active) setChartData(result); })
             .catch(() => { if (active) setChartData(null); });
-        return () => { active = false; };
+        loadSpend();
+        timer = window.setInterval(loadSpend, 60_000);
+        return () => {
+            active = false;
+            if (timer) window.clearInterval(timer);
+        };
     }, [filters?.from, filters?.to]);
     const rows = useMemo(() => {
         const singleDay = Boolean(filters?.from && (filters?.to || filters?.from) === filters.from);
