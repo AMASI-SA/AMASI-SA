@@ -2,8 +2,8 @@
 
 The established V2 pipeline remains responsible for provider evidence,
 profitability, persistence, scheduling, snapshot lifecycle and approval/write
-safety. Decision Intelligence V3 replaces only the OpenAI reasoning boundary and
-adds task-local access to the tenant database for deeper funnel/product evidence.
+safety. Decision Intelligence V3 replaces only the runtime OpenAI reasoning
+boundary and adds task-local access to the tenant database for deeper evidence.
 """
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from typing import Any
 
 import campaign_ai_decision_v3 as _decision_v3
 import campaign_ai_execution_alignment as _alignment
+import campaign_ai_execution_retry as _execution_retry
 import campaign_ai_monitor_legacy as _legacy
 import campaign_ai_policy_v2 as _policy
 from campaign_ai_runtime_context_v3 import (
@@ -53,7 +54,7 @@ _experiment_outcomes_context = _policy._experiment_outcomes_context
 execution_capabilities = _alignment.execution_capabilities
 
 # Preserve the existing Salla/profit explanation enrichment, then append the
-# rich V3 business diagnosis captured on the exact candidate row.  V2 later
+# rich V3 business diagnosis captured on the exact candidate row. V2 later
 # computes approval_available from the fail-closed legacy action projection.
 _base_recommendation_explanation = _policy._recommendation_explanation
 
@@ -69,9 +70,20 @@ def _recommendation_explanation(item: Any, row: dict[str, Any]) -> dict[str, Any
 _policy._recommendation_explanation = _recommendation_explanation
 _legacy._recommendation_explanation = _recommendation_explanation
 
-# V3 owns diagnosis + marketing judgment, including its own mandatory second
-# pass for budget-owner coverage and counterfactual review.  Execution alignment
-# remains code-owned inside the V3 boundary and the unchanged V2 approval route.
+# Keep the former aligned/repairing call only for the established direct unit
+# tests that monkeypatch ``monitor._ask_openai``. It is NOT installed into the
+# Production monitor runtime below and therefore cannot author a Production
+# recommendation snapshot.
+_legacy_test_aligned_ask = _alignment.build_aligned_ask_openai(_legacy, _policy)
+_legacy_test_repairing_ask = _execution_retry.build_repairing_ask_openai(
+    _legacy_test_aligned_ask,
+    _legacy,
+    _policy,
+    _alignment,
+)
+
+# Runtime authority: V3 owns diagnosis + marketing judgment, including its own
+# mandatory second pass for budget-owner coverage and counterfactual review.
 _v3_ask_openai = _decision_v3.build_decision_v3_ask_openai(
     _legacy,
     _policy,
@@ -80,9 +92,8 @@ _v3_ask_openai = _decision_v3.build_decision_v3_ask_openai(
 _policy._ask_openai = _v3_ask_openai
 _legacy._ask_openai = _v3_ask_openai
 
-# The V2 monitor signature deliberately remains unchanged. ContextVar supplies
-# db/user_id to V3 without process-global tenant state or changes to the worker,
-# cadence, snapshot, or route contracts.
+# The V2 monitor signature remains unchanged. ContextVar supplies db/user_id to
+# V3 without process-global tenant state or changes to worker/cadence/snapshot.
 _base_run_campaign_ai_monitor = _policy.run_campaign_ai_monitor
 
 
@@ -112,6 +123,13 @@ _legacy.run_campaign_ai_monitor = run_campaign_ai_monitor
 
 
 async def _ask_openai(*args: Any, **kwargs: Any):
+    """Legacy direct-test helper; Production runtime does not call this symbol."""
+    _legacy.AsyncOpenAI = AsyncOpenAI
+    return await _legacy_test_repairing_ask(*args, **kwargs)
+
+
+async def _ask_openai_v3(*args: Any, **kwargs: Any):
+    """Direct V3 diagnostic hook for focused V3 tests/evals."""
     _legacy.AsyncOpenAI = AsyncOpenAI
     return await _v3_ask_openai(*args, **kwargs)
 
