@@ -11,7 +11,7 @@ instead of disappearing from the dashboard.
 
 The guard also removes historical OpenAI budget actions aimed directly at an ad.
 Ads do not own a daily budget in the current Snapchat/Meta execution contracts;
-showing such a card without an approval button is misleading.  New analysis is
+showing such a card without an approval button is misleading. New analysis is
 prevented from creating those combinations by ``campaign_ai_execution_alignment``.
 """
 from __future__ import annotations
@@ -106,10 +106,26 @@ def _strip_unexecutable_budget_recommendations(
     sanitized = dict(public)
     sanitized["recommendations"] = kept
     sanitized["execution_alignment_suppressed"] = removed
+    sanitized["summary_adjusted_after_execution_filter"] = True
     limitations = list(sanitized.get("limitations") or [])
     if "non_executable_ad_budget_recommendation_suppressed" not in limitations:
         limitations.append("non_executable_ad_budget_recommendation_suppressed")
     sanitized["limitations"] = limitations
+
+    # The old summary can mention cards that were just removed. Never show a
+    # narrative that contradicts the visible/executable recommendation set.
+    if kept:
+        sanitized["summary"] = (
+            f"تم استبعاد {removed} توصية قديمة استهدفت تعديل ميزانية إعلان لا يملك "
+            "ميزانية مستقلة. التوصيات الظاهرة فقط هي القرارات المتوافقة مع مستوى "
+            "التنفيذ الفعلي، وسيعيد OpenAI مراجعة الحملات والمجموعات في الدورة التالية."
+        )
+    else:
+        sanitized["summary"] = (
+            f"لا توجد الآن توصية قابلة للتنفيذ مباشرة. تم استبعاد {removed} توصية "
+            "قديمة استهدفت مستوى إعلان لا يملك ميزانية مستقلة، وسيعيد OpenAI مراجعة "
+            "الحملات والمجموعات والإعلانات دون تنفيذ أي تغيير تلقائي."
+        )
     return sanitized
 
 
@@ -190,7 +206,7 @@ def attach_campaign_ai_public_guard(
             return _public_document(latest)
 
         # A racing legacy writer must not make a valid OpenAI recommendation
-        # disappear.  Reuse only a recent OpenAI snapshot inside the exact same
+        # disappear. Reuse only a recent OpenAI snapshot inside the exact same
         # five-hour recommendation validity window used by execution approval.
         recent_openai = await collection.find_one(
             {

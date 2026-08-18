@@ -1,20 +1,23 @@
 """Public facade for Campaign AI source-of-truth policy.
 
 The historical implementation remains in ``campaign_ai_monitor_legacy`` so
-existing route/scheduler/execution contracts stay stable.  The marketing
-source/policy lives in ``campaign_ai_policy_v2``.  The execution-alignment layer
+existing route/scheduler/execution contracts stay stable. The marketing
+source/policy lives in ``campaign_ai_policy_v2``. The execution-alignment layer
 adds the real provider write capabilities to OpenAI evidence and rejects
-impossible action/target pairs without inventing a parent target.
+impossible action/target pairs without inventing a parent target. A bounded
+OpenAI repair pass may then reconsider the same evidence once when the first
+model response targeted an impossible provider write.
 """
 from __future__ import annotations
 
 from typing import Any
 
 import campaign_ai_execution_alignment as _alignment
+import campaign_ai_execution_retry as _execution_retry
 import campaign_ai_monitor_legacy as _legacy
 import campaign_ai_policy_v2 as _policy
 
-# Keep the established monkeypatch/test surface for the OpenAI client.  The
+# Keep the established monkeypatch/test surface for the OpenAI client. The
 # policy runtime uses the legacy module's client reference; the public wrapper
 # synchronizes an explicitly replaced client before a direct _ask_openai call.
 AsyncOpenAI = _legacy.AsyncOpenAI
@@ -51,19 +54,23 @@ _experiment_outcomes_context = _policy._experiment_outcomes_context
 _recommendation_explanation = _policy._recommendation_explanation
 execution_capabilities = _alignment.execution_capabilities
 
-# Install the aligned OpenAI boundary into both policy and legacy runtime
-# globals.  ``run_campaign_ai_monitor`` performs a global lookup of
-# ``_ask_openai`` on every run, so this also covers the isolated subprocess
-# worker without duplicating scheduler or execution code.
+# Install the aligned OpenAI boundary first, then wrap it with one bounded
+# OpenAI-owned correction pass. Mezan still never selects or promotes a target.
 _aligned_ask_openai = _alignment.build_aligned_ask_openai(_legacy, _policy)
-_policy._ask_openai = _aligned_ask_openai
-_legacy._ask_openai = _aligned_ask_openai
+_repairing_ask_openai = _execution_retry.build_repairing_ask_openai(
+    _aligned_ask_openai,
+    _legacy,
+    _policy,
+    _alignment,
+)
+_policy._ask_openai = _repairing_ask_openai
+_legacy._ask_openai = _repairing_ask_openai
 run_campaign_ai_monitor = _policy.run_campaign_ai_monitor
 
 
 async def _ask_openai(*args: Any, **kwargs: Any):
     _legacy.AsyncOpenAI = AsyncOpenAI
-    return await _aligned_ask_openai(*args, **kwargs)
+    return await _repairing_ask_openai(*args, **kwargs)
 
 
 # Existing route/scheduler helpers remain delegated to the legacy module; the

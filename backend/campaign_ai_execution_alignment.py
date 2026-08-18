@@ -1,6 +1,6 @@
 """Align OpenAI campaign recommendations with provider execution capabilities.
 
-Marketing judgment remains with OpenAI.  This module only exposes the provider
+Marketing judgment remains with OpenAI. This module only exposes the provider
 write boundary as evidence and rejects impossible action/target combinations.
 It never promotes an ad recommendation to a parent entity on its own.
 """
@@ -272,8 +272,18 @@ def build_aligned_ask_openai(legacy: Any, policy: Any):
                 candidates,
                 next_check_at=next_check,
             )
-            governed = legacy._govern_output(
+
+            # Enforce the real provider write contract BEFORE legacy governance.
+            # Otherwise a model's impossible `ad + scale` can be transformed into
+            # `monitor` by a generic safety rule, hiding the fact that the model
+            # targeted the wrong execution level and preventing the repair pass.
+            executable_first = _filter_to_executable_contract(
                 output,
+                candidates,
+                policy,
+            )
+            governed = legacy._govern_output(
+                executable_first,
                 candidates,
                 next_check_at=next_check,
             )
