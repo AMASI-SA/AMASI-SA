@@ -263,14 +263,20 @@ function collectItemSelections(item) {
         seen.add(key);
         rows.push({ label: normalizedLabel, value: shownValue });
     };
+    const optionLabel = (option) => firstPresent(
+        option?.name, option?.label, option?.title, option?.question, option?.key, option?.option,
+    );
+    const optionValue = (option) => firstPresent(
+        option?.value, option?.selected, option?.answer, option?.option_value, option?.text, option?.choice, option?.values,
+    );
     push("اللون", item.color);
     push("المقاس", item.size);
     push("الخامة", item.material);
     for (const option of item.options || item.options_raw || []) {
-        push(option?.name || option?.label || option?.key, option?.value || option?.selected || option?.text || option?.choice);
+        push(optionLabel(option), optionValue(option));
     }
     for (const field of item.custom_fields || []) {
-        push(field?.name || field?.label || field?.key, field?.value || field?.text);
+        push(optionLabel(field), optionValue(field));
     }
     return rows;
 }
@@ -655,16 +661,31 @@ function ProductCard({ item, index, currency }) {
         ? explicitTax
         : derivedTax;
     return (
-        <article className="rounded-2xl border border-slate-200 p-4">
-            <div className="flex flex-col gap-4 md:flex-row md:items-start">
-                <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-slate-400">{image && !imageFailed ? <img src={image} alt="" className="h-full w-full object-cover" onError={() => setImageFailed(true)} /> : <Package size={38} />}</div>
+        <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white" data-testid="order-v2-product-card">
+            <div className="flex flex-col gap-4 p-5 md:flex-row md:items-start">
+                <div className="flex h-28 w-28 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-slate-100 text-slate-400">{image && !imageFailed ? <img src={image} alt="" className="h-full w-full object-cover" onError={() => setImageFailed(true)} /> : <Package size={42} />}</div>
                 <div className="min-w-0 flex-1">
-                    <div className="text-lg font-extrabold text-slate-900">{item.name || `منتج ${index + 1}`}</div>
+                    <div className="text-xl font-extrabold leading-8 text-slate-950">{item.name || `منتج ${index + 1}`}</div>
                     <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-500"><span>SKU: <b className="num text-slate-700">{item.sku || "—"}</b></span><span>الباركود: <b className="num text-slate-700">{item.barcode || "—"}</b></span></div>
-                    {selections.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{selections.map((selection) => <span key={`${selection.label}:${selection.value}`} className="rounded-full bg-violet-50 px-3 py-1 text-xs font-bold text-violet-700">{selection.label}: {selection.value}</span>)}</div>}
+                    {selections.length > 0 && (
+                        <div className="mt-5 overflow-hidden rounded-xl border border-slate-200" data-testid="order-v2-customer-options">
+                            <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-extrabold text-slate-700">خيارات العميل</div>
+                            <div className="divide-y divide-slate-100">
+                                {selections.map((selection) => (
+                                    <div key={`${selection.label}:${selection.value}`} className="grid min-h-12 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-4 px-4 py-3 text-sm">
+                                        <div className="font-bold text-slate-400">{selection.label} :</div>
+                                        <div className="flex items-center justify-between gap-2 font-bold text-slate-700">
+                                            <span className="break-words">{selection.value}</span>
+                                            <CopyValueButton value={selection.value} label={`نسخ ${selection.label}`} />
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
-            <div className="mt-4 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            <div className="grid gap-3 border-t border-slate-100 bg-slate-50/50 px-5 py-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                 <div><div className="text-xs font-bold text-slate-400">الكمية</div><div className="num mt-1 font-bold">{item.quantity}</div></div>
                 <div><div className="text-xs font-bold text-slate-400">الوزن</div><div className="mt-1 font-bold">{weight}</div></div>
                 <div><div className="text-xs font-bold text-slate-400">سعر الوحدة قبل الضريبة</div><div className="num mt-1 font-bold">{formatMoney(unitPrice, currency)}</div></div>
