@@ -10,7 +10,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
 
-from advertising_product_watch_v3 import scan_all_product_watch
+from advertising_product_watch_cycle_v3 import run_global_product_watch
 
 
 ROOT_DIR = Path(__file__).resolve().parent
@@ -25,7 +25,7 @@ async def run_once() -> dict:
         raise RuntimeError("product_watch_database_config_missing")
     client = AsyncIOMotorClient(mongo_url)
     try:
-        return await scan_all_product_watch(client[db_name])
+        return await run_global_product_watch(client[db_name])
     finally:
         client.close()
 
