@@ -3,7 +3,7 @@ import json
 import jwt
 import pytest
 
-from auth import create_refresh_token, get_jwt_secret
+from auth import create_access_token, create_refresh_token, get_jwt_secret
 from mobile_session_security import MobileSessionSecurityMiddleware
 
 
@@ -54,26 +54,30 @@ async def _request(middleware, path, payload):
     return start, json.loads(body.decode("utf-8"))
 
 
-def _auth_app(refresh_cookie="refresh-value"):
+def _auth_app(refresh_cookie="refresh-value", access_token="access-value"):
     async def app(scope, receive, send):
         await receive()
-        payload = {"access_token": "access-value", "ok": True}
+        payload = {"access_token": access_token, "ok": True}
         body = json.dumps(payload).encode("utf-8")
+        headers = [
+            (b"content-type", b"application/json"),
+            (b"content-length", str(len(body)).encode("ascii")),
+        ]
+        if refresh_cookie is not None:
+            headers.append(
+                (
+                    b"set-cookie",
+                    (
+                        "refresh_token=" + refresh_cookie
+                        + "; Path=/; HttpOnly; Secure; SameSite=None"
+                    ).encode("latin-1"),
+                )
+            )
         await send(
             {
                 "type": "http.response.start",
                 "status": 200,
-                "headers": [
-                    (b"content-type", b"application/json"),
-                    (b"content-length", str(len(body)).encode("ascii")),
-                    (
-                        b"set-cookie",
-                        (
-                            "refresh_token=" + refresh_cookie
-                            + "; Path=/; HttpOnly; Secure; SameSite=None"
-                        ).encode("latin-1"),
-                    ),
-                ],
+                "headers": headers,
             }
         )
         await send({"type": "http.response.body", "body": body})
@@ -94,6 +98,60 @@ async def test_mobile_auth_response_exposes_only_its_refresh_cookie():
     assert payload["access_token"] == "access-value"
     assert payload["refresh_token"] == "refresh-value"
     assert payload["refresh_expires_in_seconds"] == 30 * 24 * 60 * 60
+
+
+@pytest.mark.asyncio
+async def test_mobile_auth_derives_refresh_when_success_cookie_is_missing(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", "mobile-session-test-secret")
+    access = create_access_token(
+        "owner-1",
+        "owner@example.com",
+        mfa_verified=True,
+    )
+    middleware = MobileSessionSecurityMiddleware(
+        _auth_app(refresh_cookie=None, access_token=access),
+        db=_Db(None),
+    )
+
+    start, payload = await _request(
+        middleware,
+        "/api/auth/mfa/verify",
+        {"mobile_client": True, "challenge_token": "x", "code": "123456"},
+    )
+
+    assert start["status"] == 200
+    assert payload["access_token"] == access
+    assert payload["refresh_token"]
+    refresh_payload = jwt.decode(
+        payload["refresh_token"],
+        get_jwt_secret(),
+        algorithms=["HS256"],
+    )
+    assert refresh_payload["sub"] == "owner-1"
+    assert refresh_payload["type"] == "refresh"
+    assert refresh_payload["mfa"] is True
+    headers = {
+        key.lower(): value
+        for key, value in start["headers"]
+    }
+    assert headers[b"cache-control"] == b"no-store, no-cache, must-revalidate"
+    assert headers[b"pragma"] == b"no-cache"
+
+
+@pytest.mark.asyncio
+async def test_mobile_auth_fails_closed_for_unsigned_access_without_cookie():
+    middleware = MobileSessionSecurityMiddleware(
+        _auth_app(refresh_cookie=None, access_token="not-a-jwt"),
+        db=_Db(None),
+    )
+    _, payload = await _request(
+        middleware,
+        "/api/auth/mfa/verify",
+        {"mobile_client": True, "challenge_token": "x", "code": "123456"},
+    )
+
+    assert payload == {"access_token": "not-a-jwt", "ok": True}
+    assert "refresh_token" not in payload
 
 
 @pytest.mark.asyncio

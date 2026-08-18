@@ -111,6 +111,41 @@ def _refresh_cookie(start: dict[str, Any]) -> str | None:
     return None
 
 
+def _refresh_from_access_token(access_token: str) -> str | None:
+    """Mint the native refresh token from the signed auth result itself.
+
+    Some authentication middleware completes the MFA response without retaining
+    the inner ``Set-Cookie`` header. A successful, freshly issued access token is
+    still a cryptographically authenticated session result, so the native-only
+    boundary can derive the matching refresh token from its signed ``sub`` and
+    ``mfa`` claims. Invalid, expired, or non-access JWTs fail closed.
+    """
+    from auth import (
+        JWT_ALGORITHM,
+        create_refresh_token,
+        get_jwt_secret,
+    )
+
+    try:
+        payload = jwt.decode(
+            access_token,
+            get_jwt_secret(),
+            algorithms=[JWT_ALGORITHM],
+        )
+    except jwt.PyJWTError:
+        return None
+
+    if payload.get("type") != "access":
+        return None
+    user_id = str(payload.get("sub") or "").strip()
+    if not user_id:
+        return None
+    return create_refresh_token(
+        user_id,
+        mfa_verified=payload.get("mfa") is True,
+    )
+
+
 def _replace_content_length(
     headers: list[tuple[bytes, bytes]],
     body: bytes,
@@ -118,9 +153,19 @@ def _replace_content_length(
     filtered = [
         (key, value)
         for key, value in headers
-        if bytes(key).lower() != b"content-length"
+        if bytes(key).lower() not in {
+            b"content-length",
+            b"cache-control",
+            b"pragma",
+        }
     ]
-    filtered.append((b"content-length", str(len(body)).encode("ascii")))
+    filtered.extend(
+        [
+            (b"content-length", str(len(body)).encode("ascii")),
+            (b"cache-control", b"no-store, no-cache, must-revalidate"),
+            (b"pragma", b"no-cache"),
+        ]
+    )
     return filtered
 
 
@@ -135,12 +180,27 @@ def _inject_mobile_refresh_token(
     if not any(b"application/json" in value.lower() for value in content_types):
         return messages
 
-    refresh_token = _refresh_cookie(start)
-    if not refresh_token:
+    payload = _json_object(_response_body(messages))
+    if payload is None:
+        return messages
+    access_token = str(payload.get("access_token") or "").strip()
+    if not access_token:
         return messages
 
-    payload = _json_object(_response_body(messages))
-    if payload is None or not payload.get("access_token"):
+    refresh_token = str(payload.get("refresh_token") or "").strip()
+    if not refresh_token:
+        refresh_token = _refresh_cookie(start) or ""
+    if not refresh_token:
+        refresh_token = _refresh_from_access_token(access_token) or ""
+        if refresh_token:
+            logger.warning(
+                "AMASI mobile auth response had no refresh cookie; "
+                "derived refresh token from the signed access result"
+            )
+    if not refresh_token:
+        logger.error(
+            "AMASI mobile auth response could not produce a refresh token"
+        )
         return messages
 
     from auth import REFRESH_COOKIE_MAX_AGE_SECONDS
