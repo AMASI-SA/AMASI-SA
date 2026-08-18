@@ -1,0 +1,168 @@
+import json
+
+import jwt
+import pytest
+
+from auth import create_refresh_token, get_jwt_secret
+from mobile_session_security import MobileSessionSecurityMiddleware
+
+
+class _Users:
+    def __init__(self, user):
+        self.user = user
+
+    async def find_one(self, query):
+        if self.user and query.get("id") == self.user.get("id"):
+            return dict(self.user)
+        return None
+
+
+class _Db:
+    def __init__(self, user):
+        self.users = _Users(user)
+
+
+async def _request(middleware, path, payload):
+    request_messages = [
+        {
+            "type": "http.request",
+            "body": json.dumps(payload).encode("utf-8"),
+            "more_body": False,
+        }
+    ]
+    sent = []
+
+    async def receive():
+        if request_messages:
+            return request_messages.pop(0)
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message):
+        sent.append(dict(message))
+
+    await middleware(
+        {"type": "http", "method": "POST", "path": path},
+        receive,
+        send,
+    )
+    start = next(item for item in sent if item["type"] == "http.response.start")
+    body = b"".join(
+        item.get("body", b"")
+        for item in sent
+        if item["type"] == "http.response.body"
+    )
+    return start, json.loads(body.decode("utf-8"))
+
+
+def _auth_app(refresh_cookie="refresh-value"):
+    async def app(scope, receive, send):
+        await receive()
+        payload = {"access_token": "access-value", "ok": True}
+        body = json.dumps(payload).encode("utf-8")
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"content-length", str(len(body)).encode("ascii")),
+                    (
+                        b"set-cookie",
+                        (
+                            "refresh_token=" + refresh_cookie
+                            + "; Path=/; HttpOnly; Secure; SameSite=None"
+                        ).encode("latin-1"),
+                    ),
+                ],
+            }
+        )
+        await send({"type": "http.response.body", "body": body})
+
+    return app
+
+
+@pytest.mark.asyncio
+async def test_mobile_auth_response_exposes_only_its_refresh_cookie():
+    middleware = MobileSessionSecurityMiddleware(_auth_app(), db=_Db(None))
+    start, payload = await _request(
+        middleware,
+        "/api/auth/mfa/verify",
+        {"mobile_client": True, "challenge_token": "x", "code": "123456"},
+    )
+
+    assert start["status"] == 200
+    assert payload["access_token"] == "access-value"
+    assert payload["refresh_token"] == "refresh-value"
+    assert payload["refresh_expires_in_seconds"] == 30 * 24 * 60 * 60
+
+
+@pytest.mark.asyncio
+async def test_browser_auth_response_never_exposes_refresh_cookie():
+    middleware = MobileSessionSecurityMiddleware(_auth_app(), db=_Db(None))
+    _, payload = await _request(
+        middleware,
+        "/api/auth/login",
+        {"email": "owner@example.com", "password": "secret"},
+    )
+
+    assert payload == {"access_token": "access-value", "ok": True}
+    assert "refresh_token" not in payload
+
+
+@pytest.mark.asyncio
+async def test_mobile_refresh_rotates_access_and_refresh_tokens(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", "mobile-session-test-secret")
+    user = {
+        "id": "user-1",
+        "email": "owner@example.com",
+        "role": "owner",
+        "mfa_enabled": True,
+    }
+    refresh = create_refresh_token(user["id"], mfa_verified=True)
+
+    async def inner_app(scope, receive, send):  # pragma: no cover - must not run
+        raise AssertionError("mobile refresh must terminate in its own boundary")
+
+    middleware = MobileSessionSecurityMiddleware(inner_app, db=_Db(user))
+    start, payload = await _request(
+        middleware,
+        "/api/auth/mobile/refresh",
+        {"refresh_token": refresh},
+    )
+
+    assert start["status"] == 200
+    assert payload["ok"] is True
+    assert payload["access_token"] != refresh
+    assert payload["refresh_token"]
+    access_payload = jwt.decode(
+        payload["access_token"],
+        get_jwt_secret(),
+        algorithms=["HS256"],
+    )
+    rotated_payload = jwt.decode(
+        payload["refresh_token"],
+        get_jwt_secret(),
+        algorithms=["HS256"],
+    )
+    assert access_payload["type"] == "access"
+    assert access_payload["mfa"] is True
+    assert rotated_payload["type"] == "refresh"
+    assert rotated_payload["mfa"] is True
+
+
+@pytest.mark.asyncio
+async def test_mobile_refresh_rejects_expired_or_invalid_token(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", "mobile-session-test-secret")
+
+    async def inner_app(scope, receive, send):  # pragma: no cover - must not run
+        raise AssertionError("mobile refresh must terminate in its own boundary")
+
+    middleware = MobileSessionSecurityMiddleware(inner_app, db=_Db(None))
+    start, payload = await _request(
+        middleware,
+        "/api/auth/mobile/refresh",
+        {"refresh_token": "not-a-jwt"},
+    )
+
+    assert start["status"] == 401
+    assert payload["code"] == "mobile_refresh_token_invalid"
