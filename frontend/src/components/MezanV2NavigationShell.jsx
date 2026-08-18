@@ -25,7 +25,7 @@ export const MEZAN_V2_NAV_SECTIONS = [
         label: "الرئيسية",
         Icon: House,
         items: [
-            { to: "/dashboard-v2", label: "الرئيسية", exactSearch: true },
+            { to: "/dashboard-advanced", label: "الرئيسية", exactSearch: true },
         ],
     },
     {
@@ -146,6 +146,7 @@ const META_REVIEWER_NAV_SECTIONS = [
 ];
 
 const MEZAN_V2_PATHS = [
+    "/dashboard-advanced",
     "/dashboard-v2",
     "/orders-v2",
     "/fulfillment-v2",
@@ -196,6 +197,9 @@ export function activeNavigationSection(location, sections = MEZAN_V2_NAV_SECTIO
     if (directlyMatched) return directlyMatched;
 
     const currentPath = String(location?.pathname || "");
+    if (currentPath === "/dashboard-v2") {
+        return sections.find((section) => section.id === "home") || null;
+    }
     return sections.find(
         (section) => section.items.some(
             (item) => parseTarget(item.to).pathname === currentPath,
