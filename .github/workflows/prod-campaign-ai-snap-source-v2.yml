@@ -1,0 +1,81 @@
+name: Production Campaign AI Snapchat Source V2
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "backend/campaign_ai_monitor.py"
+      - "backend/campaign_ai_monitor_legacy.py"
+      - "backend/campaign_ai_policy_v2.py"
+      - "backend/ads_manager/__init__.py"
+      - "backend/tests/test_campaign_ai_monitor.py"
+      - "backend/tests/test_campaign_ai_source_policy_v2.py"
+      - "backend/integrations_control_center/snapchat_account_timezone_manager.py"
+      - "backend/integrations_control_center/snapchat_adsquad_performance.py"
+      - "backend/integrations_control_center/snapchat_ad_performance.py"
+      - "backend/integrations_control_center/snapchat_campaign_profitability.py"
+      - ".github/workflows/prod-campaign-ai-snap-source-v2.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  source-contract:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused dependencies
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1
+          pydantic==2.13.4
+          pymongo==4.5.0
+          motor==3.3.1
+          httpx==0.28.1
+          openai==1.99.9
+          pytest==9.0.3
+          pytest-asyncio
+          openpyxl
+          cryptography
+          bcrypt
+          PyJWT
+          reportlab
+          python-multipart
+          python-dotenv
+          email-validator
+          pymupdf
+          pillow
+          qrcode
+          arabic-reshaper
+          python-bidi
+      - name: Compile campaign AI policy
+        run: >-
+          python -m py_compile
+          campaign_ai_monitor.py
+          campaign_ai_monitor_legacy.py
+          campaign_ai_policy_v2.py
+          ads_manager/__init__.py
+          tests/test_campaign_ai_source_policy_v2.py
+      - name: Run campaign AI regression suite
+        run: >-
+          python -m pytest -q
+          tests/test_campaign_ai_monitor.py
+          tests/test_campaign_ai_source_policy_v2.py
+          --tb=short
+      - name: Enforce source-of-truth policy
+        run: |
+          POLICY=campaign_ai_policy_v2.py
+          grep -q 'SNAPCHAT_AI_ACTION_REPORT_TIME = "conversion"' "$POLICY"
+          grep -q '"executed_experiments": prior_decisions' "$POLICY"
+          ! grep -q '"prior_mezan_ai_decisions"' "$POLICY"
+          ! grep -q 'recommendation_source = "mezan_fallback"' "$POLICY"
+          grep -q '"salla_child_attribution_allowed": False' "$POLICY"
+          grep -q '"previous_mezan_recommendations_used": False' "$POLICY"
+          grep -q 'from campaign_ai_monitor import attach_campaign_ai_routes' ads_manager/__init__.py
