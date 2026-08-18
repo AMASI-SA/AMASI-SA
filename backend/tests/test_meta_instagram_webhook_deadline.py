@@ -80,6 +80,7 @@ async def test_slow_meta_call_returns_controlled_subscription_error(
             )
 
     assert failure.value.code == "instagram_webhook_subscription_failed"
+    assert failure.value.operation == "resolve_linked_instagram_account"
     assert "instagram_webhook_meta_timeout" in caplog.text
     assert "operation=resolve_linked_instagram_account" in caplog.text
     assert user_token not in caplog.text
@@ -151,6 +152,7 @@ async def test_account_install_rejection_falls_back_to_linked_page_without_token
     assert fields == ("messages", "comments")
     assert [request.method for request in requests] == ["GET", "POST", "POST", "GET"]
     assert "instagram_webhook_subscription_fallback" in caplog.text
+    assert "operation=subscribe_instagram_account" in caplog.text
     assert "meta_error_code=100" in caplog.text
     assert "error_subcode=33" in caplog.text
     assert "trace_id=FallbackTrace_123" in caplog.text
