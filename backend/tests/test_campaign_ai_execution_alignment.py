@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import campaign_ai_monitor as monitor
+from campaign_ai_public_guard import _public_document
 
 
 def candidate(*, level="ad", entity_id="ad-1", budget=None, purchases=0, spend=120.0):
@@ -199,3 +200,34 @@ def test_budget_change_without_direct_budget_is_removed(monkeypatch):
 
     assert output.recommendations == []
     assert any(value.endswith(":reduce") for value in output.limitations)
+
+
+def test_public_guard_removes_old_ad_budget_card_but_keeps_executable_parent_card():
+    result = _public_document({
+        "snapshot_id": "openai-snapshot",
+        "recommendation_source": "openai",
+        "summary": "تحليل OpenAI",
+        "recommendations": [
+            {
+                "recommendation_id": "snapchat:ad:snap-account-1:ad-1",
+                "provider": "snapchat",
+                "entity_level": "ad",
+                "entity_id": "ad-1",
+                "action": "scale",
+                "approval_available": False,
+            },
+            {
+                "recommendation_id": "snapchat:ad_group:snap-account-1:group-1",
+                "provider": "snapchat",
+                "entity_level": "ad_group",
+                "entity_id": "group-1",
+                "action": "reduce",
+                "approval_available": True,
+            },
+        ],
+    })
+
+    assert result["available"] is True
+    assert [item["entity_id"] for item in result["recommendations"]] == ["group-1"]
+    assert result["execution_alignment_suppressed"] == 1
+    assert "non_executable_ad_budget_recommendation_suppressed" in result["limitations"]
