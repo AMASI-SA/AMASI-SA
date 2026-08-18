@@ -580,6 +580,8 @@ def _normalise_options(
         name = _first(
             option.get("name"),
             option.get("label"),
+            option.get("title"),
+            option.get("question"),
             option.get("key"),
             option.get("option"),
         )
@@ -591,6 +593,8 @@ def _normalise_options(
                     option.get("values"),
                     option.get("selected"),
                     option.get("choice"),
+                    option.get("answer"),
+                    option.get("option_value"),
                     option.get("text"),
                 )
                 if candidate not in (None, "", [], {})
@@ -675,6 +679,8 @@ def _custom_fields(item: dict[str, Any]) -> list[dict[str, Any]]:
         item.get("custom_fields"),
         item.get("customizations"),
         item.get("personalization"),
+        item.get("fields"),
+        item.get("questions"),
         item.get("attachments"),
         item.get("files"),
     ]
@@ -799,6 +805,9 @@ def _map_item(
         item.get("options"),
         item.get("choices"),
         item.get("attributes"),
+        item.get("product_options"),
+        item.get("selected_options"),
+        item.get("customer_options"),
         variant.get("options"),
         product.get("options"),
     ):
