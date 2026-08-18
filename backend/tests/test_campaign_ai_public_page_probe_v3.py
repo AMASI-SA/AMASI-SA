@@ -1,21 +1,19 @@
 import asyncio
-from types import SimpleNamespace
 
 import campaign_ai_public_page_probe_v3 as probe
 
 
 def test_cross_host_destination_is_rejected_before_network(monkeypatch):
-    async def public_dns(_host):
+    def public_dns(_host):
         raise AssertionError("DNS/network guard should not be reached for host mismatch")
 
-    monkeypatch.setattr(probe, "_allowed", public_dns)
+    monkeypatch.setattr(probe, "_public_dns", public_dns)
     result = asyncio.run(probe.probe_product_page(
         "https://evil.example/product",
         canonical_url="https://amasi-sa.com/product/1",
     ))
-    # _allowed is intentionally called to combine same-host + public DNS check;
-    # replace it with a deterministic false guard for this unit contract.
-    assert result["status"] in {"PRODUCT_URL_WRONG_DESTINATION", "PRODUCT_PAGE_UNAVAILABLE"}
+    assert result["status"] == "PRODUCT_URL_WRONG_DESTINATION"
+    assert result["reason"] == "destination_not_on_trusted_public_product_host"
 
 
 def test_private_ip_cannot_pass_allowed_guard(monkeypatch):
