@@ -1,55 +1,125 @@
 import {
-    createLatestResponseBroker,
+    createDashboardRequestCoordinator,
     dashboardRequestRangeKey,
+    stripDashboardCacheBuster,
 } from "./dashboardLatestResponseBroker";
 
 
-test("builds a stable key from Dashboard date and filter params", () => {
+function deferred() {
+    let resolve;
+    let reject;
+    const promise = new Promise((onResolve, onReject) => {
+        resolve = onResolve;
+        reject = onReject;
+    });
+    return { promise, resolve, reject };
+}
+
+
+test("builds a stable dashboard key and ignores cache-busting timestamps", () => {
     expect(dashboardRequestRangeKey({
-        url: "/dashboard-v2?to_date=2026-08-04&from_date=2026-08-04",
+        method: "get",
+        url: "/dashboard-v2?_refresh=123&to_date=2026-08-04&from_date=2026-08-04",
         params: { payment_methods: "mada", shipping_companies: "smsa" },
     })).toBe(
-        "from_date=2026-08-04&to_date=2026-08-04&payment_methods=mada&shipping_companies=smsa",
+        "/dashboard-v2?from_date=2026-08-04&payment_methods=mada&shipping_companies=smsa&to_date=2026-08-04",
     );
+    expect(stripDashboardCacheBuster({
+        method: "get",
+        url: "/dashboard-v2?from_date=2026-08-04&_refresh=123",
+    }).url).toBe("/dashboard-v2?from_date=2026-08-04");
 });
 
 
-test("an older Dashboard response waits for and resolves to the newest date", async () => {
-    const broker = createLatestResponseBroker();
-    const today = broker.begin({ rangeKey: "today" });
-    const yesterday = broker.begin({ rangeKey: "yesterday" });
+test("shares one real request across concurrent callers for the same range", async () => {
+    const coordinator = createDashboardRequestCoordinator();
+    const network = deferred();
+    const load = jest.fn(() => network.promise);
+    const config = {
+        method: "get",
+        url: "/dashboard-v2?from_date=2026-08-17&to_date=2026-08-17",
+    };
 
-    const oldResult = broker.resolve(today, { data: { period: "today" } });
-    const latestResponse = { data: { period: "yesterday" } };
-    const latestResult = broker.resolve(yesterday, latestResponse);
+    const first = coordinator.run(config, load);
+    const second = coordinator.run(
+        { ...config, url: `${config.url}&_refresh=999` },
+        load,
+    );
+    await Promise.resolve();
 
-    await expect(latestResult).resolves.toBe(latestResponse);
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(coordinator.snapshot()).toEqual(expect.objectContaining({
+        inFlight: 1,
+        sharedCallers: 1,
+    }));
+
+    const response = { data: { total_orders: 18 } };
+    network.resolve(response);
+    await expect(Promise.all([first, second])).resolves.toEqual([
+        response,
+        response,
+    ]);
+    expect(coordinator.snapshot().inFlight).toBe(0);
+});
+
+
+test("an older range chains to the newest real request without a waiter queue", async () => {
+    const coordinator = createDashboardRequestCoordinator();
+    const oldNetwork = deferred();
+    const latestNetwork = deferred();
+
+    const oldResult = coordinator.run(
+        { method: "get", url: "/dashboard-v2?from_date=2026-08-16" },
+        () => oldNetwork.promise,
+    );
+    const latestResult = coordinator.run(
+        { method: "get", url: "/dashboard-v2?from_date=2026-08-17" },
+        () => latestNetwork.promise,
+    );
+
+    oldNetwork.resolve({ data: { period: "old" } });
+    const latestResponse = { data: { period: "latest" } };
+    latestNetwork.resolve(latestResponse);
+
     await expect(oldResult).resolves.toBe(latestResponse);
+    await expect(latestResult).resolves.toBe(latestResponse);
 });
 
 
-test("an older response arriving after the latest response reuses the latest payload", async () => {
-    const broker = createLatestResponseBroker();
-    const today = broker.begin({ rangeKey: "today" });
-    const yesterday = broker.begin({ rangeKey: "yesterday" });
-    const latestResponse = { data: { orders: 130, period: "yesterday" } };
+test("a stale request settles with the newest failure instead of hanging", async () => {
+    const coordinator = createDashboardRequestCoordinator();
+    const oldNetwork = deferred();
+    const latestNetwork = deferred();
 
-    await broker.resolve(yesterday, latestResponse);
+    const oldResult = coordinator.run(
+        { method: "get", url: "/dashboard?from_date=2026-08-16" },
+        () => oldNetwork.promise,
+    );
+    const latestResult = coordinator.run(
+        { method: "get", url: "/dashboard?from_date=2026-08-17" },
+        () => latestNetwork.promise,
+    );
 
-    await expect(
-        broker.resolve(today, { data: { orders: 3, period: "today" } }),
-    ).resolves.toBe(latestResponse);
+    oldNetwork.resolve({ data: { period: "old" } });
+    const failure = new Error("latest request failed");
+    latestNetwork.reject(failure);
+
+    await expect(oldResult).rejects.toBe(failure);
+    await expect(latestResult).rejects.toBe(failure);
+    expect(coordinator.snapshot().inFlight).toBe(0);
 });
 
 
-test("a stale request failure waits for the newest successful Dashboard response", async () => {
-    const broker = createLatestResponseBroker();
-    const today = broker.begin({ rangeKey: "today" });
-    const yesterday = broker.begin({ rangeKey: "yesterday" });
+test("old and V2 dashboard roots never share an in-flight request", async () => {
+    const coordinator = createDashboardRequestCoordinator();
+    const legacyLoad = jest.fn(async () => ({ data: { source: "legacy" } }));
+    const v2Load = jest.fn(async () => ({ data: { source: "v2" } }));
 
-    const staleFailure = broker.reject(today, new Error("old request failed"));
-    const latestResponse = { data: { period: "yesterday" } };
-    await broker.resolve(yesterday, latestResponse);
+    await Promise.all([
+        coordinator.run({ method: "get", url: "/dashboard" }, legacyLoad),
+        coordinator.run({ method: "get", url: "/dashboard-v2" }, v2Load),
+    ]);
 
-    await expect(staleFailure).resolves.toBe(latestResponse);
+    expect(legacyLoad).toHaveBeenCalledTimes(1);
+    expect(v2Load).toHaveBeenCalledTimes(1);
 });

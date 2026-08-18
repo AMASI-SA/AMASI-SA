@@ -1,6 +1,8 @@
-"""Browser-facing API security headers and cookie-CSRF protection."""
+"""Browser-facing API security headers, request correlation and cookie-CSRF protection."""
 from __future__ import annotations
 
+import time
+import uuid
 from collections.abc import Iterable
 
 from starlette.datastructures import MutableHeaders
@@ -35,6 +37,13 @@ def _request_is_https(scope: Scope, headers: dict[bytes, bytes]) -> bool:
     return forwarded_proto == "https"
 
 
+def _request_id(headers: dict[bytes, bytes]) -> str:
+    candidate = headers.get(b"x-request-id", b"").decode("latin-1").strip()
+    if candidate:
+        return candidate[:128]
+    return uuid.uuid4().hex
+
+
 class BrowserSecurityMiddleware:
     """Block cross-site cookie mutations and add defense-in-depth API headers."""
 
@@ -56,7 +65,11 @@ class BrowserSecurityMiddleware:
             await self.app(scope, receive, send)
             return
 
+        request_started = time.perf_counter()
         headers = _headers(scope)
+        request_id = _request_id(headers)
+        state = scope.setdefault("state", {})
+        state["request_id"] = request_id
         method = str(scope.get("method") or "GET").upper()
         raw_cookie = headers.get(b"cookie", b"")
         if method not in _SAFE_METHODS and _has_auth_cookie(raw_cookie):
@@ -73,6 +86,7 @@ class BrowserSecurityMiddleware:
                         }
                     },
                     status_code=403,
+                    headers={"X-Request-ID": request_id},
                 )
                 await response(scope, receive, send)
                 return
@@ -82,6 +96,11 @@ class BrowserSecurityMiddleware:
         async def send_with_security_headers(message: Message) -> None:
             if message.get("type") == "http.response.start":
                 response_headers = MutableHeaders(scope=message)
+                response_headers.setdefault("X-Request-ID", request_id)
+                response_headers.setdefault(
+                    "Server-Timing",
+                    f"total;dur={(time.perf_counter() - request_started) * 1000:.2f}",
+                )
                 response_headers.setdefault("Content-Security-Policy", _API_CSP)
                 response_headers.setdefault("X-Frame-Options", "DENY")
                 response_headers.setdefault("X-Content-Type-Options", "nosniff")
