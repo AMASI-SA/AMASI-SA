@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 import campaign_ai_decision_v3 as _decision_v3
+import campaign_ai_evidence_runtime_enrichment_v3 as _evidence_enrichment
 import campaign_ai_execution_alignment as _alignment
 import campaign_ai_execution_retry as _execution_retry
 import campaign_ai_monitor_legacy as _legacy
@@ -82,6 +83,14 @@ _legacy_test_repairing_ask = _execution_retry.build_repairing_ask_openai(
     _policy,
     _alignment,
 )
+
+# Enrich the V3 evidence pack with field-level product change chronology. The
+# wrapper is installed once at module import and still delegates to the same
+# base evidence builder; it does not alter scheduler/source/snapshot contracts.
+_decision_evidence_builder = _evidence_enrichment.wrap_evidence_builder(
+    _decision_v3.build_decision_evidence_pack_v3,
+)
+_decision_v3.build_decision_evidence_pack_v3 = _decision_evidence_builder
 
 # Runtime authority: V3 owns diagnosis + marketing judgment, including its own
 # mandatory second pass for budget-owner coverage and counterfactual review.
