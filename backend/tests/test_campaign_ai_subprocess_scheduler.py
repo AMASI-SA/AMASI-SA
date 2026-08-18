@@ -56,6 +56,39 @@ def test_worker_is_launched_as_separate_python_process(monkeypatch):
     assert captured["kwargs"]["env"]["MEZAN_CAMPAIGN_AI_CHILD_PROCESS"] == "1"
 
 
+def test_successful_cycle_waits_remaining_five_hour_interval():
+    delay = scheduler.next_scheduler_delay(
+        0,
+        elapsed=120,
+        interval=5 * 60 * 60,
+        retry_delay=15 * 60,
+        cadence_recheck=5 * 60,
+    )
+    assert delay == 5 * 60 * 60 - 120
+
+
+def test_global_cadence_skip_rechecks_in_five_minutes_not_five_hours():
+    delay = scheduler.next_scheduler_delay(
+        scheduler.CADENCE_SKIP_EXIT_CODE,
+        elapsed=1,
+        interval=5 * 60 * 60,
+        retry_delay=15 * 60,
+        cadence_recheck=5 * 60,
+    )
+    assert delay == 5 * 60
+
+
+def test_real_worker_failure_keeps_distinct_fifteen_minute_retry():
+    delay = scheduler.next_scheduler_delay(
+        2,
+        elapsed=5,
+        interval=5 * 60 * 60,
+        retry_delay=15 * 60,
+        cadence_recheck=5 * 60,
+    )
+    assert delay == 15 * 60
+
+
 def test_router_registration_is_idempotent(monkeypatch):
     registered = {"startup": [], "shutdown": []}
 

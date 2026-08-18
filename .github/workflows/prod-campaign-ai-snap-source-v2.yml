@@ -9,11 +9,13 @@ on:
       - "backend/campaign_ai_monitor_legacy.py"
       - "backend/campaign_ai_policy_v2.py"
       - "backend/campaign_ai_execution_alignment.py"
+      - "backend/campaign_ai_execution_retry.py"
       - "backend/campaign_ai_public_guard.py"
       - "backend/ads_manager/__init__.py"
       - "backend/tests/test_campaign_ai_monitor.py"
       - "backend/tests/test_campaign_ai_source_policy_v2.py"
       - "backend/tests/test_campaign_ai_execution_alignment.py"
+      - "backend/tests/test_campaign_ai_execution_retry.py"
       - "backend/integrations_control_center/snapchat_account_timezone_manager.py"
       - "backend/integrations_control_center/snapchat_adsquad_performance.py"
       - "backend/integrations_control_center/snapchat_ad_performance.py"
@@ -65,21 +67,25 @@ jobs:
           campaign_ai_monitor_legacy.py
           campaign_ai_policy_v2.py
           campaign_ai_execution_alignment.py
+          campaign_ai_execution_retry.py
           campaign_ai_public_guard.py
           ads_manager/__init__.py
           tests/test_campaign_ai_source_policy_v2.py
           tests/test_campaign_ai_execution_alignment.py
+          tests/test_campaign_ai_execution_retry.py
       - name: Run campaign AI regression suite
         run: >-
           python -m pytest -q
           tests/test_campaign_ai_monitor.py
           tests/test_campaign_ai_source_policy_v2.py
           tests/test_campaign_ai_execution_alignment.py
+          tests/test_campaign_ai_execution_retry.py
           --tb=short
       - name: Enforce source-of-truth and execution policy
         run: |
           POLICY=campaign_ai_policy_v2.py
           ALIGN=campaign_ai_execution_alignment.py
+          RETRY=campaign_ai_execution_retry.py
           GUARD=campaign_ai_public_guard.py
           grep -q 'SNAPCHAT_AI_ACTION_REPORT_TIME = "conversion"' "$POLICY"
           grep -q '"executed_experiments": prior_decisions' "$POLICY"
@@ -91,6 +97,12 @@ jobs:
           grep -q '"automatic_parent_retargeting_allowed": False' "$ALIGN"
           grep -q 'level in {"campaign", "ad_group"}' "$ALIGN"
           grep -q '_filter_to_executable_contract' "$ALIGN"
+          grep -q 'execution_alignment_repair_pass' "$RETRY"
+          grep -q 'budget_owner_loss_coverage_review' "$RETRY"
+          grep -q 'direct_budget_owners_to_review' "$RETRY"
+          grep -q 'execution_alignment_no_executable_recommendation' "$RETRY"
+          grep -q 'rejected_first_pass_actions' "$RETRY"
           grep -q 'non_executable_ad_budget_recommendation_suppressed' "$GUARD"
-          grep -q 'build_aligned_ask_openai' campaign_ai_monitor.py
+          grep -q 'summary_adjusted_after_execution_filter' "$GUARD"
+          grep -q 'build_repairing_ask_openai' campaign_ai_monitor.py
           grep -q 'from campaign_ai_monitor import attach_campaign_ai_routes' ads_manager/__init__.py

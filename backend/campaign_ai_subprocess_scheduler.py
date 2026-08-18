@@ -1,9 +1,9 @@
 """Lightweight scheduler for Campaign AI child-process execution.
 
-The FastAPI web process owns only a tiny timer and subprocess lifecycle.  All
+The FastAPI web process owns only a tiny timer and subprocess lifecycle. All
 provider reads, Salla profitability work and OpenAI analysis happen in the
-short-lived worker process, preserving the production rule that long-running
-analysis must not execute inside the web process itself.
+short-lived worker process. A Mongo global cadence gate inside the worker is
+the authority for whether heavy analysis is actually due.
 """
 from __future__ import annotations
 
@@ -22,7 +22,9 @@ WORKER_PATH = ROOT_DIR / "campaign_ai_worker_runner.py"
 DEFAULT_INITIAL_DELAY_SECONDS = 12.0
 DEFAULT_INTERVAL_SECONDS = 5 * 60 * 60
 DEFAULT_RETRY_DELAY_SECONDS = 15 * 60
+DEFAULT_CADENCE_RECHECK_SECONDS = 5 * 60
 DEFAULT_WORKER_TIMEOUT_SECONDS = 10 * 60
+CADENCE_SKIP_EXIT_CODE = 3
 
 _FALSE_VALUES = {"0", "false", "no", "off", "disabled"}
 _TRUE_VALUES = {"1", "true", "yes", "on", "enabled"}
@@ -45,7 +47,6 @@ def scheduler_enabled() -> bool:
         return False
     if explicit in _TRUE_VALUES:
         return True
-    # Test processes must never launch production-like children by accident.
     if os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("MEZAN_TESTING"):
         return False
     return True
@@ -56,6 +57,25 @@ def _bounded_stdout(value: bytes | None, *, limit: int = 4000) -> str:
         return ""
     rendered = value.decode("utf-8", errors="replace").strip()
     return rendered[-limit:]
+
+
+def next_scheduler_delay(
+    code: int,
+    *,
+    elapsed: float,
+    interval: float,
+    retry_delay: float,
+    cadence_recheck: float,
+) -> float:
+    """Choose the next lightweight check without changing global AI cadence."""
+    if code == 0:
+        return max(60.0, interval - max(0.0, elapsed))
+    if code == CADENCE_SKIP_EXIT_CODE:
+        # Global Mongo state says another replica owns the cycle or next_run_at
+        # has not arrived. Re-check soon, but do not run provider/OpenAI work.
+        return max(60.0, cadence_recheck)
+    # Actual worker/OpenAI/provider failure gets the explicit retry window.
+    return max(60.0, retry_delay)
 
 
 async def run_worker_once(*, timeout_seconds: float | None = None) -> int:
@@ -98,9 +118,6 @@ async def run_worker_once(*, timeout_seconds: float | None = None) -> int:
     if stdout_text:
         logger.info("Campaign AI child: %s", stdout_text)
     if process.returncode:
-        # Never copy provider/OpenAI stderr into the web logs.  It can contain
-        # request detail or credential fragments.  Sanitized error codes live
-        # in the Campaign AI run collection instead.
         logger.error(
             "Campaign AI child exited %s (stderr_bytes=%s)",
             process.returncode,
@@ -127,6 +144,11 @@ async def scheduler_loop() -> None:
         DEFAULT_RETRY_DELAY_SECONDS,
         minimum=60.0,
     )
+    cadence_recheck = _float_env(
+        "MEZAN_CAMPAIGN_AI_CADENCE_RECHECK_SECONDS",
+        DEFAULT_CADENCE_RECHECK_SECONDS,
+        minimum=60.0,
+    )
 
     await asyncio.sleep(initial_delay)
     while True:
@@ -140,12 +162,13 @@ async def scheduler_loop() -> None:
             code = 1
 
         elapsed = time.monotonic() - started
-        if code == 0:
-            delay = max(60.0, interval - elapsed)
-        else:
-            # Retry transient provider/runtime failures promptly instead of
-            # leaving the dashboard without recommendations for five hours.
-            delay = retry_delay
+        delay = next_scheduler_delay(
+            code,
+            elapsed=elapsed,
+            interval=interval,
+            retry_delay=retry_delay,
+            cadence_recheck=cadence_recheck,
+        )
         await asyncio.sleep(delay)
 
 
@@ -187,7 +210,9 @@ def attach_campaign_ai_subprocess_scheduler(router: Any) -> None:
 
 
 __all__ = [
+    "CADENCE_SKIP_EXIT_CODE",
     "attach_campaign_ai_subprocess_scheduler",
+    "next_scheduler_delay",
     "run_worker_once",
     "scheduler_enabled",
     "scheduler_loop",
