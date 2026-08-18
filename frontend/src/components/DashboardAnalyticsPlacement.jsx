@@ -2,8 +2,8 @@
  * Retired with the legacy dashboard UI.
  *
  * The advanced dashboard renders its own GA4, advertising, and executive
- * profit panels. Keeping the old DOM-relocation observer active would mount
- * duplicate polling components and retain document-wide MutationObservers.
+ * profit panels. Keeping the former DOM-relocation runtime active would mount
+ * duplicate polling components and retain document-wide observers.
  */
 export default function DashboardAnalyticsPlacement() {
     return null;
