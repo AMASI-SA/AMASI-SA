@@ -29,6 +29,7 @@ from .meta_native_reporting import (
     run_meta_reporting_sync,
 )
 from .meta_oauth_security import META_PROVIDER_ID, meta_oauth_configured
+from .dashboard_ads_platform_refresh import _refresh_meta_hourly
 from .google_ads_reporting import (
     GOOGLE_ADS_PROVIDER_ID,
     GOOGLE_ADS_REPORTING_SOURCE_MODE,
@@ -494,6 +495,11 @@ async def _refresh_meta(
                 to_date=end_date.isoformat(),
             ),
         )
+        # Reuse the exact Meta hourly projection already used by the Dashboard
+        # refresh path. This is part of the same canonical Meta scheduler run:
+        # no second scheduler, OAuth flow, or parallel Meta sync pipeline.
+        hourly = await _refresh_meta_hourly(db, user_id, end_date)
+        result = {**result, "hourly": hourly}
         status = str(result.get("status") or "complete")
         if status not in {"complete", "partial"}:
             status = "complete"
