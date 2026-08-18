@@ -1,4 +1,4 @@
-"""Regression coverage for the Instagram activation origin-timeout boundary."""
+"""Regression coverage for Instagram activation provider boundaries."""
 from __future__ import annotations
 
 import asyncio
@@ -10,6 +10,7 @@ from httpx import AsyncClient, MockTransport, Request, Response
 import meta_instagram_webhooks as instagram_webhooks
 from meta_instagram_webhooks import (
     META_CREDENTIALS_COLLECTION,
+    PAGE_WEBHOOK_INSTALL_FIELDS,
     MetaInstagramWebhookError,
     subscribe_instagram_webhooks,
 )
@@ -18,6 +19,7 @@ from meta_instagram_webhooks import (
 OWNER_ID = "owner-instagram-timeout"
 INSTAGRAM_ID = "17841400000000001"
 PAGE_ID = "104200000000001"
+APP_ID = "953625110827548"
 
 
 class FakeCollection:
@@ -39,21 +41,23 @@ class FakeDB:
         return self.collections[name]
 
 
+def _configured_db(monkeypatch, *, user_token: str = "sensitive-user-token"):
+    token_key = Fernet.generate_key()
+    credential = {
+        "access_token_ciphertext": Fernet(token_key).encrypt(user_token.encode()),
+    }
+    monkeypatch.setenv("META_TOKEN_ENC_KEY", token_key.decode())
+    monkeypatch.setenv("META_BUSINESS_APP_ID", APP_ID)
+    monkeypatch.setenv("META_BUSINESS_APP_SECRET", "provider-secret")
+    return FakeDB(credential), user_token
+
+
 @pytest.mark.asyncio
 async def test_slow_meta_call_returns_controlled_subscription_error(
     monkeypatch,
     caplog,
 ):
-    token_key = Fernet.generate_key()
-    user_token = "sensitive-user-token"
-    credential = {
-        "access_token_ciphertext": Fernet(token_key).encrypt(user_token.encode()),
-    }
-    db = FakeDB(credential)
-
-    monkeypatch.setenv("META_TOKEN_ENC_KEY", token_key.decode())
-    monkeypatch.setenv("META_BUSINESS_APP_ID", "953625110827548")
-    monkeypatch.setenv("META_BUSINESS_APP_SECRET", "provider-secret")
+    db, user_token = _configured_db(monkeypatch)
     monkeypatch.setattr(
         instagram_webhooks,
         "META_REQUEST_DEADLINE_SECONDS",
@@ -79,3 +83,76 @@ async def test_slow_meta_call_returns_controlled_subscription_error(
     assert "instagram_webhook_meta_timeout" in caplog.text
     assert "operation=resolve_linked_instagram_account" in caplog.text
     assert user_token not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_account_install_rejection_falls_back_to_linked_page_without_token_leak(
+    monkeypatch,
+    caplog,
+):
+    db, user_token = _configured_db(monkeypatch)
+    page_token = "sensitive-page-token"
+    requests: list[Request] = []
+
+    def handler(request: Request) -> Response:
+        requests.append(request)
+        if request.url.path.endswith("/me/accounts"):
+            return Response(
+                200,
+                json={
+                    "data": [{
+                        "id": PAGE_ID,
+                        "access_token": page_token,
+                        "instagram_business_account": {"id": INSTAGRAM_ID},
+                    }]
+                },
+            )
+        if request.url.path.endswith(f"/{INSTAGRAM_ID}/subscribed_apps"):
+            assert request.method == "POST"
+            assert request.url.params["subscribed_fields"] == "messages,comments"
+            return Response(
+                400,
+                json={
+                    "error": {
+                        "code": 100,
+                        "error_subcode": 33,
+                        "fbtrace_id": "FallbackTrace_123",
+                    }
+                },
+            )
+        if request.url.path.endswith(f"/{PAGE_ID}/subscribed_apps"):
+            if request.method == "POST":
+                assert request.url.params["subscribed_fields"] == ",".join(
+                    PAGE_WEBHOOK_INSTALL_FIELDS
+                )
+                assert request.url.params["access_token"] == page_token
+                return Response(200, json={"success": True})
+            assert request.method == "GET"
+            return Response(
+                200,
+                json={
+                    "data": [{
+                        "id": APP_ID,
+                        "subscribed_fields": ["messages"],
+                    }]
+                },
+            )
+        raise AssertionError(f"unexpected request: {request.method} {request.url.path}")
+
+    async with AsyncClient(transport=MockTransport(handler)) as client:
+        fields = await subscribe_instagram_webhooks(
+            db,
+            owner_user_id=OWNER_ID,
+            instagram_account_id=INSTAGRAM_ID,
+            page_id=PAGE_ID,
+            client=client,
+        )
+
+    assert fields == ("messages", "comments")
+    assert [request.method for request in requests] == ["GET", "POST", "POST", "GET"]
+    assert "instagram_webhook_subscription_fallback" in caplog.text
+    assert "meta_error_code=100" in caplog.text
+    assert "error_subcode=33" in caplog.text
+    assert "trace_id=FallbackTrace_123" in caplog.text
+    assert user_token not in caplog.text
+    assert page_token not in caplog.text

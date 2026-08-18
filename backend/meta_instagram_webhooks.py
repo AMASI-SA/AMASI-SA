@@ -1,6 +1,6 @@
 """Secret-safe Meta asset subscription for Instagram webhooks.
 
-The OAuth grant is stored by the integrations control plane.  This module is
+The OAuth grant is stored by the integrations control plane. This module is
 kept outside that package so the receive-only customer-intelligence worker does
 not import the control plane's eager router composition at startup.
 """
@@ -20,13 +20,14 @@ import httpx
 META_CREDENTIALS_COLLECTION = "mezan_meta_oauth_credentials_v2"
 META_DEFAULT_GRAPH_VERSION = "v25.0"
 INSTAGRAM_WEBHOOK_FIELDS = ("messages", "comments")
-# The activation endpoint performs three sequential Graph API calls.  Without
-# a per-call wall-clock deadline, the previous 25-second transport timeout could
-# keep one browser request open for up to roughly 75 seconds.  The production
-# origin may terminate its worker first, which surfaces to the browser as an
-# unparseable Cloudflare origin response instead of a controlled JSON error.
-# Five seconds per Graph call keeps the complete operation below the origin
-# request budget while leaving ample time for normal server-to-server traffic.
+# Facebook Login installs a messaging app on the linked Facebook Page. The Page
+# subscribed_apps edge accepts Page webhook fields; Instagram comments remain an
+# app-level Instagram webhook field. Keep the public capability contract at
+# messages + comments while the Page installation itself verifies messages.
+PAGE_WEBHOOK_INSTALL_FIELDS = ("messages",)
+# The activation endpoint performs sequential Graph API calls. Without a
+# per-call wall-clock deadline, one browser request could outlive the production
+# origin request budget and surface as an unparseable Cloudflare response.
 META_REQUEST_DEADLINE_SECONDS = 5.0
 
 logger = logging.getLogger(__name__)
@@ -196,6 +197,82 @@ async def _request_with_deadline(
         ) from None
 
 
+def _actual_subscription_fields(
+    payload: dict[str, Any],
+    *,
+    app_id: str,
+) -> tuple[dict[str, Any] | None, set[str]]:
+    app = next(
+        (
+            row
+            for row in payload.get("data") or []
+            if isinstance(row, dict) and _text(row.get("id")) == app_id
+        ),
+        None,
+    )
+    raw_fields = (app or {}).get("subscribed_fields") or []
+    if isinstance(raw_fields, str):
+        raw_fields = raw_fields.split(",")
+    actual_fields = {_text(value) for value in raw_fields if _text(value)}
+    return app, actual_fields
+
+
+async def _install_linked_page_subscription(
+    http: httpx.AsyncClient,
+    *,
+    app_id: str,
+    page_id: str,
+    page_token: str,
+) -> None:
+    """Install and read back the Facebook-Login messaging subscription."""
+    edge = f"{_graph_base()}/{page_id}/subscribed_apps"
+    subscribed_fields = ",".join(PAGE_WEBHOOK_INSTALL_FIELDS)
+    install_response = await _request_with_deadline(
+        http.post(
+            edge,
+            params={
+                "subscribed_fields": subscribed_fields,
+                "access_token": page_token,
+                "appsecret_proof": _appsecret_proof(page_token),
+            },
+        ),
+        operation="subscribe_linked_page_for_instagram",
+    )
+    installed = await _json(
+        install_response,
+        operation="subscribe_linked_page_for_instagram",
+    )
+    if installed.get("success") is not True:
+        raise _provider_error(
+            operation="subscribe_linked_page_for_instagram_unconfirmed",
+            response=install_response,
+            payload=installed,
+        )
+
+    verify_response = await _request_with_deadline(
+        http.get(
+            edge,
+            params={
+                "fields": "id,subscribed_fields",
+                "access_token": page_token,
+                "appsecret_proof": _appsecret_proof(page_token),
+            },
+        ),
+        operation="verify_linked_page_instagram_subscription",
+    )
+    verified = await _json(
+        verify_response,
+        operation="verify_linked_page_instagram_subscription",
+    )
+    app, actual_fields = _actual_subscription_fields(verified, app_id=app_id)
+    if not app or not set(PAGE_WEBHOOK_INSTALL_FIELDS).issubset(actual_fields):
+        raise _provider_error(
+            operation="verify_linked_page_instagram_subscription_unconfirmed",
+            response=verify_response,
+            payload=verified,
+        )
+
+
 async def subscribe_instagram_webhooks(
     db: Any,
     *,
@@ -204,11 +281,13 @@ async def subscribe_instagram_webhooks(
     page_id: str,
     client: httpx.AsyncClient | None = None,
 ) -> tuple[str, ...]:
-    """Install and verify the app on a linked Instagram professional account.
+    """Install and verify receive-only Instagram webhook delivery.
 
-    A Page access token is derived transiently from the encrypted user grant.
-    Neither token is returned, persisted in the channel binding, or included in
-    errors.  The operation is idempotent at Meta's ``subscribed_apps`` edge.
+    The selected Page-to-Instagram link is always verified first. Legacy Meta
+    setups may accept the Instagram account edge directly. If that install is
+    rejected, the current Facebook Login flow is installed on the linked Page's
+    ``subscribed_apps`` edge with the transient Page token. No token is returned,
+    persisted in the channel binding, or included in errors.
     """
 
     credential = await getattr(db, META_CREDENTIALS_COLLECTION).find_one(
@@ -257,36 +336,60 @@ async def subscribe_instagram_webhooks(
         if not page_token:
             raise MetaInstagramWebhookError("instagram_page_access_required")
 
-        # Subscribe the exact Instagram professional account after proving it
-        # belongs to the selected Page. The Page token is used transiently and
-        # is never persisted or exposed in errors.
-        edge = f"{_graph_base()}/{instagram_account_id}/subscribed_apps"
+        # Preserve the already-tested Instagram-account path for Meta setups
+        # that accept it. The current Amasi Facebook Login grant rejects this
+        # install, so only that installation failure falls back to the linked
+        # Page edge. A successful install with an incomplete read-back still
+        # fails closed and is never recorded as connected.
+        instagram_edge = (
+            f"{_graph_base()}/{instagram_account_id}/subscribed_apps"
+        )
         subscribed_fields = ",".join(INSTAGRAM_WEBHOOK_FIELDS)
-        install_response = await _request_with_deadline(
-            http.post(
-                edge,
-                params={
-                    "subscribed_fields": subscribed_fields,
-                    "access_token": page_token,
-                    "appsecret_proof": _appsecret_proof(page_token),
-                },
-            ),
-            operation="subscribe_instagram_account",
-        )
-        installed = await _json(
-            install_response,
-            operation="subscribe_instagram_account",
-        )
-        if installed.get("success") is not True:
-            raise _provider_error(
-                operation="subscribe_instagram_account_unconfirmed",
-                response=install_response,
-                payload=installed,
+        try:
+            install_response = await _request_with_deadline(
+                http.post(
+                    instagram_edge,
+                    params={
+                        "subscribed_fields": subscribed_fields,
+                        "access_token": page_token,
+                        "appsecret_proof": _appsecret_proof(page_token),
+                    },
+                ),
+                operation="subscribe_instagram_account",
             )
+            installed = await _json(
+                install_response,
+                operation="subscribe_instagram_account",
+            )
+            if installed.get("success") is not True:
+                raise _provider_error(
+                    operation="subscribe_instagram_account_unconfirmed",
+                    response=install_response,
+                    payload=installed,
+                )
+        except (MetaInstagramWebhookError, httpx.HTTPError) as primary_error:
+            logger.warning(
+                "instagram_webhook_subscription_fallback "
+                "from_mode=instagram_account to_mode=linked_page "
+                "http_status=%s meta_error_code=%s error_subcode=%s "
+                "trace_id=%s exception_type=%s",
+                getattr(primary_error, "http_status", None),
+                getattr(primary_error, "meta_error_code", None),
+                getattr(primary_error, "error_subcode", None),
+                getattr(primary_error, "trace_id", None),
+                type(primary_error).__name__,
+            )
+            await _install_linked_page_subscription(
+                http,
+                app_id=app_id,
+                page_id=page_id,
+                page_token=page_token,
+            )
+            return INSTAGRAM_WEBHOOK_FIELDS
 
         verify_response = await _request_with_deadline(
             http.get(
-                edge,
+                instagram_edge,
                 params={
                     "fields": "id,subscribed_fields",
                     "access_token": page_token,
@@ -299,20 +402,7 @@ async def subscribe_instagram_webhooks(
             verify_response,
             operation="verify_instagram_account_subscription",
         )
-        app = next(
-            (
-                row
-                for row in verified.get("data") or []
-                if isinstance(row, dict) and _text(row.get("id")) == app_id
-            ),
-            None,
-        )
-        raw_fields = (app or {}).get("subscribed_fields") or []
-        if isinstance(raw_fields, str):
-            raw_fields = raw_fields.split(",")
-        actual_fields = {
-            _text(value) for value in raw_fields if _text(value)
-        }
+        app, actual_fields = _actual_subscription_fields(verified, app_id=app_id)
         if not app or not set(INSTAGRAM_WEBHOOK_FIELDS).issubset(actual_fields):
             raise _provider_error(
                 operation="verify_instagram_account_subscription_unconfirmed",
@@ -336,6 +426,7 @@ async def subscribe_instagram_webhooks(
 __all__ = [
     "INSTAGRAM_WEBHOOK_FIELDS",
     "META_REQUEST_DEADLINE_SECONDS",
+    "PAGE_WEBHOOK_INSTALL_FIELDS",
     "MetaInstagramWebhookError",
     "subscribe_instagram_webhooks",
 ]
