@@ -9,6 +9,7 @@ on:
       - "backend/campaign_ai_monitor_legacy.py"
       - "backend/campaign_ai_policy_v2.py"
       - "backend/campaign_ai_execution_alignment.py"
+      - "backend/campaign_ai_public_guard.py"
       - "backend/ads_manager/__init__.py"
       - "backend/tests/test_campaign_ai_monitor.py"
       - "backend/tests/test_campaign_ai_source_policy_v2.py"
@@ -64,6 +65,7 @@ jobs:
           campaign_ai_monitor_legacy.py
           campaign_ai_policy_v2.py
           campaign_ai_execution_alignment.py
+          campaign_ai_public_guard.py
           ads_manager/__init__.py
           tests/test_campaign_ai_source_policy_v2.py
           tests/test_campaign_ai_execution_alignment.py
@@ -78,6 +80,7 @@ jobs:
         run: |
           POLICY=campaign_ai_policy_v2.py
           ALIGN=campaign_ai_execution_alignment.py
+          GUARD=campaign_ai_public_guard.py
           grep -q 'SNAPCHAT_AI_ACTION_REPORT_TIME = "conversion"' "$POLICY"
           grep -q '"executed_experiments": prior_decisions' "$POLICY"
           ! grep -q '"prior_mezan_ai_decisions"' "$POLICY"
@@ -88,5 +91,6 @@ jobs:
           grep -q '"automatic_parent_retargeting_allowed": False' "$ALIGN"
           grep -q 'level in {"campaign", "ad_group"}' "$ALIGN"
           grep -q '_filter_to_executable_contract' "$ALIGN"
+          grep -q 'non_executable_ad_budget_recommendation_suppressed' "$GUARD"
           grep -q 'build_aligned_ask_openai' campaign_ai_monitor.py
           grep -q 'from campaign_ai_monitor import attach_campaign_ai_routes' ads_manager/__init__.py
