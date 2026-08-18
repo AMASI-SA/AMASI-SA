@@ -51,7 +51,7 @@ def scheduler_enabled() -> bool:
     return True
 
 
-def _bounded_log(value: bytes | None, *, limit: int = 4000) -> str:
+def _bounded_stdout(value: bytes | None, *, limit: int = 4000) -> str:
     if not value:
         return ""
     rendered = value.decode("utf-8", errors="replace").strip()
@@ -94,18 +94,20 @@ async def run_worker_once(*, timeout_seconds: float | None = None) -> int:
         logger.error("Campaign AI child exceeded %.0fs timeout", timeout)
         return 124
 
-    stdout_text = _bounded_log(stdout)
-    stderr_text = _bounded_log(stderr)
+    stdout_text = _bounded_stdout(stdout)
     if stdout_text:
         logger.info("Campaign AI child: %s", stdout_text)
     if process.returncode:
+        # Never copy provider/OpenAI stderr into the web logs.  It can contain
+        # request detail or credential fragments.  Sanitized error codes live
+        # in the Campaign AI run collection instead.
         logger.error(
-            "Campaign AI child exited %s%s",
+            "Campaign AI child exited %s (stderr_bytes=%s)",
             process.returncode,
-            f": {stderr_text}" if stderr_text else "",
+            len(stderr or b""),
         )
-    elif stderr_text:
-        logger.warning("Campaign AI child stderr: %s", stderr_text)
+    elif stderr:
+        logger.warning("Campaign AI child emitted suppressed stderr (%s bytes)", len(stderr))
     return int(process.returncode or 0)
 
 
