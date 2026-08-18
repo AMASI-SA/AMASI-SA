@@ -367,3 +367,21 @@ def test_maps_nested_transfer_receipt_and_files_custom_field(salla_order_payload
         "name": "هل تريد إضافة كرت اهداء",
         "value": {"name": "لا"},
     }
+
+
+def test_salla_customer_choices_are_preserved_for_order_details(salla_order_payload):
+    item = salla_order_payload["items"][0]
+    item.pop("options", None)
+    item["customer_options"] = [
+        {"title": "لون الفستان", "answer": {"name": "أخضر"}},
+        {"question": "هل تريد إضافة اسم على الفستان", "option_value": "لا"},
+        {"label": "مقاس الطفل بالعمر", "selected": {"value": "5 سنة"}},
+    ]
+
+    order = map_salla_order(salla_order_payload)
+    mapped = order.items[0]
+
+    assert mapped.options_normalized["لون الفستان"] == "أخضر"
+    assert mapped.options_normalized["هل تريد إضافة اسم على الفستان"] == "لا"
+    assert mapped.options_normalized["مقاس الطفل بالعمر"] == "5 سنة"
+    assert len(mapped.options_raw) == 3
