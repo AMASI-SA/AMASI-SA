@@ -10,6 +10,7 @@ same time.
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 import json
 import logging
 import os
@@ -34,6 +35,7 @@ async def run_once() -> dict[str, Any]:
 
     # Import the heavy Campaign AI/provider graph only in this child process.
     from campaign_ai_monitor import (
+        RUN_COLLECTION,
         ensure_campaign_ai_indexes,
         run_all_campaign_ai_monitors,
     )
@@ -42,7 +44,22 @@ async def run_once() -> dict[str, Any]:
     try:
         db = client[db_name]
         await ensure_campaign_ai_indexes(db)
-        return await run_all_campaign_ai_monitors(db)
+        started_at = datetime.now(timezone.utc).isoformat()
+        summary = await run_all_campaign_ai_monitors(db)
+
+        # A provider run can complete technically while OpenAI itself is
+        # unavailable.  Treat that as retryable so the scheduler uses its short
+        # retry window instead of waiting the full five-hour decision interval.
+        retryable_ai_runs = await db[RUN_COLLECTION].count_documents({
+            "started_at": {"$gte": started_at},
+            "recommendation_source": {
+                "$in": ["openai_unavailable", "mezan_fallback"],
+            },
+        })
+        return {
+            **summary,
+            "retryable_ai_runs": int(retryable_ai_runs),
+        }
     finally:
         client.close()
 
@@ -52,7 +69,11 @@ async def _main() -> int:
     # Summary is operational metadata only; it contains no provider tokens or
     # credentials and is safe for process logs.
     print(json.dumps(summary, ensure_ascii=False, default=str))
-    return 1 if int(summary.get("failed") or 0) > 0 else 0
+    if int(summary.get("failed") or 0) > 0:
+        return 1
+    if int(summary.get("retryable_ai_runs") or 0) > 0:
+        return 2
+    return 0
 
 
 def main() -> int:
