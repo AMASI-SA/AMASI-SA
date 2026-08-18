@@ -1,0 +1,77 @@
+name: Production Campaign AI Decision V3 Extended
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "backend/campaign_ai_product_change_history_v3.py"
+      - "backend/campaign_ai_evidence_runtime_enrichment_v3.py"
+      - "backend/campaign_ai_decision_v3.py"
+      - "backend/campaign_ai_visual_evidence_v3.py"
+      - "backend/advertising_product_watch_cycle_v3.py"
+      - "backend/tests/test_campaign_ai_product_change_history_v3.py"
+      - "frontend/src/pages/CampaignRecommendations.jsx"
+      - "frontend/src/pages/AdvancedDashboard.jsx"
+      - ".github/workflows/prod-campaign-ai-decision-v3-extended.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  extended-contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused backend dependencies
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1
+          pydantic==2.13.4
+          pymongo==4.5.0
+          motor==3.3.1
+          httpx==0.28.1
+          openai==1.99.9
+          pytest==9.0.3
+          pytest-asyncio
+          openpyxl
+          cryptography
+          bcrypt
+          PyJWT
+          reportlab
+          python-multipart
+          python-dotenv
+          email-validator
+          pymupdf
+          pillow
+          qrcode
+          arabic-reshaper
+          python-bidi
+      - name: Compile extended Decision V3 modules
+        working-directory: backend
+        run: >-
+          python -m py_compile
+          campaign_ai_product_change_history_v3.py
+          campaign_ai_evidence_runtime_enrichment_v3.py
+          campaign_ai_decision_v3.py
+          campaign_ai_visual_evidence_v3.py
+          advertising_product_watch_cycle_v3.py
+      - name: Test product chronology and core V3 execution separation
+        working-directory: backend
+        run: >-
+          python -m pytest -q
+          tests/test_campaign_ai_product_change_history_v3.py
+          tests/test_campaign_ai_decision_v3_contract.py
+          tests/test_advertising_product_watch_cycle_v3.py
+          --tb=short
+      - name: Verify frontend V3 semantics
+        run: |
+          grep -q 'recommended_action' frontend/src/pages/CampaignRecommendations.jsx
+          grep -q 'root_cause_category' frontend/src/pages/CampaignRecommendations.jsx
+          grep -q 'item.executable && item.approval_available' frontend/src/pages/CampaignRecommendations.jsx
+          grep -q 'Creative Brief' frontend/src/pages/CampaignRecommendations.jsx
+          grep -q 'Advertising Product Watch' frontend/src/pages/CampaignRecommendations.jsx
+          grep -q 'Today → Yesterday → Day-2' frontend/src/pages/CampaignRecommendations.jsx
