@@ -3,11 +3,15 @@
 Only the canonical product host already known from Salla may be contacted.
 Redirects are followed manually and every hop is revalidated *before* a request,
 preventing an ad-controlled URL or redirect from turning the diagnostic into an
-SSRF primitive.  The probe is read-only and never adds a product to a cart.
+SSRF primitive. The probe is read-only and never adds a product to a cart.
+
+The response exposes bounded customer-visible HTML evidence (title, meta/OG
+metadata and a compact visible-text excerpt). It does not retain the raw page.
 """
 from __future__ import annotations
 
 import asyncio
+import html
 import ipaddress
 import re
 import socket
@@ -19,6 +23,7 @@ import httpx
 
 MAX_BODY_BYTES = 1_000_000
 MAX_REDIRECTS = 3
+MAX_VISIBLE_TEXT_CHARS = 4500
 
 
 def _text(value: Any, limit: int = 2000) -> str:
@@ -64,6 +69,33 @@ def _public_dns(host: str) -> bool:
 
 async def _allowed(url: str, canonical_host: str) -> bool:
     return _host(url) == canonical_host and await asyncio.to_thread(_public_dns, canonical_host)
+
+
+def _meta_content(source: str, *, name: str | None = None, prop: str | None = None) -> str | None:
+    if not name and not prop:
+        return None
+    target_attr = "name" if name else "property"
+    target_value = name or prop
+    patterns = (
+        rf'<meta[^>]+{target_attr}=["\']{re.escape(str(target_value))}["\'][^>]+content=["\']([^"\']*)["\'][^>]*>',
+        rf'<meta[^>]+content=["\']([^"\']*)["\'][^>]+{target_attr}=["\']{re.escape(str(target_value))}["\'][^>]*>',
+    )
+    for pattern in patterns:
+        match = re.search(pattern, source, re.I | re.S)
+        if match:
+            return _text(html.unescape(match.group(1)), 1000) or None
+    return None
+
+
+def _visible_text(source: str) -> str | None:
+    clean = re.sub(r"<script\b[^>]*>.*?</script>", " ", source, flags=re.I | re.S)
+    clean = re.sub(r"<style\b[^>]*>.*?</style>", " ", clean, flags=re.I | re.S)
+    clean = re.sub(r"<noscript\b[^>]*>.*?</noscript>", " ", clean, flags=re.I | re.S)
+    clean = re.sub(r"<!--.*?-->", " ", clean, flags=re.S)
+    clean = re.sub(r"<[^>]+>", " ", clean)
+    clean = html.unescape(clean)
+    rendered = _text(clean, MAX_VISIBLE_TEXT_CHARS)
+    return rendered or None
 
 
 async def probe_product_page(url: str | None, *, canonical_url: str | None) -> dict[str, Any]:
@@ -143,9 +175,9 @@ async def probe_product_page(url: str | None, *, canonical_url: str | None) -> d
                         remaining = MAX_BODY_BYTES - len(body)
                         body.extend(chunk[:remaining])
                     encoding = response.encoding or "utf-8"
-                    text = bytes(body).decode(encoding, errors="replace")
-                    title_match = re.search(r"<title[^>]*>(.*?)</title>", text, re.I | re.S)
-                    lowered = text.casefold()
+                    source = bytes(body).decode(encoding, errors="replace")
+                    title_match = re.search(r"<title[^>]*>(.*?)</title>", source, re.I | re.S)
+                    lowered = source.casefold()
                     add_to_cart_present = any(marker in lowered for marker in (
                         "add-to-cart",
                         "add_to_cart",
@@ -177,7 +209,16 @@ async def probe_product_page(url: str | None, *, canonical_url: str | None) -> d
                         "http_status": status_code,
                         "redirected": bool(redirects),
                         "redirects": redirects,
-                        "page_title": _text(title_match.group(1), 300) if title_match else None,
+                        "page_title": (
+                            _text(html.unescape(title_match.group(1)), 300)
+                            if title_match
+                            else None
+                        ),
+                        "meta_description": _meta_content(source, name="description"),
+                        "og_title": _meta_content(source, prop="og:title"),
+                        "og_description": _meta_content(source, prop="og:description"),
+                        "og_image": _meta_content(source, prop="og:image"),
+                        "visible_text_excerpt": _visible_text(source),
                         "add_to_cart_marker_present": add_to_cart_present,
                         "unavailable_marker_present": unavailable_markers,
                         "body_truncated": len(body) >= MAX_BODY_BYTES,
