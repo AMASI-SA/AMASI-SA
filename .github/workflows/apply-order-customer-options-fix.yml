@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - fix/order-item-customer-options-salla-card
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
 
 permissions:
   contents: write
@@ -79,6 +82,7 @@ jobs:
         run: CI=true yarn test --watchAll=false --runTestsByPath src/pages/OrderDetailsV2.test.jsx
 
       - name: Remove temporary workflow and commit fix
+        if: github.event_name == 'push'
         shell: bash
         run: |
           rm -f .github/workflows/apply-order-customer-options-fix.yml
