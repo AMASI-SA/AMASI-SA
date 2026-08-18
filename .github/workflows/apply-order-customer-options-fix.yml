@@ -1,0 +1,90 @@
+name: Apply Order Customer Options Fix
+
+on:
+  push:
+    branches:
+      - fix/order-item-customer-options-salla-card
+
+permissions:
+  contents: write
+
+jobs:
+  apply-fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/order-item-customer-options-salla-card
+          fetch-depth: 0
+
+      - name: Apply focused root fix
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          mapper = Path('backend/order_engine/mapper.py')
+          text = mapper.read_text(encoding='utf-8')
+
+          text = text.replace(
+          '''        name = _first(\n            option.get("name"),\n            option.get("label"),\n            option.get("key"),\n            option.get("option"),\n        )''',
+          '''        name = _first(\n            option.get("name"),\n            option.get("label"),\n            option.get("title"),\n            option.get("question"),\n            option.get("key"),\n            option.get("option"),\n        )''')
+
+          text = text.replace(
+          '''                    option.get("selected"),\n                    option.get("choice"),\n                    option.get("text"),''',
+          '''                    option.get("selected"),\n                    option.get("choice"),\n                    option.get("answer"),\n                    option.get("option_value"),\n                    option.get("text"),''')
+
+          text = text.replace(
+          '''        item.get("custom_fields"),\n        item.get("customizations"),\n        item.get("personalization"),''',
+          '''        item.get("custom_fields"),\n        item.get("customizations"),\n        item.get("personalization"),\n        item.get("fields"),\n        item.get("questions"),''')
+
+          text = text.replace(
+          '''        item.get("options"),\n        item.get("choices"),\n        item.get("attributes"),\n        variant.get("options"),''',
+          '''        item.get("options"),\n        item.get("choices"),\n        item.get("attributes"),\n        item.get("product_options"),\n        item.get("selected_options"),\n        item.get("customer_options"),\n        variant.get("options"),''')
+
+          mapper.write_text(text, encoding='utf-8')
+
+          page = Path('frontend/src/pages/OrderDetailsV2.jsx')
+          text = page.read_text(encoding='utf-8')
+          old_collect = '''function collectItemSelections(item) {\n    const rows = [];\n    const seen = new Set();\n    const push = (label, value) => {\n        const normalizedLabel = String(label || "").trim();\n        if (!normalizedLabel || !isPresent(value)) return;\n        const shownValue = displayValue(value);\n        if (shownValue === "—") return;\n        const key = `${normalizedLabel}:${shownValue}`;\n        if (seen.has(key)) return;\n        seen.add(key);\n        rows.push({ label: normalizedLabel, value: shownValue });\n    };\n    push("اللون", item.color);\n    push("المقاس", item.size);\n    push("الخامة", item.material);\n    for (const option of item.options || item.options_raw || []) {\n        push(option?.name || option?.label || option?.key, option?.value || option?.selected || option?.text || option?.choice);\n    }\n    for (const field of item.custom_fields || []) {\n        push(field?.name || field?.label || field?.key, field?.value || field?.text);\n    }\n    return rows;\n}'''
+          new_collect = '''function collectItemSelections(item) {\n    const rows = [];\n    const seen = new Set();\n    const push = (label, value) => {\n        const normalizedLabel = String(label || "").trim();\n        if (!normalizedLabel || !isPresent(value)) return;\n        const shownValue = displayValue(value);\n        if (shownValue === "—") return;\n        const key = `${normalizedLabel}:${shownValue}`;\n        if (seen.has(key)) return;\n        seen.add(key);\n        rows.push({ label: normalizedLabel, value: shownValue });\n    };\n    const optionLabel = (option) => firstPresent(\n        option?.name, option?.label, option?.title, option?.question, option?.key, option?.option,\n    );\n    const optionValue = (option) => firstPresent(\n        option?.value, option?.selected, option?.answer, option?.option_value, option?.text, option?.choice, option?.values,\n    );\n    push("اللون", item.color);\n    push("المقاس", item.size);\n    push("الخامة", item.material);\n    for (const option of item.options || item.options_raw || []) {\n        push(optionLabel(option), optionValue(option));\n    }\n    for (const field of item.custom_fields || []) {\n        push(optionLabel(field), optionValue(field));\n    }\n    return rows;\n}'''
+          if old_collect not in text:
+              raise SystemExit('collectItemSelections source contract changed')
+          text = text.replace(old_collect, new_collect)
+
+          start = text.index('function ProductCard({ item, index, currency }) {')
+          end = text.index('\nfunction OrderSummaryCard(', start)
+          old_product = text[start:end]
+          new_product = '''function ProductCard({ item, index, currency }) {\n    const [imageFailed, setImageFailed] = useState(false);\n    const selections = collectItemSelections(item);\n    const firstImage = Array.isArray(item.image_urls) ? item.image_urls[0] : "";\n    const image = String(\n        item.image_url || firstImage || item.thumbnail || item.product_thumbnail || ""\n    ).trim();\n    const weight = isPresent(item.weight) ? `${displayValue(item.weight)} ${displayValue(item.weight_unit || "")}`.trim() : "—";\n    const quantity = Number(item.quantity || 1);\n    const unitPrice = Number(item.unit_price || 0);\n    const discount = Number(item.discount || 0);\n    const itemTotal = Number(item.total || 0);\n    const explicitTax = Number(item.tax_reported_by_source);\n    const beforeTaxAfterDiscount = Math.max((unitPrice * quantity) - discount, 0);\n    const derivedTax = Math.max(itemTotal - beforeTaxAfterDiscount, 0);\n    const itemTax = Number.isFinite(explicitTax) && explicitTax > 0\n        ? explicitTax\n        : derivedTax;\n    return (\n        <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white" data-testid="order-v2-product-card">\n            <div className="flex flex-col gap-4 p-5 md:flex-row md:items-start">\n                <div className="flex h-28 w-28 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-slate-100 text-slate-400">{image && !imageFailed ? <img src={image} alt="" className="h-full w-full object-cover" onError={() => setImageFailed(true)} /> : <Package size={42} />}</div>\n                <div className="min-w-0 flex-1">\n                    <div className="text-xl font-extrabold leading-8 text-slate-950">{item.name || `منتج ${index + 1}`}</div>\n                    <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-500"><span>SKU: <b className="num text-slate-700">{item.sku || "—"}</b></span><span>الباركود: <b className="num text-slate-700">{item.barcode || "—"}</b></span></div>\n                    {selections.length > 0 && (\n                        <div className="mt-5 overflow-hidden rounded-xl border border-slate-200" data-testid="order-v2-customer-options">\n                            <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-extrabold text-slate-700">خيارات العميل</div>\n                            <div className="divide-y divide-slate-100">\n                                {selections.map((selection) => (\n                                    <div key={`${selection.label}:${selection.value}`} className="grid min-h-12 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-4 px-4 py-3 text-sm">\n                                        <div className="font-bold text-slate-400">{selection.label} :</div>\n                                        <div className="flex items-center justify-between gap-2 font-bold text-slate-700">\n                                            <span className="break-words">{selection.value}</span>\n                                            <CopyValueButton value={selection.value} label={`نسخ ${selection.label}`} />\n                                        </div>\n                                    </div>\n                                ))}\n                            </div>\n                        </div>\n                    )}\n                </div>\n            </div>\n            <div className="grid gap-3 border-t border-slate-100 bg-slate-50/50 px-5 py-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">\n                <div><div className="text-xs font-bold text-slate-400">الكمية</div><div className="num mt-1 font-bold">{item.quantity}</div></div>\n                <div><div className="text-xs font-bold text-slate-400">الوزن</div><div className="mt-1 font-bold">{weight}</div></div>\n                <div><div className="text-xs font-bold text-slate-400">سعر الوحدة قبل الضريبة</div><div className="num mt-1 font-bold">{formatMoney(unitPrice, currency)}</div></div>\n                <div><div className="text-xs font-bold text-slate-400">خصم المنتج</div><div className="num mt-1 font-bold text-rose-600">{discount > 0 ? `- ${formatMoney(discount, currency)}` : formatMoney(0, currency)}</div></div>\n                <div><div className="text-xs font-bold text-slate-400">ضريبة المنتج</div><div className="num mt-1 font-bold text-slate-700">{itemTax > 0 ? `+ ${formatMoney(itemTax, currency)}` : formatMoney(0, currency)}</div></div>\n                <div><div className="text-xs font-bold text-slate-400">إجمالي المنتج شامل الضريبة</div><div className="num mt-1 font-extrabold text-teal-800">{formatMoney(itemTotal, currency)}</div></div>\n            </div>\n        </article>\n    );\n}\n'''
+          text = text[:start] + new_product + text[end:]
+          page.write_text(text, encoding='utf-8')
+
+          tests = Path('backend/tests/test_order_engine_mapper.py')
+          test_text = tests.read_text(encoding='utf-8')
+          marker = 'def test_salla_customer_choices_are_preserved_for_order_details'
+          if marker not in test_text:
+              test_text += '''\n\ndef test_salla_customer_choices_are_preserved_for_order_details(salla_order_payload):\n    item = salla_order_payload["items"][0]\n    item.pop("options", None)\n    item["customer_options"] = [\n        {"title": "لون الفستان", "answer": {"name": "أخضر"}},\n        {"question": "هل تريد إضافة اسم على الفستان", "option_value": "لا"},\n        {"label": "مقاس الطفل بالعمر", "selected": {"value": "5 سنة"}},\n    ]\n\n    order = map_salla_order(salla_order_payload)\n    mapped = order.items[0]\n\n    assert mapped.options_normalized["لون الفستان"] == "أخضر"\n    assert mapped.options_normalized["هل تريد إضافة اسم على الفستان"] == "لا"\n    assert mapped.options_normalized["مقاس الطفل بالعمر"] == "5 سنة"\n    assert len(mapped.options_raw) == 3\n'''
+              tests.write_text(test_text, encoding='utf-8')
+          PY
+
+      - name: Run focused backend tests
+        run: python -m pytest -q backend/tests/test_order_engine_mapper.py backend/tests/test_order_item_engine_mapper.py
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: yarn install --frozen-lockfile
+
+      - name: Run frontend order details tests
+        working-directory: frontend
+        run: CI=true yarn test --watchAll=false --runTestsByPath src/pages/OrderDetailsV2.test.jsx
+
+      - name: Remove temporary workflow and commit fix
+        shell: bash
+        run: |
+          rm -f .github/workflows/apply-order-customer-options-fix.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/order_engine/mapper.py backend/tests/test_order_engine_mapper.py frontend/src/pages/OrderDetailsV2.jsx .github/workflows/apply-order-customer-options-fix.yml
+          git commit -m "fix(orders): preserve and display customer product options"
+          git push origin HEAD:fix/order-item-customer-options-salla-card
