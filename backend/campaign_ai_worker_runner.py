@@ -60,8 +60,11 @@ def main() -> int:
         return asyncio.run(_main())
     except KeyboardInterrupt:
         return 130
-    except Exception:
-        logger.exception("Campaign AI isolated worker failed")
+    except Exception as exc:
+        # Provider/OpenAI exception text can contain credential fragments or
+        # request details.  Persisted Campaign AI run documents already keep
+        # sanitized error codes, so process logs record only the exception type.
+        logger.error("Campaign AI isolated worker failed: %s", type(exc).__name__)
         return 1
 
 
