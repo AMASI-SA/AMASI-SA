@@ -1,0 +1,63 @@
+name: Apply Meta Hourly Dashboard Spend Fix
+
+on:
+  push:
+    branches:
+      - fix/meta-hourly-dashboard-spend
+    paths:
+      - .github/workflows/apply-meta-hourly-dashboard-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/meta-hourly-dashboard-spend
+          fetch-depth: 0
+      - name: Apply focused Meta hourly projection fix
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('backend/integrations_control_center/meta_native_reporting.py')
+          text = path.read_text()
+
+          old = '''from pydantic import BaseModel, Field, model_validator\n\nfrom .meta_account_selection import (\n'''
+          new = '''from pydantic import BaseModel, Field, model_validator\n\nfrom .ads_platform_hourly import (\n    ensure_platform_hourly_indexes,\n    upsert_platform_hour,\n)\nfrom .meta_account_selection import (\n'''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          marker = '''\n\nasync def run_meta_reporting_sync(\n'''
+          assert marker in text
+          helper = r'''\n\ndef _meta_hour_index(value: Any) -> int | None:\n    text = str(value or "").strip()\n    if len(text) < 2 or not text[:2].isdigit():\n        return None\n    hour = int(text[:2])\n    return hour if 0 <= hour <= 23 else None\n\n\nasync def _fetch_day_hourly(\n    client: httpx.AsyncClient,\n    access_token: str,\n    account: dict[str, Any],\n    day: date,\n) -> list[dict[str, Any]]:\n    account_id = str(account["ad_account_id"])\n    response = await client.get(\n        f"{meta_graph_base()}/{account_id}/insights",\n        params={\n            "access_token": access_token,\n            "appsecret_proof": meta_appsecret_proof(access_token),\n            "fields": "spend,impressions,clicks,account_currency,date_start,date_stop",\n            "time_range": json.dumps(\n                {"since": day.isoformat(), "until": day.isoformat()},\n                separators=(",", ":"),\n            ),\n            "time_increment": 1,\n            "level": "account",\n            "breakdowns": "hourly_stats_aggregated_by_advertiser_time_zone",\n            "limit": 100,\n        },\n    )\n    if response.status_code >= 400:\n        raise _graph_error(response, "meta_hourly_insights")\n    payload = response.json() or {}\n    rows = payload.get("data") if isinstance(payload, dict) else None\n    if not isinstance(rows, list):\n        raise MetaReportingError(\n            "meta_hourly_insights_invalid_rows",\n            "Meta hourly reporting returned invalid insight rows.",\n            status_code=502,\n            retryable=True,\n        )\n    return [row for row in rows if isinstance(row, dict)]\n'''
+          text = text.replace(marker, helper + marker, 1)
+
+          old = '''    await ensure_meta_reporting_indexes(db)\n    await ensure_meta_campaign_reporting_indexes(db)\n'''
+          new = '''    await ensure_meta_reporting_indexes(db)\n    await ensure_meta_campaign_reporting_indexes(db)\n    await ensure_platform_hourly_indexes(db)\n'''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = '''                    saved += 1\n                    try:\n                        campaign_result = await sync_meta_campaign_day(\n'''
+          new = '''                    saved += 1\n                    try:\n                        hourly_rows = await _fetch_day_hourly(\n                            client, access_token, account, day\n                        )\n                        provider_calls += 1\n                        buckets = {\n                            hour: {"spend_native": 0.0, "impressions": 0, "clicks": 0}\n                            for hour in range(24)\n                        }\n                        for hourly_row in hourly_rows:\n                            hour = _meta_hour_index(\n                                hourly_row.get(\n                                    "hourly_stats_aggregated_by_advertiser_time_zone"\n                                )\n                            )\n                            if hour is None:\n                                continue\n                            bucket = buckets[hour]\n                            bucket["spend_native"] += float(hourly_row.get("spend") or 0)\n                            bucket["impressions"] += int(float(hourly_row.get("impressions") or 0))\n                            bucket["clicks"] += int(float(hourly_row.get("clicks") or 0))\n                        account_timezone = str(account.get("timezone") or "Asia/Riyadh")\n                        for hour, bucket in buckets.items():\n                            hourly_spend_native = float(bucket["spend_native"])\n                            hourly_spend_sar = (\n                                round(hourly_spend_native * fx_rate, 2)\n                                if fx_rate is not None\n                                else None\n                            )\n                            await upsert_platform_hour(\n                                db,\n                                user_id=user_id,\n                                provider="meta",\n                                ad_account_id=str(account["ad_account_id"]),\n                                display_name=account.get("display_name"),\n                                day=day,\n                                hour_index=hour,\n                                account_timezone=account_timezone,\n                                currency_native=currency,\n                                spend_native=hourly_spend_native,\n                                fx_rate_to_sar=fx_rate,\n                                spend_sar=hourly_spend_sar,\n                                impressions=int(bucket["impressions"]),\n                                clicks=int(bucket["clicks"]),\n                                source_mode=META_REPORTING_SOURCE_MODE,\n                                observed_at=observed_at,\n                            )\n                    except MetaReportingError as exc:\n                        if exc.code == "meta_needs_reauth":\n                            raise\n                        item = {\n                            "ad_account_id": account["ad_account_id"],\n                            "date": day.isoformat(),\n                            "kind": "hourly_insights",\n                            "code": exc.code,\n                        }\n                        account_errors.append(item)\n                        error_items.append(item)\n                    try:\n                        campaign_result = await sync_meta_campaign_day(\n'''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          path.write_text(text)
+
+          test = Path('backend/tests/test_meta_hourly_dashboard_spend_contract.py')
+          test.write_text('''from pathlib import Path\n\n\ndef test_meta_reporting_persists_hourly_dashboard_projection():\n    source = Path("backend/integrations_control_center/meta_native_reporting.py").read_text()\n    assert "hourly_stats_aggregated_by_advertiser_time_zone" in source\n    assert "ensure_platform_hourly_indexes" in source\n    assert "upsert_platform_hour" in source\n    assert 'provider="meta"' in source\n    assert "for hour in range(24)" in source\n\n\ndef test_meta_hourly_projection_remains_read_only():\n    source = Path("backend/integrations_control_center/meta_native_reporting.py").read_text()\n    assert "campaign_write_reached" in source\n    assert "accounting_write_reached" in source\n    assert "qoyod_write_reached" in source\n''')
+          PY
+
+          python -m py_compile backend/integrations_control_center/meta_native_reporting.py
+          pytest -q backend/tests/test_meta_hourly_dashboard_spend_contract.py backend/tests/test_google_ads_dashboard_live_sync_contract.py
+
+          git config user.name "mezan"
+          git config user.email "amasi.jewelery@gmail.com"
+          git add backend/integrations_control_center/meta_native_reporting.py backend/tests/test_meta_hourly_dashboard_spend_contract.py
+          git commit -m "fix(ads): persist Meta hourly spend for dashboard" || exit 0
+          git push origin HEAD:fix/meta-hourly-dashboard-spend
