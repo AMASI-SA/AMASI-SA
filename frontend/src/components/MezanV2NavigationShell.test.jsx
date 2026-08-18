@@ -15,7 +15,7 @@ import MezanV2NavigationShell, {
 } from "./MezanV2NavigationShell";
 
 const DASHBOARD_LOCATION = {
-    pathname: "/dashboard-v2",
+    pathname: "/dashboard-advanced",
     search: "",
 };
 
@@ -34,8 +34,9 @@ const FULFILLMENT_LOCATION = {
     search: "?stage=reviewed&view=products",
 };
 
-test("Mezan 2 shell is limited to Mezan 2 routes", () => {
+test("Mezan 2 shell is limited to Mezan 2 routes including the advanced dashboard", () => {
     [
+        "/dashboard-advanced",
         "/dashboard-v2",
         "/orders-v2/280001234",
         "/fulfillment-v2",
@@ -58,6 +59,25 @@ test("Mezan 2 shell is limited to Mezan 2 routes", () => {
         "/transactions",
         "/settings",
     ].forEach((pathname) => expect(isMezanV2Route(pathname)).toBe(false));
+});
+
+test("advanced dashboard is the Mezan 2 home target and renders the unified header", () => {
+    const home = MEZAN_V2_NAV_SECTIONS.find((section) => section.id === "home");
+    expect(home.items).toEqual([
+        { to: "/dashboard-advanced", label: "الرئيسية", exactSearch: true },
+    ]);
+    expect(activeNavigationSection(DASHBOARD_LOCATION)?.id).toBe("home");
+    expect(activeNavigationSection({ pathname: "/dashboard-v2", search: "" })?.id).toBe("home");
+
+    const markup = renderToStaticMarkup(
+        <MezanV2NavigationShell
+            location={DASHBOARD_LOCATION}
+            onOpenAll={() => {}}
+        />,
+    );
+    expect(markup).toContain('data-testid="mezan-v2-navigation-shell"');
+    expect(markup).toContain('data-testid="mezan-v2-primary-home"');
+    expect(markup).toContain('href="/dashboard-advanced"');
 });
 
 test("orders and fulfillment are independent top-level sections", () => {
@@ -206,6 +226,7 @@ test("new navigation does not route to legacy Mezan pages", () => {
     ));
 
     expect(targets).not.toContain("/");
+    expect(targets).not.toContain("/dashboard-v2");
     expect(targets).not.toContain("/orders");
     expect(targets).not.toContain("/reports");
     expect(targets).not.toContain("/transactions");
