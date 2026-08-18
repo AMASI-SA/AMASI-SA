@@ -49,8 +49,6 @@ jobs:
 
         response = await request(headers)
         if response.status_code == 401:
-            # Access tokens are short-lived. A 401 is not proof that the long-lived
-            # OAuth grant is gone: refresh once and retry the exact read request.
             fresh_access = await self.access_token(force_refresh=True)
             retry_headers = dict(headers)
             retry_headers["Authorization"] = f"Bearer {fresh_access}"
@@ -74,8 +72,6 @@ jobs:
             message = "Snapchat rejected a read-only data request."
             if safe_suffix:
                 message = f"{message} Provider: {safe_suffix}"
-            # A 403 is normally an account/resource permission rejection, not an
-            # expired OAuth grant. Do not disconnect the entire Snapchat app.
             raise SnapchatNativeSyncError(
                 f"snapchat_provider_http_{response.status_code}",
                 message,
@@ -180,13 +176,14 @@ jobs:
                 error_payload = response.json() or {}
             except (TypeError, ValueError):
                 error_payload = {}
-            oauth_error = str(error_payload.get("error") or "").strip().lower()
-            oauth_description = str(error_payload.get("error_description") or "").strip().lower()
-            combined_error = f"{oauth_error} {oauth_description} {(response.text or '').lower()}"
-
+            combined_error = " ".join(
+                [
+                    str(error_payload.get("error") or "").lower(),
+                    str(error_payload.get("error_description") or "").lower(),
+                    (response.text or "").lower(),
+                ]
+            )
             if "invalid_grant" in combined_error:
-                # Another worker may have refreshed first and persisted a newer
-                # refresh token. Re-read before declaring the user grant dead.
                 latest = await _collection(self.db, SNAPCHAT_CREDENTIALS_COLLECTION).find_one(
                     {"user_id": self.user_id, "provider": SNAPCHAT_PROVIDER_ID},
                     {"_id": 0, "refresh_token_ciphertext": 1},
@@ -200,17 +197,15 @@ jobs:
                 if latest_refresh and latest_refresh != refresh:
                     refresh = latest_refresh
                     response = await refresh_request(refresh)
-                    if response.status_code < 400:
-                        error_payload = {}
-                    else:
+                    if response.status_code >= 400:
                         try:
-                            error_payload = response.json() or {}
+                            retry_error_payload = response.json() or {}
                         except (TypeError, ValueError):
-                            error_payload = {}
+                            retry_error_payload = {}
                         combined_error = " ".join(
                             [
-                                str(error_payload.get("error") or "").lower(),
-                                str(error_payload.get("error_description") or "").lower(),
+                                str(retry_error_payload.get("error") or "").lower(),
+                                str(retry_error_payload.get("error_description") or "").lower(),
                                 (response.text or "").lower(),
                             ]
                         )
@@ -219,7 +214,6 @@ jobs:
                         "snapchat_needs_reauth", "Snapchat authorization must be renewed.",
                         status_code=409, result={"needs_reauth": True},
                     )
-
             if response.status_code >= 400:
                 if "invalid_client" in combined_error:
                     raise SnapchatNativeSyncError(
@@ -306,5 +300,5 @@ def test_only_explicit_invalid_grant_marks_refresh_as_needing_reauth():
           git config user.name "mezan"
           git config user.email "amasi.jewelery@gmail.com"
           git add backend/integrations_control_center/snapchat_native_data_common.py backend/tests/test_snapchat_oauth_stability_contract.py
-          git commit -m "fix(snapchat): keep OAuth grant stable across token refreshes"
+          git commit -m "fix(snapchat): keep OAuth grant stable across token refreshes" || exit 0
           git push origin HEAD:fix/snapchat-oauth-stability
