@@ -1,25 +1,24 @@
-"""Public facade for Campaign AI source-of-truth policy.
+"""Public facade for Campaign AI source-of-truth and Decision Intelligence V3.
 
-The historical implementation remains in ``campaign_ai_monitor_legacy`` so
-existing route/scheduler/execution contracts stay stable. The marketing
-source/policy lives in ``campaign_ai_policy_v2``. The execution-alignment layer
-adds the real provider write capabilities to OpenAI evidence and rejects
-impossible action/target pairs without inventing a parent target. A bounded
-OpenAI repair pass may then reconsider the same evidence once when the first
-model response targeted an impossible provider write.
+The established V2 pipeline remains responsible for provider evidence,
+profitability, persistence, scheduling, snapshot lifecycle and approval/write
+safety. Decision Intelligence V3 replaces only the OpenAI reasoning boundary and
+adds task-local access to the tenant database for deeper funnel/product evidence.
 """
 from __future__ import annotations
 
 from typing import Any
 
+import campaign_ai_decision_v3 as _decision_v3
 import campaign_ai_execution_alignment as _alignment
-import campaign_ai_execution_retry as _execution_retry
 import campaign_ai_monitor_legacy as _legacy
 import campaign_ai_policy_v2 as _policy
+from campaign_ai_runtime_context_v3 import (
+    reset_runtime_context as _reset_v3_context,
+    set_runtime_context as _set_v3_context,
+)
 
-# Keep the established monkeypatch/test surface for the OpenAI client. The
-# policy runtime uses the legacy module's client reference; the public wrapper
-# synchronizes an explicitly replaced client before a direct _ask_openai call.
+# Keep the established monkeypatch/test surface for the OpenAI client.
 AsyncOpenAI = _legacy.AsyncOpenAI
 
 RecommendationItem = _policy.RecommendationItem
@@ -51,30 +50,73 @@ _page_aligned_profitability = _policy._page_aligned_profitability
 _snapchat_campaign_entities = _policy._snapchat_campaign_entities
 _snapchat_child_entities = _policy._snapchat_child_entities
 _experiment_outcomes_context = _policy._experiment_outcomes_context
-_recommendation_explanation = _policy._recommendation_explanation
 execution_capabilities = _alignment.execution_capabilities
 
-# Install the aligned OpenAI boundary first, then wrap it with one bounded
-# OpenAI-owned correction pass. Mezan still never selects or promotes a target.
-_aligned_ask_openai = _alignment.build_aligned_ask_openai(_legacy, _policy)
-_repairing_ask_openai = _execution_retry.build_repairing_ask_openai(
-    _aligned_ask_openai,
+# Preserve the existing Salla/profit explanation enrichment, then append the
+# rich V3 business diagnosis captured on the exact candidate row.  V2 later
+# computes approval_available from the fail-closed legacy action projection.
+_base_recommendation_explanation = _policy._recommendation_explanation
+
+
+def _recommendation_explanation(item: Any, row: dict[str, Any]) -> dict[str, Any]:
+    brief = dict(_base_recommendation_explanation(item, row) or {})
+    rich = row.get("_decision_v3") if isinstance(row, dict) else None
+    if isinstance(rich, dict):
+        brief.update(rich)
+    return brief
+
+
+_policy._recommendation_explanation = _recommendation_explanation
+_legacy._recommendation_explanation = _recommendation_explanation
+
+# V3 owns diagnosis + marketing judgment, including its own mandatory second
+# pass for budget-owner coverage and counterfactual review.  Execution alignment
+# remains code-owned inside the V3 boundary and the unchanged V2 approval route.
+_v3_ask_openai = _decision_v3.build_decision_v3_ask_openai(
     _legacy,
     _policy,
     _alignment,
 )
-_policy._ask_openai = _repairing_ask_openai
-_legacy._ask_openai = _repairing_ask_openai
-run_campaign_ai_monitor = _policy.run_campaign_ai_monitor
+_policy._ask_openai = _v3_ask_openai
+_legacy._ask_openai = _v3_ask_openai
+
+# The V2 monitor signature deliberately remains unchanged. ContextVar supplies
+# db/user_id to V3 without process-global tenant state or changes to the worker,
+# cadence, snapshot, or route contracts.
+_base_run_campaign_ai_monitor = _policy.run_campaign_ai_monitor
+
+
+async def run_campaign_ai_monitor(
+    db: Any,
+    user_id: str,
+    *args: Any,
+    **kwargs: Any,
+):
+    _legacy.AsyncOpenAI = AsyncOpenAI
+    token = _set_v3_context(db, user_id)
+    try:
+        return await _base_run_campaign_ai_monitor(
+            db,
+            user_id,
+            *args,
+            **kwargs,
+        )
+    finally:
+        _reset_v3_context(token)
+
+
+# run_all_campaign_ai_monitors lives in the compatibility module and resolves
+# this global at runtime, so the established worker automatically enters V3.
+_policy.run_campaign_ai_monitor = run_campaign_ai_monitor
+_legacy.run_campaign_ai_monitor = run_campaign_ai_monitor
 
 
 async def _ask_openai(*args: Any, **kwargs: Any):
     _legacy.AsyncOpenAI = AsyncOpenAI
-    return await _repairing_ask_openai(*args, **kwargs)
+    return await _v3_ask_openai(*args, **kwargs)
 
 
-# Existing route/scheduler helpers remain delegated to the legacy module; the
-# policy module patches their runtime globals during import.
+# Existing route/scheduler helpers remain delegated to the legacy module.
 def __getattr__(name: str) -> Any:
     if hasattr(_policy, name):
         return getattr(_policy, name)
