@@ -7,6 +7,8 @@ on:
     paths:
       - "backend/campaign_ai_monitor.py"
       - "backend/campaign_ai_monitor_legacy.py"
+      - "backend/campaign_ai_policy_v2.py"
+      - "backend/ads_manager/__init__.py"
       - "backend/tests/test_campaign_ai_monitor.py"
       - "backend/tests/test_campaign_ai_source_policy_v2.py"
       - "backend/integrations_control_center/snapchat_account_timezone_manager.py"
@@ -58,6 +60,8 @@ jobs:
           python -m py_compile
           campaign_ai_monitor.py
           campaign_ai_monitor_legacy.py
+          campaign_ai_policy_v2.py
+          ads_manager/__init__.py
           tests/test_campaign_ai_source_policy_v2.py
       - name: Run campaign AI regression suite
         run: >-
@@ -67,9 +71,11 @@ jobs:
           --tb=short
       - name: Enforce source-of-truth policy
         run: |
-          grep -q 'SNAPCHAT_AI_ACTION_REPORT_TIME = "conversion"' campaign_ai_monitor.py
-          grep -q '"executed_experiments": prior_decisions' campaign_ai_monitor.py
-          ! grep -q '"prior_mezan_ai_decisions"' campaign_ai_monitor.py
-          ! grep -q 'recommendation_source = "mezan_fallback"' campaign_ai_monitor.py
-          grep -q '"salla_child_attribution_allowed": False' campaign_ai_monitor.py
-          grep -q '"previous_mezan_recommendations_used": False' campaign_ai_monitor.py
+          POLICY=campaign_ai_policy_v2.py
+          grep -q 'SNAPCHAT_AI_ACTION_REPORT_TIME = "conversion"' "$POLICY"
+          grep -q '"executed_experiments": prior_decisions' "$POLICY"
+          ! grep -q '"prior_mezan_ai_decisions"' "$POLICY"
+          ! grep -q 'recommendation_source = "mezan_fallback"' "$POLICY"
+          grep -q '"salla_child_attribution_allowed": False' "$POLICY"
+          grep -q '"previous_mezan_recommendations_used": False' "$POLICY"
+          grep -q 'from campaign_ai_monitor import attach_campaign_ai_routes' ads_manager/__init__.py

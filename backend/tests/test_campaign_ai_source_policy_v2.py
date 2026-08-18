@@ -16,7 +16,7 @@ def _account(account_id="snap-1", timezone_name="America/Los_Angeles"):
 
 def test_snapchat_ai_range_is_anchored_to_each_account_local_today(monkeypatch):
     monkeypatch.setattr(
-        monitor,
+        monitor._policy,
         "account_local_today",
         lambda _tz, now=None: date(2026, 8, 17),
     )
@@ -91,16 +91,20 @@ def test_snapchat_campaign_uses_conversion_platform_results_and_separate_salla_p
 
     monkeypatch.setattr(monitor._legacy, "_snapchat_accounts", accounts)
     monkeypatch.setattr(
-        monitor,
+        monitor._policy,
         "account_local_today",
         lambda _tz, now=None: date(2026, 8, 18),
     )
     monkeypatch.setattr(
-        monitor,
+        monitor._policy,
         "build_account_timezone_campaign_report",
         campaign_report,
     )
-    monkeypatch.setattr(monitor, "build_campaign_profitability", profitability)
+    monkeypatch.setattr(
+        monitor._policy,
+        "build_campaign_profitability",
+        profitability,
+    )
 
     rows = asyncio.run(
         monitor._snapchat_campaign_entities(
@@ -206,22 +210,30 @@ def test_snapchat_children_use_platform_conversion_and_page_verified_parent_sall
 
     monkeypatch.setattr(monitor._legacy, "_snapchat_accounts", accounts)
     monkeypatch.setattr(
-        monitor,
+        monitor._policy,
         "account_local_today",
         lambda _tz, now=None: date(2026, 8, 18),
     )
     monkeypatch.setattr(
-        monitor,
+        monitor._policy,
         "build_account_timezone_campaign_report",
         campaign_report,
     )
-    monkeypatch.setattr(monitor, "build_campaign_profitability", profitability)
     monkeypatch.setattr(
-        monitor,
+        monitor._policy,
+        "build_campaign_profitability",
+        profitability,
+    )
+    monkeypatch.setattr(
+        monitor._policy,
         "build_account_timezone_adsquad_report",
         group_report,
     )
-    monkeypatch.setattr(monitor, "build_account_timezone_ad_report", ad_report)
+    monkeypatch.setattr(
+        monitor._policy,
+        "build_account_timezone_ad_report",
+        ad_report,
+    )
 
     rows = asyncio.run(
         monitor._snapchat_child_entities(
@@ -332,8 +344,8 @@ def test_openai_failure_never_creates_mezan_fallback_recommendations(monkeypatch
     async def fail_openai(*_args, **_kwargs):
         raise RuntimeError("openai_api_key_missing")
 
-    monkeypatch.setattr(monitor, "_campaign_entities", campaign_entities)
-    monkeypatch.setattr(monitor, "_snapchat_child_entities", empty)
+    monkeypatch.setattr(monitor._policy, "_campaign_entities", campaign_entities)
+    monkeypatch.setattr(monitor._policy, "_snapchat_child_entities", empty)
     monkeypatch.setattr(monitor._legacy, "_meta_child_entities", empty)
     monkeypatch.setattr(
         monitor._legacy,
@@ -341,9 +353,9 @@ def test_openai_failure_never_creates_mezan_fallback_recommendations(monkeypatch
         no_meta_refresh,
     )
     monkeypatch.setattr(monitor._legacy, "_campaign_history_context", history)
-    monkeypatch.setattr(monitor, "_experiment_outcomes_context", experiments)
+    monkeypatch.setattr(monitor._policy, "_experiment_outcomes_context", experiments)
     monkeypatch.setattr(monitor._legacy, "_business_profit_context", profit)
-    monkeypatch.setattr(monitor, "_ask_openai", fail_openai)
+    monkeypatch.setattr(monitor._policy, "_ask_openai", fail_openai)
 
     db = FakeDB()
     result = asyncio.run(
@@ -386,7 +398,7 @@ def test_openai_payload_uses_executed_experiments_not_prior_mezan_recommendation
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setattr(monitor._legacy, "AsyncOpenAI", Client)
     asyncio.run(
-        monitor._ask_openai(
+        monitor._policy._ask_openai(
             [],
             now=datetime(2026, 8, 18, 12, tzinfo=timezone.utc),
             campaign_history={},
