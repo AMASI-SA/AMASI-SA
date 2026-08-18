@@ -13,8 +13,10 @@ const dashboardSource = fs.readFileSync(
 
 test("obsolete monthly, analysis-history, and salary cards are absent with the retired dashboard runtime", () => {
     expect(dashboardSource).toContain(
-        'if (sourceMode === "mezan_v2") return <AdvancedDashboard />;',
+        '<Navigate to="/dashboard-advanced" replace />',
     );
+    expect(dashboardSource).not.toContain("AdvancedDashboard");
+    expect(dashboardSource).not.toContain("sourceMode");
     expect(dashboardSource).not.toContain('data-testid="dashboard-salary-accrual-section"');
     expect(dashboardSource).not.toContain('data-testid="dashboard-monthly-performance-section"');
     expect(dashboardSource).not.toContain('data-testid="dashboard-recent-analyses-section"');
