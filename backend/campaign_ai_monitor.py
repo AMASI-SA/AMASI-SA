@@ -99,11 +99,14 @@ async def _runtime_ask_dispatch(*args: Any, **kwargs: Any):
     another through the wrong decision engine. A missing context means this is a
     direct diagnostic/unit-test call rather than a Production monitor run.
     """
-    _legacy.AsyncOpenAI = AsyncOpenAI
     try:
         _get_v3_context()
     except RuntimeError:
+        # Do not overwrite _legacy.AsyncOpenAI here. Established direct tests
+        # intentionally inject a fake client into the legacy module itself.
         return await _legacy_test_repairing_ask(*args, **kwargs)
+    # Production monitor wrapper installs the public client before setting the
+    # task-local context, so this branch is always the V3 runtime path.
     return await _v3_ask_openai(*args, **kwargs)
 
 
