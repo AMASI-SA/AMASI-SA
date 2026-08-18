@@ -28,11 +28,31 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: backend/requirements.txt
-      - name: Install backend dependencies
-        run: python -m pip install -q -r requirements.txt
+          python-version: "3.11"
+      - name: Install focused dependencies
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1
+          pydantic==2.13.4
+          pymongo==4.5.0
+          motor==3.3.1
+          httpx==0.28.1
+          openai==1.99.9
+          pytest==9.0.3
+          pytest-asyncio
+          openpyxl
+          cryptography
+          bcrypt
+          PyJWT
+          reportlab
+          python-multipart
+          python-dotenv
+          email-validator
+          pymupdf
+          pillow
+          qrcode
+          arabic-reshaper
+          python-bidi
       - name: Compile campaign AI policy
         run: >-
           python -m py_compile
