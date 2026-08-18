@@ -1,16 +1,16 @@
 """OpenAI-owned root-cause decision intelligence for Campaign AI V3.
 
 The existing scheduler, source collection, snapshot and approval path remain
-unchanged.  This module replaces only the marketing reasoning boundary:
+unchanged. This module replaces only the marketing reasoning boundary:
 
-1. first OpenAI pass diagnoses the ordered temporal/funnel/product evidence;
+1. first OpenAI pass diagnoses ordered temporal/funnel/product evidence;
 2. second OpenAI pass reviews every direct budget owner and counterfactually
    challenges the complete proposed recommendation set;
 3. code validates references and write safety, but never chooses a marketing
    action from ROAS/CPA thresholds.
 
 Business recommendations remain visible even when they cannot be executed by an
-Ads API.  In that case the internal legacy action is projected to ``monitor``
+Ads API. In that case the internal legacy action is projected to ``monitor``
 only to keep the old execution endpoint fail-closed; the rich
 ``recommended_action`` remains unchanged in the public snapshot.
 """
@@ -35,12 +35,14 @@ from campaign_ai_decision_schema_v3 import (
 )
 from campaign_ai_evidence_v3 import build_decision_evidence_pack_v3
 from campaign_ai_runtime_context_v3 import get_runtime_context
+from campaign_ai_visual_evidence_v3 import responses_input
 
 
 V3_MARKER = "decision_intelligence_v3"
 COUNTERFACTUAL_MARKER = "counterfactual_review_v3"
 BUDGET_OWNER_REVIEW_MARKER = "budget_owner_review_v3"
 REVIEW_INCOMPLETE_MARKER = "decision_v3_review_incomplete"
+VISUAL_FALLBACK_MARKER = "decision_v3_visual_input_text_fallback"
 
 CREATIVE_ACTIONS = {
     "TEST_NEW_CREATIVE", "REFRESH_CREATIVE", "TEST_NEW_HOOK", "SHORTEN_VIDEO",
@@ -86,6 +88,11 @@ def _decision_key(item: DecisionRecommendationV3) -> tuple[str, str, str, str]:
         str(item.account_id or ""),
         str(item.entity_id),
     )
+
+
+def _canonical_recommendation_id(row: dict[str, Any], entity_id: str | None = None) -> str:
+    provider, level, account_id, candidate_entity_id = _candidate_key(row)
+    return f"{provider}:{level}:{account_id or 'unknown'}:{entity_id or candidate_entity_id}"
 
 
 def _expected_action_type(action: str) -> str:
@@ -222,7 +229,8 @@ def _normalize_decision_output(
             continue
         seen.add(key)
 
-        recommendation_id = f"{rich.provider}:{rich.entity_level}:{row.get('account_id') or 'unknown'}:{rich.entity_id}"
+        recommendation_id = _canonical_recommendation_id(row, rich.entity_id)
+        model_recommendation_id = str(rich.recommendation_id or "")
         product_id, destination_url, product_limits = _canonical_product_identity(
             evidence_pack,
             row,
@@ -249,7 +257,10 @@ def _normalize_decision_output(
             if _key_text(row) not in reviewed_budget_owners:
                 blockers.append("budget_owner_not_confirmed_in_final_review")
         if counterfactual_reviewed is not None and ads_write_requested:
-            if recommendation_id not in counterfactual_reviewed:
+            if (
+                recommendation_id not in counterfactual_reviewed
+                and model_recommendation_id not in counterfactual_reviewed
+            ):
                 blockers.append("counterfactual_review_not_confirmed")
 
         code_executable = bool(ads_write_requested and not blockers)
@@ -348,6 +359,53 @@ def _model() -> str:
     )
 
 
+def _visual_retryable(exc: Exception) -> bool:
+    """Retry text-only only for request-shape/image validation failures."""
+    return type(exc).__name__ in {"BadRequestError", "UnprocessableEntityError"}
+
+
+async def _structured_response(
+    client: Any,
+    *,
+    instructions: str,
+    payload: dict[str, Any],
+    evidence_pack: dict[str, Any],
+    schema_name: str,
+    schema: dict[str, Any],
+    max_output_tokens: int,
+) -> tuple[Any, int, bool]:
+    model_input, image_count = responses_input(
+        payload,
+        evidence_pack,
+        include_images=True,
+    )
+    kwargs = {
+        "model": _model(),
+        "instructions": instructions,
+        "input": model_input,
+        "max_output_tokens": max_output_tokens,
+        "reasoning": {"effort": "medium"},
+        "store": False,
+        "text": {"format": {
+            "type": "json_schema",
+            "name": schema_name,
+            "strict": True,
+            "schema": schema,
+        }},
+    }
+    try:
+        return await client.responses.create(**kwargs), image_count, False
+    except Exception as exc:
+        if not image_count or not _visual_retryable(exc):
+            raise
+        # A model/account/image URL can reject visual input. Retry the exact same
+        # marketing problem as text-only; this is transport degradation, never a
+        # deterministic Mezan recommendation fallback.
+        text_input, _ = responses_input(payload, evidence_pack, include_images=False)
+        kwargs["input"] = text_input
+        return await client.responses.create(**kwargs), 0, True
+
+
 FIRST_PASS_INSTRUCTIONS = """
 أنت محلل أداء وتسويق إلكتروني مستقل لمتجر أماسي وصاحب الحكم التسويقي النهائي.
 الكود يجمع الحقائق ويضمن الجودة والأمان والتنفيذ، لكنه لا يقرر أن ROAS أو CPA معين يعني Pause.
@@ -371,6 +429,8 @@ Purchase ضعيف ترفع فرضيات Checkout/Payment/Shipping/Website/Tracki
 افحص المنتج قبل لوم الإعلان: Destination URL، الصفحة العامة، Visibility، السعر والعرض، الخيارات
 والـVariants، المخزون، قابلية Add To Cart، وتناسق Ad↔Product Page. لا توصي Scale إذا الأدلة لا تثبت
 أن المنتج/الصفحة/المخزون يستطيع استيعاب الزيادة. إذا الرابط أو المنتج نفسه معطل فشخّص السبب الحقيقي.
+إذا وصلك Visual evidence لصور المنتج، حلله كصور فعلية: وضوح المنتج، Crop، الخلفية، الاستخدام،
+التفاصيل، ترتيب Hero/Gallery، ومدى توافقها مع الرسالة. لا تستنتج ما لا يظهر في الصورة.
 
 استخدم Video/Funnel metrics كEvidence Framework لا كقوانين: drop مبكر قد يعني Hook، drop وسط قد
 يعني pacing/relevance، completion جيد مع CTR ضعيف قد يعني CTA/Offer، CTR جيد مع ATC ضعيف قد يعني
@@ -396,7 +456,7 @@ Learning/partial-day/attribution delay/creative count تفسر النتائج أ
 
 SECOND_PASS_INSTRUCTIONS = """
 هذه الجولة النهائية Counterfactual + Budget-owner Review وليست إعادة قواعد من ميزان.
-راجع القرار الأول من الصفر أمام الأدلة نفسها. يجب:
+راجع القرار الأول من الصفر أمام الأدلة نفسها، بما فيها الصور الفعلية إن أُرسلت. يجب:
 1) مراجعة كل key في required_budget_owner_keys حتى لا تُغفل حملة/مجموعة ذات صرف أو أثر كبير.
 2) مراجعة كل توصية أولية وتسأل: ما الدليل الذي قد يجعلها خاطئة؟
 3) قبل أي PAUSE راجع تحديدًا CTR/ATC/Checkout/carts/payment/learning/partial-day/attribution/history/
@@ -406,6 +466,8 @@ creative-count/product/page/inventory. إذا كان تفسير Downstream أق�
 أي توصية أولية وإضافة توصية أغفلها المرور الأول.
 6) reviewed_budget_owner_keys يجب أن يسرد كل owner تمت مراجعته، و
 counterfactual_reviewed_recommendation_ids يجب أن يسرد recommendation_id لكل توصية نهائية راجعتها.
+يفضل استخدام recommendation_id بصيغة provider:level:account_id:entity_id. إذا احتفظت بمعرف الجولة
+الأولى المختلف، اذكره كما هو؛ طبقة الأمان تطابقه مع الهدف الفعلي ولا تعتمد على النص وحده.
 OpenAI وحده صاحب الحكم التسويقي؛ لا توجد عتبة ROAS/CPA برمجية تجبر قرارًا.
 """.strip()
 
@@ -430,37 +492,35 @@ def build_decision_v3_ask_openai(legacy: Any, policy: Any, alignment: Any) -> Ca
         )
         safe_rows = [alignment._safe_candidate(row) for row in candidates]
         client = _openai_client(legacy)
+        visual_fallback = False
         try:
-            first_response = await client.responses.create(
-                model=_model(),
+            first_payload = {
+                "next_check_at": next_check,
+                "current_market_context": legacy._saudi_calendar_context(now),
+                "active_entities": safe_rows,
+                "decision_evidence_v3": evidence_pack,
+                "overall_store_profit_context": business_profit,
+                "executed_experiments": prior_decisions,
+                "legacy_campaign_history_context": campaign_history,
+                "source_contract": {
+                    "snapchat_entity_metrics": policy.SNAPCHAT_AI_PLATFORM_SOURCE,
+                    "snapchat_action_report_time": policy.SNAPCHAT_AI_ACTION_REPORT_TIME,
+                    "campaign_salla_profit": policy.SNAPCHAT_AI_SALLA_SOURCE,
+                    "salla_child_attribution_allowed": False,
+                    "mezan_previous_recommendations_allowed": False,
+                    "mezan_fallback_decisions_allowed": False,
+                },
+            }
+            first_response, _first_images, first_fallback = await _structured_response(
+                client,
                 instructions=FIRST_PASS_INSTRUCTIONS,
-                input=json.dumps({
-                    "next_check_at": next_check,
-                    "current_market_context": legacy._saudi_calendar_context(now),
-                    "active_entities": safe_rows,
-                    "decision_evidence_v3": evidence_pack,
-                    "overall_store_profit_context": business_profit,
-                    "executed_experiments": prior_decisions,
-                    "legacy_campaign_history_context": campaign_history,
-                    "source_contract": {
-                        "snapchat_entity_metrics": policy.SNAPCHAT_AI_PLATFORM_SOURCE,
-                        "snapchat_action_report_time": policy.SNAPCHAT_AI_ACTION_REPORT_TIME,
-                        "campaign_salla_profit": policy.SNAPCHAT_AI_SALLA_SOURCE,
-                        "salla_child_attribution_allowed": False,
-                        "mezan_previous_recommendations_allowed": False,
-                        "mezan_fallback_decisions_allowed": False,
-                    },
-                }, ensure_ascii=False, default=str),
+                payload=first_payload,
+                evidence_pack=evidence_pack,
+                schema_name="campaign_decision_intelligence_v3",
+                schema=v3_json_schema(),
                 max_output_tokens=max(legacy.OPENAI_MAX_OUTPUT_TOKENS, 24000),
-                reasoning={"effort": "medium"},
-                store=False,
-                text={"format": {
-                    "type": "json_schema",
-                    "name": "campaign_decision_intelligence_v3",
-                    "strict": True,
-                    "schema": v3_json_schema(),
-                }},
             )
+            visual_fallback = visual_fallback or first_fallback
             if getattr(first_response, "status", None) == "incomplete":
                 details = getattr(first_response, "incomplete_details", None)
                 reason = legacy._text(getattr(details, "reason", "unknown"), limit=80) or "unknown"
@@ -471,30 +531,26 @@ def build_decision_v3_ask_openai(legacy: Any, policy: Any, alignment: Any) -> Ca
                 raise policy.CampaignOpenAIError("openai_v3_first_validation_error") from exc
 
             required_budget_owners = _budget_owner_keys(candidates, alignment)
-            first_ids = [str(item.recommendation_id) for item in first.recommendations]
-            review_response = await client.responses.create(
-                model=_model(),
+            review_payload = {
+                "next_check_at": next_check,
+                "required_budget_owner_keys": required_budget_owners,
+                "first_pass_recommendations": first.model_dump(),
+                "active_entities": safe_rows,
+                "decision_evidence_v3": evidence_pack,
+                "overall_store_profit_context": business_profit,
+                "executed_experiments": prior_decisions,
+                "current_market_context": legacy._saudi_calendar_context(now),
+            }
+            review_response, _review_images, review_fallback = await _structured_response(
+                client,
                 instructions=SECOND_PASS_INSTRUCTIONS,
-                input=json.dumps({
-                    "next_check_at": next_check,
-                    "required_budget_owner_keys": required_budget_owners,
-                    "first_pass_recommendations": first.model_dump(),
-                    "active_entities": safe_rows,
-                    "decision_evidence_v3": evidence_pack,
-                    "overall_store_profit_context": business_profit,
-                    "executed_experiments": prior_decisions,
-                    "current_market_context": legacy._saudi_calendar_context(now),
-                }, ensure_ascii=False, default=str),
+                payload=review_payload,
+                evidence_pack=evidence_pack,
+                schema_name="campaign_decision_review_v3",
+                schema=review_json_schema(),
                 max_output_tokens=max(legacy.OPENAI_MAX_OUTPUT_TOKENS, 24000),
-                reasoning={"effort": "medium"},
-                store=False,
-                text={"format": {
-                    "type": "json_schema",
-                    "name": "campaign_decision_review_v3",
-                    "strict": True,
-                    "schema": review_json_schema(),
-                }},
             )
+            visual_fallback = visual_fallback or review_fallback
             if getattr(review_response, "status", None) == "incomplete":
                 # First pass is still useful diagnostically, but no Ads write may
                 # bypass the mandatory final review.
@@ -511,6 +567,7 @@ def build_decision_v3_ask_openai(legacy: Any, policy: Any, alignment: Any) -> Ca
                 final_legacy.limitations = list(dict.fromkeys([
                     *final_legacy.limitations,
                     REVIEW_INCOMPLETE_MARKER,
+                    *([VISUAL_FALLBACK_MARKER] if visual_fallback else []),
                 ]))
                 return final_legacy
             try:
@@ -530,6 +587,7 @@ def build_decision_v3_ask_openai(legacy: Any, policy: Any, alignment: Any) -> Ca
                     *final_legacy.limitations,
                     REVIEW_INCOMPLETE_MARKER,
                     "openai_v3_review_validation_error",
+                    *([VISUAL_FALLBACK_MARKER] if visual_fallback else []),
                 ]))
                 return final_legacy
 
@@ -549,6 +607,8 @@ def build_decision_v3_ask_openai(legacy: Any, policy: Any, alignment: Any) -> Ca
             review_limits = list(review.review_limitations)
             if missing_budget:
                 review_limits.append(f"budget_owner_review_missing_count:{len(missing_budget)}")
+            if visual_fallback:
+                review_limits.append(VISUAL_FALLBACK_MARKER)
             final_legacy.limitations = list(dict.fromkeys([
                 *final_legacy.limitations,
                 *review_limits,
@@ -565,7 +625,10 @@ def build_decision_v3_ask_openai(legacy: Any, policy: Any, alignment: Any) -> Ca
 __all__ = [
     "BUDGET_OWNER_REVIEW_MARKER",
     "COUNTERFACTUAL_MARKER",
+    "FIRST_PASS_INSTRUCTIONS",
     "REVIEW_INCOMPLETE_MARKER",
+    "SECOND_PASS_INSTRUCTIONS",
     "V3_MARKER",
+    "VISUAL_FALLBACK_MARKER",
     "build_decision_v3_ask_openai",
 ]
