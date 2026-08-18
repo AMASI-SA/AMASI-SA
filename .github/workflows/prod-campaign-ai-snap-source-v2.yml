@@ -1,0 +1,55 @@
+name: Production Campaign AI Snapchat Source V2
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "backend/campaign_ai_monitor.py"
+      - "backend/campaign_ai_monitor_legacy.py"
+      - "backend/tests/test_campaign_ai_monitor.py"
+      - "backend/tests/test_campaign_ai_source_policy_v2.py"
+      - "backend/integrations_control_center/snapchat_account_timezone_manager.py"
+      - "backend/integrations_control_center/snapchat_adsquad_performance.py"
+      - "backend/integrations_control_center/snapchat_ad_performance.py"
+      - "backend/integrations_control_center/snapchat_campaign_profitability.py"
+      - ".github/workflows/prod-campaign-ai-snap-source-v2.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  source-contract:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install backend dependencies
+        run: python -m pip install -q -r requirements.txt
+      - name: Compile campaign AI policy
+        run: >-
+          python -m py_compile
+          campaign_ai_monitor.py
+          campaign_ai_monitor_legacy.py
+          tests/test_campaign_ai_source_policy_v2.py
+      - name: Run campaign AI regression suite
+        run: >-
+          python -m pytest -q
+          tests/test_campaign_ai_monitor.py
+          tests/test_campaign_ai_source_policy_v2.py
+          --tb=short
+      - name: Enforce source-of-truth policy
+        run: |
+          grep -q 'SNAPCHAT_AI_ACTION_REPORT_TIME = "conversion"' campaign_ai_monitor.py
+          grep -q '"executed_experiments": prior_decisions' campaign_ai_monitor.py
+          ! grep -q '"prior_mezan_ai_decisions"' campaign_ai_monitor.py
+          ! grep -q 'recommendation_source = "mezan_fallback"' campaign_ai_monitor.py
+          grep -q '"salla_child_attribution_allowed": False' campaign_ai_monitor.py
+          grep -q '"previous_mezan_recommendations_used": False' campaign_ai_monitor.py
