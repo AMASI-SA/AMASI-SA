@@ -1,17 +1,14 @@
 import { Navigate } from "react-router-dom";
-import AdvancedDashboard from "./AdvancedDashboard";
 import "./retiredDashboard.css";
 
 /**
- * Compatibility boundary for the retired dashboard implementation.
+ * Frozen compatibility boundary for every retired dashboard surface.
  *
- * `/dashboard-v2` remains the Mezan 2 home route, but it now renders the
- * advanced dashboard directly inside the Mezan 2 navigation shell. The older
- * `/legacy-dashboard` bookmark redirects to the supported advanced route.
- * The former dashboard implementation and all of its polling/API side effects
- * are intentionally removed.
+ * Both the legacy Mezan dashboard and the former Mezan 2 dashboard converge
+ * immediately on the single supported advanced dashboard. The retired UI is
+ * never rendered here, so none of its timers, requests, observers, or local
+ * state can start from these compatibility routes.
  */
-export default function RetiredDashboard({ sourceMode = "legacy" }) {
-    if (sourceMode === "mezan_v2") return <AdvancedDashboard />;
+export default function RetiredDashboard() {
     return <Navigate to="/dashboard-advanced" replace />;
 }
