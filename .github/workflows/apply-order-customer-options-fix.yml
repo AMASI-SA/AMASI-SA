@@ -71,7 +71,7 @@ jobs:
           PY
 
       - name: Install focused Python test dependencies
-        run: python -m pip install --disable-pip-version-check pytest pydantic
+        run: python -m pip install --disable-pip-version-check pytest pydantic openpyxl
 
       - name: Run focused backend tests
         env:
