@@ -1,0 +1,47 @@
+name: Mobile Session Security
+
+on:
+  pull_request:
+    paths:
+      - "backend/auth.py"
+      - "backend/mobile_session_security.py"
+      - "backend/tests/test_mobile_session_security.py"
+      - ".github/workflows/mobile-session-security.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  native-refresh-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused auth dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            "pytest==9.0.3" \
+            "pytest-asyncio==1.3.0" \
+            "bcrypt==4.3.0" \
+            "fastapi==0.110.1" \
+            "starlette==0.37.2" \
+            "pymongo==4.5.0" \
+            "PyJWT==2.13.0"
+      - name: Compile native session boundary
+        env:
+          JWT_SECRET: ci-only-mobile-session-secret
+        run: >-
+          PYTHONPATH=backend python -m py_compile
+          backend/mobile_session_security.py
+          backend/auth.py
+          backend/tests/test_mobile_session_security.py
+      - name: Run native refresh security contracts
+        env:
+          JWT_SECRET: ci-only-mobile-session-secret
+        run: >-
+          PYTHONPATH=backend python -m pytest -q
+          backend/tests/test_mobile_session_security.py
