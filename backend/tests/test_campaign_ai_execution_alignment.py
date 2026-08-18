@@ -68,6 +68,15 @@ def recommendation_payload(*, level, entity_id, action, change_percent=15):
     }
 
 
+def recommendation_model(*, level, entity_id, action, change_percent=15):
+    return monitor.RecommendationItem(**recommendation_payload(
+        level=level,
+        entity_id=entity_id,
+        action=action,
+        change_percent=change_percent,
+    ))
+
+
 def install_fake_openai(monkeypatch, recommendation, captured):
     class Responses:
         async def create(self, **kwargs):
@@ -231,3 +240,81 @@ def test_public_guard_removes_old_ad_budget_card_but_keeps_executable_parent_car
     assert [item["entity_id"] for item in result["recommendations"]] == ["group-1"]
     assert result["execution_alignment_suppressed"] == 1
     assert "non_executable_ad_budget_recommendation_suppressed" in result["limitations"]
+
+
+class FakeCollection:
+    def __init__(self):
+        self.inserted = []
+        self.updated = []
+
+    async def insert_one(self, value):
+        self.inserted.append(value)
+
+    async def update_one(self, query, update, **_kwargs):
+        self.updated.append((query, update))
+
+
+class FakeDB:
+    def __init__(self):
+        self.collections = {}
+
+    def __getitem__(self, name):
+        return self.collections.setdefault(name, FakeCollection())
+
+
+def test_monitor_marks_valid_ad_group_budget_action_as_approvable(monkeypatch):
+    group = candidate(level="ad_group", entity_id="group-1", budget=70.0, spend=180.0)
+
+    async def campaign_entities(_db, _user, _provider, _start, _end):
+        return []
+
+    async def snapchat_children(*_args, **_kwargs):
+        return [group]
+
+    async def empty(*_args, **_kwargs):
+        return []
+
+    async def history(*_args, **_kwargs):
+        return {}
+
+    async def experiments(*_args, **_kwargs):
+        return {"source": "owner_approved_executed_changes_only", "experiments": []}
+
+    async def profit(*_args, **_kwargs):
+        return {"available": False}
+
+    async def openai_result(*_args, **_kwargs):
+        return monitor.RecommendationOutput(
+            summary="تحليل OpenAI",
+            recommendations=[recommendation_model(
+                level="ad_group",
+                entity_id="group-1",
+                action="reduce",
+            )],
+            limitations=[],
+        )
+
+    monkeypatch.setattr(monitor._policy, "_campaign_entities", campaign_entities)
+    monkeypatch.setattr(monitor._policy, "_snapchat_child_entities", snapchat_children)
+    monkeypatch.setattr(monitor._legacy, "_meta_child_entities", empty)
+    monkeypatch.setattr(monitor._legacy, "_campaign_history_context", history)
+    monkeypatch.setattr(monitor._policy, "_experiment_outcomes_context", experiments)
+    monkeypatch.setattr(monitor._legacy, "_business_profit_context", profit)
+    monkeypatch.setattr(monitor._policy, "_ask_openai", openai_result)
+
+    db = FakeDB()
+    result = asyncio.run(monitor.run_campaign_ai_monitor(
+        db,
+        "owner",
+        now=lambda: datetime(2026, 8, 18, 12, tzinfo=timezone.utc),
+        refresh_meta=False,
+    ))
+
+    assert result["recommendation_source"] == "openai"
+    assert len(result["recommendations"]) == 1
+    item = result["recommendations"][0]
+    assert item["entity_level"] == "ad_group"
+    assert item["action"] == "reduce"
+    assert item["approval_available"] is True
+    assert item["execution_status"] == "awaiting_approval"
+    assert item["recommendation_id"] in result["execution_targets"]
