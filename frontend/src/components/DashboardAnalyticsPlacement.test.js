@@ -1,128 +1,57 @@
 const fs = require("fs");
 const path = require("path");
 
-const componentsDir = __dirname;
-const layoutSource = fs.readFileSync(
-    path.join(componentsDir, "Layout.jsx"),
-    "utf8",
-);
-const placementSource = fs.readFileSync(
-    path.join(componentsDir, "DashboardAnalyticsPlacement.jsx"),
-    "utf8",
-);
-const filtersSource = fs.readFileSync(
-    path.join(componentsDir, "AdvancedFilters.jsx"),
-    "utf8",
-);
-const dashboardSource = fs.readFileSync(
-    path.join(componentsDir, "../pages/Dashboard.jsx"),
-    "utf8",
-);
+function read(relativePath) {
+    return fs.readFileSync(path.join(__dirname, "..", relativePath), "utf8");
+}
+
+const dashboardCompatibilitySource = read("pages/Dashboard.jsx");
+const advancedDashboardSource = read("pages/AdvancedDashboard.jsx");
+const analyticsPlacementSource = read("components/DashboardAnalyticsPlacement.jsx");
+const snapchatPlacementSource = read("components/DashboardSnapchatAccountsPlacement.jsx");
 
 
-test("Layout delegates dashboard reports to the profit-summary placement", () => {
-    expect(layoutSource).toContain(
-        'import DashboardAnalyticsPlacement from "./DashboardAnalyticsPlacement"',
+test("all retired dashboard compatibility routes redirect to the advanced dashboard", () => {
+    expect(dashboardCompatibilitySource).toContain(
+        '<Navigate to="/dashboard-advanced" replace />',
     );
-    expect(layoutSource).toContain(
-        'const isLegacyDashboard = location.pathname === "/legacy-dashboard"',
-    );
-    expect(layoutSource).toContain(
-        'const isMezanV2Dashboard = location.pathname === "/dashboard-v2"',
-    );
-    expect(layoutSource).toContain(
-        "const showsDashboardAnalytics = isLegacyDashboard || isMezanV2Dashboard",
-    );
-    expect(layoutSource).toContain(
-        "<DashboardAnalyticsPlacement active={showsDashboardAnalytics} />",
-    );
-    expect(layoutSource).not.toContain(
-        'import GoogleAnalyticsRealtimeCards from "./GoogleAnalyticsRealtimeCards"',
-    );
-    expect(layoutSource).not.toContain(
-        'import GoogleAnalyticsTrafficSourcesCard from "./GoogleAnalyticsTrafficSourcesCard"',
-    );
+    expect(dashboardCompatibilitySource).not.toContain("AdvancedDashboard");
+    expect(dashboardCompatibilitySource).not.toMatch(/api\.(get|post|put|patch|delete)\(/);
+    expect(dashboardCompatibilitySource).not.toContain("setInterval(");
+    expect(dashboardCompatibilitySource).not.toContain("setTimeout(");
+    expect(dashboardCompatibilitySource).not.toContain("useEffect(");
+    expect(dashboardCompatibilitySource).not.toContain("useState(");
 });
 
 
-test("GA4, one live profit summary, and ads spend share one RTL report grid", () => {
-    expect(placementSource).toContain(
-        "'[data-testid=\"profit-summary-card\"]'",
-    );
-    expect(placementSource).toContain(
-        'currentGrid.className = "mt-6 grid grid-cols-1 gap-4 xl:grid-cols-3 xl:items-stretch"',
-    );
-    expect(placementSource).toContain(
-        "currentGrid.append(currentGaHost, currentProfitHost, currentAdsHost)",
-    );
-    expect(placementSource).toContain(
-        "currentProfitHost.replaceChildren(currentProfit)",
-    );
-    expect(placementSource).toContain(
-        "const candidate = newestLiveProfitCandidate(document, currentProfitHost)",
-    );
-    expect(placementSource).toContain(
-        "const outsideHost = candidates.filter((node) => node.parentElement !== profitHost)",
-    );
-    expect(placementSource).not.toContain(
-        "const candidate = document.querySelector(PROFIT_SUMMARY_SELECTOR)",
-    );
-    expect(placementSource).not.toContain(
-        "currentProfitHost.appendChild(candidate)",
-    );
-    expect(placementSource).toContain("<GoogleAnalyticsRealtimeCards />");
-    expect(placementSource).toContain("<DashboardAdsSpendCard");
-    expect(placementSource).toContain("fromDate={dateRange.fromDate}");
-    expect(placementSource).toContain("toDate={dateRange.toDate}");
-    expect(placementSource).toContain("<GoogleAnalyticsTrafficSourcesCard />");
-
-    // Dashboard owns exactly one React ProfitSummaryCard. The placement may
-    // relocate the newest live DOM node, but it must never render a second JSX
-    // summary or leave the older moved node visible after a date refresh.
-    expect((dashboardSource.match(/<ProfitSummaryCard\b/g) || [])).toHaveLength(1);
-    expect(placementSource).toContain(
-        "currentProfitHost.removeChild(currentProfit)",
-    );
+test("legacy dashboard placement components mount no observers, portals, or polling", () => {
+    for (const source of [analyticsPlacementSource, snapchatPlacementSource]) {
+        expect(source).toContain("return null;");
+        expect(source).not.toContain("MutationObserver");
+        expect(source).not.toContain("createPortal");
+        expect(source).not.toContain("requestAnimationFrame");
+        expect(source).not.toContain("setInterval(");
+        expect(source).not.toMatch(/api\.(get|post|put|patch|delete)\(/);
+    }
 });
 
 
-test("dashboard date filters expose one date source for profit and ads reports", () => {
-    expect(filtersSource).toContain('data-testid="advanced-filters"');
-    expect(filtersSource).toContain('data-date-preset={value.preset || ""}');
-    expect(filtersSource).toContain('data-from-date={value.from || ""}');
-    expect(filtersSource).toContain('data-to-date={value.to || value.from || ""}');
-    expect(placementSource).toContain(
-        'const FILTER_SELECTOR = \'[data-testid="advanced-filters"]\'',
-    );
-    expect(placementSource).toContain(
-        'filters?.getAttribute("data-from-date")',
-    );
-    expect(placementSource).toContain(
-        'filters?.getAttribute("data-to-date")',
-    );
+test("the advanced dashboard owns GA4, ads, payment fees, and profit details", () => {
+    expect(advancedDashboardSource).toContain("<AdsExecutiveBreakdownTable");
+    expect(advancedDashboardSource).toContain("buildPaymentFeeRows(rows)");
+    expect(advancedDashboardSource).toContain('testid="advanced-profit-payment-details"');
+    expect(advancedDashboardSource).toContain('data-testid="advanced-ga-active-chart"');
+    expect(advancedDashboardSource).toContain("<GaLive data={ga} />");
+    expect(advancedDashboardSource).toContain("<AdsCard ads={data?.ads_v2}");
 });
 
 
-test("Mezan V2 hides legacy-only salary and analysis sections", () => {
-    expect(dashboardSource).toContain(
-        '!isMezanV2 && !hiddenCards.includes("salary_accrual_card")',
+test("the advanced dashboard retains governed date refresh and latest-snapshot behavior", () => {
+    expect(advancedDashboardSource).toContain(
+        'const response = await api.get(`/dashboard-v2?${query.toString()}`',
     );
-    expect(dashboardSource).toContain(
-        "{!isMezanV2 && (<>",
-    );
-    expect(dashboardSource).toContain(
-        'data-testid="dashboard-monthly-performance-section"',
-    );
-    expect(dashboardSource).toContain(
-        'data-testid="dashboard-recent-analyses-section"',
-    );
-});
-
-
-test("Mezan V2 uses independent full Snapchat account cards", () => {
-    expect(dashboardSource).toContain(
-        'endpoint="/dashboard-v2/snapchat-accounts-summary"',
-    );
-    expect(dashboardSource).toContain('variant="separated"');
-    expect(dashboardSource).toContain("{!isMezanV2 && snapSummary && (");
+    expect(advancedDashboardSource).toContain("requestSequenceRef");
+    expect(advancedDashboardSource).toContain("backgroundRefreshInFlightRef");
+    expect(advancedDashboardSource).toContain("DASHBOARD_AUTO_REFRESH_MS");
+    expect(advancedDashboardSource).toContain("Keep the last good cart snapshot");
 });

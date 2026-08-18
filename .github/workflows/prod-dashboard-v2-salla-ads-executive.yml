@@ -12,6 +12,7 @@ on:
       - "frontend/src/components/ProfitSummaryCard.jsx"
       - "frontend/src/components/ProfitSummaryCard.adsExecutive.test.jsx"
       - "frontend/src/pages/Dashboard.jsx"
+      - "frontend/src/pages/AdvancedDashboard.jsx"
       - ".github/workflows/prod-dashboard-v2-salla-ads-executive.yml"
 
 permissions:
@@ -94,16 +95,17 @@ jobs:
         env:
           CI: "false"
         run: yarn build
-      - name: Enforce inline table and source labels
+      - name: Enforce advanced inline table and source labels
         working-directory: .
         run: |
           TABLE=frontend/src/components/AdsExecutiveBreakdownTable.jsx
           CARD=frontend/src/components/ProfitSummaryCard.jsx
-          DASH=frontend/src/pages/Dashboard.jsx
+          ADVANCED=frontend/src/pages/AdvancedDashboard.jsx
           grep -q 'ads-executive-breakdown-table' "$TABLE"
           grep -q 'متوسط تكلفة الطلب' "$TABLE"
           grep -q 'المبيعات / العائد' "$TABLE"
           grep -q 'سلة: الطلبات والمبيعات' "$TABLE"
           grep -q 'المنصة: الصرف وتكلفة الطلب' "$TABLE"
           grep -q 'tooltip={adsExecutiveTooltip}' "$CARD"
-          grep -q 'adsExecutiveBreakdown={isMezanV2' "$DASH"
+          grep -q 'testid="advanced-profit-ads-details"' "$ADVANCED"
+          grep -q '<AdsExecutiveBreakdownTable data={data?.ads_v2?.executive_breakdown} />' "$ADVANCED"
