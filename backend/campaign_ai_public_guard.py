@@ -8,6 +8,11 @@ worker can never surface ``mezan_fallback`` recommendations to the dashboard.
 If a legacy fallback snapshot races with a still-valid OpenAI snapshot, the
 recent OpenAI snapshot remains visible for its normal five-hour validity window
 instead of disappearing from the dashboard.
+
+The guard also removes historical OpenAI budget actions aimed directly at an ad.
+Ads do not own a daily budget in the current Snapchat/Meta execution contracts;
+showing such a card without an approval button is misleading.  New analysis is
+prevented from creating those combinations by ``campaign_ai_execution_alignment``.
 """
 from __future__ import annotations
 
@@ -21,6 +26,7 @@ RECOMMENDATION_COLLECTION = "mezan_campaign_ai_recommendations_v1"
 BLOCKED_RECOMMENDATION_SOURCES = {"mezan_fallback"}
 VALID_OPENAI_SOURCE = "openai"
 OPENAI_SNAPSHOT_VALIDITY = timedelta(hours=5)
+BUDGET_ACTIONS = {"reduce", "scale"}
 
 
 def _text(value: Any, *, limit: int = 120) -> str:
@@ -75,6 +81,38 @@ def _recent_valid_openai(
     return timedelta(0) <= age <= OPENAI_SNAPSHOT_VALIDITY
 
 
+def _strip_unexecutable_budget_recommendations(
+    public: dict[str, Any],
+) -> dict[str, Any]:
+    """Remove stale ad-level reduce/scale cards; never retarget them to a parent."""
+    recommendations = public.get("recommendations") or []
+    kept: list[Any] = []
+    removed = 0
+    for item in recommendations:
+        if not isinstance(item, dict):
+            kept.append(item)
+            continue
+        if (
+            _text(item.get("entity_level"), limit=30) == "ad"
+            and _text(item.get("action"), limit=30) in BUDGET_ACTIONS
+        ):
+            removed += 1
+            continue
+        kept.append(item)
+
+    if not removed:
+        return public
+
+    sanitized = dict(public)
+    sanitized["recommendations"] = kept
+    sanitized["execution_alignment_suppressed"] = removed
+    limitations = list(sanitized.get("limitations") or [])
+    if "non_executable_ad_budget_recommendation_suppressed" not in limitations:
+        limitations.append("non_executable_ad_budget_recommendation_suppressed")
+    sanitized["limitations"] = limitations
+    return sanitized
+
+
 def _public_document(document: dict[str, Any] | None) -> dict[str, Any]:
     if not document:
         return {
@@ -92,7 +130,7 @@ def _public_document(document: dict[str, Any] | None) -> dict[str, Any]:
         if key not in {"_id", "user_id", "execution_targets"}
     }
     if not _fallback_present(public):
-        return {"available": True, **public}
+        return {"available": True, **_strip_unexecutable_budget_recommendations(public)}
 
     limitations = list(public.get("limitations") or [])
     if "legacy_mezan_fallback_suppressed" not in limitations:
@@ -185,8 +223,14 @@ def attach_campaign_ai_public_guard(
             .sort("generated_at", -1)
             .limit(limit)
         )
+        documents = await cursor.to_list(length=limit)
+        items = []
+        for document in documents:
+            public = _public_document(document)
+            public.pop("available", None)
+            items.append(public)
         return {
-            "items": await cursor.to_list(length=limit),
+            "items": items,
             "mode": "recommend_then_approve",
         }
 
@@ -197,4 +241,5 @@ __all__ = [
     "_public_document",
     "_public_recent_openai_after_fallback",
     "_recent_valid_openai",
+    "_strip_unexecutable_budget_recommendations",
 ]
