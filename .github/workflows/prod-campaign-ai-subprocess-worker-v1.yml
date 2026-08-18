@@ -26,8 +26,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install focused test dependency
-        run: python -m pip install -q pytest
+      - name: Install focused test dependencies
+        run: python -m pip install -q pytest openpyxl
       - name: Compile isolated scheduler and runner
         run: >-
           python -m py_compile
