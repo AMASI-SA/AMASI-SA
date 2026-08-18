@@ -1,16 +1,17 @@
 """Compose Decision Intelligence V3 evidence without changing the V2 pipeline.
 
 The pack is keyed by the exact candidates already selected by the established
-Campaign AI run.  It adds temporal, funnel, product, cart, cross-platform and
-retrieved marketing-knowledge evidence.  All arithmetic is descriptive; this
-module never maps metrics to pause/scale decisions.
+Campaign AI run.  Every optional evidence source degrades independently; a page
+probe or store-friction source cannot turn a valid provider analysis into a total
+AI outage.  Arithmetic remains descriptive and never selects pause/scale.
 """
 from __future__ import annotations
 
 from collections import defaultdict
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Awaitable
 
+from advertising_product_watch_v3 import ALERT_COLLECTION
 from campaign_ai_abandoned_cart_evidence_v3 import build_abandoned_cart_evidence
 from campaign_ai_funnel_evidence_v3 import build_funnel_evidence
 from campaign_ai_knowledge_retrieval_v3 import (
@@ -19,6 +20,7 @@ from campaign_ai_knowledge_retrieval_v3 import (
 )
 from campaign_ai_product_intelligence_v3 import build_product_intelligence
 from campaign_ai_public_page_probe_v3 import probe_product_page
+from campaign_ai_store_friction_evidence_v3 import build_store_friction_evidence
 from campaign_ai_temporal_evidence_v3 import build_sequential_temporal_evidence
 
 
@@ -46,6 +48,13 @@ def _entity_key(row: dict[str, Any]) -> str:
         str(row.get("account_id") or ""),
         str(row.get("entity_id") or ""),
     ))
+
+
+async def _capture(label: str, awaitable: Awaitable[Any], *, default: Any) -> tuple[Any, str | None]:
+    try:
+        return await awaitable, None
+    except Exception as exc:
+        return default, f"{label}_unavailable:{type(exc).__name__}"
 
 
 def _metric_totals(entity_rows: dict[str, Any], window: str) -> dict[str, dict[str, float]]:
@@ -189,6 +198,18 @@ def _compact_product_evidence(product_evidence: dict[str, Any]) -> dict[str, Any
     }
 
 
+async def _active_product_watch_alerts(db: Any, user_id: str) -> list[dict[str, Any]]:
+    rows = await db[ALERT_COLLECTION].find(
+        {"user_id": user_id, "status": "active"},
+        {"_id": 0, "user_id": 0},
+    ).sort("last_seen_at", -1).limit(100).to_list(length=100)
+    for row in rows:
+        for key in ("first_seen_at", "last_seen_at", "updated_at"):
+            if hasattr(row.get(key), "isoformat"):
+                row[key] = row[key].isoformat()
+    return rows
+
+
 def _retrieval_query(providers: list[str]) -> str:
     provider_text = " ".join(providers)
     return (
@@ -206,23 +227,51 @@ async def build_decision_evidence_pack_v3(
     end: date,
     current: datetime,
 ) -> dict[str, Any]:
-    temporal = await build_sequential_temporal_evidence(
-        db,
-        user_id,
-        candidates,
-        end=end,
-        current=current,
+    limitations: list[str] = []
+    temporal, error = await _capture(
+        "temporal_evidence",
+        build_sequential_temporal_evidence(db, user_id, candidates, end=end, current=current),
+        default={"schema_version": "campaign_ai_temporal_evidence_v3", "entities": {}},
     )
-    funnel = await build_funnel_evidence(db, user_id, candidates, end=end)
-    products = await build_product_intelligence(
-        db,
-        user_id,
-        candidates,
-        probe_pages=False,
+    if error: limitations.append(error)
+    funnel, error = await _capture(
+        "funnel_evidence",
+        build_funnel_evidence(db, user_id, candidates, end=end),
+        default={"schema_version": "campaign_ai_funnel_evidence_v3", "entities": {}, "limitations": []},
     )
-    await _bounded_public_probes(products, candidates)
+    if error: limitations.append(error)
+    products, error = await _capture(
+        "product_intelligence",
+        build_product_intelligence(db, user_id, candidates, probe_pages=False),
+        default={"schema_version": "campaign_ai_product_intelligence_v3", "entities": {}},
+    )
+    if error:
+        limitations.append(error)
+    else:
+        try:
+            await _bounded_public_probes(products, candidates)
+        except Exception as exc:
+            limitations.append(f"public_product_page_probe_unavailable:{type(exc).__name__}")
     products = _compact_product_evidence(products)
-    carts = await build_abandoned_cart_evidence(db, user_id, candidates, end=end)
+    carts, error = await _capture(
+        "abandoned_cart_evidence",
+        build_abandoned_cart_evidence(db, user_id, candidates, end=end),
+        default={"schema_version": "campaign_ai_abandoned_cart_evidence_v3", "entities": {}, "limitations": []},
+    )
+    if error: limitations.append(error)
+    store_friction, error = await _capture(
+        "store_friction_evidence",
+        build_store_friction_evidence(db, user_id, end=end),
+        default={"schema_version": "campaign_ai_store_friction_evidence_v3", "windows": {}, "scope": "unavailable"},
+    )
+    if error: limitations.append(error)
+    watch_alerts, error = await _capture(
+        "product_watch_alerts",
+        _active_product_watch_alerts(db, user_id),
+        default=[],
+    )
+    if error: limitations.append(error)
+
     providers = sorted({str(row.get("provider") or "") for row in candidates if row.get("provider")})
     cross = _cross_evidence(temporal, funnel)
     feature_flags = {
@@ -236,12 +285,13 @@ async def build_decision_evidence_pack_v3(
         "abandoned_cart_evidence_available": bool(carts.get("entities")),
     }
     topics = infer_retrieval_topics(feature_flags)
-    knowledge = await retrieve_marketing_knowledge(
-        db,
-        query=_retrieval_query(providers),
-        topics=topics,
-        limit=10,
+    knowledge, error = await _capture(
+        "marketing_knowledge_retrieval",
+        retrieve_marketing_knowledge(db, query=_retrieval_query(providers), topics=topics, limit=10),
+        default=[],
     )
+    if error: limitations.append(error)
+
     return {
         "schema_version": "campaign_ai_decision_evidence_pack_v3",
         "providers": providers,
@@ -249,6 +299,8 @@ async def build_decision_evidence_pack_v3(
         "funnel_and_creative": funnel,
         "product_intelligence": products,
         "abandoned_carts": carts,
+        "store_checkout_payment_shipping": store_friction,
+        "operational_product_watch_alerts": watch_alerts,
         "cross_campaign_cross_platform": cross,
         "marketing_knowledge": {
             "retrieval_topics": topics,
@@ -277,10 +329,13 @@ async def build_decision_evidence_pack_v3(
             "diagnose_before_action": True,
             "recommendation_is_separate_from_execution": True,
             "store_level_carts_must_not_become_campaign_revenue": True,
+            "store_payment_shipping_must_not_become_campaign_attribution": True,
             "salla_child_attribution_allowed": False,
             "context_is_explanatory_not_rule": True,
             "openai_is_final_marketing_decision_authority": True,
+            "optional_evidence_sources_degrade_independently": True,
         },
+        "limitations": list(dict.fromkeys(limitations)),
     }
 
 
