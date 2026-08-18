@@ -1,7 +1,7 @@
 """Replica-safe global cycle for Advertising Product Watch V3.
 
 This mirrors the proven Campaign AI cadence pattern: create one singleton
-control document, then claim only when due and not leased.  No upsert is used on
+control document, then claim only when due and not leased. No upsert is used on
 a conditional claim, so a non-claimable existing singleton cannot cause a
 DuplicateKey race across web replicas.
 """
@@ -22,6 +22,9 @@ from advertising_product_watch_v3 import (
     WATCH_INTERVAL_SECONDS,
     ensure_product_watch_indexes,
     scan_user_product_watch,
+)
+from campaign_ai_product_change_history_v3 import (
+    snapshot_recently_watched_products,
 )
 
 
@@ -139,14 +142,28 @@ async def run_global_product_watch(db: Any) -> dict[str, Any]:
     try:
         user_ids = await db[CAMPAIGN_PRODUCT_LINK_COLLECTION].distinct("user_id")
         summaries = []
+        content_snapshots = []
         for user_id in sorted(str(value) for value in user_ids if value):
-            summaries.append(await scan_user_product_watch(db, user_id))
+            scan = await scan_user_product_watch(db, user_id)
+            summaries.append(scan)
+            content_snapshots.append(await snapshot_recently_watched_products(
+                db,
+                user_id,
+            ))
         finished = await finish_cycle(db, owner, failed=False)
         return {
             "skipped": False,
             "users": len(summaries),
             "active_alerts": sum(int(row.get("active_alerts") or 0) for row in summaries),
             "watched_products": sum(int(row.get("watched_products") or 0) for row in summaries),
+            "product_content_snapshots": sum(
+                int(row.get("products_snapshotted") or 0)
+                for row in content_snapshots
+            ),
+            "products_with_observed_changes": sum(
+                int(row.get("products_with_changes") or 0)
+                for row in content_snapshots
+            ),
             "summaries": summaries,
             "next_run_at": finished.get("next_run_at"),
         }
