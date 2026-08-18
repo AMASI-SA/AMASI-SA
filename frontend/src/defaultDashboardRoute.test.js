@@ -13,16 +13,16 @@ test("root and authenticated public redirects land on the advanced dashboard", (
     expect(app).not.toContain('<Route path="/" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />');
 });
 
-test("Mezan 2 replaces the old dashboard implementation with the advanced dashboard", () => {
+test("both retired dashboard routes converge on the advanced dashboard without old runtime", () => {
     const app = read("src/App.js");
     const retired = read("src/pages/Dashboard.jsx");
 
     expect(app).toContain('path="/dashboard-v2"');
     expect(app).toContain('<Layout><Dashboard sourceMode="mezan_v2" /></Layout>');
-    expect(retired).toContain('import AdvancedDashboard from "./AdvancedDashboard";');
-    expect(retired).toContain('if (sourceMode === "mezan_v2") return <AdvancedDashboard />;');
+    expect(app).toContain('<Route path="/legacy-dashboard" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />');
     expect(retired).toContain('return <Navigate to="/dashboard-advanced" replace />;');
     expect(retired).toContain('import "./retiredDashboard.css";');
+    expect(retired).not.toContain("AdvancedDashboard");
 
     [
         "api.get(",
@@ -31,12 +31,9 @@ test("Mezan 2 replaces the old dashboard implementation with the advanced dashbo
         "setTimeout(",
         "useEffect(",
         "useState(",
+        "MutationObserver",
+        "requestAnimationFrame",
     ].forEach((forbidden) => expect(retired).not.toContain(forbidden));
-});
-
-test("the explicit legacy dashboard URL is a compatibility redirect only", () => {
-    const app = read("src/App.js");
-    expect(app).toContain('<Route path="/legacy-dashboard" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />');
 });
 
 test("obsolete dashboard controls are removed from the visible navigation", () => {
