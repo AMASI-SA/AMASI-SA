@@ -1,0 +1,167 @@
+name: Apply Google Ads Live Sync Patch
+
+on:
+  push:
+    branches: [fix/google-ads-dashboard-live-sync]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/google-ads-dashboard-live-sync
+          fetch-depth: 0
+      - name: Patch sources
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('backend/integrations_control_center/ads_auto_sync_scheduler.py')
+          s = p.read_text()
+          def once(old, new):
+              global s
+              if old not in s:
+                  raise SystemExit('missing pattern: ' + old[:120].replace('\n','\\n'))
+              s = s.replace(old, new, 1)
+
+          once(
+              'from .meta_oauth_security import META_PROVIDER_ID, meta_oauth_configured\nfrom .tiktok_native_reporting import (\n',
+              'from .meta_oauth_security import META_PROVIDER_ID, meta_oauth_configured\nfrom .google_ads_reporting import (\n    GOOGLE_ADS_PROVIDER_ID,\n    GOOGLE_ADS_REPORTING_SOURCE_MODE,\n    GoogleAdsReportingError,\n    google_ads_reporting_enabled,\n    run_google_ads_reporting_sync,\n)\nfrom .google_oauth_security import google_oauth_configured\nfrom .tiktok_native_reporting import (\n'
+          )
+          once(
+              'TIKTOK_RUN_TYPE = "tiktok_reporting_async"\nACTIVE_STATUSES = ("queued", "running")\n',
+              'TIKTOK_RUN_TYPE = "tiktok_reporting_async"\nGOOGLE_RUN_TYPE = "google_ads_reporting_async"\nACTIVE_STATUSES = ("queued", "running")\n'
+          )
+          once(
+              '                TIKTOK_PROVIDER_ID,\n            ]},\n            "connection_status": "connected",\n',
+              '                TIKTOK_PROVIDER_ID,\n                GOOGLE_ADS_PROVIDER_ID,\n            ]},\n            "connection_status": "connected",\n'
+          )
+          once(
+              '            TIKTOK_PROVIDER_ID,\n        }:\n            pairs.add((user_id, provider))\n',
+              '            TIKTOK_PROVIDER_ID,\n            GOOGLE_ADS_PROVIDER_ID,\n        }:\n            pairs.add((user_id, provider))\n'
+          )
+
+          marker = '\n\nasync def _refresh_snapchat(\n'
+          if marker not in s:
+              raise SystemExit('missing _refresh_snapchat marker')
+          google = '''
+
+async def _refresh_google(
+    db: Any,
+    *,
+    user_id: str,
+    start_date: date,
+    end_date: date,
+    now: datetime,
+) -> dict[str, Any]:
+    if not google_oauth_configured() or not google_ads_reporting_enabled():
+        return {"provider": GOOGLE_ADS_PROVIDER_ID, "status": "skipped", "reason": "disabled"}
+    active = await _active_run(db, user_id=user_id, provider=GOOGLE_ADS_PROVIDER_ID, now=now)
+    if active:
+        return {"provider": GOOGLE_ADS_PROVIDER_ID, "status": "skipped", "reason": "sync_in_progress", "run_id": active.get("run_id")}
+    run_id = await _start_run(
+        db,
+        user_id=user_id,
+        provider=GOOGLE_ADS_PROVIDER_ID,
+        run_type=GOOGLE_RUN_TYPE,
+        source_mode=GOOGLE_ADS_REPORTING_SOURCE_MODE,
+        start_date=start_date,
+        end_date=end_date,
+        now=now,
+    )
+    try:
+        result = await run_google_ads_reporting_sync(
+            db,
+            user_id,
+            date_from=start_date.isoformat(),
+            date_to=end_date.isoformat(),
+        )
+        status = str(result.get("status") or "complete")
+        if status not in {"complete", "partial", "failed"}:
+            status = "complete"
+        await _finish_run(db, user_id=user_id, run_id=run_id, status=status, result=result)
+        return {"provider": GOOGLE_ADS_PROVIDER_ID, "run_id": run_id, "status": status, **_safe_summary(result)}
+    except GoogleAdsReportingError as exc:
+        error_id = await _record_error(
+            db,
+            user_id=user_id,
+            provider=GOOGLE_ADS_PROVIDER_ID,
+            run_id=run_id,
+            source_mode=GOOGLE_ADS_REPORTING_SOURCE_MODE,
+            code=exc.code,
+            message=exc.message,
+            retryable=exc.retryable,
+        )
+        await _finish_run(
+            db,
+            user_id=user_id,
+            run_id=run_id,
+            status="failed",
+            result=exc.result,
+            error={"error_id": error_id, "code": exc.code, "message": exc.message, "retryable": exc.retryable},
+        )
+        if exc.code == "google_ads_needs_reauth":
+            await _mark_needs_reauth(db, user_id, GOOGLE_ADS_PROVIDER_ID)
+        return {"provider": GOOGLE_ADS_PROVIDER_ID, "run_id": run_id, "status": "failed", "code": exc.code}
+'''
+          s = s.replace(marker, google + marker, 1)
+          once(
+              '            if provider == TIKTOK_PROVIDER_ID:\n                return await _refresh_tiktok(\n                    db,\n                    user_id=user_id,\n                    start_date=start_date,\n                    end_date=end_date,\n                    now=started,\n                )\n            return await _refresh_snapchat(\n',
+              '            if provider == TIKTOK_PROVIDER_ID:\n                return await _refresh_tiktok(\n                    db,\n                    user_id=user_id,\n                    start_date=start_date,\n                    end_date=end_date,\n                    now=started,\n                )\n            if provider == GOOGLE_ADS_PROVIDER_ID:\n                return await _refresh_google(\n                    db,\n                    user_id=user_id,\n                    start_date=start_date,\n                    end_date=end_date,\n                    now=started,\n                )\n            return await _refresh_snapchat(\n'
+          )
+          once(
+              '                TIKTOK_PROVIDER_ID,\n            ]},\n        },\n        {"_id": 0},\n    )\n',
+              '                TIKTOK_PROVIDER_ID,\n                GOOGLE_ADS_PROVIDER_ID,\n            ]},\n        },\n        {"_id": 0},\n    )\n'
+          )
+          p.write_text(s)
+
+          p = Path('frontend/src/pages/AdvancedDashboard.jsx')
+          s = p.read_text()
+          old = '''    useEffect(() => {
+        let active = true;
+        const fromDate = filters?.from;
+        const toDate = filters?.to || fromDate;
+        if (!fromDate || !toDate) return () => { active = false; };
+        getDashboardAdsSpend({ dateFrom: fromDate, dateTo: toDate, refresh: false })
+            .then((result) => { if (active) setChartData(result); })
+            .catch(() => { if (active) setChartData(null); });
+        return () => { active = false; };
+    }, [filters?.from, filters?.to]);
+'''
+          new = '''    useEffect(() => {
+        let active = true;
+        let timer = null;
+        const fromDate = filters?.from;
+        const toDate = filters?.to || fromDate;
+        if (!fromDate || !toDate) return () => { active = false; };
+        const loadSpend = () => getDashboardAdsSpend({ dateFrom: fromDate, dateTo: toDate, refresh: false })
+            .then((result) => { if (active) setChartData(result); })
+            .catch(() => { if (active) setChartData(null); });
+        loadSpend();
+        timer = window.setInterval(loadSpend, 60_000);
+        return () => {
+            active = false;
+            if (timer) window.clearInterval(timer);
+        };
+    }, [filters?.from, filters?.to]);
+'''
+          if old not in s:
+              raise SystemExit('missing AdvancedDashboard AdsCard effect')
+          p.write_text(s.replace(old, new, 1))
+
+          Path('backend/tests/test_google_ads_dashboard_live_sync_contract.py').write_text('''from pathlib import Path\n\n\ndef test_google_ads_is_part_of_server_side_ads_scheduler():\n    source = Path("backend/integrations_control_center/ads_auto_sync_scheduler.py").read_text()\n    assert "GOOGLE_ADS_PROVIDER_ID" in source\n    assert "run_google_ads_reporting_sync" in source\n    assert "async def _refresh_google(" in source\n    assert "if provider == GOOGLE_ADS_PROVIDER_ID:" in source\n    assert source.count("GOOGLE_ADS_PROVIDER_ID") >= 8\n\n\ndef test_dashboard_ads_card_reloads_saved_spend_without_manual_page_refresh():\n    source = Path("frontend/src/pages/AdvancedDashboard.jsx").read_text()\n    assert "const loadSpend = () => getDashboardAdsSpend" in source\n    assert "window.setInterval(loadSpend, 60_000)" in source\n    assert "window.clearInterval(timer)" in source\n''')
+          PY
+      - name: Commit patch
+        shell: bash
+        run: |
+          rm -f .github/workflows/apply-google-ads-dashboard-live-sync.yml .github/workflows/apply-google-ads-dashboard-live-sync-pr.yml .github/workflows/apply-google-ads-live-sync-fast.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(ads): keep Google dashboard spend live"
+          git push origin HEAD:fix/google-ads-dashboard-live-sync
