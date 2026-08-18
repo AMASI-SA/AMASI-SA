@@ -28,17 +28,76 @@ const ERROR_MESSAGES = {
     instagram_page_link_required: "حساب Instagram غير مرتبط بصفحة Facebook داخل Meta.",
     instagram_page_access_required: "تعذر الوصول إلى الصفحة المرتبطة. أعد تفويض Meta ثم حاول مجددًا.",
     instagram_asset_link_mismatch: "الحساب المختار لم يعد مرتبطًا بالصفحة المكتشفة في Meta.",
-    instagram_webhook_subscription_failed: "تعذر اشتراك الحساب فعليًا في Webhooks لدى Meta. أعد التفويض ثم حاول مجددًا.",
+    instagram_webhook_subscription_failed: "تعذر اشتراك الحساب فعليًا في Webhooks لدى Meta.",
     meta_configuration_invalid: "إعدادات Meta في الخادم غير مكتملة.",
     owner_only: "هذه الخطوة متاحة لمالك الحساب فقط.",
 };
 
+const DIAGNOSTIC_OPERATION_LABELS = {
+    graph_configuration: "تهيئة Graph API",
+    load_encrypted_meta_token: "قراءة ربط Meta المشفر",
+    load_meta_encryption_key: "قراءة مفتاح تشفير Meta",
+    decrypt_meta_token: "فك ربط Meta المشفر",
+    load_meta_app_secret: "قراءة سر تطبيق Meta",
+    load_meta_app_id: "قراءة معرف تطبيق Meta",
+    resolve_linked_instagram_account: "اكتشاف الصفحة وحساب Instagram المرتبط",
+    validate_page_instagram_link: "التحقق من ارتباط الصفحة بالحساب",
+    resolve_page_access_token: "استخراج Page Access Token",
+    subscribe_instagram_account: "اشتراك حساب Instagram",
+    subscribe_instagram_account_unconfirmed: "تأكيد اشتراك حساب Instagram",
+    verify_instagram_account_subscription: "قراءة اشتراك حساب Instagram",
+    verify_instagram_account_subscription_unconfirmed: "التحقق النهائي من اشتراك حساب Instagram",
+    subscribe_linked_page_for_instagram: "اشتراك صفحة Facebook المرتبطة",
+    subscribe_linked_page_for_instagram_unconfirmed: "تأكيد اشتراك صفحة Facebook المرتبطة",
+    verify_linked_page_instagram_subscription: "قراءة اشتراك صفحة Facebook المرتبطة",
+    verify_linked_page_instagram_subscription_unconfirmed: "التحقق النهائي من اشتراك صفحة Facebook المرتبطة",
+    meta_transport: "الاتصال بخوادم Meta",
+};
+
+function diagnosticSuffix(detail) {
+    if (!detail || typeof detail !== "object") return "";
+    const parts = [];
+    const operation = typeof detail.operation === "string"
+        ? detail.operation.trim()
+        : "";
+    if (operation) {
+        parts.push(`المرحلة: ${DIAGNOSTIC_OPERATION_LABELS[operation] || operation}`);
+    }
+    if (Number.isInteger(detail.http_status)) {
+        parts.push(`HTTP ${detail.http_status}`);
+    }
+    if (Number.isInteger(detail.meta_error_code)) {
+        parts.push(`Meta code ${detail.meta_error_code}`);
+    }
+    if (Number.isInteger(detail.error_subcode)) {
+        parts.push(`subcode ${detail.error_subcode}`);
+    }
+    if (typeof detail.trace_id === "string" && detail.trace_id.trim()) {
+        parts.push(`trace ${detail.trace_id.trim()}`);
+    }
+    const missingPermissions = Array.isArray(detail.missing_page_permissions)
+        ? detail.missing_page_permissions
+            .filter((value) => typeof value === "string" && value.trim())
+            .map((value) => value.trim())
+        : [];
+    if (missingPermissions.length) {
+        parts.push(`صلاحيات الصفحة الناقصة: ${missingPermissions.join(", ")}`);
+    } else if (detail.page_subscription_permission_ready === false) {
+        parts.push("صلاحيات مسار الصفحة غير مكتملة");
+    }
+    return parts.length ? ` — ${parts.join("، ")}` : "";
+}
+
 function errorMessage(error, fallback) {
     const detail = error?.response?.data?.detail;
     const code = typeof detail === "object" ? detail?.code : null;
-    if (code && ERROR_MESSAGES[code]) return ERROR_MESSAGES[code];
+    if (code && ERROR_MESSAGES[code]) {
+        return `${ERROR_MESSAGES[code]}${diagnosticSuffix(detail)}`;
+    }
     if (typeof detail === "string") return detail;
-    if (typeof detail?.message === "string") return detail.message;
+    if (typeof detail?.message === "string") {
+        return `${detail.message}${diagnosticSuffix(detail)}`;
+    }
     return fallback;
 }
 

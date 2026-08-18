@@ -40,6 +40,7 @@ class MetaInstagramWebhookError(RuntimeError):
         self,
         code: str,
         *,
+        operation: str | None = None,
         http_status: int | None = None,
         meta_error_code: int | None = None,
         error_subcode: int | None = None,
@@ -47,6 +48,7 @@ class MetaInstagramWebhookError(RuntimeError):
     ):
         super().__init__(code)
         self.code = code
+        self.operation = operation
         self.http_status = http_status
         self.meta_error_code = meta_error_code
         self.error_subcode = error_subcode
@@ -64,19 +66,28 @@ def _graph_base() -> str:
         "META_GRAPH_API_VERSION", META_DEFAULT_GRAPH_VERSION
     ).strip()
     if not re.fullmatch(r"v\d{1,2}\.\d", version):
-        raise MetaInstagramWebhookError("meta_configuration_invalid")
+        raise MetaInstagramWebhookError(
+            "meta_configuration_invalid",
+            operation="graph_configuration",
+        )
     return f"https://graph.facebook.com/{version}"
 
 
 def _decrypt_token(value: bytes | None) -> str:
     if not value:
-        raise MetaInstagramWebhookError("meta_reauthorization_required")
+        raise MetaInstagramWebhookError(
+            "meta_reauthorization_required",
+            operation="load_encrypted_meta_token",
+        )
     try:
         from cryptography.fernet import Fernet, MultiFernet
 
         primary = os.environ.get("META_TOKEN_ENC_KEY", "").strip()
         if not primary:
-            raise MetaInstagramWebhookError("meta_configuration_invalid")
+            raise MetaInstagramWebhookError(
+                "meta_configuration_invalid",
+                operation="load_meta_encryption_key",
+            )
         keys = [Fernet(primary.encode("utf-8"))]
         previous = os.environ.get("META_TOKEN_ENC_KEY_OLD", "").strip()
         if previous:
@@ -85,13 +96,19 @@ def _decrypt_token(value: bytes | None) -> str:
     except MetaInstagramWebhookError:
         raise
     except Exception as exc:  # noqa: BLE001
-        raise MetaInstagramWebhookError("meta_reauthorization_required") from exc
+        raise MetaInstagramWebhookError(
+            "meta_reauthorization_required",
+            operation="decrypt_meta_token",
+        ) from exc
 
 
 def _appsecret_proof(access_token: str) -> str:
     secret = os.environ.get("META_BUSINESS_APP_SECRET", "").strip()
     if not secret:
-        raise MetaInstagramWebhookError("meta_configuration_invalid")
+        raise MetaInstagramWebhookError(
+            "meta_configuration_invalid",
+            operation="load_meta_app_secret",
+        )
     return hmac.new(
         secret.encode("utf-8"), access_token.encode("utf-8"), hashlib.sha256
     ).hexdigest()
@@ -133,6 +150,7 @@ def _provider_error(
     )
     return MetaInstagramWebhookError(
         "instagram_webhook_subscription_failed",
+        operation=operation,
         http_status=response.status_code,
         meta_error_code=meta_error_code,
         error_subcode=error_subcode,
@@ -157,6 +175,7 @@ async def _json(
             ) from None
         raise MetaInstagramWebhookError(
             "instagram_webhook_subscription_failed",
+            operation=operation,
             http_status=response.status_code,
         ) from None
     if response.status_code >= 400 or (
@@ -170,6 +189,7 @@ async def _json(
     if not isinstance(payload, dict):
         raise MetaInstagramWebhookError(
             "instagram_webhook_subscription_failed",
+            operation=operation,
             http_status=response.status_code,
         )
     return payload
@@ -193,7 +213,8 @@ async def _request_with_deadline(
             META_REQUEST_DEADLINE_SECONDS,
         )
         raise MetaInstagramWebhookError(
-            "instagram_webhook_subscription_failed"
+            "instagram_webhook_subscription_failed",
+            operation=operation,
         ) from None
 
 
@@ -297,7 +318,10 @@ async def subscribe_instagram_webhooks(
     user_token = _decrypt_token((credential or {}).get("access_token_ciphertext"))
     app_id = os.environ.get("META_BUSINESS_APP_ID", "").strip()
     if not app_id:
-        raise MetaInstagramWebhookError("meta_configuration_invalid")
+        raise MetaInstagramWebhookError(
+            "meta_configuration_invalid",
+            operation="load_meta_app_id",
+        )
 
     owns_client = client is None
     http = client or httpx.AsyncClient(timeout=META_REQUEST_DEADLINE_SECONDS)
@@ -326,15 +350,24 @@ async def subscribe_instagram_webhooks(
             None,
         )
         if not page:
-            raise MetaInstagramWebhookError("instagram_page_access_required")
+            raise MetaInstagramWebhookError(
+                "instagram_page_access_required",
+                operation="resolve_linked_instagram_account",
+            )
         linked_instagram_id = _text(
             (page.get("instagram_business_account") or {}).get("id")
         )
         if linked_instagram_id != instagram_account_id:
-            raise MetaInstagramWebhookError("instagram_asset_link_mismatch")
+            raise MetaInstagramWebhookError(
+                "instagram_asset_link_mismatch",
+                operation="validate_page_instagram_link",
+            )
         page_token = _text(page.get("access_token"))
         if not page_token:
-            raise MetaInstagramWebhookError("instagram_page_access_required")
+            raise MetaInstagramWebhookError(
+                "instagram_page_access_required",
+                operation="resolve_page_access_token",
+            )
 
         # Preserve the already-tested Instagram-account path for Meta setups
         # that accept it. The current Amasi Facebook Login grant rejects this
@@ -371,8 +404,9 @@ async def subscribe_instagram_webhooks(
             logger.warning(
                 "instagram_webhook_subscription_fallback "
                 "from_mode=instagram_account to_mode=linked_page "
-                "http_status=%s meta_error_code=%s error_subcode=%s "
-                "trace_id=%s exception_type=%s",
+                "operation=%s http_status=%s meta_error_code=%s "
+                "error_subcode=%s trace_id=%s exception_type=%s",
+                getattr(primary_error, "operation", None),
                 getattr(primary_error, "http_status", None),
                 getattr(primary_error, "meta_error_code", None),
                 getattr(primary_error, "error_subcode", None),
@@ -416,7 +450,8 @@ async def subscribe_instagram_webhooks(
             type(exc).__name__,
         )
         raise MetaInstagramWebhookError(
-            "instagram_webhook_subscription_failed"
+            "instagram_webhook_subscription_failed",
+            operation="meta_transport",
         ) from None
     finally:
         if owns_client:

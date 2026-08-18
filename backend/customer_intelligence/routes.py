@@ -170,6 +170,28 @@ def _reply_error(exc: Exception) -> HTTPException:
     )
 
 
+def _instagram_error_detail(exc: InstagramProvisioningError) -> dict[str, Any]:
+    """Return owner-safe provider diagnostics without credentials or raw IDs."""
+    detail: dict[str, Any] = {"code": exc.code}
+    for key in (
+        "operation",
+        "http_status",
+        "meta_error_code",
+        "error_subcode",
+        "trace_id",
+        "page_subscription_permission_ready",
+    ):
+        value = getattr(exc, key, None)
+        if value is not None:
+            detail[key] = value
+    missing_permissions = list(
+        getattr(exc, "missing_page_permissions", ()) or ()
+    )
+    if missing_permissions:
+        detail["missing_page_permissions"] = missing_permissions
+    return detail
+
+
 def make_customer_intelligence_router(
     current_user: Callable,
     *,
@@ -360,7 +382,7 @@ def make_customer_intelligence_router(
             except InstagramProvisioningError as exc:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
-                    detail={"code": exc.code},
+                    detail=_instagram_error_detail(exc),
                 ) from exc
 
         @router.post(
@@ -388,7 +410,7 @@ def make_customer_intelligence_router(
                 )
                 raise HTTPException(
                     status_code=status_code,
-                    detail={"code": exc.code},
+                    detail=_instagram_error_detail(exc),
                 ) from exc
 
     return router

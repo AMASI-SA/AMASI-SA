@@ -37,13 +37,40 @@ INSTAGRAM_REQUIRED_PERMISSIONS = frozenset(
         "pages_manage_metadata",
     }
 )
+# This is deliberately separate from INSTAGRAM_REQUIRED_PERMISSIONS. Instagram
+# receive-only setup must not be blocked by the Facebook Page messaging scope,
+# but Meta's linked-Page subscribed_apps fallback requires both permissions.
+PAGE_SUBSCRIPTION_PERMISSIONS = frozenset(
+    {
+        "pages_manage_metadata",
+        "pages_messaging",
+    }
+)
 INSTAGRAM_PROVISION_CONFIRMATION = "CONNECT_RECEIVE_ONLY_INSTAGRAM"
 
 
 class InstagramProvisioningError(RuntimeError):
-    def __init__(self, code: str):
+    def __init__(
+        self,
+        code: str,
+        *,
+        operation: str | None = None,
+        http_status: int | None = None,
+        meta_error_code: int | None = None,
+        error_subcode: int | None = None,
+        trace_id: str | None = None,
+        page_subscription_permission_ready: bool | None = None,
+        missing_page_permissions: tuple[str, ...] = (),
+    ):
         super().__init__(code)
         self.code = code
+        self.operation = operation
+        self.http_status = http_status
+        self.meta_error_code = meta_error_code
+        self.error_subcode = error_subcode
+        self.trace_id = trace_id
+        self.page_subscription_permission_ready = page_subscription_permission_ready
+        self.missing_page_permissions = tuple(missing_page_permissions)
 
 
 class InstagramSetupModel(BaseModel):
@@ -127,12 +154,16 @@ async def _assets(db: Any, *, owner_user_id: str) -> list[dict[str, Any]]:
     return await cursor.to_list(length=100)
 
 
-async def _permissions_ready(db: Any, *, owner_user_id: str) -> bool:
+async def _granted_permissions(db: Any, *, owner_user_id: str) -> set[str]:
     credential = await getattr(db, META_CREDENTIALS_COLLECTION).find_one(
         {"user_id": owner_user_id, "provider": "meta_ads"},
         {"_id": 0, "scope": 1},
     )
-    scopes = {_text(value) for value in (credential or {}).get("scope") or []}
+    return {_text(value) for value in (credential or {}).get("scope") or [] if _text(value)}
+
+
+async def _permissions_ready(db: Any, *, owner_user_id: str) -> bool:
+    scopes = await _granted_permissions(db, owner_user_id=owner_user_id)
     return INSTAGRAM_REQUIRED_PERMISSIONS.issubset(scopes)
 
 
@@ -216,7 +247,11 @@ class InstagramProvisioningService:
         request: InstagramProvisionIn,
     ) -> InstagramProvisionResult:
         owner_id = _text(owner_user_id)
-        if not await _permissions_ready(self._db, owner_user_id=owner_id):
+        granted_permissions = await _granted_permissions(
+            self._db,
+            owner_user_id=owner_id,
+        )
+        if not INSTAGRAM_REQUIRED_PERMISSIONS.issubset(granted_permissions):
             raise InstagramProvisioningError("meta_reauthorization_required")
         merchant_id = await _connected_store_id(self._db, owner_user_id=owner_id)
         if not merchant_id:
@@ -263,7 +298,19 @@ class InstagramProvisioningService:
                 page_id=page_id,
             )
         except MetaInstagramWebhookError as exc:
-            raise InstagramProvisioningError(exc.code) from exc
+            missing_page_permissions = tuple(
+                sorted(PAGE_SUBSCRIPTION_PERMISSIONS - granted_permissions)
+            )
+            raise InstagramProvisioningError(
+                exc.code,
+                operation=exc.operation,
+                http_status=exc.http_status,
+                meta_error_code=exc.meta_error_code,
+                error_subcode=exc.error_subcode,
+                trace_id=exc.trace_id,
+                page_subscription_permission_ready=not missing_page_permissions,
+                missing_page_permissions=missing_page_permissions,
+            ) from exc
 
         now = self._now()
         if existing:
@@ -314,6 +361,7 @@ __all__ = [
     "INSTAGRAM_REQUIRED_PERMISSIONS",
     "META_ASSETS_COLLECTION",
     "META_CREDENTIALS_COLLECTION",
+    "PAGE_SUBSCRIPTION_PERMISSIONS",
     "InstagramCandidatePublic",
     "InstagramProvisionIn",
     "InstagramProvisionResult",
