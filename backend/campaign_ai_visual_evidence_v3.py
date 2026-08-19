@@ -1,8 +1,9 @@
-"""Bounded multimodal product-page visual evidence for Decision Intelligence V3.
+"""Bounded multimodal visual evidence for Decision Intelligence V3.
 
-Image URLs come only from the Salla-backed Product V2 evidence already attached
-to the campaign-product graph.  They are passed to the OpenAI Responses API as
-input_image items; this module does not fetch arbitrary image URLs itself.
+Actual provider creative visuals are preferred, then Salla/Product V2 hero and
+gallery evidence fills the remaining bounded image budget. Provider-media URLs
+are validated before entering the evidence pack; this module only performs a
+final HTTPS shape check before sending them as Responses API input_image items.
 """
 from __future__ import annotations
 
@@ -10,7 +11,8 @@ from typing import Any
 from urllib.parse import urlsplit
 
 
-MAX_VISUALS_PER_MODEL_CALL = 6
+MAX_VISUALS_PER_MODEL_CALL = 8
+MAX_AD_CREATIVE_VISUALS_PER_CALL = 5
 
 
 def _https_url(value: Any) -> str | None:
@@ -23,7 +25,7 @@ def _https_url(value: Any) -> str | None:
         return None
     if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
         return None
-    return raw[:3000]
+    return raw[:4000]
 
 
 def _image_url(value: Any) -> str | None:
@@ -36,6 +38,37 @@ def _image_url(value: Any) -> str | None:
         if url:
             return url
     return None
+
+
+def ad_creative_visuals(evidence_pack: dict[str, Any]) -> list[dict[str, Any]]:
+    entities = ((evidence_pack.get("actual_creative_media") or {}).get("entities") or {})
+    output: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for entity_key, block in entities.items():
+        if not isinstance(block, dict):
+            continue
+        provider = str(block.get("provider") or "unknown")
+        for visual in (block.get("visuals") or []):
+            if not isinstance(visual, dict):
+                continue
+            url = _image_url(visual.get("image_url"))
+            if not url or url in seen:
+                continue
+            seen.add(url)
+            output.append({
+                "kind": "actual_ad_creative",
+                "entity_key": entity_key,
+                "provider": provider,
+                "ad_id": str(visual.get("ad_id") or ""),
+                "creative_id": str(visual.get("creative_id") or ""),
+                "media_id": str(visual.get("media_id") or visual.get("video_id") or ""),
+                "role": str(visual.get("visual_role") or "actual_ad_media"),
+                "source": str(visual.get("source") or "provider_actual_media"),
+                "image_url": url,
+            })
+            if len(output) >= MAX_AD_CREATIVE_VISUALS_PER_CALL:
+                return output
+    return output
 
 
 def product_visuals(evidence_pack: dict[str, Any]) -> list[dict[str, Any]]:
@@ -60,6 +93,7 @@ def product_visuals(evidence_pack: dict[str, Any]) -> list[dict[str, Any]]:
                     continue
                 seen.add(url)
                 output.append({
+                    "kind": "product_page_visual",
                     "entity_key": entity_key,
                     "product_id": product_id,
                     "product_name": product_name,
@@ -69,6 +103,20 @@ def product_visuals(evidence_pack: dict[str, Any]) -> list[dict[str, Any]]:
                 if len(output) >= MAX_VISUALS_PER_MODEL_CALL:
                     return output
     return output
+
+
+def combined_visuals(evidence_pack: dict[str, Any]) -> list[dict[str, Any]]:
+    actual = ad_creative_visuals(evidence_pack)
+    seen = {row["image_url"] for row in actual}
+    output = list(actual)
+    for row in product_visuals(evidence_pack):
+        if row["image_url"] in seen:
+            continue
+        seen.add(row["image_url"])
+        output.append(row)
+        if len(output) >= MAX_VISUALS_PER_MODEL_CALL:
+            break
+    return output[:MAX_VISUALS_PER_MODEL_CALL]
 
 
 def responses_input(
@@ -83,16 +131,23 @@ def responses_input(
         "type": "input_text",
         "text": json.dumps(payload, ensure_ascii=False, default=str),
     }]
-    visuals = product_visuals(evidence_pack) if include_images else []
+    visuals = combined_visuals(evidence_pack) if include_images else []
     for visual in visuals:
-        content.append({
-            "type": "input_text",
-            "text": (
-                "Visual evidence for product "
+        if visual.get("kind") == "actual_ad_creative":
+            label = (
+                "ACTUAL provider ad creative visual. "
+                f"provider={visual['provider']}, role={visual['role']}, "
+                f"ad_id={visual['ad_id'] or 'unknown'}, creative_id={visual['creative_id'] or 'unknown'}, "
+                f"entity={visual['entity_key']}, source={visual['source']}. "
+                "Analyze only what is actually visible in this image/frame. Do not claim unseen video moments."
+            )
+        else:
+            label = (
+                "Product-page visual evidence for product "
                 f"{visual['product_id']} ({visual['product_name']}), role={visual['role']}, "
                 f"entity={visual['entity_key']}. Analyze only what is actually visible."
-            ),
-        })
+            )
+        content.append({"type": "input_text", "text": label})
         content.append({
             "type": "input_image",
             "image_url": visual["image_url"],
@@ -101,4 +156,11 @@ def responses_input(
     return [{"role": "user", "content": content}], len(visuals)
 
 
-__all__ = ["MAX_VISUALS_PER_MODEL_CALL", "product_visuals", "responses_input"]
+__all__ = [
+    "MAX_AD_CREATIVE_VISUALS_PER_CALL",
+    "MAX_VISUALS_PER_MODEL_CALL",
+    "ad_creative_visuals",
+    "combined_visuals",
+    "product_visuals",
+    "responses_input",
+]
