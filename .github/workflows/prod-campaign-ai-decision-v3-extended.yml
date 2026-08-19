@@ -6,13 +6,19 @@ on:
       - hotfix/prod-snap-meta-final
     paths:
       - "backend/campaign_ai_product_change_history_v3.py"
+      - "backend/campaign_ai_product_health_score_v3.py"
+      - "backend/campaign_ai_ad_creative_media_v3.py"
       - "backend/campaign_ai_evidence_runtime_enrichment_v3.py"
       - "backend/campaign_ai_decision_v3.py"
       - "backend/campaign_ai_visual_evidence_v3.py"
       - "backend/advertising_product_watch_cycle_v3.py"
       - "backend/tests/test_campaign_ai_product_change_history_v3.py"
+      - "backend/tests/test_campaign_ai_product_health_score_v3.py"
+      - "backend/tests/test_campaign_ai_ad_creative_media_v3.py"
+      - "backend/tests/test_campaign_ai_evidence_runtime_enrichment_v3.py"
       - "frontend/src/pages/CampaignRecommendations.jsx"
       - "frontend/src/pages/AdvancedDashboard.jsx"
+      - "frontend/package.json"
       - ".github/workflows/prod-campaign-ai-decision-v3-extended.yml"
 
 permissions:
@@ -55,15 +61,20 @@ jobs:
         run: >-
           python -m py_compile
           campaign_ai_product_change_history_v3.py
+          campaign_ai_product_health_score_v3.py
+          campaign_ai_ad_creative_media_v3.py
           campaign_ai_evidence_runtime_enrichment_v3.py
           campaign_ai_decision_v3.py
           campaign_ai_visual_evidence_v3.py
           advertising_product_watch_cycle_v3.py
-      - name: Test product chronology and core V3 execution separation
+      - name: Test product, creative-media, and V3 execution separation
         working-directory: backend
         run: >-
           python -m pytest -q
           tests/test_campaign_ai_product_change_history_v3.py
+          tests/test_campaign_ai_product_health_score_v3.py
+          tests/test_campaign_ai_ad_creative_media_v3.py
+          tests/test_campaign_ai_evidence_runtime_enrichment_v3.py
           tests/test_campaign_ai_decision_v3_contract.py
           tests/test_advertising_product_watch_cycle_v3.py
           --tb=short
@@ -75,3 +86,7 @@ jobs:
           grep -q 'Creative Brief' frontend/src/pages/CampaignRecommendations.jsx
           grep -q 'Advertising Product Watch' frontend/src/pages/CampaignRecommendations.jsx
           grep -q 'Today → Yesterday → Day-2' frontend/src/pages/CampaignRecommendations.jsx
+          grep -q 'recommended_action' frontend/src/pages/AdvancedDashboard.jsx
+          grep -q 'root_cause_category' frontend/src/pages/AdvancedDashboard.jsx
+          grep -q 'action_type === "ads_write"' frontend/src/pages/AdvancedDashboard.jsx
+          grep -q 'item.executable' frontend/src/pages/AdvancedDashboard.jsx
