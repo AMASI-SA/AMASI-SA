@@ -1,0 +1,42 @@
+name: Apply Product Cost Completion Filter
+
+on:
+  push:
+    branches:
+      - fix/product-cost-category-completion
+    paths:
+      - ".github/workflows/apply-product-cost-completion-filter.yml"
+      - "scripts/apply_product_cost_completion_filter.py"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/product-cost-category-completion
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Apply completion filter
+        run: |
+          set -euo pipefail
+          python scripts/apply_product_cost_completion_filter.py
+          python -m py_compile backend/product_v2_workspace_routes.py backend/product_cost_setup_routes.py
+      - name: Commit source change
+        run: |
+          set -euo pipefail
+          git config user.name "mezan"
+          git config user.email "amasi.jewelery@gmail.com"
+          git add backend/product_v2_workspace_routes.py
+          if git diff --cached --quiet; then
+            echo "No source changes."
+            exit 0
+          fi
+          git commit -m "fix(products): keep completed setup out of sold missing-cost queue"
+          git push origin HEAD:fix/product-cost-category-completion
