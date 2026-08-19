@@ -23,7 +23,10 @@ from pymongo.errors import DuplicateKeyError
 from component_edit_policy import component_cost_metadata
 from fulfillment_v2_routes import _actor_context, _require_permission
 from mezan_supplier_management_routes import MEZAN_SUPPLIERS_V2
-from order_option_cost_snapshot_routes import resolve_base_unit_cost
+from order_option_cost_snapshot_routes import (
+    MEZAN_V2_COST_SOURCES,
+    resolve_base_unit_cost,
+)
 from preparation_piece_barcode import parse_preparation_piece_barcode
 from preparation_piece_operations import (
     PIECES,
@@ -437,10 +440,40 @@ def build_supplier_receiving_invoice(
         product_charge_eligible = bool(
             first.get("product_charge_eligible", True)
         )
-        reference_product_halalas = int(
-            first.get("reference_product_unit_price_halalas") or 0
+        reference_product_price_source = _text(
+            first.get("reference_product_price_source")
+        ) or "missing"
+        reference_product_price_complete = bool(
+            first.get("reference_product_price_complete")
+        )
+        reference_product_is_mezan = bool(
+            reference_product_price_complete
+            and reference_product_price_source in MEZAN_V2_COST_SOURCES
+        )
+        # Supplier invoices are a Mezan cost-authority boundary. Historical
+        # scans that still carry a Salla fallback are treated as missing, not
+        # as an accepted product price.
+        reference_product_halalas = (
+            int(first.get("reference_product_unit_price_halalas") or 0)
+            if reference_product_is_mezan
+            else 0
         )
         requested_product_halalas = int(line.product_unit_price_halalas)
+        if (
+            product_charge_eligible
+            and not reference_product_is_mezan
+            and requested_product_halalas == 0
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "supplier_receiving_mezan_product_price_required",
+                    "line_number": line_number,
+                    "product_id": _text(first.get("product_id")) or None,
+                    "product_name": _text(first.get("product_name")) or "منتج",
+                    "price_authority": "mezan_v2",
+                },
+            )
         if not product_charge_eligible and requested_product_halalas != 0:
             raise HTTPException(
                 status_code=409,
@@ -595,6 +628,17 @@ def build_supplier_receiving_invoice(
             "sku": _text(first.get("sku")) or None,
             "variant_id": _text(first.get("variant_id")) or None,
             "product_charge_eligible": product_charge_eligible,
+            "product_price_authority": "mezan_v2",
+            "reference_product_price_complete": (
+                reference_product_is_mezan
+                if product_charge_eligible
+                else True
+            ),
+            "reference_product_price_source": (
+                reference_product_price_source
+                if product_charge_eligible
+                else "previous_supplier_invoice"
+            ),
             "quantity": quantity,
             "reference_product_unit_price_halalas": reference_product_halalas,
             "product_unit_price_halalas": requested_product_halalas,
@@ -981,12 +1025,47 @@ async def _supplier_service_catalog(
     }
 
 
+def supplier_mezan_product_reference_price(
+    *,
+    piece: dict[str, Any],
+    profile: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Resolve a supplier-invoice product price from Mezan V2 only.
+
+    Salla cost remains available to profitability calculations elsewhere, but
+    it is never an authority for a supplier payable. An absent Mezan base or
+    variant cost is returned as missing so an authorised employee must record
+    the real supplier price in Mezan before approval.
+    """
+    amount, source = resolve_base_unit_cost(
+        {
+            "variant_id": piece.get("variant_id") or piece.get("salla_variant_id"),
+            "sku": piece.get("sku"),
+        },
+        profile or {},
+        {},  # Deliberately disable every Salla product/variant fallback.
+    )
+    if source not in MEZAN_V2_COST_SOURCES:
+        amount = None
+        source = "missing"
+    amount_halalas = _halalas(amount)
+    return {
+        "reference_product_unit_price_halalas": int(amount_halalas or 0),
+        "reference_product_price_complete": amount_halalas is not None,
+        "reference_product_price_source": source,
+        "product_price_authority": "mezan_v2",
+        "salla_price_fallback_allowed": False,
+    }
+
+
 async def _supplier_product_reference_price(
     db: Any,
     *,
     user_id: str,
     piece: dict[str, Any],
+    mongo_session: Any = None,
 ) -> dict[str, Any]:
+    kwargs = {"session": mongo_session} if mongo_session is not None else {}
     product_id = _text(piece.get("product_id"))
     product = await db[PRODUCTS].find_one(
         {
@@ -1002,37 +1081,23 @@ async def _supplier_product_reference_price(
             "id": 1,
             "mezan_product_id": 1,
             "salla_product_id": 1,
-            "cost_price_from_salla": 1,
-            "variants": 1,
         },
+        **kwargs,
     )
     if not product:
-        return {
-            "reference_product_unit_price_halalas": 0,
-            "reference_product_price_complete": False,
-            "reference_product_price_source": "missing",
-        }
+        return supplier_mezan_product_reference_price(piece=piece, profile={})
     salla_id = _text(product.get("salla_product_id")) or _text(
         product.get("mezan_product_id") or product.get("id")
     )
     profile = await db[COST_PROFILES].find_one(
         {"user_id": user_id, "salla_product_id": salla_id},
         {"_id": 0},
+        **kwargs,
     ) or {}
-    amount, source = resolve_base_unit_cost(
-        {
-            "variant_id": piece.get("variant_id") or piece.get("salla_variant_id"),
-            "sku": piece.get("sku"),
-        },
-        profile,
-        product,
+    return supplier_mezan_product_reference_price(
+        piece=piece,
+        profile=profile,
     )
-    amount_halalas = _halalas(amount)
-    return {
-        "reference_product_unit_price_halalas": int(amount_halalas or 0),
-        "reference_product_price_complete": amount_halalas is not None,
-        "reference_product_price_source": source,
-    }
 
 
 def supplier_service_completion_update(
@@ -2185,14 +2250,40 @@ async def _recent_session_events(
             session=session,
             mongo_session=mongo_session,
         )
+        product_price_cache: dict[tuple[str, str, str], dict[str, Any]] = {}
         for row in rows:
-            # Always rebuild this derived field. Older open sessions may still
-            # contain product-level services that the customer did not choose.
+            # Always rebuild derived fields. Older open sessions may contain
+            # unselected services or a product price copied from Salla before
+            # the Mezan-only supplier-price boundary was enforced.
             row["invoice_services"] = supplier_piece_invoice_services(
                 row,
                 session,
                 service_catalog,
             )
+            if row.get("product_charge_eligible") is False:
+                row.update({
+                    "reference_product_unit_price_halalas": 0,
+                    "reference_product_price_complete": True,
+                    "reference_product_price_source": "previous_supplier_invoice",
+                    "product_price_authority": "mezan_v2",
+                    "salla_price_fallback_allowed": False,
+                })
+                continue
+            cache_key = (
+                _text(row.get("product_id")),
+                _text(row.get("variant_id") or row.get("salla_variant_id")),
+                _text(row.get("sku")).casefold(),
+            )
+            if cache_key not in product_price_cache:
+                product_price_cache[cache_key] = (
+                    await _supplier_product_reference_price(
+                        db,
+                        user_id=user_id,
+                        piece=row,
+                        mongo_session=mongo_session,
+                    )
+                )
+            row.update(dict(product_price_cache[cache_key]))
     return rows
 
 
@@ -4374,6 +4465,7 @@ __all__ = [
     "supplier_receipt_piece_rollback_update",
     "supplier_receipt_previous_piece_state",
     "supplier_piece_reference_price",
+    "supplier_mezan_product_reference_price",
     "supplier_invoice_experiment_run_id",
     "supplier_service_completion_update",
 ]

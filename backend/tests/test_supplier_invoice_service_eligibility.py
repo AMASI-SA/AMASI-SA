@@ -138,7 +138,6 @@ def test_permanent_snapshot_is_pending_and_invoice_required() -> None:
     assert row["status"] == "pending"
 
 
-
 def test_customer_selected_service_does_not_require_supplier_assignment() -> None:
     rows = supplier_piece_invoice_services(
         {
@@ -214,7 +213,6 @@ def test_permanent_service_selector_excludes_invoiced_and_received_pieces() -> N
     }
 
 
-
 def test_invoice_close_cannot_bypass_permanent_service_endpoint() -> None:
     with pytest.raises(HTTPException) as captured:
         build_supplier_receiving_invoice(
@@ -226,6 +224,8 @@ def test_invoice_close_cannot_bypass_permanent_service_endpoint() -> None:
                 "sku": "SKU-1",
                 "product_charge_eligible": True,
                 "reference_product_unit_price_halalas": 5000,
+                "reference_product_price_complete": True,
+                "reference_product_price_source": "mezan_v2_base",
                 "invoice_services": [],
             }],
             requested_lines=[SupplierReceivingInvoiceLineRequest(
