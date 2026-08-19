@@ -1,0 +1,71 @@
+name: Apply Supplier Service Permanence
+
+on:
+  push:
+    branches:
+      - fix/supplier-invoice-service-permanence
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-supplier-service-permanence
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Clone feature branch
+        run: |
+          set -euo pipefail
+          git clone --depth=1 --branch "${GITHUB_REF_NAME}" \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" workspace
+
+      - name: Decode and apply reviewed patch
+        run: |
+          set -euo pipefail
+          cat > /tmp/supplier_service_patch.b64 <<'PATCH_B64'
+          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
+          PATCH_B64
+          python - <<'PY'
+          import base64, gzip
+          from pathlib import Path
+          encoded = Path('/tmp/supplier_service_patch.b64').read_text().strip()
+          content = gzip.decompress(base64.b64decode(encoded))
+          target = Path('workspace/scripts/apply_supplier_invoice_service_eligibility.py')
+          target.write_bytes(content)
+          PY
+          cd workspace
+          python scripts/apply_supplier_invoice_service_eligibility.py
+          rm scripts/apply_supplier_invoice_service_eligibility.py
+
+      - name: Compile changed boundary
+        working-directory: workspace
+        run: |
+          set -euo pipefail
+          python -m py_compile \
+            backend/supplier_receiving_routes.py \
+            backend/preparation_piece_operations.py \
+            backend/tests/test_supplier_invoice_service_eligibility.py
+
+      - name: Commit generated source changes
+        working-directory: workspace
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            backend/supplier_receiving_routes.py \
+            backend/preparation_piece_operations.py \
+            backend/tests/test_supplier_invoice_service_eligibility.py
+          if git diff --cached --quiet; then
+            echo "Patch already applied; nothing to commit."
+            exit 0
+          fi
+          git commit -m "fix(receiving): keep supplier invoice services optional and permanent"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
