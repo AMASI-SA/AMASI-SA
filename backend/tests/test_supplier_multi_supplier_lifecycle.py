@@ -9,13 +9,13 @@ from preparation_piece_operations import PIECE_STATUS_IN_PROGRESS
 from preparation_supplier_dispatch import (
     DISPATCH_STATUS_PARTIAL,
     piece_is_available_for_supplier_dispatch,
-    supplier_dispatch_blocker,
-    supplier_dispatch_lines,
+    supplier_receiving_dispatch_blocker,
 )
 from supplier_receiving_routes import (
     SupplierReceivingInvoiceLineRequest,
     SupplierReceivingInvoiceServiceRequest,
     build_supplier_receiving_invoice,
+    supplier_partial_receipt_assignment_patch,
     supplier_piece_product_charge_eligible,
 )
 
@@ -31,6 +31,8 @@ def _partially_completed_piece() -> dict:
         "status": PIECE_STATUS_IN_PROGRESS,
         "execution_status": "awaiting_remaining_services",
         "supplier_dispatch_status": DISPATCH_STATUS_PARTIAL,
+        "supplier_id": "supplier-1",
+        "supplier_name": "المورد الأول",
         "supplier_receiving_history": [
             {
                 "invoice_id": "invoice-supplier-1",
@@ -60,22 +62,34 @@ def _partially_completed_piece() -> dict:
     }
 
 
-def test_partially_completed_piece_can_be_sent_to_second_supplier() -> None:
+def test_partially_completed_piece_is_assigned_during_second_supplier_receipt() -> None:
     piece = _partially_completed_piece()
-    second_supplier = {
-        "id": "supplier-2",
-        "company_name": "المورد الثاني",
-        "service_links": [
-            {"service_id": "paint", "service_name": "طلاء"},
-        ],
+    session = {
+        "id": "session-supplier-2",
+        "supplier_id": "supplier-2",
+        "supplier_snapshot": {
+            "id": "supplier-2",
+            "company_name": "المورد الثاني",
+            "service_links": [
+                {"service_id": "paint", "service_name": "طلاء"},
+            ],
+        },
     }
 
-    assert piece_is_available_for_supplier_dispatch(piece) is True
-    assert supplier_dispatch_blocker(piece, second_supplier) is None
+    # No second supplier dispatch file is created. Scanning in supplier 2's
+    # receiving session is the assignment action for the remaining service.
+    assert piece_is_available_for_supplier_dispatch(piece) is False
+    assert supplier_receiving_dispatch_blocker(piece, "supplier-2") is None
 
-    lines = supplier_dispatch_lines([piece], second_supplier)
-    assert len(lines) == 1
-    assert [row["service_id"] for row in lines[0]["services"]] == ["paint"]
+    patch = supplier_partial_receipt_assignment_patch(
+        piece=piece,
+        session=session,
+        actor={"id": "receiver-2", "name": "موظف الاستلام"},
+        assigned_at=datetime.now(timezone.utc),
+    )
+    assert patch["supplier_id"] == "supplier-2"
+    assert patch["supplier_assignment_mode"] == "direct_at_partial_receipt"
+    assert patch["supplier_assigned_from_id"] == "supplier-1"
     assert supplier_piece_product_charge_eligible(piece) is False
 
 
