@@ -85,6 +85,16 @@ SAFE_RATE_LIMIT_HEADERS = (
     "x-ratelimit-reset-requests",
     "x-ratelimit-reset-tokens",
 )
+NON_RETRYABLE_QUOTA_TYPES = {
+    "insufficient_quota",
+}
+NON_RETRYABLE_QUOTA_CODES = {
+    "credit_balance_exhausted",
+    "billing_hard_limit_reached",
+    "billing_not_active",
+    "insufficient_quota",
+    "quota_exceeded",
+}
 
 
 def _evaluate_case_with_execution_contract(case, output):
@@ -258,7 +268,6 @@ def _safe_error_diagnostic(exc: Exception) -> dict[str, Any]:
                 diagnostic[target_key] = str(value)[:200]
         message = error_body.get("message")
         if message not in (None, ""):
-            # OpenAI error text contains limit/current/reset context, not the API key.
             diagnostic["message"] = " ".join(str(message).split())[:800]
 
     response = getattr(exc, "response", None)
@@ -277,6 +286,20 @@ def _safe_error_diagnostic(exc: Exception) -> dict[str, Any]:
     return diagnostic
 
 
+def _non_retryable_quota_reason(exc: Exception) -> str | None:
+    """Identify 429 responses that cannot recover without a billing/quota change."""
+    if type(exc).__name__ != "RateLimitError":
+        return None
+    diagnostic = _safe_error_diagnostic(exc)
+    error_type = str(diagnostic.get("api_error_type") or "").strip().lower()
+    error_code = str(diagnostic.get("api_error_code") or "").strip().lower()
+    if error_code in NON_RETRYABLE_QUOTA_CODES:
+        return error_code
+    if error_type in NON_RETRYABLE_QUOTA_TYPES:
+        return error_type
+    return None
+
+
 def _print_safe_error_diagnostic(case_id: str, exc: Exception, *, attempt: int) -> None:
     payload = _safe_error_diagnostic(exc)
     payload["case"] = case_id
@@ -291,10 +314,28 @@ async def _run_case_with_transient_backoff(client: Any, case: dict[str, Any]) ->
             return await live_eval.run_case(client, case)
         except Exception as exc:
             name = type(exc).__name__
-            _print_safe_error_diagnostic(str(case["id"]), exc, attempt=attempt + 1)
+            case_id = str(case["id"])
+            _print_safe_error_diagnostic(case_id, exc, attempt=attempt + 1)
+
+            non_retryable_quota = _non_retryable_quota_reason(exc)
+            if non_retryable_quota:
+                print(
+                    f"V3_TRANSIENT_RETRY_SKIPPED_NON_RETRYABLE case={case_id} "
+                    f"error={name} reason={non_retryable_quota}",
+                    flush=True,
+                )
+                return {
+                    "id": case_id,
+                    "description": case["description"],
+                    "actions": [],
+                    "roots": [],
+                    "failures": [f"eval_runtime_error:{name}"],
+                    "summary": "",
+                }
+
             if name not in TRANSIENT_ERROR_NAMES or attempt >= attempts - 1:
                 return {
-                    "id": str(case["id"]),
+                    "id": case_id,
                     "description": case["description"],
                     "actions": [],
                     "roots": [],
@@ -303,7 +344,7 @@ async def _run_case_with_transient_backoff(client: Any, case: dict[str, Any]) ->
                 }
             delay = TRANSIENT_BACKOFF_SECONDS[attempt]
             print(
-                f"V3_TRANSIENT_RETRY case={case['id']} error={name} "
+                f"V3_TRANSIENT_RETRY case={case_id} error={name} "
                 f"attempt={attempt + 1}/{attempts} sleep={delay}s",
                 flush=True,
             )
