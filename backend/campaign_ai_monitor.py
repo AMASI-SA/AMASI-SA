@@ -1,25 +1,31 @@
-"""Public facade for Campaign AI source-of-truth policy.
+"""Public facade for Campaign AI source-of-truth and Decision Intelligence V3.
 
-The historical implementation remains in ``campaign_ai_monitor_legacy`` so
-existing route/scheduler/execution contracts stay stable. The marketing
-source/policy lives in ``campaign_ai_policy_v2``. The execution-alignment layer
-adds the real provider write capabilities to OpenAI evidence and rejects
-impossible action/target pairs without inventing a parent target. A bounded
-OpenAI repair pass may then reconsider the same evidence once when the first
-model response targeted an impossible provider write.
+The established V2 pipeline remains responsible for provider evidence,
+profitability, persistence, scheduling, snapshot lifecycle and approval/write
+safety. Decision Intelligence V3 replaces only the runtime OpenAI reasoning
+boundary and adds task-local access to the tenant database for deeper evidence.
 """
 from __future__ import annotations
 
 from typing import Any
 
+import campaign_ai_decision_v3 as _decision_v3
+import campaign_ai_evidence_runtime_enrichment_v3 as _evidence_enrichment
 import campaign_ai_execution_alignment as _alignment
 import campaign_ai_execution_retry as _execution_retry
 import campaign_ai_monitor_legacy as _legacy
 import campaign_ai_policy_v2 as _policy
+from campaign_ai_decision_prompts_v3 import (
+    FIRST_PASS_INSTRUCTIONS as _V3_FIRST_PASS_INSTRUCTIONS,
+    SECOND_PASS_INSTRUCTIONS as _V3_SECOND_PASS_INSTRUCTIONS,
+)
+from campaign_ai_runtime_context_v3 import (
+    get_runtime_context as _get_v3_context,
+    reset_runtime_context as _reset_v3_context,
+    set_runtime_context as _set_v3_context,
+)
 
-# Keep the established monkeypatch/test surface for the OpenAI client. The
-# policy runtime uses the legacy module's client reference; the public wrapper
-# synchronizes an explicitly replaced client before a direct _ask_openai call.
+# Keep the established monkeypatch/test surface for the OpenAI client.
 AsyncOpenAI = _legacy.AsyncOpenAI
 
 RecommendationItem = _policy.RecommendationItem
@@ -45,36 +51,132 @@ RESULT_SOURCE_SALLA = _policy.RESULT_SOURCE_SALLA
 OPENAI_TIMEOUT_SECONDS = _legacy.OPENAI_TIMEOUT_SECONDS
 OPENAI_MAX_OUTPUT_TOKENS = _legacy.OPENAI_MAX_OUTPUT_TOKENS
 
+# Production and live-eval must use one reasoning contract. The historical V3
+# module still exports prompt constants for compatibility, so bind them to the
+# lightweight shared module before building the runtime OpenAI callable.
+_decision_v3.FIRST_PASS_INSTRUCTIONS = _V3_FIRST_PASS_INSTRUCTIONS
+_decision_v3.SECOND_PASS_INSTRUCTIONS = _V3_SECOND_PASS_INSTRUCTIONS
+# Restocking is an operational recommendation, never an Ads API write.
+_decision_v3.OPERATIONAL_ACTIONS.add("RESTOCK_PRODUCT")
+
 # Explicit policy exports used by focused tests/diagnostics.
 _account_range = _policy._account_range
 _page_aligned_profitability = _policy._page_aligned_profitability
 _snapchat_campaign_entities = _policy._snapchat_campaign_entities
 _snapchat_child_entities = _policy._snapchat_child_entities
 _experiment_outcomes_context = _policy._experiment_outcomes_context
-_recommendation_explanation = _policy._recommendation_explanation
 execution_capabilities = _alignment.execution_capabilities
 
-# Install the aligned OpenAI boundary first, then wrap it with one bounded
-# OpenAI-owned correction pass. Mezan still never selects or promotes a target.
-_aligned_ask_openai = _alignment.build_aligned_ask_openai(_legacy, _policy)
-_repairing_ask_openai = _execution_retry.build_repairing_ask_openai(
-    _aligned_ask_openai,
+# Preserve the existing Salla/profit explanation enrichment, then append the
+# rich V3 business diagnosis captured on the exact candidate row. V2 later
+# computes approval_available from the fail-closed legacy action projection.
+_base_recommendation_explanation = _policy._recommendation_explanation
+
+
+def _recommendation_explanation(item: Any, row: dict[str, Any]) -> dict[str, Any]:
+    brief = dict(_base_recommendation_explanation(item, row) or {})
+    rich = row.get("_decision_v3") if isinstance(row, dict) else None
+    if isinstance(rich, dict):
+        brief.update(rich)
+    return brief
+
+
+_policy._recommendation_explanation = _recommendation_explanation
+_legacy._recommendation_explanation = _recommendation_explanation
+
+# Keep the former aligned/repairing call for established direct unit tests and
+# diagnostics that intentionally invoke the OpenAI boundary without a tenant
+# runtime context. It is never used by the Production monitor because the
+# monitor wrapper below always installs ContextVar(db,user_id) first.
+_legacy_test_aligned_ask = _alignment.build_aligned_ask_openai(_legacy, _policy)
+_legacy_test_repairing_ask = _execution_retry.build_repairing_ask_openai(
+    _legacy_test_aligned_ask,
     _legacy,
     _policy,
     _alignment,
 )
-_policy._ask_openai = _repairing_ask_openai
-_legacy._ask_openai = _repairing_ask_openai
-run_campaign_ai_monitor = _policy.run_campaign_ai_monitor
+
+# Enrich the V3 evidence pack with field-level product change chronology. The
+# wrapper is installed once at module import and still delegates to the same
+# base evidence builder; it does not alter scheduler/source/snapshot contracts.
+_decision_evidence_builder = _evidence_enrichment.wrap_evidence_builder(
+    _decision_v3.build_decision_evidence_pack_v3,
+)
+_decision_v3.build_decision_evidence_pack_v3 = _decision_evidence_builder
+
+# Runtime authority: V3 owns diagnosis + marketing judgment, including its own
+# mandatory second pass for budget-owner coverage and counterfactual review.
+_v3_ask_openai = _decision_v3.build_decision_v3_ask_openai(
+    _legacy,
+    _policy,
+    _alignment,
+)
+
+
+async def _runtime_ask_dispatch(*args: Any, **kwargs: Any):
+    """Use V3 in a tenant monitor task; preserve old direct-test contracts only.
+
+    ContextVar is task-local, so concurrent tenant monitor tasks cannot route one
+    another through the wrong decision engine. A missing context means this is a
+    direct diagnostic/unit-test call rather than a Production monitor run.
+    """
+    try:
+        _get_v3_context()
+    except RuntimeError:
+        # Do not overwrite _legacy.AsyncOpenAI here. Established direct tests
+        # intentionally inject a fake client into the legacy module itself.
+        return await _legacy_test_repairing_ask(*args, **kwargs)
+    # Production monitor wrapper installs the public client before setting the
+    # task-local context, so this branch is always the V3 runtime path.
+    return await _v3_ask_openai(*args, **kwargs)
+
+
+_policy._ask_openai = _runtime_ask_dispatch
+_legacy._ask_openai = _runtime_ask_dispatch
+
+# The V2 monitor signature remains unchanged. ContextVar supplies db/user_id to
+# V3 without process-global tenant state or changes to worker/cadence/snapshot.
+_base_run_campaign_ai_monitor = _policy.run_campaign_ai_monitor
+
+
+async def run_campaign_ai_monitor(
+    db: Any,
+    user_id: str,
+    *args: Any,
+    **kwargs: Any,
+):
+    _legacy.AsyncOpenAI = AsyncOpenAI
+    token = _set_v3_context(db, user_id)
+    try:
+        return await _base_run_campaign_ai_monitor(
+            db,
+            user_id,
+            *args,
+            **kwargs,
+        )
+    finally:
+        _reset_v3_context(token)
+
+
+# run_all_campaign_ai_monitors lives in the compatibility module and resolves
+# this global at runtime, so the established worker automatically enters V3.
+_policy.run_campaign_ai_monitor = run_campaign_ai_monitor
+_legacy.run_campaign_ai_monitor = run_campaign_ai_monitor
 
 
 async def _ask_openai(*args: Any, **kwargs: Any):
+    """Established direct-test helper; Production monitor uses the dispatcher."""
     _legacy.AsyncOpenAI = AsyncOpenAI
-    return await _repairing_ask_openai(*args, **kwargs)
+    return await _legacy_test_repairing_ask(*args, **kwargs)
 
 
-# Existing route/scheduler helpers remain delegated to the legacy module; the
-# policy module patches their runtime globals during import.
+async def _ask_openai_v3(*args: Any, **kwargs: Any):
+    """Direct V3 diagnostic hook; caller must establish runtime context."""
+    _legacy.AsyncOpenAI = AsyncOpenAI
+    return await _v3_ask_openai(*args, **kwargs)
+
+
+# Existing route/scheduler helpers remain delegated to the legacy module.
 def __getattr__(name: str) -> Any:
     if hasattr(_policy, name):
         return getattr(_policy, name)

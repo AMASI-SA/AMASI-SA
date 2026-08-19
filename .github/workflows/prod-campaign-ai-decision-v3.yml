@@ -1,0 +1,130 @@
+name: Production Campaign AI Decision Intelligence V3
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "backend/campaign_ai_*_v3.py"
+      - "backend/advertising_product_watch*_v3.py"
+      - "backend/campaign_ai_monitor.py"
+      - "backend/ads_manager/__init__.py"
+      - "backend/tests/test_campaign_ai_decision_v3_contract.py"
+      - "backend/tests/test_campaign_ai_public_page_probe_v3.py"
+      - "backend/tests/test_campaign_ai_customer_voice_evidence_v3.py"
+      - "backend/tests/test_advertising_product_watch_cycle_v3.py"
+      - "backend/tests/campaign_ai_v3_scenarios.py"
+      - "frontend/src/pages/CampaignRecommendations.jsx"
+      - "frontend/src/pages/AdvancedDashboard.jsx"
+      - ".github/workflows/prod-campaign-ai-decision-v3.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  decision-intelligence-contract:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused dependencies
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1
+          pydantic==2.13.4
+          pymongo==4.5.0
+          motor==3.3.1
+          httpx==0.28.1
+          openai==1.99.9
+          pytest==9.0.3
+          pytest-asyncio
+          openpyxl
+          cryptography
+          bcrypt
+          PyJWT
+          reportlab
+          python-multipart
+          python-dotenv
+          email-validator
+          pymupdf
+          pillow
+          qrcode
+          arabic-reshaper
+          python-bidi
+      - name: Compile Decision Intelligence V3
+        run: >-
+          python -m py_compile
+          campaign_ai_decision_schema_v3.py
+          campaign_ai_decision_review_schema_v3.py
+          campaign_ai_decision_prompts_v3.py
+          campaign_ai_temporal_evidence_v3.py
+          campaign_ai_funnel_evidence_v3.py
+          campaign_ai_public_page_probe_v3.py
+          campaign_ai_product_intelligence_v3.py
+          campaign_ai_product_change_history_v3.py
+          campaign_ai_abandoned_cart_evidence_v3.py
+          campaign_ai_store_friction_evidence_v3.py
+          campaign_ai_customer_voice_evidence_v3.py
+          campaign_ai_offer_schedule_v3.py
+          campaign_ai_knowledge_retrieval_v3.py
+          campaign_ai_visual_evidence_v3.py
+          campaign_ai_evidence_v3.py
+          campaign_ai_evidence_runtime_enrichment_v3.py
+          campaign_ai_runtime_context_v3.py
+          campaign_ai_decision_v3.py
+          advertising_product_watch_v3.py
+          advertising_product_watch_cycle_v3.py
+          advertising_product_watch_runner_v3.py
+          advertising_product_watch_scheduler_v3.py
+          advertising_product_watch_routes_v3.py
+          campaign_ai_monitor.py
+          scripts/campaign_ai_v3_live_eval.py
+      - name: Run V3 safety and reasoning contracts
+        run: >-
+          python -m pytest -q
+          tests/test_campaign_ai_decision_v3_contract.py
+          tests/test_campaign_ai_public_page_probe_v3.py
+          tests/test_campaign_ai_customer_voice_evidence_v3.py
+          tests/test_advertising_product_watch_cycle_v3.py
+          --tb=short
+      - name: Enforce architecture invariants
+        run: |
+          grep -q 'today_is_examined_first' campaign_ai_temporal_evidence_v3.py
+          grep -q 'three_day_aggregate_is_primary_rule.*False' campaign_ai_temporal_evidence_v3.py
+          grep -q 'recommendation_is_separate_from_execution.*True' campaign_ai_evidence_v3.py
+          grep -q 'openai_is_final_marketing_decision_authority.*True' campaign_ai_evidence_v3.py
+          grep -q 'counterfactual_reviewed_recommendation_ids' campaign_ai_decision_review_schema_v3.py
+          grep -q 'required_budget_owner_keys' campaign_ai_decision_v3.py
+          grep -q 'product_availability_not_verified_for_scale' campaign_ai_decision_v3.py
+          grep -q 'VISUAL_FALLBACK_MARKER' campaign_ai_decision_v3.py
+          grep -q 'responses_input' campaign_ai_decision_v3.py
+          grep -q 'follow_redirects=False' campaign_ai_public_page_probe_v3.py
+          grep -q 'MAX_PUBLIC_PAGE_PROBES_PER_CYCLE' campaign_ai_evidence_v3.py
+          grep -q 'store_level_corroborating_evidence' campaign_ai_abandoned_cart_evidence_v3.py
+          grep -q 'payment_failure_events_available.*False' campaign_ai_store_friction_evidence_v3.py
+          grep -q 'source_tier' campaign_ai_knowledge_retrieval_v3.py
+          grep -q 'last_reviewed_at' campaign_ai_knowledge_retrieval_v3.py
+          grep -q 'input_image' campaign_ai_visual_evidence_v3.py
+          grep -q 'field_changes_observed_at' campaign_ai_product_change_history_v3.py
+          grep -q 'raw_conversations_included.*False' campaign_ai_customer_voice_evidence_v3.py
+          grep -q 'pii_included.*False' campaign_ai_customer_voice_evidence_v3.py
+          grep -q 'store_or_product_feedback_becomes_campaign_attribution.*False' campaign_ai_customer_voice_evidence_v3.py
+          grep -q 'VERIFIED_CAMPAIGN_ATTRIBUTION' campaign_ai_customer_voice_evidence_v3.py
+          grep -q 'marketing_decision.*False' advertising_product_watch_v3.py
+          grep -q 'provider_write_reached.*False' advertising_product_watch_v3.py
+          grep -q 'ContextVar' campaign_ai_runtime_context_v3.py
+          ! grep -q 'if .*roas.*pause' campaign_ai_decision_v3.py
+          ! grep -q 'if .*cpa.*pause' campaign_ai_decision_v3.py
+      - name: Enforce V3 frontend recommendation vs execution separation
+        working-directory: .
+        run: |
+          grep -q 'recommended_action' frontend/src/pages/CampaignRecommendations.jsx
+          grep -q 'root_cause_category' frontend/src/pages/CampaignRecommendations.jsx
+          grep -q 'item.executable && item.approval_available' frontend/src/pages/CampaignRecommendations.jsx
+          grep -q 'ما الذي قد يجعل هذه التوصية خاطئة؟' frontend/src/pages/CampaignRecommendations.jsx
+          grep -q 'Advertising Product Watch' frontend/src/pages/CampaignRecommendations.jsx

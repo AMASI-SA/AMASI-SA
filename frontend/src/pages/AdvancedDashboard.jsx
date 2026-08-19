@@ -36,14 +36,58 @@ function Panel({ children, className = "", testid }) {
 }
 
 const AI_ACTIONS = {
-    pause: { label: "إيقاف مقترح", tone: "border-red-200 bg-red-50 text-red-700" },
-    reduce: { label: "خفض مقترح", tone: "border-orange-200 bg-orange-50 text-orange-700" },
-    monitor: { label: "مراقبة", tone: "border-amber-200 bg-amber-50 text-amber-700" },
-    maintain: { label: "استمرار", tone: "border-sky-200 bg-sky-50 text-sky-700" },
-    scale: { label: "توسعة مقترحة", tone: "border-emerald-200 bg-emerald-50 text-emerald-700" },
+    CONTINUE: { label: "استمرار", tone: "border-sky-200 bg-sky-50 text-sky-700" },
+    MONITOR: { label: "مراقبة", tone: "border-amber-200 bg-amber-50 text-amber-700" },
+    NO_ACTION_INSUFFICIENT_DATA: { label: "بيانات غير كافية", tone: "border-slate-200 bg-slate-50 text-slate-600" },
+    PAUSE_AD: { label: "إيقاف الإعلان", tone: "border-red-200 bg-red-50 text-red-700" },
+    PAUSE_ADSET: { label: "إيقاف المجموعة", tone: "border-red-200 bg-red-50 text-red-700" },
+    PAUSE_CAMPAIGN: { label: "إيقاف الحملة", tone: "border-red-200 bg-red-50 text-red-700" },
+    DECREASE_BUDGET: { label: "خفض الميزانية", tone: "border-orange-200 bg-orange-50 text-orange-700" },
+    INCREASE_BUDGET: { label: "زيادة الميزانية", tone: "border-emerald-200 bg-emerald-50 text-emerald-700" },
+    TEST_NEW_CREATIVE: { label: "اختبار إبداع جديد", tone: "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700" },
+    REFRESH_CREATIVE: { label: "تحديث الإبداع", tone: "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700" },
+    TEST_NEW_HOOK: { label: "اختبار خطاف جديد", tone: "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700" },
+    STORY_AD: { label: "إعلان ستوري", tone: "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700" },
+    REVIEW_AUDIENCE: { label: "مراجعة الجمهور", tone: "border-violet-200 bg-violet-50 text-violet-700" },
+    REVIEW_PRODUCT: { label: "مراجعة المنتج", tone: "border-violet-200 bg-violet-50 text-violet-700" },
+    REVIEW_OFFER: { label: "مراجعة العرض", tone: "border-violet-200 bg-violet-50 text-violet-700" },
+    REVIEW_PRODUCT_PAGE: { label: "مراجعة صفحة المنتج", tone: "border-violet-200 bg-violet-50 text-violet-700" },
+    CHANGE_PRODUCT_TITLE: { label: "تغيير اسم المنتج", tone: "border-indigo-200 bg-indigo-50 text-indigo-700" },
+    CHANGE_PRODUCT_DESCRIPTION: { label: "تغيير وصف المنتج", tone: "border-indigo-200 bg-indigo-50 text-indigo-700" },
+    CHANGE_HERO_IMAGE: { label: "تغيير صورة العرض", tone: "border-indigo-200 bg-indigo-50 text-indigo-700" },
+    REORDER_PRODUCT_IMAGES: { label: "ترتيب صور المنتج", tone: "border-indigo-200 bg-indigo-50 text-indigo-700" },
+    REVIEW_PRICE: { label: "مراجعة السعر", tone: "border-indigo-200 bg-indigo-50 text-indigo-700" },
+    REVIEW_SHIPPING_COST: { label: "مراجعة تكلفة الشحن", tone: "border-violet-200 bg-violet-50 text-violet-700" },
+    REVIEW_CHECKOUT: { label: "مراجعة إتمام الطلب", tone: "border-violet-200 bg-violet-50 text-violet-700" },
+    REVIEW_PAYMENT: { label: "مراجعة الدفع", tone: "border-violet-200 bg-violet-50 text-violet-700" },
+    INVESTIGATE_ABANDONED_CARTS: { label: "فحص السلات المتروكة", tone: "border-violet-200 bg-violet-50 text-violet-700" },
+    INVESTIGATE_WEBSITE: { label: "فحص المتجر", tone: "border-rose-200 bg-rose-50 text-rose-700" },
+    INVESTIGATE_TRACKING: { label: "فحص التتبع", tone: "border-violet-200 bg-violet-50 text-violet-700" },
+    FIX_TRACKING: { label: "إصلاح التتبع", tone: "border-rose-200 bg-rose-50 text-rose-700" },
+    FIX_DESTINATION_URL: { label: "إصلاح رابط المنتج", tone: "border-rose-200 bg-rose-50 text-rose-700" },
+    RESTORE_PRODUCT_VISIBILITY: { label: "إظهار المنتج", tone: "border-rose-200 bg-rose-50 text-rose-700" },
+    REVIEW_INVENTORY: { label: "مراجعة المخزون", tone: "border-teal-200 bg-teal-50 text-teal-700" },
+    RESTOCK_PRODUCT: { label: "إعادة توريد المنتج", tone: "border-teal-200 bg-teal-50 text-teal-700" },
+    EXTEND_PROMOTION: { label: "تمديد العرض المقترح", tone: "border-indigo-200 bg-indigo-50 text-indigo-700" },
 };
 
 const AI_LEVELS = { campaign: "حملة", ad_group: "مجموعة", ad: "إعلان" };
+const AI_ROOT_CAUSES = {
+    CAMPAIGN: "الحملة", CREATIVE: "الإبداع", AUDIENCE: "الجمهور", PRODUCT: "المنتج",
+    OFFER: "العرض", LANDING_PAGE: "صفحة الهبوط", ADD_TO_CART: "الإضافة للسلة",
+    CHECKOUT: "إتمام الطلب", SHIPPING: "الشحن", PAYMENT: "الدفع", WEBSITE: "المتجر",
+    TRACKING: "التتبع", ATTRIBUTION: "الإسناد", SEASONALITY: "الموسمية", INVENTORY: "المخزون",
+    PRODUCT_VISIBILITY: "ظهور المنتج", PRODUCT_URL: "رابط المنتج", NORMAL_VARIANCE: "تذبذب طبيعي",
+    INSUFFICIENT_DATA: "بيانات غير كافية", UNKNOWN: "غير محسوم",
+};
+
+function aiActionMeta(item) {
+    const key = String(item?.recommended_action || "MONITOR");
+    return AI_ACTIONS[key] || {
+        label: key.replaceAll("_", " "),
+        tone: "border-violet-200 bg-violet-50 text-violet-700",
+    };
+}
 
 export function CampaignAdvisorCard() {
     const [snapshot, setSnapshot] = useState(null);
@@ -67,10 +111,13 @@ export function CampaignAdvisorCard() {
     }, []);
     const recommendations = snapshot?.recommendations || [];
     const visible = recommendations.slice(0, 5);
-    const urgent = recommendations.filter((item) => ["pause", "reduce"].includes(item.action)).length;
-    const scale = recommendations.filter((item) => item.action === "scale").length;
+    const urgent = recommendations.filter((item) => ["PAUSE_AD", "PAUSE_ADSET", "PAUSE_CAMPAIGN", "DECREASE_BUDGET"].includes(item.recommended_action)).length;
+    const scale = recommendations.filter((item) => item.recommended_action === "INCREASE_BUDGET").length;
     const approve = async (item) => {
-        const change = item.action === "pause" ? "إيقاف" : item.action === "reduce" ? `خفض الميزانية ${item.change_percent || 15}%` : `رفع الميزانية ${item.change_percent || 15}%`;
+        const canApprove = item.action_type === "ads_write" && item.executable && item.approval_available;
+        if (!canApprove) return;
+        const action = item.recommended_action;
+        const change = action?.startsWith("PAUSE_") ? "الإيقاف" : action === "DECREASE_BUDGET" ? `خفض الميزانية ${item.change_percent || 15}%` : `رفع الميزانية ${item.change_percent || 15}%`;
         if (!window.confirm(`موافقتك ستنفّذ ${change} على ${item.entity_name} في ${item.provider === "meta" ? "Meta" : "Snapchat"}. هل تريد المتابعة؟`)) return;
         setApproving((value) => ({ ...value, [item.recommendation_id]: true }));
         try {
@@ -92,7 +139,7 @@ export function CampaignAdvisorCard() {
         <div className="flex min-h-14 flex-wrap items-center justify-between gap-2 border-b border-violet-800 bg-violet-700 px-4 py-3 text-white">
             <div>
                 <h2 className="flex items-center gap-2 font-extrabold"><Sparkles className="h-5 w-5" />ملاحظات الذكاء على الحملات</h2>
-                <p className="mt-1 text-[10px] text-violet-100">سناب وMeta · قرار مستقل كل 5 ساعات مع تاريخ 3 و7 و30 يومًا</p>
+                <p className="mt-1 text-[10px] text-violet-100">سناب وMeta · قرار مستقل كل 5 ساعات · التشخيص منفصل عن التنفيذ</p>
             </div>
             <div className="flex items-center gap-2 text-[10px] font-bold">
                 <span className="rounded-full bg-white/15 px-2 py-1">هدر محتمل {integer(urgent)}</span>
@@ -103,26 +150,28 @@ export function CampaignAdvisorCard() {
             <span className="font-bold">{loading ? "جارٍ قراءة آخر تحليل…" : (snapshot?.summary || "سيظهر أول تحليل بعد اكتمال التشغيل الدوري.")}</span>
             <div className="flex items-center gap-3 whitespace-nowrap text-violet-600">
                 <span className="flex items-center gap-1"><Clock3 className="h-3 w-3" />{snapshot?.generated_at ? relativeTime(snapshot.generated_at) : "بانتظار أول تشغيل"}</span>
-                <span className="flex items-center gap-1"><ShieldCheck className="h-3 w-3" />تنفيذ بعد موافقتك</span>
+                <span className="flex items-center gap-1"><ShieldCheck className="h-3 w-3" />Ads write فقط بعد موافقتك</span>
             </div>
         </div>
         {visible.length ? <div className="grid gap-2 p-3 lg:grid-cols-5">
             {visible.map((item) => {
-                const action = AI_ACTIONS[item.action] || AI_ACTIONS.monitor;
+                const action = aiActionMeta(item);
                 const provider = item.provider === "meta" ? "Meta" : "سناب";
                 const executionLabel = item.execution_status === "completed" ? "تم التنفيذ" : item.execution_status === "verification_required" ? "بانتظار التحقق" : item.execution_status === "failed" ? "تعذر التنفيذ" : item.execution_status === "executing" ? "جارٍ التنفيذ…" : null;
                 const blocked = Boolean(executionLabel);
+                const canApprove = item.action_type === "ads_write" && item.executable && item.approval_available;
+                const rootCause = AI_ROOT_CAUSES[item.root_cause_category] || item.root_cause_category;
                 return <div key={item.recommendation_id} className="min-w-0 rounded-xl border border-slate-200 bg-white p-3 hover:border-violet-300 hover:bg-violet-50/30">
                     <div className="flex items-center justify-between gap-2"><span className="text-[9px] font-black text-slate-400">{provider} · {AI_LEVELS[item.entity_level] || item.entity_level}</span><span className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-black ${action.tone}`}>{action.label}</span></div>
-                    {item.recommendation_source === "mezan_fallback" && <span className="mt-2 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[8px] font-black text-amber-800">مصدر التوصية: ميزان</span>}
                     {item.account_name && <p className="mt-1 truncate text-[9px] font-extrabold text-slate-500">الحساب: {item.account_name}</p>}
                     <Link to={`/ads-manager?provider=${item.provider}`} className="mt-2 block truncate text-xs font-extrabold text-slate-900 hover:text-violet-700">{item.provider === "meta" && Number(item.campaign_ad_group_count) === 1 && Number(item.campaign_ad_count) === 1 && item.campaign_name ? item.campaign_name : item.entity_name}</Link>
                     {item.provider === "meta" && item.entity_level === "ad" && <p className="mt-1 truncate text-[9px] font-bold text-slate-400">الإعلان: {item.entity_name}</p>}
-                    <p className="mt-1 line-clamp-2 text-[10px] leading-5 text-slate-600">{item.rationale}</p>
-                    <div className="mt-2 flex items-center justify-between gap-2"><p className="text-[9px] font-bold text-violet-700">الثقة: {item.confidence === "high" ? "عالية" : item.confidence === "medium" ? "متوسطة" : "منخفضة"}</p>{item.approval_available && <button type="button" disabled={approving[item.recommendation_id] || blocked} onClick={() => approve(item)} className="rounded-lg bg-violet-700 px-2 py-1 text-[9px] font-extrabold text-white disabled:bg-slate-300">{executionLabel || (approving[item.recommendation_id] ? "جارٍ التنفيذ…" : "موافقة وتنفيذ")}</button>}</div>
+                    {rootCause && <p className="mt-1 truncate text-[9px] font-extrabold text-rose-700">السبب الجذري: {rootCause}</p>}
+                    <p className="mt-1 line-clamp-2 text-[10px] leading-5 text-slate-600">{item.diagnosis || item.rationale}</p>
+                    <div className="mt-2 flex items-center justify-between gap-2"><p className="text-[9px] font-bold text-violet-700">الثقة: {item.confidence === "high" ? "عالية" : item.confidence === "medium" ? "متوسطة" : "منخفضة"}</p>{canApprove && <button type="button" disabled={approving[item.recommendation_id] || blocked} onClick={() => approve(item)} className="rounded-lg bg-violet-700 px-2 py-1 text-[9px] font-extrabold text-white disabled:bg-slate-300">{executionLabel || (approving[item.recommendation_id] ? "جارٍ التنفيذ…" : "موافقة وتنفيذ")}</button>}</div>
                 </div>;
             })}
-        </div> : <div className="p-5 text-center text-xs text-slate-400">{loading ? "جارٍ التحميل…" : "لا توجد الآن توصية موثوقة بإيقاف أو توسعة."}</div>}
+        </div> : <div className="p-5 text-center text-xs text-slate-400">{loading ? "جارٍ التحميل…" : "لا توجد الآن توصيات جديدة موثوقة."}</div>}
         {recommendations.length > 0 && <div className="border-t px-4 py-2 text-left"><Link to="/ads-manager/recommendations" className="text-[10px] font-extrabold text-violet-700">عرض جميع التوصيات ←</Link></div>}
     </Panel>;
 }
