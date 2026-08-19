@@ -522,18 +522,63 @@ def supplier_dispatch_cards(
     return cards
 
 
+def piece_allows_direct_service_receipt(piece: dict[str, Any]) -> bool:
+    """Allow the next supplier to be bound when a remaining service is received.
+
+    A first supplier still requires the governed dispatch workflow. Once a real
+    supplier invoice exists, the physical piece may move to another specialist
+    without a second dispatch file. Scanning it inside that supplier's receiving
+    session is the new operational assignment; invoice approval records only the
+    services completed there and never charges the product again.
+    """
+    history = [
+        row
+        for row in piece.get("supplier_receiving_history") or []
+        if isinstance(row, dict) and _text(row.get("invoice_id"))
+    ]
+    if not history:
+        return False
+    pending_services = [
+        row
+        for row in piece.get("services") or []
+        if isinstance(row, dict)
+        and _text(row.get("service_id"))
+        and _text(row.get("status")).casefold() != "completed"
+    ]
+    try:
+        remaining_service_count = int(piece.get("remaining_service_count") or 0)
+    except (TypeError, ValueError, OverflowError):
+        remaining_service_count = 0
+    return bool(
+        remaining_service_count > 0
+        or pending_services
+        or _text(piece.get("execution_status")) == "awaiting_remaining_services"
+        or _text(piece.get("supplier_dispatch_status")) == DISPATCH_STATUS_PARTIAL
+    )
+
+
 def supplier_receiving_dispatch_blocker(
     piece: dict[str, Any],
     supplier_id: Any,
 ) -> dict[str, Any] | None:
-    """Fail closed only for pieces governed by the new dispatch workflow."""
+    """Require dispatch only for the first supplier of a physical piece.
+
+    For a partially invoiced piece, the current receiving session directly binds
+    the supplier at service receipt time. The previous supplier id and the absence
+    of a second dispatch file must not block the remaining-service invoice.
+    """
+    if piece_allows_direct_service_receipt(piece):
+        return None
     dispatch_status = _text(piece.get("supplier_dispatch_status"))
     if not dispatch_status:
         return None  # Backward compatibility for historical files.
     if dispatch_status == DISPATCH_STATUS_PARTIAL:
         return {
             "code": "supplier_piece_not_dispatched",
-            "message": "أرسل القطعة إلى المورد المطلوب قبل استلامها.",
+            "message": (
+                "لا توجد فاتورة مورد سابقة تثبت الاستلام الجزئي؛ "
+                "أرسل القطعة أولًا عبر ملف المورد."
+            ),
         }
     expected_supplier_id = _text(piece.get("supplier_id"))
     actual_supplier_id = _text(supplier_id)
@@ -1943,6 +1988,7 @@ __all__ = [
     "ensure_supplier_dispatch_indexes",
     "employee_workspace_summary",
     "make_preparation_supplier_dispatch_router",
+    "piece_allows_direct_service_receipt",
     "piece_is_available_for_supplier_dispatch",
     "plan_piece_selections",
     "supplier_dispatch_blocker",
