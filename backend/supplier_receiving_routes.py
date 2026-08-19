@@ -88,6 +88,14 @@ RECEIPT_PIECE_FIELDS = (
     "supplier_reassigned_by_id",
     "supplier_reassigned_by_name",
     "supplier_reassignment_session_id",
+    "supplier_assignment_mode",
+    "supplier_assigned_at_receipt",
+    "supplier_assigned_from_id",
+    "supplier_assigned_from_name",
+    "supplier_assigned_at",
+    "supplier_assigned_by_id",
+    "supplier_assigned_by_name",
+    "supplier_assignment_session_id",
     "supplier_receiving_scanned_barcode",
     "receipt_event_id",
     "updated_at",
@@ -850,6 +858,43 @@ def supplier_receipt_piece_patch(
         "mezan_only": True,
         "salla_updated": False,
         "qoyod_updated": False,
+    }
+
+
+def supplier_partial_receipt_assignment_patch(
+    *,
+    piece: dict[str, Any],
+    session: dict[str, Any],
+    actor: dict[str, Any],
+    assigned_at: datetime,
+) -> dict[str, Any]:
+    """Assign a partially received piece to the current supplier at scan time.
+
+    A previous supplier invoice already owns the one-time product cost. The next
+    supplier is only completing a remaining service, so opening its receiving
+    session and scanning the same piece is the assignment action. No second
+    supplier dispatch file and no reassignment confirmation are required.
+    """
+    if _text(piece.get("supplier_dispatch_status")) != DISPATCH_STATUS_PARTIAL:
+        return {}
+    if not list(piece.get("supplier_receiving_history") or []):
+        return {}
+    supplier = dict(session.get("supplier_snapshot") or {})
+    supplier_id = _text(supplier.get("id")) or _text(session.get("supplier_id"))
+    previous_supplier_id = _text(piece.get("supplier_id"))
+    if not supplier_id or supplier_id == previous_supplier_id:
+        return {}
+    return {
+        "supplier_id": supplier_id,
+        "supplier_name": _text(supplier.get("company_name")) or "المورد الحالي",
+        "supplier_assignment_mode": "direct_at_partial_receipt",
+        "supplier_assigned_at_receipt": True,
+        "supplier_assigned_from_id": previous_supplier_id or None,
+        "supplier_assigned_from_name": _text(piece.get("supplier_name")) or None,
+        "supplier_assigned_at": assigned_at,
+        "supplier_assigned_by_id": _text(actor.get("id")) or None,
+        "supplier_assigned_by_name": _actor_name(actor) or None,
+        "supplier_assignment_session_id": _text(session.get("id")) or None,
     }
 
 
@@ -3115,6 +3160,12 @@ def make_supplier_receiving_router(
                     == "supplier_piece_dispatched_to_different_supplier"
                     and payload.confirm_supplier_reassignment
                 )
+                direct_assignment_patch = supplier_partial_receipt_assignment_patch(
+                    piece=original_piece,
+                    session=session,
+                    actor=user,
+                    assigned_at=now,
+                )
                 patch = supplier_receipt_piece_patch(
                     session=session,
                     actor=user,
@@ -3122,7 +3173,9 @@ def make_supplier_receiving_router(
                     barcode=barcode,
                     received_at=now,
                 )
-                if supplier_reassigned:
+                if direct_assignment_patch:
+                    patch.update(direct_assignment_patch)
+                elif supplier_reassigned:
                     patch.update({
                         "supplier_id": receiving_supplier_id,
                         "supplier_name": receiving_supplier_name,
@@ -3250,9 +3303,18 @@ def make_supplier_receiving_router(
                     ),
                     "supplier_context": dict(session.get("supplier_snapshot") or {}),
                     "supplier_service_link_status": "draft_not_recorded",
-                    "supplier_reassigned": (
+                    "supplier_assigned_at_receipt": bool(
+                        updated_piece.get("supplier_assigned_at_receipt") is True
+                        and _text(original_piece.get("supplier_id"))
+                        != _text(updated_piece.get("supplier_id"))
+                    ),
+                    "supplier_assignment_mode": _text(
+                        updated_piece.get("supplier_assignment_mode")
+                    ) or None,
+                    "supplier_reassigned": bool(
                         _text(original_piece.get("supplier_id"))
                         != _text(updated_piece.get("supplier_id"))
+                        and updated_piece.get("supplier_assigned_at_receipt") is not True
                     ),
                     "supplier_reassigned_from_id": (
                         _text(original_piece.get("supplier_id")) or None
@@ -3376,6 +3438,10 @@ def make_supplier_receiving_router(
             "scans": public_events,
             "selected_quantity": len(public_events),
             "requires_quantity_selection": False,
+            "supplier_assigned_at_receipt": any(
+                event.get("supplier_assigned_at_receipt") is True
+                for event in public_events
+            ),
             "supplier_service_link_applied": False,
             "draft_piece_reserved": True,
             "financial_invoice_created": False,
@@ -4304,6 +4370,7 @@ __all__ = [
     "build_supplier_receiving_invoice",
     "resolve_scanned_piece",
     "supplier_receipt_piece_patch",
+    "supplier_partial_receipt_assignment_patch",
     "supplier_receipt_piece_rollback_update",
     "supplier_receipt_previous_piece_state",
     "supplier_piece_reference_price",
