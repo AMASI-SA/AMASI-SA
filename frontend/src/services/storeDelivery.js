@@ -21,9 +21,7 @@ export async function createStoreDriverAccount(driverId, payload) {
 }
 
 export async function resetStoreDriverPassword(driverId, newPassword) {
-  return (await api.put(`/store-delivery/drivers/${encodeURIComponent(driverId)}/account/password`, {
-    new_password: newPassword,
-  })).data;
+  return (await api.put(`/store-delivery/drivers/${encodeURIComponent(driverId)}/account/password`, { new_password: newPassword })).data;
 }
 
 export async function disableStoreDriverAccount(driverId) {
@@ -42,15 +40,23 @@ export async function confirmDriverHandoverSession(sessionId) {
   return (await api.post(`/store-delivery/handover/sessions/${encodeURIComponent(sessionId)}/confirm`)).data;
 }
 
+export async function listActiveStoreDeliveryAssignments(params = {}) {
+  return (await api.get("/store-delivery/assignments", { params })).data;
+}
+
+export async function reassignStoreDeliveryAssignment(assignmentId, driverId, reason = "") {
+  return (await api.post(`/store-delivery/assignments/${encodeURIComponent(assignmentId)}/reassign`, {
+    driver_id: driverId,
+    reason,
+  })).data;
+}
+
 export async function listPendingDriverPaymentReviews(params = {}) {
   return (await api.get("/store-delivery/payment-review/pending", { params })).data;
 }
 
 export async function reviewDriverPayment(assignmentId, decision, note = "") {
-  return (await api.post(`/store-delivery/payment-review/${encodeURIComponent(assignmentId)}`, {
-    decision,
-    note,
-  })).data;
+  return (await api.post(`/store-delivery/payment-review/${encodeURIComponent(assignmentId)}`, { decision, note })).data;
 }
 
 export async function listOfficialBusinessBankAccounts() {
