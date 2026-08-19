@@ -152,23 +152,14 @@ def _partial_piece() -> dict:
             "service_ids": ["service-1"],
         }],
         "services": [
-            {
-                "service_id": "service-1",
-                "service_name": "الخدمة الأولى",
-                "status": "completed",
-            },
-            {
-                "service_id": "service-2",
-                "service_name": "الخدمة المتبقية",
-                "status": "pending",
-            },
+            {"service_id": "service-1", "status": "completed"},
+            {"service_id": "service-2", "status": "pending"},
         ],
     }
 
 
 def test_partial_piece_is_received_directly_from_second_supplier() -> None:
     piece = _partial_piece()
-
     assert piece_allows_direct_service_receipt(piece) is True
     assert supplier_receiving_dispatch_blocker(piece, "supplier-2") is None
 
@@ -176,7 +167,6 @@ def test_partial_piece_is_received_directly_from_second_supplier() -> None:
 def test_prior_supplier_assignment_does_not_block_remaining_service_receipt() -> None:
     piece = _partial_piece()
     piece["supplier_dispatch_status"] = DISPATCH_STATUS_SENT
-
     assert supplier_receiving_dispatch_blocker(piece, "supplier-2") is None
 
 
@@ -191,9 +181,7 @@ def test_first_supplier_still_requires_original_dispatch_assignment() -> None:
         "supplier_receiving_history": [],
         "services": [{"service_id": "service-1", "status": "pending"}],
     }
-
     blocker = supplier_receiving_dispatch_blocker(piece, "supplier-2")
-
     assert piece_allows_direct_service_receipt(piece) is False
     assert blocker is not None
     assert blocker["code"] == "supplier_piece_dispatched_to_different_supplier"
@@ -202,9 +190,7 @@ def test_first_supplier_still_requires_original_dispatch_assignment() -> None:
 def test_unproven_partial_status_does_not_bypass_dispatch() -> None:
     piece = _partial_piece()
     piece["supplier_receiving_history"] = []
-
     blocker = supplier_receiving_dispatch_blocker(piece, "supplier-2")
-
     assert piece_allows_direct_service_receipt(piece) is False
     assert blocker is not None
     assert blocker["code"] == "supplier_piece_not_dispatched"
@@ -219,47 +205,7 @@ def test_completed_piece_is_not_a_direct_partial_receipt() -> None:
         "remaining_service_count": 0,
         "services": [{"service_id": "service-1", "status": "completed"}],
     })
-
     assert piece_allows_direct_service_receipt(piece) is False
 ''',
     encoding="utf-8",
 )
-
-policy_path = Path(".github/workflows/supplier-invoice-service-policy.yml")
-policy = policy_path.read_text(encoding="utf-8")
-path_line = '      - "backend/tests/test_direct_partial_service_receipt.py"\n'
-if path_line not in policy:
-    policy = replace_once(
-        policy,
-        '      - "backend/tests/test_supplier_multi_supplier_lifecycle.py"\n',
-        '      - "backend/tests/test_supplier_multi_supplier_lifecycle.py"\n'
-        + path_line,
-        "workflow direct-receipt path",
-    )
-run_line = '          backend/tests/test_direct_partial_service_receipt.py\n'
-if run_line not in policy:
-    anchor = '          backend/tests/test_supplier_multi_supplier_lifecycle.py\n'
-    if policy.count(anchor) != 2:
-        raise SystemExit("workflow multi-supplier run anchors were not found twice")
-    policy = policy.replace(anchor, anchor + run_line)
-grep_line = (
-    "          grep -q 'piece_allows_direct_service_receipt' "
-    "backend/preparation_supplier_dispatch.py\n"
-)
-if grep_line not in policy:
-    policy = replace_once(
-        policy,
-        "          grep -q 'supplier_invoice_required' backend/preparation_piece_operations.py\n",
-        "          grep -q 'supplier_invoice_required' backend/preparation_piece_operations.py\n"
-        + grep_line,
-        "workflow direct-receipt grep",
-    )
-policy_path.write_text(policy, encoding="utf-8")
-
-for temporary in (
-    Path(".github/workflows/apply-direct-partial-service-receipt.yml"),
-    Path(".github/workflows/apply-direct-partial-service-receipt-pr.yml"),
-    Path("scripts/apply_direct_partial_service_receipt_patch.py"),
-):
-    if temporary.exists():
-        temporary.unlink()
