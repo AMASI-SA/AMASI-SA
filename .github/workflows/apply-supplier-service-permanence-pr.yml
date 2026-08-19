@@ -27,18 +27,28 @@ jobs:
           git clone --depth=1 --branch "${HEAD_BRANCH}" \
             "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" workspace
 
-      - name: Decode and apply reviewed patch
+      - name: Reconstruct and apply reviewed patch
         run: |
           set -euo pipefail
           python - <<'PY'
           import base64
           import gzip
+          import hashlib
           from pathlib import Path
 
-          encoded = Path(
-              "workspace/.ci/supplier_service_patch.b64"
-          ).read_text(encoding="utf-8")
-          script = gzip.decompress(base64.b64decode(encoded))
+          parts = sorted(
+              Path("workspace/.ci/supplier_service_patch_parts").glob("*.part")
+          )
+          if [part.name for part in parts] != [f"{index:03d}.part" for index in range(10)]:
+              raise SystemExit("supplier service patch chunks are incomplete")
+          encoded = "".join(part.read_text(encoding="utf-8").strip() for part in parts)
+          if len(encoded) != 8452:
+              raise SystemExit(f"unexpected patch payload length: {len(encoded)}")
+          script = gzip.decompress(base64.b64decode(encoded, validate=True))
+          digest = hashlib.sha256(script).hexdigest()
+          expected = "2e582d2529fb7af32ba1becdbe26a7e827272c69c5cd8f2c3f1ae192610ab0fc"
+          if digest != expected:
+              raise SystemExit(f"patch digest mismatch: {digest}")
           target = Path(
               "workspace/scripts/apply_supplier_invoice_service_eligibility.py"
           )
