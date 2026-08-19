@@ -69,6 +69,18 @@ def test_visible_text_strips_malformed_closing_tag_payloads():
     assert "noscript-secret" not in visible
 
 
+def test_visible_text_scanner_is_case_insensitive():
+    source = "<SCRIPT type='text/javascript'>SECRET</ScRiPt weird><p>Public</p>"
+    visible = probe._visible_text(source)
+    assert visible == "Public"
+
+
+def test_unclosed_raw_text_element_fails_closed():
+    source = "<p>Before</p><script>never expose this secret"
+    visible = probe._visible_text(source)
+    assert visible == "Before"
+
+
 def test_meta_parser_reads_og_metadata():
     source = '<meta property="og:title" content="منتج مميز"><meta name="description" content="وصف المنتج">'
     assert probe._meta_content(source, prop="og:title") == "منتج مميز"
