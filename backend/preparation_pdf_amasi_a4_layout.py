@@ -258,7 +258,6 @@ def generate_amasi_product_file_pdf(
         detail_bottom = y + 2.0 * mm
         half = (inner_right - inner_left - DETAIL_GAP) / 2
         left_half_right = inner_left + half
-        right_half_left = inner_left + half + DETAIL_GAP
         right_half_right = inner_right
         divider_x = inner_left + half + DETAIL_GAP / 2
         pdf.setStrokeColor(BORDER)
@@ -297,11 +296,15 @@ def render_amasi_batch_pdf(batch_row: dict[str, Any]) -> bytes:
         for row in (batch_row.get("lines") or [])
         if isinstance(row, dict)
     ]
+    # During reviewed-stage file creation the supplier is captured as the
+    # human file title. Later assignment flows may populate supplier_name
+    # explicitly; prefer that field when present.
+    supplier = _text(batch_row.get("supplier_name")) or _text(batch_row.get("file_title"))
     return generate_amasi_product_file_pdf(
         lines,
         serial_start=1,
         title="ملف المنتجات",
-        supplier_name=_text(batch_row.get("supplier_name")),
+        supplier_name=supplier,
         responsible_employee_name=(
             _text(batch_row.get("responsible_employee_name"))
             or _text(batch_row.get("created_by_name"))
