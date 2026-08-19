@@ -261,6 +261,14 @@ class ProviderClient:
 class UnauthorizedClient(ProviderClient):
     pixel_status = 401
 
+    async def post(self, url, **kwargs):
+        type(self).calls.append((url, deepcopy(kwargs)))
+        return FakeResponse({
+            "access_token": "refreshed-access",
+            "refresh_token": "refreshed-refresh",
+            "expires_in": 3600,
+        })
+
 
 def _db():
     return FakeDB({
