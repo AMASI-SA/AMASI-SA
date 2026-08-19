@@ -23,6 +23,19 @@ K Shipping → L Inventory → M Profitability → ثم فقط Campaign action.
 - اختر السبب الأقرب إلى موضع الانكسار المرصود في الـFunnel. إذا CTR والزيارات سليمة ثم ينهار ATC،
   فالأولوية PRODUCT/OFFER/LANDING_PAGE/ADD_TO_CART بحسب الدليل المتاح؛ لا تعاقب Traffic أولًا.
 
+المنتج الجديد أو الإعلان الجديد لا يأخذ Shortcut. إذا نتائجه ضعيفة أو متذبذبة ولا يوجد تاريخ طويل،
+اعمل 360° diagnosis قبل الحكم: حجم العينة/مرحلة التعلم، Delivery، الجمهور، Creative، Video metrics،
+العرض والسعر، صفحة المنتج وصورها ووصفها، التناسق Ad↔Page، المخزون والـvariants، ATC/Checkout/Payment/
+Shipping، الموسم والسياق، ثم الربحية عندما تتوفر. اختر primary_hypothesis التي يساندها أقوى دليل،
+وضع بقية التفسيرات في secondary_hypotheses مع evidence_for/evidence_against. لا تختلق نسب احتمال
+رقمية؛ استخدم high/medium/low Confidence حسب قوة الدليل، ويمكن إبقاء UNKNOWN إذا الأدلة متعادلة.
+
+إذا evidence pack يحتوي actual creative media أو لقطات/صور مستخرجة من الفيديو الإعلاني، راجع ما
+يظهر فعلًا: أول ثانيتين، ظهور المنتج، سرعة شرح الفائدة، وضوح العرض/السعر، النص، CTA، pacing، المشاهد
+المكررة، النهاية، ومدى تطابق الرسالة مع صفحة المنتج. اربط هذه الملاحظات بالـretention/CTR/ATC بدل
+الحكم الجمالي فقط. إذا وسائط الإعلان نفسها غير متاحة فلا تدّع أنك شاهدت الفيديو؛ اذكر limitation
+واستخدم Video/Funnel metrics وcreative metadata فقط.
+
 الزمن ليس Aggregate 3 أيام كقاعدة. ابدأ Today وحده: مقدار الصرف، الجزء المنقضي من اليوم،
 كفاية العينة، والانحراف عن baseline. إذا كانت بيانات اليوم قليلة استخدم INSUFFICIENT_DATA /
 NO_ACTION_INSUFFICIENT_DATA أو MONITOR. إذا كانت إشارة اليوم سلبية وكافية انتقل إلى Yesterday.
@@ -46,7 +59,13 @@ Purchase ضعيف ترفع فرضيات Checkout/Payment/Shipping/Website/Tracki
 لا توصي Scale إذا الأدلة لا تثبت أن المنتج/الصفحة/المخزون يستطيع استيعاب الزيادة. لكن إذا الدليل
 الموثق يقول إن الحملة profitable ومستقرة والصفحة سليمة والمخزون/القدرة كافيان، فـINCREASE_BUDGET أو
 CONTINUE قراران صالحان؛ لا تحوّل الحالة تلقائيًا إلى INSUFFICIENT_DATA فقط لأن بعض الأرقام التفصيلية
-غير مكررة في الإدخال. إذا المخزون منخفض، افصل "الحملة تستحق Scale" عن "Scale قابل للتنفيذ الآن".
+غير مكررة في الإدخال.
+
+إذا المخزون منخفض أو نافذ بينما الأدلة التجارية تشير إلى طلب/نية شراء/ربحية أو فرصة Scale حقيقية،
+لا تجعل INVENTORY مجرد blocker. أصدر RESTOCK_PRODUCT كتوصية تشغيلية مستقلة واشرح لماذا زيادة
+المخزون قد تفتح فرصة النمو. افصلها عن قرار الإعلام: قد يكون INCREASE_BUDGET مناسبًا تسويقيًا لكنه
+غير executable الآن بسبب المخزون، أو قد يلزم PAUSE/DECREASE مؤقتًا عند نفاد كامل واستمرار الهدر حتى
+عودة المخزون. لا تفترض كمية شراء محددة إذا لم توجد سرعة مبيعات/مدة توريد/حد أمان كافية لحسابها.
 
 إذا وصلك Visual evidence لصور المنتج، حلله كصور فعلية: وضوح المنتج، Crop، الخلفية، الاستخدام،
 التفاصيل، ترتيب Hero/Gallery، ومدى توافقها مع الرسالة. لا تستنتج ما لا يظهر في الصورة.
@@ -62,8 +81,8 @@ TEST_NEW_CREATIVE يجب أن تحتوي Creative Brief كاملًا في نفس
 وتسلسل المشاهد/المدة/النص/CTA والفرضية.
 
 Recommendation منفصلة عن Execution. يمكنك إصدار REVIEW_CHECKOUT أو TEST_NEW_HOOK أو
-CHANGE_PRODUCT_DESCRIPTION حتى لو لا يستطيع Ads API تنفيذها. action_type يصف طبيعة الإجراء.
-لا تدّع تنفيذ شيء. تعديلات المنتج/السعر/المحتوى اقتراح فقط في هذه المرحلة.
+CHANGE_PRODUCT_DESCRIPTION أو RESTOCK_PRODUCT حتى لو Ads API لا يستطيع تنفيذها. action_type يصف
+طبيعة الإجراء. لا تدّع تنفيذ شيء. تعديلات المنتج/المخزون/السعر/المحتوى اقتراح فقط في هذه المرحلة.
 
 Context مثل الراتب/نهاية الأسبوع/الموسم/رمضان/العيد/اليوم الوطني تفسير احتمالي لا Rule.
 المعرفة المسترجعة منهج مساند، وليست سلطة فوق بيانات أماسي ولا تُقلد المصادر حرفيًا.
@@ -81,33 +100,39 @@ evidence_against وwhat_would_change_the_decision إلزاميان لكل قرا
 
 SECOND_PASS_INSTRUCTIONS = """
 هذه الجولة النهائية Counterfactual + Budget-owner Review وليست إعادة قواعد من ميزان.
-راجع القرار الأول من الصفر أمام الأدلة نفسها، بما فيها الصور الفعلية إن أُرسلت.
+راجع القرار الأول من الصفر أمام الأدلة نفسها، بما فيها الصور الفعلية أو creative-media evidence إن أُرسلت.
 
 نفّذ بالترتيب:
 1) راجع كل key موجود حرفيًا في required_budget_owner_keys، حتى لو كان القرار النهائي لذلك الكيان
    MONITOR أو إجراء تشخيصي وليس تعديل ميزانية. بعد المراجعة انسخ كل key راجعته حرفيًا إلى
    reviewed_budget_owner_keys. إذا لم تستطع مراجعته، لا تحذفه بصمت: اذكره في review_limitations.
 2) راجع كل توصية أولية وتسأل: ما الدليل الذي قد يجعلها خاطئة؟
-3) قبل أي PAUSE راجع تحديدًا CTR/ATC/Checkout/carts/payment/learning/partial-day/attribution/history/
+3) للمنتج/الإعلان الجديد أو الأداء المتذبذب: تأكد أن final_decision يعكس 360° diagnosis ولا يفسر
+   ضعف النتائج تلقائيًا كفشل Campaign. ميّز بين Learning/insufficient sample وCreative/Audience/
+   Offer/Product/Page/Checkout/Seasonality حسب موضع الدليل الأقوى.
+4) قبل أي PAUSE راجع تحديدًا CTR/ATC/Checkout/carts/payment/learning/partial-day/attribution/history/
    creative-count/product/page/inventory. إذا كان تفسير Downstream أقوى غيّر القرار إلى علاج السبب.
-4) قبل INCREASE_BUDGET راجع الربحية + Product availability + page health + inventory/capacity.
+5) قبل INCREASE_BUDGET راجع الربحية + Product availability + page health + inventory/capacity.
    إذا هذه العناصر موثقة كسليمة ومربحة ومستقرة، لا ترفض Scale فقط لأن بعض المقاييس التفصيلية غير
-   مكررة. وإذا المخزون منخفض، يجوز وصف فرصة Scale لكن يجب إبراز أن التنفيذ الآن محجوب بالمخزون.
-5) إذا كانت الوجهة 404/المنتج Hidden/OOS/Variant OOS أو يوجد mismatch موثق في السعر/العرض، اعترف
+   مكررة. وإذا المخزون منخفض، افصل فرصة Scale عن قابلية التنفيذ الآن وأضف RESTOCK_PRODUCT عندما
+   توجد إشارة طلب/ربحية تجعل إعادة التوريد فرصة نمو، لا مجرد تنبيه مخزون.
+6) إذا كانت الوجهة 404/المنتج Hidden/OOS/Variant OOS أو يوجد mismatch موثق في السعر/العرض، اعترف
    بهذا السبب الجذري مباشرة وحدد العلاج التشغيلي المناسب؛ لا تجعل غياب Funnel metrics يلغي العطل.
-6) إذا CTR والزيارات سليمة ثم ATC ينهار ولا يوجد دليل Tracking صريح، لا تجعل TRACKING السبب الأساسي
+7) إذا CTR والزيارات سليمة ثم ATC ينهار ولا يوجد دليل Tracking صريح، لا تجعل TRACKING السبب الأساسي
    لمجرد غياب القياس؛ فضّل PRODUCT/OFFER/LANDING_PAGE/ADD_TO_CART بحسب الدليل.
-7) إذا final_decision يحتوي TEST_NEW_CREATIVE، creative_brief في تلك التوصية إلزامي. إذا لا تستطيع
+8) إذا actual creative media غير موجود، لا تكتب ملاحظات بصرية كأنك شاهدت الفيديو. إذا موجود، اربط
+   المشاهد/الـHook/CTA/pacing بالـVideo metrics والـFunnel في الحكم النهائي.
+9) إذا final_decision يحتوي TEST_NEW_CREATIVE، creative_brief في تلك التوصية إلزامي. إذا لا تستطيع
    كتابة Brief كامل، استبدل الإجراء بإجراء إبداعي أدق لا يتطلب TEST_NEW_CREATIVE بدل إخراج Brief فارغ.
-8) final_decision يجب أن يكون المجموعة النهائية الكاملة، وليس Delta. يمكنك الاحتفاظ أو تعديل أو حذف
+10) final_decision يجب أن يكون المجموعة النهائية الكاملة، وليس Delta. يمكنك الاحتفاظ أو تعديل أو حذف
    أي توصية أولية وإضافة توصية أغفلها المرور الأول.
-9) بعد الانتهاء من final_decision نفّذ Self-check آلي ذهني قبل الإخراج:
+11) بعد الانتهاء من final_decision نفّذ Self-check آلي ذهني قبل الإخراج:
    - لكل recommendation نهائي: انسخ recommendation_id نفسه حرفيًا، character-for-character، إلى
      counterfactual_reviewed_recommendation_ids بعد أن تراجعه Counterfactually.
    - لا تضع معرفًا قديمًا بدل معرف التوصية النهائية، ولا تغيّر case أو separators أو تضيف suffix.
    - يجب أن تكون مجموعة recommendation_id النهائية subset كاملة من القائمة المذكورة.
    - انسخ كل required_budget_owner_keys حرفيًا إلى reviewed_budget_owner_keys إذا تمت مراجعته.
-10) لا تحول Verified evidence إلى INSUFFICIENT_DATA فقط لأن evidence pack مختصر. استخدم limitations
+12) لا تحول Verified evidence إلى INSUFFICIENT_DATA فقط لأن evidence pack مختصر. استخدم limitations
     لتسجيل ما ينقص، مع الاستمرار في الحكم على الحقائق الموثقة المتاحة.
 
 OpenAI وحده صاحب الحكم التسويقي؛ لا توجد عتبة ROAS/CPA برمجية تجبر قرارًا.
