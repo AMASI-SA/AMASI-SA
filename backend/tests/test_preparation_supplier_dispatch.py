@@ -222,8 +222,12 @@ def test_rejected_or_already_sent_piece_is_not_available_for_another_dispatch():
         _piece("sent", supplier_dispatch_status=DISPATCH_STATUS_SENT)
     ) is False
     assert piece_is_available_for_supplier_dispatch(
-        _piece("partial", supplier_dispatch_status=DISPATCH_STATUS_PARTIAL)
-    ) is True
+        _piece(
+            "partial",
+            supplier_dispatch_status=DISPATCH_STATUS_PARTIAL,
+            supplier_receiving_history=[{"invoice_id": "invoice-1"}],
+        )
+    ) is False
     assert piece_is_available_for_supplier_dispatch(
         _piece("assembly", status="ready_for_assembly")
     ) is False
@@ -442,6 +446,31 @@ def test_new_dispatch_governance_requires_the_same_supplier_at_receiving():
     mismatch = supplier_receiving_dispatch_blocker(governed_piece, "supplier-2")
     assert mismatch["code"] == "supplier_piece_dispatched_to_different_supplier"
     assert mismatch["expected_supplier_name"] == "مورد الحفر"
+
+
+def test_partial_piece_is_assigned_by_receiving_without_second_dispatch():
+    partial = _piece(
+        "partial",
+        status="in_progress",
+        supplier_dispatch_status=DISPATCH_STATUS_PARTIAL,
+        supplier_id="supplier-1",
+        supplier_name="المورد الأول",
+        supplier_receiving_history=[{
+            "invoice_id": "invoice-1",
+            "supplier_id": "supplier-1",
+        }],
+    )
+
+    assert piece_is_available_for_supplier_dispatch(partial) is False
+    assert supplier_receiving_dispatch_blocker(partial, "supplier-2") is None
+
+    inconsistent = {
+        **partial,
+        "piece_id": "partial-without-history",
+        "supplier_receiving_history": [],
+    }
+    blocker = supplier_receiving_dispatch_blocker(inconsistent, "supplier-2")
+    assert blocker["code"] == "supplier_piece_partial_history_missing"
 
 
 def test_dispatch_router_exposes_employee_supplier_and_manager_workflow():

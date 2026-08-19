@@ -6,9 +6,10 @@ on:
       - hotfix/prod-snap-meta-final
     paths:
       - "backend/supplier_receiving_routes.py"
-      - "backend/preparation_piece_operations.py"
       - "backend/preparation_supplier_dispatch.py"
+      - "backend/preparation_piece_operations.py"
       - "backend/tests/test_supplier_receiving.py"
+      - "backend/tests/test_preparation_supplier_dispatch.py"
       - "backend/tests/test_supplier_invoice_service_eligibility.py"
       - "backend/tests/test_supplier_invoice_service_candidates.py"
       - "backend/tests/test_supplier_multi_supplier_lifecycle.py"
@@ -57,6 +58,7 @@ jobs:
           backend/preparation_piece_operations.py
           backend/preparation_supplier_dispatch.py
           backend/tests/test_supplier_receiving.py
+          backend/tests/test_preparation_supplier_dispatch.py
           backend/tests/test_supplier_invoice_service_eligibility.py
           backend/tests/test_supplier_invoice_service_candidates.py
           backend/tests/test_supplier_multi_supplier_lifecycle.py
@@ -65,6 +67,7 @@ jobs:
         run: >-
           python -m pytest -q
           backend/tests/test_supplier_receiving.py
+          backend/tests/test_preparation_supplier_dispatch.py
           backend/tests/test_supplier_invoice_service_eligibility.py
           backend/tests/test_supplier_invoice_service_candidates.py
           backend/tests/test_supplier_multi_supplier_lifecycle.py
@@ -77,5 +80,8 @@ jobs:
           grep -q 'supplier_receiving_service_add_via_product_required' backend/supplier_receiving_routes.py
           grep -q 'supplier_uninvoiced_piece_selector' backend/supplier_receiving_routes.py
           grep -q 'supplier_invoice_required' backend/preparation_piece_operations.py
+          grep -q 'direct_at_partial_receipt' backend/supplier_receiving_routes.py
+          grep -q 'supplier_piece_partial_history_missing' backend/preparation_supplier_dispatch.py
+          grep -q 'return _text(piece.get("supplier_dispatch_status")) == ""' backend/preparation_supplier_dispatch.py
           grep -q 'DISPATCH_STATUS_PARTIAL' backend/tests/test_supplier_multi_supplier_lifecycle.py
           grep -q 'product_total_halalas.*== 0' backend/tests/test_supplier_multi_supplier_lifecycle.py
