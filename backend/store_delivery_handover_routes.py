@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from store_delivery_domain import StoreDeliveryRuleError, assignment_snapshot, normalize_text
@@ -93,6 +93,7 @@ async def ensure_store_delivery_handover_indexes(db: Any) -> None:
     await db[SESSIONS].create_index([("user_id", 1), ("driver_id", 1), ("status", 1)])
     await db[ASSIGNMENTS].create_index([("user_id", 1), ("id", 1)], unique=True)
     await db[ASSIGNMENTS].create_index([("user_id", 1), ("order_id", 1), ("active", 1)])
+    await db[ASSIGNMENTS].create_index([("user_id", 1), ("driver_id", 1), ("barcode", 1)])
     await db[EVENTS].create_index([("user_id", 1), ("occurred_at", -1)])
 
 
@@ -118,7 +119,8 @@ def make_store_delivery_handover_router(db: Any, current_user: Callable[..., Any
             "started_by": normalize_text(actor.get("id")), "confirmed_at": None,
         }
         await db[SESSIONS].insert_one(session)
-        session.pop("_id", None); session.pop("user_id", None)
+        session.pop("_id", None)
+        session.pop("user_id", None)
         return session
 
     @router.post("/sessions/{session_id}/scan")
@@ -146,12 +148,23 @@ def make_store_delivery_handover_router(db: Any, current_user: Callable[..., Any
         try:
             snapshot = assignment_snapshot(driver=driver, shipping_city=city)
         except StoreDeliveryRuleError as exc:
-            rejected = {"barcode": barcode, "order_id": order.get("id"), "order_number": _order_number(order), "shipping_city": city, "code": str(exc), "scanned_at": _now()}
+            rejected = {
+                "barcode": barcode,
+                "order_id": order.get("id"),
+                "order_number": _order_number(order),
+                "shipping_city": city,
+                "code": str(exc),
+                "scanned_at": _now(),
+            }
             await db[SESSIONS].update_one({"user_id": user_id, "id": session_id}, {"$push": {"rejected": rejected}})
             return {"accepted": False, **rejected}
         accepted = {
-            "barcode": barcode, "order_id": order.get("id"), "order_number": _order_number(order),
-            "shipping_city": city, **snapshot, "scanned_at": _now(),
+            "barcode": barcode,
+            "order_id": order.get("id"),
+            "order_number": _order_number(order),
+            "shipping_city": city,
+            **snapshot,
+            "scanned_at": _now(),
         }
         await db[SESSIONS].update_one({"user_id": user_id, "id": session_id}, {"$push": {"accepted": accepted}})
         return {"accepted": True, "shipment": accepted}
@@ -168,25 +181,79 @@ def make_store_delivery_handover_router(db: Any, current_user: Callable[..., Any
         accepted = list(session.get("accepted") or [])
         if not accepted:
             raise HTTPException(status_code=409, detail={"code": "handover_session_empty"})
-        now = _now(); created = []
+
+        # Preflight every row before the first write so a mixed batch never partly assigns.
         for item in accepted:
-            existing = await db[ASSIGNMENTS].find_one({"user_id": user_id, "order_id": item["order_id"], "active": True}, {"_id": 1})
+            existing = await db[ASSIGNMENTS].find_one(
+                {"user_id": user_id, "order_id": item["order_id"], "active": True}, {"_id": 1}
+            )
             if existing:
-                raise HTTPException(status_code=409, detail={"code": "shipment_already_assigned", "order_id": item["order_id"]})
-            row = {
-                "id": str(uuid.uuid4()), "user_id": user_id, "session_id": session_id,
-                "order_id": item["order_id"], "order_number": item.get("order_number"),
-                "driver_id": item["driver_id"], "driver_name_snapshot": item["driver_name_snapshot"],
-                "driver_city_snapshot": item["driver_city_snapshot"], "shipping_city_snapshot": item["shipping_city_snapshot"],
-                "delivery_fee_snapshot": item["delivery_fee_snapshot"], "coverage_mode_snapshot": item["coverage_mode_snapshot"],
-                "status": "assigned", "active": True, "assigned_at": now,
-                "assigned_by": normalize_text(actor.get("id")), "delivered_at": None,
-            }
-            await db[ASSIGNMENTS].insert_one(row); row.pop("_id", None); row.pop("user_id", None); created.append(row)
-        await db[SESSIONS].update_one({"user_id": user_id, "id": session_id, "status": "open"}, {"$set": {"status": "confirmed", "confirmed_at": now, "confirmed_by": normalize_text(actor.get("id")), "assigned_count": len(created)}})
-        return {"confirmed": True, "session_id": session_id, "assigned_count": len(created), "assignments": created}
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "shipment_already_assigned", "order_id": item["order_id"]},
+                )
+
+        now = _now()
+        created: list[dict[str, Any]] = []
+        inserted_ids: list[str] = []
+        try:
+            for item in accepted:
+                row = {
+                    "id": str(uuid.uuid4()),
+                    "user_id": user_id,
+                    "session_id": session_id,
+                    "order_id": item["order_id"],
+                    "order_number": item.get("order_number"),
+                    "barcode": normalize_text(item.get("barcode")),
+                    "driver_id": item["driver_id"],
+                    "driver_name_snapshot": item["driver_name_snapshot"],
+                    "driver_city_snapshot": item["driver_city_snapshot"],
+                    "shipping_city_snapshot": item["shipping_city_snapshot"],
+                    "delivery_fee_snapshot": item["delivery_fee_snapshot"],
+                    "coverage_mode_snapshot": item["coverage_mode_snapshot"],
+                    "status": "assigned",
+                    "active": True,
+                    "assigned_at": now,
+                    "assigned_by": normalize_text(actor.get("id")),
+                    "delivered_at": None,
+                }
+                await db[ASSIGNMENTS].insert_one(row)
+                inserted_ids.append(row["id"])
+                public = dict(row)
+                public.pop("_id", None)
+                public.pop("user_id", None)
+                created.append(public)
+        except Exception:
+            if inserted_ids:
+                await db[ASSIGNMENTS].delete_many({"user_id": user_id, "id": {"$in": inserted_ids}})
+            raise
+
+        closed = await db[SESSIONS].update_one(
+            {"user_id": user_id, "id": session_id, "status": "open"},
+            {"$set": {
+                "status": "confirmed",
+                "confirmed_at": now,
+                "confirmed_by": normalize_text(actor.get("id")),
+                "assigned_count": len(created),
+            }},
+        )
+        if closed.modified_count != 1:
+            await db[ASSIGNMENTS].delete_many({"user_id": user_id, "id": {"$in": inserted_ids}})
+            raise HTTPException(status_code=409, detail={"code": "handover_session_concurrent_confirm"})
+
+        return {
+            "confirmed": True,
+            "session_id": session_id,
+            "assigned_count": len(created),
+            "assignments": created,
+        }
 
     return router
 
 
-__all__ = ["make_store_delivery_handover_router", "ensure_store_delivery_handover_indexes", "ASSIGNMENTS", "SESSIONS"]
+__all__ = [
+    "make_store_delivery_handover_router",
+    "ensure_store_delivery_handover_indexes",
+    "ASSIGNMENTS",
+    "SESSIONS",
+]
