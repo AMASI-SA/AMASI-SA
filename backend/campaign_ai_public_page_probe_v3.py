@@ -88,9 +88,9 @@ def _meta_content(source: str, *, name: str | None = None, prop: str | None = No
 
 
 def _visible_text(source: str) -> str | None:
-    clean = re.sub(r"<script\b[^>]*>.*?</script\s*>", " ", source, flags=re.I | re.S)
-    clean = re.sub(r"<style\b[^>]*>.*?</style\s*>", " ", clean, flags=re.I | re.S)
-    clean = re.sub(r"<noscript\b[^>]*>.*?</noscript\s*>", " ", clean, flags=re.I | re.S)
+    clean = re.sub(r"<script\b[^>]*>.*?</script\b[^>]*>", " ", source, flags=re.I | re.S)
+    clean = re.sub(r"<style\b[^>]*>.*?</style\b[^>]*>", " ", clean, flags=re.I | re.S)
+    clean = re.sub(r"<noscript\b[^>]*>.*?</noscript\b[^>]*>", " ", clean, flags=re.I | re.S)
     clean = re.sub(r"<!--.*?-->", " ", clean, flags=re.S)
     clean = re.sub(r"<[^>]+>", " ", clean)
     clean = html.unescape(clean)
