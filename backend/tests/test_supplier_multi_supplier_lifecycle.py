@@ -88,6 +88,7 @@ def test_partially_completed_piece_is_assigned_during_second_supplier_receipt() 
         assigned_at=datetime.now(timezone.utc),
     )
     assert patch["supplier_id"] == "supplier-2"
+    assert patch["supplier_assigned_at_receipt"] is True
     assert patch["supplier_assignment_mode"] == "direct_at_partial_receipt"
     assert patch["supplier_assigned_from_id"] == "supplier-1"
     assert supplier_piece_product_charge_eligible(piece) is False
