@@ -178,7 +178,11 @@ async def _sold_missing_mezan_cost_products(
 ) -> dict[str, dict[str, Any]]:
     """Return sold V2 products whose sold lines lack an explicit Mezan cost."""
     products = await db[PRODUCTS].find(
-        {"user_id": user_id, "archived": {"$ne": True}},
+        {
+            "user_id": user_id,
+            "archived": {"$ne": True},
+            "cost_setup_complete": {"$ne": True},
+        },
         {
             "_id": 0,
             "id": 1,
@@ -306,6 +310,7 @@ async def _requested_missing_mezan_cost_products(
         {
             "user_id": user_id,
             "archived": {"$ne": True},
+            "cost_setup_complete": {"$ne": True},
             "$or": [
                 {"salla_product_id": {"$in": identity_values}},
                 {"mezan_product_id": {"$in": requested_ids}},

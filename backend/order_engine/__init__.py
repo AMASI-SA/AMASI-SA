@@ -61,6 +61,7 @@ def make_order_engine_router(*args, **kwargs):
     from component_edit_routes import make_component_edit_router
     from product_option_cost_routes import make_product_option_cost_router
     from product_group_link_routes import make_product_group_link_router
+    from product_cost_setup_routes import make_product_cost_setup_router
     from product_fulfillment_routes import make_product_fulfillment_router
     from order_option_cost_snapshot_routes import make_order_option_cost_snapshot_router
     from fulfillment_v2_routes import make_fulfillment_v2_router
@@ -192,8 +193,10 @@ def make_order_engine_router(*args, **kwargs):
         # the component edit modal is always pre-filled.
         make_component_workspace_cost_compat_router(db, current_user),
         make_component_edit_router(db, current_user),
-        # Group-aware operations and resource-link routes must precede the
-        # legacy product fulfillment routes with the same path/method keys.
+        # Product cost setup owns the canonical operations GET so web/mobile
+        # receive the product classification and explicit completion state.
+        make_product_cost_setup_router(db, current_user),
+        # Group-aware resource/group writes remain the canonical mutation paths.
         make_product_group_link_router(db, current_user),
         make_product_fulfillment_router(db, current_user),
         make_product_option_cost_router(db, current_user),
