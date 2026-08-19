@@ -1,0 +1,87 @@
+name: Apply Supplier Service Permanence PR
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-supplier-service-permanence-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      HEAD_BRANCH: ${{ github.head_ref }}
+    steps:
+      - name: Clone PR head
+        run: |
+          set -euo pipefail
+          git clone --depth=1 --branch "${HEAD_BRANCH}" \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" workspace
+
+      - name: Extract and apply reviewed patch
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import base64
+          import gzip
+          from pathlib import Path
+
+          source = Path(
+              "workspace/.github/workflows/apply-supplier-service-permanence.yml"
+          ).read_text(encoding="utf-8").splitlines()
+          start_marker = "cat > /tmp/supplier_service_patch.b64 <<'PATCH_B64'"
+          start = next(
+              index + 1
+              for index, line in enumerate(source)
+              if line.strip() == start_marker
+          )
+          end = next(
+              index
+              for index, line in enumerate(source[start:], start=start)
+              if line.strip() == "PATCH_B64"
+          )
+          encoded = "".join(line.strip() for line in source[start:end])
+          script = gzip.decompress(base64.b64decode(encoded))
+          target = Path(
+              "workspace/scripts/apply_supplier_invoice_service_eligibility.py"
+          )
+          target.write_bytes(script)
+          PY
+          cd workspace
+          python scripts/apply_supplier_invoice_service_eligibility.py
+          rm scripts/apply_supplier_invoice_service_eligibility.py
+
+      - name: Compile changed boundary
+        working-directory: workspace
+        run: |
+          set -euo pipefail
+          python -m py_compile \
+            backend/supplier_receiving_routes.py \
+            backend/preparation_piece_operations.py \
+            backend/tests/test_supplier_invoice_service_eligibility.py
+
+      - name: Commit source changes to PR branch
+        working-directory: workspace
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            backend/supplier_receiving_routes.py \
+            backend/preparation_piece_operations.py \
+            backend/tests/test_supplier_invoice_service_eligibility.py
+          if git diff --cached --quiet; then
+            echo "Reviewed patch already applied."
+            exit 0
+          fi
+          git commit -m "fix(receiving): keep supplier invoice services optional and permanent"
+          git push origin "HEAD:${HEAD_BRANCH}"
