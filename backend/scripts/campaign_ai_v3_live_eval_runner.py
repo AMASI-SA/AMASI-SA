@@ -36,9 +36,44 @@ from scripts import campaign_ai_v3_live_eval as live_eval  # noqa: E402
 
 _original_evaluate_case = live_eval.evaluate_case
 
+# The corpus describes broad acceptable diagnosis families. These extensions do
+# not force an action or waive a bad outcome; they recognize equally valid,
+# more-localized members of the V3 root-cause taxonomy that the original
+# hand-written corpus omitted.
+ROOT_CAUSE_FAMILY_EXTENSIONS = {
+    # Healthy clicks/page visits followed by collapsed ATC can localize directly
+    # to the Add-To-Cart step instead of the broader landing/product buckets.
+    "good_ctr_low_atc": {"ADD_TO_CART"},
+    # A stale price rendered in the ad itself is legitimately a Creative root
+    # cause as well as Offer/Landing/Product mismatch.
+    "ad_old_price_product_new_price": {"CREATIVE"},
+}
+
+# Business requirements that must be present, not merely one action among an
+# acceptable family. A commercially strong campaign constrained by <1 day of
+# stock must explicitly surface replenishment while any scale write stays
+# blocked until capacity is restored.
+REQUIRED_ACTIONS_BY_CASE = {
+    "low_stock_scale_candidate": {"RESTOCK_PRODUCT"},
+}
+
 
 def _evaluate_case_with_execution_contract(case, output):
-    failures = list(_original_evaluate_case(case, output))
+    eval_case = dict(case)
+    extensions = ROOT_CAUSE_FAMILY_EXTENSIONS.get(str(case.get("id") or ""), set())
+    if extensions:
+        current = list(eval_case.get("acceptable_root_causes") or [])
+        eval_case["acceptable_root_causes"] = list(dict.fromkeys([*current, *sorted(extensions)]))
+
+    failures = list(_original_evaluate_case(eval_case, output))
+
+    required_actions = REQUIRED_ACTIONS_BY_CASE.get(str(case.get("id") or ""), set())
+    if required_actions:
+        observed_actions = {item.recommended_action for item in output.recommendations}
+        missing = sorted(required_actions - observed_actions)
+        if missing:
+            failures.append(f"required_actions_missing:{missing}")
+
     forbidden_executable = set(case.get("must_not_executable_actions") or [])
     if forbidden_executable:
         for item in output.recommendations:
