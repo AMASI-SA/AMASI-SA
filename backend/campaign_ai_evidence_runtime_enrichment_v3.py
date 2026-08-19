@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable
 
+from campaign_ai_ad_creative_media_v3 import build_actual_ad_creative_media_evidence
 from campaign_ai_customer_voice_evidence_v3 import build_customer_voice_evidence
 from campaign_ai_offer_schedule_v3 import build_offer_schedule_evidence
 from campaign_ai_product_change_history_v3 import (
@@ -95,6 +96,31 @@ def wrap_evidence_builder(
         except Exception as exc:
             limitations = list(pack.get("limitations") or [])
             limitations.append(f"product_health_score_unavailable:{type(exc).__name__}")
+            pack["limitations"] = list(dict.fromkeys(limitations))
+
+        # Resolve the actual provider creative separately from Product V2 hero/gallery
+        # images. Any provider/auth/media failure is explicit evidence unavailability;
+        # it never turns into fabricated visual analysis or a total AI-cycle failure.
+        try:
+            pack["actual_creative_media"] = await build_actual_ad_creative_media_evidence(
+                db,
+                user_id,
+                candidates,
+            )
+        except Exception as exc:
+            pack["actual_creative_media"] = {
+                "schema_version": "campaign_ai_actual_ad_creative_media_v3",
+                "entities": {},
+                "visual_count": 0,
+                "contract": {
+                    "provider_media_read_only": True,
+                    "raw_video_claimed_watched_without_frames": False,
+                    "missing_media_is_explicit": True,
+                },
+                "limitations": [f"creative_media_unavailable:{type(exc).__name__}"],
+            }
+            limitations = list(pack.get("limitations") or [])
+            limitations.append(f"creative_media_unavailable:{type(exc).__name__}")
             pack["limitations"] = list(dict.fromkeys(limitations))
 
         product_ids: list[str] = []
