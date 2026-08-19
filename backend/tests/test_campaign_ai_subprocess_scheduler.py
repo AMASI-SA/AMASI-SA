@@ -1,7 +1,8 @@
 import asyncio
-from types import SimpleNamespace
+import logging
 
 import campaign_ai_subprocess_scheduler as scheduler
+import campaign_ai_worker_runner as worker
 
 
 def test_scheduler_defaults_to_enabled_outside_tests(monkeypatch):
@@ -78,15 +79,82 @@ def test_global_cadence_skip_rechecks_in_five_minutes_not_five_hours():
     assert delay == 5 * 60
 
 
-def test_real_worker_failure_keeps_distinct_fifteen_minute_retry():
+def test_retryable_ai_failure_keeps_distinct_fifteen_minute_retry():
     delay = scheduler.next_scheduler_delay(
-        2,
+        scheduler.RETRYABLE_AI_EXIT_CODE,
         elapsed=5,
         interval=5 * 60 * 60,
         retry_delay=15 * 60,
         cadence_recheck=5 * 60,
     )
     assert delay == 15 * 60
+
+
+def test_cadence_skip_exit_is_info_not_error(monkeypatch, caplog):
+    class FakeProcess:
+        returncode = scheduler.CADENCE_SKIP_EXIT_CODE
+
+        async def communicate(self):
+            return (
+                b'{"cadence_skipped": true, "cadence_skip_reason": "not_due"}',
+                b"",
+            )
+
+    async def fake_create_subprocess_exec(*args, **kwargs):
+        return FakeProcess()
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+    caplog.set_level(logging.INFO, logger=scheduler.__name__)
+
+    code = asyncio.run(scheduler.run_worker_once(timeout_seconds=60))
+
+    assert code == scheduler.CADENCE_SKIP_EXIT_CODE
+    assert "cadence skip" in caplog.text
+    assert not any(record.levelno >= logging.ERROR for record in caplog.records)
+
+
+def test_retryable_ai_exit_is_warning_and_never_logs_raw_stderr(monkeypatch, caplog):
+    secret_stderr = b"provider detail sk-secret-must-never-appear"
+
+    class FakeProcess:
+        returncode = scheduler.RETRYABLE_AI_EXIT_CODE
+
+        async def communicate(self):
+            return (
+                b'{"retryable_ai_runs": 1, "retryable_ai_error_codes": ["openai_response_validation_error"]}',
+                secret_stderr,
+            )
+
+    async def fake_create_subprocess_exec(*args, **kwargs):
+        return FakeProcess()
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+    caplog.set_level(logging.INFO, logger=scheduler.__name__)
+
+    code = asyncio.run(scheduler.run_worker_once(timeout_seconds=60))
+
+    assert code == scheduler.RETRYABLE_AI_EXIT_CODE
+    assert "requested retry after AI failure" in caplog.text
+    assert "openai_response_validation_error" in caplog.text
+    assert secret_stderr.decode() not in caplog.text
+    assert not any(record.levelno >= logging.ERROR for record in caplog.records)
+
+
+def test_worker_extracts_only_bounded_sanitized_openai_error_codes():
+    codes = worker._sanitized_openai_error_codes([
+        "decision_intelligence_v3",
+        "openai_recommendation:openai_response_validation_error",
+        "openai_recommendation:openai_rate_limited",
+        "openai_recommendation:OPENAI_RATE_LIMITED",
+        "openai_recommendation:not-openai raw secret/value?x=1",
+    ])
+
+    assert codes == [
+        "openai_response_validation_error",
+        "openai_rate_limited",
+        "openai_error_unknown",
+    ]
+    assert all("?" not in code and "/" not in code for code in codes)
 
 
 def test_router_registration_is_idempotent(monkeypatch):
