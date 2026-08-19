@@ -7,11 +7,19 @@ historical eval script imports prompt constants from ``campaign_ai_decision_v3``
 importing that runtime module pulls the whole app stack. This launcher injects a
 prompt-only compatibility module before loading the eval.
 
+The historical eval also calls ``dotenv.load_dotenv`` before reading environment
+variables.  The lightweight launcher deliberately does not depend on
+python-dotenv: the eval API key is supplied explicitly through ``OPENAI_API_KEY``.
+When python-dotenv is absent we install a no-op compatibility module before the
+historical script is imported.  This keeps the focused eval independent of the
+application dependency set and never reads/sources ``backend/.env``.
+
 Optional environment:
   MEZAN_V3_EVAL_IDS   comma-separated scenario ids to run, preserving corpus order
 """
 from __future__ import annotations
 
+import importlib.util
 import os
 from pathlib import Path
 import sys
@@ -30,6 +38,20 @@ prompt_stub = types.ModuleType("campaign_ai_decision_v3")
 prompt_stub.FIRST_PASS_INSTRUCTIONS = FIRST_PASS_INSTRUCTIONS
 prompt_stub.SECOND_PASS_INSTRUCTIONS = SECOND_PASS_INSTRUCTIONS
 sys.modules["campaign_ai_decision_v3"] = prompt_stub
+
+# ``campaign_ai_v3_live_eval.py`` historically imports python-dotenv only to
+# call ``load_dotenv(BACKEND / '.env')``.  The launcher already requires the key
+# to be exported explicitly, so silently reading a local .env is unnecessary.
+# Keep the historical script reusable while allowing this focused runner to
+# execute in a minimal environment where python-dotenv is not installed.
+if importlib.util.find_spec("dotenv") is None:
+    dotenv_stub = types.ModuleType("dotenv")
+
+    def _load_dotenv_noop(*_args, **_kwargs):
+        return False
+
+    dotenv_stub.load_dotenv = _load_dotenv_noop
+    sys.modules["dotenv"] = dotenv_stub
 
 from scripts import campaign_ai_v3_live_eval as live_eval  # noqa: E402
 
