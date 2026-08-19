@@ -15,6 +15,7 @@ import html
 import ipaddress
 import re
 import socket
+from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import urljoin, urlsplit
 
@@ -87,14 +88,76 @@ def _meta_content(source: str, *, name: str | None = None, prop: str | None = No
     return None
 
 
+def _tag_boundary(source: str, index: int) -> bool:
+    return index >= len(source) or source[index].isspace() or source[index] in {">", "/"}
+
+
+def _find_html_token(source: str, token: str, start: int) -> int:
+    """Find an ASCII HTML tag token case-insensitively without normalizing indexes."""
+    target = token.lower()
+    index = source.find("<", max(0, start))
+    while index >= 0:
+        end = index + len(target)
+        if source[index:end].lower() == target and _tag_boundary(source, end):
+            return index
+        index = source.find("<", index + 1)
+    return -1
+
+
+def _strip_raw_text_element(source: str, tag: str) -> str:
+    """Remove script/style/noscript blocks with a bounded tolerant scanner.
+
+    Raw-text elements are stripped before HTMLParser sees the page. A malformed
+    or unclosed raw-text block is dropped through end-of-input rather than
+    leaking script/style content into customer-visible evidence.
+    """
+    opening = f"<{tag}"
+    closing = f"</{tag}"
+    cursor = 0
+    parts: list[str] = []
+    while cursor < len(source):
+        open_start = _find_html_token(source, opening, cursor)
+        if open_start < 0:
+            parts.append(source[cursor:])
+            break
+        parts.append(source[cursor:open_start])
+        open_end = source.find(">", open_start + len(opening))
+        if open_end < 0:
+            break
+        close_start = _find_html_token(source, closing, open_end + 1)
+        if close_start < 0:
+            break
+        close_end = source.find(">", close_start + len(closing))
+        if close_end < 0:
+            break
+        cursor = close_end + 1
+    return "".join(parts)
+
+
+class _VisibleTextParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+
+    def handle_data(self, data: str) -> None:
+        if data:
+            self.parts.append(data)
+
+
 def _visible_text(source: str) -> str | None:
-    clean = re.sub(r"<script\b[^>]*>.*?</script\b[^>]*>", " ", source, flags=re.I | re.S)
-    clean = re.sub(r"<style\b[^>]*>.*?</style\b[^>]*>", " ", clean, flags=re.I | re.S)
-    clean = re.sub(r"<noscript\b[^>]*>.*?</noscript\b[^>]*>", " ", clean, flags=re.I | re.S)
-    clean = re.sub(r"<!--.*?-->", " ", clean, flags=re.S)
-    clean = re.sub(r"<[^>]+>", " ", clean)
-    clean = html.unescape(clean)
-    rendered = _text(clean, MAX_VISIBLE_TEXT_CHARS)
+    clean = source
+    for tag in ("script", "style", "noscript"):
+        clean = _strip_raw_text_element(clean, tag)
+
+    parser = _VisibleTextParser()
+    try:
+        parser.feed(clean)
+        parser.close()
+    except Exception:
+        # Fail closed: malformed HTML must never make hidden script/style data
+        # look like customer-visible evidence.
+        return None
+    rendered = _text(" ".join(parser.parts), MAX_VISIBLE_TEXT_CHARS)
     return rendered or None
 
 
