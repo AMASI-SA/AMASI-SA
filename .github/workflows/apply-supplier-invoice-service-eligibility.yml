@@ -8,17 +8,25 @@ on:
       - scripts/finalize_supplier_invoice_service_policy.py
       - scripts/finalize_supplier_invoice_service_policy_v2.py
       - .github/workflows/apply-supplier-invoice-service-eligibility.yml
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - scripts/finalize_supplier_invoice_service_policy.py
+      - scripts/finalize_supplier_invoice_service_policy_v2.py
+      - .github/workflows/apply-supplier-invoice-service-eligibility.yml
 
 permissions:
   contents: write
 
 jobs:
   finalize:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      TARGET_BRANCH: ${{ github.ref_name }}
+      TARGET_BRANCH: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
       PYTHONPATH: backend
     steps:
       - name: Clone repair branch
