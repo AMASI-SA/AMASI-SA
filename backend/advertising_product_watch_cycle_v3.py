@@ -14,6 +14,7 @@ from typing import Any
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
+from advertising_offer_watch_v3 import scan_user_offer_watch
 from advertising_product_watch_v3 import (
     CAMPAIGN_PRODUCT_LINK_COLLECTION,
     CADENCE_COLLECTION,
@@ -142,10 +143,13 @@ async def run_global_product_watch(db: Any) -> dict[str, Any]:
     try:
         user_ids = await db[CAMPAIGN_PRODUCT_LINK_COLLECTION].distinct("user_id")
         summaries = []
+        offer_summaries = []
         content_snapshots = []
         for user_id in sorted(str(value) for value in user_ids if value):
             scan = await scan_user_product_watch(db, user_id)
+            offer_scan = await scan_user_offer_watch(db, user_id)
             summaries.append(scan)
+            offer_summaries.append(offer_scan)
             content_snapshots.append(await snapshot_recently_watched_products(
                 db,
                 user_id,
@@ -154,8 +158,19 @@ async def run_global_product_watch(db: Any) -> dict[str, Any]:
         return {
             "skipped": False,
             "users": len(summaries),
-            "active_alerts": sum(int(row.get("active_alerts") or 0) for row in summaries),
+            "active_alerts": (
+                sum(int(row.get("active_alerts") or 0) for row in summaries)
+                + sum(int(row.get("active_offer_alerts") or 0) for row in offer_summaries)
+            ),
+            "active_offer_alerts": sum(
+                int(row.get("active_offer_alerts") or 0)
+                for row in offer_summaries
+            ),
             "watched_products": sum(int(row.get("watched_products") or 0) for row in summaries),
+            "watched_offer_links": sum(
+                int(row.get("watched_offer_links") or 0)
+                for row in offer_summaries
+            ),
             "product_content_snapshots": sum(
                 int(row.get("products_snapshotted") or 0)
                 for row in content_snapshots
@@ -165,6 +180,7 @@ async def run_global_product_watch(db: Any) -> dict[str, Any]:
                 for row in content_snapshots
             ),
             "summaries": summaries,
+            "offer_summaries": offer_summaries,
             "next_run_at": finished.get("next_run_at"),
         }
     except Exception:
