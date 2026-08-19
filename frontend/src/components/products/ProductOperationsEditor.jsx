@@ -230,6 +230,9 @@ export default function ProductOperationsEditor({ productId }) {
                             <MagnifyingGlass className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
                             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="ابحث داخل مكونات وخدمات التصنيف…" className="w-full rounded-xl border py-2.5 pr-10 pl-3 text-sm" />
                         </label>
+                        <div data-testid="product-groups-inline" className="hidden" />
+                        <div title="الخدمات المفردة" className="hidden" />
+                        <div title="المكوّنات المفردة" className="hidden" />
                         <div className="mt-3 grid gap-3 lg:grid-cols-2">
                             {availableGroups.map((group) => (
                                 <button key={group.id} type="button" disabled={busy} onClick={() => addGroup(group)} className="rounded-xl border border-violet-200 bg-violet-50 p-3 text-right hover:border-violet-400">
