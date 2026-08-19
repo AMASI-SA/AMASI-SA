@@ -27,7 +27,7 @@ jobs:
           git clone --depth=1 --branch "${HEAD_BRANCH}" \
             "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" workspace
 
-      - name: Extract and apply reviewed patch
+      - name: Decode and apply reviewed patch
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -35,21 +35,9 @@ jobs:
           import gzip
           from pathlib import Path
 
-          source = Path(
-              "workspace/.github/workflows/apply-supplier-service-permanence.yml"
-          ).read_text(encoding="utf-8").splitlines()
-          start_marker = "cat > /tmp/supplier_service_patch.b64 <<'PATCH_B64'"
-          start = next(
-              index + 1
-              for index, line in enumerate(source)
-              if line.strip() == start_marker
-          )
-          end = next(
-              index
-              for index, line in enumerate(source[start:], start=start)
-              if line.strip() == "PATCH_B64"
-          )
-          encoded = "".join(line.strip() for line in source[start:end])
+          encoded = Path(
+              "workspace/.ci/supplier_service_patch.b64"
+          ).read_text(encoding="utf-8")
           script = gzip.decompress(base64.b64decode(encoded))
           target = Path(
               "workspace/scripts/apply_supplier_invoice_service_eligibility.py"
