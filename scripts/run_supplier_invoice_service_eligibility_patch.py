@@ -47,6 +47,21 @@ robust_replace_once = '''def replace_once(text: str, old: str, new: str, label: 
                 segment = segment.replace(marker, replacement, 1)
                 return text[:start] + segment + text[end:]
 
+    if label == "respect explicit empty invoice services":
+        start = text.find("def _invoice_group_key(scan: dict[str, Any])")
+        end = text.find("    services = tuple(sorted(", start)
+        if start >= 0 and end > start:
+            replacement = (
+                "def _invoice_group_key(scan: dict[str, Any]) -> tuple[Any, ...]:\\n"
+                "    invoice_services = scan.get(\\\"invoice_services\\\")\\n"
+                "    scan_services = (\\n"
+                "        invoice_services\\n"
+                "        if isinstance(invoice_services, list)\\n"
+                "        else scan.get(\\\"services\\\")\\n"
+                "    ) or []\\n"
+            )
+            return text[:start] + replacement + text[end:]
+
     if label == "rebuild active invoice service candidates":
         actual = (
             "        .to_list(limit)\\n"
