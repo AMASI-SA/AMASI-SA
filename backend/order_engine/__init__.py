@@ -107,6 +107,11 @@ def make_order_engine_router(*args, **kwargs):
     from store_delivery_driver_app_routes import make_store_delivery_driver_app_router
     from store_delivery_customer_instruction_routes import make_store_delivery_customer_instruction_router
     from store_delivery_payment_review_routes import make_store_delivery_payment_review_router
+    from store_delivery_payment_evidence_routes import make_store_delivery_payment_evidence_router
+    from store_delivery_payment_resubmission_routes import make_store_delivery_payment_resubmission_router
+    from store_delivery_reminder_routes import make_store_delivery_reminder_router
+    from store_delivery_settlement_routes import make_store_delivery_settlement_router
+    from store_delivery_customer_lookup_routes import make_store_delivery_customer_lookup_router
 
     import product_v2_routes as _product_v2_routes
     from product_v2_sync_hotfix import run_product_v2_sync_fixed
@@ -180,9 +185,14 @@ def make_order_engine_router(*args, **kwargs):
         # Order Engine extension point so server.py remains stable.
         make_store_delivery_driver_router(db, current_user),
         make_store_delivery_handover_router(db, current_user),
+        make_store_delivery_payment_evidence_router(db, current_user),
         make_store_delivery_driver_app_router(db, current_user),
+        make_store_delivery_payment_resubmission_router(db, current_user),
         make_store_delivery_customer_instruction_router(db, current_user),
+        make_store_delivery_customer_lookup_router(db, current_user),
+        make_store_delivery_reminder_router(db, current_user),
         make_store_delivery_payment_review_router(db, current_user),
+        make_store_delivery_settlement_router(db, current_user),
     ]
     existing_keys = set()
     for route in router.routes:
