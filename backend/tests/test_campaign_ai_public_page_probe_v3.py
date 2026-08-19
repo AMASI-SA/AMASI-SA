@@ -37,6 +37,22 @@ def test_visible_text_strips_script_and_tags():
     assert "secret" not in visible
 
 
+def test_visible_text_strips_spaced_end_tags():
+    source = (
+        "<html><body>"
+        "<script>secret()</script >"
+        "<style>.hidden{display:none}</style   >"
+        "<noscript>fallback-only</noscript\t>"
+        "<p>Visible product text</p>"
+        "</body></html>"
+    )
+    visible = probe._visible_text(source)
+    assert "Visible product text" in visible
+    assert "secret" not in visible
+    assert "hidden" not in visible
+    assert "fallback-only" not in visible
+
+
 def test_meta_parser_reads_og_metadata():
     source = '<meta property="og:title" content="منتج مميز"><meta name="description" content="وصف المنتج">'
     assert probe._meta_content(source, prop="og:title") == "منتج مميز"
