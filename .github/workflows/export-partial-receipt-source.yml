@@ -1,0 +1,34 @@
+name: Export Partial Receipt Source
+
+on:
+  push:
+    branches:
+      - fix/partial-receipt-direct-supplier-assignment
+    paths:
+      - ".github/workflows/export-partial-receipt-source.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build focused source bundle
+        run: |
+          set -euo pipefail
+          tar -czf partial-receipt-source.tar.gz \
+            backend/preparation_supplier_dispatch.py \
+            backend/supplier_receiving_routes.py \
+            backend/tests/test_preparation_supplier_dispatch.py \
+            backend/tests/test_supplier_receiving.py \
+            .github/workflows/supplier-invoice-service-policy.yml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: partial-receipt-source
+          path: partial-receipt-source.tar.gz
+          if-no-files-found: error
+          retention-days: 1
