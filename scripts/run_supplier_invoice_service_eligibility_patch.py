@@ -63,16 +63,11 @@ robust_replace_once = '''def replace_once(text: str, old: str, new: str, label: 
             return text[:start] + replacement + text[end:]
 
     if label == "rebuild active invoice service candidates":
-        actual = (
-            "        .to_list(limit)\\n"
-            "    )\\n"
-            "    return rows\\n\\n\\n"
-            "async def _cancellable_session_events(\\n"
-        )
-        if text.count(actual) == 1:
-            replacement = (
-                "        .to_list(limit)\\n"
-                "    )\\n"
+        start = text.find("async def _recent_session_events(")
+        next_function = text.find("async def _cancellable_session_events(", start)
+        return_index = text.rfind("    return rows\\n", start, next_function)
+        if start >= 0 and next_function > start and return_index > start:
+            insertion = (
                 "    session = await db[SESSIONS].find_one(\\n"
                 "        {\\\"user_id\\\": user_id, \\\"id\\\": session_id},\\n"
                 "        {\\\"_id\\\": 0},\\n"
@@ -89,10 +84,13 @@ robust_replace_once = '''def replace_once(text: str, old: str, new: str, label: 
                 "            row[\\\"invoice_services\\\"] = supplier_piece_invoice_services(\\n"
                 "                row, session, service_catalog,\\n"
                 "            )\\n"
-                "    return rows\\n\\n\\n"
-                "async def _cancellable_session_events(\\n"
+                "    return rows\\n"
             )
-            return text.replace(actual, replacement, 1)
+            return (
+                text[:return_index]
+                + insertion
+                + text[return_index + len("    return rows\\n"):]
+            )
 
     raise RuntimeError(f"{label}: expected exactly one match, found {count}")
 '''
