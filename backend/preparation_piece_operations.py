@@ -259,17 +259,19 @@ def inherit_required_services(
         }
 
     for link in product_links:
-        # Product links are availability/configuration only unless a receiving
-        # employee explicitly promoted the service to a permanent supplier
-        # invoice service. Customer-selected services come from option bindings.
-        if link.get("supplier_invoice_required") is not True:
-            continue
+        permanent_invoice_service = (
+            link.get("supplier_invoice_required") is True
+        )
         add(
             link.get("resource_id"),
             link.get("quantity"),
-            "supplier_receiving_permanent",
+            (
+                "supplier_receiving_permanent"
+                if permanent_invoice_service
+                else "product"
+            ),
             customer_selected=False,
-            supplier_invoice_required=True,
+            supplier_invoice_required=permanent_invoice_service,
         )
 
     for binding in option_bindings:

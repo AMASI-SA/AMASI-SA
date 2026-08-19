@@ -269,7 +269,7 @@ def supplier_piece_invoice_services(
     result: list[dict[str, Any]] = []
     for raw in piece.get("services") or []:
         service_id = _text(raw.get("service_id"))
-        if not service_id or service_id not in supplier_links:
+        if not service_id:
             continue
         if not _service_is_invoice_eligible(raw):
             continue
@@ -504,42 +504,14 @@ def build_supplier_receiving_invoice(
             existing = service_id in common_service_ids
             is_addition = not existing
             if is_addition:
-                if not requested_service.add_to_product:
-                    raise HTTPException(
-                        status_code=409,
-                        detail={
-                            "code": "supplier_receiving_service_not_on_product",
-                            "service_id": service_id,
-                            "line_number": line_number,
-                        },
-                    )
-                if ADD_PRODUCT_SERVICE_PERMISSION not in permissions:
-                    raise HTTPException(
-                        status_code=403,
-                        detail={
-                            "code": "supplier_receiving_service_add_permission_required",
-                            "permission": ADD_PRODUCT_SERVICE_PERMISSION,
-                            "service_id": service_id,
-                        },
-                    )
-                if service_id not in supplier_service_ids or service_id not in service_catalog:
-                    raise HTTPException(
-                        status_code=422,
-                        detail={
-                            "code": "supplier_receiving_service_not_available",
-                            "service_id": service_id,
-                        },
-                    )
-                reference_row = service_catalog[service_id]
-                required_quantity = Decimal("1")
-                added_product_services.append({
-                    "line_number": line_number,
-                    "product_id": _text(first.get("product_id")),
-                    "product_name": _text(first.get("product_name")) or "منتج",
-                    "service_id": service_id,
-                    "service_name": _text(reference_row.get("name")) or service_id,
-                    "quantity": 1.0,
-                })
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "supplier_receiving_service_add_via_product_required",
+                        "service_id": service_id,
+                        "line_number": line_number,
+                    },
+                )
             else:
                 reference_row = eligible_maps[0][service_id]
                 required_quantity = _positive_quantity(
@@ -932,22 +904,20 @@ async def _supplier_service_catalog(
     session: dict[str, Any],
     mongo_session: Any = None,
 ) -> dict[str, dict[str, Any]]:
-    service_ids = sorted({
-        _text(row.get("service_id"))
-        for row in (
-            (session.get("supplier_snapshot") or {}).get("service_links") or []
-        )
-        if _text(row.get("service_id"))
-    })
-    if not service_ids:
-        return {}
+    """Return the active merchant service catalogue.
+
+    Supplier-to-service assignment is operational context only. It must not
+    hide a customer-selected service or prevent an authorised employee from
+    adding a new permanent service to the product.
+    """
+    del session
     kwargs = {"session": mongo_session} if mongo_session is not None else {}
     rows = await db[RESOURCES].find(
         {
             "user_id": user_id,
-            "id": {"$in": service_ids},
             "kind": "service",
             "track_inventory": {"$ne": True},
+            "status": {"$ne": "inactive"},
         },
         {
             "_id": 0,
@@ -958,7 +928,7 @@ async def _supplier_service_catalog(
             "unit_cost": 1,
         },
         **kwargs,
-    ).to_list(max(1, len(service_ids)))
+    ).sort("name", 1).to_list(5000)
     return {
         _text(row.get("id")): dict(row)
         for row in rows
@@ -1040,11 +1010,6 @@ def supplier_service_completion_update(
     seen: set[str] = set()
     for raw in piece.get("services") or []:
         row = dict(raw)
-        # A generic product link is only an available service. If the customer
-        # did not select it and it was not made permanent from supplier
-        # receiving, it must neither remain pending nor block receipt.
-        if not _service_is_invoice_eligible(row) and not _service_is_complete(row):
-            continue
         service_id = _text(row.get("service_id"))
         selected_row = selected.get(service_id)
         if selected_row:
@@ -1526,6 +1491,34 @@ def _supplier_receiving_product_identifiers(
     })
 
 
+def supplier_uninvoiced_piece_selector(
+    *,
+    merchant_id: str,
+    product_identifiers: list[str],
+    service_id: str,
+) -> dict[str, Any]:
+    """Target only mutable pieces; issued supplier invoices remain immutable."""
+    return {
+        "user_id": merchant_id,
+        "product_id": {"$in": product_identifiers},
+        "status": {"$nin": [PIECE_STATUS_CANCELLED, PIECE_STATUS_RECEIVED]},
+        "$and": [
+            {
+                "$or": [
+                    {"supplier_receiving_history": {"$exists": False}},
+                    {"supplier_receiving_history": None},
+                    {"supplier_receiving_history": []},
+                ]
+            },
+            {
+                "services": {
+                    "$not": {"$elemMatch": {"service_id": service_id}}
+                }
+            },
+        ],
+    }
+
+
 def _permanent_supplier_service_snapshot(
     resource: dict[str, Any],
     *,
@@ -1736,27 +1729,11 @@ async def _apply_permanent_supplier_invoice_service(
         actor=actor,
         added_at=now,
     )
-    uninvoiced_piece_query = {
-        "user_id": merchant_id,
-        "product_id": {"$in": identifiers},
-        "status": {"$nin": [PIECE_STATUS_CANCELLED, PIECE_STATUS_RECEIVED]},
-        "$and": [
-            {
-                "$or": [
-                    {"supplier_receiving_history": {"$exists": False}},
-                    {"supplier_receiving_history": None},
-                    {"supplier_receiving_history": []},
-                ]
-            },
-            {
-                "services": {
-                    "$not": {
-                        "$elemMatch": {"service_id": normalized_service_id}
-                    }
-                }
-            },
-        ],
-    }
+    uninvoiced_piece_query = supplier_uninvoiced_piece_selector(
+        merchant_id=merchant_id,
+        product_identifiers=identifiers,
+        service_id=normalized_service_id,
+    )
     piece_result = await db[PIECES].update_many(
         uninvoiced_piece_query,
         {
@@ -2022,9 +1999,7 @@ def _pending_service_signature(piece: dict[str, Any]) -> tuple[tuple[str, str], 
             str(_positive_quantity(row.get("required_quantity"))),
         )
         for row in (piece.get("services") or [])
-        if _text(row.get("service_id"))
-        and _service_is_invoice_eligible(row)
-        and not _service_is_complete(row)
+        if _text(row.get("service_id")) and not _service_is_complete(row)
     ))
 
 
