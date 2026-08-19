@@ -250,37 +250,60 @@ jobs:
 
           policy_path = Path(".github/workflows/supplier-invoice-service-policy.yml")
           policy = policy_path.read_text(encoding="utf-8")
-          replacements = {
-              '      - "backend/preparation_piece_operations.py"\n': (
-                  '      - "backend/preparation_piece_operations.py"\n'
-                  '      - "backend/preparation_supplier_dispatch.py"\n'
-              ),
-              '      - "backend/tests/test_supplier_invoice_service_candidates.py"\n': (
-                  '      - "backend/tests/test_supplier_invoice_service_candidates.py"\n'
-                  '      - "backend/tests/test_direct_partial_service_receipt.py"\n'
-              ),
-              '          backend/preparation_piece_operations.py\n': (
-                  '          backend/preparation_piece_operations.py\n'
-                  '          backend/preparation_supplier_dispatch.py\n'
-              ),
-              '          backend/tests/test_supplier_invoice_service_candidates.py\n': (
-                  '          backend/tests/test_supplier_invoice_service_candidates.py\n'
-                  '          backend/tests/test_direct_partial_service_receipt.py\n'
-              ),
-              '          backend/tests/test_supplier_invoice_service_candidates.py\n          backend/tests/test_preparation_piece_operations.py\n': (
-                  '          backend/tests/test_supplier_invoice_service_candidates.py\n'
-                  '          backend/tests/test_direct_partial_service_receipt.py\n'
-                  '          backend/tests/test_preparation_piece_operations.py\n'
-              ),
-              "          grep -q 'supplier_invoice_required' backend/preparation_piece_operations.py\n": (
-                  "          grep -q 'supplier_invoice_required' backend/preparation_piece_operations.py\n"
-                  "          grep -q 'piece_allows_direct_service_receipt' backend/preparation_supplier_dispatch.py\n"
-              ),
-          }
-          for old_text, new_text in replacements.items():
-              if old_text not in policy:
-                  raise SystemExit(f"workflow anchor missing: {old_text!r}")
-              policy = policy.replace(old_text, new_text, 1)
+          path_anchor = '      - "backend/preparation_piece_operations.py"\n'
+          policy = policy.replace(
+              path_anchor,
+              path_anchor + '      - "backend/preparation_supplier_dispatch.py"\n',
+              1,
+          )
+          test_path_anchor = '      - "backend/tests/test_supplier_invoice_service_candidates.py"\n'
+          policy = policy.replace(
+              test_path_anchor,
+              test_path_anchor + '      - "backend/tests/test_direct_partial_service_receipt.py"\n',
+              1,
+          )
+          compile_block = '''          backend/supplier_receiving_routes.py
+                    backend/preparation_piece_operations.py
+                    backend/tests/test_supplier_receiving.py
+                    backend/tests/test_supplier_invoice_service_eligibility.py
+                    backend/tests/test_supplier_invoice_service_candidates.py
+          '''
+          compile_replacement = '''          backend/supplier_receiving_routes.py
+                    backend/preparation_piece_operations.py
+                    backend/preparation_supplier_dispatch.py
+                    backend/tests/test_supplier_receiving.py
+                    backend/tests/test_supplier_invoice_service_eligibility.py
+                    backend/tests/test_supplier_invoice_service_candidates.py
+                    backend/tests/test_direct_partial_service_receipt.py
+          '''
+          if compile_block not in policy:
+              raise SystemExit("compile workflow block was not found")
+          policy = policy.replace(compile_block, compile_replacement, 1)
+          pytest_block = '''          backend/tests/test_supplier_receiving.py
+                    backend/tests/test_supplier_invoice_service_eligibility.py
+                    backend/tests/test_supplier_invoice_service_candidates.py
+                    backend/tests/test_preparation_piece_operations.py
+                    --tb=short
+          '''
+          pytest_replacement = '''          backend/tests/test_supplier_receiving.py
+                    backend/tests/test_supplier_invoice_service_eligibility.py
+                    backend/tests/test_supplier_invoice_service_candidates.py
+                    backend/tests/test_direct_partial_service_receipt.py
+                    backend/tests/test_preparation_piece_operations.py
+                    --tb=short
+          '''
+          if pytest_block not in policy:
+              raise SystemExit("pytest workflow block was not found")
+          policy = policy.replace(pytest_block, pytest_replacement, 1)
+          grep_anchor = "          grep -q 'supplier_invoice_required' backend/preparation_piece_operations.py\n"
+          if grep_anchor not in policy:
+              raise SystemExit("workflow grep anchor was not found")
+          policy = policy.replace(
+              grep_anchor,
+              grep_anchor
+              + "          grep -q 'piece_allows_direct_service_receipt' backend/preparation_supplier_dispatch.py\n",
+              1,
+          )
           policy_path.write_text(policy, encoding="utf-8")
 
           Path(".github/workflows/apply-direct-partial-service-receipt.yml").unlink()
