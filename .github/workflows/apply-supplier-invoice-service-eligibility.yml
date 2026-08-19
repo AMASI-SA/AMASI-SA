@@ -7,21 +7,29 @@ on:
     paths:
       - scripts/apply_supplier_invoice_service_eligibility.py
       - .github/workflows/apply-supplier-invoice-service-eligibility.yml
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - scripts/apply_supplier_invoice_service_eligibility.py
+      - .github/workflows/apply-supplier-invoice-service-eligibility.yml
 
 permissions:
   contents: write
 
 jobs:
   apply:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TARGET_BRANCH: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
     steps:
       - name: Clone repair branch
         run: |
           set -euo pipefail
-          git clone --depth=1 --branch "${GITHUB_REF_NAME}" \
+          git clone --depth=1 --branch "${TARGET_BRANCH}" \
             "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" workspace
       - name: Apply deterministic patch
         working-directory: workspace
@@ -47,4 +55,4 @@ jobs:
             backend/preparation_piece_operations.py \
             backend/tests/test_supplier_invoice_service_eligibility.py
           git commit -m "fix(receiving): keep invoice services customer-selected or permanent"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+          git push origin "HEAD:${TARGET_BRANCH}"
