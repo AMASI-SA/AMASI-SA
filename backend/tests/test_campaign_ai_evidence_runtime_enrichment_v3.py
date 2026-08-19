@@ -77,7 +77,10 @@ async def test_runtime_enrichment_attaches_product_health_and_actual_media(monke
     product = pack["product_intelligence"]["entities"]["snapchat|campaign|acct|c1"]["products"][0]
     assert product["product_health_score"]["score"] == 100.0
     assert product["product_health_score"]["coverage_pct"] == 100.0
-    assert "No product-health score threshold" in pack["product_health_score_contract"]
+    contract = pack["product_health_score_contract"].lower()
+    assert "product-health score threshold" in contract
+    assert "pause" in contract
+    assert "scale" in contract
     assert pack["actual_creative_media"]["visual_count"] == 1
 
 
