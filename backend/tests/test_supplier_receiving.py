@@ -459,6 +459,8 @@ def test_invoice_draft_separates_product_and_service_prices():
             "reference_unit_price_halalas": 350,
         }],
         "reference_product_unit_price_halalas": 500,
+        "reference_product_price_complete": True,
+        "reference_product_price_source": "mezan_v2_base",
     }
     invoice = build_supplier_receiving_invoice(
         session={
@@ -507,6 +509,8 @@ def test_invoice_draft_allows_normally_priced_product_without_services():
             "services": [],
             "invoice_services": [],
             "reference_product_unit_price_halalas": 1500,
+            "reference_product_price_complete": True,
+            "reference_product_price_source": "mezan_v2_base",
         }],
         requested_lines=[SupplierReceivingInvoiceLineRequest(
             piece_ids=["piece-normal-1"],
@@ -626,6 +630,8 @@ def test_invoice_rejects_grouping_pieces_with_different_pending_services():
             {"service_id": "paint", "required_quantity": 1},
         ],
         "reference_product_unit_price_halalas": 500,
+        "reference_product_price_complete": True,
+        "reference_product_price_source": "mezan_v2_base",
     }
     scans = [
         {
@@ -691,6 +697,8 @@ def test_price_overrides_require_permissions_and_additions_use_dedicated_route()
             "reference_unit_price_halalas": 300,
         }],
         "reference_product_unit_price_halalas": 500,
+        "reference_product_price_complete": True,
+        "reference_product_price_source": "mezan_v2_base",
     }
     session = {
         "reference": "SR-1",
