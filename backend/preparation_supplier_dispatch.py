@@ -386,6 +386,13 @@ def plan_piece_selections(
 
 
 def piece_is_available_for_supplier_dispatch(piece: dict[str, Any]) -> bool:
+    """Return only pieces that still require their first supplier dispatch.
+
+    A ``partial_received`` piece already completed at least one supplier invoice.
+    It must not return to the employee's «send to supplier» queue: the employee
+    opens the next supplier's receiving session and scans the same piece there,
+    where the supplier is assigned directly for the remaining service.
+    """
     if _text(piece.get("assignment_status")) == ASSIGNMENT_STATUS_UNASSIGNED:
         return False
     if _text(piece.get("status")) in {
@@ -397,10 +404,7 @@ def piece_is_available_for_supplier_dispatch(piece: dict[str, Any]) -> bool:
         return False
     if _text(piece.get("supplier_receiving_session_id")):
         return False
-    return _text(piece.get("supplier_dispatch_status")) in {
-        "",
-        DISPATCH_STATUS_PARTIAL,
-    }
+    return _text(piece.get("supplier_dispatch_status")) == ""
 
 
 def file_is_fully_dispatched(pieces: list[dict[str, Any]]) -> bool:
@@ -526,14 +530,26 @@ def supplier_receiving_dispatch_blocker(
     piece: dict[str, Any],
     supplier_id: Any,
 ) -> dict[str, Any] | None:
-    """Fail closed only for pieces governed by the new dispatch workflow."""
+    """Validate first-dispatch ownership while allowing direct partial receipt.
+
+    ``partial_received`` proves that the physical piece already passed through a
+    supplier invoice and still has unfinished services. A later supplier is
+    therefore assigned by the receiving session itself; no second dispatch file
+    or reassignment confirmation is required. ``sent`` and ``ready`` pieces keep
+    the strict original-supplier check below.
+    """
     dispatch_status = _text(piece.get("supplier_dispatch_status"))
     if not dispatch_status:
         return None  # Backward compatibility for historical files.
     if dispatch_status == DISPATCH_STATUS_PARTIAL:
+        if list(piece.get("supplier_receiving_history") or []):
+            return None
         return {
-            "code": "supplier_piece_not_dispatched",
-            "message": "أرسل القطعة إلى المورد المطلوب قبل استلامها.",
+            "code": "supplier_piece_partial_history_missing",
+            "message": (
+                "حالة القطعة جزئية لكن سجل فاتورة المورد السابقة غير موجود؛ "
+                "أوقف الاستلام وراجع سجل القطعة."
+            ),
         }
     expected_supplier_id = _text(piece.get("supplier_id"))
     actual_supplier_id = _text(supplier_id)

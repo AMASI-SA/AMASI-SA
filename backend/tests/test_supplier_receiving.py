@@ -38,6 +38,7 @@ from supplier_receiving_routes import (
     supplier_piece_reference_price,
     supplier_scan_group_candidates,
     supplier_receipt_piece_patch,
+    supplier_partial_receipt_assignment_patch,
     supplier_receipt_piece_rollback_update,
     supplier_receipt_previous_piece_state,
     supplier_service_completion_update,
@@ -169,6 +170,115 @@ def test_scan_only_reserves_piece_without_recording_supplier_completion():
     assert "invoice_id" not in patch
     assert patch["salla_updated"] is False
     assert patch["qoyod_updated"] is False
+
+
+def test_partial_piece_is_directly_assigned_to_receiving_supplier():
+    assigned_at = datetime(2026, 8, 19, 14, 0, tzinfo=timezone.utc)
+    piece = {
+        "piece_id": "piece-1",
+        "status": PIECE_STATUS_IN_PROGRESS,
+        "supplier_dispatch_status": "partial_received",
+        "supplier_id": "supplier-1",
+        "supplier_name": "المورد الأول",
+        "supplier_receiving_history": [{
+            "invoice_id": "invoice-1",
+            "supplier_id": "supplier-1",
+        }],
+    }
+    session = {
+        "id": "session-2",
+        "supplier_id": "supplier-2",
+        "supplier_snapshot": {
+            "id": "supplier-2",
+            "company_name": "المورد الثاني",
+        },
+    }
+
+    patch = supplier_partial_receipt_assignment_patch(
+        piece=piece,
+        session=session,
+        actor={"id": "receiver-1", "name": "المستلم"},
+        assigned_at=assigned_at,
+    )
+
+    assert patch["supplier_id"] == "supplier-2"
+    assert patch["supplier_name"] == "المورد الثاني"
+    assert patch["supplier_assignment_mode"] == "direct_at_partial_receipt"
+    assert patch["supplier_assigned_at_receipt"] is True
+    assert patch["supplier_assigned_from_id"] == "supplier-1"
+    assert patch["supplier_assignment_session_id"] == "session-2"
+
+    snapshot = supplier_receipt_previous_piece_state(piece)
+    rollback = supplier_receipt_piece_rollback_update(snapshot)
+    assert rollback["$set"]["supplier_id"] == "supplier-1"
+    assert "supplier_assignment_mode" in rollback["$unset"]
+    assert "supplier_assigned_at_receipt" in rollback["$unset"]
+
+    assert supplier_partial_receipt_assignment_patch(
+        piece={**piece, "supplier_id": "supplier-2"},
+        session=session,
+        actor={"id": "receiver-1"},
+        assigned_at=assigned_at,
+    ) == {}
+
+
+@pytest.mark.asyncio
+async def test_partial_piece_is_scan_candidate_for_next_supplier_without_reassignment():
+    rows = [{
+        "piece_id": "piece-partial-1",
+        "batch_id": "batch-1",
+        "order_item_id": "item-1",
+        "group_key": "product:1",
+        "unit_index": 1,
+        "status": PIECE_STATUS_IN_PROGRESS,
+        "supplier_dispatch_status": "partial_received",
+        "supplier_id": "supplier-1",
+        "supplier_name": "المورد الأول",
+        "supplier_receiving_history": [{"invoice_id": "invoice-1"}],
+        "services": [{
+            "service_id": "paint",
+            "required_quantity": 1,
+            "status": "pending",
+            "supplier_invoice_required": True,
+        }],
+    }]
+
+    class _Cursor:
+        def sort(self, *_args):
+            return self
+
+        def limit(self, *_args):
+            return self
+
+        async def to_list(self, _limit):
+            return rows
+
+    class _Collection:
+        def find(self, _query, _projection):
+            return _Cursor()
+
+    class _DB:
+        def __getitem__(self, _name):
+            return _Collection()
+
+    candidates = await supplier_scan_group_candidates(
+        _DB(),
+        user_id="owner-1",
+        scanned_piece=rows[0],
+        session={
+            "id": "session-2",
+            "supplier_id": "supplier-2",
+            "supplier_snapshot": {
+                "id": "supplier-2",
+                "company_name": "المورد الثاني",
+                "service_links": [],
+            },
+        },
+        allow_service_addition=False,
+        allow_supplier_reassignment=False,
+    )
+
+    assert [row["piece_id"] for row in candidates] == ["piece-partial-1"]
 
 
 def test_receipt_cancel_snapshot_restores_the_exact_previous_piece_state():
