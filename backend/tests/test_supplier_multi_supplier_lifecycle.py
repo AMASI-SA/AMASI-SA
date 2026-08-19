@@ -76,8 +76,8 @@ def test_partially_completed_piece_is_assigned_during_second_supplier_receipt() 
         },
     }
 
-    # No second supplier dispatch file is created. Scanning in supplier 2's
-    # receiving session is the assignment action for the remaining service.
+    # No second supplier dispatch file is created. The receiving scan itself is
+    # the explicit assignment action for supplier 2 and the remaining service.
     assert piece_is_available_for_supplier_dispatch(piece) is False
     assert supplier_receiving_dispatch_blocker(piece, "supplier-2") is None
 
