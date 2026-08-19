@@ -1,7 +1,9 @@
-"""Accountant review for store-driver COD evidence.
+"""Accountant review for store-driver non-cash collection evidence.
 
-Cash remains driver custody until settlement. Card-terminal and bank-transfer
-receipts remain pending until an accountant approves or rejects them.
+The review queue is sourced from ``store_delivery_payment_reviews`` created by
+the driver app. Approval updates the review and collection, then projects a
+store-delivery payment marker onto the assignment and order without overwriting
+Salla-authoritative payment fields.
 """
 from __future__ import annotations
 
@@ -13,10 +15,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from store_delivery_domain import normalize_text
-from store_delivery_driver_app_routes import (
-    DRIVER_COLLECTIONS,
-    DRIVER_PAYMENT_REVIEWS,
-)
+from store_delivery_driver_app_routes import DRIVER_COLLECTIONS, DRIVER_PAYMENT_REVIEWS
+from store_delivery_driver_routes import STORE_DRIVERS
+from store_delivery_handover_routes import ASSIGNMENTS
 
 PAYMENT_EVENTS = "store_delivery_payment_review_events"
 ReviewDecision = Literal["approved", "rejected"]
@@ -52,13 +53,13 @@ def _require_accountant(user: Any) -> dict[str, Any]:
 
 class ReviewPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
     decision: ReviewDecision
     note: str = Field(default="", max_length=1000)
 
 
 async def ensure_store_delivery_payment_review_indexes(db: Any) -> None:
     await db[PAYMENT_EVENTS].create_index([("user_id", 1), ("assignment_id", 1), ("occurred_at", -1)])
+    await db[DRIVER_PAYMENT_REVIEWS].create_index([("user_id", 1), ("assignment_id", 1)], unique=True)
 
 
 def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..., Any]) -> APIRouter:
@@ -70,106 +71,136 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
         limit: int = Query(default=250, ge=1, le=1000),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
-        actor = _require_accountant(user)
-        user_id = _merchant_user_id(actor)
+        actor = _require_accountant(user); user_id = _merchant_user_id(actor)
         query: dict[str, Any] = {"user_id": user_id, "status": "pending"}
-        if method:
-            query["payment_method"] = normalize_text(method)
-        items = await db[DRIVER_PAYMENT_REVIEWS].find(
-            query,
-            {"_id": 0, "user_id": 0},
-        ).sort("submitted_at", 1).to_list(length=limit)
+        if method: query["payment_method"] = normalize_text(method)
+        reviews = await db[DRIVER_PAYMENT_REVIEWS].find(query, {"_id": 0, "user_id": 0}).sort(
+            "submitted_at", 1).to_list(length=limit)
+        assignment_ids = [row.get("assignment_id") for row in reviews if row.get("assignment_id")]
+        assignments = await db[ASSIGNMENTS].find(
+            {"user_id": user_id, "id": {"$in": assignment_ids}}, {"_id": 0, "user_id": 0}
+        ).to_list(length=max(len(assignment_ids), 1)) if assignment_ids else []
+        by_assignment = {row["id"]: row for row in assignments}
+        driver_ids = list({row.get("driver_id") for row in reviews if row.get("driver_id")})
+        drivers = await db[STORE_DRIVERS].find(
+            {"user_id": user_id, "id": {"$in": driver_ids}}, {"_id": 0, "id": 1, "name": 1, "phone": 1}
+        ).to_list(length=max(len(driver_ids), 1)) if driver_ids else []
+        by_driver = {row["id"]: row for row in drivers}
+        items = []
+        for review in reviews:
+            assignment = by_assignment.get(review.get("assignment_id"), {})
+            driver = by_driver.get(review.get("driver_id"), {})
+            items.append({
+                **review,
+                "order_number": assignment.get("order_number"),
+                "delivery_status": assignment.get("status"),
+                "delivered_at": assignment.get("delivered_at"),
+                "driver_name": driver.get("name") or assignment.get("driver_name_snapshot"),
+                "driver_phone": driver.get("phone"),
+            })
         return {"items": items, "total": len(items)}
 
     @router.get("/bank-accounts")
     async def official_bank_accounts(user: dict = Depends(current_user)) -> dict[str, Any]:
-        actor = _require_accountant(user)
-        user_id = _merchant_user_id(actor)
+        actor = _require_accountant(user); user_id = _merchant_user_id(actor)
         items = await db.accounts.find(
             {"user_id": user_id, "account_type": "bank", "status": "active"},
-            {
-                "_id": 0,
-                "id": 1,
-                "name": 1,
-                "provider": 1,
-                "account_number": 1,
-                "iban": 1,
-                "status": 1,
-            },
+            {"_id": 0, "id": 1, "name": 1, "provider": 1, "account_number": 1, "iban": 1, "status": 1},
         ).sort("name", 1).to_list(length=200)
         return {"items": items, "total": len(items), "source": "financial_center_accounts"}
 
     @router.post("/{assignment_id}")
-    async def review_payment(
-        assignment_id: str,
-        payload: ReviewPayload,
-        user: dict = Depends(current_user),
-    ) -> dict[str, Any]:
-        actor = _require_accountant(user)
-        user_id = _merchant_user_id(actor)
+    async def review_payment(assignment_id: str, payload: ReviewPayload,
+                             user: dict = Depends(current_user)) -> dict[str, Any]:
+        actor = _require_accountant(user); user_id = _merchant_user_id(actor)
         await ensure_store_delivery_payment_review_indexes(db)
-
         review = await db[DRIVER_PAYMENT_REVIEWS].find_one(
             {"user_id": user_id, "assignment_id": assignment_id}, {"_id": 0}
         )
         if not review:
-            raise HTTPException(status_code=404, detail={"code": "payment_review_not_found"})
+            raise HTTPException(status_code=404, detail={"code": "store_delivery_payment_review_not_found"})
         if review.get("status") != "pending":
             raise HTTPException(status_code=409, detail={"code": "payment_review_already_final"})
+        assignment = await db[ASSIGNMENTS].find_one(
+            {"user_id": user_id, "id": assignment_id}, {"_id": 0}
+        )
+        if not assignment:
+            raise HTTPException(status_code=404, detail={"code": "store_delivery_assignment_not_found"})
+        if assignment.get("status") != "delivered":
+            raise HTTPException(status_code=409, detail={"code": "delivery_not_completed"})
         if review.get("payment_method") not in {"card_terminal", "bank_transfer"}:
             raise HTTPException(status_code=409, detail={"code": "payment_review_not_required"})
 
-        now = _now()
-        approved = payload.decision == "approved"
-        review_status = "approved" if approved else "rejected"
-        review_patch = {
-            "status": review_status,
-            "reviewed_at": now,
-            "reviewed_by": normalize_text(actor.get("id")),
-            "review_note": normalize_text(payload.note),
-        }
+        now = _now(); approved = payload.decision == "approved"
+        final_status = "approved" if approved else "rejected"
         updated_review = await db[DRIVER_PAYMENT_REVIEWS].find_one_and_update(
             {"user_id": user_id, "assignment_id": assignment_id, "status": "pending"},
-            {"$set": review_patch},
+            {"$set": {
+                "status": final_status, "reviewed_at": now,
+                "reviewed_by": normalize_text(actor.get("id")),
+                "review_note": normalize_text(payload.note),
+            }},
             return_document=True,
             projection={"_id": 0, "user_id": 0},
         )
         if not updated_review:
             raise HTTPException(status_code=409, detail={"code": "payment_review_concurrent_update"})
 
-        collection_patch = {
-            "review_status": review_status,
-            "payment_confirmed": approved,
-            "payment_status": "paid" if approved else "payment_evidence_rejected",
-            "reviewed_at": now,
-            "reviewed_by": normalize_text(actor.get("id")),
-            "review_note": normalize_text(payload.note),
-        }
         await db[DRIVER_COLLECTIONS].update_one(
             {"user_id": user_id, "assignment_id": assignment_id},
-            {"$set": collection_patch},
+            {"$set": {
+                "review_status": final_status, "reviewed_at": now,
+                "reviewed_by": normalize_text(actor.get("id")),
+                "review_note": normalize_text(payload.note),
+                "payment_confirmed": approved,
+                "payment_status": "paid" if approved else "payment_evidence_rejected",
+            }},
         )
+        assignment_patch = {
+            "payment_review_status": final_status,
+            "payment_reviewed_at": now,
+            "payment_reviewed_by": normalize_text(actor.get("id")),
+            "payment_method_snapshot": review.get("payment_method"),
+            "payment_amount_snapshot": review.get("amount"),
+            "payment_bank_account_id_snapshot": review.get("bank_account_id"),
+            "payment_bank_name_snapshot": review.get("bank_name_snapshot"),
+            "payment_confirmed": approved,
+            "payment_status": "paid" if approved else "payment_evidence_rejected",
+            "updated_at": now,
+        }
+        await db[ASSIGNMENTS].update_one({"user_id": user_id, "id": assignment_id}, {"$set": assignment_patch})
+
+        # Preserve Salla's canonical fields. This namespaced projection is the
+        # operational truth for customer service/order views until an explicit
+        # Salla payment-status sync is designed and reviewed separately.
+        order_patch = {
+            "store_delivery_payment_status": assignment_patch["payment_status"],
+            "store_delivery_payment_method": review.get("payment_method"),
+            "store_delivery_payment_amount": review.get("amount"),
+            "store_delivery_payment_confirmed": approved,
+            "store_delivery_payment_reviewed_at": now,
+            "store_delivery_payment_reviewed_by": normalize_text(actor.get("id")),
+        }
+        if review.get("bank_account_id"):
+            order_patch["store_delivery_bank_account_id"] = review.get("bank_account_id")
+            order_patch["store_delivery_bank_name"] = review.get("bank_name_snapshot")
+        await db.orders.update_one({"user_id": user_id, "id": assignment.get("order_id")}, {"$set": order_patch})
 
         await db[PAYMENT_EVENTS].insert_one({
-            "id": str(uuid.uuid4()),
-            "user_id": user_id,
-            "assignment_id": assignment_id,
-            "order_id": review.get("order_id"),
-            "driver_id": review.get("driver_id"),
-            "payment_method": review.get("payment_method"),
-            "amount": review.get("amount"),
-            "decision": payload.decision,
-            "note": normalize_text(payload.note),
-            "actor_id": normalize_text(actor.get("id")),
-            "occurred_at": now,
+            "id": str(uuid.uuid4()), "user_id": user_id, "assignment_id": assignment_id,
+            "order_id": assignment.get("order_id"), "driver_id": assignment.get("driver_id"),
+            "decision": payload.decision, "note": normalize_text(payload.note),
+            "payment_method": review.get("payment_method"), "amount": review.get("amount"),
+            "actor_id": normalize_text(actor.get("id")), "occurred_at": now,
         })
-        return updated_review
+        return {
+            "assignment_id": assignment_id,
+            "decision": payload.decision,
+            "payment_status": assignment_patch["payment_status"],
+            "review": updated_review,
+        }
 
     return router
 
 
-__all__ = [
-    "ReviewPayload",
-    "ensure_store_delivery_payment_review_indexes",
-    "make_store_delivery_payment_review_router",
-]
+__all__ = ["ReviewPayload", "ensure_store_delivery_payment_review_indexes", "make_store_delivery_payment_review_router"]
