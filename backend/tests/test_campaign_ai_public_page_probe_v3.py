@@ -53,6 +53,22 @@ def test_visible_text_strips_spaced_end_tags():
     assert "fallback-only" not in visible
 
 
+def test_visible_text_strips_malformed_closing_tag_payloads():
+    source = (
+        "<html><body>"
+        "<script>script-secret</script\t\n bar>"
+        "<style>style-secret</style data-bad>"
+        "<noscript>noscript-secret</noscript/x>"
+        "<p>Safe visible content</p>"
+        "</body></html>"
+    )
+    visible = probe._visible_text(source)
+    assert "Safe visible content" in visible
+    assert "script-secret" not in visible
+    assert "style-secret" not in visible
+    assert "noscript-secret" not in visible
+
+
 def test_meta_parser_reads_og_metadata():
     source = '<meta property="og:title" content="منتج مميز"><meta name="description" content="وصف المنتج">'
     assert probe._meta_content(source, prop="og:title") == "منتج مميز"
