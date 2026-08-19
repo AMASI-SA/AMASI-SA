@@ -44,10 +44,25 @@ jobs:
             backend/preparation_piece_operations.py \
             backend/tests/test_supplier_invoice_service_eligibility.py
           git diff --check
-      - name: Install backend test dependencies
+      - name: Install production preparation test dependencies
         working-directory: workspace
-        run: |
-          python -m pip install -q -r backend/requirements.txt
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1
+          pydantic==2.13.4
+          pymongo==4.5.0
+          httpx
+          pytest
+          pytest-asyncio
+          openpyxl
+          cryptography
+          reportlab
+          python-multipart
+          pymupdf
+          pillow
+          qrcode
+          arabic-reshaper
+          python-bidi
       - name: Run supplier policy and piece regression tests
         working-directory: workspace
         run: |
