@@ -13,7 +13,7 @@ import {
 } from "../../services/mezanProductsV2";
 
 const EMPTY = {
-    name: "", price: "", sale_price: "", sale_starts_at: "", sale_ends_at: "",
+    name: "", price: "", sale_price: "", salla_cost_price: "", sale_starts_at: "", sale_ends_at: "",
     status: "active", short_description: "", description: "", categories: "",
     google_category: "", local_category: "", seo_title: "", seo_description: "",
     keywords: "", slug: "",
@@ -31,6 +31,7 @@ function hydrate(product) {
         name: product?.name || "",
         price: product?.price ?? "",
         sale_price: product?.sale_price ?? "",
+        salla_cost_price: product?.salla_cost_price ?? product?.cost_price_from_salla ?? "",
         sale_starts_at: dateInput(product?.sale_starts_at),
         sale_ends_at: dateInput(product?.sale_ends_at),
         status: product?.status || "active",
@@ -61,6 +62,7 @@ function buildChanges(form, original) {
     if (text(form.name) !== text(original.name)) changes.name = text(form.name);
     if (String(form.price) !== String(original.price)) changes.price = form.price === "" ? null : Number(form.price);
     if (String(form.sale_price) !== String(original.sale_price)) changes.sale_price = form.sale_price === "" ? null : Number(form.sale_price);
+    if (String(form.salla_cost_price) !== String(original.salla_cost_price)) changes.salla_cost_price = form.salla_cost_price === "" ? null : Number(form.salla_cost_price);
     if (form.sale_starts_at !== original.sale_starts_at) changes.sale_starts_at = form.sale_starts_at || null;
     if (form.sale_ends_at !== original.sale_ends_at) changes.sale_ends_at = form.sale_ends_at || null;
     if (form.status !== original.status) changes.status = form.status;
@@ -321,6 +323,8 @@ export default function ProductControlCenterPanel({ productId, product, onPublis
             <div className="grid gap-4 md:grid-cols-2">
                 {field("name", "اسم المنتج")}{field("status", "حالة المنتج", <select value={form.status} onChange={(e) => setForm((r) => ({ ...r, status: e.target.value }))} className="mt-1 w-full rounded-xl border p-3"><option value="active">نشط</option><option value="inactive">مخفي</option><option value="out_of_stock">نفد</option></select>)}
                 {field("price", "السعر الأساسي", <input type="number" value={form.price} onChange={(e) => setForm((r) => ({ ...r, price: e.target.value }))} className="mt-1 w-full rounded-xl border p-3" />)}{field("sale_price", "السعر المخفض", <input type="number" value={form.sale_price} onChange={(e) => setForm((r) => ({ ...r, sale_price: e.target.value }))} className="mt-1 w-full rounded-xl border p-3" />)}
+                {field("salla_cost_price", "سعر التكلفة في سلة", <input type="number" min="0" step="0.01" value={form.salla_cost_price} onChange={(e) => setForm((r) => ({ ...r, salla_cost_price: e.target.value }))} className="mt-1 w-full rounded-xl border border-emerald-300 bg-emerald-50/30 p-3" />)}
+                <div className="self-end rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900"><ShieldCheck className="ml-1 inline" />هذا الحقل يحدّث تكلفة سلة فقط عند النشر، ولا يغيّر تكلفة ميزان.</div>
                 {field("sale_starts_at", "تاريخ بداية التخفيض", <input type="date" value={form.sale_starts_at} onChange={(e) => setForm((r) => ({ ...r, sale_starts_at: e.target.value }))} className="mt-1 w-full rounded-xl border p-3" />)}{field("sale_ends_at", "تاريخ نهاية التخفيض", <input type="date" value={form.sale_ends_at} onChange={(e) => setForm((r) => ({ ...r, sale_ends_at: e.target.value }))} className="mt-1 w-full rounded-xl border p-3" />)}
                 <CategoryPicker value={form.categories} items={categories} loading={categoriesLoading} onChange={(value) => setForm((r) => ({ ...r, categories: value }))} />
                 <GoogleCategoryPicker value={form.google_category} items={googleTaxonomy} loading={googleTaxonomyLoading} error={googleTaxonomyError} version={googleTaxonomyVersion} onChange={(value) => setForm((r) => ({ ...r, google_category: value }))} />
