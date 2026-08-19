@@ -68,6 +68,14 @@ REQUIRED_ACTIONS_BY_CASE = {
     "low_stock_scale_candidate": {"RESTOCK_PRODUCT"},
 }
 
+TRANSIENT_ERROR_NAMES = {
+    "RateLimitError",
+    "APITimeoutError",
+    "APIConnectionError",
+    "InternalServerError",
+}
+TRANSIENT_BACKOFF_SECONDS = (20, 45, 90)
+
 
 def _evaluate_case_with_execution_contract(case, output):
     eval_case = dict(case)
@@ -137,10 +145,27 @@ def _contract_fingerprint(cases: list[dict[str, Any]]) -> str:
         "cases": cases,
         "decision_schema": live_eval.v3_json_schema(),
         "review_schema": live_eval.review_json_schema(),
+        # Keep v2 so checkpoints from the exact same model/prompt/schema corpus
+        # remain valid. The change below only retries transport/runtime failures;
+        # it does not alter the marketing-evaluation contract.
         "runner_contract": 2,
     }
     raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _transient_failure_name(row: dict[str, Any]) -> str | None:
+    failures = row.get("failures")
+    if not isinstance(failures, list):
+        return None
+    for failure in failures:
+        text = str(failure or "")
+        if not text.startswith("eval_runtime_error:"):
+            continue
+        name = text.split(":", 1)[1].strip()
+        if name in TRANSIENT_ERROR_NAMES:
+            return name
+    return None
 
 
 def _load_checkpoint(cases: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -161,13 +186,21 @@ def _load_checkpoint(cases: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     if not isinstance(results, list):
         raise SystemExit("V3_LIVE_EVAL_REFUSED_CHECKPOINT_RESULTS_INVALID")
     by_id: dict[str, dict[str, Any]] = {}
+    transient = 0
     for row in results:
-        if isinstance(row, dict):
-            case_id = str(row.get("id") or "")
-            if case_id in expected_ids:
-                by_id[case_id] = row
+        if not isinstance(row, dict):
+            continue
+        case_id = str(row.get("id") or "")
+        if case_id not in expected_ids:
+            continue
+        if _transient_failure_name(row):
+            transient += 1
+            continue
+        by_id[case_id] = row
     if by_id:
         print(f"V3_RESUME_LOADED={len(by_id)}", flush=True)
+    if transient:
+        print(f"V3_RESUME_RETRY_TRANSIENT={transient}", flush=True)
     return by_id
 
 
@@ -194,6 +227,32 @@ def _write_checkpoint(cases: list[dict[str, Any]], by_id: dict[str, dict[str, An
     os.replace(temp, path)
 
 
+async def _run_case_with_transient_backoff(client: Any, case: dict[str, Any]) -> dict[str, Any]:
+    attempts = len(TRANSIENT_BACKOFF_SECONDS) + 1
+    for attempt in range(attempts):
+        try:
+            return await live_eval.run_case(client, case)
+        except Exception as exc:
+            name = type(exc).__name__
+            if name not in TRANSIENT_ERROR_NAMES or attempt >= attempts - 1:
+                return {
+                    "id": str(case["id"]),
+                    "description": case["description"],
+                    "actions": [],
+                    "roots": [],
+                    "failures": [f"eval_runtime_error:{name}"],
+                    "summary": "",
+                }
+            delay = TRANSIENT_BACKOFF_SECONDS[attempt]
+            print(
+                f"V3_TRANSIENT_RETRY case={case['id']} error={name} "
+                f"attempt={attempt + 1}/{attempts} sleep={delay}s",
+                flush=True,
+            )
+            await asyncio.sleep(delay)
+    raise AssertionError("unreachable")
+
+
 async def _main_async_with_checkpoint() -> int:
     api_key = (os.environ.get("OPENAI_API_KEY") or "").strip()
     if not api_key:
@@ -211,17 +270,7 @@ async def _main_async_with_checkpoint() -> int:
                 print(f"[{index}/{len(live_eval.SCENARIOS)}] {case_id} ... RESUME_SKIP", flush=True)
                 continue
             print(f"[{index}/{len(live_eval.SCENARIOS)}] {case_id} ...", flush=True)
-            try:
-                result = await live_eval.run_case(client, case)
-            except Exception as exc:
-                result = {
-                    "id": case_id,
-                    "description": case["description"],
-                    "actions": [],
-                    "roots": [],
-                    "failures": [f"eval_runtime_error:{type(exc).__name__}"],
-                    "summary": "",
-                }
+            result = await _run_case_with_transient_backoff(client, case)
             by_id[case_id] = result
             _write_checkpoint(cases, by_id)
             print(json.dumps(result, ensure_ascii=False), flush=True)
