@@ -1,5 +1,9 @@
-from store_delivery_handover_routes import _barcode_candidates, _order_city, _order_number
+from store_delivery_handover_routes import ORDERS, _barcode_candidates, _order_city, _order_id, _order_number
 from store_delivery_domain import assignment_snapshot, StoreDeliveryRuleError
+
+
+def test_handover_reads_canonical_unified_orders_collection():
+    assert ORDERS == "unified_orders"
 
 
 def test_order_city_prefers_shipping_fields():
@@ -15,20 +19,26 @@ def test_order_city_supports_nested_shipping_address():
     assert _order_city({"shipping_address": {"city": "جدة"}}) == "جدة"
 
 
-def test_order_number_falls_back_to_id():
-    assert _order_number({"id": "abc"}) == "abc"
-    assert _order_number({"order_number": "2339", "id": "abc"}) == "2339"
+def test_order_number_uses_canonical_order_fields():
+    assert _order_number({"order_id": "abc"}) == "abc"
+    assert _order_number({"order_number": "2339", "order_id": "abc"}) == "2339"
 
 
-def test_barcode_candidates_cover_shipping_and_order_identifiers():
+def test_order_id_never_depends_on_mongo_document_id():
+    assert _order_id({"order_id": "salla-77", "order_number": "2339"}) == "salla-77"
+    assert _order_id({"order_number": "2339"}) == "2339"
+    assert _order_id({"id": "legacy-only"}) == ""
+
+
+def test_barcode_candidates_cover_shipping_and_canonical_order_identifiers():
     rows = _barcode_candidates("ZX-10")
     assert {tuple(row.items())[0][0] for row in rows} == {
         "shipping_barcode",
         "tracking_number",
         "barcode",
         "order_number",
+        "order_id",
         "reference_id",
-        "id",
     }
 
 
