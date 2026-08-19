@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable
 
+from campaign_ai_customer_voice_evidence_v3 import build_customer_voice_evidence
 from campaign_ai_offer_schedule_v3 import build_offer_schedule_evidence
 from campaign_ai_product_change_history_v3 import (
     build_product_change_history_evidence,
@@ -108,6 +109,30 @@ def wrap_evidence_builder(
             }
             limitations = list(pack.get("limitations") or [])
             limitations.append(f"offer_schedule_unavailable:{type(exc).__name__}")
+            pack["limitations"] = list(dict.fromkeys(limitations))
+
+        try:
+            pack["customer_voice"] = await build_customer_voice_evidence(
+                db,
+                user_id,
+                candidates,
+                product_ids,
+                current=current,
+            )
+        except Exception as exc:
+            pack["customer_voice"] = {
+                "schema_version": "campaign_ai_customer_voice_evidence_v3",
+                "available": False,
+                "contracts": {
+                    "raw_conversations_included": False,
+                    "pii_included": False,
+                    "store_or_product_feedback_becomes_campaign_attribution": False,
+                    "single_complaint_forces_marketing_action": False,
+                },
+                "limitations": [f"customer_voice_unavailable:{type(exc).__name__}"],
+            }
+            limitations = list(pack.get("limitations") or [])
+            limitations.append(f"customer_voice_unavailable:{type(exc).__name__}")
             pack["limitations"] = list(dict.fromkeys(limitations))
 
         try:
