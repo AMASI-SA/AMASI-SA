@@ -57,6 +57,7 @@ RECEIVE_PERMISSION = "inventory.preparation.receive"
 EDIT_PRODUCT_PRICE_PERMISSION = "supplier_receiving.product_price.edit"
 EDIT_SERVICE_PRICE_PERMISSION = "supplier_receiving.service_price.edit"
 ADD_PRODUCT_SERVICE_PERMISSION = "supplier_receiving.service.add"
+PERMANENT_SUPPLIER_SERVICE_SOURCE = "supplier_receiving_permanent"
 MAX_SESSION_SCANS = 5000
 SCAN_LOCK_SECONDS = 120
 MAX_SHARE_EVIDENCE_BYTES = 5 * 1024 * 1024
@@ -233,6 +234,20 @@ def _service_is_complete(service: dict[str, Any]) -> bool:
     return completed.is_finite() and completed >= required
 
 
+def _service_is_invoice_eligible(service: dict[str, Any]) -> bool:
+    """Expose only customer-selected or explicitly permanent invoice services."""
+    source = _text(service.get("source")).casefold()
+    return bool(
+        service.get("customer_selected") is True
+        or service.get("supplier_invoice_required") is True
+        or source == "option"
+        or source in {
+            PERMANENT_SUPPLIER_SERVICE_SOURCE,
+            "supplier_receiving_addition",
+        }
+    )
+
+
 def supplier_piece_invoice_services(
     piece: dict[str, Any],
     session: dict[str, Any],
@@ -254,7 +269,9 @@ def supplier_piece_invoice_services(
     result: list[dict[str, Any]] = []
     for raw in piece.get("services") or []:
         service_id = _text(raw.get("service_id"))
-        if not service_id or service_id not in supplier_links:
+        if not service_id:
+            continue
+        if not _service_is_invoice_eligible(raw):
             continue
         if _service_is_complete(raw):
             continue
@@ -294,6 +311,13 @@ def supplier_piece_invoice_services(
             "linked_to_product": True,
             "eligibility_source": _text(raw.get("source")) or "product",
             "eligibility_condition": dict(raw.get("condition") or {}) or None,
+            "customer_selected": bool(
+                raw.get("customer_selected") is True
+                or _text(raw.get("source")).casefold() == "option"
+            ),
+            "supplier_invoice_required": bool(
+                raw.get("supplier_invoice_required") is True
+            ),
             "add_to_product": False,
         })
     return result
@@ -330,9 +354,10 @@ def supplier_piece_reference_price(piece: dict[str, Any]) -> dict[str, Any]:
 
 
 def _invoice_group_key(scan: dict[str, Any]) -> tuple[Any, ...]:
+    invoice_services = scan.get("invoice_services")
     scan_services = (
-        scan.get("invoice_services")
-        if scan.get("invoice_services")
+        invoice_services
+        if isinstance(invoice_services, list)
         else scan.get("services")
     ) or []
     services = tuple(sorted(
@@ -818,52 +843,14 @@ def supplier_piece_service_blocker(
     *,
     allow_service_addition: bool = False,
 ) -> dict[str, Any] | None:
-    """Require at least one pending service this supplier can perform."""
-    required_services = [
-        row for row in (piece.get("services") or [])
-        if _text(row.get("service_id"))
-    ]
-    if not required_services:
-        if allow_service_addition:
-            return None
-        return {
-            "code": "supplier_piece_services_missing",
-            "message": (
-                "هذه القطعة لا تحتوي على خدمة تجهيز مرتبطة. "
-                "اربط المنتج بخدمة من مكونات المنتجات قبل الاستلام من المورد."
-            ),
-        }
-    supplier = dict(session.get("supplier_snapshot") or {})
-    provided_ids = {
-        _text(row.get("service_id"))
-        for row in (supplier.get("service_links") or [])
-        if _text(row.get("service_id"))
-    }
-    available = [
-        row for row in required_services
-        if _text(row.get("service_id")) in provided_ids
-        and not _service_is_complete(row)
-    ]
-    if available or allow_service_addition:
-        return None
-    return {
-        "code": "supplier_piece_service_mismatch",
-        "message": (
-            "المورد المحدد لا يقدم أي خدمة متبقية مرتبطة بهذه القطعة."
-        ),
-        "supplier_id": _text(supplier.get("id")),
-        "supplier_name": _text(supplier.get("company_name")),
-        "required_services": [
-            {
-                "service_id": _text(row.get("service_id")),
-                "service_name": _text(row.get("service_name"))
-                or _text(row.get("service_code"))
-                or _text(row.get("service_id")),
-            }
-            for row in required_services
-            if not _service_is_complete(row)
-        ],
-    }
+    """Supplier services are optional; product receipt can be invoiced alone.
+
+    Service eligibility is enforced only for a service the employee explicitly
+    selects. A product-linked service that the customer did not choose must not
+    block scanning or force itself into the supplier invoice.
+    """
+    del piece, session, allow_service_addition
+    return None
 
 
 def supplier_receipt_piece_patch(
@@ -1481,6 +1468,397 @@ async def apply_supplier_invoice_price_changes(
     return enriched
 
 
+
+async def _supplier_receiving_product(
+    db: Any,
+    *,
+    user_id: str,
+    product_id: str,
+    mongo_session: Any = None,
+) -> dict[str, Any]:
+    kwargs = {"session": mongo_session} if mongo_session is not None else {}
+    normalized = _text(product_id)
+    product = await db[PRODUCTS].find_one(
+        {
+            "user_id": user_id,
+            "$or": [
+                {"id": normalized},
+                {"mezan_product_id": normalized},
+                {"salla_product_id": normalized},
+            ],
+        },
+        {
+            "_id": 0,
+            "id": 1,
+            "mezan_product_id": 1,
+            "salla_product_id": 1,
+            "name": 1,
+            "sku": 1,
+        },
+        **kwargs,
+    )
+    if not product:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "supplier_receiving_product_not_found"},
+        )
+    return product
+
+
+def _supplier_receiving_product_identifiers(
+    product: dict[str, Any],
+    requested_id: str = "",
+) -> list[str]:
+    return sorted({
+        value
+        for value in (
+            _text(requested_id),
+            _text(product.get("id")),
+            _text(product.get("mezan_product_id")),
+            _text(product.get("salla_product_id")),
+        )
+        if value
+    })
+
+
+def _permanent_supplier_service_snapshot(
+    resource: dict[str, Any],
+    *,
+    actor: dict[str, Any] | None = None,
+    added_at: datetime | None = None,
+) -> dict[str, Any]:
+    timestamp = added_at or _now()
+    return {
+        "service_id": _text(resource.get("id")),
+        "service_name": _text(resource.get("name"))
+        or _text(resource.get("id")),
+        "service_code": _text(resource.get("code")) or None,
+        "required_quantity": 1.0,
+        "unit": _text(resource.get("unit")) or "job",
+        "reference_unit_cost": resource.get("unit_cost"),
+        "source": PERMANENT_SUPPLIER_SERVICE_SOURCE,
+        "condition": None,
+        "customer_selected": False,
+        "supplier_invoice_required": True,
+        "supplier_invoice_added_at": timestamp,
+        "supplier_invoice_added_by": _text((actor or {}).get("id")) or None,
+        "status": "pending",
+        "completed_quantity": 0.0,
+    }
+
+
+def _permanent_supplier_invoice_service_row(
+    resource: dict[str, Any],
+) -> dict[str, Any]:
+    reference_halalas = _halalas(resource.get("unit_cost"))
+    return {
+        "service_id": _text(resource.get("id")),
+        "service_name": _text(resource.get("name"))
+        or _text(resource.get("id")),
+        "service_code": _text(resource.get("code")) or None,
+        "unit": _text(resource.get("unit")) or "job",
+        "required_quantity": 1.0,
+        "reference_unit_price_halalas": reference_halalas,
+        "reference_price_complete": reference_halalas is not None,
+        "linked_to_product": True,
+        "eligibility_source": PERMANENT_SUPPLIER_SERVICE_SOURCE,
+        "eligibility_condition": None,
+        "customer_selected": False,
+        "supplier_invoice_required": True,
+        "add_to_product": False,
+    }
+
+
+async def _supplier_invoice_service_candidate_context(
+    db: Any,
+    *,
+    user_id: str,
+    session: dict[str, Any],
+    product_id: str,
+    mongo_session: Any = None,
+) -> tuple[
+    dict[str, Any],
+    list[dict[str, Any]],
+    set[str],
+    set[str],
+]:
+    kwargs = {"session": mongo_session} if mongo_session is not None else {}
+    product = await _supplier_receiving_product(
+        db,
+        user_id=user_id,
+        product_id=product_id,
+        mongo_session=mongo_session,
+    )
+    salla_product_id = _text(product.get("salla_product_id")) or _text(
+        product.get("mezan_product_id") or product.get("id")
+    )
+    product_links = await db[PRODUCT_RESOURCE_BINDINGS].find(
+        {"user_id": user_id, "salla_product_id": salla_product_id},
+        {"_id": 0, "resource_id": 1},
+        **kwargs,
+    ).to_list(5000)
+    option_links = await db[BINDINGS].find(
+        {
+            "user_id": user_id,
+            "salla_product_id": salla_product_id,
+            "mode": "resource",
+            "resource_id": {"$nin": [None, ""]},
+        },
+        {"_id": 0, "resource_id": 1},
+        **kwargs,
+    ).to_list(5000)
+    product_link_ids = {
+        _text(row.get("resource_id"))
+        for row in product_links
+        if _text(row.get("resource_id"))
+    }
+    option_link_ids = {
+        _text(row.get("resource_id"))
+        for row in option_links
+        if _text(row.get("resource_id"))
+    }
+    blocked = product_link_ids | option_link_ids
+    rows = await db[RESOURCES].find(
+        {
+            "user_id": user_id,
+            "kind": "service",
+            "track_inventory": {"$ne": True},
+            "status": {"$ne": "inactive"},
+        },
+        {
+            "_id": 0,
+            "id": 1,
+            "name": 1,
+            "code": 1,
+            "unit": 1,
+            "unit_cost": 1,
+        },
+        **kwargs,
+    ).sort("name", 1).to_list(5000)
+    candidates = [
+        dict(row)
+        for row in rows
+        if _text(row.get("id"))
+        and _text(row.get("id")) not in blocked
+    ]
+    return product, candidates, product_link_ids, option_link_ids
+
+
+async def _apply_permanent_supplier_invoice_service(
+    db: Any,
+    *,
+    context: dict[str, Any],
+    actor: dict[str, Any],
+    session: dict[str, Any],
+    product_id: str,
+    service_id: str,
+    mongo_session: Any,
+) -> dict[str, Any]:
+    merchant_id = context["merchant_id"]
+    product, candidates, product_link_ids, option_link_ids = (
+        await _supplier_invoice_service_candidate_context(
+            db,
+            user_id=merchant_id,
+            session=session,
+            product_id=product_id,
+            mongo_session=mongo_session,
+        )
+    )
+    normalized_service_id = _text(service_id)
+    if normalized_service_id in product_link_ids:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "supplier_receiving_service_already_linked_to_product",
+                "service_id": normalized_service_id,
+            },
+        )
+    if normalized_service_id in option_link_ids:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "supplier_receiving_service_already_linked_to_option",
+                "service_id": normalized_service_id,
+            },
+        )
+    resource = next(
+        (
+            row for row in candidates
+            if _text(row.get("id")) == normalized_service_id
+        ),
+        None,
+    )
+    if not resource:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "supplier_receiving_service_not_available",
+                "service_id": normalized_service_id,
+            },
+        )
+
+    now = _now()
+    salla_product_id = _text(product.get("salla_product_id")) or _text(
+        product.get("mezan_product_id") or product.get("id")
+    )
+    selector = {
+        "user_id": merchant_id,
+        "salla_product_id": salla_product_id,
+        "resource_id": normalized_service_id,
+    }
+    await db[PRODUCT_RESOURCE_BINDINGS].update_one(
+        selector,
+        {
+            "$set": {
+                **selector,
+                "mezan_product_id": (
+                    product.get("mezan_product_id") or product.get("id")
+                ),
+                "product_name": product.get("name"),
+                "resource_name": resource.get("name"),
+                "quantity": 1.0,
+                "supplier_invoice_required": True,
+                "supplier_invoice_source": "supplier_receiving",
+                "supplier_invoice_added_at": now,
+                "supplier_invoice_added_by": context["actor_id"],
+                "supplier_invoice_added_by_name": _actor_name(actor),
+                "updated_at": now,
+            },
+            "$setOnInsert": {
+                "id": uuid.uuid4().hex,
+                "created_at": now,
+            },
+        },
+        upsert=True,
+        session=mongo_session,
+    )
+
+    identifiers = _supplier_receiving_product_identifiers(product, product_id)
+    snapshot = _permanent_supplier_service_snapshot(
+        resource,
+        actor=actor,
+        added_at=now,
+    )
+    uninvoiced_piece_query = {
+        "user_id": merchant_id,
+        "product_id": {"$in": identifiers},
+        "status": {"$nin": [PIECE_STATUS_CANCELLED, PIECE_STATUS_RECEIVED]},
+        "$and": [
+            {
+                "$or": [
+                    {"supplier_receiving_history": {"$exists": False}},
+                    {"supplier_receiving_history": None},
+                    {"supplier_receiving_history": []},
+                ]
+            },
+            {
+                "services": {
+                    "$not": {
+                        "$elemMatch": {"service_id": normalized_service_id}
+                    }
+                }
+            },
+        ],
+    }
+    piece_result = await db[PIECES].update_many(
+        uninvoiced_piece_query,
+        {
+            "$push": {"services": snapshot},
+            "$inc": {
+                "service_count": 1,
+                "remaining_service_count": 1,
+            },
+            "$set": {
+                "service_plan_status": "pending",
+                "service_plan_updated_at": now,
+                "updated_at": now,
+            },
+        },
+        session=mongo_session,
+    )
+
+    invoice_row = _permanent_supplier_invoice_service_row(resource)
+    event_query = {
+        "user_id": merchant_id,
+        "session_id": _text(session.get("id")),
+        "event_type": "supplier_piece_scanned",
+        "product_id": {"$in": identifiers},
+    }
+    event_service_updates = 0
+    event_invoice_updates = 0
+    for collection_name in (RECEIVING_EVENTS, PIECE_EVENTS):
+        service_result = await db[collection_name].update_many(
+            {
+                **event_query,
+                "services": {
+                    "$not": {
+                        "$elemMatch": {"service_id": normalized_service_id}
+                    }
+                },
+            },
+            {
+                "$push": {"services": snapshot},
+                "$inc": {"remaining_service_count": 1},
+                "$set": {"updated_at": now},
+            },
+            session=mongo_session,
+        )
+        invoice_result = await db[collection_name].update_many(
+            {
+                **event_query,
+                "invoice_services": {
+                    "$not": {
+                        "$elemMatch": {"service_id": normalized_service_id}
+                    }
+                },
+            },
+            {
+                "$push": {"invoice_services": invoice_row},
+                "$set": {"updated_at": now},
+            },
+            session=mongo_session,
+        )
+        if collection_name == RECEIVING_EVENTS:
+            event_service_updates = int(service_result.modified_count or 0)
+            event_invoice_updates = int(invoice_result.modified_count or 0)
+
+    audit = {
+        "id": uuid.uuid4().hex,
+        "user_id": merchant_id,
+        "event_type": "supplier_receiving_permanent_service_added",
+        "session_id": _text(session.get("id")),
+        "session_reference": _text(session.get("reference")),
+        "product_id": _text(product.get("mezan_product_id") or product.get("id")),
+        "salla_product_id": salla_product_id,
+        "product_name": _text(product.get("name")),
+        "service_id": normalized_service_id,
+        "service_name": _text(resource.get("name")),
+        "impacted_uninvoiced_piece_count": int(
+            piece_result.modified_count or 0
+        ),
+        "impacted_active_scan_count": event_invoice_updates,
+        "historical_invoices_changed": False,
+        "actor_id": context["actor_id"],
+        "actor_name": _actor_name(actor),
+        "created_at": now,
+    }
+    await db[AUDIT].insert_one(audit, session=mongo_session)
+    return {
+        "product": product,
+        "service": resource,
+        "service_snapshot": snapshot,
+        "invoice_service": invoice_row,
+        "impacted_uninvoiced_piece_count": int(
+            piece_result.modified_count or 0
+        ),
+        "impacted_active_scan_count": max(
+            event_service_updates,
+            event_invoice_updates,
+        ),
+        "historical_invoices_changed": False,
+    }
+
+
 async def ensure_supplier_receiving_indexes(db: Any) -> None:
     await db[SESSIONS].create_index(
         [("user_id", ASCENDING), ("client_request_id", ASCENDING)],
@@ -1776,6 +2154,26 @@ async def _recent_session_events(
         .limit(limit)
         .to_list(limit)
     )
+    session = await db[SESSIONS].find_one(
+        {"user_id": user_id, "id": session_id},
+        {"_id": 0},
+        **kwargs,
+    )
+    if session:
+        service_catalog = await _supplier_service_catalog(
+            db,
+            user_id=user_id,
+            session=session,
+            mongo_session=mongo_session,
+        )
+        for row in rows:
+            # Always rebuild this derived field. Older open sessions may still
+            # contain product-level services that the customer did not choose.
+            row["invoice_services"] = supplier_piece_invoice_services(
+                row,
+                session,
+                service_catalog,
+            )
     return rows
 
 
@@ -1853,7 +2251,6 @@ def make_supplier_receiving_router(
                 {
                     "user_id": merchant_id,
                     "status": {"$ne": "inactive"},
-                    "service_ids.0": {"$exists": True},
                 },
                 {
                     "_id": 0,
@@ -1953,6 +2350,144 @@ def make_supplier_receiving_router(
             "legacy_supplier_data_used": False,
             "mezan_only": True,
             "qoyod_write_enabled": False,
+        }
+
+
+    @router.get(
+        "/sessions/{session_id}/products/{product_id}/service-candidates"
+    )
+    async def supplier_invoice_service_candidates(
+        session_id: str,
+        product_id: str,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        context = await _actor_context(db, user)
+        _require_permission(context, RECEIVE_PERMISSION)
+        _require_permission(context, ADD_PRODUCT_SERVICE_PERMISSION)
+        session = await _session_for_actor(
+            db,
+            context=context,
+            session_id=session_id,
+        )
+        if _text(session.get("status")) != "open":
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "supplier_receiving_session_closed"},
+            )
+        product, candidates, _product_links, _option_links = (
+            await _supplier_invoice_service_candidate_context(
+                db,
+                user_id=context["merchant_id"],
+                session=session,
+                product_id=product_id,
+            )
+        )
+        return {
+            "ok": True,
+            "product": {
+                "id": _text(product.get("mezan_product_id") or product.get("id")),
+                "salla_product_id": _text(product.get("salla_product_id")),
+                "name": _text(product.get("name")) or "منتج",
+                "sku": _text(product.get("sku")),
+            },
+            "services": [
+                {
+                    "id": _text(row.get("id")),
+                    "name": _text(row.get("name")) or _text(row.get("id")),
+                    "code": _text(row.get("code")),
+                    "unit": _text(row.get("unit")) or "job",
+                    "unit_cost": row.get("unit_cost"),
+                    "unit_price_halalas": int(
+                        _halalas(row.get("unit_cost")) or 0
+                    ),
+                }
+                for row in candidates
+            ],
+            "existing_product_services_hidden": True,
+            "existing_option_services_hidden": True,
+            "historical_invoices_immutable": True,
+        }
+
+    @router.post(
+        "/sessions/{session_id}/products/{product_id}/services/{service_id}",
+        status_code=201,
+    )
+    async def add_permanent_supplier_invoice_service(
+        session_id: str,
+        product_id: str,
+        service_id: str,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        context = await _actor_context(db, user)
+        _require_permission(context, RECEIVE_PERMISSION)
+        _require_permission(context, ADD_PRODUCT_SERVICE_PERMISSION)
+        session = await _session_for_actor(
+            db,
+            context=context,
+            session_id=session_id,
+        )
+        if _text(session.get("status")) != "open":
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "supplier_receiving_session_closed"},
+            )
+        mongo_client = getattr(db, "client", None)
+        if mongo_client is None or not hasattr(mongo_client, "start_session"):
+            raise HTTPException(
+                status_code=503,
+                detail={"code": "supplier_receiving_atomic_transaction_required"},
+            )
+        async with await mongo_client.start_session() as mongo_session:
+            async with mongo_session.start_transaction():
+                fresh_session = await db[SESSIONS].find_one(
+                    {
+                        "user_id": context["merchant_id"],
+                        "id": session_id,
+                        "status": "open",
+                        "opened_by": context["actor_id"],
+                    },
+                    {"_id": 0},
+                    session=mongo_session,
+                )
+                if not fresh_session:
+                    raise HTTPException(
+                        status_code=409,
+                        detail={"code": "supplier_receiving_session_closed"},
+                    )
+                result = await _apply_permanent_supplier_invoice_service(
+                    db,
+                    context=context,
+                    actor=user,
+                    session=fresh_session,
+                    product_id=product_id,
+                    service_id=service_id,
+                    mongo_session=mongo_session,
+                )
+        return {
+            "ok": True,
+            "product": {
+                "id": _text(
+                    result["product"].get("mezan_product_id")
+                    or result["product"].get("id")
+                ),
+                "salla_product_id": _text(
+                    result["product"].get("salla_product_id")
+                ),
+                "name": _text(result["product"].get("name")) or "منتج",
+                "sku": _text(result["product"].get("sku")),
+            },
+            "service": {
+                **result["invoice_service"],
+                "unit_cost": result["service"].get("unit_cost"),
+            },
+            "impacted_uninvoiced_piece_count": (
+                result["impacted_uninvoiced_piece_count"]
+            ),
+            "impacted_active_scan_count": (
+                result["impacted_active_scan_count"]
+            ),
+            "historical_invoices_changed": False,
+            "permanent_for_future_orders": True,
         }
 
     @router.get("/invoices/{invoice_id}")
@@ -2260,11 +2795,6 @@ def make_supplier_receiving_router(
                 status_code=404,
                 detail={"code": "supplier_receiving_supplier_not_found"},
             )
-        if not list(supplier.get("service_links") or []):
-            raise HTTPException(
-                status_code=409,
-                detail={"code": "supplier_receiving_supplier_services_required"},
-            )
         now = _now()
         session_id = f"supplier-receiving-{uuid.uuid4().hex}"
         row = {
@@ -2277,7 +2807,11 @@ def make_supplier_receiving_router(
             "supplier_snapshot": supplier,
             "supplier_context_only": False,
             "supplier_operational_linked": True,
-            "supplier_service_link_status": "catalog_linked",
+            "supplier_service_link_status": (
+                "catalog_linked"
+                if list(supplier.get("service_links") or [])
+                else "not_required"
+            ),
             "opened_by": context["actor_id"],
             "opened_by_name": _actor_name(user),
             "opened_at": now,

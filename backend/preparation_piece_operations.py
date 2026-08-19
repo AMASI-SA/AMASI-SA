@@ -220,11 +220,19 @@ def inherit_required_services(
     option_bindings: Iterable[dict[str, Any]],
     resources_by_id: dict[str, dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Inherit services from the product and the selected option values."""
+    """Inherit services while preserving why each service is invoice-eligible."""
     selected_pairs = _selected_spec_pairs(line)
     inherited: dict[str, dict[str, Any]] = {}
 
-    def add(resource_id: Any, quantity: Any, source: str, condition=None) -> None:
+    def add(
+        resource_id: Any,
+        quantity: Any,
+        source: str,
+        condition=None,
+        *,
+        customer_selected: bool = False,
+        supplier_invoice_required: bool = False,
+    ) -> None:
         key = _text(resource_id)
         resource = resources_by_id.get(key)
         if not key or not resource or not _resource_is_service(resource):
@@ -244,12 +252,27 @@ def inherit_required_services(
             "reference_unit_cost": resource.get("unit_cost"),
             "source": source,
             "condition": condition,
+            "customer_selected": customer_selected,
+            "supplier_invoice_required": supplier_invoice_required,
             "status": "pending",
             "completed_quantity": 0.0,
         }
 
     for link in product_links:
-        add(link.get("resource_id"), link.get("quantity"), "product")
+        permanent_invoice_service = (
+            link.get("supplier_invoice_required") is True
+        )
+        add(
+            link.get("resource_id"),
+            link.get("quantity"),
+            (
+                "supplier_receiving_permanent"
+                if permanent_invoice_service
+                else "product"
+            ),
+            customer_selected=False,
+            supplier_invoice_required=permanent_invoice_service,
+        )
 
     for binding in option_bindings:
         if _text(binding.get("mode")) != "resource":
@@ -270,6 +293,8 @@ def inherit_required_services(
                 "value_id": binding.get("value_id"),
                 "value_name": binding.get("value_name"),
             },
+            customer_selected=True,
+            supplier_invoice_required=False,
         )
 
     return sorted(
