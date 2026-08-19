@@ -1,0 +1,50 @@
+name: Apply Supplier Invoice Service Policy
+
+on:
+  push:
+    branches:
+      - fix/supplier-invoice-service-eligibility
+    paths:
+      - scripts/apply_supplier_invoice_service_eligibility.py
+      - .github/workflows/apply-supplier-invoice-service-eligibility.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Clone repair branch
+        run: |
+          set -euo pipefail
+          git clone --depth=1 --branch "${GITHUB_REF_NAME}" \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" workspace
+      - name: Apply deterministic patch
+        working-directory: workspace
+        run: |
+          python scripts/apply_supplier_invoice_service_eligibility.py
+          python -m py_compile \
+            backend/supplier_receiving_routes.py \
+            backend/preparation_piece_operations.py \
+            backend/tests/test_supplier_invoice_service_eligibility.py
+          git diff --check
+      - name: Commit patched sources
+        working-directory: workspace
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No source changes were required."
+            exit 0
+          fi
+          git config user.name "AMASI Service Policy Bot"
+          git config user.email "service-policy-bot@users.noreply.github.com"
+          git add \
+            backend/supplier_receiving_routes.py \
+            backend/preparation_piece_operations.py \
+            backend/tests/test_supplier_invoice_service_eligibility.py
+          git commit -m "fix(receiving): keep invoice services customer-selected or permanent"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
