@@ -1,0 +1,38 @@
+name: Apply Direct Partial Service Receipt On PR
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - ".github/workflows/apply-direct-partial-service-receipt-pr.yml"
+      - "scripts/apply_direct_partial_service_receipt_patch.py"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.head_ref == 'fix/direct-partial-service-receipt'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/direct-partial-service-receipt
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Apply direct service receipt implementation
+        run: python scripts/apply_direct_partial_service_receipt_patch.py
+
+      - name: Commit patched implementation
+        run: |
+          git config user.name "mezan"
+          git config user.email "amasi.jewelery@gmail.com"
+          git add -A
+          git commit -m "fix(receiving): assign next supplier when service is received"
+          git push origin HEAD:fix/direct-partial-service-receipt
