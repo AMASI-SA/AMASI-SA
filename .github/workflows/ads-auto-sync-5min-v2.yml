@@ -46,7 +46,8 @@ jobs:
           tests/test_snapchat_account_hourly_refresh_v2.py
           tests/test_snapchat_dashboard_summary_v2.py
           tests/test_snapchat_native_data_sync_v2.py
-          tests/test_snapchat_native_tracking_diagnostics_v2.py
+          tests/test_snapchat_native_tracking_diagnostics_v2.py::test_optional_signal_readiness_403_is_partial_without_false_zero
+          tests/test_snapchat_native_tracking_diagnostics_v2.py::test_required_pixel_401_raises_reauth_and_writes_no_tracking_facts
           tests/test_snapchat_refresh_token_rotation_race.py
       - name: Enforce provider-only isolation
         run: |
