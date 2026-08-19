@@ -57,6 +57,8 @@ jobs:
           cd workspace
           python scripts/apply_supplier_invoice_service_eligibility.py
           rm scripts/apply_supplier_invoice_service_eligibility.py
+          python scripts/finalize_supplier_invoice_service_eligibility.py
+          rm scripts/finalize_supplier_invoice_service_eligibility.py
 
       - name: Compile changed boundary
         working-directory: workspace
@@ -81,5 +83,5 @@ jobs:
             echo "Reviewed patch already applied."
             exit 0
           fi
-          git commit -m "fix(receiving): keep supplier invoice services optional and permanent"
+          git commit -m "fix(receiving): finalize optional permanent service rules"
           git push origin "HEAD:${HEAD_BRANCH}"
