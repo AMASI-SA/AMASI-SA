@@ -1,31 +1,44 @@
-name: Export Partial Receipt Source
+name: Apply Partial Receipt Fix
 
 on:
-  pull_request:
+  push:
     branches:
-      - hotfix/prod-snap-meta-final
+      - fix/partial-receipt-direct-supplier-assignment
     paths:
       - ".github/workflows/export-partial-receipt-source.yml"
-  workflow_dispatch: {}
+      - ".github/patches/partial-receipt-direct-assignment.patch"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  export:
+  apply:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Build backend source bundle
+        with:
+          fetch-depth: 0
+      - name: Apply and validate direct receiving assignment
         run: |
           set -euo pipefail
-          tar -czf partial-receipt-source.tar.gz \
-            backend \
+          git apply --check .github/patches/partial-receipt-direct-assignment.patch
+          git apply .github/patches/partial-receipt-direct-assignment.patch
+          python -m py_compile \
+            backend/preparation_supplier_dispatch.py \
+            backend/supplier_receiving_routes.py \
+            backend/tests/test_preparation_supplier_dispatch.py \
+            backend/tests/test_supplier_receiving.py
+      - name: Commit source changes
+        run: |
+          set -euo pipefail
+          git config user.name "mezan"
+          git config user.email "amasi.jewelery@gmail.com"
+          git add \
+            backend/preparation_supplier_dispatch.py \
+            backend/supplier_receiving_routes.py \
+            backend/tests/test_preparation_supplier_dispatch.py \
+            backend/tests/test_supplier_receiving.py \
             .github/workflows/supplier-invoice-service-policy.yml
-      - uses: actions/upload-artifact@v4
-        with:
-          name: partial-receipt-source
-          path: partial-receipt-source.tar.gz
-          if-no-files-found: error
-          retention-days: 1
+          git commit -m "fix(receiving): assign partial pieces at supplier receipt"
+          git push origin HEAD:fix/partial-receipt-direct-supplier-assignment
