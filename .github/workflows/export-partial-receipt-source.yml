@@ -29,6 +29,7 @@ jobs:
             backend/supplier_receiving_routes.py \
             backend/tests/test_preparation_supplier_dispatch.py \
             backend/tests/test_supplier_receiving.py
+          git checkout -- .github/workflows/supplier-invoice-service-policy.yml
       - name: Commit source changes
         run: |
           set -euo pipefail
@@ -38,7 +39,6 @@ jobs:
             backend/preparation_supplier_dispatch.py \
             backend/supplier_receiving_routes.py \
             backend/tests/test_preparation_supplier_dispatch.py \
-            backend/tests/test_supplier_receiving.py \
-            .github/workflows/supplier-invoice-service-policy.yml
+            backend/tests/test_supplier_receiving.py
           git commit -m "fix(receiving): assign partial pieces at supplier receipt"
           git push origin HEAD:fix/partial-receipt-direct-supplier-assignment
