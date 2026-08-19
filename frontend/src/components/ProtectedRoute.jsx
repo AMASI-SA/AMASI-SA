@@ -1,5 +1,6 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import AmasiDeliveryApp from "../pages/AmasiDeliveryApp";
 import AuthLoadingScreen from "./AuthLoadingScreen";
 import AuthRecoveryScreen from "./AuthRecoveryScreen";
 
@@ -15,17 +16,12 @@ export default function ProtectedRoute({ children }) {
         return <Navigate to="/login" state={{ from: location }} replace />;
     }
 
-    // A store-driver login is purpose-bound to the standalone delivery app.
-    // This is a UI containment layer in addition to the backend's role checks;
-    // manually typing a Mezan URL must never expose administrative screens.
+    // Purpose-bound courier accounts never render Mezan administrative UI.
+    // The standalone delivery workspace is returned directly regardless of the
+    // URL the courier tries to open, while backend role checks remain the final
+    // authorization boundary.
     if (user.role === "store_driver") {
-        if (location.pathname !== "/delivery-app") {
-            return <Navigate to="/delivery-app" replace />;
-        }
-        return children;
-    }
-    if (location.pathname === "/delivery-app") {
-        return <Navigate to="/dashboard-advanced" replace />;
+        return <AmasiDeliveryApp />;
     }
 
     if (user.role === "meta_reviewer") {
