@@ -7,9 +7,11 @@ on:
     paths:
       - "backend/supplier_receiving_routes.py"
       - "backend/preparation_piece_operations.py"
+      - "backend/preparation_supplier_dispatch.py"
       - "backend/tests/test_supplier_receiving.py"
       - "backend/tests/test_supplier_invoice_service_eligibility.py"
       - "backend/tests/test_supplier_invoice_service_candidates.py"
+      - "backend/tests/test_supplier_multi_supplier_lifecycle.py"
       - ".github/workflows/supplier-invoice-service-policy.yml"
 
 permissions:
@@ -53,16 +55,19 @@ jobs:
           python -m py_compile
           backend/supplier_receiving_routes.py
           backend/preparation_piece_operations.py
+          backend/preparation_supplier_dispatch.py
           backend/tests/test_supplier_receiving.py
           backend/tests/test_supplier_invoice_service_eligibility.py
           backend/tests/test_supplier_invoice_service_candidates.py
+          backend/tests/test_supplier_multi_supplier_lifecycle.py
 
-      - name: Run service eligibility and permanence regressions
+      - name: Run service eligibility, permanence and multi-supplier regressions
         run: >-
           python -m pytest -q
           backend/tests/test_supplier_receiving.py
           backend/tests/test_supplier_invoice_service_eligibility.py
           backend/tests/test_supplier_invoice_service_candidates.py
+          backend/tests/test_supplier_multi_supplier_lifecycle.py
           backend/tests/test_preparation_piece_operations.py
           --tb=short
 
@@ -72,3 +77,5 @@ jobs:
           grep -q 'supplier_receiving_service_add_via_product_required' backend/supplier_receiving_routes.py
           grep -q 'supplier_uninvoiced_piece_selector' backend/supplier_receiving_routes.py
           grep -q 'supplier_invoice_required' backend/preparation_piece_operations.py
+          grep -q 'DISPATCH_STATUS_PARTIAL' backend/tests/test_supplier_multi_supplier_lifecycle.py
+          grep -q 'product_total_halalas.*== 0' backend/tests/test_supplier_multi_supplier_lifecycle.py
