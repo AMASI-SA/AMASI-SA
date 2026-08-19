@@ -8,22 +8,28 @@ importing that runtime module pulls the whole app stack. This launcher injects a
 prompt-only compatibility module before loading the eval.
 
 The historical eval also calls ``dotenv.load_dotenv`` before reading environment
-variables.  The lightweight launcher deliberately does not depend on
+variables. The lightweight launcher deliberately does not depend on
 python-dotenv: the eval API key is supplied explicitly through ``OPENAI_API_KEY``.
 When python-dotenv is absent we install a no-op compatibility module before the
-historical script is imported.  This keeps the focused eval independent of the
+historical script is imported. This keeps the focused eval independent of the
 application dependency set and never reads/sources ``backend/.env``.
 
 Optional environment:
-  MEZAN_V3_EVAL_IDS   comma-separated scenario ids to run, preserving corpus order
+  MEZAN_V3_EVAL_IDS          comma-separated scenario ids to run, preserving corpus order
+  MEZAN_V3_EVAL_CHECKPOINT   persistent JSON checkpoint path; completed cases resume safely
 """
 from __future__ import annotations
 
+import asyncio
+from datetime import datetime, timezone
+import hashlib
 import importlib.util
+import json
 import os
 from pathlib import Path
 import sys
 import types
+from typing import Any
 
 BACKEND = Path(__file__).resolve().parents[1]
 if str(BACKEND) not in sys.path:
@@ -39,11 +45,6 @@ prompt_stub.FIRST_PASS_INSTRUCTIONS = FIRST_PASS_INSTRUCTIONS
 prompt_stub.SECOND_PASS_INSTRUCTIONS = SECOND_PASS_INSTRUCTIONS
 sys.modules["campaign_ai_decision_v3"] = prompt_stub
 
-# ``campaign_ai_v3_live_eval.py`` historically imports python-dotenv only to
-# call ``load_dotenv(BACKEND / '.env')``.  The launcher already requires the key
-# to be exported explicitly, so silently reading a local .env is unnecessary.
-# Keep the historical script reusable while allowing this focused runner to
-# execute in a minimal environment where python-dotenv is not installed.
 if importlib.util.find_spec("dotenv") is None:
     dotenv_stub = types.ModuleType("dotenv")
 
@@ -58,23 +59,11 @@ from scripts import campaign_ai_v3_live_eval as live_eval  # noqa: E402
 
 _original_evaluate_case = live_eval.evaluate_case
 
-# The corpus describes broad acceptable diagnosis families. These extensions do
-# not force an action or waive a bad outcome; they recognize equally valid,
-# more-localized members of the V3 root-cause taxonomy that the original
-# hand-written corpus omitted.
 ROOT_CAUSE_FAMILY_EXTENSIONS = {
-    # Healthy clicks/page visits followed by collapsed ATC can localize directly
-    # to the Add-To-Cart step instead of the broader landing/product buckets.
     "good_ctr_low_atc": {"ADD_TO_CART"},
-    # A stale price rendered in the ad itself is legitimately a Creative root
-    # cause as well as Offer/Landing/Product mismatch.
     "ad_old_price_product_new_price": {"CREATIVE"},
 }
 
-# Business requirements that must be present, not merely one action among an
-# acceptable family. A commercially strong campaign constrained by <1 day of
-# stock must explicitly surface replenishment while any scale write stays
-# blocked until capacity is restored.
 REQUIRED_ACTIONS_BY_CASE = {
     "low_stock_scale_candidate": {"RESTOCK_PRODUCT"},
 }
@@ -128,9 +117,141 @@ def _apply_requested_ids() -> None:
     print(f"V3_TARGETED_SCENARIOS={len(selected)}", flush=True)
 
 
+def _selected_cases() -> tuple[int, list[dict[str, Any]]]:
+    start = max(0, int(os.environ.get("MEZAN_V3_EVAL_START", "0")))
+    requested_limit = int(os.environ.get("MEZAN_V3_EVAL_LIMIT", str(len(live_eval.SCENARIOS))))
+    cases = live_eval.SCENARIOS[start:start + max(1, requested_limit)]
+    return start, cases
+
+
+def _checkpoint_path() -> Path | None:
+    raw = (os.environ.get("MEZAN_V3_EVAL_CHECKPOINT") or "").strip()
+    return Path(raw).expanduser() if raw else None
+
+
+def _contract_fingerprint(cases: list[dict[str, Any]]) -> str:
+    payload = {
+        "model": live_eval.MODEL,
+        "first_pass": FIRST_PASS_INSTRUCTIONS,
+        "second_pass": SECOND_PASS_INSTRUCTIONS,
+        "cases": cases,
+        "decision_schema": live_eval.v3_json_schema(),
+        "review_schema": live_eval.review_json_schema(),
+        "runner_contract": 2,
+    }
+    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _load_checkpoint(cases: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    path = _checkpoint_path()
+    if path is None or not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise SystemExit(f"V3_LIVE_EVAL_REFUSED_CHECKPOINT_UNREADABLE:{type(exc).__name__}") from exc
+    expected_fingerprint = _contract_fingerprint(cases)
+    expected_ids = [str(row["id"]) for row in cases]
+    if payload.get("fingerprint") != expected_fingerprint:
+        raise SystemExit("V3_LIVE_EVAL_REFUSED_CHECKPOINT_FINGERPRINT_MISMATCH")
+    if payload.get("case_ids") != expected_ids:
+        raise SystemExit("V3_LIVE_EVAL_REFUSED_CHECKPOINT_CASESET_MISMATCH")
+    results = payload.get("results")
+    if not isinstance(results, list):
+        raise SystemExit("V3_LIVE_EVAL_REFUSED_CHECKPOINT_RESULTS_INVALID")
+    by_id: dict[str, dict[str, Any]] = {}
+    for row in results:
+        if isinstance(row, dict):
+            case_id = str(row.get("id") or "")
+            if case_id in expected_ids:
+                by_id[case_id] = row
+    if by_id:
+        print(f"V3_RESUME_LOADED={len(by_id)}", flush=True)
+    return by_id
+
+
+def _write_checkpoint(cases: list[dict[str, Any]], by_id: dict[str, dict[str, Any]]) -> None:
+    path = _checkpoint_path()
+    if path is None:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    ordered = [by_id[str(case["id"])] for case in cases if str(case["id"]) in by_id]
+    payload = {
+        "schema_version": "campaign_ai_v3_live_eval_checkpoint_v2",
+        "model": live_eval.MODEL,
+        "fingerprint": _contract_fingerprint(cases),
+        "case_ids": [str(row["id"]) for row in cases],
+        "completed": len(ordered),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "results": ordered,
+    }
+    temp = path.with_suffix(path.suffix + ".tmp")
+    with temp.open("w", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, ensure_ascii=False, indent=2))
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(temp, path)
+
+
+async def _main_async_with_checkpoint() -> int:
+    api_key = (os.environ.get("OPENAI_API_KEY") or "").strip()
+    if not api_key:
+        print("V3_LIVE_EVAL_REFUSED: OPENAI_API_KEY missing")
+        return 2
+
+    start, cases = _selected_cases()
+    by_id = _load_checkpoint(cases)
+    client = live_eval.AsyncOpenAI(api_key=api_key, max_retries=1, timeout=180.0)
+    try:
+        for offset, case in enumerate(cases):
+            index = start + offset + 1
+            case_id = str(case["id"])
+            if case_id in by_id:
+                print(f"[{index}/{len(live_eval.SCENARIOS)}] {case_id} ... RESUME_SKIP", flush=True)
+                continue
+            print(f"[{index}/{len(live_eval.SCENARIOS)}] {case_id} ...", flush=True)
+            try:
+                result = await live_eval.run_case(client, case)
+            except Exception as exc:
+                result = {
+                    "id": case_id,
+                    "description": case["description"],
+                    "actions": [],
+                    "roots": [],
+                    "failures": [f"eval_runtime_error:{type(exc).__name__}"],
+                    "summary": "",
+                }
+            by_id[case_id] = result
+            _write_checkpoint(cases, by_id)
+            print(json.dumps(result, ensure_ascii=False), flush=True)
+    finally:
+        await client.close()
+
+    results = [by_id[str(case["id"])] for case in cases if str(case["id"]) in by_id]
+    failed = [row for row in results if row.get("failures")]
+    report = {
+        "model": live_eval.MODEL,
+        "start": start,
+        "evaluated": len(results),
+        "total_corpus": len(cases),
+        "passed": len(results) - len(failed),
+        "failed": len(failed),
+        "failed_ids": [row["id"] for row in failed],
+        "all_requested_cases_passed": len(results) == len(cases) and not failed,
+        "checkpoint_enabled": True,
+    }
+    print("\nV3_LIVE_EVAL_SUMMARY")
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+    _write_checkpoint(cases, by_id)
+    return 1 if failed or len(results) != len(cases) else 0
+
+
 def main() -> int:
     _apply_requested_ids()
-    return live_eval.main()
+    if _checkpoint_path() is None:
+        return live_eval.main()
+    return asyncio.run(_main_async_with_checkpoint())
 
 
 if __name__ == "__main__":
