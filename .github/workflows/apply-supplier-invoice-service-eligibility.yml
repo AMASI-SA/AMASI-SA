@@ -6,12 +6,14 @@ on:
       - fix/supplier-invoice-service-eligibility
     paths:
       - scripts/apply_supplier_invoice_service_eligibility.py
+      - scripts/refine_supplier_invoice_service_eligibility.py
       - .github/workflows/apply-supplier-invoice-service-eligibility.yml
   pull_request:
     branches:
       - hotfix/prod-snap-meta-final
     paths:
       - scripts/apply_supplier_invoice_service_eligibility.py
+      - scripts/refine_supplier_invoice_service_eligibility.py
       - .github/workflows/apply-supplier-invoice-service-eligibility.yml
 
 permissions:
@@ -35,6 +37,7 @@ jobs:
         working-directory: workspace
         run: |
           python scripts/apply_supplier_invoice_service_eligibility.py
+          python scripts/refine_supplier_invoice_service_eligibility.py
           python -m py_compile \
             backend/supplier_receiving_routes.py \
             backend/preparation_piece_operations.py \
