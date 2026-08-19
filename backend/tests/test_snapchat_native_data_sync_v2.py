@@ -209,6 +209,14 @@ class UnauthorizedClient(ProviderClient):
         type(self).calls.append((url, deepcopy(kwargs)))
         return FakeResponse({"request_status": "FAILURE"}, status_code=401)
 
+    async def post(self, url, **kwargs):
+        type(self).calls.append((url, deepcopy(kwargs)))
+        return FakeResponse({
+            "access_token": "refreshed-access",
+            "refresh_token": "refreshed-refresh",
+            "expires_in": 3600,
+        })
+
 
 def _db():
     return FakeDB({
@@ -291,9 +299,17 @@ async def test_account_aggregate_keeps_missing_conversions_unknown(monkeypatch):
     monkeypatch.setattr(native.httpx, "AsyncClient", ProviderClient)
     db = _db()
     await native.SnapchatNativeDataSync(db, now=lambda: NOW).run(
-        "owner-1", native.SnapchatNativeSyncInput(days=1)
+        "owner-1",
+        native.SnapchatNativeSyncInput(
+            from_date="2026-07-29",
+            to_date="2026-07-29",
+        ),
     )
-    account = next(row for row in db.rows["mezan_snapchat_performance_daily_v2"] if row["entity_type"] == "ad_account")
+    account = next(
+        row
+        for row in db.rows["mezan_snapchat_performance_daily_v2"]
+        if row["entity_type"] == "ad_account"
+    )
     assert account["metrics"]["spend"] == 6_000_000
     assert account["metrics"]["conversion_purchases"] is None
     assert account["metrics"]["conversion_purchases_value"] is None
