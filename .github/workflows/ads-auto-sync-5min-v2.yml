@@ -8,9 +8,13 @@ on:
       - "backend/integrations_control_center/ads_auto_sync_scheduler.py"
       - "backend/integrations_control_center/snapchat_account_hourly_refresh.py"
       - "backend/integrations_control_center/snapchat_dashboard_summary_routes.py"
+      - "backend/integrations_control_center/snapchat_native_data_common.py"
       - "backend/integrations_control_center/__init__.py"
       - "backend/tests/test_ads_auto_sync_scheduler_v2.py"
       - "backend/tests/test_snapchat_account_hourly_refresh_v2.py"
+      - "backend/tests/test_snapchat_native_data_sync_v2.py"
+      - "backend/tests/test_snapchat_native_tracking_diagnostics_v2.py"
+      - "backend/tests/test_snapchat_refresh_token_rotation_race.py"
       - ".github/workflows/ads-auto-sync-5min-v2.yml"
 
 jobs:
@@ -23,7 +27,7 @@ jobs:
           python-version: "3.12"
       - name: Install focused dependencies
         run: >-
-          pip install pytest fastapi "pydantic>=2" httpx pymongo motor
+          pip install pytest pytest-asyncio fastapi "pydantic>=2" httpx pymongo motor
           cryptography openpyxl bcrypt PyJWT reportlab
       - name: Compile scheduler and Snapchat adapters
         working-directory: backend
@@ -32,6 +36,7 @@ jobs:
             integrations_control_center/ads_auto_sync_scheduler.py \
             integrations_control_center/snapchat_account_hourly_refresh.py \
             integrations_control_center/snapchat_dashboard_summary_routes.py \
+            integrations_control_center/snapchat_native_data_common.py \
             integrations_control_center/__init__.py
       - name: Run focused tests
         working-directory: backend
@@ -40,6 +45,10 @@ jobs:
           tests/test_ads_auto_sync_scheduler_v2.py
           tests/test_snapchat_account_hourly_refresh_v2.py
           tests/test_snapchat_dashboard_summary_v2.py
+          tests/test_snapchat_native_data_sync_v2.py
+          tests/test_snapchat_native_tracking_diagnostics_v2.py::test_optional_signal_readiness_403_is_partial_without_false_zero
+          tests/test_snapchat_native_tracking_diagnostics_v2.py::test_required_pixel_401_raises_reauth_and_writes_no_tracking_facts
+          tests/test_snapchat_refresh_token_rotation_race.py
       - name: Enforce provider-only isolation
         run: |
           FILE=backend/integrations_control_center/ads_auto_sync_scheduler.py

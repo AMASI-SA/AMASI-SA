@@ -269,11 +269,37 @@ class SnapchatSyncContext:
                 "snapchat_provider_network_error", "Snapchat provider request failed.",
                 status_code=502, retryable=True,
             ) from exc
-        if response.status_code in {401, 403}:
+        if response.status_code == 401:
+            fresh_access = await self.access_token(force_refresh=True)
+            retry_headers = dict(headers)
+            retry_headers["Authorization"] = f"Bearer {fresh_access}"
+            self.provider_calls += 1
+            if self.provider_calls > MAX_PROVIDER_CALLS:
+                raise SnapchatNativeSyncError(
+                    "snapchat_provider_call_budget_exceeded",
+                    f"Snapchat sync exceeded the {MAX_PROVIDER_CALLS} call budget.",
+                    status_code=400,
+                )
+            try:
+                response = await client.get(
+                    url, headers=retry_headers, params=params
+                )
+            except httpx.HTTPError as exc:
+                raise SnapchatNativeSyncError(
+                    "snapchat_provider_network_error",
+                    "Snapchat provider request failed.",
+                    status_code=502,
+                    retryable=True,
+                ) from exc
+
+        if response.status_code == 401:
             raise SnapchatNativeSyncError(
-                "snapchat_needs_reauth", "Snapchat authorization must be renewed.",
-                status_code=409, result={"needs_reauth": True},
+                "snapchat_needs_reauth",
+                "Snapchat authorization must be renewed.",
+                status_code=409,
+                result={"needs_reauth": True},
             )
+
         if response.status_code >= 400:
             try:
                 provider_payload = response.json() or {}
@@ -315,7 +341,7 @@ class SnapchatSyncContext:
             )
         return payload
 
-    async def access_token(self) -> str:
+    async def access_token(self, *, force_refresh: bool = False) -> str:
         credentials = await _collection(self.db, SNAPCHAT_CREDENTIALS_COLLECTION).find_one(
             {"user_id": self.user_id, "provider": SNAPCHAT_PROVIDER_ID},
             {"_id": 0, "access_token_ciphertext": 1, "refresh_token_ciphertext": 1,
@@ -342,9 +368,13 @@ class SnapchatSyncContext:
         expires_at = credentials.get("access_token_expires_at")
         if isinstance(expires_at, str):
             expires_at = _parse_datetime(expires_at)
-        if (access and isinstance(expires_at, datetime)
-                and expires_at.astimezone(timezone.utc)
-                > self.now().astimezone(timezone.utc) + timedelta(seconds=120)):
+        if (
+            not force_refresh
+            and access
+            and isinstance(expires_at, datetime)
+            and expires_at.astimezone(timezone.utc)
+            > self.now().astimezone(timezone.utc) + timedelta(seconds=120)
+        ):
             return access
 
         client_id = os.environ.get("SNAPCHAT_MARKETING_CLIENT_ID", "").strip()
@@ -370,16 +400,82 @@ class SnapchatSyncContext:
                 "snapchat_token_refresh_failed", "Snapchat token refresh failed.",
                 status_code=502, retryable=True,
             ) from exc
-        if response.status_code in {400, 401, 403}:
-            raise SnapchatNativeSyncError(
-                "snapchat_needs_reauth", "Snapchat authorization must be renewed.",
-                status_code=409, result={"needs_reauth": True},
-            )
         if response.status_code >= 400:
-            raise SnapchatNativeSyncError(
-                "snapchat_token_refresh_rejected", "Snapchat rejected the token refresh.",
-                status_code=502, retryable=response.status_code >= 500,
+            try:
+                error_payload = response.json() or {}
+            except (TypeError, ValueError):
+                error_payload = {}
+
+            oauth_error = str(
+                error_payload.get("error") or ""
+            ).strip().lower()
+            oauth_description = str(
+                error_payload.get("error_description") or ""
+            ).strip().lower()
+            combined_error = (
+                f"{oauth_error} {oauth_description} "
+                f"{(response.text or '').lower()}"
             )
+
+            if "invalid_grant" in combined_error:
+                latest = await _collection(
+                    self.db, SNAPCHAT_CREDENTIALS_COLLECTION
+                ).find_one(
+                    {
+                        "user_id": self.user_id,
+                        "provider": SNAPCHAT_PROVIDER_ID,
+                    },
+                    {"_id": 0, "refresh_token_ciphertext": 1},
+                )
+
+                try:
+                    latest_refresh = decrypt_snapchat_token(
+                        (latest or {}).get("refresh_token_ciphertext")
+                    )
+                except ValueError:
+                    latest_refresh = ""
+
+                if latest_refresh and latest_refresh != refresh:
+                    refresh = latest_refresh
+                    data["refresh_token"] = refresh
+                    try:
+                        async with httpx.AsyncClient(timeout=25.0) as client:
+                            response = await client.post(
+                                SNAPCHAT_TOKEN_URL, data=data
+                            )
+                    except httpx.HTTPError as exc:
+                        raise SnapchatNativeSyncError(
+                            "snapchat_token_refresh_failed",
+                            "Snapchat token refresh failed.",
+                            status_code=502,
+                            retryable=True,
+                        ) from exc
+
+                if response.status_code >= 400:
+                    raise SnapchatNativeSyncError(
+                        "snapchat_needs_reauth",
+                        "Snapchat authorization must be renewed.",
+                        status_code=409,
+                        result={"needs_reauth": True},
+                    )
+
+            elif "invalid_client" in combined_error:
+                raise SnapchatNativeSyncError(
+                    "snapchat_oauth_not_configured",
+                    "Snapchat OAuth client credentials were rejected.",
+                    status_code=503,
+                )
+
+            else:
+                raise SnapchatNativeSyncError(
+                    "snapchat_token_refresh_rejected",
+                    "Snapchat temporarily rejected the token refresh.",
+                    status_code=502,
+                    retryable=(
+                        response.status_code >= 500
+                        or response.status_code == 429
+                    ),
+                )
         try:
             payload = response.json() or {}
         except (TypeError, ValueError) as exc:
@@ -404,6 +500,7 @@ class SnapchatSyncContext:
                 "access_token_expires_at": now + timedelta(seconds=expires_in),
                 "scope": payload.get("scope") or credentials.get("scope")
                          or list(SNAPCHAT_REQUESTED_SCOPES),
+                "last_refresh_success_at": now,
                 "updated_at": now,
             }},
         )
