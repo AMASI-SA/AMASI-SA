@@ -33,6 +33,32 @@ load_dotenv(ROOT_DIR / ".env")
 logger = logging.getLogger("campaign_ai_worker_runner")
 
 
+def _sanitized_openai_error_codes(limitations: Any) -> list[str]:
+    """Return only bounded machine error codes safe for operational logs.
+
+    Snapshot limitations already persist the sanitized OpenAI classification as
+    ``openai_recommendation:<code>``. Never print raw exception text, request
+    details, provider URLs or credentials from the isolated worker.
+    """
+    rows = limitations if isinstance(limitations, list) else []
+    output: list[str] = []
+    prefix = "openai_recommendation:"
+    for item in rows:
+        rendered = str(item or "").strip().lower()
+        if not rendered.startswith(prefix):
+            continue
+        raw_code = rendered[len(prefix):]
+        safe_code = "".join(
+            char for char in raw_code
+            if char.isalnum() or char in {"_", "-", ":"}
+        )[:100]
+        if not safe_code.startswith("openai_"):
+            safe_code = "openai_error_unknown"
+        if safe_code not in output:
+            output.append(safe_code)
+    return output
+
+
 async def run_once() -> dict[str, Any]:
     mongo_url = (os.environ.get("MONGO_URL") or "").strip()
     db_name = (os.environ.get("DB_NAME") or "").strip()
@@ -41,6 +67,7 @@ async def run_once() -> dict[str, Any]:
 
     # Import the heavy Campaign AI/provider graph only in this child process.
     from campaign_ai_monitor import (
+        RECOMMENDATION_COLLECTION,
         RUN_COLLECTION,
         ensure_campaign_ai_indexes,
         run_all_campaign_ai_monitors,
@@ -72,12 +99,36 @@ async def run_once() -> dict[str, Any]:
             # unavailable. Treat that as retryable so only the replica that won
             # the global cycle retries after the short window. Other replicas
             # remain blocked by next_run_at and cannot publish competing snapshots.
-            retryable_ai_runs = await db[RUN_COLLECTION].count_documents({
-                "started_at": {"$gte": started_at},
-                "recommendation_source": {
-                    "$in": ["openai_unavailable", "mezan_fallback"],
+            retryable_ai_run_docs = await db[RUN_COLLECTION].find(
+                {
+                    "started_at": {"$gte": started_at},
+                    "recommendation_source": {
+                        "$in": ["openai_unavailable", "mezan_fallback"],
+                    },
                 },
-            })
+                {"_id": 0, "snapshot_id": 1},
+            ).to_list(length=50)
+            retryable_ai_runs = len(retryable_ai_run_docs)
+
+            # The public snapshot already stores only the sanitized OpenAI code
+            # in limitations. Surface that exact machine code in child stdout so
+            # Production can distinguish quota/validation/timeout/runtime causes
+            # without exposing raw stderr or credentials.
+            retryable_ai_error_codes: list[str] = []
+            for run_doc in retryable_ai_run_docs:
+                snapshot_id = str(run_doc.get("snapshot_id") or "").strip()
+                if not snapshot_id:
+                    continue
+                snapshot = await db[RECOMMENDATION_COLLECTION].find_one(
+                    {"snapshot_id": snapshot_id},
+                    {"_id": 0, "limitations": 1},
+                ) or {}
+                for code in _sanitized_openai_error_codes(snapshot.get("limitations")):
+                    if code not in retryable_ai_error_codes:
+                        retryable_ai_error_codes.append(code)
+            if retryable_ai_runs and not retryable_ai_error_codes:
+                retryable_ai_error_codes = ["openai_error_unknown"]
+
             failed = int(summary.get("failed") or 0)
             legacy_lease_collision = summary.get("skipped") == "lease_held"
             retryable = bool(
@@ -103,6 +154,7 @@ async def run_once() -> dict[str, Any]:
             return {
                 **summary,
                 "retryable_ai_runs": int(retryable_ai_runs),
+                "retryable_ai_error_codes": retryable_ai_error_codes,
                 "cadence_claimed": True,
                 "global_cycle_outcome": outcome,
                 "next_run_at": finished.get("next_run_at"),
