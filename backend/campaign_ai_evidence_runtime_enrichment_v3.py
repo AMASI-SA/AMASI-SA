@@ -9,6 +9,7 @@ from campaign_ai_offer_schedule_v3 import build_offer_schedule_evidence
 from campaign_ai_product_change_history_v3 import (
     build_product_change_history_evidence,
 )
+from campaign_ai_product_health_score_v3 import enrich_product_health_scores
 from product_v2_routes import PRODUCTS as PRODUCT_V2_COLLECTION
 
 
@@ -81,6 +82,21 @@ def wrap_evidence_builder(
         **kwargs: Any,
     ) -> dict[str, Any]:
         pack = await base_builder(db, user_id, candidates, **kwargs)
+
+        # Attach a coverage-aware product health summary before any downstream
+        # enrichments or model call. Unknown checks remain unknown and no score
+        # threshold is allowed to select a marketing action.
+        try:
+            enrich_product_health_scores(pack)
+            pack["product_health_score_contract"] = (
+                "Evidence summary only. Unknown checks are excluded from coverage and no "
+                "product-health score threshold may automatically pause, scale or classify a campaign."
+            )
+        except Exception as exc:
+            limitations = list(pack.get("limitations") or [])
+            limitations.append(f"product_health_score_unavailable:{type(exc).__name__}")
+            pack["limitations"] = list(dict.fromkeys(limitations))
+
         product_ids: list[str] = []
         for block in (((pack.get("product_intelligence") or {}).get("entities") or {}).values()):
             for product in block.get("products") or []:
