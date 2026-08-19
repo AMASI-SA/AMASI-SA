@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
     CheckCircle,
     Cube,
-    LinkSimple,
     MagnifyingGlass,
     Package,
     SpinnerGap,
