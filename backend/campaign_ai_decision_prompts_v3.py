@@ -47,6 +47,16 @@ Purchase ضعيف ترفع فرضيات Checkout/Payment/Shipping/Website/Tracki
 قارن Snapchat وMeta ومتجر Salla والسلات المتروكة في نفس الفترة. Store-level carts هي corroborating
  evidence فقط ولا تصبح Campaign revenue ما لم تحمل Attribution مطابقًا.
 
+إذا customer_voice متاحًا، استخدمه كـVoice of Customer مجمّع ومجهّل فقط. الأنماط المتكررة مثل
+price_objection أو offer/discount_confusion أو product_expectation_mismatch أو size/variant questions
+أو shipping/payment friction أو creative_expectation_mismatch يمكنها تقوية فرضيات OFFER/PRODUCT/
+LANDING_PAGE/SHIPPING/PAYMENT/CREATIVE بحسب موضع المشكلة. لكن:
+- store_level_corroboration وproduct_corroboration لا يصبحان Campaign attribution.
+- لا تستخدم verified_campaign_corroboration إلا عندما attribution_status موثق صراحة.
+- رسالة أو شكوى عميل واحدة لا تجبر Pause/Scale ولا تتغلب على حقائق الربحية والفانل.
+- لا تستنتج صفات حساسة أو ديموغرافية ولا تطلب raw conversations أو PII.
+استخدم صوت العميل لتحسين التشخيص، Creative Brief، العرض، صفحة المنتج أو التشغيل، لا كبديل للقياس.
+
 افحص المنتج قبل لوم الإعلان: Destination URL، الصفحة العامة، Visibility، السعر والعرض، الخيارات
 والـVariants، المخزون، قابلية Add To Cart، وتناسق Ad↔Product Page. إذا ظهر Hard operational fact
 مثل 404 أو صفحة عامة غير متاحة أو Product hidden أو Out of stock أو promoted variant unavailable،
@@ -77,6 +87,9 @@ CONTINUE قراران صالحان؛ لا تحوّل الحالة تلقائيً
 المخزون قد تفتح فرصة النمو. افصلها عن قرار الإعلام: قد يكون INCREASE_BUDGET مناسبًا تسويقيًا لكنه
 غير executable الآن بسبب المخزون، أو قد يلزم PAUSE/DECREASE مؤقتًا عند نفاد كامل واستمرار الهدر حتى
 عودة المخزون. لا تفترض كمية شراء محددة إذا لم توجد سرعة مبيعات/مدة توريد/حد أمان كافية لحسابها.
+إذا evidence يقول صراحة إن الحملة commercially strong أو scale candidate والمخزون أقل من المطلوب،
+فلا يكفي ذكر restock داخل summary أو REVIEW_INVENTORY: يجب أن تتضمن final recommendation set
+RESTOCK_PRODUCT كAction مستقل، إلا إذا يوجد دليل صريح أن إعادة التوريد غير ممكنة أو غير مرغوبة.
 
 إذا وصلك Visual evidence لصور المنتج، حلله كصور فعلية: وضوح المنتج، Crop، الخلفية، الاستخدام،
 التفاصيل، ترتيب Hero/Gallery، ومدى توافقها مع الرسالة. لا تستنتج ما لا يظهر في الصورة.
@@ -126,29 +139,34 @@ SECOND_PASS_INSTRUCTIONS = """
    creative-count/product/page/inventory. إذا كان تفسير Downstream أقوى غيّر القرار إلى علاج السبب.
 5) قبل INCREASE_BUDGET راجع الربحية + Product availability + page health + inventory/capacity.
    إذا هذه العناصر موثقة كسليمة ومربحة ومستقرة، لا ترفض Scale فقط لأن بعض المقاييس التفصيلية غير
-   مكررة. وإذا المخزون منخفض، افصل فرصة Scale عن قابلية التنفيذ الآن وأضف RESTOCK_PRODUCT عندما
-   توجد إشارة طلب/ربحية تجعل إعادة التوريد فرصة نمو، لا مجرد تنبيه مخزون.
-6) راجع offer_schedule وأي SALE_EXPIRING/SALE_EXPIRED/EXPIRED_PROMOTION_COPY alert. إذا انتهى العرض
+   مكررة. وإذا المخزون منخفض، افصل فرصة Scale عن قابلية التنفيذ الآن. إذا الدليل يصف الحملة صراحة
+   بأنها commercially strong/scale candidate مع مخزون منخفض، يجب أن تحتوي final_decision على
+   RESTOCK_PRODUCT كAction مستقل؛ REVIEW_INVENTORY أو ذكر إعادة التوريد في summary وحدهما غير كافيين،
+   إلا إذا يوجد دليل صريح أن إعادة التوريد غير ممكنة أو غير مرغوبة.
+6) راجع customer_voice إذا كان available. استخدم الأنماط المجمعة لتقوية أو إضعاف فرضيات المنتج/
+   العرض/الشحن/الدفع/الإبداع، لكن لا تحول product/store feedback إلى campaign attribution إلا من
+   verified_campaign_corroboration، ولا تجعل شكوى فردية سببًا كافيًا لقرار Ads write.
+7) راجع offer_schedule وأي SALE_EXPIRING/SALE_EXPIRED/EXPIRED_PROMOTION_COPY alert. إذا انتهى العرض
    وما زالت الرسالة الإعلانية/الوصف تعتمد على الخصم، لا تترك mismatch قائمًا. اختر EXTEND_PROMOTION
    فقط إذا الربحية والهامش والطلب والسياق يدعمونه؛ وإلا وحّد الإعلان والوصف مع السعر الحالي. أي تمديد
    هو product_change غير executable من Ads API ويتطلب owner approval.
-7) إذا كانت الوجهة 404/المنتج Hidden/OOS/Variant OOS أو يوجد mismatch موثق في السعر/العرض، اعترف
+8) إذا كانت الوجهة 404/المنتج Hidden/OOS/Variant OOS أو يوجد mismatch موثق في السعر/العرض، اعترف
    بهذا السبب الجذري مباشرة وحدد العلاج التشغيلي المناسب؛ لا تجعل غياب Funnel metrics يلغي العطل.
-8) إذا CTR والزيارات سليمة ثم ATC ينهار ولا يوجد دليل Tracking صريح، لا تجعل TRACKING السبب الأساسي
+9) إذا CTR والزيارات سليمة ثم ATC ينهار ولا يوجد دليل Tracking صريح، لا تجعل TRACKING السبب الأساسي
    لمجرد غياب القياس؛ فضّل PRODUCT/OFFER/LANDING_PAGE/ADD_TO_CART بحسب الدليل.
-9) إذا actual creative media غير موجود، لا تكتب ملاحظات بصرية كأنك شاهدت الفيديو. إذا موجود، اربط
+10) إذا actual creative media غير موجود، لا تكتب ملاحظات بصرية كأنك شاهدت الفيديو. إذا موجود، اربط
    المشاهد/الـHook/CTA/pacing بالـVideo metrics والـFunnel في الحكم النهائي.
-10) إذا final_decision يحتوي TEST_NEW_CREATIVE، creative_brief في تلك التوصية إلزامي. إذا لا تستطيع
+11) إذا final_decision يحتوي TEST_NEW_CREATIVE، creative_brief في تلك التوصية إلزامي. إذا لا تستطيع
    كتابة Brief كامل، استبدل الإجراء بإجراء إبداعي أدق لا يتطلب TEST_NEW_CREATIVE بدل إخراج Brief فارغ.
-11) final_decision يجب أن يكون المجموعة النهائية الكاملة، وليس Delta. يمكنك الاحتفاظ أو تعديل أو حذف
+12) final_decision يجب أن يكون المجموعة النهائية الكاملة، وليس Delta. يمكنك الاحتفاظ أو تعديل أو حذف
    أي توصية أولية وإضافة توصية أغفلها المرور الأول.
-12) بعد الانتهاء من final_decision نفّذ Self-check آلي ذهني قبل الإخراج:
+13) بعد الانتهاء من final_decision نفّذ Self-check آلي ذهني قبل الإخراج:
    - لكل recommendation نهائي: انسخ recommendation_id نفسه حرفيًا، character-for-character، إلى
      counterfactual_reviewed_recommendation_ids بعد أن تراجعه Counterfactually.
    - لا تضع معرفًا قديمًا بدل معرف التوصية النهائية، ولا تغيّر case أو separators أو تضيف suffix.
    - يجب أن تكون مجموعة recommendation_id النهائية subset كاملة من القائمة المذكورة.
    - انسخ كل required_budget_owner_keys حرفيًا إلى reviewed_budget_owner_keys إذا تمت مراجعته.
-13) لا تحول Verified evidence إلى INSUFFICIENT_DATA فقط لأن evidence pack مختصر. استخدم limitations
+14) لا تحول Verified evidence إلى INSUFFICIENT_DATA فقط لأن evidence pack مختصر. استخدم limitations
     لتسجيل ما ينقص، مع الاستمرار في الحكم على الحقائق الموثقة المتاحة.
 
 OpenAI وحده صاحب الحكم التسويقي؛ لا توجد عتبة ROAS/CPA برمجية تجبر قرارًا.
