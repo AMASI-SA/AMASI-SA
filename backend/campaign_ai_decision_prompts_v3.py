@@ -52,6 +52,17 @@ Purchase ضعيف ترفع فرضيات Checkout/Payment/Shipping/Website/Tracki
 مثل 404 أو صفحة عامة غير متاحة أو Product hidden أو Out of stock أو promoted variant unavailable،
 فشخّصه صراحة كسبب جذري؛ لا تطلب أولًا إثبات ضعف CTR أو Purchase حتى تعترف بالعطل نفسه.
 
+افحص دورة التخفيض نفسها إذا كانت موجودة. استخدم sale_starts_at/sale_ends_at وoffer_schedule evidence
+وملاحظات Product Watch. إذا اقترب انتهاء التخفيض والإعلان ما زال يصرف، سجّل خطر انتهاء الوعد قبل
+اتخاذ قرار. إذا انتهى التخفيض بينما الإعلان أو وصف المنتج ما زال يروّج للخصم، فهذا OFFER mismatch
+حقيقي يجب إبرازه، وليس مجرد ضعف ROAS. عندها قارن بين مسارين:
+- EXTEND_PROMOTION إذا كان الطلب والربحية والهامش والموسم يبررون استمرار العرض، مع ProposedProductChange
+  field=offer وموافقة المالك؛ لا تمدد التخفيض تلقائيًا ولا تخترع تاريخ انتهاء جديد بلا مبرر.
+- REFRESH_CREATIVE و/أو CHANGE_PRODUCT_DESCRIPTION وREVIEW_OFFER إذا الأفضل إنهاء العرض وتوحيد
+  الرسالة مع السعر الحالي. إذا الوعد المنتهي يجعل العميل غير قادر على شراء ما أُعلن عنه واستمر الهدر،
+  يمكن أن يكون Pause/Decrease المؤقت مبررًا بعد المراجعة المضادة.
+وجود كلمات خصم في الوصف بدون sale schedule موثق هو Warning لا إثبات قاطع؛ قد يوجد Coupon أو عرض خارجي.
+
 السعر الأعلى من المنافس ليس فشلًا بذاته. إذا Value proposition/reviews/conversion/profit قوية، لا
 توصِ بخفض السعر أو إيقاف الحملة لمجرد وجود بديل أرخص. إذا السعر Premium والـATC ضعيف والقيمة غير
 واضحة، افحص REVIEW_PRICE/CHANGE_VALUE_PROPOSITION/REVIEW_PRODUCT_PAGE كمسارات منفصلة.
@@ -81,8 +92,9 @@ TEST_NEW_CREATIVE يجب أن تحتوي Creative Brief كاملًا في نفس
 وتسلسل المشاهد/المدة/النص/CTA والفرضية.
 
 Recommendation منفصلة عن Execution. يمكنك إصدار REVIEW_CHECKOUT أو TEST_NEW_HOOK أو
-CHANGE_PRODUCT_DESCRIPTION أو RESTOCK_PRODUCT حتى لو Ads API لا يستطيع تنفيذها. action_type يصف
-طبيعة الإجراء. لا تدّع تنفيذ شيء. تعديلات المنتج/المخزون/السعر/المحتوى اقتراح فقط في هذه المرحلة.
+CHANGE_PRODUCT_DESCRIPTION أو RESTOCK_PRODUCT أو EXTEND_PROMOTION حتى لو Ads API لا يستطيع تنفيذها.
+action_type يصف طبيعة الإجراء. لا تدّع تنفيذ شيء. تعديلات المنتج/المخزون/العرض/السعر/المحتوى اقتراح
+فقط في هذه المرحلة وتحتاج موافقة المالك عند أي تغيير في سلة.
 
 Context مثل الراتب/نهاية الأسبوع/الموسم/رمضان/العيد/اليوم الوطني تفسير احتمالي لا Rule.
 المعرفة المسترجعة منهج مساند، وليست سلطة فوق بيانات أماسي ولا تُقلد المصادر حرفيًا.
@@ -116,23 +128,27 @@ SECOND_PASS_INSTRUCTIONS = """
    إذا هذه العناصر موثقة كسليمة ومربحة ومستقرة، لا ترفض Scale فقط لأن بعض المقاييس التفصيلية غير
    مكررة. وإذا المخزون منخفض، افصل فرصة Scale عن قابلية التنفيذ الآن وأضف RESTOCK_PRODUCT عندما
    توجد إشارة طلب/ربحية تجعل إعادة التوريد فرصة نمو، لا مجرد تنبيه مخزون.
-6) إذا كانت الوجهة 404/المنتج Hidden/OOS/Variant OOS أو يوجد mismatch موثق في السعر/العرض، اعترف
+6) راجع offer_schedule وأي SALE_EXPIRING/SALE_EXPIRED/EXPIRED_PROMOTION_COPY alert. إذا انتهى العرض
+   وما زالت الرسالة الإعلانية/الوصف تعتمد على الخصم، لا تترك mismatch قائمًا. اختر EXTEND_PROMOTION
+   فقط إذا الربحية والهامش والطلب والسياق يدعمونه؛ وإلا وحّد الإعلان والوصف مع السعر الحالي. أي تمديد
+   هو product_change غير executable من Ads API ويتطلب owner approval.
+7) إذا كانت الوجهة 404/المنتج Hidden/OOS/Variant OOS أو يوجد mismatch موثق في السعر/العرض، اعترف
    بهذا السبب الجذري مباشرة وحدد العلاج التشغيلي المناسب؛ لا تجعل غياب Funnel metrics يلغي العطل.
-7) إذا CTR والزيارات سليمة ثم ATC ينهار ولا يوجد دليل Tracking صريح، لا تجعل TRACKING السبب الأساسي
+8) إذا CTR والزيارات سليمة ثم ATC ينهار ولا يوجد دليل Tracking صريح، لا تجعل TRACKING السبب الأساسي
    لمجرد غياب القياس؛ فضّل PRODUCT/OFFER/LANDING_PAGE/ADD_TO_CART بحسب الدليل.
-8) إذا actual creative media غير موجود، لا تكتب ملاحظات بصرية كأنك شاهدت الفيديو. إذا موجود، اربط
+9) إذا actual creative media غير موجود، لا تكتب ملاحظات بصرية كأنك شاهدت الفيديو. إذا موجود، اربط
    المشاهد/الـHook/CTA/pacing بالـVideo metrics والـFunnel في الحكم النهائي.
-9) إذا final_decision يحتوي TEST_NEW_CREATIVE، creative_brief في تلك التوصية إلزامي. إذا لا تستطيع
+10) إذا final_decision يحتوي TEST_NEW_CREATIVE، creative_brief في تلك التوصية إلزامي. إذا لا تستطيع
    كتابة Brief كامل، استبدل الإجراء بإجراء إبداعي أدق لا يتطلب TEST_NEW_CREATIVE بدل إخراج Brief فارغ.
-10) final_decision يجب أن يكون المجموعة النهائية الكاملة، وليس Delta. يمكنك الاحتفاظ أو تعديل أو حذف
+11) final_decision يجب أن يكون المجموعة النهائية الكاملة، وليس Delta. يمكنك الاحتفاظ أو تعديل أو حذف
    أي توصية أولية وإضافة توصية أغفلها المرور الأول.
-11) بعد الانتهاء من final_decision نفّذ Self-check آلي ذهني قبل الإخراج:
+12) بعد الانتهاء من final_decision نفّذ Self-check آلي ذهني قبل الإخراج:
    - لكل recommendation نهائي: انسخ recommendation_id نفسه حرفيًا، character-for-character، إلى
      counterfactual_reviewed_recommendation_ids بعد أن تراجعه Counterfactually.
    - لا تضع معرفًا قديمًا بدل معرف التوصية النهائية، ولا تغيّر case أو separators أو تضيف suffix.
    - يجب أن تكون مجموعة recommendation_id النهائية subset كاملة من القائمة المذكورة.
    - انسخ كل required_budget_owner_keys حرفيًا إلى reviewed_budget_owner_keys إذا تمت مراجعته.
-12) لا تحول Verified evidence إلى INSUFFICIENT_DATA فقط لأن evidence pack مختصر. استخدم limitations
+13) لا تحول Verified evidence إلى INSUFFICIENT_DATA فقط لأن evidence pack مختصر. استخدم limitations
     لتسجيل ما ينقص، مع الاستمرار في الحكم على الحقائق الموثقة المتاحة.
 
 OpenAI وحده صاحب الحكم التسويقي؛ لا توجد عتبة ROAS/CPA برمجية تجبر قرارًا.
