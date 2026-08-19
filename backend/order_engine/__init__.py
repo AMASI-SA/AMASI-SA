@@ -112,6 +112,7 @@ def make_order_engine_router(*args, **kwargs):
     from store_delivery_reminder_routes import make_store_delivery_reminder_router
     from store_delivery_settlement_routes import make_store_delivery_settlement_router
     from store_delivery_customer_lookup_routes import make_store_delivery_customer_lookup_router
+    from store_delivery_reassignment_routes import make_store_delivery_reassignment_router
 
     import product_v2_routes as _product_v2_routes
     from product_v2_sync_hotfix import run_product_v2_sync_fixed
@@ -181,10 +182,9 @@ def make_order_engine_router(*args, **kwargs):
         make_fulfillment_experiment_router(db, current_user),
         make_supplier_receiving_router(db, current_user),
         make_fulfillment_v2_router(db, current_user),
-        # Store-driver delivery is intentionally mounted inside the existing
-        # Order Engine extension point so server.py remains stable.
         make_store_delivery_driver_router(db, current_user),
         make_store_delivery_handover_router(db, current_user),
+        make_store_delivery_reassignment_router(db, current_user),
         make_store_delivery_payment_evidence_router(db, current_user),
         make_store_delivery_driver_app_router(db, current_user),
         make_store_delivery_payment_resubmission_router(db, current_user),
