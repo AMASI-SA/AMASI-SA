@@ -75,6 +75,16 @@ TRANSIENT_ERROR_NAMES = {
     "InternalServerError",
 }
 TRANSIENT_BACKOFF_SECONDS = (20, 45, 90)
+SAFE_RATE_LIMIT_HEADERS = (
+    "retry-after",
+    "x-request-id",
+    "x-ratelimit-limit-requests",
+    "x-ratelimit-limit-tokens",
+    "x-ratelimit-remaining-requests",
+    "x-ratelimit-remaining-tokens",
+    "x-ratelimit-reset-requests",
+    "x-ratelimit-reset-tokens",
+)
 
 
 def _evaluate_case_with_execution_contract(case, output):
@@ -146,8 +156,8 @@ def _contract_fingerprint(cases: list[dict[str, Any]]) -> str:
         "decision_schema": live_eval.v3_json_schema(),
         "review_schema": live_eval.review_json_schema(),
         # Keep v2 so checkpoints from the exact same model/prompt/schema corpus
-        # remain valid. The change below only retries transport/runtime failures;
-        # it does not alter the marketing-evaluation contract.
+        # remain valid. Transport retry/diagnostic changes do not alter the
+        # marketing-evaluation contract.
         "runner_contract": 2,
     }
     raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
@@ -227,6 +237,53 @@ def _write_checkpoint(cases: list[dict[str, Any]], by_id: dict[str, dict[str, An
     os.replace(temp, path)
 
 
+def _safe_error_diagnostic(exc: Exception) -> dict[str, Any]:
+    """Return safe transport diagnostics without credentials or request payloads."""
+    diagnostic: dict[str, Any] = {
+        "error": type(exc).__name__,
+    }
+    status_code = getattr(exc, "status_code", None)
+    if status_code is not None:
+        diagnostic["status_code"] = status_code
+    request_id = getattr(exc, "request_id", None)
+    if request_id:
+        diagnostic["request_id"] = str(request_id)[:200]
+
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        error_body = body.get("error") if isinstance(body.get("error"), dict) else body
+        for source_key, target_key in (("type", "api_error_type"), ("code", "api_error_code")):
+            value = error_body.get(source_key)
+            if value not in (None, ""):
+                diagnostic[target_key] = str(value)[:200]
+        message = error_body.get("message")
+        if message not in (None, ""):
+            # OpenAI error text contains limit/current/reset context, not the API key.
+            diagnostic["message"] = " ".join(str(message).split())[:800]
+
+    response = getattr(exc, "response", None)
+    headers = getattr(response, "headers", None)
+    if headers is not None:
+        safe_headers = {}
+        for name in SAFE_RATE_LIMIT_HEADERS:
+            try:
+                value = headers.get(name)
+            except Exception:
+                value = None
+            if value not in (None, ""):
+                safe_headers[name] = str(value)[:200]
+        if safe_headers:
+            diagnostic["headers"] = safe_headers
+    return diagnostic
+
+
+def _print_safe_error_diagnostic(case_id: str, exc: Exception, *, attempt: int) -> None:
+    payload = _safe_error_diagnostic(exc)
+    payload["case"] = case_id
+    payload["attempt"] = attempt
+    print("V3_OPENAI_ERROR_DIAGNOSTIC " + json.dumps(payload, ensure_ascii=False), flush=True)
+
+
 async def _run_case_with_transient_backoff(client: Any, case: dict[str, Any]) -> dict[str, Any]:
     attempts = len(TRANSIENT_BACKOFF_SECONDS) + 1
     for attempt in range(attempts):
@@ -234,6 +291,7 @@ async def _run_case_with_transient_backoff(client: Any, case: dict[str, Any]) ->
             return await live_eval.run_case(client, case)
         except Exception as exc:
             name = type(exc).__name__
+            _print_safe_error_diagnostic(str(case["id"]), exc, attempt=attempt + 1)
             if name not in TRANSIENT_ERROR_NAMES or attempt >= attempts - 1:
                 return {
                     "id": str(case["id"]),
