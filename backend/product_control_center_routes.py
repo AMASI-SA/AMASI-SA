@@ -28,7 +28,7 @@ PROTECTED_FIELDS = {
 
 PUBLISHABLE_FIELDS = {
     "name", "description", "short_description", "price", "sale_price",
-    "status", "sku", "barcode", "categories", "brand", "seo",
+    "salla_cost_price", "status", "sku", "barcode", "categories", "brand", "seo",
     "google_category", "local_category", "images", "options",
     "custom_fields", "variants", "slug",
 }
@@ -80,6 +80,12 @@ def _salla_payload(patch: dict[str, Any]) -> dict[str, Any]:
     ):
         if key in patch:
             payload[key] = patch[key]
+    # `salla_cost_price` is deliberately a Product Control Center alias.
+    # The canonical Mezan accounting/cost fields remain protected and are never
+    # accepted from this draft path. Only the outbound Salla payload receives
+    # the provider field name `cost_price`.
+    if "salla_cost_price" in patch:
+        payload["cost_price"] = patch["salla_cost_price"]
     seo = patch.get("seo")
     if isinstance(seo, dict):
         if seo.get("title") is not None:
@@ -121,6 +127,7 @@ def _price_snapshot(product: dict[str, Any]) -> dict[str, float | None]:
     return {
         "price": regular,
         "sale_price": _money_amount(product.get("sale_price")),
+        "cost_price": _money_amount(product.get("cost_price") or product.get("cost")),
     }
 
 
@@ -140,6 +147,8 @@ def _salla_payload_with_preserved_prices(
         "price": _money_amount(payload.get("price")),
         "sale_price": _money_amount(payload.get("sale_price")),
     }
+    if "cost_price" in payload:
+        expected["cost_price"] = _money_amount(payload.get("cost_price"))
     return payload, expected
 
 
@@ -159,6 +168,12 @@ def _verify_salla_prices(
             "code": "salla_price_verification_failed",
             "mismatches": mismatches,
         })
+
+
+def _before_value(product: dict[str, Any], key: str) -> Any:
+    if key == "salla_cost_price":
+        return product.get("cost_price_from_salla")
+    return product.get(key)
 
 
 async def _product(db: Any, user_id: str, product_id: str) -> dict[str, Any]:
@@ -229,6 +244,7 @@ def make_product_control_center_router(db: Any, current_user: Callable[..., Any]
             "capabilities": {
                 "content": True, "seo": True, "categories": True,
                 "images": True, "pricing": True, "options": True,
+                "salla_cost_price": True,
                 "rollback": True, "cost_engine_preserved": True,
             },
         }
@@ -254,7 +270,7 @@ def make_product_control_center_router(db: Any, current_user: Callable[..., Any]
             "source": _text(payload.get("source")) or "human",
             "reason": _text(payload.get("reason")),
             "changes": patch,
-            "before": {key: product.get(key) for key in patch},
+            "before": {key: _before_value(product, key) for key in patch},
             "created_at": now,
             "updated_at": now,
         }
@@ -300,8 +316,9 @@ def make_product_control_center_router(db: Any, current_user: Callable[..., Any]
             remote_payload, expected_prices = _salla_payload_with_preserved_prices(patch, current_remote)
             response = await call_salla(db, user_id, "PUT", f"/products/{salla_id}", json=remote_payload)
             verified_response = await call_salla(db, user_id, "GET", f"/products/{salla_id}")
+            verified_remote = _salla_product(verified_response)
             try:
-                _verify_salla_prices(_salla_product(verified_response), expected_prices)
+                _verify_salla_prices(verified_remote, expected_prices)
             except HTTPException:
                 rollback_payload = {key: value for key, value in expected_prices.items() if value is not None}
                 if rollback_payload:
@@ -328,7 +345,12 @@ def make_product_control_center_router(db: Any, current_user: Callable[..., Any]
             "status": "published", "published_at": now, "updated_at": now, "revision_id": revision["id"],
         }})
         await supersede_active_drafts(db, user_id=user_id, salla_id=salla_id, keep_id=draft_id, now=now)
-        await db[PRODUCTS].update_one({"user_id": user_id, "salla_product_id": salla_id}, {"$set": {**patch, "updated_at": now, "last_control_center_publish_at": now}})
+        local_patch = {key: value for key, value in patch.items() if key != "salla_cost_price"}
+        if "salla_cost_price" in patch:
+            local_patch["cost_price_from_salla"] = _money_amount(
+                verified_remote.get("cost_price") or verified_remote.get("cost")
+            )
+        await db[PRODUCTS].update_one({"user_id": user_id, "salla_product_id": salla_id}, {"$set": {**local_patch, "updated_at": now, "last_control_center_publish_at": now}})
         return {"ok": True, "revision": _serialize(revision), "cost_engine_preserved": True}
 
     @router.get("/{product_id}/control-center/history")
