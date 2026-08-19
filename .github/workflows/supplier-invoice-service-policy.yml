@@ -12,6 +12,7 @@ on:
       - "backend/tests/test_supplier_invoice_service_eligibility.py"
       - "backend/tests/test_supplier_invoice_service_candidates.py"
       - "backend/tests/test_supplier_multi_supplier_lifecycle.py"
+      - "backend/tests/test_direct_partial_service_receipt.py"
       - ".github/workflows/supplier-invoice-service-policy.yml"
 
 permissions:
@@ -60,6 +61,7 @@ jobs:
           backend/tests/test_supplier_invoice_service_eligibility.py
           backend/tests/test_supplier_invoice_service_candidates.py
           backend/tests/test_supplier_multi_supplier_lifecycle.py
+          backend/tests/test_direct_partial_service_receipt.py
 
       - name: Run service eligibility, permanence and multi-supplier regressions
         run: >-
@@ -68,6 +70,7 @@ jobs:
           backend/tests/test_supplier_invoice_service_eligibility.py
           backend/tests/test_supplier_invoice_service_candidates.py
           backend/tests/test_supplier_multi_supplier_lifecycle.py
+          backend/tests/test_direct_partial_service_receipt.py
           backend/tests/test_preparation_piece_operations.py
           --tb=short
 
@@ -79,3 +82,4 @@ jobs:
           grep -q 'supplier_invoice_required' backend/preparation_piece_operations.py
           grep -q 'DISPATCH_STATUS_PARTIAL' backend/tests/test_supplier_multi_supplier_lifecycle.py
           grep -q 'product_total_halalas.*== 0' backend/tests/test_supplier_multi_supplier_lifecycle.py
+          grep -q 'piece_allows_direct_service_receipt' backend/preparation_supplier_dispatch.py
