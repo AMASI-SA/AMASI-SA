@@ -99,6 +99,26 @@ async def _totals(db: Any, user_id: str, driver_id: str) -> dict[str, float]:
 def make_store_delivery_settlement_router(db: Any, current_user: Callable[..., Any]) -> APIRouter:
     router = APIRouter(prefix="/store-delivery/settlements", tags=["Store Delivery Settlements"])
 
+    @router.get("/drivers")
+    async def settlement_drivers(user: dict = Depends(current_user)) -> dict[str, Any]:
+        actor = _require_accountant(user)
+        user_id = _merchant_user_id(actor)
+        drivers = await db[STORE_DRIVERS].find(
+            {"user_id": user_id},
+            {"_id": 0, "user_id": 0, "city_key": 0, "notes": 0},
+        ).sort([("status", 1), ("name", 1)]).to_list(length=1000)
+        items = []
+        for driver in drivers:
+            items.append({
+                "id": driver.get("id"),
+                "name": driver.get("name"),
+                "phone": driver.get("phone"),
+                "city": driver.get("city"),
+                "status": driver.get("status"),
+                **await _totals(db, user_id, driver.get("id")),
+            })
+        return {"items": items, "total": len(items)}
+
     @router.get("/driver/{driver_id}/summary")
     async def driver_summary(driver_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
         actor = _require_accountant(user)
@@ -128,10 +148,7 @@ def make_store_delivery_settlement_router(db: Any, current_user: Callable[..., A
         amount = float(money(payload.amount))
         available = totals["cod_cash_custody"] if settlement_type == "cod_remittance" else totals["delivery_earnings_due"]
         if amount > available + 0.0001:
-            raise HTTPException(
-                status_code=409,
-                detail={"code": "store_delivery_settlement_exceeds_balance", "available": available},
-            )
+            raise HTTPException(status_code=409, detail={"code": "store_delivery_settlement_exceeds_balance", "available": available})
         account = None
         if payload.account_id:
             account = await db.accounts.find_one(
@@ -142,23 +159,15 @@ def make_store_delivery_settlement_router(db: Any, current_user: Callable[..., A
                 raise HTTPException(status_code=422, detail={"code": "settlement_account_invalid"})
         now = _now()
         row = {
-            "id": str(uuid.uuid4()),
-            "user_id": user_id,
-            "driver_id": driver_id,
-            "driver_name_snapshot": driver.get("name"),
-            "settlement_type": settlement_type,
-            "amount": amount,
-            "account_id": normalize_text(payload.account_id),
+            "id": str(uuid.uuid4()), "user_id": user_id, "driver_id": driver_id,
+            "driver_name_snapshot": driver.get("name"), "settlement_type": settlement_type,
+            "amount": amount, "account_id": normalize_text(payload.account_id),
             "account_name_snapshot": (account or {}).get("name") or (account or {}).get("provider"),
-            "reference": normalize_text(payload.reference),
-            "note": normalize_text(payload.note),
-            "status": "posted",
-            "created_at": now,
-            "created_by": normalize_text(actor.get("id")),
+            "reference": normalize_text(payload.reference), "note": normalize_text(payload.note),
+            "status": "posted", "created_at": now, "created_by": normalize_text(actor.get("id")),
         }
         await db[SETTLEMENTS].insert_one(row)
-        row.pop("_id", None)
-        row.pop("user_id", None)
+        row.pop("_id", None); row.pop("user_id", None)
         return {"settlement": row, "summary": await _totals(db, user_id, driver_id)}
 
     @router.post("/driver/{driver_id}/cod-remittance", status_code=201)
