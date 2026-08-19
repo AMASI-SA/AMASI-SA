@@ -24,6 +24,7 @@ DEFAULT_INTERVAL_SECONDS = 5 * 60 * 60
 DEFAULT_RETRY_DELAY_SECONDS = 15 * 60
 DEFAULT_CADENCE_RECHECK_SECONDS = 5 * 60
 DEFAULT_WORKER_TIMEOUT_SECONDS = 10 * 60
+RETRYABLE_AI_EXIT_CODE = 2
 CADENCE_SKIP_EXIT_CODE = 3
 
 _FALSE_VALUES = {"0", "false", "no", "off", "disabled"}
@@ -117,15 +118,32 @@ async def run_worker_once(*, timeout_seconds: float | None = None) -> int:
     stdout_text = _bounded_stdout(stdout)
     if stdout_text:
         logger.info("Campaign AI child: %s", stdout_text)
-    if process.returncode:
+    returncode = int(process.returncode or 0)
+    stderr_bytes = len(stderr or b"")
+    if returncode == CADENCE_SKIP_EXIT_CODE:
+        # Exit 3 is an intentional global-cadence skip, not a worker failure.
+        logger.info(
+            "Campaign AI child cadence skip (exit=%s, stderr_bytes=%s)",
+            returncode,
+            stderr_bytes,
+        )
+    elif returncode == RETRYABLE_AI_EXIT_CODE:
+        # OpenAI/provider details remain suppressed; the child stdout carries
+        # only sanitized retry classifications for safe Production diagnosis.
+        logger.warning(
+            "Campaign AI child requested retry after AI failure (exit=%s, stderr_bytes=%s)",
+            returncode,
+            stderr_bytes,
+        )
+    elif returncode:
         logger.error(
             "Campaign AI child exited %s (stderr_bytes=%s)",
-            process.returncode,
-            len(stderr or b""),
+            returncode,
+            stderr_bytes,
         )
     elif stderr:
-        logger.warning("Campaign AI child emitted suppressed stderr (%s bytes)", len(stderr))
-    return int(process.returncode or 0)
+        logger.warning("Campaign AI child emitted suppressed stderr (%s bytes)", stderr_bytes)
+    return returncode
 
 
 async def scheduler_loop() -> None:
@@ -211,6 +229,7 @@ def attach_campaign_ai_subprocess_scheduler(router: Any) -> None:
 
 __all__ = [
     "CADENCE_SKIP_EXIT_CODE",
+    "RETRYABLE_AI_EXIT_CODE",
     "attach_campaign_ai_subprocess_scheduler",
     "next_scheduler_delay",
     "run_worker_once",
