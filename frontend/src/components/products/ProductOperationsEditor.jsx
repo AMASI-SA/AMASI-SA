@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+    CheckCircle,
     Cube,
-    FolderSimple,
     LinkSimple,
     MagnifyingGlass,
     Package,
     SpinnerGap,
     Trash,
-    WarningCircle,
     Wrench,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
@@ -16,88 +15,52 @@ import {
     getProductOperations,
     linkProductGroups,
     linkProductResource,
-    saveProductOperationProfile,
     unlinkProductGroup,
     unlinkProductResource,
 } from "../../services/mezanProductsV2";
-import { PRODUCT_OPERATION_CHOICES_ENABLED } from "../../lib/productOperationFreeze";
 import {
-    filterProductGroups,
-    groupNamesForResource,
-    resourceMatchesCategory,
-} from "../../lib/productGroupPicker";
+    saveProductCostCategory,
+    saveProductCostCompletion,
+} from "../../services/productCostSetup";
 
 function errorCode(error, fallback) {
     const detail = error?.response?.data?.detail;
-    const code = detail?.code;
     const labels = {
-        resource_already_linked_to_option: "هذه الخدمة أو المكوّن مرتبط بأحد خيارات المنتج. أزل ربط الخيار أولًا.",
-        group_resource_already_linked_to_option: "تحتوي المجموعة على خدمة أو مكوّن مرتبط بخيار في المنتج. أزل ربط الخيار أولًا.",
-        resource_link_managed_by_group: "هذا العنصر مرتبط من خلال مجموعة. أزل المجموعة بدل حذف العنصر مباشرة.",
-        component_group_not_found: "إحدى المجموعات المحددة لم تعد موجودة.",
+        resource_already_linked_to_option: "هذه الخدمة أو المكوّن مرتبط بخيار في المنتج. أزل ربط الخيار أولًا.",
+        group_resource_already_linked_to_option: "تحتوي المجموعة على عنصر مرتبط بخيار في المنتج.",
+        resource_link_managed_by_group: "هذا العنصر مرتبط من خلال مجموعة. أزل المجموعة بدل العنصر.",
+        component_group_not_found: "إحدى المجموعات لم تعد موجودة.",
         product_group_link_not_found: "ربط المجموعة غير موجود.",
-        invalid_fulfillment_type: "اختر نوع تنفيذ المنتج.",
-        invalid_inventory_policy: "اختر هل المنتج يتتبع مخزون الفروع.",
-        invalid_stockout_policy: "اختر ماذا يحدث عند نفاد المخزون.",
-        invalid_low_stock_threshold: "حد قرب النفاد يجب أن يكون صفرًا أو عددًا صحيحًا موجبًا.",
+        product_cost_category_not_found: "تصنيف المنتج غير موجود أو غير نشط.",
     };
-    return labels[code] || detail?.message || code || fallback;
+    return labels[detail?.code] || detail?.message || detail?.code || fallback;
 }
 
-function ResourcePicker({ title, Icon, rows, query, setQuery, onLink, busy }) {
-    return (
-        <section className="rounded-2xl border border-slate-200 p-3">
-            <h3 className="font-black"><Icon className="ml-1 inline" />{title}</h3>
-            <label className="relative mt-3 block">
-                <MagnifyingGlass className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={`ابحث في ${title}…`} className="w-full rounded-xl border py-2.5 pr-10 pl-3 text-sm" />
-            </label>
-            <div className="mt-3 max-h-64 space-y-2 overflow-auto">
-                {!rows.length && <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-400">لا توجد نتائج ضمن التصنيف المحدد.</p>}
-                {rows.map((resource) => {
-                    const conflict = (resource.option_links || [])[0];
-                    return (
-                        <div key={resource.id} className={`rounded-xl border p-3 ${conflict ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-white"}`}>
-                            <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                    <div className="truncate font-bold">{resource.name}</div>
-                                    <div className="mt-1 text-[11px] text-slate-500">{resource.code}{resource.requires_preparation && <span className="mr-2 rounded-full bg-violet-100 px-2 py-0.5 font-bold text-violet-800">يمنع الشحن حتى يكتمل</span>}</div>
-                                </div>
-                                <button type="button" disabled={busy || !!conflict} onClick={() => onLink(resource)} className="shrink-0 rounded-lg border border-violet-300 px-3 py-2 text-xs font-black text-violet-800 disabled:border-slate-200 disabled:text-slate-400"><LinkSimple className="ml-1 inline" /> ربط</button>
-                            </div>
-                            {conflict && <p className="mt-2 text-[11px] font-bold leading-5 text-amber-800">مرتبط بالخيار «{conflict.option_name}: {conflict.value_name}»؛ لا يمكن ربطه بالمنتج نفسه.</p>}
-                        </div>
-                    );
-                })}
-            </div>
-        </section>
-    );
+function isService(resource) {
+    return resource?.kind === "service" || !resource?.track_inventory;
 }
 
 export default function ProductOperationsEditor({ productId }) {
-    const [data, setData] = useState({ profile: {}, product_links: [], resources: [], categories: [], groups: [], product_group_links: [] });
-    const [fulfillmentType, setFulfillmentType] = useState("");
-    const [inventoryPolicy, setInventoryPolicy] = useState("");
-    const [stockoutPolicy, setStockoutPolicy] = useState("close_when_out_of_stock");
-    const [lowStockThreshold, setLowStockThreshold] = useState(3);
-    const [serviceQuery, setServiceQuery] = useState("");
-    const [componentQuery, setComponentQuery] = useState("");
-    const [categoryFilter, setCategoryFilter] = useState("");
-    const [loading, setLoading] = useState(true);
+    const [data, setData] = useState({
+        product: {},
+        cost_setup: {},
+        product_links: [],
+        resources: [],
+        categories: [],
+        groups: [],
+        product_group_links: [],
+    });
+    const [query, setQuery] = useState("");
     const [busy, setBusy] = useState(false);
+    const [loading, setLoading] = useState(true);
 
     async function load() {
         if (!productId) return;
         setLoading(true);
         try {
-            const result = await getProductOperations(productId);
-            setData(result);
-            setFulfillmentType(result?.profile?.fulfillment_type || "");
-            setInventoryPolicy(result?.profile?.inventory_policy || "");
-            setStockoutPolicy(result?.profile?.stockout_policy || "close_when_out_of_stock");
-            setLowStockThreshold(result?.profile?.low_stock_threshold ?? 3);
+            setData(await getProductOperations(productId));
         } catch (error) {
-            toast.error(errorCode(error, "تعذر تحميل إعدادات تشغيل المنتج"));
+            toast.error(errorCode(error, "تعذر تحميل إعدادات تكلفة المنتج"));
         } finally {
             setLoading(false);
         }
@@ -106,210 +69,202 @@ export default function ProductOperationsEditor({ productId }) {
     useEffect(() => { load(); }, [productId]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const categories = useMemo(() => data.categories || [], [data.categories]);
-    const groups = useMemo(() => data.groups || [], [data.groups]);
-    const linked = useMemo(
+    const categoryId = data?.cost_setup?.cost_category_id || data?.product?.cost_category_id || "";
+    const categoryName = data?.cost_setup?.cost_category_name || data?.product?.cost_category_name || "";
+    const linkedResources = useMemo(
         () => (data.resources || []).filter((row) => row.linked_to_product),
         [data.resources],
     );
-    const available = useMemo(
-        () => (data.resources || []).filter((row) => !row.linked_to_product),
-        [data.resources],
+    const linkedGroups = useMemo(
+        () => (data.groups || []).filter((row) => row.linked_to_product),
+        [data.groups],
     );
-    const categoryGroups = useMemo(() => [
-        ...filterProductGroups(groups, { categoryId: categoryFilter, kind: "service" }),
-        ...filterProductGroups(groups, { categoryId: categoryFilter, kind: "component" }),
-    ], [groups, categoryFilter]);
-
-    const filterRows = (kind, query) => {
+    const availableResources = useMemo(() => {
         const needle = query.trim().toLowerCase();
-        return available.filter((row) => {
-            const matchesKind = kind === "service"
-                ? row.kind === "service" || !row.track_inventory
-                : row.kind === "stock_component" || row.track_inventory;
-            const matchesCategory = resourceMatchesCategory(row, categoryFilter);
-            return matchesKind && matchesCategory && (!needle || `${row.name || ""} ${row.code || ""}`.toLowerCase().includes(needle));
+        if (!categoryId) return [];
+        return (data.resources || []).filter((row) => {
+            if (row.linked_to_product) return false;
+            if (!(row.category_ids || []).map(String).includes(String(categoryId))) return false;
+            if ((row.option_links || []).length) return false;
+            return !needle || `${row.name || ""} ${row.code || ""}`.toLowerCase().includes(needle);
         });
-    };
-    const services = filterRows("service", serviceQuery);
-    const components = filterRows("component", componentQuery);
+    }, [data.resources, categoryId, query]);
+    const availableGroups = useMemo(() => {
+        const needle = query.trim().toLowerCase();
+        if (!categoryId) return [];
+        return (data.groups || []).filter((row) =>
+            !row.linked_to_product
+            && String(row.category_id || "") === String(categoryId)
+            && (!needle || `${row.name || ""} ${(row.resources || []).map((item) => item.name).join(" ")}`.toLowerCase().includes(needle)),
+        );
+    }, [data.groups, categoryId, query]);
 
-    async function saveProfile() {
-        if (!fulfillmentType || !inventoryPolicy) {
-            toast.error("اختر مسار التنفيذ وسياسة المخزون.");
-            return;
-        }
-        if (
-            inventoryPolicy === "branch_stock_required"
-            && (!Number.isInteger(Number(lowStockThreshold)) || Number(lowStockThreshold) < 0)
-        ) {
-            toast.error("حد قرب النفاد يجب أن يكون صفرًا أو عددًا صحيحًا موجبًا.");
-            return;
-        }
+    async function chooseCategory(nextCategoryId) {
+        if (!nextCategoryId || busy) return;
         setBusy(true);
         try {
-            const result = await saveProductOperationProfile(productId, {
-                fulfillment_type: fulfillmentType,
-                inventory_policy: inventoryPolicy,
-                stockout_policy: stockoutPolicy,
-                low_stock_threshold: Number(lowStockThreshold),
-            });
+            const result = await saveProductCostCategory(productId, nextCategoryId);
             setData(result);
-            toast.success("تم حفظ نوع تنفيذ المنتج");
+            toast.success("تم حفظ تصنيف المنتج؛ ستظهر عناصر هذا التصنيف تلقائيًا.");
         } catch (error) {
-            toast.error(errorCode(error, "تعذر حفظ إعداد التشغيل"));
+            toast.error(errorCode(error, "تعذر حفظ تصنيف المنتج"));
         } finally {
             setBusy(false);
         }
     }
 
-    async function link(resource) {
+    async function addResource(resource) {
         setBusy(true);
         try {
             const result = await linkProductResource(productId, resource.id, 1);
-            setData(result);
-            toast.success(`تم ربط ${resource.name} بالمنتج`);
-            window.dispatchEvent(new CustomEvent("mezan:product-resource-links-changed", { detail: { productId } }));
+            setData({ ...result, cost_setup: data.cost_setup, product: { ...result.product, cost_category_id: categoryId, cost_category_name: categoryName } });
+            toast.success(`تمت إضافة ${resource.name} وحفظها تلقائيًا`);
         } catch (error) {
-            toast.error(errorCode(error, "تعذر ربط الخدمة أو المكوّن"));
-        } finally {
-            setBusy(false);
-        }
+            toast.error(errorCode(error, "تعذر إضافة العنصر"));
+        } finally { setBusy(false); }
     }
 
-    async function unlink(resource) {
+    async function removeResource(resource) {
         setBusy(true);
         try {
             const result = await unlinkProductResource(productId, resource.id);
-            setData(result);
-            toast.success(`تم إلغاء الربط اليدوي لـ ${resource.name}`);
-            window.dispatchEvent(new CustomEvent("mezan:product-resource-links-changed", { detail: { productId } }));
+            setData({ ...result, cost_setup: data.cost_setup, product: { ...result.product, cost_category_id: categoryId, cost_category_name: categoryName } });
+            toast.success(`تمت إزالة ${resource.name}`);
         } catch (error) {
-            toast.error(errorCode(error, "تعذر إلغاء الربط"));
-        } finally {
-            setBusy(false);
-        }
+            toast.error(errorCode(error, "تعذر إزالة العنصر"));
+        } finally { setBusy(false); }
     }
 
     async function addGroup(group) {
         setBusy(true);
         try {
             const result = await linkProductGroups(productId, [group.id]);
-            setData(result);
-            toast.success(`تمت إضافة مجموعة ${group.name}`);
-            window.dispatchEvent(new CustomEvent("mezan:product-resource-links-changed", { detail: { productId } }));
+            setData({ ...result, cost_setup: data.cost_setup, product: { ...result.product, cost_category_id: categoryId, cost_category_name: categoryName } });
+            toast.success(`تمت إضافة مجموعة ${group.name} وحفظها تلقائيًا`);
         } catch (error) {
-            toast.error(errorCode(error, "تعذر ربط المجموعة"));
-        } finally {
-            setBusy(false);
-        }
+            toast.error(errorCode(error, "تعذر إضافة المجموعة"));
+        } finally { setBusy(false); }
     }
 
     async function removeGroup(group) {
         setBusy(true);
         try {
             const result = await unlinkProductGroup(productId, group.id);
-            setData(result);
+            setData({ ...result, cost_setup: data.cost_setup, product: { ...result.product, cost_category_id: categoryId, cost_category_name: categoryName } });
             toast.success(`تمت إزالة مجموعة ${group.name}`);
-            window.dispatchEvent(new CustomEvent("mezan:product-resource-links-changed", { detail: { productId } }));
         } catch (error) {
             toast.error(errorCode(error, "تعذر إزالة المجموعة"));
-        } finally {
-            setBusy(false);
-        }
+        } finally { setBusy(false); }
     }
 
-    if (loading) return <section className="flex min-h-40 items-center justify-center rounded-2xl border"><SpinnerGap className="animate-spin text-violet-700" /></section>;
+    async function completeCostSetup() {
+        setBusy(true);
+        try {
+            const result = await saveProductCostCompletion(productId, true);
+            setData(result);
+            toast.success("تم حفظ المنتج كتكلفة مكتملة؛ سيختفي من قائمة المنتجات المباعة بدون تكلفة.");
+            window.dispatchEvent(new CustomEvent("mezan:product-cost-completed", { detail: { productId } }));
+        } catch (error) {
+            toast.error(errorCode(error, "تعذر اعتماد اكتمال التكلفة"));
+        } finally { setBusy(false); }
+    }
+
+    if (loading) {
+        return <section className="flex min-h-40 items-center justify-center rounded-2xl border"><SpinnerGap className="animate-spin text-violet-700" /></section>;
+    }
 
     return (
-        <section className="space-y-4 rounded-2xl border border-violet-200 bg-violet-50/30 p-3 sm:p-4" data-testid="product-operations-editor">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                <div>
-                    <h2 className="font-black">خدمات ومكوّنات المنتج</h2>
-                    <p className="mt-1 text-xs leading-6 text-slate-500">اختر تصنيف التجهيز؛ تظهر مجموعاته أولًا ثم الخدمات والمكوّنات المفردة.</p>
-                </div>
-                <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-black" data-testid="product-resource-category-filter">
-                    <option value="">اختر التصنيف</option>
+        <section className="space-y-4 rounded-2xl border border-violet-200 bg-violet-50/30 p-3 sm:p-4" data-testid="product-operations-editor" dir="rtl">
+            <div>
+                <h2 className="font-black">تصنيف المنتج والمكونات والخدمات</h2>
+                <p className="mt-1 text-xs leading-6 text-slate-500">اختر تصنيف المنتج مرة واحدة. بعدها يعرض ميزان تلقائيًا المكونات والخدمات التابعة له فقط، بدون إعادة اختيار التصنيف عند كل إضافة.</p>
+            </div>
+
+            <div className="rounded-2xl border border-violet-200 bg-white p-4">
+                <label className="block text-xs font-black text-slate-600">تصنيف المنتج</label>
+                <select
+                    value={categoryId}
+                    onChange={(event) => chooseCategory(event.target.value)}
+                    disabled={busy}
+                    className="mt-2 min-h-12 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-black"
+                    data-testid="product-cost-category-select"
+                >
+                    <option value="">اختر التصنيف — مثال: ملابس أو مطليات</option>
                     {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
                 </select>
+                <p className="mt-2 text-[11px] leading-5 text-slate-500">تكلفة المنتج الأساسية والمكونات والخدمات اختيارية. التصنيف وظيفته تنظيم العناصر التي تظهر لهذا المنتج.</p>
             </div>
 
-            <div className="rounded-xl border border-violet-200 bg-violet-100/70 p-3 text-xs font-bold leading-6 text-violet-950">
-                خيارات التشغيل والمخزون مجمّدة مؤقتًا. جميع المنتجات تدخل مسار التجهيز، ويستمر ربط الخدمات والمكوّنات والمجموعات أدناه كالمعتاد.
-            </div>
-
-            {PRODUCT_OPERATION_CHOICES_ENABLED && <>
-                <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-                    <div className="grid gap-4 xl:grid-cols-2">
-                        <div>
-                            <div className="mb-2 text-xs font-bold text-slate-600">المسار الافتراضي للتنفيذ</div>
-                            <div className="grid grid-cols-2 gap-2">
-                                <button type="button" onClick={() => setFulfillmentType("instant")} className={`rounded-xl border p-3 text-sm font-black ${fulfillmentType === "instant" ? "border-emerald-500 bg-emerald-50 text-emerald-900" : "bg-white"}`}><Package className="ml-1 inline" /> مباشر للشحن</button>
-                                <button type="button" onClick={() => setFulfillmentType("requires_preparation")} className={`rounded-xl border p-3 text-sm font-black ${fulfillmentType === "requires_preparation" ? "border-violet-500 bg-violet-100 text-violet-950" : "bg-white"}`}><Wrench className="ml-1 inline" /> يحتاج تجهيز</button>
-                            </div>
-                        </div>
-                        <div>
-                            <div className="mb-2 text-xs font-bold text-slate-600">سياسة مخزون المنتج النهائي</div>
-                            <div className="grid grid-cols-2 gap-2">
-                                <button type="button" onClick={() => setInventoryPolicy("branch_stock_required")} className={`rounded-xl border p-3 text-sm font-black ${inventoryPolicy === "branch_stock_required" ? "border-sky-500 bg-sky-50 text-sky-950" : "bg-white"}`}><Package className="ml-1 inline" /> يتتبع المخزون</button>
-                                <button type="button" onClick={() => setInventoryPolicy("finished_goods_inventory_not_tracked")} className={`rounded-xl border p-3 text-sm font-black ${inventoryPolicy === "finished_goods_inventory_not_tracked" ? "border-amber-500 bg-amber-50 text-amber-950" : "bg-white"}`}><Wrench className="ml-1 inline" /> لا يتتبع النهائي</button>
-                            </div>
-                        </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="flex items-center justify-between gap-3">
+                    <div>
+                        <h3 className="font-black">المرتبط حاليًا</h3>
+                        <p className="mt-1 text-xs text-slate-500">أي إضافة أو إزالة تُحفظ مباشرة.</p>
                     </div>
-                    <button type="button" disabled={busy || !fulfillmentType || !inventoryPolicy} onClick={saveProfile} className="rounded-xl bg-violet-700 px-5 py-3 text-sm font-black text-white disabled:opacity-50">{busy ? "جارٍ الحفظ…" : "حفظ التشغيل"}</button>
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black">{linkedResources.length} عنصر</span>
                 </div>
-
-                {inventoryPolicy === "branch_stock_required" && (
-                    <section className="rounded-2xl border border-amber-200 bg-white p-4">
-                        <div className="flex items-center gap-2 font-black text-slate-950"><WarningCircle size={21} className="text-amber-600" />التنبيه والتصرف عند نفاد المخزون</div>
-                        <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
-                            <div className="grid gap-2 sm:grid-cols-2">
-                                <button type="button" onClick={() => setStockoutPolicy("close_when_out_of_stock")} className={`rounded-xl border p-3 text-right text-sm font-black ${stockoutPolicy === "close_when_out_of_stock" ? "border-rose-400 bg-rose-50" : "bg-white"}`}>إيقاف البيع</button>
-                                <button type="button" onClick={() => setStockoutPolicy("allow_preorder")} className={`rounded-xl border p-3 text-right text-sm font-black ${stockoutPolicy === "allow_preorder" ? "border-violet-400 bg-violet-50" : "bg-white"}`}>حجز مسبق</button>
-                            </div>
-                            <label className="block"><span className="mb-2 block text-xs font-bold text-slate-600">حذّرني عندما يصل الرصيد إلى</span><input type="number" min="0" max="100000" step="1" value={lowStockThreshold} onChange={(event) => setLowStockThreshold(event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm font-black" /></label>
+                <div className="mt-3 space-y-2">
+                    {linkedGroups.map((group) => (
+                        <div key={group.id} className="flex items-center justify-between gap-3 rounded-xl border border-violet-200 bg-violet-50 p-3">
+                            <div><div className="font-bold">{group.name}</div><div className="mt-1 text-[11px] text-slate-500">{group.group_kind === "service" ? "مجموعة خدمات" : "مجموعة مكونات"} · {(group.resources || []).length} عناصر</div></div>
+                            <button type="button" disabled={busy} onClick={() => removeGroup(group)} className="rounded-lg border border-red-200 px-3 py-2 text-xs font-black text-red-700"><Trash className="ml-1 inline" />إزالة</button>
                         </div>
-                    </section>
+                    ))}
+                    {linkedResources.filter((row) => row.manual_link).map((resource) => (
+                        <div key={resource.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3">
+                            <div><div className="font-bold">{resource.name}</div><div className="mt-1 text-[11px] text-slate-500">{isService(resource) ? "خدمة" : "مكوّن"} · {resource.code || "بدون رمز"}</div></div>
+                            <button type="button" disabled={busy} onClick={() => removeResource(resource)} className="rounded-lg border border-red-200 px-3 py-2 text-xs font-black text-red-700"><Trash className="ml-1 inline" />إزالة</button>
+                        </div>
+                    ))}
+                    {!linkedResources.length && <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-400">لا توجد مكونات أو خدمات، وهذا مسموح.</p>}
+                </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <h3 className="font-black">إضافة مكوّن أو خدمة</h3>
+                <p className="mt-1 text-xs text-slate-500">المعروض الآن من تصنيف: <strong>{categoryName || "لم يتم تحديد تصنيف"}</strong></p>
+                {!categoryId ? (
+                    <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-900">حدد تصنيف المنتج أولًا لعرض العناصر المناسبة.</div>
+                ) : (
+                    <>
+                        <label className="relative mt-3 block">
+                            <MagnifyingGlass className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="ابحث داخل مكونات وخدمات التصنيف…" className="w-full rounded-xl border py-2.5 pr-10 pl-3 text-sm" />
+                        </label>
+                        <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                            {availableGroups.map((group) => (
+                                <button key={group.id} type="button" disabled={busy} onClick={() => addGroup(group)} className="rounded-xl border border-violet-200 bg-violet-50 p-3 text-right hover:border-violet-400">
+                                    <Cube className="ml-1 inline text-violet-700" /><span className="font-black">{group.name}</span>
+                                    <span className="mt-1 block text-[11px] text-slate-500">{group.group_kind === "service" ? "مجموعة خدمات" : "مجموعة مكونات"} · {(group.resources || []).length} عناصر</span>
+                                </button>
+                            ))}
+                            {availableResources.map((resource) => (
+                                <button key={resource.id} type="button" disabled={busy} onClick={() => addResource(resource)} className="rounded-xl border border-slate-200 bg-white p-3 text-right hover:border-violet-400">
+                                    {isService(resource) ? <Wrench className="ml-1 inline text-violet-700" /> : <Package className="ml-1 inline text-sky-700" />}
+                                    <span className="font-black">{resource.name}</span>
+                                    <span className="mt-1 block text-[11px] text-slate-500">{isService(resource) ? "خدمة" : "مكوّن"} · {resource.code || "بدون رمز"}</span>
+                                </button>
+                            ))}
+                        </div>
+                        {!availableGroups.length && !availableResources.length && <p className="mt-3 rounded-xl bg-slate-50 p-3 text-xs text-slate-400">لا توجد عناصر أخرى متاحة ضمن هذا التصنيف.</p>}
+                    </>
                 )}
-            </>}
+            </div>
 
-            {!categoryFilter ? (
-                <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm font-bold text-slate-500">اختر تصنيف التجهيز لعرض مجموعاته وخدماته ومكوّناته.</div>
-            ) : (
-                <>
-                    <section className="rounded-2xl border border-violet-200 bg-white p-3" data-testid="product-groups-inline">
-                        <h3 className="font-black"><FolderSimple className="ml-1 inline text-violet-700" />المجموعات ({categoryGroups.length})</h3>
-                        {!categoryGroups.length ? <p className="mt-2 rounded-xl bg-slate-50 p-3 text-xs text-slate-400">لا توجد مجموعات ضمن التصنيف المحدد.</p> : <div className="mt-3 grid gap-2 lg:grid-cols-2">{categoryGroups.map((group) => (
-                            <article key={group.id} className={`rounded-xl border p-3 ${group.linked_to_product ? "border-emerald-200 bg-emerald-50/50" : "border-violet-100 bg-violet-50/40"}`}>
-                                <div className="flex items-start justify-between gap-3">
-                                    <div className="min-w-0">
-                                        <div className="font-black text-violet-950">{group.name}</div>
-                                        <div className="mt-1 text-[11px] font-bold text-slate-500">{group.group_kind === "service" ? "مجموعة خدمات" : "مجموعة مكوّنات"} · {group.resources?.length || 0} عناصر</div>
-                                    </div>
-                                    {group.linked_to_product ? (
-                                        <button type="button" disabled={busy} onClick={() => removeGroup(group)} className="shrink-0 rounded-lg border border-rose-200 bg-white px-3 py-2 text-xs font-black text-rose-700"><Trash className="ml-1 inline" />إزالة</button>
-                                    ) : (
-                                        <button type="button" disabled={busy} onClick={() => addGroup(group)} className="shrink-0 rounded-lg bg-violet-700 px-3 py-2 text-xs font-black text-white disabled:opacity-50"><LinkSimple className="ml-1 inline" />ربط المجموعة</button>
-                                    )}
-                                </div>
-                                <div className="mt-2 flex flex-wrap gap-1">{(group.resources || []).map((resource) => <span key={resource.id} className="rounded-full bg-white px-2 py-1 text-[10px] font-bold text-slate-700">{resource.name}</span>)}</div>
-                            </article>
-                        ))}</div>}
-                    </section>
-
-                    <section className="rounded-2xl border border-slate-200 bg-white p-3">
-                        <h3 className="font-black">المرتبط بالمنتج مباشرة ({linked.length})</h3>
-                        {!linked.length ? <p className="mt-2 text-xs text-slate-400">لا توجد خدمات أو مكوّنات مرتبطة بالمنتج مباشرة.</p> : <div className="mt-3 grid gap-2 sm:grid-cols-2">{linked.map((resource) => {
-                            const names = groupNamesForResource(groups, resource.group_ids);
-                            return <div key={resource.id} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 p-3"><div className="min-w-0"><div className="truncate font-bold">{resource.name}</div><div className="text-[11px] text-slate-500">{resource.track_inventory ? "مكوّن" : "خدمة"} · الكمية {resource.product_quantity || 1}</div>{names.length > 0 && <div className="mt-1 text-[10px] font-bold text-violet-700">من: {names.join("، ")}</div>}</div>{resource.manual_link ? <button type="button" disabled={busy} onClick={() => unlink(resource)} className="rounded-lg border border-rose-200 p-2 text-rose-700" title="إلغاء الربط اليدوي"><Trash /></button> : <span className="rounded-full bg-violet-100 px-2 py-1 text-[10px] font-black text-violet-800">من مجموعة</span>}</div>;
-                        })}</div>}
-                    </section>
-
-                    <div className="grid gap-3 xl:grid-cols-2">
-                        <ResourcePicker title="الخدمات المفردة" Icon={Wrench} rows={services} query={serviceQuery} setQuery={setServiceQuery} onLink={link} busy={busy} />
-                        <ResourcePicker title="المكوّنات المفردة" Icon={Cube} rows={components} query={componentQuery} setQuery={setComponentQuery} onLink={link} busy={busy} />
-                    </div>
-                </>
-            )}
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                <h3 className="font-black text-emerald-950">اعتماد اكتمال التكلفة</h3>
+                <p className="mt-1 text-xs leading-6 text-emerald-900">التكلفة والمكونات والخدمات ليست إجبارية. هذا الزر فقط يعني أن مراجعة المنتج انتهت، وهو وحده الذي يخفي المنتج من قائمة «المنتجات المباعة بدون تكلفة».</p>
+                <button
+                    type="button"
+                    disabled={busy || data?.cost_setup?.complete === true}
+                    onClick={completeCostSetup}
+                    className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 font-black text-white disabled:opacity-50"
+                    data-testid="product-cost-complete-button"
+                >
+                    <CheckCircle size={20} />
+                    {data?.cost_setup?.complete === true ? "المنتج مكتمل التكلفة" : "حفظ المنتج كتكلفة مكتملة"}
+                </button>
+            </div>
         </section>
     );
 }
