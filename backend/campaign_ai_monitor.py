@@ -15,6 +15,10 @@ import campaign_ai_execution_alignment as _alignment
 import campaign_ai_execution_retry as _execution_retry
 import campaign_ai_monitor_legacy as _legacy
 import campaign_ai_policy_v2 as _policy
+from campaign_ai_decision_prompts_v3 import (
+    FIRST_PASS_INSTRUCTIONS as _V3_FIRST_PASS_INSTRUCTIONS,
+    SECOND_PASS_INSTRUCTIONS as _V3_SECOND_PASS_INSTRUCTIONS,
+)
 from campaign_ai_runtime_context_v3 import (
     get_runtime_context as _get_v3_context,
     reset_runtime_context as _reset_v3_context,
@@ -46,6 +50,14 @@ RESULT_SOURCE_PLATFORM = _policy.RESULT_SOURCE_PLATFORM
 RESULT_SOURCE_SALLA = _policy.RESULT_SOURCE_SALLA
 OPENAI_TIMEOUT_SECONDS = _legacy.OPENAI_TIMEOUT_SECONDS
 OPENAI_MAX_OUTPUT_TOKENS = _legacy.OPENAI_MAX_OUTPUT_TOKENS
+
+# Production and live-eval must use one reasoning contract. The historical V3
+# module still exports prompt constants for compatibility, so bind them to the
+# lightweight shared module before building the runtime OpenAI callable.
+_decision_v3.FIRST_PASS_INSTRUCTIONS = _V3_FIRST_PASS_INSTRUCTIONS
+_decision_v3.SECOND_PASS_INSTRUCTIONS = _V3_SECOND_PASS_INSTRUCTIONS
+# Restocking is an operational recommendation, never an Ads API write.
+_decision_v3.OPERATIONAL_ACTIONS.add("RESTOCK_PRODUCT")
 
 # Explicit policy exports used by focused tests/diagnostics.
 _account_range = _policy._account_range
