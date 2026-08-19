@@ -6,6 +6,7 @@ on:
       - fix/supplier-invoice-service-eligibility
     paths:
       - scripts/finalize_supplier_invoice_service_policy.py
+      - scripts/finalize_supplier_invoice_service_policy_v2.py
       - .github/workflows/apply-supplier-invoice-service-eligibility.yml
 
 permissions:
@@ -29,6 +30,7 @@ jobs:
         working-directory: workspace
         run: |
           python scripts/finalize_supplier_invoice_service_policy.py
+          python scripts/finalize_supplier_invoice_service_policy_v2.py
           python -m py_compile \
             backend/supplier_receiving_routes.py \
             backend/preparation_piece_operations.py \
