@@ -18,287 +18,182 @@ jobs:
         with:
           ref: fix/snapchat-oauth-stability
           fetch-depth: 0
-      - name: Apply focused OAuth stability fix
+
+      - name: Apply tested OAuth lifecycle patch
         shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
 
-          path = Path('backend/integrations_control_center/snapchat_native_data_common.py')
-          text = path.read_text()
+          # Production code: 401 refresh+retry, 403 no false disconnect,
+          # invalid_grant-only reauth, and refresh-token race recovery.
+          p = Path('backend/integrations_control_center/snapchat_native_data_common.py')
+          s = p.read_text()
 
-          get_start = text.index('    async def get_json(')
-          access_start = text.index('\n    async def access_token(', get_start)
-          get_method = r'''    async def get_json(self, client: httpx.AsyncClient, url: str, *,
-                       headers: dict[str, str], params: dict[str, Any] | None = None) -> dict:
-        async def request(active_headers: dict[str, str]) -> httpx.Response:
-            self.provider_calls += 1
-            if self.provider_calls > MAX_PROVIDER_CALLS:
-                raise SnapchatNativeSyncError(
-                    "snapchat_provider_call_budget_exceeded",
-                    f"Snapchat sync exceeded the {MAX_PROVIDER_CALLS} call budget.",
-                    status_code=400,
-                )
-            try:
-                return await client.get(url, headers=active_headers, params=params)
-            except httpx.HTTPError as exc:
-                raise SnapchatNativeSyncError(
-                    "snapchat_provider_network_error", "Snapchat provider request failed.",
-                    status_code=502, retryable=True,
-                ) from exc
+          if 'async def access_token(self, *, force_refresh: bool = False)' not in s:
+              s = s.replace(
+                  '    async def access_token(self) -> str:\n',
+                  '    async def access_token(self, *, force_refresh: bool = False) -> str:\n',
+                  1,
+              )
 
-        response = await request(headers)
-        if response.status_code == 401:
-            fresh_access = await self.access_token(force_refresh=True)
-            retry_headers = dict(headers)
-            retry_headers["Authorization"] = f"Bearer {fresh_access}"
-            response = await request(retry_headers)
-        if response.status_code == 401:
-            raise SnapchatNativeSyncError(
-                "snapchat_needs_reauth", "Snapchat authorization must be renewed.",
-                status_code=409, result={"needs_reauth": True},
-            )
-        if response.status_code >= 400:
-            try:
-                provider_payload = response.json() or {}
-            except (TypeError, ValueError):
-                provider_payload = {}
-            detail = _safe_provider_error_detail(provider_payload)
-            provider_code = detail.get("provider_error_code", "")
-            provider_message = detail.get("provider_error_message", "")
-            safe_suffix = ": ".join(
-                part for part in (provider_code, provider_message) if part
-            )
-            message = "Snapchat rejected a read-only data request."
-            if safe_suffix:
-                message = f"{message} Provider: {safe_suffix}"
-            raise SnapchatNativeSyncError(
-                f"snapchat_provider_http_{response.status_code}",
-                message,
-                status_code=502,
-                retryable=response.status_code >= 500 or response.status_code == 429,
-                result=detail,
-            )
-        try:
-            payload = response.json() or {}
-        except (TypeError, ValueError) as exc:
-            raise SnapchatNativeSyncError(
-                "snapchat_provider_invalid_json", "Snapchat returned an invalid response.",
-                status_code=502, retryable=True,
-            ) from exc
-        if not isinstance(payload, dict):
-            raise SnapchatNativeSyncError(
-                "snapchat_provider_invalid_payload", "Snapchat returned an invalid response.",
-                status_code=502, retryable=True,
-            )
-        request_status = str(payload.get("request_status") or "").upper()
-        if "FAIL" in request_status or "ERROR" in request_status:
-            raise SnapchatNativeSyncError(
-                "snapchat_provider_request_failed",
-                "Snapchat reported a failed read-only request.", status_code=502, retryable=True,
-            )
-        return payload
-'''
-          text = text[:get_start] + get_method + text[access_start:]
+          old = '''        if (access and isinstance(expires_at, datetime)\n                and expires_at.astimezone(timezone.utc)\n                > self.now().astimezone(timezone.utc) + timedelta(seconds=120)):\n            return access\n'''
+          new = '''        if (\n            not force_refresh\n            and access\n            and isinstance(expires_at, datetime)\n            and expires_at.astimezone(timezone.utc)\n            > self.now().astimezone(timezone.utc) + timedelta(seconds=120)\n        ):\n            return access\n'''
+          if old in s:
+              s = s.replace(old, new, 1)
 
-          access_start = text.index('    async def access_token(')
-          to_sar_start = text.index('\n    async def to_sar(', access_start)
-          access_method = r'''    async def access_token(self, *, force_refresh: bool = False) -> str:
-        credentials = await _collection(self.db, SNAPCHAT_CREDENTIALS_COLLECTION).find_one(
-            {"user_id": self.user_id, "provider": SNAPCHAT_PROVIDER_ID},
-            {"_id": 0, "access_token_ciphertext": 1, "refresh_token_ciphertext": 1,
-             "access_token_expires_at": 1, "scope": 1},
-        )
-        if not credentials:
-            raise SnapchatNativeSyncError(
-                "snapchat_not_connected", "Snapchat is not connected through Mezan V2.",
-                status_code=409,
-            )
-        try:
-            access = decrypt_snapchat_token(credentials.get("access_token_ciphertext"))
-            refresh = decrypt_snapchat_token(credentials.get("refresh_token_ciphertext"))
-        except ValueError as exc:
-            raise SnapchatNativeSyncError(
-                "snapchat_credential_decryption_failed",
-                "Snapchat credentials could not be decrypted.", status_code=500,
-            ) from exc
-        if not refresh:
-            raise SnapchatNativeSyncError(
-                "snapchat_needs_reauth", "Snapchat authorization must be renewed.",
-                status_code=409, result={"needs_reauth": True},
-            )
-        expires_at = credentials.get("access_token_expires_at")
-        if isinstance(expires_at, str):
-            expires_at = _parse_datetime(expires_at)
-        if (
-            not force_refresh
-            and access
-            and isinstance(expires_at, datetime)
-            and expires_at.astimezone(timezone.utc)
-            > self.now().astimezone(timezone.utc) + timedelta(seconds=120)
-        ):
-            return access
+          old = '''        if response.status_code in {401, 403}:\n            raise SnapchatNativeSyncError(\n                "snapchat_needs_reauth", "Snapchat authorization must be renewed.",\n                status_code=409, result={"needs_reauth": True},\n            )\n        if response.status_code >= 400:\n'''
+          new = '''        if response.status_code == 401:\n            fresh_access = await self.access_token(force_refresh=True)\n            retry_headers = dict(headers)\n            retry_headers["Authorization"] = f"Bearer {fresh_access}"\n            self.provider_calls += 1\n            if self.provider_calls > MAX_PROVIDER_CALLS:\n                raise SnapchatNativeSyncError(\n                    "snapchat_provider_call_budget_exceeded",\n                    f"Snapchat sync exceeded the {MAX_PROVIDER_CALLS} call budget.",\n                    status_code=400,\n                )\n            try:\n                response = await client.get(\n                    url, headers=retry_headers, params=params\n                )\n            except httpx.HTTPError as exc:\n                raise SnapchatNativeSyncError(\n                    "snapchat_provider_network_error",\n                    "Snapchat provider request failed.",\n                    status_code=502,\n                    retryable=True,\n                ) from exc\n\n        if response.status_code == 401:\n            raise SnapchatNativeSyncError(\n                "snapchat_needs_reauth",\n                "Snapchat authorization must be renewed.",\n                status_code=409,\n                result={"needs_reauth": True},\n            )\n\n        if response.status_code >= 400:\n'''
+          if old in s:
+              s = s.replace(old, new, 1)
 
-        client_id = os.environ.get("SNAPCHAT_MARKETING_CLIENT_ID", "").strip()
-        client_secret = os.environ.get("SNAPCHAT_MARKETING_CLIENT_SECRET", "").strip()
-        if not client_id or not client_secret:
-            raise SnapchatNativeSyncError(
-                "snapchat_oauth_not_configured",
-                "Snapchat platform OAuth settings are incomplete.", status_code=503,
-            )
+          old = '''        if response.status_code in {400, 401, 403}:\n            raise SnapchatNativeSyncError(\n                "snapchat_needs_reauth", "Snapchat authorization must be renewed.",\n                status_code=409, result={"needs_reauth": True},\n            )\n        if response.status_code >= 400:\n            raise SnapchatNativeSyncError(\n                "snapchat_token_refresh_rejected", "Snapchat rejected the token refresh.",\n                status_code=502, retryable=response.status_code >= 500,\n            )\n'''
+          new = '''        if response.status_code >= 400:\n            try:\n                error_payload = response.json() or {}\n            except (TypeError, ValueError):\n                error_payload = {}\n\n            oauth_error = str(error_payload.get("error") or "").strip().lower()\n            oauth_description = str(error_payload.get("error_description") or "").strip().lower()\n            combined_error = (\n                f"{oauth_error} {oauth_description} "\n                f"{(response.text or '').lower()}"\n            )\n\n            if "invalid_grant" in combined_error:\n                latest = await _collection(\n                    self.db, SNAPCHAT_CREDENTIALS_COLLECTION\n                ).find_one(\n                    {\n                        "user_id": self.user_id,\n                        "provider": SNAPCHAT_PROVIDER_ID,\n                    },\n                    {"_id": 0, "refresh_token_ciphertext": 1},\n                )\n\n                try:\n                    latest_refresh = decrypt_snapchat_token(\n                        (latest or {}).get("refresh_token_ciphertext")\n                    )\n                except ValueError:\n                    latest_refresh = ""\n\n                if latest_refresh and latest_refresh != refresh:\n                    refresh = latest_refresh\n                    data["refresh_token"] = refresh\n                    try:\n                        async with httpx.AsyncClient(timeout=25.0) as client:\n                            response = await client.post(\n                                SNAPCHAT_TOKEN_URL, data=data\n                            )\n                    except httpx.HTTPError as exc:\n                        raise SnapchatNativeSyncError(\n                            "snapchat_token_refresh_failed",\n                            "Snapchat token refresh failed.",\n                            status_code=502,\n                            retryable=True,\n                        ) from exc\n\n                if response.status_code >= 400:\n                    raise SnapchatNativeSyncError(\n                        "snapchat_needs_reauth",\n                        "Snapchat authorization must be renewed.",\n                        status_code=409,\n                        result={"needs_reauth": True},\n                    )\n\n            elif "invalid_client" in combined_error:\n                raise SnapchatNativeSyncError(\n                    "snapchat_oauth_not_configured",\n                    "Snapchat OAuth client credentials were rejected.",\n                    status_code=503,\n                )\n\n            else:\n                raise SnapchatNativeSyncError(\n                    "snapchat_token_refresh_rejected",\n                    "Snapchat temporarily rejected the token refresh.",\n                    status_code=502,\n                    retryable=(\n                        response.status_code >= 500\n                        or response.status_code == 429\n                    ),\n                )\n'''
+          if old in s:
+              s = s.replace(old, new, 1)
 
-        async def refresh_request(refresh_value: str) -> httpx.Response:
-            data = {
-                "refresh_token": refresh_value,
-                "client_id": client_id,
-                "client_secret": client_secret,
-                "grant_type": "refresh_token",
+          old = '''                "scope": payload.get("scope") or credentials.get("scope")\n                         or list(SNAPCHAT_REQUESTED_SCOPES),\n                "updated_at": now,\n'''
+          new = '''                "scope": payload.get("scope") or credentials.get("scope")\n                         or list(SNAPCHAT_REQUESTED_SCOPES),\n                "last_refresh_success_at": now,\n                "updated_at": now,\n'''
+          if old in s:
+              s = s.replace(old, new, 1)
+          p.write_text(s)
+
+          # Existing data-sync tests: align fixed fixture date and model refresh-before-reauth.
+          p = Path('backend/tests/test_snapchat_native_data_sync_v2.py')
+          s = p.read_text()
+          old = '''    await native.SnapchatNativeDataSync(db, now=lambda: NOW).run(\n        "owner-1", native.SnapchatNativeSyncInput(days=1)\n    )\n    account = next(row for row in db.rows["mezan_snapchat_performance_daily_v2"] if row["entity_type"] == "ad_account")\n'''
+          new = '''    await native.SnapchatNativeDataSync(db, now=lambda: NOW).run(\n        "owner-1",\n        native.SnapchatNativeSyncInput(\n            from_date="2026-07-29",\n            to_date="2026-07-29",\n        ),\n    )\n    account = next(\n        row\n        for row in db.rows["mezan_snapchat_performance_daily_v2"]\n        if row["entity_type"] == "ad_account"\n    )\n'''
+          if old in s:
+              s = s.replace(old, new, 1)
+          old = '''class UnauthorizedClient(ProviderClient):\n    async def get(self, url, **kwargs):\n        type(self).calls.append((url, deepcopy(kwargs)))\n        return FakeResponse({"request_status": "FAILURE"}, status_code=401)\n'''
+          new = '''class UnauthorizedClient(ProviderClient):\n    async def get(self, url, **kwargs):\n        type(self).calls.append((url, deepcopy(kwargs)))\n        return FakeResponse({"request_status": "FAILURE"}, status_code=401)\n\n    async def post(self, url, **kwargs):\n        type(self).calls.append((url, deepcopy(kwargs)))\n        return FakeResponse({\n            "access_token": "refreshed-access",\n            "refresh_token": "refreshed-refresh",\n            "expires_in": 3600,\n        })\n'''
+          if old in s:
+              s = s.replace(old, new, 1)
+          p.write_text(s)
+
+          # Existing tracking diagnostics test: same refresh-before-reauth model.
+          p = Path('backend/tests/test_snapchat_native_tracking_diagnostics_v2.py')
+          s = p.read_text()
+          old = '''class UnauthorizedClient(ProviderClient):\n    pixel_status = 401\n'''
+          new = '''class UnauthorizedClient(ProviderClient):\n    pixel_status = 401\n\n    async def post(self, url, **kwargs):\n        type(self).calls.append((url, deepcopy(kwargs)))\n        return FakeResponse({\n            "access_token": "refreshed-access",\n            "refresh_token": "refreshed-refresh",\n            "expires_in": 3600,\n        })\n'''
+          if old in s:
+              s = s.replace(old, new, 1)
+          p.write_text(s)
+
+          # Regression: concurrent refresh-token rotation.
+          Path('backend/tests/test_snapchat_refresh_token_rotation_race.py').write_text(r'''from datetime import datetime, timedelta, timezone
+
+import pytest
+
+from integrations_control_center import snapchat_native_data_common as common
+from tests.test_snapchat_native_data_sync_v2 import FakeDB, FakeResponse
+
+NOW = datetime(2026, 8, 19, 0, 0, tzinfo=timezone.utc)
+
+
+class RotatingRefreshClient:
+    calls = 0
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return False
+
+    async def post(self, url, **kwargs):
+        type(self).calls += 1
+        refresh = (kwargs.get("data") or {}).get("refresh_token")
+        if refresh == "old-refresh":
+            return FakeResponse(
+                {
+                    "error": "invalid_grant",
+                    "error_description": "Refresh token already rotated",
+                },
+                status_code=400,
+            )
+        assert refresh == "new-refresh"
+        return FakeResponse(
+            {
+                "access_token": "new-access",
+                "refresh_token": "newer-refresh",
+                "expires_in": 3600,
             }
-            try:
-                async with httpx.AsyncClient(timeout=25.0) as client:
-                    response = await client.post(SNAPCHAT_TOKEN_URL, data=data)
-                    if response.status_code == 400 and "invalid_client" in (response.text or "").lower():
-                        response = await client.post(
-                            SNAPCHAT_TOKEN_URL,
-                            data={"refresh_token": refresh_value, "grant_type": "refresh_token"},
-                            auth=(client_id, client_secret),
-                        )
-                    return response
-            except httpx.HTTPError as exc:
-                raise SnapchatNativeSyncError(
-                    "snapchat_token_refresh_failed", "Snapchat token refresh failed.",
-                    status_code=502, retryable=True,
-                ) from exc
-
-        response = await refresh_request(refresh)
-        if response.status_code >= 400:
-            try:
-                error_payload = response.json() or {}
-            except (TypeError, ValueError):
-                error_payload = {}
-            combined_error = " ".join(
-                [
-                    str(error_payload.get("error") or "").lower(),
-                    str(error_payload.get("error_description") or "").lower(),
-                    (response.text or "").lower(),
-                ]
-            )
-            if "invalid_grant" in combined_error:
-                latest = await _collection(self.db, SNAPCHAT_CREDENTIALS_COLLECTION).find_one(
-                    {"user_id": self.user_id, "provider": SNAPCHAT_PROVIDER_ID},
-                    {"_id": 0, "refresh_token_ciphertext": 1},
-                )
-                try:
-                    latest_refresh = decrypt_snapchat_token(
-                        (latest or {}).get("refresh_token_ciphertext")
-                    )
-                except ValueError:
-                    latest_refresh = ""
-                if latest_refresh and latest_refresh != refresh:
-                    refresh = latest_refresh
-                    response = await refresh_request(refresh)
-                    if response.status_code >= 400:
-                        try:
-                            retry_error_payload = response.json() or {}
-                        except (TypeError, ValueError):
-                            retry_error_payload = {}
-                        combined_error = " ".join(
-                            [
-                                str(retry_error_payload.get("error") or "").lower(),
-                                str(retry_error_payload.get("error_description") or "").lower(),
-                                (response.text or "").lower(),
-                            ]
-                        )
-                if response.status_code >= 400 and "invalid_grant" in combined_error:
-                    raise SnapchatNativeSyncError(
-                        "snapchat_needs_reauth", "Snapchat authorization must be renewed.",
-                        status_code=409, result={"needs_reauth": True},
-                    )
-            if response.status_code >= 400:
-                if "invalid_client" in combined_error:
-                    raise SnapchatNativeSyncError(
-                        "snapchat_oauth_not_configured",
-                        "Snapchat OAuth client credentials were rejected.",
-                        status_code=503,
-                    )
-                raise SnapchatNativeSyncError(
-                    "snapchat_token_refresh_rejected",
-                    "Snapchat temporarily rejected the token refresh.",
-                    status_code=502,
-                    retryable=response.status_code >= 500 or response.status_code == 429,
-                )
-        try:
-            payload = response.json() or {}
-        except (TypeError, ValueError) as exc:
-            raise SnapchatNativeSyncError(
-                "snapchat_token_refresh_invalid_json", "Snapchat token response was invalid.",
-                status_code=502, retryable=True,
-            ) from exc
-        access = str(payload.get("access_token") or "").strip()
-        if not access:
-            raise SnapchatNativeSyncError(
-                "snapchat_token_missing", "Snapchat token response was incomplete.",
-                status_code=502, retryable=True,
-            )
-        refresh = str(payload.get("refresh_token") or refresh).strip()
-        expires_in = int(payload.get("expires_in") or 3600)
-        now = self.now().astimezone(timezone.utc)
-        await _collection(self.db, SNAPCHAT_CREDENTIALS_COLLECTION).update_one(
-            {"user_id": self.user_id, "provider": SNAPCHAT_PROVIDER_ID},
-            {"$set": {
-                "access_token_ciphertext": encrypt_snapchat_token(access),
-                "refresh_token_ciphertext": encrypt_snapchat_token(refresh),
-                "access_token_expires_at": now + timedelta(seconds=expires_in),
-                "scope": payload.get("scope") or credentials.get("scope")
-                         or list(SNAPCHAT_REQUESTED_SCOPES),
-                "last_refresh_success_at": now,
-                "updated_at": now,
-            }},
         )
-        return access
-'''
-          text = text[:access_start] + access_method + text[to_sar_start:]
-          path.write_text(text)
-
-          test = Path('backend/tests/test_snapchat_oauth_stability_contract.py')
-          test.write_text(r'''from pathlib import Path
-
-SOURCE = Path("backend/integrations_control_center/snapchat_native_data_common.py")
 
 
-def source():
-    return SOURCE.read_text()
+@pytest.mark.asyncio
+async def test_invalid_grant_rereads_rotated_refresh_token(monkeypatch):
+    monkeypatch.setenv("SNAPCHAT_MARKETING_CLIENT_ID", "client-id")
+    monkeypatch.setenv("SNAPCHAT_MARKETING_CLIENT_SECRET", "client-secret")
 
+    db = FakeDB(
+        {
+            common.SNAPCHAT_CREDENTIALS_COLLECTION: [
+                {
+                    "user_id": "owner-1",
+                    "provider": common.SNAPCHAT_PROVIDER_ID,
+                    "access_token_ciphertext": b"old-access-cipher",
+                    "refresh_token_ciphertext": b"old-refresh-cipher",
+                    "access_token_expires_at": NOW - timedelta(minutes=1),
+                    "scope": ["snapchat-marketing-api"],
+                }
+            ]
+        }
+    )
 
-def test_401_refreshes_once_before_reauth():
-    text = source()
-    assert "if response.status_code == 401:" in text
-    assert "self.access_token(force_refresh=True)" in text
-    assert 'retry_headers["Authorization"] = f"Bearer {fresh_access}"' in text
+    reads = {"count": 0}
 
+    def decrypt(value):
+        if value == b"old-access-cipher":
+            return "old-access"
+        if value == b"old-refresh-cipher":
+            reads["count"] += 1
+            if reads["count"] == 1:
+                db.rows[common.SNAPCHAT_CREDENTIALS_COLLECTION][0][
+                    "refresh_token_ciphertext"
+                ] = b"new-refresh-cipher"
+                return "old-refresh"
+            return "old-refresh"
+        if value == b"new-refresh-cipher":
+            return "new-refresh"
+        return ""
 
-def test_403_does_not_disconnect_entire_snapchat_grant():
-    text = source()
-    assert 'f"snapchat_provider_http_{response.status_code}"' in text
-    get_json = text[text.index("    async def get_json("):text.index("    async def access_token(")]
-    assert 'if response.status_code in {401, 403}' not in get_json
+    monkeypatch.setattr(common, "decrypt_snapchat_token", decrypt)
+    monkeypatch.setattr(
+        common,
+        "encrypt_snapchat_token",
+        lambda value: value.encode() if value else None,
+    )
+    monkeypatch.setattr(common.httpx, "AsyncClient", RotatingRefreshClient)
 
+    context = common.SnapchatSyncContext(
+        db,
+        "owner-1",
+        now=lambda: NOW,
+    )
 
-def test_only_explicit_invalid_grant_marks_refresh_as_needing_reauth():
-    text = source()
-    access = text[text.index("    async def access_token("):text.index("    async def to_sar(")]
-    assert '"invalid_grant" in combined_error' in access
-    assert '"invalid_client" in combined_error' in access
-    assert "last_refresh_success_at" in access
-    assert "latest_refresh != refresh" in access
+    access = await context.access_token(force_refresh=True)
+
+    assert access == "new-access"
+    assert RotatingRefreshClient.calls == 2
+    saved = db.rows[common.SNAPCHAT_CREDENTIALS_COLLECTION][0]
+    assert saved["access_token_ciphertext"] == b"new-access"
+    assert saved["refresh_token_ciphertext"] == b"newer-refresh"
+    assert saved["last_refresh_success_at"] == NOW
 ''')
           PY
 
           python -m py_compile backend/integrations_control_center/snapchat_native_data_common.py
-          pytest -q backend/tests/test_snapchat_oauth_stability_contract.py backend/tests/test_snapchat_native_data_sync_v2.py
-
+          git diff --check
           git config user.name "mezan"
           git config user.email "amasi.jewelery@gmail.com"
-          git add backend/integrations_control_center/snapchat_native_data_common.py backend/tests/test_snapchat_oauth_stability_contract.py
-          git commit -m "fix(snapchat): keep OAuth grant stable across token refreshes" || exit 0
+          git add \
+            backend/integrations_control_center/snapchat_native_data_common.py \
+            backend/tests/test_snapchat_native_data_sync_v2.py \
+            backend/tests/test_snapchat_native_tracking_diagnostics_v2.py \
+            backend/tests/test_snapchat_refresh_token_rotation_race.py
+          git commit -m "fix(snapchat): stabilize OAuth token refresh lifecycle" || exit 0
           git push origin HEAD:fix/snapchat-oauth-stability
