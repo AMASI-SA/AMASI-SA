@@ -7,6 +7,7 @@ on:
     paths:
       - "backend/supplier_receiving_routes.py"
       - "backend/preparation_piece_operations.py"
+      - "backend/tests/test_supplier_receiving.py"
       - "backend/tests/test_supplier_invoice_service_eligibility.py"
       - "backend/tests/test_supplier_invoice_service_candidates.py"
       - ".github/workflows/supplier-invoice-service-policy.yml"
@@ -52,12 +53,14 @@ jobs:
           python -m py_compile
           backend/supplier_receiving_routes.py
           backend/preparation_piece_operations.py
+          backend/tests/test_supplier_receiving.py
           backend/tests/test_supplier_invoice_service_eligibility.py
           backend/tests/test_supplier_invoice_service_candidates.py
 
       - name: Run service eligibility and permanence regressions
         run: >-
           python -m pytest -q
+          backend/tests/test_supplier_receiving.py
           backend/tests/test_supplier_invoice_service_eligibility.py
           backend/tests/test_supplier_invoice_service_candidates.py
           backend/tests/test_preparation_piece_operations.py
