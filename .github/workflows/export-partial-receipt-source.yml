@@ -17,14 +17,11 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Build focused source bundle
+      - name: Build backend source bundle
         run: |
           set -euo pipefail
           tar -czf partial-receipt-source.tar.gz \
-            backend/preparation_supplier_dispatch.py \
-            backend/supplier_receiving_routes.py \
-            backend/tests/test_preparation_supplier_dispatch.py \
-            backend/tests/test_supplier_receiving.py \
+            backend \
             .github/workflows/supplier-invoice-service-policy.yml
       - uses: actions/upload-artifact@v4
         with:
