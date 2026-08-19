@@ -114,14 +114,17 @@ def supplier_receiving_dispatch_blocker(
         }
     return None
 '''
-source = replace_once(source, old_blocker, new_blocker, "receiving dispatch blocker")
+if "def piece_allows_direct_service_receipt(" not in source:
+    source = replace_once(source, old_blocker, new_blocker, "receiving dispatch blocker")
 
-old_export = '    "piece_is_available_for_supplier_dispatch",\n'
-new_export = (
-    '    "piece_allows_direct_service_receipt",\n'
-    '    "piece_is_available_for_supplier_dispatch",\n'
-)
-source = replace_once(source, old_export, new_export, "direct receipt export")
+export_anchor = '    "piece_is_available_for_supplier_dispatch",\n'
+if '    "piece_allows_direct_service_receipt",\n' not in source:
+    source = replace_once(
+        source,
+        export_anchor,
+        '    "piece_allows_direct_service_receipt",\n' + export_anchor,
+        "direct receipt export",
+    )
 dispatch_path.write_text(source, encoding="utf-8")
 
 Path("backend/tests/test_direct_partial_service_receipt.py").write_text(
@@ -224,62 +227,33 @@ def test_completed_piece_is_not_a_direct_partial_receipt() -> None:
 
 policy_path = Path(".github/workflows/supplier-invoice-service-policy.yml")
 policy = policy_path.read_text(encoding="utf-8")
-policy = replace_once(
-    policy,
-    '      - "backend/preparation_piece_operations.py"\n',
-    '      - "backend/preparation_piece_operations.py"\n'
-    '      - "backend/preparation_supplier_dispatch.py"\n',
-    "workflow path anchor",
+path_line = '      - "backend/tests/test_direct_partial_service_receipt.py"\n'
+if path_line not in policy:
+    policy = replace_once(
+        policy,
+        '      - "backend/tests/test_supplier_multi_supplier_lifecycle.py"\n',
+        '      - "backend/tests/test_supplier_multi_supplier_lifecycle.py"\n'
+        + path_line,
+        "workflow direct-receipt path",
+    )
+run_line = '          backend/tests/test_direct_partial_service_receipt.py\n'
+if run_line not in policy:
+    anchor = '          backend/tests/test_supplier_multi_supplier_lifecycle.py\n'
+    if policy.count(anchor) != 2:
+        raise SystemExit("workflow multi-supplier run anchors were not found twice")
+    policy = policy.replace(anchor, anchor + run_line)
+grep_line = (
+    "          grep -q 'piece_allows_direct_service_receipt' "
+    "backend/preparation_supplier_dispatch.py\n"
 )
-policy = replace_once(
-    policy,
-    '      - "backend/tests/test_supplier_invoice_service_candidates.py"\n',
-    '      - "backend/tests/test_supplier_invoice_service_candidates.py"\n'
-    '      - "backend/tests/test_direct_partial_service_receipt.py"\n',
-    "workflow test path anchor",
-)
-policy = replace_once(
-    policy,
-    '''          backend/supplier_receiving_routes.py
-          backend/preparation_piece_operations.py
-          backend/tests/test_supplier_receiving.py
-          backend/tests/test_supplier_invoice_service_eligibility.py
-          backend/tests/test_supplier_invoice_service_candidates.py
-''',
-    '''          backend/supplier_receiving_routes.py
-          backend/preparation_piece_operations.py
-          backend/preparation_supplier_dispatch.py
-          backend/tests/test_supplier_receiving.py
-          backend/tests/test_supplier_invoice_service_eligibility.py
-          backend/tests/test_supplier_invoice_service_candidates.py
-          backend/tests/test_direct_partial_service_receipt.py
-''',
-    "workflow compile block",
-)
-policy = replace_once(
-    policy,
-    '''          backend/tests/test_supplier_receiving.py
-          backend/tests/test_supplier_invoice_service_eligibility.py
-          backend/tests/test_supplier_invoice_service_candidates.py
-          backend/tests/test_preparation_piece_operations.py
-          --tb=short
-''',
-    '''          backend/tests/test_supplier_receiving.py
-          backend/tests/test_supplier_invoice_service_eligibility.py
-          backend/tests/test_supplier_invoice_service_candidates.py
-          backend/tests/test_direct_partial_service_receipt.py
-          backend/tests/test_preparation_piece_operations.py
-          --tb=short
-''',
-    "workflow pytest block",
-)
-policy = replace_once(
-    policy,
-    "          grep -q 'supplier_invoice_required' backend/preparation_piece_operations.py\n",
-    "          grep -q 'supplier_invoice_required' backend/preparation_piece_operations.py\n"
-    "          grep -q 'piece_allows_direct_service_receipt' backend/preparation_supplier_dispatch.py\n",
-    "workflow grep anchor",
-)
+if grep_line not in policy:
+    policy = replace_once(
+        policy,
+        "          grep -q 'supplier_invoice_required' backend/preparation_piece_operations.py\n",
+        "          grep -q 'supplier_invoice_required' backend/preparation_piece_operations.py\n"
+        + grep_line,
+        "workflow direct-receipt grep",
+    )
 policy_path.write_text(policy, encoding="utf-8")
 
 for temporary in (
