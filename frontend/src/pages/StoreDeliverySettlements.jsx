@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
-import { CashRegister, CurrencyCircleDollar, Truck } from "@phosphor-icons/react";
+import { CashRegister, CurrencyCircleDollar } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 import api from "../lib/api";
-import { listStoreDrivers } from "../services/storeDelivery";
 
 function money(value) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "SAR", maximumFractionDigits: 2 }).format(Number(value || 0));
@@ -19,10 +18,10 @@ export default function StoreDeliverySettlements() {
 
   useEffect(() => {
     Promise.all([
-      listStoreDrivers(),
+      api.get("/store-delivery/settlements/drivers"),
       api.get("/store-delivery/payment-review/bank-accounts"),
-    ]).then(([driverData, accountResponse]) => {
-      setDrivers(driverData.items || []);
+    ]).then(([driverResponse, accountResponse]) => {
+      setDrivers(driverResponse.data?.items || []);
       setAccounts(accountResponse.data?.items || []);
     }).catch(() => toast.error("تعذر تحميل بيانات التسويات"));
   }, []);
@@ -73,7 +72,7 @@ export default function StoreDeliverySettlements() {
   return (
     <main className="space-y-5 p-4 sm:p-6" dir="rtl">
       <header><h1 className="text-2xl font-black text-slate-950">تسويات موصلي المتجر</h1><p className="mt-1 text-sm font-bold text-slate-500">عهدة COD ومستحقات التوصيل حركتان منفصلتان ولا يتم خصمهما من بعض تلقائيًا.</p></header>
-      <section className="max-w-2xl rounded-2xl border bg-white p-4"><label className="text-sm font-black">الموصل<select value={driverId} onChange={(e) => { setDriverId(e.target.value); setSummary(null); setItems([]); if (e.target.value) load(e.target.value); }} className="mt-2 h-12 w-full rounded-xl border px-3 font-bold"><option value="">اختر الموصل</option>{drivers.map((row) => <option key={row.id} value={row.id}>{row.name} — {row.city}</option>)}</select></label></section>
+      <section className="max-w-2xl rounded-2xl border bg-white p-4"><label className="text-sm font-black">الموصل<select value={driverId} onChange={(e) => { const id = e.target.value; setDriverId(id); setSummary(null); setItems([]); if (id) load(id); }} className="mt-2 h-12 w-full rounded-xl border px-3 font-bold"><option value="">اختر الموصل</option>{drivers.map((row) => <option key={row.id} value={row.id}>{row.name} — {row.city}</option>)}</select></label></section>
       {summary && <><section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Card label="كاش محصل" value={money(summary.cod_cash_collected)} Icon={CashRegister} /><Card label="تم توريده" value={money(summary.cod_cash_remitted)} Icon={CashRegister} /><Card label="المتبقي بعهدته" value={money(summary.cod_cash_custody)} Icon={CashRegister} /><Card label="مستحق له" value={money(summary.delivery_earnings_due)} Icon={CurrencyCircleDollar} /></section><section className="grid gap-3 sm:grid-cols-2"><button disabled={busy || !(summary.cod_cash_custody > 0)} onClick={() => create("cod-remittance")} className="rounded-2xl bg-slate-950 px-4 py-4 font-black text-white disabled:opacity-40">تسجيل توريد COD</button><button disabled={busy || !(summary.delivery_earnings_due > 0)} onClick={() => create("earning-payment")} className="rounded-2xl bg-emerald-700 px-4 py-4 font-black text-white disabled:opacity-40">دفع مستحقات التوصيل</button></section><section className="space-y-2"><h2 className="font-black">سجل التسويات</h2>{items.map((row) => <article key={row.id} className="flex items-center justify-between rounded-2xl border bg-white p-4"><div><div className="font-black">{row.settlement_type === "cod_remittance" ? "توريد COD" : "دفع مستحق توصيل"}</div><div className="mt-1 text-xs font-bold text-slate-500">{row.created_at} {row.account_name_snapshot ? `· ${row.account_name_snapshot}` : ""}</div></div><div className="font-black" dir="ltr">{money(row.amount)}</div></article>)}{!items.length && <div className="rounded-2xl border border-dashed p-5 text-center text-sm font-bold text-slate-500">لا توجد تسويات مسجلة.</div>}</section></>}
     </main>
   );
