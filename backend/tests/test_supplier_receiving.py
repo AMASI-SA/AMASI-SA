@@ -195,7 +195,7 @@ def test_receipt_cancel_snapshot_restores_the_exact_previous_piece_state():
     assert "supplier_reassignment_session_id" in rollback["$unset"]
 
 
-def test_piece_services_must_be_covered_by_selected_mezan_supplier():
+def test_supplier_service_selection_is_optional_and_not_limited_to_supplier_links():
     session = {
         "supplier_snapshot": {
             "id": "supplier-1",
@@ -207,18 +207,11 @@ def test_piece_services_must_be_covered_by_selected_mezan_supplier():
         {"services": [{"service_id": "engrave", "service_name": "حفر الاسم"}]},
         session,
     ) is None
-
-    mismatch = supplier_piece_service_blocker(
+    assert supplier_piece_service_blocker(
         {"services": [{"service_id": "print", "service_name": "طباعة"}]},
         session,
-    )
-    assert mismatch["code"] == "supplier_piece_service_mismatch"
-    assert mismatch["required_services"] == [
-        {"service_id": "print", "service_name": "طباعة"}
-    ]
-
-    missing_plan = supplier_piece_service_blocker({"services": []}, session)
-    assert missing_plan["code"] == "supplier_piece_services_missing"
+    ) is None
+    assert supplier_piece_service_blocker({"services": []}, session) is None
     assert supplier_piece_service_blocker(
         {"services": []},
         session,
@@ -571,7 +564,7 @@ def test_invoice_rejects_grouping_pieces_with_different_pending_services():
         assert exc.detail["code"] == "supplier_receiving_invoice_group_mismatch"
 
 
-def test_price_overrides_and_service_additions_require_their_exact_permissions():
+def test_price_overrides_require_permissions_and_additions_use_dedicated_route():
     scan = {
         "piece_id": "piece-1",
         "product_id": "product-1",
@@ -589,19 +582,52 @@ def test_price_overrides_and_service_additions_require_their_exact_permissions()
     session = {
         "reference": "SR-1",
         "supplier_snapshot": {
-            "service_links": [
-                {"service_id": "engrave"},
-                {"service_id": "paint"},
-            ],
+            "service_links": [{"service_id": "engrave"}],
         },
     }
-    request = [SupplierReceivingInvoiceLineRequest(
+    override_request = [SupplierReceivingInvoiceLineRequest(
         piece_ids=["piece-1"],
         product_unit_price_halalas=550,
+        services=[SupplierReceivingInvoiceServiceRequest(
+            service_id="engrave",
+            unit_price_halalas=325,
+        )],
+    )]
+    try:
+        build_supplier_receiving_invoice(
+            session=session,
+            scans=[scan],
+            requested_lines=override_request,
+            saved_at=datetime.now(timezone.utc),
+            permissions=set(),
+            service_catalog={},
+        )
+        assert False, "permission guard must reject the override"
+    except Exception as exc:
+        assert getattr(exc, "status_code", None) == 403
+
+    invoice = build_supplier_receiving_invoice(
+        session=session,
+        scans=[scan],
+        requested_lines=override_request,
+        saved_at=datetime.now(timezone.utc),
+        permissions={
+            EDIT_PRODUCT_PRICE_PERMISSION,
+            EDIT_SERVICE_PRICE_PERMISSION,
+        },
+        service_catalog={},
+    )
+    assert invoice["total_halalas"] == 875
+    assert len(invoice["price_changes"]) == 2
+    assert invoice["added_product_services"] == []
+
+    addition_request = [SupplierReceivingInvoiceLineRequest(
+        piece_ids=["piece-1"],
+        product_unit_price_halalas=500,
         services=[
             SupplierReceivingInvoiceServiceRequest(
                 service_id="engrave",
-                unit_price_halalas=325,
+                unit_price_halalas=300,
             ),
             SupplierReceivingInvoiceServiceRequest(
                 service_id="paint",
@@ -614,30 +640,19 @@ def test_price_overrides_and_service_additions_require_their_exact_permissions()
         build_supplier_receiving_invoice(
             session=session,
             scans=[scan],
-            requested_lines=request,
+            requested_lines=addition_request,
             saved_at=datetime.now(timezone.utc),
-            permissions=set(),
-            service_catalog={"paint": {"id": "paint", "name": "طلاء", "unit_cost": 2}},
+            permissions={ADD_PRODUCT_SERVICE_PERMISSION},
+            service_catalog={
+                "paint": {"id": "paint", "name": "طلاء", "unit_cost": 2}
+            },
         )
-        assert False, "permission guard must reject the override"
+        assert False, "new services must use the dedicated permanent endpoint"
     except Exception as exc:
-        assert getattr(exc, "status_code", None) == 403
-
-    invoice = build_supplier_receiving_invoice(
-        session=session,
-        scans=[scan],
-        requested_lines=request,
-        saved_at=datetime.now(timezone.utc),
-        permissions={
-            EDIT_PRODUCT_PRICE_PERMISSION,
-            EDIT_SERVICE_PRICE_PERMISSION,
-            ADD_PRODUCT_SERVICE_PERMISSION,
-        },
-        service_catalog={"paint": {"id": "paint", "name": "طلاء", "unit_cost": 2}},
-    )
-    assert invoice["total_halalas"] == 1075
-    assert len(invoice["price_changes"]) == 2
-    assert invoice["added_product_services"][0]["service_id"] == "paint"
+        assert getattr(exc, "status_code", None) == 409
+        assert exc.detail["code"] == (
+            "supplier_receiving_service_add_via_product_required"
+        )
 
 
 def test_service_completion_keeps_unfinished_group_services_open():

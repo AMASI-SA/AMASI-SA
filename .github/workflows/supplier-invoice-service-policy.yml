@@ -1,0 +1,81 @@
+name: Supplier Invoice Service Policy
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "backend/supplier_receiving_routes.py"
+      - "backend/preparation_piece_operations.py"
+      - "backend/preparation_supplier_dispatch.py"
+      - "backend/tests/test_supplier_receiving.py"
+      - "backend/tests/test_supplier_invoice_service_eligibility.py"
+      - "backend/tests/test_supplier_invoice_service_candidates.py"
+      - "backend/tests/test_supplier_multi_supplier_lifecycle.py"
+      - ".github/workflows/supplier-invoice-service-policy.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  policy-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install production preparation test dependencies
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1
+          pydantic==2.13.4
+          pymongo==4.5.0
+          httpx
+          pytest
+          pytest-asyncio
+          openpyxl
+          cryptography
+          reportlab
+          python-multipart
+          pymupdf
+          pillow
+          qrcode
+          arabic-reshaper
+          python-bidi
+
+      - name: Compile supplier receiving boundary
+        run: >-
+          python -m py_compile
+          backend/supplier_receiving_routes.py
+          backend/preparation_piece_operations.py
+          backend/preparation_supplier_dispatch.py
+          backend/tests/test_supplier_receiving.py
+          backend/tests/test_supplier_invoice_service_eligibility.py
+          backend/tests/test_supplier_invoice_service_candidates.py
+          backend/tests/test_supplier_multi_supplier_lifecycle.py
+
+      - name: Run service eligibility, permanence and multi-supplier regressions
+        run: >-
+          python -m pytest -q
+          backend/tests/test_supplier_receiving.py
+          backend/tests/test_supplier_invoice_service_eligibility.py
+          backend/tests/test_supplier_invoice_service_candidates.py
+          backend/tests/test_supplier_multi_supplier_lifecycle.py
+          backend/tests/test_preparation_piece_operations.py
+          --tb=short
+
+      - name: Enforce dedicated permanent-add boundary
+        run: |
+          set -euo pipefail
+          grep -q 'supplier_receiving_service_add_via_product_required' backend/supplier_receiving_routes.py
+          grep -q 'supplier_uninvoiced_piece_selector' backend/supplier_receiving_routes.py
+          grep -q 'supplier_invoice_required' backend/preparation_piece_operations.py
+          grep -q 'DISPATCH_STATUS_PARTIAL' backend/tests/test_supplier_multi_supplier_lifecycle.py
+          grep -q 'product_total_halalas.*== 0' backend/tests/test_supplier_multi_supplier_lifecycle.py
