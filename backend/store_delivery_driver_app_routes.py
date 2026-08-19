@@ -101,6 +101,23 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             "coverage_mode": driver.get("coverage_mode") or "city",
         }
 
+    @router.get("/bank-accounts")
+    async def official_bank_accounts(user: dict = Depends(current_user)) -> dict[str, Any]:
+        actor = _require_store_driver(user)
+        driver = await _driver_for_user(db, actor)
+        items = await db.accounts.find(
+            {"user_id": _merchant_id(driver), "account_type": "bank", "status": "active"},
+            {
+                "_id": 0,
+                "id": 1,
+                "name": 1,
+                "provider": 1,
+                "account_number": 1,
+                "iban": 1,
+            },
+        ).sort("name", 1).to_list(length=200)
+        return {"items": items, "total": len(items), "source": "financial_center_accounts"}
+
     @router.get("/deliveries")
     async def deliveries(user: dict = Depends(current_user)) -> dict[str, Any]:
         actor = _require_store_driver(user)
@@ -141,11 +158,15 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
 
         now = _now()
         if target == DELIVERY_STATUS_OUT_FOR_DELIVERY:
-            await db[ASSIGNMENTS].update_one(
+            result = await db[ASSIGNMENTS].find_one_and_update(
                 {"user_id": merchant_id, "id": assignment["id"], "status": current},
                 {"$set": {"status": target, "out_for_delivery_at": now, "updated_at": now}},
+                return_document=True,
+                projection={"_id": 0, "user_id": 0},
             )
-            return {"ok": True, "assignment_id": assignment["id"], "status": target}
+            if not result:
+                raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_conflict"})
+            return result
 
         try:
             requirements = collection_requirements(
@@ -159,6 +180,20 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             raise HTTPException(status_code=422, detail={"code": "collection_receipt_required"})
         if requirements["bank_account_required"] and not normalize_text(payload.bank_account_id):
             raise HTTPException(status_code=422, detail={"code": "business_bank_account_required"})
+        if requirements["bank_account_required"]:
+            bank = await db.accounts.find_one(
+                {
+                    "user_id": merchant_id,
+                    "id": normalize_text(payload.bank_account_id),
+                    "account_type": "bank",
+                    "status": "active",
+                },
+                {"_id": 0, "id": 1, "name": 1, "provider": 1},
+            )
+            if not bank:
+                raise HTTPException(status_code=422, detail={"code": "business_bank_account_invalid"})
+        else:
+            bank = None
 
         earning = driver_earning(assignment=assignment, delivered=True)
         earning_row = {
@@ -175,6 +210,7 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             "cod_custody_amount": requirements["cod_custody_amount"],
             "receipt_reference": normalize_text(payload.receipt_reference),
             "bank_account_id": normalize_text(payload.bank_account_id),
+            "bank_name_snapshot": (bank or {}).get("name") or (bank or {}).get("provider"),
             "review_status": requirements["review_status"], "collected_at": now,
         }
         try:
@@ -188,20 +224,25 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
                     "payment_method": requirements["payment_method"],
                     "receipt_reference": normalize_text(payload.receipt_reference),
                     "bank_account_id": normalize_text(payload.bank_account_id),
+                    "bank_name_snapshot": (bank or {}).get("name") or (bank or {}).get("provider"),
                     "status": "pending", "submitted_at": now,
                 })
         except Exception:
-            # Fail closed: status remains undelivered if financial side-effects cannot be recorded.
             await db[DRIVER_EARNINGS].delete_one({"user_id": merchant_id, "assignment_id": assignment["id"]})
             await db[DRIVER_COLLECTIONS].delete_one({"user_id": merchant_id, "assignment_id": assignment["id"]})
             await db[DRIVER_PAYMENT_REVIEWS].delete_one({"user_id": merchant_id, "assignment_id": assignment["id"]})
             raise
 
-        result = await db[ASSIGNMENTS].update_one(
+        result = await db[ASSIGNMENTS].find_one_and_update(
             {"user_id": merchant_id, "id": assignment["id"], "status": current},
             {"$set": {"status": DELIVERY_STATUS_DELIVERED, "delivered_at": now, "updated_at": now}},
+            return_document=True,
+            projection={"_id": 0, "user_id": 0},
         )
-        if result.modified_count != 1:
+        if not result:
+            await db[DRIVER_EARNINGS].delete_one({"user_id": merchant_id, "assignment_id": assignment["id"]})
+            await db[DRIVER_COLLECTIONS].delete_one({"user_id": merchant_id, "assignment_id": assignment["id"]})
+            await db[DRIVER_PAYMENT_REVIEWS].delete_one({"user_id": merchant_id, "assignment_id": assignment["id"]})
             raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_conflict"})
         await db[EVENTS].insert_one({
             "id": str(uuid.uuid4()), "user_id": merchant_id, "event_type": "store_delivery_delivered",
@@ -210,9 +251,7 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             "payment_method": requirements["payment_method"], "occurred_at": now,
         })
         return {
-            "ok": True,
-            "assignment_id": assignment["id"],
-            "status": DELIVERY_STATUS_DELIVERED,
+            **result,
             "earning_amount": earning,
             "collection": requirements,
         }
@@ -232,7 +271,7 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             {"user_id": merchant_id, "driver_id": driver["id"]},
             {"_id": 0, "cod_custody_amount": 1, "amount": 1, "payment_method": 1, "review_status": 1},
         ).to_list(length=5000)
-        counts = {status: sum(1 for row in assignments if row.get("status") == status) for status in (
+        counts = {state: sum(1 for row in assignments if row.get("status") == state) for state in (
             DELIVERY_STATUS_ASSIGNED, DELIVERY_STATUS_OUT_FOR_DELIVERY, DELIVERY_STATUS_DELIVERED
         )}
         return {
@@ -247,4 +286,10 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
     return router
 
 
-__all__ = ["make_store_delivery_driver_app_router", "ensure_store_delivery_driver_app_indexes"]
+__all__ = [
+    "make_store_delivery_driver_app_router",
+    "ensure_store_delivery_driver_app_indexes",
+    "DRIVER_EARNINGS",
+    "DRIVER_COLLECTIONS",
+    "DRIVER_PAYMENT_REVIEWS",
+]
