@@ -34,6 +34,24 @@ sys.modules["campaign_ai_decision_v3"] = prompt_stub
 from scripts import campaign_ai_v3_live_eval as live_eval  # noqa: E402
 
 
+_original_evaluate_case = live_eval.evaluate_case
+
+
+def _evaluate_case_with_execution_contract(case, output):
+    failures = list(_original_evaluate_case(case, output))
+    forbidden_executable = set(case.get("must_not_executable_actions") or [])
+    if forbidden_executable:
+        for item in output.recommendations:
+            if item.recommended_action in forbidden_executable and bool(item.executable):
+                failures.append(
+                    f"forbidden_executable_action:{item.recommended_action}:{item.recommendation_id}"
+                )
+    return failures
+
+
+live_eval.evaluate_case = _evaluate_case_with_execution_contract
+
+
 def _apply_requested_ids() -> None:
     raw = (os.environ.get("MEZAN_V3_EVAL_IDS") or "").strip()
     if not raw:
