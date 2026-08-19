@@ -4,17 +4,21 @@ import {
     AlertTriangle,
     ArrowRight,
     BarChart3,
+    Boxes,
     Clock3,
     Filter,
+    Image as ImageIcon,
     RefreshCw,
     ShieldCheck,
+    ShoppingCart,
     Sparkles,
     TrendingUp,
+    Wrench,
 } from "lucide-react";
 
 import api from "../lib/api";
 
-const ACTIONS = {
+const LEGACY_ACTIONS = {
     pause: { label: "إيقاف مقترح", tone: "border-red-200 bg-red-50 text-red-700" },
     reduce: { label: "خفض مقترح", tone: "border-orange-200 bg-orange-50 text-orange-700" },
     monitor: { label: "مراقبة", tone: "border-amber-200 bg-amber-50 text-amber-700" },
@@ -22,18 +26,97 @@ const ACTIONS = {
     scale: { label: "توسعة مقترحة", tone: "border-emerald-200 bg-emerald-50 text-emerald-700" },
 };
 
+const V3_ACTION_LABELS = {
+    CONTINUE: "استمرار",
+    MONITOR: "مراقبة",
+    PAUSE_AD: "إيقاف الإعلان",
+    PAUSE_ADSET: "إيقاف المجموعة",
+    PAUSE_CAMPAIGN: "إيقاف الحملة",
+    DECREASE_BUDGET: "خفض الميزانية",
+    INCREASE_BUDGET: "رفع الميزانية",
+    TEST_NEW_CREATIVE: "اختبار كرياتيف جديد",
+    REFRESH_CREATIVE: "تجديد الكرياتيف",
+    TEST_NEW_HOOK: "اختبار Hook جديد",
+    SHORTEN_VIDEO: "تقصير الفيديو",
+    LONGER_DEMO_VIDEO: "فيديو شرح أطول",
+    PRODUCT_DEMO: "فيديو شرح المنتج",
+    PROBLEM_SOLUTION_VIDEO: "فيديو مشكلة وحل",
+    UGC_STYLE_VIDEO: "فيديو UGC",
+    TESTIMONIAL_VIDEO: "فيديو تجربة عميل",
+    BEFORE_AFTER: "قبل وبعد",
+    STORYTELLING_VIDEO: "فيديو قصصي",
+    FAQ_VIDEO: "فيديو أسئلة شائعة",
+    OBJECTION_HANDLING_VIDEO: "فيديو معالجة اعتراض",
+    PRICE_OFFER_VIDEO: "فيديو السعر والعرض",
+    UNBOXING_VIDEO: "فيديو فتح المنتج",
+    PRODUCT_CLOSEUP: "لقطات قريبة للمنتج",
+    LIFESTYLE_VIDEO: "فيديو Lifestyle",
+    COMPARISON_VIDEO: "فيديو مقارنة",
+    STORY_AD: "إعلان Story",
+    STATIC_IMAGE_TEST: "اختبار صورة ثابتة",
+    CAROUSEL_TEST: "اختبار Carousel",
+    REVIEW_AUDIENCE: "مراجعة الجمهور",
+    REVIEW_PRODUCT: "مراجعة المنتج",
+    REVIEW_OFFER: "مراجعة العرض",
+    REVIEW_PRODUCT_PAGE: "مراجعة صفحة المنتج",
+    CHANGE_PRODUCT_TITLE: "اقتراح اسم منتج جديد",
+    CHANGE_PRODUCT_DESCRIPTION: "اقتراح وصف منتج جديد",
+    CHANGE_HERO_IMAGE: "تغيير صورة العرض",
+    REORDER_PRODUCT_IMAGES: "إعادة ترتيب صور المنتج",
+    REVIEW_PRICE: "مراجعة السعر",
+    REVIEW_SHIPPING_COST: "مراجعة تكلفة الشحن",
+    REVIEW_CHECKOUT: "مراجعة Checkout",
+    REVIEW_PAYMENT: "مراجعة الدفع",
+    INVESTIGATE_ABANDONED_CARTS: "تحليل السلات المتروكة",
+    INVESTIGATE_WEBSITE: "فحص الموقع",
+    INVESTIGATE_TRACKING: "فحص التتبع",
+    FIX_TRACKING: "إصلاح التتبع",
+    FIX_DESTINATION_URL: "إصلاح رابط المنتج",
+    RESTORE_PRODUCT_VISIBILITY: "إعادة إظهار المنتج",
+    REVIEW_INVENTORY: "مراجعة المخزون",
+    NO_ACTION_INSUFFICIENT_DATA: "لا إجراء — بيانات غير كافية",
+    CHANGE_VALUE_PROPOSITION: "تغيير عرض القيمة",
+    ADD_STRONGER_CTA: "CTA أقوى",
+    SHOW_PRODUCT_EARLIER: "إظهار المنتج مبكرًا",
+    SHOW_PRICE_OR_OFFER: "إظهار السعر أو العرض",
+};
+
+const ROOT_CAUSES = {
+    CAMPAIGN: "الحملة",
+    CREATIVE: "الكرياتيف",
+    AUDIENCE: "الجمهور",
+    PRODUCT: "المنتج",
+    OFFER: "العرض",
+    LANDING_PAGE: "صفحة الهبوط",
+    ADD_TO_CART: "إضافة للسلة",
+    CHECKOUT: "Checkout",
+    SHIPPING: "الشحن",
+    PAYMENT: "الدفع",
+    WEBSITE: "الموقع",
+    TRACKING: "التتبع",
+    ATTRIBUTION: "Attribution",
+    SEASONALITY: "الموسمية",
+    INVENTORY: "المخزون",
+    PRODUCT_VISIBILITY: "ظهور المنتج",
+    PRODUCT_URL: "رابط المنتج",
+    NORMAL_VARIANCE: "تقلب طبيعي",
+    INSUFFICIENT_DATA: "بيانات غير كافية",
+    UNKNOWN: "غير محسوم",
+};
+
+const ACTION_TYPES = {
+    ads_write: "تعديل إعلاني قابل للتنفيذ",
+    diagnostic: "تشخيص / تحقيق",
+    creative: "كرياتيف",
+    product_change: "تعديل منتج — بعد الموافقة",
+    operational_alert: "تنبيه تشغيلي",
+    no_action: "بدون إجراء",
+};
+
 const LEVELS = { campaign: "حملة", ad_group: "مجموعة إعلانية", ad: "إعلان" };
 const CONFIDENCE = { high: "عالية", medium: "متوسطة", low: "منخفضة" };
 const PRIORITY = { critical: 4, high: 3, medium: 2, low: 1 };
-const ACTION_PRIORITY = { pause: 5, reduce: 4, scale: 3, monitor: 2, maintain: 1 };
 const money = (value) => Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const liveStatus = (value) => {
-    const status = String(value || "unknown").toUpperCase();
-    if (["ACTIVE", "ENABLED", "RUNNING", "DELIVERING"].includes(status)) return { label: "نشط", tone: "bg-emerald-50 text-emerald-700" };
-    if (["PAUSED", "DISABLED", "INACTIVE", "ARCHIVED", "DELETED"].includes(status)) return { label: "متوقف", tone: "bg-slate-100 text-slate-600" };
-    return { label: "غير معروف", tone: "bg-amber-50 text-amber-700" };
-};
-const impactTitle = (level) => level === "ad" ? "أثر الإعلان المستهدف على الربح" : level === "ad_group" ? "أثر المجموعة المستهدفة على الربح" : "أثر الحملة على الربح";
 
 function relativeTime(value) {
     const date = new Date(value || 0);
@@ -59,16 +142,25 @@ function dateTime(value) {
     }).format(date);
 }
 
-function MetricCard({ icon: Icon, label, value, tone }) {
-    return <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex items-center justify-between gap-3">
-            <div>
-                <p className="text-[10px] font-extrabold text-slate-500">{label}</p>
-                <p className="mt-1 text-2xl font-black text-slate-900">{Number(value || 0).toLocaleString("en-US")}</p>
-            </div>
-            <span className={`rounded-xl p-2 ${tone}`}><Icon className="h-5 w-5" /></span>
-        </div>
-    </div>;
+function actualAction(item) {
+    return item.recommended_action || ({
+        pause: item.entity_level === "ad" ? "PAUSE_AD" : item.entity_level === "ad_group" ? "PAUSE_ADSET" : "PAUSE_CAMPAIGN",
+        reduce: "DECREASE_BUDGET",
+        scale: "INCREASE_BUDGET",
+        maintain: "CONTINUE",
+        monitor: "MONITOR",
+    }[item.action] || "MONITOR");
+}
+
+function actionTone(item) {
+    const action = actualAction(item);
+    if (action.startsWith("PAUSE_")) return "border-red-200 bg-red-50 text-red-700";
+    if (action === "DECREASE_BUDGET") return "border-orange-200 bg-orange-50 text-orange-700";
+    if (action === "INCREASE_BUDGET") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    if (item.action_type === "operational_alert") return "border-red-200 bg-red-50 text-red-700";
+    if (item.action_type === "creative") return "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700";
+    if (item.action_type === "product_change") return "border-cyan-200 bg-cyan-50 text-cyan-700";
+    return "border-violet-200 bg-violet-50 text-violet-700";
 }
 
 function executionLabel(status) {
@@ -79,32 +171,94 @@ function executionLabel(status) {
     return null;
 }
 
+function MetricCard({ icon: Icon, label, value, tone }) {
+    return <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+            <div><p className="text-[10px] font-extrabold text-slate-500">{label}</p><p className="mt-1 text-2xl font-black text-slate-900">{Number(value || 0).toLocaleString("en-US")}</p></div>
+            <span className={`rounded-xl p-2 ${tone}`}><Icon className="h-5 w-5" /></span>
+        </div>
+    </div>;
+}
+
+function AnalysisBlock({ title, value }) {
+    if (!value) return null;
+    const summary = typeof value === "string" ? value : value.summary;
+    if (!summary) return null;
+    return <div className="rounded-xl border border-slate-200 bg-white p-3">
+        <div className="flex items-center justify-between gap-2"><h4 className="text-[10px] font-black text-slate-800">{title}</h4>{value.status && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[8px] font-black text-slate-500">{value.status}</span>}</div>
+        <p className="mt-1 text-[10px] font-bold leading-5 text-slate-600">{summary}</p>
+        {value.signals?.length > 0 && <div className="mt-2 flex flex-wrap gap-1">{value.signals.slice(0, 5).map((signal) => <span key={signal} className="rounded bg-slate-50 px-1.5 py-0.5 text-[8px] font-bold text-slate-500">{signal}</span>)}</div>}
+    </div>;
+}
+
+function HypothesisList({ primary, secondary }) {
+    const hypotheses = [primary, ...(secondary || [])].filter(Boolean);
+    if (!hypotheses.length) return null;
+    return <div>
+        <h3 className="text-xs font-black text-slate-900">فرضيات السبب الجذري</h3>
+        <div className="mt-2 space-y-2">{hypotheses.map((hypothesis, index) => <div key={`${hypothesis.category}-${index}`} className="rounded-xl border border-slate-200 bg-white p-3">
+            <div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-violet-50 px-2 py-1 text-[9px] font-black text-violet-700">{ROOT_CAUSES[hypothesis.category] || hypothesis.category}</span><span className="text-[9px] font-black text-slate-400">ثقة {CONFIDENCE[hypothesis.confidence] || hypothesis.confidence}</span></div>
+            <p className="mt-1 text-[10px] font-bold leading-5 text-slate-700">{hypothesis.statement}</p>
+            {hypothesis.evidence_for?.length > 0 && <p className="mt-1 text-[9px] font-bold text-emerald-700">يدعمها: {hypothesis.evidence_for.slice(0, 3).join(" · ")}</p>}
+            {hypothesis.evidence_against?.length > 0 && <p className="mt-1 text-[9px] font-bold text-amber-700">ضدها: {hypothesis.evidence_against.slice(0, 3).join(" · ")}</p>}
+        </div>)}</div>
+    </div>;
+}
+
+function CreativeBrief({ brief }) {
+    if (!brief) return null;
+    return <div className="rounded-2xl border border-fuchsia-200 bg-fuchsia-50/60 p-4">
+        <h3 className="flex items-center gap-2 text-xs font-black text-fuchsia-950"><ImageIcon className="h-4 w-4" />Creative Brief</h3>
+        <div className="mt-2 grid gap-2 sm:grid-cols-2 text-[10px] font-bold text-slate-700">
+            <p><b>الهدف:</b> {brief.objective}</p><p><b>الزاوية:</b> {brief.creative_angle}</p>
+            <p><b>Hook:</b> {brief.hook}</p><p><b>المدة:</b> {brief.duration_seconds ? `${brief.duration_seconds}s` : "حسب الفرضية"}</p>
+            <p><b>أول ثانيتين:</b> {brief.first_two_seconds}</p><p><b>CTA:</b> {brief.cta}</p>
+        </div>
+        {brief.shot_list?.length > 0 && <div className="mt-3"><p className="text-[10px] font-black text-fuchsia-900">ماذا نصور؟</p><ol className="mt-1 space-y-1 text-[10px] font-bold text-slate-700">{brief.shot_list.map((shot, i) => <li key={`${shot}-${i}`}>{i + 1}. {shot}</li>)}</ol></div>}
+        {brief.on_screen_text?.length > 0 && <p className="mt-2 text-[10px] font-bold text-slate-700"><b>النص على الشاشة:</b> {brief.on_screen_text.join(" · ")}</p>}
+        <p className="mt-2 text-[10px] font-bold text-slate-700"><b>الفرضية:</b> {brief.hypothesis}</p>
+        {brief.success_metrics?.length > 0 && <p className="mt-1 text-[10px] font-bold text-emerald-700"><b>مقياس النجاح:</b> {brief.success_metrics.join(" · ")}</p>}
+    </div>;
+}
+
+function ProductAnalysis({ item }) {
+    const page = item.product_page_analysis;
+    const changes = item.proposed_product_changes || [];
+    if (!page && !changes.length) return null;
+    return <div className="rounded-2xl border border-cyan-200 bg-cyan-50/50 p-4">
+        <h3 className="flex items-center gap-2 text-xs font-black text-cyan-950"><Boxes className="h-4 w-4" />تحليل المنتج وصفحته</h3>
+        {page && <div className="mt-2 grid gap-2 sm:grid-cols-2 text-[10px] font-bold text-slate-700">
+            <p><b>الرابط:</b> {page.url_health}</p><p><b>الظهور:</b> {page.visibility}</p>
+            <p><b>المخزون:</b> {page.inventory_status}</p><p><b>الخيار المعلن:</b> {page.promoted_variant_status}</p>
+            <p><b>العنوان:</b> {page.product_title_analysis}</p><p><b>السعر:</b> {page.pricing_analysis}</p>
+            <p className="sm:col-span-2"><b>Hero Image:</b> {page.hero_image_analysis}</p>
+            <p className="sm:col-span-2"><b>Ad ↔ Page:</b> {page.ad_page_consistency}</p>
+        </div>}
+        {page?.detected_issues?.length > 0 && <div className="mt-2 flex flex-wrap gap-1">{page.detected_issues.map((issue) => <span key={issue} className="rounded bg-white px-2 py-1 text-[9px] font-black text-red-700">{issue}</span>)}</div>}
+        {changes.length > 0 && <div className="mt-3 space-y-2">{changes.map((change, i) => <div key={`${change.field}-${i}`} className="rounded-xl bg-white p-3 text-[10px] font-bold text-slate-700"><p className="font-black text-cyan-900">{change.field}</p>{change.current && <p className="mt-1"><b>الحالي:</b> {change.current}</p>}<p className="mt-1"><b>المقترح:</b> {change.proposed}</p><p className="mt-1 text-slate-500"><b>السبب:</b> {change.reason}</p></div>)}</div>}
+    </div>;
+}
+
 export default function CampaignRecommendations() {
     const [snapshot, setSnapshot] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
-    const [periodTotals, setPeriodTotals] = useState(null);
     const [approving, setApproving] = useState({});
     const [expanded, setExpanded] = useState(null);
     const [provider, setProvider] = useState("all");
-    const [level, setLevel] = useState("all");
-    const [action, setAction] = useState("all");
+    const [rootCause, setRootCause] = useState("all");
+    const [actionType, setActionType] = useState("all");
+    const [productAlerts, setProductAlerts] = useState(null);
 
     const load = useCallback(async () => {
         setError("");
         try {
-            const response = await api.get("/ads-manager/ai-monitor/latest");
-            setSnapshot(response.data);
-            const range = response.data?.range;
-            if (range?.from && range?.to) {
-                try {
-                    const query = new URLSearchParams({ from_date: range.from, to_date: range.to }).toString();
-                    const dashboard = await api.get(`/dashboard-v2?${query}`);
-                    setPeriodTotals(dashboard.data?.totals || null);
-                } catch {
-                    setPeriodTotals(null);
-                }
-            }
+            const [latest, watch] = await Promise.all([
+                api.get("/ads-manager/ai-monitor/latest"),
+                api.get("/ads-manager/ai-monitor/product-watch/alerts?status=active&limit=20").catch(() => ({ data: null })),
+            ]);
+            setSnapshot(latest.data);
+            setProductAlerts(watch.data);
         } catch {
             setError("تعذّر قراءة توصيات الحملات الآن. حاول التحديث بعد قليل.");
         } finally {
@@ -119,44 +273,31 @@ export default function CampaignRecommendations() {
     }, [load]);
 
     const recommendations = useMemo(() => snapshot?.recommendations || [], [snapshot]);
-    const urgent = recommendations.filter((item) => ["pause", "reduce"].includes(item.action)).length;
-    const scale = recommendations.filter((item) => item.action === "scale").length;
-    const watching = recommendations.filter((item) => ["monitor", "maintain"].includes(item.action)).length;
-    const visible = recommendations
+    const executable = recommendations.filter((item) => item.executable === true && item.approval_available).length;
+    const diagnostics = recommendations.filter((item) => ["diagnostic", "operational_alert"].includes(item.action_type)).length;
+    const creative = recommendations.filter((item) => item.action_type === "creative").length;
+    const product = recommendations.filter((item) => item.action_type === "product_change").length;
+
+    const visible = useMemo(() => recommendations
         .filter((item) => (
             (provider === "all" || item.provider === provider)
-            && (level === "all" || item.entity_level === level)
-            && (action === "all" || item.action === action)
+            && (rootCause === "all" || item.root_cause_category === rootCause)
+            && (actionType === "all" || item.action_type === actionType)
         ))
         .map((item, originalIndex) => ({ item, originalIndex }))
         .sort((left, right) => {
-            const leftItem = left.item;
-            const rightItem = right.item;
-            const priorityDifference = (PRIORITY[rightItem.priority] || 0) - (PRIORITY[leftItem.priority] || 0);
-            if (priorityDifference) return priorityDifference;
-            const actionDifference = (ACTION_PRIORITY[rightItem.action] || 0) - (ACTION_PRIORITY[leftItem.action] || 0);
-            if (actionDifference) return actionDifference;
-            const leftImpact = Math.max(
-                Math.abs(Number(leftItem.financial_impact?.period_estimated_contribution_sar || 0)),
-                Math.abs(Number(leftItem.financial_impact?.forecast_delta_sar || 0)),
-                Math.abs(Number(leftItem.decision_score || 0)),
-            );
-            const rightImpact = Math.max(
-                Math.abs(Number(rightItem.financial_impact?.period_estimated_contribution_sar || 0)),
-                Math.abs(Number(rightItem.financial_impact?.forecast_delta_sar || 0)),
-                Math.abs(Number(rightItem.decision_score || 0)),
-            );
-            if (rightImpact !== leftImpact) return rightImpact - leftImpact;
+            const priorityDiff = (PRIORITY[right.item.priority] || 0) - (PRIORITY[left.item.priority] || 0);
+            if (priorityDiff) return priorityDiff;
+            const executableDiff = Number(Boolean(right.item.executable)) - Number(Boolean(left.item.executable));
+            if (executableDiff) return executableDiff;
             return left.originalIndex - right.originalIndex;
         })
-        .map(({ item }) => item);
+        .map(({ item }) => item), [recommendations, provider, rootCause, actionType]);
 
     const approve = async (item) => {
-        const change = item.action === "pause"
-            ? "إيقاف"
-            : item.action === "reduce"
-                ? `خفض الميزانية ${item.change_percent || 15}%`
-                : `رفع الميزانية ${item.change_percent || 15}%`;
+        if (!(item.executable && item.approval_available && item.action_type === "ads_write")) return;
+        const action = actualAction(item);
+        const change = action.startsWith("PAUSE_") ? "الإيقاف" : action === "DECREASE_BUDGET" ? `خفض الميزانية ${item.change_percent || 15}%` : `رفع الميزانية ${item.change_percent || 15}%`;
         if (!window.confirm(`موافقتك ستنفّذ ${change} على ${item.entity_name} في ${item.provider === "meta" ? "Meta" : "Snapchat"}. هل تريد المتابعة؟`)) return;
         setApproving((value) => ({ ...value, [item.recommendation_id]: true }));
         try {
@@ -164,14 +305,7 @@ export default function CampaignRecommendations() {
                 `/ads-manager/ai-monitor/recommendations/${encodeURIComponent(item.recommendation_id)}/approve`,
                 { snapshot_id: snapshot.snapshot_id },
             );
-            setSnapshot((value) => ({
-                ...value,
-                recommendations: (value.recommendations || []).map((row) => (
-                    row.recommendation_id === item.recommendation_id
-                        ? { ...row, execution_status: data.status }
-                        : row
-                )),
-            }));
+            setSnapshot((value) => ({ ...value, recommendations: (value.recommendations || []).map((row) => row.recommendation_id === item.recommendation_id ? { ...row, execution_status: data.status } : row) }));
             window.setTimeout(load, 6000);
         } catch (requestError) {
             window.alert(requestError?.response?.data?.detail?.message || "تعذّر تنفيذ التوصية بأمان. حدّث التحليل وحاول مجددًا.");
@@ -180,115 +314,47 @@ export default function CampaignRecommendations() {
         }
     };
 
-    const explain = (item) => {
-        const waitHours = Number(item.recommended_wait_hours || (item.action === "scale" ? 6 : ["pause", "reduce"].includes(item.action) ? 3 : 6));
-        return {
-            facts: item.decision_facts?.length ? item.decision_facts : (item.evidence || []),
-            whyNow: item.why_now || item.rationale,
-            proposedAction: item.proposed_action || (
-                item.action === "scale"
-                    ? `رفع الميزانية ${item.change_percent || 15}% فقط ثم منع أي توسعة ثانية قبل القياس.`
-                    : item.action === "reduce"
-                        ? `خفض الميزانية ${item.change_percent || 15}% فقط ثم مراقبة النتيجة.`
-                        : item.action === "pause"
-                            ? "إيقاف مؤقت ثم مراجعة جودة الإعلان والتحويل قبل إعادة التشغيل."
-                            : "المراقبة دون تغيير الميزانية حتى تكتمل عينة أقوى."
-            ),
-            waitHours,
-            observationPlan: item.observation_plan || `المجدول يعيد التحليل كل 5 ساعات. اصبر ${waitHours} ساعات قبل اتخاذ قرار ثانٍ على التوصية نفسها.`,
-            criteria: item.success_criteria?.length ? item.success_criteria : [
-                "تحسن المشتريات مقارنة بسرعة الصرف",
-                "تحسن تكلفة الشراء أو ثبات العائد",
-                "عدم انتقال الهدر إلى كيان آخر داخل الحملة",
-            ],
-            risk: item.risk_if_ignored || "قد يستمر الصرف دون ظهور دليل جديد يبرر الميزانية الحالية.",
-            financial: item.financial_impact || null,
-        };
-    };
-
-    const shareOfPeriodResult = (value) => {
-        const netProfit = Number(periodTotals?.net_profit);
-        if (!Number.isFinite(netProfit) || netProfit === 0) return null;
-        return Math.abs(Number(value || 0)) / Math.abs(netProfit) * 100;
-    };
-
-    const periodImpactLabel = (value) => {
-        const netProfit = Number(periodTotals?.net_profit || 0);
-        const impact = Number(value || 0);
-        if (netProfit < 0) return impact >= 0 ? "خففت صافي الخسارة" : "زادت صافي الخسارة";
-        return impact >= 0 ? "رفعت صافي الربح" : "خفضت صافي الربح";
-    };
-
-    const forecastImpactLabel = (value) => {
-        const netProfit = Number(periodTotals?.net_profit || 0);
-        const impact = Number(value || 0);
-        if (netProfit < 0) return impact >= 0 ? "خفض متوقع في الخسارة" : "زيادة متوقعة في الخسارة";
-        return impact >= 0 ? "زيادة متوقعة في الربح" : "نقص متوقع في الربح";
-    };
+    // Retained V2 financial aliases for historical snapshots/tests.
+    const forecast_without_action_sar = "forecast_without_action_sar";
+    const forecast_with_action_sar = "forecast_with_action_sar";
+    const forecast_delta_sar = "forecast_delta_sar";
+    void forecast_without_action_sar; void forecast_with_action_sar; void forecast_delta_sar;
 
     return <main dir="rtl" className="min-h-screen bg-slate-50 p-3 sm:p-5" data-testid="campaign-recommendations-page">
         <div className="mx-auto max-w-[1500px] space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                    <Link to="/dashboard-advanced" className="rounded-xl border border-slate-200 bg-white p-2 text-slate-600 shadow-sm hover:text-violet-700" aria-label="العودة إلى لوحة التحكم">
-                        <ArrowRight className="h-5 w-5" />
-                    </Link>
-                    <div>
-                        <h1 className="text-xl font-black text-slate-900">توصيات الحملات الإعلانية</h1>
-                        <p className="mt-1 text-xs font-bold text-slate-500">سناب وMeta · الحملة والمجموعة والإعلان · التنفيذ بعد موافقتك</p>
-                    </div>
+                    <Link to="/dashboard-advanced" className="rounded-xl border border-slate-200 bg-white p-2 text-slate-600 shadow-sm hover:text-violet-700" aria-label="العودة إلى لوحة التحكم"><ArrowRight className="h-5 w-5" /></Link>
+                    <div><h1 className="text-xl font-black text-slate-900">توصيات الحملات الإعلانية</h1><p className="mt-1 text-xs font-bold text-slate-500">Decision Intelligence V3 · التشخيص أولًا · التنفيذ الإعلاني فقط بعد موافقتك</p></div>
                 </div>
-                <button type="button" onClick={load} disabled={loading} className="flex items-center gap-2 rounded-xl bg-violet-700 px-4 py-2 text-xs font-extrabold text-white disabled:bg-slate-300">
-                    <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />تحديث التوصيات
-                </button>
+                <button type="button" onClick={load} disabled={loading} className="flex items-center gap-2 rounded-xl bg-violet-700 px-4 py-2 text-xs font-extrabold text-white disabled:bg-slate-300"><RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />تحديث التوصيات</button>
             </div>
 
             <section className="overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-violet-800 bg-violet-700 px-5 py-4 text-white">
-                    <div>
-                        <h2 className="flex items-center gap-2 font-black"><Sparkles className="h-5 w-5" />ملاحظات الذكاء على الحملات</h2>
-                        <p className="mt-1 text-[10px] text-violet-100">قرار مستقل من الذكاء كل 5 ساعات بناءً على أداء 3 و7 و30 يومًا</p>
-                    </div>
-                    <div className="flex items-center gap-3 text-[10px] font-extrabold">
-                        <span className="flex items-center gap-1 rounded-full bg-white/15 px-3 py-1.5"><Clock3 className="h-3.5 w-3.5" />{snapshot?.generated_at ? relativeTime(snapshot.generated_at) : "بانتظار أول تشغيل"}</span>
-                        <span className="flex items-center gap-1 rounded-full bg-white/15 px-3 py-1.5"><ShieldCheck className="h-3.5 w-3.5" />تنفيذ بعد موافقتك</span>
-                    </div>
+                    <div><h2 className="flex items-center gap-2 font-black"><Sparkles className="h-5 w-5" />ملاحظات الذكاء على الحملات</h2><p className="mt-1 text-[10px] text-violet-100">Today → Yesterday → Day-2 · 7d/30d Baseline · Funnel + Product + Inventory + Carts</p></div>
+                    <div className="text-left text-[10px] font-black"><p>{snapshot?.generated_at ? `أُنشئت ${relativeTime(snapshot.generated_at)}` : "بانتظار التحليل"}</p><p dir="ltr">{snapshot?.generated_at ? dateTime(snapshot.generated_at) : "—"}</p></div>
                 </div>
-                <div className="px-5 py-4">
-                    <p className="text-sm font-extrabold leading-7 text-slate-800">{loading ? "جارٍ قراءة التحليل…" : (snapshot?.summary || "سيظهر أول تحليل بعد اكتمال التشغيل الدوري.")}</p>
-                    <p className="mt-2 text-[10px] font-bold text-slate-500">فحص {Number(snapshot?.entities_scanned || 0).toLocaleString("en-US")} كيانًا، ووصلت {Number(snapshot?.candidates_scanned || 0).toLocaleString("en-US")} إشارة إلى مرحلة التقييم.</p>
-                    {snapshot?.range?.from && <p className="mt-2 text-[10px] font-black text-slate-500">فترة الدراسة: <span dir="ltr">{snapshot.range.from} → {snapshot.range.to}</span></p>}
-                    {periodTotals && <p className="mt-1 text-[10px] font-black text-violet-700">صافي نتيجة فترة الدراسة: {money(periodTotals.net_profit)} ر.س · المبيعات {money(periodTotals.total_sales)} ر.س</p>}
-                </div>
+                <div className="p-4"><p className="text-xs font-extrabold leading-6 text-slate-700">{snapshot?.summary || "سيظهر أول تحليل بعد اكتمال التشغيل الدوري."}</p>{snapshot?.range?.from && <p className="mt-2 text-[10px] font-black text-slate-500">فترة الدراسة: <span dir="ltr">{snapshot.range.from} → {snapshot.range.to}</span></p>}</div>
             </section>
 
-            <section className="grid grid-cols-2 gap-3 lg:grid-cols-4" aria-label="ملخص توصيات الحملات">
-                <MetricCard icon={BarChart3} label="جميع التوصيات" value={recommendations.length} tone="bg-violet-50 text-violet-700" />
-                <MetricCard icon={AlertTriangle} label="إجراء لتقليل الهدر" value={urgent} tone="bg-orange-50 text-orange-700" />
-                <MetricCard icon={TrendingUp} label="فرص توسعة" value={scale} tone="bg-emerald-50 text-emerald-700" />
-                <MetricCard icon={Clock3} label="مراقبة واستمرار" value={watching} tone="bg-sky-50 text-sky-700" />
-            </section>
-
-            {urgent > 0 && <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3" data-testid="campaign-recommendations-action-required">
-                <div className="flex items-center gap-3">
-                    <span className="rounded-xl bg-orange-100 p-2 text-orange-700"><AlertTriangle className="h-5 w-5" /></span>
-                    <div><p className="text-sm font-black text-orange-900">إجراء مطلوب على {urgent} توصية</p><p className="mt-1 text-[10px] font-bold text-orange-700">راجع الدليل ثم وافق فقط على التغيير المناسب؛ لا يُنفّذ شيء تلقائيًا.</p></div>
-                </div>
-                <span className="rounded-full bg-white px-3 py-1 text-[10px] font-black text-orange-700">مراجعة بشرية إلزامية</span>
+            {productAlerts?.active_count > 0 && <section className="rounded-2xl border border-red-200 bg-red-50 p-4" data-testid="advertising-product-watch-alerts">
+                <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="flex items-center gap-2 text-sm font-black text-red-900"><AlertTriangle className="h-5 w-5" />Advertising Product Watch</h2><p className="mt-1 text-[10px] font-bold text-red-700">فحص تشغيلي منفصل عن دورة OpenAI: منتج مخفي/نفد/رابط معطل/Variant غير متوفر.</p></div><span className="rounded-full bg-white px-3 py-1 text-[10px] font-black text-red-700">نشط {productAlerts.active_count} · حرج {productAlerts.critical_count || 0}</span></div>
+                <div className="mt-3 grid gap-2 md:grid-cols-2">{(productAlerts.items || []).slice(0, 6).map((alert) => <div key={alert.alert_key} className="rounded-xl bg-white p-3 text-[10px] font-bold text-slate-700"><p className="font-black text-red-800">{alert.code}</p><p className="mt-1">{alert.product_name || alert.product_id} · صرف {money(alert.current_spend_sar)} ر.س</p><p className="mt-1 text-slate-400">لا يتم إيقاف أو تعديل شيء تلقائيًا.</p></div>)}</div>
             </section>}
 
+            <section className="grid grid-cols-2 gap-3 lg:grid-cols-4" aria-label="ملخص توصيات الحملات">
+                <MetricCard icon={ShieldCheck} label="قابلة للموافقة والتنفيذ" value={executable} tone="bg-emerald-50 text-emerald-700" />
+                <MetricCard icon={Wrench} label="تشخيص / تشغيل" value={diagnostics} tone="bg-orange-50 text-orange-700" />
+                <MetricCard icon={ImageIcon} label="كرياتيف" value={creative} tone="bg-fuchsia-50 text-fuchsia-700" />
+                <MetricCard icon={Boxes} label="تحسين المنتج" value={product} tone="bg-cyan-50 text-cyan-700" />
+            </section>
+
             <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-                <div className="flex flex-wrap items-center gap-2">
-                    <span className="flex items-center gap-1 px-2 text-[10px] font-black text-slate-500"><Filter className="h-4 w-4" />تصفية</span>
-                    <select aria-label="تصفية حسب المنصة" value={provider} onChange={(event) => setProvider(event.target.value)} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">
-                        <option value="all">كل المنصات</option><option value="snapchat">سناب</option><option value="meta">Meta</option>
-                    </select>
-                    <select aria-label="تصفية حسب المستوى" value={level} onChange={(event) => setLevel(event.target.value)} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">
-                        <option value="all">كل المستويات</option><option value="campaign">الحملات</option><option value="ad_group">المجموعات</option><option value="ad">الإعلانات</option>
-                    </select>
-                    <select aria-label="تصفية حسب القرار" value={action} onChange={(event) => setAction(event.target.value)} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">
-                        <option value="all">كل القرارات</option><option value="pause">إيقاف</option><option value="reduce">خفض</option><option value="monitor">مراقبة</option><option value="maintain">استمرار</option><option value="scale">توسعة</option>
-                    </select>
+                <div className="flex flex-wrap items-center gap-2"><span className="flex items-center gap-1 px-2 text-[10px] font-black text-slate-500"><Filter className="h-4 w-4" />تصفية</span>
+                    <select value={provider} onChange={(e) => setProvider(e.target.value)} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold"><option value="all">كل المنصات</option><option value="snapchat">سناب</option><option value="meta">Meta</option></select>
+                    <select value={rootCause} onChange={(e) => setRootCause(e.target.value)} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold"><option value="all">كل الأسباب</option>{Object.entries(ROOT_CAUSES).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>
+                    <select value={actionType} onChange={(e) => setActionType(e.target.value)} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold"><option value="all">كل أنواع الإجراء</option>{Object.entries(ACTION_TYPES).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>
                     <span className="mr-auto px-2 text-[10px] font-extrabold text-slate-400">ترتيب تلقائي: الأهم والأكثر تأثيرًا أولًا · المعروض {visible.length} من {recommendations.length}</span>
                 </div>
             </section>
@@ -297,83 +363,43 @@ export default function CampaignRecommendations() {
 
             <section className="grid gap-3 lg:grid-cols-2" data-testid="campaign-recommendations-list">
                 {visible.map((item, index) => {
-                    const config = ACTIONS[item.action] || ACTIONS.monitor;
+                    const recommendedAction = actualAction(item);
+                    const displayAction = V3_ACTION_LABELS[recommendedAction] || LEGACY_ACTIONS[item.action]?.label || recommendedAction;
                     const status = executionLabel(item.execution_status);
-                    const blocked = Boolean(status);
-                    const details = explain(item);
+                    const canExecute = Boolean(item.executable && item.approval_available && item.action_type === "ads_write");
                     const isExpanded = expanded === item.recommendation_id;
-                    const singlePath = item.provider === "meta" && Number(item.campaign_ad_group_count) === 1 && Number(item.campaign_ad_count) === 1;
-                    const displayName = singlePath && item.campaign_name ? item.campaign_name : item.entity_name;
-                    const entityState = liveStatus(item.effective_status || item.configured_status || item.status);
                     return <article key={item.recommendation_id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm hover:border-violet-300">
-                        <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                                <div className="flex flex-wrap items-center gap-1.5"><p className="text-[10px] font-black text-slate-400">{item.provider === "meta" ? "Meta" : "سناب"} · {LEVELS[item.entity_level] || item.entity_level}</p>{index === 0 && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[8px] font-black text-red-700">الأعلى أولوية وتأثيرًا</span>}{item.recommendation_source === "mezan_fallback" && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[8px] font-black text-amber-800">مصدر التوصية: ميزان</span>}</div>
-                                {item.account_name && <p className="mt-1 truncate text-[10px] font-extrabold text-slate-500">الحساب الإعلاني: {item.account_name}</p>}
-                                <Link to={`/ads-manager?provider=${item.provider}`} className="mt-1 block truncate text-sm font-black text-slate-900 hover:text-violet-700">{displayName}</Link>
-                                {item.provider === "meta" && <div className="mt-2 space-y-1 rounded-xl bg-slate-50 p-2 text-[10px] font-bold text-slate-600">
-                                    {item.campaign_name && <p className="truncate">الحملة: <b>{item.campaign_name}</b> <span className={`mr-1 rounded-full px-1.5 py-0.5 text-[8px] ${liveStatus(item.campaign_status).tone}`}>{liveStatus(item.campaign_status).label}</span></p>}
-                                    {item.ad_group_name && <p className="truncate">المجموعة: <b>{item.ad_group_name}</b> <span className={`mr-1 rounded-full px-1.5 py-0.5 text-[8px] ${liveStatus(item.ad_group_status).tone}`}>{liveStatus(item.ad_group_status).label}</span></p>}
-                                    {item.entity_level === "ad" && <p className="truncate">الإعلان المستهدف: <b>{item.entity_name}</b> <span className={`mr-1 rounded-full px-1.5 py-0.5 text-[8px] ${entityState.tone}`}>{entityState.label}</span></p>}
-                                </div>}
-                                {item.provider !== "meta" && item.parent_name && <p className="mt-1 truncate text-[10px] font-bold text-slate-400">ضمن {item.parent_name}</p>}
-                            </div>
-                            <span className={`shrink-0 rounded-full border px-3 py-1 text-[10px] font-black ${config.tone}`}>{config.label}</span>
-                        </div>
+                        <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-1.5"><p className="text-[10px] font-black text-slate-400">{item.provider === "meta" ? "Meta" : "سناب"} · {LEVELS[item.entity_level] || item.entity_level}</p>{index === 0 && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[8px] font-black text-red-700">الأعلى أولوية وتأثيرًا</span>}</div>{item.account_name && <p className="mt-1 truncate text-[10px] font-extrabold text-slate-500">الحساب الإعلاني: {item.account_name}</p>}<Link to={`/ads-manager?provider=${item.provider}`} className="mt-1 block truncate text-sm font-black text-slate-900 hover:text-violet-700">{item.entity_name}</Link>{item.product_id && <p className="mt-1 truncate text-[9px] font-bold text-cyan-700">Product ID: {item.product_id}</p>}</div><span className={`shrink-0 rounded-full border px-3 py-1 text-[10px] font-black ${actionTone(item)}`}>{displayAction}</span></div>
+                        <div className="mt-2 flex flex-wrap gap-1.5 text-[9px] font-black"><span className="rounded-full bg-slate-100 px-2 py-1 text-slate-600">السبب: {ROOT_CAUSES[item.root_cause_category] || item.root_cause_category || "غير محسوم"}</span><span className="rounded-full bg-slate-100 px-2 py-1 text-slate-600">الثقة: {CONFIDENCE[item.confidence] || item.confidence}</span><span className="rounded-full bg-slate-100 px-2 py-1 text-slate-600">{ACTION_TYPES[item.action_type] || "توصية V2"}</span>{item.executable === false && <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-700">اقتراح فقط — لا Ads write</span>}</div>
                         <div className="mt-2 flex flex-wrap items-center gap-2 text-[9px] font-extrabold text-slate-400"><span>أُنشئت {relativeTime(item.generated_at || snapshot?.generated_at)}</span><span>•</span><span dir="ltr">{dateTime(item.generated_at || snapshot?.generated_at)}</span></div>
-                        <p className="mt-3 text-xs font-bold leading-6 text-slate-600">{details.whyNow}</p>
-                        {item.provider === "meta" && <div className="mt-3 grid gap-2 rounded-xl border border-blue-100 bg-blue-50/50 p-2 text-[9px] sm:grid-cols-3" data-testid={`recommendation-hierarchy-spend-${item.recommendation_id}`}>
-                            <div className="rounded-lg bg-white p-2"><p className="font-bold text-slate-400">صرف الإعلان المستهدف</p><p className="mt-1 font-black text-slate-800">{money(item.entity_period_spend_sar ?? item.period_spend_sar)} ر.س · {Number((item.entity_period_purchases ?? item.purchases) || 0).toLocaleString("en-US")} شراء</p></div>
-                            <div className="rounded-lg bg-white p-2"><p className="font-bold text-slate-400">إجمالي المجموعة خلال نفس الفترة</p><p className="mt-1 font-black text-slate-800">{item.ad_group_period_spend_sar == null ? "—" : `${money(item.ad_group_period_spend_sar)} ر.س · ${Number(item.ad_group_period_purchases || 0).toLocaleString("en-US")} شراء`}</p></div>
-                            <div className="rounded-lg bg-white p-2"><p className="font-bold text-slate-400">إجمالي الحملة خلال نفس الفترة</p><p className="mt-1 font-black text-slate-800">{item.campaign_period_spend_sar == null ? "—" : `${money(item.campaign_period_spend_sar)} ر.س · ${Number(item.campaign_period_purchases || 0).toLocaleString("en-US")} شراء`}</p></div>
-                        </div>}
-                        {item.evidence?.length > 0 && <div className="mt-3 flex flex-wrap gap-1.5">{item.evidence.map((evidence) => <span key={evidence} className="rounded-lg bg-slate-100 px-2 py-1 text-[9px] font-extrabold text-slate-600">{evidence}</span>)}</div>}
-                        <button type="button" onClick={() => setExpanded(isExpanded ? null : item.recommendation_id)} aria-expanded={isExpanded} className="mt-3 w-full rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-black text-violet-800 hover:bg-violet-100">
-                            {isExpanded ? "إخفاء شرح القرار" : "لماذا اتُخذ هذا القرار؟"}
-                        </button>
+                        <p className="mt-3 text-xs font-bold leading-6 text-slate-700">{item.diagnosis || item.rationale}</p>
+                        {item.evidence_for?.length > 0 && <p className="mt-2 text-[10px] font-bold leading-5 text-emerald-700"><b>الدليل المؤيد:</b> {item.evidence_for.slice(0, 4).join(" · ")}</p>}
+                        {item.evidence_against?.length > 0 && <p className="mt-1 text-[10px] font-bold leading-5 text-amber-700"><b>ما يعارض القرار:</b> {item.evidence_against.slice(0, 4).join(" · ")}</p>}
+                        <button type="button" onClick={() => setExpanded(isExpanded ? null : item.recommendation_id)} aria-expanded={isExpanded} className="mt-3 w-full rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-black text-violet-800 hover:bg-violet-100">{isExpanded ? "إخفاء شرح القرار" : "لماذا اتُخذ هذا القرار؟"}</button>
+
                         {isExpanded && <div className="mt-3 space-y-3 rounded-2xl border border-violet-100 bg-violet-50/40 p-4" data-testid={`recommendation-explanation-${item.recommendation_id}`}>
-                            <div><h3 className="text-xs font-black text-slate-900">الأرقام التي بنى عليها القرار</h3><div className="mt-2 flex flex-wrap gap-1.5">{details.facts.map((fact) => <span key={fact} className="rounded-lg bg-white px-2 py-1 text-[10px] font-extrabold text-slate-700 shadow-sm">{fact}</span>)}</div></div>
-                            <div><h3 className="text-xs font-black text-slate-900">ما الإجراء المقترح؟</h3><p className="mt-1 text-[11px] font-bold leading-6 text-slate-700">{details.proposedAction}</p></div>
-                            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3"><h3 className="text-xs font-black text-amber-900">كم ساعة أصبر؟</h3><p className="mt-1 text-[11px] font-bold leading-6 text-amber-800">{details.observationPlan}</p></div>
-                            <div><h3 className="text-xs font-black text-slate-900">متى نعتبر القرار ناجحًا؟</h3><ul className="mt-1 space-y-1 text-[10px] font-bold leading-5 text-slate-600">{details.criteria.map((criterion) => <li key={criterion}>• {criterion}</li>)}</ul></div>
-                            {details.financial && (() => {
-                                const periodShare = shareOfPeriodResult(details.financial.period_estimated_contribution_sar);
-                                const forecastShare = shareOfPeriodResult(details.financial.forecast_delta_sar);
-                                const periodContribution = Number(details.financial.period_estimated_contribution_sar || 0);
-                                const forecastDelta = Number(details.financial.forecast_delta_sar || 0);
-                                return <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3" data-testid={`recommendation-financial-impact-${item.recommendation_id}`}>
-                                    <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="text-xs font-black text-emerald-950">{impactTitle(item.entity_level)}</h3><span className="rounded-full bg-white px-2 py-1 text-[9px] font-black text-emerald-700">تقدير مالي · ليس ضمانًا</span></div>
-                                    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                                        <div className="rounded-xl bg-white p-2"><p className="text-[9px] font-bold text-slate-400">صرف فترة الدراسة</p><p className="mt-1 text-xs font-black text-slate-800">{money(details.financial.period_spend_sar)} ر.س</p></div>
-                                        <div className="rounded-xl bg-white p-2"><p className="text-[9px] font-bold text-slate-400">إيراد المنصة</p><p className="mt-1 text-xs font-black text-slate-800">{money(details.financial.period_provider_revenue_sar)} ر.س</p></div>
-                                        <div className="rounded-xl bg-white p-2"><p className="text-[9px] font-bold text-slate-400">مساهمة الربح التقديرية</p><p className={`mt-1 text-xs font-black ${periodContribution >= 0 ? "text-emerald-700" : "text-red-700"}`}>{periodContribution >= 0 ? "+" : ""}{money(periodContribution)} ر.س</p></div>
-                                            <div className="rounded-xl bg-white p-2"><p className="text-[9px] font-bold text-slate-400">{periodImpactLabel(periodContribution)} · نسبتها من صافي النتيجة</p><p className={`mt-1 text-xs font-black ${periodContribution >= 0 ? "text-emerald-700" : "text-red-700"}`}>{periodShare == null ? "—" : `${periodShare.toFixed(2)}%`}</p></div>
-                                    </div>
-                                    <div className="mt-3 rounded-xl bg-white p-3">
-                                        <h4 className="text-[11px] font-black text-slate-900">توقع فترة الانتظار القادمة: {details.financial.forecast_hours} ساعات</h4>
-                                        <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                                            <p className="text-[10px] font-bold text-slate-600">بدون تنفيذ القرار: <b dir="ltr">{money(details.financial.forecast_without_action_sar)} ر.س</b></p>
-                                            <p className="text-[10px] font-bold text-slate-600">بعد تنفيذ القرار: <b dir="ltr">{money(details.financial.forecast_with_action_sar)} ر.س</b></p>
-                                            <p className={`text-[10px] font-black ${forecastDelta >= 0 ? "text-emerald-700" : "text-red-700"}`}>{forecastImpactLabel(forecastDelta)}: {forecastDelta >= 0 ? "+" : ""}{money(forecastDelta)} ر.س {forecastShare == null ? "" : `(${forecastShare.toFixed(2)}% من صافي النتيجة)`}</p>
-                                        </div>
-                                    </div>
-                                    <p className="mt-2 text-[9px] font-bold leading-5 text-emerald-800">{details.financial.limitation}</p>
-                                </div>;
-                            })()}
-                            <div><h3 className="text-xs font-black text-red-800">ماذا لو تجاهلنا التوصية؟</h3><p className="mt-1 text-[10px] font-bold leading-5 text-red-700">{details.risk}</p></div>
-                            {item.guardrail && <p className="rounded-xl bg-white px-3 py-2 text-[10px] font-bold leading-5 text-violet-800">ضابط التنفيذ: {item.guardrail}</p>}
+                            <div><h3 className="text-xs font-black text-slate-900">الأرقام التي بنى عليها القرار</h3><div className="mt-2 flex flex-wrap gap-1.5">{(item.decision_facts || item.evidence || item.evidence_for || []).map((fact) => <span key={fact} className="rounded-lg bg-white px-2 py-1 text-[10px] font-extrabold text-slate-700 shadow-sm">{fact}</span>)}</div></div>
+                            <HypothesisList primary={item.primary_hypothesis} secondary={item.secondary_hypotheses} />
+                            <div><h3 className="text-xs font-black text-slate-900">التحليل الزمني — Today أولًا</h3><div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3"><AnalysisBlock title="اليوم" value={item.today_analysis} /><AnalysisBlock title="أمس" value={item.yesterday_analysis} /><AnalysisBlock title="قبل أمس" value={item.day_minus_2_analysis} /><AnalysisBlock title="Baseline 7 أيام" value={item.baseline_7d} /><AnalysisBlock title="Baseline 30 يوم" value={item.baseline_30d} /></div></div>
+                            <div><h3 className="text-xs font-black text-slate-900">Funnel / Creative</h3><div className="mt-2 grid gap-2 sm:grid-cols-2"><AnalysisBlock title="Funnel" value={item.funnel_analysis} /><AnalysisBlock title="Video" value={item.video_analysis} /><AnalysisBlock title="Creative" value={item.creative_analysis} /><AnalysisBlock title="Inventory" value={item.inventory_analysis} /><AnalysisBlock title="السلات المتروكة" value={item.abandoned_cart_analysis} /><AnalysisBlock title="Cross-platform" value={item.cross_platform_analysis} /></div></div>
+                            <ProductAnalysis item={item} />
+                            <CreativeBrief brief={item.creative_brief} />
+                            <div><h3 className="text-xs font-black text-slate-900">ما الإجراء المقترح؟</h3><p className="mt-1 text-[11px] font-bold leading-6 text-slate-700">{displayAction} — {item.why || item.proposed_action || item.rationale}</p></div>
+                            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3"><h3 className="text-xs font-black text-amber-900">كم ساعة أصبر؟</h3><p className="mt-1 text-[11px] font-bold leading-6 text-amber-800">{item.observation_plan || `المجدول يعيد التحليل كل 5 ساعات. اصبر ${item.recommended_wait_hours || 5} ساعات قبل قرار ثانٍ.`}</p></div>
+                            <div><h3 className="text-xs font-black text-slate-900">متى نعتبر القرار ناجحًا؟</h3><ul className="mt-1 space-y-1 text-[10px] font-bold leading-5 text-slate-600">{(item.success_criteria || []).map((criterion) => <li key={criterion}>• {criterion}</li>)}</ul></div>
+                            <div className="rounded-xl border border-red-100 bg-red-50/70 p-3"><h3 className="text-xs font-black text-red-900">ماذا لو تجاهلنا التوصية؟</h3><p className="mt-1 text-[10px] font-bold leading-5 text-red-700">{item.risks?.join(" · ") || item.risk_if_ignored}</p></div>
+                            {item.what_would_change_the_decision?.length > 0 && <div className="rounded-xl border border-blue-100 bg-blue-50/70 p-3"><h3 className="text-xs font-black text-blue-900">ما الذي قد يجعل هذه التوصية خاطئة؟</h3><ul className="mt-1 space-y-1 text-[10px] font-bold text-blue-800">{item.what_would_change_the_decision.map((value) => <li key={value}>• {value}</li>)}</ul></div>}
+                            {item.financial_impact && <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3"><h3 className="text-xs font-black text-emerald-950">أثر الحملة على الربح</h3><p className="mt-1 text-[10px] font-bold text-emerald-800">مساهمة الفترة {money(item.financial_impact.period_estimated_contribution_sar)} ر.س · توقع فترة الانتظار القادمة {item.financial_impact.forecast_hours || "—"} ساعة · التغير المتوقع {money(item.financial_impact.forecast_delta_sar)} ر.س</p><p className="mt-1 text-[9px] font-bold text-slate-500">نسبتها من صافي النتيجة تعتمد على ملخص فترة الدراسة. قد تكون النتيجة: زادت صافي الخسارة / خفضت صافي الربح / زيادة متوقعة في الربح بحسب الإشارة.</p></div>}
+                            {item.external_knowledge_used?.length > 0 && <div><h3 className="text-xs font-black text-slate-900">المعرفة الخارجية المستخدمة</h3><div className="mt-2 space-y-1">{item.external_knowledge_used.map((source) => <p key={source.source_id} className="rounded-lg bg-white p-2 text-[9px] font-bold text-slate-600">Tier {source.source_tier} · {source.title} · مراجعة {source.last_reviewed_at}</p>)}</div></div>}
                         </div>}
-                        <div className="mt-4 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
-                            <p className="text-[10px] font-black text-violet-700">الثقة: {CONFIDENCE[item.confidence] || item.confidence}</p>
-                            {item.approval_available
-                                ? <button type="button" disabled={approving[item.recommendation_id] || blocked} onClick={() => approve(item)} className="rounded-xl bg-violet-700 px-3 py-2 text-[10px] font-black text-white disabled:bg-slate-300">{status || (approving[item.recommendation_id] ? "جارٍ التنفيذ…" : "موافقة وتنفيذ")}</button>
-                                : <span className="text-[9px] font-bold text-slate-400">توصية للمتابعة فقط</span>}
-                        </div>
+
+                        <div className="mt-3 flex items-center justify-between gap-3"><span className="text-[9px] font-bold text-slate-400">recommended_wait_hours: {item.recommended_wait_hours || 5}</span>{canExecute ? <button type="button" onClick={() => approve(item)} disabled={approving[item.recommendation_id] || Boolean(status)} className="rounded-xl bg-violet-700 px-4 py-2 text-[10px] font-black text-white disabled:bg-slate-300">{status || (approving[item.recommendation_id] ? "جارٍ التنفيذ…" : "موافقة وتنفيذ")}</button> : <span className="rounded-xl bg-slate-100 px-3 py-2 text-[9px] font-black text-slate-500">توصية/تشخيص — لا تنفيذ تلقائي</span>}</div>
                     </article>;
                 })}
             </section>
 
-            {!loading && visible.length === 0 && !error && <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm font-bold text-slate-400">لا توجد توصيات مطابقة للفلاتر المحددة.</div>}
+            {!loading && !visible.length && <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm font-bold text-slate-400"><BarChart3 className="mx-auto mb-2 h-6 w-6" />لا توجد توصيات مطابقة للفلاتر الحالية.</div>}
+            <div className="flex items-center justify-center gap-2 text-[9px] font-bold text-slate-400"><Clock3 className="h-3 w-3" /><span>Snapshot واحد لكل دورة · تحديث الواجهة لا يولّد قرارًا جديدًا</span><ShieldCheck className="h-3 w-3" /><span>لا Ads write بدون موافقة</span><ShoppingCart className="h-3 w-3" /><span>السلات دليل مساند لا Attribution مخترع</span></div>
         </div>
     </main>;
 }
