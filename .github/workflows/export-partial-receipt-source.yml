@@ -1,9 +1,9 @@
 name: Export Partial Receipt Source
 
 on:
-  push:
+  pull_request:
     branches:
-      - fix/partial-receipt-direct-supplier-assignment
+      - hotfix/prod-snap-meta-final
     paths:
       - ".github/workflows/export-partial-receipt-source.yml"
   workflow_dispatch: {}
