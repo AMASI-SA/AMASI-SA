@@ -393,6 +393,8 @@ def piece_is_available_for_supplier_dispatch(piece: dict[str, Any]) -> bool:
     opens the next supplier's receiving session and scans the same piece there,
     where the supplier is assigned directly for the remaining service.
     """
+    if piece.get("experiment_archived_at") is not None:
+        return False
     if _text(piece.get("assignment_status")) == ASSIGNMENT_STATUS_UNASSIGNED:
         return False
     if _text(piece.get("status")) in {
@@ -411,7 +413,10 @@ def file_is_fully_dispatched(pieces: list[dict[str, Any]]) -> bool:
     """Return true only when every active physical piece was raised to a supplier."""
     active = [
         piece for piece in pieces
-        if _text(piece.get("status")) != PIECE_STATUS_CANCELLED
+        if (
+            _text(piece.get("status")) != PIECE_STATUS_CANCELLED
+            and piece.get("experiment_archived_at") is None
+        )
     ]
     return bool(active) and all(
         _text(piece.get("supplier_dispatch_status"))
@@ -943,6 +948,7 @@ async def _employee_workspace(
         {
             "user_id": user_id,
             "responsible_employee_id": employee_id,
+            "experiment_archived_at": None,
             "status": {"$ne": PIECE_STATUS_CANCELLED},
         },
         {"_id": 0, "user_id": 0, "image_b64": 0},
@@ -1095,7 +1101,11 @@ async def _unassigned_workspace(
     reviewer: dict[str, Any],
 ) -> dict[str, Any]:
     pieces = await db[PIECES].find(
-        {"user_id": user_id, "assignment_status": ASSIGNMENT_STATUS_UNASSIGNED},
+        {
+            "user_id": user_id,
+            "assignment_status": ASSIGNMENT_STATUS_UNASSIGNED,
+            "experiment_archived_at": None,
+        },
         {"_id": 0, "user_id": 0, "image_b64": 0},
     ).sort("rejected_at", 1).limit(5000).to_list(5000)
     grouped: dict[tuple[str, str, str], dict[str, Any]] = {}
@@ -1352,6 +1362,7 @@ def make_preparation_supplier_dispatch_router(
                 "user_id": user_id,
                 "file_number": {"$in": source_file_numbers},
                 "responsible_employee_id": employee_id,
+                "experiment_archived_at": None,
                 "status": {"$in": [PIECE_STATUS_ASSIGNED, PIECE_STATUS_IN_PROGRESS]},
                 "$or": [
                     {"supplier_dispatch_status": {"$exists": False}},
@@ -1507,6 +1518,7 @@ def make_preparation_supplier_dispatch_router(
                 "user_id": user_id,
                 "piece_id": {"$in": piece_ids},
                 "responsible_employee_id": employee_id,
+                "experiment_archived_at": None,
                 "status": {"$in": [PIECE_STATUS_ASSIGNED, PIECE_STATUS_IN_PROGRESS]},
                 "$or": [
                     {"supplier_dispatch_status": {"$exists": False}},
@@ -1634,6 +1646,7 @@ def make_preparation_supplier_dispatch_router(
                 "user_id": user_id,
                 "file_number": _text(payload.file_number),
                 "responsible_employee_id": employee_id,
+                "experiment_archived_at": None,
                 "status": {"$in": [PIECE_STATUS_ASSIGNED, PIECE_STATUS_IN_PROGRESS]},
                 "$or": [
                     {"supplier_dispatch_status": {"$exists": False}},
@@ -1664,6 +1677,7 @@ def make_preparation_supplier_dispatch_router(
                 "user_id": user_id,
                 "piece_id": {"$in": piece_ids},
                 "responsible_employee_id": employee_id,
+                "experiment_archived_at": None,
                 "$or": [
                     {"supplier_dispatch_status": {"$exists": False}},
                     {"supplier_dispatch_status": None},
@@ -1766,6 +1780,7 @@ def make_preparation_supplier_dispatch_router(
                 "user_id": user_id,
                 "piece_id": {"$in": payload.piece_ids},
                 "assignment_status": ASSIGNMENT_STATUS_UNASSIGNED,
+                "experiment_archived_at": None,
             },
             {"_id": 0},
         ).to_list(len(payload.piece_ids))
@@ -1790,6 +1805,7 @@ def make_preparation_supplier_dispatch_router(
                 "user_id": user_id,
                 "piece_id": {"$in": payload.piece_ids},
                 "assignment_status": ASSIGNMENT_STATUS_UNASSIGNED,
+                "experiment_archived_at": None,
             },
             {"$set": {
                 "status": PIECE_STATUS_ASSIGNED,
