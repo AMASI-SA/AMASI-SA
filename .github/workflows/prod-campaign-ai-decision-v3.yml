@@ -140,4 +140,5 @@ jobs:
           grep -q 'root_cause_category' frontend/src/pages/CampaignRecommendations.jsx
           grep -q 'item.executable && item.approval_available' frontend/src/pages/CampaignRecommendations.jsx
           grep -q 'ما الذي قد يجعل هذه التوصية خاطئة؟' frontend/src/pages/CampaignRecommendations.jsx
-          grep -q 'Advertising Product Watch' frontend/src/pages/CampaignRecommendations.jsx
+          grep -q 'monthly-profit-goal-card' frontend/src/pages/CampaignRecommendations.jsx
+          grep -q 'عرض التحليل المتقدم' frontend/src/pages/CampaignRecommendations.jsx
