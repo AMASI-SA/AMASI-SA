@@ -5,6 +5,7 @@ workspaces and engines.
 It must not expose MongoDB-shaped documents to frontend consumers.
 """
 
+# CI fan-out marker for protected Production checks on preparation PDF-only fixes.
 # Payment-method freshness policy
 import orders_db as _orders_db
 
