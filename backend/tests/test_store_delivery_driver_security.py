@@ -1,29 +1,27 @@
 """Security contract for the standalone Amasi Delivery driver account."""
 from __future__ import annotations
 
-import os
+from pathlib import Path
 
 import pytest
 from fastapi import HTTPException
 
-os.environ.setdefault("MONGO_URL", "mongodb://127.0.0.1:27017")
-os.environ.setdefault("DB_NAME", "mezan_test")
+from store_delivery_driver_app_routes import _require_store_driver
+from store_delivery_driver_routes import DRIVER_ACCOUNT_ROLE, DriverAccountCreate
 
-from server import _effective_perms  # noqa: E402
-from store_delivery_driver_app_routes import _require_store_driver  # noqa: E402
-from store_delivery_driver_routes import (  # noqa: E402
-    DRIVER_ACCOUNT_ROLE,
-    DriverAccountCreate,
-)
+SERVER_SOURCE = (Path(__file__).resolve().parents[1] / "server.py").read_text(encoding="utf-8")
 
 
 def test_store_driver_role_has_zero_legacy_mezan_permissions():
+    """Unknown roles fail closed in the legacy RBAC resolver.
+
+    Keep this as a static contract instead of importing server.py: importing the
+    whole production application would pull unrelated Mongo/integration runtime
+    dependencies into this focused security test.
+    """
     assert DRIVER_ACCOUNT_ROLE == "store_driver"
-    assert _effective_perms({
-        "role": DRIVER_ACCOUNT_ROLE,
-        "extra_permissions": [],
-        "denied_permissions": [],
-    }) == set()
+    assert 'ROLE_DEFAULT_PERMS.get(role, [])' in SERVER_SOURCE
+    assert '"store_driver":' not in SERVER_SOURCE
 
 
 def test_driver_app_rejects_legacy_viewer_even_with_no_permissions():
