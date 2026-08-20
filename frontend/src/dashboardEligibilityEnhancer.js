@@ -9,6 +9,7 @@ let settings = null;
 let summary = null;
 let summaryRequestKey = "";
 let summaryRequestInFlight = false;
+let renderScheduled = false;
 
 function isAdvancedDashboard() {
   return Boolean(document.querySelector(`[data-testid="${PAGE_TEST_ID}"]`));
@@ -31,6 +32,26 @@ function summaryKey(query) {
   return JSON.stringify(query || {});
 }
 
+function setTextIfChanged(node, value) {
+  if (!node) return;
+  const next = String(value ?? "");
+  if (node.textContent !== next) node.textContent = next;
+}
+
+function scheduleRender() {
+  if (renderScheduled) return;
+  renderScheduled = true;
+  const run = () => {
+    renderScheduled = false;
+    renderEnhancements();
+  };
+  if (typeof window.requestAnimationFrame === "function") {
+    window.requestAnimationFrame(run);
+  } else {
+    window.setTimeout(run, 0);
+  }
+}
+
 async function loadSettings() {
   try {
     const { data } = await api.get("/dashboard-v2/eligibility-settings");
@@ -38,7 +59,7 @@ async function loadSettings() {
   } catch {
     settings = null;
   }
-  renderEnhancements();
+  scheduleRender();
 }
 
 async function loadSummary(query) {
@@ -55,7 +76,7 @@ async function loadSummary(query) {
     summaryRequestKey = key;
   } finally {
     summaryRequestInFlight = false;
-    renderEnhancements();
+    scheduleRender();
   }
 }
 
@@ -73,45 +94,46 @@ function controlMarkup() {
     </button>`;
 }
 
-function installControl() {
-  if (!isAdvancedDashboard() || document.getElementById(CONTROL_ID)) return;
+function installOrUpdateControl() {
+  if (!isAdvancedDashboard()) return;
   const header = document.querySelector(`[data-testid="${PAGE_TEST_ID}"] > header`);
   if (!header) return;
-  const wrapper = document.createElement("div");
-  wrapper.id = CONTROL_ID;
-  wrapper.style.display = "flex";
-  wrapper.style.alignItems = "center";
-  wrapper.style.gap = "8px";
-  wrapper.innerHTML = controlMarkup();
-  const button = wrapper.querySelector("[data-dashboard-eligibility-toggle]");
-  button?.addEventListener("click", async () => {
-    const currentEnabled = settings?.enabled !== false;
-    button.disabled = true;
-    try {
-      const { data } = await api.put("/dashboard-v2/eligibility-settings", { enabled: !currentEnabled });
-      settings = data || { enabled: !currentEnabled };
-      window.location.reload();
-    } catch {
-      button.disabled = false;
-    }
-  });
-  header.appendChild(wrapper);
+
+  const enabledKey = settings?.enabled !== false ? "on" : "off";
+  let wrapper = document.getElementById(CONTROL_ID);
+  if (!wrapper) {
+    wrapper = document.createElement("div");
+    wrapper.id = CONTROL_ID;
+    wrapper.style.display = "flex";
+    wrapper.style.alignItems = "center";
+    wrapper.style.gap = "8px";
+    header.appendChild(wrapper);
+  }
+
+  if (wrapper.dataset.renderedState !== enabledKey) {
+    wrapper.innerHTML = controlMarkup();
+    wrapper.dataset.renderedState = enabledKey;
+  }
 }
 
 function installProfitNote() {
   const panel = document.querySelector('[data-testid="advanced-profit-summary"]');
-  if (!panel || document.getElementById(PROFIT_NOTE_ID) || !summary) return;
+  if (!panel || !summary) return;
   const metrics = panel.children?.[1];
   if (!metrics) return;
-  const note = document.createElement("div");
-  note.id = PROFIT_NOTE_ID;
-  note.style.cssText = "padding:6px 12px;border-bottom:1px solid #d1fae5;background:#f0fdf4;font-size:10px;font-weight:700;color:#475569;text-align:right";
-  if (summary.enabled) {
-    note.textContent = `طلبات غير مؤهلة: ${Number(summary.excluded_orders_count || 0).toLocaleString("en-US")} طلب · أقل من ${Number(summary.order_min_total_sar || 50).toLocaleString("en-US")} ر.س · لا تدخل في الطلبات أو المبيعات أو المتوسطات`;
-  } else {
-    note.textContent = "فلتر التأهيل متوقف · يتم احتساب جميع الطلبات والقطع في لوحة التحكم";
+
+  let note = document.getElementById(PROFIT_NOTE_ID);
+  if (!note) {
+    note = document.createElement("div");
+    note.id = PROFIT_NOTE_ID;
+    note.style.cssText = "padding:6px 12px;border-bottom:1px solid #d1fae5;background:#f0fdf4;font-size:10px;font-weight:700;color:#475569;text-align:right";
+    metrics.insertAdjacentElement("afterend", note);
   }
-  metrics.insertAdjacentElement("afterend", note);
+
+  const text = summary.enabled
+    ? `طلبات غير مؤهلة: ${Number(summary.excluded_orders_count || 0).toLocaleString("en-US")} طلب · أقل من ${Number(summary.order_min_total_sar || 50).toLocaleString("en-US")} ر.س · لا تدخل في الطلبات أو المبيعات أو المتوسطات`
+    : "فلتر التأهيل متوقف · يتم احتساب جميع الطلبات والقطع في لوحة التحكم";
+  setTextIfChanged(note, text);
 }
 
 function updateProductsHeader() {
@@ -119,14 +141,13 @@ function updateProductsHeader() {
   if (!panel || !summary) return;
   const headerMeta = panel.querySelector("div > div.text-left");
   if (!headerMeta) return;
+
   const firstLine = headerMeta.querySelector("p");
-  if (firstLine) {
-    if (summary.enabled) {
-      firstLine.textContent = `${Number(summary.eligible_piece_count || 0).toLocaleString("en-US")} قطعة خلال الفترة`;
-    } else {
-      firstLine.textContent = `${Number(summary.eligible_piece_count || 0).toLocaleString("en-US")} قطعة خلال الفترة`;
-    }
-  }
+  setTextIfChanged(
+    firstLine,
+    `${Number(summary.eligible_piece_count || 0).toLocaleString("en-US")} قطعة خلال الفترة`,
+  );
+
   let note = document.getElementById(PRODUCT_NOTE_ID);
   if (!note) {
     note = document.createElement("p");
@@ -134,49 +155,48 @@ function updateProductsHeader() {
     note.style.cssText = "font-size:9px;line-height:14px;color:#c7d2fe;font-weight:700";
     headerMeta.appendChild(note);
   }
-  note.textContent = summary.enabled
-    ? `مستبعد ${Number(summary.excluded_low_price_piece_count || 0).toLocaleString("en-US")} قطعة · سعر الوحدة أقل من ${Number(summary.product_min_unit_sale_sar || 25).toLocaleString("en-US")} ر.س`
-    : "فلتر القطع منخفضة السعر متوقف";
+  setTextIfChanged(
+    note,
+    summary.enabled
+      ? `مستبعد ${Number(summary.excluded_low_price_piece_count || 0).toLocaleString("en-US")} قطعة · سعر الوحدة أقل من ${Number(summary.product_min_unit_sale_sar || 25).toLocaleString("en-US")} ر.س`
+      : "فلتر القطع منخفضة السعر متوقف",
+  );
 }
 
 function renderEnhancements() {
   if (!isAdvancedDashboard()) return;
-  const control = document.getElementById(CONTROL_ID);
-  if (control && settings) {
-    control.innerHTML = controlMarkup();
-    const button = control.querySelector("[data-dashboard-eligibility-toggle]");
-    button?.addEventListener("click", async () => {
-      const currentEnabled = settings?.enabled !== false;
-      button.disabled = true;
-      try {
-        const { data } = await api.put("/dashboard-v2/eligibility-settings", { enabled: !currentEnabled });
-        settings = data || { enabled: !currentEnabled };
-        window.location.reload();
-      } catch {
-        button.disabled = false;
-      }
-    });
-  } else {
-    installControl();
-  }
+  installOrUpdateControl();
   installProfitNote();
   updateProductsHeader();
 }
 
+async function handleToggleClick(event) {
+  const button = event.target?.closest?.("[data-dashboard-eligibility-toggle]");
+  if (!button || !isAdvancedDashboard()) return;
+  const currentEnabled = settings?.enabled !== false;
+  button.disabled = true;
+  try {
+    const { data } = await api.put("/dashboard-v2/eligibility-settings", { enabled: !currentEnabled });
+    settings = data || { enabled: !currentEnabled };
+    window.location.reload();
+  } catch {
+    button.disabled = false;
+  }
+}
+
 api.interceptors.response.use((response) => {
   const query = dashboardQueryFromConfig(response?.config);
-  if (query) {
-    window.setTimeout(() => loadSummary(query), 0);
-  }
+  if (query) window.setTimeout(() => loadSummary(query), 0);
   return response;
 });
 
 if (typeof window !== "undefined" && typeof document !== "undefined") {
-  const observer = new MutationObserver(() => renderEnhancements());
+  const observer = new MutationObserver(() => scheduleRender());
   observer.observe(document.documentElement, { childList: true, subtree: true });
-  window.addEventListener("popstate", renderEnhancements);
+  document.addEventListener("click", handleToggleClick);
+  window.addEventListener("popstate", scheduleRender);
   window.setTimeout(() => {
     loadSettings();
-    renderEnhancements();
+    scheduleRender();
   }, 0);
 }
