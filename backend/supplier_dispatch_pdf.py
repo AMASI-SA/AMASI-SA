@@ -8,7 +8,9 @@ showing supplier + responsible employee in the header.
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import datetime
 from typing import Any, Callable
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 
@@ -21,6 +23,26 @@ from preparation_supplier_dispatch import (
 )
 from preparation_piece_operations import PIECES
 from reviewed_preparation_batches import BATCHES, _line_from_batch_storage
+
+RIYADH = ZoneInfo("Asia/Riyadh")
+
+
+def _riyadh_date(value: Any) -> str:
+    if isinstance(value, datetime):
+        date = value if value.tzinfo else value.replace(tzinfo=RIYADH)
+        date = date.astimezone(RIYADH)
+        return f"{date.year}/{date.month:02d}/{date.day:02d}"
+    raw = _text(value)
+    if not raw:
+        return ""
+    try:
+        date = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if date.tzinfo is None:
+            date = date.replace(tzinfo=RIYADH)
+        date = date.astimezone(RIYADH)
+        return f"{date.year}/{date.month:02d}/{date.day:02d}"
+    except ValueError:
+        return raw[:10].replace("-", "/")
 
 
 def _line_match(piece: dict[str, Any], rows: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -78,7 +100,7 @@ async def build_supplier_dispatch_pdf(db: Any, *, user_id: str, dispatch: dict[s
         supplier_name=_text(dispatch.get("supplier_name")),
         responsible_employee_name=_text(dispatch.get("sent_by_name")),
         file_number=_text(dispatch.get("supplier_file_number") or dispatch.get("file_number")),
-        file_date=str(dispatch.get("sent_at") or dispatch.get("created_at") or ""),
+        file_date=_riyadh_date(dispatch.get("sent_at") or dispatch.get("created_at")),
     )
 
 
