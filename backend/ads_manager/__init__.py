@@ -11,7 +11,7 @@ def make_ads_manager_router(db: Any, current_user: Callable):
     """Compose Ads Manager, Campaign AI and the separate product watch.
 
     Campaign AI remains lazily imported because the Snapchat profitability
-    engine imports account-cost helpers from this package.  Heavy Campaign AI
+    engine imports account-cost helpers from this package. Heavy Campaign AI
     work still runs in its isolated subprocess every global five-hour cycle.
 
     Advertising Product Watch V3 is a separate read-only operational monitor.
@@ -26,6 +26,9 @@ def make_ads_manager_router(db: Any, current_user: Callable):
         attach_advertising_product_watch_scheduler,
     )
     from campaign_ai_monitor import attach_campaign_ai_routes
+    from campaign_ai_monthly_profit_goal_v1 import (
+        attach_monthly_profit_goal_routes,
+    )
     from campaign_ai_public_guard import attach_campaign_ai_public_guard
     from campaign_ai_subprocess_scheduler import (
         attach_campaign_ai_subprocess_scheduler,
@@ -33,6 +36,12 @@ def make_ads_manager_router(db: Any, current_user: Callable):
 
     router = _make_overview_router(db, current_user)
     attach_account_cost_settings_routes(
+        router,
+        db,
+        current_user,
+        _require_owner,
+    )
+    attach_monthly_profit_goal_routes(
         router,
         db,
         current_user,
