@@ -9,7 +9,10 @@ from typing import Any, Callable
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from store_delivery_customer_instruction_routes import STORE_DELIVERY_INSTRUCTIONS
+from store_delivery_customer_instruction_routes import (
+    STORE_DELIVERY_INSTRUCTIONS,
+    _require_customer_service,
+)
 from store_delivery_domain import normalize_text
 from store_delivery_handover_routes import ASSIGNMENTS, ORDERS
 
@@ -22,21 +25,6 @@ def _merchant_user_id(user: dict[str, Any]) -> str:
     if not owner_id:
         raise HTTPException(status_code=409, detail={"code": "employee_store_not_linked"})
     return owner_id
-
-
-def _require_customer_service(user: Any) -> dict[str, Any]:
-    if not isinstance(user, dict):
-        raise HTTPException(status_code=403, detail={"code": "delivery_instruction_permission_required"})
-    role = normalize_text(user.get("role")).casefold()
-    permission = "store_delivery.instructions.manage"
-    allowed = (
-        role in {"owner", "admin", "operations", "customer_service"}
-        or user.get("is_owner") is True
-        or permission in set(user.get("extra_permissions") or [])
-    ) and permission not in set(user.get("denied_permissions") or [])
-    if not allowed:
-        raise HTTPException(status_code=403, detail={"code": "delivery_instruction_permission_required"})
-    return user
 
 
 def make_store_delivery_customer_lookup_router(db: Any, current_user: Callable[..., Any]) -> APIRouter:
