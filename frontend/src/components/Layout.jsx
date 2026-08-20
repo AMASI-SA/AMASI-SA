@@ -70,7 +70,8 @@ const V2_LINKS = [
 function legacySpecificChildContract(location) {
     const pathname = location.pathname;
     const hasSpecificChild = V2_LINKS.some((item) => item.to.startsWith(`${pathname}?`));
-    return hasSpecificChild && Boolean(location.search);
+    const parentStaysActive = !hasSpecificChild || !location.search;
+    return !parentStaysActive;
 }
 
 function WarehouseSidebarLink({ location, onNavigate }) {
