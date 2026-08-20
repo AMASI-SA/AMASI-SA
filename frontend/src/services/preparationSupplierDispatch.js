@@ -4,6 +4,9 @@ const ERROR_LABELS = {
     preparation_manage_permission_required: "تحتاج صلاحية إدارة التجهيز لفتح ملفاتك.",
     preparation_file_not_found: "ملف التجهيز غير موجود أو لم يكتمل تسجيله.",
     piece_quantity_exceeds_available: "الكمية المختارة لم تعد متاحة؛ حدّث الملف.",
+    ambiguous_piece_group: "تغيّر تجميع القطع بعد فتح الصفحة؛ حدّث الملف ثم أعد الإرسال.",
+    duplicate_piece_group: "يوجد تكرار غير متوقع في مجموعة القطع؛ حدّث الملف ثم أعد الإرسال.",
+    invalid_piece_selection: "تعذّر مطابقة القطع المحددة مع الملف الحالي؛ حدّث الصفحة.",
     supplier_dispatch_supplier_not_found: "المورد غير موجود أو موقوف.",
     supplier_dispatch_service_mismatch: "المورد المحدد لا يقدم خدمة متبقية لهذا المنتج.",
     supplier_dispatch_piece_conflict: "تغيّرت إحدى القطع أثناء الرفع؛ حدّث الملف.",
@@ -35,6 +38,22 @@ export function newPreparationDispatchRequestId(prefix = "supplier-dispatch") {
     return `${prefix}:${Date.now()}:${Math.random().toString(16).slice(2)}`;
 }
 
+export function normalizeSupplierDispatchPayload(payload = {}) {
+    const files = Array.isArray(payload?.files)
+        ? payload.files.filter((file) => file && String(file.file_number || "").trim())
+        : [];
+    if (files.length !== 1) return payload;
+
+    const [file] = files;
+    return {
+        client_request_id: payload.client_request_id,
+        supplier_id: payload.supplier_id,
+        note: payload.note ?? null,
+        file_number: String(file.file_number || "").trim(),
+        selections: Array.isArray(file.selections) ? file.selections : [],
+    };
+}
+
 export async function getPreparationSupplierWorkspace({ limit = 100 } = {}) {
     try {
         return (await api.get("/supplier-dispatch-v1/workspace", {
@@ -47,7 +66,8 @@ export async function getPreparationSupplierWorkspace({ limit = 100 } = {}) {
 
 export async function sendPreparationPiecesToSupplier(payload) {
     try {
-        return (await api.post("/supplier-dispatch-v1/dispatches", payload)).data;
+        const requestPayload = normalizeSupplierDispatchPayload(payload);
+        return (await api.post("/supplier-dispatch-v1/dispatches", requestPayload)).data;
     } catch (error) {
         throw dispatchError(error, "تعذّر رفع المنتجات إلى المورد.");
     }
