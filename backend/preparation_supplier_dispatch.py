@@ -1523,6 +1523,7 @@ def make_preparation_supplier_dispatch_router(
                 "user_id": user_id,
                 "piece_id": {"$in": piece_ids},
                 "responsible_employee_id": employee_id,
+                "experiment_archived_at": None,
                 "status": {"$in": [PIECE_STATUS_ASSIGNED, PIECE_STATUS_IN_PROGRESS]},
                 "$or": [
                     {"supplier_dispatch_status": {"$exists": False}},
