@@ -29,22 +29,26 @@ def install_order_review_forward_stage_guard() -> None:
     from preparation_pdf_compact_operational_layout import (
         install_preparation_pdf_compact_operational_layout,
     )
+    from preparation_pdf_amasi_a4_layout import (
+        install_preparation_pdf_amasi_a4_layout,
+    )
+    from preparation_pdf_physical_piece_overlay import (
+        install_preparation_pdf_physical_piece_overlay,
+    )
 
     order_review_routes.REVIEW_COMPLETED_STAGES.update(
         FORWARD_FULFILLMENT_STAGES
     )
-    # Sorting must wrap the original catalogue loader before the reference PDF
-    # layer adds its image-access context around that same loader.
     install_reviewed_product_sorting()
     install_preparation_pdf_reference_layout()
-    # The reference builder first creates one snapshot per allocated source
-    # line; expand it here so every selected physical piece becomes one card.
     install_preparation_pdf_unit_card_expansion()
     install_preparation_pdf_wrapped_text()
     install_preparation_pdf_card_file_number()
-    # Keep wrapping and durable numbering, then apply only the merchant-approved
-    # compact media/detail geometry as the final renderer overlay.
     install_preparation_pdf_compact_operational_layout()
+    # The merchant-approved Amasi renderer must win over every legacy layout.
+    install_preparation_pdf_amasi_a4_layout()
+    # Final identity-safe overlay: one stored physical unit -> one card/QR.
+    install_preparation_pdf_physical_piece_overlay()
 
 
 __all__ = [
