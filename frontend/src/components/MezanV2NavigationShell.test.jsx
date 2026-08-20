@@ -92,6 +92,7 @@ test("orders and fulfillment are independent top-level sections", () => {
         "/fulfillment-v2?stage=reviewed&view=files",
         "/fulfillment-v2?stage=assembly",
         "/fulfillment-v2?stage=ready_to_ship",
+        "/fulfillment-v2?workspace=store-driver-handover",
     ]);
     expect(orders.items.some((item) => item.to.startsWith("/fulfillment-v2"))).toBe(false);
     expect(orders.items.some((item) => item.to === "/inventory-receiving-v2")).toBe(false);
@@ -110,6 +111,7 @@ test("orders and fulfillment are independent top-level sections", () => {
     expect(markup).toContain('data-testid="mezan-v2-secondary-fulfillment"');
     expect(markup).toContain("تم المراجعة");
     expect(markup).toContain("سجل ملفات التجهيز");
+    expect(markup).toContain("تسليم الشحنات للموصلين");
 });
 
 test("products section exposes a Salla-style primary group and secondary page rail", () => {
@@ -150,7 +152,7 @@ test("inventory receiving belongs to products rather than orders", () => {
     expect(section?.id).toBe("products");
 });
 
-test("AI section exposes the conversational Mezan assistant", () => {
+test("AI section exposes the conversational Mezan assistant and delivery customer-service workspace", () => {
     const section = MEZAN_V2_NAV_SECTIONS.find(
         (item) => item.id === "intelligence",
     );
@@ -158,6 +160,7 @@ test("AI section exposes the conversational Mezan assistant", () => {
     expect(section.items.map((item) => item.to)).toEqual([
         "/assistant",
         "/customer-intelligence",
+        "/customer-intelligence?workspace=store-delivery",
     ]);
     expect(isMezanV2Route("/assistant")).toBe(true);
     expect(activeNavigationSection({
@@ -175,11 +178,13 @@ test("Mezan 2 exposes an independent suppliers section", () => {
     expect(activeNavigationSection({ pathname: "/suppliers-v2", search: "" })?.id).toBe("suppliers");
 });
 
-test("recurring obligations are a first-class Mezan 2 finance page", () => {
+test("finance keeps recurring obligations and store-driver accounting workspaces", () => {
     const finance = MEZAN_V2_NAV_SECTIONS.find((section) => section.id === "finance");
     expect(finance.label).toBe("الإدارة المالية");
     expect(finance.items).toEqual([
         { to: "/recurring-obligations", label: "الالتزامات والمصاريف الدورية", exactSearch: true },
+        { to: "/bank-transfer-review?workspace=store-delivery", label: "مراجعة تحصيلات الموصلين" },
+        { to: "/settlements-overview?workspace=store-delivery", label: "تسويات موصلي المتجر" },
     ]);
     expect(activeNavigationSection({ pathname: "/recurring-obligations", search: "" })?.id).toBe("finance");
 });

@@ -14,7 +14,7 @@ import {
 
 const fulfillment = MEZAN_V2_NAV_SECTIONS.find((section) => section.id === "fulfillment");
 
-test("fulfillment routes keep reviewed products available internally", () => {
+test("fulfillment routes keep reviewed products and driver handover available internally", () => {
     expect(fulfillment.items).toEqual([
         { to: "/fulfillment-v2", label: "إدارة التجهيز", exactSearch: true },
         { to: "/fulfillment-v2?workspace=my-products", label: "إدارة منتجاتي" },
@@ -22,6 +22,7 @@ test("fulfillment routes keep reviewed products available internally", () => {
         { to: "/fulfillment-v2?stage=reviewed&view=files", label: "سجل ملفات التجهيز" },
         { to: "/fulfillment-v2?stage=assembly", label: "الاستلام من التجهيز" },
         { to: "/fulfillment-v2?stage=ready_to_ship", label: "التجميع والعنونة" },
+        { to: "/fulfillment-v2?workspace=store-driver-handover", label: "تسليم الشحنات للموصلين" },
     ]);
 });
 
@@ -34,6 +35,7 @@ test("duplicate reviewed products entry is removed from the upper submenu", () =
             <a href="/fulfillment-v2?stage=reviewed&view=files">سجل ملفات التجهيز</a>
             <a href="/fulfillment-v2?stage=assembly">الاستلام من التجهيز</a>
             <a href="/fulfillment-v2?stage=ready_to_ship">التجميع والعنونة</a>
+            <a href="/fulfillment-v2?workspace=store-driver-handover">تسليم الشحنات للموصلين</a>
         </nav>
     `;
 
@@ -44,6 +46,7 @@ test("duplicate reviewed products entry is removed from the upper submenu", () =
         "سجل ملفات التجهيز",
         "الاستلام من التجهيز",
         "التجميع والعنونة",
+        "تسليم الشحنات للموصلين",
     ]);
 });
 
@@ -59,6 +62,7 @@ test("only the reviewed products navigation item is active in products view", ()
     expect(isNavigationItemActive(location, fulfillment.items[3])).toBe(false);
     expect(isNavigationItemActive(location, fulfillment.items[4])).toBe(false);
     expect(isNavigationItemActive(location, fulfillment.items[5])).toBe(false);
+    expect(isNavigationItemActive(location, fulfillment.items[6])).toBe(false);
     expect(activeNavigationSection(location)?.id).toBe("fulfillment");
 });
 
@@ -74,6 +78,7 @@ test("only the file registry navigation item is active in files view", () => {
     expect(isNavigationItemActive(location, fulfillment.items[3])).toBe(true);
     expect(isNavigationItemActive(location, fulfillment.items[4])).toBe(false);
     expect(isNavigationItemActive(location, fulfillment.items[5])).toBe(false);
+    expect(isNavigationItemActive(location, fulfillment.items[6])).toBe(false);
     expect(activeNavigationSection(location)?.id).toBe("fulfillment");
 });
 
@@ -85,6 +90,17 @@ test("my products is an independent navigation item beside fulfillment", () => {
 
     expect(isNavigationItemActive(location, fulfillment.items[0])).toBe(false);
     expect(isNavigationItemActive(location, fulfillment.items[1])).toBe(true);
+    expect(activeNavigationSection(location)?.id).toBe("fulfillment");
+});
+
+test("driver handover is an independent fulfillment navigation item", () => {
+    const location = {
+        pathname: "/fulfillment-v2",
+        search: "?workspace=store-driver-handover",
+    };
+
+    expect(isNavigationItemActive(location, fulfillment.items[0])).toBe(false);
+    expect(isNavigationItemActive(location, fulfillment.items[6])).toBe(true);
     expect(activeNavigationSection(location)?.id).toBe("fulfillment");
 });
 
