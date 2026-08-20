@@ -10,6 +10,7 @@ on:
       - "backend/campaign_ai_ad_creative_media_v3.py"
       - "backend/campaign_ai_evidence_runtime_enrichment_v3.py"
       - "backend/campaign_ai_decision_v3.py"
+      - "backend/campaign_ai_visual_evidence_v3.py"
       - "backend/advertising_product_watch_cycle_v3.py"
       - "backend/tests/test_campaign_ai_product_change_history_v3.py"
       - "backend/tests/test_campaign_ai_product_health_score_v3.py"
