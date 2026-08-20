@@ -216,6 +216,9 @@ def test_stale_product_only_selection_is_rejected_when_services_are_ambiguous():
 def test_rejected_or_already_sent_piece_is_not_available_for_another_dispatch():
     assert piece_is_available_for_supplier_dispatch(_piece("available")) is True
     assert piece_is_available_for_supplier_dispatch(
+        _piece("archived", experiment_archived_at="2026-08-20T16:00:00Z")
+    ) is False
+    assert piece_is_available_for_supplier_dispatch(
         _piece("rejected", assignment_status=ASSIGNMENT_STATUS_UNASSIGNED)
     ) is False
     assert piece_is_available_for_supplier_dispatch(
@@ -260,6 +263,19 @@ def test_cancelled_piece_does_not_block_file_dispatch_completion():
     pieces = [
         _piece("sent", supplier_dispatch_status=DISPATCH_STATUS_SENT),
         _piece("cancelled", group_key="product:2", status="cancelled"),
+    ]
+
+    assert file_is_fully_dispatched(pieces) is True
+
+
+def test_archived_piece_does_not_block_file_dispatch_completion():
+    pieces = [
+        _piece("sent", supplier_dispatch_status=DISPATCH_STATUS_SENT),
+        _piece(
+            "archived",
+            group_key="product:2",
+            experiment_archived_at="2026-08-20T16:00:00Z",
+        ),
     ]
 
     assert file_is_fully_dispatched(pieces) is True
@@ -626,6 +642,7 @@ async def test_employee_workspace_queries_only_pieces_assigned_to_that_employee(
     pieces_query = collection.find.call_args_list[0].args[0]
     assert pieces_query["user_id"] == "merchant-1"
     assert pieces_query["responsible_employee_id"] == "employee-1"
+    assert pieces_query["experiment_archived_at"] is None
     assert result["employee_id"] == "employee-1"
     assert result["files"] == []
 
