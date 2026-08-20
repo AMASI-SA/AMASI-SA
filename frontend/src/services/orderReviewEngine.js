@@ -1,4 +1,5 @@
 import api from "../lib/api";
+import { confirmReviewUnitSplit } from "../reviewUnitSplitGuard";
 
 function message(error, fallback) {
     const detail = error?.response?.data?.detail;
@@ -162,8 +163,20 @@ export async function updateOrderReviewItem(orderNumber, orderItemId, payload) {
 }
 
 export async function completeOrderReview(orderNumber, expectedRevision) {
-    try { return (await api.post(`/order-reviews-v1/${encodeURIComponent(orderNumber)}/complete`, { expected_revision: expectedRevision })).data; }
-    catch (error) { throw new Error(message(error, "تعذّر اعتماد مراجعة الطلب.")); }
+    try {
+        // Re-read immediately before completion so the warning is based on the
+        // same durable review snapshot that is about to transition to reviewed.
+        const detail = (await api.get(`/order-reviews-v1/${encodeURIComponent(orderNumber)}`)).data;
+        if (!confirmReviewUnitSplit(detail)) {
+            throw new Error("تم إلغاء اعتماد المراجعة. افصل المنتج يدويًا أو راجع الكمية ثم اضغط «تمت المراجعة» مرة أخرى.");
+        }
+        return (await api.post(`/order-reviews-v1/${encodeURIComponent(orderNumber)}/complete`, {
+            expected_revision: expectedRevision,
+        })).data;
+    } catch (error) {
+        if (error instanceof Error && !error?.response) throw error;
+        throw new Error(message(error, "تعذّر اعتماد مراجعة الطلب."));
+    }
 }
 
 export async function createOrderReviewOperationalItem(orderNumber, payload) {
