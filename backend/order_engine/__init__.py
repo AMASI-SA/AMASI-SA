@@ -71,6 +71,7 @@ def make_order_engine_router(*args, **kwargs):
     from preparation_file_registry import make_preparation_file_registry_router
     from preparation_piece_operations import install_preparation_piece_operations, make_preparation_piece_operations_router
     from preparation_supplier_dispatch import make_preparation_supplier_dispatch_router
+    from supplier_dispatch_pdf import make_supplier_dispatch_pdf_router
     from supplier_dispatch_share_evidence import make_supplier_dispatch_share_evidence_router
     from preparation_piece_line_services import install_preparation_piece_line_services
     from preparation_piece_execution_guard import install_preparation_piece_execution_guard
@@ -159,6 +160,7 @@ def make_order_engine_router(*args, **kwargs):
         make_preparation_file_failure_safety_router(db, current_user),
         make_preparation_piece_operations_router(db, current_user),
         make_preparation_supplier_dispatch_router(db, current_user),
+        make_supplier_dispatch_pdf_router(db, current_user),
         make_supplier_dispatch_share_evidence_router(db, current_user),
         make_mezan_supplier_management_router(db, current_user),
         make_fulfillment_experiment_router(db, current_user),
