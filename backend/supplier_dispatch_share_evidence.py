@@ -12,7 +12,7 @@ from typing import Any, Callable
 
 from bson.binary import Binary
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from pymongo import ASCENDING, DESCENDING
+from pymongo import ASCENDING, DESCENDING, ReturnDocument
 
 from order_review_routes import _merchant_user_id, _text
 from preparation_supplier_dispatch import (
@@ -154,7 +154,7 @@ def make_supplier_dispatch_share_evidence_router(db: Any, current_user: Callable
                 "share_confirmed_by": employee_id,
                 "updated_at": now,
             }},
-            return_document=True,
+            return_document=ReturnDocument.AFTER,
             projection={"_id": 0},
         )
         if not result:
