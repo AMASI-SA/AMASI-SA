@@ -32,6 +32,9 @@ def install_order_review_forward_stage_guard() -> None:
     from preparation_pdf_amasi_a4_layout import (
         install_preparation_pdf_amasi_a4_layout,
     )
+    from preparation_pdf_physical_piece_overlay import (
+        install_preparation_pdf_physical_piece_overlay,
+    )
 
     order_review_routes.REVIEW_COMPLETED_STAGES.update(
         FORWARD_FULFILLMENT_STAGES
@@ -42,9 +45,10 @@ def install_order_review_forward_stage_guard() -> None:
     install_preparation_pdf_wrapped_text()
     install_preparation_pdf_card_file_number()
     install_preparation_pdf_compact_operational_layout()
-    # Final overlay. This intentionally runs last so the merchant-approved
-    # Amasi A4 design is not altered by legacy layout wrappers.
+    # The merchant-approved Amasi renderer must win over every legacy layout.
     install_preparation_pdf_amasi_a4_layout()
+    # Final identity-safe overlay: one stored physical unit -> one card/QR.
+    install_preparation_pdf_physical_piece_overlay()
 
 
 __all__ = [
