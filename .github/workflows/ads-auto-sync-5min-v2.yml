@@ -11,6 +11,8 @@ on:
       - "backend/integrations_control_center/snapchat_native_data_common.py"
       - "backend/integrations_control_center/__init__.py"
       - "backend/store_delivery_*.py"
+      - "backend/dashboard_eligibility_filter.py"
+      - "backend/tests/test_dashboard_eligibility_filter.py"
       - "backend/tests/test_ads_auto_sync_scheduler_v2.py"
       - "backend/tests/test_snapchat_account_hourly_refresh_v2.py"
       - "backend/tests/test_snapchat_native_data_sync_v2.py"

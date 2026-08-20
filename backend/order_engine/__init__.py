@@ -106,6 +106,7 @@ def make_order_engine_router(*args, **kwargs):
     from store_delivery_settlement_routes import make_store_delivery_settlement_router
     from store_delivery_customer_lookup_routes import make_store_delivery_customer_lookup_router
     from store_delivery_reassignment_routes import make_store_delivery_reassignment_router
+    from dashboard_eligibility_filter import install_dashboard_eligibility_filter, make_dashboard_eligibility_router
 
     import product_v2_routes as _product_v2_routes
     from product_v2_sync_hotfix import run_product_v2_sync_fixed
@@ -115,6 +116,7 @@ def make_order_engine_router(*args, **kwargs):
     install_preparation_piece_line_services()
     install_preparation_piece_execution_guard()
     install_preparation_finalize_safety()
+    install_dashboard_eligibility_filter()
     _product_v2_routes.run_product_v2_sync = run_product_v2_sync_fixed
     install_product_source_authority()
     install_product_field_cost_support()
@@ -189,6 +191,7 @@ def make_order_engine_router(*args, **kwargs):
         make_store_delivery_reminder_router(db, current_user),
         make_store_delivery_payment_review_router(db, current_user),
         make_store_delivery_settlement_router(db, current_user),
+        make_dashboard_eligibility_router(db, current_user),
     ]
     existing_keys = set()
     for route in router.routes:
