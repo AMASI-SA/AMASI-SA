@@ -32,6 +32,9 @@ def install_order_review_forward_stage_guard() -> None:
     from preparation_pdf_amasi_a4_layout import (
         install_preparation_pdf_amasi_a4_layout,
     )
+    from preparation_pdf_card_readability_overlay import (
+        install_preparation_pdf_card_readability_overlay,
+    )
     from preparation_pdf_physical_piece_overlay import (
         install_preparation_pdf_physical_piece_overlay,
     )
@@ -47,6 +50,8 @@ def install_order_review_forward_stage_guard() -> None:
     install_preparation_pdf_compact_operational_layout()
     # The merchant-approved Amasi renderer must win over every legacy layout.
     install_preparation_pdf_amasi_a4_layout()
+    # Apply the real-file readability corrections without changing A4/3x5.
+    install_preparation_pdf_card_readability_overlay()
     # Final identity-safe overlay: one stored physical unit -> one card/QR.
     install_preparation_pdf_physical_piece_overlay()
 
