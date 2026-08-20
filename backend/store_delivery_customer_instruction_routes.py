@@ -38,11 +38,19 @@ def _require_customer_service(user: Any) -> dict[str, Any]:
     if not isinstance(user, dict):
         raise HTTPException(status_code=403, detail={"code": "delivery_instruction_permission_required"})
     role = normalize_text(user.get("role")).casefold()
-    extra = set(user.get("extra_permissions") or [])
+    granted = set(user.get("extra_permissions") or []) | set(user.get("permissions") or []) | set(user.get("effective_permissions") or [])
     denied = set(user.get("denied_permissions") or [])
-    permission = "store_delivery.instructions.manage"
-    allowed = (role in {"owner", "admin", "operations", "customer_service"} or user.get("is_owner") is True or permission in extra) and permission not in denied
-    if not allowed:
+    delivery_permission = "store_delivery.instructions.manage"
+    customer_service_permission = "customer_intelligence.inbox.read"
+    role_allowed = role in {"owner", "admin", "operations", "customer_service"} or user.get("is_owner") is True
+    permission_allowed = (
+        delivery_permission in granted or customer_service_permission in granted
+    )
+    explicitly_denied = (
+        delivery_permission in denied
+        or (customer_service_permission in granted and customer_service_permission in denied)
+    )
+    if not (role_allowed or permission_allowed) or explicitly_denied:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"code": "delivery_instruction_permission_required"})
     return user
 
@@ -210,4 +218,4 @@ def make_store_delivery_customer_instruction_router(db: Any, current_user: Calla
     return router
 
 
-__all__ = ["DeliveryInstructionCreate", "DeliveryInstructionUpdate", "ensure_store_delivery_instruction_indexes", "make_store_delivery_customer_instruction_router"]
+__all__ = ["DeliveryInstructionCreate", "DeliveryInstructionUpdate", "ensure_store_delivery_instruction_indexes", "make_store_delivery_customer_instruction_router", "_require_customer_service"]
