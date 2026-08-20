@@ -24,14 +24,12 @@ _original_make_order_engine_router = _routes.make_order_engine_router
 
 
 def _route_keys(route):
-    """Return unique (path, method) keys for an APIRoute."""
     path = getattr(route, "path", None)
     methods = getattr(route, "methods", None) or {None}
     return {(path, method) for method in methods}
 
 
 def make_order_engine_router(*args, **kwargs):
-    """Build Order Engine plus independent Mezan OS operations engines."""
     router = _original_make_order_engine_router(*args, **kwargs)
     db = args[0] if args else kwargs["db"]
     current_user = args[1] if len(args) > 1 else kwargs["current_user"]
@@ -49,10 +47,7 @@ def make_order_engine_router(*args, **kwargs):
     from product_sale_schedule_support import install_product_sale_schedule_support
     from product_category_publish_support import install_product_category_publish_support
     from product_main_image_dedupe_support import install_product_main_image_dedupe_support
-    from product_category_variant_support import (
-        install_product_category_variant_support,
-        make_product_category_catalog_router,
-    )
+    from product_category_variant_support import install_product_category_variant_support, make_product_category_catalog_router
     from product_v2_recent_sync_routes import make_product_v2_recent_sync_router
     from component_category_required_routes import make_component_category_required_router
     from component_workspace_cost_compat_routes import make_component_workspace_cost_compat_router
@@ -72,21 +67,18 @@ def make_order_engine_router(*args, **kwargs):
     from reviewed_product_sorting import make_reviewed_product_sorting_router
     from reviewed_preparation_batches import make_reviewed_preparation_batches_router
     from mobile_reviewed_preparation_routes import make_mobile_reviewed_preparation_router
+    from mobile_product_file_pdf import make_mobile_product_file_pdf_router
     from preparation_file_registry import make_preparation_file_registry_router
-    from preparation_piece_operations import (
-        install_preparation_piece_operations,
-        make_preparation_piece_operations_router,
-    )
+    from preparation_piece_operations import install_preparation_piece_operations, make_preparation_piece_operations_router
     from preparation_supplier_dispatch import make_preparation_supplier_dispatch_router
+    from supplier_dispatch_pdf import make_supplier_dispatch_pdf_router
+    from supplier_dispatch_share_evidence import make_supplier_dispatch_share_evidence_router
     from preparation_piece_line_services import install_preparation_piece_line_services
     from preparation_piece_execution_guard import install_preparation_piece_execution_guard
     from supplier_receiving_routes import make_supplier_receiving_router
     from fulfillment_experiment_routes import make_fulfillment_experiment_router
     from mezan_supplier_management_routes import make_mezan_supplier_management_router
-    from preparation_file_failure_safety import (
-        install_preparation_finalize_safety,
-        make_preparation_file_failure_safety_router,
-    )
+    from preparation_file_failure_safety import install_preparation_finalize_safety, make_preparation_file_failure_safety_router
     from product_inventory_receipt_routes import make_product_inventory_receipt_router
     from stock_preparation_order_routes import make_stock_preparation_order_router
     from salla_inventory_sync_routes import make_salla_inventory_sync_router
@@ -173,11 +165,14 @@ def make_order_engine_router(*args, **kwargs):
         make_reviewed_products_catalog_router(db, current_user),
         make_reviewed_product_sorting_router(db, current_user),
         make_mobile_reviewed_preparation_router(db, current_user),
+        make_mobile_product_file_pdf_router(db, current_user),
         make_reviewed_preparation_batches_router(db, current_user),
         make_preparation_file_registry_router(db, current_user),
         make_preparation_file_failure_safety_router(db, current_user),
         make_preparation_piece_operations_router(db, current_user),
         make_preparation_supplier_dispatch_router(db, current_user),
+        make_supplier_dispatch_pdf_router(db, current_user),
+        make_supplier_dispatch_share_evidence_router(db, current_user),
         make_mezan_supplier_management_router(db, current_user),
         make_fulfillment_experiment_router(db, current_user),
         make_supplier_receiving_router(db, current_user),
