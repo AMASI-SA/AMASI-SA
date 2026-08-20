@@ -24,6 +24,7 @@ from product_v2_routes import PRODUCTS, _number, _text
 RESOURCES = "mezan_cost_resources_v2"
 BINDINGS = "mezan_product_option_cost_bindings_v2"
 AUDIT = "mezan_cost_change_log_v2"
+OPTION_LEVEL_VALUE_ID = "__option__"
 
 
 def _now() -> datetime:
@@ -80,10 +81,28 @@ def _option_value(product: dict[str, Any], option_id: str, value_id: str) -> tup
     for option in product.get("options") or []:
         if str(option.get("id")) != str(option_id):
             continue
-        for value in option.get("values") or []:
+        values = option.get("values") or []
+        if not values and str(value_id) == OPTION_LEVEL_VALUE_ID:
+            return option, {
+                "id": OPTION_LEVEL_VALUE_ID,
+                "name": _text(option.get("name")) or "الخيار",
+            }
+        for value in values:
             if str(value.get("id")) == str(value_id):
                 return option, value
     raise HTTPException(status_code=422, detail={"code": "option_value_not_found"})
+
+
+def _binding_is_selected(
+    binding: dict[str, Any],
+    selected_keys: set[tuple[str, str]],
+    selected_option_ids: set[str],
+) -> bool:
+    option_id = str(binding.get("option_id"))
+    value_id = str(binding.get("value_id"))
+    if value_id == OPTION_LEVEL_VALUE_ID:
+        return option_id in selected_option_ids
+    return (option_id, value_id) in selected_keys
 
 
 async def _binding_view(db: Any, binding: dict[str, Any]) -> dict[str, Any]:
@@ -339,6 +358,7 @@ def make_product_option_cost_router(db: Any, current_user: Callable[..., Any]) -
         base_cost = _number(profile.get("base_cost")) or 0.0
         selected = payload.get("selected_options") if isinstance(payload.get("selected_options"), list) else []
         selected_keys = {(str(row.get("option_id")), str(row.get("value_id"))) for row in selected if isinstance(row, dict)}
+        selected_option_ids = {option_id for option_id, _value_id in selected_keys}
         bindings = await db[BINDINGS].find({
             "user_id": user_id,
             "salla_product_id": str(product["salla_product_id"]),
@@ -362,8 +382,7 @@ def make_product_option_cost_router(db: Any, current_user: Callable[..., Any]) -
         applied = []
         option_additional = 0.0
         for binding in bindings:
-            key = (str(binding.get("option_id")), str(binding.get("value_id")))
-            if key not in selected_keys:
+            if not _binding_is_selected(binding, selected_keys, selected_option_ids):
                 continue
             view = await _binding_view(db, binding)
             amount = _number(view.get("resolved_amount")) or 0.0
