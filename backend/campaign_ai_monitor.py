@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import campaign_ai_context_budget_v3 as _context_budget
 import campaign_ai_decision_v3 as _decision_v3
 import campaign_ai_evidence_runtime_enrichment_v3 as _evidence_enrichment
 import campaign_ai_execution_alignment as _alignment
@@ -103,6 +104,15 @@ _decision_evidence_builder = _evidence_enrichment.wrap_evidence_builder(
     _decision_v3.build_decision_evidence_pack_v3,
 )
 _decision_v3.build_decision_evidence_pack_v3 = _decision_evidence_builder
+
+# Bound the model representation after all evidence enrichment and before the
+# Responses API call. The original evidence object remains available to the
+# normalizer/execution guards; only the OpenAI view is compacted. A genuine
+# context-length rejection receives one stronger bounded retry.
+_base_v3_structured_response = _decision_v3._structured_response
+_decision_v3._structured_response = _context_budget.wrap_structured_response(
+    _base_v3_structured_response,
+)
 
 # Runtime authority: V3 owns diagnosis + marketing judgment, including its own
 # mandatory second pass for budget-owner coverage and counterfactual review.
