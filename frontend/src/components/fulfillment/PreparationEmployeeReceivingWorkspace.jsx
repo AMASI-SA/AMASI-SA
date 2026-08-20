@@ -133,7 +133,7 @@ export function CameraScanner({ onDetected, onClose }) {
                     NotReadableError: "الكاميرا مستخدمة في تطبيق آخر.",
                     SecurityError: "تشغيل الكاميرا يحتاج اتصال HTTPS آمن.",
                 };
-                setError(messages[cameraError?.name] || "تعذّر تشغيل الكاميرا. يمكنك البحث برقم الطلب.");
+                setError(messages[cameraError?.name] || "تعذّر تشغيل الكاميرا. يمكنك إدخال باركود القطعة يدويًا.");
             }
         }
 
