@@ -204,11 +204,13 @@ def prepare_context_budget(
         )
 
         bounded_payload = deepcopy(payload)
-        bounded_payload["active_entities"] = _compact(
-            selected_rows,
-            list_limit=list_limit,
-            text_limit=text_limit,
-        )
+        # Preserve the selected entity count. Only lists *inside* each row are
+        # bounded; applying list_limit to the outer entity list would silently
+        # collapse every tier to 12/8/6 rows and break budget-owner coverage.
+        bounded_payload["active_entities"] = [
+            _compact(row, list_limit=list_limit, text_limit=text_limit)
+            for row in selected_rows
+        ]
         bounded_payload["decision_evidence_v3"] = bounded_evidence
 
         # Context/history are supporting evidence. Preserve them, but progressively
