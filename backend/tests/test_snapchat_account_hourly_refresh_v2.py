@@ -4,6 +4,8 @@ import asyncio
 from copy import deepcopy
 from datetime import date, datetime, timezone
 
+import pytest
+
 from integrations_control_center import snapchat_account_hourly_refresh as hourly
 from integrations_control_center.snapchat_account_hourly_refresh import (
     ACCOUNT_REFRESH_SOURCE_MODE,
@@ -16,6 +18,9 @@ from integrations_control_center.snapchat_account_hourly_refresh import (
     extract_account_hour_rows,
     snapchat_account_request_window,
     snapchat_hourly_request_window,
+)
+from integrations_control_center.snapchat_native_data_common import (
+    SnapchatNativeSyncError,
 )
 from integrations_control_center.snapchat_dashboard_summary_routes import (
     summarize_snapchat_dashboard_rows,
@@ -230,7 +235,7 @@ def test_provider_request_uses_hour_campaign_breakdown_and_native_window():
     )
     context = _CaptureContext(payload)
 
-    rows, errors = asyncio.run(
+    fetched = asyncio.run(
         _fetch_account_hours(
             context,
             object(),
@@ -240,6 +245,7 @@ def test_provider_request_uses_hour_campaign_breakdown_and_native_window():
             request_end=datetime.fromisoformat("2026-08-02T14:00:00-07:00"),
         )
     )
+    rows, errors = fetched
 
     params = context.calls[0]["params"]
     assert params["granularity"] == PROVIDER_GRANULARITY == "HOUR"
@@ -248,6 +254,164 @@ def test_provider_request_uses_hour_campaign_breakdown_and_native_window():
     assert params["end_time"] == "2026-08-02T14:00:00-07:00"
     assert len(rows) == 1
     assert errors == []
+    assert fetched.coverage == {
+        "status": "complete",
+        "data_state": "confirmed_data",
+        "expected_requests": 1,
+        "completed_requests": 1,
+    }
+
+
+@pytest.mark.parametrize(
+    ("payload", "code"),
+    [
+        ({"request_status": "SUCCESS"}, "snapchat_account_hour_timeseries_missing"),
+        (
+            {
+                "request_status": "SUCCESS",
+                "timeseries_stats": [{"sub_request_status": "SUCCESS"}],
+            },
+            "snapchat_account_hour_timeseries_stat_missing",
+        ),
+        (
+            {
+                "request_status": "SUCCESS",
+                "timeseries_stats": [{
+                    "sub_request_status": "SUCCESS",
+                    "timeseries_stat": {},
+                }],
+            },
+            "snapchat_account_hour_campaign_breakdown_missing",
+        ),
+    ],
+)
+def test_successful_http_with_malformed_timeseries_fails_closed(payload, code):
+    context = _CaptureContext(payload)
+
+    with pytest.raises(SnapchatNativeSyncError) as raised:
+        asyncio.run(
+            _fetch_account_hours(
+                context,
+                object(),
+                "access-token",
+                account_id="account-1",
+                request_start=datetime.fromisoformat("2026-08-02T00:00:00+03:00"),
+                request_end=datetime.fromisoformat("2026-08-03T00:00:00+03:00"),
+            )
+        )
+
+    assert raised.value.code == code
+    assert raised.value.result["coverage"]["status"] == "incomplete"
+    assert raised.value.result["coverage"]["data_state"] == "unknown_incomplete"
+
+
+def test_provider_rows_outside_requested_window_are_incomplete():
+    context = _CaptureContext(
+        _hour_payload(
+            (
+                "campaign-1",
+                [
+                    {
+                        "start_time": "2026-08-01T00:00:00+03:00",
+                        "end_time": "2026-08-01T01:00:00+03:00",
+                        "stats": _metrics(spend=0),
+                    }
+                ],
+            )
+        )
+    )
+
+    with pytest.raises(SnapchatNativeSyncError) as raised:
+        asyncio.run(
+            _fetch_account_hours(
+                context,
+                object(),
+                "access-token",
+                account_id="account-1",
+                request_start=datetime.fromisoformat("2026-08-02T00:00:00+03:00"),
+                request_end=datetime.fromisoformat("2026-08-03T00:00:00+03:00"),
+            )
+        )
+
+    assert raised.value.code == "snapchat_account_hour_window_mismatch"
+    assert raised.value.result["coverage"] == {
+        "status": "incomplete",
+        "data_state": "unknown_incomplete",
+        "expected_requests": 1,
+        "completed_requests": 0,
+        "reason": "snapchat_account_hour_window_mismatch",
+    }
+
+
+def test_empty_timeseries_without_result_envelope_is_incomplete():
+    context = _CaptureContext({
+        "request_status": "SUCCESS",
+        "timeseries_stats": [],
+    })
+
+    with pytest.raises(SnapchatNativeSyncError) as raised:
+        asyncio.run(
+            _fetch_account_hours(
+                context,
+                object(),
+                "access-token",
+                account_id="account-1",
+                request_start=datetime.fromisoformat("2026-08-02T00:00:00+03:00"),
+                request_end=datetime.fromisoformat("2026-08-03T00:00:00+03:00"),
+            )
+        )
+
+    assert raised.value.code == "snapchat_account_hour_result_envelope_missing"
+    assert raised.value.result["coverage"]["status"] == "incomplete"
+
+
+def test_valid_empty_campaign_breakdown_is_confirmed_no_data():
+    context = _CaptureContext(_hour_payload())
+
+    fetched = asyncio.run(
+        _fetch_account_hours(
+            context,
+            object(),
+            "access-token",
+            account_id="account-1",
+            request_start=datetime.fromisoformat("2026-08-02T00:00:00+03:00"),
+            request_end=datetime.fromisoformat("2026-08-03T00:00:00+03:00"),
+        )
+    )
+
+    assert fetched.rows == []
+    assert fetched.errors == []
+    assert fetched.coverage["data_state"] == "confirmed_no_data"
+
+
+def test_unfinished_pagination_is_incomplete(monkeypatch):
+    payload = _hour_payload()
+    payload["paging"] = {
+        "next_link": "https://adsapi.snapchat.com/v1/adaccounts/account-1/stats?page=2"
+    }
+    context = _CaptureContext(payload)
+    monkeypatch.setattr(hourly, "MAX_PAGES", 1)
+
+    with pytest.raises(SnapchatNativeSyncError) as raised:
+        asyncio.run(
+            _fetch_account_hours(
+                context,
+                object(),
+                "access-token",
+                account_id="account-1",
+                request_start=datetime.fromisoformat("2026-08-02T00:00:00+03:00"),
+                request_end=datetime.fromisoformat("2026-08-03T00:00:00+03:00"),
+            )
+        )
+
+    assert raised.value.code == "snapchat_account_hour_pagination_incomplete"
+    assert raised.value.result["coverage"] == {
+        "status": "incomplete",
+        "data_state": "unknown_incomplete",
+        "expected_requests": 2,
+        "completed_requests": 1,
+        "reason": "snapchat_account_hour_pagination_incomplete",
+    }
 
 
 class _PerformanceCollection:
@@ -323,7 +487,16 @@ def test_refresh_persists_two_campaign_days_and_exact_account_total(
     ]
 
     async def fake_fetch(*args, **kwargs):
-        return rows, []
+        return hourly.AccountHourFetchResult(
+            rows=rows,
+            errors=[],
+            coverage={
+                "status": "complete",
+                "data_state": "confirmed_data",
+                "expected_requests": 1,
+                "completed_requests": 1,
+            },
+        )
 
     monkeypatch.setattr(hourly, "_fetch_account_hours", fake_fetch)
     context = _RefreshContext()
@@ -398,9 +571,18 @@ def test_refresh_persists_two_campaign_days_and_exact_account_total(
     assert account_total["metrics"]["conversion_purchases_value"] == 17_000_000
 
 
-def test_refresh_keeps_zero_day_account_row_without_campaign_rows(monkeypatch):
+def test_refresh_does_not_replace_stale_fact_with_unproven_zero(monkeypatch):
     async def fake_fetch(*args, **kwargs):
-        return [], []
+        return hourly.AccountHourFetchResult(
+            rows=[],
+            errors=[],
+            coverage={
+                "status": "complete",
+                "data_state": "confirmed_no_data",
+                "expected_requests": 1,
+                "completed_requests": 1,
+            },
+        )
 
     monkeypatch.setattr(hourly, "_fetch_account_hours", fake_fetch)
     context = _RefreshContext()
@@ -420,13 +602,56 @@ def test_refresh_keeps_zero_day_account_row_without_campaign_rows(monkeypatch):
         )
     )
 
-    assert result["rows_saved"] == 1
+    assert result["rows_saved"] == 0
     assert result["campaign_rows_saved"] == 0
-    assert len(context.db.performance.updates) == 1
-    write = context.db.performance.updates[0]
-    assert write["query"]["entity_type"] == "ad_account"
+    assert result["coverage"]["data_state"] == "confirmed_no_data"
+    assert context.db.performance.updates == []
+
+
+def test_refresh_persists_provider_confirmed_zero(monkeypatch):
+    rows = [{
+        "campaign_id": "campaign-zero",
+        "start_time": "2026-08-02T00:00:00+03:00",
+        "end_time": "2026-08-02T01:00:00+03:00",
+        "metrics": {key: 0 for key in hourly.STAT_FIELDS},
+    }]
+
+    async def fake_fetch(*args, **kwargs):
+        return hourly.AccountHourFetchResult(
+            rows=rows,
+            errors=[],
+            coverage={
+                "status": "complete",
+                "data_state": "confirmed_zero",
+                "expected_requests": 1,
+                "completed_requests": 1,
+            },
+        )
+
+    monkeypatch.setattr(hourly, "_fetch_account_hours", fake_fetch)
+    context = _RefreshContext()
+    result = asyncio.run(
+        hourly.refresh_snapchat_account_hours(
+            context,
+            object(),
+            "access-token",
+            {
+                "ad_account_id": "account-1",
+                "timezone": "Asia/Riyadh",
+                "currency": "SAR",
+            },
+            start_date=date(2026, 8, 2),
+            end_date=date(2026, 8, 2),
+            now=datetime(2026, 8, 3, 12, 0, tzinfo=timezone.utc),
+        )
+    )
+
+    assert result["coverage"]["data_state"] == "confirmed_zero"
+    assert result["rows_saved"] == 2
+    assert len(context.db.performance.updates) == 2
     assert all(
         value == 0
+        for write in context.db.performance.updates
         for value in write["update"]["$set"]["metrics"].values()
     )
 

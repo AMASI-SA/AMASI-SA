@@ -121,7 +121,18 @@ async def test_every_total_entity_request_asks_for_exact_audience_metrics():
 
         async def get_json(self, client, url, *, headers, params=None):
             self.calls.append(deepcopy(params or {}))
-            return {"total_stats": []}
+            breakdown = str((params or {}).get("breakdown") or "")
+            return {
+                "request_status": "SUCCESS",
+                "total_stats": [
+                    {
+                        "sub_request_status": "SUCCESS",
+                        "total_stat": {
+                            "breakdown_stats": {breakdown: []},
+                        },
+                    }
+                ]
+            }
 
     context = CaptureContext()
     request_start = datetime(2026, 8, 9, tzinfo=timezone.utc)

@@ -88,6 +88,16 @@ MAX_REPORT_ROWS = 100_000
 MAX_ENTITY_ROWS = 50_000
 ADSQUAD_PAGE_SIZE = 9
 
+DATA_STATE_CONFIRMED_DATA = "confirmed_data"
+DATA_STATE_CONFIRMED_ZERO = "confirmed_zero"
+DATA_STATE_CONFIRMED_NO_DATA = "confirmed_no_data"
+DATA_STATE_UNKNOWN_INCOMPLETE = "unknown_incomplete"
+CONFIRMED_DATA_STATES = frozenset({
+    DATA_STATE_CONFIRMED_DATA,
+    DATA_STATE_CONFIRMED_ZERO,
+    DATA_STATE_CONFIRMED_NO_DATA,
+})
+
 AccountRefresh = Callable[..., Awaitable[dict[str, Any]]]
 
 
@@ -108,6 +118,84 @@ def _number(value: Any) -> float | None:
     except (TypeError, ValueError, OverflowError):
         return None
     return parsed if parsed == parsed and abs(parsed) != float("inf") else None
+
+
+def _has_numeric_provider_metric(metrics: Any) -> bool:
+    if not isinstance(metrics, dict):
+        return False
+    observed = False
+    for field in TOTAL_STAT_FIELDS:
+        if field not in metrics:
+            continue
+        if _number(metrics.get(field)) is None:
+            return False
+        observed = True
+    return observed
+
+
+def _valid_provider_window(
+    start_time: Any,
+    end_time: Any,
+    *,
+    expected_start: Any = None,
+    expected_end: Any = None,
+) -> bool:
+    start = _parse_datetime(start_time)
+    end = _parse_datetime(end_time)
+    if start is None or end is None:
+        return False
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=timezone.utc)
+    if end.tzinfo is None:
+        end = end.replace(tzinfo=timezone.utc)
+    start = start.astimezone(timezone.utc)
+    end = end.astimezone(timezone.utc)
+    if end <= start:
+        return False
+    if expected_start is not None:
+        requested_start = _parse_datetime(expected_start)
+        if requested_start is None:
+            return False
+        if requested_start.tzinfo is None:
+            requested_start = requested_start.replace(tzinfo=timezone.utc)
+        if start != requested_start.astimezone(timezone.utc):
+            return False
+    if expected_end is not None:
+        requested_end = _parse_datetime(expected_end)
+        if requested_end is None:
+            return False
+        if requested_end.tzinfo is None:
+            requested_end = requested_end.replace(tzinfo=timezone.utc)
+        if end != requested_end.astimezone(timezone.utc):
+            return False
+    return True
+
+
+def _performance_data_state(
+    rows: list[dict[str, Any]],
+    *,
+    errors: list[dict[str, Any]],
+    structure_seen: bool,
+) -> str:
+    """Classify only structurally proven provider results as known data."""
+    if errors or not structure_seen:
+        return DATA_STATE_UNKNOWN_INCOMPLETE
+    if not rows:
+        return DATA_STATE_CONFIRMED_NO_DATA
+    numeric_values: list[float] = []
+    for row in rows:
+        metrics = row.get("metrics")
+        if not isinstance(metrics, dict):
+            continue
+        for field in TOTAL_STAT_FIELDS:
+            value = _number(metrics.get(field))
+            if value is not None:
+                numeric_values.append(value)
+    if not numeric_values:
+        return DATA_STATE_UNKNOWN_INCOMPLETE
+    if any(value != 0 for value in numeric_values):
+        return DATA_STATE_CONFIRMED_DATA
+    return DATA_STATE_CONFIRMED_ZERO
 
 
 async def _to_list(cursor: Any, length: int) -> list[dict[str, Any]]:
@@ -161,7 +249,16 @@ def extract_adsquad_total_rows(
     request_end: datetime,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int, bool]:
     """Extract complete Ad Squad rows from a Campaign TOTAL response."""
-    wrapped_stats = payload.get("total_stats") or []
+    if not isinstance(payload, dict) or str(
+        payload.get("request_status") or ""
+    ).upper() != "SUCCESS":
+        raise SnapchatNativeSyncError(
+            "snapchat_adsquad_request_incomplete",
+            "Snapchat did not confirm a successful Ad Squad TOTAL response.",
+            status_code=502,
+            retryable=True,
+        )
+    wrapped_stats = payload.get("total_stats")
     if not isinstance(wrapped_stats, list):
         raise SnapchatNativeSyncError(
             "snapchat_adsquad_total_payload_invalid",
@@ -173,20 +270,45 @@ def extract_adsquad_total_rows(
     errors: list[dict[str, Any]] = []
     successful = 0
     breakdown_seen = False
+    if not wrapped_stats:
+        errors.append({
+            "kind": "adsquad_total_stats",
+            "campaign_id": campaign_id,
+            "code": "snapchat_adsquad_total_stats_missing",
+            "message": "Snapchat returned no Ad Squad TOTAL result envelope.",
+            "retryable": True,
+        })
+        return rows, errors, successful, breakdown_seen
     for wrapped in wrapped_stats:
         if not isinstance(wrapped, dict):
-            continue
-        status = str(wrapped.get("sub_request_status") or "SUCCESS").upper()
-        if "FAIL" in status or "ERROR" in status:
             errors.append({
                 "kind": "adsquad_total_stats",
                 "campaign_id": campaign_id,
-                "error": status[:100],
+                "code": "snapchat_adsquad_total_wrapper_invalid",
+                "message": "Snapchat returned an invalid Ad Squad result wrapper.",
+                "retryable": True,
             })
             continue
-        successful += 1
-        stat = wrapped.get("total_stat", wrapped)
+        status = str(wrapped.get("sub_request_status") or "").upper()
+        if status != "SUCCESS":
+            errors.append({
+                "kind": "adsquad_total_stats",
+                "campaign_id": campaign_id,
+                "code": "snapchat_adsquad_subrequest_incomplete",
+                "message": "Snapchat did not confirm the Ad Squad subrequest.",
+                "error": status[:100],
+                "retryable": True,
+            })
+            continue
+        stat = wrapped.get("total_stat")
         if not isinstance(stat, dict):
+            errors.append({
+                "kind": "adsquad_total_stats",
+                "campaign_id": campaign_id,
+                "code": "snapchat_adsquad_total_stat_missing",
+                "message": "Snapchat success response omitted total_stat.",
+                "retryable": True,
+            })
             continue
         provider_start = stat.get("start_time") or request_start.isoformat(
             timespec="seconds"
@@ -194,20 +316,60 @@ def extract_adsquad_total_rows(
         provider_end = stat.get("end_time") or request_end.isoformat(
             timespec="seconds"
         )
+        if not _valid_provider_window(
+            provider_start,
+            provider_end,
+            expected_start=request_start,
+            expected_end=request_end,
+        ):
+            errors.append({
+                "kind": "adsquad_total_stats",
+                "campaign_id": campaign_id,
+                "code": "snapchat_adsquad_provider_window_invalid",
+                "message": "Snapchat returned an invalid Ad Squad report window.",
+                "retryable": True,
+            })
+            continue
         breakdown = stat.get("breakdown_stats")
         candidates: list[dict[str, Any]] = []
-        if isinstance(breakdown, dict):
-            for key in ("adsquad", "ad_squad", "adsquads"):
-                value = breakdown.get(key)
-                if isinstance(value, list):
-                    breakdown_seen = True
-                    candidates.extend(
-                        item for item in value if isinstance(item, dict)
-                    )
+        if not isinstance(breakdown, dict):
+            errors.append({
+                "kind": "adsquad_total_stats",
+                "campaign_id": campaign_id,
+                "code": "snapchat_adsquad_breakdown_missing",
+                "message": "Snapchat total_stat omitted Ad Squad breakdown_stats.",
+                "retryable": True,
+            })
+            continue
+        matching_values = [
+            breakdown[key]
+            for key in ("adsquad", "ad_squad", "adsquads")
+            if key in breakdown
+        ]
+        if not matching_values or any(
+            not isinstance(value, list) for value in matching_values
+        ):
+            errors.append({
+                "kind": "adsquad_total_stats",
+                "campaign_id": campaign_id,
+                "code": "snapchat_adsquad_breakdown_invalid",
+                "message": "Snapchat returned an invalid Ad Squad breakdown.",
+                "retryable": True,
+            })
+            continue
+        breakdown_seen = True
+        wrapper_valid = True
+        for value in matching_values:
+            for item in value:
+                if not isinstance(item, dict):
+                    wrapper_valid = False
+                    continue
+                candidates.append(item)
         for entity in candidates:
             adsquad_id = _text(entity.get("id"))
             metrics = entity.get("stats")
-            if not adsquad_id or not isinstance(metrics, dict):
+            if not adsquad_id or not _has_numeric_provider_metric(metrics):
+                wrapper_valid = False
                 continue
             rows.append({
                 "campaign_id": campaign_id,
@@ -216,6 +378,16 @@ def extract_adsquad_total_rows(
                 "end_time": provider_end,
                 "metrics": metrics,
             })
+        if not wrapper_valid:
+            errors.append({
+                "kind": "adsquad_total_stats",
+                "campaign_id": campaign_id,
+                "code": "snapchat_adsquad_breakdown_row_invalid",
+                "message": "Snapchat returned a partial or invalid Ad Squad row.",
+                "retryable": True,
+            })
+            continue
+        successful += 1
     return rows, errors, successful, breakdown_seen
 
 
@@ -251,7 +423,7 @@ async def _fetch_campaign_adsquad_totals(
     errors: list[dict[str, Any]] = []
     successful = 0
     breakdown_seen = False
-    for _ in range(MAX_PAGES):
+    for page_index in range(MAX_PAGES):
         payload = await context.get_json(
             client,
             url,
@@ -270,8 +442,37 @@ async def _fetch_campaign_adsquad_totals(
         errors.extend(page_errors)
         successful += page_success
         breakdown_seen = breakdown_seen or page_breakdown
-        next_url = _safe_next_url((payload.get("paging") or {}).get("next_link"))
+        paging = payload.get("paging")
+        if paging is not None and not isinstance(paging, dict):
+            errors.append({
+                "kind": "adsquad_total_stats",
+                "campaign_id": campaign_id,
+                "code": "snapchat_adsquad_paging_invalid",
+                "message": "Snapchat returned an invalid paging envelope.",
+                "retryable": True,
+            })
+            break
+        raw_next_url = (paging or {}).get("next_link")
+        if not raw_next_url:
+            break
+        next_url = _safe_next_url(raw_next_url)
         if not next_url:
+            errors.append({
+                "kind": "adsquad_total_stats",
+                "campaign_id": campaign_id,
+                "code": "snapchat_adsquad_next_link_invalid",
+                "message": "Snapchat pagination returned an untrusted next_link.",
+                "retryable": True,
+            })
+            break
+        if page_index == MAX_PAGES - 1:
+            errors.append({
+                "kind": "adsquad_total_stats",
+                "campaign_id": campaign_id,
+                "code": "snapchat_adsquad_pagination_incomplete",
+                "message": "Snapchat Ad Squad pagination exceeded the page limit.",
+                "retryable": True,
+            })
             break
         url, params = next_url, None
     if successful == 0 and errors:
@@ -321,6 +522,11 @@ async def _fetch_adsquad_window(
                     "rows": rows,
                     "errors": report_errors,
                     "breakdown_seen": breakdown_seen,
+                    "data_state": _performance_data_state(
+                        rows,
+                        errors=report_errors,
+                        structure_seen=breakdown_seen,
+                    ),
                 }
             except SnapchatNativeSyncError as exc:
                 if exc.code == "snapchat_needs_reauth":
@@ -337,6 +543,7 @@ async def _fetch_adsquad_window(
                         "retryable": bool(exc.retryable),
                     }],
                     "breakdown_seen": False,
+                    "data_state": DATA_STATE_UNKNOWN_INCOMPLETE,
                 }
 
     tasks = [
@@ -492,20 +699,27 @@ async def _recent_refresh(
     account_id: str,
     *,
     now: datetime,
-) -> bool:
+) -> dict[str, Any] | None:
     row = await _collection(db, ADSQUAD_REFRESH_STATE_COLLECTION).find_one(
         {"user_id": user_id, "ad_account_id": account_id},
     )
     observed = _parse_datetime((row or {}).get("last_success_at"))
     if observed is None:
-        return False
+        return None
     if observed.tzinfo is None:
         observed = observed.replace(tzinfo=timezone.utc)
-    return (
+    coverage = (row or {}).get("coverage")
+    if not (
+        isinstance(coverage, dict)
+        and coverage.get("status") == "complete"
+        and coverage.get("data_state") in CONFIRMED_DATA_STATES
+    ):
+        return None
+    return row if (
         _text((row or {}).get("source_mode")) == ADSQUAD_REFRESH_SOURCE_MODE
         and (now - observed.astimezone(timezone.utc)).total_seconds()
         < ADSQUAD_REFRESH_INTERVAL_SECONDS
-    )
+    ) else None
 
 
 async def refresh_snapchat_adsquad_performance(
@@ -528,18 +742,20 @@ async def refresh_snapchat_adsquad_performance(
         )
     timezone_name = _valid_timezone_name(account.get("timezone"))
     current = _aware_now(now)
-    if await _recent_refresh(
+    recent_refresh = await _recent_refresh(
         context.db,
         context.user_id,
         account_id,
         now=current,
-    ):
+    )
+    if recent_refresh:
         return {
             "source_mode": ADSQUAD_SOURCE_MODE,
             "skipped": True,
             "skip_reason": "fresh_within_15_minutes",
             "rows_saved": 0,
             "provider_calls": 0,
+            "coverage": dict(recent_refresh.get("coverage") or {}),
             "source_only": True,
         }
 
@@ -563,6 +779,12 @@ async def refresh_snapchat_adsquad_performance(
             "skip_reason": "empty_request_window",
             "rows_saved": 0,
             "provider_calls": 0,
+            "coverage": {
+                "status": "incomplete",
+                "data_state": DATA_STATE_UNKNOWN_INCOMPLETE,
+                "expected_requests": 0,
+                "completed_requests": 0,
+            },
             "source_only": True,
         }
 
@@ -576,6 +798,10 @@ async def refresh_snapchat_adsquad_performance(
     account_local_saved = 0
     request_windows: list[dict[str, str]] = []
     breakdown_days = 0
+    expected_requests = 0
+    completed_requests = 0
+    confirmed_states: list[str] = []
+    pending_rows: list[tuple[str, date, list[dict[str, Any]]]] = []
 
     for report_date in report_dates:
         window = account_local_total_window(
@@ -584,6 +810,13 @@ async def refresh_snapchat_adsquad_performance(
             now=current,
         )
         if window is None:
+            errors.append({
+                "kind": "adsquad_total_stats",
+                "date": report_date.isoformat(),
+                "code": "snapchat_adsquad_window_unavailable",
+                "message": "The requested Ad Squad report window was unavailable.",
+                "retryable": True,
+            })
             continue
         request_start, request_end = window
         request_windows.append({
@@ -596,8 +829,24 @@ async def refresh_snapchat_adsquad_performance(
             mode: [] for mode in ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES
         }
         complete_by_mode = {
-            mode: True for mode in ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES
+            mode: False for mode in ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES
         }
+        expected_identities = {
+            (_text(campaign.get("external_id")), mode)
+            for campaign in campaigns
+            if _text(campaign.get("external_id"))
+            for mode in ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES
+        }
+        expected_requests += len(expected_identities)
+        completed_identities: set[tuple[str, str]] = set()
+        if not expected_identities:
+            errors.append({
+                "kind": "adsquad_total_stats",
+                "date": report_date.isoformat(),
+                "code": "snapchat_adsquad_campaign_coverage_unproven",
+                "message": "No active campaign performance request could be proven.",
+                "retryable": True,
+            })
 
         window_results = await _fetch_adsquad_window(
             context,
@@ -608,24 +857,63 @@ async def refresh_snapchat_adsquad_performance(
             request_end=request_end,
         )
         for result in window_results:
+            campaign_id = _text(result.get("campaign_id"))
             action_report_time = _text(result.get("action_report_time"))
-            if action_report_time not in rows_by_mode:
+            identity = (campaign_id, action_report_time)
+            if identity not in expected_identities:
+                errors.append({
+                    "kind": "adsquad_total_stats",
+                    "date": report_date.isoformat(),
+                    "code": "snapchat_adsquad_result_identity_unexpected",
+                    "campaign_id": campaign_id,
+                    "action_report_time": action_report_time,
+                    "retryable": True,
+                })
                 continue
             campaign_rows = result.get("rows") or []
             campaign_errors = result.get("errors") or []
-            rows_by_mode[action_report_time].extend(campaign_rows)
-            complete_by_mode[action_report_time] = (
-                complete_by_mode[action_report_time]
+            data_state = _text(result.get("data_state"))
+            request_complete = (
+                data_state in CONFIRMED_DATA_STATES
                 and bool(result.get("breakdown_seen"))
                 and not campaign_errors
             )
+            if request_complete and identity not in completed_identities:
+                completed_identities.add(identity)
+                confirmed_states.append(data_state)
+                rows_by_mode[action_report_time].extend(campaign_rows)
             errors.extend({
                 **error,
                 "date": report_date.isoformat(),
                 "action_report_time": action_report_time,
             } for error in campaign_errors)
 
+        completed_requests += len(completed_identities)
+        for action_report_time in ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES:
+            expected_for_mode = {
+                identity for identity in expected_identities
+                if identity[1] == action_report_time
+            }
+            complete_by_mode[action_report_time] = bool(expected_for_mode) and (
+                expected_for_mode <= completed_identities
+            )
+
         for action_report_time, mode_rows in rows_by_mode.items():
+            if not complete_by_mode[action_report_time]:
+                continue
+            pending_rows.append((action_report_time, report_date, mode_rows))
+
+    now_iso = context.now_iso()
+    coverage_complete = (
+        bool(request_windows)
+        and len(request_windows) == len(report_dates)
+        and expected_requests > 0
+        and completed_requests == expected_requests
+        and not errors
+        and not campaign_limit_reached
+    )
+    if coverage_complete:
+        for action_report_time, report_date, mode_rows in pending_rows:
             local = _day_buckets(
                 mode_rows,
                 timezone_name=timezone_name,
@@ -648,10 +936,22 @@ async def refresh_snapchat_adsquad_performance(
                     action_report_time=action_report_time,
                 )
                 account_local_saved += 1
-            if complete_by_mode[action_report_time]:
-                breakdown_days += 1
+            breakdown_days += 1
 
-    now_iso = context.now_iso()
+    if not coverage_complete:
+        aggregate_data_state = DATA_STATE_UNKNOWN_INCOMPLETE
+    elif DATA_STATE_CONFIRMED_DATA in confirmed_states:
+        aggregate_data_state = DATA_STATE_CONFIRMED_DATA
+    elif DATA_STATE_CONFIRMED_ZERO in confirmed_states:
+        aggregate_data_state = DATA_STATE_CONFIRMED_ZERO
+    else:
+        aggregate_data_state = DATA_STATE_CONFIRMED_NO_DATA
+    coverage = {
+        "status": "complete" if coverage_complete else "incomplete",
+        "data_state": aggregate_data_state,
+        "expected_requests": expected_requests,
+        "completed_requests": completed_requests,
+    }
     state_set: dict[str, Any] = {
         "user_id": context.user_id,
         "ad_account_id": account_id,
@@ -661,10 +961,11 @@ async def refresh_snapchat_adsquad_performance(
         "errors_count": len(errors),
         "source_mode": ADSQUAD_REFRESH_SOURCE_MODE,
         "provider_granularity": ADSQUAD_PROVIDER_GRANULARITY,
+        "coverage": coverage,
         "updated_at": now_iso,
         "last_attempt_at": now_iso,
     }
-    if not errors and not campaign_limit_reached:
+    if coverage_complete:
         state_set["last_success_at"] = now_iso
     await _collection(
         context.db,
@@ -690,6 +991,7 @@ async def refresh_snapchat_adsquad_performance(
         "campaign_limit_reached": campaign_limit_reached,
         "errors_count": len(errors),
         "errors": errors[:50],
+        "coverage": coverage,
         "provider_calls": context.provider_calls - calls_before,
         "provider_granularity": ADSQUAD_PROVIDER_GRANULARITY,
         "provider_breakdown": ADSQUAD_BREAKDOWN,
@@ -758,6 +1060,12 @@ def install_snapchat_adsquad_performance_refresh() -> None:
                     "message": exc.message[:300],
                     "retryable": bool(exc.retryable),
                 }],
+                "coverage": {
+                    "status": "incomplete",
+                    "data_state": DATA_STATE_UNKNOWN_INCOMPLETE,
+                    "expected_requests": 0,
+                    "completed_requests": 0,
+                },
                 "source_only": True,
             }
         return output

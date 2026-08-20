@@ -69,8 +69,10 @@ class FakeDB:
 
 def test_extract_ad_hour_rows_preserves_campaign_identity():
     payload = {
+        "request_status": "SUCCESS",
         "timeseries_stats": [
             {
+                "sub_request_status": "SUCCESS",
                 "timeseries_stat": {
                     "breakdown_stats": {
                         "ad": [
@@ -109,13 +111,31 @@ def test_extract_ad_hour_rows_preserves_campaign_identity():
     assert rows[0]["metrics"]["spend"] == 5_000_000
 
 
+def test_ad_success_without_timeseries_stat_is_incomplete():
+    rows, errors, successful = module.extract_ad_hour_rows(
+        {
+            "request_status": "SUCCESS",
+            "timeseries_stats": [
+                {"sub_request_status": "SUCCESS", "timeseries_stat": None}
+            ]
+        },
+        campaign_id="campaign-1",
+    )
+
+    assert rows == []
+    assert successful == 0
+    assert errors[0]["code"] == "snapchat_ad_timeseries_stat_missing"
+
+
 def test_extract_ad_total_rows_preserves_all_attributed_purchases():
     payload = {
+        "request_status": "SUCCESS",
         "total_stats": [
             {
+                "sub_request_status": "SUCCESS",
                 "total_stat": {
-                    "start_time": "2026-08-08T00:00:00+03:00",
-                    "end_time": "2026-08-08T12:00:00+03:00",
+                    "start_time": "2026-08-08T00:00:00+00:00",
+                    "end_time": "2026-08-08T12:00:00+00:00",
                     "breakdown_stats": {
                         "ad": [
                             {
@@ -147,6 +167,150 @@ def test_extract_ad_total_rows_preserves_all_attributed_purchases():
     assert rows[0]["metrics"]["conversion_purchases"] == 15
 
 
+@pytest.mark.parametrize("request_status", [None, "PARTIAL"])
+def test_ad_total_requires_explicit_success_status(request_status):
+    payload = {
+        "total_stats": [
+            {
+                "sub_request_status": "SUCCESS",
+                "total_stat": {"breakdown_stats": {"ad": []}},
+            }
+        ]
+    }
+    if request_status is not None:
+        payload["request_status"] = request_status
+
+    with pytest.raises(module.SnapchatNativeSyncError) as raised:
+        module.extract_ad_total_rows(
+            payload,
+            campaign_id="campaign-1",
+            request_start=datetime(2026, 8, 8, tzinfo=timezone.utc),
+            request_end=datetime(2026, 8, 9, tzinfo=timezone.utc),
+        )
+
+    assert raised.value.code == "snapchat_ad_request_incomplete"
+
+
+def test_ad_total_missing_subrequest_status_is_incomplete():
+    rows, errors, successful, breakdown_seen = module.extract_ad_total_rows(
+        {
+            "request_status": "SUCCESS",
+            "total_stats": [
+                {"total_stat": {"breakdown_stats": {"ad": []}}}
+            ],
+        },
+        campaign_id="campaign-1",
+        request_start=datetime(2026, 8, 8, tzinfo=timezone.utc),
+        request_end=datetime(2026, 8, 9, tzinfo=timezone.utc),
+    )
+
+    assert rows == []
+    assert successful == 0
+    assert breakdown_seen is False
+    assert errors[0]["code"] == "snapchat_ad_subrequest_incomplete"
+
+
+@pytest.mark.parametrize(
+    ("start_time", "metrics", "expected_code"),
+    [
+        (
+            "not-a-date",
+            {"spend": 0},
+            "snapchat_ad_provider_window_invalid",
+        ),
+        (
+            "2026-08-07T00:00:00+00:00",
+            {"spend": 0},
+            "snapchat_ad_provider_window_invalid",
+        ),
+        (
+            None,
+            {"spend": 0, "conversion_purchases": "malformed"},
+            "snapchat_ad_breakdown_row_invalid",
+        ),
+    ],
+)
+def test_ad_total_rejects_malformed_provider_evidence(
+    start_time,
+    metrics,
+    expected_code,
+):
+    total_stat = {
+        "breakdown_stats": {"ad": [{"id": "ad-1", "stats": metrics}]}
+    }
+    if start_time is not None:
+        total_stat["start_time"] = start_time
+    rows, errors, successful, breakdown_seen = module.extract_ad_total_rows(
+        {
+            "request_status": "SUCCESS",
+            "total_stats": [
+                {
+                    "sub_request_status": "SUCCESS",
+                    "total_stat": total_stat,
+                }
+            ],
+        },
+        campaign_id="campaign-1",
+        request_start=datetime(2026, 8, 8, tzinfo=timezone.utc),
+        request_end=datetime(2026, 8, 9, tzinfo=timezone.utc),
+    )
+
+    assert rows == []
+    assert successful == 0
+    assert errors[0]["code"] == expected_code
+    assert module._performance_data_state(
+        rows,
+        errors=errors,
+        structure_seen=breakdown_seen,
+    ) == module.DATA_STATE_UNKNOWN_INCOMPLETE
+
+
+@pytest.mark.parametrize(
+    ("breakdown_rows", "expected_state"),
+    [
+        ([], "confirmed_no_data"),
+        (
+            [
+                {
+                    "id": "ad-zero",
+                    "stats": {"spend": 0, "impressions": 0, "swipes": 0},
+                }
+            ],
+            "confirmed_zero",
+        ),
+    ],
+)
+def test_ad_distinguishes_confirmed_no_data_and_zero(
+    breakdown_rows,
+    expected_state,
+):
+    rows, errors, successful, breakdown_seen = module.extract_ad_total_rows(
+        {
+            "request_status": "SUCCESS",
+            "total_stats": [
+                {
+                    "sub_request_status": "SUCCESS",
+                    "total_stat": {
+                        "breakdown_stats": {"ad": breakdown_rows}
+                    },
+                }
+            ]
+        },
+        campaign_id="campaign-1",
+        request_start=datetime(2026, 8, 8, tzinfo=timezone.utc),
+        request_end=datetime(2026, 8, 9, tzinfo=timezone.utc),
+    )
+
+    assert errors == []
+    assert successful == 1
+    assert breakdown_seen is True
+    assert module._performance_data_state(
+        rows,
+        errors=errors,
+        structure_seen=breakdown_seen,
+    ) == expected_state
+
+
 @pytest.mark.asyncio
 async def test_total_request_keeps_conversion_only_ad_rows():
     class Context:
@@ -155,8 +319,10 @@ async def test_total_request_keeps_conversion_only_ad_rows():
         async def get_json(self, client, url, *, headers, params):
             self.params = deepcopy(params)
             return {
+                "request_status": "SUCCESS",
                 "total_stats": [
                     {
+                        "sub_request_status": "SUCCESS",
                         "total_stat": {
                             "breakdown_stats": {
                                 "ad": [
@@ -186,6 +352,55 @@ async def test_total_request_keeps_conversion_only_ad_rows():
     assert rows[0]["metrics"]["conversion_purchases"] == 3
     assert context.params["granularity"] == "TOTAL"
     assert context.params["omit_empty"] == "false"
+
+
+@pytest.mark.asyncio
+async def test_ad_page_limit_marks_partial_pagination_incomplete(monkeypatch):
+    class Context:
+        async def get_json(self, client, url, *, headers, params):
+            return {
+                "request_status": "SUCCESS",
+                "total_stats": [
+                    {
+                        "sub_request_status": "SUCCESS",
+                        "total_stat": {
+                            "breakdown_stats": {
+                                "ad": [
+                                    {
+                                        "id": "ad-1",
+                                        "stats": {"spend": 1_000_000},
+                                    }
+                                ]
+                            }
+                        },
+                    }
+                ],
+                "paging": {
+                    "next_link": (
+                        "https://adsapi.snapchat.com/v1/campaigns/"
+                        "campaign-1/stats?page=2"
+                    )
+                },
+            }
+
+    monkeypatch.setattr(module, "MAX_PAGES", 1)
+    rows, errors, breakdown_seen = await module._fetch_campaign_ad_totals(
+        Context(),
+        object(),
+        "token",
+        campaign_id="campaign-1",
+        request_start=datetime(2026, 8, 8, tzinfo=timezone.utc),
+        request_end=datetime(2026, 8, 9, tzinfo=timezone.utc),
+    )
+
+    assert len(rows) == 1
+    assert breakdown_seen is True
+    assert errors[-1]["code"] == "snapchat_ad_pagination_incomplete"
+    assert module._performance_data_state(
+        rows,
+        errors=errors,
+        structure_seen=breakdown_seen,
+    ) == module.DATA_STATE_UNKNOWN_INCOMPLETE
 
 
 def test_ad_delivery_separates_switch_review_and_parent_blockers():
@@ -425,7 +640,14 @@ async def test_refresh_hydrates_exact_ad_identity_before_recent_skip(
         assert user_id == "owner-1"
         assert account_id == "account-1"
         events.append("recent")
-        return True
+        return {
+            "coverage": {
+                "status": "complete",
+                "data_state": module.DATA_STATE_CONFIRMED_DATA,
+                "expected_requests": 2,
+                "completed_requests": 2,
+            }
+        }
 
     monkeypatch.setattr(
         module,
@@ -450,6 +672,104 @@ async def test_refresh_hydrates_exact_ad_identity_before_recent_skip(
     assert result["identity_rows_saved"] == 3
     assert result["identity_counts"] == {"ad": 3}
     assert result["rows_saved"] == 0
+
+
+@pytest.mark.asyncio
+async def test_incomplete_ad_does_not_write_or_advance_last_success(
+    monkeypatch,
+):
+    from integrations_control_center import (
+        snapchat_platform_source_integrity as source_integrity,
+    )
+
+    class StateCollection:
+        def __init__(self):
+            self.updates = []
+
+        async def update_one(self, query, update, *, upsert=False):
+            self.updates.append(deepcopy(update))
+
+    class Context:
+        db = object()
+        user_id = "owner-1"
+        provider_calls = 2
+
+        @staticmethod
+        def now_iso():
+            return "2026-08-08T12:00:00+00:00"
+
+    state = StateCollection()
+    writes = []
+
+    async def identity_sync(*args, **kwargs):
+        return 1, {"ad": 1}, []
+
+    async def recent_refresh(*args, **kwargs):
+        return None
+
+    async def campaigns(*args, **kwargs):
+        return ([{"external_id": "campaign-1"}], False)
+
+    async def fetch_window(*args, **kwargs):
+        return [
+            {
+                "campaign_id": "campaign-1",
+                "action_report_time": mode,
+                "rows": [
+                    {
+                        "campaign_id": "campaign-1",
+                        "ad_id": "ad-1",
+                        "start_time": "2026-08-08T00:00:00+00:00",
+                        "end_time": "2026-08-09T00:00:00+00:00",
+                        "metrics": {"spend": 0},
+                    }
+                ],
+                "errors": [{"code": "nested_provider_error"}],
+                "breakdown_seen": False,
+                "data_state": module.DATA_STATE_UNKNOWN_INCOMPLETE,
+            }
+            for mode in module.ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES
+        ]
+
+    async def capture_write(*args, **kwargs):
+        writes.append(kwargs)
+
+    monkeypatch.setattr(module, "sync_snapchat_ad_entities", identity_sync)
+    monkeypatch.setattr(module, "_recent_refresh", recent_refresh)
+    monkeypatch.setattr(module, "_campaign_entities", campaigns)
+    monkeypatch.setattr(module, "_fetch_ad_window", fetch_window)
+    monkeypatch.setattr(module, "_upsert_projection", capture_write)
+    monkeypatch.setattr(module, "_collection", lambda *args: state)
+    monkeypatch.setattr(
+        source_integrity,
+        "account_local_dates_for_refresh",
+        lambda *args, **kwargs: [date(2026, 8, 8)],
+    )
+    monkeypatch.setattr(
+        source_integrity,
+        "account_local_total_window",
+        lambda *args, **kwargs: (
+            datetime(2026, 8, 8, tzinfo=timezone.utc),
+            datetime(2026, 8, 9, tzinfo=timezone.utc),
+        ),
+    )
+
+    result = await module.refresh_snapchat_ad_performance(
+        Context(),
+        object(),
+        "token",
+        {"ad_account_id": "account-1", "timezone": "Asia/Riyadh"},
+        start_date=date(2026, 8, 8),
+        end_date=date(2026, 8, 8),
+        now=datetime(2026, 8, 8, 12, tzinfo=timezone.utc),
+    )
+
+    state_set = state.updates[-1]["$set"]
+    assert result["coverage"]["status"] == "incomplete"
+    assert result["coverage"]["data_state"] == "unknown_incomplete"
+    assert writes == []
+    assert "last_success_at" not in state_set
+    assert state_set["last_attempt_at"] == "2026-08-08T12:00:00+00:00"
 
 
 @pytest.mark.asyncio

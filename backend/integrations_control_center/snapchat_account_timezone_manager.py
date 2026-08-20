@@ -259,6 +259,42 @@ def _campaign_day_buckets(
     return campaigns, accounts
 
 
+def _merge_hourly_coverages(
+    results: list[hourly.AccountHourFetchResult],
+) -> dict[str, Any]:
+    coverages = [
+        item.coverage if isinstance(item.coverage, dict) else {}
+        for item in results
+    ]
+    expected_requests = sum(
+        int(item.get("expected_requests") or 0) for item in coverages
+    )
+    completed_requests = sum(
+        int(item.get("completed_requests") or 0) for item in coverages
+    )
+    complete = len(coverages) == 3 and all(
+        item.get("status") == "complete"
+        and int(item.get("completed_requests") or 0)
+        == int(item.get("expected_requests") or 0)
+        for item in coverages
+    )
+    states = {str(item.get("data_state") or "") for item in coverages}
+    if not complete:
+        data_state = "unknown_incomplete"
+    elif "confirmed_data" in states:
+        data_state = "confirmed_data"
+    elif "confirmed_zero" in states:
+        data_state = "confirmed_zero"
+    else:
+        data_state = "confirmed_no_data"
+    return {
+        "status": "complete" if complete else "incomplete",
+        "data_state": data_state,
+        "expected_requests": expected_requests,
+        "completed_requests": completed_requests,
+    }
+
+
 async def _ensure_account_local_indexes(db: Any) -> None:
     collection = _collection(
         db, SNAPCHAT_ACCOUNT_LOCAL_PERFORMANCE_COLLECTION
@@ -413,6 +449,13 @@ async def refresh_snapchat_account_hours_with_account_days(
             "action_report_time": ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME,
             "account_timezone": timezone_name,
             "business_timezone": BUSINESS_TIMEZONE,
+            "coverage": {
+                "status": "incomplete",
+                "data_state": "unknown_incomplete",
+                "expected_requests": 0,
+                "completed_requests": 0,
+                "reason": "request_window_unavailable",
+            },
             "source_only": True,
             "accounting_write_reached": False,
             "qoyod_write_reached": False,
@@ -423,7 +466,7 @@ async def refresh_snapchat_account_hours_with_account_days(
     async def fetch_all_modes(window: dict[str, datetime]):
         # Existing Riyadh accounting projection: keep its established
         # conversion-time 28d-click / 1d-view contract unchanged.
-        business_rows, business_errors = await hourly._fetch_account_hours(
+        business_result = await hourly._fetch_account_hours(
             context,
             client,
             access_token,
@@ -432,9 +475,10 @@ async def refresh_snapchat_account_hours_with_account_days(
             request_end=window["provider_end"],
             action_report_time=hourly.ACTION_REPORT_TIME,
         )
+        business_rows, business_errors = business_result
 
         # Ads Manager operational view: Snapchat-style 28d-click / 7d-view.
-        conversion_rows, conversion_errors = await hourly._fetch_account_hours(
+        conversion_result = await hourly._fetch_account_hours(
             context,
             client,
             access_token,
@@ -445,8 +489,9 @@ async def refresh_snapchat_account_hours_with_account_days(
             swipe_attribution_window=ADS_MANAGER_SWIPE_ATTRIBUTION_WINDOW,
             view_attribution_window=ADS_MANAGER_VIEW_ATTRIBUTION_WINDOW,
         )
+        conversion_rows, conversion_errors = conversion_result
 
-        impression_rows, impression_errors = await hourly._fetch_account_hours(
+        impression_result = await hourly._fetch_account_hours(
             context,
             client,
             access_token,
@@ -457,6 +502,7 @@ async def refresh_snapchat_account_hours_with_account_days(
             swipe_attribution_window=ADS_MANAGER_SWIPE_ATTRIBUTION_WINDOW,
             view_attribution_window=ADS_MANAGER_VIEW_ATTRIBUTION_WINDOW,
         )
+        impression_rows, impression_errors = impression_result
 
         return (
             business_rows,
@@ -467,6 +513,9 @@ async def refresh_snapchat_account_hours_with_account_days(
                 *conversion_errors,
                 *impression_errors,
             ],
+            _merge_hourly_coverages(
+                [business_result, conversion_result, impression_result]
+            ),
         )
 
     try:
@@ -475,6 +524,7 @@ async def refresh_snapchat_account_hours_with_account_days(
             conversion_rows,
             impression_rows,
             errors,
+            coverage,
         ) = await fetch_all_modes(request)
     except SnapchatNativeSyncError as exc:
         fallback = _combined_request_window(
@@ -498,6 +548,7 @@ async def refresh_snapchat_account_hours_with_account_days(
             conversion_rows,
             impression_rows,
             errors,
+            coverage,
         ) = await fetch_all_modes(request)
 
     business_campaigns, business_accounts = _campaign_day_buckets(
@@ -538,30 +589,21 @@ async def refresh_snapchat_account_hours_with_account_days(
         saved += 1
         campaign_rows_saved += 1
 
-    cursor = start_date
-    while cursor <= end_date:
-        date_string = cursor.isoformat()
-        bucket = business_accounts.get(date_string)
-        metrics = (
-            _finalize_bucket(bucket)
-            if bucket is not None
-            else {key: 0 for key in STAT_FIELDS}
-        )
+    for date_string, bucket in sorted(business_accounts.items()):
         await _upsert_performance(
             context,
             account=account,
             entity_type="ad_account",
             external_id=account_id,
             date_string=date_string,
-            metrics=metrics,
-            provider_start=bucket.get("provider_start") if bucket else None,
-            provider_end=bucket.get("provider_end") if bucket else None,
+            metrics=_finalize_bucket(bucket),
+            provider_start=bucket.get("provider_start"),
+            provider_end=bucket.get("provider_end"),
             source_mode=hourly.ACCOUNT_REFRESH_SOURCE_MODE,
             provider_granularity=hourly.PROVIDER_GRANULARITY,
             provider_breakdown=hourly.PROVIDER_BREAKDOWN,
         )
         saved += 1
-        cursor += timedelta(days=1)
 
     local_rows_saved = 0
     local_sets = (
@@ -610,6 +652,7 @@ async def refresh_snapchat_account_hours_with_account_days(
         "account_local_rows_saved": local_rows_saved,
         "errors_count": len(errors),
         "errors": errors,
+        "coverage": coverage,
         "provider_calls": context.provider_calls,
         "source_mode": ACCOUNT_LOCAL_SOURCE_MODE,
         "provider_granularity": hourly.PROVIDER_GRANULARITY,
