@@ -118,6 +118,8 @@ def test_reset_is_atomic_and_never_reverses_supplier_or_accounting_records():
     assert "fulfillment_experiment_atomic_transaction_required" in source
     assert "archived_allocation_snapshot" in source
     assert '"financial_writes_allowed": False' in source
+    assert '"salla_writes_allowed": False' in source
+    assert '"salla_status_writes_allowed": True' in source
     assert "SUPPLIER_INVOICES" not in source
     assert "ledger" not in source.casefold()
 
