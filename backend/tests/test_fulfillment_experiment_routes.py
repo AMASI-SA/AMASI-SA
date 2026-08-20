@@ -7,6 +7,7 @@ from fastapi import HTTPException
 
 from ai_store_access_contract import ROLE_CATALOG, effective_permissions
 from fulfillment_experiment_routes import (
+    FulfillmentExperimentResetRequest,
     STOP_TYPE_LABELS,
     hold_piece_patch,
     make_fulfillment_experiment_router,
@@ -139,3 +140,17 @@ def test_router_exposes_state_reset_hold_and_release_operations():
     assert ("/fulfillment-experiments-v1/orders/{order_number}/reset", "POST") in routes
     assert ("/fulfillment-experiments-v1/orders/{order_number}/holds", "POST") in routes
     assert ("/fulfillment-experiments-v1/holds/{hold_id}/release", "POST") in routes
+
+
+
+def test_experiment_reset_accepts_explicit_store_courier_flow():
+    default_request = FulfillmentExperimentResetRequest(
+        confirmation="RESET 276628330",
+    )
+    courier_request = FulfillmentExperimentResetRequest(
+        confirmation="RESET 276628330",
+        delivery_flow="store_courier",
+    )
+
+    assert default_request.delivery_flow == "salla"
+    assert courier_request.delivery_flow == "store_courier"
