@@ -23,7 +23,11 @@ from bson.binary import Binary
 from fastapi import APIRouter, Body, Depends, HTTPException
 
 from ai_provider_status import openai_runtime_status
-from ai_store_operations_foundation import AI_ACTION_LOG, ROLE_ASSIGNMENTS
+from ai_store_access_contract import (
+    find_role_assignment,
+    role_assignment_owner_user_id,
+)
+from ai_store_operations_foundation import AI_ACTION_LOG
 from product_media_draft_routes import MEDIA_DRAFTS
 from product_media_upload_routes import (
     ALLOWED_TYPES,
@@ -175,8 +179,12 @@ async def _product(db: Any, user_id: str, product_id: str) -> dict[str, Any]:
     return row
 
 
-async def _assignment(db: Any, user_id: str) -> dict[str, Any] | None:
-    return await db[ROLE_ASSIGNMENTS].find_one({"user_id": user_id}, {"_id": 0})
+async def _assignment(db: Any, user: dict[str, Any]) -> dict[str, Any] | None:
+    return await find_role_assignment(
+        db,
+        owner_user_id=role_assignment_owner_user_id(user),
+        user_id=str(user.get("id") or ""),
+    )
 
 
 def _safe_source_row(raw: Any, index: int) -> dict[str, Any] | None:
@@ -516,7 +524,7 @@ def make_product_media_ai_router(db: Any, current_user: Callable, executor: Call
     async def media_ai_state(product_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
         user_id = str(user["id"])
         product = await _product(db, user_id, product_id)
-        assignment = await _assignment(db, user_id)
+        assignment = await _assignment(db, user)
         operations = [{
             "key": key,
             **spec,
@@ -540,7 +548,7 @@ def make_product_media_ai_router(db: Any, current_user: Callable, executor: Call
     async def create_media_ai_job(product_id: str, payload: dict = Body(...), user: dict = Depends(current_user)) -> dict[str, Any]:
         user_id = str(user["id"])
         product = await _product(db, user_id, product_id)
-        assignment = await _assignment(db, user_id)
+        assignment = await _assignment(db, user)
         source_rows = await _available_source_rows(db, user_id, product)
         try:
             normalized = validate_ai_media_request(payload, {row["url"] for row in source_rows})
@@ -580,7 +588,7 @@ def make_product_media_ai_router(db: Any, current_user: Callable, executor: Call
         user_id = str(user["id"])
         product = await _product(db, user_id, product_id)
         salla_product_id = str(product.get("salla_product_id"))
-        assignment = await _assignment(db, user_id)
+        assignment = await _assignment(db, user)
         job = await db[AI_MEDIA_JOBS].find_one({"id": job_id, "user_id": user_id, "salla_product_id": salla_product_id}, {"_id": 0})
         if not job:
             raise HTTPException(status_code=404, detail={"code": "ai_media_job_not_found"})

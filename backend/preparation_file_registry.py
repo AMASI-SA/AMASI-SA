@@ -20,7 +20,7 @@ from order_review_export_controls import (
     assignable_employee_view,
     user_can_manage_preparation,
 )
-from ai_store_access_contract import ROLE_ASSIGNMENTS, effective_permissions
+from ai_store_access_contract import effective_permissions, find_role_assignments
 from order_review_routes import EVENTS, _merchant_user_id, _require_reviewer, _text
 from reviewed_preparation_batches import BATCHES
 from tz_utils import riyadh_now_aware
@@ -139,10 +139,12 @@ async def _assignable_employees(
     candidate_ids = [
         _text(row.get("id")) for row in candidates if _text(row.get("id"))
     ]
-    assignment_rows = await db[ROLE_ASSIGNMENTS].find(
-        {"user_id": {"$in": candidate_ids}},
-        {"_id": 0},
-    ).to_list(max(len(candidate_ids), 1))
+    assignment_rows = await find_role_assignments(
+        db,
+        owner_user_id=user_id,
+        user_ids=candidate_ids,
+        limit=max(len(candidate_ids), 1),
+    )
     permissions_by_employee = {
         _text(row.get("user_id")): set(effective_permissions(row))
         for row in assignment_rows

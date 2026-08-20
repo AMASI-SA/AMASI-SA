@@ -6,7 +6,11 @@ from typing import Any, Callable
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response, status
 
-from ai_store_access_contract import PERMISSIONS, ROLE_ASSIGNMENTS, effective_permissions
+from ai_store_access_contract import (
+    PERMISSIONS,
+    effective_permissions,
+    find_role_assignment,
+)
 from meta_reviewer_access import (
     META_REVIEWER_CI_PERMISSIONS,
     is_meta_reviewer,
@@ -122,9 +126,10 @@ async def _actor_context(db: Any, user: Any) -> CustomerIntelligenceActor:
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": "employee_store_not_linked"},
         )
-    assignment = await getattr(db, ROLE_ASSIGNMENTS).find_one(
-        {"user_id": actor_id},
-        {"_id": 0},
+    assignment = await find_role_assignment(
+        db,
+        owner_user_id=owner_user_id,
+        user_id=actor_id,
     )
     return CustomerIntelligenceActor(
         actor_id=actor_id,

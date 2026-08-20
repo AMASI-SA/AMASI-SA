@@ -18,7 +18,7 @@ from pymongo import ASCENDING, DESCENDING
 from pymongo.errors import DuplicateKeyError
 
 from ai_store_access_control import effective_permissions
-from ai_store_operations_foundation import ROLE_ASSIGNMENTS
+from ai_store_access_contract import find_role_assignments
 from fulfillment_v2_routes import (
     _actor_context,
     _require_permission,
@@ -534,10 +534,11 @@ async def _eligible_operators(
         for row in users
         if _text(row.get("id"))
     ]
-    assignments = await db[ROLE_ASSIGNMENTS].find(
-        {"user_id": {"$in": user_ids}},
-        {"_id": 0},
-    ).to_list(5000)
+    assignments = await find_role_assignments(
+        db,
+        owner_user_id=merchant_id,
+        user_ids=user_ids,
+    )
     by_user = {
         _text(row.get("user_id")): row for row in assignments
     }

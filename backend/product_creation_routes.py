@@ -21,7 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pymongo import ASCENDING, DESCENDING, ReturnDocument
 
 from ai_store_access_control import effective_permissions
-from ai_store_operations_foundation import ROLE_ASSIGNMENTS
+from ai_store_access_contract import find_role_assignment
 from product_fulfillment_rules import (
     DEFAULT_LOW_STOCK_THRESHOLD,
     FROZEN_FULFILLMENT_TYPE,
@@ -329,9 +329,10 @@ async def _actor_context(db: Any, user: dict[str, Any]) -> dict[str, Any]:
             "is_owner": True,
         }
     merchant_id = _text(user.get("created_by"))
-    assignment = await db[ROLE_ASSIGNMENTS].find_one(
-        {"user_id": actor_id},
-        {"_id": 0},
+    assignment = await find_role_assignment(
+        db,
+        owner_user_id=merchant_id,
+        user_id=actor_id,
     )
     return {
         "actor_id": actor_id,

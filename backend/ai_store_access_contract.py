@@ -11,6 +11,7 @@ from typing import Any
 
 ROLE_ASSIGNMENTS = "mezan_role_assignments_v2"
 AI_ACTION_LOG = "mezan_ai_action_log_v2"
+ROLE_ASSIGNMENT_OWNER_FIELD = "owner_user_id"
 
 PERMISSIONS = {
     "products.read",
@@ -198,6 +199,214 @@ def effective_permissions(assignment: dict[str, Any] | None) -> list[str]:
     return sorted(base)
 
 
+def _role_assignments_collection(db: Any) -> Any:
+    """Support Motor's item/attribute access without coupling test doubles."""
+    try:
+        return db[ROLE_ASSIGNMENTS]
+    except (AttributeError, TypeError):
+        return getattr(db, ROLE_ASSIGNMENTS)
+
+
+def role_assignment_owner_user_id(user: dict[str, Any] | None) -> str:
+    """Resolve the existing team-account owner boundary for role assignments.
+
+    Owners own their own store scope.  Every other authenticated team user must
+    carry the existing ``created_by`` relationship; missing ownership evidence
+    intentionally resolves to an empty value so permission reads fail closed.
+    """
+    value = user or {}
+    actor_id = str(value.get("id") or "").strip()
+    role = str(value.get("role") or "").strip().casefold()
+    if role == "owner" or value.get("is_owner") is True:
+        return actor_id
+    return str(value.get("created_by") or "").strip()
+
+
+def role_assignment_write_query(
+    *,
+    owner_user_id: str,
+    user_id: str,
+    existing: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return a tenant-bound selector, including safe legacy promotion.
+
+    An unscoped legacy row is writable only when its immutable creator proves
+    the same owner boundary.  Setting ``owner_user_id`` on that write promotes
+    the row lazily without a global migration or a user-id-only update.
+    """
+    owner_id = str(owner_user_id or "").strip()
+    subject_id = str(user_id or "").strip()
+    if not owner_id or not subject_id:
+        raise ValueError("role_assignment_tenant_required")
+    if existing and not str(existing.get(ROLE_ASSIGNMENT_OWNER_FIELD) or "").strip():
+        if str(existing.get("created_by") or "").strip() != owner_id:
+            raise ValueError("legacy_role_assignment_owner_unproven")
+        return {
+            ROLE_ASSIGNMENT_OWNER_FIELD: None,
+            "created_by": owner_id,
+            "user_id": subject_id,
+        }
+    return {
+        ROLE_ASSIGNMENT_OWNER_FIELD: owner_id,
+        "user_id": subject_id,
+    }
+
+
+async def write_role_assignment(
+    db: Any,
+    *,
+    owner_user_id: str,
+    user_id: str,
+    existing: dict[str, Any] | None,
+    values: dict[str, Any],
+    upsert: bool = False,
+) -> Any:
+    """Write only within one proven tenant and promote safe legacy rows."""
+    owner_id = str(owner_user_id or "").strip()
+    subject_id = str(user_id or "").strip()
+    scoped_values = {
+        **values,
+        ROLE_ASSIGNMENT_OWNER_FIELD: owner_id,
+        "user_id": subject_id,
+    }
+    collection = _role_assignments_collection(db)
+    existing_owner = str(
+        (existing or {}).get(ROLE_ASSIGNMENT_OWNER_FIELD) or ""
+    ).strip()
+    selector = role_assignment_write_query(
+        owner_user_id=owner_id,
+        user_id=subject_id,
+        existing=existing,
+    )
+    if existing is None or existing_owner:
+        return await collection.update_one(
+            selector,
+            {"$set": scoped_values},
+            upsert=upsert,
+        )
+    result = await collection.update_one(
+        selector,
+        {"$set": scoped_values},
+        upsert=False,
+    )
+    matched_count = int(getattr(result, "matched_count", 0) or 0)
+    if not matched_count:
+        # Another authorized request may have promoted the same legacy row.
+        # Retry only against the canonical tenant selector; never upsert from a
+        # legacy selector that could race into a duplicate scoped assignment.
+        return await collection.update_one(
+            role_assignment_write_query(
+                owner_user_id=owner_id,
+                user_id=subject_id,
+            ),
+            {"$set": scoped_values},
+            upsert=upsert,
+        )
+    return result
+
+
+async def find_role_assignment(
+    db: Any,
+    *,
+    owner_user_id: str,
+    user_id: str,
+) -> dict[str, Any] | None:
+    """Read one assignment within a proven owner scope.
+
+    Scoped rows are authoritative.  Backward compatibility is bounded to an
+    unscoped row whose ``created_by`` equals the same proven owner; ambiguous
+    or foreign legacy rows are ignored.
+    """
+    owner_id = str(owner_user_id or "").strip()
+    subject_id = str(user_id or "").strip()
+    if not owner_id or not subject_id:
+        return None
+    collection = _role_assignments_collection(db)
+    scoped = await collection.find_one(
+        {
+            ROLE_ASSIGNMENT_OWNER_FIELD: owner_id,
+            "user_id": subject_id,
+        },
+        {"_id": 0},
+    )
+    if (
+        scoped
+        and str(scoped.get(ROLE_ASSIGNMENT_OWNER_FIELD) or "").strip()
+        == owner_id
+        and str(scoped.get("user_id") or "").strip() == subject_id
+    ):
+        return scoped
+    legacy = await collection.find_one(
+        {
+            ROLE_ASSIGNMENT_OWNER_FIELD: None,
+            "created_by": owner_id,
+            "user_id": subject_id,
+        },
+        {"_id": 0},
+    )
+    if (
+        legacy
+        and not str(legacy.get(ROLE_ASSIGNMENT_OWNER_FIELD) or "").strip()
+        and str(legacy.get("created_by") or "").strip() == owner_id
+        and str(legacy.get("user_id") or "").strip() == subject_id
+    ):
+        return legacy
+    return None
+
+
+async def find_role_assignments(
+    db: Any,
+    *,
+    owner_user_id: str,
+    user_ids: list[str] | set[str] | tuple[str, ...],
+    limit: int = 5000,
+) -> list[dict[str, Any]]:
+    """Read tenant-scoped assignments for a bounded set of team identities."""
+    owner_id = str(owner_user_id or "").strip()
+    subject_ids = sorted(
+        {
+            str(value or "").strip()
+            for value in user_ids
+            if str(value or "").strip()
+        }
+    )
+    if not owner_id or not subject_ids:
+        return []
+    collection = _role_assignments_collection(db)
+    scoped_rows = await collection.find(
+        {
+            ROLE_ASSIGNMENT_OWNER_FIELD: owner_id,
+            "user_id": {"$in": subject_ids},
+        },
+        {"_id": 0},
+    ).to_list(length=limit)
+    legacy_rows = await collection.find(
+        {
+            ROLE_ASSIGNMENT_OWNER_FIELD: None,
+            "created_by": owner_id,
+            "user_id": {"$in": subject_ids},
+        },
+        {"_id": 0},
+    ).to_list(length=limit)
+    by_user: dict[str, dict[str, Any]] = {}
+    for row in legacy_rows:
+        subject_id = str(row.get("user_id") or "").strip()
+        if (
+            subject_id in subject_ids
+            and not str(row.get(ROLE_ASSIGNMENT_OWNER_FIELD) or "").strip()
+            and str(row.get("created_by") or "").strip() == owner_id
+        ):
+            by_user[subject_id] = row
+    for row in scoped_rows:
+        subject_id = str(row.get("user_id") or "").strip()
+        if (
+            subject_id in subject_ids
+            and str(row.get(ROLE_ASSIGNMENT_OWNER_FIELD) or "").strip() == owner_id
+        ):
+            by_user[subject_id] = row
+    return list(by_user.values())
+
+
 async def merged_session_permissions(
     db: Any,
     user: dict[str, Any],
@@ -222,9 +431,10 @@ async def merged_session_permissions(
         require_review_scope(user, "customer_intelligence")
         merged = set(META_REVIEWER_CI_PERMISSIONS)
     else:
-        assignment = await db[ROLE_ASSIGNMENTS].find_one(
-            {"user_id": str(user.get("id") or "")},
-            {"_id": 0},
+        assignment = await find_role_assignment(
+            db,
+            owner_user_id=role_assignment_owner_user_id(user),
+            user_id=str(user.get("id") or ""),
         )
         merged |= set(effective_permissions(assignment))
     return sorted(merged)
@@ -235,9 +445,15 @@ __all__ = [
     "PERMISSIONS",
     "RESPONSIBILITY_TYPES",
     "ROLE_ASSIGNMENTS",
+    "ROLE_ASSIGNMENT_OWNER_FIELD",
     "ROLE_CATALOG",
     "ROLE_LABELS",
     "effective_permissions",
+    "find_role_assignment",
+    "find_role_assignments",
     "merged_session_permissions",
+    "role_assignment_owner_user_id",
+    "role_assignment_write_query",
+    "write_role_assignment",
     "validate_assignment",
 ]
