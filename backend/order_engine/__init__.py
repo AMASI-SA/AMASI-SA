@@ -5,6 +5,9 @@ workspaces and engines.
 It must not expose MongoDB-shaped documents to frontend consumers.
 """
 
+# CI fan-out marker: this file is intentionally shared by the required
+# Products V2 and Components checks so PDF-only preparation changes still
+# receive the protected-branch validation set before Production merge.
 # Payment-method freshness policy
 import orders_db as _orders_db
 
