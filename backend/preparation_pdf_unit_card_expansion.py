@@ -41,6 +41,39 @@ def _append_split_note(existing_note: Any, source_quantity: Any, unit_index: Any
     return " | ".join(part for part in (existing, split_note) if part) or None
 
 
+def _planned_source_quantities(planned: list[dict[str, Any]]) -> dict[tuple[str, str], int]:
+    """Resolve the original Salla order-line quantity, not just the selected batch quantity."""
+    result: dict[tuple[str, str], int] = {}
+    for allocation in planned or []:
+        if not isinstance(allocation, dict):
+            continue
+        key = (
+            str(allocation.get("order_number") or "").strip(),
+            str(allocation.get("order_item_id") or "").strip(),
+        )
+        if not all(key):
+            continue
+        source_line = allocation.get("line") if isinstance(allocation.get("line"), dict) else {}
+        source_quantity = (
+            _positive_int(source_line.get("quantity"))
+            or max(
+                [
+                    value
+                    for value in (
+                        _positive_int(index)
+                        for index in (allocation.get("unit_indices") or [])
+                    )
+                    if value is not None
+                ],
+                default=0,
+            )
+            or _positive_int(allocation.get("quantity"))
+            or 1
+        )
+        result[key] = max(result.get(key, 0), source_quantity)
+    return result
+
+
 def expand_preparation_unit_cards(
     rows: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
@@ -103,7 +136,20 @@ def install_preparation_pdf_unit_card_expansion() -> None:
     ) -> list[dict[str, Any]]:
         assert _ORIGINAL_BUILD_LINES is not None
         rows = await _ORIGINAL_BUILD_LINES(context, planned)
-        return expand_preparation_unit_cards(rows)
+        source_quantities = _planned_source_quantities(planned)
+        annotated_rows = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            copy = dict(row)
+            key = (
+                str(copy.get("order_number") or "").strip(),
+                str(copy.get("order_item_id") or "").strip(),
+            )
+            if key in source_quantities:
+                copy["source_line_quantity"] = source_quantities[key]
+            annotated_rows.append(copy)
+        return expand_preparation_unit_cards(annotated_rows)
 
     batch._build_batch_lines = build_one_card_per_unit
     _INSTALLED = True
