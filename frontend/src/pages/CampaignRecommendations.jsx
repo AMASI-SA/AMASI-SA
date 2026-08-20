@@ -30,42 +30,42 @@ const V3_ACTION_LABELS = {
     CONTINUE: "استمرار",
     MONITOR: "مراقبة",
     PAUSE_AD: "إيقاف الإعلان",
-    PAUSE_ADSET: "إيقاف المجموعة",
+    PAUSE_ADSET: "إيقاف المجموعة الإعلانية",
     PAUSE_CAMPAIGN: "إيقاف الحملة",
     DECREASE_BUDGET: "خفض الميزانية",
     INCREASE_BUDGET: "رفع الميزانية",
-    TEST_NEW_CREATIVE: "اختبار كرياتيف جديد",
-    REFRESH_CREATIVE: "تجديد الكرياتيف",
-    TEST_NEW_HOOK: "اختبار Hook جديد",
+    TEST_NEW_CREATIVE: "اختبار مادة إعلانية جديدة",
+    REFRESH_CREATIVE: "تجديد المادة الإعلانية",
+    TEST_NEW_HOOK: "اختبار بداية جديدة للفيديو",
     SHORTEN_VIDEO: "تقصير الفيديو",
     LONGER_DEMO_VIDEO: "فيديو شرح أطول",
     PRODUCT_DEMO: "فيديو شرح المنتج",
     PROBLEM_SOLUTION_VIDEO: "فيديو مشكلة وحل",
-    UGC_STYLE_VIDEO: "فيديو UGC",
+    UGC_STYLE_VIDEO: "فيديو تجربة واقعية",
     TESTIMONIAL_VIDEO: "فيديو تجربة عميل",
     BEFORE_AFTER: "قبل وبعد",
     STORYTELLING_VIDEO: "فيديو قصصي",
     FAQ_VIDEO: "فيديو أسئلة شائعة",
-    OBJECTION_HANDLING_VIDEO: "فيديو معالجة اعتراض",
+    OBJECTION_HANDLING_VIDEO: "فيديو يعالج اعتراض العميل",
     PRICE_OFFER_VIDEO: "فيديو السعر والعرض",
     UNBOXING_VIDEO: "فيديو فتح المنتج",
     PRODUCT_CLOSEUP: "لقطات قريبة للمنتج",
-    LIFESTYLE_VIDEO: "فيديو Lifestyle",
+    LIFESTYLE_VIDEO: "فيديو استخدام واقعي",
     COMPARISON_VIDEO: "فيديو مقارنة",
-    STORY_AD: "إعلان Story",
+    STORY_AD: "إعلان قصصي قصير",
     STATIC_IMAGE_TEST: "اختبار صورة ثابتة",
-    CAROUSEL_TEST: "اختبار Carousel",
+    CAROUSEL_TEST: "اختبار صور متعددة",
     REVIEW_AUDIENCE: "مراجعة الجمهور",
     REVIEW_PRODUCT: "مراجعة المنتج",
     REVIEW_OFFER: "مراجعة العرض",
     REVIEW_PRODUCT_PAGE: "مراجعة صفحة المنتج",
     CHANGE_PRODUCT_TITLE: "اقتراح اسم منتج جديد",
     CHANGE_PRODUCT_DESCRIPTION: "اقتراح وصف منتج جديد",
-    CHANGE_HERO_IMAGE: "تغيير صورة العرض",
+    CHANGE_HERO_IMAGE: "تغيير صورة العرض الرئيسية",
     REORDER_PRODUCT_IMAGES: "إعادة ترتيب صور المنتج",
     REVIEW_PRICE: "مراجعة السعر",
     REVIEW_SHIPPING_COST: "مراجعة تكلفة الشحن",
-    REVIEW_CHECKOUT: "مراجعة Checkout",
+    REVIEW_CHECKOUT: "مراجعة إتمام الطلب",
     REVIEW_PAYMENT: "مراجعة الدفع",
     INVESTIGATE_ABANDONED_CARTS: "تحليل السلات المتروكة",
     INVESTIGATE_WEBSITE: "فحص الموقع",
@@ -74,43 +74,63 @@ const V3_ACTION_LABELS = {
     FIX_DESTINATION_URL: "إصلاح رابط المنتج",
     RESTORE_PRODUCT_VISIBILITY: "إعادة إظهار المنتج",
     REVIEW_INVENTORY: "مراجعة المخزون",
-    NO_ACTION_INSUFFICIENT_DATA: "لا إجراء — بيانات غير كافية",
-    CHANGE_VALUE_PROPOSITION: "تغيير عرض القيمة",
-    ADD_STRONGER_CTA: "CTA أقوى",
+    RESTOCK_PRODUCT: "زيادة مخزون المنتج",
+    EXTEND_PROMOTION: "تمديد العرض بعد الموافقة",
+    NO_ACTION_INSUFFICIENT_DATA: "لا إجراء — البيانات غير كافية",
+    CHANGE_VALUE_PROPOSITION: "توضيح قيمة المنتج",
+    ADD_STRONGER_CTA: "دعوة أوضح لاتخاذ الإجراء",
     SHOW_PRODUCT_EARLIER: "إظهار المنتج مبكرًا",
     SHOW_PRICE_OR_OFFER: "إظهار السعر أو العرض",
 };
 
 const ROOT_CAUSES = {
     CAMPAIGN: "الحملة",
-    CREATIVE: "الكرياتيف",
+    CREATIVE: "المادة الإعلانية",
     AUDIENCE: "الجمهور",
     PRODUCT: "المنتج",
     OFFER: "العرض",
-    LANDING_PAGE: "صفحة الهبوط",
+    LANDING_PAGE: "صفحة المنتج",
     ADD_TO_CART: "إضافة للسلة",
-    CHECKOUT: "Checkout",
+    CHECKOUT: "إتمام الطلب",
     SHIPPING: "الشحن",
     PAYMENT: "الدفع",
     WEBSITE: "الموقع",
     TRACKING: "التتبع",
-    ATTRIBUTION: "Attribution",
+    ATTRIBUTION: "إسناد التحويل",
     SEASONALITY: "الموسمية",
     INVENTORY: "المخزون",
     PRODUCT_VISIBILITY: "ظهور المنتج",
     PRODUCT_URL: "رابط المنتج",
-    NORMAL_VARIANCE: "تقلب طبيعي",
+    NORMAL_VARIANCE: "تذبذب طبيعي",
     INSUFFICIENT_DATA: "بيانات غير كافية",
     UNKNOWN: "غير محسوم",
 };
 
 const ACTION_TYPES = {
-    ads_write: "تعديل إعلاني قابل للتنفيذ",
-    diagnostic: "تشخيص / تحقيق",
-    creative: "كرياتيف",
-    product_change: "تعديل منتج — بعد الموافقة",
+    ads_write: "تعديل على الإعلان",
+    diagnostic: "فحص وتشخيص",
+    creative: "تحسين المادة الإعلانية",
+    product_change: "تحسين المنتج — بعد الموافقة",
     operational_alert: "تنبيه تشغيلي",
     no_action: "بدون إجراء",
+};
+
+const ANALYSIS_STATUS = {
+    GOOD: "جيد",
+    BAD: "ضعيف",
+    MIXED: "مختلط",
+    NORMAL_VARIANCE: "تذبذب طبيعي",
+    INSUFFICIENT_DATA: "بيانات غير كافية",
+    NOT_APPLICABLE: "غير مطلوب",
+    UNKNOWN: "غير معروف",
+};
+
+const GOAL_STATUS = {
+    behind_target: { label: "متأخر عن الهدف", tone: "border-red-200 bg-red-50 text-red-800" },
+    on_track: { label: "على المسار المطلوب", tone: "border-amber-200 bg-amber-50 text-amber-800" },
+    minimum_target_covered: { label: "الحد الأدنى مغطى", tone: "border-emerald-200 bg-emerald-50 text-emerald-800" },
+    profit_data_unavailable: { label: "بيانات الربح غير مكتملة", tone: "border-slate-200 bg-slate-50 text-slate-700" },
+    goal_context_unavailable: { label: "تعذر حساب تقدم الهدف", tone: "border-slate-200 bg-slate-50 text-slate-700" },
 };
 
 const LEVELS = { campaign: "حملة", ad_group: "مجموعة إعلانية", ad: "إعلان" };
@@ -180,12 +200,42 @@ function MetricCard({ icon: Icon, label, value, tone }) {
     </div>;
 }
 
+function GoalCard({ goal, goalInput, setGoalInput, saving, onSave }) {
+    const status = GOAL_STATUS[goal?.status] || GOAL_STATUS.profit_data_unavailable;
+    const hasProgress = goal?.progress_available === true;
+    return <section className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm" data-testid="monthly-profit-goal-card">
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-emerald-700 px-5 py-4 text-white">
+            <div>
+                <h2 className="flex items-center gap-2 text-base font-black"><TrendingUp className="h-5 w-5" />هدف صافي الربح لهذا الشهر</h2>
+                <p className="mt-1 text-[10px] font-bold text-emerald-100">هذا هو الهدف الذي يدير الذكاء الحملات من أجله. أرقام الإعلان وسائل للوصول إليه وليست الهدف نفسه.</p>
+            </div>
+            <span className={`rounded-full border px-3 py-1 text-[10px] font-black ${status.tone}`}>{hasProgress ? status.label : "سيُحسب التقدم في دورة التحليل القادمة"}</span>
+        </div>
+        <div className="p-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+                <div className="rounded-xl bg-slate-50 p-3"><p className="text-[9px] font-black text-slate-500">الحد الأدنى المطلوب</p><p className="mt-1 text-lg font-black text-slate-900">{money(goal?.minimum_net_profit_sar || 100000)} ر.س</p></div>
+                <div className="rounded-xl bg-slate-50 p-3"><p className="text-[9px] font-black text-slate-500">صافي الربح حتى الآن</p><p className="mt-1 text-lg font-black text-slate-900">{hasProgress ? `${money(goal.net_profit_to_date_sar)} ر.س` : "بانتظار الحساب"}</p></div>
+                <div className="rounded-xl bg-slate-50 p-3"><p className="text-[9px] font-black text-slate-500">المتبقي للهدف</p><p className="mt-1 text-lg font-black text-slate-900">{hasProgress ? `${money(goal.remaining_to_target_sar)} ر.س` : "—"}</p></div>
+                <div className="rounded-xl bg-slate-50 p-3"><p className="text-[9px] font-black text-slate-500">الأيام المتبقية</p><p className="mt-1 text-lg font-black text-slate-900">{hasProgress ? goal.days_remaining : "—"}</p></div>
+                <div className="rounded-xl bg-slate-50 p-3"><p className="text-[9px] font-black text-slate-500">المطلوب يوميًا</p><p className="mt-1 text-lg font-black text-slate-900">{hasProgress ? `${money(goal.required_daily_net_profit_sar)} ر.س` : "—"}</p></div>
+                <div className="rounded-xl bg-slate-50 p-3"><p className="text-[9px] font-black text-slate-500">المتوقع نهاية الشهر</p><p className="mt-1 text-lg font-black text-slate-900">{hasProgress ? `${money(goal.projected_month_end_net_profit_sar)} ر.س` : "—"}</p></div>
+            </div>
+            <div className="mt-3 flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <label className="min-w-[220px] flex-1 text-[10px] font-black text-slate-600">تغيير الحد الأدنى الشهري
+                    <input type="number" min="1000" step="1000" value={goalInput} onChange={(e) => setGoalInput(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-black text-slate-900" />
+                </label>
+                <button type="button" onClick={onSave} disabled={saving || !Number(goalInput)} className="rounded-xl bg-emerald-700 px-4 py-2 text-xs font-black text-white disabled:bg-slate-300">{saving ? "جارٍ الحفظ…" : "حفظ الهدف"}</button>
+            </div>
+        </div>
+    </section>;
+}
+
 function AnalysisBlock({ title, value }) {
     if (!value) return null;
     const summary = typeof value === "string" ? value : value.summary;
     if (!summary) return null;
     return <div className="rounded-xl border border-slate-200 bg-white p-3">
-        <div className="flex items-center justify-between gap-2"><h4 className="text-[10px] font-black text-slate-800">{title}</h4>{value.status && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[8px] font-black text-slate-500">{value.status}</span>}</div>
+        <div className="flex items-center justify-between gap-2"><h4 className="text-[10px] font-black text-slate-800">{title}</h4>{value.status && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[8px] font-black text-slate-500">{ANALYSIS_STATUS[value.status] || value.status}</span>}</div>
         <p className="mt-1 text-[10px] font-bold leading-5 text-slate-600">{summary}</p>
         {value.signals?.length > 0 && <div className="mt-2 flex flex-wrap gap-1">{value.signals.slice(0, 5).map((signal) => <span key={signal} className="rounded bg-slate-50 px-1.5 py-0.5 text-[8px] font-bold text-slate-500">{signal}</span>)}</div>}
     </div>;
@@ -195,12 +245,12 @@ function HypothesisList({ primary, secondary }) {
     const hypotheses = [primary, ...(secondary || [])].filter(Boolean);
     if (!hypotheses.length) return null;
     return <div>
-        <h3 className="text-xs font-black text-slate-900">فرضيات السبب الجذري</h3>
+        <h3 className="text-xs font-black text-slate-900">الأسباب المحتملة</h3>
         <div className="mt-2 space-y-2">{hypotheses.map((hypothesis, index) => <div key={`${hypothesis.category}-${index}`} className="rounded-xl border border-slate-200 bg-white p-3">
             <div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-violet-50 px-2 py-1 text-[9px] font-black text-violet-700">{ROOT_CAUSES[hypothesis.category] || hypothesis.category}</span><span className="text-[9px] font-black text-slate-400">ثقة {CONFIDENCE[hypothesis.confidence] || hypothesis.confidence}</span></div>
             <p className="mt-1 text-[10px] font-bold leading-5 text-slate-700">{hypothesis.statement}</p>
-            {hypothesis.evidence_for?.length > 0 && <p className="mt-1 text-[9px] font-bold text-emerald-700">يدعمها: {hypothesis.evidence_for.slice(0, 3).join(" · ")}</p>}
-            {hypothesis.evidence_against?.length > 0 && <p className="mt-1 text-[9px] font-bold text-amber-700">ضدها: {hypothesis.evidence_against.slice(0, 3).join(" · ")}</p>}
+            {hypothesis.evidence_for?.length > 0 && <p className="mt-1 text-[9px] font-bold text-emerald-700">ما يدعم السبب: {hypothesis.evidence_for.slice(0, 3).join(" · ")}</p>}
+            {hypothesis.evidence_against?.length > 0 && <p className="mt-1 text-[9px] font-bold text-amber-700">ما يضعفه: {hypothesis.evidence_against.slice(0, 3).join(" · ")}</p>}
         </div>)}</div>
     </div>;
 }
@@ -208,16 +258,16 @@ function HypothesisList({ primary, secondary }) {
 function CreativeBrief({ brief }) {
     if (!brief) return null;
     return <div className="rounded-2xl border border-fuchsia-200 bg-fuchsia-50/60 p-4">
-        <h3 className="flex items-center gap-2 text-xs font-black text-fuchsia-950"><ImageIcon className="h-4 w-4" />Creative Brief</h3>
+        <h3 className="flex items-center gap-2 text-xs font-black text-fuchsia-950"><ImageIcon className="h-4 w-4" />خطة المادة الإعلانية الجديدة</h3>
         <div className="mt-2 grid gap-2 sm:grid-cols-2 text-[10px] font-bold text-slate-700">
-            <p><b>الهدف:</b> {brief.objective}</p><p><b>الزاوية:</b> {brief.creative_angle}</p>
-            <p><b>Hook:</b> {brief.hook}</p><p><b>المدة:</b> {brief.duration_seconds ? `${brief.duration_seconds}s` : "حسب الفرضية"}</p>
-            <p><b>أول ثانيتين:</b> {brief.first_two_seconds}</p><p><b>CTA:</b> {brief.cta}</p>
+            <p><b>الهدف:</b> {brief.objective}</p><p><b>زاوية العرض:</b> {brief.creative_angle}</p>
+            <p><b>بداية الفيديو:</b> {brief.hook}</p><p><b>المدة:</b> {brief.duration_seconds ? `${brief.duration_seconds} ثانية` : "حسب الفرضية"}</p>
+            <p><b>أول ثانيتين:</b> {brief.first_two_seconds}</p><p><b>الدعوة لاتخاذ الإجراء:</b> {brief.cta}</p>
         </div>
         {brief.shot_list?.length > 0 && <div className="mt-3"><p className="text-[10px] font-black text-fuchsia-900">ماذا نصور؟</p><ol className="mt-1 space-y-1 text-[10px] font-bold text-slate-700">{brief.shot_list.map((shot, i) => <li key={`${shot}-${i}`}>{i + 1}. {shot}</li>)}</ol></div>}
         {brief.on_screen_text?.length > 0 && <p className="mt-2 text-[10px] font-bold text-slate-700"><b>النص على الشاشة:</b> {brief.on_screen_text.join(" · ")}</p>}
-        <p className="mt-2 text-[10px] font-bold text-slate-700"><b>الفرضية:</b> {brief.hypothesis}</p>
-        {brief.success_metrics?.length > 0 && <p className="mt-1 text-[10px] font-bold text-emerald-700"><b>مقياس النجاح:</b> {brief.success_metrics.join(" · ")}</p>}
+        <p className="mt-2 text-[10px] font-bold text-slate-700"><b>الفكرة التي نختبرها:</b> {brief.hypothesis}</p>
+        {brief.success_metrics?.length > 0 && <p className="mt-1 text-[10px] font-bold text-emerald-700"><b>علامات النجاح:</b> {brief.success_metrics.join(" · ")}</p>}
     </div>;
 }
 
@@ -226,13 +276,13 @@ function ProductAnalysis({ item }) {
     const changes = item.proposed_product_changes || [];
     if (!page && !changes.length) return null;
     return <div className="rounded-2xl border border-cyan-200 bg-cyan-50/50 p-4">
-        <h3 className="flex items-center gap-2 text-xs font-black text-cyan-950"><Boxes className="h-4 w-4" />تحليل المنتج وصفحته</h3>
+        <h3 className="flex items-center gap-2 text-xs font-black text-cyan-950"><Boxes className="h-4 w-4" />فحص المنتج وصفحته</h3>
         {page && <div className="mt-2 grid gap-2 sm:grid-cols-2 text-[10px] font-bold text-slate-700">
-            <p><b>الرابط:</b> {page.url_health}</p><p><b>الظهور:</b> {page.visibility}</p>
+            <p><b>الرابط:</b> {page.url_health}</p><p><b>ظهور المنتج:</b> {page.visibility}</p>
             <p><b>المخزون:</b> {page.inventory_status}</p><p><b>الخيار المعلن:</b> {page.promoted_variant_status}</p>
-            <p><b>العنوان:</b> {page.product_title_analysis}</p><p><b>السعر:</b> {page.pricing_analysis}</p>
-            <p className="sm:col-span-2"><b>Hero Image:</b> {page.hero_image_analysis}</p>
-            <p className="sm:col-span-2"><b>Ad ↔ Page:</b> {page.ad_page_consistency}</p>
+            <p><b>اسم المنتج:</b> {page.product_title_analysis}</p><p><b>السعر:</b> {page.pricing_analysis}</p>
+            <p className="sm:col-span-2"><b>الصورة الرئيسية:</b> {page.hero_image_analysis}</p>
+            <p className="sm:col-span-2"><b>تطابق الإعلان مع الصفحة:</b> {page.ad_page_consistency}</p>
         </div>}
         {page?.detected_issues?.length > 0 && <div className="mt-2 flex flex-wrap gap-1">{page.detected_issues.map((issue) => <span key={issue} className="rounded bg-white px-2 py-1 text-[9px] font-black text-red-700">{issue}</span>)}</div>}
         {changes.length > 0 && <div className="mt-3 space-y-2">{changes.map((change, i) => <div key={`${change.field}-${i}`} className="rounded-xl bg-white p-3 text-[10px] font-bold text-slate-700"><p className="font-black text-cyan-900">{change.field}</p>{change.current && <p className="mt-1"><b>الحالي:</b> {change.current}</p>}<p className="mt-1"><b>المقترح:</b> {change.proposed}</p><p className="mt-1 text-slate-500"><b>السبب:</b> {change.reason}</p></div>)}</div>}
@@ -249,16 +299,25 @@ export default function CampaignRecommendations() {
     const [rootCause, setRootCause] = useState("all");
     const [actionType, setActionType] = useState("all");
     const [productAlerts, setProductAlerts] = useState(null);
+    const [goal, setGoal] = useState(null);
+    const [goalInput, setGoalInput] = useState("100000");
+    const [savingGoal, setSavingGoal] = useState(false);
 
     const load = useCallback(async () => {
         setError("");
         try {
-            const [latest, watch] = await Promise.all([
+            const [latest, watch, goalConfig] = await Promise.all([
                 api.get("/ads-manager/ai-monitor/latest"),
                 api.get("/ads-manager/ai-monitor/product-watch/alerts?status=active&limit=20").catch(() => ({ data: null })),
+                api.get("/ads-manager/ai-monitor/monthly-profit-goal").catch(() => ({ data: { minimum_net_profit_sar: 100000, configured: false } })),
             ]);
             setSnapshot(latest.data);
             setProductAlerts(watch.data);
+            const mergedGoal = latest.data?.monthly_profit_goal
+                ? { ...goalConfig.data, ...latest.data.monthly_profit_goal }
+                : goalConfig.data;
+            setGoal(mergedGoal);
+            setGoalInput(String(mergedGoal?.minimum_net_profit_sar || 100000));
         } catch {
             setError("تعذّر قراءة توصيات الحملات الآن. حاول التحديث بعد قليل.");
         } finally {
@@ -271,6 +330,21 @@ export default function CampaignRecommendations() {
         const timer = window.setInterval(load, 5 * 60 * 1000);
         return () => window.clearInterval(timer);
     }, [load]);
+
+    const saveGoal = async () => {
+        const value = Number(goalInput);
+        if (!Number.isFinite(value) || value < 1000) return;
+        setSavingGoal(true);
+        try {
+            const { data } = await api.put("/ads-manager/ai-monitor/monthly-profit-goal", { minimum_net_profit_sar: value });
+            setGoal((current) => ({ ...(current || {}), ...data, progress_available: false }));
+            setGoalInput(String(data.minimum_net_profit_sar));
+        } catch (requestError) {
+            window.alert(requestError?.response?.data?.detail?.message || "تعذّر حفظ هدف صافي الربح.");
+        } finally {
+            setSavingGoal(false);
+        }
+    };
 
     const recommendations = useMemo(() => snapshot?.recommendations || [], [snapshot]);
     const executable = recommendations.filter((item) => item.executable === true && item.approval_available).length;
@@ -325,37 +399,39 @@ export default function CampaignRecommendations() {
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                     <Link to="/dashboard-advanced" className="rounded-xl border border-slate-200 bg-white p-2 text-slate-600 shadow-sm hover:text-violet-700" aria-label="العودة إلى لوحة التحكم"><ArrowRight className="h-5 w-5" /></Link>
-                    <div><h1 className="text-xl font-black text-slate-900">توصيات الحملات الإعلانية</h1><p className="mt-1 text-xs font-bold text-slate-500">Decision Intelligence V3 · التشخيص أولًا · التنفيذ الإعلاني فقط بعد موافقتك</p></div>
+                    <div><h1 className="text-xl font-black text-slate-900">مدير الربح والحملات</h1><p className="mt-1 text-xs font-bold text-slate-500">الهدف الشهري أولًا · الذكاء يختار ما يخدم صافي الربح · أي تعديل إعلاني يحتاج موافقتك حاليًا</p></div>
                 </div>
-                <button type="button" onClick={load} disabled={loading} className="flex items-center gap-2 rounded-xl bg-violet-700 px-4 py-2 text-xs font-extrabold text-white disabled:bg-slate-300"><RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />تحديث التوصيات</button>
+                <button type="button" onClick={load} disabled={loading} className="flex items-center gap-2 rounded-xl bg-violet-700 px-4 py-2 text-xs font-extrabold text-white disabled:bg-slate-300"><RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />تحديث</button>
             </div>
+
+            <GoalCard goal={goal} goalInput={goalInput} setGoalInput={setGoalInput} saving={savingGoal} onSave={saveGoal} />
 
             <section className="overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-violet-800 bg-violet-700 px-5 py-4 text-white">
-                    <div><h2 className="flex items-center gap-2 font-black"><Sparkles className="h-5 w-5" />ملاحظات الذكاء على الحملات</h2><p className="mt-1 text-[10px] text-violet-100">Today → Yesterday → Day-2 · 7d/30d Baseline · Funnel + Product + Inventory + Carts</p></div>
+                    <div><h2 className="flex items-center gap-2 font-black"><Sparkles className="h-5 w-5" />خطة الذكاء الحالية</h2><p className="mt-1 text-[10px] text-violet-100">يبدأ باليوم، ثم يقارن الأيام السابقة، مسار الشراء، المنتج، المخزون والسلات للوصول لقرار يخدم صافي الربح.</p></div>
                     <div className="text-left text-[10px] font-black"><p>{snapshot?.generated_at ? `أُنشئت ${relativeTime(snapshot.generated_at)}` : "بانتظار التحليل"}</p><p dir="ltr">{snapshot?.generated_at ? dateTime(snapshot.generated_at) : "—"}</p></div>
                 </div>
                 <div className="p-4"><p className="text-xs font-extrabold leading-6 text-slate-700">{snapshot?.summary || "سيظهر أول تحليل بعد اكتمال التشغيل الدوري."}</p>{snapshot?.range?.from && <p className="mt-2 text-[10px] font-black text-slate-500">فترة الدراسة: <span dir="ltr">{snapshot.range.from} → {snapshot.range.to}</span></p>}</div>
             </section>
 
             {productAlerts?.active_count > 0 && <section className="rounded-2xl border border-red-200 bg-red-50 p-4" data-testid="advertising-product-watch-alerts">
-                <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="flex items-center gap-2 text-sm font-black text-red-900"><AlertTriangle className="h-5 w-5" />Advertising Product Watch</h2><p className="mt-1 text-[10px] font-bold text-red-700">فحص تشغيلي منفصل عن دورة OpenAI: منتج مخفي/نفد/رابط معطل/Variant غير متوفر.</p></div><span className="rounded-full bg-white px-3 py-1 text-[10px] font-black text-red-700">نشط {productAlerts.active_count} · حرج {productAlerts.critical_count || 0}</span></div>
-                <div className="mt-3 grid gap-2 md:grid-cols-2">{(productAlerts.items || []).slice(0, 6).map((alert) => <div key={alert.alert_key} className="rounded-xl bg-white p-3 text-[10px] font-bold text-slate-700"><p className="font-black text-red-800">{alert.code}</p><p className="mt-1">{alert.product_name || alert.product_id} · صرف {money(alert.current_spend_sar)} ر.س</p><p className="mt-1 text-slate-400">لا يتم إيقاف أو تعديل شيء تلقائيًا.</p></div>)}</div>
+                <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="flex items-center gap-2 text-sm font-black text-red-900"><AlertTriangle className="h-5 w-5" />تنبيهات المنتجات المرتبطة بالإعلانات</h2><p className="mt-1 text-[10px] font-bold text-red-700">فحص مستقل للمنتج: مخفي، نفد، رابط معطل أو خيار غير متوفر.</p></div><span className="rounded-full bg-white px-3 py-1 text-[10px] font-black text-red-700">نشط {productAlerts.active_count} · حرج {productAlerts.critical_count || 0}</span></div>
+                <div className="mt-3 grid gap-2 md:grid-cols-2">{(productAlerts.items || []).slice(0, 6).map((alert) => <div key={alert.alert_key} className="rounded-xl bg-white p-3 text-[10px] font-bold text-slate-700"><p className="font-black text-red-800">{alert.product_name || alert.product_id}</p><p className="mt-1">صرف الإعلان المرتبط {money(alert.current_spend_sar)} ر.س</p><p className="mt-1 text-slate-500">الحالة: {alert.code}</p><p className="mt-1 text-slate-400">لا يتم إيقاف أو تعديل شيء تلقائيًا.</p></div>)}</div>
             </section>}
 
             <section className="grid grid-cols-2 gap-3 lg:grid-cols-4" aria-label="ملخص توصيات الحملات">
-                <MetricCard icon={ShieldCheck} label="قابلة للموافقة والتنفيذ" value={executable} tone="bg-emerald-50 text-emerald-700" />
-                <MetricCard icon={Wrench} label="تشخيص / تشغيل" value={diagnostics} tone="bg-orange-50 text-orange-700" />
-                <MetricCard icon={ImageIcon} label="كرياتيف" value={creative} tone="bg-fuchsia-50 text-fuchsia-700" />
-                <MetricCard icon={Boxes} label="تحسين المنتج" value={product} tone="bg-cyan-50 text-cyan-700" />
+                <MetricCard icon={ShieldCheck} label="جاهزة للموافقة والتنفيذ" value={executable} tone="bg-emerald-50 text-emerald-700" />
+                <MetricCard icon={Wrench} label="مشاكل تحتاج فحصًا" value={diagnostics} tone="bg-orange-50 text-orange-700" />
+                <MetricCard icon={ImageIcon} label="تحسينات الإعلان" value={creative} tone="bg-fuchsia-50 text-fuchsia-700" />
+                <MetricCard icon={Boxes} label="تحسينات المنتج" value={product} tone="bg-cyan-50 text-cyan-700" />
             </section>
 
             <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
                 <div className="flex flex-wrap items-center gap-2"><span className="flex items-center gap-1 px-2 text-[10px] font-black text-slate-500"><Filter className="h-4 w-4" />تصفية</span>
-                    <select value={provider} onChange={(e) => setProvider(e.target.value)} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold"><option value="all">كل المنصات</option><option value="snapchat">سناب</option><option value="meta">Meta</option></select>
+                    <select value={provider} onChange={(e) => setProvider(e.target.value)} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold"><option value="all">كل المنصات</option><option value="snapchat">سناب</option><option value="meta">ميتا</option></select>
                     <select value={rootCause} onChange={(e) => setRootCause(e.target.value)} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold"><option value="all">كل الأسباب</option>{Object.entries(ROOT_CAUSES).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>
                     <select value={actionType} onChange={(e) => setActionType(e.target.value)} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold"><option value="all">كل أنواع الإجراء</option>{Object.entries(ACTION_TYPES).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>
-                    <span className="mr-auto px-2 text-[10px] font-extrabold text-slate-400">ترتيب تلقائي: الأهم والأكثر تأثيرًا أولًا · المعروض {visible.length} من {recommendations.length}</span>
+                    <span className="mr-auto px-2 text-[10px] font-extrabold text-slate-400">الأهم والأكثر تأثيرًا أولًا · المعروض {visible.length} من {recommendations.length}</span>
                 </div>
             </section>
 
@@ -368,38 +444,39 @@ export default function CampaignRecommendations() {
                     const status = executionLabel(item.execution_status);
                     const canExecute = Boolean(item.executable && item.approval_available && item.action_type === "ads_write");
                     const isExpanded = expanded === item.recommendation_id;
+                    const quickFacts = (item.decision_facts || item.evidence || []).slice(0, 4);
                     return <article key={item.recommendation_id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm hover:border-violet-300">
-                        <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-1.5"><p className="text-[10px] font-black text-slate-400">{item.provider === "meta" ? "Meta" : "سناب"} · {LEVELS[item.entity_level] || item.entity_level}</p>{index === 0 && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[8px] font-black text-red-700">الأعلى أولوية وتأثيرًا</span>}</div>{item.account_name && <p className="mt-1 truncate text-[10px] font-extrabold text-slate-500">الحساب الإعلاني: {item.account_name}</p>}<Link to={`/ads-manager?provider=${item.provider}`} className="mt-1 block truncate text-sm font-black text-slate-900 hover:text-violet-700">{item.entity_name}</Link>{item.product_id && <p className="mt-1 truncate text-[9px] font-bold text-cyan-700">Product ID: {item.product_id}</p>}</div><span className={`shrink-0 rounded-full border px-3 py-1 text-[10px] font-black ${actionTone(item)}`}>{displayAction}</span></div>
-                        <div className="mt-2 flex flex-wrap gap-1.5 text-[9px] font-black"><span className="rounded-full bg-slate-100 px-2 py-1 text-slate-600">السبب: {ROOT_CAUSES[item.root_cause_category] || item.root_cause_category || "غير محسوم"}</span><span className="rounded-full bg-slate-100 px-2 py-1 text-slate-600">الثقة: {CONFIDENCE[item.confidence] || item.confidence}</span><span className="rounded-full bg-slate-100 px-2 py-1 text-slate-600">{ACTION_TYPES[item.action_type] || "توصية V2"}</span>{item.executable === false && <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-700">اقتراح فقط — لا Ads write</span>}</div>
+                        <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-1.5"><p className="text-[10px] font-black text-slate-400">{item.provider === "meta" ? "ميتا" : "سناب"} · {LEVELS[item.entity_level] || item.entity_level}</p>{index === 0 && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[8px] font-black text-red-700">الأولوية الأولى</span>}</div>{item.account_name && <p className="mt-1 truncate text-[10px] font-extrabold text-slate-500">الحساب: {item.account_name}</p>}<Link to={`/ads-manager?provider=${item.provider}`} className="mt-1 block truncate text-sm font-black text-slate-900 hover:text-violet-700">{item.entity_name}</Link></div><span className={`shrink-0 rounded-full border px-3 py-1 text-[10px] font-black ${actionTone(item)}`}>{displayAction}</span></div>
+                        <div className="mt-2 flex flex-wrap gap-1.5 text-[9px] font-black"><span className="rounded-full bg-slate-100 px-2 py-1 text-slate-600">المشكلة/الفرصة: {ROOT_CAUSES[item.root_cause_category] || item.root_cause_category || "غير محسوم"}</span><span className="rounded-full bg-slate-100 px-2 py-1 text-slate-600">الثقة: {CONFIDENCE[item.confidence] || item.confidence}</span>{item.executable === false && <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-700">اقتراح فقط — لا تنفيذ</span>}</div>
                         <div className="mt-2 flex flex-wrap items-center gap-2 text-[9px] font-extrabold text-slate-400"><span>أُنشئت {relativeTime(item.generated_at || snapshot?.generated_at)}</span><span>•</span><span dir="ltr">{dateTime(item.generated_at || snapshot?.generated_at)}</span></div>
-                        <p className="mt-3 text-xs font-bold leading-6 text-slate-700">{item.diagnosis || item.rationale}</p>
-                        {item.evidence_for?.length > 0 && <p className="mt-2 text-[10px] font-bold leading-5 text-emerald-700"><b>الدليل المؤيد:</b> {item.evidence_for.slice(0, 4).join(" · ")}</p>}
-                        {item.evidence_against?.length > 0 && <p className="mt-1 text-[10px] font-bold leading-5 text-amber-700"><b>ما يعارض القرار:</b> {item.evidence_against.slice(0, 4).join(" · ")}</p>}
-                        <button type="button" onClick={() => setExpanded(isExpanded ? null : item.recommendation_id)} aria-expanded={isExpanded} className="mt-3 w-full rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-black text-violet-800 hover:bg-violet-100">{isExpanded ? "إخفاء شرح القرار" : "لماذا اتُخذ هذا القرار؟"}</button>
+                        <div className="mt-3 rounded-xl border border-slate-100 bg-slate-50 p-3"><p className="text-[10px] font-black text-slate-500">ماذا نفعل الآن؟</p><p className="mt-1 text-sm font-black text-slate-900">{displayAction}</p><p className="mt-2 text-xs font-bold leading-6 text-slate-700">{item.why || item.diagnosis || item.rationale}</p></div>
+                        {quickFacts.length > 0 && <div className="mt-2 grid grid-cols-2 gap-1.5">{quickFacts.map((fact) => <div key={fact} className="rounded-lg border border-slate-100 bg-white px-2 py-1.5 text-[9px] font-extrabold leading-4 text-slate-600">{fact}</div>)}</div>}
+                        <button type="button" onClick={() => setExpanded(isExpanded ? null : item.recommendation_id)} aria-expanded={isExpanded} className="mt-3 w-full rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-black text-violet-800 hover:bg-violet-100">{isExpanded ? "إخفاء التحليل المتقدم" : "عرض التحليل المتقدم"}</button>
 
                         {isExpanded && <div className="mt-3 space-y-3 rounded-2xl border border-violet-100 bg-violet-50/40 p-4" data-testid={`recommendation-explanation-${item.recommendation_id}`}>
                             <div><h3 className="text-xs font-black text-slate-900">الأرقام التي بنى عليها القرار</h3><div className="mt-2 flex flex-wrap gap-1.5">{(item.decision_facts || item.evidence || item.evidence_for || []).map((fact) => <span key={fact} className="rounded-lg bg-white px-2 py-1 text-[10px] font-extrabold text-slate-700 shadow-sm">{fact}</span>)}</div></div>
+                            {item.evidence_for?.length > 0 && <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-3"><h3 className="text-xs font-black text-emerald-900">ما يدعم القرار</h3><p className="mt-1 text-[10px] font-bold leading-5 text-emerald-800">{item.evidence_for.slice(0, 5).join(" · ")}</p></div>}
+                            {item.evidence_against?.length > 0 && <div className="rounded-xl border border-amber-100 bg-amber-50 p-3"><h3 className="text-xs font-black text-amber-900">ما الذي يدعونا للحذر؟</h3><p className="mt-1 text-[10px] font-bold leading-5 text-amber-800">{item.evidence_against.slice(0, 5).join(" · ")}</p></div>}
                             <HypothesisList primary={item.primary_hypothesis} secondary={item.secondary_hypotheses} />
-                            <div><h3 className="text-xs font-black text-slate-900">التحليل الزمني — Today أولًا</h3><div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3"><AnalysisBlock title="اليوم" value={item.today_analysis} /><AnalysisBlock title="أمس" value={item.yesterday_analysis} /><AnalysisBlock title="قبل أمس" value={item.day_minus_2_analysis} /><AnalysisBlock title="Baseline 7 أيام" value={item.baseline_7d} /><AnalysisBlock title="Baseline 30 يوم" value={item.baseline_30d} /></div></div>
-                            <div><h3 className="text-xs font-black text-slate-900">Funnel / Creative</h3><div className="mt-2 grid gap-2 sm:grid-cols-2"><AnalysisBlock title="Funnel" value={item.funnel_analysis} /><AnalysisBlock title="Video" value={item.video_analysis} /><AnalysisBlock title="Creative" value={item.creative_analysis} /><AnalysisBlock title="Inventory" value={item.inventory_analysis} /><AnalysisBlock title="السلات المتروكة" value={item.abandoned_cart_analysis} /><AnalysisBlock title="Cross-platform" value={item.cross_platform_analysis} /></div></div>
+                            <div><h3 className="text-xs font-black text-slate-900">تحليل الأيام</h3><div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3"><AnalysisBlock title="اليوم" value={item.today_analysis} /><AnalysisBlock title="أمس" value={item.yesterday_analysis} /><AnalysisBlock title="قبل أمس" value={item.day_minus_2_analysis} /><AnalysisBlock title="خط الأساس 7 أيام" value={item.baseline_7d} /><AnalysisBlock title="خط الأساس 30 يومًا" value={item.baseline_30d} /></div></div>
+                            <div><h3 className="text-xs font-black text-slate-900">مسار الشراء والمادة الإعلانية</h3><div className="mt-2 grid gap-2 sm:grid-cols-2"><AnalysisBlock title="مسار الشراء" value={item.funnel_analysis} /><AnalysisBlock title="أداء الفيديو" value={item.video_analysis} /><AnalysisBlock title="المادة الإعلانية" value={item.creative_analysis} /><AnalysisBlock title="المخزون" value={item.inventory_analysis} /><AnalysisBlock title="السلات المتروكة" value={item.abandoned_cart_analysis} /><AnalysisBlock title="المقارنة بين المنصات" value={item.cross_platform_analysis} /></div></div>
                             <ProductAnalysis item={item} />
                             <CreativeBrief brief={item.creative_brief} />
-                            <div><h3 className="text-xs font-black text-slate-900">ما الإجراء المقترح؟</h3><p className="mt-1 text-[11px] font-bold leading-6 text-slate-700">{displayAction} — {item.why || item.proposed_action || item.rationale}</p></div>
-                            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3"><h3 className="text-xs font-black text-amber-900">كم ساعة أصبر؟</h3><p className="mt-1 text-[11px] font-bold leading-6 text-amber-800">{item.observation_plan || `المجدول يعيد التحليل كل 5 ساعات. اصبر ${item.recommended_wait_hours || 5} ساعات قبل قرار ثانٍ.`}</p></div>
+                            <div><h3 className="text-xs font-black text-slate-900">الإجراء المقترح</h3><p className="mt-1 text-[11px] font-bold leading-6 text-slate-700">{displayAction} — {item.why || item.proposed_action || item.rationale}</p></div>
+                            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3"><h3 className="text-xs font-black text-amber-900">متى نراجع النتيجة؟</h3><p className="mt-1 text-[11px] font-bold leading-6 text-amber-800">{item.observation_plan || `أعد التقييم بعد ${item.recommended_wait_hours || 5} ساعات قبل قرار ثانٍ.`}</p></div>
                             <div><h3 className="text-xs font-black text-slate-900">متى نعتبر القرار ناجحًا؟</h3><ul className="mt-1 space-y-1 text-[10px] font-bold leading-5 text-slate-600">{(item.success_criteria || []).map((criterion) => <li key={criterion}>• {criterion}</li>)}</ul></div>
                             <div className="rounded-xl border border-red-100 bg-red-50/70 p-3"><h3 className="text-xs font-black text-red-900">ماذا لو تجاهلنا التوصية؟</h3><p className="mt-1 text-[10px] font-bold leading-5 text-red-700">{item.risks?.join(" · ") || item.risk_if_ignored}</p></div>
                             {item.what_would_change_the_decision?.length > 0 && <div className="rounded-xl border border-blue-100 bg-blue-50/70 p-3"><h3 className="text-xs font-black text-blue-900">ما الذي قد يجعل هذه التوصية خاطئة؟</h3><ul className="mt-1 space-y-1 text-[10px] font-bold text-blue-800">{item.what_would_change_the_decision.map((value) => <li key={value}>• {value}</li>)}</ul></div>}
-                            {item.financial_impact && <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3"><h3 className="text-xs font-black text-emerald-950">أثر الحملة على الربح</h3><p className="mt-1 text-[10px] font-bold text-emerald-800">مساهمة الفترة {money(item.financial_impact.period_estimated_contribution_sar)} ر.س · توقع فترة الانتظار القادمة {item.financial_impact.forecast_hours || "—"} ساعة · التغير المتوقع {money(item.financial_impact.forecast_delta_sar)} ر.س</p><p className="mt-1 text-[9px] font-bold text-slate-500">نسبتها من صافي النتيجة تعتمد على ملخص فترة الدراسة. قد تكون النتيجة: زادت صافي الخسارة / خفضت صافي الربح / زيادة متوقعة في الربح بحسب الإشارة.</p></div>}
-                            {item.external_knowledge_used?.length > 0 && <div><h3 className="text-xs font-black text-slate-900">المعرفة الخارجية المستخدمة</h3><div className="mt-2 space-y-1">{item.external_knowledge_used.map((source) => <p key={source.source_id} className="rounded-lg bg-white p-2 text-[9px] font-bold text-slate-600">Tier {source.source_tier} · {source.title} · مراجعة {source.last_reviewed_at}</p>)}</div></div>}
+                            {item.financial_impact && <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3"><h3 className="text-xs font-black text-emerald-950">أثر الحملة على الربح</h3><p className="mt-1 text-[10px] font-bold text-emerald-800">مساهمة الفترة {money(item.financial_impact.period_estimated_contribution_sar)} ر.س · فترة القياس القادمة {item.financial_impact.forecast_hours || "—"} ساعة · التغير المتوقع {money(item.financial_impact.forecast_delta_sar)} ر.س</p></div>}
                         </div>}
 
-                        <div className="mt-3 flex items-center justify-between gap-3"><span className="text-[9px] font-bold text-slate-400">recommended_wait_hours: {item.recommended_wait_hours || 5}</span>{canExecute ? <button type="button" onClick={() => approve(item)} disabled={approving[item.recommendation_id] || Boolean(status)} className="rounded-xl bg-violet-700 px-4 py-2 text-[10px] font-black text-white disabled:bg-slate-300">{status || (approving[item.recommendation_id] ? "جارٍ التنفيذ…" : "موافقة وتنفيذ")}</button> : <span className="rounded-xl bg-slate-100 px-3 py-2 text-[9px] font-black text-slate-500">توصية/تشخيص — لا تنفيذ تلقائي</span>}</div>
+                        <div className="mt-3 flex items-center justify-between gap-3"><span className="text-[9px] font-bold text-slate-400">إعادة التقييم بعد: {item.recommended_wait_hours || 5} ساعات</span>{canExecute ? <button type="button" onClick={() => approve(item)} disabled={approving[item.recommendation_id] || Boolean(status)} className="rounded-xl bg-violet-700 px-4 py-2 text-[10px] font-black text-white disabled:bg-slate-300">{status || (approving[item.recommendation_id] ? "جارٍ التنفيذ…" : "موافقة وتنفيذ")}</button> : <span className="rounded-xl bg-slate-100 px-3 py-2 text-[9px] font-black text-slate-500">توصية فقط — لا تنفيذ تلقائي</span>}</div>
                     </article>;
                 })}
             </section>
 
             {!loading && !visible.length && <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm font-bold text-slate-400"><BarChart3 className="mx-auto mb-2 h-6 w-6" />لا توجد توصيات مطابقة للفلاتر الحالية.</div>}
-            <div className="flex items-center justify-center gap-2 text-[9px] font-bold text-slate-400"><Clock3 className="h-3 w-3" /><span>Snapshot واحد لكل دورة · تحديث الواجهة لا يولّد قرارًا جديدًا</span><ShieldCheck className="h-3 w-3" /><span>لا Ads write بدون موافقة</span><ShoppingCart className="h-3 w-3" /><span>السلات دليل مساند لا Attribution مخترع</span></div>
+            <div className="flex items-center justify-center gap-2 text-[9px] font-bold text-slate-400"><Clock3 className="h-3 w-3" /><span>قرار واحد لكل دورة تحليل</span><ShieldCheck className="h-3 w-3" /><span>لا تعديل على الإعلان بدون موافقتك حاليًا</span><ShoppingCart className="h-3 w-3" /><span>السلات دليل مساعد وليست ربحًا منسوبًا للحملة</span></div>
         </div>
     </main>;
 }
