@@ -49,7 +49,7 @@ class MobileSupplierCreateIn(BaseModel):
 
 
 def make_supplier_mobile_router(db, current_user):
-    router = APIRouter(prefix="/mobile-suppliers-v1", tags=["mobile", "suppliers"])
+    router = APIRouter(prefix="/mobile", tags=["mobile", "suppliers"])
 
     @router.get("")
     async def list_mobile_suppliers(
