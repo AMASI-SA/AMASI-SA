@@ -29,6 +29,11 @@ const STAGE_LABELS = {
     completed: "مكتمل",
 };
 
+const DELIVERY_FLOW_LABELS = {
+    salla: "الشحن المسجل في سلة",
+    store_courier: "مندوب توصيل المتجر",
+};
+
 export default function FulfillmentExperimentPanel({ orderNumber, items = [] }) {
     const [state, setState] = useState(null);
     const [unavailable, setUnavailable] = useState(false);
@@ -41,6 +46,7 @@ export default function FulfillmentExperimentPanel({ orderNumber, items = [] }) 
     const [targetId, setTargetId] = useState("");
     const [stopType, setStopType] = useState("note");
     const [note, setNote] = useState("");
+    const [deliveryFlow, setDeliveryFlow] = useState("salla");
 
     const load = useCallback(async ({ quiet = false } = {}) => {
         if (!orderNumber) return;
@@ -49,6 +55,10 @@ export default function FulfillmentExperimentPanel({ orderNumber, items = [] }) 
         try {
             const result = await getFulfillmentExperimentState(orderNumber);
             setState(result || null);
+            const savedFlow = result?.latest_run?.delivery_flow;
+            if (savedFlow === "salla" || savedFlow === "store_courier") {
+                setDeliveryFlow(savedFlow);
+            }
             setUnavailable(false);
         } catch (loadError) {
             if (loadError?.status === 403) {
@@ -104,8 +114,13 @@ export default function FulfillmentExperimentPanel({ orderNumber, items = [] }) 
         setError("");
         setNotice("");
         try {
-            const result = await resetFulfillmentExperiment(orderNumber, "إعادة الطلب لاختبار دورة التجهيز والصلاحيات");
-            setNotice(`بدأت التجربة رقم ${result?.run?.generation || "—"}. أُرشفت ${result?.archived_piece_count || 0} قطعة تشغيلية دون أي قيد مالي.`);
+            const result = await resetFulfillmentExperiment(
+                orderNumber,
+                "إعادة الطلب لاختبار دورة التجهيز والصلاحيات",
+                deliveryFlow,
+            );
+            const flowLabel = DELIVERY_FLOW_LABELS[deliveryFlow] || deliveryFlow;
+            setNotice(`بدأت التجربة رقم ${result?.run?.generation || "—"} على مسار ${flowLabel}. أُرشفت ${result?.archived_piece_count || 0} قطعة تشغيلية دون أي قيد مالي.`);
             await load({ quiet: true });
         } catch (resetError) {
             setError(resetError?.message || "تعذّرت إعادة الطلب.");
@@ -171,10 +186,30 @@ export default function FulfillmentExperimentPanel({ orderNumber, items = [] }) 
                 <div className="rounded-xl bg-violet-50 p-3"><div className="text-[11px] font-black text-violet-500">جيل التجربة</div><div className="mt-1 text-xl font-black tabular-nums text-violet-900">{state?.latest_run?.generation || "—"}</div></div>
             </div>
 
-            {state?.latest_run?.status === "active" && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-black leading-6 text-amber-900">وضع تجريبي نشط: قيود مالية 0 · مديونية مورد 0 · تحديث سلة 0 · تحديث قيود 0.</div>}
+            {state?.latest_run?.status === "active" && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-black leading-6 text-amber-900">وضع تجريبي نشط: قيود مالية 0 · مديونية مورد 0 · تحديث سلة 0 · تحديث قيود 0 · مسار الشحن: {DELIVERY_FLOW_LABELS[state?.latest_run?.delivery_flow] || "الشحن المسجل في سلة"}.</div>}
 
             {state?.capabilities?.can_reset_experiment && (
-                <button type="button" onClick={() => setResetConfirmationOpen(true)} disabled={Boolean(busy)} className="mt-4 min-h-11 w-full rounded-xl bg-violet-700 px-4 text-sm font-black text-white disabled:opacity-50" data-testid="fulfillment-experiment-reset">
+                <div className="mt-4 rounded-2xl border border-violet-200 bg-violet-50 p-4">
+                    <label className="text-xs font-black text-violet-950" htmlFor="fulfillment-experiment-delivery-flow">مسار الشحن في التجربة</label>
+                    <select
+                        id="fulfillment-experiment-delivery-flow"
+                        value={deliveryFlow}
+                        onChange={(event) => setDeliveryFlow(event.target.value)}
+                        disabled={Boolean(busy)}
+                        className="mt-2 h-12 w-full rounded-xl border border-violet-200 bg-white px-3 text-sm font-black text-slate-900"
+                        data-testid="fulfillment-experiment-delivery-flow"
+                    >
+                        <option value="salla">الشحن المسجل في سلة</option>
+                        <option value="store_courier">مندوب توصيل المتجر — بوليصة أماسي</option>
+                    </select>
+                    <p className="mt-2 text-xs font-bold leading-6 text-violet-800">
+                        اختيار مندوب المتجر يغيّر مسار التجربة داخل ميزان فقط، ويُبقي بوليصة شركة الشحن الحقيقية في سلة دون إلغاء أو تعديل.
+                    </p>
+                </div>
+            )}
+
+            {state?.capabilities?.can_reset_experiment && (
+                <button type="button" onClick={() => setResetConfirmationOpen(true)} disabled={Boolean(busy)} className="mt-3 min-h-11 w-full rounded-xl bg-violet-700 px-4 text-sm font-black text-white disabled:opacity-50" data-testid="fulfillment-experiment-reset">
                     {busy === "reset" ? <SpinnerGap className="ml-1 inline animate-spin" /> : <Flask className="ml-1 inline" />} إعادة الطلب إلى «تمت المراجعة» كتجربة جديدة
                 </button>
             )}
@@ -186,7 +221,7 @@ export default function FulfillmentExperimentPanel({ orderNumber, items = [] }) 
                             <span className="rounded-xl bg-violet-100 p-3 text-violet-700"><Flask size={24} weight="fill" /></span>
                             <div>
                                 <h3 id="fulfillment-experiment-reset-title" className="text-lg font-black text-slate-950">تأكيد إعادة الطلب للتجربة</h3>
-                                <p className="mt-2 text-sm font-bold leading-7 text-slate-600">سيُعاد الطلب #{orderNumber} إلى مرحلة تمت المراجعة، وتؤرشف مراحل التجهيز التشغيلية فقط. الفاتورة والمحاسبة السابقة لن تتغير.</p>
+                                <p className="mt-2 text-sm font-bold leading-7 text-slate-600">سيُعاد الطلب #{orderNumber} إلى مرحلة تمت المراجعة على مسار {DELIVERY_FLOW_LABELS[deliveryFlow] || deliveryFlow}، وتؤرشف مراحل التجهيز التشغيلية فقط. الفاتورة والمحاسبة وشحنة سلة الحقيقية لن تتغير.</p>
                             </div>
                         </div>
                         <div className="mt-5 grid grid-cols-2 gap-3">
