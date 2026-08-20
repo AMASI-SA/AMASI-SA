@@ -45,7 +45,19 @@ from .snapchat_account_timezone_manager import (
     _valid_timezone_name,
     resolve_account_report_dates,
 )
-from .snapchat_adsquad_performance import _campaign_entities, _number, _to_list
+from .snapchat_adsquad_performance import (
+    CONFIRMED_DATA_STATES,
+    DATA_STATE_CONFIRMED_DATA,
+    DATA_STATE_CONFIRMED_NO_DATA,
+    DATA_STATE_CONFIRMED_ZERO,
+    DATA_STATE_UNKNOWN_INCOMPLETE,
+    _campaign_entities,
+    _has_numeric_provider_metric,
+    _number,
+    _performance_data_state,
+    _to_list,
+    _valid_provider_window,
+)
 from .snapchat_native_data_common import (
     ATTRIBUTION_MODEL,
     BUSINESS_TIMEZONE,
@@ -135,7 +147,16 @@ def extract_ad_hour_rows(
     campaign_id: str,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
     """Extract HOUR Ad rows from a Campaign Stats breakdown response."""
-    wrapped_stats = payload.get("timeseries_stats") or []
+    if not isinstance(payload, dict) or str(
+        payload.get("request_status") or ""
+    ).upper() != "SUCCESS":
+        raise SnapchatNativeSyncError(
+            "snapchat_ad_timeseries_request_incomplete",
+            "Snapchat did not confirm a successful Ad timeseries response.",
+            status_code=502,
+            retryable=True,
+        )
+    wrapped_stats = payload.get("timeseries_stats")
     if not isinstance(wrapped_stats, list):
         raise SnapchatNativeSyncError(
             "snapchat_ad_stats_payload_invalid",
@@ -146,40 +167,91 @@ def extract_ad_hour_rows(
     rows: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
     successful = 0
+    if not wrapped_stats:
+        errors.append({
+            "kind": "ad_stats",
+            "campaign_id": campaign_id,
+            "code": "snapchat_ad_timeseries_stats_missing",
+            "message": "Snapchat returned no Ad timeseries result envelope.",
+            "retryable": True,
+        })
+        return rows, errors, successful
     for wrapped in wrapped_stats:
         if not isinstance(wrapped, dict):
-            continue
-        status = str(wrapped.get("sub_request_status") or "SUCCESS").upper()
-        if "FAIL" in status or "ERROR" in status:
             errors.append({
                 "kind": "ad_stats",
                 "campaign_id": campaign_id,
-                "error": status[:100],
+                "code": "snapchat_ad_timeseries_wrapper_invalid",
+                "message": "Snapchat returned an invalid Ad timeseries wrapper.",
+                "retryable": True,
             })
             continue
-        successful += 1
-        stat = wrapped.get("timeseries_stat", wrapped)
+        status = str(wrapped.get("sub_request_status") or "").upper()
+        if status != "SUCCESS":
+            errors.append({
+                "kind": "ad_stats",
+                "campaign_id": campaign_id,
+                "code": "snapchat_ad_timeseries_subrequest_incomplete",
+                "message": "Snapchat did not confirm the Ad timeseries subrequest.",
+                "error": status[:100],
+                "retryable": True,
+            })
+            continue
+        stat = wrapped.get("timeseries_stat")
         if not isinstance(stat, dict):
+            errors.append({
+                "kind": "ad_stats",
+                "campaign_id": campaign_id,
+                "code": "snapchat_ad_timeseries_stat_missing",
+                "message": "Snapchat success response omitted timeseries_stat.",
+                "retryable": True,
+            })
             continue
         breakdown = stat.get("breakdown_stats")
         candidates: list[dict[str, Any]] = []
+        structure_seen = False
         if isinstance(breakdown, dict):
             for key in ("ad", "ads"):
-                value = breakdown.get(key)
-                if isinstance(value, list):
-                    candidates.extend(
-                        item for item in value if isinstance(item, dict)
-                    )
+                if key not in breakdown:
+                    continue
+                value = breakdown[key]
+                if not isinstance(value, list):
+                    continue
+                structure_seen = True
+                candidates.extend(value)
         if not candidates and str(stat.get("type") or "").upper() == "AD":
+            structure_seen = True
             candidates = [stat]
+        if not structure_seen:
+            errors.append({
+                "kind": "ad_stats",
+                "campaign_id": campaign_id,
+                "code": "snapchat_ad_timeseries_breakdown_missing",
+                "message": "Snapchat timeseries_stat omitted an Ad breakdown.",
+                "retryable": True,
+            })
+            continue
+        wrapper_valid = True
         for entity in candidates:
+            if not isinstance(entity, dict):
+                wrapper_valid = False
+                continue
             ad_id = _text(entity.get("id"))
             points = entity.get("timeseries")
             if not ad_id or not isinstance(points, list):
+                wrapper_valid = False
                 continue
             for point in points:
                 metrics = point.get("stats") if isinstance(point, dict) else None
-                if not isinstance(metrics, dict):
+                if (
+                    not _has_numeric_provider_metric(metrics)
+                    or not isinstance(point, dict)
+                    or not _valid_provider_window(
+                        point.get("start_time"),
+                        point.get("end_time"),
+                    )
+                ):
+                    wrapper_valid = False
                     continue
                 rows.append({
                     "campaign_id": campaign_id,
@@ -188,6 +260,16 @@ def extract_ad_hour_rows(
                     "end_time": point.get("end_time"),
                     "metrics": metrics,
                 })
+        if not wrapper_valid:
+            errors.append({
+                "kind": "ad_stats",
+                "campaign_id": campaign_id,
+                "code": "snapchat_ad_timeseries_row_invalid",
+                "message": "Snapchat returned a partial or invalid Ad timeseries row.",
+                "retryable": True,
+            })
+            continue
+        successful += 1
     return rows, errors, successful
 
 
@@ -222,7 +304,7 @@ async def _fetch_campaign_ad_hours(
     rows: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
     successful = 0
-    for _ in range(MAX_PAGES):
+    for page_index in range(MAX_PAGES):
         payload = await context.get_json(
             client,
             url,
@@ -236,8 +318,34 @@ async def _fetch_campaign_ad_hours(
         rows.extend(page_rows)
         errors.extend(page_errors)
         successful += page_success
-        next_url = _safe_next_url((payload.get("paging") or {}).get("next_link"))
+        paging = payload.get("paging")
+        if paging is not None and not isinstance(paging, dict):
+            errors.append({
+                "kind": "ad_stats",
+                "campaign_id": campaign_id,
+                "code": "snapchat_ad_paging_invalid",
+                "retryable": True,
+            })
+            break
+        raw_next_url = (paging or {}).get("next_link")
+        if not raw_next_url:
+            break
+        next_url = _safe_next_url(raw_next_url)
         if not next_url:
+            errors.append({
+                "kind": "ad_stats",
+                "campaign_id": campaign_id,
+                "code": "snapchat_ad_next_link_invalid",
+                "retryable": True,
+            })
+            break
+        if page_index == MAX_PAGES - 1:
+            errors.append({
+                "kind": "ad_stats",
+                "campaign_id": campaign_id,
+                "code": "snapchat_ad_pagination_incomplete",
+                "retryable": True,
+            })
             break
         url, params = next_url, None
     if successful == 0 and errors:
@@ -259,7 +367,16 @@ def extract_ad_total_rows(
     request_end: datetime,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int, bool]:
     """Extract complete Ad rows from a Campaign TOTAL breakdown response."""
-    wrapped_stats = payload.get("total_stats") or []
+    if not isinstance(payload, dict) or str(
+        payload.get("request_status") or ""
+    ).upper() != "SUCCESS":
+        raise SnapchatNativeSyncError(
+            "snapchat_ad_request_incomplete",
+            "Snapchat did not confirm a successful Ad TOTAL response.",
+            status_code=502,
+            retryable=True,
+        )
+    wrapped_stats = payload.get("total_stats")
     if not isinstance(wrapped_stats, list):
         raise SnapchatNativeSyncError(
             "snapchat_ad_total_payload_invalid",
@@ -271,20 +388,45 @@ def extract_ad_total_rows(
     errors: list[dict[str, Any]] = []
     successful = 0
     breakdown_seen = False
+    if not wrapped_stats:
+        errors.append({
+            "kind": "ad_total_stats",
+            "campaign_id": campaign_id,
+            "code": "snapchat_ad_total_stats_missing",
+            "message": "Snapchat returned no Ad TOTAL result envelope.",
+            "retryable": True,
+        })
+        return rows, errors, successful, breakdown_seen
     for wrapped in wrapped_stats:
         if not isinstance(wrapped, dict):
-            continue
-        status = str(wrapped.get("sub_request_status") or "SUCCESS").upper()
-        if "FAIL" in status or "ERROR" in status:
             errors.append({
                 "kind": "ad_total_stats",
                 "campaign_id": campaign_id,
-                "error": status[:100],
+                "code": "snapchat_ad_total_wrapper_invalid",
+                "message": "Snapchat returned an invalid Ad result wrapper.",
+                "retryable": True,
             })
             continue
-        successful += 1
-        stat = wrapped.get("total_stat", wrapped)
+        status = str(wrapped.get("sub_request_status") or "").upper()
+        if status != "SUCCESS":
+            errors.append({
+                "kind": "ad_total_stats",
+                "campaign_id": campaign_id,
+                "code": "snapchat_ad_subrequest_incomplete",
+                "message": "Snapchat did not confirm the Ad subrequest.",
+                "error": status[:100],
+                "retryable": True,
+            })
+            continue
+        stat = wrapped.get("total_stat")
         if not isinstance(stat, dict):
+            errors.append({
+                "kind": "ad_total_stats",
+                "campaign_id": campaign_id,
+                "code": "snapchat_ad_total_stat_missing",
+                "message": "Snapchat success response omitted total_stat.",
+                "retryable": True,
+            })
             continue
         provider_start = stat.get("start_time") or request_start.isoformat(
             timespec="seconds"
@@ -292,20 +434,60 @@ def extract_ad_total_rows(
         provider_end = stat.get("end_time") or request_end.isoformat(
             timespec="seconds"
         )
+        if not _valid_provider_window(
+            provider_start,
+            provider_end,
+            expected_start=request_start,
+            expected_end=request_end,
+        ):
+            errors.append({
+                "kind": "ad_total_stats",
+                "campaign_id": campaign_id,
+                "code": "snapchat_ad_provider_window_invalid",
+                "message": "Snapchat returned an invalid Ad report window.",
+                "retryable": True,
+            })
+            continue
         breakdown = stat.get("breakdown_stats")
         candidates: list[dict[str, Any]] = []
-        if isinstance(breakdown, dict):
-            for key in ("ad", "ads"):
-                value = breakdown.get(key)
-                if isinstance(value, list):
-                    breakdown_seen = True
-                    candidates.extend(
-                        item for item in value if isinstance(item, dict)
-                    )
+        if not isinstance(breakdown, dict):
+            errors.append({
+                "kind": "ad_total_stats",
+                "campaign_id": campaign_id,
+                "code": "snapchat_ad_breakdown_missing",
+                "message": "Snapchat total_stat omitted Ad breakdown_stats.",
+                "retryable": True,
+            })
+            continue
+        matching_values = [
+            breakdown[key]
+            for key in ("ad", "ads")
+            if key in breakdown
+        ]
+        if not matching_values or any(
+            not isinstance(value, list) for value in matching_values
+        ):
+            errors.append({
+                "kind": "ad_total_stats",
+                "campaign_id": campaign_id,
+                "code": "snapchat_ad_breakdown_invalid",
+                "message": "Snapchat returned an invalid Ad breakdown.",
+                "retryable": True,
+            })
+            continue
+        breakdown_seen = True
+        wrapper_valid = True
+        for value in matching_values:
+            for item in value:
+                if not isinstance(item, dict):
+                    wrapper_valid = False
+                    continue
+                candidates.append(item)
         for entity in candidates:
             ad_id = _text(entity.get("id"))
             metrics = entity.get("stats")
-            if not ad_id or not isinstance(metrics, dict):
+            if not ad_id or not _has_numeric_provider_metric(metrics):
+                wrapper_valid = False
                 continue
             rows.append({
                 "campaign_id": campaign_id,
@@ -314,6 +496,16 @@ def extract_ad_total_rows(
                 "end_time": provider_end,
                 "metrics": metrics,
             })
+        if not wrapper_valid:
+            errors.append({
+                "kind": "ad_total_stats",
+                "campaign_id": campaign_id,
+                "code": "snapchat_ad_breakdown_row_invalid",
+                "message": "Snapchat returned a partial or invalid Ad row.",
+                "retryable": True,
+            })
+            continue
+        successful += 1
     return rows, errors, successful, breakdown_seen
 
 
@@ -351,7 +543,7 @@ async def _fetch_campaign_ad_totals(
     errors: list[dict[str, Any]] = []
     successful = 0
     breakdown_seen = False
-    for _ in range(MAX_PAGES):
+    for page_index in range(MAX_PAGES):
         payload = await context.get_json(
             client,
             url,
@@ -370,8 +562,37 @@ async def _fetch_campaign_ad_totals(
         errors.extend(page_errors)
         successful += page_success
         breakdown_seen = breakdown_seen or page_breakdown
-        next_url = _safe_next_url((payload.get("paging") or {}).get("next_link"))
+        paging = payload.get("paging")
+        if paging is not None and not isinstance(paging, dict):
+            errors.append({
+                "kind": "ad_total_stats",
+                "campaign_id": campaign_id,
+                "code": "snapchat_ad_paging_invalid",
+                "message": "Snapchat returned an invalid paging envelope.",
+                "retryable": True,
+            })
+            break
+        raw_next_url = (paging or {}).get("next_link")
+        if not raw_next_url:
+            break
+        next_url = _safe_next_url(raw_next_url)
         if not next_url:
+            errors.append({
+                "kind": "ad_total_stats",
+                "campaign_id": campaign_id,
+                "code": "snapchat_ad_next_link_invalid",
+                "message": "Snapchat pagination returned an untrusted next_link.",
+                "retryable": True,
+            })
+            break
+        if page_index == MAX_PAGES - 1:
+            errors.append({
+                "kind": "ad_total_stats",
+                "campaign_id": campaign_id,
+                "code": "snapchat_ad_pagination_incomplete",
+                "message": "Snapchat Ad pagination exceeded the page limit.",
+                "retryable": True,
+            })
             break
         url, params = next_url, None
     if successful == 0 and errors:
@@ -420,6 +641,11 @@ async def _fetch_ad_window(
                     "rows": rows,
                     "errors": report_errors,
                     "breakdown_seen": breakdown_seen,
+                    "data_state": _performance_data_state(
+                        rows,
+                        errors=report_errors,
+                        structure_seen=breakdown_seen,
+                    ),
                 }
             except SnapchatNativeSyncError as exc:
                 if exc.code == "snapchat_needs_reauth":
@@ -436,6 +662,7 @@ async def _fetch_ad_window(
                         "retryable": bool(exc.retryable),
                     }],
                     "breakdown_seen": False,
+                    "data_state": DATA_STATE_UNKNOWN_INCOMPLETE,
                 }
 
     tasks = [
@@ -591,20 +818,27 @@ async def _recent_refresh(
     account_id: str,
     *,
     now: datetime,
-) -> bool:
+) -> dict[str, Any] | None:
     row = await _collection(db, AD_REFRESH_STATE_COLLECTION).find_one(
         {"user_id": user_id, "ad_account_id": account_id},
     )
     observed = _parse_datetime((row or {}).get("last_success_at"))
     if observed is None:
-        return False
+        return None
     if observed.tzinfo is None:
         observed = observed.replace(tzinfo=timezone.utc)
-    return (
+    coverage = (row or {}).get("coverage")
+    if not (
+        isinstance(coverage, dict)
+        and coverage.get("status") == "complete"
+        and coverage.get("data_state") in CONFIRMED_DATA_STATES
+    ):
+        return None
+    return row if (
         _text((row or {}).get("source_mode")) == AD_REFRESH_SOURCE_MODE
         and (now - observed.astimezone(timezone.utc)).total_seconds()
         < AD_REFRESH_INTERVAL_SECONDS
-    )
+    ) else None
 
 
 async def refresh_snapchat_ad_performance(
@@ -635,12 +869,20 @@ async def refresh_snapchat_ad_performance(
     ) = await sync_snapchat_ad_entities(
         context, client, access_token, account
     )
-    if await _recent_refresh(
+    recent_refresh = await _recent_refresh(
         context.db,
         context.user_id,
         account_id,
         now=current,
-    ):
+    )
+    if recent_refresh:
+        cached_coverage = dict(recent_refresh.get("coverage") or {})
+        if identity_errors:
+            cached_coverage = {
+                **cached_coverage,
+                "status": "incomplete",
+                "data_state": DATA_STATE_UNKNOWN_INCOMPLETE,
+            }
         return {
             "source_mode": AD_SOURCE_MODE,
             "skipped": True,
@@ -650,6 +892,7 @@ async def refresh_snapchat_ad_performance(
             "identity_rows_saved": identity_rows_saved,
             "identity_counts": identity_counts,
             "identity_errors": identity_errors[:20],
+            "coverage": cached_coverage,
             "source_only": True,
         }
 
@@ -677,6 +920,12 @@ async def refresh_snapchat_ad_performance(
             "identity_rows_saved": identity_rows_saved,
             "identity_counts": identity_counts,
             "identity_errors": identity_errors[:20],
+            "coverage": {
+                "status": "incomplete",
+                "data_state": DATA_STATE_UNKNOWN_INCOMPLETE,
+                "expected_requests": 0,
+                "completed_requests": 0,
+            },
             "source_only": True,
         }
 
@@ -685,10 +934,17 @@ async def refresh_snapchat_ad_performance(
         context.user_id,
         account_id,
     )
-    errors: list[dict[str, Any]] = []
+    errors: list[dict[str, Any]] = [
+        {**error, "kind": _text(error.get("kind")) or "ad_identity"}
+        for error in identity_errors
+    ]
     account_local_saved = 0
     request_windows: list[dict[str, str]] = []
     breakdown_days = 0
+    expected_requests = 0
+    completed_requests = 0
+    confirmed_states: list[str] = []
+    pending_rows: list[tuple[str, date, list[dict[str, Any]]]] = []
 
     for report_date in report_dates:
         window = account_local_total_window(
@@ -697,6 +953,13 @@ async def refresh_snapchat_ad_performance(
             now=current,
         )
         if window is None:
+            errors.append({
+                "kind": "ad_total_stats",
+                "date": report_date.isoformat(),
+                "code": "snapchat_ad_window_unavailable",
+                "message": "The requested Ad report window was unavailable.",
+                "retryable": True,
+            })
             continue
         request_start, request_end = window
         request_windows.append({
@@ -709,8 +972,24 @@ async def refresh_snapchat_ad_performance(
             mode: [] for mode in ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES
         }
         complete_by_mode = {
-            mode: True for mode in ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES
+            mode: False for mode in ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES
         }
+        expected_identities = {
+            (_text(campaign.get("external_id")), mode)
+            for campaign in campaigns
+            if _text(campaign.get("external_id"))
+            for mode in ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES
+        }
+        expected_requests += len(expected_identities)
+        completed_identities: set[tuple[str, str]] = set()
+        if not expected_identities:
+            errors.append({
+                "kind": "ad_total_stats",
+                "date": report_date.isoformat(),
+                "code": "snapchat_ad_campaign_coverage_unproven",
+                "message": "No active campaign performance request could be proven.",
+                "retryable": True,
+            })
 
         window_results = await _fetch_ad_window(
             context,
@@ -721,24 +1000,63 @@ async def refresh_snapchat_ad_performance(
             request_end=request_end,
         )
         for result in window_results:
+            campaign_id = _text(result.get("campaign_id"))
             action_report_time = _text(result.get("action_report_time"))
-            if action_report_time not in rows_by_mode:
+            identity = (campaign_id, action_report_time)
+            if identity not in expected_identities:
+                errors.append({
+                    "kind": "ad_total_stats",
+                    "date": report_date.isoformat(),
+                    "code": "snapchat_ad_result_identity_unexpected",
+                    "campaign_id": campaign_id,
+                    "action_report_time": action_report_time,
+                    "retryable": True,
+                })
                 continue
             campaign_rows = result.get("rows") or []
             campaign_errors = result.get("errors") or []
-            rows_by_mode[action_report_time].extend(campaign_rows)
-            complete_by_mode[action_report_time] = (
-                complete_by_mode[action_report_time]
+            data_state = _text(result.get("data_state"))
+            request_complete = (
+                data_state in CONFIRMED_DATA_STATES
                 and bool(result.get("breakdown_seen"))
                 and not campaign_errors
             )
+            if request_complete and identity not in completed_identities:
+                completed_identities.add(identity)
+                confirmed_states.append(data_state)
+                rows_by_mode[action_report_time].extend(campaign_rows)
             errors.extend({
                 **error,
                 "date": report_date.isoformat(),
                 "action_report_time": action_report_time,
             } for error in campaign_errors)
 
+        completed_requests += len(completed_identities)
+        for action_report_time in ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES:
+            expected_for_mode = {
+                identity for identity in expected_identities
+                if identity[1] == action_report_time
+            }
+            complete_by_mode[action_report_time] = bool(expected_for_mode) and (
+                expected_for_mode <= completed_identities
+            )
+
         for action_report_time, mode_rows in rows_by_mode.items():
+            if not complete_by_mode[action_report_time]:
+                continue
+            pending_rows.append((action_report_time, report_date, mode_rows))
+
+    now_iso = context.now_iso()
+    coverage_complete = (
+        bool(request_windows)
+        and len(request_windows) == len(report_dates)
+        and expected_requests > 0
+        and completed_requests == expected_requests
+        and not errors
+        and not campaign_limit_reached
+    )
+    if coverage_complete:
+        for action_report_time, report_date, mode_rows in pending_rows:
             local = _day_buckets(
                 mode_rows,
                 timezone_name=timezone_name,
@@ -761,10 +1079,22 @@ async def refresh_snapchat_ad_performance(
                     action_report_time=action_report_time,
                 )
                 account_local_saved += 1
-            if complete_by_mode[action_report_time]:
-                breakdown_days += 1
+            breakdown_days += 1
 
-    now_iso = context.now_iso()
+    if not coverage_complete:
+        aggregate_data_state = DATA_STATE_UNKNOWN_INCOMPLETE
+    elif DATA_STATE_CONFIRMED_DATA in confirmed_states:
+        aggregate_data_state = DATA_STATE_CONFIRMED_DATA
+    elif DATA_STATE_CONFIRMED_ZERO in confirmed_states:
+        aggregate_data_state = DATA_STATE_CONFIRMED_ZERO
+    else:
+        aggregate_data_state = DATA_STATE_CONFIRMED_NO_DATA
+    coverage = {
+        "status": "complete" if coverage_complete else "incomplete",
+        "data_state": aggregate_data_state,
+        "expected_requests": expected_requests,
+        "completed_requests": completed_requests,
+    }
     state_set: dict[str, Any] = {
         "user_id": context.user_id,
         "ad_account_id": account_id,
@@ -774,10 +1104,11 @@ async def refresh_snapchat_ad_performance(
         "errors_count": len(errors),
         "source_mode": AD_REFRESH_SOURCE_MODE,
         "provider_granularity": AD_PROVIDER_GRANULARITY,
+        "coverage": coverage,
         "updated_at": now_iso,
         "last_attempt_at": now_iso,
     }
-    if not errors and not campaign_limit_reached:
+    if coverage_complete:
         state_set["last_success_at"] = now_iso
     await _collection(
         context.db,
@@ -803,6 +1134,7 @@ async def refresh_snapchat_ad_performance(
         "campaign_limit_reached": campaign_limit_reached,
         "errors_count": len(errors),
         "errors": errors[:50],
+        "coverage": coverage,
         "identity_rows_saved": identity_rows_saved,
         "identity_counts": identity_counts,
         "identity_errors": identity_errors[:20],
@@ -872,6 +1204,12 @@ def install_snapchat_ad_performance_refresh() -> None:
                     "message": exc.message[:300],
                     "retryable": bool(exc.retryable),
                 }],
+                "coverage": {
+                    "status": "incomplete",
+                    "data_state": DATA_STATE_UNKNOWN_INCOMPLETE,
+                    "expected_requests": 0,
+                    "completed_requests": 0,
+                },
                 "source_only": True,
             }
         return output

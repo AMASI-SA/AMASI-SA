@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import inspect
 
 from fastapi import APIRouter
+import pytest
 
 from integrations_control_center import ads_auto_sync_scheduler as scheduler
 
@@ -180,6 +181,178 @@ def test_safe_summary_preserves_per_account_provider_calls():
         scheduler.snapchat_hourly.CAMPAIGN_FACTS_SOURCE_MODE
     )
     assert summary["campaign_facts_schema_version"] == 4
+
+
+def _complete_coverage(data_state="confirmed_data"):
+    return {
+        "status": "complete",
+        "data_state": data_state,
+        "expected_requests": 1,
+        "completed_requests": 1,
+    }
+
+
+@pytest.mark.parametrize("nested_key", scheduler.SNAPCHAT_PERFORMANCE_RESULT_KEYS)
+def test_nested_snapchat_performance_error_fails_account_coverage(nested_key):
+    item = {
+        "coverage": _complete_coverage(),
+        "errors_count": 0,
+        "errors": [],
+        "ad_squad_performance": {
+            "coverage": _complete_coverage(),
+            "errors_count": 0,
+            "errors": [],
+        },
+        "ad_performance": {
+            "coverage": _complete_coverage(),
+            "errors_count": 0,
+            "errors": [],
+        },
+    }
+    item[nested_key] = {
+        "coverage": {
+            "status": "incomplete",
+            "data_state": "unknown_incomplete",
+            "expected_requests": 2,
+            "completed_requests": 1,
+        },
+        "errors_count": 1,
+        "errors": [{"code": "nested_provider_error"}],
+    }
+
+    assert scheduler._snapchat_item_complete(item) is False
+    errors = scheduler._snapchat_item_errors(item)
+    assert any(error.get("code") == "nested_provider_error" for error in errors)
+    assert any(error.get("kind") == nested_key for error in errors)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("raise_error", [False, True])
+async def test_incomplete_snapchat_does_not_advance_freshness_or_health_100(
+    monkeypatch,
+    raise_error,
+):
+    account = {
+        "ad_account_id": "account-1",
+        "timezone": "Asia/Riyadh",
+        "currency": "SAR",
+    }
+    item = {
+        "ad_account_id": "account-1",
+        "rows_saved": 0,
+        "campaign_rows_saved": 0,
+        "campaign_facts_source_mode": scheduler.snapchat_hourly.CAMPAIGN_FACTS_SOURCE_MODE,
+        "campaign_facts_schema_version": scheduler.snapchat_hourly.CAMPAIGN_FACTS_SCHEMA_VERSION,
+        "errors_count": 0,
+        "errors": [],
+        "coverage": {
+            "status": "incomplete",
+            "data_state": "unknown_incomplete",
+            "expected_requests": 2,
+            "completed_requests": 1,
+        },
+        "ad_squad_performance": {
+            "coverage": _complete_coverage("confirmed_no_data"),
+            "errors_count": 0,
+            "errors": [],
+        },
+        "ad_performance": {
+            "coverage": _complete_coverage("confirmed_no_data"),
+            "errors_count": 0,
+            "errors": [],
+        },
+    }
+
+    async def no_active(*args, **kwargs):
+        return None
+
+    async def start_run(*args, **kwargs):
+        return "run-1"
+
+    async def load_accounts(*args, **kwargs):
+        return [account]
+
+    async def noop(*args, **kwargs):
+        return None
+
+    async def record_error(*args, **kwargs):
+        return "error-1"
+
+    async def refresh(*args, **kwargs):
+        if raise_error:
+            raise scheduler.SnapchatNativeSyncError(
+                "snapchat_account_hour_timeseries_stat_missing",
+                "Malformed successful response.",
+                status_code=502,
+                retryable=True,
+                result={"coverage": deepcopy(item["coverage"])},
+            )
+        return deepcopy(item)
+
+    class Context:
+        def __init__(self, db, user_id, now=None):
+            self.provider_calls = 0
+
+        async def access_token(self):
+            return "access-token"
+
+    class Client:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+    updates = {}
+
+    class Collection:
+        def __init__(self, name):
+            self.name = name
+
+        async def update_one(self, query, update, upsert=False):
+            updates.setdefault(self.name, []).append({
+                "query": deepcopy(query),
+                "update": deepcopy(update),
+                "upsert": upsert,
+            })
+
+    monkeypatch.setattr(scheduler, "snapchat_oauth_configured", lambda: True)
+    monkeypatch.setattr(scheduler, "snapchat_native_sync_enabled", lambda: True)
+    monkeypatch.setattr(scheduler, "_active_run", no_active)
+    monkeypatch.setattr(scheduler, "_start_run", start_run)
+    monkeypatch.setattr(scheduler, "_load_selected_accounts", load_accounts)
+    monkeypatch.setattr(scheduler, "ensure_snapchat_native_sync_indexes", noop)
+    monkeypatch.setattr(scheduler, "_finish_run", noop)
+    monkeypatch.setattr(scheduler, "_record_error", record_error)
+    monkeypatch.setattr(scheduler, "SnapchatSyncContext", Context)
+    monkeypatch.setattr(scheduler.httpx, "AsyncClient", Client)
+    monkeypatch.setattr(scheduler.snapchat_hourly, "refresh_snapchat_account_hours", refresh)
+    monkeypatch.setattr(
+        scheduler,
+        "_collection",
+        lambda db, name: Collection(name),
+    )
+
+    result = await scheduler._refresh_snapchat(
+        object(),
+        user_id="tenant-1",
+        start_date=datetime(2026, 8, 1, tzinfo=timezone.utc).date(),
+        end_date=datetime(2026, 8, 2, tzinfo=timezone.utc).date(),
+        now=datetime(2026, 8, 3, tzinfo=timezone.utc),
+    )
+
+    assert result["status"] == "partial"
+    assert result["coverage"]["status"] == "incomplete"
+    account_patch = updates["mezan_integration_accounts_v2"][0]["update"]["$set"]
+    integration_patch = updates["mezan_integrations_v2"][0]["update"]["$set"]
+    for patch in (account_patch, integration_patch):
+        assert "last_sync_at" not in patch
+        assert "last_observed_at" not in patch
+        assert patch["health_score"] != 100
+        assert patch["data_delay_minutes"] is None
 
 
 def test_status_never_exposes_global_results_from_another_tenant():

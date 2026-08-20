@@ -32,7 +32,18 @@ class FakeContext:
 
     async def get_json(self, client, url, *, headers, params=None):
         self.params = dict(params or {})
-        return {"timeseries_stats": []}
+        return {
+            "request_status": "SUCCESS",
+            "timeseries_stats": [
+                {
+                    "sub_request_status": "SUCCESS",
+                    "timeseries_stat": {
+                        "granularity": "HOUR",
+                        "breakdown_stats": {"campaign": []},
+                    },
+                }
+            ],
+        }
 
 
 def test_scheduler_requests_conversion_time_purchases_with_explicit_attribution():

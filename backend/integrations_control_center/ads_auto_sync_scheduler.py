@@ -89,6 +89,10 @@ TIKTOK_RUN_TYPE = "tiktok_reporting_async"
 GOOGLE_RUN_TYPE = "google_ads_reporting_async"
 ACTIVE_STATUSES = ("queued", "running")
 TERMINAL_STATUSES = ("complete", "partial", "failed", "skipped")
+SNAPCHAT_PERFORMANCE_RESULT_KEYS = (
+    "ad_squad_performance",
+    "ad_performance",
+)
 
 
 def _utcnow() -> datetime:
@@ -321,6 +325,21 @@ def _safe_summary(result: dict[str, Any]) -> dict[str, Any]:
             "ad_account_id": item.get("ad_account_id"),
             "provider_calls": int(item.get("provider_calls") or 0),
         })
+    coverage = result.get("coverage")
+    safe_coverage = (
+        {
+            key: coverage.get(key)
+            for key in (
+                "status",
+                "data_state",
+                "expected_requests",
+                "completed_requests",
+            )
+            if coverage.get(key) is not None
+        }
+        if isinstance(coverage, dict)
+        else None
+    )
     return {
         "date_from": result.get("date_from"),
         "date_to": result.get("date_to"),
@@ -342,12 +361,135 @@ def _safe_summary(result: dict[str, Any]) -> dict[str, Any]:
             if result.get("campaign_facts_schema_version") is not None
             else None
         ),
+        "coverage": safe_coverage,
         "error_samples": error_samples,
         "source_only": True,
         "provider_write_reached": False,
         "campaign_write_reached": False,
         "accounting_write_reached": False,
         "qoyod_write_reached": False,
+    }
+
+
+def _snapchat_coverage_complete(value: Any) -> bool:
+    if not isinstance(value, dict):
+        return False
+    if value.get("status") != "complete":
+        return False
+    if value.get("data_state") not in {
+        "confirmed_data",
+        "confirmed_zero",
+        "confirmed_no_data",
+    }:
+        return False
+    try:
+        expected = int(value.get("expected_requests"))
+        completed = int(value.get("completed_requests"))
+    except (TypeError, ValueError):
+        return False
+    return expected >= 0 and completed == expected
+
+
+def _snapchat_item_errors(item: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flatten P0 performance failures without treating HTTP 200 as success."""
+    errors = [
+        dict(error)
+        for error in list(item.get("errors") or [])
+        if isinstance(error, dict)
+    ]
+    if int(item.get("errors_count") or 0) > 0 and not errors:
+        errors.append({
+            "kind": "account_hour_performance",
+            "code": "snapchat_account_stats_partial",
+            "message": "Snapchat account stats response was partial.",
+            "retryable": True,
+        })
+    if not _snapchat_coverage_complete(item.get("coverage")):
+        errors.append({
+            "kind": "account_hour_performance",
+            "code": "snapchat_account_coverage_incomplete",
+            "message": "Snapchat account stats coverage was not proven complete.",
+            "retryable": True,
+        })
+
+    for key in SNAPCHAT_PERFORMANCE_RESULT_KEYS:
+        nested = item.get(key)
+        if not isinstance(nested, dict):
+            errors.append({
+                "kind": key,
+                "code": f"snapchat_{key}_result_missing",
+                "message": f"Snapchat {key} result is missing.",
+                "retryable": True,
+            })
+            continue
+        nested_errors = [
+            dict(error)
+            for error in list(nested.get("errors") or [])
+            if isinstance(error, dict)
+        ]
+        for error in nested_errors:
+            error.setdefault("kind", key)
+            errors.append(error)
+        if int(nested.get("errors_count") or 0) > 0 and not nested_errors:
+            errors.append({
+                "kind": key,
+                "code": f"snapchat_{key}_partial",
+                "message": f"Snapchat {key} response was partial.",
+                "retryable": True,
+            })
+        if not _snapchat_coverage_complete(nested.get("coverage")):
+            errors.append({
+                "kind": key,
+                "code": f"snapchat_{key}_coverage_incomplete",
+                "message": f"Snapchat {key} coverage was not proven complete.",
+                "retryable": True,
+            })
+    return errors
+
+
+def _snapchat_item_complete(item: dict[str, Any]) -> bool:
+    return not _snapchat_item_errors(item)
+
+
+def _snapchat_run_coverage(
+    items: list[dict[str, Any]],
+    *,
+    accounts_expected: int,
+) -> dict[str, Any]:
+    coverages: list[dict[str, Any]] = []
+    for item in items:
+        top = item.get("coverage")
+        if isinstance(top, dict):
+            coverages.append(top)
+        for key in SNAPCHAT_PERFORMANCE_RESULT_KEYS:
+            nested = item.get(key)
+            if isinstance(nested, dict) and isinstance(nested.get("coverage"), dict):
+                coverages.append(nested["coverage"])
+    expected_requests = sum(
+        int(value.get("expected_requests") or 0) for value in coverages
+    )
+    completed_requests = sum(
+        int(value.get("completed_requests") or 0) for value in coverages
+    )
+    complete = (
+        accounts_expected > 0
+        and len(items) == accounts_expected
+        and all(_snapchat_item_complete(item) for item in items)
+    )
+    states = {str(value.get("data_state") or "") for value in coverages}
+    if not complete:
+        data_state = "unknown_incomplete"
+    elif "confirmed_data" in states:
+        data_state = "confirmed_data"
+    elif "confirmed_zero" in states:
+        data_state = "confirmed_zero"
+    else:
+        data_state = "confirmed_no_data"
+    return {
+        "status": "complete" if complete else "incomplete",
+        "data_state": data_state,
+        "expected_requests": expected_requests,
+        "completed_requests": completed_requests,
     }
 
 
@@ -750,6 +892,7 @@ async def _refresh_snapchat(
         access_token = await token_context.access_token()
         items: list[dict[str, Any]] = []
         errors: list[dict[str, Any]] = []
+        failed_coverages: list[dict[str, Any]] = []
         provider_calls_total = 0
         account_provider_calls: list[dict[str, Any]] = []
         async with httpx.AsyncClient(timeout=35.0) as client:
@@ -767,7 +910,8 @@ async def _refresh_snapchat(
                         now=now,
                     )
                     items.append(item)
-                    for item_error in item.get("errors") or []:
+                    item_errors = _snapchat_item_errors(item)
+                    for item_error in item_errors:
                         code = str(item_error.get("code") or "snapchat_account_stats_partial")
                         message = str(
                             item_error.get("message")
@@ -791,6 +935,21 @@ async def _refresh_snapchat(
                             "message": message[:300],
                             "retryable": bool(item_error.get("retryable")),
                         })
+                    observed_at = _iso()
+                    item_complete = not item_errors
+                    account_patch: dict[str, Any] = {
+                        "data_delay_minutes": 0 if item_complete else None,
+                        "data_quality": "complete" if item_complete else "incomplete",
+                        "health_score": 100 if item_complete else 70,
+                        "performance_rows_saved": int(item.get("rows_saved") or 0),
+                        "source_mode": ACCOUNT_REFRESH_SOURCE_MODE,
+                        "coverage": item.get("coverage"),
+                    }
+                    if item_complete:
+                        account_patch.update({
+                            "last_sync_at": observed_at,
+                            "last_observed_at": observed_at,
+                        })
                     await _collection(db, "mezan_integration_accounts_v2").update_one(
                         {
                             "user_id": user_id,
@@ -800,20 +959,23 @@ async def _refresh_snapchat(
                                 {"ad_account_id": account_id},
                             ],
                         },
-                        {
-                            "$set": {
-                                "last_sync_at": _iso(),
-                                "last_observed_at": _iso(),
-                                "data_delay_minutes": 0,
-                                "health_score": 100,
-                                "performance_rows_saved": int(item.get("rows_saved") or 0),
-                                "source_mode": ACCOUNT_REFRESH_SOURCE_MODE,
-                            }
-                        },
+                        {"$set": account_patch},
                     )
                 except SnapchatNativeSyncError as exc:
                     if exc.code == "snapchat_needs_reauth":
                         raise
+                    failed_coverage = (
+                        exc.result.get("coverage")
+                        if isinstance(exc.result, dict)
+                        and isinstance(exc.result.get("coverage"), dict)
+                        else {
+                            "status": "incomplete",
+                            "data_state": "unknown_incomplete",
+                            "expected_requests": 1,
+                            "completed_requests": 0,
+                        }
+                    )
+                    failed_coverages.append(failed_coverage)
                     error_id = await _record_error(
                         db,
                         user_id=user_id,
@@ -831,6 +993,25 @@ async def _refresh_snapchat(
                         "message": exc.message[:300],
                         "retryable": exc.retryable,
                     })
+                    await _collection(db, "mezan_integration_accounts_v2").update_one(
+                        {
+                            "user_id": user_id,
+                            "provider": SNAPCHAT_PROVIDER_ID,
+                            "$or": [
+                                {"external_account_id": account_id},
+                                {"ad_account_id": account_id},
+                            ],
+                        },
+                        {
+                            "$set": {
+                                "data_delay_minutes": None,
+                                "data_quality": "incomplete",
+                                "health_score": 70,
+                                "source_mode": ACCOUNT_REFRESH_SOURCE_MODE,
+                                "coverage": failed_coverage,
+                            }
+                        },
+                    )
                 finally:
                     provider_calls_total += int(account_context.provider_calls)
                     account_provider_calls.append({
@@ -841,10 +1022,28 @@ async def _refresh_snapchat(
         campaign_rows_saved = sum(
             int(item.get("campaign_rows_saved") or 0) for item in items
         )
-        complete = sum(int(item.get("errors_count") or 0) == 0 for item in items)
-        status = "complete" if not errors and complete == len(accounts) else "partial"
+        complete = sum(_snapchat_item_complete(item) for item in items)
+        coverage = _snapchat_run_coverage(
+            items,
+            accounts_expected=len(accounts),
+        )
+        coverage["expected_requests"] += sum(
+            int(item.get("expected_requests") or 0)
+            for item in failed_coverages
+        )
+        coverage["completed_requests"] += sum(
+            int(item.get("completed_requests") or 0)
+            for item in failed_coverages
+        )
+        status = (
+            "complete"
+            if not errors
+            and complete == len(accounts)
+            and coverage["status"] == "complete"
+            else "partial"
+        )
         campaign_facts_complete = bool(accounts) and len(items) == len(accounts) and all(
-            int(item.get("errors_count") or 0) == 0
+            _snapchat_item_complete(item)
             and item.get("campaign_facts_source_mode")
             == snapchat_hourly.CAMPAIGN_FACTS_SOURCE_MODE
             and int(item.get("campaign_facts_schema_version") or 0)
@@ -886,23 +1085,26 @@ async def _refresh_snapchat(
             "provider_call_budget_scope": "per_selected_account",
             "account_provider_calls": account_provider_calls,
             "error_samples": errors[:10],
+            "coverage": coverage,
             "decision_outcomes": decision_outcomes,
         }
+        integration_observed_at = _iso()
+        integration_patch: dict[str, Any] = {
+            "connection_status": "connected",
+            "connection_provenance": "api_connection",
+            "checked_at": integration_observed_at,
+            "updated_at": integration_observed_at,
+            "data_delay_minutes": 0 if status == "complete" else None,
+            "data_quality": "complete" if status == "complete" else "incomplete",
+            "health_score": 100 if status == "complete" else 70,
+            "source_mode": ACCOUNT_REFRESH_SOURCE_MODE,
+            "coverage": coverage,
+        }
+        if status == "complete":
+            integration_patch["last_sync_at"] = integration_observed_at
         await _collection(db, "mezan_integrations_v2").update_one(
             {"user_id": user_id, "provider": SNAPCHAT_PROVIDER_ID},
-            {
-                "$set": {
-                    "connection_status": "connected",
-                    "connection_provenance": "api_connection",
-                    "last_sync_at": _iso(),
-                    "checked_at": _iso(),
-                    "updated_at": _iso(),
-                    "data_delay_minutes": 0 if status == "complete" else None,
-                    "data_quality": "complete" if status == "complete" else "partial",
-                    "health_score": 100 if status == "complete" else 85,
-                    "source_mode": ACCOUNT_REFRESH_SOURCE_MODE,
-                }
-            },
+            {"$set": integration_patch},
             upsert=True,
         )
         await _finish_run(

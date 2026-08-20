@@ -7,6 +7,7 @@ HOUR campaign buckets, and folds those buckets back into Riyadh calendar days.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
@@ -45,6 +46,70 @@ CONVERSION_SOURCE_TYPES = "total"
 ACTION_REPORT_TIME = "conversion"
 SWIPE_ATTRIBUTION_WINDOW = "28_DAY"
 VIEW_ATTRIBUTION_WINDOW = "1_DAY"
+
+
+@dataclass(frozen=True)
+class AccountHourFetchResult:
+    """Validated provider rows plus the minimal P0 coverage contract.
+
+    Iteration intentionally preserves the historical ``rows, errors = result``
+    call contract used by the account-timezone projection.
+    """
+
+    rows: list[dict[str, Any]]
+    errors: list[dict[str, Any]]
+    coverage: dict[str, Any]
+
+    def __iter__(self):
+        yield self.rows
+        yield self.errors
+
+
+def _coverage(
+    *,
+    status: str,
+    data_state: str,
+    expected_requests: int,
+    completed_requests: int,
+    reason: str | None = None,
+) -> dict[str, Any]:
+    result = {
+        "status": status,
+        "data_state": data_state,
+        "expected_requests": max(int(expected_requests), 0),
+        "completed_requests": max(int(completed_requests), 0),
+    }
+    if reason:
+        result["reason"] = reason
+    return result
+
+
+def _incomplete_coverage_error(
+    code: str,
+    message: str,
+    *,
+    expected_requests: int,
+    completed_requests: int,
+    errors: list[dict[str, Any]] | None = None,
+) -> SnapchatNativeSyncError:
+    result: dict[str, Any] = {
+        "coverage": _coverage(
+            status="incomplete",
+            data_state="unknown_incomplete",
+            expected_requests=expected_requests,
+            completed_requests=completed_requests,
+            reason=code,
+        )
+    }
+    if errors:
+        result["errors"] = errors[:10]
+    return SnapchatNativeSyncError(
+        code,
+        message,
+        status_code=502,
+        retryable=True,
+        result=result,
+    )
 
 
 def _aware_now(now: datetime | None = None) -> datetime:
@@ -210,13 +275,37 @@ def extract_account_hour_rows(
     payload: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
     """Extract campaign HOUR rows and provider sub-request errors."""
-    wrapped_stats = payload.get("timeseries_stats") or []
+    if not isinstance(payload, dict) or str(
+        payload.get("request_status") or ""
+    ).upper() != "SUCCESS":
+        raise _incomplete_coverage_error(
+            "snapchat_account_hour_request_status_invalid",
+            "Snapchat did not confirm a successful account HOUR response.",
+            expected_requests=1,
+            completed_requests=0,
+        )
+    if "timeseries_stats" not in payload:
+        raise _incomplete_coverage_error(
+            "snapchat_account_hour_timeseries_missing",
+            "Snapchat account HOUR response is missing timeseries_stats.",
+            expected_requests=1,
+            completed_requests=0,
+        )
+
+    wrapped_stats = payload.get("timeseries_stats")
     if not isinstance(wrapped_stats, list):
-        raise SnapchatNativeSyncError(
+        raise _incomplete_coverage_error(
             "snapchat_account_hour_payload_invalid",
             "Snapchat returned invalid account HOUR performance data.",
-            status_code=502,
-            retryable=True,
+            expected_requests=1,
+            completed_requests=0,
+        )
+    if not wrapped_stats:
+        raise _incomplete_coverage_error(
+            "snapchat_account_hour_result_envelope_missing",
+            "Snapchat returned no account HOUR result envelope.",
+            expected_requests=1,
+            completed_requests=0,
         )
 
     rows: list[dict[str, Any]] = []
@@ -224,40 +313,122 @@ def extract_account_hour_rows(
     successful_subrequests = 0
     for wrapped in wrapped_stats:
         if not isinstance(wrapped, dict):
-            continue
-        status = str(wrapped.get("sub_request_status") or "SUCCESS").upper()
-        if "FAIL" in status or "ERROR" in status:
+            raise _incomplete_coverage_error(
+                "snapchat_account_hour_wrapper_invalid",
+                "Snapchat returned an invalid account HOUR wrapper.",
+                expected_requests=1,
+                completed_requests=0,
+            )
+        status = str(wrapped.get("sub_request_status") or "").upper()
+        if status != "SUCCESS":
             errors.append(_subrequest_error(wrapped, status))
             continue
 
-        successful_subrequests += 1
-        stat = wrapped.get("timeseries_stat", wrapped)
+        stat = wrapped.get("timeseries_stat")
         if not isinstance(stat, dict):
-            continue
+            raise _incomplete_coverage_error(
+                "snapchat_account_hour_timeseries_stat_missing",
+                "Snapchat account HOUR wrapper is missing timeseries_stat.",
+                expected_requests=1,
+                completed_requests=0,
+            )
+        granularity = str(stat.get("granularity") or "").upper()
+        if granularity and granularity != PROVIDER_GRANULARITY:
+            raise _incomplete_coverage_error(
+                "snapchat_account_hour_granularity_invalid",
+                "Snapchat account HOUR response used an unexpected granularity.",
+                expected_requests=1,
+                completed_requests=0,
+            )
 
-        entities: list[dict[str, Any]] = []
         breakdown = stat.get("breakdown_stats")
-        if isinstance(breakdown, dict):
-            campaign_rows = breakdown.get(PROVIDER_BREAKDOWN)
-            if isinstance(campaign_rows, list):
-                entities.extend(
-                    item for item in campaign_rows if isinstance(item, dict)
-                )
-        if not entities and isinstance(stat.get("timeseries"), list):
-            entities = [stat]
+        campaign_rows = (
+            breakdown.get(PROVIDER_BREAKDOWN)
+            if isinstance(breakdown, dict)
+            else None
+        )
+        if not isinstance(campaign_rows, list):
+            raise _incomplete_coverage_error(
+                "snapchat_account_hour_campaign_breakdown_missing",
+                "Snapchat account HOUR response is missing its campaign breakdown.",
+                expected_requests=1,
+                completed_requests=0,
+            )
 
-        for entity in entities:
+        wrapper_rows: list[dict[str, Any]] = []
+        for entity in campaign_rows:
+            if not isinstance(entity, dict):
+                raise _incomplete_coverage_error(
+                    "snapchat_account_hour_campaign_invalid",
+                    "Snapchat returned an invalid campaign HOUR row.",
+                    expected_requests=1,
+                    completed_requests=0,
+                )
             campaign_id = str(entity.get("id") or "").strip()
+            if not campaign_id:
+                raise _incomplete_coverage_error(
+                    "snapchat_account_hour_campaign_id_missing",
+                    "Snapchat campaign HOUR data is missing its campaign ID.",
+                    expected_requests=1,
+                    completed_requests=0,
+                )
             points = entity.get("timeseries")
             if not isinstance(points, list):
-                continue
+                raise _incomplete_coverage_error(
+                    "snapchat_account_hour_timeseries_invalid",
+                    "Snapchat campaign HOUR data has an invalid timeseries.",
+                    expected_requests=1,
+                    completed_requests=0,
+                )
             for point in points:
                 if not isinstance(point, dict):
-                    continue
-                metrics = point.get("stats")
-                if not isinstance(metrics, dict):
-                    continue
-                rows.append(
+                    raise _incomplete_coverage_error(
+                        "snapchat_account_hour_point_invalid",
+                        "Snapchat returned an invalid campaign HOUR point.",
+                        expected_requests=1,
+                        completed_requests=0,
+                    )
+                raw_metrics = point.get("stats")
+                if not isinstance(raw_metrics, dict):
+                    raise _incomplete_coverage_error(
+                        "snapchat_account_hour_stats_missing",
+                        "Snapchat campaign HOUR point is missing stats.",
+                        expected_requests=1,
+                        completed_requests=0,
+                    )
+                start_time = _parse_datetime(point.get("start_time"))
+                end_time = _parse_datetime(point.get("end_time"))
+                if start_time is None or end_time is None or end_time <= start_time:
+                    raise _incomplete_coverage_error(
+                        "snapchat_account_hour_window_invalid",
+                        "Snapchat campaign HOUR point has an invalid time window.",
+                        expected_requests=1,
+                        completed_requests=0,
+                    )
+                metrics: dict[str, int | float | None] = {}
+                observed_values = 0
+                for key in STAT_FIELDS:
+                    if key not in raw_metrics:
+                        continue
+                    value = _as_number(raw_metrics.get(key))
+                    if raw_metrics.get(key) is not None and value is None:
+                        raise _incomplete_coverage_error(
+                            "snapchat_account_hour_metric_invalid",
+                            "Snapchat campaign HOUR point contains an invalid metric.",
+                            expected_requests=1,
+                            completed_requests=0,
+                        )
+                    metrics[key] = value
+                    if value is not None:
+                        observed_values += 1
+                if observed_values == 0:
+                    raise _incomplete_coverage_error(
+                        "snapchat_account_hour_metrics_empty",
+                        "Snapchat campaign HOUR point contains no observed metrics.",
+                        expected_requests=1,
+                        completed_requests=0,
+                    )
+                wrapper_rows.append(
                     {
                         "campaign_id": campaign_id,
                         "start_time": point.get("start_time"),
@@ -265,6 +436,8 @@ def extract_account_hour_rows(
                         "metrics": metrics,
                     }
                 )
+        rows.extend(wrapper_rows)
+        successful_subrequests += 1
 
     return rows, errors, successful_subrequests
 
@@ -282,7 +455,7 @@ async def _fetch_account_hours(
     action_report_time: str | None = None,
     swipe_attribution_window: str | None = None,
     view_attribution_window: str | None = None,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+) -> AccountHourFetchResult:
     """Fetch HOUR rows, accepting the legacy date-range call contract too."""
     if request_start is None or request_end is None:
         if start_date is None or end_date is None:
@@ -315,7 +488,7 @@ async def _fetch_account_hours(
     }
     rows: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
-    successful_subrequests = 0
+    completed_requests = 0
 
     for _ in range(MAX_PAGES):
         payload = await context.get_json(
@@ -324,25 +497,120 @@ async def _fetch_account_hours(
             headers=headers,
             params=params,
         )
-        page_rows, page_errors, page_success = extract_account_hour_rows(payload)
+        try:
+            page_rows, page_errors, _ = extract_account_hour_rows(payload)
+        except SnapchatNativeSyncError as exc:
+            exc.result = {
+                **dict(exc.result or {}),
+                "coverage": _coverage(
+                    status="incomplete",
+                    data_state="unknown_incomplete",
+                    expected_requests=completed_requests + 1,
+                    completed_requests=completed_requests,
+                    reason=exc.code,
+                ),
+            }
+            raise
+        normalized_request_start = (
+            request_start
+            if request_start.tzinfo is not None
+            else request_start.replace(tzinfo=timezone.utc)
+        ).astimezone(timezone.utc)
+        normalized_request_end = (
+            request_end
+            if request_end.tzinfo is not None
+            else request_end.replace(tzinfo=timezone.utc)
+        ).astimezone(timezone.utc)
+        for row in page_rows:
+            row_start = _parse_datetime(row.get("start_time"))
+            row_end = _parse_datetime(row.get("end_time"))
+            if row_start is not None and row_start.tzinfo is None:
+                row_start = row_start.replace(tzinfo=timezone.utc)
+            if row_end is not None and row_end.tzinfo is None:
+                row_end = row_end.replace(tzinfo=timezone.utc)
+            if (
+                row_start is None
+                or row_end is None
+                or row_start.astimezone(timezone.utc) < normalized_request_start
+                or row_end.astimezone(timezone.utc) > normalized_request_end
+            ):
+                raise _incomplete_coverage_error(
+                    "snapchat_account_hour_window_mismatch",
+                    "Snapchat account HOUR data falls outside the requested window.",
+                    expected_requests=completed_requests + 1,
+                    completed_requests=completed_requests,
+                )
         rows.extend(page_rows)
         errors.extend(page_errors)
-        successful_subrequests += page_success
-        next_url = _safe_next_url((payload.get("paging") or {}).get("next_link"))
-        if not next_url:
+        if page_errors:
+            first = page_errors[0]
+            raise _incomplete_coverage_error(
+                str(first.get("code") or "snapchat_account_hours_partial"),
+                str(
+                    first.get("message")
+                    or "Snapchat account HOUR response was partial."
+                ),
+                expected_requests=completed_requests + 1,
+                completed_requests=completed_requests,
+                errors=page_errors,
+            )
+        completed_requests += 1
+
+        paging = payload.get("paging")
+        if paging is not None and not isinstance(paging, dict):
+            raise _incomplete_coverage_error(
+                "snapchat_account_hour_paging_invalid",
+                "Snapchat returned invalid account HOUR pagination metadata.",
+                expected_requests=completed_requests + 1,
+                completed_requests=completed_requests,
+            )
+        raw_next_url = (paging or {}).get("next_link")
+        if not str(raw_next_url or "").strip():
             break
+        next_url = _safe_next_url(raw_next_url)
+        if not next_url:
+            raise _incomplete_coverage_error(
+                "snapchat_account_hour_next_link_invalid",
+                "Snapchat returned an invalid account HOUR next page link.",
+                expected_requests=completed_requests + 1,
+                completed_requests=completed_requests,
+            )
+        if completed_requests >= MAX_PAGES:
+            raise _incomplete_coverage_error(
+                "snapchat_account_hour_pagination_incomplete",
+                "Snapchat account HOUR response exceeded the pagination limit.",
+                expected_requests=completed_requests + 1,
+                completed_requests=completed_requests,
+            )
         url, params = next_url, None
 
-    if successful_subrequests == 0 and errors:
-        first = errors[0]
-        raise SnapchatNativeSyncError(
-            str(first.get("code") or "snapchat_account_hours_failed"),
-            str(first.get("message") or "Snapchat account HOUR request failed."),
-            status_code=502,
-            retryable=bool(first.get("retryable")),
-            result={"errors": errors[:10]},
+    confirmed_zero = bool(rows) and all(
+        all(
+            key in (row.get("metrics") or {})
+            and isinstance((row.get("metrics") or {}).get(key), (int, float))
+            and not isinstance((row.get("metrics") or {}).get(key), bool)
+            and (row.get("metrics") or {}).get(key) == 0
+            for key in STAT_FIELDS
         )
-    return rows, errors
+        for row in rows
+    )
+    data_state = (
+        "confirmed_no_data"
+        if not rows
+        else "confirmed_zero"
+        if confirmed_zero
+        else "confirmed_data"
+    )
+    return AccountHourFetchResult(
+        rows=rows,
+        errors=errors,
+        coverage=_coverage(
+            status="complete",
+            data_state=data_state,
+            expected_requests=completed_requests,
+            completed_requests=completed_requests,
+        ),
+    )
 
 
 def aggregate_account_hours_by_riyadh_day(
@@ -480,6 +748,13 @@ async def refresh_snapchat_account_hours(
             "account_timezone": timezone_name,
             "business_timezone": BUSINESS_TIMEZONE,
             "request_windows": [],
+            "coverage": _coverage(
+                status="incomplete",
+                data_state="unknown_incomplete",
+                expected_requests=0,
+                completed_requests=0,
+                reason="request_window_unavailable",
+            ),
             "source_only": True,
             "accounting_write_reached": False,
             "qoyod_write_reached": False,
@@ -487,7 +762,7 @@ async def refresh_snapchat_account_hours(
 
     used_completed_hour_fallback = False
     try:
-        rows, errors = await _fetch_account_hours(
+        fetched = await _fetch_account_hours(
             context,
             client,
             access_token,
@@ -495,6 +770,7 @@ async def refresh_snapchat_account_hours(
             request_start=request["provider_start"],
             request_end=request["provider_end"],
         )
+        rows, errors = fetched
     except SnapchatNativeSyncError as exc:
         fallback = snapchat_account_request_window(
             start_date,
@@ -512,7 +788,7 @@ async def refresh_snapchat_account_hours(
             raise
         request = fallback
         used_completed_hour_fallback = True
-        rows, errors = await _fetch_account_hours(
+        fetched = await _fetch_account_hours(
             context,
             client,
             access_token,
@@ -520,6 +796,7 @@ async def refresh_snapchat_account_hours(
             request_start=request["provider_start"],
             request_end=request["provider_end"],
         )
+        rows, errors = fetched
 
     daily = aggregate_account_hours_by_riyadh_day(
         rows,
@@ -551,8 +828,8 @@ async def refresh_snapchat_account_hours(
         saved += 1
         campaign_rows_saved += 1
 
-    cursor = start_date
-    while cursor <= end_date:
+    for date_string, bucket in sorted(daily.items()):
+        cursor = date.fromisoformat(date_string)
         provider_window = _day_provider_window(
             cursor,
             business_start=request["business_start"],
@@ -560,16 +837,8 @@ async def refresh_snapchat_account_hours(
             account_timezone=account_timezone,
         )
         if provider_window is None:
-            cursor += timedelta(days=1)
             continue
 
-        date_string = cursor.isoformat()
-        bucket = daily.get(date_string)
-        metrics = (
-            _finalize_bucket(bucket)
-            if bucket is not None
-            else {key: 0 for key in STAT_FIELDS}
-        )
         provider_start, provider_end = provider_window
         await _upsert_performance(
             context,
@@ -577,7 +846,7 @@ async def refresh_snapchat_account_hours(
             entity_type="ad_account",
             external_id=account_id,
             date_string=date_string,
-            metrics=metrics,
+            metrics=_finalize_bucket(bucket),
             provider_start=provider_start.isoformat(timespec="seconds"),
             provider_end=provider_end.isoformat(timespec="seconds"),
             source_mode=ACCOUNT_REFRESH_SOURCE_MODE,
@@ -585,7 +854,6 @@ async def refresh_snapchat_account_hours(
             provider_breakdown=PROVIDER_BREAKDOWN,
         )
         saved += 1
-        cursor += timedelta(days=1)
 
     return {
         "provider": SNAPCHAT_PROVIDER_ID,
@@ -598,6 +866,7 @@ async def refresh_snapchat_account_hours(
         "campaign_facts_schema_version": CAMPAIGN_FACTS_SCHEMA_VERSION,
         "errors_count": len(errors),
         "errors": errors,
+        "coverage": fetched.coverage,
         "provider_calls": context.provider_calls,
         "source_mode": ACCOUNT_REFRESH_SOURCE_MODE,
         "provider_granularity": PROVIDER_GRANULARITY,
@@ -636,6 +905,7 @@ async def refresh_snapchat_account_hours(
 
 __all__ = [
     "ACCOUNT_REFRESH_SOURCE_MODE",
+    "AccountHourFetchResult",
     "ACTION_REPORT_TIME",
     "CAMPAIGN_FACTS_SCHEMA_VERSION",
     "CAMPAIGN_FACTS_SOURCE_MODE",

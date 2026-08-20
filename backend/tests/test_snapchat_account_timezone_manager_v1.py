@@ -191,7 +191,16 @@ async def test_current_hour_400_retries_all_modes_with_completed_hour(
                 status_code=400,
                 retryable=False,
             )
-        return [], []
+        return hourly.AccountHourFetchResult(
+            rows=[],
+            errors=[],
+            coverage={
+                "status": "complete",
+                "data_state": "confirmed_no_data",
+                "expected_requests": 1,
+                "completed_requests": 1,
+            },
+        )
 
     async def noop(*args, **kwargs):
         return None
@@ -231,4 +240,67 @@ async def test_current_hour_400_retries_all_modes_with_completed_hour(
     )
     assert result["current_hour_included"] is False
     assert result["errors_count"] == 0
+    assert result["coverage"] == {
+        "status": "complete",
+        "data_state": "confirmed_no_data",
+        "expected_requests": 3,
+        "completed_requests": 3,
+    }
+
+
+@pytest.mark.asyncio
+async def test_missing_business_day_is_not_materialized_as_zero(monkeypatch) -> None:
+    row = {
+        "campaign_id": "campaign-1",
+        "start_time": "2026-08-07T00:00:00+03:00",
+        "end_time": "2026-08-07T01:00:00+03:00",
+        "metrics": {key: 0 for key in hourly.STAT_FIELDS},
+    }
+
+    async def fake_fetch(*args, **kwargs):
+        return hourly.AccountHourFetchResult(
+            rows=[row],
+            errors=[],
+            coverage={
+                "status": "complete",
+                "data_state": "confirmed_zero",
+                "expected_requests": 1,
+                "completed_requests": 1,
+            },
+        )
+
+    writes = []
+
+    async def capture_write(*args, **kwargs):
+        writes.append(dict(kwargs))
+
+    async def noop(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(hourly, "_fetch_account_hours", fake_fetch)
+    monkeypatch.setattr(manager, "_ensure_account_local_indexes", noop)
+    monkeypatch.setattr(manager, "_upsert_performance", capture_write)
+    monkeypatch.setattr(manager, "_upsert_account_local_performance", capture_write)
+
+    class Context:
+        db = object()
+        provider_calls = 3
+
+    result = await manager.refresh_snapchat_account_hours_with_account_days(
+        Context(),
+        object(),
+        "access-token",
+        {
+            "ad_account_id": "account-1",
+            "timezone": "Asia/Riyadh",
+            "currency": "SAR",
+        },
+        start_date=date(2026, 8, 7),
+        end_date=date(2026, 8, 8),
+        now=datetime(2026, 8, 9, 12, 0, tzinfo=timezone.utc),
+    )
+
+    assert result["coverage"]["data_state"] == "confirmed_zero"
+    assert writes
+    assert {write["date_string"] for write in writes} == {"2026-08-07"}
 
