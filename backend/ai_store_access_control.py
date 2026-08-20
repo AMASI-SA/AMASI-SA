@@ -17,10 +17,14 @@ from ai_store_access_contract import (
     PERMISSIONS,
     RESPONSIBILITY_TYPES,
     ROLE_ASSIGNMENTS,
+    ROLE_ASSIGNMENT_OWNER_FIELD,
     ROLE_CATALOG,
     ROLE_LABELS,
     effective_permissions,
+    find_role_assignment,
+    find_role_assignments,
     validate_assignment,
+    write_role_assignment,
 )
 from store_courier_dispatch_routes import make_store_courier_dispatch_router
 from warehouse_location_routes import WAREHOUSES
@@ -39,8 +43,10 @@ def _require_owner(user: dict[str, Any]) -> None:
 
 
 async def _audit(db: Any, *, actor: dict[str, Any], action: str, target_id: str, before: Any, after: Any) -> None:
+    owner_user_id = str(actor.get("id") or "").strip()
     await db[AI_ACTION_LOG].insert_one({
         "id": uuid.uuid4().hex,
+        ROLE_ASSIGNMENT_OWNER_FIELD: owner_user_id,
         "actor_type": "human",
         "actor_id": str(actor.get("id") or ""),
         "actor_name": actor.get("name"),
@@ -66,10 +72,11 @@ def make_ai_store_access_router(db: Any, current_user: Callable) -> APIRouter:
             {"_id": 0, "password_hash": 0, "security_answer_hash": 0},
         ).sort("created_at", -1).to_list(5000)
         user_ids = [str(row.get("id")) for row in users if row.get("id")]
-        assignments = await db[ROLE_ASSIGNMENTS].find(
-            {"user_id": {"$in": user_ids}},
-            {"_id": 0},
-        ).to_list(5000)
+        assignments = await find_role_assignments(
+            db,
+            owner_user_id=owner_id,
+            user_ids=user_ids,
+        )
         warehouses = await db[WAREHOUSES].find(
             {"user_id": owner_id, "status": {"$ne": "disabled"}},
             {
@@ -154,10 +161,15 @@ def make_ai_store_access_router(db: Any, current_user: Callable) -> APIRouter:
                     status_code=422,
                     detail={"code": "warehouse_assignment_invalid"},
                 )
-        before = await db[ROLE_ASSIGNMENTS].find_one({"user_id": target_user_id}, {"_id": 0})
+        before = await find_role_assignment(
+            db,
+            owner_user_id=owner_id,
+            user_id=target_user_id,
+        )
         now = _now()
         document = {
             "id": (before or {}).get("id") or uuid.uuid4().hex,
+            ROLE_ASSIGNMENT_OWNER_FIELD: owner_id,
             "user_id": target_user_id,
             "user_name": target.get("name"),
             "user_email": target.get("email"),
@@ -169,15 +181,27 @@ def make_ai_store_access_router(db: Any, current_user: Callable) -> APIRouter:
         if not before:
             document["created_at"] = now
             document["created_by"] = str(user.get("id") or "")
-        await db[ROLE_ASSIGNMENTS].update_one({"user_id": target_user_id}, {"$set": document}, upsert=True)
+        await write_role_assignment(
+            db,
+            owner_user_id=owner_id,
+            user_id=target_user_id,
+            existing=before,
+            values=document,
+            upsert=True,
+        )
         await _audit(db, actor=user, action="store_operations_role_assigned", target_id=target_user_id, before=before, after=document)
         return {"ok": True, "assignment": document}
 
     @router.get("/audit/log")
     async def audit_log(limit: int = Query(100, ge=1, le=500), user: dict = Depends(current_user)) -> dict[str, Any]:
         _require_owner(user)
+        owner_id = str(user.get("id") or "").strip()
         rows = await db[AI_ACTION_LOG].find(
-            {"target_type": "store_operations_access"}, {"_id": 0}
+            {
+                ROLE_ASSIGNMENT_OWNER_FIELD: owner_id,
+                "target_type": "store_operations_access",
+            },
+            {"_id": 0},
         ).sort("occurred_at", -1).limit(limit).to_list(limit)
         return {"ok": True, "items": rows, "total": len(rows)}
 

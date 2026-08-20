@@ -23,7 +23,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from pymongo import ASCENDING, DESCENDING
 from pymongo.errors import DuplicateKeyError
 
-from ai_store_access_contract import ROLE_ASSIGNMENTS, effective_permissions
+from ai_store_access_contract import (
+    effective_permissions,
+    find_role_assignment,
+    role_assignment_owner_user_id,
+)
 from mezan_supplier_management_routes import MEZAN_SUPPLIERS_V2
 from order_review_export_controls import user_can_manage_preparation
 from order_review_routes import (
@@ -244,9 +248,10 @@ async def _require_preparation_worker(
         )
     if user_can_manage_preparation(user):
         return user
-    assignment = await db[ROLE_ASSIGNMENTS].find_one(
-        {"user_id": _text(user.get("id"))},
-        {"_id": 0},
+    assignment = await find_role_assignment(
+        db,
+        owner_user_id=role_assignment_owner_user_id(user),
+        user_id=_text(user.get("id")),
     )
     if permission not in set(effective_permissions(assignment)):
         raise HTTPException(

@@ -42,7 +42,9 @@ from preparation_supplier_dispatch import (
 async def test_preparation_operator_role_can_open_and_work_only_its_assignment():
     assignment_collection = MagicMock()
     assignment_collection.find_one = AsyncMock(return_value={
+        "owner_user_id": "owner-1",
         "user_id": "employee-1",
+        "created_by": "owner-1",
         "role_key": "preparation_operator",
         "enabled": True,
     })
@@ -55,6 +57,10 @@ async def test_preparation_operator_role_can_open_and_work_only_its_assignment()
         worker,
         permission="preparation.assigned.read",
     ) == worker
+    assignment_collection.find_one.assert_awaited_once_with(
+        {"owner_user_id": "owner-1", "user_id": "employee-1"},
+        {"_id": 0},
+    )
     assert await _require_preparation_worker(
         db,
         worker,

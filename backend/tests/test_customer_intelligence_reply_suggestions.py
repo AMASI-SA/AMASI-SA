@@ -163,7 +163,9 @@ class FakeDB:
             "occurred_at": NOW,
         }
         assignment = {
+            "owner_user_id": OWNER_ID,
             "user_id": EMPLOYEE_ID,
+            "created_by": OWNER_ID,
             "role_key": "customer_service",
             "enabled": True,
         }
@@ -502,7 +504,7 @@ async def test_auth_session_permission_merge_uses_v2_assignment_without_admin_le
     db = FakeDB()
     employee_permissions = await merged_session_permissions(
         db,
-        {"id": EMPLOYEE_ID, "role": "employee"},
+        {"id": EMPLOYEE_ID, "role": "employee", "created_by": OWNER_ID},
         {"dashboard.view"},
     )
     assert "dashboard.view" in employee_permissions

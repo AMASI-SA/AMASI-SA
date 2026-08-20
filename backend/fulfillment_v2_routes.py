@@ -11,8 +11,8 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo import ASCENDING, DESCENDING
 
-from ai_store_access_control import effective_permissions
-from ai_store_operations_foundation import PERMISSIONS, ROLE_ASSIGNMENTS
+from ai_store_access_contract import effective_permissions, find_role_assignment
+from ai_store_operations_foundation import PERMISSIONS
 from carrier_handoff import (
     CarrierHandoffError,
     confirm_carrier_label_print,
@@ -994,9 +994,10 @@ async def _actor_context(
             status_code=409,
             detail={"code": "employee_store_not_linked"},
         )
-    assignment = await db[ROLE_ASSIGNMENTS].find_one(
-        {"user_id": actor_id},
-        {"_id": 0},
+    assignment = await find_role_assignment(
+        db,
+        owner_user_id=merchant_id,
+        user_id=actor_id,
     )
     return {
         "actor_id": actor_id,

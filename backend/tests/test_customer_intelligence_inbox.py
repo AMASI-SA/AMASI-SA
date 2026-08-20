@@ -481,7 +481,9 @@ async def test_customer_service_inbox_only_contains_assigned_conversations():
     db.collections[ROLE_ASSIGNMENTS] = FakeCollection(
         [
             {
+                "owner_user_id": OWNER["id"],
                 "user_id": "employee-live",
+                "created_by": OWNER["id"],
                 "role_key": "customer_service",
                 "enabled": True,
             }

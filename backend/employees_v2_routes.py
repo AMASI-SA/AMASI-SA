@@ -28,10 +28,15 @@ from pymongo.errors import DuplicateKeyError
 from auth import hash_password
 from ai_store_access_contract import (
     PERMISSIONS,
+    ROLE_ASSIGNMENTS,
+    ROLE_ASSIGNMENT_OWNER_FIELD,
     ROLE_CATALOG,
     ROLE_LABELS,
     effective_permissions,
+    find_role_assignment,
+    find_role_assignments,
     validate_assignment,
+    write_role_assignment,
 )
 from employee_payroll_status import (
     PAYROLL_STATES,
@@ -47,7 +52,6 @@ SALARY_CONTRACTS = "mezan_employee_salary_contracts_v2"
 EMPLOYEE_EVENTS = "mezan_employee_events_v2"
 MIGRATION_RUNS = "mezan_employee_migration_runs_v2"
 PAYROLL_PARALLEL_RUNS = "mezan_employee_payroll_parallel_runs_v2"
-ROLE_ASSIGNMENTS = "mezan_role_assignments_v2"
 APPLY_CONFIRMATION = "MIGRATE_EMPLOYEES_V2_SHADOW"
 SALARY_CONTRACT_SYNC_CONFIRMATION = "SYNC_EMPLOYEE_V2_SALARY_CONTRACTS"
 PARALLEL_CYCLE_CAPTURE_CONFIRMATION = "CAPTURE_EMPLOYEE_V2_PARALLEL_CYCLE"
@@ -1118,10 +1122,11 @@ async def _preview_from_db(db: Any, owner_id: str) -> dict[str, Any]:
         and not row.get("deleted_at")
     ]
     team_ids = [_text(row.get("id")) for row in active_team_users if _text(row.get("id"))]
-    role_assignments = await db[ROLE_ASSIGNMENTS].find(
-        {"user_id": {"$in": team_ids}},
-        {"_id": 0},
-    ).to_list(5000)
+    role_assignments = await find_role_assignments(
+        db,
+        owner_user_id=owner_id,
+        user_ids=team_ids,
+    )
     legacy_ids = [_text(row.get("id")) for row in legacy_rows if _text(row.get("id"))]
     ledger_pipeline = [
         {"$match": {
@@ -1271,10 +1276,11 @@ async def _management_from_db(
         },
     ).to_list(5000)
     account_ids = [_text(row.get("id")) for row in team_users if _text(row.get("id"))]
-    role_assignments = await db[ROLE_ASSIGNMENTS].find(
-        {"user_id": {"$in": account_ids}},
-        {"_id": 0},
-    ).to_list(5000)
+    role_assignments = await find_role_assignments(
+        db,
+        owner_user_id=owner_id,
+        user_ids=account_ids,
+    )
     latest_events = await db[EMPLOYEE_EVENTS].find(
         {"user_id": owner_id, "employee_id": {"$in": employee_ids}},
         {"_id": 0},
@@ -1367,9 +1373,10 @@ async def _set_employee_account_access(
     )
     if not account_update.matched_count:
         return
-    assignment = await db[ROLE_ASSIGNMENTS].find_one(
-        {"user_id": account_id},
-        {"_id": 0},
+    assignment = await find_role_assignment(
+        db,
+        owner_user_id=owner_id,
+        user_id=account_id,
     )
     if not assignment:
         return
@@ -1381,6 +1388,7 @@ async def _set_employee_account_access(
         )
         restored = {**assignment, "enabled": restored_enabled}
         role_updates = {
+            ROLE_ASSIGNMENT_OWNER_FIELD: owner_id,
             "enabled": restored_enabled,
             "effective_permissions": effective_permissions(restored),
             "suspended_by_employee_v2": False,
@@ -1389,6 +1397,7 @@ async def _set_employee_account_access(
         }
     else:
         role_updates = {
+            ROLE_ASSIGNMENT_OWNER_FIELD: owner_id,
             "enabled_before_employee_suspension": bool(
                 assignment.get("enabled_before_employee_suspension")
                 if assignment.get("suspended_by_employee_v2")
@@ -1400,9 +1409,12 @@ async def _set_employee_account_access(
             "updated_at": now,
             "updated_by": owner_id,
         }
-    await db[ROLE_ASSIGNMENTS].update_one(
-        {"user_id": account_id},
-        {"$set": role_updates},
+    await write_role_assignment(
+        db,
+        owner_user_id=owner_id,
+        user_id=account_id,
+        existing=assignment,
+        values=role_updates,
     )
 
 
@@ -1577,8 +1589,10 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
         before_account = await db.users.find_one(
             {"id": account_id}, {"_id": 0}
         ) if account_id else None
-        before_assignment = await db[ROLE_ASSIGNMENTS].find_one(
-            {"user_id": account_id}, {"_id": 0}
+        before_assignment = await find_role_assignment(
+            db,
+            owner_user_id=owner_id,
+            user_id=account_id,
         ) if account_id else None
         now = _now()
         if status_changed and contract is not None and effective_date is not None:
@@ -1679,8 +1693,10 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
                     if account_id else None
                 ),
                 "role_assignment": _role_audit_view(
-                    await db[ROLE_ASSIGNMENTS].find_one(
-                        {"user_id": account_id}, {"_id": 0}
+                    await find_role_assignment(
+                        db,
+                        owner_user_id=owner_id,
+                        user_id=account_id,
                     ) if account_id else None
                 ),
             },
@@ -1748,9 +1764,10 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
                 status_code=404,
                 detail={"code": "employee_login_account_not_available"},
             )
-        existing_assignment = await db[ROLE_ASSIGNMENTS].find_one(
-            {"user_id": account_id},
-            {"_id": 0},
+        existing_assignment = await find_role_assignment(
+            db,
+            owner_user_id=owner_id,
+            user_id=account_id,
         )
         assigned_employee_id = _text((existing_assignment or {}).get("employee_v2_id"))
         if assigned_employee_id and assigned_employee_id != employee_id:
@@ -1800,14 +1817,18 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
                 detail={"code": "employee_account_linked_elsewhere"},
             ) from exc
         if existing_assignment:
-            await db[ROLE_ASSIGNMENTS].update_one(
-                {"user_id": account_id},
-                {"$set": {
+            await write_role_assignment(
+                db,
+                owner_user_id=owner_id,
+                user_id=account_id,
+                existing=existing_assignment,
+                values={
+                    ROLE_ASSIGNMENT_OWNER_FIELD: owner_id,
                     "employee_v2_id": employee_id,
                     "assignment_scope": "employee_v2",
                     "updated_at": now,
                     "updated_by": owner_id,
-                }},
+                },
             )
         await _set_employee_account_access(
             db,
@@ -1817,8 +1838,10 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
             reason="employee_account_linked",
         )
         updated_account = await db.users.find_one({"id": account_id}, {"_id": 0})
-        updated_assignment = await db[ROLE_ASSIGNMENTS].find_one(
-            {"user_id": account_id}, {"_id": 0}
+        updated_assignment = await find_role_assignment(
+            db,
+            owner_user_id=owner_id,
+            user_id=account_id,
         )
         await _record_employee_event(
             db,
@@ -1868,9 +1891,10 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
         before_account = await db.users.find_one(
             {"id": account_id}, {"_id": 0}
         )
-        before_assignment = await db[ROLE_ASSIGNMENTS].find_one(
-            {"user_id": account_id},
-            {"_id": 0},
+        before_assignment = await find_role_assignment(
+            db,
+            owner_user_id=owner_id,
+            user_id=account_id,
         )
         await _set_employee_account_access(
             db,
@@ -1880,16 +1904,25 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
             reason="employee_account_unlinked",
         )
         if before_assignment:
-            await db[ROLE_ASSIGNMENTS].update_one(
-                {"user_id": account_id},
-                {"$set": {
+            current_assignment = await find_role_assignment(
+                db,
+                owner_user_id=owner_id,
+                user_id=account_id,
+            )
+            await write_role_assignment(
+                db,
+                owner_user_id=owner_id,
+                user_id=account_id,
+                existing=current_assignment,
+                values={
+                    ROLE_ASSIGNMENT_OWNER_FIELD: owner_id,
                     "enabled": False,
                     "effective_permissions": [],
                     "employee_v2_id": None,
                     "assignment_scope": "employee_v2_unlinked",
                     "updated_at": _now(),
                     "updated_by": owner_id,
-                }},
+                },
             )
         await db[EMPLOYEES].update_one(
             {"user_id": owner_id, "id": employee_id},
@@ -1921,8 +1954,10 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
                     await db.users.find_one({"id": account_id}, {"_id": 0})
                 ),
                 "role_assignment": _role_audit_view(
-                    await db[ROLE_ASSIGNMENTS].find_one(
-                        {"user_id": account_id}, {"_id": 0}
+                    await find_role_assignment(
+                        db,
+                        owner_user_id=owner_id,
+                        user_id=account_id,
                     )
                 ),
             },
@@ -1994,9 +2029,10 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
                     status_code=422,
                     detail={"code": "warehouse_assignment_invalid"},
                 )
-        before = await db[ROLE_ASSIGNMENTS].find_one(
-            {"user_id": account_id},
-            {"_id": 0},
+        before = await find_role_assignment(
+            db,
+            owner_user_id=owner_id,
+            user_id=account_id,
         )
         bound_employee_id = _text((before or {}).get("employee_v2_id"))
         if bound_employee_id and bound_employee_id != employee_id:
@@ -2013,6 +2049,7 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
         }
         document = {
             "id": (before or {}).get("id") or uuid.uuid4().hex,
+            ROLE_ASSIGNMENT_OWNER_FIELD: owner_id,
             "user_id": account_id,
             "user_name": account.get("name"),
             "user_email": account.get("email"),
@@ -2028,9 +2065,12 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
         if not before:
             document["created_at"] = now
             document["created_by"] = owner_id
-        await db[ROLE_ASSIGNMENTS].update_one(
-            {"user_id": account_id},
-            {"$set": document},
+        await write_role_assignment(
+            db,
+            owner_user_id=owner_id,
+            user_id=account_id,
+            existing=before,
+            values=document,
             upsert=True,
         )
         await _set_employee_account_access(
@@ -2040,8 +2080,10 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
             owner_id=owner_id,
             reason="employee_role_assigned",
         )
-        saved = await db[ROLE_ASSIGNMENTS].find_one(
-            {"user_id": account_id}, {"_id": 0}
+        saved = await find_role_assignment(
+            db,
+            owner_user_id=owner_id,
+            user_id=account_id,
         ) or document
         await _record_employee_event(
             db,

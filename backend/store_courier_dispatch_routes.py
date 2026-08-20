@@ -21,8 +21,9 @@ from pymongo import ASCENDING, DESCENDING
 
 from ai_store_access_contract import (
     PERMISSIONS,
-    ROLE_ASSIGNMENTS,
     effective_permissions,
+    find_role_assignment,
+    find_role_assignments,
 )
 from order_engine.repository import MongoOrderRepository
 from order_engine.service import OrderNotFoundError, get_order
@@ -148,9 +149,10 @@ async def _actor_context(db: Any, user: dict[str, Any]) -> dict[str, Any]:
             status_code=409,
             detail={"code": "employee_store_not_linked"},
         )
-    assignment = await db[ROLE_ASSIGNMENTS].find_one(
-        {"user_id": actor_id},
-        {"_id": 0},
+    assignment = await find_role_assignment(
+        db,
+        owner_user_id=merchant_id,
+        user_id=actor_id,
     ) or {}
     return {
         "actor_id": actor_id,
@@ -245,9 +247,10 @@ async def _eligible_courier(
             detail={"code": "store_courier_account_inactive"},
         )
 
-    assignment = await db[ROLE_ASSIGNMENTS].find_one(
-        {"user_id": courier_id},
-        {"_id": 0},
+    assignment = await find_role_assignment(
+        db,
+        owner_user_id=merchant_id,
+        user_id=courier_id,
     ) or {}
     if not _assignment_is_store_courier(assignment):
         raise HTTPException(
@@ -285,10 +288,12 @@ async def _courier_rows(db: Any, *, merchant_id: str) -> list[dict[str, Any]]:
         for row in members
         if _text(row.get("id"))
     ]
-    assignments = await db[ROLE_ASSIGNMENTS].find(
-        {"user_id": {"$in": member_ids}},
-        {"_id": 0},
-    ).to_list(length=max(1, len(member_ids)))
+    assignments = await find_role_assignments(
+        db,
+        owner_user_id=merchant_id,
+        user_ids=member_ids,
+        limit=max(1, len(member_ids)),
+    )
     assignments_by_user = {
         _text(row.get("user_id")): row for row in assignments
     }
