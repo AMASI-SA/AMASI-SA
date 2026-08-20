@@ -1,6 +1,7 @@
 import pytest
 
 import order_engine.shipping_label_service as shipping
+import fulfillment_carrier_label as carrier
 from fulfillment_carrier_label import _workflow_patch
 
 
@@ -224,3 +225,112 @@ async def test_poll_uses_legacy_order_route_when_order_details_has_no_shipments(
         "imile-order.pdf"
     )
 
+
+
+
+@pytest.mark.asyncio
+async def test_experiment_override_builds_store_courier_label_from_salla_data(
+    monkeypatch,
+):
+    async def resolve_order(_db, _user_id, _order_number):
+        return "salla-order-1", {
+            "status": {"slug": "completed"},
+            "customer": {"name": "عميل", "mobile": "0500000000"},
+            "amounts": {"total": {"amount": 100, "currency": "SAR"}},
+        }
+
+    async def ensure_completed(_db, _user_id, _internal_id, order):
+        return order, False
+
+    async def shipment_rows(_db, _user_id, _internal_id, _embedded):
+        return [{
+            "id": "imile-shipment-1",
+            "status": "created",
+            "courier_name": "iMile",
+            "tracking_number": "6082126752679",
+            "label": {"url": "https://carrier.example/imile.pdf"},
+            "ship_to": {
+                "name": "عميل",
+                "phone": "0500000000",
+                "city": "الرياض",
+                "address_line": "حي العود",
+            },
+            "packages": [{"name": "منتج", "quantity": 1}],
+        }]
+
+    async def store_identity(_db, _user_id):
+        return {"name": "متجر أماسي"}
+
+    async def no_resync(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(shipping, "_resolve_order", resolve_order)
+    monkeypatch.setattr(shipping, "_ensure_order_completed", ensure_completed)
+    monkeypatch.setattr(shipping, "_shipment_rows", shipment_rows)
+    monkeypatch.setattr(shipping, "_store_identity", store_identity)
+    monkeypatch.setattr(shipping, "_best_effort_resync", no_resync)
+
+    result = await shipping.issue_shipping_label(
+        None,
+        "owner-1",
+        "276628330",
+        force_store_courier=True,
+    )
+
+    assert result["ready"] is True
+    assert result["label_type"] == "store_courier"
+    assert result["courier_name"] == "مندوب المتجر"
+    assert result["tracking_number"] is None
+    assert result["experiment_override"] is True
+    assert result["print_data"]["barcode_value"] == "276628330"
+    assert result["print_data"]["courier_name"] == "مندوب المتجر"
+
+
+@pytest.mark.asyncio
+async def test_completed_label_sync_honors_experimental_store_courier_mode(
+    monkeypatch,
+):
+    calls = []
+
+    class Collection:
+        async def find_one(self, *_args, **_kwargs):
+            return {
+                "stage": "completed",
+                "assembly_status": "completed",
+                "experiment_mode": True,
+                "experiment_delivery_flow": "store_courier",
+            }
+
+        async def update_one(self, *_args, **_kwargs):
+            return None
+
+        async def insert_one(self, *_args, **_kwargs):
+            return None
+
+    class FakeDb:
+        def __getitem__(self, _name):
+            return Collection()
+
+    async def issue(_db, _user_id, _order_number, **kwargs):
+        calls.append(kwargs)
+        return {
+            "ready": True,
+            "label_type": "store_courier",
+            "courier_name": "مندوب المتجر",
+            "order_status_completed": True,
+            "print_data": {"barcode_value": "276628330"},
+        }
+
+    monkeypatch.setattr(carrier, "issue_shipping_label", issue)
+
+    result = await carrier.sync_completed_carrier_label(
+        FakeDb(),
+        user_id="owner-1",
+        order_number="276628330",
+        actor_id="employee-1",
+        actor_name="موظف",
+        action="issue",
+    )
+
+    assert calls == [{"force_store_courier": True}]
+    assert result["label_type"] == "store_courier"

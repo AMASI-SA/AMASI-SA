@@ -1041,6 +1041,8 @@ async def issue_shipping_label(
     db: Any,
     user_id: str,
     order_number: str,
+    *,
+    force_store_courier: bool = False,
 ) -> dict[str, Any]:
     normalized = _text(order_number)
     if not normalized:
@@ -1092,8 +1094,13 @@ async def issue_shipping_label(
             # The normal error below remains more useful than leaking a
             # transient provider response after Salla accepted the status.
             active = []
-    if active and _is_store_courier(active[0]):
-        source = active[0]
+    if active and (force_store_courier or _is_store_courier(active[0])):
+        source = dict(active[0])
+        if force_store_courier:
+            # Experiment-only override: reuse the authoritative Salla order
+            # address and packages, but never mutate or cancel its real AWB.
+            source["courier_name"] = "مندوب المتجر"
+            source["company"] = "مندوب المتجر"
         store = await _store_identity(db, user_id)
         print_data = _store_courier_print_data(
             normalized,
@@ -1109,6 +1116,8 @@ async def issue_shipping_label(
             "label_type": "store_courier",
             "shipment_id": _text(source.get("id")) or None,
             "status": "store_courier",
+            "courier_name": "مندوب المتجر",
+            "experiment_override": force_store_courier,
             "label_url": None,
             "tracking_number": None,
             "shipping_number": None,
@@ -1116,7 +1125,11 @@ async def issue_shipping_label(
             "order_status_changed": order_status_changed,
             "print_data": print_data,
             "message": (
-                "تم تحويل الطلب إلى تم التنفيذ وتجهيز بوليصة مندوب المتجر."
+                "تم تحويل الطلب إلى تم التنفيذ وتجهيز بوليصة مندوب المتجر للمسار التجريبي."
+                if force_store_courier and order_status_changed
+                else "تم تجهيز بوليصة مندوب المتجر للمسار التجريبي دون تغيير شحنة سلة الحقيقية."
+                if force_store_courier
+                else "تم تحويل الطلب إلى تم التنفيذ وتجهيز بوليصة مندوب المتجر."
                 if order_status_changed
                 else "تم تجهيز بوليصة مندوب المتجر من بيانات الطلب."
             ),

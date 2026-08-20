@@ -88,14 +88,24 @@ async def sync_completed_carrier_label(
     workflow so an already-completed order can resume safely.
     """
     normalized = _text(order_number)
-    await _require_completed_workflow(
+    workflow = await _require_completed_workflow(
         db,
         user_id=user_id,
         order_number=normalized,
     )
+    force_store_courier = bool(workflow.get("experiment_mode")) and (
+        _text(workflow.get("experiment_delivery_flow")) == "store_courier"
+    )
     now = _now()
     try:
-        if action == "refresh":
+        if force_store_courier:
+            result = await issue_shipping_label(
+                db,
+                user_id,
+                normalized,
+                force_store_courier=True,
+            )
+        elif action == "refresh":
             result = await refresh_shipping_label(db, user_id, normalized)
             current = await db[WORKFLOWS].find_one(
                 {"user_id": user_id, "order_number": normalized},
@@ -134,6 +144,9 @@ async def sync_completed_carrier_label(
             else "carrier_label_pending"
         ),
         "carrier_label_action": action,
+        "experiment_delivery_flow": (
+            "store_courier" if force_store_courier else None
+        ),
         "salla_order_status_completed": bool(
             result.get("order_status_completed")
         ),
