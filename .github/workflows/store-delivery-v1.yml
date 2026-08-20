@@ -43,6 +43,7 @@ jobs:
           bcrypt==4.1.3
           PyJWT
           email-validator
+          openpyxl==3.1.5
       - name: Compile delivery modules
         run: python -m py_compile store_delivery_*.py order_engine/__init__.py
       - name: Run delivery tests
