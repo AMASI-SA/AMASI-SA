@@ -16,6 +16,7 @@ Endpoints (attached under /api):
   POST /api/order-status-policy/reset       → reset to defaults
 """
 
+import sys
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -26,6 +27,40 @@ from auth import get_current_user_from_db
 
 
 VALID_CATEGORIES = {"confirmed", "pending", "refunded", "cancelled"}
+
+MOBILE_APP_PERMISSION_LABELS: dict[str, str] = {
+    "app.pages.configured": "تفعيل صلاحيات صفحات تطبيق أماسي",
+    "app.page.orders": "تطبيق أماسي — الطلبات",
+    "app.page.pending_review": "تطبيق أماسي — انتظار المراجعة",
+    "app.page.reviewed_preparation": "تطبيق أماسي — تمت المراجعة",
+    "app.page.my_products": "تطبيق أماسي — إدارة منتجاتي",
+    "app.page.preparation_receiving": "تطبيق أماسي — الاستلام من موظف التجهيز",
+    "app.page.assembly_shipping": "تطبيق أماسي — التجميع والعنونة",
+    "app.page.carrier_handoff": "تطبيق أماسي — استلام موظف التسليم",
+    "app.page.products": "تطبيق أماسي — المنتجات",
+}
+
+
+def _register_mobile_app_permissions() -> None:
+    """Extend the central RBAC catalogue without changing role defaults.
+
+    `server.py` owns the catalogue and validates team-user permission keys.
+    This module is attached after server startup, so the catalogue already
+    exists when this function runs. Existing employees keep their legacy
+    permissions until the mobile app explicitly writes `app.pages.configured`.
+    """
+    server_module = sys.modules.get("server") or sys.modules.get("backend.server")
+    if server_module is None:
+        return
+    catalogue = getattr(server_module, "PERMISSIONS_CATALOGUE", None)
+    role_defaults = getattr(server_module, "ROLE_DEFAULT_PERMS", None)
+    if not isinstance(catalogue, dict):
+        return
+    catalogue.update(MOBILE_APP_PERMISSION_LABELS)
+    if isinstance(role_defaults, dict):
+        # Owner remains the only role that automatically owns every newly
+        # registered permission. Other roles are intentionally unchanged.
+        role_defaults["owner"] = list(catalogue.keys())
 
 
 # Default mapping (Arabic statuses observed in real Salla data + English aliases).
@@ -181,6 +216,7 @@ class PolicyUpdate(BaseModel):
 
 
 def attach_order_status_policy_routes(parent_router: APIRouter, db) -> None:
+    _register_mobile_app_permissions()
     router = APIRouter(prefix="/order-status-policy", tags=["settings"])
 
     async def current_user(request: Request) -> dict:
