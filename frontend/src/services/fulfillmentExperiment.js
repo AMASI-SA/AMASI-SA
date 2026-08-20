@@ -49,13 +49,21 @@ export async function getFulfillmentExperimentState(orderNumber) {
     }
 }
 
-export async function resetFulfillmentExperiment(orderNumber, note = "") {
+export async function resetFulfillmentExperiment(
+    orderNumber,
+    note = "",
+    deliveryFlow = "salla",
+) {
+    const normalizedFlow = deliveryFlow === "store_courier"
+        ? "store_courier"
+        : "salla";
     try {
         return (await api.post(
             `/fulfillment-experiments-v1/orders/${encodeURIComponent(orderNumber)}/reset`,
             {
                 confirmation: `RESET ${String(orderNumber || "").trim()}`,
                 note: String(note || "").trim() || null,
+                delivery_flow: normalizedFlow,
             },
         )).data;
     } catch (error) {
