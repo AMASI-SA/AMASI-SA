@@ -1,8 +1,14 @@
 """Stable barcode identities for physical preparation pieces.
 
-The barcode is intentionally opaque.  It contains only the deterministic
-piece UUID, while the server resolves merchant, order, file and service data
-from Mezan's own piece registry.
+The barcode is intentionally opaque. It contains only the deterministic piece
+UUID. The identity is derived from the merchant + Salla order + Salla order
+item + physical unit index, so moving/re-uploading the same order never creates
+a second barcode for the same physical piece.
+
+``batch_id`` is accepted for backwards call-site compatibility but is
+intentionally excluded from the identity seed. A preparation file is a mutable
+workflow container; it must never participate in the permanent identity of a
+physical order piece.
 """
 
 from __future__ import annotations
@@ -19,18 +25,38 @@ def _text(value: Any) -> str:
     return str(value or "").strip()
 
 
-def preparation_piece_id(
+def preparation_piece_identity_key(
     *,
     user_id: Any,
-    batch_id: Any,
     order_number: Any,
     order_item_id: Any,
     unit_index: Any,
 ) -> str:
-    """Return the same durable id used by the piece materialisation engine."""
-    raw = (
-        f"mezan-piece:{_text(user_id)}:{_text(batch_id)}:"
-        f"{_text(order_number)}:{_text(order_item_id)}:{int(unit_index)}"
+    """Return the permanent logical identity key for one physical order unit."""
+    merchant = _text(user_id)
+    order = _text(order_number)
+    item = _text(order_item_id)
+    unit = int(unit_index)
+    if not merchant or not order or not item or unit <= 0:
+        raise ValueError("invalid_preparation_piece_identity")
+    return f"mezan-piece-v2:{merchant}:{order}:{item}:{unit}"
+
+
+def preparation_piece_id(
+    *,
+    user_id: Any,
+    batch_id: Any = None,
+    order_number: Any,
+    order_item_id: Any,
+    unit_index: Any,
+) -> str:
+    """Return a durable id that is unchanged when the same piece is re-filed."""
+    del batch_id  # A file/batch must never change the physical piece identity.
+    raw = preparation_piece_identity_key(
+        user_id=user_id,
+        order_number=order_number,
+        order_item_id=order_item_id,
+        unit_index=unit_index,
     )
     return uuid.uuid5(uuid.NAMESPACE_URL, raw).hex
 
@@ -52,4 +78,5 @@ __all__ = [
     "parse_preparation_piece_barcode",
     "preparation_piece_barcode",
     "preparation_piece_id",
+    "preparation_piece_identity_key",
 ]
