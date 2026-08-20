@@ -15,6 +15,7 @@ import campaign_ai_evidence_runtime_enrichment_v3 as _evidence_enrichment
 import campaign_ai_execution_alignment as _alignment
 import campaign_ai_execution_retry as _execution_retry
 import campaign_ai_monitor_legacy as _legacy
+import campaign_ai_monthly_profit_goal_v1 as _monthly_goal
 import campaign_ai_policy_v2 as _policy
 from campaign_ai_decision_prompts_v3 import (
     FIRST_PASS_INSTRUCTIONS as _V3_FIRST_PASS_INSTRUCTIONS,
@@ -52,11 +53,41 @@ RESULT_SOURCE_SALLA = _policy.RESULT_SOURCE_SALLA
 OPENAI_TIMEOUT_SECONDS = _legacy.OPENAI_TIMEOUT_SECONDS
 OPENAI_MAX_OUTPUT_TOKENS = _legacy.OPENAI_MAX_OUTPUT_TOKENS
 
+# Owner-facing contract: the model may reason with technical evidence internally,
+# but the merchant should see a short Arabic management decision.  The monthly
+# net-profit floor is the primary business objective; ad-platform metrics are
+# means to that objective, never the objective themselves.
+_MERCHANT_GOAL_INSTRUCTIONS = """
+عقد المدير التجاري للمخرجات:
+- الهدف الأعلى هو monthly_profit_goal داخل overall_store_profit_context: تحقيق الحد الأدنى لصافي
+  ربح الشهر وحماية مساره قبل أي توسع اختياري. ROAS وCPA والصرف والمبيعات أدوات تشخيص وليست الهدف.
+- إذا كان status=behind_target فابحث عن أفضل خطة واقعية لسد فجوة صافي الربح: حماية الهدر، توسيع
+  الربح المثبت، إصلاح المنتج/الصفحة/المخزون/الكرياتيف، أو الانتظار عندما تكون زيادة الصرف مخاطرة.
+- إذا كان status=on_track فاحمِ مسار الحد الأدنى ولا تخاطر به لأجل نمو المبيعات فقط.
+- إذا كان status=minimum_target_covered يمكن البحث عن ربح إضافي فوق الحد الأدنى مع بقاء الحماية.
+- لا تدّع أن هدف الشهر قابل للتحقيق إذا الأدلة لا تدعم ذلك. قل بوضوح عندما يكون المسار الحالي غير كافٍ.
+
+أسلوب الشرح للمستخدم:
+- جميع النصوص التي يراها المستخدم (summary/title/diagnosis/why/evidence/risks/observation_plan/
+  success_criteria والشرح) يجب أن تكون عربية واضحة لشخص غير متخصص بالإعلانات.
+- لا تستخدم كلمات إنجليزية غير ضرورية مثل Funnel, Baseline, Creative, Inventory, Unknown, Normal
+  Variance, Hook, CTA, Attribution داخل النص البشري. ترجم المعنى: مسار الشراء، خط الأساس، المادة
+  الإعلانية، المخزون، غير معروف، تذبذب طبيعي، بداية الفيديو، دعوة لاتخاذ إجراء، إسناد التحويل.
+- ابدأ كل توصية بالقرار العملي الآن ثم السبب بجملة قصيرة، ثم أهم الأرقام فقط. لا تكرر نفس الفكرة.
+- عندما تستخدم اختصارًا مشهورًا مثل ROAS أو CPA، اذكر المعنى العربي أولًا، مثال: العائد على الإنفاق
+  الإعلاني (ROAS). لا تجعل المستخدم يحتاج فهم المصطلح لاتخاذ القرار.
+- التفاصيل التقنية مكانها التحليل المتقدم؛ لا تجعلها تحجب القرار الأساسي.
+"""
+
 # Production and live-eval must use one reasoning contract. The historical V3
 # module still exports prompt constants for compatibility, so bind them to the
 # lightweight shared module before building the runtime OpenAI callable.
-_decision_v3.FIRST_PASS_INSTRUCTIONS = _V3_FIRST_PASS_INSTRUCTIONS
-_decision_v3.SECOND_PASS_INSTRUCTIONS = _V3_SECOND_PASS_INSTRUCTIONS
+_decision_v3.FIRST_PASS_INSTRUCTIONS = (
+    _MERCHANT_GOAL_INSTRUCTIONS + "\n" + _V3_FIRST_PASS_INSTRUCTIONS
+)
+_decision_v3.SECOND_PASS_INSTRUCTIONS = (
+    _MERCHANT_GOAL_INSTRUCTIONS + "\n" + _V3_SECOND_PASS_INSTRUCTIONS
+)
 # Restocking is an operational recommendation, never an Ads API write.
 _decision_v3.OPERATIONAL_ACTIONS.add("RESTOCK_PRODUCT")
 
@@ -67,6 +98,16 @@ _snapchat_campaign_entities = _policy._snapchat_campaign_entities
 _snapchat_child_entities = _policy._snapchat_child_entities
 _experiment_outcomes_context = _policy._experiment_outcomes_context
 execution_capabilities = _alignment.execution_capabilities
+
+# Inject owner objective + true month-to-date dashboard net profit into the same
+# business-profit context that reaches OpenAI.  ContextVar keeps this tenant/task
+# local when multiple stores are analyzed concurrently.
+_base_business_profit_context = _legacy._business_profit_context
+_goal_aware_business_profit_context = _monthly_goal.wrap_business_profit_context(
+    _base_business_profit_context,
+    _get_v3_context,
+)
+_legacy._business_profit_context = _goal_aware_business_profit_context
 
 # Preserve the existing Salla/profit explanation enrichment, then append the
 # rich V3 business diagnosis captured on the exact candidate row. V2 later
@@ -124,20 +165,13 @@ _v3_ask_openai = _decision_v3.build_decision_v3_ask_openai(
 
 
 async def _runtime_ask_dispatch(*args: Any, **kwargs: Any):
-    """Use V3 in a tenant monitor task; preserve old direct-test contracts only.
-
-    ContextVar is task-local, so concurrent tenant monitor tasks cannot route one
-    another through the wrong decision engine. A missing context means this is a
-    direct diagnostic/unit-test call rather than a Production monitor run.
-    """
+    """Use V3 in a tenant monitor task; preserve old direct-test contracts only."""
     try:
         _get_v3_context()
     except RuntimeError:
         # Do not overwrite _legacy.AsyncOpenAI here. Established direct tests
         # intentionally inject a fake client into the legacy module itself.
         return await _legacy_test_repairing_ask(*args, **kwargs)
-    # Production monitor wrapper installs the public client before setting the
-    # task-local context, so this branch is always the V3 runtime path.
     return await _v3_ask_openai(*args, **kwargs)
 
 
@@ -157,14 +191,25 @@ async def run_campaign_ai_monitor(
 ):
     _legacy.AsyncOpenAI = AsyncOpenAI
     token = _set_v3_context(db, user_id)
+    _monthly_goal.clear_goal_context()
     try:
-        return await _base_run_campaign_ai_monitor(
+        result = await _base_run_campaign_ai_monitor(
             db,
             user_id,
             *args,
             **kwargs,
         )
+        goal_context = _monthly_goal.current_goal_context()
+        snapshot_id = result.get("snapshot_id") if isinstance(result, dict) else None
+        if goal_context and snapshot_id:
+            await db[RECOMMENDATION_COLLECTION].update_one(
+                {"user_id": user_id, "snapshot_id": snapshot_id},
+                {"$set": {"monthly_profit_goal": goal_context}},
+            )
+            result = {**result, "monthly_profit_goal": goal_context}
+        return result
     finally:
+        _monthly_goal.clear_goal_context()
         _reset_v3_context(token)
 
 

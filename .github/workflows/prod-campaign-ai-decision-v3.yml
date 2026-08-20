@@ -6,10 +6,12 @@ on:
       - hotfix/prod-snap-meta-final
     paths:
       - "backend/campaign_ai_*_v3.py"
+      - "backend/campaign_ai_monthly_profit_goal_v1.py"
       - "backend/advertising_product_watch*_v3.py"
       - "backend/campaign_ai_monitor.py"
       - "backend/ads_manager/__init__.py"
       - "backend/tests/test_campaign_ai_context_budget_v3.py"
+      - "backend/tests/test_campaign_ai_monthly_profit_goal_v1.py"
       - "backend/tests/test_campaign_ai_decision_v3_contract.py"
       - "backend/tests/test_campaign_ai_public_page_probe_v3.py"
       - "backend/tests/test_campaign_ai_customer_voice_evidence_v3.py"
@@ -61,6 +63,7 @@ jobs:
         run: >-
           python -m py_compile
           campaign_ai_context_budget_v3.py
+          campaign_ai_monthly_profit_goal_v1.py
           campaign_ai_decision_schema_v3.py
           campaign_ai_decision_review_schema_v3.py
           campaign_ai_decision_prompts_v3.py
@@ -90,6 +93,7 @@ jobs:
         run: >-
           python -m pytest -q
           tests/test_campaign_ai_context_budget_v3.py
+          tests/test_campaign_ai_monthly_profit_goal_v1.py
           tests/test_campaign_ai_decision_v3_contract.py
           tests/test_campaign_ai_public_page_probe_v3.py
           tests/test_campaign_ai_customer_voice_evidence_v3.py
@@ -124,6 +128,9 @@ jobs:
           grep -q 'MEZAN_CAMPAIGN_AI_INPUT_TOKEN_BUDGET' campaign_ai_context_budget_v3.py
           grep -q 'context_length_exceeded' campaign_ai_context_budget_v3.py
           grep -q 'wrap_structured_response' campaign_ai_monitor.py
+          grep -q 'monthly_profit_goal' campaign_ai_monitor.py
+          grep -q 'DEFAULT_MONTHLY_NET_PROFIT_TARGET_SAR = 100_000.0' campaign_ai_monthly_profit_goal_v1.py
+          grep -q 'recover_profit_gap' campaign_ai_monthly_profit_goal_v1.py
           ! grep -q 'if .*roas.*pause' campaign_ai_decision_v3.py
           ! grep -q 'if .*cpa.*pause' campaign_ai_decision_v3.py
       - name: Enforce V3 frontend recommendation vs execution separation
@@ -133,4 +140,5 @@ jobs:
           grep -q 'root_cause_category' frontend/src/pages/CampaignRecommendations.jsx
           grep -q 'item.executable && item.approval_available' frontend/src/pages/CampaignRecommendations.jsx
           grep -q 'ما الذي قد يجعل هذه التوصية خاطئة؟' frontend/src/pages/CampaignRecommendations.jsx
-          grep -q 'Advertising Product Watch' frontend/src/pages/CampaignRecommendations.jsx
+          grep -q 'monthly-profit-goal-card' frontend/src/pages/CampaignRecommendations.jsx
+          grep -q 'عرض التحليل المتقدم' frontend/src/pages/CampaignRecommendations.jsx

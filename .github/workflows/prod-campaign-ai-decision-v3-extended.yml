@@ -83,9 +83,11 @@ jobs:
           grep -q 'recommended_action' frontend/src/pages/CampaignRecommendations.jsx
           grep -q 'root_cause_category' frontend/src/pages/CampaignRecommendations.jsx
           grep -q 'item.executable && item.approval_available' frontend/src/pages/CampaignRecommendations.jsx
-          grep -q 'Creative Brief' frontend/src/pages/CampaignRecommendations.jsx
-          grep -q 'Advertising Product Watch' frontend/src/pages/CampaignRecommendations.jsx
-          grep -q 'Today → Yesterday → Day-2' frontend/src/pages/CampaignRecommendations.jsx
+          grep -q 'خطة المادة الإعلانية الجديدة' frontend/src/pages/CampaignRecommendations.jsx
+          grep -q 'تنبيهات المنتجات المرتبطة بالإعلانات' frontend/src/pages/CampaignRecommendations.jsx
+          grep -q 'تحليل الأيام' frontend/src/pages/CampaignRecommendations.jsx
+          grep -q 'عرض التحليل المتقدم' frontend/src/pages/CampaignRecommendations.jsx
+          grep -q 'monthly-profit-goal-card' frontend/src/pages/CampaignRecommendations.jsx
           grep -q 'recommended_action' frontend/src/pages/AdvancedDashboard.jsx
           grep -q 'root_cause_category' frontend/src/pages/AdvancedDashboard.jsx
           grep -q 'action_type === "ads_write"' frontend/src/pages/AdvancedDashboard.jsx
