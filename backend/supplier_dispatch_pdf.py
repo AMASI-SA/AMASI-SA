@@ -46,8 +46,33 @@ def _riyadh_date(value: Any) -> str:
 
 
 def _line_match(piece: dict[str, Any], rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Match the exact physical unit snapshot before falling back to legacy rows."""
     order_item_id = _text(piece.get("order_item_id"))
     group_key = _text(piece.get("group_key"))
+    try:
+        unit_index = int(piece.get("unit_index") or 0)
+    except (TypeError, ValueError, OverflowError):
+        unit_index = 0
+
+    if order_item_id and unit_index > 0:
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            if _text(row.get("order_item_id")) != order_item_id:
+                continue
+            try:
+                row_unit = int(row.get("unit_index") or 0)
+            except (TypeError, ValueError, OverflowError):
+                row_unit = 0
+            if row_unit == unit_index:
+                return row
+            unit_indices = row.get("unit_indices") or []
+            try:
+                if unit_index in {int(value) for value in unit_indices}:
+                    return row
+            except (TypeError, ValueError, OverflowError):
+                pass
+
     for row in rows:
         if not isinstance(row, dict):
             continue
