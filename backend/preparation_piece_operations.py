@@ -5,10 +5,11 @@ The file is assigned to one preparation employee, required services are
 inherited from Product V2 product/option service links, and execution does not
 start until the assigned employee (or an authorised manager) starts the file.
 
-Piece work stays in Mezan.  The one deliberate external transition happens
-after every piece is ready: the completed order is moved to ``تم التنفيذ`` in
-Salla so its configured courier can issue the official AWB.  No Qoyod,
-supplier, WhatsApp, or accounting writes are made here.
+Piece execution stays in Mezan.  Two deliberate order-status transitions
+are verified in Salla: a fully allocated order moves to ``قيد التنفيذ``, and
+an order whose pieces are all ready later moves to ``تم التنفيذ`` so its
+configured courier can issue the official AWB.  No Qoyod, supplier, WhatsApp,
+or accounting writes are made here.
 """
 from __future__ import annotations
 
