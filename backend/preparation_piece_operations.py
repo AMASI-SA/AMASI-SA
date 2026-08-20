@@ -5,13 +5,15 @@ The file is assigned to one preparation employee, required services are
 inherited from Product V2 product/option service links, and execution does not
 start until the assigned employee (or an authorised manager) starts the file.
 
-Piece work stays in Mezan.  The one deliberate external transition happens
-after every piece is ready: the completed order is moved to ``تم التنفيذ`` in
-Salla so its configured courier can issue the official AWB.  No Qoyod,
-supplier, WhatsApp, or accounting writes are made here.
+Piece execution stays in Mezan.  Two deliberate order-status transitions
+are verified in Salla: a fully allocated order moves to ``قيد التنفيذ``, and
+an order whose pieces are all ready later moves to ``تم التنفيذ`` so its
+configured courier can issue the official AWB.  No Qoyod, supplier, WhatsApp,
+or accounting writes are made here.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import statistics
 import uuid
@@ -47,6 +49,7 @@ from reviewed_products_catalog import (
     load_reviewed_product_context,
 )
 from reviewed_preparation_batches import BATCHES
+from salla_integration.service import SallaError, call_salla
 from preparation_file_registry import REGISTRY
 from preparation_piece_barcode import (
     parse_preparation_piece_barcode,
@@ -714,6 +717,108 @@ async def materialize_preparation_pieces(
     return pieces
 
 
+_IN_PROGRESS_STATUS_NAME = "قيد التنفيذ"
+_IN_PROGRESS_STATUS_SLUG = "in_progress"
+
+
+def _walk_salla_status_dicts(value: Any):
+    if isinstance(value, dict):
+        yield value
+        for child in value.values():
+            yield from _walk_salla_status_dicts(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _walk_salla_status_dicts(child)
+
+
+def _salla_in_progress_status_id(response: Any) -> Any:
+    """Resolve the store's exact custom ``قيد التنفيذ`` status id."""
+    for row in _walk_salla_status_dicts(response):
+        if _text(row.get("name")) != _IN_PROGRESS_STATUS_NAME:
+            continue
+        status_id = row.get("id") or row.get("status_id")
+        if status_id not in (None, ""):
+            return int(status_id) if _text(status_id).isdigit() else status_id
+    return None
+
+
+def _salla_order_is_in_progress(order: Any) -> bool:
+    status = order.get("status") if isinstance(order, dict) else None
+    for row in _walk_salla_status_dicts(status):
+        if _text(row.get("name")) == _IN_PROGRESS_STATUS_NAME:
+            return True
+        slug = _normalized(row.get("slug")).replace(" ", "_")
+        if slug == _IN_PROGRESS_STATUS_SLUG:
+            return True
+    return False
+
+
+async def _sync_salla_in_progress(
+    db: Any,
+    *,
+    user_id: str,
+    order: Any,
+) -> tuple[str, str | None]:
+    """Set and verify the order's exact custom in-progress status in Salla."""
+    source = getattr(order, "source", None)
+    internal_order_id = (
+        _text(getattr(source, "source_order_id", None))
+        or _text(getattr(order, "order_id", None))
+    )
+    if not internal_order_id:
+        return "pending", "missing_salla_order_id"
+
+    try:
+        current_response = await call_salla(
+            db,
+            user_id,
+            "GET",
+            f"/orders/{internal_order_id}",
+        )
+        current = (
+            current_response.get("data")
+            if isinstance(current_response, dict)
+            else None
+        )
+        if _salla_order_is_in_progress(current):
+            return "sent", None
+    except SallaError:
+        # Continue to the authoritative status discovery/write attempt.
+        pass
+
+    try:
+        statuses = await call_salla(db, user_id, "GET", "/orders/statuses")
+        status_id = _salla_in_progress_status_id(statuses)
+        if status_id is None:
+            return "pending", "in_progress_status_not_found"
+        await call_salla(
+            db,
+            user_id,
+            "POST",
+            f"/orders/{internal_order_id}/status",
+            json={"status_id": status_id},
+        )
+    except SallaError as exc:
+        return "pending", f"salla_{exc.status_code}"
+
+    try:
+        for attempt in range(6):
+            if attempt:
+                await asyncio.sleep(0.5)
+            response = await call_salla(
+                db,
+                user_id,
+                "GET",
+                f"/orders/{internal_order_id}",
+            )
+            latest = response.get("data") if isinstance(response, dict) else None
+            if _salla_order_is_in_progress(latest):
+                return "sent", None
+    except SallaError as exc:
+        return "pending", f"salla_verify_{exc.status_code}"
+    return "pending", "salla_in_progress_not_confirmed"
+
+
 async def _assigned_reconcile_order_stage(
     db: Any,
     *,
@@ -722,7 +827,7 @@ async def _assigned_reconcile_order_stage(
     batch_id: str,
     actor: dict[str, Any],
 ) -> tuple[bool, int]:
-    """Keep fully allocated orders reviewed until actual execution starts."""
+    """Move a fully allocated order to in-progress in Salla and Mezan."""
     workflow = await db[WORKFLOWS].find_one(
         {"user_id": user_id, "order_number": order_number},
         {"_id": 0},
@@ -781,6 +886,35 @@ async def _assigned_reconcile_order_stage(
     remaining = max(0, required - allocated)
     now = _now()
     fully_allocated = remaining == 0
+    salla_status_allowed = (
+        workflow.get("experiment_mode") is not True
+        or workflow.get("salla_status_writes_allowed") is True
+    )
+    salla_updated = False
+    if fully_allocated and salla_status_allowed:
+        sync_status, sync_error = await _sync_salla_in_progress(
+            db,
+            user_id=user_id,
+            order=order,
+        )
+        if sync_status != "sent":
+            await db[EVENTS].insert_one({
+                "user_id": user_id,
+                "order_number": order_number,
+                "batch_id": batch_id,
+                "event_type": "order_in_progress_salla_sync_failed",
+                "error_code": sync_error,
+                "occurred_at": now,
+                "actor_id": _text(actor.get("id")),
+                "mezan_only": True,
+                "salla_updated": False,
+                "qoyod_updated": False,
+            })
+            raise RuntimeError(
+                f"salla_in_progress_status_sync_failed:{sync_error or 'unknown'}"
+            )
+        salla_updated = True
+
     update = {
         "$set": {
             "preparation_progress": {
@@ -790,7 +924,9 @@ async def _assigned_reconcile_order_stage(
                 "updated_at": now,
                 "last_batch_id": batch_id,
             },
-            "preparation_assignment_status": "assigned" if fully_allocated else "partially_assigned",
+            "preparation_assignment_status": (
+                "assigned" if fully_allocated else "partially_assigned"
+            ),
             "updated_at": now,
             "updated_by": _text(actor.get("id")),
         },
@@ -799,22 +935,39 @@ async def _assigned_reconcile_order_stage(
     }
     if fully_allocated:
         update["$set"]["preparation_fully_allocated_at"] = now
+    if fully_allocated and salla_updated:
+        update["$set"].update({
+            "stage": "in_progress",
+            "in_progress_at": now,
+            "in_progress_by": _text(actor.get("id")),
+            "in_progress_by_name": _text(actor.get("name") or actor.get("email")),
+            "salla_status_sync_state": "sent",
+            "salla_status_name": _IN_PROGRESS_STATUS_NAME,
+            "salla_status_slug": _IN_PROGRESS_STATUS_SLUG,
+            "salla_status_synced_at": now,
+        })
     await db[WORKFLOWS].update_one(
         {"user_id": user_id, "order_number": order_number, "stage": "reviewed"},
         update,
     )
     if fully_allocated:
+        moved = bool(salla_updated)
         await db[EVENTS].insert_one({
             "user_id": user_id,
             "order_number": order_number,
             "batch_id": batch_id,
-            "event_type": "order_preparation_fully_assigned",
+            "event_type": (
+                "order_moved_to_in_progress"
+                if moved
+                else "order_preparation_fully_assigned"
+            ),
             "occurred_at": now,
             "actor_id": _text(actor.get("id")),
-            "mezan_only": True,
-            "salla_updated": False,
+            "mezan_only": not moved,
+            "salla_updated": moved,
             "qoyod_updated": False,
         })
+        return moved, remaining
     return False, remaining
 
 

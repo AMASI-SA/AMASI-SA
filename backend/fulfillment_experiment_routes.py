@@ -5,7 +5,9 @@ entries.  It archives the old operational allocations/pieces, returns only the
 Mezan review workflow to ``reviewed``, and marks the next materialised pieces as
 an experiment.  Supplier receiving can therefore exercise the real employee
 and permission flow without creating another payable or changing product cost
-defaults.
+defaults.  The replay permits only the order-status transition to Salla so
+operators can verify the real reviewed-to-in-progress contract; all other
+Salla writes remain disabled.
 
 Stops are operational and fail closed.  They can target a complete order, one
 order item, or one physical preparation piece.  Every affected employee gets
@@ -521,6 +523,7 @@ def make_fulfillment_experiment_router(
                         "experiment_generation": generation,
                         "experiment_reset_at": now,
                         "experiment_reset_by": context["actor_id"],
+                        "salla_status_writes_allowed": True,
                         "preparation_assignment_status": "unassigned",
                         "preparation_batch_ids": [],
                         "updated_at": now,
@@ -558,6 +561,7 @@ def make_fulfillment_experiment_router(
                 "financial_writes_allowed": False,
                 "supplier_payable_allowed": False,
                 "salla_writes_allowed": False,
+                "salla_status_writes_allowed": True,
                 "qoyod_writes_allowed": False,
                 "note": _text(payload.note) or None,
                 "created_at": now,
@@ -589,6 +593,7 @@ def make_fulfillment_experiment_router(
                 "archived_piece_count": archived_piece_count,
                 "archived_allocation_count": int(allocation_delete_result.deleted_count),
                 "financial_writes": 0,
+                "salla_status_writes_allowed": True,
                 "salla_updated": False,
                 "qoyod_updated": False,
             }
