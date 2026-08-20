@@ -1,4 +1,4 @@
-"""Security contract for the standalone Amasi Delivery driver account."""
+"""Security contracts for Amasi Delivery purpose-bound access."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from fastapi import HTTPException
 
+from store_delivery_customer_instruction_routes import _require_customer_service
 from store_delivery_driver_app_routes import _require_store_driver
 from store_delivery_driver_routes import DRIVER_ACCOUNT_ROLE, DriverAccountCreate
 
@@ -13,12 +14,7 @@ SERVER_SOURCE = (Path(__file__).resolve().parents[1] / "server.py").read_text(en
 
 
 def test_store_driver_role_has_zero_legacy_mezan_permissions():
-    """Unknown roles fail closed in the legacy RBAC resolver.
-
-    Keep this as a static contract instead of importing server.py: importing the
-    whole production application would pull unrelated Mongo/integration runtime
-    dependencies into this focused security test.
-    """
+    """Unknown roles fail closed in the legacy RBAC resolver."""
     assert DRIVER_ACCOUNT_ROLE == "store_driver"
     assert 'ROLE_DEFAULT_PERMS.get(role, [])' in SERVER_SOURCE
     assert '"store_driver":' not in SERVER_SOURCE
@@ -45,3 +41,20 @@ def test_driver_password_minimum_is_enforced():
         password="DeliveryPass123!",
     )
     assert str(payload.email) == "driver@example.com"
+
+
+def test_customer_service_existing_inbox_permission_can_manage_delivery_instructions():
+    user = {
+        "id": "cs1",
+        "role": "viewer",
+        "created_by": "owner1",
+        "permissions": ["customer_intelligence.inbox.read"],
+    }
+    assert _require_customer_service(user) is user
+
+
+def test_customer_service_without_role_or_permission_is_rejected():
+    with pytest.raises(HTTPException) as exc:
+        _require_customer_service({"id": "viewer1", "role": "viewer"})
+    assert exc.value.status_code == 403
+    assert exc.value.detail["code"] == "delivery_instruction_permission_required"
