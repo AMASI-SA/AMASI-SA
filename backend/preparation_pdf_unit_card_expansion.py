@@ -22,6 +22,25 @@ def _positive_int(value: Any) -> int | None:
     return number if number > 0 else None
 
 
+def split_quantity_card_note(source_quantity: Any, unit_index: Any) -> str:
+    """Return the operational note shown only on cards split from one order line."""
+    total = _positive_int(source_quantity) or 1
+    unit = _positive_int(unit_index) or 1
+    if total <= 1:
+        return ""
+    return f"هذا المنتج مفصول من كمية {total} — القطعة {unit} من {total}"
+
+
+def _append_split_note(existing_note: Any, source_quantity: Any, unit_index: Any) -> str | None:
+    split_note = split_quantity_card_note(source_quantity, unit_index)
+    existing = " ".join(str(existing_note or "").split())
+    if not split_note:
+        return existing or None
+    if split_note in existing:
+        return existing
+    return " | ".join(part for part in (existing, split_note) if part) or None
+
+
 def expand_preparation_unit_cards(
     rows: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
@@ -32,7 +51,11 @@ def expand_preparation_unit_cards(
         if not isinstance(source, dict):
             continue
 
-        source_quantity = _positive_int(source.get("quantity")) or 1
+        selected_quantity = _positive_int(source.get("quantity")) or 1
+        source_line_quantity = (
+            _positive_int(source.get("source_line_quantity"))
+            or selected_quantity
+        )
         unit_indices = [
             unit
             for unit in (
@@ -42,16 +65,21 @@ def expand_preparation_unit_cards(
             if unit is not None
         ]
         if not unit_indices:
-            unit_indices = list(range(1, source_quantity + 1))
+            unit_indices = list(range(1, selected_quantity + 1))
 
         for unit_index in unit_indices:
             card = dict(source)
             card.update({
                 "line_number": len(expanded) + 1,
                 "quantity": 1,
-                "source_line_quantity": source_quantity,
+                "source_line_quantity": source_line_quantity,
                 "unit_index": unit_index,
                 "unit_indices": [unit_index],
+                "note": _append_split_note(
+                    source.get("note"),
+                    source_line_quantity,
+                    unit_index,
+                ),
             })
             expanded.append(card)
 
@@ -84,4 +112,5 @@ def install_preparation_pdf_unit_card_expansion() -> None:
 __all__ = [
     "expand_preparation_unit_cards",
     "install_preparation_pdf_unit_card_expansion",
+    "split_quantity_card_note",
 ]
