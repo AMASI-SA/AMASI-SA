@@ -12,6 +12,7 @@ import {
     TopProductsCard,
     aggregateDashboardAdsHistoryByMonth,
     dashboardSpendDisplay,
+    loadDashboardPeriodSnapshot,
 } from "./AdvancedDashboard";
 
 // Keep this source-focused suite independent of the lockfile-free install's
@@ -326,8 +327,54 @@ test("advanced ads card uses the same Dashboard V2 snapshot as the profit card",
 });
 
 
-test("foreground dashboard load failures never expose a stale period or false zeros", () => {
-    expect(source).toContain("setData(null)");
-    expect(source).toContain("تعذر تحميل بيانات الفترة المحددة");
-    expect(source).toContain("لم تُعرض أرقام بديلة أو بيانات من فترة سابقة");
+test("manual refresh failure preserves the current verified dashboard snapshot", async () => {
+    const verified = { snapshot_id: "verified-snapshot" };
+    let currentData = verified;
+    let currentError = null;
+    const loadingStates = [];
+
+    await loadDashboardPeriodSnapshot({
+        next: { from: "2026-08-21", to: "2026-08-21" },
+        requestSequence: 1,
+        isLatest: (sequence) => sequence === 1,
+        apiClient: { get: jest.fn().mockRejectedValue(new Error("network")) },
+        setData: (value) => { currentData = value; },
+        setLoading: (value) => { loadingStates.push(value); },
+        setLoadError: (value) => { currentError = value; },
+        now: () => 1,
+    });
+
+    expect(currentData).toBe(verified);
+    expect(currentError).toBe("تعذر تحميل بيانات الفترة المحددة");
+    expect(loadingStates).toEqual([true, false]);
+    expect(source).not.toContain("setData(null)");
+    expect(source).toContain("تم الاحتفاظ بآخر بيانات موثوقة");
+});
+
+test("a stale dashboard response never replaces the latest successful response", async () => {
+    const requests = [];
+    const apiClient = {
+        get: jest.fn(() => new Promise((resolve) => requests.push(resolve))),
+    };
+    let latestSequence = 1;
+    let currentData = { snapshot_id: "verified-snapshot" };
+    const shared = {
+        next: { from: "2026-08-21", to: "2026-08-21" },
+        apiClient,
+        isLatest: (sequence) => sequence === latestSequence,
+        setData: (value) => { currentData = value; },
+        setLoading: jest.fn(),
+        setLoadError: jest.fn(),
+        now: () => 1,
+    };
+
+    const staleRequest = loadDashboardPeriodSnapshot({ ...shared, requestSequence: 1 });
+    latestSequence = 2;
+    const latestRequest = loadDashboardPeriodSnapshot({ ...shared, requestSequence: 2 });
+    requests[1]({ data: { snapshot_id: "latest-snapshot" } });
+    await latestRequest;
+    requests[0]({ data: { snapshot_id: "stale-snapshot" } });
+    await staleRequest;
+
+    expect(currentData).toEqual({ snapshot_id: "latest-snapshot" });
 });

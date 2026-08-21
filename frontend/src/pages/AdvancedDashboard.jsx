@@ -516,6 +516,40 @@ export function LatestOrders({ orders, totals = {} }) {
 
 function GaLive({ data }) { const pages = data?.top_pages || []; const minutes = data?.active_users?.per_minute || []; const max = Math.max(1, ...pages.map((p) => Number(p.views || 0))); const minuteMax = Math.max(1, ...minutes.map((m) => Number(m.active_users || 0))); return <div className="space-y-4"><Panel className="border-blue-200"><div className="flex h-14 items-center gap-2 border-b border-blue-800 bg-blue-700 px-4 text-white"><BarChart3 className="h-5 w-5" /><h2 className="text-sm font-black">Google Analytics 4 — مباشر</h2></div><div className="p-4"><h3 className="mb-3 text-sm font-extrabold">الصفحات الأكثر مشاهدة</h3>{pages.slice(0, 6).map((p, i) => <div key={`${p.title}-${i}`} className="mb-3"><div className="flex justify-between gap-2 text-[10px]"><span className="truncate">{p.title}</span><b>{p.views}</b></div><div className="mt-1 h-1.5 rounded bg-slate-100"><div className="h-full rounded bg-blue-500" style={{ width: `${Number(p.views || 0) / max * 100}%` }} /></div></div>)}</div></Panel><Panel className="border-violet-200"><div className="flex h-14 items-center gap-2 border-b border-violet-800 bg-violet-700 px-4 text-white"><UsersRound className="h-5 w-5" /><h2 className="font-black">المستخدمون النشطون الآن</h2></div><div className="grid grid-cols-2 gap-2 p-4"><Metric label="آخر 30 دقيقة" value={integer(data?.active_users?.last_30_minutes)} Icon={UsersRound} tone="bg-blue-50 text-blue-600" /><Metric label="آخر 5 دقائق" value={integer(data?.active_users?.last_5_minutes)} Icon={UsersRound} tone="bg-violet-50 text-violet-600" /></div><div className="flex h-36 items-end gap-1 overflow-hidden px-4 pb-4" dir="ltr" data-testid="advanced-ga-active-chart">{minutes.map((m, i) => <div key={i} className="max-h-full flex-1 rounded-t bg-violet-600" style={{ height: `${Math.min(100, Math.max(4, Number(m.active_users || 0) / minuteMax * 100))}%` }} />)}</div></Panel></div>; }
 
+export async function loadDashboardPeriodSnapshot({
+    next,
+    background = false,
+    requestSequence,
+    isLatest,
+    apiClient = api,
+    setData,
+    setLoading,
+    setLoadError,
+    now = Date.now,
+}) {
+    if (!background) {
+        setLoading(true);
+        setLoadError(null);
+    }
+    try {
+        const query = new URLSearchParams(filtersToQueryString(next));
+        query.set("_refresh", String(now()));
+        const response = await apiClient.get(`/dashboard-v2?${query.toString()}`, {
+            headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+        });
+        if (isLatest(requestSequence)) {
+            setData(response.data);
+            setLoadError(null);
+        }
+    } catch {
+        if (!background && isLatest(requestSequence)) {
+            setLoadError("تعذر تحميل بيانات الفترة المحددة");
+        }
+    } finally {
+        if (isLatest(requestSequence)) setLoading(false);
+    }
+}
+
 export default function AdvancedDashboard() {
     const [filters, setFilters] = useState(() => defaultFilters("today"));
     const [data, setData] = useState(null); const [carts, setCarts] = useState([]); const [cartSummary, setCartSummary] = useState({ abandoned_count: 0, recovered_count: 0 }); const [ga, setGa] = useState(null); const [loading, setLoading] = useState(true); const [loadError, setLoadError] = useState(null);
@@ -528,29 +562,19 @@ export default function AdvancedDashboard() {
     const loadPeriod = useCallback(async (next, { background = false } = {}) => {
         if (background && backgroundRefreshInFlightRef.current) return;
         const requestSequence = ++requestSequenceRef.current;
-        if (!background && requestSequence === requestSequenceRef.current) setData(null);
         if (background) backgroundRefreshInFlightRef.current = true;
-        else {
-            setLoading(true);
-            setLoadError(null);
-        }
         try {
-            const query = new URLSearchParams(filtersToQueryString(next));
-            query.set("_refresh", String(Date.now()));
-            const response = await api.get(`/dashboard-v2?${query.toString()}`, {
-                headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+            await loadDashboardPeriodSnapshot({
+                next,
+                background,
+                requestSequence,
+                isLatest: (sequence) => sequence === requestSequenceRef.current,
+                setData,
+                setLoading,
+                setLoadError,
             });
-            if (requestSequence === requestSequenceRef.current) {
-                setData(response.data);
-                setLoadError(null);
-            }
-        } catch {
-            if (!background && requestSequence === requestSequenceRef.current) {
-                setLoadError("تعذر تحميل بيانات الفترة المحددة");
-            }
         } finally {
             if (background) backgroundRefreshInFlightRef.current = false;
-            if (requestSequence === requestSequenceRef.current) setLoading(false);
         }
     }, []);
     useEffect(() => { loadPeriod(filters); }, [filters, loadPeriod]);
@@ -628,7 +652,8 @@ export default function AdvancedDashboard() {
             <Link to="/dashboard-v2" className="inline-flex items-center gap-2 rounded-xl border bg-white px-4 py-2 text-sm font-bold"><ArrowRight className="h-4 w-4" />لوحة التحكم القديمة</Link>
         </header>
         <div className="flex items-stretch gap-2"><div className="min-w-0 flex-1"><AdvancedFilters value={filters} onChange={setFilters} defaultPreset="today" /></div><button onClick={() => loadPeriod(filters)} className="rounded-xl border bg-white px-4 text-blue-700" aria-label="تحديث بيانات الفترة"><RefreshCw className={`h-5 w-5 ${loading ? "animate-spin" : ""}`} /></button></div>
-        {!data && !loading && loadError ? <Panel className="border-amber-200 bg-amber-50 p-5 text-sm font-bold text-amber-900" role="alert">{loadError} — لم تُعرض أرقام بديلة أو بيانات من فترة سابقة.</Panel> : <>
+        {!loading && loadError && <Panel className="border-amber-200 bg-amber-50 p-5 text-sm font-bold text-amber-900"><span role="alert">{loadError} — {data ? "تم الاحتفاظ بآخر بيانات موثوقة." : "لم تُعرض أرقام بديلة أو بيانات من فترة سابقة."}</span></Panel>}
+        {(Boolean(data) || loading) && <>
         <SummaryStrip data={data} filters={filters} loading={loading} />
         <CampaignAdvisorCard />
         <div dir="ltr" className="grid items-start gap-4 min-[1280px]:grid-cols-[clamp(280px,24vw,350px)_minmax(0,1fr)]"><aside dir="rtl" className="space-y-4"><AdsCard ads={data?.ads_v2} /><TopProductsCard rows={data?.product_cost_v2?.product_rows} summary={data?.product_cost_v2} loading={loading} /><AbandonedCartsCard carts={carts} summary={cartSummary} /></aside><main dir="rtl" className="min-w-0"><div dir="ltr" className="grid min-w-0 items-start gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]"><div dir="rtl" className="space-y-4"><ProfitCard data={data} loading={loading} /><LatestOrders orders={orders} totals={data?.totals} /></div><div dir="rtl"><GaLive data={ga} /></div></div></main></div>
