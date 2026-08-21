@@ -23,14 +23,19 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable
 
 import campaign_ai_monitor_legacy as _legacy
+import campaign_ai_execution_quality_gate as _execution_quality
 from integrations_control_center.snapchat_account_timezone_manager import (
+    ACCOUNT_LOCAL_SOURCE_MODE,
+    SNAPCHAT_ACCOUNT_LOCAL_PERFORMANCE_COLLECTION,
     account_local_today,
     build_account_timezone_campaign_report,
 )
 from integrations_control_center.snapchat_ad_performance import (
+    AD_SOURCE_MODE,
     build_account_timezone_ad_report,
 )
 from integrations_control_center.snapchat_adsquad_performance import (
+    ADSQUAD_SOURCE_MODE,
     build_account_timezone_adsquad_report,
 )
 from integrations_control_center.snapchat_campaign_profitability import (
@@ -274,9 +279,17 @@ async def _snapchat_campaign_entities(
         observed_days = int(
             ((platform_report.get("totals") or {}).get("observed_days") or 0)
         )
+        report_source = platform_report.get("source") or {}
+        report_pagination = platform_report.get("campaign_pagination") or {}
         report_complete = bool(
             (platform_report.get("ai_readiness") or {}).get("report_ready")
             and (platform_report.get("ai_readiness") or {}).get("campaign_details_ready")
+            and observed_days >= (local_end - local_start).days + 1
+            and report_source.get("row_limit_reached") is False
+            and report_source.get("entity_limit_reached") is False
+            and int(report_pagination.get("page") or 0) == 1
+            and int(report_pagination.get("pages") or 0) == 1
+            and int(report_pagination.get("total") or 0) > 0
         )
         for item in platform_report.get("campaigns") or []:
             campaign_id = _legacy._text(item.get("campaign_id"), limit=120)
@@ -301,23 +314,46 @@ async def _snapchat_campaign_entities(
                 impressions=item.get("impressions"),
                 clicks=item.get("swipes"),
                 observed_days=item.get("observed_days") or observed_days,
-                data_complete=bool(item.get("data_complete", report_complete)),
+                data_complete=bool(
+                    item.get("data_complete", report_complete) and report_complete
+                ),
                 account_id=account_id,
                 account_name=item.get("account_name") or account_name,
                 current_daily_budget_native=(item.get("budget") or {}).get("daily_native"),
                 campaign_id=campaign_id,
                 campaign_name=item.get("campaign_name"),
                 campaign_status=item.get("status"),
+                currency_native=(
+                    item.get("display_currency")
+                    or (item.get("budget") or {}).get("currency")
+                    or account.get("currency")
+                ),
+                fx_rate_to_sar=(
+                    item.get("exchange_rate_to_sar")
+                    or (platform_report.get("accounts") or [{}])[0].get(
+                        "exchange_rate_to_sar"
+                    )
+                ),
+                fx_source="provider_currency_identity" if str(
+                    item.get("display_currency")
+                    or (item.get("budget") or {}).get("currency")
+                    or account.get("currency")
+                    or ""
+                ).upper() == "SAR" else "account_cost_setting_required",
+                provider_result_source=SNAPCHAT_AI_PLATFORM_SOURCE,
+                action_report_time=SNAPCHAT_AI_ACTION_REPORT_TIME,
+                result_source=RESULT_SOURCE_PLATFORM,
+                source_date_from=local_start.isoformat(),
+                source_date_to=local_end.isoformat(),
+                source_observed_at=account.get("last_sync_at"),
+                account_timezone=platform_report.get("account_timezone"),
+                pagination_complete=report_complete,
+                source_mode=ACCOUNT_LOCAL_SOURCE_MODE,
+                source_fact_collection=SNAPCHAT_ACCOUNT_LOCAL_PERFORMANCE_COLLECTION,
             )
             if not row:
                 continue
             row.update({
-                "provider_result_source": SNAPCHAT_AI_PLATFORM_SOURCE,
-                "action_report_time": SNAPCHAT_AI_ACTION_REPORT_TIME,
-                "result_source": RESULT_SOURCE_PLATFORM,
-                "source_date_from": local_start.isoformat(),
-                "source_date_to": local_end.isoformat(),
-                "account_timezone": platform_report.get("account_timezone"),
                 "salla_attribution_applied_to_entity_metrics": False,
                 "salla_campaign_results": {
                     "source": "unified_orders:salla_exact_account_campaign_match",
@@ -410,6 +446,24 @@ async def _snapchat_child_entities(
             sort_by="spend",
             action_report_time=SNAPCHAT_AI_ACTION_REPORT_TIME,
         )
+        group_source = group_report.get("source") or {}
+        group_pagination = group_report.get("pagination") or {}
+        group_report_complete = bool(
+            group_source.get("row_limit_reached") is False
+            and group_source.get("entity_limit_reached") is False
+            and int(group_pagination.get("page") or 0) == 1
+            and int(group_pagination.get("pages") or 0) == 1
+            and int(group_pagination.get("total") or 0) > 0
+        )
+        ad_source = ad_report.get("source") or {}
+        ad_pagination = ad_report.get("pagination") or {}
+        ad_report_complete = bool(
+            ad_source.get("row_limit_reached") is False
+            and ad_source.get("entity_limit_reached") is False
+            and int(ad_pagination.get("page") or 0) == 1
+            and int(ad_pagination.get("pages") or 0) == 1
+            and int(ad_pagination.get("total") or 0) > 0
+        )
 
         def parent_profit(campaign_id: str) -> dict[str, Any]:
             return _page_aligned_profitability(
@@ -432,7 +486,9 @@ async def _snapchat_child_entities(
                 impressions=item.get("impressions"),
                 clicks=item.get("swipes"),
                 observed_days=item.get("observed_days"),
-                data_complete=item.get("data_complete"),
+                data_complete=bool(
+                    item.get("data_complete") and group_report_complete
+                ),
                 account_id=account_id,
                 account_name=account_name,
                 parent_id=campaign_id,
@@ -443,15 +499,26 @@ async def _snapchat_child_entities(
                 ad_group_id=item.get("ad_squad_id"),
                 ad_group_name=item.get("ad_squad_name"),
                 ad_group_status=item.get("status"),
+                currency_native=(
+                    item.get("display_currency") or account.get("currency")
+                ),
+                fx_rate_to_sar=item.get("exchange_rate_to_sar"),
+                fx_source="provider_currency_identity" if str(
+                    item.get("display_currency") or account.get("currency") or ""
+                ).upper() == "SAR" else "account_cost_setting_required",
+                provider_result_source=SNAPCHAT_AI_PLATFORM_SOURCE,
+                action_report_time=SNAPCHAT_AI_ACTION_REPORT_TIME,
+                result_source=RESULT_SOURCE_PLATFORM,
+                source_date_from=local_start.isoformat(),
+                source_date_to=local_end.isoformat(),
+                source_observed_at=account.get("last_sync_at"),
+                account_timezone=group_report.get("account_timezone"),
+                pagination_complete=group_report_complete,
+                source_mode=ADSQUAD_SOURCE_MODE,
+                source_fact_collection=SNAPCHAT_ACCOUNT_LOCAL_PERFORMANCE_COLLECTION,
             )
             if row:
                 row.update({
-                    "provider_result_source": SNAPCHAT_AI_PLATFORM_SOURCE,
-                    "action_report_time": SNAPCHAT_AI_ACTION_REPORT_TIME,
-                    "result_source": RESULT_SOURCE_PLATFORM,
-                    "source_date_from": local_start.isoformat(),
-                    "source_date_to": local_end.isoformat(),
-                    "account_timezone": group_report.get("account_timezone"),
                     "salla_attribution_applied_to_entity_metrics": False,
                     "parent_campaign_salla_results": salla_by_id.get(campaign_id),
                     "parent_campaign_profitability": parent_profit(campaign_id),
@@ -478,7 +545,9 @@ async def _snapchat_child_entities(
                 impressions=item.get("impressions"),
                 clicks=item.get("swipes"),
                 observed_days=item.get("observed_days"),
-                data_complete=item.get("data_complete"),
+                data_complete=bool(
+                    item.get("data_complete") and ad_report_complete
+                ),
                 account_id=account_id,
                 account_name=account_name,
                 parent_id=item.get("ad_squad_id"),
@@ -491,15 +560,26 @@ async def _snapchat_child_entities(
                 ad_group_id=item.get("ad_squad_id"),
                 ad_group_name=item.get("ad_squad_name"),
                 ad_group_status=item.get("ad_squad_status"),
+                currency_native=(
+                    item.get("display_currency") or account.get("currency")
+                ),
+                fx_rate_to_sar=item.get("exchange_rate_to_sar"),
+                fx_source="provider_currency_identity" if str(
+                    item.get("display_currency") or account.get("currency") or ""
+                ).upper() == "SAR" else "account_cost_setting_required",
+                provider_result_source=SNAPCHAT_AI_PLATFORM_SOURCE,
+                action_report_time=SNAPCHAT_AI_ACTION_REPORT_TIME,
+                result_source=RESULT_SOURCE_PLATFORM,
+                source_date_from=local_start.isoformat(),
+                source_date_to=local_end.isoformat(),
+                source_observed_at=account.get("last_sync_at"),
+                account_timezone=ad_report.get("account_timezone"),
+                pagination_complete=ad_report_complete,
+                source_mode=AD_SOURCE_MODE,
+                source_fact_collection=SNAPCHAT_ACCOUNT_LOCAL_PERFORMANCE_COLLECTION,
             )
             if row:
                 row.update({
-                    "provider_result_source": SNAPCHAT_AI_PLATFORM_SOURCE,
-                    "action_report_time": SNAPCHAT_AI_ACTION_REPORT_TIME,
-                    "result_source": RESULT_SOURCE_PLATFORM,
-                    "source_date_from": local_start.isoformat(),
-                    "source_date_to": local_end.isoformat(),
-                    "account_timezone": ad_report.get("account_timezone"),
                     "salla_attribution_applied_to_entity_metrics": False,
                     "parent_campaign_salla_results": salla_by_id.get(campaign_id),
                     "parent_campaign_profitability": parent_profit(campaign_id),
@@ -1033,6 +1113,14 @@ async def run_campaign_ai_monitor(
         candidate_by_key = {_candidate_key(row): row for row in candidates}
         recommendation_rows: list[dict[str, Any]] = []
         execution_targets: dict[str, dict[str, Any]] = {}
+        snapshot_id = str(_legacy.uuid.uuid4())
+        snapshot_range = {"from": start.isoformat(), "to": end.isoformat()}
+        # Provider refresh and the model call can take minutes.  Quality is
+        # evaluated against a fresh capture clock, not the monitor's start
+        # time, so facts observed during this same run are not misclassified as
+        # future data.  The analytical date window itself remains unchanged.
+        snapshot_captured_at = now().astimezone(timezone.utc)
+        snapshot_generated_at = _legacy._iso(snapshot_captured_at)
         for item in result.recommendations:
             public_item = item.model_dump()
             target = candidate_by_key.get((
@@ -1042,7 +1130,7 @@ async def run_campaign_ai_monitor(
                 item.entity_id,
             )) or {}
             public_item.update(_recommendation_explanation(item, target))
-            public_item["generated_at"] = started_at
+            public_item["generated_at"] = snapshot_generated_at
             public_item["recommendation_source"] = recommendation_source
             public_item["decision_score"] = None
             public_item.update({key: target.get(key) for key in (
@@ -1076,46 +1164,103 @@ async def run_campaign_ai_monitor(
                 "parent_campaign_profitability",
                 "commercial_context_scope",
             )})
-            executable = bool(
+            capability_executable = bool(
                 item.action in {"pause", "reduce", "scale"}
                 and target.get("account_id")
                 and target.get("active")
                 and (item.entity_level != "ad" or item.action == "pause")
             )
+            execution_target = {
+                key: target.get(key) for key in (
+                    "provider",
+                    "entity_level",
+                    "entity_id",
+                    "account_id",
+                    "parent_id",
+                    "status",
+                    "configured_status",
+                    "effective_status",
+                    "active",
+                    "current_daily_budget_native",
+                    "spend_sar",
+                    "revenue_sar",
+                    "purchases",
+                    "impressions",
+                    "clicks",
+                    "roas",
+                    "cpa_sar",
+                    "observed_days",
+                    "data_complete",
+                    "currency_native",
+                    "fx_rate_to_sar",
+                    "fx_source",
+                    "provider_result_source",
+                    "action_report_time",
+                    "result_source",
+                    "source_date_from",
+                    "source_date_to",
+                    "source_observed_at",
+                    "account_timezone",
+                    "pagination_complete",
+                    "source_mode",
+                    "source_fact_collection",
+                    "campaign_profitability",
+                    "parent_campaign_profitability",
+                )
+            }
+            quality_evidence: dict[str, Any] | None = None
+            quality_decision = {
+                "allowed": False,
+                "status": "blocked",
+                "blockers": ["execution_capability_unavailable"],
+            }
+            if capability_executable:
+                try:
+                    quality_evidence = (
+                        await _execution_quality.collect_execution_quality_evidence(
+                            db,
+                            user_id,
+                            execution_target,
+                            snapshot_generated_at=snapshot_generated_at,
+                            snapshot_range=snapshot_range,
+                            now=now,
+                            source_context={
+                                "monitor_errors": errors,
+                                "meta_refresh": meta_refresh,
+                            },
+                        )
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "Campaign AI execution-quality evidence failed closed for %s/%s: %s",
+                        item.provider,
+                        item.entity_id,
+                        type(exc).__name__,
+                    )
+                    quality_evidence = None
+                quality_decision = _execution_quality.evaluate_execution_quality(
+                    quality_evidence,
+                    action=item.action,
+                )
+            executable = bool(capability_executable and quality_decision["allowed"])
             public_item["approval_available"] = executable
             public_item["execution_status"] = (
                 "awaiting_approval" if executable else "recommendation_only"
             )
+            public_item["execution_quality_status"] = quality_decision["status"]
+            public_item["execution_quality_blockers"] = quality_decision["blockers"]
             recommendation_rows.append(public_item)
-            if executable:
-                execution_targets[item.recommendation_id] = {
-                    key: target.get(key) for key in (
-                        "provider",
-                        "entity_level",
-                        "entity_id",
-                        "account_id",
-                        "parent_id",
-                        "current_daily_budget_native",
-                        "spend_sar",
-                        "revenue_sar",
-                        "purchases",
-                        "roas",
-                        "cpa_sar",
-                        "data_complete",
-                        "campaign_profitability",
-                        "parent_campaign_profitability",
-                        "provider_result_source",
-                        "action_report_time",
-                    )
-                }
+            if capability_executable:
+                execution_target["execution_quality"] = quality_evidence
+                execution_targets[item.recommendation_id] = execution_target
 
         document = {
-            "snapshot_id": str(_legacy.uuid.uuid4()),
+            "snapshot_id": snapshot_id,
             "run_id": run_id,
             "user_id": user_id,
-            "generated_at": _legacy._iso(current),
-            "next_run_at": _legacy._iso(current + timedelta(hours=5)),
-            "range": {"from": start.isoformat(), "to": end.isoformat()},
+            "generated_at": snapshot_generated_at,
+            "next_run_at": _legacy._iso(snapshot_captured_at + timedelta(hours=5)),
+            "range": snapshot_range,
             "summary": result.summary,
             "recommendations": recommendation_rows,
             "execution_targets": execution_targets,
