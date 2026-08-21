@@ -87,14 +87,17 @@ class _Cursor:
 
 
 class _Collection:
-    def __init__(self, rows, *, name=None, calls=None):
+    def __init__(self, rows, *, name=None, calls=None, projections=None):
         self.rows = rows
         self.name = name
         self.calls = calls
+        self.projections = projections
 
     async def find_one(self, query, projection=None, sort=None):
         if self.calls is not None:
             self.calls.append((self.name, "find_one", deepcopy(query)))
+        if self.projections is not None:
+            self.projections.append((self.name, "find_one", deepcopy(projection)))
         rows = [row for row in self.rows if _matches(row, query)]
         if sort:
             for key, direction in reversed(sort):
@@ -107,6 +110,8 @@ class _Collection:
     def find(self, query, projection=None):
         if self.calls is not None:
             self.calls.append((self.name, "find", deepcopy(query)))
+        if self.projections is not None:
+            self.projections.append((self.name, "find", deepcopy(projection)))
         return _Cursor([row for row in self.rows if _matches(row, query)])
 
     async def insert_one(self, document):
@@ -152,12 +157,14 @@ class _DB:
     def __init__(self, rows):
         self.rows = rows
         self.calls = []
+        self.projections = []
 
     def __getitem__(self, name):
         return _Collection(
             self.rows.setdefault(name, []),
             name=name,
             calls=self.calls,
+            projections=self.projections,
         )
 
     def __getattr__(self, name):
@@ -196,6 +203,107 @@ def test_exception_type_diagnostic_is_a_bounded_ascii_identifier():
 
     assert scheduler._safe_exception_type(RuntimeError()) == "RuntimeError"
     assert scheduler._safe_exception_type(unsafe_error()) == "Exception"
+
+
+def test_failure_location_uses_only_the_deepest_scheduler_package_frame():
+    secret = "Authorization: Bearer traceback-local-secret"
+
+    class ExplodingRun(dict):
+        def get(self, *_args, **_kwargs):
+            local_payload_canary = secret
+            raise RuntimeError(local_payload_canary)
+
+    try:
+        scheduler._safe_provider_run_status(ExplodingRun())
+    except RuntimeError as exc:
+        location = scheduler._safe_failure_location(exc)
+        current = exc.__traceback__
+        expected_line = None
+        while current is not None:
+            if current.tb_frame.f_code.co_name == "_safe_provider_run_status":
+                expected_line = current.tb_lineno
+            current = current.tb_next
+    else:  # pragma: no cover - the test fixture always raises
+        raise AssertionError("expected the synthetic scheduler failure")
+
+    assert location.keys() == {
+        "failure_module",
+        "failure_function",
+        "failure_line",
+    }
+    assert location["failure_module"] == (
+        "integrations_control_center.ads_auto_sync_scheduler"
+    )
+    assert location["failure_function"] == "_safe_provider_run_status"
+    assert expected_line is not None
+    assert location["failure_line"] == expected_line
+    assert secret not in repr(location)
+    assert str(scheduler.__file__) not in repr(location)
+
+
+@pytest.mark.parametrize(
+    ("module", "function", "line"),
+    [
+        ("C:/private/integrations_control_center/scheduler.py", "refresh", 10),
+        ("other_package.scheduler", "refresh", 10),
+        ("integrations_control_center.scheduler", "refresh\nsecret", 10),
+        ("integrations_control_center.scheduler", "refresh", True),
+        ("integrations_control_center.scheduler", "refresh", 0),
+        (
+            "integrations_control_center.scheduler",
+            "refresh",
+            scheduler.SNAPCHAT_FAILURE_LINE_LIMIT + 1,
+        ),
+    ],
+)
+def test_failure_location_is_atomic_and_rejects_untrusted_values(
+    module,
+    function,
+    line,
+):
+    assert scheduler._safe_failure_location_values(module, function, line) == {}
+
+
+@pytest.mark.asyncio
+async def test_decision_outcome_deferred_error_never_logs_exception_text(
+    monkeypatch,
+    caplog,
+):
+    from integrations_control_center import snapchat_decision_outcomes
+
+    canaries = (
+        "Authorization: Bearer outcome-evaluator-secret",
+        "outcome-evaluator-local-payload",
+        str(scheduler.__file__),
+    )
+    secret = " ".join(canaries)
+
+    async def explode(*_args, **_kwargs):
+        local_payload_canary = secret
+        raise RuntimeError(local_payload_canary)
+
+    monkeypatch.setattr(
+        snapchat_decision_outcomes,
+        "evaluate_due_ad_decisions",
+        explode,
+    )
+    caplog.set_level(logging.ERROR, logger=scheduler.__name__)
+
+    result = await scheduler._evaluate_snapchat_outcomes_after_sync(
+        object(),
+        "owner-outcome-evaluator",
+        now=datetime(2026, 8, 21, 12, 0, tzinfo=timezone.utc),
+    )
+
+    assert result == {
+        "status": "deferred",
+        "retryable": True,
+        "error_type": "RuntimeError",
+    }
+    assert "failure_stage=decision_outcomes_evaluation" in caplog.text
+    assert "exception_type=RuntimeError" in caplog.text
+    for canary in canaries:
+        assert canary not in caplog.text
 
 
 @pytest.mark.asyncio
@@ -1019,13 +1127,18 @@ async def test_unexpected_snapchat_runtime_error_terminalizes_failed_run(
         }
     )
 
-    secret = (
-        "Authorization: Bearer access-token-canary "
-        "decrypted-refresh-token-canary response-payload-canary"
+    canaries = (
+        "Authorization: Bearer access-token-canary",
+        "decrypted-refresh-token-canary",
+        "response-payload-canary",
+        "traceback-local-canary",
+        str(scheduler.__file__),
     )
+    secret = " ".join(canaries)
 
     async def explode(*_args, **_kwargs):
-        raise RuntimeError(secret)
+        local_payload_canary = secret
+        raise RuntimeError(local_payload_canary)
 
     monkeypatch.setattr(scheduler, "snapchat_oauth_configured", lambda: True)
     monkeypatch.setattr(scheduler, "snapchat_native_sync_enabled", lambda: True)
@@ -1061,6 +1174,7 @@ async def test_unexpected_snapchat_runtime_error_terminalizes_failed_run(
         "expected_requests": 1,
         "completed_requests": 0,
     }
+    failure_line = run["error"]["failure_line"]
     assert run["error"] == {
         "error_id": db.rows[scheduler.ERRORS_COLLECTION][0]["error_id"],
         "code": "snapchat_scheduler_runtime_error",
@@ -1069,12 +1183,18 @@ async def test_unexpected_snapchat_runtime_error_terminalizes_failed_run(
         "failure_stage": "integration_account_credential_proof",
         "exception_type": "RuntimeError",
         "run_id": run["run_id"],
+        "failure_module": "integrations_control_center.ads_auto_sync_scheduler",
+        "failure_function": "_refresh_snapchat",
+        "failure_line": failure_line,
     }
+    source_lines, source_start = inspect.getsourcelines(scheduler._refresh_snapchat)
+    assert source_start <= failure_line < source_start + len(source_lines)
     assert "failure_stage=integration_account_credential_proof" in caplog.text
     assert "exception_type=RuntimeError" in caplog.text
-    assert secret not in repr(result)
-    assert secret not in repr(db.rows)
-    assert secret not in caplog.text
+    for canary in canaries:
+        assert canary not in repr(result)
+        assert canary not in repr(db.rows)
+        assert canary not in caplog.text
     integration = db.rows["mezan_integrations_v2"][0]
     assert integration["data_quality"] == "incomplete"
     assert integration["data_delay_minutes"] is None
@@ -1109,7 +1229,10 @@ async def test_fact_write_runtime_error_persists_only_safe_diagnostics(
         }
     )
     account = deepcopy(db.rows["mezan_integration_accounts_v2"][0])
-    secret = "Bearer fact-write-secret raw-response-secret"
+    secret = (
+        "Bearer fact-write-secret raw-response-secret "
+        f"full-path-canary={scheduler.__file__}"
+    )
 
     async def load_accounts(*_args, **_kwargs):
         return [account]
@@ -1208,6 +1331,11 @@ async def test_fact_write_runtime_error_persists_only_safe_diagnostics(
     assert run["error"]["failure_stage"] == "fact_write"
     assert run["error"]["exception_type"] == "ValueError"
     assert run["error"]["run_id"] == run["run_id"]
+    assert run["error"]["failure_module"] == (
+        "integrations_control_center.snapchat_ad_performance"
+    )
+    assert run["error"]["failure_function"] == "_upsert_projection"
+    assert 1 <= run["error"]["failure_line"] <= scheduler.SNAPCHAT_FAILURE_LINE_LIMIT
     assert secret not in repr(db.rows)
     assert secret not in repr(result)
     assert secret not in caplog.text
@@ -1538,13 +1666,20 @@ def test_snapchat_malformed_error_envelope_blocks_complete_proof(target):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("raise_error", "complete_item"),
-    [(False, False), (True, False), (False, True)],
+    ("raise_error", "complete_item", "outcome_failure"),
+    [
+        (False, False, False),
+        (True, False, False),
+        (False, True, False),
+        (False, True, True),
+    ],
 )
 async def test_snapchat_refresh_advances_proof_only_for_complete_account(
     monkeypatch,
+    caplog,
     raise_error,
     complete_item,
+    outcome_failure,
 ):
     account = {
         "ad_account_id": "account-1",
@@ -1614,7 +1749,11 @@ async def test_snapchat_refresh_advances_proof_only_for_complete_account(
             )
         return deepcopy(item)
 
+    outcome_secret = "Bearer decision-outcomes-secret raw-outcome-payload"
+
     async def evaluate_outcomes(*args, **kwargs):
+        if outcome_failure:
+            raise RuntimeError(outcome_secret)
         return {"status": "complete", "evaluated": 0}
 
     class Context:
@@ -1681,6 +1820,7 @@ async def test_snapchat_refresh_advances_proof_only_for_complete_account(
         "_collection",
         lambda db, name: Collection(name),
     )
+    caplog.set_level(logging.ERROR, logger=scheduler.__name__)
 
     result = await scheduler._refresh_snapchat(
         object(),
@@ -1692,6 +1832,33 @@ async def test_snapchat_refresh_advances_proof_only_for_complete_account(
 
     account_patch = updates["mezan_integration_accounts_v2"][0]["update"]["$set"]
     integration_patch = updates["mezan_integrations_v2"][0]["update"]["$set"]
+    if outcome_failure:
+        assert result["status"] == "failed"
+        assert result["code"] == "snapchat_scheduler_runtime_error"
+        assert finished[0]["status"] == "complete"
+        terminal_failure = finished[-1]
+        assert terminal_failure["status"] == "failed"
+        assert terminal_failure["result"]["coverage"] == {
+            "status": "incomplete",
+            "data_state": "unknown_incomplete",
+            "expected_requests": 1,
+            "completed_requests": 0,
+        }
+        assert terminal_failure["error"]["failure_stage"] == (
+            "decision_outcomes_evaluation"
+        )
+        assert terminal_failure["error"]["exception_type"] == "RuntimeError"
+        assert terminal_failure["error"]["failure_module"] == (
+            "integrations_control_center.ads_auto_sync_scheduler"
+        )
+        assert terminal_failure["error"]["failure_function"] == (
+            "_refresh_snapchat"
+        )
+        assert terminal_failure["error"]["failure_line"] > 0
+        assert outcome_secret not in repr(finished)
+        assert outcome_secret not in repr(result)
+        assert outcome_secret not in caplog.text
+        return
     if complete_item:
         assert result["status"] == "complete"
         assert result["coverage"] == {
@@ -1787,6 +1954,14 @@ def test_status_never_exposes_global_results_from_another_tenant():
                         "failure_stage": "provider_refresh",
                         "exception_type": "RuntimeError",
                         "run_id": "tenant-a-run",
+                        "failure_module": (
+                            "integrations_control_center.ads_auto_sync_scheduler"
+                        ),
+                        "failure_function": "_refresh_snapchat",
+                        "failure_line": 1422,
+                        "failure_path": owner_secret,
+                        "traceback": owner_secret,
+                        "locals": {"authorization": owner_secret},
                     },
                 },
                 {
@@ -1808,6 +1983,15 @@ def test_status_never_exposes_global_results_from_another_tenant():
 
     result = asyncio.run(scheduler.auto_sync_status(db, "tenant-a"))
 
+    runs_projection = next(
+        projection
+        for name, operation, projection in db.projections
+        if name == scheduler.RUNS_COLLECTION and operation == "find"
+    )
+    assert runs_projection["error.failure_module"] == 1
+    assert runs_projection["error.failure_function"] == 1
+    assert runs_projection["error.failure_line"] == 1
+
     assert result["providers"][scheduler.SNAPCHAT_PROVIDER_ID]["run_id"] == (
         "tenant-a-run"
     )
@@ -1819,6 +2003,14 @@ def test_status_never_exposes_global_results_from_another_tenant():
     assert owner_run["error"]["failure_stage"] == "provider_refresh"
     assert owner_run["error"]["exception_type"] == "RuntimeError"
     assert owner_run["error"]["run_id"] == "tenant-a-run"
+    assert owner_run["error"]["failure_module"] == (
+        "integrations_control_center.ads_auto_sync_scheduler"
+    )
+    assert owner_run["error"]["failure_function"] == "_refresh_snapchat"
+    assert owner_run["error"]["failure_line"] == 1422
+    assert "failure_path" not in owner_run["error"]
+    assert "traceback" not in owner_run["error"]
+    assert "locals" not in owner_run["error"]
     assert "message" not in owner_run["error"]
     assert "access_token" not in owner_run
     assert "raw_response_payload" not in owner_run["summary"]
@@ -1836,4 +2028,22 @@ def test_status_never_exposes_global_results_from_another_tenant():
     assert "foreign-account-b" not in serialized
     assert "foreign-error-b" not in serialized
     assert owner_secret not in serialized
+
+    malicious_location_run = deepcopy(
+        db.rows[scheduler.RUNS_COLLECTION][0]
+    )
+    token_shaped_exception_type = "eyJhbGciOiJIUzI1NiJ9.secret.signature"
+    malicious_location_run["error"].update({
+        "failure_module": f"C:/private/{owner_secret}/scheduler.py",
+        "failure_function": f"refresh\n{owner_secret}",
+        "failure_line": True,
+        "exception_type": token_shaped_exception_type,
+    })
+    sanitized = scheduler._safe_provider_run_status(malicious_location_run)
+    assert "exception_type" not in sanitized["error"]
+    assert "failure_module" not in sanitized["error"]
+    assert "failure_function" not in sanitized["error"]
+    assert "failure_line" not in sanitized["error"]
+    assert owner_secret not in repr(sanitized)
+    assert token_shaped_exception_type not in repr(sanitized)
 
