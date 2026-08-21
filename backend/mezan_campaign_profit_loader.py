@@ -9,6 +9,7 @@ No provider, order, accounting, Qoyod, or catalog writes occur here.
 """
 from __future__ import annotations
 
+import asyncio
 from datetime import date
 from typing import Any, Awaitable, Callable
 
@@ -81,7 +82,7 @@ async def build_mezan_profit_totals(
     shipping = aggregate_breakdown(orders, company_configs)
     shipping_total = _number(shipping.get("total_with_tax"))
 
-    product_cost, ads, operating, recurring = await __import__("asyncio").gather(
+    product_cost, ads, operating, recurring = await asyncio.gather(
         build_mezan_v2_product_cost(db, user_id, orders),
         build_mezan_v2_ads(
             db,
