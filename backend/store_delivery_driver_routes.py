@@ -28,6 +28,7 @@ from store_delivery_domain import (
 
 STORE_DRIVERS = "store_drivers"
 STORE_DRIVER_EVENTS = "store_driver_events"
+STORE_DELIVERY_ASSIGNMENTS = "store_delivery_assignments"
 MANAGE_PERMISSION = "store_delivery.manage"
 DRIVER_ACCOUNT_ROLE = "store_driver"
 MIN_DRIVER_PASSWORD_LENGTH = 12
@@ -163,6 +164,38 @@ def _public_driver(doc: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in doc.items() if key not in {"_id", "user_id", "city_key"}}
 
 
+def _driver_delivery_counts(rows: list[dict[str, Any]]) -> dict[str, dict[str, int]]:
+    """Build the mobile-list counters from the assignment source of truth."""
+    counts: dict[str, dict[str, int]] = {}
+    for row in rows:
+        driver_id = normalize_text(row.get("driver_id"))
+        if not driver_id:
+            continue
+        bucket = counts.setdefault(driver_id, {
+            "assigned_count": 0,
+            "out_for_delivery_count": 0,
+            "current_delivery_count": 0,
+            "delivered_count": 0,
+        })
+        assignment_status = normalize_text(row.get("status"))
+        key = f"{assignment_status}_count"
+        if key in bucket:
+            bucket[key] += 1
+        if assignment_status in {"assigned", "out_for_delivery"}:
+            bucket["current_delivery_count"] += 1
+    return counts
+
+
+def _change_history_payload(current: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
+    ignored = {"city_key", "updated_at", "updated_by", "version"}
+    changed_fields = sorted(key for key in patch if key not in ignored and current.get(key) != patch.get(key))
+    return {
+        "changed_fields": changed_fields,
+        "before": {key: current.get(key) for key in changed_fields},
+        "after": {key: patch.get(key) for key in changed_fields},
+    }
+
+
 async def _driver_or_404(db: Any, user_id: str, driver_id: str) -> dict[str, Any]:
     row = await db[STORE_DRIVERS].find_one({"user_id": user_id, "id": driver_id}, {"_id": 0})
     if not row:
@@ -210,6 +243,23 @@ def make_store_delivery_driver_router(db: Any, current_user: Callable[..., Any])
         if city: query["city_key"] = normalize_text(city).casefold()
         items = await db[STORE_DRIVERS].find(query, {"_id": 0, "user_id": 0, "city_key": 0}).sort(
             [("status", 1), ("name", 1)]).to_list(length=1000)
+        assignment_rows = await db[STORE_DELIVERY_ASSIGNMENTS].find(
+            {
+                "user_id": user_id,
+                "active": True,
+                "status": {"$in": ["assigned", "out_for_delivery", "delivered"]},
+            },
+            {"_id": 0, "driver_id": 1, "status": 1},
+        ).to_list(length=100000)
+        counts = _driver_delivery_counts(assignment_rows)
+        empty_counts = {
+            "assigned_count": 0,
+            "out_for_delivery_count": 0,
+            "current_delivery_count": 0,
+            "delivered_count": 0,
+        }
+        for item in items:
+            item["delivery_counts"] = counts.get(normalize_text(item.get("id")), empty_counts.copy())
         return {"items": items, "total": len(items), "coverage_mode": COVERAGE_MODE_CITY}
 
     @router.get("/{driver_id}")
@@ -244,7 +294,7 @@ def make_store_delivery_driver_router(db: Any, current_user: Callable[..., Any])
                 {"$set": {"disabled": not active, "is_active": active, "updated_at": _now()}},
             )
         await _event(db, user_id=user_id, driver_id=driver_id, event_type="store_driver_updated",
-                     actor_id=normalize_text(actor.get("id")), payload={"changed_fields": sorted(patch.keys())})
+                     actor_id=normalize_text(actor.get("id")), payload=_change_history_payload(current, patch))
         return result
 
     @router.post("/{driver_id}/account", status_code=201)
