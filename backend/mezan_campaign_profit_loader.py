@@ -5,6 +5,10 @@ from typing import Any, Awaitable, Callable
 
 from mezan_profit_engine import build_mezan_profit_envelope, build_mezan_profit_totals
 
+# Compatibility marker for deployment/worker contract checks.
+# The authoritative value still comes from the consolidated envelope.
+PROFIT_SOURCE = "mezan_profit_engine_v2_read_only"
+
 
 def make_mezan_campaign_profit_loader(db: Any) -> Callable[..., Awaitable[dict[str, Any]]]:
     """Expose the legacy loader shape without rebuilding P&L semantics here."""
