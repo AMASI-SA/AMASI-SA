@@ -139,6 +139,17 @@ async def test_labeling_employee_must_scan_the_matching_imile_awb():
     assert saved["carrier_handoff_state"] == "awaiting_carrier_handoff"
     assert saved["carrier_label_barcode"] == "6081326581116"
 
+    repeated = await confirm_carrier_label_print(
+        db,
+        user_id="owner-1",
+        order_number="276628330",
+        scanned_barcode="6081326581116",
+        actor_id="labeler-1",
+        actor_name="موظف العنونة",
+    )
+    assert repeated["already_confirmed"] is True
+    assert len(db["mezan_fulfillment_events_v2"].rows) == 1
+
 
 @pytest.mark.asyncio
 async def test_customer_service_gate_blocks_carrier_label_confirmation():

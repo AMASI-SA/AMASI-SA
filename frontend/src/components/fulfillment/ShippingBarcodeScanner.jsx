@@ -1,12 +1,21 @@
 import { useEffect, useRef, useState } from "react";
-import { Barcode, Camera, SpinnerGap, XCircle } from "@phosphor-icons/react";
+import {
+    Barcode,
+    Camera,
+    CheckCircle,
+    SpinnerGap,
+    WarningCircle,
+    XCircle,
+} from "@phosphor-icons/react";
 
 export default function ShippingBarcodeScanner({
     title,
     description,
     busy = false,
     error = "",
+    feedback = null,
     onDetected,
+    onFeedbackAction,
     onClose,
 }) {
     const videoRef = useRef(null);
@@ -15,6 +24,8 @@ export default function ShippingBarcodeScanner({
     const [cameraReady, setCameraReady] = useState(false);
 
     useEffect(() => {
+        setCameraReady(false);
+        if (feedback) return undefined;
         let stopped = false;
         let detecting = false;
         let lastValue = "";
@@ -124,7 +135,11 @@ export default function ShippingBarcodeScanner({
             zxingControls?.stop?.();
             for (const track of stream?.getTracks?.() || []) track.stop();
         };
-    }, [onDetected]);
+    }, [feedback, onDetected]);
+
+    useEffect(() => {
+        if (feedback) setManualBarcode("");
+    }, [feedback]);
 
     const submitManual = async (event) => {
         event.preventDefault();
@@ -140,21 +155,52 @@ export default function ShippingBarcodeScanner({
                     <button type="button" onClick={onClose} disabled={busy} className="rounded-xl bg-white/10 p-2 disabled:opacity-50" aria-label="إغلاق"><XCircle size={24} /></button>
                 </header>
                 <div className="space-y-4 p-4">
-                    <div className="relative aspect-video overflow-hidden rounded-2xl bg-black">
-                        <video ref={videoRef} muted playsInline className="h-full w-full object-cover" />
-                        {!cameraReady && !cameraError && <div className="absolute inset-0 flex items-center justify-center text-white"><SpinnerGap size={30} className="animate-spin" /></div>}
-                        {cameraReady && <div className="pointer-events-none absolute inset-x-10 top-1/2 h-0.5 bg-emerald-400 shadow-[0_0_12px_#34d399]" />}
-                    </div>
-                    {(cameraError || error) && <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm font-black text-amber-950">{error || cameraError}</div>}
-                    <form onSubmit={submitManual} className="flex gap-2">
-                        <div className="relative min-w-0 flex-1">
-                            <Barcode size={21} className="absolute right-3 top-1/2 -translate-y-1/2 text-violet-700" />
-                            <input value={manualBarcode} onChange={(event) => setManualBarcode(event.target.value)} disabled={busy} autoFocus className="h-12 w-full rounded-xl border border-slate-300 pr-10 pl-3 font-bold" placeholder="أو أدخل رقم الباركود" dir="ltr" />
+                    {feedback ? (
+                        <div
+                            className={`rounded-3xl border p-5 text-center ${feedback.kind === "success" ? "border-emerald-300 bg-emerald-50 text-emerald-950" : "border-amber-300 bg-amber-50 text-amber-950"}`}
+                            role="status"
+                            aria-live="assertive"
+                            data-testid={`shipping-scan-feedback-${feedback.kind}`}
+                        >
+                            {feedback.kind === "success"
+                                ? <CheckCircle size={54} weight="fill" className="mx-auto text-emerald-600" />
+                                : <WarningCircle size={54} weight="fill" className="mx-auto text-amber-600" />}
+                            <h4 className="mt-3 text-xl font-black">{feedback.title}</h4>
+                            <p className="mt-2 text-sm font-bold leading-7">{feedback.message}</p>
+                            {feedback.barcode && (
+                                <div className="mx-auto mt-3 w-fit rounded-xl bg-white/80 px-4 py-2 font-mono text-sm font-black" dir="ltr">
+                                    {feedback.barcode}
+                                </div>
+                            )}
+                            <button
+                                type="button"
+                                onClick={onFeedbackAction}
+                                className={`mt-5 inline-flex min-h-12 w-full items-center justify-center rounded-2xl px-4 font-black text-white ${feedback.kind === "success" ? "bg-emerald-700" : "bg-amber-700"}`}
+                                data-testid="shipping-scan-feedback-action"
+                            >
+                                {feedback.actionLabel || "إغلاق"}
+                            </button>
                         </div>
-                        <button type="submit" disabled={busy || !manualBarcode.trim()} className="inline-flex h-12 items-center gap-2 rounded-xl bg-violet-700 px-4 font-black text-white disabled:opacity-50">
-                            {busy ? <SpinnerGap size={20} className="animate-spin" /> : <Camera size={20} />} تحقق
-                        </button>
-                    </form>
+                    ) : (
+                        <>
+                            <div className="relative aspect-video overflow-hidden rounded-2xl bg-black">
+                                <video ref={videoRef} muted playsInline className="h-full w-full object-cover" />
+                                {!cameraReady && !cameraError && <div className="absolute inset-0 flex items-center justify-center text-white"><SpinnerGap size={30} className="animate-spin" /></div>}
+                                {cameraReady && <div className="pointer-events-none absolute inset-x-10 top-1/2 h-0.5 bg-emerald-400 shadow-[0_0_12px_#34d399]" />}
+                            </div>
+                            {busy && <div className="rounded-2xl border border-violet-200 bg-violet-50 p-3 text-center text-sm font-black text-violet-950" role="status">تمت قراءة الباركود، جاري التحقق من حالة الشحنة...</div>}
+                            {(cameraError || error) && <div className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm font-black text-rose-950" role="alert" data-testid="shipping-scan-error">{error || cameraError}</div>}
+                            <form onSubmit={submitManual} className="flex gap-2">
+                                <div className="relative min-w-0 flex-1">
+                                    <Barcode size={21} className="absolute right-3 top-1/2 -translate-y-1/2 text-violet-700" />
+                                    <input value={manualBarcode} onChange={(event) => setManualBarcode(event.target.value)} disabled={busy} autoFocus className="h-12 w-full rounded-xl border border-slate-300 pr-10 pl-3 font-bold" placeholder="أو أدخل رقم الباركود" dir="ltr" />
+                                </div>
+                                <button type="submit" disabled={busy || !manualBarcode.trim()} className="inline-flex h-12 items-center gap-2 rounded-xl bg-violet-700 px-4 font-black text-white disabled:opacity-50">
+                                    {busy ? <SpinnerGap size={20} className="animate-spin" /> : <Camera size={20} />} تحقق
+                                </button>
+                            </form>
+                        </>
+                    )}
                 </div>
             </div>
         </div>

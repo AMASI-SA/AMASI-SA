@@ -43,6 +43,47 @@ function savedCarrierSnapshot(order) {
     };
 }
 
+export function shippingScanFeedback({ mode, result = {}, error = null, barcode = "" }) {
+    const normalizedBarcode = String(barcode || "").trim();
+    if (error?.code === "carrier_shipment_already_received") {
+        const employeeName = error?.details?.employee_name;
+        return {
+            kind: "duplicate",
+            title: "تم مسح الشحنة مسبقًا",
+            message: employeeName
+                ? `هذه الشحنة مضافة من قبل إلى عهدة ${employeeName}. لم تُضف مرة أخرى.`
+                : "هذه الشحنة مضافة مسبقًا إلى عهدة موظف تسليم الشحن. لم تُضف مرة أخرى.",
+            barcode: normalizedBarcode,
+            actionLabel: "مسح شحنة أخرى",
+        };
+    }
+    if (error) return null;
+    if (mode === "confirm_print") {
+        return result?.already_confirmed
+            ? {
+                kind: "duplicate",
+                title: "تم مسح البوليصة مسبقًا",
+                message: "سبق التحقق من هذا الباركود وتأكيد أن الشحنة جاهزة. لم يُسجل تأكيد مكرر.",
+                barcode: normalizedBarcode,
+                actionLabel: "إغلاق",
+            }
+            : {
+                kind: "success",
+                title: "تم مسح الباركود بنجاح",
+                message: "تم التحقق من البوليصة وتأكيد أن الشحنة جاهزة لتسليمها لموظف الشحن.",
+                barcode: normalizedBarcode,
+                actionLabel: "إغلاق",
+            };
+    }
+    return {
+        kind: "success",
+        title: "تم استلام الشحنة بنجاح",
+        message: "تم مسح الباركود وإضافة الشحنة إلى عهدتك لتسليمها إلى شركة الشحن.",
+        barcode: normalizedBarcode,
+        actionLabel: "مسح شحنة أخرى",
+    };
+}
+
 export function CarrierLabelControl({ order, permissions, busy, onIssue, onConfirmPrint }) {
     const snapshot = order.carrierSnapshot || savedCarrierSnapshot(order);
     const ready = Boolean(snapshot.ready && snapshot.label_url);
@@ -157,10 +198,12 @@ export default function CompletedFulfillmentOrders() {
     const [scanner, setScanner] = useState(null);
     const [scannerBusy, setScannerBusy] = useState(false);
     const [scannerError, setScannerError] = useState("");
+    const [scannerFeedback, setScannerFeedback] = useState(null);
     const scannerLock = useRef(false);
 
-    const load = useCallback(async () => {
-        setLoading(true);
+    const load = useCallback(async (options = {}) => {
+        const background = options?.background === true;
+        if (!background) setLoading(true);
         setError("");
         try {
             const result = await listCompletedFulfillmentOrders({ limit: 100 });
@@ -178,7 +221,7 @@ export default function CompletedFulfillmentOrders() {
         } catch (loadError) {
             setError(loadError.message);
         } finally {
-            setLoading(false);
+            if (!background) setLoading(false);
         }
     }, []);
 
@@ -246,11 +289,13 @@ export default function CompletedFulfillmentOrders() {
 
     const openPrintConfirmation = (order) => {
         setScannerError("");
+        setScannerFeedback(null);
         setScanner({ mode: "confirm_print", order });
     };
 
     const openCarrierHandoffScanner = () => {
         setScannerError("");
+        setScannerFeedback(null);
         setScanner({ mode: "carrier_handoff" });
     };
 
@@ -280,17 +325,34 @@ export default function CompletedFulfillmentOrders() {
                         }
                         : order
                 )));
-                toast.success("تم التحقق من الباركود وتأكيد طباعة الشحنة");
+                const feedback = shippingScanFeedback({
+                    mode: scanner.mode,
+                    result,
+                    barcode,
+                });
+                setScannerFeedback(feedback);
+                toast.success(feedback.title);
             } else {
-                await scanCarrierHandoffShipment(barcode);
+                const scanResult = await scanCarrierHandoffShipment(barcode);
                 const result = await listCarrierHandoffShipments({ limit: 100 });
                 setHandoffShipments(result.items || []);
-                await load();
-                toast.success("سُجلت الشحنة في حساب موظف تسليم الشحن");
+                const feedback = shippingScanFeedback({
+                    mode: scanner.mode,
+                    result: scanResult,
+                    barcode,
+                });
+                setScannerFeedback(feedback);
+                toast.success(feedback.title);
+                await load({ background: true });
             }
-            setScanner(null);
         } catch (scanError) {
-            setScannerError(scanError.message);
+            const feedback = shippingScanFeedback({
+                mode: scanner.mode,
+                error: scanError,
+                barcode,
+            });
+            if (feedback) setScannerFeedback(feedback);
+            else setScannerError(scanError.message);
         } finally {
             scannerLock.current = false;
             setScannerBusy(false);
@@ -378,8 +440,22 @@ export default function CompletedFulfillmentOrders() {
                     description={scanner.mode === "confirm_print" ? "صوّر باركود بوليصة شركة الشحن للتأكد أنها تخص هذا الطلب." : "لن تُقبل شحنة غير مؤكدة أو شحنة أُدخلت مسبقًا."}
                     busy={scannerBusy}
                     error={scannerError}
+                    feedback={scannerFeedback}
                     onDetected={handleShippingBarcode}
-                    onClose={() => !scannerBusy && setScanner(null)}
+                    onFeedbackAction={() => {
+                        if (scanner.mode === "confirm_print") {
+                            setScanner(null);
+                            setScannerFeedback(null);
+                            return;
+                        }
+                        setScannerError("");
+                        setScannerFeedback(null);
+                    }}
+                    onClose={() => {
+                        if (scannerBusy) return;
+                        setScanner(null);
+                        setScannerFeedback(null);
+                    }}
                 />
             )}
         </section>
