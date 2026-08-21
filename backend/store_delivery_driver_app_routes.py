@@ -27,6 +27,11 @@ from store_delivery_domain import (
 )
 from store_delivery_driver_routes import STORE_DRIVERS
 from store_delivery_handover_routes import ASSIGNMENTS, EVENTS, ORDERS
+from store_courier_domain import (
+    DELIVERED as WORKFLOW_DELIVERED,
+    DELIVERING as WORKFLOW_DELIVERING,
+    WORKFLOWS,
+)
 from store_delivery_payment_evidence_routes import (
     RECEIPTS,
     authoritative_outstanding_amount,
@@ -247,6 +252,20 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
                 },
                 {"$set": {"store_delivery_status": target, "store_delivery_updated_at": now}},
             )
+            await db[WORKFLOWS].update_one(
+                {
+                    "user_id": merchant_id,
+                    "order_number": assignment.get("order_number"),
+                    "store_delivery_assignment_id": assignment["id"],
+                },
+                {"$set": {
+                    "stage": WORKFLOW_DELIVERING,
+                    "store_courier_assignment_state": WORKFLOW_DELIVERING,
+                    "store_courier_picked_up_at": now,
+                    "store_courier_picked_up_by_id": normalize_text(actor.get("id")),
+                    "updated_at": now,
+                }},
+            )
             return result
 
         order = await canonical_order_for_assignment(db, user_id=merchant_id, assignment=assignment)
@@ -396,6 +415,20 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
                 "store_delivery_payment_status": payment_state,
                 "store_delivery_payment_review_status": requirements["review_status"],
                 "store_delivery_updated_at": now,
+            }},
+        )
+        await db[WORKFLOWS].update_one(
+            {
+                "user_id": merchant_id,
+                "order_number": assignment.get("order_number"),
+                "store_delivery_assignment_id": assignment["id"],
+            },
+            {"$set": {
+                "stage": WORKFLOW_DELIVERED,
+                "store_courier_assignment_state": WORKFLOW_DELIVERED,
+                "store_courier_delivered_at": now,
+                "store_courier_delivered_by_id": normalize_text(actor.get("id")),
+                "updated_at": now,
             }},
         )
         await db[EVENTS].insert_one({
