@@ -10,10 +10,12 @@ on:
       - "backend/campaign_ai_worker_runner.py"
       - "backend/campaign_ai_global_cadence.py"
       - "backend/campaign_ai_public_guard.py"
+      - "backend/mezan_campaign_profit_loader.py"
       - "backend/ads_manager/__init__.py"
       - "backend/tests/test_campaign_ai_subprocess_scheduler.py"
       - "backend/tests/test_campaign_ai_global_cadence.py"
       - "backend/tests/test_campaign_ai_no_mezan_fallback_guard.py"
+      - "backend/tests/test_campaign_ai_mezan_profit_loader_p0_1.py"
       - "backend/server.py"
       - ".github/workflows/prod-campaign-ai-subprocess-worker-v1.yml"
 
@@ -55,7 +57,7 @@ jobs:
           qrcode
           arabic-reshaper
           python-bidi
-      - name: Compile isolated scheduler, runner, cadence gate, and public guard
+      - name: Compile isolated scheduler, runner, cadence gate, public guard, and Mezan profit loader
         run: >-
           python -m py_compile
           campaign_ai_monitor.py
@@ -63,18 +65,21 @@ jobs:
           campaign_ai_worker_runner.py
           campaign_ai_global_cadence.py
           campaign_ai_public_guard.py
+          mezan_campaign_profit_loader.py
           ads_manager/__init__.py
           tests/test_campaign_ai_subprocess_scheduler.py
           tests/test_campaign_ai_global_cadence.py
           tests/test_campaign_ai_no_mezan_fallback_guard.py
-      - name: Test subprocess scheduler, global cadence, and no-fallback contract
+          tests/test_campaign_ai_mezan_profit_loader_p0_1.py
+      - name: Test subprocess scheduler, global cadence, no-fallback, and profit-loader contract
         run: >-
           python -m pytest -q
           tests/test_campaign_ai_subprocess_scheduler.py
           tests/test_campaign_ai_global_cadence.py
           tests/test_campaign_ai_no_mezan_fallback_guard.py
+          tests/test_campaign_ai_mezan_profit_loader_p0_1.py
           --tb=short
-      - name: Enforce web-process isolation and one global decision cycle
+      - name: Enforce web-process isolation, one global decision cycle, and Mezan profit wiring
         working-directory: .
         run: |
           grep -q 'campaign AI background worker disabled in web process' backend/server.py
@@ -87,6 +92,9 @@ jobs:
           grep -q 'campaign_ai_openai_global_v1' backend/campaign_ai_global_cadence.py
           grep -q 'next_run_at' backend/campaign_ai_global_cadence.py
           grep -q 'run_all_campaign_ai_monitors' backend/campaign_ai_worker_runner.py
+          grep -q 'make_mezan_campaign_profit_loader' backend/campaign_ai_worker_runner.py
+          grep -q 'business_context_loader=profit_loader' backend/campaign_ai_worker_runner.py
+          grep -q 'mezan_profit_engine_v2_read_only' backend/mezan_campaign_profit_loader.py
           grep -q 'legacy_mezan_fallback_suppressed' backend/campaign_ai_public_guard.py
           grep -q 'serving_previous_valid_openai_snapshot' backend/campaign_ai_public_guard.py
           ! grep -q 'from campaign_ai_monitor' backend/campaign_ai_subprocess_scheduler.py
