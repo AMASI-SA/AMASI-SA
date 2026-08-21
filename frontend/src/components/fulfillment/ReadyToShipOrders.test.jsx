@@ -8,12 +8,8 @@ jest.mock("sonner", () => ({ toast: { success: jest.fn(), error: jest.fn() } }))
 
 jest.mock("../../services/fulfillmentV2", () => ({
     confirmCompletedCarrierLabelPrint: jest.fn(),
-    confirmFulfillmentBatchHandoff: jest.fn(),
-    confirmFulfillmentBatchPacked: jest.fn(),
-    listFulfillmentBatches: jest.fn(() => Promise.resolve({ items: [] })),
     listReadyToShipOrders: jest.fn(() => Promise.resolve({ items: [], permissions: {} })),
     issueCompletedOrderCarrierLabel: jest.fn(),
-    printFulfillmentBatch: jest.fn(),
 }));
 
 jest.mock("../../services/preparationWorkService", () => ({
@@ -38,8 +34,10 @@ test("assembly page starts with an obvious order search camera and ready queue",
     expect(markup).toContain("ابحث برقم الطلب أو المنتج");
     expect(markup).toContain('placeholder="رقم الطلب أو باركود المنتج"');
     expect(markup).toContain('aria-label="فتح الكاميرا للبحث عن منتج التجميع"');
-    expect(markup).toContain("الطلبات الجاهزة المكتملة");
+    expect(markup).toContain("الطلبات الجاهزة للتجميع");
     expect(markup).toContain("تم التنفيذ");
+    expect(markup).not.toContain("دفعات الطباعة والتسليم السابقة");
+    expect(markup).not.toContain("سبب إعادة الطباعة");
 });
 
 test("assembly product shows full customer information and one ready button", () => {
@@ -117,4 +115,36 @@ test("store courier assembly card prints then confirms the attached QR", () => {
     expect(markup).toContain(
         'data-testid="assembly-confirm-carrier-label-print"',
     );
+});
+
+test("completed order search shows products and shipment as read-only history", () => {
+    const markup = renderToStaticMarkup(
+        <CompletedAssemblyOrderCard
+            orderNumber="276628330"
+            historyOnly
+            carrierLabel={{
+                ready: true,
+                print_confirmed: true,
+                label_type: "store_courier",
+                shipment_state: "assigned_waiting_pickup",
+                store_courier_assignee_name: "مندوب الرياض",
+                print_data: {
+                    order_number: "276628330",
+                    qr_code: "data:image/svg+xml;base64,QR",
+                },
+            }}
+            canConfirmPrint
+            onConfirmPrint={() => {}}
+            onIssue={() => {}}
+        />,
+    );
+
+    expect(markup).toContain("سجل الطلب");
+    expect(markup).toContain("المنتجات وبيانات الشحنة أدناه للعرض فقط");
+    expect(markup).toContain('data-testid="assembly-shipment-read-only"');
+    expect(markup).toContain("مندوب المتجر");
+    expect(markup).toContain("مندوب الرياض");
+    expect(markup).not.toContain('data-testid="assembly-print-store-courier-label"');
+    expect(markup).not.toContain('data-testid="assembly-confirm-carrier-label-print"');
+    expect(markup).not.toContain('data-testid="assembly-issue-carrier-label"');
 });

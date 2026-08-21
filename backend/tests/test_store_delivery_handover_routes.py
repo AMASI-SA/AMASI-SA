@@ -7,10 +7,28 @@ from store_delivery_handover_routes import (
     _order_number,
 )
 from store_delivery_domain import assignment_snapshot, StoreDeliveryRuleError
+from store_courier_domain import store_courier_assignment_blocker
 
 
 def test_handover_reads_canonical_unified_orders_collection():
     assert ORDERS == "unified_orders"
+
+
+def test_store_courier_assignment_requires_completed_printed_shipment():
+    ready = {
+        "carrier_label_type": "store_courier",
+        "carrier_label_ready": True,
+        "carrier_label_print_confirmed": True,
+        "stage": "completed",
+        "assembly_status": "completed",
+    }
+    assert store_courier_assignment_blocker(ready) is None
+    assert store_courier_assignment_blocker({**ready, "carrier_label_print_confirmed": False}) == (
+        "store_courier_label_not_confirmed"
+    )
+    assert store_courier_assignment_blocker({**ready, "assembly_status": "in_progress"}) == (
+        "store_courier_order_not_completed"
+    )
 
 
 def test_order_city_prefers_shipping_fields():

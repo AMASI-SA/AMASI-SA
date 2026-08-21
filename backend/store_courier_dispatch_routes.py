@@ -28,9 +28,16 @@ from ai_store_access_contract import (
 from order_engine.repository import MongoOrderRepository
 from order_engine.service import OrderNotFoundError, get_order
 from order_tracking_notes import enforce_stage_instructions
+from store_courier_domain import (
+    ASSIGNED_WAITING_PICKUP,
+    CANCELLED,
+    DELIVERED,
+    DELIVERING,
+    WORKFLOWS,
+    store_courier_assignment_blocker,
+)
 
 
-WORKFLOWS = "order_review_workflows"
 EVENTS = "mezan_fulfillment_events_v2"
 ASSIGN_PERMISSION = "fulfillment.store_courier.assign"
 DELIVER_PERMISSION = "fulfillment.store_courier.deliver"
@@ -38,10 +45,6 @@ DISPATCH_RESPONSIBILITY = "store_courier_dispatch"
 DELIVERY_RESPONSIBILITY = "store_courier_delivery"
 STORE_COURIER_ROLE = "store_courier"
 
-ASSIGNED_WAITING_PICKUP = "assigned_waiting_pickup"
-DELIVERING = "delivering"
-DELIVERED = "delivered"
-CANCELLED = "cancelled"
 MY_SHIPMENT_STAGES = {"waiting", DELIVERING, DELIVERED, "all"}
 
 
@@ -543,19 +546,8 @@ def _actor_name(user: dict[str, Any], fallback: str) -> str:
     return _text(user.get("name") or user.get("email")) or fallback
 
 
-def _store_courier_assignment_blocker(workflow: dict[str, Any]) -> str | None:
-    if _text(workflow.get("carrier_label_type")) != "store_courier":
-        return "store_courier_label_required"
-    if workflow.get("carrier_label_ready") is not True:
-        return "store_courier_label_not_ready"
-    if workflow.get("carrier_label_print_confirmed") is not True:
-        return "store_courier_label_not_confirmed"
-    if (
-        _text(workflow.get("stage")) != "completed"
-        or _text(workflow.get("assembly_status")) != "completed"
-    ):
-        return "store_courier_order_not_completed"
-    return None
+# Backward-compatible private name used by the legacy router tests.
+_store_courier_assignment_blocker = store_courier_assignment_blocker
 
 
 async def _assigned_workflow(

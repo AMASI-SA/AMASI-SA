@@ -18,7 +18,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from store_delivery_domain import StoreDeliveryRuleError, assignment_snapshot, normalize_text
-from order_tracking_notes import ORDER_TRACKING_INSTRUCTIONS
+from order_tracking_notes import ORDER_TRACKING_INSTRUCTIONS, enforce_stage_instructions
+from store_courier_domain import (
+    ASSIGNED_WAITING_PICKUP,
+    WORKFLOWS,
+    store_courier_assignment_blocker,
+)
 from store_delivery_customer_instruction_routes import STORE_DELIVERY_INSTRUCTIONS
 from store_delivery_driver_routes import STORE_DRIVERS
 
@@ -106,6 +111,49 @@ def _assignment_order_filter(user_id: str, row: dict[str, Any]) -> dict[str, Any
     return {"user_id": user_id, "$or": clauses}
 
 
+async def _rollback_confirm_targets(
+    db: Any,
+    *,
+    user_id: str,
+    updated_orders: list[tuple[dict[str, Any], dict[str, Any]]],
+    updated_workflows: list[tuple[dict[str, Any], dict[str, Any]]],
+) -> None:
+    for prior, patch in updated_orders:
+        identity = normalize_text(prior.get("order_id") or prior.get("order_number"))
+        rollback_filter = {
+            "user_id": user_id,
+            "store_delivery_assignment_id": patch["store_delivery_assignment_id"],
+            "$or": [{"order_id": identity}, {"order_number": identity}],
+        }
+        restore_keys = set(patch)
+        restore = {key: prior[key] for key in restore_keys if key in prior}
+        unset = {key: "" for key in restore_keys if key not in prior}
+        update: dict[str, Any] = {}
+        if restore:
+            update["$set"] = restore
+        if unset:
+            update["$unset"] = unset
+        if update:
+            await db[ORDERS].update_one(rollback_filter, update)
+    for prior, patch in updated_workflows:
+        order_number = normalize_text(prior.get("order_number"))
+        rollback_filter = {
+            "user_id": user_id,
+            "order_number": order_number,
+            "store_delivery_assignment_id": patch["store_delivery_assignment_id"],
+        }
+        restore_keys = set(patch)
+        restore = {key: prior[key] for key in restore_keys if key in prior}
+        unset = {key: "" for key in restore_keys if key not in prior}
+        update = {}
+        if restore:
+            update["$set"] = restore
+        if unset:
+            update["$unset"] = unset
+        if update:
+            await db[WORKFLOWS].update_one(rollback_filter, update)
+
+
 class SessionCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     driver_id: str = Field(min_length=1, max_length=80)
@@ -180,6 +228,18 @@ def make_store_delivery_handover_router(db: Any, current_user: Callable[..., Any
         if active:
             return {"accepted": False, "barcode": barcode, "code": "shipment_already_assigned"}
 
+        workflow = await db[WORKFLOWS].find_one(
+            {"user_id": user_id, "order_number": _order_number(order)},
+            {"_id": 0},
+        )
+        if not workflow:
+            return {"accepted": False, "barcode": barcode, "code": "store_courier_shipment_not_found"}
+        blocker = store_courier_assignment_blocker(workflow)
+        if blocker:
+            return {"accepted": False, "barcode": barcode, "code": blocker}
+        if normalize_text(workflow.get("store_courier_assignee_id")):
+            return {"accepted": False, "barcode": barcode, "code": "store_courier_already_assigned"}
+
         city = _order_city(order)
         try:
             snapshot = assignment_snapshot(driver=driver, shipping_city=city)
@@ -238,8 +298,28 @@ def make_store_delivery_handover_router(db: Any, current_user: Callable[..., Any
         inserted_ids: list[str] = []
         inserted_instruction_ids: list[str] = []
         updated_orders: list[tuple[dict[str, Any], dict[str, Any]]] = []
+        updated_workflows: list[tuple[dict[str, Any], dict[str, Any]]] = []
         try:
             for row in rows:
+                workflow = await db[WORKFLOWS].find_one(
+                    {"user_id": user_id, "order_number": row.get("order_number")},
+                    {"_id": 0},
+                )
+                if not workflow:
+                    raise HTTPException(status_code=409, detail={"code": "store_courier_shipment_not_found"})
+                blocker = store_courier_assignment_blocker(workflow)
+                if blocker:
+                    raise HTTPException(status_code=409, detail={"code": blocker, "order_number": row.get("order_number")})
+                if normalize_text(workflow.get("store_courier_assignee_id")):
+                    raise HTTPException(status_code=409, detail={"code": "store_courier_already_assigned", "order_number": row.get("order_number")})
+                await enforce_stage_instructions(
+                    db,
+                    user_id=user_id,
+                    order_number=normalize_text(row.get("order_number")),
+                    stage="store_courier",
+                    actor_id=normalize_text(actor.get("id")),
+                    order_wide=True,
+                )
                 await db[ASSIGNMENTS].insert_one(row)
                 inserted_ids.append(row["id"])
                 tracking_rows = await db[ORDER_TRACKING_INSTRUCTIONS].find(
@@ -317,6 +397,44 @@ def make_store_delivery_handover_router(db: Any, current_user: Callable[..., Any
                 if order_result.matched_count != 1:
                     raise RuntimeError("canonical_order_update_conflict_during_handover_confirm")
                 updated_orders.append((prior, order_patch))
+
+                workflow_patch = {
+                    "delivery_flow": "store_courier",
+                    "store_courier_assignment_state": ASSIGNED_WAITING_PICKUP,
+                    "store_courier_assignee_id": (
+                        normalize_text(driver.get("account_user_id"))
+                        or f"store-driver:{driver['id']}"
+                    ),
+                    "store_courier_assignee_name": driver.get("name"),
+                    "store_courier_driver_profile_id": driver["id"],
+                    "store_delivery_assignment_id": row["id"],
+                    "store_courier_assigned_at": now,
+                    "store_courier_assigned_by_id": normalize_text(actor.get("id")),
+                    "store_courier_assignment_barcode": row.get("barcode"),
+                    "store_courier_label_verified_at": now,
+                    "store_courier_label_verified_by_id": normalize_text(actor.get("id")),
+                    "updated_at": now,
+                }
+                workflow_result = await db[WORKFLOWS].update_one(
+                    {
+                        "user_id": user_id,
+                        "order_number": row.get("order_number"),
+                        "carrier_label_type": "store_courier",
+                        "carrier_label_ready": True,
+                        "carrier_label_print_confirmed": True,
+                        "stage": "completed",
+                        "assembly_status": "completed",
+                        "$or": [
+                            {"store_courier_assignee_id": {"$exists": False}},
+                            {"store_courier_assignee_id": None},
+                            {"store_courier_assignee_id": ""},
+                        ],
+                    },
+                    {"$set": workflow_patch},
+                )
+                if workflow_result.modified_count != 1:
+                    raise HTTPException(status_code=409, detail={"code": "store_courier_assignment_conflict", "order_number": row.get("order_number")})
+                updated_workflows.append((workflow, workflow_patch))
         except Exception:
             if inserted_ids:
                 await db[ASSIGNMENTS].delete_many({"user_id": user_id, "id": {"$in": inserted_ids}})
@@ -325,23 +443,12 @@ def make_store_delivery_handover_router(db: Any, current_user: Callable[..., Any
                     "user_id": user_id,
                     "id": {"$in": inserted_instruction_ids},
                 })
-            for prior, order_patch in updated_orders:
-                identity = normalize_text(prior.get("order_id") or prior.get("order_number"))
-                rollback_filter = {
-                    "user_id": user_id,
-                    "store_delivery_assignment_id": order_patch["store_delivery_assignment_id"],
-                    "$or": [{"order_id": identity}, {"order_number": identity}],
-                }
-                restore_keys = set(order_patch)
-                restore = {key: prior[key] for key in restore_keys if key in prior}
-                unset = {key: "" for key in restore_keys if key not in prior}
-                rollback_update: dict[str, Any] = {}
-                if restore:
-                    rollback_update["$set"] = restore
-                if unset:
-                    rollback_update["$unset"] = unset
-                if rollback_update:
-                    await db[ORDERS].update_one(rollback_filter, rollback_update)
+            await _rollback_confirm_targets(
+                db,
+                user_id=user_id,
+                updated_orders=updated_orders,
+                updated_workflows=updated_workflows,
+            )
             raise
 
         session_update = await db[SESSIONS].update_one(
@@ -355,23 +462,12 @@ def make_store_delivery_handover_router(db: Any, current_user: Callable[..., Any
                     "user_id": user_id,
                     "id": {"$in": inserted_instruction_ids},
                 })
-            for prior, order_patch in updated_orders:
-                identity = normalize_text(prior.get("order_id") or prior.get("order_number"))
-                rollback_filter = {
-                    "user_id": user_id,
-                    "store_delivery_assignment_id": order_patch["store_delivery_assignment_id"],
-                    "$or": [{"order_id": identity}, {"order_number": identity}],
-                }
-                restore_keys = set(order_patch)
-                restore = {key: prior[key] for key in restore_keys if key in prior}
-                unset = {key: "" for key in restore_keys if key not in prior}
-                rollback_update: dict[str, Any] = {}
-                if restore:
-                    rollback_update["$set"] = restore
-                if unset:
-                    rollback_update["$unset"] = unset
-                if rollback_update:
-                    await db[ORDERS].update_one(rollback_filter, rollback_update)
+            await _rollback_confirm_targets(
+                db,
+                user_id=user_id,
+                updated_orders=updated_orders,
+                updated_workflows=updated_workflows,
+            )
             raise HTTPException(status_code=409, detail={"code": "handover_session_confirm_conflict"})
 
         created = [{k: v for k, v in row.items() if k not in {"_id", "user_id"}} for row in rows]
