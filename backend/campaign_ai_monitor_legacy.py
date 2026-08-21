@@ -1269,6 +1269,63 @@ def _govern_output(
     )
 
 
+def _apply_observation_window_guard(
+    output: RecommendationOutput,
+    candidates: list[dict[str, Any]],
+    prior_decisions: dict[str, Any],
+    *,
+    now: datetime,
+) -> tuple[RecommendationOutput, dict[str, dict[str, Any]]]:
+    """Suppress duplicate/conflicting actions while prior measurement is open."""
+    from campaign_ai_observation_window_guard import observation_window_decision
+
+    evidence = {
+        (
+            row.get("provider"), row.get("entity_level"),
+            str(row.get("account_id") or ""), str(row.get("entity_id")),
+        ): row
+        for row in candidates
+    }
+    governed: list[RecommendationItem] = []
+    decisions: dict[str, dict[str, Any]] = {}
+    for item in output.recommendations:
+        row = evidence.get((
+            item.provider, item.entity_level,
+            str(item.account_id or ""), item.entity_id,
+        )) or {}
+        decision = observation_window_decision(
+            item.model_dump(),
+            row,
+            prior_decisions,
+            now=now,
+            target_cpa_sar=TARGET_CPA_SAR,
+        )
+        decisions[item.recommendation_id] = decision
+        if decision.get("blocked") is not True:
+            governed.append(item)
+            continue
+        blocked_until = str(decision.get("blocked_until") or item.next_check_at)
+        governed.append(item.model_copy(update={
+            "action": "monitor",
+            "change_percent": None,
+            "title": "انتظار نتيجة القرار السابق",
+            "rationale": (
+                "ما زالت نافذة قياس القرار السابق مفتوحة؛ يمنع ميزان إصدار تعديل مالي "
+                "ثانٍ على نفس الكيان قبل اكتمال القياس."
+            ),
+            "why_now": f"انتظر حتى {blocked_until} قبل قرار مالي جديد على نفس الكيان.",
+            "guardrail": (
+                "P1-4: تم تحويل القرار إلى مراقبة لمنع تكرار أو عكس التوصية داخل نافذة القياس."
+            ),
+            "next_check_at": blocked_until,
+        }))
+    return RecommendationOutput(
+        summary=output.summary,
+        recommendations=governed,
+        limitations=output.limitations,
+    ), decisions
+
+
 def _deterministic_recommendations(
     candidates: list[dict[str, Any]],
     *,
@@ -1394,7 +1451,8 @@ async def _prior_ai_context(db: Any, user_id: str) -> dict[str, Any]:
                 {key: item.get(key) for key in (
                     "recommendation_id", "action", "change_percent", "priority",
                     "confidence", "account_id", "account_name", "entity_name",
-                    "rationale", "evidence",
+                    "provider", "entity_level", "entity_id",
+                    "rationale", "evidence", "recommended_wait_hours", "next_check_at",
                     "decision_facts", "financial_impact", "execution_status",
                 )}
                 for item in (snapshot.get("recommendations") or [])[:18]
@@ -1763,6 +1821,9 @@ async def run_campaign_ai_monitor(
                     limitation=f"openai_recommendation:{error_code}",
                 )
                 recommendation_source = "mezan_fallback"
+        result, observation_window_guards = _apply_observation_window_guard(
+            result, candidates, prior_decisions, now=current
+        )
         candidate_by_key = {
             (
                 row.get("provider"), row.get("entity_level"),
@@ -1782,6 +1843,10 @@ async def run_campaign_ai_monitor(
             public_item["generated_at"] = started_at
             public_item["recommendation_source"] = recommendation_source
             public_item["decision_score"] = None
+            public_item["observation_window_guard"] = observation_window_guards.get(
+                item.recommendation_id,
+                {"status": "clear", "blocked": False, "emergency_override": False},
+            )
             public_item.update({key: target.get(key) for key in (
                 "status", "configured_status", "effective_status", "status_updated_at",
                 "campaign_id", "campaign_name", "campaign_status",
