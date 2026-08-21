@@ -10,7 +10,11 @@ jest.mock("../../services/fulfillmentV2", () => ({
     scanCarrierHandoffShipment: jest.fn(),
 }));
 
-import { CarrierLabelControl } from "./CompletedFulfillmentOrders";
+import {
+    CarrierLabelControl,
+    shippingScanFeedback,
+} from "./CompletedFulfillmentOrders";
+import ShippingBarcodeScanner from "./ShippingBarcodeScanner";
 
 const permissions = { can_print: true, can_confirm_print: true };
 
@@ -127,4 +131,52 @@ test("external label stays with labeling until its exact barcode is confirmed", 
     );
     expect(confirmed).toContain("تم التنفيذ وطباعة الشحنة");
     expect(confirmed).toContain("بانتظار موظف تسليم الشحن");
+});
+
+test("shipping scan shows persistent success instead of closing silently", () => {
+    const feedback = shippingScanFeedback({
+        mode: "confirm_print",
+        result: { already_confirmed: false },
+        barcode: "6082126619113",
+    });
+    const markup = renderToStaticMarkup(
+        <ShippingBarcodeScanner
+            title="تأكيد طباعة الشحنة"
+            description="اختبار"
+            feedback={feedback}
+            onDetected={() => {}}
+            onFeedbackAction={() => {}}
+            onClose={() => {}}
+        />,
+    );
+
+    expect(markup).toContain('data-testid="shipping-scan-feedback-success"');
+    expect(markup).toContain("تم مسح الباركود بنجاح");
+    expect(markup).toContain("6082126619113");
+});
+
+test("shipping scan distinguishes a previously confirmed label", () => {
+    const feedback = shippingScanFeedback({
+        mode: "confirm_print",
+        result: { already_confirmed: true },
+        barcode: "6082126619113",
+    });
+
+    expect(feedback.kind).toBe("duplicate");
+    expect(feedback.title).toBe("تم مسح البوليصة مسبقًا");
+});
+
+test("carrier handoff duplicate names the employee who already received it", () => {
+    const feedback = shippingScanFeedback({
+        mode: "carrier_handoff",
+        error: {
+            code: "carrier_shipment_already_received",
+            details: { employee_name: "موظف تسليم الشحن" },
+        },
+        barcode: "6082126619113",
+    });
+
+    expect(feedback.kind).toBe("duplicate");
+    expect(feedback.message).toContain("موظف تسليم الشحن");
+    expect(feedback.message).toContain("لم تُضف مرة أخرى");
 });

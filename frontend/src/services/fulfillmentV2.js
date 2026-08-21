@@ -23,6 +23,15 @@ function detailMessage(error, fallback) {
     };
     return labels[detail?.code] || detail?.message || detail?.code || error?.message || fallback;
 }
+
+function fulfillmentError(error, fallback) {
+    const converted = new Error(detailMessage(error, fallback));
+    const detail = error?.response?.data?.detail;
+    converted.code = detail?.code || "";
+    converted.details = detail && typeof detail === "object" ? { ...detail } : {};
+    converted.status = error?.response?.status || null;
+    return converted;
+}
 export async function listReadyToShipOrders({ limit = 100 } = {}) {
     try {
         return (await api.get("/fulfillment-v2/ready-to-ship", { params: { limit } })).data;
@@ -72,7 +81,7 @@ export async function confirmCompletedCarrierLabelPrint(orderNumber, barcode) {
             { barcode: String(barcode || "").trim() },
         )).data;
     } catch (error) {
-        throw new Error(detailMessage(error, "تعذر تأكيد طباعة بوليصة الشحن."));
+        throw fulfillmentError(error, "تعذر تأكيد طباعة بوليصة الشحن.");
     }
 }
 
@@ -90,7 +99,7 @@ export async function scanCarrierHandoffShipment(barcode) {
             barcode: String(barcode || "").trim(),
         })).data;
     } catch (error) {
-        throw new Error(detailMessage(error, "تعذر تسجيل الشحنة في حساب موظف التسليم."));
+        throw fulfillmentError(error, "تعذر تسجيل الشحنة في حساب موظف التسليم.");
     }
 }
 
