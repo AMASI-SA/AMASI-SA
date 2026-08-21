@@ -86,8 +86,17 @@ def _auth_app(refresh_cookie="refresh-value", access_token="access-value"):
 
 
 @pytest.mark.asyncio
-async def test_mobile_auth_response_exposes_only_its_refresh_cookie():
-    middleware = MobileSessionSecurityMiddleware(_auth_app(), db=_Db(None))
+async def test_mobile_auth_response_replaces_browser_tokens_with_native_bound_tokens(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", "mobile-session-test-secret")
+    browser_access = create_access_token(
+        "owner-1",
+        "owner@example.com",
+        mfa_verified=True,
+    )
+    middleware = MobileSessionSecurityMiddleware(
+        _auth_app(access_token=browser_access),
+        db=_Db(None),
+    )
     start, payload = await _request(
         middleware,
         "/api/auth/mfa/verify",
@@ -95,8 +104,19 @@ async def test_mobile_auth_response_exposes_only_its_refresh_cookie():
     )
 
     assert start["status"] == 200
-    assert payload["access_token"] == "access-value"
-    assert payload["refresh_token"] == "refresh-value"
+    assert payload["access_token"] != browser_access
+    access_payload = jwt.decode(
+        payload["access_token"],
+        get_jwt_secret(),
+        algorithms=["HS256"],
+    )
+    refresh_payload = jwt.decode(
+        payload["refresh_token"],
+        get_jwt_secret(),
+        algorithms=["HS256"],
+    )
+    assert access_payload["client"] == "amasi_mobile"
+    assert refresh_payload["client"] == "amasi_mobile"
     assert payload["refresh_expires_in_seconds"] == 30 * 24 * 60 * 60
 
 
@@ -120,7 +140,7 @@ async def test_mobile_auth_derives_refresh_when_success_cookie_is_missing(monkey
     )
 
     assert start["status"] == 200
-    assert payload["access_token"] == access
+    assert payload["access_token"] != access
     assert payload["refresh_token"]
     refresh_payload = jwt.decode(
         payload["refresh_token"],
@@ -130,6 +150,7 @@ async def test_mobile_auth_derives_refresh_when_success_cookie_is_missing(monkey
     assert refresh_payload["sub"] == "owner-1"
     assert refresh_payload["type"] == "refresh"
     assert refresh_payload["mfa"] is True
+    assert refresh_payload["client"] == "amasi_mobile"
     headers = {
         key.lower(): value
         for key, value in start["headers"]
@@ -176,7 +197,11 @@ async def test_mobile_refresh_rotates_access_and_refresh_tokens(monkeypatch):
         "role": "owner",
         "mfa_enabled": True,
     }
-    refresh = create_refresh_token(user["id"], mfa_verified=True)
+    refresh = create_refresh_token(
+        user["id"],
+        mfa_verified=True,
+        client_type="amasi_mobile",
+    )
 
     async def inner_app(scope, receive, send):  # pragma: no cover - must not run
         raise AssertionError("mobile refresh must terminate in its own boundary")
@@ -204,8 +229,28 @@ async def test_mobile_refresh_rotates_access_and_refresh_tokens(monkeypatch):
     )
     assert access_payload["type"] == "access"
     assert access_payload["mfa"] is True
+    assert access_payload["client"] == "amasi_mobile"
     assert rotated_payload["type"] == "refresh"
     assert rotated_payload["mfa"] is True
+    assert rotated_payload["client"] == "amasi_mobile"
+
+
+@pytest.mark.asyncio
+async def test_mobile_refresh_rejects_an_untagged_browser_refresh_token(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", "mobile-session-test-secret")
+    user = {"id": "user-1", "email": "user@example.com", "role": "viewer"}
+    browser_refresh = create_refresh_token(user["id"])
+
+    async def inner_app(scope, receive, send):  # pragma: no cover
+        raise AssertionError("mobile refresh must terminate in its own boundary")
+
+    start, payload = await _request(
+        MobileSessionSecurityMiddleware(inner_app, db=_Db(user)),
+        "/api/auth/mobile/refresh",
+        {"refresh_token": browser_refresh},
+    )
+    assert start["status"] == 401
+    assert payload["code"] == "mobile_refresh_token_invalid"
 
 
 @pytest.mark.asyncio
