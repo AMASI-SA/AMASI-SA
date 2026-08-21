@@ -18,6 +18,7 @@ import MezanComponentsProduction from "./MezanComponentsProduction";
 import { getMezanComponentWorkspace } from "../services/mezanComponentCatalog";
 import {
   createComponentCategory,
+  activeResourcesForComponentCategory,
   generatedComponentGroupName,
   resourcesForComponentCategory,
   saveComponentGroup,
@@ -140,7 +141,7 @@ export default function MezanComponentsOrganization() {
       !needle || `${resource.name || ""} ${resource.code || ""}`.toLowerCase().includes(needle)
     ));
   }, [resources, selectedCategory, query]);
-  const groupCandidates = useMemo(() => resourcesForComponentCategory(
+  const groupCandidates = useMemo(() => activeResourcesForComponentCategory(
     resources,
     groupDraft.category_id,
     groupDraft.group_kind,
@@ -247,8 +248,8 @@ export default function MezanComponentsOrganization() {
             <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-xl font-black"><Tag className="ml-1 inline text-violet-700" />عناصر {selectedCategoryRow?.name || "كل التصنيفات"}</h2><p className="mt-1 text-xs font-bold text-slate-500">تظهر هنا الخدمات والمكونات التابعة للتصنيف المحدد فقط.</p></div><label className="relative"><MagnifyingGlass className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="بحث…" className="min-h-11 rounded-xl border pr-10 pl-3 text-sm font-bold" /></label></div>
               {!visibleResources.length ? <div className="mt-4 rounded-2xl border border-dashed p-8 text-center text-sm font-bold text-slate-500">لا توجد عناصر ضمن هذا التصنيف.</div> : <div className="mt-4 grid gap-3 md:grid-cols-2">{visibleResources.map((resource) => (
-                <article key={resource.id} className="rounded-2xl border border-slate-200 p-4">
-                  <div className="flex items-start justify-between gap-3"><div><div className="font-black text-slate-950">{resource.name}</div><div className="mt-1 text-xs font-bold text-slate-500">{resource.track_inventory ? "مكوّن" : "خدمة"} · {resource.code || "بدون رمز"}</div></div><button onClick={() => setAssigningResource(resource)} className="rounded-xl border px-3 py-2 text-xs font-black text-violet-700">تعديل التصنيفات</button></div>
+                <article key={resource.id} className={`rounded-2xl border p-4 ${resource.status === "inactive" ? "border-rose-200 bg-rose-50/50" : "border-slate-200"}`}>
+                  <div className="flex items-start justify-between gap-3"><div><div className="flex items-center gap-2"><div className="font-black text-slate-950">{resource.name}</div>{resource.status === "inactive" && <span className="rounded-full bg-rose-100 px-2 py-1 text-[10px] font-black text-rose-700">موقوف</span>}</div><div className="mt-1 text-xs font-bold text-slate-500">{resource.track_inventory ? "مكوّن" : "خدمة"} · {resource.code || "بدون رمز"}</div></div><button onClick={() => setAssigningResource(resource)} className="rounded-xl border px-3 py-2 text-xs font-black text-violet-700">تعديل التصنيفات</button></div>
                   <div className="mt-3"><CategoryBadges categoryIds={resource.category_ids || []} categories={categories} /></div>
                 </article>
               ))}</div>}

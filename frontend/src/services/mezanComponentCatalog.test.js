@@ -35,6 +35,8 @@ describe("Mezan component preview catalog", () => {
 
         expect(summarizeMezanComponents(components)).toEqual({
             total: 7,
+            active: 7,
+            inactive: 0,
             stock_components: 4,
             labor_services: 3,
             missing_cost: 7,
@@ -48,6 +50,20 @@ describe("Mezan component preview catalog", () => {
         expect(filterMezanComponents(components, { filter: "stock" })).toHaveLength(4);
         expect(filterMezanComponents(components, { filter: "service" })).toHaveLength(3);
         expect(filterMezanComponents(components, { filter: "missing_cost" })).toHaveLength(7);
+    });
+
+    test("hides stopped components by default and exposes explicit status filters", () => {
+        const { components } = buildMezanComponentWorkspace();
+        const rows = components.map((component, index) => (
+            index === 0 ? { ...component, status: "inactive" } : component
+        ));
+
+        expect(filterMezanComponents(rows)).toHaveLength(6);
+        expect(filterMezanComponents(rows, { status: "inactive" })).toEqual([
+            expect.objectContaining({ id: rows[0].id, status: "inactive" }),
+        ]);
+        expect(filterMezanComponents(rows, { status: "all" })).toHaveLength(7);
+        expect(summarizeMezanComponents(rows)).toMatchObject({ active: 6, inactive: 1 });
     });
 
     test("derives component usages from the product recipe", () => {

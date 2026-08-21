@@ -7,6 +7,7 @@ from typing import Any, Callable
 from fastapi import APIRouter, Body, Depends, HTTPException
 
 from component_edit_policy import component_cost_metadata
+from component_status_policy import COMPONENT_STATUS_ACTIVE, require_active_component
 from product_cost_revision import bump_product_cost_revision
 from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS
 from product_option_cost_routes import AUDIT, BINDINGS, RESOURCES, _now, ensure_indexes
@@ -66,6 +67,7 @@ def make_component_edit_router(db: Any, current_user: Callable[..., Any]) -> API
                 payload,
                 kind=kind,
             ),
+            "status": COMPONENT_STATUS_ACTIVE,
             **component_cost_metadata(track_inventory=track_inventory, amount=amount),
             "created_at": now,
             "updated_at": now,
@@ -85,8 +87,7 @@ def make_component_edit_router(db: Any, current_user: Callable[..., Any]) -> API
         await ensure_indexes(db)
         user_id = str(user["id"])
         before = await db[RESOURCES].find_one({"user_id": user_id, "id": resource_id}, {"_id": 0})
-        if not before:
-            raise HTTPException(status_code=404, detail={"code": "component_not_found"})
+        require_active_component(before)
         name = _text(payload.get("name")) or _text(before.get("name"))
         code = (_text(payload.get("code")) or _text(before.get("code"))).upper()
         if not name or not code:
@@ -147,8 +148,7 @@ def make_component_edit_router(db: Any, current_user: Callable[..., Any]) -> API
         if amount is None or amount < 0:
             raise HTTPException(status_code=422, detail={"code": "invalid_cost"})
         before = await db[RESOURCES].find_one({"user_id": user_id, "id": resource_id}, {"_id": 0})
-        if not before:
-            raise HTTPException(status_code=404, detail={"code": "component_not_found"})
+        require_active_component(before)
         if before.get("track_inventory") and before.get("cost_source") == "purchase_invoice" and before.get("cost_authoritative"):
             raise HTTPException(status_code=409, detail={"code": "purchase_cost_authoritative"})
         metadata = component_cost_metadata(track_inventory=bool(before.get("track_inventory")), amount=amount)

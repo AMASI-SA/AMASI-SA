@@ -31,6 +31,7 @@ function errorCode(error, fallback) {
         component_group_not_found: "إحدى المجموعات لم تعد موجودة.",
         product_group_link_not_found: "ربط المجموعة غير موجود.",
         product_cost_category_not_found: "تصنيف المنتج غير موجود أو غير نشط.",
+        component_inactive: "المكوّن أو الخدمة موقوفة ولا يمكن ربطها قبل إعادة تفعيلها.",
     };
     return labels[detail?.code] || detail?.message || detail?.code || fallback;
 }
@@ -83,6 +84,8 @@ export default function ProductOperationsEditor({ productId }) {
         if (!categoryId) return [];
         return (data.resources || []).filter((row) => {
             if (row.linked_to_product) return false;
+            if (row.status === "inactive" || row.is_active === false) return false;
+            if (row.available_for_product_link === false) return false;
             if (!(row.category_ids || []).map(String).includes(String(categoryId))) return false;
             if ((row.option_links || []).length) return false;
             return !needle || `${row.name || ""} ${row.code || ""}`.toLowerCase().includes(needle);
@@ -93,6 +96,7 @@ export default function ProductOperationsEditor({ productId }) {
         if (!categoryId) return [];
         return (data.groups || []).filter((row) =>
             !row.linked_to_product
+            && row.available_for_product_link !== false
             && String(row.category_id || "") === String(categoryId)
             && (!needle || `${row.name || ""} ${(row.resources || []).map((item) => item.name).join(" ")}`.toLowerCase().includes(needle)),
         );
@@ -211,7 +215,7 @@ export default function ProductOperationsEditor({ productId }) {
                     ))}
                     {linkedResources.filter((row) => row.manual_link).map((resource) => (
                         <div key={resource.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3">
-                            <div><div className="font-bold">{resource.name}</div><div className="mt-1 text-[11px] text-slate-500">{isService(resource) ? "خدمة" : "مكوّن"} · {resource.code || "بدون رمز"}</div></div>
+                            <div><div className="flex items-center gap-2"><div className="font-bold">{resource.name}</div>{resource.status === "inactive" && <span className="rounded-full bg-rose-100 px-2 py-1 text-[10px] font-black text-rose-700">موقوف</span>}</div><div className="mt-1 text-[11px] text-slate-500">{isService(resource) ? "خدمة" : "مكوّن"} · {resource.code || "بدون رمز"}</div></div>
                             <button type="button" disabled={busy} onClick={() => removeResource(resource)} className="rounded-lg border border-red-200 px-3 py-2 text-xs font-black text-red-700"><Trash className="ml-1 inline" />إزالة</button>
                         </div>
                     ))}

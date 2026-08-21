@@ -20,6 +20,7 @@ from component_workspace_cost_compat_routes import (
     COMPONENT_GROUPS,
     generated_group_name,
 )
+from component_status_policy import component_is_active, require_active_component
 from product_cost_revision import bump_product_cost_revision
 from product_fulfillment_routes import (
     ProductResourceLinkRequest,
@@ -138,6 +139,10 @@ async def _extended_operations_view(
             if resource_id in resources_by_id
         ]
         group_id = _text(raw.get("id"))
+        all_members_active = (
+            len(group_resources) == len(resource_ids)
+            and all(component_is_active(resource) for resource in group_resources)
+        )
         group_rows.append({
             "id": group_id,
             "category_id": _text(raw.get("category_id")),
@@ -151,6 +156,7 @@ async def _extended_operations_view(
                 "track_inventory": bool(resource.get("track_inventory")),
             } for resource in group_resources],
             "linked_to_product": group_id in linked_group_ids,
+            "available_for_product_link": all_members_active,
             "status": _text(raw.get("status")) or "active",
         })
 
@@ -268,11 +274,7 @@ def make_product_group_link_router(
             {"user_id": user_id, "id": resource_id},
             {"_id": 0},
         )
-        if not resource:
-            raise HTTPException(
-                status_code=404,
-                detail={"code": "component_not_found"},
-            )
+        require_active_component(resource)
         salla_id = _product_key(product)
         await _validate_no_option_conflicts(
             db,
@@ -425,6 +427,19 @@ def make_product_group_link_router(
                 detail={
                     "code": "component_group_resource_missing",
                     "resource_ids": missing_resources,
+                },
+            )
+        inactive_resources = [
+            resource_id
+            for resource_id, resource in resources_by_id.items()
+            if not component_is_active(resource)
+        ]
+        if inactive_resources:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "component_inactive",
+                    "resource_ids": inactive_resources,
                 },
             )
         await _validate_no_option_conflicts(
