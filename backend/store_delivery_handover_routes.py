@@ -19,10 +19,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from store_delivery_domain import StoreDeliveryRuleError, assignment_snapshot, normalize_text
 from order_tracking_notes import ORDER_TRACKING_INSTRUCTIONS, enforce_stage_instructions
-from store_courier_dispatch_routes import (
+from store_courier_domain import (
     ASSIGNED_WAITING_PICKUP,
     WORKFLOWS,
-    _store_courier_assignment_blocker,
+    store_courier_assignment_blocker,
 )
 from store_delivery_customer_instruction_routes import STORE_DELIVERY_INSTRUCTIONS
 from store_delivery_driver_routes import STORE_DRIVERS
@@ -234,7 +234,7 @@ def make_store_delivery_handover_router(db: Any, current_user: Callable[..., Any
         )
         if not workflow:
             return {"accepted": False, "barcode": barcode, "code": "store_courier_shipment_not_found"}
-        blocker = _store_courier_assignment_blocker(workflow)
+        blocker = store_courier_assignment_blocker(workflow)
         if blocker:
             return {"accepted": False, "barcode": barcode, "code": blocker}
         if normalize_text(workflow.get("store_courier_assignee_id")):
@@ -307,7 +307,7 @@ def make_store_delivery_handover_router(db: Any, current_user: Callable[..., Any
                 )
                 if not workflow:
                     raise HTTPException(status_code=409, detail={"code": "store_courier_shipment_not_found"})
-                blocker = _store_courier_assignment_blocker(workflow)
+                blocker = store_courier_assignment_blocker(workflow)
                 if blocker:
                     raise HTTPException(status_code=409, detail={"code": blocker, "order_number": row.get("order_number")})
                 if normalize_text(workflow.get("store_courier_assignee_id")):
