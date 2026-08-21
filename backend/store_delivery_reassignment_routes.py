@@ -12,8 +12,11 @@ from store_delivery_customer_instruction_routes import STORE_DELIVERY_INSTRUCTIO
 from store_delivery_domain import StoreDeliveryRuleError, assignment_snapshot, normalize_text
 from store_delivery_driver_routes import STORE_DRIVERS
 from store_delivery_handover_routes import ASSIGNMENTS, EVENTS, ORDERS, _order_city
+from store_delivery_payment_evidence_routes import authoritative_outstanding_amount
+from payment_methods import normalize_payment_method
 
 HANDOVER_PERMISSION = "store_delivery.handover"
+CURRENT_DELIVERY_STATUSES = ("assigned", "out_for_delivery")
 
 
 def _now() -> str:
@@ -47,6 +50,115 @@ class ReassignPayload(BaseModel):
     reason: str = Field(default="", max_length=500)
 
 
+def _assignment_status_filter(value: str | None) -> str | dict[str, list[str]] | None:
+    normalized = normalize_text(value)
+    if not normalized:
+        return None
+    if normalized == "current":
+        return {"$in": list(CURRENT_DELIVERY_STATUSES)}
+    return normalized
+
+
+def _is_cash_on_delivery(order: dict[str, Any]) -> bool:
+    raw = normalize_text(
+        order.get("actual_payment_method")
+        or order.get("payment_method")
+        or order.get("payment_method_normalized")
+    )
+    key, _display, _parent = normalize_payment_method(raw)
+    return key == "cash_on_delivery"
+
+
+def _assignment_totals(assignments: list[dict[str, Any]], orders_by_key: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    delivery_fee_total = 0.0
+    cod_total = 0.0
+    cod_unavailable_count = 0
+    for assignment in assignments:
+        delivery_fee_total += float(assignment.get("delivery_fee_snapshot") or 0)
+        order = (
+            orders_by_key.get(normalize_text(assignment.get("order_id")))
+            or orders_by_key.get(normalize_text(assignment.get("order_number")))
+        )
+        if not order or not _is_cash_on_delivery(order):
+            continue
+        try:
+            cod_total += authoritative_outstanding_amount(order)
+        except StoreDeliveryRuleError:
+            cod_unavailable_count += 1
+    return {
+        "cod_total": round(cod_total, 2),
+        "delivery_fee_total": round(delivery_fee_total, 2),
+        "cod_unavailable_count": cod_unavailable_count,
+    }
+
+
+async def _orders_for_assignments(db: Any, user_id: str, assignments: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    ids = sorted({normalize_text(row.get("order_id")) for row in assignments if normalize_text(row.get("order_id"))})
+    numbers = sorted({normalize_text(row.get("order_number")) for row in assignments if normalize_text(row.get("order_number"))})
+    if not ids and not numbers:
+        return {}
+    rows = await db[ORDERS].find(
+        {
+            "user_id": user_id,
+            "$or": [
+                {"order_id": {"$in": ids + numbers}},
+                {"order_number": {"$in": numbers + ids}},
+            ],
+        },
+        {
+            "_id": 0,
+            "order_id": 1,
+            "order_number": 1,
+            "reference_id": 1,
+            "customer_name": 1,
+            "customer_mobile": 1,
+            "shipping_city": 1,
+            "shipping_district": 1,
+            "shipping_street": 1,
+            "remaining_amount": 1,
+            "paid_amount": 1,
+            "total_amount": 1,
+            "has_remaining_amount": 1,
+            "payment_status": 1,
+            "actual_payment_method": 1,
+            "payment_method": 1,
+            "payment_method_normalized": 1,
+        },
+    ).to_list(length=max(len(ids) + len(numbers), 1) * 2)
+    by_key: dict[str, dict[str, Any]] = {}
+    for order in rows:
+        for key in (normalize_text(order.get("order_id")), normalize_text(order.get("order_number"))):
+            if key:
+                by_key[key] = order
+    return by_key
+
+
+def _enrich_assignment(assignment: dict[str, Any], order: dict[str, Any] | None) -> dict[str, Any]:
+    row = dict(assignment)
+    if not order:
+        row["order_found"] = False
+        row["cod_outstanding"] = None
+        return row
+    row.update({
+        "order_found": True,
+        "customer_name": order.get("customer_name"),
+        "customer_mobile": order.get("customer_mobile"),
+        "shipping_city": order.get("shipping_city"),
+        "shipping_district": order.get("shipping_district"),
+        "shipping_street": order.get("shipping_street"),
+        "payment_method": order.get("actual_payment_method") or order.get("payment_method"),
+        "is_cash_on_delivery": _is_cash_on_delivery(order),
+    })
+    if row["is_cash_on_delivery"]:
+        try:
+            row["cod_outstanding"] = authoritative_outstanding_amount(order)
+        except StoreDeliveryRuleError:
+            row["cod_outstanding"] = None
+    else:
+        row["cod_outstanding"] = 0.0
+    return row
+
+
 def make_store_delivery_reassignment_router(db: Any, current_user: Callable[..., Any]) -> APIRouter:
     router = APIRouter(prefix="/store-delivery/assignments", tags=["Store Delivery Reassignment"])
 
@@ -55,6 +167,7 @@ def make_store_delivery_reassignment_router(db: Any, current_user: Callable[...,
         driver_id: str | None = Query(default=None),
         status_filter: str | None = Query(default=None, alias="status"),
         limit: int = Query(default=250, ge=1, le=1000),
+        offset: int = Query(default=0, ge=0),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         actor = _require_operator(user)
@@ -62,10 +175,41 @@ def make_store_delivery_reassignment_router(db: Any, current_user: Callable[...,
         query: dict[str, Any] = {"user_id": user_id, "active": True}
         if driver_id:
             query["driver_id"] = normalize_text(driver_id)
-        if status_filter:
-            query["status"] = normalize_text(status_filter)
-        items = await db[ASSIGNMENTS].find(query, {"_id": 0, "user_id": 0}).sort("assigned_at", -1).to_list(length=limit)
-        return {"items": items, "total": len(items)}
+        normalized_status = _assignment_status_filter(status_filter)
+        if normalized_status is not None:
+            query["status"] = normalized_status
+        total = await db[ASSIGNMENTS].count_documents(query)
+        all_assignments = await db[ASSIGNMENTS].find(
+            query,
+            {
+                "_id": 0,
+                "user_id": 0,
+                "id": 1,
+                "order_id": 1,
+                "order_number": 1,
+                "delivery_fee_snapshot": 1,
+                "status": 1,
+            },
+        ).to_list(length=max(total, 1))
+        orders_by_key = await _orders_for_assignments(db, user_id, all_assignments)
+        items = await db[ASSIGNMENTS].find(query, {"_id": 0, "user_id": 0}).sort(
+            "assigned_at", -1
+        ).skip(offset).limit(limit).to_list(length=limit)
+        enriched = []
+        for item in items:
+            order = (
+                orders_by_key.get(normalize_text(item.get("order_id")))
+                or orders_by_key.get(normalize_text(item.get("order_number")))
+            )
+            enriched.append(_enrich_assignment(item, order))
+        return {
+            "items": enriched,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "has_more": offset + len(enriched) < total,
+            "summary": _assignment_totals(all_assignments, orders_by_key),
+        }
 
     @router.post("/{assignment_id}/reassign")
     async def reassign(assignment_id: str, payload: ReassignPayload,
