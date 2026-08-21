@@ -81,6 +81,9 @@ def _snapshot(workflow: dict[str, Any]) -> dict[str, Any]:
         "carrier_handoff_employee_id": workflow.get("carrier_handoff_employee_id"),
         "carrier_handoff_employee_name": workflow.get("carrier_handoff_employee_name"),
         "carrier_handoff_scanned_at": workflow.get("carrier_handoff_scanned_at"),
+        "carrier_handoff_custody_active": bool(
+            workflow.get("carrier_handoff_custody_active")
+        ),
         "carrier_tracking_number": workflow.get("carrier_tracking_number"),
         "carrier_name": workflow.get("carrier_name"),
     }
@@ -271,6 +274,7 @@ async def receive_carrier_shipment(
                 "carrier_handoff_employee_id": actor_id,
                 "carrier_handoff_employee_name": actor_name,
                 "carrier_handoff_scanned_at": now,
+                "carrier_handoff_custody_active": True,
                 "updated_at": now,
             }
         },
@@ -298,6 +302,7 @@ async def receive_carrier_shipment(
         "carrier_handoff_employee_id": actor_id,
         "carrier_handoff_employee_name": actor_name,
         "carrier_handoff_scanned_at": now,
+        "carrier_handoff_custody_active": True,
     }
     return {"ok": True, **_snapshot(updated)}
 
@@ -324,6 +329,7 @@ async def advance_carrier_handoff_from_salla_status(
         "carrier_handoff_state": (
             "carrier_in_delivery" if stage == "delivering" else "delivered"
         ),
+        "carrier_handoff_custody_active": False,
         "updated_at": now,
     }
     if stage == "delivering":
