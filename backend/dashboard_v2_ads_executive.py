@@ -32,6 +32,18 @@ def _number(value: Any, fallback: float = 0.0) -> float:
     return parsed
 
 
+def _optional_nonnegative(value: Any) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if parsed != parsed or abs(parsed) == float("inf") or parsed < 0:
+        return None
+    return parsed
+
+
 def _fragments(value: Any) -> list[str]:
     if value is None:
         return []
@@ -120,7 +132,8 @@ def build_salla_ads_executive_breakdown(
         salla[provider]["sales_sar"] += sales
 
     providers: dict[str, dict[str, Any]] = {}
-    total_spend = 0.0
+    known_total_spend = 0.0
+    spend_complete = True
     total_salla_orders = 0
     total_salla_sales = 0.0
     total_platform_orders = 0
@@ -128,26 +141,43 @@ def build_salla_ads_executive_breakdown(
 
     for provider in PROVIDER_ORDER:
         spend_key = "google_transitional" if provider == "google" else provider
-        spend = round(_number((ads.get("breakdown") or {}).get(spend_key)), 2)
+        raw_spend = (ads.get("breakdown") or {}).get(spend_key)
+        parsed_spend = _optional_nonnegative(raw_spend)
+        spend = round(parsed_spend, 2) if parsed_spend is not None else None
+        if spend is None:
+            spend_complete = False
+            total_cpa_complete = False
         provider_metrics = (ads.get("providers") or {}).get(provider) or {}
-        if provider == "google":
+        if spend is None:
+            platform_orders = None
+        elif provider == "google":
             platform_orders = None
             if spend > 0:
                 total_cpa_complete = False
         else:
-            platform_orders = int(round(_number(provider_metrics.get("orders"))))
+            parsed_orders = _optional_nonnegative(provider_metrics.get("orders"))
+            platform_orders = int(round(parsed_orders)) if parsed_orders is not None else None
+            if platform_orders is None and spend > 0:
+                total_cpa_complete = False
         platform_cpa = (
             round(spend / platform_orders, 2)
-            if spend > 0 and platform_orders is not None and platform_orders > 0
+            if spend is not None and spend > 0 and platform_orders is not None and platform_orders > 0
             else None
         )
         salla_orders = int(salla[provider]["orders"])
         salla_sales = round(_number(salla[provider]["sales_sar"]), 2)
-        actual_roas = round(salla_sales / spend, 2) if spend > 0 else None
+        actual_roas = (
+            round(salla_sales / spend, 2)
+            if spend is not None and spend > 0
+            else None
+        )
         providers[provider] = {
             "provider": provider,
             "label": PROVIDER_LABELS[provider],
             "spend_sar": spend,
+            "data_state": provider_metrics.get("data_state"),
+            "coverage_complete": provider_metrics.get("coverage_complete"),
+            "amount_complete": provider_metrics.get("amount_complete"),
             "salla_orders": salla_orders,
             "salla_sales_sar": salla_sales,
             "platform_reported_orders": platform_orders,
@@ -161,17 +191,21 @@ def build_salla_ads_executive_breakdown(
                 "roas": "salla_sales_divided_by_ad_platform_spend",
             },
         }
-        total_spend += spend
+        if spend is not None:
+            known_total_spend += spend
         total_salla_orders += salla_orders
         total_salla_sales += salla_sales
         if platform_orders is not None:
             total_platform_orders += platform_orders
 
-    total_spend = round(total_spend, 2)
+    total_spend = round(known_total_spend, 2) if spend_complete else None
     total_salla_sales = round(total_salla_sales, 2)
     total_cpa = (
         round(total_spend / total_platform_orders, 2)
-        if total_cpa_complete and total_spend > 0 and total_platform_orders > 0
+        if total_cpa_complete
+        and total_spend is not None
+        and total_spend > 0
+        and total_platform_orders > 0
         else None
     )
     return {
@@ -182,7 +216,11 @@ def build_salla_ads_executive_breakdown(
             "salla_sales_sar": total_salla_sales,
             "platform_reported_orders": total_platform_orders if total_cpa_complete else None,
             "platform_cost_per_order_sar": total_cpa,
-            "actual_roas": round(total_salla_sales / total_spend, 2) if total_spend > 0 else None,
+            "actual_roas": (
+                round(total_salla_sales / total_spend, 2)
+                if total_spend is not None and total_spend > 0
+                else None
+            ),
         },
         "coverage": {
             "salla_orders_in_scope": len(orders),
@@ -190,6 +228,7 @@ def build_salla_ads_executive_breakdown(
             "salla_unattributed_orders": unattributed_orders,
             "salla_unattributed_sales_sar": round(unattributed_sales, 2),
             "platform_cpa_denominator_complete": total_cpa_complete,
+            "spend_amount_complete": spend_complete,
         },
         "source_contract": {
             "orders": "unified_orders.source/utm_source:salla",

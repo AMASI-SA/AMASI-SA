@@ -15,7 +15,6 @@ import "@/marketingAdsLiveWorkspaceEnhancer";
 import "@/marketingAdsTableUXEnhancer";
 import "@/marketingCampaignSelectedSourceGuard";
 import "@/dashboardVisibleRangeRequestGuard";
-import "@/dashboardExecutivePlatformSpendInterceptor";
 import "@/reviewedPreparationSelection.css";
 import "@/reviewMezanImageEnhancer";
 import "@/reviewMezanImageGlobalDelete";

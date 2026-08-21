@@ -7,6 +7,7 @@ function read(relativePath) {
 
 const dashboardCompatibilitySource = read("pages/Dashboard.jsx");
 const advancedDashboardSource = read("pages/AdvancedDashboard.jsx");
+const frontendIndexSource = read("index.js");
 const analyticsPlacementSource = read("components/DashboardAnalyticsPlacement.jsx");
 const snapchatPlacementSource = read("components/DashboardSnapchatAccountsPlacement.jsx");
 
@@ -43,6 +44,9 @@ test("the advanced dashboard owns GA4, ads, payment fees, and profit details", (
     expect(advancedDashboardSource).toContain('data-testid="advanced-ga-active-chart"');
     expect(advancedDashboardSource).toContain("<GaLive data={ga} />");
     expect(advancedDashboardSource).toContain("<AdsCard ads={data?.ads_v2}");
+    expect(advancedDashboardSource).not.toContain("getDashboardAdsSpend");
+    expect(advancedDashboardSource).not.toContain("chartData");
+    expect(frontendIndexSource).not.toContain("dashboardExecutivePlatformSpendInterceptor");
 });
 
 
