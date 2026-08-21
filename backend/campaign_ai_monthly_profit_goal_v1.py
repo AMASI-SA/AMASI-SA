@@ -120,6 +120,7 @@ async def _month_to_date_totals(
         allow_self_heal=False,
     )
     totals = (payload or {}).get("totals") or {}
+    profit_envelope = (payload or {}).get("profit_envelope") or {}
     return {
         "available": _number(totals.get("net_profit")) is not None,
         "from": start.isoformat(),
@@ -134,6 +135,8 @@ async def _month_to_date_totals(
         "operating_expenses_total": _number(totals.get("operating_expenses_total")),
         "missing_product_cost_count": totals.get("missing_product_cost_count"),
         "incomplete_profit_orders_count": totals.get("incomplete_profit_orders_count"),
+        "profit_accounting": profit_envelope.get("quality"),
+        "profit_contract_version": profit_envelope.get("contract_version"),
     }
 
 
@@ -160,28 +163,36 @@ def _derive_goal_progress(
             "تحقيق صافي ربح شهري لا يقل عن الهدف، وحماية الحد الأدنى قبل التوسع الاختياري."
         ),
     }
-    missing_costs = month_to_date.get("missing_product_cost_count")
-    incomplete_orders = month_to_date.get("incomplete_profit_orders_count")
-    try:
-        missing_costs = int(missing_costs)
-    except (TypeError, ValueError, OverflowError):
-        missing_costs = None
-    try:
-        incomplete_orders = int(incomplete_orders)
-    except (TypeError, ValueError, OverflowError):
-        incomplete_orders = None
-    accounting_quality_known = (
-        missing_costs is not None and incomplete_orders is not None
-    )
-    accounting_complete = bool(
-        accounting_quality_known
-        and missing_costs == 0
-        and incomplete_orders == 0
-    )
-    accounting_incomplete = bool(
-        accounting_quality_known
-        and (missing_costs > 0 or incomplete_orders > 0)
-    )
+    envelope_quality = month_to_date.get("profit_accounting")
+    if isinstance(envelope_quality, dict):
+        accounting_quality_known = envelope_quality.get("known") is True
+        accounting_complete = bool(
+            accounting_quality_known
+            and envelope_quality.get("complete") is True
+            and envelope_quality.get("scale_safe") is True
+        )
+        missing_costs = envelope_quality.get("missing_product_cost_count")
+        incomplete_orders = envelope_quality.get("incomplete_profit_orders_count")
+    else:
+        missing_costs = month_to_date.get("missing_product_cost_count")
+        incomplete_orders = month_to_date.get("incomplete_profit_orders_count")
+        try:
+            missing_costs = int(missing_costs)
+        except (TypeError, ValueError, OverflowError):
+            missing_costs = None
+        try:
+            incomplete_orders = int(incomplete_orders)
+        except (TypeError, ValueError, OverflowError):
+            incomplete_orders = None
+        accounting_quality_known = (
+            missing_costs is not None and incomplete_orders is not None
+        )
+        accounting_complete = bool(
+            accounting_quality_known
+            and missing_costs == 0
+            and incomplete_orders == 0
+        )
+    accounting_incomplete = bool(accounting_quality_known and not accounting_complete)
     base = {
         **base,
         "profit_accounting_complete": (

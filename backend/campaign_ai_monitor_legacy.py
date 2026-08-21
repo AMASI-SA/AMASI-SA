@@ -1510,6 +1510,7 @@ async def _business_profit_context(
             allow_self_heal=False,
         )
         totals = (payload or {}).get("totals") or {}
+        profit_envelope = (payload or {}).get("profit_envelope") or {}
         from campaign_ai_time_window_quality import window_quality
         quality = window_quality({
             "source_date_from": start.isoformat(),
@@ -1520,6 +1521,8 @@ async def _business_profit_context(
             "from": start.isoformat(),
             "to": end.isoformat(),
             "time_window_quality": quality,
+            "profit_contract_version": profit_envelope.get("contract_version"),
+            "profit_accounting": profit_envelope.get("quality"),
             "contains_open_current_day": quality["contains_open_current_day"],
             "safe_for_scale_comparison": quality["safe_for_scale_comparison"],
             **{key: totals.get(key) for key in (
