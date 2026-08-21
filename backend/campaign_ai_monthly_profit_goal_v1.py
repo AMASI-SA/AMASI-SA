@@ -170,10 +170,25 @@ def _derive_goal_progress(
         incomplete_orders = int(incomplete_orders)
     except (TypeError, ValueError, OverflowError):
         incomplete_orders = None
-    accounting_complete = missing_costs == 0 and incomplete_orders == 0
+    accounting_quality_known = (
+        missing_costs is not None and incomplete_orders is not None
+    )
+    accounting_complete = bool(
+        accounting_quality_known
+        and missing_costs == 0
+        and incomplete_orders == 0
+    )
+    accounting_incomplete = bool(
+        accounting_quality_known
+        and (missing_costs > 0 or incomplete_orders > 0)
+    )
     base = {
         **base,
-        "profit_accounting_complete": accounting_complete,
+        "profit_accounting_complete": (
+            accounting_complete if accounting_quality_known else None
+        ),
+        "profit_accounting_quality_known": accounting_quality_known,
+        # Execution remains fail-closed when completeness is unknown.
         "scale_execution_allowed_by_profit_accounting": accounting_complete,
         "profit_accounting_quality": {
             "missing_product_cost_count": missing_costs,
@@ -199,7 +214,7 @@ def _derive_goal_progress(
     projected = net_profit / elapsed_days * days_in_month
     projected_gap = projected - target
     coverage = (net_profit / target * 100.0) if target else 100.0
-    if not accounting_complete:
+    if accounting_incomplete:
         status = "profit_accounting_incomplete"
         phase = "protect_data_quality"
     elif net_profit >= target:
