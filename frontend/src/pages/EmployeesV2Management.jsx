@@ -4,6 +4,7 @@ import {
     CheckCircle,
     ClockCounterClockwise,
     CurrencyCircleDollar,
+    DeviceMobile,
     IdentificationCard,
     Key,
     LinkSimple,
@@ -19,6 +20,7 @@ import { toast } from "sonner";
 
 import {
     assignEmployeesV2Role,
+    assignEmployeesV2MobileAppPermissions,
     createAndLinkEmployeesV2Account,
     createEmployeesV2,
     getEmployeesV2Events,
@@ -53,6 +55,7 @@ const EVENT_LABELS = {
     employee_account_linked: "ربط حساب الدخول",
     employee_account_unlinked: "فصل حساب الدخول وإيقافه",
     employee_role_assigned: "تعيين الدور والصلاحيات",
+    employee_mobile_app_permissions_assigned: "تعيين صلاحيات تطبيق AMASI",
     employee_account_password_reset: "تغيير كلمة مرور حساب الدخول",
     employee_shadow_migrated: "نقل الموظف إلى نواة ميزان 2",
     employee_pilot_created: "إنشاء سجل التجربة السابق",
@@ -304,6 +307,58 @@ function RoleModal({ employee, management, busy, onClose, onSubmit }) {
 }
 
 
+function MobileAppPermissionsModal({ employee, management, busy, onClose, onSubmit }) {
+    const access = employee.mobile_app_access || {};
+    const groups = management.mobile_app_permission_catalog || [];
+    const [enabled, setEnabled] = useState(access.enabled !== false);
+    const [selected, setSelected] = useState(() => access.stored_permissions || access.permissions || []);
+    const mezanPermissionCount = employee.operational_role?.effective_permissions?.length || 0;
+
+    function toggle(permission, checked) {
+        setSelected((current) => {
+            const next = new Set(current);
+            if (checked) next.add(permission.key);
+            else {
+                next.delete(permission.key);
+                groups.forEach((group) => group.permissions?.forEach((item) => {
+                    if (item.requires === permission.key) next.delete(item.key);
+                }));
+            }
+            return [...next];
+        });
+    }
+
+    return (
+        <ModalShell title="صلاحيات تطبيق AMASI فقط" onClose={onClose} busy={busy} testId="employees-v2-mobile-app-permissions-dialog">
+            <div className="max-h-[calc(95vh-65px)] overflow-y-auto p-5">
+                <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm font-bold leading-7 text-sky-950">
+                    <DeviceMobile className="ml-1 inline" /> هذه الصلاحيات للتطبيق فقط ولا تمنح أي صفحة أو عملية في موقع ميزان. صلاحيات ميزان الحالية للموظف: <strong>{numberFormatter.format(mezanPermissionCount)}</strong> ولن تتغير عند الحفظ.
+                </div>
+                <label className="mt-4 flex items-center gap-2 rounded-xl border p-3 text-sm font-black"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} data-testid="employees-v2-mobile-app-enabled" /> تفعيل الوصول المحدد داخل التطبيق</label>
+                <div className="mt-4 space-y-4">
+                    {groups.map((group) => (
+                        <section key={group.key} className="rounded-2xl border bg-slate-50 p-4">
+                            <h3 className="text-sm font-black text-slate-950">{group.label}</h3>
+                            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                                {(group.permissions || []).map((permission) => {
+                                    const parentMissing = permission.requires && !selected.includes(permission.requires);
+                                    return <label key={permission.key} className={`flex items-start gap-2 rounded-xl border bg-white p-3 text-sm font-bold ${parentMissing ? "opacity-45" : ""}`}>
+                                        <input type="checkbox" checked={selected.includes(permission.key)} disabled={busy || parentMissing} onChange={(event) => toggle(permission, event.target.checked)} className="mt-1 h-4 w-4 accent-sky-700" data-testid={`mobile-app-permission-${permission.key}`} />
+                                        <span>{permission.label}<span className="mt-1 block text-[10px] font-semibold text-slate-400" dir="ltr">{permission.key}</span></span>
+                                    </label>;
+                                })}
+                            </div>
+                        </section>
+                    ))}
+                </div>
+                <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold leading-6 text-amber-900">أي صفحة جديدة تضاف لاحقًا لن تظهر لهذا الموظف تلقائيًا؛ تبقى للمدير فقط حتى تمنحها له من هنا.</p>
+                <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={onClose} disabled={busy} className="rounded-xl border px-4 py-2.5 text-sm font-bold">إلغاء</button><button type="button" onClick={() => onSubmit({ enabled, permissions: selected })} disabled={busy} data-testid="employees-v2-mobile-app-permissions-submit" className="rounded-xl bg-sky-700 px-4 py-2.5 text-sm font-black text-white disabled:opacity-50">حفظ صلاحيات التطبيق</button></div>
+            </div>
+        </ModalShell>
+    );
+}
+
+
 function EventsModal({ employee, items, loading, onClose }) {
     return (
         <ModalShell title={`سجل نشاط ${employee?.name || "الموظف"}`} onClose={onClose} testId="employees-v2-events-dialog">
@@ -317,7 +372,7 @@ function EventsModal({ employee, items, loading, onClose }) {
 }
 
 
-function EmployeeCard({ employee, management, onEdit, onAccount, onRole, onEvents }) {
+function EmployeeCard({ employee, management, onEdit, onAccount, onRole, onMobileAppPermissions, onEvents }) {
     const linked = Boolean(employee.account?.user_id);
     const role = employee.operational_role || {};
     const salary = employee.salary_contract?.monthly_amount;
@@ -337,7 +392,7 @@ function EmployeeCard({ employee, management, onEdit, onAccount, onRole, onEvent
                 <div className="rounded-2xl border bg-slate-50 p-3"><div className="text-[10px] font-bold text-slate-500">الصلاحيات</div><div className="mt-1 text-sm font-black">{numberFormatter.format(role.effective_permissions?.length || 0)}</div></div>
             </div>
             {employee.account?.suggested_account && !linked && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900">اقتراح يحتاج اعتمادًا يدويًا: {employee.account.suggested_account.name || employee.account.suggested_account.email}</div>}
-            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3"><button type="button" onClick={onAccount} className="inline-flex items-center justify-center gap-1 rounded-xl border px-3 py-2.5 text-xs font-black text-violet-700"><LinkSimple />{linked ? "الحساب وكلمة المرور" : "ربط حساب"}</button><button type="button" onClick={linked ? onRole : onAccount} className="inline-flex items-center justify-center gap-1 rounded-xl border px-3 py-2.5 text-xs font-black text-emerald-700"><ShieldCheck />{linked ? "الدور والصلاحيات" : "اربط الحساب أولًا"}</button><button type="button" onClick={onEvents} className="col-span-2 inline-flex items-center justify-center gap-1 rounded-xl border px-3 py-2.5 text-xs font-black text-slate-700 sm:col-span-1"><ClockCounterClockwise />سجل النشاط</button></div>
+            <div className="mt-4 grid grid-cols-2 gap-2"><button type="button" onClick={onAccount} className="inline-flex items-center justify-center gap-1 rounded-xl border px-3 py-2.5 text-xs font-black text-violet-700"><LinkSimple />{linked ? "الحساب وكلمة المرور" : "ربط حساب"}</button><button type="button" onClick={linked ? onRole : onAccount} className="inline-flex items-center justify-center gap-1 rounded-xl border px-3 py-2.5 text-xs font-black text-emerald-700"><ShieldCheck />{linked ? "صلاحيات ميزان" : "اربط الحساب أولًا"}</button><button type="button" onClick={linked ? onMobileAppPermissions : onAccount} className="inline-flex items-center justify-center gap-1 rounded-xl border px-3 py-2.5 text-xs font-black text-sky-700"><DeviceMobile />{linked ? `صلاحيات التطبيق (${numberFormatter.format(employee.mobile_app_access?.permissions?.length || 0)})` : "اربط الحساب أولًا"}</button><button type="button" onClick={onEvents} className="inline-flex items-center justify-center gap-1 rounded-xl border px-3 py-2.5 text-xs font-black text-slate-700"><ClockCounterClockwise />سجل النشاط</button></div>
         </article>
     );
 }
@@ -423,11 +478,12 @@ export default function EmployeesV2ManagementWorkspace() {
 
             {loading && <div className="rounded-3xl border bg-white p-12 text-center font-bold text-slate-500">جارٍ تحميل إدارة الموظفين…</div>}
             {!loading && !employees.length && <div className="rounded-3xl border border-dashed bg-white p-12 text-center text-slate-500">لا يوجد موظفون مطابقون للبحث والتصفية.</div>}
-            {!loading && employees.length > 0 && <section className="grid gap-3 xl:grid-cols-2">{employees.map((employee) => <EmployeeCard key={employee.id} employee={employee} management={management} onEdit={() => setModal({ type: "form", employee })} onAccount={() => setModal({ type: "account", employee })} onRole={() => setModal({ type: "role", employee })} onEvents={() => openEvents(employee)} />)}</section>}
+            {!loading && employees.length > 0 && <section className="grid gap-3 xl:grid-cols-2">{employees.map((employee) => <EmployeeCard key={employee.id} employee={employee} management={management} onEdit={() => setModal({ type: "form", employee })} onAccount={() => setModal({ type: "account", employee })} onRole={() => setModal({ type: "role", employee })} onMobileAppPermissions={() => setModal({ type: "mobile-app-permissions", employee })} onEvents={() => openEvents(employee)} />)}</section>}
 
             {modal?.type === "form" && <EmployeeFormModal employee={selectedEmployee} busy={busy} onClose={() => setModal(null)} onSubmit={(payload) => mutate(() => selectedEmployee ? updateEmployeesV2(selectedEmployee.id, payload) : createEmployeesV2(payload), selectedEmployee ? "تم تحديث الموظف والراتب والوصول من التاريخ المحدد" : "تمت إضافة الموظف دون إنشاء عقد راتب")} />}
             {modal?.type === "account" && selectedEmployee && <AccountModal employee={selectedEmployee} candidates={management.login_account_candidates || []} busy={busy} onClose={() => setModal(null)} onLink={(accountId) => mutate(() => linkEmployeesV2Account(selectedEmployee.id, accountId), "تم ربط حساب الدخول بالحالة الحالية للموظف")} onCreateAndLink={(payload) => mutate(() => createAndLinkEmployeesV2Account(selectedEmployee.id, payload), "تم إنشاء حساب الدخول وربطه بصفر صلاحيات قديمة")} onUnlink={() => mutate(() => unlinkEmployeesV2Account(selectedEmployee.id), "تم فصل الحساب وإيقاف وصوله فورًا")} onPassword={(password) => mutate(() => resetEmployeesV2AccountPassword(selectedEmployee.id, password), "تم تغيير كلمة مرور الموظف دون إظهارها في السجل")} />}
             {modal?.type === "role" && selectedEmployee && <RoleModal employee={selectedEmployee} management={management} busy={busy} onClose={() => setModal(null)} onSubmit={(payload) => mutate(() => assignEmployeesV2Role(selectedEmployee.id, payload), "تم حفظ الدور والصلاحيات")} />}
+            {modal?.type === "mobile-app-permissions" && selectedEmployee && <MobileAppPermissionsModal employee={selectedEmployee} management={management} busy={busy} onClose={() => setModal(null)} onSubmit={(payload) => mutate(() => assignEmployeesV2MobileAppPermissions(selectedEmployee.id, payload), "تم حفظ صلاحيات التطبيق فقط دون تغيير صلاحيات ميزان")} />}
             {modal?.type === "events" && <EventsModal employee={selectedEmployee} items={events.items} loading={events.loading} onClose={() => setModal(null)} />}
         </div>
     );

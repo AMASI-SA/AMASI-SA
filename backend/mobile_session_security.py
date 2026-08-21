@@ -111,8 +111,8 @@ def _refresh_cookie(start: dict[str, Any]) -> str | None:
     return None
 
 
-def _refresh_from_access_token(access_token: str) -> str | None:
-    """Mint the native refresh token from the signed auth result itself.
+def _mobile_tokens_from_access_token(access_token: str) -> tuple[str, str] | None:
+    """Mint native-only access and refresh tokens from a signed auth result.
 
     Some authentication middleware completes the MFA response without retaining
     the inner ``Set-Cookie`` header. A successful, freshly issued access token is
@@ -122,9 +122,11 @@ def _refresh_from_access_token(access_token: str) -> str | None:
     """
     from auth import (
         JWT_ALGORITHM,
+        create_access_token,
         create_refresh_token,
         get_jwt_secret,
     )
+    from mobile_app_permissions import MOBILE_APP_CLIENT
 
     try:
         payload = jwt.decode(
@@ -138,11 +140,22 @@ def _refresh_from_access_token(access_token: str) -> str | None:
     if payload.get("type") != "access":
         return None
     user_id = str(payload.get("sub") or "").strip()
-    if not user_id:
+    email = str(payload.get("email") or "").strip()
+    if not user_id or not email:
         return None
-    return create_refresh_token(
-        user_id,
-        mfa_verified=payload.get("mfa") is True,
+    mfa_verified = payload.get("mfa") is True
+    return (
+        create_access_token(
+            user_id,
+            email,
+            mfa_verified=mfa_verified,
+            client_type=MOBILE_APP_CLIENT,
+        ),
+        create_refresh_token(
+            user_id,
+            mfa_verified=mfa_verified,
+            client_type=MOBILE_APP_CLIENT,
+        ),
     )
 
 
@@ -187,24 +200,17 @@ def _inject_mobile_refresh_token(
     if not access_token:
         return messages
 
-    refresh_token = str(payload.get("refresh_token") or "").strip()
-    if not refresh_token:
-        refresh_token = _refresh_cookie(start) or ""
-    if not refresh_token:
-        refresh_token = _refresh_from_access_token(access_token) or ""
-        if refresh_token:
-            logger.warning(
-                "AMASI mobile auth response had no refresh cookie; "
-                "derived refresh token from the signed access result"
-            )
-    if not refresh_token:
+    mobile_tokens = _mobile_tokens_from_access_token(access_token)
+    if not mobile_tokens:
         logger.error(
-            "AMASI mobile auth response could not produce a refresh token"
+            "AMASI mobile auth response could not produce native-bound tokens"
         )
         return messages
+    mobile_access_token, refresh_token = mobile_tokens
 
     from auth import REFRESH_COOKIE_MAX_AGE_SECONDS
 
+    payload["access_token"] = mobile_access_token
     payload["refresh_token"] = refresh_token
     payload["refresh_expires_in_seconds"] = REFRESH_COOKIE_MAX_AGE_SECONDS
     body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
@@ -322,11 +328,14 @@ class MobileSessionSecurityMiddleware:
             create_refresh_token,
             get_jwt_secret,
         )
+        from mobile_app_permissions import MOBILE_APP_CLIENT
 
         try:
             decoded = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
             if decoded.get("type") != "refresh":
                 raise jwt.InvalidTokenError("invalid token type")
+            if decoded.get("client") != MOBILE_APP_CLIENT:
+                raise jwt.InvalidTokenError("invalid mobile client")
 
             user_id = str(decoded.get("sub") or "").strip()
             user = await self.db.users.find_one({"id": user_id})
@@ -382,10 +391,12 @@ class MobileSessionSecurityMiddleware:
                 user["id"],
                 user["email"],
                 mfa_verified=mfa_verified,
+                client_type=MOBILE_APP_CLIENT,
             )
             refresh = create_refresh_token(
                 user["id"],
                 mfa_verified=mfa_verified,
+                client_type=MOBILE_APP_CLIENT,
             )
             response = _no_store(JSONResponse(
                 {

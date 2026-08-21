@@ -2,6 +2,7 @@ import api from "../lib/api";
 import {
     applyEmployeesV2ShadowMigration,
     assignEmployeesV2Role,
+    assignEmployeesV2MobileAppPermissions,
     captureEmployeesV2ParallelCycle,
     createAndLinkEmployeesV2Account,
     createEmployeesV2,
@@ -12,6 +13,7 @@ import {
     EMPLOYEE_PARALLEL_CYCLE_CAPTURE_CONFIRMATION,
     EMPLOYEE_PAYROLL_STATUS_CONFIRMATION,
     EMPLOYEE_ROLE_CONFIRMATION,
+    EMPLOYEE_MOBILE_APP_PERMISSIONS_CONFIRMATION,
     EMPLOYEE_SHADOW_MIGRATION_CONFIRMATION,
     EMPLOYEE_SALARY_CONTRACT_SYNC_CONFIRMATION,
     getEmployeesV2,
@@ -75,6 +77,10 @@ test("full management uses guarded employee, account, role, password, and audit 
         warehouse_ids: [],
         fulfillment_responsibilities: [],
     });
+    await assignEmployeesV2MobileAppPermissions("employee/1", {
+        enabled: true,
+        permissions: ["app.page.orders"],
+    });
     await resetEmployeesV2AccountPassword("employee/1", "Temporary123!");
     await getEmployeesV2Events("employee/1");
     await unlinkEmployeesV2Account("employee/1");
@@ -83,6 +89,7 @@ test("full management uses guarded employee, account, role, password, and audit 
     expect(EMPLOYEE_ACCOUNT_LINK_CONFIRMATION).toBe("LINK_EMPLOYEE_V2_ACCOUNT");
     expect(EMPLOYEE_ACCOUNT_UNLINK_CONFIRMATION).toBe("UNLINK_EMPLOYEE_V2_ACCOUNT");
     expect(EMPLOYEE_ROLE_CONFIRMATION).toBe("ASSIGN_EMPLOYEE_V2_ROLE");
+    expect(EMPLOYEE_MOBILE_APP_PERMISSIONS_CONFIRMATION).toBe("ASSIGN_EMPLOYEE_V2_MOBILE_APP_PERMISSIONS");
     expect(EMPLOYEE_PASSWORD_CONFIRMATION).toBe("RESET_EMPLOYEE_V2_ACCOUNT_PASSWORD");
     expect(api.get).toHaveBeenNthCalledWith(1, "/employees-v2/management");
     expect(api.post).toHaveBeenCalledWith("/employees-v2/management/employees", {
@@ -106,6 +113,14 @@ test("full management uses guarded employee, account, role, password, and audit 
         {
             new_password: "Temporary123!",
             confirmation: "RESET_EMPLOYEE_V2_ACCOUNT_PASSWORD",
+        },
+    );
+    expect(api.put).toHaveBeenCalledWith(
+        "/employees-v2/management/employees/employee%2F1/mobile-app-permissions",
+        {
+            enabled: true,
+            permissions: ["app.page.orders"],
+            confirmation: "ASSIGN_EMPLOYEE_V2_MOBILE_APP_PERMISSIONS",
         },
     );
     expect(api.get).toHaveBeenNthCalledWith(
