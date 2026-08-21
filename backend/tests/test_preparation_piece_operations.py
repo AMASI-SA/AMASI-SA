@@ -371,6 +371,10 @@ def test_my_work_discovers_reassigned_pieces_before_registry_employee_filter():
         '"batch_id": {"$in": batch_ids}'
     )
     assert "PIECE_STATUS_READY_FOR_ASSEMBLY" in source
+    assert '"preparation_receipt_status": {"$ne": "received"}' in source
+    assert '"branch_handoff_at": now' in inspect.getsource(
+        __import__("preparation_piece_operations")._receive_preparation_piece
+    )
 
 
 def test_preparation_receipt_card_merges_customer_specs_and_marks_search_match():
@@ -423,6 +427,34 @@ def test_preparation_receipt_blocks_supplier_piece_until_supplier_receipt_finish
         "supplier_dispatch_status": "received",
         "status": "received",
     }) is None
+
+
+def test_preparation_receipt_blocks_every_unfinished_required_service():
+    piece = {
+        "piece_id": "piece-1",
+        "status": PIECE_STATUS_IN_PROGRESS,
+        "responsible_employee_id": "employee-1",
+        "services": [
+            {
+                "service_id": "engrave",
+                "service_name": "حفر الاسم",
+                "status": "pending",
+                "required_quantity": 1,
+                "completed_quantity": 0,
+            }
+        ],
+    }
+
+    assert preparation_receipt_blocker(piece) == (
+        "preparation_piece_services_incomplete"
+    )
+    card = _preparation_receipt_piece_public(piece)
+    assert card["can_receive"] is False
+    assert card["remaining_service_count"] == 1
+    assert card["pending_service_names"] == ["حفر الاسم"]
+
+    piece["services"][0]["completed_quantity"] = 1
+    assert preparation_receipt_blocker(piece) is None
 
 
 def test_preparation_receipt_is_final_and_order_search_accepts_arabic_prefix():
