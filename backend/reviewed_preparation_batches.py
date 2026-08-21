@@ -28,6 +28,7 @@ from pymongo import ASCENDING, DESCENDING
 from pymongo.errors import BulkWriteError, DuplicateKeyError
 
 from order_item_engine.mapper import map_order_item_identities
+from order_tracking_notes import enforce_stage_instructions
 from order_review_routes import (
     EVENTS,
     WORKFLOWS,
@@ -802,6 +803,23 @@ def make_reviewed_preparation_batches_router(
                 status_code=409,
                 detail={"code": code, "message": messages.get(code, "اختيار المنتجات غير صالح.")},
             ) from exc
+
+        # Resolve the gate at the selected product grain.  An order-wide stop
+        # blocks every selected line, while a product stop blocks only that
+        # product and does not freeze unrelated lines from the same order.
+        for order_number, order_item_id in sorted({
+            (_text(row.get("order_number")), _text(row.get("order_item_id")))
+            for row in planned
+            if _text(row.get("order_number"))
+        }):
+            await enforce_stage_instructions(
+                db,
+                user_id=user_id,
+                order_number=order_number,
+                order_item_id=order_item_id,
+                stage="reviewed",
+                actor_id=_text(reviewer.get("id")),
+            )
 
         batch_id = uuid.uuid4().hex
         now = _now()

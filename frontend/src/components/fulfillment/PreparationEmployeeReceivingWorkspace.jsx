@@ -17,6 +17,7 @@ import {
     receivePreparationPiece,
     searchPreparationReceipt,
 } from "../../services/preparationWorkService";
+import CustomerServiceInstructionBanner from "./CustomerServiceInstructionBanner";
 
 const BLOCKER_MESSAGES = {
     preparation_piece_already_received: "تم استلام المنتج",
@@ -28,6 +29,7 @@ const BLOCKER_MESSAGES = {
     preparation_piece_services_incomplete: "لا يمكن استلام القطعة؛ توجد خدمة مطلوبة لم تُنفذ بعد. أكمل جميع الخدمات ثم أعد تصوير الباركود.",
     preparation_piece_not_started: "لم يبدأ تجهيزه",
     preparation_piece_not_ready_for_receipt: "غير جاهز للاستلام",
+    customer_service_instruction_action_required: "نفّذ تعليمات خدمة العملاء الظاهرة قبل استلام القطعة.",
 };
 
 function preparationBlockerMessage(piece) {
@@ -203,7 +205,7 @@ function ProductImage({ piece }) {
     );
 }
 
-export function ProductCard({ piece, busy, onReceive }) {
+export function ProductCard({ piece, busy, onReceive, onUpdated }) {
     const received = piece.status === "ready_for_assembly";
     return (
         <article className={`overflow-hidden rounded-3xl border-2 bg-white shadow-sm ${piece.search_match ? "border-violet-500 ring-4 ring-violet-100" : received ? "border-emerald-300" : "border-slate-200"}`} data-testid="preparation-receiving-product-card">
@@ -239,6 +241,8 @@ export function ProductCard({ piece, busy, onReceive }) {
                     )}
                 </div>
 
+                <div className="mt-3"><CustomerServiceInstructionBanner instructions={piece.customer_service_instructions || []} stage="preparation_receiving" onUpdated={onUpdated} /></div>
+
                 {piece.can_receive ? (
                     <button type="button" onClick={() => onReceive(piece)} disabled={busy} className="mt-4 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-700 px-4 text-base font-black text-white shadow-sm transition active:scale-[0.99] disabled:opacity-60" data-testid="receive-preparation-piece-button">
                         {busy ? <SpinnerGap size={23} className="animate-spin" /> : <CheckCircle size={24} weight="fill" />}
@@ -261,6 +265,7 @@ export function ProductCard({ piece, busy, onReceive }) {
 export default function PreparationEmployeeReceivingWorkspace() {
     const [query, setQuery] = useState("");
     const [receivedPieces, setReceivedPieces] = useState([]);
+    const [blockedPiece, setBlockedPiece] = useState(null);
     const [lastProgress, setLastProgress] = useState(null);
     const [searching, setSearching] = useState(false);
     const [cameraOpen, setCameraOpen] = useState(false);
@@ -285,6 +290,8 @@ export default function PreparationEmployeeReceivingWorkspace() {
         setQuery(value);
         setSearching(true);
         setSuccess("");
+        setBlockedPiece(null);
+        let matchedPiece = null;
         try {
             const searchResult = await searchPreparationReceipt(value);
             const matchedPieceId = String(searchResult.matched_piece_id || "").trim();
@@ -296,7 +303,7 @@ export default function PreparationEmployeeReceivingWorkspace() {
                 return null;
             }
 
-            const matchedPiece = searchResult.pieces?.find(
+            matchedPiece = searchResult.pieces?.find(
                 (piece) => piece.piece_id === matchedPieceId,
             );
             if (!matchedPiece) {
@@ -360,6 +367,7 @@ export default function PreparationEmployeeReceivingWorkspace() {
                 ...current.filter((piece) => piece.piece_id !== matchedPieceId),
             ]);
             setLastProgress(response.progress || null);
+            setBlockedPiece(null);
             setQuery("");
             setSuccess(
                 response.progress?.order_ready_for_assembly
@@ -368,6 +376,22 @@ export default function PreparationEmployeeReceivingWorkspace() {
             );
             return response;
         } catch (receiveError) {
+            if (
+                receiveError?.code === "customer_service_instruction_action_required"
+                && matchedPiece
+            ) {
+                setBlockedPiece({
+                    ...matchedPiece,
+                    can_receive: false,
+                    blocker_code: receiveError.code,
+                    search_match: true,
+                    customer_service_instructions:
+                        receiveError?.detail?.instructions
+                        || matchedPiece.customer_service_instructions
+                        || [],
+                });
+                return null;
+            }
             showPopup(
                 "تعذّر استلام المنتج",
                 receiveError?.message || "تعذّر استلام القطعة من موظف التجهيز.",
@@ -420,6 +444,21 @@ export default function PreparationEmployeeReceivingWorkspace() {
 
             {success && <div className="flex items-start gap-2 rounded-2xl border border-emerald-300 bg-emerald-50 p-4 text-sm font-black leading-6 text-emerald-900" role="status"><CheckCircle size={22} className="mt-0.5 shrink-0" weight="fill" />{success}</div>}
 
+            {blockedPiece && !searching && (
+                <div data-testid="preparation-receiving-customer-service-gate">
+                    <ProductCard
+                        piece={blockedPiece}
+                        busy={false}
+                        onReceive={() => {}}
+                        onUpdated={(response) => {
+                            if (!response?.waiting_customer_service_approval) {
+                                void receiveScannedPiece(blockedPiece.piece_id);
+                            }
+                        }}
+                    />
+                </div>
+            )}
+
             <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm" data-testid="preparation-receiving-session-summary">
                 <div>
                     <div className="text-[10px] font-black text-slate-400">مستلمات الجلسة</div>
@@ -428,7 +467,7 @@ export default function PreparationEmployeeReceivingWorkspace() {
                 <div className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-800">كل باركود = قطعة واحدة</div>
             </div>
 
-            {!receivedPieces.length && !searching && (
+            {!receivedPieces.length && !blockedPiece && !searching && (
                 <div className="rounded-3xl border-2 border-dashed border-slate-200 bg-white px-5 py-10 text-center">
                     <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700"><Camera size={34} weight="duotone" /></span>
                     <h3 className="mt-4 text-lg font-black text-slate-950">ابدأ بتصوير باركود أول قطعة</h3>

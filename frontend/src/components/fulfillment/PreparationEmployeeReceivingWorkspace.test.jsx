@@ -76,6 +76,8 @@ test("barcode flow searches the exact piece then receives it once", () => {
     expect(source).toContain("preparation_piece_services_incomplete");
     expect(source).toContain("pending_service_names");
     expect(source).toContain("الخدمات غير المنجزة");
+    expect(source).toContain("customer_service_instruction_action_required");
+    expect(source).toContain("preparation-receiving-customer-service-gate");
     expect(source).not.toContain("setResult(data)");
     expect(source).not.toContain("searchPreparationReceipt(result.order_number)");
 });

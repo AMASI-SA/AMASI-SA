@@ -18,6 +18,12 @@ function customerIntelligenceLinks(user) {
         .filter((item) => item.to.startsWith("/customer-intelligence"));
 }
 
+function orderTrackingLinks(user) {
+    return sidebarSectionsForUser(user)
+        .flatMap((section) => section.items || [])
+        .filter((item) => item.to === "/order-tracking-notes");
+}
+
 test("customer intelligence navigation is visible once for owner or permitted employee", () => {
     expect(customerIntelligenceLinks({ is_owner: true, permissions: [] })).toHaveLength(1);
     expect(customerIntelligenceLinks({
@@ -33,6 +39,16 @@ test("customer-service navigation opens the conversations tab directly", () => {
     });
 
     expect(link.to).toBe("/customer-intelligence?tab=conversations");
+});
+
+test("customer-service section exposes one unified order tracking and notes page", () => {
+    const links = orderTrackingLinks({
+        is_owner: false,
+        permissions: [PERMISSION],
+    });
+
+    expect(links).toHaveLength(1);
+    expect(links[0].label).toBe("تتبع الطلب وملاحظاته");
 });
 
 test("customer intelligence navigation stays hidden from unrelated employees", () => {

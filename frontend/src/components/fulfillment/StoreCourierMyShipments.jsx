@@ -22,6 +22,7 @@ import {
     pickupStoreCourierShipment,
 } from "../../services/storeCourierDispatch";
 import ShippingBarcodeScanner from "./ShippingBarcodeScanner";
+import CustomerServiceInstructionBanner from "./CustomerServiceInstructionBanner";
 
 
 const STAGE_COPY = {
@@ -361,6 +362,8 @@ export default function StoreCourierMyShipments({ stage = "waiting" }) {
                                             </div>
                                         </div>
                                     )}
+
+                                    <CustomerServiceInstructionBanner instructions={shipment.customer_service_instructions || []} stage="store_courier" onUpdated={() => load({ silent: true })} />
 
                                     <div className="grid grid-cols-3 gap-2">
                                         <a href={phone ? `tel:${phone}` : undefined} aria-disabled={!phone} className={`inline-flex min-h-11 items-center justify-center gap-1 rounded-xl border text-xs font-black ${phone ? "border-slate-200 text-slate-700" : "pointer-events-none border-slate-100 text-slate-300"}`}>

@@ -21,6 +21,7 @@ from order_engine.salla_refresh import refresh_order_from_salla
 from order_engine.service import InvalidOrderCursorError, OrderNotFoundError, get_order, list_orders
 from order_item_engine.mapper import map_order_item_identities
 from order_engine.product_image_enrichment import enrich_order_item_images
+from order_tracking_notes import enforce_stage_instructions
 from salla_integration.auto_sync import schedule_salla_auto_sync
 from salla_integration.service import SallaError, call_salla
 
@@ -475,6 +476,9 @@ async def _detail(db: Any, user_id: str, order: OrderDTO) -> dict[str, Any]:
         "revision": int((workflow or {}).get("revision") or 0),
         "items": item_views,
         "operational_items": list((workflow or {}).get("operational_items") or []),
+        "customer_service_instructions": list(
+            (workflow or {}).get("customer_service_instructions") or []
+        ),
     }
 
 
@@ -613,6 +617,14 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         user_id = _merchant_user_id(reviewer)
         actor_id = str(reviewer["id"])
         await _ensure_indexes(db)
+        await enforce_stage_instructions(
+            db,
+            user_id=user_id,
+            order_number=order_number,
+            order_item_id=payload.source_order_item_id,
+            stage="pending_review",
+            actor_id=actor_id,
+        )
         try:
             order = await get_order(repository, user_id=user_id, order_number=order_number)
         except OrderNotFoundError as exc:
@@ -754,6 +766,14 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         reviewer = _require_reviewer(user)
         user_id = _merchant_user_id(reviewer)
         actor_id = str(reviewer["id"])
+        await enforce_stage_instructions(
+            db,
+            user_id=user_id,
+            order_number=order_number,
+            stage="pending_review",
+            actor_id=actor_id,
+            order_wide=True,
+        )
         normalized_status = None
         if payload.preparation_status is not None:
             status_value = _normalized(payload.preparation_status)
@@ -805,6 +825,14 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         reviewer = _require_reviewer(user)
         user_id = _merchant_user_id(reviewer)
         actor_id = str(reviewer["id"])
+        await enforce_stage_instructions(
+            db,
+            user_id=user_id,
+            order_number=order_number,
+            stage="pending_review",
+            actor_id=actor_id,
+            order_wide=True,
+        )
         workflow = await db[WORKFLOWS].find_one(
             {"user_id": user_id, "order_number": order_number}, {"_id": 0}
         )
@@ -879,6 +907,14 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         user_id = _merchant_user_id(reviewer)
         actor_id = str(reviewer["id"])
         await _ensure_indexes(db)
+        await enforce_stage_instructions(
+            db,
+            user_id=user_id,
+            order_number=order_number,
+            order_item_id=order_item_id,
+            stage="pending_review",
+            actor_id=actor_id,
+        )
         try:
             order = await get_order(repository, user_id=user_id, order_number=order_number)
         except OrderNotFoundError as exc:
@@ -921,6 +957,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         })
         states[order_item_id] = current
         new_doc = {
+            **(workflow or {}),
             "user_id": user_id,
             "order_number": order.order_number,
             "order_id": order.order_id,
@@ -930,6 +967,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             "updated_at": _now(),
             "updated_by": actor_id,
         }
+        new_doc.pop("_id", None)
         if workflow:
             result = await db[WORKFLOWS].replace_one(
                 {"user_id": user_id, "order_number": order.order_number, "revision": revision}, new_doc
@@ -974,6 +1012,14 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         user_id = _merchant_user_id(reviewer)
         actor_id = str(reviewer["id"])
         await _ensure_indexes(db)
+        await enforce_stage_instructions(
+            db,
+            user_id=user_id,
+            order_number=order_number,
+            stage="pending_review",
+            actor_id=actor_id,
+            order_wide=True,
+        )
         try:
             order = await get_order(repository, user_id=user_id, order_number=order_number)
         except OrderNotFoundError as exc:
@@ -1072,6 +1118,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             else "reviewed"
         )
         new_doc = {
+            **(workflow or {}),
             "user_id": user_id, "order_number": order.order_number, "order_id": order.order_id,
             "stage": next_stage, "revision": revision + 1, "items": frozen_items,
             "operational_items": list((workflow or {}).get("operational_items") or []),
@@ -1081,6 +1128,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             "salla_status_sync": "sent", "salla_status_sync_error": None,
             "salla_status_sync_at": _now(), "updated_at": now, "updated_by": actor_id,
         }
+        new_doc.pop("_id", None)
         if next_stage == "ready_to_ship":
             new_doc["ready_to_ship_at"] = now
         if workflow:

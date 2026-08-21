@@ -33,6 +33,7 @@ import {
     setReviewedPreparationQuantity,
     toggleReviewedPreparationProduct,
 } from "../reviewedPreparationSelection";
+import CustomerServiceInstructionBanner from "../components/fulfillment/CustomerServiceInstructionBanner";
 
 function categoryLabel(category) {
     return String(category?.path || category?.name || category?.id || "").trim();
@@ -239,6 +240,7 @@ export default function ReviewedOrders() {
     const [downloadingBatch, setDownloadingBatch] = useState(false);
     const [batchError, setBatchError] = useState("");
     const [lastBatch, setLastBatch] = useState(null);
+    const [stageInstructions, setStageInstructions] = useState([]);
     const requestIdRef = useRef("");
 
     const load = useCallback(async ({ silent = false } = {}) => {
@@ -330,6 +332,9 @@ export default function ReviewedOrders() {
             }
         } catch (createError) {
             setBatchError(createError.message);
+            if (createError?.code === "customer_service_instruction_action_required") {
+                setStageInstructions(createError?.detail?.instructions || []);
+            }
             await load({ silent: true });
         } finally {
             setCreatingBatch(false);
@@ -437,6 +442,14 @@ export default function ReviewedOrders() {
                     {batchError}
                 </div>
             )}
+
+            <CustomerServiceInstructionBanner
+                instructions={stageInstructions}
+                stage="reviewed"
+                onUpdated={(response) => {
+                    if (!response?.waiting_customer_service_approval) setStageInstructions([]);
+                }}
+            />
 
             {catalog.truncated && (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-900">

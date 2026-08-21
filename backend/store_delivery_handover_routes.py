@@ -18,6 +18,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from store_delivery_domain import StoreDeliveryRuleError, assignment_snapshot, normalize_text
+from order_tracking_notes import ORDER_TRACKING_INSTRUCTIONS
+from store_delivery_customer_instruction_routes import STORE_DELIVERY_INSTRUCTIONS
 from store_delivery_driver_routes import STORE_DRIVERS
 
 SESSIONS = "store_delivery_handover_sessions"
@@ -206,13 +208,62 @@ def make_store_delivery_handover_router(db: Any, current_user: Callable[..., Any
             })
 
         inserted_ids: list[str] = []
+        inserted_instruction_ids: list[str] = []
         try:
             for row in rows:
                 await db[ASSIGNMENTS].insert_one(row)
                 inserted_ids.append(row["id"])
+                tracking_rows = await db[ORDER_TRACKING_INSTRUCTIONS].find(
+                    {
+                        "user_id": user_id,
+                        "order_number": row.get("order_number"),
+                        "status": {"$in": ["active", "waiting_customer_service_approval"]},
+                        "target_stages": "store_courier",
+                    },
+                    {"_id": 0},
+                ).to_list(100)
+                for tracking in tracking_rows:
+                    instruction_id = f"tracking-{tracking['id']}"
+                    instruction_result = await db[STORE_DELIVERY_INSTRUCTIONS].update_one(
+                        {"user_id": user_id, "id": instruction_id},
+                        {"$setOnInsert": {
+                            "id": instruction_id,
+                            "user_id": user_id,
+                            "order_id": row["order_id"],
+                            "driver_id": row["driver_id"],
+                            "driver_name_snapshot": row.get("driver_name_snapshot"),
+                            "instruction_type": (
+                                "scheduled"
+                                if tracking.get("delivery_date")
+                                else "urgent"
+                                if tracking.get("priority") == "urgent"
+                                else "general"
+                            ),
+                            "priority": tracking.get("priority") or "normal",
+                            "note": tracking.get("note") or "تعليمات من خدمة العملاء",
+                            "delivery_date": tracking.get("delivery_date"),
+                            "delivery_time": tracking.get("delivery_time"),
+                            "status": "active",
+                            "acknowledged_at": None,
+                            "acknowledged_by_driver_id": None,
+                            "version": 1,
+                            "created_at": now,
+                            "created_by": tracking.get("created_by"),
+                            "updated_at": now,
+                            "source_tracking_instruction_id": tracking["id"],
+                        }},
+                        upsert=True,
+                    )
+                    if getattr(instruction_result, "upserted_id", None) is not None:
+                        inserted_instruction_ids.append(instruction_id)
         except Exception:
             if inserted_ids:
                 await db[ASSIGNMENTS].delete_many({"user_id": user_id, "id": {"$in": inserted_ids}})
+            if inserted_instruction_ids:
+                await db[STORE_DELIVERY_INSTRUCTIONS].delete_many({
+                    "user_id": user_id,
+                    "id": {"$in": inserted_instruction_ids},
+                })
             raise
 
         session_update = await db[SESSIONS].update_one(
@@ -221,6 +272,11 @@ def make_store_delivery_handover_router(db: Any, current_user: Callable[..., Any
         )
         if session_update.modified_count != 1:
             await db[ASSIGNMENTS].delete_many({"user_id": user_id, "id": {"$in": inserted_ids}})
+            if inserted_instruction_ids:
+                await db[STORE_DELIVERY_INSTRUCTIONS].delete_many({
+                    "user_id": user_id,
+                    "id": {"$in": inserted_instruction_ids},
+                })
             raise HTTPException(status_code=409, detail={"code": "handover_session_confirm_conflict"})
 
         created = [{k: v for k, v in row.items() if k not in {"_id", "user_id"}} for row in rows]

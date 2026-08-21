@@ -1196,6 +1196,12 @@ async def _order_view(
         ),
         "delivering_at": workflow.get("delivering_at"),
         "delivered_at": workflow.get("delivered_at"),
+        "customer_service_instructions": list(
+            workflow.get("customer_service_instructions") or []
+        ),
+        "customer_service_hold_active": bool(
+            workflow.get("customer_service_hold_active")
+        ),
     }
 
 

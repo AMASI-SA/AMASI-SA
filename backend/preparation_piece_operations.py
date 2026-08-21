@@ -41,6 +41,7 @@ from order_review_routes import (
     _require_reviewer,
     _text,
 )
+from order_tracking_notes import enforce_stage_instructions
 from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS
 from product_option_cost_routes import BINDINGS, RESOURCES
 from reviewed_products_catalog import (
@@ -636,32 +637,74 @@ async def materialize_preparation_pieces(
         for piece in pieces
         if _text(piece.get("order_number"))
     })
-    experiment_workflows = await db[WORKFLOWS].find(
+    runtime_workflows = await db[WORKFLOWS].find(
         {
             "user_id": user_id,
             "order_number": {"$in": order_numbers},
-            "experiment_mode": True,
-            "experiment_run_id": {"$nin": [None, ""]},
         },
         {
             "_id": 0,
             "order_number": 1,
+            "customer_service_instructions": 1,
+            "customer_service_hold_active": 1,
+            "customer_service_hold_reason": 1,
             "experiment_run_id": 1,
             "experiment_generation": 1,
+            "experiment_mode": 1,
         },
     ).to_list(max(len(order_numbers), 1)) if order_numbers else []
-    experiment_by_order = {
+    runtime_by_order = {
         _text(row.get("order_number")): row
-        for row in experiment_workflows
+        for row in runtime_workflows
         if _text(row.get("order_number"))
     }
     for piece in pieces:
-        experiment = experiment_by_order.get(_text(piece.get("order_number")))
-        if experiment:
+        runtime = runtime_by_order.get(_text(piece.get("order_number"))) or {}
+        matching_instructions = []
+        for instruction in runtime.get("customer_service_instructions") or []:
+            scope = _text(instruction.get("scope")) or "order"
+            target_ids = {
+                _text(value)
+                for value in (
+                    list(instruction.get("target_ids") or [])
+                    + [instruction.get("target_id")]
+                )
+                if _text(value)
+            }
+            if (
+                scope == "order"
+                or (
+                    scope == "item"
+                    and _text(piece.get("order_item_id")) in target_ids
+                )
+                or (
+                    scope == "piece"
+                    and _text(piece.get("piece_id")) in target_ids
+                )
+            ):
+                matching_instructions.append(instruction)
+        if matching_instructions:
+            piece["customer_service_instructions"] = matching_instructions
+        matching_hold = next((
+            instruction
+            for instruction in matching_instructions
+            if _text(instruction.get("action_type"))
+            in {"edit_product", "edit_order", "delete_product", "cancel_order"}
+            and _text(instruction.get("status"))
+            in {"active", "waiting_customer_service_approval"}
+        ), None)
+        if runtime.get("customer_service_hold_active") and matching_hold:
+            piece.update({
+                "customer_service_hold_active": True,
+                "customer_service_hold_reason": _text(
+                    matching_hold.get("note")
+                ) or None,
+            })
+        if runtime.get("experiment_mode") and _text(runtime.get("experiment_run_id")):
             piece.update({
                 "experiment_mode": True,
-                "experiment_run_id": _text(experiment.get("experiment_run_id")),
-                "experiment_generation": int(experiment.get("experiment_generation") or 1),
+                "experiment_run_id": _text(runtime.get("experiment_run_id")),
+                "experiment_generation": int(runtime.get("experiment_generation") or 1),
                 "financial_writes_allowed": False,
                 "supplier_payable_allowed": False,
             })
@@ -1015,6 +1058,27 @@ async def _start_file_execution(
             status_code=409,
             detail={"code": "preparation_file_cannot_start", "status": current_status},
         )
+    gate_pieces = await db[PIECES].find(
+        {
+            "user_id": user_id,
+            "batch_id": batch_id,
+            "$or": [
+                {"experiment_archived_at": {"$exists": False}},
+                {"experiment_archived_at": None},
+            ],
+        },
+        {"_id": 0, "piece_id": 1, "order_number": 1, "order_item_id": 1},
+    ).to_list(10000)
+    for piece in gate_pieces:
+        await enforce_stage_instructions(
+            db,
+            user_id=user_id,
+            order_number=_text(piece.get("order_number")),
+            order_item_id=_text(piece.get("order_item_id")),
+            piece_id=_text(piece.get("piece_id")),
+            stage="preparation",
+            actor_id=_text(actor.get("id")),
+        )
     now = _now()
     actor_id = _text(actor.get("id"))
     actor_name = _text(actor.get("name") or actor.get("email"))
@@ -1274,6 +1338,9 @@ def _preparation_receipt_piece_public(
         "preparation_received_by_name": _text(
             piece.get("preparation_received_by_name")
         ) or None,
+        "customer_service_instructions": list(
+            piece.get("customer_service_instructions") or []
+        ),
     }
 
 
@@ -1535,6 +1602,15 @@ async def _receive_preparation_piece(
                 ],
             })
         raise HTTPException(status_code=409, detail=detail)
+    await enforce_stage_instructions(
+        db,
+        user_id=user_id,
+        order_number=_text(piece.get("order_number")),
+        order_item_id=_text(piece.get("order_item_id")),
+        piece_id=normalized_piece_id,
+        stage="preparation_receiving",
+        actor_id=actor_id,
+    )
 
     now = _now()
     update_result = await db[PIECES].update_one(
@@ -1945,6 +2021,15 @@ async def _mark_assembly_piece_ready(
     blocker = assembly_piece_blocker(piece)
     if blocker:
         raise HTTPException(status_code=409, detail={"code": blocker})
+    await enforce_stage_instructions(
+        db,
+        user_id=user_id,
+        order_number=order_number,
+        order_item_id=_text(piece.get("order_item_id")),
+        piece_id=normalized_piece_id,
+        stage="assembly_labeling",
+        actor_id=actor_id,
+    )
     result = await db[PIECES].update_one(
         {
             "user_id": user_id,

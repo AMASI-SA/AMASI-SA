@@ -27,6 +27,7 @@ from order_option_cost_snapshot_routes import (
     MEZAN_V2_COST_SOURCES,
     resolve_base_unit_cost,
 )
+from order_tracking_notes import enforce_stage_instructions
 from preparation_piece_barcode import parse_preparation_piece_barcode
 from preparation_piece_operations import (
     PIECES,
@@ -3091,6 +3092,15 @@ def make_supplier_receiving_router(
             blocker = piece_scan_blocker(piece)
             if blocker:
                 raise HTTPException(status_code=409, detail=blocker)
+            await enforce_stage_instructions(
+                db,
+                user_id=context["merchant_id"],
+                order_number=_text(piece.get("order_number")),
+                order_item_id=_text(piece.get("order_item_id")),
+                piece_id=_text(piece.get("piece_id")),
+                stage="supplier_receiving",
+                actor_id=context["actor_id"],
+            )
             dispatch_blocker = supplier_receiving_dispatch_blocker(
                 piece,
                 (session.get("supplier_snapshot") or {}).get("id")
@@ -3384,6 +3394,9 @@ def make_supplier_receiving_router(
                     "receiving_employee_id": context["actor_id"],
                     "receiving_employee_name": _actor_name(user),
                     "services": list(updated_piece.get("services") or []),
+                    "customer_service_instructions": list(
+                        updated_piece.get("customer_service_instructions") or []
+                    ),
                     "invoice_services": supplier_piece_invoice_services(
                         updated_piece,
                         session,

@@ -1,6 +1,7 @@
 from copy import deepcopy
 
 import pytest
+from fastapi import HTTPException
 from carrier_handoff import (
     CarrierHandoffError,
     advance_carrier_handoff_from_salla_status,
@@ -27,6 +28,9 @@ def _matches(document, query):
                     return False
             else:
                 raise AssertionError(f"unsupported query operator: {expected}")
+        elif isinstance(actual, list):
+            if expected not in actual:
+                return False
         elif actual != expected:
             return False
     return True
@@ -35,6 +39,17 @@ def _matches(document, query):
 class _Result:
     def __init__(self, modified_count=0):
         self.modified_count = modified_count
+
+
+class _Cursor:
+    def __init__(self, rows=None):
+        self.rows = [deepcopy(row) for row in rows or []]
+
+    def sort(self, *_args, **_kwargs):
+        return self
+
+    async def to_list(self, length):
+        return self.rows[:length]
 
 
 class _Collection:
@@ -46,6 +61,9 @@ class _Collection:
             (deepcopy(row) for row in self.rows if _matches(row, query)),
             None,
         )
+
+    def find(self, query, _projection=None):
+        return _Cursor(row for row in self.rows if _matches(row, query))
 
     async def update_one(self, query, update):
         for row in self.rows:
@@ -61,10 +79,11 @@ class _Collection:
 
 
 class _DB:
-    def __init__(self, workflows):
+    def __init__(self, workflows, instructions=None):
         self.collections = {
             "order_review_workflows": _Collection(workflows),
             "mezan_fulfillment_events_v2": _Collection(),
+            "mezan_order_tracking_instructions_v1": _Collection(instructions),
         }
 
     def __getitem__(self, name):
@@ -119,6 +138,39 @@ async def test_labeling_employee_must_scan_the_matching_imile_awb():
     saved = db["order_review_workflows"].rows[0]
     assert saved["carrier_handoff_state"] == "awaiting_carrier_handoff"
     assert saved["carrier_label_barcode"] == "6081326581116"
+
+
+@pytest.mark.asyncio
+async def test_customer_service_gate_blocks_carrier_label_confirmation():
+    db = _DB(
+        [_workflow()],
+        instructions=[
+            {
+                "id": "instruction-1",
+                "user_id": "owner-1",
+                "order_number": "276628330",
+                "status": "active",
+                "scope": "order",
+                "target_stages": ["carrier_handoff"],
+                "enforcement": "completion_required",
+            }
+        ],
+    )
+
+    with pytest.raises(HTTPException) as blocked:
+        await confirm_carrier_label_print(
+            db,
+            user_id="owner-1",
+            order_number="276628330",
+            scanned_barcode="6081326581116",
+            actor_id="labeler-1",
+            actor_name="موظف العنونة",
+        )
+
+    assert blocked.value.status_code == 409
+    assert blocked.value.detail["code"] == (
+        "customer_service_instruction_action_required"
+    )
 
 
 @pytest.mark.asyncio

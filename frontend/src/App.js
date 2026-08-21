@@ -52,6 +52,7 @@ import MezanComponents from "./pages/MezanComponents";
 import AppsIntegrationsControlCenter from "./pages/AppsIntegrationsControlCenter";
 import InstagramCustomerIntelligenceIntegration from "./pages/InstagramCustomerIntelligenceIntegration";
 import CustomerIntelligenceCenter from "./pages/CustomerIntelligenceCenter";
+import OrderTrackingNotes from "./pages/OrderTrackingNotes";
 import AdsManager from "./pages/AdsManager";
 import FulfillmentV2 from "./pages/FulfillmentV2";
 import InventoryReceivingWorkspace from "./pages/InventoryReceivingWorkspace";
@@ -379,6 +380,16 @@ function AppRoutes() {
                     <ProtectedRoute>
                         <PermissionRoute permission="customer_intelligence.inbox.read">
                             <Layout><CustomerIntelligenceCenter /></Layout>
+                        </PermissionRoute>
+                    </ProtectedRoute>
+                }
+            />
+            <Route
+                path="/order-tracking-notes"
+                element={
+                    <ProtectedRoute>
+                        <PermissionRoute permission="customer_intelligence.inbox.read">
+                            <Layout><OrderTrackingNotes /></Layout>
                         </PermissionRoute>
                     </ProtectedRoute>
                 }

@@ -42,6 +42,12 @@ const SECTIONS = [
         requiredPermission: "customer_intelligence.inbox.read",
         items: [
             {
+                to: "/order-tracking-notes",
+                label: "تتبع الطلب وملاحظاته",
+                icon: ClockCounterClockwise,
+                testid: "nav-order-tracking-notes",
+            },
+            {
                 to: "/customer-intelligence?tab=conversations",
                 label: "ذكاء العملاء والمبيعات",
                 icon: ChatsCircle,

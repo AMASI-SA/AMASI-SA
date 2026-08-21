@@ -6,6 +6,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+from order_tracking_notes import enforce_stage_instructions
+
 WORKFLOWS = "order_review_workflows"
 EVENTS = "mezan_fulfillment_events_v2"
 
@@ -150,6 +152,14 @@ async def confirm_carrier_label_print(
                 "scanned_at": workflow.get("carrier_handoff_scanned_at"),
             },
         )
+    await enforce_stage_instructions(
+        db,
+        user_id=user_id,
+        order_number=normalized_order,
+        stage="carrier_handoff",
+        actor_id=actor_id,
+        order_wide=True,
+    )
     if workflow.get("carrier_label_print_confirmed"):
         return {"ok": True, "already_confirmed": True, **_snapshot(workflow)}
 
@@ -253,6 +263,14 @@ async def receive_carrier_shipment(
             "carrier_shipment_no_longer_waiting",
             "هذه الشحنة لم تعد بانتظار التسليم لشركة الشحن.",
         )
+    await enforce_stage_instructions(
+        db,
+        user_id=user_id,
+        order_number=_text(workflow.get("order_number")),
+        stage="carrier_handoff",
+        actor_id=actor_id,
+        order_wide=True,
+    )
 
     now = _now()
     result = await db[WORKFLOWS].update_one(
