@@ -7,6 +7,7 @@ function read(relativePath) {
 
 const dashboardCompatibilitySource = read("pages/Dashboard.jsx");
 const advancedDashboardSource = read("pages/AdvancedDashboard.jsx");
+const frontendIndexSource = read("index.js");
 const analyticsPlacementSource = read("components/DashboardAnalyticsPlacement.jsx");
 const snapchatPlacementSource = read("components/DashboardSnapchatAccountsPlacement.jsx");
 
@@ -43,13 +44,18 @@ test("the advanced dashboard owns GA4, ads, payment fees, and profit details", (
     expect(advancedDashboardSource).toContain('data-testid="advanced-ga-active-chart"');
     expect(advancedDashboardSource).toContain("<GaLive data={ga} />");
     expect(advancedDashboardSource).toContain("<AdsCard ads={data?.ads_v2}");
+    expect(advancedDashboardSource).not.toContain("getDashboardAdsSpend");
+    expect(advancedDashboardSource).not.toContain("chartData");
+    expect(frontendIndexSource).not.toContain("dashboardExecutivePlatformSpendInterceptor");
 });
 
 
 test("the advanced dashboard retains governed date refresh and latest-snapshot behavior", () => {
     expect(advancedDashboardSource).toContain(
-        'const response = await api.get(`/dashboard-v2?${query.toString()}`',
+        'const response = await apiClient.get(`/dashboard-v2?${query.toString()}`',
     );
+    expect(advancedDashboardSource).toContain("isLatest(requestSequence)");
+    expect(advancedDashboardSource).not.toContain("setData(null)");
     expect(advancedDashboardSource).toContain("requestSequenceRef");
     expect(advancedDashboardSource).toContain("backgroundRefreshInFlightRef");
     expect(advancedDashboardSource).toContain("DASHBOARD_AUTO_REFRESH_MS");

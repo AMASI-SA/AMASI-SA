@@ -16,6 +16,9 @@ on:
       - "frontend/src/lib/dashboardPlatformSpendMerge.test.js"
       - "frontend/src/services/dashboardAdsSpend.js"
       - "frontend/src/services/dashboardAdsSpend.test.js"
+      - "frontend/src/pages/AdvancedDashboard.jsx"
+      - "frontend/src/pages/AdvancedDashboard.latestOrders.test.jsx"
+      - "frontend/src/components/DashboardAnalyticsPlacement.test.js"
       - ".github/workflows/prod-dashboard-executive-four-platform-date-v1.yml"
 
 permissions:
@@ -46,6 +49,8 @@ jobs:
           src/lib/dashboardPlatformSpendMerge.test.js
           src/dashboardExecutivePlatformSpendInterceptor.test.js
           src/services/dashboardAdsSpend.test.js
+          src/pages/AdvancedDashboard.latestOrders.test.jsx
+          src/components/DashboardAnalyticsPlacement.test.js
       - name: Build Production frontend
         env:
           CI: "false"
@@ -76,6 +81,6 @@ jobs:
           grep -q 'refresh: false' "$INTERCEPTOR"
           ! grep -q 'refresh: true' "$INTERCEPTOR"
           grep -q 'mergeDashboardWithPlatformSpend' "$INTERCEPTOR"
-          grep -q 'dashboardExecutivePlatformSpendInterceptor' "$INDEX"
+          ! grep -q 'dashboardExecutivePlatformSpendInterceptor' "$INDEX"
           ! grep -q 'general_ledger' "$RANGE_GUARD" "$CLIENT" "$MERGE" "$INTERCEPTOR"
           ! grep -q 'qoyod' "$RANGE_GUARD" "$CLIENT" "$INTERCEPTOR"

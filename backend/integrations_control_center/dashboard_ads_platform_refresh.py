@@ -24,16 +24,7 @@ from . import meta_native_reporting as meta
 from .meta_oauth_security import META_PROVIDER_ID, meta_oauth_configured
 from . import tiktok_native_reporting as tiktok
 from .tiktok_oauth_security import TIKTOK_PROVIDER_ID, tiktok_oauth_configured
-from .snapchat_account_hourly_refresh import refresh_snapchat_account_hours
-from .snapchat_account_selection import _load_selected_accounts
-from .snapchat_native_data_common import (
-    SNAPCHAT_PROVIDER_ID,
-    SnapchatNativeSyncError,
-    SnapchatSyncContext,
-    ensure_snapchat_native_sync_indexes,
-    snapchat_native_sync_enabled,
-)
-from .snapchat_oauth_security import snapchat_oauth_configured
+from .snapchat_native_data_common import SNAPCHAT_PROVIDER_ID
 
 FOUR_PLATFORM_KEYS = ("snapchat", "meta", "tiktok", "google")
 MAX_REFRESH_DAYS = 31
@@ -289,37 +280,17 @@ async def _refresh_snapchat(
     start: date,
     end: date,
 ) -> dict[str, Any]:
-    if not snapchat_oauth_configured() or not snapchat_native_sync_enabled():
-        return {"provider": SNAPCHAT_PROVIDER_ID, "status": "skipped", "reason": "disabled"}
-    accounts = await _load_selected_accounts(db, user_id)
-    await ensure_snapchat_native_sync_indexes(db)
-    context = SnapchatSyncContext(db, user_id, now=_utcnow)
-    access_token = await context.access_token()
-    items: list[dict[str, Any]] = []
-    errors: list[dict[str, Any]] = []
-    async with httpx.AsyncClient(timeout=35.0) as client:
-        for account in accounts:
-            try:
-                items.append(
-                    await refresh_snapchat_account_hours(
-                        context,
-                        client,
-                        access_token,
-                        account,
-                        start_date=start,
-                        end_date=end,
-                        now=_utcnow(),
-                    )
-                )
-            except SnapchatNativeSyncError as exc:
-                errors.append({"code": exc.code, "message": exc.message})
-    rows_saved = sum(int(item.get("rows_saved") or 0) for item in items)
+    # The canonical Snapchat writer is the durable analytics scheduler.  A
+    # second writer without a run record could be mistaken for a scheduler
+    # fact when their write windows overlap, so Dashboard refresh is read-only.
+    del db, user_id, start, end
     return {
         "provider": SNAPCHAT_PROVIDER_ID,
-        "status": "complete" if not errors else "partial" if rows_saved else "failed",
-        "rows_saved": rows_saved,
-        "errors_count": len(errors),
-        "error_samples": errors[:5],
+        "status": "incomplete",
+        "reason": "canonical_dashboard_scheduler_required",
+        "projection_write_reached": False,
+        "rows_saved": 0,
+        "errors_count": 0,
     }
 
 

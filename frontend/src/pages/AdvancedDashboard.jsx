@@ -18,7 +18,6 @@ import {
     dashboardOrdersSignature,
     shouldRefreshDashboardForOrders,
 } from "../lib/dashboardLiveRefresh";
-import { getDashboardAdsSpend } from "../services/dashboardAdsSpend";
 
 const PLATFORM_META = [
     { key: "snapchat", label: "سناب شات", color: "#f59e0b" },
@@ -30,6 +29,47 @@ const PLATFORM_META = [
 const money = (value) => Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const integer = (value) => Number(value || 0).toLocaleString("en-US", { maximumFractionDigits: 0 });
 const CARTS_AUTO_REFRESH_MS = 15_000;
+
+function finiteFinancialValue(value, { nonnegative = false } = {}) {
+    if (value === null || value === undefined || value === "" || typeof value === "boolean") return null;
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || (nonnegative && parsed < 0)) return null;
+    return parsed;
+}
+
+function optionalMoney(value) {
+    const parsed = finiteFinancialValue(value);
+    return parsed === null ? "—" : money(parsed);
+}
+
+export function dashboardSpendDisplay(value, dataState = "") {
+    const parsed = finiteFinancialValue(value, { nonnegative: true });
+    const state = String(dataState || "");
+    if (state === "confirmed_no_data") return parsed === null ? "لا توجد بيانات" : "غير مكتمل";
+    if (state === "unknown_incomplete" || state === "incomplete") return "غير مكتمل";
+    if (state === "not_connected") return parsed === 0 ? "غير متصل" : "غير مكتمل";
+    if (state === "confirmed_zero") return parsed === 0 ? money(0) : "غير مكتمل";
+    if (state === "confirmed_data") return parsed !== null && parsed > 0 ? money(parsed) : "غير مكتمل";
+    return parsed === null ? "غير مكتمل" : money(parsed);
+}
+
+export function aggregateDashboardAdsHistoryByMonth(daily = []) {
+    const grouped = {};
+    daily.forEach((row) => {
+        const key = String(row?.date || "").slice(0, 7);
+        if (!key) return;
+        grouped[key] ||= { label: key, snapchat: 0, tiktok: 0, meta: 0, google: 0 };
+        PLATFORM_META.forEach(({ key: provider }) => {
+            const amount = finiteFinancialValue(row?.[provider], { nonnegative: true });
+            if (amount === null || grouped[key][provider] === null) {
+                grouped[key][provider] = null;
+            } else {
+                grouped[key][provider] += amount;
+            }
+        });
+    });
+    return Object.values(grouped);
+}
 
 function Panel({ children, className = "", testid }) {
     return <section data-testid={testid} className={`overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm ${className}`}>{children}</section>;
@@ -289,43 +329,25 @@ export function SummaryStrip({ data, filters, loading = false }) {
     </div>;
 }
 
-function AdsCard({ ads, filters }) {
+function AdsCard({ ads }) {
     const [monthly, setMonthly] = useState(false);
-    const [chartData, setChartData] = useState(null);
-    useEffect(() => {
-        let active = true;
-        let timer = null;
-        const fromDate = filters?.from;
-        const toDate = filters?.to || fromDate;
-        if (!fromDate || !toDate) return () => { active = false; };
-        const loadSpend = () => getDashboardAdsSpend({ dateFrom: fromDate, dateTo: toDate, refresh: false })
-            .then((result) => { if (active) setChartData(result); })
-            .catch(() => { if (active) setChartData(null); });
-        loadSpend();
-        timer = window.setInterval(loadSpend, 60_000);
-        return () => {
-            active = false;
-            if (timer) window.clearInterval(timer);
-        };
-    }, [filters?.from, filters?.to]);
     const rows = useMemo(() => {
-        const singleDay = Boolean(filters?.from && (filters?.to || filters?.from) === filters.from);
-        const hourly = chartData?.hourly_spend || [];
-        const daily = chartData?.daily_spend?.length ? chartData.daily_spend : (ads?.history || []);
-        if (!monthly && singleDay && hourly.length) return hourly.map((row) => ({ ...row, label: row.hour }));
+        const daily = ads?.history || [];
         if (!monthly) return daily.map((row) => ({ ...row, label: row.date?.slice(5) }));
-        const grouped = {};
-        daily.forEach((row) => { const key = String(row.date || "").slice(0, 7); grouped[key] ||= { label: key, snapchat: 0, tiktok: 0, meta: 0, google: 0 }; PLATFORM_META.forEach(({ key: p }) => { grouped[key][p] += Number(row[p] || 0); }); });
-        return Object.values(grouped);
-    }, [ads?.history, chartData, filters?.from, filters?.to, monthly]);
+        return aggregateDashboardAdsHistoryByMonth(daily);
+    }, [ads?.history, monthly]);
     const plotRows = rows;
-    const breakdown = chartData?.provider_totals_sar || ads?.breakdown || {};
-    const chartTotal = chartData?.total_sar ?? ads?.total;
+    const breakdown = ads?.breakdown || {};
+    const spendQuality = ads?.spend_quality || {};
+    const totalComplete = spendQuality.status === "complete" && spendQuality.amount_complete === true;
+    const chartTotal = totalComplete
+        ? finiteFinancialValue(ads?.total, { nonnegative: true })
+        : null;
     return <Panel className="border-amber-200" testid="advanced-ads-chart">
         <div className="flex h-14 items-center justify-between border-b border-amber-700 bg-amber-600 px-4 text-white"><h2 className="flex items-center gap-2 font-extrabold"><CircleDollarSign className="h-5 w-5" />مصروفات منصات الإعلانات</h2><div className="rounded-lg border border-white/30 bg-white/15 p-1 text-[10px] font-bold"><button onClick={() => setMonthly(false)} className={`rounded-md px-2 py-1 ${!monthly ? "bg-white text-amber-800" : ""}`}>يومي</button><button onClick={() => setMonthly(true)} className={`rounded-md px-2 py-1 ${monthly ? "bg-white text-amber-800" : ""}`}>شهري</button></div></div>
         <div className="h-[190px] px-2 pt-3" dir="ltr"><ResponsiveContainer width="99%" height="100%" minWidth={0} minHeight={0}><LineChart data={plotRows} margin={{ top: 6, right: 6, left: 0, bottom: 4 }}><CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" /><XAxis dataKey="label" tick={{ fontSize: 9 }} minTickGap={8} interval="preserveStartEnd" /><YAxis tick={{ fontSize: 9 }} width={38} /><Tooltip formatter={(value, name) => [`${money(value)} ر.س`, name]} labelFormatter={(value) => `الوقت: ${value}`} contentStyle={{ direction: "rtl", borderRadius: 10, fontFamily: "Cairo" }} />{PLATFORM_META.map((p) => <Line key={p.key} type="monotone" dataKey={p.key} name={p.label} stroke={p.color} strokeWidth={2.5} dot={false} activeDot={{ r: 3 }} connectNulls={false} />)}</LineChart></ResponsiveContainer></div>
-        <div className="grid grid-cols-4 gap-1 p-2">{PLATFORM_META.map((p) => { const value = p.key === "google" ? (breakdown.google ?? breakdown.google_transitional) : breakdown[p.key]; return <div key={p.key} className="rounded-lg border p-2 text-center"><p className="text-[9px] font-bold" style={{ color: p.color }}>{p.label}</p><p className="num mt-1 text-[10px] font-black">{money(value)}</p></div>; })}</div>
-        <div className="flex h-11 items-center justify-between border-t bg-amber-50 px-4 font-extrabold"><span>إجمالي المصروفات</span><span className="num">{money(chartTotal)} ر.س</span></div>
+        <div className="grid grid-cols-4 gap-1 p-2">{PLATFORM_META.map((p) => { const value = p.key === "google" ? (breakdown.google ?? breakdown.google_transitional) : breakdown[p.key]; const state = spendQuality?.[p.key]?.data_state; return <div key={p.key} className="rounded-lg border p-2 text-center"><p className="text-[9px] font-bold" style={{ color: p.color }}>{p.label}</p><p className="num mt-1 text-[10px] font-black">{dashboardSpendDisplay(value, state)}</p></div>; })}</div>
+        <div className="flex h-11 items-center justify-between border-t bg-amber-50 px-4 font-extrabold"><span>إجمالي المصروفات</span><span className="num">{chartTotal === null ? "غير مكتمل" : `${optionalMoney(chartTotal)} ر.س`}</span></div>
     </Panel>;
 }
 
@@ -359,6 +381,14 @@ function OperatingProfitDetails({ totals = {}, total = 0 }) {
 export function ProfitCard({ data, loading = false }) {
     const [expanded, setExpanded] = useState(null);
     const t = data?.totals || {};
+    const adsQuality = data?.ads_v2?.spend_quality || {};
+    const adsTotal = finiteFinancialValue(t.total_ads_cost, { nonnegative: true });
+    const adsSpendComplete = (
+        adsTotal !== null
+        && t.ads_spend_data_complete === true
+        && adsQuality.status === "complete"
+        && adsQuality.amount_complete === true
+    );
     const fees = t.total_payment_fees ?? (Number(t.other_payment_fees || 0) + Number(t.tamara_fees || 0) + Number(t.tabby_fees || 0) + Number(t.emkan_fees || 0) + Number(t.bank_fees || 0) + Number(t.ad_bank_commission_fees || 0));
     const rows = [
         { key: "sales", label: "المبيعات", value: t.total_sales, Icon: CircleDollarSign, color: "text-emerald-700" },
@@ -371,7 +401,8 @@ export function ProfitCard({ data, loading = false }) {
     const sales = Number(t.total_sales || 0);
     const orderCount = Number(t.total_orders || 0);
     const averageBasket = orderCount > 0 ? sales / orderCount : 0;
-    const netMargin = sales > 0 ? (Number(t.net_profit || 0) / sales * 100).toFixed(2) : null;
+    const netProfit = finiteFinancialValue(t.net_profit);
+    const netMargin = adsSpendComplete && sales > 0 && netProfit !== null ? (netProfit / sales * 100).toFixed(2) : null;
     const details = {
         ads: <ProfitDetailBox testid="advanced-profit-ads-details"><AdsExecutiveBreakdownTable data={data?.ads_v2?.executive_breakdown} /></ProfitDetailBox>,
         shipping: <ShippingProfitDetails rows={data?.shipping_breakdown} total={t.total_shipping_cost} />,
@@ -379,7 +410,7 @@ export function ProfitCard({ data, loading = false }) {
         operating: <OperatingProfitDetails totals={t} total={t.operating_expenses_total} />,
     };
     const initialLoading = loading && !data;
-    return <Panel className="border-emerald-200" testid="advanced-profit-summary"><div className="flex h-14 items-center justify-between border-b border-emerald-800 bg-emerald-700 px-4 text-white"><h2 className="flex items-center gap-2 font-extrabold"><TrendingUp className="h-5 w-5" />الملخص التنفيذي للأرباح</h2><span className="text-[9px] font-bold text-emerald-100">{initialLoading ? "جارٍ مزامنة الفترة…" : "الفترة المحددة"}</span></div><div className="grid grid-cols-2 gap-2 border-b border-emerald-100 bg-emerald-50/40 p-3 sm:grid-cols-4"><Metric label="تكلفة الطلب" value={initialLoading || t.avg_cost_per_order == null ? "—" : `${money(t.avg_cost_per_order)} ر.س`} Icon={ShoppingBag} tone="bg-blue-50 text-blue-700" /><Metric label="عدد الطلبات" value={initialLoading ? "—" : integer(orderCount)} Icon={ShoppingCart} tone="bg-emerald-50 text-emerald-700" /><Metric label="العائد" value={initialLoading || t.overall_roas == null ? "—" : `${Number(t.overall_roas).toFixed(2)}×`} Icon={TrendingUp} tone="bg-violet-50 text-violet-700" /><Metric label="متوسط قيمة سلة المشتريات" value={initialLoading ? "—" : `${money(averageBasket)} ر.س`} Icon={ShoppingBag} tone="bg-rose-50 text-rose-600" /></div><div className="px-4 py-2">{rows.map((row, index) => { const percentage = index > 0 && sales > 0 ? (Number(row.value || 0) / sales * 100).toFixed(2) : null; return <div key={row.key}><button type="button" disabled={!row.expandable} onClick={() => row.expandable && setExpanded((value) => value === row.key ? null : row.key)} aria-expanded={row.expandable ? expanded === row.key : undefined} data-testid={`advanced-profit-row-${row.key}`} dir="rtl" className={`flex min-h-[56px] w-full items-center gap-3 border-b text-right last:border-0 ${row.expandable ? "cursor-pointer rounded-lg hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-200" : "cursor-default"}`}><span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-50 ${row.color}`}><row.Icon className="h-4 w-4" /></span><p className="flex min-w-0 flex-1 items-center gap-1 text-right text-xs font-extrabold text-slate-700">{row.label}{row.expandable && <ChevronDown className={`h-3 w-3 shrink-0 transition-transform ${expanded === row.key ? "rotate-180" : ""}`} />}</p><div dir="ltr" className={`num flex shrink-0 items-baseline gap-1 text-left text-base font-black ${row.color}`}><span>{initialLoading ? "—" : money(row.value)}</span>{!initialLoading && <span className="text-[11px] font-extrabold">ر.س</span>}{percentage && <span className="ml-1 rounded-md bg-current/10 px-1.5 py-0.5 text-[9px] opacity-80">{percentage}%</span>}</div></button>{row.expandable && expanded === row.key && details[row.key]}</div>; })}</div><div dir="ltr" className="m-4 flex min-h-[64px] items-center justify-between rounded-xl bg-emerald-600 px-5 text-white"><p className="num flex items-baseline gap-1 text-xl font-black">{!initialLoading && netMargin && <span data-testid="advanced-profit-net-margin" title="هامش صافي الأرباح">{netMargin}%</span>}<span>{initialLoading ? "—" : money(t.net_profit)}</span>{!initialLoading && <span className="text-sm">ر.س</span>}</p><div dir="rtl"><p className="font-black">صافي الأرباح</p><p className="text-[9px] text-emerald-100">بعد جميع التكاليف والمصروفات</p></div></div></Panel>;
+    return <Panel className="border-emerald-200" testid="advanced-profit-summary"><div className="flex h-14 items-center justify-between border-b border-emerald-800 bg-emerald-700 px-4 text-white"><h2 className="flex items-center gap-2 font-extrabold"><TrendingUp className="h-5 w-5" />الملخص التنفيذي للأرباح</h2><span className="text-[9px] font-bold text-emerald-100">{initialLoading ? "جارٍ مزامنة الفترة…" : "الفترة المحددة"}</span></div><div className="grid grid-cols-2 gap-2 border-b border-emerald-100 bg-emerald-50/40 p-3 sm:grid-cols-4"><Metric label="تكلفة الطلب" value={initialLoading || !adsSpendComplete || t.avg_cost_per_order == null ? "—" : `${money(t.avg_cost_per_order)} ر.س`} Icon={ShoppingBag} tone="bg-blue-50 text-blue-700" /><Metric label="عدد الطلبات" value={initialLoading ? "—" : integer(orderCount)} Icon={ShoppingCart} tone="bg-emerald-50 text-emerald-700" /><Metric label="العائد" value={initialLoading || !adsSpendComplete || t.overall_roas == null ? "—" : `${Number(t.overall_roas).toFixed(2)}×`} Icon={TrendingUp} tone="bg-violet-50 text-violet-700" /><Metric label="متوسط قيمة سلة المشتريات" value={initialLoading ? "—" : `${money(averageBasket)} ر.س`} Icon={ShoppingBag} tone="bg-rose-50 text-rose-600" /></div><div className="px-4 py-2">{rows.map((row, index) => { const rowValue = finiteFinancialValue(row.value); const rowIncomplete = row.key === "ads" && !adsSpendComplete; const percentage = index > 0 && sales > 0 && rowValue !== null && !rowIncomplete ? (rowValue / sales * 100).toFixed(2) : null; return <div key={row.key}><button type="button" disabled={!row.expandable} onClick={() => row.expandable && setExpanded((value) => value === row.key ? null : row.key)} aria-expanded={row.expandable ? expanded === row.key : undefined} data-testid={`advanced-profit-row-${row.key}`} dir="rtl" className={`flex min-h-[56px] w-full items-center gap-3 border-b text-right last:border-0 ${row.expandable ? "cursor-pointer rounded-lg hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-200" : "cursor-default"}`}><span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-50 ${row.color}`}><row.Icon className="h-4 w-4" /></span><p className="flex min-w-0 flex-1 items-center gap-1 text-right text-xs font-extrabold text-slate-700">{row.label}{row.expandable && <ChevronDown className={`h-3 w-3 shrink-0 transition-transform ${expanded === row.key ? "rotate-180" : ""}`} />}</p><div dir="ltr" className={`num flex shrink-0 items-baseline gap-1 text-left text-base font-black ${row.color}`}><span>{initialLoading ? "—" : rowIncomplete ? "غير مكتمل" : optionalMoney(row.value)}</span>{!initialLoading && !rowIncomplete && rowValue !== null && <span className="text-[11px] font-extrabold">ر.س</span>}{percentage && <span className="ml-1 rounded-md bg-current/10 px-1.5 py-0.5 text-[9px] opacity-80">{percentage}%</span>}</div></button>{row.expandable && expanded === row.key && details[row.key]}</div>; })}</div><div dir="ltr" className="m-4 flex min-h-[64px] items-center justify-between rounded-xl bg-emerald-600 px-5 text-white"><p className="num flex items-baseline gap-1 text-xl font-black">{!initialLoading && netMargin && <span data-testid="advanced-profit-net-margin" title="هامش صافي الأرباح">{netMargin}%</span>}<span>{initialLoading ? "—" : !adsSpendComplete ? "غير مكتمل" : optionalMoney(t.net_profit)}</span>{!initialLoading && adsSpendComplete && netProfit !== null && <span className="text-sm">ر.س</span>}</p><div dir="rtl"><p className="font-black">صافي الأرباح</p><p className="text-[9px] text-emerald-100">{!initialLoading && !adsSpendComplete ? "بانتظار اكتمال بيانات الإعلانات" : "بعد جميع التكاليف والمصروفات"}</p></div></div></Panel>;
 }
 
 function orderSource(order) {
@@ -485,9 +516,43 @@ export function LatestOrders({ orders, totals = {} }) {
 
 function GaLive({ data }) { const pages = data?.top_pages || []; const minutes = data?.active_users?.per_minute || []; const max = Math.max(1, ...pages.map((p) => Number(p.views || 0))); const minuteMax = Math.max(1, ...minutes.map((m) => Number(m.active_users || 0))); return <div className="space-y-4"><Panel className="border-blue-200"><div className="flex h-14 items-center gap-2 border-b border-blue-800 bg-blue-700 px-4 text-white"><BarChart3 className="h-5 w-5" /><h2 className="text-sm font-black">Google Analytics 4 — مباشر</h2></div><div className="p-4"><h3 className="mb-3 text-sm font-extrabold">الصفحات الأكثر مشاهدة</h3>{pages.slice(0, 6).map((p, i) => <div key={`${p.title}-${i}`} className="mb-3"><div className="flex justify-between gap-2 text-[10px]"><span className="truncate">{p.title}</span><b>{p.views}</b></div><div className="mt-1 h-1.5 rounded bg-slate-100"><div className="h-full rounded bg-blue-500" style={{ width: `${Number(p.views || 0) / max * 100}%` }} /></div></div>)}</div></Panel><Panel className="border-violet-200"><div className="flex h-14 items-center gap-2 border-b border-violet-800 bg-violet-700 px-4 text-white"><UsersRound className="h-5 w-5" /><h2 className="font-black">المستخدمون النشطون الآن</h2></div><div className="grid grid-cols-2 gap-2 p-4"><Metric label="آخر 30 دقيقة" value={integer(data?.active_users?.last_30_minutes)} Icon={UsersRound} tone="bg-blue-50 text-blue-600" /><Metric label="آخر 5 دقائق" value={integer(data?.active_users?.last_5_minutes)} Icon={UsersRound} tone="bg-violet-50 text-violet-600" /></div><div className="flex h-36 items-end gap-1 overflow-hidden px-4 pb-4" dir="ltr" data-testid="advanced-ga-active-chart">{minutes.map((m, i) => <div key={i} className="max-h-full flex-1 rounded-t bg-violet-600" style={{ height: `${Math.min(100, Math.max(4, Number(m.active_users || 0) / minuteMax * 100))}%` }} />)}</div></Panel></div>; }
 
+export async function loadDashboardPeriodSnapshot({
+    next,
+    background = false,
+    requestSequence,
+    isLatest,
+    apiClient = api,
+    setData,
+    setLoading,
+    setLoadError,
+    now = Date.now,
+}) {
+    if (!background) {
+        setLoading(true);
+        setLoadError(null);
+    }
+    try {
+        const query = new URLSearchParams(filtersToQueryString(next));
+        query.set("_refresh", String(now()));
+        const response = await apiClient.get(`/dashboard-v2?${query.toString()}`, {
+            headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+        });
+        if (isLatest(requestSequence)) {
+            setData(response.data);
+            setLoadError(null);
+        }
+    } catch {
+        if (!background && isLatest(requestSequence)) {
+            setLoadError("تعذر تحميل بيانات الفترة المحددة");
+        }
+    } finally {
+        if (isLatest(requestSequence)) setLoading(false);
+    }
+}
+
 export default function AdvancedDashboard() {
     const [filters, setFilters] = useState(() => defaultFilters("today"));
-    const [data, setData] = useState(null); const [carts, setCarts] = useState([]); const [cartSummary, setCartSummary] = useState({ abandoned_count: 0, recovered_count: 0 }); const [ga, setGa] = useState(null); const [loading, setLoading] = useState(true);
+    const [data, setData] = useState(null); const [carts, setCarts] = useState([]); const [cartSummary, setCartSummary] = useState({ abandoned_count: 0, recovered_count: 0 }); const [ga, setGa] = useState(null); const [loading, setLoading] = useState(true); const [loadError, setLoadError] = useState(null);
     const { orders } = useOrders();
     const dashboardDataRef = useRef(null);
     const requestSequenceRef = useRef(0);
@@ -498,21 +563,18 @@ export default function AdvancedDashboard() {
         if (background && backgroundRefreshInFlightRef.current) return;
         const requestSequence = ++requestSequenceRef.current;
         if (background) backgroundRefreshInFlightRef.current = true;
-        else setLoading(true);
         try {
-            const query = new URLSearchParams(filtersToQueryString(next));
-            query.set("_refresh", String(Date.now()));
-            const response = await api.get(`/dashboard-v2?${query.toString()}`, {
-                headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+            await loadDashboardPeriodSnapshot({
+                next,
+                background,
+                requestSequence,
+                isLatest: (sequence) => sequence === requestSequenceRef.current,
+                setData,
+                setLoading,
+                setLoadError,
             });
-            if (requestSequence === requestSequenceRef.current) setData(response.data);
-        } catch {
-            // Network/auth refresh/provider failures are transient. Never erase
-            // a verified dashboard snapshot and replace it with false zeros;
-            // the next scheduled refresh will reconcile it safely.
         } finally {
             if (background) backgroundRefreshInFlightRef.current = false;
-            if (requestSequence === requestSequenceRef.current) setLoading(false);
         }
     }, []);
     useEffect(() => { loadPeriod(filters); }, [filters, loadPeriod]);
@@ -590,8 +652,11 @@ export default function AdvancedDashboard() {
             <Link to="/dashboard-v2" className="inline-flex items-center gap-2 rounded-xl border bg-white px-4 py-2 text-sm font-bold"><ArrowRight className="h-4 w-4" />لوحة التحكم القديمة</Link>
         </header>
         <div className="flex items-stretch gap-2"><div className="min-w-0 flex-1"><AdvancedFilters value={filters} onChange={setFilters} defaultPreset="today" /></div><button onClick={() => loadPeriod(filters)} className="rounded-xl border bg-white px-4 text-blue-700" aria-label="تحديث بيانات الفترة"><RefreshCw className={`h-5 w-5 ${loading ? "animate-spin" : ""}`} /></button></div>
+        {!loading && loadError && <Panel className="border-amber-200 bg-amber-50 p-5 text-sm font-bold text-amber-900"><span role="alert">{loadError} — {data ? "تم الاحتفاظ بآخر بيانات موثوقة." : "لم تُعرض أرقام بديلة أو بيانات من فترة سابقة."}</span></Panel>}
+        {(Boolean(data) || loading) && <>
         <SummaryStrip data={data} filters={filters} loading={loading} />
         <CampaignAdvisorCard />
-        <div dir="ltr" className="grid items-start gap-4 min-[1280px]:grid-cols-[clamp(280px,24vw,350px)_minmax(0,1fr)]"><aside dir="rtl" className="space-y-4"><AdsCard ads={data?.ads_v2} filters={filters} /><TopProductsCard rows={data?.product_cost_v2?.product_rows} summary={data?.product_cost_v2} loading={loading} /><AbandonedCartsCard carts={carts} summary={cartSummary} /></aside><main dir="rtl" className="min-w-0"><div dir="ltr" className="grid min-w-0 items-start gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]"><div dir="rtl" className="space-y-4"><ProfitCard data={data} loading={loading} /><LatestOrders orders={orders} totals={data?.totals} /></div><div dir="rtl"><GaLive data={ga} /></div></div></main></div>
+        <div dir="ltr" className="grid items-start gap-4 min-[1280px]:grid-cols-[clamp(280px,24vw,350px)_minmax(0,1fr)]"><aside dir="rtl" className="space-y-4"><AdsCard ads={data?.ads_v2} /><TopProductsCard rows={data?.product_cost_v2?.product_rows} summary={data?.product_cost_v2} loading={loading} /><AbandonedCartsCard carts={carts} summary={cartSummary} /></aside><main dir="rtl" className="min-w-0"><div dir="ltr" className="grid min-w-0 items-start gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]"><div dir="rtl" className="space-y-4"><ProfitCard data={data} loading={loading} /><LatestOrders orders={orders} totals={data?.totals} /></div><div dir="rtl"><GaLive data={ga} /></div></div></main></div>
+        </>}
     </div>;
 }
