@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from carrier_handoff import (
     CarrierHandoffError,
     advance_carrier_handoff_from_salla_status,
+    carrier_handoff_custody_is_visible,
     confirm_carrier_label_print,
     normalize_shipping_barcode,
     receive_carrier_shipment,
@@ -109,6 +110,43 @@ def test_barcode_and_salla_status_normalization_are_exact():
     assert workflow_stage_for_salla_status("delivering") == "delivering"
     assert workflow_stage_for_salla_status("delivered") == "delivered"
     assert workflow_stage_for_salla_status("completed") is None
+
+
+def test_handoff_custody_hides_current_delivering_or_delivered_orders():
+    common = {
+        "workflow_stage": "completed",
+        "handoff_state": "with_handoff_employee",
+    }
+
+    assert carrier_handoff_custody_is_visible(
+        **common,
+        order_status_slug="completed",
+        order_status_name="تم التنفيذ",
+    ) is True
+    assert carrier_handoff_custody_is_visible(
+        **common,
+        order_status_slug="delivering",
+        order_status_name="جاري التوصيل",
+    ) is False
+    assert carrier_handoff_custody_is_visible(
+        **common,
+        order_status_slug="out_for_delivery",
+        order_status_name="جاري التوصيل",
+    ) is False
+    assert carrier_handoff_custody_is_visible(
+        **common,
+        order_status_slug="delivered",
+        order_status_name="تم التوصيل",
+    ) is False
+
+
+def test_handoff_custody_uses_arabic_current_status_when_slug_is_missing():
+    assert carrier_handoff_custody_is_visible(
+        workflow_stage="completed",
+        handoff_state="with_handoff_employee",
+        order_status_slug="",
+        order_status_name="جاري التوصيل",
+    ) is False
 
 
 @pytest.mark.asyncio
