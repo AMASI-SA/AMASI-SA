@@ -1967,6 +1967,49 @@ def start_campaign_ai_worker(
     return asyncio.create_task(loop())
 
 
+def _require_snapchat_budget_basis_unchanged(
+    recommendation: dict[str, Any],
+    target: dict[str, Any],
+    original_snapshot: dict[str, Any] | None,
+) -> None:
+    """Fail closed when the Snapchat budget changed after recommendation.
+
+    Campaign AI recommends a relative percentage. The absolute provider payload
+    is safe only while the fresh proposal baseline still equals the exact budget
+    observed by the recommendation snapshot. Any drift requires a new preview /
+    recommendation instead of applying a stale absolute amount.
+    """
+    if str(recommendation.get("action") or "") not in {"scale", "reduce"}:
+        return
+    if str(recommendation.get("entity_level") or "") == "ad":
+        return
+    expected_native = _number(target.get("current_daily_budget_native"))
+    current_micro = _number((original_snapshot or {}).get("daily_budget_micro"))
+    if expected_native is None or expected_native <= 0 or current_micro is None or current_micro <= 0:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "snapchat_recommendation_budget_basis_unavailable",
+                "message": "تعذر إثبات ميزانية Snapchat الحالية؛ أنشئ توصية جديدة قبل التنفيذ.",
+            },
+        )
+    expected_micro = int(round(expected_native * 1_000_000))
+    if int(round(current_micro)) != expected_micro:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "snapchat_recommendation_budget_drift",
+                "message": (
+                    "تغيرت ميزانية Snapchat بعد إنشاء التوصية؛ أُوقف التنفيذ "
+                    "حتى تُعاد التوصية من الميزانية الحالية."
+                ),
+                "expected_budget_micro": expected_micro,
+                "current_budget_micro": int(round(current_micro)),
+                "recovery_action": "create_fresh_campaign_ai_recommendation",
+            },
+        )
+
+
 async def _execute_snapchat_approval(
     db: Any,
     user_id: str,
@@ -2019,6 +2062,14 @@ async def _execute_snapchat_approval(
                 "recommendation_id": recommendation_id,
                 "snapshot_digest": snapshot_digest,
                 "execution_quality_contract": _execution_quality.CONTRACT_VERSION,
+                "budget_semantics": (
+                    "relative_percent_from_recommendation_snapshot_fail_closed"
+                    if requested in {"scale", "reduce"}
+                    else None
+                ),
+                "budget_change_percent": (
+                    percent if requested in {"scale", "reduce"} else None
+                ),
             },
             safety_protocol_version=2,
         ),
@@ -2035,6 +2086,9 @@ async def _execute_snapchat_approval(
         },
         {"_id": 0, "original_snapshot": 1},
     ) or {}
+    _require_snapchat_budget_basis_unchanged(
+        recommendation, target, proposal_row.get("original_snapshot")
+    )
     _execution_quality.require_provider_state_unchanged(
         "snapchat",
         recommendation,
