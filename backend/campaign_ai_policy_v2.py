@@ -133,13 +133,34 @@ def _page_aligned_profitability(
         page_orders == engine_orders
         and abs(page_sales - engine_sales) <= 0.05
     )
+    contribution = source.get("contribution_profit_sar")
+    contribution_available = aligned and contribution is not None
     base = {
-        "source": SNAPCHAT_AI_SALLA_SOURCE,
+        # P0-2 finance contract: ad platforms are performance evidence only.
+        # Mezan attribution + cost engines own commercial outcomes. This value
+        # is contribution profit, never full store net profit.
+        "source": "mezan_exact_campaign_attribution",
+        "legacy_source": SNAPCHAT_AI_SALLA_SOURCE,
+        "finance_authority": "mezan",
+        "commercial_outcomes_authority": "mezan_attribution",
+        "provider_finance_authority": False,
+        "provider_sales_used_as_profit": False,
+        "profit_metric": "contribution_profit",
+        "contribution_profit_available": contribution_available,
+        "net_profit_available": False,
+        "net_profit_sar": None,
+        "net_profit_unavailable_reason": (
+            "campaign_level_full_cost_allocation_not_implemented"
+        ),
+        "mezan_attributed_orders": page_orders,
+        "mezan_attributed_sales_sar": round(page_sales, 2),
+        # Compatibility fields retained until the UI/API migration is complete.
         "page_salla_orders": page_orders,
         "page_salla_sales_sar": round(page_sales, 2),
         "engine_orders": engine_orders,
         "engine_sales_sar": round(engine_sales, 2),
         "verified_against_page_salla": aligned,
+        "verified_against_mezan_attribution": aligned,
         "product_count": int(source.get("product_count") or 0),
         "products": _compact_products(source.get("products")),
         "profit_scope": source.get("profit_scope"),
@@ -355,9 +376,22 @@ async def _snapchat_campaign_entities(
                 continue
             row.update({
                 "salla_attribution_applied_to_entity_metrics": False,
+                "mezan_campaign_results": {
+                    "source": "mezan_attribution:unified_orders:exact_account_campaign_match",
+                    **salla_results,
+                },
+                # Legacy compatibility only; do not treat this key name as the
+                # finance authority. Mezan is authoritative for commercial truth.
                 "salla_campaign_results": {
                     "source": "unified_orders:salla_exact_account_campaign_match",
                     **salla_results,
+                },
+                "finance_semantics": {
+                    "finance_authority": "mezan",
+                    "provider_role": "ad_delivery_performance_only",
+                    "provider_sales_used_as_profit": False,
+                    "campaign_profit_metric": "contribution_profit",
+                    "campaign_net_profit_available": False,
                 },
                 "campaign_profitability": profit,
                 "profitability_coverage": profitability_coverage,

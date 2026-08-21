@@ -461,6 +461,13 @@ def _finalize_campaign(
         "products": products,
         "allocation_method": CAMPAIGN_PROFITABILITY_ALLOCATION_METHOD,
         "profit_scope": "sales_minus_product_cost_minus_ad_spend_before_payment_shipping_bnpl_and_operating_allocations",
+        "finance_authority": "mezan",
+        "profit_metric": "contribution_profit",
+        "contribution_profit_available": contribution_profit is not None,
+        "net_profit_available": False,
+        "net_profit_sar": None,
+        "net_profit_unavailable_reason": "campaign_level_full_cost_allocation_not_implemented",
+        "provider_sales_used_as_profit": False,
     }
 
 
