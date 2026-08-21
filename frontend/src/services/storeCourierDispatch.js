@@ -13,6 +13,7 @@ function detailMessage(error, fallback) {
         store_courier_shipment_not_found: "لم نجد شحنة تحمل رقم الطلب الموجود في الباركود.",
         store_courier_label_required: "هذه الشحنة ليست عبر مندوب المتجر ولا يمكن تنفيذها من هنا.",
         store_courier_label_not_ready: "اطبع بوليصة مندوب المتجر أولًا ثم صوّر الباركود.",
+        store_courier_label_not_confirmed: "يجب أن يؤكد موظف التجميع والعنونة طباعة البوليصة ولصقها قبل إسنادها للموصل.",
         store_courier_order_not_completed: "الطلب لم يكتمل في التجميع والعنونة بعد.",
         store_courier_assignment_conflict: "أُسندت الشحنة في اللحظة نفسها. حدّث القائمة قبل المحاولة مجددًا.",
         store_courier_stage_invalid: "حالة قائمة شحنات الموصل غير صحيحة.",

@@ -2,6 +2,7 @@ import pytest
 from fastapi import HTTPException
 
 import campaign_ai_monitor_legacy as legacy
+import campaign_ai_profit_accounting_gate as accounting_gate
 
 
 def test_p0_4_meta_state_match_is_exact_and_fail_closed():
@@ -48,10 +49,22 @@ class _Client:
 async def _prepare_meta_test(monkeypatch, client):
     async def preflight(*args, **kwargs):
         return {}
+    async def accounting_complete(*args, **kwargs):
+        return {
+            "complete": True,
+            "scale_gate_applied": True,
+            "missing_product_cost_count": 0,
+            "incomplete_profit_orders_count": 0,
+        }
     async def credential(*args, **kwargs):
         return "token"
     async def reconcile(*args, **kwargs):
         return None
+    monkeypatch.setattr(
+        accounting_gate,
+        "require_profit_accounting_complete_for_scale",
+        accounting_complete,
+    )
     monkeypatch.setattr(legacy._execution_quality, "preflight_approved_execution", preflight)
     monkeypatch.setattr(legacy._execution_quality, "require_provider_state_unchanged", lambda *a, **k: None)
     monkeypatch.setattr(legacy, "_meta_credential", credential)

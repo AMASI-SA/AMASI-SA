@@ -1,6 +1,7 @@
 """Freeze review after forward transition and install the approved PDF layout."""
 from __future__ import annotations
 
+# CI fan-out marker: canonical resource catalog and supplier-bank changes must exercise Fulfillment V2.
 
 FORWARD_FULFILLMENT_STAGES = {
     "in_progress",

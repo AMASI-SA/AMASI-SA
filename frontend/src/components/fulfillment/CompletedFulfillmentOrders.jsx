@@ -12,6 +12,9 @@ import { toast } from "sonner";
 import { printStoreCourierLabel } from "../../lib/storeCourierLabelPrint";
 import ShippingBarcodeScanner from "./ShippingBarcodeScanner";
 import CustomerServiceInstructionBanner from "./CustomerServiceInstructionBanner";
+import { shippingScanFeedback } from "./shippingScanFeedback";
+
+export { shippingScanFeedback } from "./shippingScanFeedback";
 
 import {
     confirmCompletedCarrierLabelPrint,
@@ -40,47 +43,7 @@ function savedCarrierSnapshot(order) {
         error_message: order.carrier_label_error_message || "",
         print_confirmed: Boolean(order.carrier_label_print_confirmed),
         print_confirmed_at: order.carrier_label_print_confirmed_at || "",
-    };
-}
-
-export function shippingScanFeedback({ mode, result = {}, error = null, barcode = "" }) {
-    const normalizedBarcode = String(barcode || "").trim();
-    if (error?.code === "carrier_shipment_already_received") {
-        const employeeName = error?.details?.employee_name;
-        return {
-            kind: "duplicate",
-            title: "تم مسح الشحنة مسبقًا",
-            message: employeeName
-                ? `هذه الشحنة مضافة من قبل إلى عهدة ${employeeName}. لم تُضف مرة أخرى.`
-                : "هذه الشحنة مضافة مسبقًا إلى عهدة موظف تسليم الشحن. لم تُضف مرة أخرى.",
-            barcode: normalizedBarcode,
-            actionLabel: "مسح شحنة أخرى",
-        };
-    }
-    if (error) return null;
-    if (mode === "confirm_print") {
-        return result?.already_confirmed
-            ? {
-                kind: "duplicate",
-                title: "تم مسح البوليصة مسبقًا",
-                message: "سبق التحقق من هذا الباركود وتأكيد أن الشحنة جاهزة. لم يُسجل تأكيد مكرر.",
-                barcode: normalizedBarcode,
-                actionLabel: "إغلاق",
-            }
-            : {
-                kind: "success",
-                title: "تم مسح الباركود بنجاح",
-                message: "تم التحقق من البوليصة وتأكيد أن الشحنة جاهزة لتسليمها لموظف الشحن.",
-                barcode: normalizedBarcode,
-                actionLabel: "إغلاق",
-            };
-    }
-    return {
-        kind: "success",
-        title: "تم استلام الشحنة بنجاح",
-        message: "تم مسح الباركود وإضافة الشحنة إلى عهدتك لتسليمها إلى شركة الشحن.",
-        barcode: normalizedBarcode,
-        actionLabel: "مسح شحنة أخرى",
+        print_data: order.carrier_label_print_data || null,
     };
 }
 
@@ -136,7 +99,7 @@ export function CarrierLabelControl({ order, permissions, busy, onIssue, onConfi
                         {snapshot.tracking_number}
                     </div>
                 )}
-                {!storeCourierReady && !printConfirmed && (
+                {!printConfirmed && (
                     <button
                         type="button"
                         onClick={() => onConfirmPrint(order)}
@@ -144,12 +107,16 @@ export function CarrierLabelControl({ order, permissions, busy, onIssue, onConfi
                         className="inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-700 px-4 text-sm font-black text-white disabled:opacity-50"
                         data-testid="confirm-carrier-label-print"
                     >
-                        <Barcode size={23} weight="bold" /> تأكيد الطباعة وتصوير باركود الشحنة
+                        <Barcode size={23} weight="bold" /> {storeCourierReady
+                            ? "تأكيد الطباعة واللصق بتصوير QR"
+                            : "تأكيد الطباعة وتصوير باركود الشحنة"}
                     </button>
                 )}
-                {!storeCourierReady && printConfirmed && (
+                {printConfirmed && (
                     <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-center text-xs font-black text-emerald-900" data-testid="carrier-label-print-confirmed">
-                        تم التحقق من الباركود · بانتظار موظف تسليم الشحن
+                        {storeCourierReady
+                            ? "تم تأكيد الطباعة واللصق · بانتظار إسناد المندوب"
+                            : "تم التحقق من الباركود · بانتظار موظف تسليم الشحن"}
                     </div>
                 )}
             </div>
@@ -332,6 +299,7 @@ export default function CompletedFulfillmentOrders() {
                 });
                 setScannerFeedback(feedback);
                 toast.success(feedback.title);
+                await load({ background: true });
             } else {
                 const scanResult = await scanCarrierHandoffShipment(barcode);
                 const result = await listCarrierHandoffShipments({ limit: 100 });
@@ -437,7 +405,11 @@ export default function CompletedFulfillmentOrders() {
             {scanner && (
                 <ShippingBarcodeScanner
                     title={scanner.mode === "confirm_print" ? `تأكيد طباعة شحنة #${scanner.order.order_number}` : "استلام شحنة للتسليم"}
-                    description={scanner.mode === "confirm_print" ? "صوّر باركود بوليصة شركة الشحن للتأكد أنها تخص هذا الطلب." : "لن تُقبل شحنة غير مؤكدة أو شحنة أُدخلت مسبقًا."}
+                    description={scanner.mode === "confirm_print"
+                        ? ((scanner.order.carrierSnapshot || savedCarrierSnapshot(scanner.order)).label_type === "store_courier"
+                            ? `صوّر QR الموجود على بوليصة مندوب المتجر. يجب أن يحمل رقم الطلب ${scanner.order.order_number}.`
+                            : "صوّر باركود بوليصة شركة الشحن للتأكد أنها تخص هذا الطلب.")
+                        : "لن تُقبل شحنة غير مؤكدة أو شحنة أُدخلت مسبقًا."}
                     busy={scannerBusy}
                     error={scannerError}
                     feedback={scannerFeedback}
