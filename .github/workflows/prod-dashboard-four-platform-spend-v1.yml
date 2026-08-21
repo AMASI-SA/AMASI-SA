@@ -9,8 +9,10 @@ on:
       - "backend/integrations_control_center/google_ads_reporting.py"
       - "backend/integrations_control_center/dashboard_ads_platform_refresh.py"
       - "backend/integrations_control_center/dashboard_ads_platform_spend_routes.py"
+      - "backend/dashboard_snapchat_spend.py"
       - "backend/integrations_control_center/dashboard_ads_executive_routes.py"
       - "backend/tests/test_dashboard_four_platform_spend_v1.py"
+      - "backend/tests/test_dashboard_snapchat_spend_issue_727.py"
       - "backend/tests/test_google_ads_reporting_v1.py"
       - "frontend/src/components/DashboardAdsSpendCard.jsx"
       - "frontend/src/components/DashboardAdsSpendCard.test.jsx"
@@ -47,13 +49,16 @@ jobs:
           integrations_control_center/google_ads_reporting.py
           integrations_control_center/dashboard_ads_platform_refresh.py
           integrations_control_center/dashboard_ads_platform_spend_routes.py
+          dashboard_snapchat_spend.py
           integrations_control_center/dashboard_ads_executive_routes.py
           tests/test_dashboard_four_platform_spend_v1.py
+          tests/test_dashboard_snapchat_spend_issue_727.py
           tests/test_google_ads_reporting_v1.py
       - name: Run focused backend tests
         run: >-
           python -m pytest -q --tb=short
           tests/test_dashboard_four_platform_spend_v1.py
+          tests/test_dashboard_snapchat_spend_issue_727.py
           tests/test_google_ads_reporting_v1.py
           tests/test_dashboard_ads_hourly_spend_v1.py
       - name: Enforce original four-provider read contract

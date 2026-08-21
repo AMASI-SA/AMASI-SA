@@ -14,6 +14,8 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, model_validator
 
+from dashboard_snapchat_spend import load_snapchat_dashboard_spend
+
 from .ads_platform_hourly import PLATFORM_HOURLY_COLLECTION
 from .dashboard_ads_platform_refresh import (
     FOUR_PLATFORM_KEYS,
@@ -160,6 +162,7 @@ async def _daily_spend(
     user_id: str,
     start: date,
     end: date,
+    snapchat: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], dict[str, bool]]:
     dates = _date_list(start, end)
     by_date: dict[str, dict[str, Any]] = {
@@ -170,13 +173,17 @@ async def _daily_spend(
         for day in dates
     }
     facts = {provider: False for provider in FOUR_PLATFORM_KEYS}
-    selected_snapchat_ids = await _selected_account_ids(
-        db,
-        user_id,
-        SNAPCHAT_PROVIDER_ID,
+    for day in dates:
+        by_date[day.isoformat()]["snapchat"] = (
+            snapchat.get("daily_sar") or {}
+        ).get(day.isoformat())
+    facts["snapchat"] = (
+        (snapchat.get("quality") or {}).get("amount_complete") is True
     )
 
     for provider, collection_name in DAILY_COLLECTION_BY_PROVIDER.items():
+        if provider == "snapchat":
+            continue
         query: dict[str, Any] = {
             "user_id": user_id,
             "provider": INTEGRATION_PROVIDER_BY_KEY[provider],
@@ -185,15 +192,6 @@ async def _daily_spend(
                 "$lte": end.isoformat(),
             },
         }
-        if provider == "snapchat":
-            # The Snapchat collection contains multiple entity grains. Reading
-            # account rows only prevents campaign/ad duplication in totals.
-            query.update(
-                {
-                    "entity_type": "ad_account",
-                    "ad_account_id": {"$in": selected_snapchat_ids},
-                }
-            )
         cursor = db[collection_name].find(
             query,
             {"_id": 0, "date": 1, "spend_sar": 1},
@@ -319,13 +317,23 @@ async def build_dashboard_platform_spend(
     if end < start or (end - start).days + 1 > MAX_READ_DAYS:
         raise HTTPException(status_code=422, detail="invalid_date_range")
 
-    daily, daily_facts = await _daily_spend(db, user_id, start, end)
+    snapchat = await load_snapchat_dashboard_spend(
+        db,
+        user_id,
+        start=start,
+        end=end,
+    )
+    daily, daily_facts = await _daily_spend(db, user_id, start, end, snapchat)
     states = await _connection_states(db, user_id)
     single_day = start == end
     hourly: list[dict[str, Any]] = []
     hourly_facts = {provider: False for provider in FOUR_PLATFORM_KEYS}
     if single_day:
         hourly, hourly_facts = await _hourly_spend(db, user_id, start)
+        snap_state = (snapchat.get("quality") or {}).get("data_state")
+        for row in hourly:
+            row["snapchat"] = 0.0 if snap_state == "confirmed_zero" else None
+        hourly_facts["snapchat"] = snap_state == "confirmed_zero"
 
     totals = {
         provider: round(
@@ -336,10 +344,30 @@ async def build_dashboard_platform_spend(
         else None
         for provider in FOUR_PLATFORM_KEYS
     }
+    totals["snapchat"] = snapchat.get("total_sar")
     provider_rows = {}
     for provider in FOUR_PLATFORM_KEYS:
         state = states.get(provider) or {}
         connection_status = str(state.get("connection_status") or "not_connected")
+        if provider == "snapchat":
+            snap_quality = snapchat.get("quality") or {}
+            provider_rows[provider] = {
+                "provider": provider,
+                "integration_provider": SNAPCHAT_PROVIDER_ID,
+                "connection_status": connection_status,
+                "connected": snap_quality.get("connected") is True,
+                "daily_available": snap_quality.get("amount_complete") is True,
+                "hourly_available": hourly_facts[provider],
+                "total_sar": totals[provider],
+                "data_quality": snap_quality.get("status"),
+                "data_state": snap_quality.get("data_state"),
+                "coverage_complete": snap_quality.get("coverage_complete") is True,
+                "amount_complete": snap_quality.get("amount_complete") is True,
+                "reason_codes": list(snap_quality.get("reason_codes") or []),
+                "last_sync_at": state.get("last_sync_at"),
+                "data_delay_minutes": state.get("data_delay_minutes"),
+            }
+            continue
         provider_rows[provider] = {
             "provider": provider,
             "integration_provider": INTEGRATION_PROVIDER_BY_KEY[provider],
@@ -358,10 +386,13 @@ async def build_dashboard_platform_spend(
             "data_delay_minutes": state.get("data_delay_minutes"),
         }
 
-    total_sar = round(
-        sum(value for value in totals.values() if value is not None),
-        2,
+    known_total_sar = round(
+        sum(value for value in totals.values() if value is not None), 2
     )
+    snap_amount_complete = (
+        (snapchat.get("quality") or {}).get("amount_complete") is True
+    )
+    total_sar = known_total_sar if snap_amount_complete else None
     return {
         "date_from": start.isoformat(),
         "date_to": end.isoformat(),
@@ -372,6 +403,13 @@ async def build_dashboard_platform_spend(
         "providers": provider_rows,
         "provider_totals_sar": totals,
         "total_sar": total_sar,
+        "known_total_sar": known_total_sar,
+        "spend_quality": {
+            "status": "complete" if snap_amount_complete else "incomplete",
+            "amount_complete": snap_amount_complete,
+            "known_total_sar": known_total_sar,
+            "snapchat": snapchat.get("quality") or {},
+        },
         "source_only": True,
         "provider_write_reached": False,
         "campaign_write_reached": False,
