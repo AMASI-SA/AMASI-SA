@@ -174,4 +174,7 @@ def make_component_edit_router(db: Any, current_user: Callable[..., Any]) -> API
         })
         return {"ok": True, "amount": metadata.get("unit_cost"), "cost_source": metadata.get("cost_source"), "impacted_bindings": impacted}
 
+    from resource_catalog_mobile_routes import make_resource_catalog_mobile_router
+    mobile_catalog_router = make_resource_catalog_mobile_router(db, current_user)
+    router.routes.extend(mobile_catalog_router.routes)
     return router
