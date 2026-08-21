@@ -2,6 +2,7 @@
 
 Keep these constants and pure validations separate from the API routers so the
 standalone driver and handover surfaces do not import the legacy order engine.
+The module must remain safe for the focused Store Delivery test environment.
 """
 from __future__ import annotations
 
