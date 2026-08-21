@@ -516,9 +516,12 @@ async def test_failed_diagnostic_run_still_rejects_an_existing_fact():
         "code": "snapchat_scheduler_runtime_error",
         "message": "Snapchat scheduler refresh failed unexpectedly.",
         "retryable": True,
-        "failure_stage": "fact_write",
+        "failure_stage": "decision_outcomes_evaluation",
         "exception_type": "RuntimeError",
         "run_id": failed["run_id"],
+        "failure_module": "integrations_control_center.ads_auto_sync_scheduler",
+        "failure_function": "_refresh_snapchat",
+        "failure_line": 1364,
     }
 
     result = await _load(_db(runs=[failed], facts=[_fact()]))
