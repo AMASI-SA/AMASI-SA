@@ -4066,6 +4066,48 @@ async def _execute_snapchat_management_proposal_under_lease(
             status_code=409,
             detail={"code": "snapchat_campaign_activation_disabled"},
         )
+    expected_outcome = (
+        row.get("expected") if isinstance(row.get("expected"), dict) else {}
+    )
+    if expected_outcome.get("source") == "ai_recommendation_5h":
+        # Revalidate analytical quality under the durable lease *before* the
+        # final provider read.  The read/state comparison and provider POST can
+        # then remain adjacent with no intervening DB await.
+        import campaign_ai_execution_quality_gate as execution_quality
+
+        try:
+            if (
+                expected_outcome.get("execution_quality_contract")
+                != execution_quality.CONTRACT_VERSION
+            ):
+                raise execution_quality.ExecutionQualityBlocked(
+                    ["execution_quality_contract_missing"]
+                )
+            await execution_quality.preflight_approved_execution(
+                db,
+                recommendation_collection="mezan_campaign_ai_recommendations_v1",
+                user_id=user_id,
+                snapshot_id=str(expected_outcome.get("snapshot_id") or ""),
+                recommendation_id=str(
+                    expected_outcome.get("recommendation_id") or ""
+                ),
+                expected_digest=str(
+                    expected_outcome.get("snapshot_digest") or ""
+                ),
+            )
+        except execution_quality.ExecutionQualityBlocked as exc:
+            failure = {
+                "code": "campaign_execution_data_quality_blocked",
+                "contract_version": execution_quality.CONTRACT_VERSION,
+                "blockers": exc.blockers,
+            }
+            await _reset_execution_claim(
+                db,
+                user_id=user_id,
+                proposal_id=proposal_id,
+                failure=failure,
+            )
+            raise HTTPException(status_code=409, detail=failure) from exc
     # Final provider read happens after the proposal lock and immediately
     # before the write.  If any delivery-sensitive field drifted since the
     # immutable preview, fail closed and leave the provider untouched.

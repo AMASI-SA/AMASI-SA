@@ -96,6 +96,56 @@ def test_rolling_window_uses_riyadh_calendar_day():
     assert end.isoformat() == "2026-08-01"
 
 
+def test_campaign_ai_proof_window_is_three_days_only_for_meta_and_snapchat(
+    monkeypatch,
+):
+    observed = {}
+
+    async def targets(_db):
+        return [
+            ("owner", scheduler.META_PROVIDER_ID),
+            ("owner", scheduler.SNAPCHAT_PROVIDER_ID),
+            ("owner", scheduler.TIKTOK_PROVIDER_ID),
+            ("owner", scheduler.GOOGLE_ADS_PROVIDER_ID),
+        ]
+
+    def refresh(provider):
+        async def run(_db, **kwargs):
+            observed[provider] = (
+                kwargs["start_date"], kwargs["end_date"]
+            )
+            return {"provider": provider, "status": "complete"}
+
+        return run
+
+    monkeypatch.setattr(scheduler, "_targets", targets)
+    monkeypatch.setattr(
+        scheduler, "_refresh_meta", refresh(scheduler.META_PROVIDER_ID)
+    )
+    monkeypatch.setattr(
+        scheduler,
+        "_refresh_snapchat",
+        refresh(scheduler.SNAPCHAT_PROVIDER_ID),
+    )
+    monkeypatch.setattr(
+        scheduler, "_refresh_tiktok", refresh(scheduler.TIKTOK_PROVIDER_ID)
+    )
+    monkeypatch.setattr(
+        scheduler, "_refresh_google", refresh(scheduler.GOOGLE_ADS_PROVIDER_ID)
+    )
+
+    current = datetime(2026, 8, 21, 12, tzinfo=timezone.utc)
+    asyncio.run(scheduler.run_auto_sync_cycle(object(), now=lambda: current))
+
+    assert observed[scheduler.META_PROVIDER_ID][0].isoformat() == "2026-08-19"
+    assert observed[scheduler.SNAPCHAT_PROVIDER_ID][0].isoformat() == "2026-08-19"
+    assert observed[scheduler.TIKTOK_PROVIDER_ID][0].isoformat() == "2026-08-20"
+    assert observed[scheduler.GOOGLE_ADS_PROVIDER_ID][0].isoformat() == "2026-08-20"
+    assert {window[1].isoformat() for window in observed.values()} == {
+        "2026-08-21"
+    }
+
+
 def test_router_registers_status_and_backend_lifecycle(monkeypatch):
     monkeypatch.setenv(scheduler.ENABLED_ENV, "true")
     router = APIRouter(prefix="/integrations-v2")
@@ -434,3 +484,4 @@ def test_status_never_exposes_global_results_from_another_tenant():
     assert "foreign-run-b" not in serialized
     assert "foreign-account-b" not in serialized
     assert "foreign-error-b" not in serialized
+

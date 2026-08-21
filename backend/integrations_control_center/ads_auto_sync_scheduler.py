@@ -73,6 +73,7 @@ MIN_INTERVAL_SECONDS = 300
 MAX_INTERVAL_SECONDS = 3600
 DEFAULT_ROLLING_DAYS = 2
 MAX_ROLLING_DAYS = 7
+CAMPAIGN_AI_EXECUTION_PROOF_DAYS = 3
 DEFAULT_STARTUP_DELAY_SECONDS = 45
 HEARTBEAT_SECONDS = 15
 LEASE_TTL = timedelta(minutes=25)
@@ -1159,11 +1160,24 @@ async def run_auto_sync_cycle(
 
     async def execute(user_id: str, provider: str) -> dict[str, Any]:
         async with semaphore:
+            # Meta/Snap Campaign AI uses an inclusive three-day decision
+            # window.  Extend only those two analytical refreshes so every
+            # decision day has current provider proof; TikTok/Google and the
+            # scheduler's existing global cadence remain unchanged.
+            provider_start_date = (
+                min(
+                    start_date,
+                    end_date
+                    - timedelta(days=CAMPAIGN_AI_EXECUTION_PROOF_DAYS - 1),
+                )
+                if provider in {META_PROVIDER_ID, SNAPCHAT_PROVIDER_ID}
+                else start_date
+            )
             if provider == META_PROVIDER_ID:
                 return await _refresh_meta(
                     db,
                     user_id=user_id,
-                    start_date=start_date,
+                    start_date=provider_start_date,
                     end_date=end_date,
                     now=started,
                 )
@@ -1186,7 +1200,7 @@ async def run_auto_sync_cycle(
             return await _refresh_snapchat(
                 db,
                 user_id=user_id,
-                start_date=start_date,
+                start_date=provider_start_date,
                 end_date=end_date,
                 now=started,
             )
@@ -1477,3 +1491,4 @@ __all__ = [
     "rolling_days",
     "run_auto_sync_cycle",
 ]
+

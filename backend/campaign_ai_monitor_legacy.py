@@ -29,6 +29,8 @@ except ImportError:  # Optional in focused test/runtime images that never call O
 from pydantic import BaseModel, Field, ValidationError
 from pymongo.errors import DuplicateKeyError
 
+import campaign_ai_execution_quality_gate as _execution_quality
+
 from integrations_control_center.meta_campaign_reporting import _paged_get
 from integrations_control_center.meta_native_reporting import (
     _accounts as _meta_accounts,
@@ -514,6 +516,7 @@ async def _refresh_meta_entities(
     saved = 0
     provider_calls = 0
     errors: list[dict[str, str]] = []
+    pagination_complete = True
     async with httpx.AsyncClient(timeout=35.0) as client:
         for account in accounts:
             account_id = _text(account.get("ad_account_id"), limit=120)
@@ -544,6 +547,7 @@ async def _refresh_meta_entities(
                         if _text(item.get("id"), limit=120)
                     }
                 except Exception as exc:
+                    pagination_complete = False
                     errors.append({
                         "account_id": account_id,
                         "date": current.date().isoformat(),
@@ -582,6 +586,7 @@ async def _refresh_meta_entities(
                         )
                         provider_calls += calls
                     except Exception as exc:  # provider errors are isolated by level/day
+                        pagination_complete = False
                         errors.append({
                             "account_id": account_id,
                             "date": cursor.isoformat(),
@@ -589,6 +594,14 @@ async def _refresh_meta_entities(
                             "code": _text(getattr(exc, "code", type(exc).__name__), limit=100),
                         })
                         continue
+                    if len(rows) > 2000:
+                        pagination_complete = False
+                        errors.append({
+                            "account_id": account_id,
+                            "date": cursor.isoformat(),
+                            "level": level,
+                            "code": "meta_ai_entity_row_limit_reached",
+                        })
                     await db[META_ENTITY_COLLECTION].delete_many({
                         "user_id": user_id,
                         "ad_account_id": account_id,
@@ -629,6 +642,9 @@ async def _refresh_meta_entities(
                             "provider": "meta",
                             "ad_account_id": account_id,
                             "account_name": _text(account.get("display_name")),
+                            "account_timezone": _text(
+                                account.get("timezone"), limit=100
+                            ) or None,
                             "entity_level": entity_level,
                             "entity_id": entity_id,
                             "entity_name": _text(
@@ -660,6 +676,12 @@ async def _refresh_meta_entities(
                             "purchase_action_type": purchase_action,
                             "revenue_action_type": revenue_action,
                             "source_mode": "meta_ai_entity_reporting_v1",
+                            "provider_result_source": "meta_ads_api_insights",
+                            "result_source": "platform",
+                            "action_report_time": "conversion",
+                            "source_date_from": start.isoformat(),
+                            "source_date_to": end.isoformat(),
+                            "pagination_complete": pagination_complete,
                             "source_only": True,
                             "observed_at": observed_at,
                             "updated_at": observed_at,
@@ -677,7 +699,17 @@ async def _refresh_meta_entities(
                         )
                         saved += 1
                 cursor += timedelta(days=1)
-    return {"rows_saved": saved, "provider_calls": provider_calls, "errors": errors[:50]}
+    return {
+        "status": "complete" if not errors and pagination_complete else "partial",
+        "date_from": start.isoformat(),
+        "date_to": end.isoformat(),
+        "rows_saved": saved,
+        "provider_calls": provider_calls,
+        "errors_count": len(errors),
+        "errors": errors[:50],
+        "pagination_complete": bool(pagination_complete and not errors),
+        "observed_at": observed_at,
+    }
 
 
 def _entity(
@@ -710,6 +742,19 @@ def _entity(
     ad_group_status: Any = None,
     campaign_ad_group_count: Any = None,
     campaign_ad_count: Any = None,
+    currency_native: Any = None,
+    fx_rate_to_sar: Any = None,
+    fx_source: Any = None,
+    provider_result_source: Any = None,
+    action_report_time: Any = None,
+    result_source: Any = None,
+    source_date_from: Any = None,
+    source_date_to: Any = None,
+    source_observed_at: Any = None,
+    account_timezone: Any = None,
+    pagination_complete: Any = None,
+    source_mode: Any = None,
+    source_fact_collection: Any = None,
 ) -> dict[str, Any] | None:
     clean_id = _text(entity_id, limit=120)
     if not clean_id:
@@ -751,6 +796,19 @@ def _entity(
         "ad_group_status": _text(ad_group_status, limit=60) or None,
         "campaign_ad_group_count": int(_safe_metric(campaign_ad_group_count, 0) or 0),
         "campaign_ad_count": int(_safe_metric(campaign_ad_count, 0) or 0),
+        "currency_native": _text(currency_native, limit=12).upper() or None,
+        "fx_rate_to_sar": _safe_metric(fx_rate_to_sar, 6),
+        "fx_source": _text(fx_source, limit=120) or None,
+        "provider_result_source": _text(provider_result_source, limit=160) or None,
+        "action_report_time": _text(action_report_time, limit=80) or None,
+        "result_source": _text(result_source, limit=80) or None,
+        "source_date_from": _text(source_date_from, limit=20) or None,
+        "source_date_to": _text(source_date_to, limit=20) or None,
+        "source_observed_at": _text(source_observed_at, limit=80) or None,
+        "account_timezone": _text(account_timezone, limit=100) or None,
+        "pagination_complete": pagination_complete if isinstance(pagination_complete, bool) else None,
+        "source_mode": _text(source_mode, limit=180) or None,
+        "source_fact_collection": _text(source_fact_collection, limit=180) or None,
     }
 
 
@@ -768,14 +826,20 @@ async def _campaign_entities(
         if provider == "snapchat"
         else await _meta_accounts(db, user_id)
     )
-    account_names = {
+    account_by_id = {
         _text(
             account.get("ad_account_id")
             or account.get("external_account_id")
             or account.get("account_id"),
             limit=120,
-        ): _text(account.get("display_name") or account.get("name"), limit=180)
+        ): account
         for account in accounts
+    }
+    account_names = {
+        account_id: _text(
+            account.get("display_name") or account.get("name"), limit=180
+        )
+        for account_id, account in account_by_id.items()
     }
 
     overview = await AdsManagerService(db).overview(
@@ -796,10 +860,23 @@ async def _campaign_entities(
         {},
     )
     coverage = provider_summary.get("performance_coverage") or {}
-    observed_days = coverage.get("observed_days") or (end - start).days + 1
-    data_complete = coverage.get("status") in {None, "complete"}
+    observed_days = coverage.get("observed_days") or 0
+    data_complete = coverage.get("status") == "complete"
+    campaign_coverage = provider_summary.get("campaign_coverage") or {}
+    overview_coverage = overview.get("coverage") or {}
+    overview_pagination = overview.get("campaign_pagination") or {}
+    pagination_complete = bool(
+        data_complete
+        and "source_truncated" not in set(coverage.get("reasons") or [])
+        and campaign_coverage.get("status") == "available"
+        and not overview_coverage.get("source_row_limit_reached")
+        and int(overview_pagination.get("page") or 0) == 1
+        and int(overview_pagination.get("pages") or 0) == 1
+        and int(overview_pagination.get("total") or 0) > 0
+    )
     for item in overview.get("campaigns") or []:
         account_id = _text(item.get("account_id") or item.get("ad_account_id"), limit=120)
+        account = account_by_id.get(account_id) or {}
         row = _entity(
             provider=provider,
             level="campaign",
@@ -822,6 +899,35 @@ async def _campaign_entities(
             account_id=account_id,
             account_name=item.get("account_name") or account_names.get(account_id),
             current_daily_budget_native=(item.get("budget") or {}).get("daily_native"),
+            currency_native=(
+                item.get("display_currency")
+                or (item.get("budget") or {}).get("currency")
+                or account.get("currency")
+            ),
+            fx_rate_to_sar=item.get("exchange_rate_to_sar"),
+            fx_source=item.get("fx_source"),
+            provider_result_source=(
+                "meta_ads_manager_reporting" if provider == "meta" else None
+            ),
+            action_report_time="conversion" if provider == "meta" else None,
+            result_source="platform" if provider == "meta" else None,
+            source_date_from=start.isoformat(),
+            source_date_to=end.isoformat(),
+            source_observed_at=(
+                (provider_summary.get("freshness") or {}).get("last_observed_at")
+            ),
+            account_timezone=(
+                item.get("account_timezone") or account.get("timezone")
+            ),
+            pagination_complete=pagination_complete,
+            source_mode=(
+                "meta_campaign_reporting_v2" if provider == "meta" else None
+            ),
+            source_fact_collection=(
+                "mezan_meta_campaign_performance_daily_v2"
+                if provider == "meta"
+                else None
+            ),
         )
         if row:
             rows.append(row)
@@ -954,6 +1060,21 @@ async def _meta_child_entities(
             ad_group_status=latest.get("ad_group_status"),
             campaign_ad_group_count=latest.get("campaign_ad_group_count"),
             campaign_ad_count=latest.get("campaign_ad_count"),
+            currency_native=latest.get("currency_native"),
+            fx_rate_to_sar=latest.get("fx_rate_to_sar"),
+            fx_source=latest.get("fx_source"),
+            provider_result_source=(
+                latest.get("provider_result_source") or "meta_ads_api_insights"
+            ),
+            action_report_time=latest.get("action_report_time") or "conversion",
+            result_source=latest.get("result_source") or "platform",
+            source_date_from=start.isoformat(),
+            source_date_to=end.isoformat(),
+            source_observed_at=latest.get("observed_at"),
+            account_timezone=latest.get("account_timezone"),
+            pagination_complete=latest.get("pagination_complete"),
+            source_mode=latest.get("source_mode"),
+            source_fact_collection=META_ENTITY_COLLECTION,
         )
         if row:
             campaign_key = (account_id, str(latest.get("campaign_id") or ""))
@@ -1853,6 +1974,9 @@ async def _execute_snapchat_approval(
     target: dict[str, Any],
     *,
     idempotency_key: str,
+    snapshot_id: str,
+    recommendation_id: str,
+    snapshot_digest: str,
 ) -> dict[str, Any]:
     from integrations_control_center.snapchat_campaign_management import (
         SnapchatManagementApprovalInput,
@@ -1888,7 +2012,14 @@ async def _execute_snapchat_approval(
             payload=payload,
             reason=_text(recommendation.get("rationale"), limit=500),
             idempotency_key=idempotency_key,
-            expected_outcome={"source": "ai_recommendation_5h", "action": requested},
+            expected_outcome={
+                "source": "ai_recommendation_5h",
+                "action": requested,
+                "snapshot_id": snapshot_id,
+                "recommendation_id": recommendation_id,
+                "snapshot_digest": snapshot_digest,
+                "execution_quality_contract": _execution_quality.CONTRACT_VERSION,
+            },
             safety_protocol_version=2,
         ),
     )
@@ -1897,6 +2028,19 @@ async def _execute_snapchat_approval(
         if proposal.get("status") == "completed":
             return proposal
         raise HTTPException(status_code=409, detail={"code": "recommendation_proposal_not_approvable"})
+    proposal_row = await db["mezan_snapchat_campaign_proposals_v1"].find_one(
+        {
+            "user_id": user_id,
+            "proposal_id": str(proposal.get("proposal_id") or ""),
+        },
+        {"_id": 0, "original_snapshot": 1},
+    ) or {}
+    _execution_quality.require_provider_state_unchanged(
+        "snapchat",
+        recommendation,
+        target,
+        proposal_row.get("original_snapshot"),
+    )
     approved = await approve_snapchat_management_proposal(
         db,
         user_id,
@@ -1905,6 +2049,14 @@ async def _execute_snapchat_approval(
         SnapchatManagementApprovalInput(
             confirm_token=str(token), expected_revision=int(proposal.get("revision") or 1)
         ),
+    )
+    await _execution_quality.preflight_approved_execution(
+        db,
+        recommendation_collection=RECOMMENDATION_COLLECTION,
+        user_id=user_id,
+        snapshot_id=snapshot_id,
+        recommendation_id=recommendation_id,
+        expected_digest=snapshot_digest,
     )
     return await execute_snapchat_management_proposal(
         db, user_id, user_id, str(approved["proposal_id"])
@@ -1916,7 +2068,22 @@ async def _execute_meta_approval(
     user_id: str,
     recommendation: dict[str, Any],
     target: dict[str, Any],
+    *,
+    snapshot_id: str,
+    recommendation_id: str,
+    snapshot_digest: str,
 ) -> dict[str, Any]:
+    # Revalidate analytical quality first.  The provider read, state/budget
+    # comparison and POST below then remain adjacent with no intervening DB
+    # await that could widen the provider-state TOCTOU window.
+    await _execution_quality.preflight_approved_execution(
+        db,
+        recommendation_collection=RECOMMENDATION_COLLECTION,
+        user_id=user_id,
+        snapshot_id=snapshot_id,
+        recommendation_id=recommendation_id,
+        expected_digest=snapshot_digest,
+    )
     access_token = await _meta_credential(db, user_id, _utcnow())
     entity_id = _text(target.get("entity_id"), limit=120)
     proof = meta_appsecret_proof(access_token)
@@ -1933,6 +2100,9 @@ async def _execute_meta_approval(
         if read.status_code >= 400:
             raise HTTPException(status_code=502, detail={"code": "meta_recommendation_preflight_failed"})
         before = read.json()
+        _execution_quality.require_provider_state_unchanged(
+            "meta", recommendation, target, before
+        )
         requested = recommendation["action"]
         current_status = str(before.get("status") or before.get("effective_status") or "").upper()
         if current_status not in {"ACTIVE", "ENABLED"}:
@@ -1977,6 +2147,71 @@ async def _execute_meta_approval(
             "verification": after if verify.status_code < 400 else None,
             "provider_write_reached": True,
         }
+
+
+def _execution_quality_http_exception(
+    exc: _execution_quality.ExecutionQualityBlocked,
+) -> HTTPException:
+    return HTTPException(
+        status_code=409,
+        detail={
+            "code": "campaign_execution_data_quality_blocked",
+            "contract_version": _execution_quality.CONTRACT_VERSION,
+            "blockers": exc.blockers,
+        },
+    )
+
+
+async def _execute_approved_recommendation(
+    db: Any,
+    user_id: str,
+    *,
+    snapshot_id: str,
+    recommendation_id: str,
+    expected_digest: str,
+    idempotency_key: str,
+) -> dict[str, Any]:
+    """Shared fail-closed dispatch for both Campaign-AI providers."""
+    if not expected_digest:
+        raise _execution_quality.ExecutionQualityBlocked(
+            ["execution_snapshot_digest_missing"]
+        )
+    checked = await _execution_quality.preflight_approved_execution(
+        db,
+        recommendation_collection=RECOMMENDATION_COLLECTION,
+        user_id=user_id,
+        snapshot_id=snapshot_id,
+        recommendation_id=recommendation_id,
+        expected_digest=expected_digest,
+    )
+    recommendation = checked["recommendation"]
+    target = checked["target"]
+    provider = recommendation.get("provider")
+    if provider == "snapchat":
+        return await _execute_snapchat_approval(
+            db,
+            user_id,
+            recommendation,
+            target,
+            idempotency_key=idempotency_key,
+            snapshot_id=snapshot_id,
+            recommendation_id=recommendation_id,
+            snapshot_digest=expected_digest,
+        )
+    if provider == "meta":
+        return await _execute_meta_approval(
+            db,
+            user_id,
+            recommendation,
+            target,
+            snapshot_id=snapshot_id,
+            recommendation_id=recommendation_id,
+            snapshot_digest=expected_digest,
+        )
+    raise HTTPException(
+        status_code=409,
+        detail={"code": "recommendation_provider_unsupported"},
+    )
 
 
 def attach_campaign_ai_routes(
@@ -2040,6 +2275,19 @@ def attach_campaign_ai_routes(
         target = (latest.get("execution_targets") or {}).get(recommendation_id)
         if not recommendation or not target or not recommendation.get("approval_available"):
             raise HTTPException(status_code=409, detail={"code": "recommendation_not_executable"})
+        try:
+            checked = await _execution_quality.preflight_approved_execution(
+                db,
+                recommendation_collection=RECOMMENDATION_COLLECTION,
+                user_id=user_id,
+                snapshot_id=payload.snapshot_id,
+                recommendation_id=recommendation_id,
+            )
+        except _execution_quality.ExecutionQualityBlocked as exc:
+            raise _execution_quality_http_exception(exc) from exc
+        recommendation = checked["recommendation"]
+        target = checked["target"]
+        snapshot_digest = checked["snapshot_digest"]
         execution_id = hashlib.sha256(
             f"{user_id}:{payload.snapshot_id}:{recommendation_id}".encode()
         ).hexdigest()
@@ -2054,6 +2302,8 @@ def attach_campaign_ai_routes(
             "approved_by": user_id,
             "approved_at": _iso(),
             "writes_performed": False,
+            "snapshot_digest": snapshot_digest,
+            "execution_quality": checked["execution_quality"],
         }
         try:
             await db[EXECUTION_COLLECTION].insert_one(started)
@@ -2064,14 +2314,14 @@ def attach_campaign_ai_routes(
             return existing or {"execution_id": execution_id, "status": "executing"}
         async def execute_in_background() -> None:
             try:
-                if recommendation.get("provider") == "snapchat":
-                    result = await _execute_snapchat_approval(
-                        db, user_id, recommendation, target, idempotency_key=execution_id
-                    )
-                elif recommendation.get("provider") == "meta":
-                    result = await _execute_meta_approval(db, user_id, recommendation, target)
-                else:
-                    raise HTTPException(status_code=409, detail={"code": "recommendation_provider_unsupported"})
+                result = await _execute_approved_recommendation(
+                    db,
+                    user_id,
+                    snapshot_id=payload.snapshot_id,
+                    recommendation_id=recommendation_id,
+                    expected_digest=snapshot_digest,
+                    idempotency_key=execution_id,
+                )
                 final_status = "completed" if result.get("status") == "completed" else "verification_required"
                 await db[EXECUTION_COLLECTION].update_one(
                     {"execution_id": execution_id},
@@ -2091,7 +2341,10 @@ def attach_campaign_ai_routes(
                     array_filters=[{"item.recommendation_id": recommendation_id}],
                 )
             except Exception as exc:
-                detail = exc.detail if isinstance(exc, HTTPException) else {"code": type(exc).__name__}
+                if isinstance(exc, _execution_quality.ExecutionQualityBlocked):
+                    detail = _execution_quality_http_exception(exc).detail
+                else:
+                    detail = exc.detail if isinstance(exc, HTTPException) else {"code": type(exc).__name__}
                 await db[EXECUTION_COLLECTION].update_one(
                     {"execution_id": execution_id},
                     {"$set": {"status": "failed", "finished_at": _iso(), "failure": detail}},
