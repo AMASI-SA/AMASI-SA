@@ -66,6 +66,7 @@ def _workflow_patch(result: dict[str, Any], *, now: str) -> dict[str, Any]:
         "carrier_label_message": result.get("message"),
         "carrier_label_error_code": None,
         "carrier_label_error_message": None,
+        "carrier_label_print_data": result.get("print_data"),
         "carrier_label_verified_at": now,
         "updated_at": now,
     }

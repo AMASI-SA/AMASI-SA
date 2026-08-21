@@ -1167,6 +1167,7 @@ async def _order_view(
         "carrier_label_ready": bool(workflow.get("carrier_label_ready")),
         "carrier_label_url": workflow.get("carrier_label_url"),
         "carrier_label_type": workflow.get("carrier_label_type"),
+        "carrier_label_print_data": workflow.get("carrier_label_print_data"),
         "carrier_name": workflow.get("carrier_name") or order.shipping.company,
         "carrier_tracking_number": workflow.get("carrier_tracking_number"),
         "carrier_label_message": workflow.get("carrier_label_message"),
@@ -1287,6 +1288,7 @@ def make_fulfillment_v2_router(
         # Handoff employees receive their custody list from the dedicated
         # endpoint below and must not see other employees' labeling queues.
         if can_label:
+            query["carrier_label_print_confirmed"] = {"$ne": True}
             query["$or"] = [
                 {"carrier_handoff_employee_id": {"$exists": False}},
                 {"carrier_handoff_employee_id": None},

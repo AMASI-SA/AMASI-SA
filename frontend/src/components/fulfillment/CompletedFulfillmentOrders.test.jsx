@@ -70,6 +70,8 @@ test("store courier exposes the Mezan-designed printable label", () => {
 
     expect(markup).toContain("طباعة بوليصة مندوب المتجر");
     expect(markup).toContain('data-testid="print-store-courier-label"');
+    expect(markup).toContain("تأكيد الطباعة واللصق بتصوير QR");
+    expect(markup).toContain('data-testid="confirm-carrier-label-print"');
     expect(markup).not.toContain("ننتظر رابط البوليصة");
 });
 
@@ -164,6 +166,21 @@ test("shipping scan distinguishes a previously confirmed label", () => {
 
     expect(feedback.kind).toBe("duplicate");
     expect(feedback.title).toBe("تم مسح البوليصة مسبقًا");
+});
+
+test("store courier confirmation explains that the label was attached", () => {
+    const feedback = shippingScanFeedback({
+        mode: "confirm_print",
+        result: {
+            already_confirmed: false,
+            carrier_label_type: "store_courier",
+        },
+        barcode: "276628330",
+    });
+
+    expect(feedback.kind).toBe("success");
+    expect(feedback.title).toBe("تم تأكيد الطباعة واللصق");
+    expect(feedback.message).toContain("انتظار إسناده لمندوب التوصيل");
 });
 
 test("carrier handoff duplicate names the employee who already received it", () => {
