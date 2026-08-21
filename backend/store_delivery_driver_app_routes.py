@@ -27,7 +27,7 @@ from store_delivery_domain import (
 )
 from store_delivery_driver_routes import STORE_DRIVERS
 from store_delivery_handover_routes import ASSIGNMENTS, EVENTS, ORDERS
-from store_courier_dispatch_routes import (
+from store_courier_domain import (
     DELIVERED as WORKFLOW_DELIVERED,
     DELIVERING as WORKFLOW_DELIVERING,
     WORKFLOWS,
