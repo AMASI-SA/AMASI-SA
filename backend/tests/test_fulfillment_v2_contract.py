@@ -172,6 +172,8 @@ def test_carrier_handoff_is_barcode_governed_and_released_by_orders_page_sync():
     ).read_text(encoding="utf-8")
     assert "advance_carrier_handoff_from_salla_status" in salla_sync_source
     assert 'source="mezan_orders_page_status_sync"' in salla_sync_source
+    assert '"order_status": order.status' in backend_source
+    assert "carrier_handoff_custody_is_visible(" in backend_source
     assert 'data-testid="confirm-carrier-label-print"' in frontend_source
     assert 'data-testid="open-carrier-handoff-scanner"' in frontend_source
     assert "setInterval" in frontend_source

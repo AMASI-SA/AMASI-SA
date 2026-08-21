@@ -15,6 +15,7 @@ from ai_store_access_contract import effective_permissions, find_role_assignment
 from ai_store_operations_foundation import PERMISSIONS
 from carrier_handoff import (
     CarrierHandoffError,
+    carrier_handoff_custody_is_visible,
     confirm_carrier_label_print,
     receive_carrier_shipment,
 )
@@ -1159,6 +1160,8 @@ async def _order_view(
             or workflow.get("claim_batch_id")
         ),
         "completed_at": workflow.get("completed_at"),
+        "order_status": order.status,
+        "order_status_native": order.status_native,
         "salla_order_status": workflow.get("salla_order_status"),
         "carrier_label_status": workflow.get("carrier_label_status"),
         "carrier_label_ready": bool(workflow.get("carrier_label_ready")),
@@ -1461,8 +1464,16 @@ def make_fulfillment_v2_router(
                 user_id=context["merchant_id"],
                 workflow=workflow,
             )
-            if row:
-                items.append(row)
+            if not row:
+                continue
+            if not carrier_handoff_custody_is_visible(
+                workflow_stage=workflow.get("stage"),
+                handoff_state=workflow.get("carrier_handoff_state"),
+                order_status_slug=row.get("order_status"),
+                order_status_name=row.get("order_status_native"),
+            ):
+                continue
+            items.append(row)
         return {
             "items": items,
             "total": len(items),

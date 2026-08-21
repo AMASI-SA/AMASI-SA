@@ -63,6 +63,31 @@ def workflow_stage_for_salla_status(
     return None
 
 
+def carrier_handoff_custody_is_visible(
+    *,
+    workflow_stage: Any,
+    handoff_state: Any,
+    order_status_slug: Any,
+    order_status_name: Any = None,
+) -> bool:
+    """Keep only shipments that are still physically with the handoff employee.
+
+    The workflow transition and the canonical order refresh are persisted in
+    separate collections.  During the short window between those writes, the
+    workflow can still say ``completed`` while the current Salla order status
+    already says delivering/delivered.  The employee must never keep seeing
+    that stale custody card.
+    """
+    if _text(workflow_stage).casefold() != "completed":
+        return False
+    if _text(handoff_state).casefold() != "with_handoff_employee":
+        return False
+    return workflow_stage_for_salla_status(
+        order_status_slug,
+        order_status_name,
+    ) is None
+
+
 def _snapshot(workflow: dict[str, Any]) -> dict[str, Any]:
     return {
         "order_number": workflow.get("order_number"),
@@ -389,6 +414,7 @@ async def advance_carrier_handoff_from_salla_status(
 __all__ = [
     "CarrierHandoffError",
     "advance_carrier_handoff_from_salla_status",
+    "carrier_handoff_custody_is_visible",
     "confirm_carrier_label_print",
     "normalize_shipping_barcode",
     "receive_carrier_shipment",
