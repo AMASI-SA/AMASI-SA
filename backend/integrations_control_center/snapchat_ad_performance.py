@@ -728,6 +728,9 @@ async def _upsert_projection(
     bucket: dict[str, Any],
     action_report_time: str,
 ) -> None:
+    observe_failure_stage = getattr(context, "observe_failure_stage", None)
+    if callable(observe_failure_stage):
+        observe_failure_stage("fact_write")
     metrics = _finalize_bucket(bucket)
     currency = _text(account.get("currency")).upper()
     spend_micro = _as_number(metrics.get("spend"))
