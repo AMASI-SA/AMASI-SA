@@ -2063,6 +2063,102 @@ async def _execute_snapchat_approval(
     )
 
 
+def _meta_state_matches_mutation(
+    mutation: dict[str, Any],
+    state: dict[str, Any] | None,
+) -> bool:
+    """Return True only when a provider read proves the requested mutation."""
+    current = state if isinstance(state, dict) else {}
+    if "status" in mutation:
+        expected = str(mutation.get("status") or "").upper()
+        actual = str(
+            current.get("status") or current.get("effective_status") or ""
+        ).upper()
+        return bool(expected) and actual == expected
+    if "daily_budget" in mutation:
+        expected_budget = str(mutation.get("daily_budget") or "")
+        actual_budget = str(current.get("daily_budget") or "")
+        return bool(expected_budget) and actual_budget == expected_budget
+    return False
+
+
+async def _reconcile_meta_provider_uncertainty(
+    db: Any,
+    user_id: str,
+    entity_id: str,
+    current_state: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Resolve a prior ambiguous Meta write only from provider evidence.
+
+    A previous accepted/possibly-reached write is never retried merely because
+    its verification failed.  If the provider now proves the requested state,
+    the old execution is closed as completed.  Otherwise the entity stays
+    fail-closed and a new financial mutation is blocked.
+    """
+    unresolved = await db[EXECUTION_COLLECTION].find_one(
+        {
+            "user_id": user_id,
+            "provider": "meta",
+            "status": {"$in": ["provider_state_uncertain", "verification_required"]},
+            "$or": [
+                {"entity_id": entity_id},
+                {"result.entity_id": entity_id},
+            ],
+        },
+        {"_id": 0},
+        sort=[("finished_at", -1), ("approved_at", -1)],
+    )
+    if not unresolved:
+        return None
+    result = unresolved.get("result") or {}
+    requested_change = result.get("requested_change") or {}
+    if _meta_state_matches_mutation(requested_change, current_state):
+        reconciled_at = _iso()
+        execution_id = str(unresolved.get("execution_id") or "")
+        await db[EXECUTION_COLLECTION].update_one(
+            {"execution_id": execution_id},
+            {"$set": {
+                "status": "completed",
+                "finished_at": reconciled_at,
+                "result.status": "completed",
+                "result.reconciliation": {
+                    "status": "provider_state_confirmed",
+                    "reconciled_at": reconciled_at,
+                    "provider_state": {
+                        key: current_state.get(key)
+                        for key in ("status", "effective_status", "daily_budget")
+                    },
+                },
+            }},
+        )
+        snapshot_id = str(unresolved.get("snapshot_id") or "")
+        recommendation_id = str(unresolved.get("recommendation_id") or "")
+        if snapshot_id and recommendation_id:
+            await db[RECOMMENDATION_COLLECTION].update_one(
+                {"user_id": user_id, "snapshot_id": snapshot_id},
+                {"$set": {
+                    "recommendations.$[item].execution_status": "completed",
+                    "recommendations.$[item].executed_at": reconciled_at,
+                }},
+                array_filters=[{"item.recommendation_id": recommendation_id}],
+            )
+        return {
+            "resolved": True,
+            "execution_id": execution_id,
+            "status": "completed",
+        }
+    raise HTTPException(
+        status_code=409,
+        detail={
+            "code": "meta_provider_state_uncertain",
+            "execution_id": unresolved.get("execution_id"),
+            "entity_id": entity_id,
+            "requested_change": requested_change,
+            "message": "Provider state must be reconciled before another Meta write.",
+        },
+    )
+
+
 async def _execute_meta_approval(
     db: Any,
     user_id: str,
@@ -2073,9 +2169,8 @@ async def _execute_meta_approval(
     recommendation_id: str,
     snapshot_digest: str,
 ) -> dict[str, Any]:
-    # Revalidate analytical quality first.  The provider read, state/budget
-    # comparison and POST below then remain adjacent with no intervening DB
-    # await that could widen the provider-state TOCTOU window.
+    # Revalidate analytical quality first.  No provider mutation may proceed
+    # unless the P0-3 quality contract and the current provider state both hold.
     await _execution_quality.preflight_approved_execution(
         db,
         recommendation_collection=RECOMMENDATION_COLLECTION,
@@ -2100,6 +2195,9 @@ async def _execute_meta_approval(
         if read.status_code >= 400:
             raise HTTPException(status_code=502, detail={"code": "meta_recommendation_preflight_failed"})
         before = read.json()
+        # P0-4: before any new financial write, reconcile an older ambiguous
+        # write from provider truth.  If it is still not provable, fail closed.
+        await _reconcile_meta_provider_uncertainty(db, user_id, entity_id, before)
         _execution_quality.require_provider_state_unchanged(
             "meta", recommendation, target, before
         )
@@ -2119,33 +2217,60 @@ async def _execute_meta_approval(
             percent = min(30, max(5, int(recommendation.get("change_percent") or 15)))
             ratio = 1 + direction * percent / 100
             mutation = {"daily_budget": str(max(1, int(round(current_budget * ratio))))}
-        write = await client.post(
-            f"{base}/{entity_id}",
-            data={"access_token": access_token, "appsecret_proof": proof, **mutation},
-        )
+        before_compact = {
+            key: before.get(key) for key in ("status", "effective_status", "daily_budget")
+        }
+        try:
+            write = await client.post(
+                f"{base}/{entity_id}",
+                data={"access_token": access_token, "appsecret_proof": proof, **mutation},
+            )
+        except Exception as exc:
+            # A transport exception does not prove that Meta did not receive the
+            # POST.  Treat it as ambiguous and never retry the mutation blindly.
+            return {
+                "provider": "meta",
+                "entity_id": entity_id,
+                "status": "provider_state_uncertain",
+                "before": before_compact,
+                "requested_change": mutation,
+                "verification": None,
+                "provider_write_reached": None,
+                "uncertainty_reason": "meta_write_transport_outcome_unknown",
+                "transport_error": type(exc).__name__,
+            }
         if write.status_code >= 400:
             raise HTTPException(status_code=502, detail={"code": "meta_recommendation_write_failed"})
-        verify = await client.get(
-            f"{base}/{entity_id}",
-            params={
-                "access_token": access_token,
-                "appsecret_proof": proof,
-                "fields": "id,name,status,effective_status,daily_budget",
-            },
-        )
-        after = verify.json() if verify.status_code < 400 else {}
-        if "status" in mutation:
-            verified = str(after.get("status") or after.get("effective_status") or "").upper() == "PAUSED"
-        else:
-            verified = str(after.get("daily_budget") or "") == str(mutation["daily_budget"])
+        try:
+            verify = await client.get(
+                f"{base}/{entity_id}",
+                params={
+                    "access_token": access_token,
+                    "appsecret_proof": proof,
+                    "fields": "id,name,status,effective_status,daily_budget",
+                },
+            )
+            after = verify.json() if verify.status_code < 400 else {}
+            verification_error = None
+            if verify.status_code >= 400:
+                verification_error = f"http_{verify.status_code}"
+        except Exception as exc:
+            after = {}
+            verification_error = type(exc).__name__
+        verified = _meta_state_matches_mutation(mutation, after)
         return {
             "provider": "meta",
             "entity_id": entity_id,
-            "status": "completed" if verified else "verification_required",
-            "before": {key: before.get(key) for key in ("status", "effective_status", "daily_budget")},
+            "status": "completed" if verified else "provider_state_uncertain",
+            "before": before_compact,
             "requested_change": mutation,
-            "verification": after if verify.status_code < 400 else None,
+            "verification": after if after else None,
             "provider_write_reached": True,
+            "uncertainty_reason": (
+                None if verified else
+                ("meta_verification_read_failed" if verification_error else "meta_verification_mismatch")
+            ),
+            "verification_error": verification_error,
         }
 
 
@@ -2297,6 +2422,8 @@ def attach_campaign_ai_routes(
             "snapshot_id": payload.snapshot_id,
             "recommendation_id": recommendation_id,
             "provider": recommendation.get("provider"),
+            "entity_id": _text(target.get("entity_id"), limit=120),
+            "entity_level": recommendation.get("entity_level"),
             "action": recommendation.get("action"),
             "status": "executing",
             "approved_by": user_id,
@@ -2322,13 +2449,19 @@ def attach_campaign_ai_routes(
                     expected_digest=snapshot_digest,
                     idempotency_key=execution_id,
                 )
-                final_status = "completed" if result.get("status") == "completed" else "verification_required"
+                result_status = str(result.get("status") or "")
+                final_status = (
+                    result_status
+                    if result_status in {"completed", "provider_state_uncertain", "verification_required"}
+                    else "verification_required"
+                )
                 await db[EXECUTION_COLLECTION].update_one(
                     {"execution_id": execution_id},
                     {"$set": {
                         "status": final_status,
                         "finished_at": _iso(),
-                        "writes_performed": True,
+                        "writes_performed": result.get("provider_write_reached") is True,
+                        "provider_write_outcome_known": result.get("provider_write_reached") is not None,
                         "result": result,
                     }},
                 )
