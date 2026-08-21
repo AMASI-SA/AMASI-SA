@@ -44,6 +44,16 @@ from employee_payroll_status import (
     transition_suspensions,
 )
 from liabilities_routes import _aggregate_salary_accrual, _compute_employee_accrual
+from mobile_app_permissions import (
+    MOBILE_APP_ACCESS,
+    MOBILE_APP_ACCESS_OWNER_FIELD,
+    MOBILE_APP_CLIENT,
+    effective_mobile_app_permissions,
+    find_mobile_app_access,
+    mobile_app_permission_catalog,
+    mobile_app_access_for_user,
+    validate_mobile_app_permissions,
+)
 from tz_utils import riyadh_today
 from warehouse_location_routes import WAREHOUSES
 
@@ -60,6 +70,7 @@ EMPLOYEE_CREATE_CONFIRMATION = "CREATE_EMPLOYEE_V2"
 EMPLOYEE_ACCOUNT_LINK_CONFIRMATION = "LINK_EMPLOYEE_V2_ACCOUNT"
 EMPLOYEE_ACCOUNT_UNLINK_CONFIRMATION = "UNLINK_EMPLOYEE_V2_ACCOUNT"
 EMPLOYEE_ROLE_ASSIGNMENT_CONFIRMATION = "ASSIGN_EMPLOYEE_V2_ROLE"
+EMPLOYEE_MOBILE_APP_PERMISSIONS_CONFIRMATION = "ASSIGN_EMPLOYEE_V2_MOBILE_APP_PERMISSIONS"
 EMPLOYEE_PASSWORD_CONFIRMATION = "RESET_EMPLOYEE_V2_ACCOUNT_PASSWORD"
 EMPLOYEE_PAYROLL_STATUS_CONFIRMATION = "CHANGE_EMPLOYEE_V2_PAYROLL_STATUS"
 EMPLOYEE_STATUSES = PAYROLL_STATES
@@ -272,6 +283,7 @@ def build_employee_management_snapshot(
     role_assignments: list[dict[str, Any]],
     preview_employees: list[dict[str, Any]],
     latest_events: list[dict[str, Any]],
+    mobile_app_access_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build the owner-managed Employee OS workspace for all V2 identities."""
     owner_id = _text(owner_id)
@@ -283,6 +295,11 @@ def build_employee_management_snapshot(
     assignments_by_user = {
         _text(row.get("user_id")): row
         for row in role_assignments
+        if _text(row.get("user_id"))
+    }
+    mobile_access_by_user = {
+        _text(row.get("user_id")): row
+        for row in (mobile_app_access_rows or [])
         if _text(row.get("user_id"))
     }
     users_by_id = {
@@ -318,6 +335,7 @@ def build_employee_management_snapshot(
         )
         account = users_by_id.get(account_user_id)
         assignment = assignments_by_user.get(account_user_id)
+        mobile_access = mobile_access_by_user.get(account_user_id)
         raw_status = _text(employee.get("status") or preview.get("status"))
         status = raw_status if raw_status in EMPLOYEE_STATUSES else "inactive"
         contract = contracts_by_employee.get(employee_id) or preview.get("salary_contract")
@@ -391,6 +409,28 @@ def build_employee_management_snapshot(
                     (assignment or {}).get("fulfillment_responsibilities") or []
                 ),
             },
+            "mobile_app_access": {
+                "configured": mobile_access is not None,
+                "enabled": bool(
+                    mobile_access
+                    and mobile_access.get("enabled", True)
+                    and account
+                    and account.get("disabled") is not True
+                    and account.get("is_active") is not False
+                    and not account.get("deleted_at")
+                ),
+                "permissions": effective_mobile_app_permissions(
+                    mobile_access,
+                    account_active=bool(
+                        account
+                        and account.get("disabled") is not True
+                        and account.get("is_active") is not False
+                        and not account.get("deleted_at")
+                    ),
+                ),
+                "stored_permissions": list((mobile_access or {}).get("permissions") or []),
+                "scope": "amasi_mobile_only",
+            },
             "latest_event": events_by_employee.get(employee_id),
             "created_at": employee.get("created_at"),
             "updated_at": employee.get("updated_at"),
@@ -450,6 +490,8 @@ def build_employee_management_snapshot(
         "role_catalog": ROLE_CATALOG,
         "role_labels": ROLE_LABELS,
         "permissions": sorted(PERMISSIONS),
+        "mobile_app_permission_catalog": mobile_app_permission_catalog(),
+        "mobile_app_permission_scope": "amasi_mobile_only",
     }
 
 
@@ -1031,6 +1073,14 @@ def build_payroll_cutover_readiness(
 
 
 async def ensure_employee_v2_indexes(db: Any) -> None:
+    await db[MOBILE_APP_ACCESS].create_index(
+        [
+            (MOBILE_APP_ACCESS_OWNER_FIELD, ASCENDING),
+            ("user_id", ASCENDING),
+        ],
+        unique=True,
+        name="uq_mezan_mobile_app_access_owner_user",
+    )
     await db[EMPLOYEES].create_index(
         [("user_id", ASCENDING), ("id", ASCENDING)],
         unique=True,
@@ -1281,6 +1331,13 @@ async def _management_from_db(
         owner_user_id=owner_id,
         user_ids=account_ids,
     )
+    mobile_app_access_rows = await db[MOBILE_APP_ACCESS].find(
+        {
+            MOBILE_APP_ACCESS_OWNER_FIELD: owner_id,
+            "user_id": {"$in": account_ids},
+        },
+        {"_id": 0},
+    ).to_list(max(len(account_ids), 1))
     latest_events = await db[EMPLOYEE_EVENTS].find(
         {"user_id": owner_id, "employee_id": {"$in": employee_ids}},
         {"_id": 0},
@@ -1293,6 +1350,7 @@ async def _management_from_db(
         role_assignments=role_assignments,
         preview_employees=preview.get("employees") or [],
         latest_events=latest_events,
+        mobile_app_access_rows=mobile_app_access_rows,
     )
 
 
@@ -1344,6 +1402,16 @@ def _role_audit_view(assignment: dict[str, Any] | None) -> dict[str, Any] | None
             "employee_v2_id",
             "assignment_scope",
         )
+    }
+
+
+def _mobile_app_access_audit_view(access: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not access:
+        return None
+    return {
+        "enabled": access.get("enabled", True) is not False,
+        "permissions": sorted(access.get("permissions") or []),
+        "scope": "amasi_mobile_only",
     }
 
 
@@ -1420,6 +1488,58 @@ async def _set_employee_account_access(
 
 def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
     router = APIRouter(prefix="/employees-v2", tags=["Employees V2"])
+
+    @router.get("/mobile-directory")
+    async def mobile_employee_directory(
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        if user.get("_session_client") != MOBILE_APP_CLIENT:
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "mobile_app_session_required"},
+            )
+        access = await mobile_app_access_for_user(db, user)
+        if "app.page.employees" not in set(access.get("permissions") or []):
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "mobile_app_permission_required", "permission": "app.page.employees"},
+            )
+        role = _text(user.get("role")).casefold()
+        owner_id = _text(user.get("id")) if role == "owner" or user.get("is_owner") is True else _text(user.get("created_by"))
+        if not owner_id:
+            raise HTTPException(status_code=403, detail={"code": "mobile_app_owner_scope_required"})
+        rows = await db[EMPLOYEES].find(
+            {"user_id": owner_id},
+            {
+                "_id": 0,
+                "id": 1,
+                "display_name": 1,
+                "phone": 1,
+                "contact_email": 1,
+                "job_title": 1,
+                "department": 1,
+                "status": 1,
+                "account_user_id": 1,
+            },
+        ).sort("display_name", 1).to_list(5000)
+        return {
+            "ok": True,
+            "items": [
+                {
+                    "id": _text(row.get("id")),
+                    "name": _text(row.get("display_name")),
+                    "phone": row.get("phone"),
+                    "contact_email": row.get("contact_email"),
+                    "job_title": row.get("job_title"),
+                    "department": row.get("department"),
+                    "status": _text(row.get("status") or "inactive"),
+                    "has_login_account": bool(_text(row.get("account_user_id"))),
+                }
+                for row in rows
+            ],
+            "read_only": True,
+            "permission_scope": "amasi_mobile_only",
+        }
 
     @router.get("")
     async def list_employees(user: dict = Depends(current_user)) -> dict[str, Any]:
@@ -1903,6 +2023,24 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
             owner_id=owner_id,
             reason="employee_account_unlinked",
         )
+        before_mobile_access = await find_mobile_app_access(
+            db,
+            owner_user_id=owner_id,
+            user_id=account_id,
+        )
+        if before_mobile_access:
+            await db[MOBILE_APP_ACCESS].update_one(
+                {
+                    MOBILE_APP_ACCESS_OWNER_FIELD: owner_id,
+                    "user_id": account_id,
+                },
+                {"$set": {
+                    "enabled": False,
+                    "disabled_reason": "employee_account_unlinked",
+                    "updated_at": _now(),
+                    "updated_by": owner_id,
+                }},
+            )
         if before_assignment:
             current_assignment = await find_role_assignment(
                 db,
@@ -1947,6 +2085,7 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
                 "account_user_id": account_id,
                 "account_access": _account_access_view(before_account),
                 "role_assignment": _role_audit_view(before_assignment),
+                "mobile_app_access": _mobile_app_access_audit_view(before_mobile_access),
             },
             after={
                 "account_user_id": None,
@@ -1960,11 +2099,122 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
                         user_id=account_id,
                     )
                 ),
+                "mobile_app_access": _mobile_app_access_audit_view(
+                    await find_mobile_app_access(
+                        db,
+                        owner_user_id=owner_id,
+                        user_id=account_id,
+                    )
+                ),
             },
             metadata={"effect_scope": "employee_account_access"},
         )
         response = await _employee_management_response(db, owner_id=owner_id)
         return {"ok": True, "idempotent_replay": False, **response}
+
+    @router.put("/management/employees/{employee_id}/mobile-app-permissions")
+    async def assign_employee_mobile_app_permissions(
+        employee_id: str,
+        payload: dict[str, Any] = Body(...),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        _require_owner(user)
+        if _text(payload.get("confirmation")) != EMPLOYEE_MOBILE_APP_PERMISSIONS_CONFIRMATION:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "employee_mobile_app_permissions_confirmation_required"},
+            )
+        owner_id = _text(user.get("id"))
+        employee = _require_managed_employee(await db[EMPLOYEES].find_one(
+            {"user_id": owner_id, "id": employee_id},
+            {"_id": 0},
+        ))
+        account_id = _text(employee.get("account_user_id"))
+        if not account_id:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "employee_account_link_required_before_mobile_app_permissions"},
+            )
+        account = await db.users.find_one(
+            {
+                "id": account_id,
+                "created_by": owner_id,
+                "role": {"$ne": "owner"},
+            },
+            {"_id": 0, "id": 1, "name": 1, "email": 1, "role": 1},
+        )
+        if not account:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "employee_login_account_not_available"},
+            )
+        try:
+            selected_permissions = validate_mobile_app_permissions(
+                payload.get("permissions")
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": str(exc)},
+            ) from exc
+
+        before = await find_mobile_app_access(
+            db,
+            owner_user_id=owner_id,
+            user_id=account_id,
+        )
+        now = _now()
+        enabled = bool(payload.get("enabled", True))
+        document = {
+            "id": (before or {}).get("id") or f"mobapp_{uuid.uuid4().hex}",
+            MOBILE_APP_ACCESS_OWNER_FIELD: owner_id,
+            "user_id": account_id,
+            "employee_v2_id": employee_id,
+            "enabled": enabled,
+            "permissions": selected_permissions,
+            "scope": "amasi_mobile_only",
+            "updated_at": now,
+            "updated_by": owner_id,
+        }
+        await db[MOBILE_APP_ACCESS].update_one(
+            {
+                MOBILE_APP_ACCESS_OWNER_FIELD: owner_id,
+                "user_id": account_id,
+            },
+            {
+                "$set": document,
+                "$setOnInsert": {
+                    "created_at": now,
+                    "created_by": owner_id,
+                },
+            },
+            upsert=True,
+        )
+        saved = await find_mobile_app_access(
+            db,
+            owner_user_id=owner_id,
+            user_id=account_id,
+        ) or document
+        await _record_employee_event(
+            db,
+            owner_id=owner_id,
+            employee_id=employee_id,
+            event_type="employee_mobile_app_permissions_assigned",
+            actor=user,
+            before=_mobile_app_access_audit_view(before),
+            after=_mobile_app_access_audit_view(saved),
+            metadata={
+                "permission_count": len(selected_permissions),
+                "scope": "amasi_mobile_only",
+                "mezan_permission_changes": 0,
+            },
+        )
+        response = await _employee_management_response(db, owner_id=owner_id)
+        return {
+            "ok": True,
+            "mobile_app_access": _mobile_app_access_audit_view(saved),
+            **response,
+        }
 
     @router.put("/management/employees/{employee_id}/role")
     async def assign_employee_role(
@@ -2575,6 +2825,7 @@ __all__ = [
     "EMPLOYEE_CREATE_CONFIRMATION",
     "EMPLOYEE_PASSWORD_CONFIRMATION",
     "EMPLOYEE_ROLE_ASSIGNMENT_CONFIRMATION",
+    "EMPLOYEE_MOBILE_APP_PERMISSIONS_CONFIRMATION",
     "NATIVE_SOURCE_SYSTEM",
     "PARALLEL_CYCLE_CAPTURE_CONFIRMATION",
     "PAYROLL_PARALLEL_RUNS",
