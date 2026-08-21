@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
+import unicodedata
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable
@@ -95,17 +97,40 @@ def _float(value: Any) -> float:
     return parsed
 
 
+_ARABIC_DIACRITICS_RE = re.compile(r"[\u0610-\u061a\u064b-\u065f\u0670\u06d6-\u06ed]")
+
+
+def _normalize_match_text(value: object) -> str:
+    """Normalize presentation variants without changing business semantics.
+
+    Arabic hamza/alef presentation differences are common between Salla status
+    labels and saved Mezan settings (for example بانتظار vs بإنتظار). Matching
+    should not drop otherwise identical orders because of those orthographic
+    variants. The function also removes combining marks/tatweel and collapses
+    whitespace, while preserving the actual words and status policy.
+    """
+    rendered = unicodedata.normalize("NFKC", str(value or "")).casefold()
+    rendered = _ARABIC_DIACRITICS_RE.sub("", rendered).replace("ـ", "")
+    rendered = rendered.translate(str.maketrans({
+        "أ": "ا",
+        "إ": "ا",
+        "آ": "ا",
+        "ٱ": "ا",
+    }))
+    return " ".join(rendered.split())
+
+
 def _matches_any(value: str, allowed: list[str]) -> bool:
     if not allowed:
         return True
-    normalized = str(value or "").strip().casefold()
+    normalized = _normalize_match_text(value)
     return any(
         candidate and (
             candidate == normalized
             or candidate in normalized
             or normalized in candidate
         )
-        for candidate in (str(item).strip().casefold() for item in allowed)
+        for candidate in (_normalize_match_text(item) for item in allowed)
     )
 
 
