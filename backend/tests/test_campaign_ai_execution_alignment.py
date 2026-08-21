@@ -294,6 +294,39 @@ def test_monitor_marks_valid_ad_group_budget_action_as_approvable(monkeypatch):
             limitations=[],
         )
 
+    async def complete_quality(*_args, **_kwargs):
+        return {
+            "contract_version": "campaign_ai_execution_quality_p0_3_v1",
+            "provider": "snapchat",
+            "data_quality": "complete",
+            "data_state": "confirmed_data",
+            "coverage": {"status": "complete"},
+            "freshness": {"status": "fresh"},
+            "provider_sync": {
+                "status": "complete",
+                    "source_mode": (
+                        monitor._policy._execution_quality.RUN_SOURCE_MODES[
+                            "snapchat"
+                        ]
+                    ),
+                "errors_count": 0,
+                "error_codes": [],
+                "accounts_attempted": 1,
+                "accounts_complete": 1,
+                "account_bound": True,
+                "chronology_valid": True,
+            },
+            "pagination": {"status": "complete", "truncated": False},
+            "fx": {"status": "documented"},
+            "attribution": {
+                "status": "trusted",
+                "source_window_trusted": True,
+            },
+            "source_validation": {"status": "complete", "errors": []},
+            "entity_facts": {"status": "complete", "errors": []},
+            "source_revision": {"status": "unchanged"},
+        }
+
     monkeypatch.setattr(monitor._policy, "_campaign_entities", campaign_entities)
     monkeypatch.setattr(monitor._policy, "_snapchat_child_entities", snapchat_children)
     monkeypatch.setattr(monitor._legacy, "_meta_child_entities", empty)
@@ -301,6 +334,11 @@ def test_monitor_marks_valid_ad_group_budget_action_as_approvable(monkeypatch):
     monkeypatch.setattr(monitor._policy, "_experiment_outcomes_context", experiments)
     monkeypatch.setattr(monitor._legacy, "_business_profit_context", profit)
     monkeypatch.setattr(monitor._policy, "_ask_openai", openai_result)
+    monkeypatch.setattr(
+        monitor._policy._execution_quality,
+        "collect_execution_quality_evidence",
+        complete_quality,
+    )
 
     db = FakeDB()
     result = asyncio.run(monitor.run_campaign_ai_monitor(
