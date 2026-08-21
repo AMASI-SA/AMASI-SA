@@ -623,7 +623,10 @@ def _group_piece_products(pieces: list[dict[str, Any]]) -> list[dict[str, Any]]:
             row["sent_quantity"] += 1
         if dispatch_status == DISPATCH_STATUS_READY or status == PIECE_STATUS_READY_FOR_RECEIPT:
             row["ready_quantity"] += 1
-        if dispatch_status == DISPATCH_STATUS_RECEIVED or status == PIECE_STATUS_RECEIVED:
+        if (
+            dispatch_status == DISPATCH_STATUS_RECEIVED
+            or status == PIECE_STATUS_RECEIVED
+        ) and not _text(piece.get("branch_handoff_at")):
             row["received_quantity"] += 1
     for row in grouped.values():
         row["order_numbers"].sort()
@@ -791,8 +794,11 @@ def _piece_products(pieces: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 or status == PIECE_STATUS_READY_FOR_RECEIPT
             ) else 0,
             "received_quantity": 1 if (
-                dispatch_status == DISPATCH_STATUS_RECEIVED
-                or status == PIECE_STATUS_RECEIVED
+                (
+                    dispatch_status == DISPATCH_STATUS_RECEIVED
+                    or status == PIECE_STATUS_RECEIVED
+                )
+                and not _text(piece.get("branch_handoff_at"))
             ) else 0,
             "order_numbers": (
                 [_text(piece.get("order_number"))]
@@ -1043,7 +1049,10 @@ async def _employee_workspace(
             account["sent_quantity"] += 1
         if dispatch_status == DISPATCH_STATUS_READY or status == PIECE_STATUS_READY_FOR_RECEIPT:
             account["ready_quantity"] += 1
-        if dispatch_status == DISPATCH_STATUS_RECEIVED or status == PIECE_STATUS_RECEIVED:
+        if (
+            dispatch_status == DISPATCH_STATUS_RECEIVED
+            or status == PIECE_STATUS_RECEIVED
+        ) and not _text(piece.get("branch_handoff_at")):
             account["received_quantity"] += 1
     for supplier_id, account in supplier_rows.items():
         account_pieces = [

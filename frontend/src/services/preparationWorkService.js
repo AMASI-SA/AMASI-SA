@@ -22,6 +22,7 @@ function errorMessage(error, fallback) {
         preparation_piece_employee_required: "يجب إسناد القطعة إلى موظف تجهيز أولًا.",
         preparation_piece_supplier_receiving_in_progress: "القطعة داخل جلسة استلام من المورد الآن.",
         preparation_piece_supplier_receipt_required: "استلم القطعة من المورد أولًا ثم استلمها من التجهيز.",
+        preparation_piece_services_incomplete: "لا يمكن استلام القطعة؛ توجد خدمة مطلوبة لم تُنفذ بعد. أكمل جميع الخدمات ثم أعد تصوير الباركود.",
         preparation_piece_not_started: "لم يبدأ موظف التجهيز هذه القطعة بعد.",
         preparation_piece_not_ready_for_receipt: "حالة القطعة لا تسمح باستلامها الآن.",
         preparation_piece_receipt_conflict: "تغيرت حالة القطعة. ابحث عن الطلب مرة أخرى.",
@@ -33,7 +34,17 @@ function errorMessage(error, fallback) {
         assembly_piece_stopped: "هذا المنتج متوقف ولا يمكن إكماله.",
         assembly_piece_ready_conflict: "تغيرت حالة المنتج. افتح الطلب مرة أخرى.",
     };
-    return messages[detail?.code] || error?.message || fallback;
+    const base = messages[detail?.code] || error?.message || fallback;
+    const pendingNames = Array.isArray(detail?.pending_service_names)
+        ? detail.pending_service_names.filter(Boolean)
+        : [];
+    if (
+        detail?.code === "preparation_piece_services_incomplete"
+        && pendingNames.length
+    ) {
+        return `${base} الخدمات غير المنجزة: ${pendingNames.join("، ")}.`;
+    }
+    return base;
 }
 
 export async function getMyPreparationWork({ limit = 50 } = {}) {

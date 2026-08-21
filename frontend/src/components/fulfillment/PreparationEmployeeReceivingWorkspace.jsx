@@ -25,9 +25,26 @@ const BLOCKER_MESSAGES = {
     preparation_piece_employee_required: "لم يُسند لموظف تجهيز",
     preparation_piece_supplier_receiving_in_progress: "داخل استلام المورد",
     preparation_piece_supplier_receipt_required: "يحتاج استلامه من المورد أولًا",
+    preparation_piece_services_incomplete: "لا يمكن استلام القطعة؛ توجد خدمة مطلوبة لم تُنفذ بعد. أكمل جميع الخدمات ثم أعد تصوير الباركود.",
     preparation_piece_not_started: "لم يبدأ تجهيزه",
     preparation_piece_not_ready_for_receipt: "غير جاهز للاستلام",
 };
+
+function preparationBlockerMessage(piece) {
+    const base = BLOCKER_MESSAGES[piece?.blocker_code]
+        || piece?.status_label
+        || "غير جاهز للاستلام";
+    const pendingNames = Array.isArray(piece?.pending_service_names)
+        ? piece.pending_service_names.filter(Boolean)
+        : [];
+    if (
+        piece?.blocker_code === "preparation_piece_services_incomplete"
+        && pendingNames.length
+    ) {
+        return `${base} الخدمات غير المنجزة: ${pendingNames.join("، ")}.`;
+    }
+    return base;
+}
 
 export function CameraScanner({ onDetected, onClose }) {
     const videoRef = useRef(null);
@@ -233,7 +250,7 @@ export function ProductCard({ piece, busy, onReceive }) {
                     </div>
                 ) : (
                     <div className="mt-4 flex min-h-14 items-center justify-center gap-2 rounded-2xl bg-amber-50 px-4 text-center text-sm font-black text-amber-900">
-                        <WarningCircle size={22} weight="fill" /> {BLOCKER_MESSAGES[piece.blocker_code] || piece.status_label || "غير جاهز للاستلام"}
+                        <WarningCircle size={22} weight="fill" /> {preparationBlockerMessage(piece)}
                     </div>
                 )}
             </div>
@@ -311,9 +328,7 @@ export default function PreparationEmployeeReceivingWorkspace() {
             if (!matchedPiece.can_receive) {
                 showPopup(
                     "تعذّر استلام المنتج",
-                    BLOCKER_MESSAGES[matchedPiece.blocker_code]
-                        || matchedPiece.status_label
-                        || "حالة القطعة لا تسمح باستلامها الآن.",
+                    preparationBlockerMessage(matchedPiece),
                 );
                 return null;
             }

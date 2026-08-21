@@ -1151,6 +1151,8 @@ def preparation_receipt_blocker(piece: dict[str, Any]) -> str | None:
         return "preparation_piece_employee_required"
     if _text(piece.get("supplier_receiving_session_id")):
         return "preparation_piece_supplier_receiving_in_progress"
+    if _preparation_incomplete_services(piece):
+        return "preparation_piece_services_incomplete"
     if supplier_dispatch_status and supplier_dispatch_status != "received":
         return "preparation_piece_supplier_receipt_required"
     if status == PIECE_STATUS_ASSIGNED:
@@ -1162,6 +1164,39 @@ def preparation_receipt_blocker(piece: dict[str, Any]) -> str | None:
     }:
         return "preparation_piece_not_ready_for_receipt"
     return None
+
+
+def _preparation_service_is_complete(service: dict[str, Any]) -> bool:
+    """Use the same completion contract as supplier receiving without imports.
+
+    Keeping this check local avoids a circular import while still accepting
+    both the durable ``completed`` status and older quantity-complete records.
+    """
+    if _text(service.get("status")).casefold() == "completed":
+        return True
+    try:
+        required = float(service.get("required_quantity") or 1)
+    except (TypeError, ValueError, OverflowError):
+        required = 1.0
+    if required <= 0:
+        required = 1.0
+    try:
+        completed = float(service.get("completed_quantity") or 0)
+    except (TypeError, ValueError, OverflowError):
+        completed = 0.0
+    return completed >= required
+
+
+def _preparation_incomplete_services(
+    piece: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Return unfinished required services from the authoritative snapshot."""
+    return [
+        dict(service)
+        for service in piece.get("services") or []
+        if isinstance(service, dict)
+        and not _preparation_service_is_complete(service)
+    ]
 
 
 def _preparation_receipt_specs(piece: dict[str, Any]) -> list[dict[str, str]]:
@@ -1211,6 +1246,7 @@ def _preparation_receipt_piece_public(
         or None
     )
     piece_id = _text(piece.get("piece_id") or piece.get("id"))
+    incomplete_services = _preparation_incomplete_services(piece)
     return {
         "piece_id": piece_id,
         "order_number": _text(piece.get("order_number")),
@@ -1227,6 +1263,12 @@ def _preparation_receipt_piece_public(
         "status_label": status_labels.get(status, status or "غير معروف"),
         "can_receive": blocker is None,
         "blocker_code": blocker,
+        "remaining_service_count": len(incomplete_services),
+        "pending_service_names": [
+            _text(service.get("service_name") or service.get("service_code"))
+            for service in incomplete_services
+            if _text(service.get("service_name") or service.get("service_code"))
+        ],
         "search_match": bool(matched_piece_id and piece_id == matched_piece_id),
         "preparation_received_at": piece.get("preparation_received_at"),
         "preparation_received_by_name": _text(
@@ -1475,7 +1517,24 @@ async def _receive_preparation_piece(
 
     blocker = preparation_receipt_blocker(piece)
     if blocker:
-        raise HTTPException(status_code=409, detail={"code": blocker})
+        detail: dict[str, Any] = {"code": blocker}
+        if blocker == "preparation_piece_services_incomplete":
+            incomplete_services = _preparation_incomplete_services(piece)
+            detail.update({
+                "remaining_service_count": len(incomplete_services),
+                "pending_service_names": [
+                    _text(
+                        service.get("service_name")
+                        or service.get("service_code")
+                    )
+                    for service in incomplete_services
+                    if _text(
+                        service.get("service_name")
+                        or service.get("service_code")
+                    )
+                ],
+            })
+        raise HTTPException(status_code=409, detail=detail)
 
     now = _now()
     update_result = await db[PIECES].update_one(
@@ -1493,6 +1552,11 @@ async def _receive_preparation_piece(
             "preparation_received_at": now,
             "preparation_received_by": actor_id,
             "preparation_received_by_name": actor_name,
+            "branch_handoff_at": now,
+            "branch_handoff_by": actor_id,
+            "branch_handoff_by_name": actor_name,
+            "branch_handoff_status": "received_by_branch",
+            "preparation_employee_custody_status": "handed_to_branch",
             "completed_at": now,
             "updated_at": now,
             "mezan_only": True,
@@ -2001,6 +2065,7 @@ async def _my_work_view(db: Any, *, user_id: str, employee_id: str, limit: int) 
         {
             "user_id": user_id,
             "responsible_employee_id": employee_id,
+            "preparation_receipt_status": {"$ne": "received"},
             "$and": [
                 {"$or": [
                     {"experiment_archived_at": {"$exists": False}},

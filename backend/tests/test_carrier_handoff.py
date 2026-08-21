@@ -141,6 +141,7 @@ async def test_handoff_scan_claims_once_and_rejects_every_duplicate():
         actor_name="موظف تسليم الشحن",
     )
     assert result["carrier_handoff_employee_id"] == "handoff-1"
+    assert result["carrier_handoff_custody_active"] is True
 
     with pytest.raises(CarrierHandoffError) as duplicate:
         await receive_carrier_shipment(
@@ -181,7 +182,39 @@ async def test_mezan_orders_status_sync_releases_employee_custody():
     saved = db["order_review_workflows"].rows[0]
     assert saved["stage"] == "delivering"
     assert saved["carrier_handoff_state"] == "carrier_in_delivery"
+    assert saved["carrier_handoff_custody_active"] is False
     assert saved["carrier_handoff_release_source"] == "mezan_orders_page_status_sync"
+
+
+@pytest.mark.asyncio
+async def test_delivered_status_also_releases_handoff_employee_custody():
+    db = _DB(
+        [
+            _workflow(
+                carrier_label_print_confirmed=True,
+                carrier_label_barcode="6081326581116",
+                carrier_handoff_state="with_handoff_employee",
+                carrier_handoff_employee_id="handoff-1",
+                carrier_handoff_employee_name="موظف تسليم الشحن",
+                carrier_handoff_custody_active=True,
+            )
+        ]
+    )
+
+    result = await advance_carrier_handoff_from_salla_status(
+        db,
+        user_id="owner-1",
+        order_number="276628330",
+        status_slug="delivered",
+        status_name="تم التوصيل",
+    )
+
+    assert result == {"advanced": True, "stage": "delivered"}
+    saved = db["order_review_workflows"].rows[0]
+    assert saved["stage"] == "delivered"
+    assert saved["carrier_handoff_state"] == "delivered"
+    assert saved["carrier_handoff_custody_active"] is False
+    assert saved["carrier_handoff_employee_id"] == "handoff-1"
 
 
 @pytest.mark.asyncio
