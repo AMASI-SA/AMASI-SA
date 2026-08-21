@@ -12,6 +12,7 @@ from employees_v2_routes import (
     EMPLOYEE_ACCOUNT_UNLINK_CONFIRMATION,
     EMPLOYEE_CREATE_CONFIRMATION,
     EMPLOYEE_PASSWORD_CONFIRMATION,
+    EMPLOYEE_MOBILE_APP_PERMISSIONS_CONFIRMATION,
     EMPLOYEE_PAYROLL_STATUS_CONFIRMATION,
     EMPLOYEE_ROLE_ASSIGNMENT_CONFIRMATION,
     NATIVE_SOURCE_SYSTEM,
@@ -243,10 +244,12 @@ def test_management_routes_use_general_employee_contracts():
     source = (ROOT / "backend/employees_v2_routes.py").read_text(encoding="utf-8")
 
     assert "/employees-v2/management/employees" in paths
+    assert "/employees-v2/mobile-directory" in paths
     assert "/employees-v2/management/employees/{employee_id}" in paths
     assert "/employees-v2/management/employees/{employee_id}/account" in paths
     assert "/employees-v2/management/employees/{employee_id}/account/password" in paths
     assert "/employees-v2/management/employees/{employee_id}/role" in paths
+    assert "/employees-v2/management/employees/{employee_id}/mobile-app-permissions" in paths
     assert "/employees-v2/management/employees/{employee_id}/events" in paths
     assert not any("/management/pilot" in path for path in paths)
     assert '"mode": "pilot_management"' not in source
@@ -255,6 +258,7 @@ def test_management_routes_use_general_employee_contracts():
     assert EMPLOYEE_ACCOUNT_LINK_CONFIRMATION == "LINK_EMPLOYEE_V2_ACCOUNT"
     assert EMPLOYEE_ACCOUNT_UNLINK_CONFIRMATION == "UNLINK_EMPLOYEE_V2_ACCOUNT"
     assert EMPLOYEE_ROLE_ASSIGNMENT_CONFIRMATION == "ASSIGN_EMPLOYEE_V2_ROLE"
+    assert EMPLOYEE_MOBILE_APP_PERMISSIONS_CONFIRMATION == "ASSIGN_EMPLOYEE_V2_MOBILE_APP_PERMISSIONS"
     assert EMPLOYEE_PASSWORD_CONFIRMATION == "RESET_EMPLOYEE_V2_ACCOUNT_PASSWORD"
     assert EMPLOYEE_PAYROLL_STATUS_CONFIRMATION == "CHANGE_EMPLOYEE_V2_PAYROLL_STATUS"
 
@@ -388,6 +392,73 @@ def test_full_employee_api_flow_revokes_and_restores_access_without_financial_wr
     assert "general_ledger" not in db.collections
     assert "liabilities" not in db.collections
     assert "Temporary123!" not in repr(db[employee_routes.EMPLOYEE_EVENTS].rows)
+
+
+def test_mobile_app_permissions_are_saved_without_changing_mezan_role(monkeypatch):
+    db = _Database()
+    owner = {"id": "owner-1", "role": "owner", "name": "المالك"}
+    db[employee_routes.EMPLOYEES].rows.append({
+        "id": "employee-1",
+        "user_id": "owner-1",
+        "display_name": "موظف التطبيق",
+        "status": "active",
+        "account_user_id": "mobile-user",
+        "version": 1,
+    })
+    db.users.rows.append({
+        "id": "mobile-user",
+        "created_by": "owner-1",
+        "name": "موظف التطبيق",
+        "email": "mobile@example.com",
+        "role": "viewer",
+    })
+    db[employee_routes.ROLE_ASSIGNMENTS].rows.append({
+        "owner_user_id": "owner-1",
+        "user_id": "mobile-user",
+        "role_key": "preparation_operator",
+        "enabled": True,
+        "extra_permissions": [],
+        "denied_permissions": [
+            "preparation.assigned.read",
+            "preparation.assigned.stop",
+            "preparation.assigned.work",
+        ],
+        "effective_permissions": [],
+    })
+
+    async def response(_db, *, owner_id):
+        return {"mode": "full_management", "owner_id": owner_id}
+
+    monkeypatch.setattr(employee_routes, "_employee_management_response", response)
+    endpoint = _route_endpoint(
+        make_employees_v2_router(db, lambda: owner),
+        "/employees-v2/management/employees/{employee_id}/mobile-app-permissions",
+        "PUT",
+    )
+    result = asyncio.run(endpoint(
+        employee_id="employee-1",
+        payload={
+            "confirmation": EMPLOYEE_MOBILE_APP_PERMISSIONS_CONFIRMATION,
+            "enabled": True,
+            "permissions": [
+                "app.page.my_products",
+                "app.action.my_products.service.add",
+            ],
+        },
+        user=owner,
+    ))
+
+    assert result["ok"] is True
+    assert db[employee_routes.ROLE_ASSIGNMENTS].rows[0]["effective_permissions"] == []
+    saved = db[employee_routes.MOBILE_APP_ACCESS].rows[0]
+    assert saved["scope"] == "amasi_mobile_only"
+    assert saved["permissions"] == [
+        "app.action.my_products.service.add",
+        "app.page.my_products",
+    ]
+    event = db[employee_routes.EMPLOYEE_EVENTS].rows[-1]
+    assert event["event_type"] == "employee_mobile_app_permissions_assigned"
+    assert event["metadata"]["mezan_permission_changes"] == 0
 
 
 def test_status_change_writes_v2_contract_leave_history_only(monkeypatch):
