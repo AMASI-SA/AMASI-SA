@@ -1901,9 +1901,8 @@ async def _assembly_search(
             "$or": [
                 {"stage": "ready_to_ship"},
                 {
-                    "stage": "completed",
                     "assembly_status": "completed",
-                    "carrier_label_print_confirmed": {"$ne": True},
+                    "stage": {"$in": ["completed", "delivering", "delivered"]},
                 },
             ],
         },
@@ -1956,11 +1955,32 @@ async def _assembly_search(
         "print_confirmed": bool(
             workflow.get("carrier_label_print_confirmed")
         ),
+        "print_confirmed_at": workflow.get(
+            "carrier_label_print_confirmed_at"
+        ),
+        "print_confirmed_by_name": workflow.get(
+            "carrier_label_print_confirmed_by_name"
+        ),
+        "shipment_state": (
+            workflow.get("store_courier_assignment_state")
+            or workflow.get("carrier_handoff_state")
+        ),
+        "handoff_employee_name": workflow.get(
+            "carrier_handoff_employee_name"
+        ),
+        "store_courier_assignee_name": workflow.get(
+            "store_courier_assignee_name"
+        ),
         "print_data": workflow.get("carrier_label_print_data"),
     }
+    history_only = bool(
+        workflow.get("carrier_label_print_confirmed")
+        or _text(workflow.get("stage")) in {"delivering", "delivered"}
+    )
     return {
         "order_number": order_number,
         "stage": _text(workflow.get("stage")),
+        "history_only": history_only,
         "matched_piece_id": matched_piece_id or None,
         "print_batch_id": _text(
             workflow.get("shipping_print_batch_id")
