@@ -15,6 +15,7 @@ import {
     updateOrderReviewOperationalItemStatus,
     saveOrderReviewImageChoice,
 } from "../services/orderReviewEngine";
+import CustomerServiceInstructionBanner from "../components/fulfillment/CustomerServiceInstructionBanner";
 
 function money(value, currency = "SAR") {
     const amount = Number(value || 0);
@@ -567,6 +568,12 @@ function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
                                 <button type="button" onClick={() => copy(order.order_number, "رقم الطلب")} className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 font-bold"><Clipboard /> نسخ رقم الطلب</button>
                             </div>
                         </div>
+
+                        <CustomerServiceInstructionBanner
+                            instructions={detail.customer_service_instructions || []}
+                            stage="pending_review"
+                            onUpdated={load}
+                        />
 
                         <section className="rounded-2xl border bg-white p-4">
                             <h3 className="mb-3 text-lg font-extrabold">معلومات العميل</h3>

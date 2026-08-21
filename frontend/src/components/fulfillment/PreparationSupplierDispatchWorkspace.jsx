@@ -30,6 +30,7 @@ import {
     sendPreparationPiecesToSupplier,
 } from "../../services/preparationSupplierDispatch";
 import { printSupplierDispatch } from "./supplierDispatchPrint";
+import CustomerServiceInstructionBanner from "./CustomerServiceInstructionBanner";
 
 const SupplierReceivingWorkspace = lazy(() => import("./SupplierReceivingWorkspace"));
 
@@ -592,6 +593,7 @@ export function WaitingReviewView({
                                                 </div>
                                                 <div className="mt-2 min-w-0"><div className="line-clamp-2 min-h-10 text-xs font-black leading-5 text-slate-900 sm:text-sm">{product.product_name}</div><div className="mt-1 truncate text-[10px] font-bold text-slate-500">{product.sku || "بدون SKU"} · {product.available_quantity} قطعة</div></div>
                                                 <div className="mt-2 flex min-h-6 flex-wrap gap-1">{(product.services || []).filter((service) => service.status !== "completed").slice(0, 2).map((service) => <span key={service.service_id} className="rounded-full bg-amber-50 px-1.5 py-1 text-[9px] font-black text-amber-800">{service.service_name || "خدمة"}</span>)}</div>
+                                                <div className="mt-2"><CustomerServiceInstructionBanner instructions={product.customer_service_instructions || []} stage="supplier_dispatch" onUpdated={onChanged} /></div>
                                                 {selectionState !== "unselected" && <div className="mt-2"><QuantityControl product={product} value={value} onChange={(quantity) => setQuantity(file.file_number, product.group_key, quantity)} /></div>}
                                             </article>
                                         );

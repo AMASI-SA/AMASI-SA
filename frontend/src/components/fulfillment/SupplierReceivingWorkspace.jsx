@@ -33,6 +33,7 @@ import {
     scanSupplierReceivingPiece,
     uploadSupplierInvoiceShareEvidence,
 } from "../../services/supplierReceiving";
+import CustomerServiceInstructionBanner from "./CustomerServiceInstructionBanner";
 
 const PREPARATION_TRACKS = [
     "من المستودع",
@@ -233,6 +234,7 @@ function ScanRow({ scan }) {
                 </div>
             </div>
             <div className="text-xs font-bold text-slate-500 sm:text-left">{formatReceivingDate(scan.occurred_at)}</div>
+            <div className="sm:col-span-3"><CustomerServiceInstructionBanner instructions={scan.customer_service_instructions || []} stage="supplier_receiving" /></div>
         </article>
     );
 }
@@ -793,6 +795,7 @@ export default function SupplierReceivingWorkspace() {
     const [workflowStep, setWorkflowStep] = useState("scan");
     const [savedInvoice, setSavedInvoice] = useState(null);
     const [quantityRequest, setQuantityRequest] = useState(null);
+    const [stageInstructions, setStageInstructions] = useState([]);
     const barcodeRef = useRef(null);
     const scanBusyRef = useRef(false);
 
@@ -861,6 +864,7 @@ export default function SupplierReceivingWorkspace() {
             setWorkflowStep("scan");
             setSavedInvoice(null);
             setQuantityRequest(null);
+            setStageInstructions([]);
         } catch (openError) {
             setError(openError.message);
         } finally {
@@ -885,6 +889,7 @@ export default function SupplierReceivingWorkspace() {
                 ? result.scans
                 : result?.scan ? [result.scan] : [];
             setQuantityRequest(null);
+            setStageInstructions([]);
             setLastScan(receivedScans[0] ? {
                 ...receivedScans[0],
                 received_quantity: Number(result?.selected_quantity || receivedScans.length || 1),
@@ -905,6 +910,9 @@ export default function SupplierReceivingWorkspace() {
             }));
             return true;
         } catch (scanError) {
+            if (scanError?.code === "customer_service_instruction_action_required") {
+                setStageInstructions(scanError?.detail?.instructions || []);
+            }
             setError(scanError.message);
             setBarcode("");
             return false;
@@ -1194,6 +1202,14 @@ export default function SupplierReceivingWorkspace() {
                     <WarningCircle size={21} className="mt-0.5 shrink-0" />{error}
                 </div>
             )}
+
+            <CustomerServiceInstructionBanner
+                instructions={stageInstructions}
+                stage="supplier_receiving"
+                onUpdated={(response) => {
+                    if (!response?.waiting_customer_service_approval) setStageInstructions([]);
+                }}
+            />
 
             {!active ? (
                 <form onSubmit={openSession} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" data-testid="supplier-receiving-open-form">

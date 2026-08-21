@@ -30,6 +30,7 @@ import {
 } from "../../services/preparationWorkService";
 import { CameraScanner } from "./PreparationEmployeeReceivingWorkspace";
 import { printStoreCourierLabel } from "../../lib/storeCourierLabelPrint";
+import CustomerServiceInstructionBanner from "./CustomerServiceInstructionBanner";
 
 const ASSEMBLY_BLOCKERS = {
     assembly_piece_preparation_receipt_required: "استلم المنتج من موظف التجهيز أولًا",
@@ -60,7 +61,7 @@ function ProductImage({ piece }) {
     );
 }
 
-export function AssemblyProductCard({ piece, busy, onReady }) {
+export function AssemblyProductCard({ piece, busy, onReady, onUpdated }) {
     return (
         <article
             className={`overflow-hidden rounded-3xl border-2 bg-white shadow-sm ${piece.search_match ? "border-violet-500 ring-4 ring-violet-100" : piece.assembly_ready ? "border-emerald-300" : "border-slate-200"}`}
@@ -112,6 +113,8 @@ export function AssemblyProductCard({ piece, busy, onReady }) {
                         </div>
                     </div>
                 )}
+
+                <div className="mt-3"><CustomerServiceInstructionBanner instructions={piece.customer_service_instructions || []} stage="assembly_labeling" onUpdated={onUpdated} /></div>
 
                 {piece.can_mark_ready ? (
                     <button
@@ -402,7 +405,7 @@ export default function ReadyToShipOrders() {
                     )}
 
                     {result.pieces?.map((piece) => (
-                        <AssemblyProductCard key={piece.piece_id} piece={piece} busy={busy === `ready:${piece.piece_id}`} onReady={handleReady} />
+                        <AssemblyProductCard key={piece.piece_id} piece={piece} busy={busy === `ready:${piece.piece_id}`} onReady={handleReady} onUpdated={() => openOrder(result.order_number)} />
                     ))}
                 </div>
             )}

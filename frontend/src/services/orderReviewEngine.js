@@ -110,7 +110,10 @@ export async function createReviewedPreparationBatch({ clientRequestId, selectio
         return { ...data, ...registered, batch_id: registered.batch_id || data.batch_id };
     } catch (error) {
         if (error instanceof Error && !error?.response) throw error;
-        throw new Error(message(error, "تعذّر إنشاء ملف التجهيز."));
+        const wrapped = new Error(message(error, "تعذّر إنشاء ملف التجهيز."));
+        wrapped.code = error?.response?.data?.detail?.code;
+        wrapped.detail = error?.response?.data?.detail;
+        throw wrapped;
     }
 }
 

@@ -121,7 +121,10 @@ export async function receivePreparationPiece(pieceId, clientRequestId) {
             { client_request_id: clientRequestId || newPreparationReceiptRequestId() },
         )).data;
     } catch (error) {
-        throw new Error(errorMessage(error, "تعذّر استلام المنتج من التجهيز."));
+        const wrapped = new Error(errorMessage(error, "تعذّر استلام المنتج من التجهيز."));
+        wrapped.code = error?.response?.data?.detail?.code;
+        wrapped.detail = error?.response?.data?.detail;
+        throw wrapped;
     }
 }
 

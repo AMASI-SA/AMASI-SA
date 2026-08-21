@@ -27,6 +27,7 @@ from ai_store_access_contract import (
 )
 from order_engine.repository import MongoOrderRepository
 from order_engine.service import OrderNotFoundError, get_order
+from order_tracking_notes import enforce_stage_instructions
 
 
 WORKFLOWS = "order_review_workflows"
@@ -438,6 +439,12 @@ async def _shipment_view(
             or workflow.get("delivered_at")
         ),
         "delivery_note": workflow.get("store_courier_delivery_note"),
+        "customer_service_instructions": list(
+            workflow.get("customer_service_instructions") or []
+        ),
+        "customer_service_hold_active": bool(
+            workflow.get("customer_service_hold_active")
+        ),
         "stage": workflow.get("stage"),
         "can_pickup": bool(
             _text(workflow.get("stage")) == "completed"
@@ -748,6 +755,15 @@ def make_store_courier_dispatch_router(
                 },
             )
 
+        await enforce_stage_instructions(
+            db,
+            user_id=context["merchant_id"],
+            order_number=order_number,
+            stage="store_courier",
+            actor_id=context["actor_id"],
+            order_wide=True,
+        )
+
         now = _now()
         actor_name = _actor_name(user, "مسؤول إدارة الموصلين")
         result = await db[WORKFLOWS].update_one(
@@ -929,6 +945,15 @@ def make_store_courier_dispatch_router(
                 },
             )
 
+        await enforce_stage_instructions(
+            db,
+            user_id=context["merchant_id"],
+            order_number=normalized_order,
+            stage="store_courier",
+            actor_id=context["actor_id"],
+            order_wide=True,
+        )
+
         now = _now()
         actor_name = _actor_name(user, "مندوب المتجر")
         result = await db[WORKFLOWS].update_one(
@@ -1060,6 +1085,15 @@ def make_store_courier_dispatch_router(
                     "assignment_state": current_state,
                 },
             )
+
+        await enforce_stage_instructions(
+            db,
+            user_id=context["merchant_id"],
+            order_number=normalized_order,
+            stage="store_courier",
+            actor_id=context["actor_id"],
+            order_wide=True,
+        )
 
         now = _now()
         actor_name = _actor_name(user, "مندوب المتجر")

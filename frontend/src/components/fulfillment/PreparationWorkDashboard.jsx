@@ -18,6 +18,7 @@ import {
 } from "../../services/preparationWorkService";
 import { createFulfillmentHold } from "../../services/fulfillmentExperiment";
 import PreparationSupplierDispatchWorkspace from "./PreparationSupplierDispatchWorkspace";
+import CustomerServiceInstructionBanner from "./CustomerServiceInstructionBanner";
 
 const STATUS_LABELS = {
     assigned: "مسند ولم يبدأ",
@@ -262,6 +263,7 @@ function MyWorkView({ work, loading, error, onRefresh }) {
                                                 <div className="mt-2"><PieceServiceSummary piece={piece} /></div>
                                                 {piece.experiment_mode && <div className="mt-2 w-fit rounded-full bg-violet-100 px-2 py-1 text-[10px] font-black text-violet-800">تجربة معزولة ماليًا</div>}
                                                 {piece.active_hold_id && <div className="mt-2 rounded-lg border border-rose-200 bg-rose-50 p-2 text-xs font-black leading-5 text-rose-900">{piece.hold_stop_label || "متوقف"}: {piece.hold_note || "راجع الإدارة"}</div>}
+                                                <div className="mt-2"><CustomerServiceInstructionBanner instructions={piece.customer_service_instructions || []} stage="preparation" onUpdated={onRefresh} /></div>
                                             </div>
                                             <div className="flex flex-col items-start gap-2"><span className="w-fit rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-extrabold text-slate-700">{STATUS_LABELS[piece.status] || piece.status || "مسند"}</span>{["assigned", "in_progress", "ready_for_employee_receipt"].includes(piece.status) && !piece.active_hold_id && <button type="button" onClick={() => selfStop(piece)} disabled={Boolean(holdBusy)} className="min-h-9 rounded-lg border border-rose-300 bg-rose-50 px-3 text-[11px] font-black text-rose-800 disabled:opacity-40">{holdBusy === piece.piece_id ? <SpinnerGap className="ml-1 inline animate-spin" /> : <WarningCircle className="ml-1 inline" />} إيقاف القطعة</button>}</div>
                                         </div>

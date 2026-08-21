@@ -11,6 +11,7 @@ import {
 import { toast } from "sonner";
 import { printStoreCourierLabel } from "../../lib/storeCourierLabelPrint";
 import ShippingBarcodeScanner from "./ShippingBarcodeScanner";
+import CustomerServiceInstructionBanner from "./CustomerServiceInstructionBanner";
 
 import {
     confirmCompletedCarrierLabelPrint,
@@ -359,6 +360,7 @@ export default function CompletedFulfillmentOrders() {
                                     </div>
                                 ))}
                             </div>
+                            <div className="mt-3"><CustomerServiceInstructionBanner instructions={order.customer_service_instructions || []} stage="carrier_handoff" onUpdated={load} /></div>
                             <CarrierLabelControl
                                 order={order}
                                 permissions={permissions}

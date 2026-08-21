@@ -99,6 +99,7 @@ def make_order_engine_router(*args, **kwargs):
     from store_delivery_handover_routes import make_store_delivery_handover_router
     from store_delivery_driver_app_routes import make_store_delivery_driver_app_router
     from store_delivery_customer_instruction_routes import make_store_delivery_customer_instruction_router
+    from order_tracking_notes_routes import make_order_tracking_notes_router
     from store_delivery_payment_review_routes import make_store_delivery_payment_review_router
     from store_delivery_payment_evidence_routes import make_store_delivery_payment_evidence_router
     from store_delivery_payment_resubmission_routes import make_store_delivery_payment_resubmission_router
@@ -187,6 +188,7 @@ def make_order_engine_router(*args, **kwargs):
         make_store_delivery_driver_app_router(db, current_user),
         make_store_delivery_payment_resubmission_router(db, current_user),
         make_store_delivery_customer_instruction_router(db, current_user),
+        make_order_tracking_notes_router(db, current_user),
         make_store_delivery_customer_lookup_router(db, current_user),
         make_store_delivery_reminder_router(db, current_user),
         make_store_delivery_payment_review_router(db, current_user),

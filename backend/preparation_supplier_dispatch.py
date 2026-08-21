@@ -37,6 +37,7 @@ from order_review_routes import (
     _require_reviewer,
     _text,
 )
+from order_tracking_notes import enforce_stage_instructions
 from preparation_file_registry import REGISTRY, _assignable_employees
 from preparation_piece_operations import (
     PIECES,
@@ -805,6 +806,9 @@ def _piece_products(pieces: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 if _text(piece.get("order_number"))
                 else []
             ),
+            "customer_service_instructions": list(
+                piece.get("customer_service_instructions") or []
+            ),
         })
     return rows
 
@@ -1409,6 +1413,16 @@ def make_preparation_supplier_dispatch_router(
                 ) from exc
             selected_by_file[file_number] = file_selected
             selected.extend(file_selected)
+        for piece in selected:
+            await enforce_stage_instructions(
+                db,
+                user_id=user_id,
+                order_number=_text(piece.get("order_number")),
+                order_item_id=_text(piece.get("order_item_id")),
+                piece_id=_text(piece.get("piece_id")),
+                stage="supplier_dispatch",
+                actor_id=employee_id,
+            )
         supplier = await db[MEZAN_SUPPLIERS_V2].find_one(
             {
                 "user_id": user_id,
