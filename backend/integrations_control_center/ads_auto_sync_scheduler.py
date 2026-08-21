@@ -107,12 +107,30 @@ SNAPCHAT_FAILURE_STAGES = frozenset({
     "coverage_aggregation",
     "integration_state_persist",
     "run_finalize",
+    "decision_outcomes_evaluation",
 })
 SNAPCHAT_DEFAULT_FAILURE_STAGE = "integration_account_credential_proof"
+SNAPCHAT_FAILURE_MODULE_PREFIX = "integrations_control_center"
+SNAPCHAT_FAILURE_MODULE_LIMIT = 160
+SNAPCHAT_FAILURE_FUNCTION_LIMIT = 80
+SNAPCHAT_FAILURE_LINE_LIMIT = 1_000_000
 
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _safe_ascii_identifier(value: Any, *, limit: int) -> str | None:
+    if (
+        isinstance(value, str)
+        and value == value.strip()
+        and 1 <= len(value) <= limit
+        and value.isascii()
+        and (value[0].isalpha() or value[0] == "_")
+        and all(character.isalnum() or character == "_" for character in value)
+    ):
+        return value
+    return None
 
 
 def _safe_exception_type(exc: BaseException) -> str:
@@ -120,15 +138,81 @@ def _safe_exception_type(exc: BaseException) -> str:
         name = type(exc).__name__
     except Exception:  # noqa: BLE001
         return "Exception"
-    if (
-        isinstance(name, str)
-        and 1 <= len(name) <= 80
-        and name.isascii()
-        and (name[0].isalpha() or name[0] == "_")
-        and all(character.isalnum() or character == "_" for character in name)
-    ):
-        return name
+    safe_name = _safe_ascii_identifier(name, limit=80)
+    if safe_name:
+        return safe_name
     return "Exception"
+
+
+def _safe_failure_location_values(
+    module: Any,
+    function: Any,
+    line: Any,
+) -> dict[str, Any]:
+    if (
+        not isinstance(module, str)
+        or module != module.strip()
+        or not module
+        or len(module) > SNAPCHAT_FAILURE_MODULE_LIMIT
+        or not module.isascii()
+    ):
+        return {}
+    module_parts = module.split(".")
+    if (
+        module_parts[0] != SNAPCHAT_FAILURE_MODULE_PREFIX
+        or any(
+            not part
+            or not (part[0].isalpha() or part[0] == "_")
+            or any(not (character.isalnum() or character == "_") for character in part)
+            for part in module_parts
+        )
+    ):
+        return {}
+    if (
+        _safe_ascii_identifier(
+            function,
+            limit=SNAPCHAT_FAILURE_FUNCTION_LIMIT,
+        )
+        is None
+    ):
+        return {}
+    if (
+        isinstance(line, bool)
+        or not isinstance(line, int)
+        or not (1 <= line <= SNAPCHAT_FAILURE_LINE_LIMIT)
+    ):
+        return {}
+    return {
+        "failure_module": module,
+        "failure_function": function,
+        "failure_line": int(line),
+    }
+
+
+def _safe_failure_location(exc: BaseException) -> dict[str, Any]:
+    """Return the deepest scheduler-package frame without source, path or locals."""
+    try:
+        current = exc.__traceback__
+    except Exception:  # noqa: BLE001
+        return {}
+    candidate: dict[str, Any] = {}
+    traversed = 0
+    while current is not None and traversed < 64:
+        traversed += 1
+        try:
+            frame = current.tb_frame
+            location = _safe_failure_location_values(
+                frame.f_globals.get("__name__"),
+                frame.f_code.co_name,
+                current.tb_lineno,
+            )
+            next_traceback = current.tb_next
+        except Exception:  # noqa: BLE001
+            break
+        if location:
+            candidate = location
+        current = next_traceback
+    return candidate
 
 
 def _iso(value: datetime | None = None) -> str:
@@ -647,11 +731,17 @@ async def _evaluate_snapchat_outcomes_after_sync(
     except asyncio.TimeoutError:
         return {"status": "deferred_timeout", "retryable": True}
     except Exception as exc:
-        logger.exception("Snapchat decision outcome evaluation failed")
+        exception_type = _safe_exception_type(exc)
+        logger.exception(
+            "Snapchat decision outcome evaluation failed "
+            "failure_stage=decision_outcomes_evaluation exception_type=%s",
+            exception_type,
+            exc_info=False,
+        )
         return {
             "status": "deferred",
             "retryable": True,
-            "error_type": type(exc).__name__,
+            "error_type": exception_type,
         }
 
 
@@ -1360,6 +1450,7 @@ async def _refresh_snapchat(
             db, user_id=user_id, run_id=run_id, status=status, result=result
         )
         if status == "complete":
+            observe_failure_stage("decision_outcomes_evaluation")
             decision_outcomes = await _evaluate_snapchat_outcomes_after_sync(
                 db,
                 user_id,
@@ -1424,6 +1515,7 @@ async def _refresh_snapchat(
         message = "Snapchat scheduler refresh failed unexpectedly."
         failed_stage = failure_stage
         exception_type = _safe_exception_type(exc)
+        failure_location = _safe_failure_location(exc)
         logger.exception(
             "Canonical Snapchat scheduler failure "
             "failure_stage=%s exception_type=%s",
@@ -1484,6 +1576,7 @@ async def _refresh_snapchat(
                 "failure_stage": failed_stage,
                 "exception_type": exception_type,
                 "run_id": run_id,
+                **failure_location,
             },
         )
         await _mark_snapchat_sync_unhealthy(db, user_id)
@@ -1809,7 +1902,7 @@ def _safe_provider_run_status(run: dict[str, Any]) -> dict[str, Any]:
         failure_stage = str(error.get("failure_stage") or "")
         if failure_stage in SNAPCHAT_FAILURE_STAGES:
             safe_error["failure_stage"] = failure_stage
-        exception_type = _safe_status_identifier(
+        exception_type = _safe_ascii_identifier(
             error.get("exception_type"),
             limit=80,
         )
@@ -1817,6 +1910,11 @@ def _safe_provider_run_status(run: dict[str, Any]) -> dict[str, Any]:
             safe_error["exception_type"] = exception_type
         if run_id and error.get("run_id") == run_id:
             safe_error["run_id"] = run_id
+            safe_error.update(_safe_failure_location_values(
+                error.get("failure_module"),
+                error.get("failure_function"),
+                error.get("failure_line"),
+            ))
         if safe_error:
             safe_run["error"] = safe_error
     return safe_run
@@ -1853,6 +1951,9 @@ async def auto_sync_status(db: Any, user_id: str) -> dict[str, Any]:
             "error.failure_stage": 1,
             "error.exception_type": 1,
             "error.run_id": 1,
+            "error.failure_module": 1,
+            "error.failure_function": 1,
+            "error.failure_line": 1,
         },
     )
     if hasattr(cursor, "sort"):
