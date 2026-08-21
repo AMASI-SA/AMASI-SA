@@ -2032,6 +2032,10 @@ async def _execute_snapchat_approval(
     level = recommendation["entity_level"]
     action = {"campaign": "campaign.update", "ad_group": "ad_squad.update", "ad": "ad.update"}[level]
     requested = recommendation["action"]
+    from campaign_ai_profit_accounting_gate import (
+        require_profit_accounting_complete_for_scale,
+    )
+    await require_profit_accounting_complete_for_scale(db, user_id, requested)
     payload: dict[str, Any]
     if requested == "pause":
         payload = {"status": "PAUSED"}
@@ -2232,6 +2236,12 @@ async def _execute_meta_approval(
         snapshot_id=snapshot_id,
         recommendation_id=recommendation_id,
         expected_digest=snapshot_digest,
+    )
+    from campaign_ai_profit_accounting_gate import (
+        require_profit_accounting_complete_for_scale,
+    )
+    await require_profit_accounting_complete_for_scale(
+        db, user_id, str(recommendation.get("action") or "")
     )
     access_token = await _meta_credential(db, user_id, _utcnow())
     entity_id = _text(target.get("entity_id"), limit=120)
