@@ -2,6 +2,13 @@ import api from "../lib/api";
 
 function detailMessage(error, fallback) {
     const detail = error?.response?.data?.detail;
+    if (detail?.code === "store_courier_label_barcode_mismatch") {
+        const scanned = detail?.scanned_order_number;
+        const expected = detail?.expected_order_number;
+        if (scanned && expected) {
+            return `هذه البوليصة تخص الطلب رقم ${scanned} ولا تخص الطلب رقم ${expected}.`;
+        }
+    }
     const labels = {
         ready_orders_changed_refresh_required: "تغيّرت قائمة الطلبات الجاهزة. حدّث الصفحة ثم أعد الاختيار.",
         ready_orders_claim_conflict: "استلم موظف آخر أحد الطلبات في اللحظة نفسها. حدّث القائمة.",
@@ -20,6 +27,7 @@ function detailMessage(error, fallback) {
             : "أُضيفت هذه الشحنة مسبقًا إلى حساب موظف تسليم الشحن.",
         carrier_shipment_no_longer_waiting: "هذه الشحنة لم تعد بانتظار التسليم لشركة الشحن.",
         store_courier_separate_flow: "طلبات مندوب المتجر لها مسار تسليم مستقل.",
+        store_courier_label_barcode_mismatch: "رمز بوليصة مندوب المتجر لا يطابق رقم الطلب.",
     };
     return labels[detail?.code] || detail?.message || detail?.code || error?.message || fallback;
 }

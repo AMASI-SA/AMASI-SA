@@ -543,6 +543,21 @@ def _actor_name(user: dict[str, Any], fallback: str) -> str:
     return _text(user.get("name") or user.get("email")) or fallback
 
 
+def _store_courier_assignment_blocker(workflow: dict[str, Any]) -> str | None:
+    if _text(workflow.get("carrier_label_type")) != "store_courier":
+        return "store_courier_label_required"
+    if workflow.get("carrier_label_ready") is not True:
+        return "store_courier_label_not_ready"
+    if workflow.get("carrier_label_print_confirmed") is not True:
+        return "store_courier_label_not_confirmed"
+    if (
+        _text(workflow.get("stage")) != "completed"
+        or _text(workflow.get("assembly_status")) != "completed"
+    ):
+        return "store_courier_order_not_completed"
+    return None
+
+
 async def _assigned_workflow(
     db: Any,
     *,
@@ -691,30 +706,12 @@ def make_store_courier_dispatch_router(
                     "order_number": order_number,
                 },
             )
-        if _text(workflow.get("carrier_label_type")) != "store_courier":
+        assignment_blocker = _store_courier_assignment_blocker(workflow)
+        if assignment_blocker:
             raise HTTPException(
                 status_code=409,
                 detail={
-                    "code": "store_courier_label_required",
-                    "order_number": order_number,
-                },
-            )
-        if workflow.get("carrier_label_ready") is not True:
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "code": "store_courier_label_not_ready",
-                    "order_number": order_number,
-                },
-            )
-        if (
-            _text(workflow.get("stage")) != "completed"
-            or _text(workflow.get("assembly_status")) != "completed"
-        ):
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "code": "store_courier_order_not_completed",
+                    "code": assignment_blocker,
                     "order_number": order_number,
                 },
             )

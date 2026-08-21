@@ -1900,7 +1900,11 @@ async def _assembly_search(
             "order_number": order_number,
             "$or": [
                 {"stage": "ready_to_ship"},
-                {"stage": "completed", "assembly_status": "completed"},
+                {
+                    "stage": "completed",
+                    "assembly_status": "completed",
+                    "carrier_label_print_confirmed": {"$ne": True},
+                },
             ],
         },
         {"_id": 0},
@@ -1942,6 +1946,18 @@ async def _assembly_search(
     ))
     ready_count = sum(1 for row in rows if row["assembly_ready"])
     completed = bool(rows and ready_count == len(rows))
+    carrier_label = {
+        "ready": bool(workflow.get("carrier_label_ready")),
+        "label_url": workflow.get("carrier_label_url"),
+        "label_type": workflow.get("carrier_label_type"),
+        "courier_name": workflow.get("carrier_name"),
+        "tracking_number": workflow.get("carrier_tracking_number"),
+        "message": workflow.get("carrier_label_message"),
+        "print_confirmed": bool(
+            workflow.get("carrier_label_print_confirmed")
+        ),
+        "print_data": workflow.get("carrier_label_print_data"),
+    }
     return {
         "order_number": order_number,
         "stage": _text(workflow.get("stage")),
@@ -1950,6 +1966,7 @@ async def _assembly_search(
             workflow.get("shipping_print_batch_id")
             or workflow.get("claim_batch_id")
         ) or None,
+        "carrier_label": carrier_label,
         "pieces": rows,
         "summary": {
             "total": len(rows),

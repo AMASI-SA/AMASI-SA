@@ -319,20 +319,58 @@ async def test_delivered_status_also_releases_handoff_employee_custody():
 
 
 @pytest.mark.asyncio
-async def test_store_courier_never_enters_external_carrier_handoff_flow():
-    db = _DB([_workflow(carrier_label_type="store_courier")])
+async def test_store_courier_print_confirmation_matches_the_order_qr():
+    db = _DB([
+        _workflow(
+            carrier_label_type="store_courier",
+            carrier_tracking_number=None,
+        )
+    ])
 
-    with pytest.raises(CarrierHandoffError) as blocked:
+    with pytest.raises(CarrierHandoffError) as mismatch:
         await confirm_carrier_label_print(
             db,
             user_id="owner-1",
             order_number="276628330",
-            scanned_barcode="6081326581116",
+            scanned_barcode="276628331",
             actor_id="labeler-1",
             actor_name="موظف العنونة",
         )
 
-    assert blocked.value.code == "store_courier_separate_flow"
+    assert mismatch.value.code == "store_courier_label_barcode_mismatch"
+    assert mismatch.value.details == {
+        "expected_order_number": "276628330",
+        "scanned_order_number": "276628331",
+    }
+
+    confirmed = await confirm_carrier_label_print(
+        db,
+        user_id="owner-1",
+        order_number="276628330",
+        scanned_barcode="276628330",
+        actor_id="labeler-1",
+        actor_name="موظف العنونة",
+    )
+
+    assert confirmed["carrier_label_type"] == "store_courier"
+    assert confirmed["carrier_label_print_confirmed"] is True
+    saved = db["order_review_workflows"].rows[0]
+    assert saved["carrier_label_barcode"] == "276628330"
+    assert saved["carrier_handoff_state"] == (
+        "awaiting_store_courier_assignment"
+    )
+    assert saved["store_courier_assignment_state"] == "awaiting_assignment"
+
+    with pytest.raises(CarrierHandoffError) as external_handoff:
+        await receive_carrier_shipment(
+            db,
+            user_id="owner-1",
+            scanned_barcode="276628330",
+            actor_id="handoff-1",
+            actor_name="موظف شركة الشحن",
+        )
+    assert external_handoff.value.code == "store_courier_separate_flow"
+
     result = await advance_carrier_handoff_from_salla_status(
         db,
         user_id="owner-1",

@@ -43,6 +43,7 @@ from store_courier_dispatch_routes import (
     _address_text,
     _assignment_is_store_courier,
     _my_stage_filter,
+    _store_courier_assignment_blocker,
 )
 
 
@@ -125,3 +126,20 @@ def test_address_text_builds_stable_fallback_without_duplicates():
         "city": "الرياض",
         "country": "السعودية",
     }) == "RRAA1234، الياسمين، أنس بن مالك، 12، الرياض، السعودية"
+
+
+def test_dispatch_requires_labeling_employee_print_confirmation():
+    ready = {
+        "carrier_label_type": "store_courier",
+        "carrier_label_ready": True,
+        "stage": "completed",
+        "assembly_status": "completed",
+    }
+
+    assert _store_courier_assignment_blocker(ready) == (
+        "store_courier_label_not_confirmed"
+    )
+    assert _store_courier_assignment_blocker({
+        **ready,
+        "carrier_label_print_confirmed": True,
+    }) is None

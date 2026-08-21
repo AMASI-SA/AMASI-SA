@@ -92,6 +92,7 @@ def _snapshot(workflow: dict[str, Any]) -> dict[str, Any]:
     return {
         "order_number": workflow.get("order_number"),
         "stage": workflow.get("stage"),
+        "carrier_label_type": workflow.get("carrier_label_type"),
         "carrier_label_print_confirmed": bool(
             workflow.get("carrier_label_print_confirmed")
         ),
@@ -147,28 +148,46 @@ async def confirm_carrier_label_print(
             "الطلب غير موجود في مرحلة تم التنفيذ.",
             status_code=404,
         )
-    if _text(workflow.get("carrier_label_type")) == "store_courier":
-        raise CarrierHandoffError(
-            "store_courier_separate_flow",
-            "طلبات مندوب المتجر لها مسار تسليم مستقل.",
-        )
+    is_store_courier = (
+        _text(workflow.get("carrier_label_type")) == "store_courier"
+    )
     if not workflow.get("carrier_label_ready"):
         raise CarrierHandoffError(
             "carrier_label_not_ready",
-            "انتظر حتى تصبح بوليصة شركة الشحن جاهزة.",
+            (
+                "جهّز بوليصة مندوب المتجر قبل تأكيد الطباعة."
+                if is_store_courier
+                else "انتظر حتى تصبح بوليصة شركة الشحن جاهزة."
+            ),
         )
-    expected = normalize_shipping_barcode(workflow.get("carrier_tracking_number"))
-    if not expected:
+    expected = (
+        normalize_shipping_barcode(normalized_order)
+        if is_store_courier
+        else normalize_shipping_barcode(workflow.get("carrier_tracking_number"))
+    )
+    if not expected and not is_store_courier:
         raise CarrierHandoffError(
             "carrier_tracking_number_missing",
             "رقم تتبع البوليصة غير محفوظ؛ أعد التحقق من سلة.",
         )
     if barcode != expected:
+        if is_store_courier:
+            raise CarrierHandoffError(
+                "store_courier_label_barcode_mismatch",
+                (
+                    f"هذه البوليصة تخص الطلب رقم {barcode} ولا تخص الطلب "
+                    f"رقم {normalized_order}."
+                ),
+                details={
+                    "expected_order_number": normalized_order,
+                    "scanned_order_number": barcode,
+                },
+            )
         raise CarrierHandoffError(
             "carrier_label_barcode_mismatch",
             "هذه ليست بوليصة الشحن الخاصة بهذا الطلب.",
         )
-    if workflow.get("carrier_handoff_employee_id"):
+    if not is_store_courier and workflow.get("carrier_handoff_employee_id"):
         raise CarrierHandoffError(
             "carrier_shipment_already_received",
             "استلم موظف تسليم الشحن هذه الشحنة مسبقًا.",
@@ -181,7 +200,7 @@ async def confirm_carrier_label_print(
         db,
         user_id=user_id,
         order_number=normalized_order,
-        stage="carrier_handoff",
+        stage=("assembly_labeling" if is_store_courier else "carrier_handoff"),
         actor_id=actor_id,
         order_wide=True,
     )
@@ -189,6 +208,23 @@ async def confirm_carrier_label_print(
         return {"ok": True, "already_confirmed": True, **_snapshot(workflow)}
 
     now = _now()
+    waiting_state = (
+        "awaiting_store_courier_assignment"
+        if is_store_courier
+        else "awaiting_carrier_handoff"
+    )
+    workflow_patch: dict[str, Any] = {
+        "carrier_label_print_confirmed": True,
+        "carrier_label_print_confirmed_at": now,
+        "carrier_label_print_confirmed_by": actor_id,
+        "carrier_label_print_confirmed_by_name": actor_name,
+        "carrier_label_barcode": barcode,
+        "carrier_handoff_state": waiting_state,
+        "completed_operational_status": "label_printed",
+        "updated_at": now,
+    }
+    if is_store_courier:
+        workflow_patch["store_courier_assignment_state"] = "awaiting_assignment"
     result = await db[WORKFLOWS].update_one(
         {
             "user_id": user_id,
@@ -199,18 +235,7 @@ async def confirm_carrier_label_print(
                 {"carrier_label_print_confirmed": False},
             ],
         },
-        {
-            "$set": {
-                "carrier_label_print_confirmed": True,
-                "carrier_label_print_confirmed_at": now,
-                "carrier_label_print_confirmed_by": actor_id,
-                "carrier_label_print_confirmed_by_name": actor_name,
-                "carrier_label_barcode": barcode,
-                "carrier_handoff_state": "awaiting_carrier_handoff",
-                "completed_operational_status": "label_printed",
-                "updated_at": now,
-            }
-        },
+        {"$set": workflow_patch},
     )
     if not result.modified_count:
         raise CarrierHandoffError(
@@ -224,6 +249,8 @@ async def confirm_carrier_label_print(
             "order_number": normalized_order,
             "event_type": "carrier_label_print_confirmed",
             "tracking_number": workflow.get("carrier_tracking_number"),
+            "carrier_label_type": workflow.get("carrier_label_type"),
+            "scanned_barcode": barcode,
             "actor_id": actor_id,
             "actor_name": actor_name,
             "occurred_at": now,
@@ -236,8 +263,10 @@ async def confirm_carrier_label_print(
         "carrier_label_print_confirmed_by": actor_id,
         "carrier_label_print_confirmed_by_name": actor_name,
         "carrier_label_barcode": barcode,
-        "carrier_handoff_state": "awaiting_carrier_handoff",
+        "carrier_handoff_state": waiting_state,
     }
+    if is_store_courier:
+        updated["store_courier_assignment_state"] = "awaiting_assignment"
     return {"ok": True, "already_confirmed": False, **_snapshot(updated)}
 
 

@@ -555,6 +555,7 @@ def make_fulfillment_experiment_router(
                         "carrier_label_print_confirmed_by_id": "",
                         "carrier_label_print_confirmed_by_name": "",
                         "carrier_label_barcode": "",
+                        "carrier_label_print_data": "",
                         "carrier_handoff_state": "",
                         "carrier_handoff_employee_id": "",
                         "carrier_handoff_employee_name": "",

@@ -79,6 +79,11 @@ def test_workflow_snapshot_distinguishes_store_courier_label():
             "order_status_completed": True,
             "label_type": "store_courier",
             "shipment_id": "store-1",
+            "print_data": {
+                "order_number": "276628330",
+                "barcode_value": "276628330",
+                "qr_code": "data:image/svg+xml;base64,QR",
+            },
         },
         now="2026-08-13T10:00:00+00:00",
     )
@@ -87,6 +92,7 @@ def test_workflow_snapshot_distinguishes_store_courier_label():
     assert patch["carrier_label_status"] == "ready"
     assert patch["carrier_label_type"] == "store_courier"
     assert patch["carrier_label_url"] is None
+    assert patch["carrier_label_print_data"]["barcode_value"] == "276628330"
 
 
 @pytest.mark.asyncio

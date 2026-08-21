@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
     ArrowLeft,
+    Barcode,
     Camera,
     CheckCircle,
     ClipboardText,
@@ -17,10 +18,12 @@ import {
 import { toast } from "sonner";
 
 import {
+    confirmCompletedCarrierLabelPrint,
     confirmFulfillmentBatchHandoff,
     confirmFulfillmentBatchPacked,
     listFulfillmentBatches,
     listReadyToShipOrders,
+    issueCompletedOrderCarrierLabel,
     printFulfillmentBatch,
 } from "../../services/fulfillmentV2";
 import {
@@ -31,6 +34,8 @@ import {
 import { CameraScanner } from "./PreparationEmployeeReceivingWorkspace";
 import { printStoreCourierLabel } from "../../lib/storeCourierLabelPrint";
 import CustomerServiceInstructionBanner from "./CustomerServiceInstructionBanner";
+import ShippingBarcodeScanner from "./ShippingBarcodeScanner";
+import { shippingScanFeedback } from "./shippingScanFeedback";
 
 const ASSEMBLY_BLOCKERS = {
     assembly_piece_preparation_receipt_required: "استلم المنتج من موظف التجهيز أولًا",
@@ -169,6 +174,73 @@ function ReadyOrderCard({ order, onOpen }) {
     );
 }
 
+export function CompletedAssemblyOrderCard({
+    orderNumber,
+    carrierLabel,
+    onConfirmPrint,
+    onIssue,
+    canConfirmPrint = true,
+    issuing = false,
+}) {
+    const storeCourier = carrierLabel.label_type === "store_courier";
+    const storeCourierReady = Boolean(
+        carrierLabel.ready && storeCourier && carrierLabel.print_data?.qr_code,
+    );
+    const externalCarrierReady = Boolean(
+        carrierLabel.ready && !storeCourier && carrierLabel.label_url,
+    );
+    const ready = storeCourierReady || externalCarrierReady;
+    const printConfirmed = Boolean(carrierLabel.print_confirmed);
+
+    return (
+        <div className="rounded-3xl border-2 border-emerald-400 bg-emerald-50 p-5 text-center" data-testid="assembly-order-completed">
+            <CheckCircle size={44} weight="fill" className="mx-auto text-emerald-700" />
+            <h3 className="mt-2 text-xl font-black text-emerald-950">انتقل الطلب #{orderNumber} إلى تم التنفيذ</h3>
+            <p className="mt-1 text-sm font-bold text-emerald-800">اكتملت كل المنتجات. اطبع البوليصة والصقها على الطلب، ثم صوّر رمزها لتأكيد العملية.</p>
+            {externalCarrierReady && (
+                <a href={carrierLabel.label_url} target="_blank" rel="noopener noreferrer" download className="mt-3 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-violet-700 px-4 text-base font-black text-white" data-testid="assembly-download-official-carrier-label">
+                    <DownloadSimple size={24} weight="bold" /> تحميل بوليصة {carrierLabel.courier_name || "شركة الشحن"}
+                </a>
+            )}
+            {storeCourierReady && (
+                <button type="button" onClick={() => {
+                    const printWindow = window.open("about:blank", "_blank");
+                    if (printWindow) printWindow.opener = null;
+                    if (!printStoreCourierLabel(printWindow, carrierLabel.print_data)) printWindow?.close();
+                }} className="mt-3 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-violet-700 px-4 text-base font-black text-white" data-testid="assembly-print-store-courier-label">
+                    <Printer size={24} weight="fill" /> طباعة بوليصة مندوب المتجر
+                </button>
+            )}
+            {ready && !printConfirmed && (
+                <button type="button" onClick={onConfirmPrint} disabled={!canConfirmPrint} className="mt-2 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-700 px-4 text-base font-black text-white disabled:opacity-50" data-testid="assembly-confirm-carrier-label-print">
+                    <Barcode size={24} weight="bold" /> {storeCourier
+                        ? "تأكيد الطباعة واللصق بتصوير QR"
+                        : "تأكيد الطباعة وتصوير باركود الشحنة"}
+                </button>
+            )}
+            {ready && printConfirmed && (
+                <div className="mt-3 rounded-2xl border border-emerald-200 bg-white px-3 py-3 text-sm font-black text-emerald-900">
+                    {storeCourier
+                        ? "تم تأكيد الطباعة واللصق · بانتظار إسناد المندوب"
+                        : "تم التحقق من الباركود · بانتظار موظف تسليم الشحن"}
+                </div>
+            )}
+            {!ready && (
+                <>
+                    <div className="mt-3 rounded-2xl bg-amber-50 px-3 py-3 text-sm font-black text-amber-900">
+                        {carrierLabel.message || "لم تكتمل بيانات الطباعة بعد. أعد تجهيز البوليصة دون إعادة تجهيز المنتجات."}
+                    </div>
+                    <button type="button" onClick={onIssue} disabled={!canConfirmPrint || issuing} className="mt-2 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 text-base font-black text-white disabled:opacity-50" data-testid="assembly-issue-carrier-label">
+                        {issuing ? <SpinnerGap size={23} className="animate-spin" /> : <Printer size={23} weight="fill" />}
+                        {issuing ? "جاري تجهيز البوليصة..." : "تجهيز أو استعادة بوليصة الشحن"}
+                    </button>
+                </>
+            )}
+            <Link to="/fulfillment-v2?stage=completed" className="mt-2 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-emerald-300 bg-white px-4 text-sm font-black text-emerald-900">فتح تم التنفيذ <ArrowLeft size={19} weight="bold" /></Link>
+        </div>
+    );
+}
+
 export default function ReadyToShipOrders() {
     const [orders, setOrders] = useState([]);
     const [batches, setBatches] = useState([]);
@@ -182,6 +254,11 @@ export default function ReadyToShipOrders() {
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
     const [reprintReasons, setReprintReasons] = useState({});
+    const [labelScanner, setLabelScanner] = useState(null);
+    const [labelScannerBusy, setLabelScannerBusy] = useState(false);
+    const [labelScannerError, setLabelScannerError] = useState("");
+    const [labelScannerFeedback, setLabelScannerFeedback] = useState(null);
+    const labelScannerLock = useRef(false);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -320,6 +397,68 @@ export default function ReadyToShipOrders() {
         }
     };
 
+    const openLabelConfirmation = useCallback(() => {
+        if (!result?.order_number) return;
+        setLabelScannerError("");
+        setLabelScannerFeedback(null);
+        setLabelScanner({
+            orderNumber: result.order_number,
+            labelType: (result.carrier_label || {}).label_type || "",
+        });
+    }, [result]);
+
+    const confirmPrintedLabel = useCallback(async (barcode) => {
+        if (!labelScanner || labelScannerLock.current) return;
+        labelScannerLock.current = true;
+        setLabelScannerBusy(true);
+        setLabelScannerError("");
+        try {
+            const confirmation = await confirmCompletedCarrierLabelPrint(
+                labelScanner.orderNumber,
+                barcode,
+            );
+            const feedback = shippingScanFeedback({
+                mode: "confirm_print",
+                result: confirmation,
+                barcode,
+            });
+            setLabelScannerFeedback(feedback);
+            toast.success(feedback.title);
+            setResult(null);
+            setSuccess("");
+            await load();
+        } catch (scanError) {
+            setLabelScannerError(scanError.message);
+        } finally {
+            labelScannerLock.current = false;
+            setLabelScannerBusy(false);
+        }
+    }, [labelScanner, load]);
+
+    const issueCarrierLabel = useCallback(async () => {
+        if (!result?.order_number) return;
+        setBusy(`issue-label:${result.order_number}`);
+        setError("");
+        try {
+            const issued = await issueCompletedOrderCarrierLabel(
+                result.order_number,
+            );
+            setResult((current) => current ? {
+                ...current,
+                carrier_label: issued,
+            } : current);
+            setSuccess(
+                issued?.label_type === "store_courier"
+                    ? "تم تجهيز بوليصة مندوب المتجر. اطبعها والصقها ثم صوّر QR للتأكيد."
+                    : "تم تجهيز بوليصة الشحن. اطبعها ثم صوّر الباركود للتأكيد.",
+            );
+        } catch (issueError) {
+            setError(issueError.message);
+        } finally {
+            setBusy("");
+        }
+    }, [result]);
+
     const completed = Boolean(
         result?.progress?.order_completed
         || result?.summary?.all_ready
@@ -377,31 +516,14 @@ export default function ReadyToShipOrders() {
                     </div>
 
                     {completed && (
-                        <div className="rounded-3xl border-2 border-emerald-400 bg-emerald-50 p-5 text-center" data-testid="assembly-order-completed">
-                            <CheckCircle size={44} weight="fill" className="mx-auto text-emerald-700" />
-                            <h3 className="mt-2 text-xl font-black text-emerald-950">انتقل الطلب إلى تم التنفيذ</h3>
-                            <p className="mt-1 text-sm font-bold text-emerald-800">اكتملت كل المنتجات. الطباعة أدناه هي بوليصة الناقل الرسمية، أو بوليصة ميزان إذا كان الناقل مندوب المتجر.</p>
-                            {carrierLabel.ready && carrierLabel.label_url && (
-                                <a href={carrierLabel.label_url} target="_blank" rel="noopener noreferrer" download className="mt-3 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-violet-700 px-4 text-base font-black text-white" data-testid="assembly-download-official-carrier-label">
-                                    <DownloadSimple size={24} weight="bold" /> تحميل بوليصة {carrierLabel.courier_name || "شركة الشحن"}
-                                </a>
-                            )}
-                            {carrierLabel.ready && carrierLabel.label_type === "store_courier" && carrierLabel.print_data?.qr_code && (
-                                <button type="button" onClick={() => {
-                                    const printWindow = window.open("about:blank", "_blank");
-                                    if (printWindow) printWindow.opener = null;
-                                    if (!printStoreCourierLabel(printWindow, carrierLabel.print_data)) printWindow?.close();
-                                }} className="mt-3 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-violet-700 px-4 text-base font-black text-white" data-testid="assembly-print-store-courier-label">
-                                    <Printer size={24} weight="fill" /> طباعة بوليصة مندوب المتجر
-                                </button>
-                            )}
-                            {!carrierLabel.ready && (
-                                <div className="mt-3 rounded-2xl bg-amber-50 px-3 py-3 text-sm font-black text-amber-900">
-                                    {carrierLabel.message || "لم يصل رابط البوليصة بعد. افتح تم التنفيذ لإعادة المحاولة دون إعادة تجهيز المنتجات."}
-                                </div>
-                            )}
-                            <Link to="/fulfillment-v2?stage=completed" className="mt-2 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-emerald-300 bg-white px-4 text-sm font-black text-emerald-900">فتح تم التنفيذ <ArrowLeft size={19} weight="bold" /></Link>
-                        </div>
+                        <CompletedAssemblyOrderCard
+                            orderNumber={result.order_number}
+                            carrierLabel={carrierLabel}
+                            onConfirmPrint={openLabelConfirmation}
+                            onIssue={issueCarrierLabel}
+                            canConfirmPrint={Boolean(permissions.can_print)}
+                            issuing={busy === `issue-label:${result.order_number}`}
+                        />
                     )}
 
                     {result.pieces?.map((piece) => (
@@ -456,6 +578,27 @@ export default function ReadyToShipOrders() {
             </div>
 
             {cameraOpen && <CameraScanner onDetected={handleDetected} onClose={() => setCameraOpen(false)} />}
+            {labelScanner && (
+                <ShippingBarcodeScanner
+                    title={`تأكيد طباعة شحنة #${labelScanner.orderNumber}`}
+                    description={labelScanner.labelType === "store_courier"
+                        ? `صوّر QR الموجود على بوليصة مندوب المتجر. يجب أن يحمل رقم الطلب ${labelScanner.orderNumber}.`
+                        : "صوّر باركود بوليصة شركة الشحن للتأكد أنها تخص هذا الطلب."}
+                    busy={labelScannerBusy}
+                    error={labelScannerError}
+                    feedback={labelScannerFeedback}
+                    onDetected={confirmPrintedLabel}
+                    onFeedbackAction={() => {
+                        setLabelScanner(null);
+                        setLabelScannerFeedback(null);
+                    }}
+                    onClose={() => {
+                        if (labelScannerBusy) return;
+                        setLabelScanner(null);
+                        setLabelScannerFeedback(null);
+                    }}
+                />
+            )}
         </section>
     );
 }
