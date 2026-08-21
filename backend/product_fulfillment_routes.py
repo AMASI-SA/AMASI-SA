@@ -8,6 +8,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pymongo import ASCENDING
 
+from component_status_policy import (
+    active_component_selector,
+    component_is_active,
+    component_status,
+    require_active_component,
+)
 from product_fulfillment_rules import (
     DEFAULT_LOW_STOCK_THRESHOLD,
     FROZEN_FULFILLMENT_TYPE,
@@ -114,6 +120,11 @@ async def _operations_view(
         {"user_id": user_id, "salla_product_id": salla_id},
         {"_id": 0},
     ).sort("created_at", 1).to_list(length=1000)
+    linked_resource_ids = {
+        str(row.get("resource_id"))
+        for row in product_links
+        if row.get("resource_id")
+    }
     option_links = await db[BINDINGS].find(
         {
             "user_id": user_id,
@@ -123,8 +134,19 @@ async def _operations_view(
         },
         {"_id": 0},
     ).to_list(length=5000)
+    preserved_resource_ids = linked_resource_ids | {
+        str(row.get("resource_id"))
+        for row in option_links
+        if row.get("mode") == "resource" and row.get("resource_id")
+    }
     resources = await db[RESOURCES].find(
-        {"user_id": user_id},
+        {
+            "user_id": user_id,
+            "$or": [
+                active_component_selector(),
+                {"id": {"$in": sorted(preserved_resource_ids)}},
+            ],
+        },
         {"_id": 0},
     ).sort("name", 1).to_list(length=2000)
     product_by_resource = {
@@ -147,6 +169,8 @@ async def _operations_view(
         product_link = product_by_resource.get(resource_id)
         option_conflicts = option_by_resource.get(resource_id, [])
         row.update({
+            "status": component_status(row),
+            "is_active": component_is_active(row),
             "linked_to_product": bool(product_link),
             "product_quantity": (
                 _number(product_link.get("quantity"))
@@ -154,8 +178,12 @@ async def _operations_view(
                 else None
             ),
             "option_links": option_conflicts,
-            "available_for_product_link": not bool(option_conflicts),
-            "available_for_option_link": not bool(product_link),
+            "available_for_product_link": (
+                component_is_active(row) and not bool(option_conflicts)
+            ),
+            "available_for_option_link": (
+                component_is_active(row) and not bool(product_link)
+            ),
         })
         resource_rows.append(row)
 
@@ -389,11 +417,7 @@ def make_product_fulfillment_router(
             {"user_id": user_id, "id": resource_id},
             {"_id": 0},
         )
-        if not resource:
-            raise HTTPException(
-                status_code=404,
-                detail={"code": "component_not_found"},
-            )
+        require_active_component(resource)
         salla_id = _product_key(product)
         option_conflict = await db[BINDINGS].find_one(
             {

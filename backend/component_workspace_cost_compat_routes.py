@@ -14,6 +14,7 @@ from typing import Any, Callable, Literal
 from fastapi import APIRouter, Body, Depends, HTTPException
 from pymongo import ASCENDING
 
+from component_status_policy import component_is_active, component_status
 from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS
 from product_option_cost_routes import BINDINGS, RESOURCES, _serialize, ensure_indexes
 from product_v2_routes import PRODUCTS, _number, _text
@@ -95,6 +96,16 @@ def validate_group_members(
             detail={"code": "component_group_resource_missing", "resource_ids": missing},
         )
     selected = [by_id[resource_id] for resource_id in ids]
+    inactive = [
+        _text(row.get("id"))
+        for row in selected
+        if not component_is_active(row)
+    ]
+    if inactive:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "component_inactive", "resource_ids": inactive},
+        )
     wrong_category = [
         _text(row.get("id"))
         for row in selected
@@ -242,6 +253,8 @@ def make_component_workspace_cost_compat_router(
             row = _serialize(resource) or {}
             amount = _current_cost(row)
             row.update({
+                "status": component_status(row),
+                "is_active": component_is_active(row),
                 "track_inventory": bool(row.get("track_inventory")),
                 "category_ids": _unique_ids(row.get("category_ids")),
                 "editable_cost": amount,
@@ -287,7 +300,12 @@ def make_component_workspace_cost_compat_router(
                     "name": _text(resource.get("name")),
                     "code": _text(resource.get("code")) or None,
                     "track_inventory": bool(resource.get("track_inventory")),
+                    "status": component_status(resource),
                 } for resource in group_resources],
+                "available_for_new_links": (
+                    len(group_resources) == len(resource_ids)
+                    and all(component_is_active(resource) for resource in group_resources)
+                ),
                 "status": _text(group.get("status")) or "active",
                 "created_at": group.get("created_at"),
                 "updated_at": group.get("updated_at"),
@@ -310,6 +328,7 @@ def make_component_workspace_cost_compat_router(
                 "source": RESOURCES,
                 "cost_contract": "current_editable_cost_v2",
                 "organization_contract": "component_categories_groups_v1",
+                "component_lifecycle_contract": "active_inactive_soft_stop_v1",
                 "historical_orders_unchanged": True,
             },
         }

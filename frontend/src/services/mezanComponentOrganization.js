@@ -92,3 +92,8 @@ export function resourcesForComponentCategory(resources, categoryId, groupKind =
     return categoryMatches && (groupKind === "all" || groupKind === kind);
   });
 }
+
+export function activeResourcesForComponentCategory(resources, categoryId, groupKind = "all") {
+  return resourcesForComponentCategory(resources, categoryId, groupKind)
+    .filter((resource) => resource.status !== "inactive");
+}

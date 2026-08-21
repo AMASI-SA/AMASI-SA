@@ -91,6 +91,27 @@ export async function updateMezanComponent(componentId, component) {
     }
 }
 
+export async function setMezanComponentStatus(componentId, status, reason = "") {
+    try {
+        const response = await api.put(
+            `/components-v2/${encodeURIComponent(componentId)}/status`,
+            { status, reason },
+        );
+        return {
+            ok: true,
+            resource: response.data.resource,
+            status: response.data.status,
+            changed: response.data.changed,
+            impacted_bindings: response.data.impacted_bindings || 0,
+        };
+    } catch (error) {
+        return {
+            ok: false,
+            code: error?.response?.data?.detail?.code || "invalid_component_status",
+        };
+    }
+}
+
 export async function linkMezanComponentToProductPreview({ productId, resourceId, quantity, condition }) {
     try {
         if (!condition?.option_key || !condition?.value_key) {
@@ -124,13 +145,15 @@ export function summarizeMezanComponents(components) {
     const rows = components || [];
     return {
         total: rows.length,
+        active: rows.filter((row) => row.status !== "inactive").length,
+        inactive: rows.filter((row) => row.status === "inactive").length,
         stock_components: rows.filter((row) => row.track_inventory).length,
         labor_services: rows.filter((row) => !row.track_inventory).length,
         missing_cost: rows.filter((row) => row.reference_cost?.amount == null).length,
     };
 }
 
-export function filterMezanComponents(components, { query = "", filter = "all" } = {}) {
+export function filterMezanComponents(components, { query = "", filter = "all", status = "active" } = {}) {
     const needle = normalizeSearch(query);
     return (components || []).filter((component) => {
         const matchesFilter = (
@@ -140,6 +163,8 @@ export function filterMezanComponents(components, { query = "", filter = "all" }
             || (filter === "missing_cost" && component.reference_cost?.amount == null)
         );
         if (!matchesFilter) return false;
+        if (status === "active" && component.status === "inactive") return false;
+        if (status === "inactive" && component.status !== "inactive") return false;
         if (!needle) return true;
         return normalizeSearch([
             component.name,

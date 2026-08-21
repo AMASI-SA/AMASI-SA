@@ -13,6 +13,12 @@ from typing import Any, Callable
 from fastapi import APIRouter, Body, Depends, HTTPException
 
 from component_edit_policy import component_cost_metadata
+from component_status_policy import (
+    COMPONENT_STATUSES,
+    COMPONENT_STATUS_ACTIVE,
+    COMPONENT_STATUS_INACTIVE,
+    component_status,
+)
 from component_workspace_cost_compat_routes import (
     COMPONENT_CATEGORIES,
     COMPONENT_GROUPS,
@@ -171,6 +177,7 @@ def make_component_category_required_router(
             "description": _text(payload.get("description")),
             "track_inventory": track_inventory,
             "requires_preparation": _requires_preparation(payload, kind=kind),
+            "status": COMPONENT_STATUS_ACTIVE,
             **component_cost_metadata(
                 track_inventory=track_inventory,
                 amount=amount,
@@ -330,6 +337,82 @@ def make_component_category_required_router(
         })
         saved = await db[RESOURCES].find_one(selector, {"_id": 0})
         return {"ok": True, "resource": saved, "impacted_bindings": impacted}
+
+    @router.put("/components-v2/{resource_id}/status")
+    async def update_component_status(
+        resource_id: str,
+        payload: dict = Body(...),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        """Soft-stop or reactivate a component without deleting history."""
+        user_id = str(user["id"])
+        resource_id = _text(resource_id)
+        requested_status = _text(payload.get("status")).lower()
+        if requested_status not in COMPONENT_STATUSES:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "invalid_component_status"},
+            )
+        selector = {"user_id": user_id, "id": resource_id}
+        before = await db[RESOURCES].find_one(selector, {"_id": 0})
+        if not before:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "component_not_found"},
+            )
+        previous_status = component_status(before)
+        now = _now()
+        patch: dict[str, Any] = {
+            "status": requested_status,
+            "updated_at": now,
+            "status_updated_at": now,
+            "status_updated_by": str(user.get("id") or ""),
+        }
+        update: dict[str, Any] = {"$set": patch}
+        if requested_status == COMPONENT_STATUS_INACTIVE:
+            patch.update({
+                "stopped_at": now,
+                "stopped_by": str(user.get("id") or ""),
+                "stop_reason": _text(payload.get("reason")),
+            })
+        else:
+            update["$unset"] = {
+                "stopped_at": "",
+                "stopped_by": "",
+                "stop_reason": "",
+            }
+        await db[RESOURCES].update_one(selector, update)
+        await bump_product_cost_revision(db, user_id)
+        option_impacted = await db[BINDINGS].count_documents(
+            {"user_id": user_id, "resource_id": resource_id}
+        )
+        product_impacted = await db[PRODUCT_RESOURCE_BINDINGS].count_documents(
+            {"user_id": user_id, "resource_id": resource_id}
+        )
+        impacted = option_impacted + product_impacted
+        await db[AUDIT].insert_one({
+            "id": uuid.uuid4().hex,
+            "user_id": user_id,
+            "event_type": "resource_status_changed",
+            "resource_id": resource_id,
+            "before": previous_status,
+            "after": requested_status,
+            "reason": _text(payload.get("reason")),
+            "impacted_bindings": impacted,
+            "impacted_option_bindings": option_impacted,
+            "impacted_product_bindings": product_impacted,
+            "historical_order_snapshots_unchanged": True,
+            "created_at": now,
+        })
+        saved = await db[RESOURCES].find_one(selector, {"_id": 0})
+        return {
+            "ok": True,
+            "resource": saved,
+            "status": requested_status,
+            "changed": previous_status != requested_status,
+            "impacted_bindings": impacted,
+            "historical_order_snapshots_unchanged": True,
+        }
 
     @router.put("/components-v2/{resource_id}/categories")
     async def assign_resource_categories(

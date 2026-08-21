@@ -18,6 +18,13 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 from pymongo import ASCENDING
 
 from product_cost_revision import bump_product_cost_revision
+from component_status_policy import (
+    COMPONENT_STATUS_ACTIVE,
+    active_component_selector,
+    component_is_active,
+    component_status,
+    require_active_component,
+)
 from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS
 from product_v2_routes import PRODUCTS, _number, _text
 
@@ -114,6 +121,11 @@ async def _binding_view(db: Any, binding: dict[str, Any]) -> dict[str, Any]:
             {"_id": 0},
         )
         row["resource"] = _serialize(resource)
+        row["resource_status"] = component_status(resource)
+        row["resource_inactive"] = not component_is_active(resource)
+        # Existing bindings keep their current cost while the resource is
+        # stopped. Inactive only blocks new links; it never rewrites an
+        # existing product recipe or a historical snapshot.
         unit_cost = _number((resource or {}).get("unit_cost")) or 0.0
         amount = unit_cost * (_number(row.get("quantity")) or 1.0)
     row["resolved_amount"] = amount or 0.0
@@ -197,6 +209,7 @@ def make_product_option_cost_router(db: Any, current_user: Callable[..., Any]) -
             "category": _text(payload.get("category")) or "other",
             "description": _text(payload.get("description")),
             "track_inventory": bool(payload.get("track_inventory")),
+            "status": COMPONENT_STATUS_ACTIVE,
             "unit_cost": _number(payload.get("unit_cost")),
             "created_at": now,
             "updated_at": now,
@@ -218,8 +231,7 @@ def make_product_option_cost_router(db: Any, current_user: Callable[..., Any]) -
             raise HTTPException(status_code=422, detail={"code": "invalid_cost"})
         now = _now()
         before = await db[RESOURCES].find_one({"user_id": user_id, "id": resource_id}, {"_id": 0})
-        if not before:
-            raise HTTPException(status_code=404, detail={"code": "component_not_found"})
+        require_active_component(before)
         await db[RESOURCES].update_one(
             {"user_id": user_id, "id": resource_id},
             {"$set": {"unit_cost": amount, "updated_at": now}},
@@ -257,12 +269,27 @@ def make_product_option_cost_router(db: Any, current_user: Callable[..., Any]) -
             if row.get("resource_id")
         }
         resources = []
+        bound_resource_ids = {
+            str(row.get("resource_id"))
+            for row in bindings
+            if row.get("mode") == "resource" and row.get("resource_id")
+        }
         async for raw in db[RESOURCES].find(
-            {"user_id": user_id}, {"_id": 0}
+            {
+                "user_id": user_id,
+                "$or": [
+                    active_component_selector(),
+                    {"id": {"$in": sorted(bound_resource_ids)}},
+                ],
+            },
+            {"_id": 0},
         ).sort("name", 1):
             row = _serialize(raw) or {}
             row["linked_to_product"] = str(row.get("id")) in product_resource_ids
-            row["available_for_option_link"] = not row["linked_to_product"]
+            row["status"] = component_status(row)
+            row["available_for_option_link"] = (
+                component_is_active(row) and not row["linked_to_product"]
+            )
             resources.append(row)
         return {
             "salla_product_id": salla_product_id,
@@ -288,8 +315,12 @@ def make_product_option_cost_router(db: Any, current_user: Callable[..., Any]) -
             raise HTTPException(status_code=422, detail={"code": "invalid_quantity"})
         if mode == "resource":
             resource = await db[RESOURCES].find_one({"user_id": user_id, "id": resource_id}, {"_id": 0})
-            if not resource:
-                raise HTTPException(status_code=422, detail={"code": "component_not_found"})
+            try:
+                require_active_component(resource)
+            except HTTPException as exc:
+                if exc.status_code == 404:
+                    raise HTTPException(status_code=422, detail={"code": "component_not_found"}) from exc
+                raise
             product_conflict = await db[PRODUCT_RESOURCE_BINDINGS].find_one(
                 {
                     "user_id": user_id,

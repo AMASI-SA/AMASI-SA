@@ -23,6 +23,7 @@ from component_workspace_cost_compat_routes import (
     generated_group_name,
     validate_group_members,
 )
+from component_status_policy import active_component_selector, component_status
 from product_option_cost_routes import RESOURCES
 from product_v2_routes import _text
 
@@ -72,6 +73,7 @@ def _serialize_resource(row: dict[str, Any], category_names: dict[str, str]) -> 
         "requires_preparation": row.get("requires_preparation") is True,
         "unit_cost": amount,
         "track_inventory": bool(row.get("track_inventory")),
+        "status": component_status(row),
     }
 
 
@@ -101,7 +103,7 @@ def make_resource_catalog_mobile_router(db: Any, current_user: Callable[..., Any
         }
 
         resources = await db[RESOURCES].find(
-            {"user_id": user_id},
+            {"user_id": user_id, **active_component_selector()},
             {
                 "_id": 0,
                 "id": 1,
@@ -115,6 +117,7 @@ def make_resource_catalog_mobile_router(db: Any, current_user: Callable[..., Any
                 "unit_cost": 1,
                 "initial_unit_cost": 1,
                 "track_inventory": 1,
+                "status": 1,
             },
         ).sort("name", 1).to_list(length=5000)
         serialized_resources = [_serialize_resource(row, category_names) for row in resources]
