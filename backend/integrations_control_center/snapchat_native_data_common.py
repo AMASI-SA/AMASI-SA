@@ -249,12 +249,18 @@ class SnapchatSyncContext:
     now: Callable[[], datetime] = _utcnow
     provider_calls: int = 0
     usd_rate_cache: float | None = None
+    failure_stage_observer: Callable[[str], None] | None = None
 
     def now_iso(self) -> str:
         return _iso(self.now())
 
+    def observe_failure_stage(self, stage: str) -> None:
+        if self.failure_stage_observer is not None:
+            self.failure_stage_observer(stage)
+
     async def get_json(self, client: httpx.AsyncClient, url: str, *,
                        headers: dict[str, str], params: dict[str, Any] | None = None) -> dict:
+        self.observe_failure_stage("provider_refresh")
         self.provider_calls += 1
         if self.provider_calls > MAX_PROVIDER_CALLS:
             raise SnapchatNativeSyncError(
@@ -273,6 +279,7 @@ class SnapchatSyncContext:
             fresh_access = await self.access_token(force_refresh=True)
             retry_headers = dict(headers)
             retry_headers["Authorization"] = f"Bearer {fresh_access}"
+            self.observe_failure_stage("provider_refresh")
             self.provider_calls += 1
             if self.provider_calls > MAX_PROVIDER_CALLS:
                 raise SnapchatNativeSyncError(
@@ -342,6 +349,7 @@ class SnapchatSyncContext:
         return payload
 
     async def access_token(self, *, force_refresh: bool = False) -> str:
+        self.observe_failure_stage("credential_decrypt_or_refresh")
         credentials = await _collection(self.db, SNAPCHAT_CREDENTIALS_COLLECTION).find_one(
             {"user_id": self.user_id, "provider": SNAPCHAT_PROVIDER_ID},
             {"_id": 0, "access_token_ciphertext": 1, "refresh_token_ciphertext": 1,

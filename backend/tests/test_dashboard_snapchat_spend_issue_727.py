@@ -510,6 +510,26 @@ async def test_newer_incomplete_attempt_blocks_older_complete_fact():
 
 
 @pytest.mark.asyncio
+async def test_failed_diagnostic_run_still_rejects_an_existing_fact():
+    failed = _run(status="failed")
+    failed["error"] = {
+        "code": "snapchat_scheduler_runtime_error",
+        "message": "Snapchat scheduler refresh failed unexpectedly.",
+        "retryable": True,
+        "failure_stage": "fact_write",
+        "exception_type": "RuntimeError",
+        "run_id": failed["run_id"],
+    }
+
+    result = await _load(_db(runs=[failed], facts=[_fact()]))
+
+    assert result["total_sar"] is None
+    assert result["daily_sar"][DAY.isoformat()] is None
+    assert result["quality"]["data_state"] == "unknown_incomplete"
+    assert result["quality"]["amount_complete"] is False
+
+
+@pytest.mark.asyncio
 async def test_selected_migrated_account_without_provenance_is_not_silently_omitted():
     migrated = _account("snap-migrated", provenance=False)
     result = await _load(_db(accounts=[_account(), migrated]))

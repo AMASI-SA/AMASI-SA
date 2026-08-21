@@ -515,6 +515,8 @@ def _canonical_credential_projection() -> dict[str, int]:
 async def _load_canonical_scheduler_accounts(
     db: Any,
     user_id: str,
+    *,
+    failure_stage_observer: Callable[[str], None] | None = None,
 ) -> list[dict[str, Any]]:
     """Load tenant-owned accounts that the canonical scheduler may refresh.
 
@@ -523,6 +525,8 @@ async def _load_canonical_scheduler_accounts(
     credential; the canonical sync then validates that credential against the
     provider before writing any fact or advancing freshness.
     """
+    if failure_stage_observer is not None:
+        failure_stage_observer("integration_account_credential_proof")
     integration = await _collection(db, "mezan_integrations_v2").find_one(
         {"user_id": user_id, "provider": SNAPCHAT_PROVIDER_ID},
         {
@@ -555,11 +559,15 @@ async def _load_canonical_scheduler_accounts(
         if hasattr(credential_cursor, "to_list")
         else [row async for row in credential_cursor]
     )
+    if failure_stage_observer is not None:
+        failure_stage_observer("selected_accounts_load")
     rows = await _selected_account_rows(
         db,
         user_id,
         require_api_provenance=False,
     )
+    if failure_stage_observer is not None:
+        failure_stage_observer("integration_account_credential_proof")
     return _validate_canonical_scheduler_accounts(
         user_id=user_id,
         credential_rows=credential_rows,

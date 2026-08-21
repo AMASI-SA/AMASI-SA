@@ -4,12 +4,16 @@ import asyncio
 from copy import deepcopy
 from datetime import date, datetime, timedelta, timezone
 import inspect
+import logging
 
 from fastapi import APIRouter
 import pytest
 
+from integrations_control_center import snapchat_ad_performance as ad_performance
 from integrations_control_center import ads_auto_sync_scheduler as scheduler
 from integrations_control_center import snapchat_account_selection as selection
+from integrations_control_center import snapchat_adsquad_performance as adsquad_performance
+from integrations_control_center import snapchat_native_performance_sync as performance
 
 
 def _matches(row, query):
@@ -181,6 +185,99 @@ def test_interval_cannot_be_faster_than_five_minutes(monkeypatch):
 def test_scheduler_can_be_disabled_explicitly(monkeypatch):
     monkeypatch.setenv(scheduler.ENABLED_ENV, "false")
     assert scheduler.auto_sync_enabled() is False
+
+
+def test_exception_type_diagnostic_is_a_bounded_ascii_identifier():
+    unsafe_error = type(
+        "Unsafe-Type\nBearerSecretCanary",
+        (RuntimeError,),
+        {},
+    )
+
+    assert scheduler._safe_exception_type(RuntimeError()) == "RuntimeError"
+    assert scheduler._safe_exception_type(unsafe_error()) == "Exception"
+
+
+@pytest.mark.asyncio
+async def test_provider_read_and_fact_write_report_distinct_failure_stages():
+    stages = []
+    db = _DB({})
+    context = scheduler.SnapchatSyncContext(
+        db,
+        "owner-stage-hooks",
+        failure_stage_observer=stages.append,
+    )
+
+    class Response:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {}
+
+    class Client:
+        @staticmethod
+        async def get(*_args, **_kwargs):
+            return Response()
+
+    await context.get_json(
+        Client(),
+        "https://adsapi.snapchat.com/v1/test",
+        headers={"Authorization": "redacted"},
+    )
+    await performance._upsert_performance(
+        context,
+        account={
+            "ad_account_id": "snap-stage-hooks",
+            "currency": "SAR",
+            "timezone": "Asia/Riyadh",
+        },
+        entity_type="ad_account",
+        external_id="snap-stage-hooks",
+        date_string="2026-08-21",
+        metrics={"spend": 0, "conversion_purchases": 0},
+    )
+    await ad_performance._upsert_projection(
+        context,
+        collection_name="test_ad_facts",
+        account={
+            "ad_account_id": "snap-stage-hooks",
+            "currency": "SAR",
+            "timezone": "Asia/Riyadh",
+        },
+        timezone_name="Asia/Riyadh",
+        stored_granularity="RIYADH_DAY",
+        campaign_id="campaign-stage-hooks",
+        ad_id="ad-stage-hooks",
+        date_string="2026-08-21",
+        bucket=performance._new_bucket(ad_performance.TOTAL_STAT_FIELDS),
+        action_report_time=ad_performance.ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME,
+    )
+    await adsquad_performance._upsert_projection(
+        context,
+        collection_name="test_adsquad_facts",
+        account={
+            "ad_account_id": "snap-stage-hooks",
+            "currency": "SAR",
+            "timezone": "Asia/Riyadh",
+        },
+        timezone_name="Asia/Riyadh",
+        stored_granularity="RIYADH_DAY",
+        campaign_id="campaign-stage-hooks",
+        adsquad_id="adsquad-stage-hooks",
+        date_string="2026-08-21",
+        bucket=performance._new_bucket(adsquad_performance.TOTAL_STAT_FIELDS),
+        action_report_time=(
+            adsquad_performance.ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME
+        ),
+    )
+
+    assert stages == [
+        "provider_refresh",
+        "fact_write",
+        "fact_write",
+        "fact_write",
+    ]
 
 
 def test_rolling_window_uses_riyadh_calendar_day():
@@ -903,6 +1000,7 @@ async def test_snapchat_disconnect_during_provider_call_cannot_restore_freshness
 @pytest.mark.asyncio
 async def test_unexpected_snapchat_runtime_error_terminalizes_failed_run(
     monkeypatch,
+    caplog,
 ):
     current = datetime(2026, 8, 21, 12, 0, tzinfo=timezone.utc)
     db = _DB(
@@ -921,8 +1019,13 @@ async def test_unexpected_snapchat_runtime_error_terminalizes_failed_run(
         }
     )
 
+    secret = (
+        "Authorization: Bearer access-token-canary "
+        "decrypted-refresh-token-canary response-payload-canary"
+    )
+
     async def explode(*_args, **_kwargs):
-        raise RuntimeError("sensitive provider detail")
+        raise RuntimeError(secret)
 
     monkeypatch.setattr(scheduler, "snapchat_oauth_configured", lambda: True)
     monkeypatch.setattr(scheduler, "snapchat_native_sync_enabled", lambda: True)
@@ -932,6 +1035,7 @@ async def test_unexpected_snapchat_runtime_error_terminalizes_failed_run(
         "_load_canonical_scheduler_accounts",
         explode,
     )
+    caplog.set_level(logging.ERROR, logger=scheduler.__name__)
 
     result = await scheduler._refresh_snapchat(
         db,
@@ -951,12 +1055,162 @@ async def test_unexpected_snapchat_runtime_error_terminalizes_failed_run(
     assert run["status"] == "failed"
     assert run["summary"]["date_from"] == "2026-08-20"
     assert run["summary"]["date_to"] == "2026-08-21"
-    assert run["summary"]["coverage"]["status"] == "incomplete"
-    assert "sensitive provider detail" not in str(run)
+    assert run["summary"]["coverage"] == {
+        "status": "incomplete",
+        "data_state": "unknown_incomplete",
+        "expected_requests": 1,
+        "completed_requests": 0,
+    }
+    assert run["error"] == {
+        "error_id": db.rows[scheduler.ERRORS_COLLECTION][0]["error_id"],
+        "code": "snapchat_scheduler_runtime_error",
+        "message": "Snapchat scheduler refresh failed unexpectedly.",
+        "retryable": True,
+        "failure_stage": "integration_account_credential_proof",
+        "exception_type": "RuntimeError",
+        "run_id": run["run_id"],
+    }
+    assert "failure_stage=integration_account_credential_proof" in caplog.text
+    assert "exception_type=RuntimeError" in caplog.text
+    assert secret not in repr(result)
+    assert secret not in repr(db.rows)
+    assert secret not in caplog.text
     integration = db.rows["mezan_integrations_v2"][0]
     assert integration["data_quality"] == "incomplete"
     assert integration["data_delay_minutes"] is None
     assert integration["health_score"] == 70
+
+
+@pytest.mark.asyncio
+async def test_fact_write_runtime_error_persists_only_safe_diagnostics(
+    monkeypatch,
+    caplog,
+):
+    current = datetime(2026, 8, 21, 12, 0, tzinfo=timezone.utc)
+    db = _DB(
+        {
+            "mezan_integrations_v2": [
+                {
+                    "user_id": "owner-fact-runtime",
+                    "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                    "connection_status": "connected",
+                }
+            ],
+            "mezan_integration_accounts_v2": [
+                {
+                    "user_id": "owner-fact-runtime",
+                    "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                    "connection_status": "connected",
+                    "mezan_selected": True,
+                    "ad_account_id": "snap-fact-runtime",
+                    "external_account_id": "snap-fact-runtime",
+                }
+            ],
+        }
+    )
+    account = deepcopy(db.rows["mezan_integration_accounts_v2"][0])
+    secret = "Bearer fact-write-secret raw-response-secret"
+
+    async def load_accounts(*_args, **_kwargs):
+        return [account]
+
+    async def noop(*_args, **_kwargs):
+        return None
+
+    async def refresh(context, *_args, **_kwargs):
+        await ad_performance._upsert_projection(
+            context,
+            collection_name="test_ad_facts",
+            account={
+                "ad_account_id": "snap-fact-runtime",
+                "currency": "SAR",
+                "timezone": "Asia/Riyadh",
+            },
+            timezone_name="Asia/Riyadh",
+            stored_granularity="RIYADH_DAY",
+            campaign_id="campaign-fact-runtime",
+            ad_id="ad-fact-runtime",
+            date_string="2026-08-21",
+            bucket=performance._new_bucket(ad_performance.TOTAL_STAT_FIELDS),
+            action_report_time=(
+                ad_performance.ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME
+            ),
+        )
+
+    class FailingFactCollection:
+        @staticmethod
+        async def update_one(*_args, **_kwargs):
+            raise ValueError(secret)
+
+    class Context:
+        def __init__(self, db_value, user_id, **_kwargs):
+            self.db = db_value
+            self.user_id = user_id
+            self.provider_calls = 0
+
+        async def access_token(self):
+            return "test-token"
+
+        def now_iso(self):
+            return current.isoformat()
+
+        async def to_sar(self, value, _currency):
+            return value
+
+        def observe_failure_stage(self, stage):
+            self.failure_stage_observer(stage)
+
+    class Client:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+    monkeypatch.setattr(scheduler, "snapchat_oauth_configured", lambda: True)
+    monkeypatch.setattr(scheduler, "snapchat_native_sync_enabled", lambda: True)
+    monkeypatch.setattr(scheduler, "_utcnow", lambda: current)
+    monkeypatch.setattr(
+        scheduler,
+        "_load_canonical_scheduler_accounts",
+        load_accounts,
+    )
+    monkeypatch.setattr(scheduler, "ensure_snapchat_native_sync_indexes", noop)
+    monkeypatch.setattr(scheduler, "SnapchatSyncContext", Context)
+    monkeypatch.setattr(scheduler.httpx, "AsyncClient", Client)
+    monkeypatch.setattr(
+        ad_performance,
+        "_collection",
+        lambda *_args, **_kwargs: FailingFactCollection(),
+    )
+    monkeypatch.setattr(
+        scheduler.snapchat_hourly,
+        "refresh_snapchat_account_hours",
+        refresh,
+    )
+    caplog.set_level(logging.ERROR, logger=scheduler.__name__)
+
+    result = await scheduler._refresh_snapchat(
+        db,
+        user_id="owner-fact-runtime",
+        start_date=date(2026, 8, 20),
+        end_date=date(2026, 8, 21),
+        now=current,
+    )
+
+    run = db.rows[scheduler.RUNS_COLLECTION][0]
+    assert result["status"] == "failed"
+    assert run["status"] == "failed"
+    assert run["summary"]["coverage"]["data_state"] == "unknown_incomplete"
+    assert run["error"]["failure_stage"] == "fact_write"
+    assert run["error"]["exception_type"] == "ValueError"
+    assert run["error"]["run_id"] == run["run_id"]
+    assert secret not in repr(db.rows)
+    assert secret not in repr(result)
+    assert secret not in caplog.text
 
 
 def test_campaign_ai_proof_window_is_three_days_only_for_meta_and_snapchat(
@@ -1469,6 +1723,7 @@ async def test_snapchat_refresh_advances_proof_only_for_complete_account(
 
 
 def test_status_never_exposes_global_results_from_another_tenant():
+    owner_secret = "Authorization: Bearer owner-status-secret"
     db = _DB(
         {
             scheduler.SCHEDULER_COLLECTION: [
@@ -1510,7 +1765,29 @@ def test_status_never_exposes_global_results_from_another_tenant():
                     "trigger": scheduler.TRIGGER,
                     "provider": scheduler.SNAPCHAT_PROVIDER_ID,
                     "run_id": "tenant-a-run",
+                    "status": "failed",
                     "started_at": "2026-08-12T12:00:00+00:00",
+                    "access_token": owner_secret,
+                    "summary": {
+                        "raw_response_payload": owner_secret,
+                        "coverage": {
+                            "status": "incomplete",
+                            "data_state": "unknown_incomplete",
+                            "expected_requests": 1,
+                            "completed_requests": 0,
+                        }
+                    },
+                    "error": {
+                        "code": "snapchat_scheduler_runtime_error",
+                        "message": (
+                            "Snapchat scheduler refresh failed unexpectedly."
+                        ),
+                        "exception_message": owner_secret,
+                        "retryable": True,
+                        "failure_stage": "provider_refresh",
+                        "exception_type": "RuntimeError",
+                        "run_id": "tenant-a-run",
+                    },
                 },
                 {
                     "user_id": "tenant-b",
@@ -1534,6 +1811,17 @@ def test_status_never_exposes_global_results_from_another_tenant():
     assert result["providers"][scheduler.SNAPCHAT_PROVIDER_ID]["run_id"] == (
         "tenant-a-run"
     )
+    owner_run = result["providers"][scheduler.SNAPCHAT_PROVIDER_ID]
+    assert owner_run["status"] == "failed"
+    assert owner_run["summary"]["coverage"]["data_state"] == (
+        "unknown_incomplete"
+    )
+    assert owner_run["error"]["failure_stage"] == "provider_refresh"
+    assert owner_run["error"]["exception_type"] == "RuntimeError"
+    assert owner_run["error"]["run_id"] == "tenant-a-run"
+    assert "message" not in owner_run["error"]
+    assert "access_token" not in owner_run
+    assert "raw_response_payload" not in owner_run["summary"]
     assert result["scheduler"]["last_result"] == {
         "status": "complete",
         "started_at": "2026-08-12T12:00:00+00:00",
@@ -1547,4 +1835,5 @@ def test_status_never_exposes_global_results_from_another_tenant():
     assert "foreign-run-b" not in serialized
     assert "foreign-account-b" not in serialized
     assert "foreign-error-b" not in serialized
+    assert owner_secret not in serialized
 

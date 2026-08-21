@@ -96,10 +96,39 @@ SNAPCHAT_PERFORMANCE_RESULT_KEYS = (
     "ad_squad_performance",
     "ad_performance",
 )
+SNAPCHAT_FAILURE_STAGES = frozenset({
+    "integration_account_credential_proof",
+    "selected_accounts_load",
+    "fact_storage_prepare",
+    "credential_decrypt_or_refresh",
+    "provider_refresh",
+    "fact_write",
+    "account_state_persist",
+    "coverage_aggregation",
+    "integration_state_persist",
+    "run_finalize",
+})
+SNAPCHAT_DEFAULT_FAILURE_STAGE = "integration_account_credential_proof"
 
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _safe_exception_type(exc: BaseException) -> str:
+    try:
+        name = type(exc).__name__
+    except Exception:  # noqa: BLE001
+        return "Exception"
+    if (
+        isinstance(name, str)
+        and 1 <= len(name) <= 80
+        and name.isascii()
+        and (name[0].isalpha() or name[0] == "_")
+        and all(character.isalnum() or character == "_" for character in name)
+    ):
+        return name
+    return "Exception"
 
 
 def _iso(value: datetime | None = None) -> str:
@@ -998,21 +1027,38 @@ async def _refresh_snapchat(
         end_date=end_date,
         now=now,
     )
+    failure_stage = SNAPCHAT_DEFAULT_FAILURE_STAGE
+
+    def observe_failure_stage(stage: str) -> None:
+        nonlocal failure_stage
+        if stage in SNAPCHAT_FAILURE_STAGES:
+            failure_stage = stage
+
     try:
-        accounts = await _load_canonical_scheduler_accounts(db, user_id)
+        accounts = await _load_canonical_scheduler_accounts(
+            db,
+            user_id,
+            failure_stage_observer=observe_failure_stage,
+        )
+        observe_failure_stage("fact_storage_prepare")
         await ensure_snapchat_native_sync_indexes(db)
         token_context = SnapchatSyncContext(db, user_id, now=_utcnow)
+        token_context.failure_stage_observer = observe_failure_stage
+        observe_failure_stage("credential_decrypt_or_refresh")
         access_token = await token_context.access_token()
         items: list[dict[str, Any]] = []
         errors: list[dict[str, Any]] = []
         failed_coverages: list[dict[str, Any]] = []
         provider_calls_total = 0
         account_provider_calls: list[dict[str, Any]] = []
+        observe_failure_stage("provider_refresh")
         async with httpx.AsyncClient(timeout=35.0) as client:
             for account in accounts:
                 account_context = SnapchatSyncContext(db, user_id, now=_utcnow)
+                account_context.failure_stage_observer = observe_failure_stage
                 account_id = str(account.get("ad_account_id") or "").strip()
                 try:
+                    observe_failure_stage("provider_refresh")
                     item = await snapchat_hourly.refresh_snapchat_account_hours(
                         account_context,
                         client,
@@ -1022,6 +1068,7 @@ async def _refresh_snapchat(
                         end_date=end_date,
                         now=now,
                     )
+                    observe_failure_stage("account_state_persist")
                     items.append(item)
                     item_errors = _snapchat_item_errors(item)
                     for item_error in item_errors:
@@ -1175,6 +1222,7 @@ async def _refresh_snapchat(
                         "ad_account_id": account_id,
                         "provider_calls": int(account_context.provider_calls),
                     })
+        observe_failure_stage("coverage_aggregation")
         rows_saved = sum(int(item.get("rows_saved") or 0) for item in items)
         campaign_rows_saved = sum(
             int(item.get("campaign_rows_saved") or 0) for item in items
@@ -1245,6 +1293,7 @@ async def _refresh_snapchat(
             "coverage": coverage,
             "decision_outcomes": decision_outcomes,
         }
+        observe_failure_stage("integration_state_persist")
         integration_observed_at = _iso()
         integration_patch: dict[str, Any] = {
             "checked_at": integration_observed_at,
@@ -1283,8 +1332,14 @@ async def _refresh_snapchat(
                     message=state_error["message"],
                     retryable=True,
                 )
-            except Exception:
-                logger.exception("Failed to persist Snapchat state race error")
+            except Exception as persist_exc:  # noqa: BLE001
+                logger.exception(
+                    "Failed to persist Snapchat state race error "
+                    "failure_stage=%s exception_type=%s",
+                    failure_stage,
+                    _safe_exception_type(persist_exc),
+                    exc_info=False,
+                )
                 error_id = None
             errors.append({"error_id": error_id, **state_error})
             status = "partial"
@@ -1300,6 +1355,7 @@ async def _refresh_snapchat(
                 "coverage": coverage,
             })
             await _mark_snapchat_sync_unhealthy(db, user_id)
+        observe_failure_stage("run_finalize")
         await _finish_run(
             db, user_id=user_id, run_id=run_id, status=status, result=result
         )
@@ -1331,8 +1387,14 @@ async def _refresh_snapchat(
                 message=exc.message,
                 retryable=exc.retryable,
             )
-        except Exception:
-            logger.exception("Failed to persist controlled Snapchat sync error")
+        except Exception as persist_exc:  # noqa: BLE001
+            logger.exception(
+                "Failed to persist controlled Snapchat sync error "
+                "failure_stage=%s exception_type=%s",
+                failure_stage,
+                _safe_exception_type(persist_exc),
+                exc_info=False,
+            )
         await _finish_run(
             db,
             user_id=user_id,
@@ -1357,9 +1419,18 @@ async def _refresh_snapchat(
         if needs_reauth:
             await _mark_needs_reauth(db, user_id, SNAPCHAT_PROVIDER_ID)
         return {"provider": SNAPCHAT_PROVIDER_ID, "run_id": run_id, "status": "failed", "code": exc.code}
-    except Exception:
+    except Exception as exc:  # noqa: BLE001
         code = "snapchat_scheduler_runtime_error"
         message = "Snapchat scheduler refresh failed unexpectedly."
+        failed_stage = failure_stage
+        exception_type = _safe_exception_type(exc)
+        logger.exception(
+            "Canonical Snapchat scheduler failure "
+            "failure_stage=%s exception_type=%s",
+            failed_stage,
+            exception_type,
+            exc_info=False,
+        )
         error_id: str | None = None
         try:
             error_id = await _record_error(
@@ -1372,8 +1443,14 @@ async def _refresh_snapchat(
                 message=message,
                 retryable=True,
             )
-        except Exception:
-            logger.exception("Failed to persist unexpected Snapchat sync error")
+        except Exception as persist_exc:  # noqa: BLE001
+            logger.exception(
+                "Failed to persist canonical Snapchat scheduler error "
+                "failure_stage=%s exception_type=%s",
+                failed_stage,
+                _safe_exception_type(persist_exc),
+                exc_info=False,
+            )
         failure_result = {
             "provider": SNAPCHAT_PROVIDER_ID,
             "status": "failed",
@@ -1404,6 +1481,9 @@ async def _refresh_snapchat(
                 "code": code,
                 "message": message,
                 "retryable": True,
+                "failure_stage": failed_stage,
+                "exception_type": exception_type,
+                "run_id": run_id,
             },
         )
         await _mark_snapchat_sync_unhealthy(db, user_id)
@@ -1636,6 +1716,112 @@ async def auto_sync_loop(db: Any) -> None:
         await asyncio.sleep(HEARTBEAT_SECONDS)
 
 
+def _safe_status_identifier(value: Any, *, limit: int = 120) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    if not normalized or len(normalized) > limit or not normalized.isascii():
+        return None
+    if not all(
+        character.isalnum() or character in {"_", "-", ".", ":"}
+        for character in normalized
+    ):
+        return None
+    return normalized
+
+
+def _safe_status_timestamp(value: Any) -> str | None:
+    parsed = _parse_datetime(value)
+    return _iso(parsed) if parsed is not None else None
+
+
+def _safe_provider_run_status(run: dict[str, Any]) -> dict[str, Any]:
+    provider = str(run.get("provider") or "")
+    if provider not in {
+        META_PROVIDER_ID,
+        SNAPCHAT_PROVIDER_ID,
+        TIKTOK_PROVIDER_ID,
+        GOOGLE_ADS_PROVIDER_ID,
+    }:
+        return {}
+    run_id = _safe_status_identifier(run.get("run_id"))
+    status = str(run.get("status") or "")
+    if status not in {*ACTIVE_STATUSES, *TERMINAL_STATUSES}:
+        status = "unknown"
+    safe_run: dict[str, Any] = {
+        "provider": provider,
+        "run_id": run_id,
+        "status": status,
+        "started_at": _safe_status_timestamp(run.get("started_at")),
+        "finished_at": _safe_status_timestamp(run.get("finished_at")),
+    }
+    run_type = _safe_status_identifier(run.get("run_type"))
+    if run_type:
+        safe_run["run_type"] = run_type
+    source_mode = run.get("source_mode")
+    if source_mode in {
+        META_REPORTING_SOURCE_MODE,
+        ACCOUNT_REFRESH_SOURCE_MODE,
+        TIKTOK_REPORTING_SOURCE_MODE,
+        GOOGLE_ADS_REPORTING_SOURCE_MODE,
+    }:
+        safe_run["source_mode"] = source_mode
+
+    summary = run.get("summary")
+    coverage = summary.get("coverage") if isinstance(summary, dict) else None
+    if isinstance(coverage, dict):
+        coverage_status = str(coverage.get("status") or "")
+        data_state = str(coverage.get("data_state") or "")
+        expected_requests = _strict_nonnegative_int(
+            coverage.get("expected_requests")
+        )
+        completed_requests = _strict_nonnegative_int(
+            coverage.get("completed_requests")
+        )
+        if (
+            coverage_status in {"complete", "incomplete"}
+            and data_state in {
+                "confirmed_data",
+                "confirmed_zero",
+                "confirmed_no_data",
+                "unknown_incomplete",
+            }
+            and expected_requests is not None
+            and completed_requests is not None
+        ):
+            safe_run["summary"] = {
+                "coverage": {
+                    "status": coverage_status,
+                    "data_state": data_state,
+                    "expected_requests": expected_requests,
+                    "completed_requests": completed_requests,
+                }
+            }
+
+    error = run.get("error")
+    if isinstance(error, dict):
+        safe_error: dict[str, Any] = {}
+        code = _safe_status_identifier(error.get("code"))
+        if code:
+            safe_error["code"] = code
+        if isinstance(error.get("retryable"), bool):
+            safe_error["retryable"] = error["retryable"]
+        failure_stage = str(error.get("failure_stage") or "")
+        if failure_stage in SNAPCHAT_FAILURE_STAGES:
+            safe_error["failure_stage"] = failure_stage
+        exception_type = _safe_status_identifier(
+            error.get("exception_type"),
+            limit=80,
+        )
+        if exception_type:
+            safe_error["exception_type"] = exception_type
+        if run_id and error.get("run_id") == run_id:
+            safe_error["run_id"] = run_id
+        if safe_error:
+            safe_run["error"] = safe_error
+    return safe_run
+
+
 async def auto_sync_status(db: Any, user_id: str) -> dict[str, Any]:
     scheduler = await _collection(db, SCHEDULER_COLLECTION).find_one(
         {"_id": SCHEDULER_ID},
@@ -1652,7 +1838,22 @@ async def auto_sync_status(db: Any, user_id: str) -> dict[str, Any]:
                 GOOGLE_ADS_PROVIDER_ID,
             ]},
         },
-        {"_id": 0},
+        {
+            "_id": 0,
+            "provider": 1,
+            "run_id": 1,
+            "run_type": 1,
+            "status": 1,
+            "started_at": 1,
+            "finished_at": 1,
+            "source_mode": 1,
+            "summary.coverage": 1,
+            "error.code": 1,
+            "error.retryable": 1,
+            "error.failure_stage": 1,
+            "error.exception_type": 1,
+            "error.run_id": 1,
+        },
     )
     if hasattr(cursor, "sort"):
         cursor = cursor.sort("started_at", -1)
@@ -1662,7 +1863,9 @@ async def auto_sync_status(db: Any, user_id: str) -> dict[str, Any]:
     for run in await _to_list(cursor, 20):
         provider = str(run.get("provider") or "")
         if provider and provider not in latest:
-            latest[provider] = run
+            safe_run = _safe_provider_run_status(run)
+            if safe_run:
+                latest[provider] = safe_run
     global_last_result = scheduler.get("last_result")
     global_last_result = (
         global_last_result if isinstance(global_last_result, dict) else {}
