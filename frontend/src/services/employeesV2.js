@@ -7,6 +7,7 @@ export const EMPLOYEE_CREATE_CONFIRMATION = "CREATE_EMPLOYEE_V2";
 export const EMPLOYEE_ACCOUNT_LINK_CONFIRMATION = "LINK_EMPLOYEE_V2_ACCOUNT";
 export const EMPLOYEE_ACCOUNT_UNLINK_CONFIRMATION = "UNLINK_EMPLOYEE_V2_ACCOUNT";
 export const EMPLOYEE_ROLE_CONFIRMATION = "ASSIGN_EMPLOYEE_V2_ROLE";
+export const EMPLOYEE_MOBILE_APP_PERMISSIONS_CONFIRMATION = "ASSIGN_EMPLOYEE_V2_MOBILE_APP_PERMISSIONS";
 export const EMPLOYEE_PASSWORD_CONFIRMATION = "RESET_EMPLOYEE_V2_ACCOUNT_PASSWORD";
 export const EMPLOYEE_PAYROLL_STATUS_CONFIRMATION = "CHANGE_EMPLOYEE_V2_PAYROLL_STATUS";
 
@@ -111,6 +112,16 @@ export async function assignEmployeesV2Role(employeeId, payload) {
         {
             ...payload,
             confirmation: EMPLOYEE_ROLE_CONFIRMATION,
+        },
+    )).data;
+}
+
+export async function assignEmployeesV2MobileAppPermissions(employeeId, payload) {
+    return (await api.put(
+        `/employees-v2/management/employees/${encodeURIComponent(employeeId)}/mobile-app-permissions`,
+        {
+            ...payload,
+            confirmation: EMPLOYEE_MOBILE_APP_PERMISSIONS_CONFIRMATION,
         },
     )).data;
 }
