@@ -72,6 +72,7 @@ async def run_once() -> dict[str, Any]:
         ensure_campaign_ai_indexes,
         run_all_campaign_ai_monitors,
     )
+    from mezan_campaign_profit_loader import make_mezan_campaign_profit_loader
 
     client = AsyncIOMotorClient(mongo_url)
     try:
@@ -93,7 +94,11 @@ async def run_once() -> dict[str, Any]:
         owner = str(cadence["owner"])
         started_at = datetime.now(timezone.utc).isoformat()
         try:
-            summary = await run_all_campaign_ai_monitors(db)
+            profit_loader = make_mezan_campaign_profit_loader(db)
+            summary = await run_all_campaign_ai_monitors(
+                db,
+                business_context_loader=profit_loader,
+            )
 
             # A provider run can complete technically while OpenAI itself is
             # unavailable. Treat that as retryable so only the replica that won
