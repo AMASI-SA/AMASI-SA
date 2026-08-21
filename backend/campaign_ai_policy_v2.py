@@ -383,7 +383,7 @@ async def _snapchat_campaign_entities(
                 # Legacy compatibility only; do not treat this key name as the
                 # finance authority. Mezan is authoritative for commercial truth.
                 "salla_campaign_results": {
-                    "source": "legacy_alias:mezan_attribution",
+                    "source": "unified_orders:salla_exact_account_campaign_match",
                     **salla_results,
                 },
                 "finance_semantics": {
