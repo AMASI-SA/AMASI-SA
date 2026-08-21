@@ -2044,6 +2044,14 @@ async def _execute_snapchat_approval(
     recommendation_id: str,
     snapshot_digest: str,
 ) -> dict[str, Any]:
+    await _execution_quality.preflight_approved_execution(
+        db,
+        recommendation_collection=RECOMMENDATION_COLLECTION,
+        user_id=user_id,
+        snapshot_id=snapshot_id,
+        recommendation_id=recommendation_id,
+        expected_digest=snapshot_digest,
+    )
     from integrations_control_center.snapchat_campaign_management import (
         SnapchatManagementApprovalInput,
         SnapchatManagementProposalInput,

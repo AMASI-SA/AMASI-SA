@@ -1669,6 +1669,19 @@ async def preflight_approved_execution(
         or recommendation.get("approval_available") is not True
     ):
         raise ExecutionQualityBlocked(["execution_snapshot_target_unavailable"])
+    execution_status = _text(recommendation.get("execution_status"), limit=80).lower()
+    if execution_status in {
+        "executing",
+        "completed",
+        "provider_state_uncertain",
+        "verification_required",
+    }:
+        raise ExecutionQualityBlocked([
+            "execution_recommendation_not_approvable"
+        ], {
+            "execution_status": execution_status,
+            "recommendation_id": recommendation_id,
+        })
     baseline = target.get("execution_quality")
     if (
         not isinstance(baseline, dict)
