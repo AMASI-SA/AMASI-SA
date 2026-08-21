@@ -91,6 +91,21 @@ def _barcode_candidates(barcode: str) -> list[dict[str, Any]]:
     ]
 
 
+def _assignment_order_filter(user_id: str, row: dict[str, Any]) -> dict[str, Any]:
+    clauses: list[dict[str, Any]] = []
+    for field, value in (
+        ("order_id", row.get("order_id")),
+        ("order_number", row.get("order_id")),
+        ("order_number", row.get("order_number")),
+    ):
+        normalized = normalize_text(value)
+        if normalized and {field: normalized} not in clauses:
+            clauses.append({field: normalized})
+    if not clauses:
+        raise RuntimeError("canonical_order_identity_missing_during_handover_confirm")
+    return {"user_id": user_id, "$or": clauses}
+
+
 class SessionCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     driver_id: str = Field(min_length=1, max_length=80)
@@ -106,6 +121,7 @@ async def ensure_store_delivery_handover_indexes(db: Any) -> None:
     await db[SESSIONS].create_index([("user_id", 1), ("driver_id", 1), ("status", 1)])
     await db[ASSIGNMENTS].create_index([("user_id", 1), ("id", 1)], unique=True)
     await db[ASSIGNMENTS].create_index([("user_id", 1), ("order_id", 1), ("active", 1)])
+    await db[ASSIGNMENTS].create_index([("user_id", 1), ("driver_id", 1), ("status", 1), ("active", 1)])
     await db[EVENTS].create_index([("user_id", 1), ("occurred_at", -1)])
 
 
@@ -194,21 +210,34 @@ def make_store_delivery_handover_router(db: Any, current_user: Callable[..., Any
         if existing:
             raise HTTPException(status_code=409, detail={"code": "shipment_already_assigned", "order_id": existing.get("order_id")})
 
+        driver = await db[STORE_DRIVERS].find_one(
+            {"user_id": user_id, "id": session.get("driver_id"), "status": "active"},
+            {"_id": 0},
+        )
+        if not driver:
+            raise HTTPException(status_code=409, detail={"code": "driver_inactive"})
+
         now = _now()
         rows = []
         for item in accepted:
+            try:
+                current_snapshot = assignment_snapshot(
+                    driver=driver,
+                    shipping_city=normalize_text(item.get("shipping_city") or item.get("shipping_city_snapshot")),
+                )
+            except StoreDeliveryRuleError as exc:
+                raise HTTPException(status_code=409, detail={"code": str(exc), "order_id": item.get("order_id")}) from exc
             rows.append({
                 "id": str(uuid.uuid4()), "user_id": user_id, "session_id": session_id,
                 "order_id": item["order_id"], "order_number": item.get("order_number"), "barcode": item.get("barcode"),
-                "driver_id": item["driver_id"], "driver_name_snapshot": item["driver_name_snapshot"],
-                "driver_city_snapshot": item["driver_city_snapshot"], "shipping_city_snapshot": item["shipping_city_snapshot"],
-                "delivery_fee_snapshot": item["delivery_fee_snapshot"], "coverage_mode_snapshot": item["coverage_mode_snapshot"],
+                **current_snapshot,
                 "status": "assigned", "active": True, "assigned_at": now,
                 "assigned_by": normalize_text(actor.get("id")), "delivered_at": None,
             })
 
         inserted_ids: list[str] = []
         inserted_instruction_ids: list[str] = []
+        updated_orders: list[tuple[dict[str, Any], dict[str, Any]]] = []
         try:
             for row in rows:
                 await db[ASSIGNMENTS].insert_one(row)
@@ -256,6 +285,38 @@ def make_store_delivery_handover_router(db: Any, current_user: Callable[..., Any
                     )
                     if getattr(instruction_result, "upserted_id", None) is not None:
                         inserted_instruction_ids.append(instruction_id)
+
+                order_filter = _assignment_order_filter(user_id, row)
+                prior = await db[ORDERS].find_one(
+                    order_filter,
+                    {
+                        "_id": 0,
+                        "order_id": 1,
+                        "order_number": 1,
+                        "store_delivery_assignment_id": 1,
+                        "store_delivery_driver_id": 1,
+                        "store_delivery_driver_name": 1,
+                        "store_delivery_fee_snapshot": 1,
+                        "store_delivery_status": 1,
+                        "store_delivery_assigned_at": 1,
+                        "store_delivery_updated_at": 1,
+                    },
+                )
+                if not prior:
+                    raise RuntimeError("canonical_order_not_found_during_handover_confirm")
+                order_patch = {
+                    "store_delivery_assignment_id": row["id"],
+                    "store_delivery_driver_id": row["driver_id"],
+                    "store_delivery_driver_name": row.get("driver_name_snapshot"),
+                    "store_delivery_fee_snapshot": row.get("delivery_fee_snapshot"),
+                    "store_delivery_status": "assigned",
+                    "store_delivery_assigned_at": now,
+                    "store_delivery_updated_at": now,
+                }
+                order_result = await db[ORDERS].update_one(order_filter, {"$set": order_patch})
+                if order_result.matched_count != 1:
+                    raise RuntimeError("canonical_order_update_conflict_during_handover_confirm")
+                updated_orders.append((prior, order_patch))
         except Exception:
             if inserted_ids:
                 await db[ASSIGNMENTS].delete_many({"user_id": user_id, "id": {"$in": inserted_ids}})
@@ -264,6 +325,23 @@ def make_store_delivery_handover_router(db: Any, current_user: Callable[..., Any
                     "user_id": user_id,
                     "id": {"$in": inserted_instruction_ids},
                 })
+            for prior, order_patch in updated_orders:
+                identity = normalize_text(prior.get("order_id") or prior.get("order_number"))
+                rollback_filter = {
+                    "user_id": user_id,
+                    "store_delivery_assignment_id": order_patch["store_delivery_assignment_id"],
+                    "$or": [{"order_id": identity}, {"order_number": identity}],
+                }
+                restore_keys = set(order_patch)
+                restore = {key: prior[key] for key in restore_keys if key in prior}
+                unset = {key: "" for key in restore_keys if key not in prior}
+                rollback_update: dict[str, Any] = {}
+                if restore:
+                    rollback_update["$set"] = restore
+                if unset:
+                    rollback_update["$unset"] = unset
+                if rollback_update:
+                    await db[ORDERS].update_one(rollback_filter, rollback_update)
             raise
 
         session_update = await db[SESSIONS].update_one(
@@ -277,6 +355,23 @@ def make_store_delivery_handover_router(db: Any, current_user: Callable[..., Any
                     "user_id": user_id,
                     "id": {"$in": inserted_instruction_ids},
                 })
+            for prior, order_patch in updated_orders:
+                identity = normalize_text(prior.get("order_id") or prior.get("order_number"))
+                rollback_filter = {
+                    "user_id": user_id,
+                    "store_delivery_assignment_id": order_patch["store_delivery_assignment_id"],
+                    "$or": [{"order_id": identity}, {"order_number": identity}],
+                }
+                restore_keys = set(order_patch)
+                restore = {key: prior[key] for key in restore_keys if key in prior}
+                unset = {key: "" for key in restore_keys if key not in prior}
+                rollback_update: dict[str, Any] = {}
+                if restore:
+                    rollback_update["$set"] = restore
+                if unset:
+                    rollback_update["$unset"] = unset
+                if rollback_update:
+                    await db[ORDERS].update_one(rollback_filter, rollback_update)
             raise HTTPException(status_code=409, detail={"code": "handover_session_confirm_conflict"})
 
         created = [{k: v for k, v in row.items() if k not in {"_id", "user_id"}} for row in rows]
