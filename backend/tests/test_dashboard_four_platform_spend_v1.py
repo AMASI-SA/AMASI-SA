@@ -20,6 +20,10 @@ def _path_value(document, dotted):
 
 def _matches(document, query):
     for key, condition in query.items():
+        if key == "$or":
+            if not any(_matches(document, branch) for branch in condition):
+                return False
+            continue
         value, exists = _path_value(document, key)
         if not isinstance(condition, dict):
             if not exists or value != condition:
@@ -38,6 +42,12 @@ def _matches(document, query):
             elif operator == "$lt":
                 if not exists or value >= expected:
                     return False
+            elif operator == "$exists":
+                if exists is not bool(expected):
+                    return False
+            elif operator == "$ne":
+                if exists and value == expected:
+                    return False
             else:
                 raise AssertionError(f"unsupported operator: {operator}")
     return True
@@ -50,6 +60,18 @@ class FakeCursor:
     async def to_list(self, length):
         return deepcopy(self.rows[:length])
 
+    def sort(self, key, direction=None):
+        field, order = (key[0] if isinstance(key, list) else (key, direction))
+        self.rows.sort(
+            key=lambda row: _path_value(row, field)[0] or "",
+            reverse=order == -1,
+        )
+        return self
+
+    def limit(self, length):
+        self.rows = self.rows[:length]
+        return self
+
 
 class FakeCollection:
     def __init__(self, rows=None):
@@ -57,6 +79,12 @@ class FakeCollection:
 
     def find(self, query, projection=None):
         return FakeCursor(row for row in self.rows if _matches(row, query))
+
+    async def find_one(self, query, projection=None):
+        for row in self.rows:
+            if _matches(row, query):
+                return deepcopy(row)
+        return None
 
 
 class FakeDB:
@@ -84,7 +112,26 @@ def _connected(provider):
 
 
 @pytest.mark.asyncio
-async def test_builds_selected_four_platform_daily_and_riyadh_hourly_spend():
+async def test_builds_selected_four_platform_daily_and_riyadh_hourly_spend(monkeypatch):
+    async def canonical_snapchat(*_args, **_kwargs):
+        return {
+            "rows": [],
+            "daily_sar": {"2026-08-05": 100.0},
+            "daily_state": {"2026-08-05": "confirmed_data"},
+            "total_sar": 100.0,
+            "bank_commissions": {},
+            "quality": {
+                "status": "complete",
+                "data_state": "confirmed_data",
+                "coverage_complete": True,
+                "amount_complete": True,
+                "complete": True,
+                "connected": True,
+                "reason_codes": [],
+            },
+        }
+
+    monkeypatch.setattr(module, "load_snapchat_dashboard_spend", canonical_snapchat)
     selected_midnight = local_hour_start_utc(
         __import__("datetime").date(2026, 8, 5),
         0,
@@ -233,7 +280,7 @@ async def test_builds_selected_four_platform_daily_and_riyadh_hourly_spend():
         "google": 7.5,
     }
     assert result["total_sar"] == 132.5
-    assert result["hourly_spend"][0]["snapchat"] == 10.0
+    assert result["hourly_spend"][0]["snapchat"] is None
     assert result["hourly_spend"][1]["meta"] == 2.0
     assert result["hourly_spend"][1]["tiktok"] == 1.0
     assert result["hourly_spend"][1]["google"] == 0.5

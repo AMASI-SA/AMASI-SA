@@ -18,7 +18,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from auth import ensure_user_settings
 from customer_identity import CUSTOMER_IDENTITY_COLLECTION, decrypt_private_payload
@@ -27,6 +27,7 @@ from dashboard_v2_ad_costs import (
     merge_ad_bank_fees_into_dashboard,
 )
 from dashboard_v2_ads_executive import build_salla_ads_executive_breakdown
+from dashboard_snapchat_spend import load_snapchat_dashboard_spend
 from integrations_control_center.meta_oauth_security import META_PROVIDER_ID
 from integrations_control_center.snapchat_oauth_security import SNAPCHAT_PROVIDER_ID
 from integrations_control_center.tiktok_oauth_security import TIKTOK_PROVIDER_ID
@@ -893,19 +894,36 @@ async def build_mezan_v2_ads(
     from_date: str | None,
     to_date: str | None,
 ) -> dict[str, Any]:
-    today = _today_riyadh().isoformat()
-    start = from_date or today
-    end = to_date or start
+    today = _today_riyadh()
+    start_text = from_date or today.isoformat()
+    end_text = to_date or start_text
+    try:
+        start_date = date.fromisoformat(start_text)
+        end_date = date.fromisoformat(end_text)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail="invalid_date_range") from exc
+    if end_date < start_date or (end_date - start_date).days + 1 > 90:
+        raise HTTPException(status_code=422, detail="invalid_date_range")
+    start = start_date.isoformat()
+    end = end_date.isoformat()
+    snapchat = await load_snapchat_dashboard_spend(
+        db,
+        user_id,
+        start=start_date,
+        end=end_date,
+    )
     raw_platform_rows = {
         provider: await _provider_rows(db, user_id, provider, start, end)
-        for provider in ("snapchat", "meta", "tiktok")
+        for provider in ("meta", "tiktok")
     }
+    raw_platform_rows["snapchat"] = []
     account_costs = await apply_mezan_v2_ad_account_costs(
         db,
         user_id,
         raw_platform_rows,
     )
     platform_rows = account_costs["platform_rows"]
+    platform_rows["snapchat"] = list(snapchat.get("rows") or [])
     breakdown = {
         provider: round(sum(_float(
             row.get("effective_spend_sar")
@@ -913,7 +931,9 @@ async def build_mezan_v2_ads(
             else row.get("spend_sar")
         ) for row in rows), 2)
         for provider, rows in platform_rows.items()
+        if provider != "snapchat"
     }
+    breakdown["snapchat"] = snapchat.get("total_sar")
     google_rows = await _to_list(
         db.daily_costs.find(
             {"user_id": user_id, "date": {"$gte": start, "$lte": end}},
@@ -925,52 +945,131 @@ async def build_mezan_v2_ads(
         sum(_float(row.get("google_ads")) for row in google_rows),
         2,
     )
-    bank_commissions = {
-        key: value for key, value in account_costs.items()
-        if key != "platform_rows"
+    snap_quality = snapchat.get("quality") if isinstance(snapchat.get("quality"), dict) else {}
+    amount_complete = snap_quality.get("amount_complete") is True
+    bank_commissions: dict[str, Any] | None = None
+    if amount_complete:
+        base_bank = {
+            key: value for key, value in account_costs.items()
+            if key != "platform_rows"
+        }
+        snap_bank = snapchat.get("bank_commissions") or {}
+        base_accounts = list(base_bank.get("accounts") or [])
+        snap_accounts = list(snap_bank.get("accounts") or [])
+        bank_commissions = {
+            **base_bank,
+            "accounts": base_accounts + snap_accounts,
+            "total_fee_sar": round(
+                _float(base_bank.get("total_fee_sar"))
+                + _float(snap_bank.get("total_fee_sar")),
+                2,
+            ),
+            "fee_subject_spend_sar": round(
+                _float(base_bank.get("fee_subject_spend_sar"))
+                + _float(snap_bank.get("fee_subject_spend_sar")),
+                2,
+            ),
+            "total_effective_spend_sar": round(
+                _float(base_bank.get("total_effective_spend_sar"))
+                + _float(snap_bank.get("total_effective_spend_sar")),
+                2,
+            ),
+            "coverage": {
+                "meta_tiktok": base_bank.get("coverage") or {},
+                "snapchat": snap_bank.get("coverage") or {},
+                "complete": True,
+            },
+            "google_transitional_spend_sar": breakdown["google_transitional"],
+            "google_account_allocation": (
+                "not_available" if breakdown["google_transitional"] > 0 else "not_required"
+            ),
+        }
+    history_by_date: dict[str, dict[str, float | None]] = {
+        (start_date + timedelta(days=offset)).isoformat(): {
+            "snapchat": (snapchat.get("daily_sar") or {}).get(
+                (start_date + timedelta(days=offset)).isoformat()
+            ),
+            "meta": 0.0,
+            "tiktok": 0.0,
+            "google": 0.0,
+        }
+        for offset in range((end_date - start_date).days + 1)
     }
-    bank_commissions["google_transitional_spend_sar"] = breakdown["google_transitional"]
-    bank_commissions["google_account_allocation"] = (
-        "not_available" if breakdown["google_transitional"] > 0 else "not_required"
-    )
-    history_by_date: dict[str, dict[str, float]] = defaultdict(lambda: {
-        "snapchat": 0.0,
-        "meta": 0.0,
-        "tiktok": 0.0,
-        "google": 0.0,
-    })
     for provider, rows in platform_rows.items():
+        if provider == "snapchat":
+            continue
         for row in rows:
             row_date = str(row.get("date") or "")[:10]
-            if not row_date:
+            if row_date not in history_by_date:
                 continue
-            history_by_date[row_date][provider] += _float(
+            history_by_date[row_date][provider] = _float(history_by_date[row_date][provider]) + _float(
                 row.get("effective_spend_sar")
                 if row.get("effective_spend_sar") is not None
                 else row.get("spend_sar")
             )
     for row in google_rows:
         row_date = str(row.get("date") or "")[:10]
-        if row_date:
-            history_by_date[row_date]["google"] += _float(row.get("google_ads"))
+        if row_date in history_by_date:
+            history_by_date[row_date]["google"] = _float(
+                history_by_date[row_date]["google"]
+            ) + _float(row.get("google_ads"))
     history = [
         {
             "date": row_date,
-            **{provider: round(amount, 2) for provider, amount in values.items()},
+            **{
+                provider: (round(amount, 2) if amount is not None else None)
+                for provider, amount in values.items()
+            },
         }
         for row_date, values in sorted(history_by_date.items())
     ]
+    provider_metrics = {
+        provider: _aggregate_provider_rows(rows, start, end)
+        for provider, rows in platform_rows.items()
+        if provider != "snapchat"
+    }
+    if amount_complete:
+        provider_metrics["snapchat"] = _aggregate_provider_rows(
+            platform_rows["snapchat"], start, end
+        )
+    else:
+        provider_metrics["snapchat"] = {
+            key: None
+            for key in (
+                "spend", "orders", "revenue", "impressions", "clicks",
+                "roas", "cpa", "cost_per_order", "cpc", "cpm", "ctr",
+            )
+        }
+    provider_metrics["snapchat"].update({
+        "data_state": snap_quality.get("data_state") or "unknown_incomplete",
+        "coverage_complete": snap_quality.get("coverage_complete") is True,
+        "amount_complete": amount_complete,
+    })
+    known_subtotal = round(sum(
+        float(value)
+        for provider, value in breakdown.items()
+        if provider != "snapchat" and value is not None
+    ), 2)
+    total = (
+        round(known_subtotal + float(breakdown["snapchat"]), 2)
+        if amount_complete and breakdown["snapchat"] is not None
+        else None
+    )
     return {
-        "total": round(sum(breakdown.values()), 2),
+        "total": total,
+        "known_subtotal_sar": known_subtotal,
         "breakdown": breakdown,
         "history": history,
-        "providers": {
-            provider: _aggregate_provider_rows(rows, start, end)
-            for provider, rows in platform_rows.items()
+        "providers": provider_metrics,
+        "spend_quality": {
+            "status": "complete" if amount_complete else "incomplete",
+            "amount_complete": amount_complete,
+            "known_subtotal_sar": known_subtotal,
+            "snapchat": snap_quality,
         },
         "bank_commissions": bank_commissions,
         "source_contract": {
-            "snapchat": f"{SNAP_FACTS}:selected_accounts:ad_account_rows:spend_native",
+            "snapchat": "dashboard_snapchat_spend:riyadh_ad_account_native_with_run_proof",
             "meta": f"{META_FACTS}:selected_accounts:spend_native",
             "tiktok": f"{TIKTOK_FACTS}:connected_accounts:spend_native",
             "exchange_rates": "mezan_ad_account_cost_settings_v2:per_account",
@@ -1136,14 +1235,21 @@ def make_dashboard_v2_router(
         operating_total = salary_total + recurring_total
         product_total = product_cost["total"]
         ads_total = ads["total"]
-        totals["net_profit"] = round(
-            _float(totals.get("net_profit"))
-            + sales_delta
-            + previous_product - product_total
-            + previous_ads - ads_total
-            + previous_operating - operating_total,
-            2,
+        ads_amount_complete = (
+            ads_total is not None
+            and (ads.get("spend_quality") or {}).get("amount_complete") is True
         )
+        if ads_amount_complete:
+            totals["net_profit"] = round(
+                _float(totals.get("net_profit"))
+                + sales_delta
+                + previous_product - product_total
+                + previous_ads - float(ads_total)
+                + previous_operating - operating_total,
+                2,
+            )
+        else:
+            totals["net_profit"] = None
         totals["net_sales"] = round(
             _float(totals.get("net_sales")) + sales_delta,
             2,
@@ -1155,15 +1261,21 @@ def make_dashboard_v2_router(
                 2,
             )
         if config.get("deduct_ads", True):
-            totals["net_sales"] = round(
-                _float(totals.get("net_sales")) + previous_ads - ads_total,
-                2,
+            totals["net_sales"] = (
+                round(
+                    _float(totals.get("net_sales"))
+                    + previous_ads - float(ads_total),
+                    2,
+                )
+                if ads_amount_complete
+                else None
             )
         if config.get("deduct_operating_expenses", True):
-            totals["net_sales"] = round(
-                _float(totals.get("net_sales")) + previous_operating - operating_total,
-                2,
-            )
+            if totals.get("net_sales") is not None:
+                totals["net_sales"] = round(
+                    _float(totals.get("net_sales")) + previous_operating - operating_total,
+                    2,
+                )
         totals.update({
             "total_product_cost": product_total,
             "computed_product_cost": product_total,
@@ -1174,8 +1286,13 @@ def make_dashboard_v2_router(
             "excel_no_products_count": 0,
             "total_ads_cost": ads_total,
             "daily_ads_total": ads_total,
+            "ads_spend_data_complete": ads_amount_complete,
             "daily_products_total": product_total,
-            "daily_costs_total": round(product_total + ads_total, 2),
+            "daily_costs_total": (
+                round(product_total + float(ads_total), 2)
+                if ads_amount_complete
+                else None
+            ),
             "daily_expenses_total": product_total,
             "operating_expenses_total": round(operating_total, 2),
             "operating_rentals_total": recurring["rentals_total"],
@@ -1186,8 +1303,18 @@ def make_dashboard_v2_router(
             "operating_prepaid_total": 0.0,
             "operating_prepaid_by_type": {},
             "operating_daily_other_total": 0.0,
-            "overall_roas": round(_float(totals.get("total_sales")) / ads_total, 2) if ads_total > 0 else None,
-            "avg_cost_per_order": round(ads_total / int(totals.get("total_orders") or 0), 2) if ads_total > 0 and int(totals.get("total_orders") or 0) > 0 else None,
+            "overall_roas": (
+                round(_float(totals.get("total_sales")) / float(ads_total), 2)
+                if ads_amount_complete and float(ads_total) > 0
+                else None
+            ),
+            "avg_cost_per_order": (
+                round(float(ads_total) / int(totals.get("total_orders") or 0), 2)
+                if ads_amount_complete
+                and float(ads_total) > 0
+                and int(totals.get("total_orders") or 0) > 0
+                else None
+            ),
             "tiktok_spend": ads["providers"]["tiktok"]["spend"],
             "tiktok_purchases": ads["providers"]["tiktok"]["orders"],
             "tiktok_revenue": ads["providers"]["tiktok"]["revenue"],
@@ -1199,7 +1326,19 @@ def make_dashboard_v2_router(
             "legacy_analyses_count": 0,
             "analyses_count": 0,
         })
-        merge_ad_bank_fees_into_dashboard(response, ads)
+        if ads_amount_complete and ads.get("bank_commissions") is not None:
+            merge_ad_bank_fees_into_dashboard(response, ads)
+        else:
+            totals["ad_bank_commission_fees"] = None
+            totals["total_payment_fees"] = None
+            totals["net_profit"] = None
+            if config.get("deduct_payment_fees", True):
+                totals["net_sales"] = None
+            response["payment_breakdown"] = [
+                row
+                for row in (response.get("payment_breakdown") or [])
+                if row.get("key") != "ad_bank_commissions"
+            ]
         response.update({
             "recent_analyses": [],
             "product_cost_v2": product_cost,
@@ -1489,13 +1628,20 @@ def make_dashboard_v2_router(
                 "description": "قراءة فقط من مصدر لوحة ميزان 2",
             }
             for provider, amount in ads["breakdown"].items()
-            if amount > 0
+            if isinstance(amount, (int, float)) and not isinstance(amount, bool) and amount > 0
         ]
         return {
             "total_amount": ads["total"],
             "total_entries": len(items),
             "items": items,
-            "by_provider": {key.replace("_transitional", ""): value for key, value in ads["breakdown"].items() if value > 0},
+            "by_provider": {
+                key.replace("_transitional", ""): value
+                for key, value in ads["breakdown"].items()
+                if isinstance(value, (int, float))
+                and not isinstance(value, bool)
+                and value > 0
+            },
+            "spend_quality": ads.get("spend_quality") or {},
             "by_account": {},
             "source_only": True,
         }

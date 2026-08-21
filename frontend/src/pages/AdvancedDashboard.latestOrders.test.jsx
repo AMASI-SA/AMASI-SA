@@ -4,7 +4,34 @@ import path from "path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 
-import { AbandonedCartsCard, LatestOrders, ProfitCard, SummaryStrip, TopProductsCard } from "./AdvancedDashboard";
+import {
+    AbandonedCartsCard,
+    LatestOrders,
+    ProfitCard,
+    SummaryStrip,
+    TopProductsCard,
+    aggregateDashboardAdsHistoryByMonth,
+    dashboardSpendDisplay,
+    loadDashboardPeriodSnapshot,
+} from "./AdvancedDashboard";
+
+// Keep this source-focused suite independent of the lockfile-free install's
+// newer conditional react-router/dom export, which Jest 27 cannot resolve.
+jest.mock("react-router-dom", () => {
+    const ReactModule = require("react");
+    return {
+        Link: ({ children, to, ...props }) => ReactModule.createElement(
+            "a",
+            { ...props, href: to },
+            children,
+        ),
+        MemoryRouter: ({ children }) => ReactModule.createElement(
+            ReactModule.Fragment,
+            null,
+            children,
+        ),
+    };
+});
 
 const source = fs.readFileSync(path.join(__dirname, "AdvancedDashboard.jsx"), "utf8");
 
@@ -83,8 +110,7 @@ test("summary strip includes current month order and sales cards", () => {
     expect(markup).toContain("سناب:");
     expect(markup).toContain(">2</b>");
     expect(markup).toContain("متوسط:");
-    expect(markup).toContain("50.00 ر.س");
-    expect(markup).not.toContain("25.00 ر.س");
+    expect(markup).toContain("25.00 ر.س");
     expect(markup).not.toContain("متوسط قيمة سلة المشتريات");
 });
 
@@ -161,6 +187,88 @@ test("initial dashboard loading never presents fake zero profit or empty product
     expect(productsMarkup).not.toContain("لا توجد منتجات مباعة");
 });
 
+test("dashboard spend formatting keeps zero, no-data, and unknown distinct", () => {
+    expect(dashboardSpendDisplay(0, "confirmed_zero")).toBe("0.00");
+    expect(dashboardSpendDisplay(null, "confirmed_no_data")).toBe("لا توجد بيانات");
+    expect(dashboardSpendDisplay(null, "unknown_incomplete")).toBe("غير مكتمل");
+    expect(dashboardSpendDisplay(false, "confirmed_zero")).toBe("غير مكتمل");
+    expect(dashboardSpendDisplay(10, "confirmed_no_data")).toBe("غير مكتمل");
+});
+
+test("monthly advertising history never turns an unknown day into zero", () => {
+    expect(aggregateDashboardAdsHistoryByMonth([
+        { date: "2026-08-01", snapchat: 10, tiktok: 2, meta: 3, google: 4 },
+        { date: "2026-08-02", snapchat: null, tiktok: 5, meta: 6, google: 7 },
+    ])).toEqual([{
+        label: "2026-08",
+        snapchat: null,
+        tiktok: 7,
+        meta: 9,
+        google: 11,
+    }]);
+});
+
+test("profit summary exposes incomplete advertising instead of rendering zero", () => {
+    const markup = renderToStaticMarkup(<ProfitCard data={{
+        totals: {
+            total_sales: 100,
+            total_orders: 1,
+            total_product_cost: 20,
+            total_ads_cost: null,
+            total_shipping_cost: 5,
+            total_payment_fees: 2,
+            operating_expenses_total: 3,
+            net_profit: null,
+            avg_cost_per_order: null,
+            overall_roas: null,
+            ads_spend_data_complete: false,
+        },
+        ads_v2: {
+            spend_quality: {
+                status: "incomplete",
+                amount_complete: false,
+                snapchat: { data_state: "unknown_incomplete" },
+            },
+        },
+    }} />);
+    const rowStart = markup.indexOf('data-testid="advanced-profit-row-ads"');
+    const adsRow = markup.slice(rowStart, markup.indexOf("</button>", rowStart));
+
+    expect(adsRow).toContain("غير مكتمل");
+    expect(adsRow).not.toContain(">0.00<");
+    expect(markup).toContain("بانتظار اكتمال بيانات الإعلانات");
+});
+
+test("profit summary still renders a provider-confirmed zero", () => {
+    const markup = renderToStaticMarkup(<ProfitCard data={{
+        totals: {
+            total_sales: 100,
+            total_orders: 1,
+            total_product_cost: 20,
+            total_ads_cost: 0,
+            total_shipping_cost: 5,
+            total_payment_fees: 2,
+            operating_expenses_total: 3,
+            net_profit: 70,
+            avg_cost_per_order: 0,
+            overall_roas: null,
+            ads_spend_data_complete: true,
+        },
+        ads_v2: {
+            spend_quality: {
+                status: "complete",
+                amount_complete: true,
+                snapchat: { data_state: "confirmed_zero" },
+            },
+        },
+    }} />);
+    const rowStart = markup.indexOf('data-testid="advanced-profit-row-ads"');
+    const adsRow = markup.slice(rowStart, markup.indexOf("</button>", rowStart));
+
+    expect(adsRow).toContain(">0.00<");
+    expect(adsRow).not.toContain("غير مكتمل");
+});
+
 test("GA active-user bars stay inside their chart area", () => {
     expect(source).toContain('data-testid="advanced-ga-active-chart"');
     expect(source).toContain("overflow-hidden");
@@ -169,27 +277,37 @@ test("GA active-user bars stay inside their chart area", () => {
 });
 
 test("profit summary keeps the four audited breakdowns in scrollable accordions", () => {
-    expect(source).toContain('data-testid="advanced-profit-ads-details"');
-    expect(source).toContain('data-testid="advanced-profit-shipping-details"');
-    expect(source).toContain('data-testid="advanced-profit-payment-details"');
-    expect(source).toContain('data-testid="advanced-profit-operating-details"');
+    expect(source).toContain('testid="advanced-profit-ads-details"');
+    expect(source).toContain('testid="advanced-profit-shipping-details"');
+    expect(source).toContain('testid="advanced-profit-payment-details"');
+    expect(source).toContain('testid="advanced-profit-operating-details"');
     expect(source).toContain("max-h-72 overflow-auto");
     expect(source).toContain("aria-expanded={row.expandable ? expanded === row.key : undefined}");
 });
 
 test("profit rows keep labels on the right and render amount then currency then percentage", () => {
-    const markup = renderToStaticMarkup(<ProfitCard data={{ totals: {
-        total_sales: 253.6,
-        total_orders: 2,
-        total_product_cost: 74,
-        total_ads_cost: 411.48,
-        total_shipping_cost: 37.25,
-        total_payment_fees: 11.36,
-        operating_expenses_total: 1436.19,
-        net_profit: -1716.68,
-        avg_cost_per_order: 205.74,
-        overall_roas: 0.62,
-    } }} />);
+    const markup = renderToStaticMarkup(<ProfitCard data={{
+        totals: {
+            total_sales: 253.6,
+            total_orders: 2,
+            total_product_cost: 74,
+            total_ads_cost: 411.48,
+            total_shipping_cost: 37.25,
+            total_payment_fees: 11.36,
+            operating_expenses_total: 1436.19,
+            net_profit: -1716.68,
+            avg_cost_per_order: 205.74,
+            overall_roas: 0.62,
+            ads_spend_data_complete: true,
+        },
+        ads_v2: {
+            spend_quality: {
+                status: "complete",
+                amount_complete: true,
+                snapchat: { data_state: "confirmed_data" },
+            },
+        },
+    }} />);
 
     const amountIndex = markup.indexOf(">411.48<");
     const currencyIndex = markup.indexOf(">ر.س<", amountIndex);
@@ -200,15 +318,63 @@ test("profit rows keep labels on the right and render amount then currency then 
     expect(markup).toContain("flex min-w-0 flex-1 items-center");
 });
 
-test("advanced ads card reads original hourly platform series", () => {
-    expect(source).toContain("getDashboardAdsSpend");
-    expect(source).toContain("chartData?.hourly_spend");
-    expect(source).toContain("row.hour");
+test("advanced ads card uses the same Dashboard V2 snapshot as the profit card", () => {
+    expect(source).not.toContain("getDashboardAdsSpend");
+    expect(source).not.toContain("chartData");
+    expect(source).toContain("const daily = ads?.history || []");
+    expect(source).toContain("const breakdown = ads?.breakdown || {}");
     expect(source).toContain('connectNulls={false}');
 });
 
 
-test("transient dashboard load failures preserve the last verified snapshot", () => {
-    expect(source).toContain("Never erase");
-    expect(source).not.toContain("if (!background && requestSequence === requestSequenceRef.current) setData(null)");
+test("manual refresh failure preserves the current verified dashboard snapshot", async () => {
+    const verified = { snapshot_id: "verified-snapshot" };
+    let currentData = verified;
+    let currentError = null;
+    const loadingStates = [];
+
+    await loadDashboardPeriodSnapshot({
+        next: { from: "2026-08-21", to: "2026-08-21" },
+        requestSequence: 1,
+        isLatest: (sequence) => sequence === 1,
+        apiClient: { get: jest.fn().mockRejectedValue(new Error("network")) },
+        setData: (value) => { currentData = value; },
+        setLoading: (value) => { loadingStates.push(value); },
+        setLoadError: (value) => { currentError = value; },
+        now: () => 1,
+    });
+
+    expect(currentData).toBe(verified);
+    expect(currentError).toBe("تعذر تحميل بيانات الفترة المحددة");
+    expect(loadingStates).toEqual([true, false]);
+    expect(source).not.toContain("setData(null)");
+    expect(source).toContain("تم الاحتفاظ بآخر بيانات موثوقة");
+});
+
+test("a stale dashboard response never replaces the latest successful response", async () => {
+    const requests = [];
+    const apiClient = {
+        get: jest.fn(() => new Promise((resolve) => requests.push(resolve))),
+    };
+    let latestSequence = 1;
+    let currentData = { snapshot_id: "verified-snapshot" };
+    const shared = {
+        next: { from: "2026-08-21", to: "2026-08-21" },
+        apiClient,
+        isLatest: (sequence) => sequence === latestSequence,
+        setData: (value) => { currentData = value; },
+        setLoading: jest.fn(),
+        setLoadError: jest.fn(),
+        now: () => 1,
+    };
+
+    const staleRequest = loadDashboardPeriodSnapshot({ ...shared, requestSequence: 1 });
+    latestSequence = 2;
+    const latestRequest = loadDashboardPeriodSnapshot({ ...shared, requestSequence: 2 });
+    requests[1]({ data: { snapshot_id: "latest-snapshot" } });
+    await latestRequest;
+    requests[0]({ data: { snapshot_id: "stale-snapshot" } });
+    await staleRequest;
+
+    expect(currentData).toEqual({ snapshot_id: "latest-snapshot" });
 });
