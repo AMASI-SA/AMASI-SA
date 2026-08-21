@@ -247,10 +247,20 @@ async def test_canonical_scheduler_includes_migrated_account_with_tenant_credent
         lambda value: "refresh-token" if value == b"tenant-refresh" else "",
     )
 
-    rows = await selection._load_canonical_scheduler_accounts(db, "owner-1")
+    failure_stages = []
+    rows = await selection._load_canonical_scheduler_accounts(
+        db,
+        "owner-1",
+        failure_stage_observer=failure_stages.append,
+    )
 
     assert [row["ad_account_id"] for row in rows] == ["account-2"]
     assert rows[0].get("connection_provenance") is None
+    assert failure_stages == [
+        "integration_account_credential_proof",
+        "selected_accounts_load",
+        "integration_account_credential_proof",
+    ]
 
 
 @pytest.mark.asyncio

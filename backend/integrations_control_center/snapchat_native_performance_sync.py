@@ -226,6 +226,9 @@ async def _upsert_performance(
     provider_granularity: str = "HOUR",
     provider_breakdown: str | None = None,
 ) -> None:
+    observe_failure_stage = getattr(context, "observe_failure_stage", None)
+    if callable(observe_failure_stage):
+        observe_failure_stage("fact_write")
     currency = str(account.get("currency") or "").strip().upper()
     spend_micro = _as_number(metrics.get("spend"))
     value_micro = _as_number(metrics.get("conversion_purchases_value"))
