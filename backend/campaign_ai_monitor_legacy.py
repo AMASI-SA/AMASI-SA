@@ -1161,6 +1161,14 @@ def deterministic_candidates(entities: list[dict[str, Any]]) -> list[dict[str, A
         if spend <= 0 or row.get("active") is False:
             continue
         days = max(1, int(_number(row.get("observed_days")) or 1))
+        from campaign_ai_time_window_quality import window_quality
+        row["time_window_quality"] = window_quality(row)
+        row["contains_open_current_day"] = bool(
+            row["time_window_quality"].get("contains_open_current_day")
+        )
+        row["scale_comparison_safe"] = bool(
+            row["time_window_quality"].get("safe_for_scale_comparison")
+        )
         row["spend_per_day_sar"] = round(spend / days, 2)
         row["ctr_pct"] = round(
             float(row.get("clicks") or 0) / float(row.get("impressions") or 1) * 100,
@@ -1232,7 +1240,11 @@ def _govern_output(
         if row.get("active") is False:
             continue
         action = item.action
-        if action == "scale" and (not row.get("data_complete") or int(row.get("purchases") or 0) < 3):
+        if action == "scale" and (
+            not row.get("data_complete")
+            or int(row.get("purchases") or 0) < 3
+            or row.get("scale_comparison_safe") is not True
+        ):
             action = "monitor"
         governed.append(item.model_copy(update={
             "recommendation_id": (
@@ -1397,12 +1409,14 @@ async def _campaign_history_context(
     end: date,
 ) -> dict[str, list[dict[str, Any]]]:
     output: dict[str, list[dict[str, Any]]] = {}
+    from campaign_ai_time_window_quality import completed_history_window
     for days in (7, 30):
         rows: list[dict[str, Any]] = []
+        history_start, history_end = completed_history_window(end, days)
         for provider in ("snapchat", "meta"):
             try:
                 rows.extend(await _campaign_entities(
-                    db, user_id, provider, end - timedelta(days=days - 1), end
+                    db, user_id, provider, history_start, history_end
                 ))
             except Exception:
                 logger.exception("Campaign AI %s-day history failed for %s", days, provider)
@@ -1438,9 +1452,18 @@ async def _business_profit_context(
             allow_self_heal=False,
         )
         totals = (payload or {}).get("totals") or {}
+        from campaign_ai_time_window_quality import window_quality
+        quality = window_quality({
+            "source_date_from": start.isoformat(),
+            "source_date_to": end.isoformat(),
+            "account_timezone": "Asia/Riyadh",
+        })
         windows[label] = {
             "from": start.isoformat(),
             "to": end.isoformat(),
+            "time_window_quality": quality,
+            "contains_open_current_day": quality["contains_open_current_day"],
+            "safe_for_scale_comparison": quality["safe_for_scale_comparison"],
             **{key: totals.get(key) for key in (
                 "total_sales", "total_orders", "net_profit", "total_ads_cost",
                 "total_product_cost", "total_payment_fees", "total_shipping_cost",
