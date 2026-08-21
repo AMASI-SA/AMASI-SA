@@ -699,6 +699,9 @@ async def _recent_refresh(
     account_id: str,
     *,
     now: datetime,
+    start_date: date,
+    end_date: date,
+    timezone_name: str,
 ) -> dict[str, Any] | None:
     row = await _collection(db, ADSQUAD_REFRESH_STATE_COLLECTION).find_one(
         {"user_id": user_id, "ad_account_id": account_id},
@@ -715,10 +718,13 @@ async def _recent_refresh(
         and coverage.get("data_state") in CONFIRMED_DATA_STATES
     ):
         return None
+    age_seconds = (now - observed.astimezone(timezone.utc)).total_seconds()
     return row if (
         _text((row or {}).get("source_mode")) == ADSQUAD_REFRESH_SOURCE_MODE
-        and (now - observed.astimezone(timezone.utc)).total_seconds()
-        < ADSQUAD_REFRESH_INTERVAL_SECONDS
+        and _text((row or {}).get("date_from")) == start_date.isoformat()
+        and _text((row or {}).get("date_to")) == end_date.isoformat()
+        and _text((row or {}).get("account_timezone")) == timezone_name
+        and 0 <= age_seconds < ADSQUAD_REFRESH_INTERVAL_SECONDS
     ) else None
 
 
@@ -747,6 +753,9 @@ async def refresh_snapchat_adsquad_performance(
         context.user_id,
         account_id,
         now=current,
+        start_date=start_date,
+        end_date=end_date,
+        timezone_name=timezone_name,
     )
     if recent_refresh:
         return {
@@ -961,6 +970,9 @@ async def refresh_snapchat_adsquad_performance(
         "errors_count": len(errors),
         "source_mode": ADSQUAD_REFRESH_SOURCE_MODE,
         "provider_granularity": ADSQUAD_PROVIDER_GRANULARITY,
+        "date_from": start_date.isoformat(),
+        "date_to": end_date.isoformat(),
+        "account_timezone": timezone_name,
         "coverage": coverage,
         "updated_at": now_iso,
         "last_attempt_at": now_iso,

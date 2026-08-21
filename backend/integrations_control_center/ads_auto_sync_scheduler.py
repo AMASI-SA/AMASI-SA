@@ -48,7 +48,9 @@ from .tiktok_native_reporting import (
 from .tiktok_oauth_security import TIKTOK_PROVIDER_ID, tiktok_oauth_configured
 from . import snapchat_account_hourly_refresh as snapchat_hourly
 from .snapchat_account_hourly_refresh import ACCOUNT_REFRESH_SOURCE_MODE
-from .snapchat_account_selection import _load_selected_accounts
+from .snapchat_account_selection import (
+    _load_canonical_scheduler_accounts,
+)
 from .snapchat_native_data_common import (
     BUSINESS_TIMEZONE,
     SNAPCHAT_PROVIDER_ID,
@@ -201,7 +203,6 @@ async def _targets(db: Any) -> list[tuple[str, str]]:
         {
             "provider": {"$in": [
                 META_PROVIDER_ID,
-                SNAPCHAT_PROVIDER_ID,
                 TIKTOK_PROVIDER_ID,
                 GOOGLE_ADS_PROVIDER_ID,
             ]},
@@ -216,11 +217,31 @@ async def _targets(db: Any) -> list[tuple[str, str]]:
         provider = str(row.get("provider") or "").strip()
         if user_id and provider in {
             META_PROVIDER_ID,
-            SNAPCHAT_PROVIDER_ID,
             TIKTOK_PROVIDER_ID,
             GOOGLE_ADS_PROVIDER_ID,
         }:
             pairs.add((user_id, provider))
+
+    # Migrated Snapchat integrations can predate connection_provenance.  Keep
+    # discovery read-only and broad across connected tenants; the exact
+    # selected-account and credential proof is repeated after the durable run
+    # starts and immediately before any provider or fact writer is reached.
+    snapchat_cursor = _collection(db, "mezan_integrations_v2").find(
+        {
+            "provider": SNAPCHAT_PROVIDER_ID,
+            "connection_status": "connected",
+        },
+        {"_id": 0, "user_id": 1},
+    )
+    snapchat_user_ids = {
+        value
+        for row in await _to_list(snapchat_cursor, 2000)
+        if isinstance((value := row.get("user_id")), str)
+        and value
+        and value == value.strip()
+    }
+    for user_id in snapchat_user_ids:
+        pairs.add((user_id, SNAPCHAT_PROVIDER_ID))
     return sorted(pairs)
 
 
@@ -372,6 +393,12 @@ def _safe_summary(result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _strict_nonnegative_int(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return int(value)
+
+
 def _snapchat_coverage_complete(value: Any) -> bool:
     if not isinstance(value, dict):
         return False
@@ -383,22 +410,39 @@ def _snapchat_coverage_complete(value: Any) -> bool:
         "confirmed_no_data",
     }:
         return False
-    try:
-        expected = int(value.get("expected_requests"))
-        completed = int(value.get("completed_requests"))
-    except (TypeError, ValueError):
+    expected = _strict_nonnegative_int(value.get("expected_requests"))
+    completed = _strict_nonnegative_int(value.get("completed_requests"))
+    if expected is None or completed is None:
         return False
-    return expected >= 0 and completed == expected
+    return expected > 0 and completed == expected
 
 
 def _snapchat_item_errors(item: dict[str, Any]) -> list[dict[str, Any]]:
     """Flatten P0 performance failures without treating HTTP 200 as success."""
+    raw_errors = item.get("errors", [])
     errors = [
         dict(error)
-        for error in list(item.get("errors") or [])
+        for error in raw_errors
         if isinstance(error, dict)
-    ]
-    if int(item.get("errors_count") or 0) > 0 and not errors:
+    ] if isinstance(raw_errors, list) else []
+    if not isinstance(raw_errors, list) or any(
+        not isinstance(error, dict) for error in raw_errors
+    ):
+        errors.append({
+            "kind": "account_hour_performance",
+            "code": "snapchat_account_error_envelope_invalid",
+            "message": "Snapchat account error metadata is malformed.",
+            "retryable": True,
+        })
+    item_error_count = _strict_nonnegative_int(item.get("errors_count", 0))
+    if item_error_count is None:
+        errors.append({
+            "kind": "account_hour_performance",
+            "code": "snapchat_account_error_count_invalid",
+            "message": "Snapchat account error metadata is malformed.",
+            "retryable": True,
+        })
+    elif item_error_count > 0 and not errors:
         errors.append({
             "kind": "account_hour_performance",
             "code": "snapchat_account_stats_partial",
@@ -423,15 +467,35 @@ def _snapchat_item_errors(item: dict[str, Any]) -> list[dict[str, Any]]:
                 "retryable": True,
             })
             continue
+        raw_nested_errors = nested.get("errors", [])
         nested_errors = [
             dict(error)
-            for error in list(nested.get("errors") or [])
+            for error in raw_nested_errors
             if isinstance(error, dict)
-        ]
+        ] if isinstance(raw_nested_errors, list) else []
+        if not isinstance(raw_nested_errors, list) or any(
+            not isinstance(error, dict) for error in raw_nested_errors
+        ):
+            errors.append({
+                "kind": key,
+                "code": f"snapchat_{key}_error_envelope_invalid",
+                "message": f"Snapchat {key} error metadata is malformed.",
+                "retryable": True,
+            })
         for error in nested_errors:
             error.setdefault("kind", key)
             errors.append(error)
-        if int(nested.get("errors_count") or 0) > 0 and not nested_errors:
+        nested_error_count = _strict_nonnegative_int(
+            nested.get("errors_count", 0)
+        )
+        if nested_error_count is None:
+            errors.append({
+                "kind": key,
+                "code": f"snapchat_{key}_error_count_invalid",
+                "message": f"Snapchat {key} error metadata is malformed.",
+                "retryable": True,
+            })
+        elif nested_error_count > 0 and not nested_errors:
             errors.append({
                 "kind": key,
                 "code": f"snapchat_{key}_partial",
@@ -458,19 +522,28 @@ def _snapchat_run_coverage(
     accounts_expected: int,
 ) -> dict[str, Any]:
     coverages: list[dict[str, Any]] = []
+    current_request_coverages: list[dict[str, Any]] = []
     for item in items:
         top = item.get("coverage")
         if isinstance(top, dict):
             coverages.append(top)
+            current_request_coverages.append(top)
         for key in SNAPCHAT_PERFORMANCE_RESULT_KEYS:
             nested = item.get(key)
             if isinstance(nested, dict) and isinstance(nested.get("coverage"), dict):
                 coverages.append(nested["coverage"])
+                if not (
+                    nested.get("skipped") is True
+                    and nested.get("skip_reason") == "fresh_within_15_minutes"
+                ):
+                    current_request_coverages.append(nested["coverage"])
     expected_requests = sum(
-        int(value.get("expected_requests") or 0) for value in coverages
+        _strict_nonnegative_int(value.get("expected_requests")) or 0
+        for value in current_request_coverages
     )
     completed_requests = sum(
-        int(value.get("completed_requests") or 0) for value in coverages
+        _strict_nonnegative_int(value.get("completed_requests")) or 0
+        for value in current_request_coverages
     )
     complete = (
         accounts_expected > 0
@@ -590,11 +663,50 @@ async def _mark_needs_reauth(db: Any, user_id: str, provider: str) -> None:
                 "connection_status": "needs_reauth",
                 "data_quality": "unavailable",
                 "data_delay_minutes": None,
+                "health_score": 0,
                 "checked_at": _iso(),
                 "updated_at": _iso(),
             }
         },
         upsert=True,
+    )
+
+
+async def _mark_snapchat_sync_unhealthy(
+    db: Any,
+    user_id: str,
+) -> None:
+    """Invalidate stale green health without advancing successful freshness."""
+    observed_at = _iso()
+    integration_update: dict[str, Any] = {
+        "$set": {
+            "data_quality": "incomplete",
+            "data_delay_minutes": None,
+            "health_score": 70,
+            "checked_at": observed_at,
+            "updated_at": observed_at,
+        }
+    }
+    account_update: dict[str, Any] = {
+        "$set": {
+            "data_quality": "incomplete",
+            "data_delay_minutes": None,
+            "health_score": 70,
+            "updated_at": observed_at,
+        }
+    }
+    await _collection(db, "mezan_integrations_v2").update_one(
+        {"user_id": user_id, "provider": SNAPCHAT_PROVIDER_ID},
+        integration_update,
+        upsert=False,
+    )
+    await _collection(db, "mezan_integration_accounts_v2").update_many(
+        {
+            "user_id": user_id,
+            "provider": SNAPCHAT_PROVIDER_ID,
+            "mezan_selected": True,
+        },
+        account_update,
     )
 
 
@@ -887,7 +999,7 @@ async def _refresh_snapchat(
         now=now,
     )
     try:
-        accounts = await _load_selected_accounts(db, user_id)
+        accounts = await _load_canonical_scheduler_accounts(db, user_id)
         await ensure_snapchat_native_sync_indexes(db)
         token_context = SnapchatSyncContext(db, user_id, now=_utcnow)
         access_token = await token_context.access_token()
@@ -951,10 +1063,14 @@ async def _refresh_snapchat(
                             "last_sync_at": observed_at,
                             "last_observed_at": observed_at,
                         })
-                    await _collection(db, "mezan_integration_accounts_v2").update_one(
+                    account_update = await _collection(
+                        db, "mezan_integration_accounts_v2"
+                    ).update_one(
                         {
                             "user_id": user_id,
                             "provider": SNAPCHAT_PROVIDER_ID,
+                            "connection_status": "connected",
+                            "mezan_selected": True,
                             "$or": [
                                 {"external_account_id": account_id},
                                 {"ad_account_id": account_id},
@@ -962,6 +1078,46 @@ async def _refresh_snapchat(
                         },
                         {"$set": account_patch},
                     )
+                    if getattr(account_update, "matched_count", 0) != 1:
+                        state_error = {
+                            "code": "snapchat_account_state_changed",
+                            "message": (
+                                "Selected Snapchat account state changed during "
+                                "the refresh."
+                            ),
+                            "retryable": True,
+                        }
+                        existing_errors = [
+                            dict(error)
+                            for error in item.get("errors", [])
+                            if isinstance(error, dict)
+                        ] if isinstance(item.get("errors", []), list) else []
+                        item["errors"] = [*existing_errors, state_error]
+                        item["errors_count"] = len(item["errors"])
+                        item["coverage"] = {
+                            **(
+                                item.get("coverage")
+                                if isinstance(item.get("coverage"), dict)
+                                else {}
+                            ),
+                            "status": "incomplete",
+                            "data_state": "unknown_incomplete",
+                        }
+                        error_id = await _record_error(
+                            db,
+                            user_id=user_id,
+                            provider=SNAPCHAT_PROVIDER_ID,
+                            run_id=run_id,
+                            source_mode=ACCOUNT_REFRESH_SOURCE_MODE,
+                            code=state_error["code"],
+                            message=f"account={account_id}: {state_error['message']}",
+                            retryable=True,
+                        )
+                        errors.append({
+                            "error_id": error_id,
+                            "ad_account_id": account_id,
+                            **state_error,
+                        })
                 except SnapchatNativeSyncError as exc:
                     if exc.code == "snapchat_needs_reauth":
                         raise
@@ -1029,11 +1185,11 @@ async def _refresh_snapchat(
             accounts_expected=len(accounts),
         )
         coverage["expected_requests"] += sum(
-            int(item.get("expected_requests") or 0)
+            _strict_nonnegative_int(item.get("expected_requests")) or 0
             for item in failed_coverages
         )
         coverage["completed_requests"] += sum(
-            int(item.get("completed_requests") or 0)
+            _strict_nonnegative_int(item.get("completed_requests")) or 0
             for item in failed_coverages
         )
         status = (
@@ -1091,8 +1247,6 @@ async def _refresh_snapchat(
         }
         integration_observed_at = _iso()
         integration_patch: dict[str, Any] = {
-            "connection_status": "connected",
-            "connection_provenance": "api_connection",
             "checked_at": integration_observed_at,
             "updated_at": integration_observed_at,
             "data_delay_minutes": 0 if status == "complete" else None,
@@ -1103,11 +1257,49 @@ async def _refresh_snapchat(
         }
         if status == "complete":
             integration_patch["last_sync_at"] = integration_observed_at
-        await _collection(db, "mezan_integrations_v2").update_one(
-            {"user_id": user_id, "provider": SNAPCHAT_PROVIDER_ID},
+        integration_update = await _collection(db, "mezan_integrations_v2").update_one(
+            {
+                "user_id": user_id,
+                "provider": SNAPCHAT_PROVIDER_ID,
+                "connection_status": "connected",
+            },
             {"$set": integration_patch},
-            upsert=True,
+            upsert=False,
         )
+        if getattr(integration_update, "matched_count", 0) != 1:
+            state_error = {
+                "code": "snapchat_integration_state_changed",
+                "message": "Snapchat integration state changed during the refresh.",
+                "retryable": True,
+            }
+            try:
+                error_id = await _record_error(
+                    db,
+                    user_id=user_id,
+                    provider=SNAPCHAT_PROVIDER_ID,
+                    run_id=run_id,
+                    source_mode=ACCOUNT_REFRESH_SOURCE_MODE,
+                    code=state_error["code"],
+                    message=state_error["message"],
+                    retryable=True,
+                )
+            except Exception:
+                logger.exception("Failed to persist Snapchat state race error")
+                error_id = None
+            errors.append({"error_id": error_id, **state_error})
+            status = "partial"
+            coverage = {
+                **coverage,
+                "status": "incomplete",
+                "data_state": "unknown_incomplete",
+            }
+            result.update({
+                "status": status,
+                "errors_count": len(errors),
+                "error_samples": errors[:10],
+                "coverage": coverage,
+            })
+            await _mark_snapchat_sync_unhealthy(db, user_id)
         await _finish_run(
             db, user_id=user_id, run_id=run_id, status=status, result=result
         )
@@ -1120,22 +1312,33 @@ async def _refresh_snapchat(
             result["decision_outcomes"] = decision_outcomes
         return {"run_id": run_id, **result}
     except SnapchatNativeSyncError as exc:
-        error_id = await _record_error(
-            db,
-            user_id=user_id,
-            provider=SNAPCHAT_PROVIDER_ID,
-            run_id=run_id,
-            source_mode=ACCOUNT_REFRESH_SOURCE_MODE,
-            code=exc.code,
-            message=exc.message,
-            retryable=exc.retryable,
-        )
+        failure_result = {
+            **(exc.result if isinstance(exc.result, dict) else {}),
+            "provider": SNAPCHAT_PROVIDER_ID,
+            "status": "failed",
+            "date_from": start_date.isoformat(),
+            "date_to": end_date.isoformat(),
+        }
+        error_id: str | None = None
+        try:
+            error_id = await _record_error(
+                db,
+                user_id=user_id,
+                provider=SNAPCHAT_PROVIDER_ID,
+                run_id=run_id,
+                source_mode=ACCOUNT_REFRESH_SOURCE_MODE,
+                code=exc.code,
+                message=exc.message,
+                retryable=exc.retryable,
+            )
+        except Exception:
+            logger.exception("Failed to persist controlled Snapchat sync error")
         await _finish_run(
             db,
             user_id=user_id,
             run_id=run_id,
             status="failed",
-            result=exc.result,
+            result=failure_result,
             error={
                 "error_id": error_id,
                 "code": exc.code,
@@ -1143,9 +1346,73 @@ async def _refresh_snapchat(
                 "retryable": exc.retryable,
             },
         )
-        if exc.code == "snapchat_needs_reauth":
+        await _mark_snapchat_sync_unhealthy(db, user_id)
+        needs_reauth = bool(
+            exc.code == "snapchat_needs_reauth"
+            or (
+                isinstance(exc.result, dict)
+                and exc.result.get("needs_reauth") is True
+            )
+        )
+        if needs_reauth:
             await _mark_needs_reauth(db, user_id, SNAPCHAT_PROVIDER_ID)
         return {"provider": SNAPCHAT_PROVIDER_ID, "run_id": run_id, "status": "failed", "code": exc.code}
+    except Exception:
+        code = "snapchat_scheduler_runtime_error"
+        message = "Snapchat scheduler refresh failed unexpectedly."
+        error_id: str | None = None
+        try:
+            error_id = await _record_error(
+                db,
+                user_id=user_id,
+                provider=SNAPCHAT_PROVIDER_ID,
+                run_id=run_id,
+                source_mode=ACCOUNT_REFRESH_SOURCE_MODE,
+                code=code,
+                message=message,
+                retryable=True,
+            )
+        except Exception:
+            logger.exception("Failed to persist unexpected Snapchat sync error")
+        failure_result = {
+            "provider": SNAPCHAT_PROVIDER_ID,
+            "status": "failed",
+            "date_from": start_date.isoformat(),
+            "date_to": end_date.isoformat(),
+            "accounts_attempted": 0,
+            "accounts_complete": 0,
+            "rows_saved": 0,
+            "errors_count": 1,
+            "provider_calls": 0,
+            "account_provider_calls": [],
+            "error_samples": [{"code": code, "message": message}],
+            "coverage": {
+                "status": "incomplete",
+                "data_state": "unknown_incomplete",
+                "expected_requests": 1,
+                "completed_requests": 0,
+            },
+        }
+        await _finish_run(
+            db,
+            user_id=user_id,
+            run_id=run_id,
+            status="failed",
+            result=failure_result,
+            error={
+                "error_id": error_id,
+                "code": code,
+                "message": message,
+                "retryable": True,
+            },
+        )
+        await _mark_snapchat_sync_unhealthy(db, user_id)
+        return {
+            "provider": SNAPCHAT_PROVIDER_ID,
+            "run_id": run_id,
+            "status": "failed",
+            "code": code,
+        }
 
 
 async def run_auto_sync_cycle(

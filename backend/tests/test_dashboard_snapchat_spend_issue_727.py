@@ -518,9 +518,23 @@ async def test_selected_migrated_account_without_provenance_is_not_silently_omit
 
 
 @pytest.mark.asyncio
-async def test_selected_migrated_account_is_included_when_canonical_proof_exists():
+@pytest.mark.parametrize(
+    ("state", "spend", "migrated_spend", "expected_total"),
+    [
+        ("confirmed_data", 10, 20, 30.0),
+        ("confirmed_zero", 0, 0, 0.0),
+    ],
+)
+async def test_selected_migrated_account_is_numeric_when_canonical_proof_exists(
+    state,
+    spend,
+    migrated_spend,
+    expected_total,
+):
     accounts = [_account(), _account("snap-migrated", provenance=False)]
-    run = _run()
+    for account in accounts:
+        account["coverage"] = _coverage(state)
+    run = _run(state=state)
     run["summary"].update({
         "accounts_attempted": 2,
         "accounts_complete": 2,
@@ -530,21 +544,29 @@ async def test_selected_migrated_account_is_included_when_canonical_proof_exists
             {"ad_account_id": "snap-migrated", "provider_calls": 2},
         ],
     })
-    migrated_fact = _fact(spend=20)
+    migrated_fact = _fact(spend=migrated_spend)
     migrated_fact.update({
         "ad_account_id": "snap-migrated",
         "external_id": "snap-migrated",
     })
+    integration = _integration()
+    integration["coverage"] = _coverage(state)
     result = await _load(
         _db(
             accounts=accounts,
             runs=[run],
-            facts=[_fact(), migrated_fact],
+            facts=[_fact(spend=spend), migrated_fact],
+            integration=integration,
         )
     )
     assert result["quality"]["selected_account_count"] == 2
-    assert result["total_sar"] == 30.0
-    assert result["quality"]["data_state"] == "confirmed_data"
+    assert result["total_sar"] == expected_total
+    assert result["daily_sar"][DAY.isoformat()] == expected_total
+    assert result["daily_state"][DAY.isoformat()] == state
+    assert result["quality"]["data_state"] == state
+    assert result["quality"]["coverage_complete"] is True
+    assert result["quality"]["amount_complete"] is True
+    assert result["quality"]["reason_codes"] == []
 
 
 @pytest.mark.asyncio
