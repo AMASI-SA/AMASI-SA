@@ -67,6 +67,59 @@ class FakeDB:
         return self[name]
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("last_success_at", "date_from", "expected_cached"),
+    [
+        ("2026-08-21T11:55:00+00:00", "2026-08-20", True),
+        ("2026-08-21T12:01:00+00:00", "2026-08-20", False),
+        ("2026-08-21T11:55:00+00:00", "2026-08-19", False),
+    ],
+)
+async def test_ad_recent_refresh_requires_exact_window_and_nonfuture_time(
+    monkeypatch,
+    last_success_at,
+    date_from,
+    expected_cached,
+):
+    row = {
+        "user_id": "owner-1",
+        "ad_account_id": "account-1",
+        "source_mode": module.AD_REFRESH_SOURCE_MODE,
+        "last_success_at": last_success_at,
+        "date_from": date_from,
+        "date_to": "2026-08-21",
+        "account_timezone": "Asia/Riyadh",
+        "coverage": {
+            "status": "complete",
+            "data_state": module.DATA_STATE_CONFIRMED_DATA,
+            "expected_requests": 1,
+            "completed_requests": 1,
+        },
+    }
+
+    class StateCollection:
+        async def find_one(self, query):
+            assert query == {
+                "user_id": "owner-1",
+                "ad_account_id": "account-1",
+            }
+            return deepcopy(row)
+
+    monkeypatch.setattr(module, "_collection", lambda *_args: StateCollection())
+    result = await module._recent_refresh(
+        object(),
+        "owner-1",
+        "account-1",
+        now=datetime(2026, 8, 21, 12, 0, tzinfo=timezone.utc),
+        start_date=date(2026, 8, 20),
+        end_date=date(2026, 8, 21),
+        timezone_name="Asia/Riyadh",
+    )
+
+    assert (result is not None) is expected_cached
+
+
 def test_extract_ad_hour_rows_preserves_campaign_identity():
     payload = {
         "request_status": "SUCCESS",
@@ -635,10 +688,15 @@ async def test_refresh_hydrates_exact_ad_identity_before_recent_skip(
         account_id,
         *,
         now,
+        start_date,
+        end_date,
+        timezone_name,
     ):
         assert db is context.db
         assert user_id == "owner-1"
         assert account_id == "account-1"
+        assert start_date == end_date == date(2026, 8, 9)
+        assert timezone_name == "America/Los_Angeles"
         events.append("recent")
         return {
             "coverage": {
@@ -765,6 +823,9 @@ async def test_incomplete_ad_does_not_write_or_advance_last_success(
     )
 
     state_set = state.updates[-1]["$set"]
+    assert state_set["date_from"] == "2026-08-08"
+    assert state_set["date_to"] == "2026-08-08"
+    assert state_set["account_timezone"] == "Asia/Riyadh"
     assert result["coverage"]["status"] == "incomplete"
     assert result["coverage"]["data_state"] == "unknown_incomplete"
     assert writes == []

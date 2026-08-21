@@ -2,22 +2,54 @@ from __future__ import annotations
 
 import asyncio
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 import inspect
 
 from fastapi import APIRouter
 import pytest
 
 from integrations_control_center import ads_auto_sync_scheduler as scheduler
+from integrations_control_center import snapchat_account_selection as selection
 
 
 def _matches(row, query):
     for key, expected in query.items():
-        actual = row.get(key)
-        if isinstance(expected, dict) and "$in" in expected:
-            if actual not in expected["$in"]:
+        if key == "$or":
+            if not any(_matches(row, branch) for branch in expected):
                 return False
-        elif actual != expected:
+            continue
+        if key == "$and":
+            if not all(_matches(row, branch) for branch in expected):
+                return False
+            continue
+        actual = row
+        exists = True
+        for part in key.split("."):
+            if not isinstance(actual, dict) or part not in actual:
+                exists = False
+                actual = None
+                break
+            actual = actual[part]
+        if not isinstance(expected, dict):
+            if actual != expected:
+                return False
+            continue
+        for operator, operand in expected.items():
+            if operator == "$in" and (not exists or actual not in operand):
+                return False
+            if operator == "$exists" and exists is not bool(operand):
+                return False
+            if operator == "$ne" and exists and actual == operand:
+                return False
+            if operator == "$gte" and (not exists or actual < operand):
+                return False
+            if operator == "$lte" and (not exists or actual > operand):
+                return False
+            if operator == "$gt" and (not exists or actual <= operand):
+                return False
+            if operator == "$lt" and (not exists or actual >= operand):
+                return False
+        if not expected:
             return False
     return True
 
@@ -26,11 +58,13 @@ class _Cursor:
     def __init__(self, rows):
         self.rows = deepcopy(rows)
 
-    def sort(self, key, direction):
-        self.rows.sort(
-            key=lambda row: row.get(key) or "",
-            reverse=direction < 0,
-        )
+    def sort(self, key, direction=None):
+        fields = key if isinstance(key, list) else [(key, direction)]
+        for field, order in reversed(fields):
+            self.rows.sort(
+                key=lambda row: row.get(field) or "",
+                reverse=order < 0,
+            )
         return self
 
     def limit(self, count):
@@ -40,27 +74,90 @@ class _Cursor:
     async def to_list(self, length):
         return deepcopy(self.rows[:length])
 
+    def __aiter__(self):
+        async def iterate():
+            for row in self.rows:
+                yield deepcopy(row)
+
+        return iterate()
+
 
 class _Collection:
-    def __init__(self, rows):
+    def __init__(self, rows, *, name=None, calls=None):
         self.rows = rows
+        self.name = name
+        self.calls = calls
 
-    async def find_one(self, query, projection=None):
-        return next(
-            (deepcopy(row) for row in self.rows if _matches(row, query)),
-            None,
-        )
+    async def find_one(self, query, projection=None, sort=None):
+        if self.calls is not None:
+            self.calls.append((self.name, "find_one", deepcopy(query)))
+        rows = [row for row in self.rows if _matches(row, query)]
+        if sort:
+            for key, direction in reversed(sort):
+                rows.sort(
+                    key=lambda row: row.get(key) or "",
+                    reverse=direction < 0,
+                )
+        return deepcopy(rows[0]) if rows else None
 
     def find(self, query, projection=None):
+        if self.calls is not None:
+            self.calls.append((self.name, "find", deepcopy(query)))
         return _Cursor([row for row in self.rows if _matches(row, query)])
+
+    async def insert_one(self, document):
+        self.rows.append(deepcopy(document))
+
+    async def update_one(self, query, update, upsert=False):
+        row = next((item for item in self.rows if _matches(item, query)), None)
+        inserted = row is None and upsert
+        if row is None:
+            if not upsert:
+                return type("UpdateResult", (), {"matched_count": 0})()
+            row = {
+                key: deepcopy(value)
+                for key, value in query.items()
+                if not key.startswith("$") and not isinstance(value, dict)
+            }
+            self.rows.append(row)
+        if inserted:
+            row.update(deepcopy(update.get("$setOnInsert") or {}))
+        row.update(deepcopy(update.get("$set") or {}))
+        for key in (update.get("$unset") or {}):
+            row.pop(key, None)
+        return type("UpdateResult", (), {"matched_count": 0 if inserted else 1})()
+
+    async def update_many(self, query, update):
+        matched = 0
+        for row in self.rows:
+            if _matches(row, query):
+                row.update(deepcopy(update.get("$set") or {}))
+                for key in (update.get("$unset") or {}):
+                    row.pop(key, None)
+                matched += 1
+        return type("UpdateResult", (), {"matched_count": matched})()
+
+    async def count_documents(self, query):
+        return sum(_matches(row, query) for row in self.rows)
+
+    async def create_index(self, *args, **kwargs):
+        return "test-index"
 
 
 class _DB:
     def __init__(self, rows):
         self.rows = rows
+        self.calls = []
 
     def __getitem__(self, name):
-        return _Collection(self.rows.setdefault(name, []))
+        return _Collection(
+            self.rows.setdefault(name, []),
+            name=name,
+            calls=self.calls,
+        )
+
+    def __getattr__(self, name):
+        return self[name]
 
 
 def test_defaults_to_enabled_five_minutes_and_two_days(monkeypatch):
@@ -94,6 +191,772 @@ def test_rolling_window_uses_riyadh_calendar_day():
     )
     assert start.isoformat() == "2026-07-31"
     assert end.isoformat() == "2026-08-01"
+
+
+@pytest.mark.asyncio
+async def test_connected_snapchat_targets_are_reproved_before_the_writer(
+    monkeypatch,
+):
+    db = _DB(
+        {
+            "mezan_integrations_v2": [
+                {
+                    "user_id": "owner-api",
+                    "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                    "connection_status": "connected",
+                    "connection_provenance": "api_connection",
+                },
+                {
+                    "user_id": "owner-migrated",
+                    "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                    "connection_status": "connected",
+                    "connection_provenance": "legacy_integration",
+                },
+                {
+                    "user_id": "owner-unproven",
+                    "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                    "connection_status": "connected",
+                },
+                {
+                    "user_id": "owner-disconnected",
+                    "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                    "connection_status": "needs_reauth",
+                },
+                {
+                    "user_id": "owner-malformed",
+                    "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                    "connection_status": "connected",
+                },
+                {
+                    "user_id": 7,
+                    "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                    "connection_status": "connected",
+                },
+                {
+                    "user_id": " owner-spaced ",
+                    "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                    "connection_status": "connected",
+                },
+                {
+                    "user_id": "meta-owner",
+                    "provider": scheduler.META_PROVIDER_ID,
+                    "connection_status": "connected",
+                    "connection_provenance": "api_connection",
+                },
+            ],
+            "mezan_integration_accounts_v2": [
+                {
+                    "user_id": "owner-api",
+                    "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                    "connection_status": "connected",
+                    "mezan_selected": True,
+                    "ad_account_id": "snap-api",
+                    "external_account_id": "snap-api",
+                },
+                {
+                    "user_id": "owner-migrated",
+                    "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                    "connection_status": "connected",
+                    "mezan_selected": True,
+                    "ad_account_id": "snap-migrated",
+                    "external_account_id": "snap-migrated",
+                    "organization_id": "org-owner",
+                },
+                {
+                    "user_id": "owner-unproven",
+                    "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                    "connection_status": "connected",
+                    "mezan_selected": True,
+                    "ad_account_id": "snap-unproven",
+                    "external_account_id": "snap-unproven",
+                },
+                {
+                    "user_id": "foreign-owner",
+                    "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                    "connection_status": "connected",
+                    "mezan_selected": True,
+                    "ad_account_id": "foreign-account",
+                    "external_account_id": "foreign-account",
+                },
+                {
+                    "user_id": "owner-malformed",
+                    "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                    "connection_status": "connected",
+                    "mezan_selected": True,
+                    "ad_account_id": "snap-malformed",
+                    "external_account_id": "snap-malformed",
+                },
+                {
+                    "user_id": "7",
+                    "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                    "connection_status": "connected",
+                    "mezan_selected": True,
+                    "ad_account_id": "snap-numeric-tenant",
+                    "external_account_id": "snap-numeric-tenant",
+                },
+                {
+                    "user_id": "owner-spaced",
+                    "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                    "connection_status": "connected",
+                    "mezan_selected": True,
+                    "ad_account_id": "snap-spaced-tenant",
+                    "external_account_id": "snap-spaced-tenant",
+                },
+            ],
+            selection.SNAPCHAT_CREDENTIALS_COLLECTION: [
+                {
+                    "user_id": "owner-api",
+                    "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                    "refresh_token_ciphertext": b"api-refresh",
+                },
+                {
+                    "user_id": "owner-migrated",
+                    "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                    "refresh_token_ciphertext": b"tenant-refresh",
+                    "organization_ids": ["org-owner"],
+                },
+                {
+                    "user_id": "foreign-owner",
+                    "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                    "refresh_token_ciphertext": b"foreign-refresh",
+                },
+                {
+                    "user_id": "owner-malformed",
+                    "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                    "refresh_token_ciphertext": b"tenant-refresh",
+                    "organization_ids": 123,
+                },
+                {
+                    "user_id": "7",
+                    "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                    "refresh_token_ciphertext": b"tenant-refresh",
+                },
+                {
+                    "user_id": "owner-spaced",
+                    "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                    "refresh_token_ciphertext": b"tenant-refresh",
+                },
+            ],
+        }
+    )
+    assert await scheduler._targets(db) == [
+        ("meta-owner", scheduler.META_PROVIDER_ID),
+        ("owner-api", scheduler.SNAPCHAT_PROVIDER_ID),
+        ("owner-malformed", scheduler.SNAPCHAT_PROVIDER_ID),
+        ("owner-migrated", scheduler.SNAPCHAT_PROVIDER_ID),
+        ("owner-unproven", scheduler.SNAPCHAT_PROVIDER_ID),
+    ]
+    reads = [(name, operation) for name, operation, _query in db.calls]
+    assert reads.count(("mezan_integrations_v2", "find")) == 2
+    assert reads.count(("mezan_integration_accounts_v2", "find")) == 0
+    assert reads.count((selection.SNAPCHAT_CREDENTIALS_COLLECTION, "find")) == 0
+    assert not any(operation == "find_one" for _name, operation in reads)
+    integration_queries = [
+        query
+        for name, operation, query in db.calls
+        if name == "mezan_integrations_v2" and operation == "find"
+    ]
+    assert scheduler.SNAPCHAT_PROVIDER_ID not in (
+        integration_queries[0]["provider"]["$in"]
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("spend_micro", "expected_state", "expected_spend"),
+    [
+        (5_000_000, "confirmed_data", 5.0),
+        (0, "confirmed_zero", 0.0),
+    ],
+)
+async def test_migrated_account_emits_canonical_fact_and_terminal_run_proof(
+    monkeypatch,
+    spend_micro,
+    expected_state,
+    expected_spend,
+):
+    from cryptography.fernet import Fernet
+
+    from integrations_control_center import snapchat_oauth_security
+    import dashboard_snapchat_spend
+
+    run_started = datetime(2026, 8, 21, 12, 0, tzinfo=timezone.utc)
+    write_time = run_started + timedelta(minutes=2)
+    report_date = date(2026, 8, 20)
+    monkeypatch.setenv(
+        "SNAPCHAT_TOKEN_ENC_KEY",
+        Fernet.generate_key().decode("ascii"),
+    )
+    credential = {
+        "user_id": "owner-migrated",
+        "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+        "access_token_ciphertext": snapchat_oauth_security.encrypt_snapchat_token(
+            "access-token"
+        ),
+        "refresh_token_ciphertext": snapchat_oauth_security.encrypt_snapchat_token(
+            "refresh-token"
+        ),
+        "access_token_expires_at": write_time + timedelta(hours=2),
+        "organization_ids": ["org-owner"],
+    }
+    db = _DB(
+        {
+            "mezan_integrations_v2": [
+                {
+                    "user_id": "owner-migrated",
+                    "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                    "connection_status": "connected",
+                    "connection_provenance": "legacy_integration",
+                }
+            ],
+            "mezan_integration_accounts_v2": [
+                {
+                    "user_id": "owner-migrated",
+                    "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                    "connection_status": "connected",
+                    "connection_provenance": "legacy_integration",
+                    "mezan_selected": True,
+                    "mezan_integration_account_id": "integration-account-1",
+                    "ad_account_id": "snap-migrated",
+                    "external_account_id": "snap-migrated",
+                    "organization_id": "org-owner",
+                    "timezone": "Asia/Riyadh",
+                    "currency": "SAR",
+                }
+            ],
+            selection.SNAPCHAT_CREDENTIALS_COLLECTION: [credential],
+        }
+    )
+    metrics = {
+        key: (spend_micro if key == "spend" else 0)
+        for key in scheduler.snapchat_hourly.STAT_FIELDS
+    }
+    provider_payload = {
+        "request_status": "SUCCESS",
+        "timeseries_stats": [
+            {
+                "sub_request_status": "SUCCESS",
+                "timeseries_stat": {
+                    "granularity": "HOUR",
+                    "breakdown_stats": {
+                        "campaign": [
+                            {
+                                "id": "campaign-1",
+                                "timeseries": [
+                                    {
+                                        "start_time": "2026-08-20T00:00:00+03:00",
+                                        "end_time": "2026-08-20T01:00:00+03:00",
+                                        "stats": metrics,
+                                    }
+                                ],
+                            }
+                        ]
+                    },
+                },
+            }
+        ],
+    }
+
+    class Response:
+        status_code = 200
+        text = ""
+
+        def json(self):
+            return deepcopy(provider_payload)
+
+    class Client:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def get(self, *args, **kwargs):
+            return Response()
+
+    real_refresh = scheduler.snapchat_hourly.refresh_snapchat_account_hours
+
+    async def refresh_with_production_children(*args, **kwargs):
+        item = await real_refresh(*args, **kwargs)
+        args[0].provider_calls += 2
+        child = {
+            "errors_count": 0,
+            "errors": [],
+            "provider_calls": 1,
+            "coverage": _complete_coverage("confirmed_no_data"),
+        }
+        return {
+            **item,
+            "ad_squad_performance": deepcopy(child),
+            "ad_performance": deepcopy(child),
+        }
+
+    async def noop(*args, **kwargs):
+        return None
+
+    async def outcomes(*args, **kwargs):
+        return {"status": "complete", "evaluated": 0}
+
+    monkeypatch.setattr(scheduler, "snapchat_oauth_configured", lambda: True)
+    monkeypatch.setattr(scheduler, "snapchat_native_sync_enabled", lambda: True)
+    monkeypatch.setattr(scheduler, "_utcnow", lambda: write_time)
+    monkeypatch.setattr(scheduler, "ensure_snapchat_native_sync_indexes", noop)
+    monkeypatch.setattr(
+        scheduler,
+        "_evaluate_snapchat_outcomes_after_sync",
+        outcomes,
+    )
+    monkeypatch.setattr(scheduler.httpx, "AsyncClient", Client)
+    monkeypatch.setattr(
+        scheduler.snapchat_hourly,
+        "refresh_snapchat_account_hours",
+        refresh_with_production_children,
+    )
+
+    assert await scheduler._targets(db) == [
+        ("owner-migrated", scheduler.SNAPCHAT_PROVIDER_ID)
+    ]
+    result = await scheduler._refresh_snapchat(
+        db,
+        user_id="owner-migrated",
+        start_date=report_date,
+        end_date=report_date,
+        now=run_started,
+    )
+
+    assert result["status"] == "complete"
+    assert result["accounts_attempted"] == result["accounts_complete"] == 1
+    assert result["rows_saved"] == 2
+    assert result["campaign_rows_saved"] == 1
+    assert result["errors_count"] == 0
+    assert result["provider_calls"] == 3
+    assert result["account_provider_calls"] == [
+        {"ad_account_id": "snap-migrated", "provider_calls": 3}
+    ]
+    assert result["coverage"] == {
+        "status": "complete",
+        "data_state": expected_state,
+        "expected_requests": 3,
+        "completed_requests": 3,
+    }
+
+    facts = db.rows["mezan_snapchat_performance_daily_v2"]
+    assert len(facts) == 2
+    account_fact = next(row for row in facts if row["entity_type"] == "ad_account")
+    assert account_fact["user_id"] == "owner-migrated"
+    assert account_fact["ad_account_id"] == "snap-migrated"
+    assert account_fact["mezan_integration_account_id"] == "integration-account-1"
+    assert account_fact["date"] == report_date.isoformat()
+    assert account_fact["date_timezone"] == "Asia/Riyadh"
+    assert account_fact["source_mode"] == scheduler.ACCOUNT_REFRESH_SOURCE_MODE
+    assert account_fact["spend_native"] == expected_spend
+    assert account_fact["updated_at"] == write_time.isoformat()
+    campaign_fact = next(row for row in facts if row["entity_type"] == "campaign")
+    assert campaign_fact["source_mode"] == (
+        scheduler.snapchat_hourly.CAMPAIGN_FACTS_SOURCE_MODE
+    )
+
+    runs = db.rows[scheduler.RUNS_COLLECTION]
+    assert len(runs) == 1
+    run = runs[0]
+    assert run["run_id"] == result["run_id"]
+    assert run["status"] == "complete"
+    assert run["source_mode"] == scheduler.ACCOUNT_REFRESH_SOURCE_MODE
+    assert run["started_at"] == run_started.isoformat()
+    assert run["finished_at"] == write_time.isoformat()
+    assert run["summary"]["date_from"] == report_date.isoformat()
+    assert run["summary"]["date_to"] == report_date.isoformat()
+    assert run["summary"]["accounts_attempted"] == 1
+    assert run["summary"]["accounts_complete"] == 1
+    assert run["summary"]["coverage"] == result["coverage"]
+    assert run["summary"]["account_provider_calls"] == (
+        result["account_provider_calls"]
+    )
+
+    account = db.rows["mezan_integration_accounts_v2"][0]
+    assert account["connection_provenance"] == "legacy_integration"
+    assert account["source_mode"] == scheduler.ACCOUNT_REFRESH_SOURCE_MODE
+    assert account["coverage"] == _complete_coverage(expected_state)
+    assert account["last_sync_at"] == write_time.isoformat()
+    integration = db.rows["mezan_integrations_v2"][0]
+    assert integration["connection_provenance"] == "legacy_integration"
+    assert integration["source_mode"] == scheduler.ACCOUNT_REFRESH_SOURCE_MODE
+    assert integration["coverage"] == result["coverage"]
+    assert integration["last_sync_at"] == write_time.isoformat()
+    assert db.rows[selection.SNAPCHAT_CREDENTIALS_COLLECTION] == [credential]
+
+    dashboard = await dashboard_snapchat_spend.load_snapchat_dashboard_spend(
+        db,
+        "owner-migrated",
+        start=report_date,
+        end=report_date,
+        now=write_time + timedelta(minutes=5),
+    )
+    assert dashboard["total_sar"] == expected_spend
+    assert dashboard["daily_sar"][report_date.isoformat()] == expected_spend
+    assert dashboard["quality"]["data_state"] == expected_state
+    assert dashboard["quality"]["coverage_complete"] is True
+    assert dashboard["quality"]["amount_complete"] is True
+    assert dashboard["quality"]["reason_codes"] == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("credential_mode", "expected_code"),
+    [
+        ("missing", "snapchat_needs_reauth"),
+        ("malformed_org", "snapchat_credential_metadata_invalid"),
+    ],
+)
+@pytest.mark.parametrize("error_record_fails", [False, True])
+async def test_invalid_snapchat_credential_terminalizes_and_invalidates_health(
+    monkeypatch,
+    credential_mode,
+    expected_code,
+    error_record_fails,
+):
+    current = datetime(2026, 8, 21, 12, 0, tzinfo=timezone.utc)
+    old_sync = "2026-08-21T11:30:00+00:00"
+    db = _DB(
+        {
+            "mezan_integrations_v2": [
+                {
+                    "user_id": "owner-revoked",
+                    "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                    "connection_status": "connected",
+                    "data_quality": "complete",
+                    "data_delay_minutes": 0,
+                    "health_score": 100,
+                    "last_sync_at": old_sync,
+                }
+            ],
+            "mezan_integration_accounts_v2": [
+                {
+                    "user_id": "owner-revoked",
+                    "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                    "connection_status": "connected",
+                    "mezan_selected": True,
+                    "ad_account_id": "snap-revoked",
+                    "external_account_id": "snap-revoked",
+                    "organization_id": "org-owner",
+                    "data_quality": "complete",
+                    "data_delay_minutes": 0,
+                    "health_score": 100,
+                    "last_sync_at": old_sync,
+                }
+            ],
+            selection.SNAPCHAT_CREDENTIALS_COLLECTION: (
+                [
+                    {
+                        "user_id": "owner-revoked",
+                        "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                        "refresh_token_ciphertext": b"refresh-token",
+                        "organization_ids": 123,
+                    }
+                ]
+                if credential_mode == "malformed_org"
+                else []
+            ),
+        }
+    )
+    monkeypatch.setattr(scheduler, "snapchat_oauth_configured", lambda: True)
+    monkeypatch.setattr(scheduler, "snapchat_native_sync_enabled", lambda: True)
+    monkeypatch.setattr(scheduler, "_utcnow", lambda: current)
+    monkeypatch.setattr(
+        selection,
+        "decrypt_snapchat_token",
+        lambda _value: "refresh-token",
+    )
+    if error_record_fails:
+        async def fail_error_record(*_args, **_kwargs):
+            raise RuntimeError("error collection unavailable")
+
+        monkeypatch.setattr(scheduler, "_record_error", fail_error_record)
+
+    assert await scheduler._targets(db) == [
+        ("owner-revoked", scheduler.SNAPCHAT_PROVIDER_ID)
+    ]
+    result = await scheduler._refresh_snapchat(
+        db,
+        user_id="owner-revoked",
+        start_date=date(2026, 8, 20),
+        end_date=date(2026, 8, 21),
+        now=current,
+    )
+
+    assert result["status"] == "failed"
+    assert result["code"] == expected_code
+    run = db.rows[scheduler.RUNS_COLLECTION][0]
+    assert run["status"] == "failed"
+    assert run["summary"]["date_from"] == "2026-08-20"
+    assert run["summary"]["date_to"] == "2026-08-21"
+    integration = db.rows["mezan_integrations_v2"][0]
+    assert integration["connection_status"] == "needs_reauth"
+    assert integration["data_quality"] == "unavailable"
+    assert integration["data_delay_minutes"] is None
+    assert integration["health_score"] == 0
+    assert integration["last_sync_at"] == old_sync
+    account = db.rows["mezan_integration_accounts_v2"][0]
+    assert account["data_quality"] == "incomplete"
+    assert account["data_delay_minutes"] is None
+    assert account["health_score"] == 70
+    assert account["last_sync_at"] == old_sync
+    assert db.rows.get("mezan_snapchat_performance_daily_v2", []) == []
+
+
+@pytest.mark.asyncio
+async def test_snapchat_disconnect_after_discovery_blocks_provider_and_fact(
+    monkeypatch,
+):
+    current = datetime(2026, 8, 21, 12, 0, tzinfo=timezone.utc)
+    db = _DB(
+        {
+            "mezan_integrations_v2": [
+                {
+                    "user_id": "owner-race",
+                    "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                    "connection_status": "connected",
+                    "data_quality": "complete",
+                    "data_delay_minutes": 0,
+                    "health_score": 100,
+                }
+            ],
+            "mezan_integration_accounts_v2": [
+                {
+                    "user_id": "owner-race",
+                    "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                    "connection_status": "connected",
+                    "mezan_selected": True,
+                    "ad_account_id": "snap-race",
+                    "external_account_id": "snap-race",
+                }
+            ],
+            selection.SNAPCHAT_CREDENTIALS_COLLECTION: [
+                {
+                    "user_id": "owner-race",
+                    "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                    "refresh_token_ciphertext": b"refresh-token",
+                }
+            ],
+        }
+    )
+    monkeypatch.setattr(scheduler, "snapchat_oauth_configured", lambda: True)
+    monkeypatch.setattr(scheduler, "snapchat_native_sync_enabled", lambda: True)
+    monkeypatch.setattr(scheduler, "_utcnow", lambda: current)
+    monkeypatch.setattr(
+        selection,
+        "decrypt_snapchat_token",
+        lambda _value: "refresh-token",
+    )
+
+    assert await scheduler._targets(db) == [
+        ("owner-race", scheduler.SNAPCHAT_PROVIDER_ID)
+    ]
+    db.rows["mezan_integrations_v2"][0]["connection_status"] = "needs_reauth"
+    result = await scheduler._refresh_snapchat(
+        db,
+        user_id="owner-race",
+        start_date=date(2026, 8, 20),
+        end_date=date(2026, 8, 21),
+        now=current,
+    )
+
+    assert result["status"] == "failed"
+    assert result["code"] == "snapchat_integration_not_connected"
+    assert db.rows[scheduler.RUNS_COLLECTION][0]["status"] == "failed"
+    integration = db.rows["mezan_integrations_v2"][0]
+    assert integration["connection_status"] == "needs_reauth"
+    assert integration["data_quality"] == "incomplete"
+    assert integration["health_score"] == 70
+    assert db.rows.get("mezan_snapchat_performance_daily_v2", []) == []
+
+
+@pytest.mark.asyncio
+async def test_snapchat_disconnect_during_provider_call_cannot_restore_freshness(
+    monkeypatch,
+):
+    current = datetime(2026, 8, 21, 12, 0, tzinfo=timezone.utc)
+    db = _DB(
+        {
+            "mezan_integrations_v2": [
+                {
+                    "user_id": "owner-midflight",
+                    "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                    "connection_status": "connected",
+                    "connection_provenance": "legacy_integration",
+                    "data_quality": "complete",
+                    "data_delay_minutes": 0,
+                    "health_score": 100,
+                }
+            ],
+            "mezan_integration_accounts_v2": [
+                {
+                    "user_id": "owner-midflight",
+                    "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                    "connection_status": "connected",
+                    "mezan_selected": True,
+                    "ad_account_id": "snap-midflight",
+                    "external_account_id": "snap-midflight",
+                }
+            ],
+        }
+    )
+    account = deepcopy(db.rows["mezan_integration_accounts_v2"][0])
+
+    async def load_accounts(*_args, **_kwargs):
+        return [account]
+
+    async def noop(*_args, **_kwargs):
+        return None
+
+    async def refresh(context, *_args, **_kwargs):
+        context.provider_calls = 3
+        db.rows["mezan_integrations_v2"][0]["connection_status"] = (
+            "needs_reauth"
+        )
+        return {
+            "ad_account_id": "snap-midflight",
+            "rows_saved": 1,
+            "campaign_rows_saved": 1,
+            "campaign_facts_source_mode": (
+                scheduler.snapchat_hourly.CAMPAIGN_FACTS_SOURCE_MODE
+            ),
+            "campaign_facts_schema_version": (
+                scheduler.snapchat_hourly.CAMPAIGN_FACTS_SCHEMA_VERSION
+            ),
+            "errors_count": 0,
+            "errors": [],
+            "coverage": _complete_coverage(),
+            "ad_squad_performance": {
+                "errors_count": 0,
+                "errors": [],
+                "coverage": _complete_coverage("confirmed_no_data"),
+            },
+            "ad_performance": {
+                "errors_count": 0,
+                "errors": [],
+                "coverage": _complete_coverage("confirmed_no_data"),
+            },
+        }
+
+    class Context:
+        def __init__(self, *_args, **_kwargs):
+            self.provider_calls = 0
+
+        async def access_token(self):
+            return "access-token"
+
+    class Client:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+    monkeypatch.setattr(scheduler, "snapchat_oauth_configured", lambda: True)
+    monkeypatch.setattr(scheduler, "snapchat_native_sync_enabled", lambda: True)
+    monkeypatch.setattr(scheduler, "_utcnow", lambda: current)
+    monkeypatch.setattr(
+        scheduler,
+        "_load_canonical_scheduler_accounts",
+        load_accounts,
+    )
+    monkeypatch.setattr(scheduler, "ensure_snapchat_native_sync_indexes", noop)
+    monkeypatch.setattr(scheduler, "SnapchatSyncContext", Context)
+    monkeypatch.setattr(scheduler.httpx, "AsyncClient", Client)
+    monkeypatch.setattr(
+        scheduler.snapchat_hourly,
+        "refresh_snapchat_account_hours",
+        refresh,
+    )
+
+    result = await scheduler._refresh_snapchat(
+        db,
+        user_id="owner-midflight",
+        start_date=date(2026, 8, 20),
+        end_date=date(2026, 8, 21),
+        now=current,
+    )
+
+    assert result["status"] == "partial"
+    assert result["coverage"]["status"] == "incomplete"
+    run = db.rows[scheduler.RUNS_COLLECTION][0]
+    assert run["status"] == "partial"
+    integration = db.rows["mezan_integrations_v2"][0]
+    assert integration["connection_status"] == "needs_reauth"
+    assert integration["connection_provenance"] == "legacy_integration"
+    assert integration["data_quality"] == "incomplete"
+    assert integration["health_score"] == 70
+    assert "last_sync_at" not in integration
+    account_row = db.rows["mezan_integration_accounts_v2"][0]
+    assert account_row["data_quality"] == "incomplete"
+    assert account_row["health_score"] == 70
+    assert account_row["data_delay_minutes"] is None
+
+
+@pytest.mark.asyncio
+async def test_unexpected_snapchat_runtime_error_terminalizes_failed_run(
+    monkeypatch,
+):
+    current = datetime(2026, 8, 21, 12, 0, tzinfo=timezone.utc)
+    db = _DB(
+        {
+            "mezan_integrations_v2": [
+                {
+                    "user_id": "owner-runtime",
+                    "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                    "connection_status": "connected",
+                    "data_quality": "complete",
+                    "data_delay_minutes": 0,
+                    "health_score": 100,
+                }
+            ],
+            "mezan_integration_accounts_v2": [],
+        }
+    )
+
+    async def explode(*_args, **_kwargs):
+        raise RuntimeError("sensitive provider detail")
+
+    monkeypatch.setattr(scheduler, "snapchat_oauth_configured", lambda: True)
+    monkeypatch.setattr(scheduler, "snapchat_native_sync_enabled", lambda: True)
+    monkeypatch.setattr(scheduler, "_utcnow", lambda: current)
+    monkeypatch.setattr(
+        scheduler,
+        "_load_canonical_scheduler_accounts",
+        explode,
+    )
+
+    result = await scheduler._refresh_snapchat(
+        db,
+        user_id="owner-runtime",
+        start_date=date(2026, 8, 20),
+        end_date=date(2026, 8, 21),
+        now=current,
+    )
+
+    assert result == {
+        "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+        "run_id": db.rows[scheduler.RUNS_COLLECTION][0]["run_id"],
+        "status": "failed",
+        "code": "snapchat_scheduler_runtime_error",
+    }
+    run = db.rows[scheduler.RUNS_COLLECTION][0]
+    assert run["status"] == "failed"
+    assert run["summary"]["date_from"] == "2026-08-20"
+    assert run["summary"]["date_to"] == "2026-08-21"
+    assert run["summary"]["coverage"]["status"] == "incomplete"
+    assert "sensitive provider detail" not in str(run)
+    integration = db.rows["mezan_integrations_v2"][0]
+    assert integration["data_quality"] == "incomplete"
+    assert integration["data_delay_minutes"] is None
+    assert integration["health_score"] == 70
 
 
 def test_campaign_ai_proof_window_is_three_days_only_for_meta_and_snapchat(
@@ -276,16 +1139,164 @@ def test_nested_snapchat_performance_error_fails_account_coverage(nested_key):
     assert any(error.get("kind") == nested_key for error in errors)
 
 
+def test_cached_child_coverage_does_not_inflate_current_run_request_counts():
+    item = {
+        "coverage": _complete_coverage(),
+        "errors_count": 0,
+        "errors": [],
+        "ad_squad_performance": {
+            "skipped": True,
+            "skip_reason": "fresh_within_15_minutes",
+            "coverage": {
+                **_complete_coverage("confirmed_data"),
+                "expected_requests": 5,
+                "completed_requests": 5,
+            },
+            "errors_count": 0,
+            "errors": [],
+        },
+        "ad_performance": {
+            "skipped": True,
+            "skip_reason": "fresh_within_15_minutes",
+            "coverage": {
+                **_complete_coverage("confirmed_zero"),
+                "expected_requests": 7,
+                "completed_requests": 7,
+            },
+            "errors_count": 0,
+            "errors": [],
+        },
+    }
+
+    assert scheduler._snapchat_item_complete(item) is True
+    assert scheduler._snapchat_run_coverage(item and [item], accounts_expected=1) == {
+        "status": "complete",
+        "data_state": "confirmed_data",
+        "expected_requests": 1,
+        "completed_requests": 1,
+    }
+
+
+def test_cached_child_incomplete_coverage_still_blocks_run():
+    item = {
+        "coverage": _complete_coverage(),
+        "errors_count": 0,
+        "errors": [],
+        "ad_squad_performance": {
+            "skipped": True,
+            "skip_reason": "fresh_within_15_minutes",
+            "coverage": _complete_coverage("confirmed_no_data"),
+            "errors_count": 0,
+            "errors": [],
+        },
+        "ad_performance": {
+            "skipped": True,
+            "skip_reason": "fresh_within_15_minutes",
+            "coverage": {
+                "status": "incomplete",
+                "data_state": "unknown_incomplete",
+                "expected_requests": 7,
+                "completed_requests": 6,
+            },
+            "errors_count": 0,
+            "errors": [],
+        },
+    }
+
+    coverage = scheduler._snapchat_run_coverage([item], accounts_expected=1)
+    assert coverage["status"] == "incomplete"
+    assert coverage["data_state"] == "unknown_incomplete"
+
+
+@pytest.mark.parametrize(
+    "coverage",
+    [
+        {
+            "status": "complete",
+            "data_state": "confirmed_zero",
+            "expected_requests": 0,
+            "completed_requests": 0,
+        },
+        {
+            "status": "complete",
+            "data_state": "confirmed_data",
+            "expected_requests": "1",
+            "completed_requests": "1",
+        },
+        {
+            "status": "complete",
+            "data_state": "confirmed_data",
+            "expected_requests": True,
+            "completed_requests": True,
+        },
+    ],
+)
+def test_snapchat_coverage_rejects_zero_or_malformed_request_counts(coverage):
+    item = {
+        "coverage": coverage,
+        "errors_count": 0,
+        "errors": [],
+        "ad_squad_performance": {
+            "coverage": _complete_coverage(),
+            "errors_count": 0,
+            "errors": [],
+        },
+        "ad_performance": {
+            "coverage": _complete_coverage(),
+            "errors_count": 0,
+            "errors": [],
+        },
+    }
+
+    assert scheduler._snapchat_coverage_complete(coverage) is False
+    assert scheduler._snapchat_item_complete(item) is False
+    aggregate = scheduler._snapchat_run_coverage([item], accounts_expected=1)
+    assert aggregate["status"] == "incomplete"
+    assert aggregate["data_state"] == "unknown_incomplete"
+
+
+@pytest.mark.parametrize("target", ["top", "nested"])
+def test_snapchat_malformed_error_envelope_blocks_complete_proof(target):
+    item = {
+        "coverage": _complete_coverage(),
+        "errors_count": 0,
+        "errors": [],
+        "ad_squad_performance": {
+            "coverage": _complete_coverage(),
+            "errors_count": 0,
+            "errors": [],
+        },
+        "ad_performance": {
+            "coverage": _complete_coverage(),
+            "errors_count": 0,
+            "errors": [],
+        },
+    }
+    if target == "top":
+        item["errors"] = {"code": "malformed"}
+    else:
+        item["ad_performance"]["errors"] = ["malformed"]
+
+    errors = scheduler._snapchat_item_errors(item)
+    assert scheduler._snapchat_item_complete(item) is False
+    assert any("error_envelope_invalid" in error["code"] for error in errors)
+
+
 @pytest.mark.asyncio
-@pytest.mark.parametrize("raise_error", [False, True])
-async def test_incomplete_snapchat_does_not_advance_freshness_or_health_100(
+@pytest.mark.parametrize(
+    ("raise_error", "complete_item"),
+    [(False, False), (True, False), (False, True)],
+)
+async def test_snapchat_refresh_advances_proof_only_for_complete_account(
     monkeypatch,
     raise_error,
+    complete_item,
 ):
     account = {
         "ad_account_id": "account-1",
         "timezone": "Asia/Riyadh",
         "currency": "SAR",
+        "connection_provenance": "legacy_integration",
     }
     item = {
         "ad_account_id": "account-1",
@@ -312,6 +1323,10 @@ async def test_incomplete_snapchat_does_not_advance_freshness_or_health_100(
             "errors": [],
         },
     }
+    if complete_item:
+        item["rows_saved"] = 1
+        item["campaign_rows_saved"] = 1
+        item["coverage"] = _complete_coverage()
 
     async def no_active(*args, **kwargs):
         return None
@@ -325,10 +1340,16 @@ async def test_incomplete_snapchat_does_not_advance_freshness_or_health_100(
     async def noop(*args, **kwargs):
         return None
 
+    finished = []
+
+    async def finish_run(*args, **kwargs):
+        finished.append(deepcopy(kwargs))
+
     async def record_error(*args, **kwargs):
         return "error-1"
 
     async def refresh(*args, **kwargs):
+        args[0].provider_calls = 3
         if raise_error:
             raise scheduler.SnapchatNativeSyncError(
                 "snapchat_account_hour_timeseries_stat_missing",
@@ -338,6 +1359,9 @@ async def test_incomplete_snapchat_does_not_advance_freshness_or_health_100(
                 result={"coverage": deepcopy(item["coverage"])},
             )
         return deepcopy(item)
+
+    async def evaluate_outcomes(*args, **kwargs):
+        return {"status": "complete", "evaluated": 0}
 
     class Context:
         def __init__(self, db, user_id, now=None):
@@ -368,15 +1392,33 @@ async def test_incomplete_snapchat_does_not_advance_freshness_or_health_100(
                 "update": deepcopy(update),
                 "upsert": upsert,
             })
+            return type("UpdateResult", (), {"matched_count": 1})()
+
+        async def update_many(self, query, update):
+            updates.setdefault(self.name, []).append({
+                "query": deepcopy(query),
+                "update": deepcopy(update),
+                "upsert": False,
+            })
+            return type("UpdateResult", (), {"matched_count": 1})()
 
     monkeypatch.setattr(scheduler, "snapchat_oauth_configured", lambda: True)
     monkeypatch.setattr(scheduler, "snapchat_native_sync_enabled", lambda: True)
     monkeypatch.setattr(scheduler, "_active_run", no_active)
     monkeypatch.setattr(scheduler, "_start_run", start_run)
-    monkeypatch.setattr(scheduler, "_load_selected_accounts", load_accounts)
+    monkeypatch.setattr(
+        scheduler,
+        "_load_canonical_scheduler_accounts",
+        load_accounts,
+    )
     monkeypatch.setattr(scheduler, "ensure_snapchat_native_sync_indexes", noop)
-    monkeypatch.setattr(scheduler, "_finish_run", noop)
+    monkeypatch.setattr(scheduler, "_finish_run", finish_run)
     monkeypatch.setattr(scheduler, "_record_error", record_error)
+    monkeypatch.setattr(
+        scheduler,
+        "_evaluate_snapchat_outcomes_after_sync",
+        evaluate_outcomes,
+    )
     monkeypatch.setattr(scheduler, "SnapchatSyncContext", Context)
     monkeypatch.setattr(scheduler.httpx, "AsyncClient", Client)
     monkeypatch.setattr(scheduler.snapchat_hourly, "refresh_snapchat_account_hours", refresh)
@@ -394,15 +1436,36 @@ async def test_incomplete_snapchat_does_not_advance_freshness_or_health_100(
         now=datetime(2026, 8, 3, tzinfo=timezone.utc),
     )
 
-    assert result["status"] == "partial"
-    assert result["coverage"]["status"] == "incomplete"
     account_patch = updates["mezan_integration_accounts_v2"][0]["update"]["$set"]
     integration_patch = updates["mezan_integrations_v2"][0]["update"]["$set"]
-    for patch in (account_patch, integration_patch):
-        assert "last_sync_at" not in patch
-        assert "last_observed_at" not in patch
-        assert patch["health_score"] != 100
-        assert patch["data_delay_minutes"] is None
+    if complete_item:
+        assert result["status"] == "complete"
+        assert result["coverage"] == {
+            "status": "complete",
+            "data_state": "confirmed_data",
+            "expected_requests": 3,
+            "completed_requests": 3,
+        }
+        assert result["accounts_attempted"] == 1
+        assert result["accounts_complete"] == 1
+        assert result["account_provider_calls"] == [
+            {"ad_account_id": "account-1", "provider_calls": 3}
+        ]
+        assert finished[0]["status"] == "complete"
+        assert finished[0]["result"]["coverage"] == result["coverage"]
+        assert account_patch["last_sync_at"]
+        assert account_patch["last_observed_at"]
+        assert integration_patch["last_sync_at"]
+        assert account_patch["health_score"] == 100
+        assert integration_patch["health_score"] == 100
+    else:
+        assert result["status"] == "partial"
+        assert result["coverage"]["status"] == "incomplete"
+        for patch in (account_patch, integration_patch):
+            assert "last_sync_at" not in patch
+            assert "last_observed_at" not in patch
+            assert patch["health_score"] != 100
+            assert patch["data_delay_minutes"] is None
 
 
 def test_status_never_exposes_global_results_from_another_tenant():
