@@ -1649,6 +1649,20 @@ async def preflight_approved_execution(
         None,
     )
     target = (latest.get("execution_targets") or {}).get(recommendation_id)
+    if isinstance(recommendation, dict) and generated_at is not None:
+        from campaign_ai_time_window_quality import snapshot_max_age_minutes
+        max_age_minutes = snapshot_max_age_minutes(recommendation.get("action"))
+        snapshot_age_minutes = (current - generated_at).total_seconds() / 60.0
+        if snapshot_age_minutes > max_age_minutes:
+            raise ExecutionQualityBlocked([
+                "execution_scale_snapshot_stale"
+                if str(recommendation.get("action") or "") == "scale"
+                else "execution_snapshot_stale"
+            ], {
+                "snapshot_age_minutes": round(snapshot_age_minutes, 2),
+                "max_age_minutes": max_age_minutes,
+                "action": recommendation.get("action"),
+            })
     if (
         not isinstance(recommendation, dict)
         or not isinstance(target, dict)
