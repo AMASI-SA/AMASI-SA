@@ -621,6 +621,32 @@ def test_employee_summary_exposes_physical_piece_counts_for_overview_cards():
     assert summary["total_assigned_pieces"] == 4
 
 
+def test_branch_handoff_removes_piece_from_received_awaiting_branch_cards():
+    waiting = _piece(
+        "received-waiting",
+        status="received",
+        supplier_dispatch_status="received",
+    )
+    handed_off = _piece(
+        "received-handed-off",
+        status="ready_for_assembly",
+        supplier_dispatch_status="received",
+        branch_handoff_at="2026-08-21T10:00:00+00:00",
+    )
+
+    grouped = _group_piece_products([waiting, handed_off])
+    piece_rows = _piece_products([waiting, handed_off])
+
+    assert grouped[0]["received_quantity"] == 1
+    received_by_piece = {
+        row["piece_id"]: row["received_quantity"] for row in piece_rows
+    }
+    assert received_by_piece == {
+        "received-waiting": 1,
+        "received-handed-off": 0,
+    }
+
+
 @pytest.mark.asyncio
 async def test_employee_workspace_queries_only_pieces_assigned_to_that_employee():
     class EmptyCursor:
