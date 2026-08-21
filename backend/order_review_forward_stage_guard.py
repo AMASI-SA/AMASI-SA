@@ -3,6 +3,7 @@ from __future__ import annotations
 
 # CI fan-out marker: canonical resource catalog and supplier-bank changes must exercise Fulfillment V2.
 # Supplier V2 SSOT adapter changes are fulfillment-sensitive and must run this suite.
+# Supplier category binding changes must also exercise the canonical fulfillment contracts.
 
 FORWARD_FULFILLMENT_STAGES = {
     "in_progress",
