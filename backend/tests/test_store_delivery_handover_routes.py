@@ -1,4 +1,11 @@
-from store_delivery_handover_routes import ORDERS, _barcode_candidates, _order_city, _order_id, _order_number
+from store_delivery_handover_routes import (
+    ORDERS,
+    _assignment_order_filter,
+    _barcode_candidates,
+    _order_city,
+    _order_id,
+    _order_number,
+)
 from store_delivery_domain import assignment_snapshot, StoreDeliveryRuleError
 
 
@@ -56,6 +63,13 @@ def test_assignment_snapshot_freezes_driver_fee_and_city():
     second = assignment_snapshot(driver=driver, shipping_city="الرياض")
     assert first["delivery_fee_snapshot"] == 20.0
     assert second["delivery_fee_snapshot"] == 25.0
+
+
+def test_assignment_order_filter_never_adds_null_identity_clause():
+    assert _assignment_order_filter("merchant-1", {"order_id": "salla-1", "order_number": None}) == {
+        "user_id": "merchant-1",
+        "$or": [{"order_id": "salla-1"}, {"order_number": "salla-1"}],
+    }
 
 
 def test_city_mismatch_is_rejected_before_assignment():
