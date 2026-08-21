@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
     ArrowLeft,
@@ -19,12 +19,8 @@ import { toast } from "sonner";
 
 import {
     confirmCompletedCarrierLabelPrint,
-    confirmFulfillmentBatchHandoff,
-    confirmFulfillmentBatchPacked,
-    listFulfillmentBatches,
     listReadyToShipOrders,
     issueCompletedOrderCarrierLabel,
-    printFulfillmentBatch,
 } from "../../services/fulfillmentV2";
 import {
     markAssemblyPieceReady,
@@ -42,11 +38,14 @@ const ASSEMBLY_BLOCKERS = {
     assembly_piece_stopped: "المنتج متوقف",
 };
 
-const STATUS_LABELS = {
-    claimed: "بانتظار الطباعة",
-    printed: "تمت الطباعة",
-    packed: "تم التجميع والتغليف",
-    handed_off: "سُلّمت للناقل",
+const SHIPMENT_STATE_LABELS = {
+    awaiting_assignment: "بانتظار إسناد مندوب المتجر",
+    assigned_waiting_pickup: "تم إسنادها وبانتظار استلام المندوب",
+    awaiting_carrier_handoff: "بانتظار موظف تسليم الشحن",
+    with_handoff_employee: "مع موظف تسليم الشحن",
+    carrier_in_delivery: "جاري التوصيل",
+    delivering: "جاري التوصيل",
+    delivered: "تم التوصيل",
 };
 
 function ProductImage({ piece }) {
@@ -177,6 +176,7 @@ function ReadyOrderCard({ order, onOpen }) {
 export function CompletedAssemblyOrderCard({
     orderNumber,
     carrierLabel,
+    historyOnly = false,
     onConfirmPrint,
     onIssue,
     canConfirmPrint = true,
@@ -191,18 +191,27 @@ export function CompletedAssemblyOrderCard({
     );
     const ready = storeCourierReady || externalCarrierReady;
     const printConfirmed = Boolean(carrierLabel.print_confirmed);
+    const readOnly = Boolean(historyOnly || printConfirmed);
+    const shipmentState = SHIPMENT_STATE_LABELS[carrierLabel.shipment_state]
+        || carrierLabel.shipment_state
+        || (storeCourier ? "بانتظار إسناد مندوب المتجر" : "بانتظار موظف تسليم الشحن");
+    const deliveryEmployee = carrierLabel.store_courier_assignee_name
+        || carrierLabel.handoff_employee_name
+        || "لم يُسند بعد";
 
     return (
         <div className="rounded-3xl border-2 border-emerald-400 bg-emerald-50 p-5 text-center" data-testid="assembly-order-completed">
             <CheckCircle size={44} weight="fill" className="mx-auto text-emerald-700" />
-            <h3 className="mt-2 text-xl font-black text-emerald-950">انتقل الطلب #{orderNumber} إلى تم التنفيذ</h3>
-            <p className="mt-1 text-sm font-bold text-emerald-800">اكتملت كل المنتجات. اطبع البوليصة والصقها على الطلب، ثم صوّر رمزها لتأكيد العملية.</p>
-            {externalCarrierReady && (
+            <h3 className="mt-2 text-xl font-black text-emerald-950">{readOnly ? "سجل الطلب" : "انتقل الطلب"} #{orderNumber} {readOnly ? "" : "إلى تم التنفيذ"}</h3>
+            <p className="mt-1 text-sm font-bold text-emerald-800">{readOnly
+                ? "اكتملت مرحلة التجميع والعنونة. المنتجات وبيانات الشحنة أدناه للعرض فقط."
+                : "اكتملت كل المنتجات. اطبع البوليصة والصقها على الطلب، ثم صوّر رمزها لتأكيد العملية."}</p>
+            {externalCarrierReady && !readOnly && (
                 <a href={carrierLabel.label_url} target="_blank" rel="noopener noreferrer" download className="mt-3 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-violet-700 px-4 text-base font-black text-white" data-testid="assembly-download-official-carrier-label">
                     <DownloadSimple size={24} weight="bold" /> تحميل بوليصة {carrierLabel.courier_name || "شركة الشحن"}
                 </a>
             )}
-            {storeCourierReady && (
+            {storeCourierReady && !readOnly && (
                 <button type="button" onClick={() => {
                     const printWindow = window.open("about:blank", "_blank");
                     if (printWindow) printWindow.opener = null;
@@ -211,21 +220,28 @@ export function CompletedAssemblyOrderCard({
                     <Printer size={24} weight="fill" /> طباعة بوليصة مندوب المتجر
                 </button>
             )}
-            {ready && !printConfirmed && (
+            {ready && !readOnly && (
                 <button type="button" onClick={onConfirmPrint} disabled={!canConfirmPrint} className="mt-2 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-700 px-4 text-base font-black text-white disabled:opacity-50" data-testid="assembly-confirm-carrier-label-print">
                     <Barcode size={24} weight="bold" /> {storeCourier
                         ? "تأكيد الطباعة واللصق بتصوير QR"
                         : "تأكيد الطباعة وتصوير باركود الشحنة"}
                 </button>
             )}
-            {ready && printConfirmed && (
-                <div className="mt-3 rounded-2xl border border-emerald-200 bg-white px-3 py-3 text-sm font-black text-emerald-900">
-                    {storeCourier
-                        ? "تم تأكيد الطباعة واللصق · بانتظار إسناد المندوب"
-                        : "تم التحقق من الباركود · بانتظار موظف تسليم الشحن"}
+            {readOnly && (
+                <div className="mt-4 rounded-2xl border border-emerald-200 bg-white p-4 text-right" data-testid="assembly-shipment-read-only">
+                    <div className="flex items-center gap-2 text-sm font-black text-emerald-950">
+                        <Truck size={22} weight="fill" /> بيانات الشحنة
+                    </div>
+                    <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                        <div className="rounded-xl bg-slate-50 px-3 py-2"><dt className="text-[10px] font-black text-slate-400">طريقة الشحن</dt><dd className="mt-0.5 font-black text-slate-900">{storeCourier ? "مندوب المتجر" : (carrierLabel.courier_name || "شركة الشحن")}</dd></div>
+                        <div className="rounded-xl bg-slate-50 px-3 py-2"><dt className="text-[10px] font-black text-slate-400">حالة الشحنة</dt><dd className="mt-0.5 font-black text-slate-900">{shipmentState}</dd></div>
+                        {!storeCourier && carrierLabel.tracking_number && <div className="rounded-xl bg-slate-50 px-3 py-2"><dt className="text-[10px] font-black text-slate-400">رقم التتبع</dt><dd className="mt-0.5 break-all font-black text-slate-900">{carrierLabel.tracking_number}</dd></div>}
+                        <div className="rounded-xl bg-slate-50 px-3 py-2"><dt className="text-[10px] font-black text-slate-400">المسؤول الحالي</dt><dd className="mt-0.5 font-black text-slate-900">{deliveryEmployee}</dd></div>
+                    </dl>
+                    <div className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-center text-xs font-black text-emerald-900">تم إنهاء الطباعة والتأكيد؛ لا توجد إعادة طباعة أو إعادة تأكيد من التجميع والعنونة.</div>
                 </div>
             )}
-            {!ready && (
+            {!ready && !readOnly && (
                 <>
                     <div className="mt-3 rounded-2xl bg-amber-50 px-3 py-3 text-sm font-black text-amber-900">
                         {carrierLabel.message || "لم تكتمل بيانات الطباعة بعد. أعد تجهيز البوليصة دون إعادة تجهيز المنتجات."}
@@ -236,14 +252,13 @@ export function CompletedAssemblyOrderCard({
                     </button>
                 </>
             )}
-            <Link to="/fulfillment-v2?stage=completed" className="mt-2 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-emerald-300 bg-white px-4 text-sm font-black text-emerald-900">فتح تم التنفيذ <ArrowLeft size={19} weight="bold" /></Link>
+            {!readOnly && <Link to="/fulfillment-v2?stage=completed" className="mt-2 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-emerald-300 bg-white px-4 text-sm font-black text-emerald-900">فتح تم التنفيذ <ArrowLeft size={19} weight="bold" /></Link>}
         </div>
     );
 }
 
 export default function ReadyToShipOrders() {
     const [orders, setOrders] = useState([]);
-    const [batches, setBatches] = useState([]);
     const [permissions, setPermissions] = useState({});
     const [query, setQuery] = useState("");
     const [result, setResult] = useState(null);
@@ -253,7 +268,6 @@ export default function ReadyToShipOrders() {
     const [busy, setBusy] = useState("");
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
-    const [reprintReasons, setReprintReasons] = useState({});
     const [labelScanner, setLabelScanner] = useState(null);
     const [labelScannerBusy, setLabelScannerBusy] = useState(false);
     const [labelScannerError, setLabelScannerError] = useState("");
@@ -263,15 +277,11 @@ export default function ReadyToShipOrders() {
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const [queue, batchResult] = await Promise.all([
-                listReadyToShipOrders({ limit: 100 }),
-                listFulfillmentBatches({ limit: 50 }),
-            ]);
+            const queue = await listReadyToShipOrders({ limit: 100 });
             setOrders((queue.items || []).filter(
                 (order) => order.ready_to_ship_source === "preparation_receipt",
             ));
             setPermissions(queue.permissions || {});
-            setBatches(batchResult.items || []);
         } catch (loadError) {
             setError(loadError.message);
         } finally {
@@ -338,60 +348,6 @@ export default function ReadyToShipOrders() {
             await load();
         } catch (readyError) {
             setError(readyError.message);
-        } finally {
-            setBusy("");
-        }
-    };
-
-    const batchById = useMemo(
-        () => Object.fromEntries(batches.map((batch) => [batch.id, batch])),
-        [batches],
-    );
-
-    const print = async (batchId) => {
-        if (!batchId) return;
-        const batch = batchById[batchId] || {};
-        const isReprint = Number(batch.print_count || 0) > 0;
-        const reason = String(reprintReasons[batchId] || "").trim();
-        if (isReprint && !reason) {
-            setError("اكتب سبب إعادة الطباعة أولًا.");
-            return;
-        }
-        setBusy(`print:${batchId}`);
-        setError("");
-        try {
-            await printFulfillmentBatch(batchId, reason);
-            toast.success(isReprint ? "تمت إعادة طباعة الشحنة" : "تم تنزيل ملف الشحنة");
-            setReprintReasons((current) => ({ ...current, [batchId]: "" }));
-            await load();
-        } catch (printError) {
-            setError(printError.message);
-        } finally {
-            setBusy("");
-        }
-    };
-
-    const pack = async (batch) => {
-        setBusy(`pack:${batch.id}`);
-        try {
-            await confirmFulfillmentBatchPacked(batch.id);
-            toast.success("تم تأكيد التجميع والتغليف إن وُجد");
-            await load();
-        } catch (packError) {
-            setError(packError.message);
-        } finally {
-            setBusy("");
-        }
-    };
-
-    const handoff = async (batch) => {
-        setBusy(`handoff:${batch.id}`);
-        try {
-            await confirmFulfillmentBatchHandoff(batch.id);
-            toast.success("تم تأكيد تسليم الدفعة لشركة الشحن");
-            await load();
-        } catch (handoffError) {
-            setError(handoffError.message);
         } finally {
             setBusy("");
         }
@@ -519,6 +475,7 @@ export default function ReadyToShipOrders() {
                         <CompletedAssemblyOrderCard
                             orderNumber={result.order_number}
                             carrierLabel={carrierLabel}
+                            historyOnly={Boolean(result.history_only)}
                             onConfirmPrint={openLabelConfirmation}
                             onIssue={issueCarrierLabel}
                             canConfirmPrint={Boolean(permissions.can_print)}
@@ -535,7 +492,7 @@ export default function ReadyToShipOrders() {
             {!result && (
                 <section className="space-y-3">
                     <div className="flex items-center justify-between px-1">
-                        <div><h3 className="text-lg font-black text-slate-950">الطلبات الجاهزة المكتملة</h3><p className="text-xs font-bold text-slate-500">اضغط على الطلب لعرض كل منتجاته.</p></div>
+                        <div><h3 className="text-lg font-black text-slate-950">الطلبات الجاهزة للتجميع</h3><p className="text-xs font-bold text-slate-500">تظهر هنا الطلبات التي ما زالت تحتاج تنفيذ هذه المرحلة فقط.</p></div>
                         <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-black text-violet-800">{orders.length}</span>
                     </div>
                     {loading ? (
@@ -548,29 +505,6 @@ export default function ReadyToShipOrders() {
                         </div>
                     )}
                 </section>
-            )}
-
-            {!!batches.length && (
-                <details className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <summary className="cursor-pointer text-sm font-black text-slate-800">دفعات الطباعة والتسليم السابقة ({batches.length})</summary>
-                    <div className="mt-4 space-y-3">
-                        {batches.map((batch) => {
-                            const printed = Number(batch.print_count || 0) > 0;
-                            return (
-                                <article key={batch.id} className="rounded-2xl border bg-slate-50 p-3">
-                                    <div className="font-black">{(batch.order_numbers || []).map((value) => `#${value}`).join("، ") || batch.id}</div>
-                                    <div className="mt-1 text-xs font-bold text-slate-500">{STATUS_LABELS[batch.status] || batch.status}</div>
-                                    {printed && <input value={reprintReasons[batch.id] || ""} onChange={(event) => setReprintReasons((current) => ({ ...current, [batch.id]: event.target.value }))} placeholder="سبب إعادة الطباعة" className="mt-2 h-11 w-full rounded-xl border bg-white px-3 text-sm" />}
-                                    <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                                        <button type="button" disabled={!permissions.can_print || busy === `print:${batch.id}`} onClick={() => print(batch.id)} className="min-h-11 rounded-xl bg-violet-700 px-3 text-sm font-black text-white disabled:opacity-50"><Printer className="ml-1 inline" />{printed ? "إعادة الطباعة" : "طباعة الشحنة"}</button>
-                                        {printed && batch.status !== "packed" && batch.status !== "handed_off" && <button type="button" disabled={!permissions.can_pack || busy === `pack:${batch.id}`} onClick={() => pack(batch)} className="min-h-11 rounded-xl bg-sky-700 px-3 text-sm font-black text-white disabled:opacity-50"><Package className="ml-1 inline" />تأكيد التجميع</button>}
-                                        {batch.status === "packed" && <button type="button" disabled={!permissions.can_handoff || busy === `handoff:${batch.id}`} onClick={() => handoff(batch)} className="min-h-11 rounded-xl bg-emerald-700 px-3 text-sm font-black text-white disabled:opacity-50"><Truck className="ml-1 inline" />تسليم للناقل</button>}
-                                    </div>
-                                </article>
-                            );
-                        })}
-                    </div>
-                </details>
             )}
 
             <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4 text-sm font-bold leading-6 text-violet-950">

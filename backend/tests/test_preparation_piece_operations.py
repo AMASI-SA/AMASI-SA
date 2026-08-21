@@ -7,13 +7,16 @@ from fastapi import HTTPException
 
 from preparation_piece_operations import (
     DEFAULT_ESTIMATED_DURATION_MINUTES,
+    PIECES,
     PIECE_STATUS_ASSIGNED,
     PIECE_STATUS_IN_PROGRESS,
     PIECE_STATUS_READY_FOR_ASSEMBLY,
+    WORKFLOWS,
     FileSchedulePatchRequest,
     _assembly_batch_id,
     _assembly_piece_public,
     _assembly_progress,
+    _assembly_search,
     _can_start_assigned_file,
     _piece_has_completed_preparation_receipt,
     _service_context_key,
@@ -521,3 +524,82 @@ def test_last_assembly_piece_moves_order_to_completed_and_creates_print_batch():
     assert '"shipping_print_batch_id": batch_id' in source
     assert "SHIPPING_BATCHES" in source
     assert '"source": "assembly_completion"' in source
+
+
+class _AssemblySearchCursor:
+    def __init__(self, rows):
+        self.rows = rows
+
+    async def to_list(self, _limit):
+        return list(self.rows)
+
+
+class _AssemblySearchCollection:
+    def __init__(self, *, row=None, rows=None):
+        self.row = row
+        self.rows = rows or []
+        self.find_one_queries = []
+
+    async def find_one(self, query, *_args, **_kwargs):
+        self.find_one_queries.append(query)
+        return self.row
+
+    def find(self, *_args, **_kwargs):
+        return _AssemblySearchCursor(self.rows)
+
+
+@pytest.mark.asyncio
+async def test_assembly_search_keeps_completed_order_as_read_only_history():
+    workflows = _AssemblySearchCollection(row={
+        "order_number": "276628330",
+        "stage": "delivering",
+        "assembly_status": "completed",
+        "carrier_label_ready": True,
+        "carrier_label_type": "store_courier",
+        "carrier_label_print_confirmed": True,
+        "carrier_label_print_confirmed_at": "2026-08-21T18:00:00+00:00",
+        "carrier_label_print_confirmed_by_name": "موظف العنونة",
+        "store_courier_assignment_state": "assigned_waiting_pickup",
+        "store_courier_assignee_name": "مندوب الرياض",
+        "carrier_label_print_data": {
+            "order_number": "276628330",
+            "qr_code": "data:image/svg+xml;base64,QR",
+        },
+    })
+    pieces = _AssemblySearchCollection(rows=[{
+        "piece_id": "piece-1",
+        "order_number": "276628330",
+        "unit_index": 1,
+        "product_name": "منتج تجريبي",
+        "status": PIECE_STATUS_READY_FOR_ASSEMBLY,
+        "assembly_status": "ready",
+    }])
+    db = {
+        WORKFLOWS: workflows,
+        PIECES: pieces,
+    }
+
+    result = await _assembly_search(
+        db,
+        user_id="merchant-1",
+        query="276628330",
+    )
+
+    assert result["history_only"] is True
+    assert result["pieces"][0]["product_name"] == "منتج تجريبي"
+    assert result["pieces"][0]["can_mark_ready"] is False
+    assert result["carrier_label"]["shipment_state"] == (
+        "assigned_waiting_pickup"
+    )
+    assert result["carrier_label"]["store_courier_assignee_name"] == (
+        "مندوب الرياض"
+    )
+    workflow_query = workflows.find_one_queries[0]
+    history_query = workflow_query["$or"][1]
+    assert history_query["assembly_status"] == "completed"
+    assert history_query["stage"]["$in"] == [
+        "completed",
+        "delivering",
+        "delivered",
+    ]
+    assert "carrier_label_print_confirmed" not in history_query
