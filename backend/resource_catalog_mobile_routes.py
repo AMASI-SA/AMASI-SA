@@ -33,6 +33,11 @@ def _category_id(name: str) -> str:
 
 
 async def _ensure_indexes(db: Any) -> None:
+    """Create write-safety indexes only on mutation paths.
+
+    Read requests must remain latency-bounded. Running create_index on every
+    GET can block behind Mongo index work and cause the mobile client timeout.
+    """
     await db[CATEGORIES].create_index([("user_id", 1), ("normalized_name", 1)], unique=True)
     await db[GROUPS].create_index([("user_id", 1), ("id", 1)], unique=True)
     await db[GROUPS].create_index([("user_id", 1), ("category", 1), ("kind", 1), ("normalized_name", 1)], unique=True)
@@ -65,31 +70,62 @@ def make_resource_catalog_mobile_router(db: Any, current_user: Callable[..., Any
 
     @router.get("/mobile")
     async def mobile_catalog(user: dict = Depends(current_user)) -> dict[str, Any]:
-        await _ensure_indexes(db)
         user_id = str(user["id"])
-        resources = await db[RESOURCES].find({"user_id": user_id}, {"_id": 0}).sort("name", 1).to_list(length=2000)
-        category_docs = await db[CATEGORIES].find({"user_id": user_id}, {"_id": 0}).sort("name", 1).to_list(length=1000)
-        groups = await db[GROUPS].find({"user_id": user_id}, {"_id": 0}).sort("name", 1).to_list(length=2000)
+        resources = await db[RESOURCES].find(
+            {"user_id": user_id},
+            {
+                "_id": 0,
+                "id": 1,
+                "name": 1,
+                "code": 1,
+                "kind": 1,
+                "unit": 1,
+                "category": 1,
+                "description": 1,
+                "requires_preparation": 1,
+                "unit_cost": 1,
+                "initial_unit_cost": 1,
+                "track_inventory": 1,
+            },
+        ).sort("name", 1).to_list(length=2000)
+        category_docs = await db[CATEGORIES].find(
+            {"user_id": user_id},
+            {"_id": 0, "name": 1},
+        ).sort("name", 1).to_list(length=1000)
+        groups = await db[GROUPS].find(
+            {"user_id": user_id},
+            {"_id": 0, "id": 1, "name": 1, "category": 1, "kind": 1, "resource_ids": 1, "updated_at": 1},
+        ).sort("name", 1).to_list(length=2000)
 
         names: dict[str, str] = {}
         for row in category_docs:
             name = _text(row.get("name"))
             if name:
                 names[_normalized(name)] = name
-        for row in resources:
-            name = _text(row.get("category")) or "other"
-            names.setdefault(_normalized(name), name)
 
-        serialized_resources = [_serialize_resource(row) for row in resources]
+        serialized_resources: list[dict[str, Any]] = []
+        counts: dict[str, dict[str, int]] = {}
+        for raw in resources:
+            row = _serialize_resource(raw)
+            serialized_resources.append(row)
+            key = _normalized(row["category"])
+            names.setdefault(key, row["category"])
+            bucket = counts.setdefault(key, {"resources": 0, "services": 0, "components": 0})
+            bucket["resources"] += 1
+            if row["kind"] == "service":
+                bucket["services"] += 1
+            else:
+                bucket["components"] += 1
+
         categories = []
-        for _, name in sorted(names.items(), key=lambda item: item[1].casefold()):
-            rows = [row for row in serialized_resources if _normalized(row.get("category")) == _normalized(name)]
+        for key, name in sorted(names.items(), key=lambda item: item[1].casefold()):
+            bucket = counts.get(key, {"resources": 0, "services": 0, "components": 0})
             categories.append({
                 "id": _category_id(name),
                 "name": name,
-                "resources_count": len(rows),
-                "services_count": sum(1 for row in rows if row["kind"] == "service"),
-                "components_count": sum(1 for row in rows if row["kind"] == "stock_component"),
+                "resources_count": bucket["resources"],
+                "services_count": bucket["services"],
+                "components_count": bucket["components"],
             })
 
         clean_groups = [{
