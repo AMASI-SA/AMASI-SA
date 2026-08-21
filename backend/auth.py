@@ -78,7 +78,13 @@ def account_is_disabled(user: dict | None) -> bool:
     )
 
 
-def create_access_token(user_id: str, email: str, *, mfa_verified: bool = False) -> str:
+def create_access_token(
+    user_id: str,
+    email: str,
+    *,
+    mfa_verified: bool = False,
+    client_type: str | None = None,
+) -> str:
     now = datetime.now(timezone.utc)
     payload = {
         "sub": user_id,
@@ -88,10 +94,17 @@ def create_access_token(user_id: str, email: str, *, mfa_verified: bool = False)
         "exp": now + ACCESS_TOKEN_TTL,
         "type": "access",
     }
+    if client_type:
+        payload["client"] = str(client_type).strip()
     return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
 
 
-def create_refresh_token(user_id: str, *, mfa_verified: bool = False) -> str:
+def create_refresh_token(
+    user_id: str,
+    *,
+    mfa_verified: bool = False,
+    client_type: str | None = None,
+) -> str:
     now = datetime.now(timezone.utc)
     payload = {
         "sub": user_id,
@@ -100,6 +113,8 @@ def create_refresh_token(user_id: str, *, mfa_verified: bool = False) -> str:
         "exp": now + REFRESH_TOKEN_TTL,
         "type": "refresh",
     }
+    if client_type:
+        payload["client"] = str(client_type).strip()
     return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
 
 
@@ -261,6 +276,9 @@ async def get_current_user_from_db(request: Request, db) -> dict:
 
         user.pop("password_hash", None)
         user.pop("_id", None)
+        # Private request context used only by server-side native-app policy.
+        # It is derived from the signed JWT and cannot be supplied by a header.
+        user["_session_client"] = str(payload.get("client") or "").strip() or None
         return user
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")

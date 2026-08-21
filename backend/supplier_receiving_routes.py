@@ -21,8 +21,9 @@ from pymongo import ASCENDING, DESCENDING, ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 from component_edit_policy import component_cost_metadata
-from fulfillment_v2_routes import _actor_context, _require_permission
+from fulfillment_v2_routes import _actor_context as _base_actor_context, _require_permission
 from mezan_supplier_management_routes import MEZAN_SUPPLIERS_V2
+from mobile_app_permissions import MOBILE_APP_CLIENT, mobile_app_access_for_user
 from order_option_cost_snapshot_routes import (
     MEZAN_V2_COST_SOURCES,
     resolve_base_unit_cost,
@@ -61,6 +62,10 @@ RECEIVE_PERMISSION = "inventory.preparation.receive"
 EDIT_PRODUCT_PRICE_PERMISSION = "supplier_receiving.product_price.edit"
 EDIT_SERVICE_PRICE_PERMISSION = "supplier_receiving.service_price.edit"
 ADD_PRODUCT_SERVICE_PERMISSION = "supplier_receiving.service.add"
+MOBILE_MY_PRODUCTS_PAGE_PERMISSION = "app.page.my_products"
+MOBILE_EDIT_PRODUCT_PRICE_PERMISSION = "app.action.my_products.invoice_product_price.edit"
+MOBILE_EDIT_SERVICE_PRICE_PERMISSION = "app.action.my_products.service_price.edit"
+MOBILE_ADD_PRODUCT_SERVICE_PERMISSION = "app.action.my_products.service.add"
 PERMANENT_SUPPLIER_SERVICE_SOURCE = "supplier_receiving_permanent"
 MAX_SESSION_SCANS = 5000
 SCAN_LOCK_SECONDS = 120
@@ -107,6 +112,35 @@ RECEIPT_PIECE_FIELDS = (
     "salla_updated",
     "qoyod_updated",
 )
+
+
+async def _actor_context(db: Any, user: dict[str, Any]) -> dict[str, Any]:
+    """Resolve Mezan access plus native-only grants for this mobile workflow.
+
+    Native grants are accepted only from a signed ``amasi_mobile`` JWT. They
+    are translated locally for this workflow and never enter the account's
+    Mezan effective-permission set, so the same employee remains at zero in the
+    browser while the selected app page and actions work normally.
+    """
+    context = await _base_actor_context(db, user)
+    if user.get("_session_client") != MOBILE_APP_CLIENT:
+        return context
+    mobile_access = await mobile_app_access_for_user(db, user)
+    granted = set(mobile_access.get("permissions") or [])
+    translated: set[str] = set()
+    if MOBILE_MY_PRODUCTS_PAGE_PERMISSION in granted:
+        translated.add(RECEIVE_PERMISSION)
+    if MOBILE_EDIT_PRODUCT_PRICE_PERMISSION in granted:
+        translated.add(EDIT_PRODUCT_PRICE_PERMISSION)
+    if MOBILE_EDIT_SERVICE_PRICE_PERMISSION in granted:
+        translated.add(EDIT_SERVICE_PRICE_PERMISSION)
+    if MOBILE_ADD_PRODUCT_SERVICE_PERMISSION in granted:
+        translated.add(ADD_PRODUCT_SERVICE_PERMISSION)
+    return {
+        **context,
+        "permissions": sorted(set(context.get("permissions") or []) | translated),
+        "mobile_app_permission_translation": sorted(translated),
+    }
 
 
 class SupplierReceivingSessionCreateRequest(BaseModel):

@@ -2,6 +2,7 @@ import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 
 jest.mock("../services/employeesV2", () => ({
+    assignEmployeesV2MobileAppPermissions: jest.fn(),
     assignEmployeesV2Role: jest.fn(),
     createAndLinkEmployeesV2Account: jest.fn(),
     createEmployeesV2: jest.fn(),
@@ -19,6 +20,7 @@ jest.mock("sonner", () => ({
 
 import EmployeesV2Management from "./EmployeesV2Management";
 import {
+    assignEmployeesV2MobileAppPermissions,
     getEmployeesV2Management,
     resetEmployeesV2AccountPassword,
 } from "../services/employeesV2";
@@ -52,6 +54,13 @@ const employees = Array.from({ length: 15 }, (_item, index) => ({
         enabled: true,
         effective_permissions: ["preparation.assigned.read", "preparation.assigned.work"],
     } : { role_key: null, enabled: false, effective_permissions: [] },
+    mobile_app_access: index === 0 ? {
+        configured: true,
+        enabled: true,
+        permissions: ["app.page.my_products"],
+        stored_permissions: ["app.page.my_products"],
+        scope: "amasi_mobile_only",
+    } : { configured: false, enabled: false, permissions: [], stored_permissions: [] },
 }));
 const workspace = {
     summary: { legacy_employees: 15, already_migrated: 15 },
@@ -77,6 +86,22 @@ const workspace = {
             preparation_operator: "موظف التجهيز",
             warehouse_operator: "موظف المخزن",
         },
+        mobile_app_permission_catalog: [
+            {
+                key: "preparation",
+                label: "إدارة التجهيز",
+                permissions: [
+                    { key: "app.page.my_products", label: "إدارة منتجاتي", kind: "page" },
+                ],
+            },
+            {
+                key: "actions",
+                label: "إجراءات إدارة منتجاتي",
+                permissions: [
+                    { key: "app.action.my_products.service.add", label: "إضافة خدمة", kind: "action", requires: "app.page.my_products" },
+                ],
+            },
+        ],
     },
 };
 
@@ -176,7 +201,7 @@ test("preparation employee role remains limited to assigned work", async () => {
     const { container, root } = await renderPage();
     try {
         const firstCard = container.querySelector('[data-testid="employees-v2-employee-card"]');
-        const roleButton = [...firstCard.querySelectorAll("button")].find((button) => button.textContent.includes("الدور والصلاحيات"));
+        const roleButton = [...firstCard.querySelectorAll("button")].find((button) => button.textContent.includes("صلاحيات ميزان"));
         await act(async () => roleButton.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 
         const roleSelect = document.body.querySelector('[data-testid="employees-v2-role-select"]');
@@ -185,6 +210,30 @@ test("preparation employee role remains limited to assigned work", async () => {
         expect(document.body.textContent).toContain("preparation.assigned.read");
         expect(document.body.textContent).toContain("preparation.assigned.work");
         expect(document.body.textContent).not.toContain("inventory.preparation.receive");
+    } finally {
+        await cleanup(container, root);
+    }
+});
+
+
+test("mobile app permissions are edited separately without changing Mezan permissions", async () => {
+    assignEmployeesV2MobileAppPermissions.mockResolvedValue(workspace);
+    const { container, root } = await renderPage();
+    try {
+        const firstCard = container.querySelector('[data-testid="employees-v2-employee-card"]');
+        const appButton = [...firstCard.querySelectorAll("button")].find((button) => button.textContent.includes("صلاحيات التطبيق"));
+        await act(async () => appButton.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+        expect(document.body.textContent).toContain("هذه الصلاحيات للتطبيق فقط");
+        expect(document.body.textContent).toContain("صلاحيات ميزان الحالية للموظف: 2");
+        const addService = document.body.querySelector('[data-testid="mobile-app-permission-app.action.my_products.service.add"]');
+        await act(async () => addService.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+        await act(async () => document.body.querySelector('[data-testid="employees-v2-mobile-app-permissions-submit"]').dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+        expect(assignEmployeesV2MobileAppPermissions).toHaveBeenCalledWith("employee-1", {
+            enabled: true,
+            permissions: ["app.page.my_products", "app.action.my_products.service.add"],
+        });
     } finally {
         await cleanup(container, root);
     }
