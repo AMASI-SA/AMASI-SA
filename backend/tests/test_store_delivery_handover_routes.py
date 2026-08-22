@@ -1,3 +1,4 @@
+# CI synchronization marker: run Store Delivery checks on the current Production base.
 from store_delivery_handover_routes import (
     ORDERS,
     _assignment_order_filter,
