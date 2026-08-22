@@ -357,6 +357,24 @@ def make_mobile_operations_monitoring_router(
                 or _text(row.get("id")) in permitted_subject_ids
             )
         ]
+        owner = await db.users.find_one(
+            {"id": owner_id},
+            {"_id": 0, "id": 1, "name": 1, "display_name": 1, "email": 1},
+        )
+        if owner and not any(_text(row.get("id")) == owner_id for row in employees):
+            employees.append({
+                "id": owner_id,
+                "account_user_id": owner_id,
+                "display_name": (
+                    _text(owner.get("display_name"))
+                    or _text(owner.get("name"))
+                    or _text(owner.get("email"))
+                    or "مالك المتجر"
+                ),
+                "job_title": "مالك المتجر",
+                "department": None,
+                "status": "active",
+            })
         employee_ids = [_text(row.get("id")) for row in employees if _text(row.get("id"))]
         pieces = await db[PIECES].find(
             {"user_id": owner_id, "responsible_employee_id": {"$in": employee_ids}},
