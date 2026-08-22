@@ -3,7 +3,6 @@ import pytest
 from mobile_app_permissions import (
     MOBILE_APP_MANAGER,
     MOBILE_APP_PERMISSIONS,
-    OWNER_BASELINE_PERMISSIONS,
     effective_mobile_app_permissions,
     mobile_app_access_for_user,
     validate_mobile_app_permissions,
@@ -36,25 +35,41 @@ class _Db:
 
 
 @pytest.mark.asyncio
-async def test_owner_gets_supervisory_monitoring_baseline_without_manager_role():
+async def test_owner_gets_all_native_app_permissions_without_stored_access():
     result = await mobile_app_access_for_user(
         _Db(None),
         {"id": "owner-1", "role": "owner", "is_owner": True},
     )
-    assert result["owner_override"] is False
+    assert result["owner_override"] is True
     assert result["owner_baseline"] is True
     assert result["enabled"] is True
-    assert set(result["permissions"]) == set(OWNER_BASELINE_PERMISSIONS)
-    assert MOBILE_APP_MANAGER not in result["permissions"]
+    assert result["manager"] is True
+    assert set(result["permissions"]) == set(MOBILE_APP_PERMISSIONS)
 
 
 @pytest.mark.asyncio
-async def test_explicit_owner_manager_access_still_expands_to_all_permissions():
+async def test_owner_full_access_cannot_be_reduced_by_partial_stored_permissions():
     result = await mobile_app_access_for_user(
-        _Db({"enabled": True, "permissions": [MOBILE_APP_MANAGER]}),
+        _Db({"enabled": True, "permissions": ["app.page.operations_monitoring"]}),
         {"id": "owner-1", "role": "owner", "is_owner": True},
     )
-    assert result["owner_override"] is False
-    assert result["owner_baseline"] is True
+    assert result["owner_override"] is True
     assert result["manager"] is True
     assert set(result["permissions"]) == set(MOBILE_APP_PERMISSIONS)
+
+
+@pytest.mark.asyncio
+async def test_disabled_owner_fails_closed():
+    result = await mobile_app_access_for_user(
+        _Db(None),
+        {
+            "id": "owner-1",
+            "role": "owner",
+            "is_owner": True,
+            "disabled": True,
+        },
+    )
+    assert result["owner_override"] is False
+    assert result["enabled"] is False
+    assert result["manager"] is False
+    assert result["permissions"] == []
