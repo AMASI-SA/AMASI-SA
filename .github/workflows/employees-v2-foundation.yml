@@ -13,6 +13,7 @@ on:
       - "backend/tests/test_employees_v2_foundation.py"
       - "backend/tests/test_employees_v2_management.py"
       - "backend/tests/test_employee_account_access_revocation.py"
+      - "backend/tests/test_supplier_management_import_boot.py"
       - "backend/server.py"
       - "frontend/src/App.js"
       - "frontend/src/components/Layout.jsx"
@@ -50,7 +51,7 @@ jobs:
           PyJWT==2.13.0
           pytest==9.0.3
           openpyxl==3.1.5
-      - name: Validate Employees V2 migration contract
+      - name: Validate Employees V2 migration contract and supplier boot import
         env:
           PYTHONPATH: backend
         run: >-
@@ -58,6 +59,7 @@ jobs:
           backend/tests/test_employees_v2_foundation.py
           backend/tests/test_employees_v2_management.py
           backend/tests/test_employee_account_access_revocation.py
+          backend/tests/test_supplier_management_import_boot.py
 
   frontend-test-and-build:
     runs-on: ubuntu-latest
