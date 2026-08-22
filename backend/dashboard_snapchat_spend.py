@@ -32,6 +32,7 @@ FUTURE_CLOCK_TOLERANCE = timedelta(minutes=5)
 MAX_ACCOUNTS = 500
 MAX_FACTS = 100_000
 MAX_OVERLAP_RUNS = 100
+ACTIVE_RUN_STATUSES = {"queued", "running"}
 
 
 def _text(value: Any) -> str:
@@ -279,7 +280,7 @@ async def _proofs_by_day(
     )
     result: dict[str, dict[str, Any]] = {}
     for report_date in days:
-        rows, _ = await _sorted_list(
+        rows, rows_truncated = await _sorted_list(
             db[RUNS_COLLECTION].find(
                 {
                     **base_query,
@@ -288,7 +289,7 @@ async def _proofs_by_day(
                 },
                 {"_id": 0},
             ),
-            1,
+            MAX_OVERLAP_RUNS,
         )
         candidates = [
             _run_contract(
@@ -303,9 +304,24 @@ async def _proofs_by_day(
             key=lambda item: item.get("started_at") or datetime.min.replace(tzinfo=timezone.utc),
             reverse=True,
         )
-        candidate = candidates[0] if candidates else {}
-        ambiguous = False
-        overlap_contracts: list[dict[str, Any]] = []
+        candidate: dict[str, Any] = {}
+        newer_active: list[dict[str, Any]] = []
+        for contract in candidates:
+            if contract.get("complete") is True:
+                candidate = contract
+                break
+            if contract.get("raw", {}).get("status") in ACTIVE_RUN_STATUSES:
+                newer_active.append(contract)
+                continue
+            # A newer terminal run without complete proof must remain the
+            # authoritative fail-closed result.  Never borrow an older green
+            # proof across a partial or failed attempt.
+            candidate = contract
+            break
+        if not candidate and candidates:
+            candidate = candidates[0]
+        ambiguous = rows_truncated and candidate.get("complete") is not True
+        overlap_contracts: list[dict[str, Any]] = list(newer_active)
         overlap_truncated = False
         latest_started = latest_global.get("started_at")
         candidate_started = candidate.get("started_at")
