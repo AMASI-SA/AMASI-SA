@@ -1,3 +1,4 @@
+# CI synchronization marker: run Store Delivery checks on the current Production base.
 from store_delivery_handover_routes import (
     ORDERS,
     _assignment_order_filter,
@@ -5,6 +6,10 @@ from store_delivery_handover_routes import (
     _order_city,
     _order_id,
     _order_number,
+)
+from store_delivery_reassignment_routes import (
+    _assignment_status_filter,
+    _delivery_duration_report,
 )
 from store_delivery_domain import assignment_snapshot, StoreDeliveryRuleError
 from store_courier_domain import store_courier_assignment_blocker
@@ -105,3 +110,33 @@ def test_city_mismatch_is_rejected_before_assignment():
         assert str(exc) == "driver_city_mismatch"
     else:
         raise AssertionError("city mismatch must fail closed")
+
+
+def test_current_assignment_status_covers_assigned_and_out_for_delivery():
+    assert _assignment_status_filter("current") == {
+        "$in": ["assigned", "out_for_delivery"]
+    }
+
+
+def test_delivery_duration_report_uses_assignment_to_delivered_timestamp():
+    report = _delivery_duration_report([
+        {
+            "assigned_at": "2026-08-22T00:00:00+00:00",
+            "delivered_at": "2026-08-22T01:00:00+00:00",
+        },
+        {
+            "assigned_at": "2026-08-22T00:00:00Z",
+            "delivered_at": "2026-08-22T03:00:00Z",
+        },
+        {
+            "assigned_at": "2026-08-22T03:00:00Z",
+            "delivered_at": "2026-08-22T02:00:00Z",
+        },
+        {"assigned_at": None, "delivered_at": "2026-08-22T02:00:00Z"},
+    ])
+    assert report == {
+        "measured_count": 2,
+        "average_delivery_seconds": 7200.0,
+        "fastest_delivery_seconds": 3600.0,
+        "longest_delivery_seconds": 10800.0,
+    }

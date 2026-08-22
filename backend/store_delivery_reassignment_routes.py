@@ -1,4 +1,4 @@
-"""Safe reassignment of an undelivered store-driver shipment."""
+"""Safe reassignment and reporting for store-driver shipments."""
 from __future__ import annotations
 
 import uuid
@@ -74,7 +74,10 @@ def _assignment_totals(assignments: list[dict[str, Any]], orders_by_key: dict[st
     cod_total = 0.0
     cod_unavailable_count = 0
     for assignment in assignments:
-        delivery_fee_total += float(assignment.get("delivery_fee_snapshot") or 0)
+        try:
+            delivery_fee_total += float(assignment.get("delivery_fee_snapshot") or 0)
+        except (TypeError, ValueError):
+            pass
         order = (
             orders_by_key.get(normalize_text(assignment.get("order_id")))
             or orders_by_key.get(normalize_text(assignment.get("order_number")))
@@ -89,6 +92,42 @@ def _assignment_totals(assignments: list[dict[str, Any]], orders_by_key: dict[st
         "cod_total": round(cod_total, 2),
         "delivery_fee_total": round(delivery_fee_total, 2),
         "cod_unavailable_count": cod_unavailable_count,
+    }
+
+
+def _parse_timestamp(value: Any) -> datetime | None:
+    text = normalize_text(value)
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _delivery_duration_report(assignments: list[dict[str, Any]]) -> dict[str, Any]:
+    durations: list[float] = []
+    for assignment in assignments:
+        start = _parse_timestamp(assignment.get("assigned_at"))
+        end = _parse_timestamp(assignment.get("delivered_at"))
+        if not start or not end or end < start:
+            continue
+        durations.append((end - start).total_seconds())
+    if not durations:
+        return {
+            "measured_count": 0,
+            "average_delivery_seconds": None,
+            "fastest_delivery_seconds": None,
+            "longest_delivery_seconds": None,
+        }
+    return {
+        "measured_count": len(durations),
+        "average_delivery_seconds": round(sum(durations) / len(durations), 2),
+        "fastest_delivery_seconds": round(min(durations), 2),
+        "longest_delivery_seconds": round(max(durations), 2),
     }
 
 
@@ -168,6 +207,7 @@ def make_store_delivery_reassignment_router(db: Any, current_user: Callable[...,
         status_filter: str | None = Query(default=None, alias="status"),
         limit: int = Query(default=250, ge=1, le=1000),
         offset: int = Query(default=0, ge=0),
+        include_summary: bool = Query(default=True),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         actor = _require_operator(user)
@@ -178,37 +218,75 @@ def make_store_delivery_reassignment_router(db: Any, current_user: Callable[...,
         normalized_status = _assignment_status_filter(status_filter)
         if normalized_status is not None:
             query["status"] = normalized_status
+
         total = await db[ASSIGNMENTS].count_documents(query)
-        all_assignments = await db[ASSIGNMENTS].find(
-            query,
-            {
-                "_id": 0,
-                "user_id": 0,
-                "id": 1,
-                "order_id": 1,
-                "order_number": 1,
-                "delivery_fee_snapshot": 1,
-                "status": 1,
-            },
-        ).to_list(length=max(total, 1))
-        orders_by_key = await _orders_for_assignments(db, user_id, all_assignments)
         items = await db[ASSIGNMENTS].find(query, {"_id": 0, "user_id": 0}).sort(
             "assigned_at", -1
         ).skip(offset).limit(limit).to_list(length=limit)
+        page_orders = await _orders_for_assignments(db, user_id, items)
         enriched = []
         for item in items:
             order = (
-                orders_by_key.get(normalize_text(item.get("order_id")))
-                or orders_by_key.get(normalize_text(item.get("order_number")))
+                page_orders.get(normalize_text(item.get("order_id")))
+                or page_orders.get(normalize_text(item.get("order_number")))
             )
             enriched.append(_enrich_assignment(item, order))
+
+        summary = None
+        if include_summary:
+            summary_rows = await db[ASSIGNMENTS].find(
+                query,
+                {
+                    "_id": 0,
+                    "user_id": 0,
+                    "order_id": 1,
+                    "order_number": 1,
+                    "delivery_fee_snapshot": 1,
+                },
+            ).to_list(length=max(total, 1))
+            summary_orders = await _orders_for_assignments(db, user_id, summary_rows)
+            summary = _assignment_totals(summary_rows, summary_orders)
+
         return {
             "items": enriched,
             "total": total,
             "limit": limit,
             "offset": offset,
             "has_more": offset + len(enriched) < total,
-            "summary": _assignment_totals(all_assignments, orders_by_key),
+            "summary": summary,
+        }
+
+    @router.get("/report")
+    async def driver_report(
+        driver_id: str = Query(min_length=1),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        actor = _require_operator(user)
+        user_id = _merchant_user_id(actor)
+        query = {
+            "user_id": user_id,
+            "driver_id": normalize_text(driver_id),
+            "active": True,
+            "status": "delivered",
+        }
+        rows = await db[ASSIGNMENTS].find(
+            query,
+            {
+                "_id": 0,
+                "user_id": 0,
+                "order_id": 1,
+                "order_number": 1,
+                "delivery_fee_snapshot": 1,
+                "assigned_at": 1,
+                "delivered_at": 1,
+            },
+        ).sort("delivered_at", -1).to_list(length=100000)
+        orders_by_key = await _orders_for_assignments(db, user_id, rows)
+        return {
+            "driver_id": normalize_text(driver_id),
+            "total_delivered": len(rows),
+            "summary": _assignment_totals(rows, orders_by_key),
+            **_delivery_duration_report(rows),
         }
 
     @router.post("/{assignment_id}/reassign")
@@ -289,4 +367,8 @@ def make_store_delivery_reassignment_router(db: Any, current_user: Callable[...,
     return router
 
 
-__all__ = ["make_store_delivery_reassignment_router"]
+__all__ = [
+    "_assignment_status_filter",
+    "_delivery_duration_report",
+    "make_store_delivery_reassignment_router",
+]
