@@ -2,8 +2,8 @@
 
 These permissions intentionally do not belong to Mezan's operational
 ``PERMISSIONS`` catalogue. Granting native access never grants a browser page
-or an operational Mezan permission. Native access is always explicit: even an
-account owner does not receive an automatic AMASI-app override.
+or an operational Mezan permission. Native access remains explicit for staff;
+the account owner receives only the fixed supervisory baseline declared below.
 """
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ MOBILE_APP_CLIENT = "amasi_mobile"
 MOBILE_APP_ACCESS = "mezan_mobile_app_access_v1"
 MOBILE_APP_ACCESS_OWNER_FIELD = "owner_user_id"
 MOBILE_APP_MANAGER = "app.role.manager"
+OWNER_BASELINE_PERMISSIONS = {"app.page.operations_monitoring"}
 
 MOBILE_APP_PERMISSION_GROUPS = [
     {
@@ -185,16 +186,20 @@ async def mobile_app_access_for_user(db: Any, user: dict[str, Any]) -> dict[str,
         or user.get("is_active") is False
         or user.get("deleted_at")
     )
-    permissions = effective_mobile_app_permissions(
+    permissions = set(effective_mobile_app_permissions(
         access,
         account_active=account_active,
-    )
+    ))
+    if is_owner and account_active:
+        permissions.update(OWNER_BASELINE_PERMISSIONS)
+    permissions_list = sorted(permissions)
     return {
-        "configured": access is not None,
-        "enabled": bool(access and access.get("enabled", True) and account_active),
+        "configured": access is not None or is_owner,
+        "enabled": bool(account_active and (access is not None or is_owner)),
         "owner_override": False,
+        "owner_baseline": bool(is_owner),
         "manager": MOBILE_APP_MANAGER in permissions,
-        "permissions": permissions,
+        "permissions": permissions_list,
     }
 
 
@@ -205,6 +210,7 @@ __all__ = [
     "MOBILE_APP_MANAGER",
     "MOBILE_APP_PERMISSION_GROUPS",
     "MOBILE_APP_PERMISSIONS",
+    "OWNER_BASELINE_PERMISSIONS",
     "effective_mobile_app_permissions",
     "find_mobile_app_access",
     "mobile_app_access_for_user",
