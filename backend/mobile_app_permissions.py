@@ -1,9 +1,9 @@
 """Independent, fail-closed access contract for the native AMASI app.
 
 These permissions intentionally do not belong to Mezan's operational
-``PERMISSIONS`` catalogue.  Granting a mobile page never grants a browser page
-or an operational Mezan permission, and a team account may therefore have zero
-Mezan permissions while retaining explicitly selected native-app pages.
+``PERMISSIONS`` catalogue. Granting native access never grants a browser page
+or an operational Mezan permission. Native access is always explicit: even an
+account owner does not receive an automatic AMASI-app override.
 """
 from __future__ import annotations
 
@@ -13,8 +13,21 @@ from typing import Any
 MOBILE_APP_CLIENT = "amasi_mobile"
 MOBILE_APP_ACCESS = "mezan_mobile_app_access_v1"
 MOBILE_APP_ACCESS_OWNER_FIELD = "owner_user_id"
+MOBILE_APP_MANAGER = "app.role.manager"
 
 MOBILE_APP_PERMISSION_GROUPS = [
+    {
+        "key": "app_management",
+        "label": "إدارة التطبيق",
+        "permissions": [
+            {
+                "key": MOBILE_APP_MANAGER,
+                "label": "مدير تطبيق AMASI",
+                "kind": "role",
+                "grants_all_current_and_future_app_permissions": True,
+            },
+        ],
+    },
     {
         "key": "preparation",
         "label": "إدارة التجهيز",
@@ -97,6 +110,8 @@ def validate_mobile_app_permissions(values: Any) -> list[str]:
     if unknown:
         raise ValueError(f"unknown_mobile_app_permission:{unknown[0]}")
     selected = set(normalized)
+    if MOBILE_APP_MANAGER in selected:
+        return normalized
     for group in MOBILE_APP_PERMISSION_GROUPS:
         for item in group["permissions"]:
             required = str(item.get("requires") or "").strip()
@@ -138,25 +153,26 @@ def effective_mobile_app_permissions(
 ) -> list[str]:
     if not access or access.get("enabled", True) is False or not account_active:
         return []
-    return sorted({
+    stored = {
         str(value).strip()
         for value in access.get("permissions") or []
         if str(value).strip() in MOBILE_APP_PERMISSIONS
-    })
+    }
+    if MOBILE_APP_MANAGER in stored:
+        # Manager is a live role, not a copied static page list. New app pages
+        # added to the catalogue therefore become available automatically.
+        return sorted(MOBILE_APP_PERMISSIONS)
+    return sorted(stored)
 
 
 async def mobile_app_access_for_user(db: Any, user: dict[str, Any]) -> dict[str, Any]:
     role = str(user.get("role") or "").strip().casefold()
     is_owner = role == "owner" or user.get("is_owner") is True
-    if is_owner:
-        return {
-            "configured": True,
-            "enabled": True,
-            "owner_override": True,
-            "permissions": sorted(MOBILE_APP_PERMISSIONS),
-        }
-
-    owner_id = str(user.get("created_by") or "").strip()
+    owner_id = (
+        str(user.get("id") or "").strip()
+        if is_owner
+        else str(user.get("created_by") or "").strip()
+    )
     user_id = str(user.get("id") or "").strip()
     access = await find_mobile_app_access(
         db,
@@ -168,14 +184,16 @@ async def mobile_app_access_for_user(db: Any, user: dict[str, Any]) -> dict[str,
         or user.get("is_active") is False
         or user.get("deleted_at")
     )
+    permissions = effective_mobile_app_permissions(
+        access,
+        account_active=account_active,
+    )
     return {
         "configured": access is not None,
         "enabled": bool(access and access.get("enabled", True) and account_active),
         "owner_override": False,
-        "permissions": effective_mobile_app_permissions(
-            access,
-            account_active=account_active,
-        ),
+        "manager": MOBILE_APP_MANAGER in permissions,
+        "permissions": permissions,
     }
 
 
@@ -183,6 +201,7 @@ __all__ = [
     "MOBILE_APP_ACCESS",
     "MOBILE_APP_ACCESS_OWNER_FIELD",
     "MOBILE_APP_CLIENT",
+    "MOBILE_APP_MANAGER",
     "MOBILE_APP_PERMISSION_GROUPS",
     "MOBILE_APP_PERMISSIONS",
     "effective_mobile_app_permissions",
