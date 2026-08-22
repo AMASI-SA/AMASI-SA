@@ -63,7 +63,7 @@ ACCOUNT_LOCAL_HOURLY_SOURCE_MODE = account_local_hourly_source_mode(
 MAX_HOURLY_REPORT_ROWS = 2_000
 
 RefreshCallable = Callable[..., Awaitable[dict[str, Any]]]
-FetchCallable = Callable[..., Awaitable[tuple[list[dict[str, Any]], list[dict[str, Any]]]]]
+FetchCallable = Callable[..., Awaitable[hourly.AccountHourFetchResult]]
 ReportCallable = Callable[..., Awaitable[dict[str, Any]]]
 
 _CAPTURE_CONTEXT: ContextVar[dict[str, Any] | None] = ContextVar(
@@ -289,8 +289,12 @@ def install_snapchat_account_hourly_capture() -> None:
             context: SnapchatSyncContext,
             *args: Any,
             **kwargs: Any,
-        ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-            rows, errors = await current_fetch(context, *args, **kwargs)
+        ) -> hourly.AccountHourFetchResult:
+            result = hourly.require_account_hour_fetch_result(
+                await current_fetch(context, *args, **kwargs),
+                result_name="hourly_capture_source",
+            )
+            rows = result.rows
             capture = _CAPTURE_CONTEXT.get()
             captured_action_report_time = str(
                 kwargs.get("action_report_time") or ""
@@ -320,7 +324,7 @@ def install_snapchat_account_hourly_capture() -> None:
                     )
                 except Exception as exc:  # keep the established daily refresh alive
                     capture["capture_error"] = type(exc).__name__
-            return rows, errors
+            return result
 
         fetch_wrapped._mezan_account_hourly_capture = True  # type: ignore[attr-defined]
         fetch_wrapped._mezan_account_hourly_base = current_fetch  # type: ignore[attr-defined]

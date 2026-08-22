@@ -7,6 +7,7 @@ import pytest
 from fastapi import APIRouter
 
 from integrations_control_center import snapchat_account_hourly_refresh as hourly
+from integrations_control_center import snapchat_account_hourly_chart as hourly_chart
 from integrations_control_center import snapchat_account_timezone_manager as manager
 from integrations_control_center.snapchat_account_timezone_retention import (
     install_snapchat_account_timezone_retention,
@@ -45,6 +46,204 @@ def test_default_report_range_is_today_in_account_timezone() -> None:
 
     assert riyadh == [date(2026, 8, 4)]
     assert los_angeles == [date(2026, 8, 3)]
+
+
+def _complete_fetch_result(
+    *,
+    data_state: str = "confirmed_no_data",
+) -> hourly.AccountHourFetchResult:
+    metrics = {key: 0 for key in hourly.STAT_FIELDS}
+    if data_state == "confirmed_data":
+        metrics["spend"] = 1_000_000
+    rows = [] if data_state == "confirmed_no_data" else [{
+        "campaign_id": "campaign-contract",
+        "start_time": "2026-08-07T00:00:00+03:00",
+        "end_time": "2026-08-07T01:00:00+03:00",
+        "metrics": metrics,
+    }]
+    return hourly.AccountHourFetchResult(
+        rows=rows,
+        errors=[],
+        coverage={
+            "status": "complete",
+            "data_state": data_state,
+            "expected_requests": 1,
+            "completed_requests": 1,
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_installed_capture_and_timezone_consumer_preserve_all_coverages(
+    monkeypatch,
+) -> None:
+    results = [
+        _complete_fetch_result(data_state="confirmed_data"),
+        _complete_fetch_result(data_state="confirmed_zero"),
+        _complete_fetch_result(data_state="confirmed_no_data"),
+    ]
+    calls = []
+    accounting_writes = []
+
+    async def base_fetch(*args, **kwargs):
+        calls.append(dict(kwargs))
+        return results[len(calls) - 1]
+
+    async def base_refresh(*args, **kwargs):
+        return {}
+
+    async def noop(*args, **kwargs):
+        return None
+
+    async def capture_accounting_write(*args, **kwargs):
+        accounting_writes.append(dict(kwargs))
+
+    monkeypatch.setattr(hourly, "_fetch_account_hours", base_fetch)
+    monkeypatch.setattr(hourly, "refresh_snapchat_account_hours", base_refresh)
+    hourly_chart.install_snapchat_account_hourly_capture()
+    monkeypatch.setattr(manager, "_ensure_account_local_indexes", noop)
+    monkeypatch.setattr(
+        manager,
+        "_upsert_performance",
+        capture_accounting_write,
+    )
+    monkeypatch.setattr(manager, "_upsert_account_local_performance", noop)
+
+    class Context:
+        db = object()
+        provider_calls = 3
+
+    result = await manager.refresh_snapchat_account_hours_with_account_days(
+        Context(),
+        object(),
+        "access-token",
+        {
+            "ad_account_id": "account-contract",
+            "timezone": "Asia/Riyadh",
+            "currency": "SAR",
+        },
+        start_date=date(2026, 8, 7),
+        end_date=date(2026, 8, 7),
+        now=datetime(2026, 8, 9, 12, 0, tzinfo=timezone.utc),
+    )
+
+    assert len(calls) == 3
+    assert result["coverage"] == {
+        "status": "complete",
+        "data_state": "confirmed_data",
+        "expected_requests": 3,
+        "completed_requests": 3,
+    }
+    account_fact = next(
+        write
+        for write in accounting_writes
+        if write["entity_type"] == "ad_account"
+    )
+    assert account_fact["external_id"] == "account-contract"
+    assert account_fact["date_string"] == "2026-08-07"
+    assert account_fact["metrics"]["spend"] == 1_000_000
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("invalid_index", "result_name"),
+    [
+        (0, "business_result"),
+        (1, "conversion_result"),
+        (2, "impression_result"),
+    ],
+)
+@pytest.mark.parametrize(
+    "invalid_kind",
+    [
+        "legacy_tuple",
+        "incomplete_coverage",
+        "zero_request_coverage",
+        "string_request_coverage",
+    ],
+)
+async def test_each_hourly_mode_rejects_invalid_result_before_fact_write(
+    monkeypatch,
+    invalid_index,
+    result_name,
+    invalid_kind,
+) -> None:
+    call_index = 0
+    writes = []
+
+    async def fake_fetch(*args, **kwargs):
+        nonlocal call_index
+        current = call_index
+        call_index += 1
+        if current == invalid_index:
+            if invalid_kind == "legacy_tuple":
+                return [], []
+            expected_requests: object = 1
+            completed_requests: object = 0
+            status = "incomplete"
+            if invalid_kind == "zero_request_coverage":
+                expected_requests = completed_requests = 0
+                status = "complete"
+            elif invalid_kind == "string_request_coverage":
+                expected_requests = completed_requests = "1"
+                status = "complete"
+            return hourly.AccountHourFetchResult(
+                rows=[],
+                errors=[],
+                coverage={
+                    "status": status,
+                    "data_state": (
+                        "unknown_incomplete"
+                        if status == "incomplete"
+                        else "confirmed_no_data"
+                    ),
+                    "expected_requests": expected_requests,
+                    "completed_requests": completed_requests,
+                },
+            )
+        return _complete_fetch_result()
+
+    async def noop(*args, **kwargs):
+        return None
+
+    async def capture_write(*args, **kwargs):
+        writes.append(dict(kwargs))
+
+    monkeypatch.setattr(hourly, "_fetch_account_hours", fake_fetch)
+    monkeypatch.setattr(manager, "_ensure_account_local_indexes", noop)
+    monkeypatch.setattr(manager, "_upsert_performance", capture_write)
+    monkeypatch.setattr(
+        manager,
+        "_upsert_account_local_performance",
+        capture_write,
+    )
+
+    class Context:
+        db = object()
+        provider_calls = 3
+
+    with pytest.raises(SnapchatNativeSyncError) as raised:
+        await manager.refresh_snapchat_account_hours_with_account_days(
+            Context(),
+            object(),
+            "access-token",
+            {
+                "ad_account_id": "account-contract",
+                "timezone": "Asia/Riyadh",
+                "currency": "SAR",
+            },
+            start_date=date(2026, 8, 7),
+            end_date=date(2026, 8, 7),
+            now=datetime(2026, 8, 9, 12, 0, tzinfo=timezone.utc),
+        )
+
+    assert raised.value.code == "snapchat_account_hour_result_contract_invalid"
+    assert raised.value.result == {
+        "contract_valid": False,
+        "result_name": result_name,
+    }
+    assert "coverage" not in raised.value.result
+    assert writes == []
 
 
 def test_same_hour_is_stored_under_each_calendar_semantics() -> None:
