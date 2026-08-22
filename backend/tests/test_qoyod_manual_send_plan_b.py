@@ -1,7 +1,7 @@
 """Pytest for Plan-B Manual Send (/app/backend/integrations/qoyod_manual).
 
 Coverage:
-    T1  pending-orders excludes pre-floor + non-completed + already-sent.
+    T1  pending-orders applies the requested range, status, and exact refs.
     T2  send guard G1 — refuses when inbox row already has
         manual_qoyod_invoice_id.
     T3  send guard G4 — refuses when payment method has no mapping.
@@ -144,6 +144,33 @@ def _inbox_row(*, order_number: str, order_date: str = "2026-07-05",
     return row
 
 
+def _unified_candidate_row(
+    *, order_number: str, order_date: str | None = "2026-07-05",
+    status: str = "completed", total: float = 100.0,
+) -> dict:
+    row = {
+        "user_id": TENANT,
+        "order_id": order_number,
+        "order_number": order_number,
+        "order_status": status,
+        "order_status_slug": status,
+        "order_status_native": (
+            "تم التنفيذ" if status == "completed" else "قيد المعالجة"
+        ),
+        "payment_method": "credit_card",
+        "payment_status": "paid",
+        "payment_collection_status": "paid",
+        "paid_amount": total,
+        "remaining_amount": 0,
+        "has_remaining_amount": False,
+        "total_amount": total,
+        "currency": "SAR",
+    }
+    if order_date is not None:
+        row["order_date"] = order_date
+    return row
+
+
 @pytest.mark.asyncio
 async def test_manual_sender_accepts_shipping_as_in_delivery_until_next_guard(db):
     """The report's canonical `shipping` slug must pass the sender status gate.
@@ -236,27 +263,37 @@ async def _seed_credentials(db):
 # ────────────────────────────────────────────────────────────────────
 @pytest.mark.asyncio
 async def test_pending_orders_filters(db):
-    # Row 1: eligible (completed, on 2026-07-05, no invoice)
-    await db.integration_inbox.insert_one(
-        _inbox_row(order_number="ORD-1"))
-    # Row 2: pre-floor (2026-06-30) — should be excluded
-    await db.integration_inbox.insert_one(
-        _inbox_row(order_number="ORD-2", order_date="2026-06-30"))
-    # Row 3: not completed — should be excluded
-    await db.integration_inbox.insert_one(
-        _inbox_row(order_number="ORD-3", status="pending"))
-    # Row 4: already sent (manual marker)
-    await db.integration_inbox.insert_one(
-        _inbox_row(order_number="ORD-4", with_manual_id=True))
-    # Row 5: legacy invoice id (non-DRY)
-    await db.integration_inbox.insert_one(
-        _inbox_row(order_number="ORD-5", with_legacy_id=True))
+    await db.unified_orders.insert_many([
+        _unified_candidate_row(order_number="ORD-1"),
+        _unified_candidate_row(
+            order_number="ORD-2", order_date="2026-06-30"
+        ),
+        _unified_candidate_row(order_number="ORD-3", status="pending"),
+        _unified_candidate_row(order_number="ORD-4"),
+        _unified_candidate_row(order_number="ORD-5"),
+    ])
+    await db.qoyod_invoices.insert_many([
+        {
+            "user_id": TENANT,
+            "qoyod_invoice_id": "999",
+            "reference": "ORD-4",
+            "raw_response": {"reference": "ORD-4"},
+        },
+        {
+            "user_id": TENANT,
+            "qoyod_invoice_id": "555",
+            "reference": "ORD-5",
+            "raw_response": {"reference": "ORD-5"},
+        },
+    ])
 
     result = await list_pending_orders(
-        db, user_id=TENANT, days=365, limit=100)
+        db, user_id=TENANT, from_date="2026-07-01",
+        to_date="2026-08-22", limit=100)
     order_numbers = {o["order_number"] for o in result["orders"]}
     assert order_numbers == {"ORD-1"}, order_numbers
-    assert result["counts"]["excluded_pre_floor"] >= 1
+    assert result["counts"]["excluded_pre_floor"] == 0
+    assert result["counts"]["excluded_outside_requested_period"] >= 1
     # NB: after the 2026-07-09 fix, the Salla-status filter runs
     # Mongo-side (BEFORE limit + BEFORE Python loop), so "pending"
     # rows never bump the `excluded_not_completed` counter — they're
@@ -664,6 +701,129 @@ async def test_send_quantises_and_uses_riyadh_send_date(db):
         f"invoice must close to zero; remaining={remaining}"
 
 
+@pytest.mark.asyncio
+async def test_plan_b_wire_contract_preserves_send_date_fixed_vat_payment_mapping_and_idempotency(
+    db,
+):
+    """Pin the existing Plan-B invoice/payment wire contract end to end."""
+    riyadh_today = datetime.now(timezone(timedelta(hours=3))).date().isoformat()
+    order_number = "WIRE-CONTRACT-900"
+
+    await _seed_settings(db)
+    await _seed_credentials(db)
+
+    row = _inbox_row(
+        order_number=order_number,
+        order_date="2026-07-05",
+        total=115.0,
+        sku="SKU-WIRE",
+    )
+    # Salla reports 8%, but the established Qoyod policy is a fixed
+    # Saudi VAT-inclusive 15% without increasing the collected gross.
+    row["raw_payload"] = {
+        "data": {
+            "reference_id": order_number,
+            "created_at": "2026-07-05",
+            "amounts": {
+                "tax": {
+                    "percent": "8.00",
+                    "amount": {"amount": 8.52, "currency": "SAR"},
+                },
+                "sub_total": {"amount": 106.48, "currency": "SAR"},
+                "total": {"amount": 115.0, "currency": "SAR"},
+            },
+        },
+    }
+    await db.integration_inbox.insert_one(row)
+
+    captured: dict = {}
+
+    async def _create_invoice(payload, *, idem):
+        captured["invoice_payload"] = payload
+        captured["invoice_idem"] = idem
+        return {
+            "invoice": {
+                "id": 6901,
+                "number": "INV-6901",
+                "reference": order_number,
+                "total": 115.0,
+            },
+        }
+
+    async def _create_payment(payload, *, idem):
+        captured["payment_payload"] = payload
+        captured["payment_idem"] = idem
+        return {"invoice_payment": {"id": 7901}}
+
+    with patch(
+        "integrations.qoyod_manual.client.ManualQoyodClient."
+        "find_invoice_by_reference",
+        new=AsyncMock(return_value=None),
+    ), patch(
+        "integrations.qoyod_manual.client.ManualQoyodClient."
+        "find_customers_by_phone",
+        new=AsyncMock(return_value=[{"id": 44}]),
+    ), patch(
+        "integrations.qoyod_manual.client.ManualQoyodClient."
+        "find_product_by_sku",
+        new=AsyncMock(return_value={"id": 88, "sku": "SKU-WIRE"}),
+    ), patch(
+        "integrations.qoyod_manual.client.ManualQoyodClient.create_invoice",
+        new=AsyncMock(side_effect=_create_invoice),
+    ), patch(
+        "integrations.qoyod_manual.client.ManualQoyodClient."
+        "create_invoice_payment",
+        new=AsyncMock(side_effect=_create_payment),
+    ):
+        result = await manual_send_one(
+            db,
+            user_id=TENANT,
+            order_number=order_number,
+        )
+
+    invoice = captured["invoice_payload"]["invoice"]
+    payment = captured["payment_payload"]["invoice_payment"]
+
+    assert invoice["issue_date"] == riyadh_today
+    assert invoice["due_date"] == riyadh_today
+    assert invoice["issue_date"] != "2026-07-05"
+    assert invoice["reference"] == order_number
+    assert invoice["currency_code"] == "SAR"
+    assert all(line["tax_percent"] == 15.0 for line in invoice["line_items"])
+
+    assert result["salla_total"] == 115.0
+    assert result["expected_total"] == 115.0
+    assert result["payment_amount"] == 115.0
+    assert payment["invoice_id"] == 6901
+    assert payment["amount"] == 115.0
+    assert payment["date"] == riyadh_today
+    assert payment["account_id"] == 42
+    assert payment["reference"] == order_number
+    assert captured["invoice_idem"] == f"inv-{order_number}"
+    assert captured["payment_idem"] == f"pay-{order_number}"
+
+    second_invoice_post = AsyncMock()
+    second_payment_post = AsyncMock()
+    with patch(
+        "integrations.qoyod_manual.client.ManualQoyodClient.create_invoice",
+        new=second_invoice_post,
+    ), patch(
+        "integrations.qoyod_manual.client.ManualQoyodClient."
+        "create_invoice_payment",
+        new=second_payment_post,
+    ):
+        with pytest.raises(ManualSendRefused) as exc:
+            await manual_send_one(
+                db,
+                user_id=TENANT,
+                order_number=order_number,
+            )
+
+    assert exc.value.code == "already_sent"
+    second_invoice_post.assert_not_awaited()
+    second_payment_post.assert_not_awaited()
+
+
 # ────────────────────────────────────────────────────────────────────
 # T11 — _q2 helper (unit)
 # ────────────────────────────────────────────────────────────────────
@@ -681,8 +841,7 @@ def test_q2_quantises_half_up():
 
 
 # ────────────────────────────────────────────────────────────────────
-# T12 — Floor-date boundary (bug: order 268552119 leaked with pre-floor
-#       Salla date because the old helper fell back to received_at).
+# T12 — Explicit requested-date boundary (no hidden rollout floor).
 #
 #   • 2026-06-30 → EXCLUDED
 #   • 2026-07-01 → INCLUDED
@@ -690,55 +849,38 @@ def test_q2_quantises_half_up():
 #   • no Salla date at all → EXCLUDED (never promoted via received_at)
 # ────────────────────────────────────────────────────────────────────
 @pytest.mark.asyncio
-async def test_floor_date_boundary_strict(db):
+async def test_requested_date_boundary_strict(db):
     # Order that MUST be excluded (2026-06-30) — reproduces the bug
     # reported for order 268552119.
-    row_before = _inbox_row(order_number="268552119",
-                             order_date="2026-06-30")
-    await db.integration_inbox.insert_one(row_before)
+    row_before = _unified_candidate_row(
+        order_number="268552119", order_date="2026-06-30"
+    )
+    await db.unified_orders.insert_one(row_before)
 
     # Exactly ON the floor — MUST be included.
-    row_boundary = _inbox_row(order_number="ORDER-JUL1",
-                               order_date="2026-07-01")
-    await db.integration_inbox.insert_one(row_boundary)
+    row_boundary = _unified_candidate_row(
+        order_number="ORDER-JUL1", order_date="2026-07-01"
+    )
+    await db.unified_orders.insert_one(row_boundary)
 
     # After floor — MUST be included.
-    row_after = _inbox_row(order_number="ORDER-JUL5",
-                            order_date="2026-07-05")
-    await db.integration_inbox.insert_one(row_after)
+    row_after = _unified_candidate_row(
+        order_number="ORDER-JUL5", order_date="2026-07-05"
+    )
+    await db.unified_orders.insert_one(row_after)
 
     # No Salla date at all — MUST be excluded even if received_at is
     # today (post-floor). Simulates a webhook that arrived after
     # 2026-07-01 for an order that was actually created much earlier
     # but whose Salla date fields are missing / malformed.
-    row_no_date = {
-        "id":                 "no-date-1",
-        "user_id":            TENANT,
-        "trace_id":           "tr-nd",
-        "salla_order_number": "ORDER-NO-DATE",
-        "received_at":        datetime.now(timezone.utc),
-        "pipeline_stage":     "NORMALIZED",
-        "canonical_payload": {
-            "order_number":  "ORDER-NO-DATE",
-            "order_id":      "ORDER-NO-DATE",
-            # NO order_date / created_at at all.
-            "order_status":  "completed",
-            "order_status_native": "تم التنفيذ",
-            "total_amount":  10.0,
-            "currency":      "SAR",
-            "payment_method": "credit_card",
-            "customer": {"name": "بدون تاريخ"},
-            "items": [{"sku": "SKU-ND", "name": "بند بدون تاريخ",
-                        "quantity": 1, "unit_price": 10.0,
-                        "tax_amount": 0.0, "discount_amount": 0.0,
-                        "total": 10.0}],
-        },
-        "raw_payload": {},
-    }
-    await db.integration_inbox.insert_one(row_no_date)
+    row_no_date = _unified_candidate_row(
+        order_number="ORDER-NO-DATE", order_date=None, total=10.0
+    )
+    await db.unified_orders.insert_one(row_no_date)
 
     result = await list_pending_orders(
-        db, user_id=TENANT, days=365, limit=100)
+        db, user_id=TENANT, from_date="2026-07-01",
+        to_date="2026-08-22", limit=100)
     order_numbers = {o["order_number"] for o in result["orders"]}
 
     # Pre-floor order must NOT appear.
@@ -751,7 +893,8 @@ async def test_floor_date_boundary_strict(db):
     assert "ORDER-JUL5" in order_numbers, order_numbers
 
     # Counters expose the distinct exclusion reasons.
-    assert result["counts"]["excluded_pre_floor"] >= 1
+    assert result["counts"]["excluded_pre_floor"] == 0
+    assert result["counts"]["excluded_outside_requested_period"] >= 1
     assert result["counts"]["excluded_no_salla_date"] >= 1
 
 
