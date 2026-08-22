@@ -62,6 +62,32 @@ def test_preparation_average_uses_only_valid_completed_pieces_in_range():
     assert result["average_preparation_seconds"] == 5400
 
 
+def test_selected_period_is_inclusive_at_start_and_exclusive_at_end():
+    start = _dt(10)
+    end = _dt(20)
+    result = summarize_preparation_employee(
+        [
+            {
+                "piece_id": "at-start",
+                "status": PIECE_STATUS_READY_FOR_ASSEMBLY,
+                "started_at": _dt(10),
+                "completed_at": _dt(10, 1),
+            },
+            {
+                "piece_id": "at-end",
+                "status": PIECE_STATUS_READY_FOR_ASSEMBLY,
+                "started_at": _dt(19, 23),
+                "completed_at": end,
+            },
+        ],
+        start=start,
+        end=end,
+    )
+    assert result["completed_count"] == 1
+    assert result["measured_count"] == 1
+    assert result["average_preparation_seconds"] == 3600
+
+
 def test_current_custody_counts_are_not_limited_by_selected_range():
     start = _dt(10)
     end = _dt(22)
@@ -185,6 +211,30 @@ def test_courier_delivery_outside_selected_period_is_not_counted():
     assert result["delivered_count"] == 0
     assert result["measured_count"] == 0
     assert result["average_delivery_seconds"] is None
+
+
+def test_courier_selected_period_uses_same_boundary_contract():
+    result = summarize_courier(
+        [
+            {
+                "status": "delivered",
+                "assigned_at": _dt(9),
+                "out_for_delivery_at": _dt(9, 23),
+                "delivered_at": _dt(10),
+            },
+            {
+                "status": "delivered",
+                "assigned_at": _dt(19),
+                "out_for_delivery_at": _dt(19, 23),
+                "delivered_at": _dt(20),
+            },
+        ],
+        start=_dt(10),
+        end=_dt(20),
+    )
+    assert result["delivered_count"] == 1
+    assert result["measured_count"] == 1
+    assert result["average_delivery_seconds"] == 3600
 
 
 def test_invalid_or_excessive_range_is_rejected():
