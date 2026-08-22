@@ -25,7 +25,7 @@ def test_p1_1_accounting_quality_requires_zero_missing_and_incomplete():
 async def test_p1_1_reduce_and_pause_are_not_blocked(monkeypatch):
     async def forbidden(*args, **kwargs):
         raise AssertionError("profit loader must not run for defensive action")
-    monkeypatch.setattr(gate, "build_mezan_profit_totals", forbidden)
+    monkeypatch.setattr(gate, "build_mezan_profit_envelope", forbidden)
     assert (await gate.require_profit_accounting_complete_for_scale(object(), "u", "reduce"))["scale_gate_applied"] is False
     assert (await gate.require_profit_accounting_complete_for_scale(object(), "u", "pause"))["scale_gate_applied"] is False
 
@@ -34,11 +34,18 @@ async def test_p1_1_reduce_and_pause_are_not_blocked(monkeypatch):
 async def test_p1_1_scale_fails_closed_when_profit_inputs_incomplete(monkeypatch):
     async def loader(*args, **kwargs):
         return {
-            "missing_product_cost_count": 1,
-            "incomplete_profit_orders_count": 3,
-            "profit_source": "mezan_profit_engine_v2_read_only",
+            "contract_version": "mezan_profit_envelope_v1",
+            "source": "mezan_profit_engine_v2_read_only",
+            "quality": {
+                "known": True,
+                "complete": False,
+                "scale_safe": False,
+                "missing_product_cost_count": 1,
+                "incomplete_profit_orders_count": 3,
+                "unknown_is_zero": False,
+            },
         }
-    monkeypatch.setattr(gate, "build_mezan_profit_totals", loader)
+    monkeypatch.setattr(gate, "build_mezan_profit_envelope", loader)
     with pytest.raises(HTTPException) as caught:
         await gate.require_profit_accounting_complete_for_scale(object(), "u", "scale")
     assert caught.value.status_code == 409
@@ -50,11 +57,18 @@ async def test_p1_1_scale_fails_closed_when_profit_inputs_incomplete(monkeypatch
 async def test_p1_1_scale_allowed_only_when_profit_inputs_complete(monkeypatch):
     async def loader(*args, **kwargs):
         return {
-            "missing_product_cost_count": 0,
-            "incomplete_profit_orders_count": 0,
-            "profit_source": "mezan_profit_engine_v2_read_only",
+            "contract_version": "mezan_profit_envelope_v1",
+            "source": "mezan_profit_engine_v2_read_only",
+            "quality": {
+                "known": True,
+                "complete": True,
+                "scale_safe": True,
+                "missing_product_cost_count": 0,
+                "incomplete_profit_orders_count": 0,
+                "unknown_is_zero": False,
+            },
         }
-    monkeypatch.setattr(gate, "build_mezan_profit_totals", loader)
+    monkeypatch.setattr(gate, "build_mezan_profit_envelope", loader)
     result = await gate.require_profit_accounting_complete_for_scale(object(), "u", "scale")
     assert result["complete"] is True
     assert result["scale_gate_applied"] is True
