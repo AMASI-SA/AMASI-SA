@@ -1,9 +1,10 @@
 """Shared primitives for the native, read-only Snapchat V2 data plane."""
 from __future__ import annotations
 
+import asyncio
 import math
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable
 from urllib.parse import urlsplit
@@ -26,6 +27,12 @@ MAX_SYNC_DAYS = 62
 MAX_SYNC_ACCOUNTS = 20
 MAX_PROVIDER_CALLS = 250
 MAX_PAGES = 10
+SNAPCHAT_PROVIDER_REQUESTS_PER_SECOND = 6.0
+SNAPCHAT_PROVIDER_MIN_REQUEST_INTERVAL_SECONDS = (
+    1.0 / SNAPCHAT_PROVIDER_REQUESTS_PER_SECOND
+)
+SNAPCHAT_HTTP_429_MAX_RETRIES = 2
+SNAPCHAT_HTTP_429_MAX_RETRY_AFTER_SECONDS = 8.0
 MAX_ENTITY_ROWS_PER_TYPE = 5000
 DEFAULT_USD_TO_SAR = 3.75
 ATTRIBUTION_MODEL = "swipe_28d_view_1d_conversion_time"
@@ -250,6 +257,16 @@ class SnapchatSyncContext:
     provider_calls: int = 0
     usd_rate_cache: float | None = None
     failure_stage_observer: Callable[[str], None] | None = None
+    _provider_request_lock: asyncio.Lock | None = field(
+        default=None,
+        init=False,
+        repr=False,
+    )
+    _provider_request_last_started: float | None = field(
+        default=None,
+        init=False,
+        repr=False,
+    )
 
     def now_iso(self) -> str:
         return _iso(self.now())
@@ -258,8 +275,14 @@ class SnapchatSyncContext:
         if self.failure_stage_observer is not None:
             self.failure_stage_observer(stage)
 
-    async def get_json(self, client: httpx.AsyncClient, url: str, *,
-                       headers: dict[str, str], params: dict[str, Any] | None = None) -> dict:
+    async def _provider_get(
+        self,
+        client: httpx.AsyncClient,
+        url: str,
+        *,
+        headers: dict[str, str],
+        params: dict[str, Any] | None,
+    ) -> httpx.Response:
         self.observe_failure_stage("provider_refresh")
         self.provider_calls += 1
         if self.provider_calls > MAX_PROVIDER_CALLS:
@@ -268,36 +291,74 @@ class SnapchatSyncContext:
                 f"Snapchat sync exceeded the {MAX_PROVIDER_CALLS} call budget.",
                 status_code=400,
             )
+        if self._provider_request_lock is None:
+            self._provider_request_lock = asyncio.Lock()
+        async with self._provider_request_lock:
+            loop = asyncio.get_running_loop()
+            if self._provider_request_last_started is not None:
+                delay = SNAPCHAT_PROVIDER_MIN_REQUEST_INTERVAL_SECONDS - (
+                    loop.time() - self._provider_request_last_started
+                )
+                if delay > 0:
+                    await asyncio.sleep(delay)
+            self._provider_request_last_started = loop.time()
         try:
-            response = await client.get(url, headers=headers, params=params)
+            return await client.get(url, headers=headers, params=params)
         except httpx.HTTPError as exc:
             raise SnapchatNativeSyncError(
-                "snapchat_provider_network_error", "Snapchat provider request failed.",
-                status_code=502, retryable=True,
+                "snapchat_provider_network_error",
+                "Snapchat provider request failed.",
+                status_code=502,
+                retryable=True,
             ) from exc
+
+    @staticmethod
+    def _http_429_retry_delay(response: httpx.Response, attempt: int) -> float:
+        raw = str(response.headers.get("Retry-After") or "").strip()
+        try:
+            parsed = float(raw)
+        except (TypeError, ValueError, OverflowError):
+            parsed = float(2 ** attempt)
+        if not math.isfinite(parsed):
+            parsed = float(2 ** attempt)
+        return min(
+            max(parsed, SNAPCHAT_PROVIDER_MIN_REQUEST_INTERVAL_SECONDS),
+            SNAPCHAT_HTTP_429_MAX_RETRY_AFTER_SECONDS,
+        )
+
+    async def get_json(self, client: httpx.AsyncClient, url: str, *,
+                       headers: dict[str, str], params: dict[str, Any] | None = None) -> dict:
+        request_headers = headers
+        response = await self._provider_get(
+            client,
+            url,
+            headers=request_headers,
+            params=params,
+        )
         if response.status_code == 401:
             fresh_access = await self.access_token(force_refresh=True)
             retry_headers = dict(headers)
             retry_headers["Authorization"] = f"Bearer {fresh_access}"
-            self.observe_failure_stage("provider_refresh")
-            self.provider_calls += 1
-            if self.provider_calls > MAX_PROVIDER_CALLS:
-                raise SnapchatNativeSyncError(
-                    "snapchat_provider_call_budget_exceeded",
-                    f"Snapchat sync exceeded the {MAX_PROVIDER_CALLS} call budget.",
-                    status_code=400,
-                )
-            try:
-                response = await client.get(
-                    url, headers=retry_headers, params=params
-                )
-            except httpx.HTTPError as exc:
-                raise SnapchatNativeSyncError(
-                    "snapchat_provider_network_error",
-                    "Snapchat provider request failed.",
-                    status_code=502,
-                    retryable=True,
-                ) from exc
+            request_headers = retry_headers
+            response = await self._provider_get(
+                client,
+                url,
+                headers=request_headers,
+                params=params,
+            )
+
+        for retry_index in range(SNAPCHAT_HTTP_429_MAX_RETRIES):
+            if response.status_code != 429:
+                break
+            await asyncio.sleep(
+                self._http_429_retry_delay(response, retry_index)
+            )
+            response = await self._provider_get(
+                client,
+                url,
+                headers=request_headers,
+                params=params,
+            )
 
         if response.status_code == 401:
             raise SnapchatNativeSyncError(
@@ -325,7 +386,10 @@ class SnapchatSyncContext:
                 f"snapchat_provider_http_{response.status_code}",
                 message,
                 status_code=502,
-                retryable=response.status_code >= 500,
+                retryable=(
+                    response.status_code == 429
+                    or response.status_code >= 500
+                ),
                 result=detail,
             )
         try:

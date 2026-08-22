@@ -127,8 +127,9 @@ class FakeDB:
 
 
 class FakeResponse:
-    def __init__(self, payload, status_code=200):
+    def __init__(self, payload, status_code=200, *, headers=None):
         self.payload, self.status_code, self.text = payload, status_code, repr(payload)
+        self.headers = dict(headers or {})
 
     def json(self):
         return deepcopy(self.payload)
@@ -386,3 +387,78 @@ def test_native_route_has_exact_sync_contract(monkeypatch):
     attach_snapchat_native_data_routes(router, _db(), current_user, require_owner)
     route = next(row for row in router.routes if row.name == "sync_snapchat_native_data")
     assert route.path == "/integrations-v2/snapchat_ads/sync"
+
+
+class _RateLimitClient:
+    def __init__(self, responses):
+        self.responses = list(responses)
+        self.calls = []
+
+    async def get(self, url, *, headers, params):
+        self.calls.append({"url": url, "headers": headers, "params": params})
+        return self.responses.pop(0)
+
+
+@pytest.mark.asyncio
+async def test_get_json_paces_and_retries_429_without_changing_payload(monkeypatch):
+    sleeps = []
+
+    async def no_sleep(delay):
+        sleeps.append(delay)
+
+    monkeypatch.setattr(common.asyncio, "sleep", no_sleep)
+    client = _RateLimitClient([
+        FakeResponse(
+            {"error": {"code": "rate_limited"}},
+            429,
+            headers={"Retry-After": "0.5"},
+        ),
+        FakeResponse({"request_status": "SUCCESS", "value": 7}),
+    ])
+    context = common.SnapchatSyncContext(object(), "owner-1")
+
+    payload = await context.get_json(
+        client,
+        "https://adsapi.snapchat.com/v1/adaccounts/account-1/stats",
+        headers={"Authorization": "Bearer token"},
+        params={"granularity": "HOUR"},
+    )
+
+    assert payload == {"request_status": "SUCCESS", "value": 7}
+    assert context.provider_calls == 2
+    assert len(client.calls) == 2
+    assert any(delay == 0.5 for delay in sleeps)
+
+
+@pytest.mark.asyncio
+async def test_exhausted_429_is_retryable_and_never_leaks_provider_secret(
+    monkeypatch,
+):
+    async def no_sleep(_delay):
+        return None
+
+    monkeypatch.setattr(common.asyncio, "sleep", no_sleep)
+    secret = "Bearer provider-secret-must-not-leak"
+    client = _RateLimitClient([
+        FakeResponse(
+            {"error": {"code": "rate_limited", "message": secret}},
+            429,
+        )
+        for _ in range(common.SNAPCHAT_HTTP_429_MAX_RETRIES + 1)
+    ])
+    context = common.SnapchatSyncContext(object(), "owner-1")
+
+    with pytest.raises(common.SnapchatNativeSyncError) as raised:
+        await context.get_json(
+            client,
+            "https://adsapi.snapchat.com/v1/adaccounts/account-1/stats",
+            headers={"Authorization": "Bearer token"},
+            params=None,
+        )
+
+    error = raised.value
+    assert error.code == "snapchat_provider_http_429"
+    assert error.retryable is True
+    assert context.provider_calls == common.SNAPCHAT_HTTP_429_MAX_RETRIES + 1
+    assert secret not in error.message
+    assert secret not in repr(error.result)
