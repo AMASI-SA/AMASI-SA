@@ -65,6 +65,83 @@ class AccountHourFetchResult:
         yield self.errors
 
 
+ACCOUNT_HOUR_RESULT_NAMES = frozenset({
+    "business_result",
+    "conversion_result",
+    "impression_result",
+    "hourly_capture_source",
+    "hourly_result_set",
+})
+
+
+def require_account_hour_fetch_result(
+    value: Any,
+    *,
+    result_name: str,
+) -> AccountHourFetchResult:
+    """Require the success-only fetch contract without inventing coverage.
+
+    ``_fetch_account_hours`` returns complete provider proof or raises.  A
+    wrapper or consumer must not downgrade a missing proof into rows/errors.
+    """
+    safe_name = (
+        result_name
+        if result_name in ACCOUNT_HOUR_RESULT_NAMES
+        else "hourly_result_set"
+    )
+    valid = isinstance(value, AccountHourFetchResult)
+    if valid:
+        coverage = value.coverage
+        expected = (
+            coverage.get("expected_requests")
+            if isinstance(coverage, dict)
+            else None
+        )
+        completed = (
+            coverage.get("completed_requests")
+            if isinstance(coverage, dict)
+            else None
+        )
+        data_state = (
+            coverage.get("data_state")
+            if isinstance(coverage, dict)
+            else None
+        )
+        valid = bool(
+            isinstance(value.rows, list)
+            and all(isinstance(row, dict) for row in value.rows)
+            and isinstance(value.errors, list)
+            and not value.errors
+            and isinstance(coverage, dict)
+            and coverage.get("status") == "complete"
+            and data_state in {
+                "confirmed_data",
+                "confirmed_zero",
+                "confirmed_no_data",
+            }
+            and type(expected) is int
+            and expected > 0
+            and type(completed) is int
+            and completed == expected
+            and (
+                (data_state == "confirmed_no_data" and not value.rows)
+                or (data_state != "confirmed_no_data" and bool(value.rows))
+            )
+        )
+    if not valid:
+        raise SnapchatNativeSyncError(
+            "snapchat_account_hour_result_contract_invalid",
+            "Snapchat account HOUR fetch returned an invalid result contract.",
+            status_code=502,
+            retryable=True,
+            result={
+                "contract_valid": False,
+                "result_name": safe_name,
+            },
+        )
+    return value
+
+
 def _coverage(
     *,
     status: str,
@@ -918,6 +995,7 @@ __all__ = [
     "aggregate_account_hours_by_riyadh_day",
     "aggregate_campaign_hours_by_riyadh_day",
     "extract_account_hour_rows",
+    "require_account_hour_fetch_result",
     "refresh_snapchat_account_hours",
     "snapchat_account_request_window",
     "snapchat_hourly_request_window",

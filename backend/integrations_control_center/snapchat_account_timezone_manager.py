@@ -466,41 +466,50 @@ async def refresh_snapchat_account_hours_with_account_days(
     async def fetch_all_modes(window: dict[str, datetime]):
         # Existing Riyadh accounting projection: keep its established
         # conversion-time 28d-click / 1d-view contract unchanged.
-        business_result = await hourly._fetch_account_hours(
-            context,
-            client,
-            access_token,
-            account_id=account_id,
-            request_start=window["provider_start"],
-            request_end=window["provider_end"],
-            action_report_time=hourly.ACTION_REPORT_TIME,
+        business_result = hourly.require_account_hour_fetch_result(
+            await hourly._fetch_account_hours(
+                context,
+                client,
+                access_token,
+                account_id=account_id,
+                request_start=window["provider_start"],
+                request_end=window["provider_end"],
+                action_report_time=hourly.ACTION_REPORT_TIME,
+            ),
+            result_name="business_result",
         )
         business_rows, business_errors = business_result
 
         # Ads Manager operational view: Snapchat-style 28d-click / 7d-view.
-        conversion_result = await hourly._fetch_account_hours(
-            context,
-            client,
-            access_token,
-            account_id=account_id,
-            request_start=window["provider_start"],
-            request_end=window["provider_end"],
-            action_report_time=ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME,
-            swipe_attribution_window=ADS_MANAGER_SWIPE_ATTRIBUTION_WINDOW,
-            view_attribution_window=ADS_MANAGER_VIEW_ATTRIBUTION_WINDOW,
+        conversion_result = hourly.require_account_hour_fetch_result(
+            await hourly._fetch_account_hours(
+                context,
+                client,
+                access_token,
+                account_id=account_id,
+                request_start=window["provider_start"],
+                request_end=window["provider_end"],
+                action_report_time=ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME,
+                swipe_attribution_window=ADS_MANAGER_SWIPE_ATTRIBUTION_WINDOW,
+                view_attribution_window=ADS_MANAGER_VIEW_ATTRIBUTION_WINDOW,
+            ),
+            result_name="conversion_result",
         )
         conversion_rows, conversion_errors = conversion_result
 
-        impression_result = await hourly._fetch_account_hours(
-            context,
-            client,
-            access_token,
-            account_id=account_id,
-            request_start=window["provider_start"],
-            request_end=window["provider_end"],
-            action_report_time="impression",
-            swipe_attribution_window=ADS_MANAGER_SWIPE_ATTRIBUTION_WINDOW,
-            view_attribution_window=ADS_MANAGER_VIEW_ATTRIBUTION_WINDOW,
+        impression_result = hourly.require_account_hour_fetch_result(
+            await hourly._fetch_account_hours(
+                context,
+                client,
+                access_token,
+                account_id=account_id,
+                request_start=window["provider_start"],
+                request_end=window["provider_end"],
+                action_report_time="impression",
+                swipe_attribution_window=ADS_MANAGER_SWIPE_ATTRIBUTION_WINDOW,
+                view_attribution_window=ADS_MANAGER_VIEW_ATTRIBUTION_WINDOW,
+            ),
+            result_name="impression_result",
         )
         impression_rows, impression_errors = impression_result
 
