@@ -1,0 +1,237 @@
+"""Authoritative read-only profit envelope for Mezan decision systems.
+
+This module is the single Campaign-AI-facing contract for store P&L. It keeps
+financial totals, component provenance, and accounting completeness together so
+consumers do not independently reinterpret missing inputs as zero or rebuild the
+meaning of net profit in multiple loaders.
+"""
+from __future__ import annotations
+
+import asyncio
+from datetime import date
+from typing import Any
+
+from auth import DEFAULT_PAYMENT_METHODS, DEFAULT_SHIPPING_COMPANIES, ensure_user_settings
+from dashboard_v2_routes import _filtered_orders, build_mezan_v2_ads, build_mezan_v2_product_cost
+from excel_parser import match_settings
+from expenses_routes import compute_operating_expenses_for_range
+from orders_db import orders_to_parsed
+from recurring_obligations_routes import compute_recurring_obligations_for_range
+from shipping_cost_ssot import aggregate_breakdown, get_company_configs
+
+CONTRACT_VERSION = "mezan_profit_envelope_v1"
+SOURCE = "mezan_profit_engine_v2_read_only"
+
+
+def _number(value: Any) -> float:
+    try:
+        parsed = float(value or 0)
+    except (TypeError, ValueError, OverflowError):
+        return 0.0
+    if parsed != parsed or abs(parsed) == float("inf"):
+        return 0.0
+    return parsed
+
+
+def _count(value: Any) -> int | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return parsed if parsed >= 0 else None
+
+
+def _accounting_quality(
+    *,
+    matched: dict[str, Any],
+    shipping: dict[str, Any],
+    product_cost: dict[str, Any],
+    ads: dict[str, Any],
+    operating: dict[str, Any],
+    recurring: dict[str, Any],
+) -> dict[str, Any]:
+    missing = _count(product_cost.get("missing_products_count"))
+    incomplete = _count(product_cost.get("incomplete_orders_count"))
+    component_known = {
+        "orders_sales": True,
+        "product_cost": (
+            "total" in product_cost
+            and missing is not None
+            and incomplete is not None
+        ),
+        "advertising": "total" in ads,
+        "payment_fees": "total_payment_fees" in matched,
+        "shipping": "total_with_tax" in shipping,
+        "payroll": "salaries_total" in operating,
+        "recurring_obligations": "total" in recurring,
+    }
+    known = all(component_known.values())
+    complete = bool(known and missing == 0 and incomplete == 0)
+    issues: list[str] = []
+    for name, is_known in component_known.items():
+        if not is_known:
+            issues.append(f"unknown_component:{name}")
+    if missing is not None and missing > 0:
+        issues.append("missing_product_cost")
+    if incomplete is not None and incomplete > 0:
+        issues.append("incomplete_profit_orders")
+    return {
+        "known": known,
+        "complete": complete,
+        "scale_safe": complete,
+        "missing_product_cost_count": missing,
+        "incomplete_profit_orders_count": incomplete,
+        "component_known": component_known,
+        "issues": issues,
+        "unknown_is_zero": False,
+    }
+
+
+async def build_mezan_profit_envelope(
+    db: Any,
+    user_id: str,
+    *,
+    from_date: str,
+    to_date: str,
+    payment_methods: str | None = None,
+    shipping_companies: str | None = None,
+) -> dict[str, Any]:
+    """Return P&L totals and their accounting-quality contract in one object."""
+    start = date.fromisoformat(from_date)
+    end = date.fromisoformat(to_date)
+    if end < start:
+        start, end = end, start
+    start_s = start.isoformat()
+    end_s = end.isoformat()
+
+    orders = await _filtered_orders(
+        db,
+        user_id,
+        from_date=start_s,
+        to_date=end_s,
+        payment_methods=payment_methods,
+        shipping_companies=shipping_companies,
+        include_marketing_attribution=False,
+    )
+    settings = await ensure_user_settings(db, user_id)
+    parsed = orders_to_parsed(orders)
+    matched = match_settings(
+        parsed,
+        settings.get("payment_methods", DEFAULT_PAYMENT_METHODS),
+        settings.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES),
+    )
+    company_configs = await get_company_configs(db, user_id)
+    shipping = aggregate_breakdown(orders, company_configs)
+
+    product_cost, ads, operating, recurring = await asyncio.gather(
+        build_mezan_v2_product_cost(db, user_id, orders),
+        build_mezan_v2_ads(db, user_id, from_date=start_s, to_date=end_s),
+        compute_operating_expenses_for_range(db, user_id, start, end),
+        compute_recurring_obligations_for_range(db, user_id, start, end),
+    )
+
+    payment_fees = _number(matched.get("total_payment_fees"))
+    shipping_total = _number(shipping.get("total_with_tax"))
+    ad_spend = _number(ads.get("total"))
+    ad_bank_fee = _number((ads.get("bank_commissions") or {}).get("total_fee_sar"))
+    payment_fees_with_ads = payment_fees + ad_bank_fee
+    product_total = _number(product_cost.get("total"))
+    salary_total = _number(operating.get("salaries_total"))
+    recurring_total = _number(recurring.get("total"))
+    operating_total = salary_total + recurring_total
+    total_sales = round(sum(_number(order.get("total_amount")) for order in orders), 2)
+    total_orders = len(orders)
+    net_profit = round(
+        total_sales
+        - payment_fees_with_ads
+        - shipping_total
+        - product_total
+        - ad_spend
+        - operating_total,
+        2,
+    )
+    quality = _accounting_quality(
+        matched=matched,
+        shipping=shipping,
+        product_cost=product_cost,
+        ads=ads,
+        operating=operating,
+        recurring=recurring,
+    )
+    source_contract = {
+        "orders_sales": "unified_orders:mezan_v2",
+        "product_cost": product_cost.get("source_contract") or {},
+        "advertising": ads.get("source_contract") or {},
+        "payment_fees": "settings.payment_methods + mezan_ad_account_cost_settings_v2",
+        "shipping": "shipping_cost_ssot",
+        "payroll": "mezan_employee_salary_contracts_v2",
+        "recurring_obligations": "operating_recurring_obligations_v2",
+    }
+    totals = {
+        "total_sales": total_sales,
+        "total_orders": total_orders,
+        "net_profit": net_profit,
+        "total_ads_cost": round(ad_spend, 2),
+        "total_product_cost": round(product_total, 2),
+        "total_payment_fees": round(payment_fees_with_ads, 2),
+        "total_shipping_cost": round(shipping_total, 2),
+        "operating_expenses_total": round(operating_total, 2),
+        "overall_roas": round(total_sales / ad_spend, 2) if ad_spend > 0 else None,
+        "avg_cost_per_order": round(ad_spend / total_orders, 2) if ad_spend > 0 and total_orders > 0 else None,
+        "missing_product_cost_count": quality["missing_product_cost_count"],
+        "incomplete_profit_orders_count": quality["incomplete_profit_orders_count"],
+        "profit_accounting_complete": quality["complete"],
+        "profit_accounting_quality_known": quality["known"],
+        "profit_source": SOURCE,
+        "profit_contract_version": CONTRACT_VERSION,
+        "profit_source_contract": source_contract,
+    }
+    return {
+        "contract_version": CONTRACT_VERSION,
+        "source": SOURCE,
+        "period": {"from": start_s, "to": end_s},
+        "totals": totals,
+        "components": {
+            "sales": {"amount_sar": total_sales, "orders": total_orders},
+            "product_cost": {"amount_sar": round(product_total, 2)},
+            "advertising": {"amount_sar": round(ad_spend, 2)},
+            "payment_fees": {"amount_sar": round(payment_fees_with_ads, 2)},
+            "shipping": {"amount_sar": round(shipping_total, 2)},
+            "payroll": {"amount_sar": round(salary_total, 2)},
+            "recurring_obligations": {"amount_sar": round(recurring_total, 2)},
+        },
+        "quality": quality,
+        "source_contract": source_contract,
+        "read_only": True,
+    }
+
+
+async def build_mezan_profit_totals(
+    db: Any,
+    user_id: str,
+    *,
+    from_date: str,
+    to_date: str,
+    payment_methods: str | None = None,
+    shipping_companies: str | None = None,
+) -> dict[str, Any]:
+    """Backward-compatible totals view backed by the consolidated envelope."""
+    envelope = await build_mezan_profit_envelope(
+        db,
+        user_id,
+        from_date=from_date,
+        to_date=to_date,
+        payment_methods=payment_methods,
+        shipping_companies=shipping_companies,
+    )
+    return dict(envelope["totals"])
+
+
+__all__ = [
+    "CONTRACT_VERSION",
+    "SOURCE",
+    "build_mezan_profit_envelope",
+    "build_mezan_profit_totals",
+]

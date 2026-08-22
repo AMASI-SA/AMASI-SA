@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 import mezan_campaign_profit_loader as profit_loader
+import mezan_profit_engine as profit_engine
 
 
 @pytest.mark.asyncio
@@ -40,26 +41,34 @@ async def test_mezan_profit_loader_uses_mezan_pnl_sources(monkeypatch):
     async def fake_recurring(*args, **kwargs):
         return {"total": 20.0}
 
-    monkeypatch.setattr(profit_loader, "_filtered_orders", fake_orders)
-    monkeypatch.setattr(profit_loader, "ensure_user_settings", fake_settings)
-    monkeypatch.setattr(profit_loader, "orders_to_parsed", lambda rows: {"rows": rows})
+    monkeypatch.setattr(profit_engine, "_filtered_orders", fake_orders)
+    monkeypatch.setattr(profit_engine, "ensure_user_settings", fake_settings)
+    monkeypatch.setattr(profit_engine, "orders_to_parsed", lambda rows: {"rows": rows})
     monkeypatch.setattr(
-        profit_loader,
+        profit_engine,
         "match_settings",
         lambda *args, **kwargs: {"total_payment_fees": 15.0},
     )
-    monkeypatch.setattr(profit_loader, "get_company_configs", fake_company_configs)
+    monkeypatch.setattr(profit_engine, "get_company_configs", fake_company_configs)
     monkeypatch.setattr(
-        profit_loader,
+        profit_engine,
         "aggregate_breakdown",
         lambda orders, configs: {"total_with_tax": 20.0},
     )
-    monkeypatch.setattr(profit_loader, "build_mezan_v2_product_cost", fake_product_cost)
-    monkeypatch.setattr(profit_loader, "build_mezan_v2_ads", fake_ads)
-    monkeypatch.setattr(profit_loader, "compute_operating_expenses_for_range", fake_operating)
-    monkeypatch.setattr(profit_loader, "compute_recurring_obligations_for_range", fake_recurring)
+    monkeypatch.setattr(profit_engine, "build_mezan_v2_product_cost", fake_product_cost)
+    monkeypatch.setattr(profit_engine, "build_mezan_v2_ads", fake_ads)
+    monkeypatch.setattr(
+        profit_engine,
+        "compute_operating_expenses_for_range",
+        fake_operating,
+    )
+    monkeypatch.setattr(
+        profit_engine,
+        "compute_recurring_obligations_for_range",
+        fake_recurring,
+    )
 
-    totals = await profit_loader.build_mezan_profit_totals(
+    totals = await profit_engine.build_mezan_profit_totals(
         object(),
         "owner-1",
         from_date="2026-08-01",
@@ -75,14 +84,33 @@ async def test_mezan_profit_loader_uses_mezan_pnl_sources(monkeypatch):
     assert totals["operating_expenses_total"] == 30.0
     assert totals["net_profit"] == 100.0
     assert totals["profit_source"] == "mezan_profit_engine_v2_read_only"
+    assert totals["profit_contract_version"] == "mezan_profit_envelope_v1"
 
 
 @pytest.mark.asyncio
 async def test_campaign_loader_contract_returns_totals(monkeypatch):
-    async def fake_totals(*args, **kwargs):
-        return {"net_profit": 1234.5, "total_sales": 5000.0}
+    async def fake_envelope(*args, **kwargs):
+        return {
+            "contract_version": "mezan_profit_envelope_v1",
+            "source": "mezan_profit_engine_v2_read_only",
+            "totals": {
+                "net_profit": 1234.5,
+                "total_sales": 5000.0,
+            },
+            "quality": {
+                "known": True,
+                "complete": True,
+                "scale_safe": True,
+                "unknown_is_zero": False,
+            },
+        }
 
-    monkeypatch.setattr(profit_loader, "build_mezan_profit_totals", fake_totals)
+    monkeypatch.setattr(
+        profit_loader,
+        "build_mezan_profit_envelope",
+        fake_envelope,
+    )
+
     loader = profit_loader.make_mezan_campaign_profit_loader(object())
     payload = await loader(
         user={"id": "owner-1"},
@@ -95,6 +123,7 @@ async def test_campaign_loader_contract_returns_totals(monkeypatch):
     )
 
     assert payload["totals"]["net_profit"] == 1234.5
+    assert payload["profit_envelope"]["contract_version"] == "mezan_profit_envelope_v1"
     assert payload["dashboard_source"] == "mezan_profit_engine_v2_read_only"
     assert payload["accounting_write_reached"] is False
     assert payload["qoyod_write_reached"] is False
@@ -104,6 +133,7 @@ def test_isolated_worker_wires_profit_loader_into_campaign_ai():
     source = (
         Path(__file__).resolve().parents[1] / "campaign_ai_worker_runner.py"
     ).read_text(encoding="utf-8")
+
     assert "make_mezan_campaign_profit_loader" in source
     assert "profit_loader = make_mezan_campaign_profit_loader(db)" in source
     assert "business_context_loader=profit_loader" in source
