@@ -22,6 +22,7 @@ from order_engine.service import InvalidOrderCursorError, OrderNotFoundError, ge
 from order_item_engine.mapper import map_order_item_identities
 from order_engine.product_image_enrichment import enrich_order_item_images
 from order_tracking_notes import enforce_stage_instructions
+from product_inventory_rules import order_item_specifications
 from salla_integration.auto_sync import schedule_salla_auto_sync
 from salla_integration.service import SallaError, call_salla
 
@@ -685,7 +686,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             "source_order_item_id": source_item.order_item_id,
             "source_product_name": _text(getattr(source_item, "name", None)),
             "linked_specs": linked_specs,
-            "preparation_status": "in_progress",
+            "preparation_status": "pending",
             "blocks_order_completion": True,
             "supplier_export": False,
             "salla_product": False,
@@ -774,20 +775,14 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             actor_id=actor_id,
             order_wide=True,
         )
-        normalized_status = None
         if payload.preparation_status is not None:
-            status_value = _normalized(payload.preparation_status)
-            status_map = {
-                "pending": "pending",
-                "لم يبدأ": "pending",
-                "in progress": "in_progress",
-                "قيد التجهيز": "in_progress",
-                "ready": "ready",
-                "جاهز": "ready",
-            }
-            normalized_status = status_map.get(status_value)
-            if not normalized_status:
-                raise HTTPException(status_code=422, detail={"code": "invalid_operational_item_status"})
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "operational_status_managed_in_assembly",
+                    "message": "جاهزية المنتج التشغيلي تُسجل من صفحة التجميع والعنونة فقط.",
+                },
+            )
         if payload.preparation_status is None and payload.name is None:
             raise HTTPException(status_code=422, detail={"code": "operational_item_update_required"})
         workflow = await db[WORKFLOWS].find_one(
@@ -800,8 +795,6 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         target = next((row for row in operational_items if _text(row.get("operational_item_id")) == operational_item_id), None)
         if target is None:
             raise HTTPException(status_code=404, detail={"code": "operational_item_not_found"})
-        if normalized_status:
-            target["preparation_status"] = normalized_status
         if payload.name is not None:
             target["name"] = _text(payload.name)
         target["updated_at"] = _now()
@@ -1036,6 +1029,64 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         if revision != payload.expected_revision:
             raise HTTPException(status_code=409, detail={"code": "review_revision_conflict", "message": "حدّث بيانات الطلب قبل الاعتماد."})
         states = _state_map(workflow)
+
+        # Product-level routing defaults are authoritative for future orders.
+        # A direct warehouse route intentionally bypasses the supplier file,
+        # preparation employee and preparation receipt stages.
+        from order_review_export_controls import (
+            ASSIGNMENT_DEFAULTS,
+            DIRECT_ASSEMBLY_ROUTE,
+            INTERNAL_PREPARATION_ROUTE,
+            SUPPLIER_FILE_ROUTE,
+            preparation_assignment_product_key,
+        )
+        product_keys = {
+            preparation_assignment_product_key(item)
+            for item in identities
+        }
+        default_docs = await db[ASSIGNMENT_DEFAULTS].find(
+            {
+                "user_id": user_id,
+                "product_key": {"$in": list(product_keys)},
+            },
+            {"_id": 0},
+        ).to_list(max(1, len(product_keys)))
+        defaults_by_key = {
+            _text(row.get("product_key")): row
+            for row in default_docs
+            if _text(row.get("product_key"))
+        }
+        for item in identities:
+            order_item_id = _text(item.order_item_id)
+            current = dict(states.get(order_item_id) or {})
+            if not _text(current.get("preparation_route")):
+                default = defaults_by_key.get(
+                    preparation_assignment_product_key(item)
+                ) or {}
+                route = _text(default.get("preparation_route"))
+                if route in {
+                    SUPPLIER_FILE_ROUTE,
+                    INTERNAL_PREPARATION_ROUTE,
+                    DIRECT_ASSEMBLY_ROUTE,
+                }:
+                    current["preparation_route"] = route
+                    current["supplier_export"] = route == SUPPLIER_FILE_ROUTE
+                    current["preparation_status"] = (
+                        "in_progress"
+                        if route == INTERNAL_PREPARATION_ROUTE
+                        else "awaiting_assembly"
+                        if route == DIRECT_ASSEMBLY_ROUTE
+                        else "pending_file"
+                    )
+                    current["assigned_employee_id"] = (
+                        _text(default.get("assigned_employee_id")) or None
+                        if route == INTERNAL_PREPARATION_ROUTE
+                        else None
+                    )
+                    current["route_source"] = "product_default"
+                    current["order_item_id"] = order_item_id
+                    states[order_item_id] = current
+
         preferences = await _preference_map(db, user_id, identities)
         now = _now()
         frozen_items = []
@@ -1045,6 +1096,15 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             frozen_items.append({
                 **states.get(item.order_item_id, {}),
                 "order_item_id": item.order_item_id,
+                "product_key": preparation_assignment_product_key(item),
+                "product_id": _text(getattr(item, "product_id", None)) or None,
+                "parent_product_id": _text(
+                    getattr(item, "parent_product_id", None)
+                ) or None,
+                "product_name": _text(getattr(item, "name", None)) or "منتج",
+                "sku": _text(getattr(item, "sku", None)) or None,
+                "quantity": int(getattr(item, "quantity", 1) or 1),
+                "specifications_snapshot": order_item_specifications(item),
                 "review_status": "reviewed",
                 "selected_image_url": view["selected_image_url"],
                 "selected_image_source": view["selected_image_source"],
@@ -1091,6 +1151,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
                 operational_items=list(
                     (workflow or {}).get("operational_items") or []
                 ),
+                review_items=frozen_items,
             )
         except Exception as exc:
             fulfillment_decision = {
