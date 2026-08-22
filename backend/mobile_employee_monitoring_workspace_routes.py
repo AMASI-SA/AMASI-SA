@@ -45,6 +45,46 @@ async def _monitoring_owner_scope(
     return owner_id
 
 
+async def _resolve_monitored_employee(
+    db: Any,
+    *,
+    owner_id: str,
+    employee_id: str,
+) -> dict[str, Any] | None:
+    """Resolve a real employee or the merchant owner synthetic monitoring row.
+
+    The monitoring summary intentionally exposes the owner as a preparation
+    card even when the owner does not have a duplicate Employees V2 record.
+    Detail/workspace reads must resolve that same synthetic identity instead of
+    returning employee_not_found.
+    """
+    employee = await db[EMPLOYEES].find_one(
+        {"user_id": owner_id, "id": employee_id},
+        {"_id": 0, "id": 1, "display_name": 1, "status": 1},
+    )
+    if employee:
+        return employee
+    if _text(employee_id) != _text(owner_id):
+        return None
+    owner = await db.users.find_one(
+        {"id": owner_id},
+        {"_id": 0, "id": 1, "name": 1, "display_name": 1, "email": 1},
+    )
+    if not owner:
+        return None
+    return {
+        "id": owner_id,
+        "display_name": (
+            _text(owner.get("display_name"))
+            or _text(owner.get("name"))
+            or _text(owner.get("email"))
+            or "مالك المتجر"
+        ),
+        "status": "active",
+        "synthetic_owner": True,
+    }
+
+
 def make_mobile_employee_monitoring_workspace_router(
     db: Any,
     current_user: Callable[..., Any],
@@ -60,9 +100,10 @@ def make_mobile_employee_monitoring_workspace_router(
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         owner_id = await _monitoring_owner_scope(db, user)
-        employee = await db[EMPLOYEES].find_one(
-            {"user_id": owner_id, "id": employee_id},
-            {"_id": 0, "id": 1, "display_name": 1, "status": 1},
+        employee = await _resolve_monitored_employee(
+            db,
+            owner_id=owner_id,
+            employee_id=employee_id,
         )
         if not employee:
             raise HTTPException(
@@ -84,6 +125,7 @@ def make_mobile_employee_monitoring_workspace_router(
                 "employee_id": employee_id,
                 "employee_name": _text(employee.get("display_name")) or "موظف",
                 "status": _text(employee.get("status")) or None,
+                "is_owner": bool(employee.get("synthetic_owner")),
             },
             "workspace": workspace,
             "allowed_monitoring_mutations": [],
@@ -92,4 +134,7 @@ def make_mobile_employee_monitoring_workspace_router(
     return router
 
 
-__all__ = ["make_mobile_employee_monitoring_workspace_router"]
+__all__ = [
+    "_resolve_monitored_employee",
+    "make_mobile_employee_monitoring_workspace_router",
+]
