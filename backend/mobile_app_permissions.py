@@ -37,6 +37,7 @@ MOBILE_APP_PERMISSION_GROUPS = [
             {"key": "app.page.suppliers", "label": "إدارة الموردين", "kind": "page"},
             {"key": "app.page.couriers", "label": "إدارة الموصلين", "kind": "page"},
             {"key": "app.page.employees", "label": "إدارة الموظفين", "kind": "page"},
+            {"key": "app.page.operations_monitoring", "label": "مراقبة العمليات", "kind": "page"},
         ],
     },
     {
