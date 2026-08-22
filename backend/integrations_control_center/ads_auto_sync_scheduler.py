@@ -1197,6 +1197,13 @@ async def _refresh_snapchat(
 ) -> dict[str, Any]:
     if not snapchat_oauth_configured() or not snapchat_native_sync_enabled():
         return {"provider": SNAPCHAT_PROVIDER_ID, "status": "skipped", "reason": "disabled"}
+    if not await _snapchat_cadence_ready(db, user_id=user_id, now=now):
+        return {
+            "provider": SNAPCHAT_PROVIDER_ID,
+            "status": "skipped",
+            "reason": "cadence_gate_10m",
+        }
+
     # Distributed atomic lease – prevents more than one Snapchat refresh
     # from running per (tenant, provider) across replicas.  Only the owner
     # of the freshly-issued token proceeds; other callers observe
@@ -1836,7 +1843,11 @@ async def _snapchat_cadence_ready(
         min(interval, SNAPCHAT_MIN_INTERVAL_SECONDS_CEILING),
     )
     threshold = now.astimezone(timezone.utc) - timedelta(seconds=interval)
-    latest = await _collection(db, RUNS_COLLECTION).find_one(
+    runs_collection = _collection(db, RUNS_COLLECTION)
+    find_one = getattr(runs_collection, "find_one", None)
+    if not callable(find_one):
+        return True
+    latest = await find_one(
         {
             "user_id": user_id,
             "provider": SNAPCHAT_PROVIDER_ID,
@@ -1911,19 +1922,8 @@ async def run_auto_sync_cycle(
                 now=started,
             )
 
-    async def execute_with_cadence(user_id: str, provider: str) -> dict[str, Any]:
-        if provider == SNAPCHAT_PROVIDER_ID and not await _snapchat_cadence_ready(
-            db, user_id=user_id, now=started
-        ):
-            return {
-                "provider": SNAPCHAT_PROVIDER_ID,
-                "status": "skipped",
-                "reason": "cadence_gate_10m",
-            }
-        return await execute(user_id, provider)
-
     raw = await asyncio.gather(
-        *(execute_with_cadence(user_id, provider) for user_id, provider in targets),
+        *(execute(user_id, provider) for user_id, provider in targets),
         return_exceptions=True,
     )
     results: list[dict[str, Any]] = []
