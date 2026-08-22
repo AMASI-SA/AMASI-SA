@@ -117,6 +117,17 @@ class _Collection:
     async def insert_one(self, document):
         self.rows.append(deepcopy(document))
 
+    async def create_index(self, *_args, **kwargs):
+        return kwargs.get("name") or "test_index"
+
+    async def find_one_and_update(self, query, update, **kwargs):
+        await self.update_one(query, update, upsert=bool(kwargs.get("upsert")))
+        identity = update.get("$set") or {}
+        row = next(
+            (item for item in self.rows if all(item.get(key) == identity.get(key) for key in ("user_id", "provider", "owner_token"))),
+            None,
+        )
+        return deepcopy(row) if row is not None else None
     async def update_one(self, query, update, upsert=False):
         row = next((item for item in self.rows if _matches(item, query)), None)
         inserted = row is None and upsert
@@ -1915,6 +1926,18 @@ async def test_snapchat_refresh_advances_proof_only_for_complete_account(
     )
     caplog.set_level(logging.ERROR, logger=scheduler.__name__)
 
+    async def acquire_lease(*_args, **_kwargs):
+        return object()
+
+    async def release_lease(*_args, **_kwargs):
+        return True
+
+    monkeypatch.setattr(scheduler, "acquire_snapchat_lease", acquire_lease)
+    monkeypatch.setattr(scheduler, "release_snapchat_lease", release_lease)
+    async def bind_lease(*_args, **_kwargs):
+        return True
+
+    monkeypatch.setattr(scheduler, "bind_run_to_lease", bind_lease)
     result = await scheduler._refresh_snapchat(
         object(),
         user_id="tenant-1",
