@@ -451,6 +451,28 @@ async def sync_order_from_verified_webhook(
             source="salla_direct",
             raw=payload,
         )
+        attribution_ledger = {
+            "synced": False,
+            "reason": "not_attempted",
+        }
+        try:
+            from mezan_attribution_ledger_sync import (
+                safe_sync_order_to_attribution_ledger,
+            )
+
+            attribution_ledger = await safe_sync_order_to_attribution_ledger(
+                db,
+                user_id=user_id,
+                order=result.get("doc") or doc,
+            )
+        except Exception as exc:
+            # Ledger attribution is analytics enrichment only. It must never
+            # block authoritative Salla ingestion or fulfilment.
+            attribution_ledger = {
+                "synced": False,
+                "reason": "ledger_bridge_unavailable",
+                "error_type": type(exc).__name__,
+            }
         first_party_attribution = {
             "linked": False,
             "reason": "linking_failed",
@@ -504,6 +526,7 @@ async def sync_order_from_verified_webhook(
             "tracking_from_order_webhook": bool(shipping_fields.get("tracking_number")),
             "auto_fulfillment": auto_fulfillment,
             "first_party_attribution": first_party_attribution,
+            "attribution_ledger": attribution_ledger,
             "no_salla_api_calls": True,
             "no_qoyod_calls": True,
         }
