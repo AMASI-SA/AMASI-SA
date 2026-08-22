@@ -117,6 +117,16 @@ def _coverage(value: Any) -> tuple[bool, str]:
     return expected_i > 0 and completed_i == expected_i, state
 
 
+def _proof_scoped_value(
+    row: dict[str, Any],
+    key: str,
+    proof: dict[str, Any],
+) -> Any:
+    return row.get(
+        f"financial_{key}" if proof.get("financial_contract") is True else key
+    )
+
+
 def _run_contract(
     run: Any,
     *,
@@ -134,8 +144,29 @@ def _run_contract(
     except ValueError:
         date_from = None
         date_to = None
-    coverage_ok, data_state = _coverage(summary.get("coverage"))
-    coverage = summary.get("coverage") if isinstance(summary.get("coverage"), dict) else {}
+    financial_proof = (
+        summary.get("financial_proof")
+        if isinstance(summary.get("financial_proof"), dict)
+        else {}
+    )
+    financial_contract = _strict_int(financial_proof.get("version")) == 1
+    if financial_contract:
+        raw_coverage = financial_proof.get("coverage")
+        accounts_complete_i = _strict_int(
+            financial_proof.get("accounts_complete")
+        )
+        errors_i = _strict_int(financial_proof.get("errors_count"))
+        run_status_ok = (
+            financial_proof.get("status") == "complete"
+            and value.get("status") in {"complete", "partial"}
+        )
+    else:
+        raw_coverage = summary.get("coverage")
+        accounts_complete_i = _strict_int(summary.get("accounts_complete"))
+        errors_i = _strict_int(summary.get("errors_count"))
+        run_status_ok = value.get("status") == "complete"
+    coverage_ok, data_state = _coverage(raw_coverage)
+    coverage = raw_coverage if isinstance(raw_coverage, dict) else {}
     coverage_completed_i = _strict_int(coverage.get("completed_requests"))
     calls = summary.get("account_provider_calls")
     participants: set[str] = set()
@@ -150,9 +181,7 @@ def _run_contract(
             participants.add(account_id)
         participants_ok = participants_ok and len(participants) == len(calls)
     attempted_i = _strict_int(summary.get("accounts_attempted"))
-    accounts_complete_i = _strict_int(summary.get("accounts_complete"))
     provider_calls_i = _strict_int(summary.get("provider_calls"))
-    errors_i = _strict_int(summary.get("errors_count"))
     participant_calls = sum(
         _strict_int(item.get("provider_calls")) or 0
         for item in calls or []
@@ -182,7 +211,7 @@ def _run_contract(
         and value.get("user_id") == user_id
         and value.get("provider") == SNAPCHAT_PROVIDER_ID
         and value.get("run_type") == ANALYTICS_RUN_TYPE
-        and value.get("status") == "complete"
+        and run_status_ok
         and _text(value.get("source_mode")) == expected_source
         and expected_source.startswith(SOURCE_PREFIX)
         and interval_ok
@@ -203,6 +232,7 @@ def _run_contract(
         "date_to": date_to,
         "participants": participants,
         "participants_proven": participants_ok,
+        "financial_contract": financial_contract,
     }
 
 
@@ -428,14 +458,21 @@ def _fact_bound(
     )
     if possible_writers != 1:
         return False
-    source = _text(integration.get("source_mode"))
-    if _text(account.get("source_mode")) != source or _text(fact.get("source_mode")) != source:
+    source = _text(_proof_scoped_value(integration, "source_mode", proof))
+    if (
+        _text(_proof_scoped_value(account, "source_mode", proof)) != source
+        or _text(fact.get("source_mode")) != source
+    ):
         return False
     if not _window_valid(fact, report_date, now=now):
         return False
     if report_date == now.astimezone(RIYADH_TZ).date():
-        account_sync = _utc(account.get("last_sync_at"))
-        integration_sync = _utc(integration.get("last_sync_at"))
+        account_sync = _utc(
+            _proof_scoped_value(account, "last_sync_at", proof)
+        )
+        integration_sync = _utc(
+            _proof_scoped_value(integration, "last_sync_at", proof)
+        )
         if not all(isinstance(item, datetime) for item in (account_sync, integration_sync)):
             return False
         if not (started <= account_sync <= finished and started <= integration_sync <= finished):
@@ -469,7 +506,13 @@ def _current_no_data_fresh(
         return False
     if now.astimezone(timezone.utc) - finished > CURRENT_RUN_MAX_AGE:
         return False
-    syncs = [_utc(integration.get("last_sync_at")), *[_utc(row.get("last_sync_at")) for row in accounts]]
+    syncs = [
+        _utc(_proof_scoped_value(integration, "last_sync_at", proof)),
+        *[
+            _utc(_proof_scoped_value(row, "last_sync_at", proof))
+            for row in accounts
+        ],
+    ]
     return all(isinstance(item, datetime) and started <= item <= finished for item in syncs)
 
 
@@ -847,14 +890,6 @@ async def load_snapchat_dashboard_spend(
             continue
         adjusted_by_key[key] = row
 
-    integration_coverage, integration_state = _coverage(integration.get("coverage"))
-    account_states: dict[str, str] = {}
-    for account_id, account in account_by_id.items():
-        complete, state = _coverage(account.get("coverage"))
-        if account.get("data_quality") != "complete" or not complete:
-            state = "unknown_incomplete"
-        account_states[account_id] = state
-
     daily_sar: dict[str, float | None] = {}
     daily_state: dict[str, str] = {}
     proof_rows: list[dict[str, Any]] = []
@@ -872,6 +907,24 @@ async def load_snapchat_dashboard_spend(
             daily_sar[day_text] = None
             daily_state[day_text] = "unknown_incomplete"
             continue
+        integration_coverage, integration_state = _coverage(
+            _proof_scoped_value(integration, "coverage", proof)
+        )
+        integration_quality = _proof_scoped_value(
+            integration, "data_quality", proof
+        )
+        account_states: dict[str, str] = {}
+        for account_id, account in account_by_id.items():
+            complete, state = _coverage(
+                _proof_scoped_value(account, "coverage", proof)
+            )
+            if (
+                _proof_scoped_value(account, "data_quality", proof)
+                != "complete"
+                or not complete
+            ):
+                state = "unknown_incomplete"
+            account_states[account_id] = state
         proof_rows.append({
             "date": day_text,
             "run_id": proof.get("run_id") or None,
@@ -889,7 +942,7 @@ async def load_snapchat_dashboard_spend(
             current_ok = True
             if report_date == today:
                 current_ok = (
-                    integration.get("data_quality") == "complete"
+                    integration_quality == "complete"
                     and integration_coverage
                     and integration_state == "confirmed_no_data"
                     and all(account_states.get(account_id) == "confirmed_no_data" for account_id in account_by_id)
@@ -909,7 +962,7 @@ async def load_snapchat_dashboard_spend(
             continue
         if report_date == today:
             if (
-                integration.get("data_quality") != "complete"
+                integration_quality != "complete"
                 or not integration_coverage
                 or integration_state != proof.get("data_state")
                 or any(account_states.get(account_id) not in KNOWN_STATES for account_id in account_by_id)

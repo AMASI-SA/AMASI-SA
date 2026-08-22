@@ -258,6 +258,79 @@ async def test_valid_native_fact_ignores_stored_sar_and_returns_confirmed_data()
 
 
 @pytest.mark.asyncio
+async def test_explicit_financial_proof_survives_partial_projection_run():
+    run = _run(status="partial")
+    run["summary"].update({
+        "accounts_complete": 0,
+        "errors_count": 4,
+        "coverage": {
+            "status": "incomplete",
+            "data_state": "unknown_incomplete",
+            "expected_requests": 234,
+            "completed_requests": 92,
+        },
+        "financial_proof": {
+            "version": 1,
+            "status": "complete",
+            "accounts_complete": 1,
+            "errors_count": 0,
+            "coverage": _coverage(),
+        },
+    })
+
+    account = _account()
+    account.update({
+        "financial_data_quality": "complete",
+        "financial_source_mode": SOURCE,
+        "financial_coverage": _coverage(),
+        "financial_last_sync_at": account["last_sync_at"],
+    })
+    integration = _integration()
+    integration.update({
+        "financial_data_quality": "complete",
+        "financial_source_mode": SOURCE,
+        "financial_coverage": _coverage(),
+        "financial_last_sync_at": integration["last_sync_at"],
+    })
+
+    result = await _load(
+        _db(runs=[run], accounts=[account], integration=integration)
+    )
+
+    assert result["total_sar"] == 10.0
+    assert result["quality"]["data_state"] == "confirmed_data"
+    assert result["quality"]["proof_runs"][0]["run_id"] == "run-good"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("version", 2),
+        ("status", "partial"),
+        ("accounts_complete", 0),
+        ("errors_count", 1),
+        ("coverage", {"status": "incomplete"}),
+    ],
+)
+async def test_partial_run_rejects_malformed_financial_proof(field, value):
+    run = _run(status="partial")
+    run["summary"]["financial_proof"] = {
+        "version": 1,
+        "status": "complete",
+        "accounts_complete": 1,
+        "errors_count": 0,
+        "coverage": _coverage(),
+        field: value,
+    }
+
+    result = await _load(_db(runs=[run]))
+
+    assert result["total_sar"] is None
+    assert result["quality"]["data_state"] == "unknown_incomplete"
+
+
+@pytest.mark.asyncio
 async def test_usd_uses_mezan2_account_fx_exactly_once():
     account = _account()
     account["currency"] = "USD"
