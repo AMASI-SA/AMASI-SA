@@ -7,12 +7,10 @@ User acceptance criteria:
       or in_delivery tabs.
     • No change to send/payment logic.
 
-Root cause of the previous duplicate: `list_pending_orders` used a
-plain Mongo `find()` + Python-side `seen_orders`. Multiple inbox
-traces per order (one per Salla status webhook) meant each tab query
-matched a DIFFERENT trace of the SAME order. Fix: the endpoint now
-uses an aggregation pipeline that groups by salla_order_number FIRST,
-picks the newest trace via $first, THEN applies the tab status filter.
+The authoritative current state is seeded in `unified_orders`, while
+the historical inbox traces remain available as operational evidence.
+This guards the same cross-tab contract without allowing an old inbox
+trace to re-introduce an order into a different tab.
 """
 from __future__ import annotations
 
@@ -61,6 +59,28 @@ async def _add_trace(db, *, order_number, received_at,
         "canonical_payload":    _canon(order_number, slug=slug, native=native),
         "raw_payload":          {"data": {"created_at": "2026-07-05"}},
     })
+    # `unified_orders` is the candidate authority. Updating this row models
+    # Salla's current order state; inbox rows above are trace evidence only.
+    await db.unified_orders.update_one(
+        {"user_id": TENANT, "order_number": str(order_number)},
+        {"$set": {
+            "user_id": TENANT,
+            "order_id": f"oid-{order_number}",
+            "order_number": str(order_number),
+            "order_date": "2026-07-05",
+            "order_status_slug": slug,
+            "order_status": slug,
+            "order_status_native": native,
+            "payment_status": "paid",
+            "paid_amount": 260.0,
+            "remaining_amount": 0.0,
+            "has_remaining_amount": False,
+            "total_amount": 260.0,
+            "currency": "SAR",
+            "updated_at": received_at,
+        }},
+        upsert=True,
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────
