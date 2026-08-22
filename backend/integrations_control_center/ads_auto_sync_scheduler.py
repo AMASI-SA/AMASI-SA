@@ -475,6 +475,35 @@ def _safe_summary(result: dict[str, Any]) -> dict[str, Any]:
         if isinstance(coverage, dict)
         else None
     )
+    financial_proof = result.get("financial_proof")
+    safe_financial_proof = None
+    if isinstance(financial_proof, dict):
+        financial_coverage = financial_proof.get("coverage")
+        safe_financial_coverage = (
+            {
+                key: financial_coverage.get(key)
+                for key in (
+                    "status",
+                    "data_state",
+                    "expected_requests",
+                    "completed_requests",
+                )
+                if financial_coverage.get(key) is not None
+            }
+            if isinstance(financial_coverage, dict)
+            else None
+        )
+        safe_financial_proof = {
+            key: financial_proof.get(key)
+            for key in (
+                "version",
+                "status",
+                "accounts_complete",
+                "errors_count",
+            )
+            if financial_proof.get(key) is not None
+        }
+        safe_financial_proof["coverage"] = safe_financial_coverage
     return {
         "date_from": result.get("date_from"),
         "date_to": result.get("date_to"),
@@ -497,6 +526,7 @@ def _safe_summary(result: dict[str, Any]) -> dict[str, Any]:
             else None
         ),
         "coverage": safe_coverage,
+        "financial_proof": safe_financial_proof,
         "error_samples": error_samples,
         "source_only": True,
         "provider_write_reached": False,
@@ -532,43 +562,7 @@ def _snapchat_coverage_complete(value: Any) -> bool:
 
 def _snapchat_item_errors(item: dict[str, Any]) -> list[dict[str, Any]]:
     """Flatten P0 performance failures without treating HTTP 200 as success."""
-    raw_errors = item.get("errors", [])
-    errors = [
-        dict(error)
-        for error in raw_errors
-        if isinstance(error, dict)
-    ] if isinstance(raw_errors, list) else []
-    if not isinstance(raw_errors, list) or any(
-        not isinstance(error, dict) for error in raw_errors
-    ):
-        errors.append({
-            "kind": "account_hour_performance",
-            "code": "snapchat_account_error_envelope_invalid",
-            "message": "Snapchat account error metadata is malformed.",
-            "retryable": True,
-        })
-    item_error_count = _strict_nonnegative_int(item.get("errors_count", 0))
-    if item_error_count is None:
-        errors.append({
-            "kind": "account_hour_performance",
-            "code": "snapchat_account_error_count_invalid",
-            "message": "Snapchat account error metadata is malformed.",
-            "retryable": True,
-        })
-    elif item_error_count > 0 and not errors:
-        errors.append({
-            "kind": "account_hour_performance",
-            "code": "snapchat_account_stats_partial",
-            "message": "Snapchat account stats response was partial.",
-            "retryable": True,
-        })
-    if not _snapchat_coverage_complete(item.get("coverage")):
-        errors.append({
-            "kind": "account_hour_performance",
-            "code": "snapchat_account_coverage_incomplete",
-            "message": "Snapchat account stats coverage was not proven complete.",
-            "retryable": True,
-        })
+    errors = _snapchat_financial_item_errors(item)
 
     for key in SNAPCHAT_PERFORMANCE_RESULT_KEYS:
         nested = item.get(key)
@@ -625,8 +619,96 @@ def _snapchat_item_errors(item: dict[str, Any]) -> list[dict[str, Any]]:
     return errors
 
 
+def _snapchat_financial_item_errors(
+    item: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Validate only the canonical account-hour facts used by finance."""
+    raw_errors = item.get("errors", [])
+    errors = [
+        dict(error)
+        for error in raw_errors
+        if isinstance(error, dict)
+    ] if isinstance(raw_errors, list) else []
+    if not isinstance(raw_errors, list) or any(
+        not isinstance(error, dict) for error in raw_errors
+    ):
+        errors.append({
+            "kind": "account_hour_performance",
+            "code": "snapchat_account_error_envelope_invalid",
+            "message": "Snapchat account error metadata is malformed.",
+            "retryable": True,
+        })
+    item_error_count = _strict_nonnegative_int(item.get("errors_count", 0))
+    if item_error_count is None:
+        errors.append({
+            "kind": "account_hour_performance",
+            "code": "snapchat_account_error_count_invalid",
+            "message": "Snapchat account error metadata is malformed.",
+            "retryable": True,
+        })
+    elif item_error_count > 0 and not errors:
+        errors.append({
+            "kind": "account_hour_performance",
+            "code": "snapchat_account_stats_partial",
+            "message": "Snapchat account stats response was partial.",
+            "retryable": True,
+        })
+    if not _snapchat_coverage_complete(item.get("coverage")):
+        errors.append({
+            "kind": "account_hour_performance",
+            "code": "snapchat_account_coverage_incomplete",
+            "message": "Snapchat account stats coverage was not proven complete.",
+            "retryable": True,
+        })
+    return errors
+
+
 def _snapchat_item_complete(item: dict[str, Any]) -> bool:
     return not _snapchat_item_errors(item)
+
+
+def _snapchat_financial_item_complete(item: dict[str, Any]) -> bool:
+    return not _snapchat_financial_item_errors(item)
+
+
+def _snapchat_financial_run_coverage(
+    items: list[dict[str, Any]],
+    *,
+    accounts_expected: int,
+) -> dict[str, Any]:
+    coverages = [
+        item["coverage"]
+        for item in items
+        if isinstance(item.get("coverage"), dict)
+    ]
+    expected_requests = sum(
+        _strict_nonnegative_int(value.get("expected_requests")) or 0
+        for value in coverages
+    )
+    completed_requests = sum(
+        _strict_nonnegative_int(value.get("completed_requests")) or 0
+        for value in coverages
+    )
+    complete = (
+        accounts_expected > 0
+        and len(items) == accounts_expected
+        and all(_snapchat_financial_item_complete(item) for item in items)
+    )
+    states = {str(value.get("data_state") or "") for value in coverages}
+    if not complete:
+        data_state = "unknown_incomplete"
+    elif "confirmed_data" in states:
+        data_state = "confirmed_data"
+    elif "confirmed_zero" in states:
+        data_state = "confirmed_zero"
+    else:
+        data_state = "confirmed_no_data"
+    return {
+        "status": "complete" if complete else "incomplete",
+        "data_state": data_state,
+        "expected_requests": expected_requests,
+        "completed_requests": completed_requests,
+    }
 
 
 def _snapchat_run_coverage(
@@ -1138,6 +1220,7 @@ async def _refresh_snapchat(
         access_token = await token_context.access_token()
         items: list[dict[str, Any]] = []
         errors: list[dict[str, Any]] = []
+        financial_errors_count = 0
         failed_coverages: list[dict[str, Any]] = []
         provider_calls_total = 0
         account_provider_calls: list[dict[str, Any]] = []
@@ -1160,6 +1243,8 @@ async def _refresh_snapchat(
                     )
                     observe_failure_stage("account_state_persist")
                     items.append(item)
+                    financial_item_errors = _snapchat_financial_item_errors(item)
+                    financial_errors_count += len(financial_item_errors)
                     item_errors = _snapchat_item_errors(item)
                     for item_error in item_errors:
                         code = str(item_error.get("code") or "snapchat_account_stats_partial")
@@ -1186,6 +1271,7 @@ async def _refresh_snapchat(
                             "retryable": bool(item_error.get("retryable")),
                         })
                     observed_at = _iso()
+                    financial_item_complete = not financial_item_errors
                     item_complete = not item_errors
                     account_patch: dict[str, Any] = {
                         "data_delay_minutes": 0 if item_complete else None,
@@ -1194,11 +1280,24 @@ async def _refresh_snapchat(
                         "performance_rows_saved": int(item.get("rows_saved") or 0),
                         "source_mode": ACCOUNT_REFRESH_SOURCE_MODE,
                         "coverage": item.get("coverage"),
+                        "financial_data_delay_minutes": (
+                            0 if financial_item_complete else None
+                        ),
+                        "financial_data_quality": (
+                            "complete" if financial_item_complete else "incomplete"
+                        ),
+                        "financial_source_mode": ACCOUNT_REFRESH_SOURCE_MODE,
+                        "financial_coverage": item.get("coverage"),
                     }
                     if item_complete:
                         account_patch.update({
                             "last_sync_at": observed_at,
                             "last_observed_at": observed_at,
+                        })
+                    if financial_item_complete:
+                        account_patch.update({
+                            "financial_last_sync_at": observed_at,
+                            "financial_last_observed_at": observed_at,
                         })
                     account_update = await _collection(
                         db, "mezan_integration_accounts_v2"
@@ -1255,6 +1354,7 @@ async def _refresh_snapchat(
                             "ad_account_id": account_id,
                             **state_error,
                         })
+                        financial_errors_count += 1
                 except SnapchatNativeSyncError as exc:
                     if exc.code == "snapchat_needs_reauth":
                         raise
@@ -1287,6 +1387,7 @@ async def _refresh_snapchat(
                         "message": exc.message[:300],
                         "retryable": exc.retryable,
                     })
+                    financial_errors_count += 1
                     await _collection(db, "mezan_integration_accounts_v2").update_one(
                         {
                             "user_id": user_id,
@@ -1303,6 +1404,10 @@ async def _refresh_snapchat(
                                 "health_score": 70,
                                 "source_mode": ACCOUNT_REFRESH_SOURCE_MODE,
                                 "coverage": failed_coverage,
+                                "financial_data_delay_minutes": None,
+                                "financial_data_quality": "incomplete",
+                                "financial_source_mode": ACCOUNT_REFRESH_SOURCE_MODE,
+                                "financial_coverage": failed_coverage,
                             }
                         },
                     )
@@ -1318,6 +1423,9 @@ async def _refresh_snapchat(
             int(item.get("campaign_rows_saved") or 0) for item in items
         )
         complete = sum(_snapchat_item_complete(item) for item in items)
+        financial_complete = sum(
+            _snapchat_financial_item_complete(item) for item in items
+        )
         coverage = _snapchat_run_coverage(
             items,
             accounts_expected=len(accounts),
@@ -1329,6 +1437,25 @@ async def _refresh_snapchat(
         coverage["completed_requests"] += sum(
             _strict_nonnegative_int(item.get("completed_requests")) or 0
             for item in failed_coverages
+        )
+        financial_coverage = _snapchat_financial_run_coverage(
+            items,
+            accounts_expected=len(accounts),
+        )
+        financial_coverage["expected_requests"] += sum(
+            _strict_nonnegative_int(item.get("expected_requests")) or 0
+            for item in failed_coverages
+        )
+        financial_coverage["completed_requests"] += sum(
+            _strict_nonnegative_int(item.get("completed_requests")) or 0
+            for item in failed_coverages
+        )
+        financial_status = (
+            "complete"
+            if financial_errors_count == 0
+            and financial_complete == len(accounts)
+            and financial_coverage["status"] == "complete"
+            else "partial"
         )
         status = (
             "complete"
@@ -1381,6 +1508,13 @@ async def _refresh_snapchat(
             "account_provider_calls": account_provider_calls,
             "error_samples": errors[:10],
             "coverage": coverage,
+            "financial_proof": {
+                "version": 1,
+                "status": financial_status,
+                "accounts_complete": financial_complete,
+                "errors_count": financial_errors_count,
+                "coverage": financial_coverage,
+            },
             "decision_outcomes": decision_outcomes,
         }
         observe_failure_stage("integration_state_persist")
@@ -1393,9 +1527,23 @@ async def _refresh_snapchat(
             "health_score": 100 if status == "complete" else 70,
             "source_mode": ACCOUNT_REFRESH_SOURCE_MODE,
             "coverage": coverage,
+            "financial_data_delay_minutes": (
+                0 if financial_status == "complete" else None
+            ),
+            "financial_data_quality": (
+                "complete" if financial_status == "complete" else "incomplete"
+            ),
+            "financial_source_mode": ACCOUNT_REFRESH_SOURCE_MODE,
+            "financial_coverage": financial_coverage,
+            "projection_data_quality": (
+                "complete" if status == "complete" else "incomplete"
+            ),
+            "projection_coverage": coverage,
         }
         if status == "complete":
             integration_patch["last_sync_at"] = integration_observed_at
+        if financial_status == "complete":
+            integration_patch["financial_last_sync_at"] = integration_observed_at
         integration_update = await _collection(db, "mezan_integrations_v2").update_one(
             {
                 "user_id": user_id,
@@ -1432,9 +1580,16 @@ async def _refresh_snapchat(
                 )
                 error_id = None
             errors.append({"error_id": error_id, **state_error})
+            financial_errors_count += 1
+            financial_status = "partial"
             status = "partial"
             coverage = {
                 **coverage,
+                "status": "incomplete",
+                "data_state": "unknown_incomplete",
+            }
+            financial_coverage = {
+                **financial_coverage,
                 "status": "incomplete",
                 "data_state": "unknown_incomplete",
             }
@@ -1443,6 +1598,13 @@ async def _refresh_snapchat(
                 "errors_count": len(errors),
                 "error_samples": errors[:10],
                 "coverage": coverage,
+                "financial_proof": {
+                    "version": 1,
+                    "status": financial_status,
+                    "accounts_complete": financial_complete,
+                    "errors_count": financial_errors_count,
+                    "coverage": financial_coverage,
+                },
             })
             await _mark_snapchat_sync_unhealthy(db, user_id)
         observe_failure_stage("run_finalize")
