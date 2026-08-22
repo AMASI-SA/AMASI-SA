@@ -1836,6 +1836,32 @@ async def run_campaign_ai_monitor(
                 "source": "store_opportunity_planner",
                 "code": _text(type(exc).__name__, limit=100),
             })
+        try:
+            from campaign_ai_saudi_product_radar import (
+                load_recent_saudi_product_radar,
+                refresh_saudi_product_radar,
+            )
+            saudi_product_radar = await refresh_saudi_product_radar(
+                db,
+                user_id,
+                as_of=end,
+                goal_context=business_profit.get("monthly_profit_goal"),
+            )
+            prior_decisions["saudi_product_radar"] = {
+                "current": saudi_product_radar,
+                "recent": await load_recent_saudi_product_radar(db, user_id, limit=7),
+            }
+        except Exception as exc:
+            saudi_product_radar = {
+                "contract_version": "saudi_product_radar_v1",
+                "read_only": True,
+                "available": False,
+                "reason": type(exc).__name__,
+            }
+            errors.append({
+                "source": "saudi_product_radar",
+                "code": _text(type(exc).__name__, limit=100),
+            })
         if not candidates:
             recommendation_source = "none"
             result = RecommendationOutput(
@@ -1938,6 +1964,8 @@ async def run_campaign_ai_monitor(
             "business_profit_context_available": bool(business_profit.get("available")),
             "monthly_causal_memory": current_month_memory,
             "monthly_causal_memory_available": current_month_memory is not None,
+            "saudi_product_radar": saudi_product_radar,
+            "saudi_product_radar_available": saudi_product_radar.get("available", True) is not False,
             "store_opportunity_plan": store_opportunity_plan,
             "store_opportunity_plan_available": store_opportunity_plan.get("available") is not False,
         }
