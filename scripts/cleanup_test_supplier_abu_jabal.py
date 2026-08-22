@@ -155,11 +155,11 @@ async def main() -> int:
     share_evidence = await _rows(db, SHARE_EVIDENCE, evidence_query)
     dispatch_events = await _rows(db, DISPATCH_EVENTS, dispatch_event_query)
     pieces = await _rows(db, PIECES, piece_query)
-    piece_ids = [str(r.get("piece_id") or r.get("id")) for r in pieces if r.get("piece_id") or r.get("id")]
     piece_event_query = {"user_id": user_id, "$or": [
         {"supplier_id": supplier_id},
-        {"piece_id": {"$in": piece_ids or ["__none__"]}},
         {"supplier_invoice_id": {"$in": invoice_ids or ["__none__"]}},
+        {"supplier_receiving_session_id": {"$in": session_ids or ["__none__"]}},
+        {"supplier_dispatch_id": {"$in": dispatch_ids or ["__none__"]}},
     ]}
     piece_events = await _rows(db, PIECE_EVENTS, piece_event_query)
     supplier_audit = await _rows(db, SUPPLIER_AUDIT, {"user_id": user_id, "supplier_id": supplier_id})
