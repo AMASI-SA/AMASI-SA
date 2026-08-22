@@ -622,19 +622,15 @@ async def me(user: dict = Depends(current_user)):
         user,
         _effective_perms(user),
     )
-    # Native-app permissions are a separate namespace and are returned only to
-    # a cryptographically tagged AMASI mobile session. They are never merged
-    # into Mezan's browser/operational ``permissions`` list.
-    from mobile_app_permissions import MOBILE_APP_CLIENT, mobile_app_access_for_user
+    # Native-app permissions remain a separate namespace and are never merged
+    # into Mezan's browser/operational ``permissions`` list. Return the
+    # authenticated account's own app-access snapshot on every profile refresh:
+    # the mobile client persists this response for navigation, and an auth
+    # middleware losing its client marker must not turn 13 saved pages into 0.
+    # Operational mobile routes still enforce their signed-session policy.
+    from mobile_app_permissions import mobile_app_access_for_user
 
-    mobile_app_access = {
-        "configured": False,
-        "enabled": False,
-        "owner_override": False,
-        "permissions": [],
-    }
-    if user.get("_session_client") == MOBILE_APP_CLIENT:
-        mobile_app_access = await mobile_app_access_for_user(db, user)
+    mobile_app_access = await mobile_app_access_for_user(db, user)
     return {
         "id": user["id"], "name": user.get("name"), "email": user["email"],
         "role": user.get("role", "user"),
