@@ -579,9 +579,15 @@ async def build_order_fulfillment_decision(
     user_id: str,
     order: Any,
     operational_items: list[dict[str, Any]] | None = None,
+    review_items: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Resolve product rules and Mezan warehouse availability for one order."""
     await ensure_fulfillment_indexes(db)
+    review_state_by_item_id = {
+        _text(row.get("order_item_id")): row
+        for row in (review_items or [])
+        if _text(row.get("order_item_id"))
+    }
     product_ids = {_product_id(item) for item in order.items}
     product_ids.discard("")
     products = await db[PRODUCTS].find(
@@ -692,6 +698,25 @@ async def build_order_fulfillment_decision(
             product_resources=product_resources,
             selected_option_resources=selected_option_resources,
         )
+        review_state = review_state_by_item_id.get(
+            _text(getattr(item, "order_item_id", None)),
+            {},
+        )
+        direct_assembly = (
+            _text(review_state.get("preparation_route")) == "direct_assembly"
+        )
+        if direct_assembly:
+            # This is a stocked warehouse product. It skips supplier and
+            # preparation custody but still reserves/deducts real inventory.
+            classification = {
+                **classification,
+                "resolved_type": FULFILLMENT_TYPE_INSTANT,
+                "requires_preparation": False,
+                "requires_branch_inventory": True,
+                "forcing_services": [],
+                "supplier_export_eligible": False,
+                "direct_assembly": True,
+            }
         quantity = float(getattr(item, "quantity", 1) or 1)
         identifiers = {
             product_id,
@@ -740,6 +765,7 @@ async def build_order_fulfillment_decision(
             "name": getattr(item, "name", None),
             "sku": getattr(item, "sku", None) or product.get("sku"),
             "quantity": quantity,
+            "direct_assembly": direct_assembly,
             **classification,
             "inventory_available": inventory_available,
             "available_quantity": available_quantity,
@@ -766,24 +792,26 @@ async def build_order_fulfillment_decision(
         })
 
     decision = evaluate_order_fulfillment(order=order, lines=lines)
-    unready_operational_items = [
+    assembly_operational_items = [
         row for row in (operational_items or [])
         if row.get("blocks_order_completion") is not False
-        and _text(row.get("preparation_status")).casefold() != "ready"
     ]
-    if unready_operational_items:
-        decision["ready_to_ship"] = False
-        decision["route_stage"] = "reviewed"
-        decision["preparation_stages_required"] = True
-        decision["supplier_export_order_required"] = True
-        decision["blockers"] = list(dict.fromkeys([
-            *(decision.get("blockers") or []),
-            "operational_items_not_ready",
-        ]))
-        decision["unready_operational_item_ids"] = [
-            row.get("operational_item_id")
-            for row in unready_operational_items
-        ]
+    direct_assembly_lines = [
+        row for row in lines if row.get("direct_assembly") is True
+    ]
+    # Assembly-only work must reach the assembly screen. Its readiness is
+    # enforced there and may not create supplier/preparation blockers here.
+    decision["operational_assembly_required"] = bool(
+        assembly_operational_items
+    )
+    decision["operational_assembly_item_ids"] = [
+        row.get("operational_item_id")
+        for row in assembly_operational_items
+    ]
+    decision["direct_assembly_required"] = bool(direct_assembly_lines)
+    decision["direct_assembly_order_item_ids"] = [
+        row.get("order_item_id") for row in direct_assembly_lines
+    ]
     inventory_eligibility_blockers = _inventory_reservation_blockers(
         decision.get("blockers") or []
     )
@@ -861,6 +889,7 @@ async def auto_route_instant_order(
         operational_items=list(
             (workflow or {}).get("operational_items") or []
         ),
+        review_items=list((workflow or {}).get("items") or []),
     )
     if decision.get("ready_to_ship") is not True:
         if (

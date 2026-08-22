@@ -17,6 +17,7 @@ from preparation_piece_operations import (
     _assembly_piece_public,
     _assembly_progress,
     _assembly_search,
+    _workflow_assembly_pieces,
     _can_start_assigned_file,
     _piece_has_completed_preparation_receipt,
     _service_context_key,
@@ -499,6 +500,50 @@ def test_assembly_product_card_keeps_full_information_and_search_priority():
     assert card["services"] == [
         {"name": "كتابة الاسم", "status": "completed"},
     ]
+
+
+def test_operational_and_direct_stock_items_exist_only_in_assembly():
+    rows = _workflow_assembly_pieces(
+        {
+            "operational_items": [{
+                "operational_item_id": "op:gift-card",
+                "name": "كرت إهداء",
+                "source_order_item_id": "item-1",
+                "source_product_name": "هدية",
+                "linked_specs": [{"name": "الاسم", "value": "سارة"}],
+                "preparation_status": "pending",
+                "supplier_export": False,
+            }],
+            "items": [{
+                "order_item_id": "item-2",
+                "preparation_route": "direct_assembly",
+                "product_id": "product-2",
+                "product_name": "منتج مخزون",
+                "quantity": 2,
+                "direct_assembly_piece_ids": ["direct-a", "direct-b"],
+                "assembly_ready_piece_ids": ["direct-a"],
+            }],
+        },
+        order_number="10452",
+    )
+
+    assert len(rows) == 3
+    operational = next(row for row in rows if row["virtual_kind"] == "operational")
+    direct = [row for row in rows if row["virtual_kind"] == "direct_assembly"]
+    assert operational["supplier_export"] is False
+    assert operational["inventory_item"] is False
+    assert operational["assembly_status"] == "pending"
+    assert [row["assembly_status"] for row in direct] == ["ready", "pending"]
+    assert all(row["supplier_export"] is False for row in direct)
+    assert all(row["inventory_item"] is True for row in direct)
+
+
+def test_virtual_assembly_cards_are_counted_before_printing():
+    source = inspect.getsource(_assembly_progress)
+
+    assert "_workflow_assembly_pieces" in source
+    assert "pieces.extend" in source
+    assert "total_count = len(pieces)" in source
 
 
 def test_assembly_ready_is_idempotent_and_batch_id_is_stable():
