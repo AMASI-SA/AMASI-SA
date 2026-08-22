@@ -917,19 +917,22 @@ async def refresh_snapchat_account_hours(
             continue
 
         provider_start, provider_end = provider_window
-        await _upsert_performance(
-            context,
-            account=account,
-            entity_type="ad_account",
-            external_id=account_id,
-            date_string=date_string,
-            metrics=_finalize_bucket(bucket),
-            provider_start=provider_start.isoformat(timespec="seconds"),
-            provider_end=provider_end.isoformat(timespec="seconds"),
-            source_mode=ACCOUNT_REFRESH_SOURCE_MODE,
-            provider_granularity=PROVIDER_GRANULARITY,
-            provider_breakdown=PROVIDER_BREAKDOWN,
-        )
+        write = {
+            "account": account,
+            "entity_type": "ad_account",
+            "external_id": account_id,
+            "date_string": date_string,
+            "metrics": _finalize_bucket(bucket),
+            "provider_start": provider_start.isoformat(timespec="seconds"),
+            "provider_end": provider_end.isoformat(timespec="seconds"),
+            "source_mode": ACCOUNT_REFRESH_SOURCE_MODE,
+            "provider_granularity": PROVIDER_GRANULARITY,
+            "provider_breakdown": PROVIDER_BREAKDOWN,
+        }
+        if getattr(context, "defer_financial_fact_writes", False):
+            context.deferred_financial_fact_writes.append(write)
+        else:
+            await _upsert_performance(context, **write)
         saved += 1
 
     return {
@@ -980,6 +983,28 @@ async def refresh_snapchat_account_hours(
     }
 
 
+async def flush_deferred_financial_fact_writes(
+    context: SnapchatSyncContext,
+) -> int:
+    """Publish canonical account facts only after their proof is complete.
+
+    Projection wrappers may take minutes or fail after the account-hour fetch.
+    Keeping these writes staged prevents an active or failed refresh from
+    replacing the last fact that is still bound to a completed financial run.
+    """
+    writes = list(getattr(context, "deferred_financial_fact_writes", []))
+    context.deferred_financial_fact_writes.clear()
+    for write in writes:
+        await _upsert_performance(context, **write)
+    return len(writes)
+
+
+def discard_deferred_financial_fact_writes(
+    context: SnapchatSyncContext,
+) -> None:
+    context.deferred_financial_fact_writes.clear()
+
+
 __all__ = [
     "ACCOUNT_REFRESH_SOURCE_MODE",
     "AccountHourFetchResult",
@@ -995,6 +1020,8 @@ __all__ = [
     "aggregate_account_hours_by_riyadh_day",
     "aggregate_campaign_hours_by_riyadh_day",
     "extract_account_hour_rows",
+    "discard_deferred_financial_fact_writes",
+    "flush_deferred_financial_fact_writes",
     "require_account_hour_fetch_result",
     "refresh_snapchat_account_hours",
     "snapchat_account_request_window",

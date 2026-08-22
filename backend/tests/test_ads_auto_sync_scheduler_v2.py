@@ -1810,6 +1810,7 @@ async def test_snapchat_refresh_advances_proof_only_for_complete_account(
 
     async def refresh(*args, **kwargs):
         args[0].provider_calls = 3
+        args[0].deferred_financial_fact_writes.append({"account": "account-1"})
         if raise_error:
             raise scheduler.SnapchatNativeSyncError(
                 "snapchat_account_hour_timeseries_stat_missing",
@@ -1819,6 +1820,17 @@ async def test_snapchat_refresh_advances_proof_only_for_complete_account(
                 result={"coverage": deepcopy(item["coverage"])},
             )
         return deepcopy(item)
+
+    published_financial_facts = []
+    discarded_financial_facts = []
+
+    async def flush_financial_facts(context):
+        published_financial_facts.extend(context.deferred_financial_fact_writes)
+        context.deferred_financial_fact_writes.clear()
+
+    def discard_financial_facts(context):
+        discarded_financial_facts.extend(context.deferred_financial_fact_writes)
+        context.deferred_financial_fact_writes.clear()
 
     outcome_secret = "Bearer decision-outcomes-secret raw-outcome-payload"
 
@@ -1887,6 +1899,16 @@ async def test_snapchat_refresh_advances_proof_only_for_complete_account(
     monkeypatch.setattr(scheduler.httpx, "AsyncClient", Client)
     monkeypatch.setattr(scheduler.snapchat_hourly, "refresh_snapchat_account_hours", refresh)
     monkeypatch.setattr(
+        scheduler.snapchat_hourly,
+        "flush_deferred_financial_fact_writes",
+        flush_financial_facts,
+    )
+    monkeypatch.setattr(
+        scheduler.snapchat_hourly,
+        "discard_deferred_financial_fact_writes",
+        discard_financial_facts,
+    )
+    monkeypatch.setattr(
         scheduler,
         "_collection",
         lambda db, name: Collection(name),
@@ -1904,6 +1926,8 @@ async def test_snapchat_refresh_advances_proof_only_for_complete_account(
     account_patch = updates["mezan_integration_accounts_v2"][0]["update"]["$set"]
     integration_patch = updates["mezan_integrations_v2"][0]["update"]["$set"]
     if outcome_failure:
+        assert published_financial_facts == [{"account": "account-1"}]
+        assert discarded_financial_facts == []
         assert result["status"] == "failed"
         assert result["code"] == "snapchat_scheduler_runtime_error"
         assert finished[0]["status"] == "complete"
@@ -1931,6 +1955,8 @@ async def test_snapchat_refresh_advances_proof_only_for_complete_account(
         assert outcome_secret not in caplog.text
         return
     if complete_item and projection_failure:
+        assert published_financial_facts == [{"account": "account-1"}]
+        assert discarded_financial_facts == []
         assert result["status"] == "partial"
         assert result["coverage"]["status"] == "incomplete"
         assert result["financial_proof"] == {
@@ -1956,6 +1982,8 @@ async def test_snapchat_refresh_advances_proof_only_for_complete_account(
         assert integration_patch["projection_data_quality"] == "incomplete"
         return
     if complete_item:
+        assert published_financial_facts == [{"account": "account-1"}]
+        assert discarded_financial_facts == []
         assert result["status"] == "complete"
         assert result["coverage"] == {
             "status": "complete",
@@ -1985,6 +2013,8 @@ async def test_snapchat_refresh_advances_proof_only_for_complete_account(
         assert account_patch["health_score"] == 100
         assert integration_patch["health_score"] == 100
     else:
+        assert published_financial_facts == []
+        assert discarded_financial_facts == [{"account": "account-1"}]
         assert result["status"] == "partial"
         assert result["coverage"]["status"] == "incomplete"
         for patch in (account_patch, integration_patch):
@@ -2151,4 +2181,3 @@ def test_status_never_exposes_global_results_from_another_tenant():
     assert "failure_line" not in sanitized["error"]
     assert owner_secret not in repr(sanitized)
     assert token_shaped_exception_type not in repr(sanitized)
-

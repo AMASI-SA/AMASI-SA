@@ -1224,11 +1224,15 @@ async def _refresh_snapchat(
         failed_coverages: list[dict[str, Any]] = []
         provider_calls_total = 0
         account_provider_calls: list[dict[str, Any]] = []
+        deferred_financial_contexts: list[SnapchatSyncContext] = []
         observe_failure_stage("provider_refresh")
         async with httpx.AsyncClient(timeout=35.0) as client:
             for account in accounts:
                 account_context = SnapchatSyncContext(db, user_id, now=_utcnow)
                 account_context.failure_stage_observer = observe_failure_stage
+                account_context.defer_financial_fact_writes = True
+                account_context.deferred_financial_fact_writes = []
+                deferred_financial_contexts.append(account_context)
                 account_id = str(account.get("ad_account_id") or "").strip()
                 try:
                     observe_failure_stage("provider_refresh")
@@ -1417,6 +1421,22 @@ async def _refresh_snapchat(
                         "ad_account_id": account_id,
                         "provider_calls": int(account_context.provider_calls),
                     })
+        financial_batch_complete = (
+            financial_errors_count == 0
+            and len(items) == len(accounts)
+            and all(_snapchat_financial_item_complete(item) for item in items)
+        )
+        if financial_batch_complete:
+            observe_failure_stage("fact_write")
+            for deferred_context in deferred_financial_contexts:
+                await snapchat_hourly.flush_deferred_financial_fact_writes(
+                    deferred_context
+                )
+        else:
+            for deferred_context in deferred_financial_contexts:
+                snapchat_hourly.discard_deferred_financial_fact_writes(
+                    deferred_context
+                )
         observe_failure_stage("coverage_aggregation")
         rows_saved = sum(int(item.get("rows_saved") or 0) for item in items)
         campaign_rows_saved = sum(
@@ -2224,4 +2244,3 @@ __all__ = [
     "rolling_days",
     "run_auto_sync_cycle",
 ]
-
