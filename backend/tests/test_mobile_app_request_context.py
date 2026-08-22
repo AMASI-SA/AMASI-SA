@@ -54,3 +54,15 @@ def test_unknown_native_route_fails_closed():
 def test_auth_profile_keeps_employee_identity():
     result = asyncio.run(mobile_app_request_user(DB(), staff(), path="/api/auth/me", method="GET"))
     assert result["id"] == "staff-1"
+
+def test_order_items_route_uses_orders_page_permission():
+    result = asyncio.run(
+        mobile_app_request_user(
+            DB(),
+            staff(),
+            path="/api/order-items-v2",
+            method="GET",
+        )
+    )
+    assert result["id"] == "owner-1"
+    assert result["_mobile_actor_id"] == "staff-1"
