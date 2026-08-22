@@ -571,6 +571,64 @@ def test_refresh_persists_two_campaign_days_and_exact_account_total(
     assert account_total["metrics"]["conversion_purchases_value"] == 17_000_000
 
 
+def test_scheduler_mode_defers_canonical_account_fact_until_flush(monkeypatch):
+    rows = [{
+        "campaign_id": "campaign-1",
+        "start_time": "2026-08-02T00:00:00+03:00",
+        "end_time": "2026-08-02T01:00:00+03:00",
+        "metrics": _metrics(spend=5_000_000, purchases=2, value=10_000_000),
+    }]
+
+    async def fake_fetch(*args, **kwargs):
+        return hourly.AccountHourFetchResult(
+            rows=rows,
+            errors=[],
+            coverage={
+                "status": "complete",
+                "data_state": "confirmed_data",
+                "expected_requests": 1,
+                "completed_requests": 1,
+            },
+        )
+
+    monkeypatch.setattr(hourly, "_fetch_account_hours", fake_fetch)
+    context = _RefreshContext()
+    context.defer_financial_fact_writes = True
+    context.deferred_financial_fact_writes = []
+
+    result = asyncio.run(
+        hourly.refresh_snapchat_account_hours(
+            context,
+            object(),
+            "access-token",
+            {
+                "ad_account_id": "account-1",
+                "timezone": "Asia/Riyadh",
+                "currency": "SAR",
+            },
+            start_date=date(2026, 8, 2),
+            end_date=date(2026, 8, 2),
+            now=datetime(2026, 8, 3, 12, 0, tzinfo=timezone.utc),
+        )
+    )
+
+    assert result["coverage"]["status"] == "complete"
+    assert [
+        write["query"]["entity_type"]
+        for write in context.db.performance.updates
+    ] == ["campaign"]
+    assert len(context.deferred_financial_fact_writes) == 1
+
+    assert asyncio.run(
+        hourly.flush_deferred_financial_fact_writes(context)
+    ) == 1
+    assert [
+        write["query"]["entity_type"]
+        for write in context.db.performance.updates
+    ] == ["campaign", "ad_account"]
+    assert context.deferred_financial_fact_writes == []
+
+
 def test_refresh_does_not_replace_stale_fact_with_unproven_zero(monkeypatch):
     async def fake_fetch(*args, **kwargs):
         return hourly.AccountHourFetchResult(
