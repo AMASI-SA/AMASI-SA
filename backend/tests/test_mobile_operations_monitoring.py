@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from mobile_operations_monitoring_routes import (
     resolve_monitoring_range,
+    summarize_courier,
     summarize_preparation_employee,
 )
 from preparation_piece_operations import (
@@ -90,6 +91,78 @@ def test_current_custody_counts_are_not_limited_by_selected_range():
     assert result["ready_not_handed_off_pieces"] == 1
     assert result["pending_review_count"] == 2
     assert result["in_progress_count"] == 2
+
+
+def test_courier_average_uses_out_for_delivery_to_delivered_only():
+    start = _dt(1)
+    end = _dt(22)
+    rows = [
+        {
+            "id": "a1",
+            "status": "delivered",
+            "active": True,
+            "assigned_at": _dt(2, 8),
+            "out_for_delivery_at": _dt(2, 9),
+            "delivered_at": _dt(2, 10),
+        },
+        {
+            "id": "a2",
+            "status": "delivered",
+            "active": True,
+            "assigned_at": _dt(3, 7),
+            "out_for_delivery_at": _dt(3, 8),
+            "delivered_at": _dt(3, 10),
+        },
+        {
+            "id": "a3",
+            "status": "delivered",
+            "active": True,
+            "assigned_at": _dt(4, 7),
+            "delivered_at": _dt(4, 10),
+        },
+        {
+            "id": "current-assigned",
+            "status": "assigned",
+            "active": True,
+            "assigned_at": _dt(20),
+        },
+        {
+            "id": "current-road",
+            "status": "out_for_delivery",
+            "active": True,
+            "assigned_at": _dt(20),
+            "out_for_delivery_at": _dt(21),
+        },
+    ]
+
+    result = summarize_courier(rows, start=start, end=end)
+
+    assert result["delivered_count"] == 3
+    assert result["measured_count"] == 2
+    assert result["average_delivery_seconds"] == 5400
+    assert result["assigned_count"] == 1
+    assert result["out_for_delivery_count"] == 1
+    assert result["current_delivery_count"] == 2
+    assert result["average_assignment_cycle_seconds"] == 9000
+    assert result["assignment_cycle_measured_count"] == 3
+
+
+def test_courier_delivery_outside_selected_period_is_not_counted():
+    result = summarize_courier(
+        [
+            {
+                "status": "delivered",
+                "assigned_at": _dt(1),
+                "out_for_delivery_at": _dt(1, 1),
+                "delivered_at": _dt(5),
+            }
+        ],
+        start=_dt(10),
+        end=_dt(22),
+    )
+    assert result["delivered_count"] == 0
+    assert result["measured_count"] == 0
+    assert result["average_delivery_seconds"] is None
 
 
 def test_invalid_or_excessive_range_is_rejected():
