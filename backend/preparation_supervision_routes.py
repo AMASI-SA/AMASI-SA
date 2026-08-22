@@ -1,16 +1,7 @@
 """Read-only preparation supervision for AMASI mobile managers.
 
 The supervision view is intentionally derived from the durable physical-piece
-SSOT.  It never mutates preparation, supplier, invoice, Salla, or Qoyod data.
-
-Card metrics:
-- with_employee: current responsibility excluding pieces already ready for the
-  next employee (those are shown separately as ready_not_handed_off).
-- waiting_review: active pieces not yet raised to a supplier.
-- ready_not_handed_off: pieces received from the supplier but not yet accepted
-  by the next preparation/assembly employee; historical, not month-scoped.
-- delivered_this_month: pieces accepted by the next employee during the current
-  Riyadh calendar month.
+SSOT. It never mutates preparation, supplier, invoice, Salla, or Qoyod data.
 """
 from __future__ import annotations
 
@@ -21,6 +12,10 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, HTTPException
 
 from fulfillment_v2_routes import _actor_context
+from mobile_app_permissions import (
+    MOBILE_APP_CLIENT,
+    mobile_app_access_for_user,
+)
 from order_review_export_controls import user_can_manage_preparation
 from preparation_piece_operations import (
     PIECES,
@@ -32,6 +27,7 @@ from preparation_supplier_dispatch import piece_is_available_for_supplier_dispat
 
 RIYADH = ZoneInfo("Asia/Riyadh")
 MAX_PIECES = 50000
+PREPARATION_SUPERVISION_APP_PERMISSION = "app.page.preparation_supervision"
 
 
 def _text(value: Any) -> str:
@@ -90,14 +86,17 @@ def _current_with_employee(row: dict[str, Any]) -> bool:
     status = _text(row.get("status"))
     if status == PIECE_STATUS_CANCELLED or _is_handed_off(row):
         return False
-    # Ready pieces are deliberately excluded from "with employee" because the
-    # card exposes them in their own ready-not-handed-off metric.
+    # Ready pieces have their own card metric and are intentionally excluded
+    # from "with_employee" so the numbers do not double-count.
     if _ready_not_handed_off(row):
         return False
     return True
 
 
 def _waiting_review(row: dict[str, Any]) -> bool:
+    # Canonical meaning: still with this employee and not raised/sent to a
+    # supplier yet. Reuse the same supplier-dispatch eligibility contract as
+    # إدارة منتجاتي rather than inventing another status interpretation.
     return _current_with_employee(row) and piece_is_available_for_supplier_dispatch(row)
 
 
@@ -173,7 +172,6 @@ def _employee_rows(
             "ready_not_handed_off": 0,
             "delivered_this_month": 0,
         })
-        # Prefer the latest non-empty stored name after account renames.
         if _text(row.get("responsible_employee_name")):
             item["employee_name"] = _text(row.get("responsible_employee_name"))
         if _current_with_employee(row):
@@ -255,6 +253,15 @@ def _detail_for_employee(
 
 async def _require_supervisor(db: Any, user: dict[str, Any]) -> dict[str, Any]:
     context = await _actor_context(db, user)
+    if user.get("_session_client") == MOBILE_APP_CLIENT:
+        access = await mobile_app_access_for_user(db, user)
+        if PREPARATION_SUPERVISION_APP_PERMISSION in set(access.get("permissions") or []):
+            return context
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "preparation_supervision_app_permission_required"},
+        )
+
     permissions = set(context.get("permissions") or [])
     if (
         context.get("is_owner")
@@ -295,11 +302,7 @@ def make_preparation_supervision_router(
         context = await _require_supervisor(db, user)
         month_start, next_month, month_key = _month_bounds()
         pieces = await _load_pieces(db, context["merchant_id"])
-        employees = _employee_rows(
-            pieces,
-            month_start=month_start,
-            next_month=next_month,
-        )
+        employees = _employee_rows(pieces, month_start=month_start, next_month=next_month)
         return {
             "ok": True,
             "month": month_key,
@@ -316,10 +319,7 @@ def make_preparation_supervision_router(
         }
 
     @router.get("/employees/{employee_id}")
-    async def employee_detail(
-        employee_id: str,
-        user: dict = Depends(current_user),
-    ) -> dict[str, Any]:
+    async def employee_detail(employee_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
         context = await _require_supervisor(db, user)
         month_start, next_month, month_key = _month_bounds()
         pieces = await _load_pieces(db, context["merchant_id"])
@@ -346,6 +346,7 @@ def make_preparation_supervision_router(
 
 
 __all__ = [
+    "PREPARATION_SUPERVISION_APP_PERMISSION",
     "make_preparation_supervision_router",
     "_employee_rows",
     "_detail_for_employee",
