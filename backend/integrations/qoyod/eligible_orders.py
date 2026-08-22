@@ -540,7 +540,7 @@ def _classify(
     }
 
 
-async def build_eligible_orders_report(
+async def _build_eligible_orders_report_legacy(
     db,
     *,
     user_id: str,
@@ -1065,4 +1065,236 @@ async def build_eligible_orders_report(
             "eligible_statuses_configured": sorted(ELIGIBLE_STATUSES),
         }
 
+    return result
+
+
+async def build_eligible_orders_report(
+    db,
+    *,
+    user_id: str,
+    orders_user_id: Optional[str] = None,
+    since_days: int = 90,
+    limit: int = 200,
+    show_already_sent: bool = False,
+    debug: bool = False,
+    from_date: Any = None,
+    to_date: Any = None,
+) -> dict:
+    """Present legacy preflight explanations inside the unified universe."""
+    from integrations.qoyod.candidate_orders import build_candidate_audit
+
+    limit = max(1, min(int(limit), 500))
+    since_days = max(1, min(int(since_days), 3650))
+    orders_owner = str(orders_user_id or user_id)
+    audit = await build_candidate_audit(
+        db,
+        orders_user_id=orders_owner,
+        markers_user_id=str(user_id),
+        marker_user_ids=(str(user_id), orders_owner),
+        from_date=from_date,
+        to_date=to_date,
+        days=since_days,
+    )
+    settings = await db.qoyod_settings.find_one(
+        {"user_id": str(user_id)}, {"_id": 0}
+    ) or {}
+    receiving_bank_configured = bool(
+        settings.get("bank_transfer_receiving_account_id")
+    )
+    counts: dict[str, int] = {
+        "ready_for_preview": 0,
+        "ready_for_manual_approval": 0,
+        "already_sent": 0,
+        "blocked_customer": 0,
+        "blocked_product": 0,
+        "blocked_bank_transfer_routing": 0,
+        "blocked_status": 0,
+        "totals_mismatch": 0,
+        "missing_from_pipeline": 0,
+        "unclassified_needs_review": 0,
+    }
+    eligible_by_status: dict[str, int] = {}
+    items: list[dict[str, Any]] = []
+    for proof in audit["orders"]:
+        status_display = str(proof.get("current_status") or "(empty)")
+        eligible_by_status[status_display] = (
+            eligible_by_status.get(status_display, 0) + 1
+        )
+        order = dict(proof.get("unified_order") or {})
+        if not order.get("items") and order.get("products"):
+            order["items"] = list(order.get("products") or [])
+        inbox_row = proof.get("inbox_row")
+        invoice = proof.get("qoyod_invoice")
+        if proof["has_qoyod_reference_match"]:
+            customer_check = {
+                "resolved": True, "qoyod_id": None, "reason": None,
+            }
+            products_check = {
+                "resolved": True, "resolved_count": 0,
+                "dry_run_only": 0, "missing": [], "first_blocker": None,
+            }
+            totals_check = {
+                "valid": True,
+                "total": float(proof.get("total_amount") or 0),
+                "expected": float(proof.get("total_amount") or 0),
+                "diff": 0.0,
+            }
+        else:
+            customer_check = await _check_customer(db, str(user_id), order)
+            products_check = await _check_products(db, str(user_id), order)
+            totals_check = _check_totals(order)
+        verdict = _classify(
+            order,
+            inbox_row,
+            invoice,
+            customer_check,
+            products_check,
+            totals_check,
+            receiving_bank_configured,
+        )
+        classification = verdict.get("classification")
+        if classification not in counts:
+            classification = "unclassified_needs_review"
+            verdict = {
+                **verdict,
+                "classification": classification,
+                "blocker_reason": "internal: unknown classifier result",
+                "recommended_next_action": "راجع المرشح قبل أي كتابة.",
+            }
+        counts[classification] += 1
+        if classification == "already_sent" and not show_already_sent:
+            continue
+        if len(items) >= limit:
+            continue
+        items.append({
+            "order_number": proof["order_number"],
+            "salla_order_id": order.get("order_id"),
+            "latest_trace_id": proof.get("trace_id"),
+            "status": proof.get("current_status"),
+            "status_slug": proof.get("current_status_key"),
+            "payment_method": proof.get("payment_method"),
+            "total_amount": round(float(proof.get("total_amount") or 0), 2),
+            "salla_order_created_at": proof.get("order_date"),
+            "created_at": proof.get("order_date"),
+            "existing_qoyod_invoice_id": proof.get("qoyod_invoice_id"),
+            "idempotency_status": (
+                "sent" if proof["has_qoyod_reference_match"] else "pending"
+            ),
+            "customer_status": {
+                "resolved": customer_check["resolved"],
+                "qoyod_id": customer_check["qoyod_id"],
+                "reason": customer_check["reason"],
+            },
+            "products_status": {
+                "resolved": products_check["resolved"],
+                "resolved_count": products_check["resolved_count"],
+                "dry_run_only": products_check["dry_run_only"],
+                "missing": products_check["missing"],
+            },
+            "totals_status": totals_check,
+            "posting_mode": verdict.get("posting_mode"),
+            "classification": classification,
+            "blocker_reason": verdict.get("blocker_reason"),
+            "candidate_reason": proof.get("candidate_reason"),
+            "recommended_next_action": verdict.get(
+                "recommended_next_action"
+            ),
+            "in_unified_orders": True,
+            "in_integration_inbox": proof["in_integration_inbox"],
+            "has_qoyod_reference_match": proof[
+                "has_qoyod_reference_match"
+            ],
+            "legacy_worker_visibility_reason": proof[
+                "legacy_worker_visibility_reason"
+            ],
+        })
+
+    result = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "since_days": since_days,
+        "since_date": audit["from_date"],
+        "from_date": audit["from_date"],
+        "to_date": audit["to_date"],
+        "source_mode": "unified_orders",
+        "source_authority": "unified_orders",
+        "source_reason": "unified_orders is the only candidate authority",
+        "match_contract": audit["match_contract"],
+        "captured_at": audit["captured_at"],
+        "snapshot_fingerprint": audit["snapshot_fingerprint"],
+        "status_counts": audit["status_counts"],
+        "status_display_counts": audit["status_display_counts"],
+        "worker_candidate_status_counts": audit[
+            "worker_candidate_status_counts"
+        ],
+        "worker_candidate_status_display_counts": audit[
+            "worker_candidate_status_display_counts"
+        ],
+        "sync_start_date": QOYOD_SYNC_START_DATE,
+        "tax_period": QOYOD_TAX_PERIOD,
+        "sync_timezone": QOYOD_SYNC_TZ,
+        "date_filter_basis": "salla_order_created_at_Asia/Riyadh",
+        "excluded_before_sync_start_date_count": 0,
+        "excluded_missing_order_created_at_count": audit[
+            "unified_exclusions"
+        ].get("missing_or_inferred_order_date", 0),
+        "total_source_rows": audit["counts"]["scanned_unified_orders"],
+        "total_scanned": audit["counts"]["scanned_unified_orders"],
+        "total_classified": sum(counts.values()),
+        "excluded_status_count": sum(audit["unified_exclusions"].values()),
+        "unclassified_count": counts["unclassified_needs_review"],
+        "total_hidden_already_sent": (
+            counts["already_sent"] if not show_already_sent else 0
+        ),
+        "total_returned_items": len(items),
+        "invariant_holds": (
+            sum(counts.values()) == audit["counts"]["eligible_unified_orders"]
+        ),
+        "worker_candidate_count": audit["counts"]["worker_candidates"],
+        "worker_candidate_reference_hash": audit["reference_hashes"][
+            "worker_candidates"
+        ],
+        "exact_qoyod_reference_matches": audit["counts"][
+            "exact_qoyod_reference_matches"
+        ],
+        "counts": counts,
+        "excluded_reason_counts": audit["unified_exclusions"],
+        "total_eligible_by_status": eligible_by_status,
+        "total_ineligible_by_status": audit.get(
+            "unified_excluded_statuses", {}
+        ),
+        "gates": {
+            "production_writes_locked": bool(
+                settings.get("production_writes_locked", True)
+            ),
+            "selective_live_send_enabled": bool(
+                settings.get("selective_live_send_enabled", False)
+            ),
+            "settlements_write_gate": "OPEN (pending disable per P0.1 gate)",
+            "receiving_bank_configured": receiving_bank_configured,
+        },
+        "items": items,
+        "notes": [
+            "READ-ONLY REPORT — no Qoyod call and no database write.",
+            (
+                f"{QOYOD_SYNC_START_DATE} is rollout metadata only; "
+                "it never clamps an explicit from/to interval."
+            ),
+            "Canonical states: completed / delivering / delivered only.",
+            "Exact join: unified order_number == Qoyod reference.",
+            "The requested from/to range is never silently clamped.",
+        ],
+    }
+    if debug:
+        result["_diagnostic"] = {
+            "orders_user_id": orders_owner,
+            "markers_user_id": str(user_id),
+            "reference_sets": {
+                "eligible": sorted(audit["eligible_references"]),
+                "sent_exact": sorted(audit["sent_references"]),
+                "worker_candidates": sorted(audit["unsent_references"]),
+            },
+            "duplicate_qoyod_references": sorted(
+                audit["duplicate_qoyod_references"]
+            ),
+        }
     return result

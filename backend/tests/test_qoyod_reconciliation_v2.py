@@ -57,6 +57,8 @@ def test_dry_and_preview_invoice_ids_are_not_authoritative():
             "qoyod_invoice_id": "712",
             "invoice_number": "712",
             "reference": "275957683",
+            "qoyod_official_reference": "275957683",
+            "reference_provenance": "qoyod.reference",
             "issue_date": "2026-08-06",
             "total": 239.41,
         },
