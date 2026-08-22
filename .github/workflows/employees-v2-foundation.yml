@@ -1,6 +1,7 @@
 name: Employees V2 Foundation
 
 # Keep this workflow eligible for required-status evaluation on maintenance PRs.
+# Maintenance route validation trigger.
 on:
   pull_request:
     paths:
