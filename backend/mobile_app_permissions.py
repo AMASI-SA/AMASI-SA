@@ -167,6 +167,34 @@ def effective_mobile_app_permissions(
     return sorted(stored)
 
 
+async def _mobile_app_access_for_linked_employee(
+    db: Any,
+    *,
+    user_id: str,
+) -> dict[str, Any] | None:
+    """Resolve legacy linked accounts without trusting a tenant supplied by the client.
+
+    Older team accounts may not carry the modern ``created_by`` field even
+    though Employees V2 links the account to exactly one merchant. Resolve the
+    owner through that server-owned link, then perform the normal
+    owner-and-user scoped access lookup.
+    """
+    if not user_id:
+        return None
+    employee = await db["mezan_employees_v2"].find_one(
+        {"account_user_id": user_id},
+        {"_id": 0, "user_id": 1},
+    )
+    owner_id = str((employee or {}).get("user_id") or "").strip()
+    if not owner_id:
+        return None
+    return await find_mobile_app_access(
+        db,
+        owner_user_id=owner_id,
+        user_id=user_id,
+    )
+
+
 async def mobile_app_access_for_user(db: Any, user: dict[str, Any]) -> dict[str, Any]:
     role = str(user.get("role") or "").strip().casefold()
     is_owner = role == "owner" or user.get("is_owner") is True
@@ -181,6 +209,11 @@ async def mobile_app_access_for_user(db: Any, user: dict[str, Any]) -> dict[str,
         owner_user_id=owner_id,
         user_id=user_id,
     )
+    if access is None and not is_owner:
+        access = await _mobile_app_access_for_linked_employee(
+            db,
+            user_id=user_id,
+        )
     account_active = not (
         user.get("disabled") is True
         or user.get("is_active") is False
