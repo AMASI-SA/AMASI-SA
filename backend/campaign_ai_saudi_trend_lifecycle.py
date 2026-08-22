@@ -1,8 +1,4 @@
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[1]
-
-module = r'''"""Deterministic Saudi Trend Score and product lifecycle detector.
+"""Deterministic Saudi Trend Score and product lifecycle detector.
 
 Read-only evidence interpreter for Saudi Product Radar. It measures momentum,
 acceleration, freshness, evidence depth, and source diversity. It never treats a
@@ -100,7 +96,7 @@ def trend_score_and_lifecycle(
     elif recent >= 70 and momentum <= -8:
         state = "falling"
         stage = "cooling"
-    elif recent >= 75 and abs(momentum) < 8:
+    elif observation_count >= 2 and recent >= 75 and abs(momentum) < 8:
         state = "stable"
         stage = "peak_or_plateau"
     elif momentum >= 12 and acceleration >= 3:
@@ -122,9 +118,9 @@ def trend_score_and_lifecycle(
         else "low"
     )
     risk = (
-        "late_entry" if stage in {"peak_or_plateau", "cooling"}
-        else "trend_decay" if stage in {"declining", "ended"}
+        "trend_decay" if stage in {"declining", "ended"}
         else "early_uncertainty" if confidence == "low"
+        else "late_entry" if stage in {"peak_or_plateau", "cooling"}
         else "normal"
     )
     wave_age_days = max(0, (latest_day - rows[0]["observed_on"]).days)
@@ -163,96 +159,3 @@ def rank_products_by_trend(
 
 
 __all__ = ["CONTRACT_VERSION", "rank_products_by_trend", "trend_score_and_lifecycle"]
-'''
-
-(ROOT / "backend/campaign_ai_saudi_trend_lifecycle.py").write_text(module, encoding="utf-8")
-
-radar_path = ROOT / "backend/campaign_ai_saudi_product_radar.py"
-radar = radar_path.read_text(encoding="utf-8")
-old = '''        lifecycle = classify_lifecycle(\n            [(item["observed_on"], item["score"]) for item in rows], as_of=as_of\n        )\n        recent = [item["score"] for item in rows if item["observed_on"] >= as_of - timedelta(days=6)]\n        score = round(sum(recent) / len(recent), 2) if recent else round(latest["score"], 2)\n'''
-new = '''        from campaign_ai_saudi_trend_lifecycle import trend_score_and_lifecycle\n        trend = trend_score_and_lifecycle(rows, as_of=as_of)\n        lifecycle = {\n            "state": trend["state"],\n            "delta": trend["momentum"],\n            "confidence": trend["confidence"],\n        }\n        recent = [item["score"] for item in rows if item["observed_on"] >= as_of - timedelta(days=6)]\n        score = round(sum(recent) / len(recent), 2) if recent else round(latest["score"], 2)\n'''
-if old not in radar:
-    raise SystemExit("radar lifecycle block not found")
-radar = radar.replace(old, new, 1)
-old_entry = '''            "saudi_opportunity_score": score,\n            "lifecycle": lifecycle,\n            "latest_price_sar": latest.get("price_sar"),\n'''
-new_entry = '''            "saudi_opportunity_score": score,\n            "saudi_trend_score": trend.get("trend_score"),\n            "lifecycle": lifecycle,\n            "trend_lifecycle": trend,\n            "latest_price_sar": latest.get("price_sar"),\n'''
-if old_entry not in radar:
-    raise SystemExit("radar entry block not found")
-radar = radar.replace(old_entry, new_entry, 1)
-old_sort = '''            item["lifecycle"]["state"] == "rising",\n            item["saudi_opportunity_score"],\n'''
-new_sort = '''            item["lifecycle"]["state"] == "rising",\n            item.get("saudi_trend_score") or -1,\n            item["saudi_opportunity_score"],\n'''
-if old_sort not in radar:
-    raise SystemExit("radar sort block not found")
-radar = radar.replace(old_sort, new_sort, 1)
-radar_path.write_text(radar, encoding="utf-8")
-
-tests = r'''from datetime import date, timedelta
-
-from campaign_ai_saudi_trend_lifecycle import trend_score_and_lifecycle
-
-
-def _rows(scores, *, start=date(2026, 8, 1), source="saudi_market"):
-    return [
-        {"observed_on": start + timedelta(days=i), "score": score, "source": source}
-        for i, score in enumerate(scores)
-    ]
-
-
-def test_accelerating_trend_is_rising():
-    rows = _rows([20, 24, 28, 34, 42, 52, 65, 78, 88])
-    result = trend_score_and_lifecycle(rows, as_of=date(2026, 8, 9))
-    assert result["state"] == "rising"
-    assert result["estimated_wave_stage"] in {"accelerating", "emerging"}
-    assert result["trend_score"] >= 60
-
-
-def test_high_but_flat_trend_is_peak_or_plateau():
-    rows = _rows([78, 80, 79, 81, 80, 82, 79, 80])
-    result = trend_score_and_lifecycle(rows, as_of=date(2026, 8, 8))
-    assert result["state"] == "stable"
-    assert result["estimated_wave_stage"] == "peak_or_plateau"
-    assert result["risk"] == "late_entry"
-
-
-def test_falling_trend_detected_before_it_hits_zero():
-    rows = _rows([90, 88, 84, 80, 72, 60, 48, 38, 30])
-    result = trend_score_and_lifecycle(rows, as_of=date(2026, 8, 9))
-    assert result["state"] == "falling"
-    assert result["estimated_wave_stage"] in {"cooling", "declining"}
-
-
-def test_stale_signal_is_trend_ended():
-    rows = _rows([60, 68, 72])
-    result = trend_score_and_lifecycle(rows, as_of=date(2026, 8, 20))
-    assert result["state"] == "trend_ended"
-    assert result["risk"] == "trend_decay"
-
-
-def test_single_signal_remains_low_confidence():
-    rows = _rows([85])
-    result = trend_score_and_lifecycle(rows, as_of=date(2026, 8, 1))
-    assert result["confidence"] == "low"
-    assert result["risk"] == "early_uncertainty"
-
-
-def test_multi_source_evidence_increases_confidence():
-    rows = _rows([35, 42, 50, 58], source="saudi_search")
-    rows += [
-        {"observed_on": date(2026, 8, 2) + timedelta(days=i), "score": score, "source": "saudi_competitor"}
-        for i, score in enumerate([40, 48, 56, 64])
-    ]
-    result = trend_score_and_lifecycle(rows, as_of=date(2026, 8, 5))
-    assert result["evidence"]["sources"] == 2
-    assert result["confidence"] in {"medium", "high"}
-
-
-def test_contract_is_read_only_metric_interpretation():
-    result = trend_score_and_lifecycle([], as_of=date(2026, 8, 22))
-    assert result["contract_version"] == "saudi_trend_lifecycle_v1"
-    assert "action" not in result
-'''
-(ROOT / "backend/tests/test_campaign_ai_saudi_trend_lifecycle.py").write_text(tests, encoding="utf-8")
-
-print("wrote backend/campaign_ai_saudi_trend_lifecycle.py")
-print("patched backend/campaign_ai_saudi_product_radar.py")
-print("wrote backend/tests/test_campaign_ai_saudi_trend_lifecycle.py")

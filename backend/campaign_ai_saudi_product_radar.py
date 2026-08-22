@@ -133,9 +133,13 @@ def build_saudi_product_radar(
     for key, rows in grouped.items():
         rows = sorted(rows, key=lambda item: item["observed_on"])
         latest = rows[-1]
-        lifecycle = classify_lifecycle(
-            [(item["observed_on"], item["score"]) for item in rows], as_of=as_of
-        )
+        from campaign_ai_saudi_trend_lifecycle import trend_score_and_lifecycle
+        trend = trend_score_and_lifecycle(rows, as_of=as_of)
+        lifecycle = {
+            "state": trend["state"],
+            "delta": trend["momentum"],
+            "confidence": trend["confidence"],
+        }
         recent = [item["score"] for item in rows if item["observed_on"] >= as_of - timedelta(days=6)]
         score = round(sum(recent) / len(recent), 2) if recent else round(latest["score"], 2)
         profit_per_order = next(
@@ -158,7 +162,9 @@ def build_saudi_product_radar(
             "product_name": latest["product_name"],
             "store_product_id": latest.get("store_product_id"),
             "saudi_opportunity_score": score,
+            "saudi_trend_score": trend.get("trend_score"),
             "lifecycle": lifecycle,
+            "trend_lifecycle": trend,
             "latest_price_sar": latest.get("price_sar"),
             "evidence_count": len(rows),
             "sources": sorted({item["source"] for item in rows}),
@@ -178,6 +184,7 @@ def build_saudi_product_radar(
     opportunities.sort(
         key=lambda item: (
             item["lifecycle"]["state"] == "rising",
+            item.get("saudi_trend_score") or -1,
             item["saudi_opportunity_score"],
             item["estimated_monthly_net_profit_sar"] or -1,
         ),
