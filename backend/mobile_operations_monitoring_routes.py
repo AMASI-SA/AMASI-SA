@@ -83,17 +83,30 @@ def _positive_duration_seconds(started_at: Any, completed_at: Any) -> int | None
     return int((completed - started).total_seconds())
 
 
+def _piece_waiting_for_supplier_dispatch(piece: dict[str, Any]) -> bool:
+    """Match the employee's live «بانتظار المراجعة/الإرسال» queue."""
+    return (
+        _text(piece.get("status")) == PIECE_STATUS_ASSIGNED
+        and not _text(piece.get("supplier_dispatch_status"))
+        and not _text(piece.get("supplier_receiving_session_id"))
+    )
+
+
 def summarize_preparation_employee(
     pieces: list[dict[str, Any]],
     *,
     start: datetime,
     end: datetime,
 ) -> dict[str, Any]:
-    """Calculate one employee's deterministic monitoring metrics."""
+    """Calculate current workload plus period-scoped completed performance.
+
+    Pending/in-progress/held counts describe the employee's current live custody.
+    Completed count and average are scoped to the selected period by completed_at.
+    """
     completed_durations: list[int] = []
     completed_in_range = 0
-    started_in_range = 0
-    assigned_in_range = 0
+    pending_review_count = 0
+    in_progress_count = 0
     current_held = 0
     ready_not_handed_off = 0
 
@@ -109,13 +122,12 @@ def summarize_preparation_employee(
             PIECE_STATUS_RECEIVED,
         }:
             current_held += 1
+        if _piece_waiting_for_supplier_dispatch(piece):
+            pending_review_count += 1
+        if status == PIECE_STATUS_IN_PROGRESS:
+            in_progress_count += 1
         if status in {PIECE_STATUS_READY_FOR_RECEIPT, PIECE_STATUS_RECEIVED}:
             ready_not_handed_off += 1
-
-        if _inside(piece.get("assigned_at"), start, end):
-            assigned_in_range += 1
-        if _inside(piece.get("started_at"), start, end):
-            started_in_range += 1
 
         completed_at = piece.get("completed_at")
         if _inside(completed_at, start, end):
@@ -131,8 +143,8 @@ def summarize_preparation_employee(
         else None
     )
     return {
-        "pending_review_count": assigned_in_range,
-        "in_progress_count": started_in_range,
+        "pending_review_count": pending_review_count,
+        "in_progress_count": in_progress_count,
         "completed_count": completed_in_range,
         "current_held_pieces": current_held,
         "ready_not_handed_off_pieces": ready_not_handed_off,
@@ -227,6 +239,10 @@ def _monitoring_piece_view(piece: dict[str, Any]) -> dict[str, Any]:
         "completed_at": piece.get("completed_at"),
         "due_at": piece.get("due_at"),
         "supplier_dispatch_status": _text(piece.get("supplier_dispatch_status")) or None,
+        "supplier_dispatch_id": _text(piece.get("supplier_dispatch_id")) or None,
+        "supplier_id": _text(piece.get("supplier_id")) or None,
+        "supplier_name": _text(piece.get("supplier_name")) or None,
+        "supplier_receiving_session_id": _text(piece.get("supplier_receiving_session_id")) or None,
         "read_only": True,
     }
 
@@ -353,7 +369,7 @@ def make_mobile_operations_monitoring_router(
         for piece in pieces:
             status = _text(piece.get("status"))
             view = _monitoring_piece_view(piece)
-            if status == PIECE_STATUS_ASSIGNED:
+            if _piece_waiting_for_supplier_dispatch(piece):
                 buckets["pending"].append(view)
             elif status == PIECE_STATUS_IN_PROGRESS:
                 buckets["in_progress"].append(view)
