@@ -169,7 +169,14 @@ def item_export_control_view(
     )
     operational = operational_excluded_keys(operational_items, order_item_id)
     hidden = sorted(set(manual) | set(operational))
-    default_route = _text((default_assignment or {}).get("preparation_route"))
+    default_route = (
+        _text((default_assignment or {}).get("preparation_route"))
+        or (
+            INTERNAL_PREPARATION_ROUTE
+            if _text((default_assignment or {}).get("assigned_employee_id"))
+            else ""
+        )
+    )
     route = (
         _text(state.get("preparation_route"))
         or default_route
