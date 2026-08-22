@@ -254,6 +254,7 @@ async def _proofs_by_day(
     *,
     expected_source: str,
     now: datetime,
+    pinned_run_ids: set[str] | None = None,
 ) -> dict[str, dict[str, Any]]:
     if not days:
         return {}
@@ -262,22 +263,30 @@ async def _proofs_by_day(
         "provider": SNAPCHAT_PROVIDER_ID,
         "run_type": ANALYTICS_RUN_TYPE,
     }
-    latest_rows, _ = await _sorted_list(
-        db[RUNS_COLLECTION].find(
-            {**base_query, "source_mode": expected_source},
-            {"_id": 0},
-        ),
-        1,
-    )
-    latest_global = (
-        _run_contract(
-            latest_rows[0],
-            user_id=user_id,
-            expected_source=expected_source,
-            now=now,
+    # When the fact-bound run pinning is active, the reader binds
+    # spend to the specific completed run that published each fact.  In
+    # that mode the "latest_global" freshness check is intentionally
+    # skipped so an unrelated newer run (running or terminally failed
+    # against a different day / source) cannot mask an earlier
+    # committed publication.
+    latest_global: dict[str, Any] = {}
+    if not pinned_run_ids:
+        latest_rows, _ = await _sorted_list(
+            db[RUNS_COLLECTION].find(
+                {**base_query, "source_mode": expected_source},
+                {"_id": 0},
+            ),
+            1,
         )
-        if latest_rows else {}
-    )
+        latest_global = (
+            _run_contract(
+                latest_rows[0],
+                user_id=user_id,
+                expected_source=expected_source,
+                now=now,
+            )
+            if latest_rows else {}
+        )
     result: dict[str, dict[str, Any]] = {}
     for report_date in days:
         rows, rows_truncated = await _sorted_list(
@@ -306,18 +315,35 @@ async def _proofs_by_day(
         )
         candidate: dict[str, Any] = {}
         newer_active: list[dict[str, Any]] = []
-        for contract in candidates:
-            if contract.get("complete") is True:
+        # First pass: honour explicit fact-run pinning.  A fact stamped
+        # with ``published_by_run_id`` binds to *that* completed run and
+        # is not invalidated by a newer unrelated run (running or
+        # terminally failed against a different attempt).  Fail-closed
+        # semantics remain intact because the pinned run itself still
+        # has to satisfy every _run_contract predicate.
+        if pinned_run_ids:
+            for contract in candidates:
+                run_id = _text(contract.get("run_id"))
+                if (
+                    run_id
+                    and run_id in pinned_run_ids
+                    and contract.get("complete") is True
+                ):
+                    candidate = contract
+                    break
+        if not candidate:
+            for contract in candidates:
+                if contract.get("complete") is True:
+                    candidate = contract
+                    break
+                if contract.get("raw", {}).get("status") in ACTIVE_RUN_STATUSES:
+                    newer_active.append(contract)
+                    continue
+                # A newer terminal run without complete proof must remain the
+                # authoritative fail-closed result.  Never borrow an older green
+                # proof across a partial or failed attempt.
                 candidate = contract
                 break
-            if contract.get("raw", {}).get("status") in ACTIVE_RUN_STATUSES:
-                newer_active.append(contract)
-                continue
-            # A newer terminal run without complete proof must remain the
-            # authoritative fail-closed result.  Never borrow an older green
-            # proof across a partial or failed attempt.
-            candidate = contract
-            break
         if not candidate and candidates:
             candidate = candidates[0]
         ambiguous = rows_truncated and candidate.get("complete") is not True
@@ -450,6 +476,13 @@ def _fact_bound(
     now: datetime,
 ) -> bool:
     if proof.get("usable") is not True:
+        return False
+    # If the fact carries an explicit publish marker we require that the
+    # active proof references the exact same run.  This closes any
+    # ambiguity when a subsequent unrelated run's window overlaps but
+    # publishes different data.
+    fact_pin = _text(fact.get("published_by_run_id"))
+    if fact_pin and fact_pin != _text(proof.get("run_id")):
         return False
     started = proof.get("started_at")
     finished = proof.get("finished_at")
@@ -672,9 +705,11 @@ async def load_snapchat_dashboard_spend(
     if not expected_source or source != expected_source:
         return _empty_result(days, state="unknown_incomplete", connected=True, reason="integration_source_unproven")
 
-    proofs = await _proofs_by_day(
-        db, user_id, days, expected_source=expected_source, now=current
-    )
+    # Facts are loaded before proofs so we can extract ``published_by_run_id``
+    # markers and pin the corresponding runs when selecting proofs.  This
+    # preserves prior committed publications across newer unrelated runs
+    # (running / failed) while keeping every fail-closed predicate intact
+    # (_run_contract still runs for the pinned candidate).
     facts = await _list(
         db[SNAPCHAT_PERFORMANCE_COLLECTION].find(
             {
@@ -690,6 +725,21 @@ async def load_snapchat_dashboard_spend(
     )
     if len(facts) > MAX_FACTS:
         return _empty_result(days, state="unknown_incomplete", connected=True, reason="facts_truncated")
+
+    pinned_run_ids: set[str] = {
+        _text(fact.get("published_by_run_id"))
+        for fact in facts
+        if _text(fact.get("published_by_run_id"))
+    }
+
+    proofs = await _proofs_by_day(
+        db,
+        user_id,
+        days,
+        expected_source=expected_source,
+        now=current,
+        pinned_run_ids=pinned_run_ids or None,
+    )
 
     reasons: set[str] = set()
     valid_native: dict[tuple[str, str], dict[str, Any]] = {}

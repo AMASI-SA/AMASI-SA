@@ -262,6 +262,12 @@ class SnapchatSyncContext:
         default_factory=list,
         repr=False,
     )
+    # Optional run identity threaded through by the ads auto-sync scheduler
+    # so ``_upsert_performance`` can stamp facts with the exact run that
+    # produced them.  The dashboard reader binds financial spend to this
+    # marker instead of the "latest" run, preserving previously-published
+    # facts across unrelated later runs (running or failed).
+    run_id: str | None = None
     _provider_request_lock: asyncio.Lock | None = field(
         default=None,
         init=False,

@@ -289,6 +289,15 @@ async def _upsert_performance(
         "stored_granularity": "RIYADH_DAY",
         "updated_at": now_iso,
     }
+    # Optional publish marker: identifies exactly which analytics_refresh
+    # run produced this fact.  The dashboard reader binds to this run_id
+    # (and validates the run is complete) instead of relying on the
+    # "latest" run, so a subsequent unrelated run (queued/running/failed)
+    # cannot invalidate an earlier committed publication.
+    published_by_run_id = getattr(context, "run_id", None)
+    if isinstance(published_by_run_id, str) and published_by_run_id.strip():
+        document["published_by_run_id"] = published_by_run_id.strip()
+        document["published_at"] = now_iso
     if entity_type == "campaign":
         document["campaign_id"] = external_id
     await _collection(context.db, SNAPCHAT_PERFORMANCE_COLLECTION).update_one(
