@@ -51,6 +51,73 @@ class FakeDB:
         return self[name]
 
 
+@pytest.mark.asyncio
+async def test_capture_wrapper_preserves_account_hour_fetch_result(monkeypatch):
+    expected = module.hourly.AccountHourFetchResult(
+        rows=[],
+        errors=[],
+        coverage={
+            "status": "complete",
+            "data_state": "confirmed_no_data",
+            "expected_requests": 1,
+            "completed_requests": 1,
+        },
+    )
+
+    async def base_fetch(*args, **kwargs):
+        return expected
+
+    async def base_refresh(*args, **kwargs):
+        return {}
+
+    monkeypatch.setattr(module.hourly, "_fetch_account_hours", base_fetch)
+    monkeypatch.setattr(
+        module.hourly,
+        "refresh_snapchat_account_hours",
+        base_refresh,
+    )
+    module.install_snapchat_account_hourly_capture()
+
+    actual = await module.hourly._fetch_account_hours(object())
+
+    assert actual is expected
+    assert isinstance(actual, module.hourly.AccountHourFetchResult)
+    assert actual.coverage == expected.coverage
+    rows, errors = actual
+    assert rows == []
+    assert errors == []
+
+
+@pytest.mark.asyncio
+async def test_capture_wrapper_rejects_legacy_tuple_without_making_coverage(
+    monkeypatch,
+):
+    async def legacy_fetch(*args, **kwargs):
+        return [], []
+
+    async def base_refresh(*args, **kwargs):
+        return {}
+
+    monkeypatch.setattr(module.hourly, "_fetch_account_hours", legacy_fetch)
+    monkeypatch.setattr(
+        module.hourly,
+        "refresh_snapchat_account_hours",
+        base_refresh,
+    )
+    module.install_snapchat_account_hourly_capture()
+
+    with pytest.raises(module.hourly.SnapchatNativeSyncError) as raised:
+        await module.hourly._fetch_account_hours(object())
+
+    assert raised.value.code == "snapchat_account_hour_result_contract_invalid"
+    assert raised.value.retryable is True
+    assert raised.value.result == {
+        "contract_valid": False,
+        "result_name": "hourly_capture_source",
+    }
+    assert "coverage" not in raised.value.result
+
+
 def test_aggregate_campaign_rows_into_account_local_hours():
     rows = [
         {
