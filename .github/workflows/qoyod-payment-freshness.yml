@@ -2,29 +2,6 @@ name: Qoyod Payment Freshness
 
 on:
   pull_request:
-    paths:
-      - "backend/order_engine/__init__.py"
-      - "backend/integrations/qoyod_manual/__init__.py"
-      - "backend/qoyod_auto_payment_freshness.py"
-      - "backend/qoyod_auto_per_order_isolation.py"
-      - "backend/qoyod_manual_current_status.py"
-      - "backend/qoyod_order_accounting_sync.py"
-      - "backend/integrations/qoyod/unsent_orders.py"
-      - "backend/integrations/qoyod_manual/send.py"
-      - "backend/integrations/qoyod_manual/routes.py"
-      - "backend/integrations/qoyod_manual/failed_retry.py"
-      - "backend/integrations/qoyod/reconciliation_v2.py"
-      - "backend/tests/test_qoyod_auto_send_latest_payment.py"
-      - "backend/tests/test_qoyod_auto_send_authoritative_payment.py"
-      - "backend/tests/test_qoyod_auto_send_per_order_isolation.py"
-      - "backend/tests/test_qoyod_manual_current_status.py"
-      - "backend/tests/test_qoyod_reconciliation_v2.py"
-      - "backend/tests/test_qoyod_order_accounting_sync.py"
-      - "backend/tests/test_qoyod_failed_retry.py"
-      - "backend/tests/test_qoyod_unsent_range_counts.py"
-      - "frontend/src/pages/QoyodReconciliation.jsx"
-      - "frontend/src/pages/QoyodUnsentOrders.jsx"
-      - ".github/workflows/qoyod-payment-freshness.yml"
   workflow_dispatch:
 
 jobs:
