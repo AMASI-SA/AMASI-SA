@@ -62,16 +62,11 @@ function extractDetail(err) {
 
 export default function QoyodReconciliation() {
   const PAGE_SIZE = 15;
-  const todayRiyadh = new Date().toLocaleDateString("en-CA", {
-    timeZone: "Asia/Riyadh",
-  });
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState("الكل");
   const [error, setError] = useState(null);
-  const [syncFirst, setSyncFirst] = useState(false);
-  const [fromDate, setFromDate] = useState("2026-07-01");
-  const [toDate, setToDate] = useState(todayRiyadh);
+  const [syncFirst, setSyncFirst] = useState(true);
   const [page, setPage] = useState(1);
   const [repairingMarkers, setRepairingMarkers] = useState(false);
   const [repairResult, setRepairResult] = useState(null);
@@ -84,13 +79,7 @@ export default function QoyodReconciliation() {
       try {
         const res = await api.get(
           "/integrations/qoyod/reconciliation-report",
-          {
-            params: {
-              sync_first: withSync,
-              from_date: fromDate,
-              to_date: toDate,
-            },
-          },
+          { params: { sync_first: withSync } },
         );
         if (res.data?.ok === false) {
           setError(res.data.error || "تعذر تشغيل تقرير المطابقة");
@@ -109,7 +98,7 @@ export default function QoyodReconciliation() {
         setLoading(false);
       }
     },
-    [fromDate, toDate],
+    [],
   );
 
   const repairMarkers = useCallback(async () => {
@@ -169,12 +158,13 @@ export default function QoyodReconciliation() {
             تقرير المطابقة — ميزان ↔ قيود
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            مصدر الحقيقة الوحيد للمقارنة. الوضع الافتراضي يقرأ النسخة
-            المحلية فقط، ثم يطابق أرقام طلبات سلة مع حقل المرجع في قيود
-            كمجموعات فعلية. مصدر الطلبات هو{" "}
+            مصدر الحقيقة الوحيد للمقارنة. عند الضغط على &quot;تشغيل
+            المطابقة&quot; النظام يقوم أولاً بجلب فواتير قيود إلى
+            الجدول المحلي <code className="font-mono">qoyod_invoices</code>{" "}
+            ثم يقارن مع طلبات سلة في{" "}
             <code className="font-mono">unified_orders</code> (نفس مصدر
-            صفحة الطلبات). النطاق الفعلي: من{" "}
-            {data?.from_date || fromDate} إلى {data?.to_date || toDate} شاملًا.
+            صفحة الطلبات). النطاق: من{" "}
+            {data?.sync_start_date || "2026-07-01"} حتى اليوم.
           </p>
           <p className="text-[11px] text-slate-400 mt-1">
             🔒 لا إرسال ولا تعديل في قيود. إصلاح العلامات يكتب محلياً
@@ -182,29 +172,6 @@ export default function QoyodReconciliation() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <label className="text-xs font-bold text-slate-600">
-            من
-            <input
-              type="date"
-              value={fromDate}
-              max={toDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              data-testid="recon-from-date"
-              className="mr-1 rounded-lg border border-slate-200 bg-white px-2 py-2"
-            />
-          </label>
-          <label className="text-xs font-bold text-slate-600">
-            إلى
-            <input
-              type="date"
-              value={toDate}
-              min={fromDate}
-              max={todayRiyadh}
-              onChange={(e) => setToDate(e.target.value)}
-              data-testid="recon-to-date"
-              className="mr-1 rounded-lg border border-slate-200 bg-white px-2 py-2"
-            />
-          </label>
           <button
             onClick={repairMarkers}
             disabled={repairingMarkers || loading}
@@ -224,7 +191,7 @@ export default function QoyodReconciliation() {
               checked={syncFirst}
               onChange={(e) => setSyncFirst(e.target.checked)}
             />
-            مزامنة قراءة قيود وحفظ النسخة المحلية أولًا
+            مزامنة قيود قبل المطابقة
           </label>
           <button
             onClick={() => runReport({ withSync: syncFirst })}

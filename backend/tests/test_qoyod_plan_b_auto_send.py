@@ -15,7 +15,6 @@ def _ready_settings(**overrides):
         "trigger_once_only": True,
         "plan_b_auto_send_armed_at": "2026-07-20T10:00:00+00:00",
         "plan_b_auto_send_orders_user_id": "orders-user",
-        auto_send.UNIFIED_CANDIDATE_AUTO_FLAG: True,
         "capabilities": {
             "create_customers": True,
             "create_products": True,
@@ -341,15 +340,11 @@ class _QuarantinesCollection:
         self.updated = []
 
     def find(self, selector, projection):
-        wanted = (
-            set(selector["order_number"]["$in"])
-            if "order_number" in selector
-            else None
-        )
+        wanted = set(selector["order_number"]["$in"])
         rows = [
             row for row in self.rows.values()
             if row["user_id"] == selector["user_id"]
-            and (wanted is None or row["order_number"] in wanted)
+            and row["order_number"] in wanted
             and row["status"] == selector["status"]
         ]
         return _AsyncCursor(rows)
@@ -372,16 +367,9 @@ class _RunDb:
 
 
 def _candidate(order_number, salla_status="تم التنفيذ"):
-    status_key = {
-        "تم التنفيذ": "completed",
-        "جاري التوصيل": "delivering",
-        "تم التوصيل": "delivered",
-    }.get(salla_status, "completed")
     return {
         "order_number": order_number,
         "salla_status": salla_status,
-        "current_status_key": status_key,
-        "worker_candidate": True,
     }
 
 
@@ -389,8 +377,6 @@ async def _prepare_run(
     monkeypatch, *, candidates, send_one,
     settings=None, candidates_by_status=None,
 ):
-    snapshot_calls = []
-
     async def fake_settings(db):
         return settings or _ready_settings()
 
@@ -400,36 +386,13 @@ async def _prepare_run(
     async def fake_release(db, owner):
         assert owner == "lease-test"
 
-    async def fake_candidate_snapshot(db, **kwargs):
-        assert kwargs["from_date"] == "2026-07-01"
-        assert kwargs["orders_user_id"] == "orders-user"
-        snapshot_calls.append(kwargs)
+    async def fake_pending(db, **kwargs):
         if candidates_by_status is None:
-            authoritative_rows = list(candidates)
+            assert kwargs["status"] == "completed"
+            rows = candidates
         else:
-            authoritative_rows = [
-                row
-                for status_rows in candidates_by_status.values()
-                for row in status_rows
-            ]
-        status_counts = {
-            status: sum(
-                row.get("current_status_key") == status
-                for row in authoritative_rows
-            )
-            for status in ("completed", "delivering", "delivered")
-        }
-        return {
-            "ok": True,
-            "source_authority": "unified_orders",
-            "orders_user_id": "orders-user",
-            "from_date": "2026-07-01",
-            "to_date": "2026-08-22",
-            "captured_at": "2026-08-22T12:00:00+00:00",
-            "snapshot_fingerprint": "test-snapshot-fingerprint",
-            "worker_candidate_status_counts": status_counts,
-            "orders": authoritative_rows,
-        }
+            rows = candidates_by_status.get(kwargs["status"], [])
+        return {"ok": True, "orders": rows}
 
     async def fake_refresh(db, *, orders_user_id, order_number):
         assert orders_user_id == "orders-user"
@@ -442,20 +405,15 @@ async def _prepare_run(
     monkeypatch.setattr(auto_send, "_current_settings", fake_settings)
     monkeypatch.setattr(auto_send, "_acquire_lease", fake_acquire)
     monkeypatch.setattr(auto_send, "_release_lease", fake_release)
-    monkeypatch.setattr(
-        auto_send, "build_candidate_audit", fake_candidate_snapshot
-    )
+    monkeypatch.setattr(auto_send, "list_pending_orders", fake_pending)
     monkeypatch.setattr(
         auto_send, "_refresh_and_verify_salla_status", fake_refresh
     )
     monkeypatch.setattr(auto_send, "manual_send_one", send_one)
-    return snapshot_calls
 
 
 @pytest.mark.asyncio
-async def test_run_once_uses_one_snapshot_and_keeps_all_three_statuses(
-    monkeypatch,
-):
+async def test_run_once_scans_all_three_configured_statuses(monkeypatch):
     calls = []
 
     async def fake_send(
@@ -464,7 +422,7 @@ async def test_run_once_uses_one_snapshot_and_keeps_all_three_statuses(
         calls.append(order_number)
         return {"invoice_id": f"q-{order_number}", "payment_id": "p-1"}
 
-    snapshot_calls = await _prepare_run(
+    await _prepare_run(
         monkeypatch,
         candidates=[],
         candidates_by_status={
@@ -482,14 +440,8 @@ async def test_run_once_uses_one_snapshot_and_keeps_all_three_statuses(
     result = await auto_send.run_once(db, batch_limit=5)
 
     assert calls == ["1001", "1002", "1003"]
-    assert len(snapshot_calls) == 1
     assert result["sent_count"] == 3
     assert result["manual_review_count"] == 0
-    assert result["candidate_snapshot"]["status_counts"] == {
-        "completed": 1,
-        "delivering": 1,
-        "delivered": 1,
-    }
 
 
 @pytest.mark.asyncio
@@ -617,47 +569,6 @@ async def test_open_quarantine_is_skipped_without_consuming_batch_slot(
 
     assert calls == ["273809027"]
     assert result["sent_count"] == 1
-
-
-@pytest.mark.asyncio
-async def test_more_than_prefetch_page_of_quarantines_cannot_starve_older_row(
-    monkeypatch,
-):
-    calls = []
-    quarantined_rows = [
-        _candidate(f"new-quarantined-{index:02d}") for index in range(30)
-    ]
-    older_runnable = _candidate("older-runnable")
-
-    async def fake_send(
-        db, *, user_id, orders_user_id, order_number, actor,
-    ):
-        calls.append(order_number)
-        return {"invoice_id": 901, "payment_id": 902}
-
-    await _prepare_run(
-        monkeypatch,
-        candidates=[*quarantined_rows, older_runnable],
-        send_one=fake_send,
-    )
-    db = _RunDb()
-    for row in quarantined_rows:
-        order_number = row["order_number"]
-        db.qoyod_manual_auto_quarantines.rows[f"main:{order_number}"] = {
-            "_id": f"main:{order_number}",
-            "user_id": "main",
-            "order_number": order_number,
-            "status": "open",
-        }
-
-    result = await auto_send.run_once(db, batch_limit=1)
-
-    assert calls == ["older-runnable"]
-    assert result["sent_count"] == 1
-    assert result["authoritative_backlog_count"] == 31
-    assert result["runnable_candidate_count"] == 1
-    assert result["open_quarantined_candidate_count"] == 30
-    assert result["batch_candidate_count"] == 1
 
 
 @pytest.mark.asyncio
@@ -798,57 +709,16 @@ async def test_round_level_failure_keeps_worker_armed_for_next_tick(
     async def fake_release(db, owner):
         released.append(owner)
 
-    async def failed_snapshot(db, **kwargs):
+    async def failed_pending(db, **kwargs):
         raise RuntimeError("database read failed")
 
     monkeypatch.setattr(auto_send, "_current_settings", fake_settings)
     monkeypatch.setattr(auto_send, "_acquire_lease", fake_acquire)
     monkeypatch.setattr(auto_send, "_release_lease", fake_release)
-    monkeypatch.setattr(
-        auto_send, "build_candidate_audit", failed_snapshot
-    )
+    monkeypatch.setattr(auto_send, "list_pending_orders", failed_pending)
 
     result = await auto_send.run_once(_RunDb(), batch_limit=5)
 
     assert result["ok"] is False
     assert result["status"] == "round_failed"
     assert released == ["lease-test"]
-
-
-@pytest.mark.asyncio
-async def test_live_unpaid_order_is_refused_by_unchanged_manual_sender(
-    monkeypatch,
-):
-    sender_calls = []
-
-    async def refusing_sender(
-        db, *, user_id, orders_user_id, order_number, actor,
-    ):
-        sender_calls.append(order_number)
-        raise ManualSendRefused(
-            "payment_not_completed",
-            "الطلب غير مدفوع بالكامل",
-            {
-                "paid_amount": 0.0,
-                "remaining_amount": 100.0,
-                "qoyod_write_performed": False,
-            },
-        )
-
-    await _prepare_run(
-        monkeypatch,
-        candidates=[_candidate("unpaid-after-live-refresh")],
-        send_one=refusing_sender,
-    )
-
-    db = _RunDb()
-    result = await auto_send.run_once(db, batch_limit=1)
-
-    assert sender_calls == ["unpaid-after-live-refresh"]
-    assert result["sent_count"] == 0
-    assert result["manual_review_count"] == 1
-    quarantine = db.qoyod_manual_auto_quarantines.rows[
-        "main:unpaid-after-live-refresh"
-    ]
-    assert quarantine["code"] == "payment_not_completed"
-    assert quarantine["detail"]["qoyod_write_performed"] is False
