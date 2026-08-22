@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta, timezone
 
 from mobile_operations_monitoring_routes import (
+    courier_live_sort_key,
+    preparation_workload_sort_key,
     resolve_monitoring_range,
     summarize_courier,
     summarize_preparation_employee,
@@ -235,6 +237,54 @@ def test_courier_selected_period_uses_same_boundary_contract():
     assert result["delivered_count"] == 1
     assert result["measured_count"] == 1
     assert result["average_delivery_seconds"] == 3600
+
+
+def test_preparation_cards_rank_live_unfinished_work_before_completed_history():
+    rows = [
+        {
+            "employee_id": "low",
+            "employee_name": "موظف قليل",
+            "current_held_pieces": 2,
+            "pending_review_count": 1,
+            "in_progress_count": 1,
+            "completed_count": 100,
+        },
+        {
+            "employee_id": "high",
+            "employee_name": "موظف كثير",
+            "current_held_pieces": 8,
+            "pending_review_count": 5,
+            "in_progress_count": 3,
+            "completed_count": 0,
+        },
+    ]
+
+    rows.sort(key=preparation_workload_sort_key)
+
+    assert [row["employee_id"] for row in rows] == ["high", "low"]
+
+
+def test_courier_cards_rank_out_for_delivery_not_delivered_history():
+    rows = [
+        {
+            "driver_id": "delivered-history",
+            "driver_name": "موصل سابق",
+            "out_for_delivery_count": 1,
+            "assigned_count": 0,
+            "delivered_count": 500,
+        },
+        {
+            "driver_id": "busy-now",
+            "driver_name": "موصل مشغول",
+            "out_for_delivery_count": 7,
+            "assigned_count": 0,
+            "delivered_count": 0,
+        },
+    ]
+
+    rows.sort(key=courier_live_sort_key)
+
+    assert [row["driver_id"] for row in rows] == ["busy-now", "delivered-history"]
 
 
 def test_invalid_or_excessive_range_is_rejected():
