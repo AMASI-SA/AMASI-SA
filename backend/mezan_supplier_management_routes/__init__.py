@@ -42,6 +42,7 @@ MezanSupplierWriteRequest = _BASE.MezanSupplierWriteRequest
 SUPPLIERS_MANAGE_PERMISSION = _BASE.SUPPLIERS_MANAGE_PERMISSION
 SUPPLIERS_READ_PERMISSION = _BASE.SUPPLIERS_READ_PERMISSION
 ensure_mezan_supplier_indexes = _BASE.ensure_mezan_supplier_indexes
+_audit = _BASE._audit
 
 TARGET_SUPPLIER_ID = "msv2_e0e83c814a12460295d1b3d539fbcfd5"
 TARGET_SUPPLIER_NAME = "ابو جبل"
@@ -435,6 +436,7 @@ __all__ = [
     "MezanSupplierWriteRequest",
     "SUPPLIERS_MANAGE_PERMISSION",
     "SUPPLIERS_READ_PERMISSION",
+    "_audit",
     "ensure_mezan_supplier_indexes",
     "make_mezan_supplier_management_router",
 ]
