@@ -89,8 +89,30 @@ def test_current_custody_counts_are_not_limited_by_selected_range():
 
     assert result["current_held_pieces"] == 3
     assert result["ready_not_handed_off_pieces"] == 1
-    assert result["pending_review_count"] == 2
-    assert result["in_progress_count"] == 2
+    assert result["pending_review_count"] == 1
+    assert result["in_progress_count"] == 1
+
+
+def test_pending_review_excludes_piece_already_sent_to_supplier():
+    result = summarize_preparation_employee(
+        [
+            {"piece_id": "waiting", "status": PIECE_STATUS_ASSIGNED},
+            {
+                "piece_id": "sent",
+                "status": PIECE_STATUS_ASSIGNED,
+                "supplier_dispatch_status": "sent",
+            },
+            {
+                "piece_id": "receiving",
+                "status": PIECE_STATUS_ASSIGNED,
+                "supplier_receiving_session_id": "session-1",
+            },
+        ],
+        start=_dt(1),
+        end=_dt(22),
+    )
+    assert result["pending_review_count"] == 1
+    assert result["current_held_pieces"] == 3
 
 
 def test_courier_average_uses_out_for_delivery_to_delivered_only():
