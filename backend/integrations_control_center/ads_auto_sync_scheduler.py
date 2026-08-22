@@ -91,6 +91,16 @@ SNAPCHAT_MIN_INTERVAL_SECONDS_ENV = "MEZAN_ADS_AUTO_SYNC_SNAPCHAT_INTERVAL_SECON
 SNAPCHAT_MIN_INTERVAL_SECONDS_DEFAULT = 600
 SNAPCHAT_MIN_INTERVAL_SECONDS_FLOOR = 300
 SNAPCHAT_MIN_INTERVAL_SECONDS_CEILING = 3600
+SNAPCHAT_ACCOUNT_REFRESH_TIMEOUT_SECONDS_ENV = (
+    "MEZAN_ADS_AUTO_SYNC_SNAPCHAT_ACCOUNT_TIMEOUT_SECONDS"
+)
+# Keep the per-account watchdog below the 25-minute distributed lease.  Two
+# selected accounts normally finish in a few minutes; ten minutes gives one
+# account ample provider/pagination headroom while ensuring a cancelled or
+# wedged provider coroutine cannot leave the canonical run permanently active.
+SNAPCHAT_ACCOUNT_REFRESH_TIMEOUT_SECONDS_DEFAULT = 600
+SNAPCHAT_ACCOUNT_REFRESH_TIMEOUT_SECONDS_FLOOR = 60
+SNAPCHAT_ACCOUNT_REFRESH_TIMEOUT_SECONDS_CEILING = 1200
 DEFAULT_ROLLING_DAYS = 2
 MAX_ROLLING_DAYS = 7
 CAMPAIGN_AI_EXECUTION_PROOF_DAYS = 3
@@ -281,6 +291,46 @@ def rolling_days() -> int:
         minimum=1,
         maximum=MAX_ROLLING_DAYS,
     )
+
+
+def snapchat_account_refresh_timeout_seconds() -> int:
+    return _bounded_int(
+        os.environ.get(SNAPCHAT_ACCOUNT_REFRESH_TIMEOUT_SECONDS_ENV),
+        default=SNAPCHAT_ACCOUNT_REFRESH_TIMEOUT_SECONDS_DEFAULT,
+        minimum=SNAPCHAT_ACCOUNT_REFRESH_TIMEOUT_SECONDS_FLOOR,
+        maximum=SNAPCHAT_ACCOUNT_REFRESH_TIMEOUT_SECONDS_CEILING,
+    )
+
+
+async def _await_snapchat_account_refresh(
+    awaitable: Any,
+    *,
+    timeout_seconds: float | None = None,
+) -> dict[str, Any]:
+    """Bound one account refresh and fail closed when provider work wedges."""
+
+    timeout = (
+        float(timeout_seconds)
+        if timeout_seconds is not None
+        else float(snapchat_account_refresh_timeout_seconds())
+    )
+    try:
+        return await asyncio.wait_for(awaitable, timeout=timeout)
+    except TimeoutError as exc:
+        raise SnapchatNativeSyncError(
+            "snapchat_provider_refresh_timeout",
+            "Snapchat account refresh exceeded the bounded execution window.",
+            status_code=504,
+            retryable=True,
+            result={
+                "coverage": {
+                    "status": "incomplete",
+                    "data_state": "unknown_incomplete",
+                    "expected_requests": 1,
+                    "completed_requests": 0,
+                }
+            },
+        ) from exc
 
 
 def startup_delay_seconds() -> int:
@@ -1277,14 +1327,16 @@ async def _refresh_snapchat(
                 account_id = str(account.get("ad_account_id") or "").strip()
                 try:
                     observe_failure_stage("provider_refresh")
-                    item = await snapchat_hourly.refresh_snapchat_account_hours(
-                        account_context,
-                        client,
-                        access_token,
-                        account,
-                        start_date=start_date,
-                        end_date=end_date,
-                        now=now,
+                    item = await _await_snapchat_account_refresh(
+                        snapchat_hourly.refresh_snapchat_account_hours(
+                            account_context,
+                            client,
+                            access_token,
+                            account,
+                            start_date=start_date,
+                            end_date=end_date,
+                            now=now,
+                        )
                     )
                     observe_failure_stage("account_state_persist")
                     items.append(item)
@@ -2331,6 +2383,7 @@ __all__ = [
     "ENABLED_ENV",
     "INTERVAL_ENV",
     "ROLLING_DAYS_ENV",
+    "SNAPCHAT_ACCOUNT_REFRESH_TIMEOUT_SECONDS_ENV",
     "attach_ads_auto_sync_scheduler",
     "auto_sync_enabled",
     "auto_sync_status",
@@ -2338,4 +2391,5 @@ __all__ = [
     "riyadh_date_range",
     "rolling_days",
     "run_auto_sync_cycle",
+    "snapchat_account_refresh_timeout_seconds",
 ]

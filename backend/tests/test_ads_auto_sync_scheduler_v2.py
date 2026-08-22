@@ -200,6 +200,85 @@ def test_interval_cannot_be_faster_than_five_minutes(monkeypatch):
     assert scheduler.interval_seconds() == 900
 
 
+def test_snapchat_account_refresh_timeout_is_bounded(monkeypatch):
+    monkeypatch.delenv(
+        scheduler.SNAPCHAT_ACCOUNT_REFRESH_TIMEOUT_SECONDS_ENV,
+        raising=False,
+    )
+    assert scheduler.snapchat_account_refresh_timeout_seconds() == 600
+
+    monkeypatch.setenv(
+        scheduler.SNAPCHAT_ACCOUNT_REFRESH_TIMEOUT_SECONDS_ENV,
+        "1",
+    )
+    assert scheduler.snapchat_account_refresh_timeout_seconds() == 60
+
+    monkeypatch.setenv(
+        scheduler.SNAPCHAT_ACCOUNT_REFRESH_TIMEOUT_SECONDS_ENV,
+        "9999",
+    )
+    assert scheduler.snapchat_account_refresh_timeout_seconds() == 1200
+
+
+@pytest.mark.asyncio
+async def test_snapchat_account_refresh_timeout_fails_closed():
+    async def wedged_refresh():
+        await asyncio.Event().wait()
+
+    with pytest.raises(scheduler.SnapchatNativeSyncError) as raised:
+        await scheduler._await_snapchat_account_refresh(
+            wedged_refresh(),
+            timeout_seconds=0.01,
+        )
+
+    error = raised.value
+    assert error.code == "snapchat_provider_refresh_timeout"
+    assert error.status_code == 504
+    assert error.retryable is True
+    assert error.result == {
+        "coverage": {
+            "status": "incomplete",
+            "data_state": "unknown_incomplete",
+            "expected_requests": 1,
+            "completed_requests": 0,
+        }
+    }
+
+
+@pytest.mark.asyncio
+async def test_stale_snapchat_run_is_failed_before_replacement():
+    now = datetime(2026, 8, 23, 1, 30, tzinfo=timezone.utc)
+    stale_started = now - scheduler.ACTIVE_JOB_TTL - timedelta(seconds=1)
+    db = _DB({
+        scheduler.RUNS_COLLECTION: [{
+            "run_id": "stale-snap-run",
+            "user_id": "owner-1",
+            "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+            "run_type": scheduler.SNAP_RUN_TYPE,
+            "status": "running",
+            "started_at": stale_started.isoformat(),
+            "finished_at": None,
+        }]
+    })
+
+    active = await scheduler._active_run(
+        db,
+        user_id="owner-1",
+        provider=scheduler.SNAPCHAT_PROVIDER_ID,
+        now=now,
+    )
+
+    assert active is None
+    recovered = db.rows[scheduler.RUNS_COLLECTION][0]
+    assert recovered["status"] == "failed"
+    assert recovered["finished_at"] == now.isoformat()
+    assert recovered["error"] == {
+        "code": "scheduled_sync_stale_job_recovered",
+        "message": "A stale advertising refresh was released.",
+        "retryable": True,
+    }
+
+
 def test_scheduler_can_be_disabled_explicitly(monkeypatch):
     monkeypatch.setenv(scheduler.ENABLED_ENV, "false")
     assert scheduler.auto_sync_enabled() is False
