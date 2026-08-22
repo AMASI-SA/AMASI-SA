@@ -1653,6 +1653,7 @@ async def _ask_openai(
     campaign_history: dict[str, Any],
     prior_decisions: dict[str, Any],
     business_profit: dict[str, Any],
+    store_opportunity_plan: dict[str, Any],
 ) -> RecommendationOutput:
     if AsyncOpenAI is None:
         raise RuntimeError("openai_sdk_missing")
@@ -1694,6 +1695,8 @@ async def _ask_openai(
                 "افحص كذلك حالة الحملة والمجموعة الأم قبل اقتراح أي إجراء على الإعلان. "
                 "مقارنة الحساب، تاريخ 7 و30 يومًا، تقويم السوق السعودي، والقرارات السابقة. "
                 "ابدأ بأثر الحملات على صافي ربح أو خسارة ميزان اليوم ثم نوافذ 3 و7 و30 يومًا، "
+                "واستخدم خطة store-wide كخريطة أولويات فقط: الحقول evidence_required ليست تشخيصًا مثبتًا، "
+                "بل تطلب منك تحديد الدليل الناقص قبل اقتراح حل على المنتج أو السعر أو المخزون أو صفحة المنتج. "
                 "وتعلم من القرارات المنفذة سابقًا بمقارنة أرقامها القديمة بالأداء الحالي. "
                 "استنتج بنفسك هل الصواب إيقاف أو خفض أو مراقبة أو إبقاء أو توسعة. ميّز بين "
                 "فشل تاريخي مستمر وتذبذب قصير، وبين ضعف الطلب في السوق وضعف الإعلان أو "
@@ -1714,6 +1717,7 @@ async def _ask_openai(
                 "active_entities_last_3_days": safe_rows,
                 "campaign_history": campaign_history,
                 "mezan_overall_profit_and_loss": business_profit,
+                "store_wide_diagnosis_and_opportunity_plan": store_opportunity_plan,
                 "prior_mezan_ai_decisions": prior_decisions,
             }, ensure_ascii=False, default=str),
             max_output_tokens=OPENAI_MAX_OUTPUT_TOKENS,
@@ -1813,6 +1817,25 @@ async def run_campaign_ai_monitor(
                 "source": "monthly_causal_memory",
                 "code": _text(type(exc).__name__, limit=100),
             })
+        try:
+            from campaign_ai_store_opportunity_planner import build_store_opportunity_plan
+            store_opportunity_plan = build_store_opportunity_plan(
+                goal_context=business_profit.get("monthly_profit_goal"),
+                business_profit=business_profit,
+                monthly_memory=current_month_memory,
+                candidates=candidates,
+            )
+        except Exception as exc:
+            store_opportunity_plan = {
+                "contract_version": "store_opportunity_planner_v1",
+                "read_only": True,
+                "available": False,
+                "reason": type(exc).__name__,
+            }
+            errors.append({
+                "source": "store_opportunity_planner",
+                "code": _text(type(exc).__name__, limit=100),
+            })
         if not candidates:
             recommendation_source = "none"
             result = RecommendationOutput(
@@ -1828,6 +1851,7 @@ async def run_campaign_ai_monitor(
                     campaign_history=campaign_history,
                     prior_decisions=prior_decisions,
                     business_profit=business_profit,
+                    store_opportunity_plan=store_opportunity_plan,
                 )
                 recommendation_source = "openai"
             except Exception as exc:
@@ -1914,6 +1938,8 @@ async def run_campaign_ai_monitor(
             "business_profit_context_available": bool(business_profit.get("available")),
             "monthly_causal_memory": current_month_memory,
             "monthly_causal_memory_available": current_month_memory is not None,
+            "store_opportunity_plan": store_opportunity_plan,
+            "store_opportunity_plan_available": store_opportunity_plan.get("available") is not False,
         }
         await db[RECOMMENDATION_COLLECTION].insert_one(document)
         await db[RUN_COLLECTION].update_one(
