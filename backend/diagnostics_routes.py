@@ -345,3 +345,11 @@ def attach_diagnostics_routes(parent_router: APIRouter, db) -> None:
         return results
 
     parent_router.include_router(router)
+
+    # Mobile manager preparation supervision is a separate read-only router.
+    # It is wired here only because diagnostics_routes is already attached
+    # during server startup; the endpoint itself lives in its own module.
+    from preparation_supervision_routes import make_preparation_supervision_router
+    parent_router.include_router(
+        make_preparation_supervision_router(db, current_user)
+    )
