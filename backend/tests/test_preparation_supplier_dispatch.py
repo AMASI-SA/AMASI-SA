@@ -19,6 +19,8 @@ from preparation_supplier_dispatch import (
     REGISTRY,
     RejectPreparationPiecesRequest,
     WORKFLOWS,
+    _actor_id,
+    _actor_name,
     _employee_workspace,
     _group_piece_products,
     _hydrate_piece_images_from_batches,
@@ -36,6 +38,27 @@ from preparation_supplier_dispatch import (
     supplier_dispatch_lines,
     supplier_receiving_dispatch_blocker,
 )
+
+
+def test_mobile_merchant_principal_preserves_real_employee_identity():
+    worker = {
+        "id": "owner-1",
+        "name": "Store Owner",
+        "email": "owner@example.com",
+        "_mobile_actor_id": "employee-1",
+        "_mobile_actor_email": "employee@example.com",
+        "_mobile_owner_id": "owner-1",
+    }
+
+    assert _actor_id(worker) == "employee-1"
+    assert _actor_name(worker) == "employee@example.com"
+
+
+def test_browser_principal_keeps_normal_actor_identity():
+    user = {"id": "owner-1", "name": "Store Owner"}
+
+    assert _actor_id(user) == "owner-1"
+    assert _actor_name(user) == "Store Owner"
 
 
 @pytest.mark.asyncio
