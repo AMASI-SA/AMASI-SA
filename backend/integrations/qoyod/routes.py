@@ -22,7 +22,7 @@ ADR-001 compliance:
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
@@ -567,7 +567,6 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         # legacy pipeline remains frozen. Disabling either switch or enabling
         # Dry Run disarms it immediately.
         from integrations.qoyod_manual.auto_send import (
-            UNIFIED_CANDIDATE_AUTO_FLAG,
             activation_issues,
             is_live_requested,
         )
@@ -598,7 +597,6 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                         "issues": issues,
                     },
                 )
-            valid[UNIFIED_CANDIDATE_AUTO_FLAG] = True
             valid["plan_b_auto_send_armed_at"] = (
                 valid.get("plan_b_auto_send_armed_at")
                 or _now().isoformat()
@@ -611,7 +609,6 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             valid["plan_b_auto_send_disabled_reason"] = None
             valid["plan_b_auto_send_last_error"] = None
         else:
-            valid[UNIFIED_CANDIDATE_AUTO_FLAG] = False
             valid["plan_b_auto_send_armed_at"] = None
             valid["plan_b_auto_send_disabled_at"] = _now().isoformat()
             if not valid.get("enabled"):
@@ -926,40 +923,24 @@ def make_qoyod_router(db, current_user) -> APIRouter:
     async def compliance_orphans(
         user=Depends(current_user),
         limit: int = 200,
-        from_date: Optional[str] = Query(None),
-        to_date: Optional[str] = Query(None),
     ):
         tenant = _tenant_id(user)
         items = await list_orphan_orders(
-            db, tenant, limit=max(1, min(limit, 1000)),
-            orders_user_id=orders_owner_id(user),
-            from_date=from_date, to_date=to_date)
+            db, tenant, limit=max(1, min(limit, 1000)))
         return {"ok": True, "count": len(items), "items": items}
 
     # ── GET /compliance/summary — Dashboard Alert counts ─────────────
     @router.get("/compliance/summary")
-    async def compliance_summary_endpoint(
-        from_date: Optional[str] = Query(None),
-        to_date: Optional[str] = Query(None),
-        user=Depends(current_user),
-    ):
+    async def compliance_summary_endpoint(user=Depends(current_user)):
         tenant = _tenant_id(user)
-        return {"ok": True, "summary": await compliance_summary(
-            db, tenant, orders_user_id=orders_owner_id(user),
-            from_date=from_date, to_date=to_date)}
+        return {"ok": True, "summary": await compliance_summary(db, tenant)}
 
     # ── GET /compliance/reconciliation — Reconciliation Card ─────────
     # Three-number diff: eligible Salla orders vs invoices in Qoyod.
     @router.get("/compliance/reconciliation")
-    async def compliance_reconciliation(
-        from_date: Optional[str] = Query(None),
-        to_date: Optional[str] = Query(None),
-        user=Depends(current_user),
-    ):
+    async def compliance_reconciliation(user=Depends(current_user)):
         tenant = _tenant_id(user)
-        return {"ok": True, "reconciliation": await reconciliation_check(
-            db, tenant, orders_user_id=orders_owner_id(user),
-            from_date=from_date, to_date=to_date)}
+        return {"ok": True, "reconciliation": await reconciliation_check(db, tenant)}
 
     # ── Iter-293 — Admin diagnostics (READ-ONLY, no Qoyod mutations) ──
     @router.get("/admin/diagnostics/build")
@@ -1857,8 +1838,6 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         limit: int = 200,
         show_already_sent: bool = False,
         debug: bool = False,
-        from_date: Optional[str] = Query(None),
-        to_date: Optional[str] = Query(None),
         user=Depends(current_user),
     ):
         from integrations.qoyod.eligible_orders import (
@@ -1867,13 +1846,10 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         return await build_eligible_orders_report(
             db,
             user_id=_tenant_id(user),
-            orders_user_id=orders_owner_id(user),
             since_days=since_days,
             limit=limit,
             show_already_sent=show_already_sent,
             debug=debug,
-            from_date=from_date,
-            to_date=to_date,
         )
 
     # ── Phase C.0 (2026-07-01) — Selective Send Policy Report ─
@@ -1895,7 +1871,6 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         return await build_selective_send_policy_report(
             db,
             user_id=_tenant_id(user),
-            orders_user_id=orders_owner_id(user),
             since_days=since_days,
             limit=limit,
         )
@@ -3268,8 +3243,6 @@ def make_qoyod_router(db, current_user) -> APIRouter:
     @router.get("/unsent-orders")
     async def unsent_orders_endpoint(
         days: int = Query(30, ge=1, le=365),
-        from_date: Optional[str] = Query(None),
-        to_date: Optional[str] = Query(None),
         limit: int = Query(1000, ge=1, le=5000),
         status: Optional[str] = Query(None),
         salla_status: Optional[str] = Query(None),
@@ -3288,22 +3261,18 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             status=status,
             salla_status=salla_status,
             search=search,
-            from_date=from_date,
-            to_date=to_date,
         )
 
     # ── تقرير المطابقة ميزان ↔ قيود — READ-ONLY ─────────────────────
     @router.get("/reconciliation-report")
     async def reconciliation_report_endpoint(
         sync_first: bool = Query(
-            False,
+            True,
             description=(
                 "If true, fetch invoices from Qoyod into the local "
                 "qoyod_invoices table before comparison."
             ),
         ),
-        from_date: Optional[str] = Query(None),
-        to_date: Optional[str] = Query(None),
         user=Depends(current_user),
     ):
         tenant = _tenant_id(user)
@@ -3339,8 +3308,6 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                     db,
                     user_id=tenant,
                     api_client=api_client,
-                    from_date=(date.fromisoformat(from_date)
-                               if from_date else None),
                 )
                 sync_summary["ran"] = True
 
@@ -3381,8 +3348,6 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                 db,
                 orders_user_id=orders_owner_id(user),
                 markers_user_id=tenant,
-                from_date=from_date,
-                to_date=to_date,
             )
         except Exception as exc:
             return {
@@ -3397,6 +3362,14 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             }
 
         report["sync_summary"] = sync_summary
+
+        try:
+            await db.qoyod_reconciliation_reports.insert_one({
+                "user_id": tenant,
+                **{k: v for k, v in report.items() if k != "ok"},
+            })
+        except Exception:
+            pass
 
         return report
 

@@ -161,38 +161,3 @@ test("one failed order does not stop the remaining automatic batch", async () =>
     await cleanup(container, root);
   }
 });
-
-test("unified backlog stays visible while bulk recovery is hidden", async () => {
-  api.get.mockResolvedValue({
-    data: {
-      source_authority: "unified_orders",
-      from_date: "2026-08-15",
-      to_date: "2026-08-22",
-      counts: { "لم يُرسل": 3, "فشل": 0, "مكرر": 0, "أُرسل": 0 },
-      orders: [{
-        order_number: "SYNTHETIC-UNSENT-001",
-        order_date: "2026-08-22",
-        status: "لم يُرسل",
-        salla_status: "تم التنفيذ",
-        reason: "مؤهل من الطلبات الموحدة",
-      }],
-      salla_status_counts: { "تم التنفيذ": 3 },
-    },
-  });
-
-  const { container, root } = await renderRecoveryPage("/?recovery=1");
-  try {
-    expect(container.querySelector('[data-testid="unsent-count-لم يُرسل"]')?.textContent)
-      .toContain("3");
-    expect(container.querySelector('[data-testid="unsent-row-SYNTHETIC-UNSENT-001"]')?.textContent)
-      .toContain("2026-08-22");
-    expect(container.querySelector('[data-testid="unsent-unified-readonly-note"]'))
-      .not.toBeNull();
-    expect(container.querySelector('[data-testid="qoyod-recovery-toggle"]'))
-      .toBeNull();
-    expect(container.querySelector('[data-testid="qoyod-recovery-panel"]'))
-      .toBeNull();
-  } finally {
-    await cleanup(container, root);
-  }
-});

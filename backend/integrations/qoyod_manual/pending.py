@@ -13,7 +13,7 @@ Rules (immutable, per user directive 2026-02):
 from __future__ import annotations
 
 from datetime import datetime, date, timedelta, timezone
-from typing import Optional, Any, Iterable
+from typing import Optional, Any
 
 # Reuse the SAME floor-date + is_real helpers so Plan B and
 # the frozen pipeline see the same universe.
@@ -22,10 +22,6 @@ from integrations.qoyod.eligible_orders import (
     _parse_iso_date,
 )
 from integrations.qoyod.unsent_orders import _is_real
-from integrations.qoyod.candidate_orders import (
-    API_STATUS_TO_KEY,
-    build_candidate_audit,
-)
 from integrations.qoyod_manual.order_source import get_order_payment_facts
 
 _FLOOR_DATE: date = date.fromisoformat(QOYOD_SYNC_START_DATE)
@@ -221,7 +217,7 @@ async def _sent_in_any_local_record(
     return None
 
 
-async def _list_pending_orders_from_inbox_legacy(
+async def list_pending_orders(
     db, *, user_id: str, orders_user_id: Optional[str] = None,
     days: int = 60, limit: int = 500,
     search: Optional[str] = None,
@@ -464,157 +460,4 @@ async def _list_pending_orders_from_inbox_legacy(
             "excluded_already_sent": excluded_already_sent,
         },
         "orders":        pending,
-    }
-
-
-async def list_pending_orders(
-    db, *, user_id: str, orders_user_id: Optional[str] = None,
-    days: int = 60, limit: int = 500,
-    search: Optional[str] = None,
-    status: str = "completed",
-    from_date: Any = None,
-    to_date: Any = None,
-    now: Optional[datetime] = None,
-    open_quarantine_order_numbers: Optional[Iterable[str]] = None,
-) -> dict:
-    """Return the authoritative Plan-B queue from ``unified_orders``.
-
-    ``integration_inbox`` remains evidence only and can never introduce an
-    order into this result. Callers with a distinct Orders owner must pass
-    ``orders_user_id``; same-tenant callers default to ``user_id``.
-    """
-    effective_orders_user_id = str(orders_user_id or user_id)
-    requested_status = status if status in SUPPORTED_STATUSES else "completed"
-    canonical_status = API_STATUS_TO_KEY[requested_status]
-    limit = max(1, min(int(limit), 1000))
-    audit = await build_candidate_audit(
-        db,
-        orders_user_id=effective_orders_user_id,
-        markers_user_id=str(user_id),
-        marker_user_ids=(str(user_id), effective_orders_user_id),
-        from_date=from_date,
-        to_date=to_date,
-        days=days,
-        now=now,
-        search=search,
-    )
-
-    quarantine_filter_applied = open_quarantine_order_numbers is not None
-    quarantined_references = {
-        str(value).strip()
-        for value in (open_quarantine_order_numbers or ())
-        if str(value).strip()
-    }
-    all_candidates = [
-        row for row in audit["orders"] if row.get("worker_candidate")
-    ]
-    runnable_candidates = [
-        row for row in all_candidates
-        if str(row.get("order_number") or "") not in quarantined_references
-    ]
-    selected = [
-        row for row in runnable_candidates
-        if row.get("current_status_key") == canonical_status
-    ][:limit]
-
-    orders: list[dict[str, Any]] = []
-    for row in selected:
-        inbox_row = row.get("inbox_row") or {}
-        received_at = inbox_row.get("received_at")
-        pending_order = {
-            "order_number": row["order_number"],
-            "trace_id": row.get("trace_id"),
-            "row_id": inbox_row.get("id"),
-            "order_date": row.get("order_date"),
-            "received_at": (
-                received_at.isoformat()
-                if hasattr(received_at, "isoformat") else received_at
-            ),
-            "total_amount": row.get("total_amount"),
-            "currency": row.get("currency") or "SAR",
-            "payment_method": row.get("payment_method"),
-            "payment_method_native": row.get("payment_method"),
-            "receiving_bank_name": None,
-            "salla_status": row.get("current_status"),
-            "current_status_key": row.get("current_status_key"),
-            "customer_name": row.get("customer_name"),
-            "customer_phone": row.get("customer_phone"),
-            "status_source": "unified_orders_current",
-            "in_unified_orders": True,
-            "in_integration_inbox": row.get("in_integration_inbox"),
-            "has_qoyod_reference_match": False,
-            "automation_visibility_reason": row.get(
-                "legacy_worker_visibility_reason"
-            ),
-            "candidate_reason": row.get("candidate_reason"),
-        }
-        if quarantine_filter_applied:
-            pending_order["runnable_worker_candidate"] = True
-        orders.append(pending_order)
-
-    status_candidate_count = sum(
-        row.get("current_status_key") == canonical_status
-        for row in all_candidates
-    )
-    runnable_status_candidate_count = sum(
-        row.get("current_status_key") == canonical_status
-        for row in runnable_candidates
-    )
-    counts = {
-        "returned": len(orders),
-        "authoritative_worker_candidates": len(all_candidates),
-        "status_worker_candidates": status_candidate_count,
-        "exact_qoyod_reference_matches": len(audit["sent_references"]),
-        "missing_from_integration_inbox": audit["counts"][
-            "missing_from_integration_inbox"
-        ],
-        "excluded_already_sent": len(audit["sent_references"]),
-        "excluded_pre_floor": 0,
-        "excluded_outside_requested_period": audit["unified_exclusions"][
-            "outside_requested_date_range"
-        ],
-        "excluded_no_salla_date": audit["unified_exclusions"][
-            "missing_or_inferred_order_date"
-        ],
-        "excluded_not_completed": audit["unified_exclusions"][
-            "status_not_eligible"
-        ],
-        "excluded_not_paid": audit["unified_exclusions"][
-            "payment_not_eligible"
-        ],
-    }
-    if quarantine_filter_applied:
-        counts.update({
-            "runnable_worker_candidates": len(runnable_candidates),
-            "runnable_status_worker_candidates": (
-                runnable_status_candidate_count
-            ),
-            "open_quarantined_worker_candidates": (
-                len(all_candidates) - len(runnable_candidates)
-            ),
-            "runnable_scope": "open_quarantine_excluded_before_limit",
-        })
-    return {
-        "ok": True,
-        "status": requested_status,
-        "supported_statuses": list(SUPPORTED_STATUSES),
-        "floor_date": _FLOOR_DATE.isoformat(),
-        "from_date": audit["from_date"],
-        "to_date": audit["to_date"],
-        "days_window": days,
-        "source_authority": "unified_orders",
-        "match_contract": audit["match_contract"],
-        "captured_at": audit["captured_at"],
-        "snapshot_fingerprint": audit["snapshot_fingerprint"],
-        "status_counts": audit["status_counts"],
-        "status_display_counts": audit["status_display_counts"],
-        "worker_candidate_status_counts": audit[
-            "worker_candidate_status_counts"
-        ],
-        "worker_candidate_status_display_counts": audit[
-            "worker_candidate_status_display_counts"
-        ],
-        "reference_hashes": audit["reference_hashes"],
-        "counts": counts,
-        "orders": orders,
     }

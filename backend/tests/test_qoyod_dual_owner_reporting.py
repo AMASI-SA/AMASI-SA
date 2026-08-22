@@ -117,18 +117,6 @@ def _inbox(owner, order_number, *, marker=None, received_at=None):
     }
 
 
-def _unified(owner, order_number, *, order_date="2026-08-10"):
-    return {
-        "user_id": owner,
-        "order_number": order_number,
-        "order_date": order_date,
-        "order_status": "completed",
-        "order_status_slug": "completed",
-        "payment_method": "mada",
-        "total_amount": 100.0,
-    }
-
-
 def test_unsent_report_reads_only_main_and_current_orders_owner():
     now = datetime.now(timezone.utc)
     inbox = [
@@ -143,22 +131,7 @@ def test_unsent_report_reads_only_main_and_current_orders_owner():
         _inbox("merchant-2", "277300003", marker="9998",
                received_at=now),
     ]
-    db = _DB(
-        inbox=inbox,
-        orders=[
-            _unified("merchant-1", "277274465"),
-            _unified("merchant-1", "277300001"),
-            _unified("merchant-1", "277300002"),
-            _unified("merchant-2", "277300003"),
-        ],
-        invoices=[{
-            "user_id": "main",
-            "qoyod_invoice_id": "1363",
-            "reference": "277274465",
-            "qoyod_official_reference": "277274465",
-            "reference_provenance": "qoyod.reference",
-        }],
-    )
+    db = _DB(inbox=inbox)
 
     result = _run(list_unsent_orders(
         db,
@@ -182,7 +155,7 @@ def test_unsent_report_reads_only_main_and_current_orders_owner():
     )
     assert sent["status"] == SENT
     assert sent["debug"]["invoice_id"] == "1363"
-    assert sent["debug"]["match_source"] == "qoyod_invoices.reference"
+    assert sent["debug"]["match_source"] == "manual_qoyod_invoice_id"
     duplicated = next(
         row for row in result["orders"]
         if row["order_number"] == "277300001"
@@ -195,17 +168,7 @@ def test_unsent_report_reads_only_main_and_current_orders_owner():
 
 
 def test_unsent_report_deduplicates_when_main_is_the_orders_owner():
-    db = _DB(
-        inbox=[_inbox("main", "277274465", marker="1363")],
-        orders=[_unified("main", "277274465")],
-        invoices=[{
-            "user_id": "main",
-            "qoyod_invoice_id": "1363",
-            "reference": "277274465",
-            "qoyod_official_reference": "277274465",
-            "reference_provenance": "qoyod.reference",
-        }],
-    )
+    db = _DB(inbox=[_inbox("main", "277274465", marker="1363")])
 
     result = _run(list_unsent_orders(
         db,
@@ -220,7 +183,7 @@ def test_unsent_report_deduplicates_when_main_is_the_orders_owner():
     assert db.integration_inbox.queries[0]["user_id"] == "main"
 
 
-def test_unsent_report_applies_real_requested_window_without_hidden_floor():
+def test_unsent_report_requires_a_proven_salla_date_on_or_after_floor():
     now = datetime.now(timezone.utc)
     before_floor = _inbox(
         "main", "269999991", received_at=now,
@@ -238,30 +201,20 @@ def test_unsent_report_applies_real_requested_window_without_hidden_floor():
     on_floor["canonical_payload"]["order_date"] = "2026-07-01"
 
     result = _run(list_unsent_orders(
-        _DB(
-            inbox=[before_floor, missing_date, on_floor],
-            orders=[
-                _unified("main", "269999991", order_date="2026-06-30"),
-                {
-                    **_unified("main", "269999992"),
-                    "order_date": None,
-                },
-                _unified("main", "269999993", order_date="2026-07-01"),
-            ],
-        ),
+        _DB(inbox=[before_floor, missing_date, on_floor]),
         user_id="main",
         orders_user_id="main",
         days=365,
         limit=1000,
     ))
 
-    assert result["counts"][UNSENT] == 2
+    assert result["counts"][UNSENT] == 1
     assert [row["order_number"] for row in result["orders"]] == [
         "269999993",
-        "269999991",
     ]
     assert result["sync_start_date"] == "2026-07-01"
-    assert result["excluded_outside_requested_period"] == 0
+    assert result["excluded_pre_sync_start"] == 1
+    assert result["excluded_missing_order_date"] == 1
 
 
 def test_reconciliation_accepts_marker_from_current_orders_owner():
@@ -273,8 +226,6 @@ def test_reconciliation_accepts_marker_from_current_orders_owner():
             "qoyod_invoice_id": "1363",
             "invoice_number": "277274465",
             "reference": order_number,
-            "qoyod_official_reference": order_number,
-            "reference_provenance": "qoyod.reference",
             "issue_date": "2026-08-12",
             "total": 170.83,
             "paid_amount": 170.83,
@@ -330,8 +281,6 @@ def test_reconciliation_bulk_loads_markers_once_with_exact_id_and_tenant_scope()
         "qoyod_invoice_id": invoice_ids[index],
         "invoice_number": invoice_ids[index],
         "reference": order_number,
-        "qoyod_official_reference": order_number,
-        "reference_provenance": "qoyod.reference",
         "issue_date": "2026-08-12",
         "total": 100.0 + index,
         "paid_amount": 100.0 + index,

@@ -1,10 +1,12 @@
 """Prove: an eligible delivered order stays in the Plan-B pending
 list even when heavy webhook noise saturates the naïve limit.
 
-The current implementation selects from authoritative `unified_orders`
-and applies the status tab before the display limit. `integration_inbox`
-is seeded only as operational evidence, so webhook noise cannot define
-or evict the candidate universe.
+Root cause fixed on 2026-07-09: `list_pending_orders` used to sort by
+`received_at DESC` and apply `limit=200` at the Mongo level BEFORE
+filtering by Salla status. In production this evicted eligible
+"delivered" orders whenever many recent inbox rows belonged to other
+statuses (webhook noise). The fix pushes the status filter DOWN into
+the Mongo query so `limit` applies to the STATUS-FILTERED subset.
 
 Test coverage:
     L1  With 400 "completed" webhook rows (noise) received AFTER an
@@ -57,26 +59,6 @@ async def _insert(db, *, order_number, received_at, slug, native):
         "canonical_payload":    _canon(order_number, slug=slug, native=native),
         "raw_payload":          {"data": {"created_at": "2026-07-05"}},
     })
-    await db.unified_orders.update_one(
-        {"user_id": TENANT, "order_number": str(order_number)},
-        {"$set": {
-            "user_id": TENANT,
-            "order_id": f"oid-{order_number}",
-            "order_number": str(order_number),
-            "order_date": "2026-07-05",
-            "order_status_slug": slug,
-            "order_status": slug,
-            "order_status_native": native,
-            "payment_status": "paid",
-            "paid_amount": 260.0,
-            "remaining_amount": 0.0,
-            "has_remaining_amount": False,
-            "total_amount": 260.0,
-            "currency": "SAR",
-            "updated_at": received_at,
-        }},
-        upsert=True,
-    )
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -88,8 +70,8 @@ async def test_eligible_delivered_not_evicted_by_completed_noise(db):
     400 "completed" rows (unrelated to Plan-B delivered tab) at t = now
     with newer `received_at` timestamps. Under the OLD limit-first
     behaviour the delivered row was pushed out of the top-200 window
-    and vanished from the tab. The authoritative queue filters by
-    status BEFORE the limit, so the delivered row surfaces.
+    and vanished from the tab. After the fix the Mongo query filters
+    by status BEFORE the limit, so the delivered row surfaces.
     """
     now = datetime.now(timezone.utc)
     # 400 recent "completed" noise rows.
@@ -137,7 +119,7 @@ async def test_low_limit_still_finds_delivered_after_noise(db):
         slug="delivered", native="تم التوصيل")
 
     # Even at limit=200, the delivered order survives because the
-    # authoritative status filter runs before the limit.
+    # status filter runs Mongo-side.
     res = await list_pending_orders(
         db, user_id=TENANT, days=60, limit=200, status="delivered")
     order_numbers = [o["order_number"] for o in res["orders"]]

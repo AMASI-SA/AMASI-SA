@@ -38,13 +38,8 @@ from typing import Any, Optional
 from pymongo.errors import DuplicateKeyError
 
 from integrations.qoyod.credentials import get_api_key
-from integrations.qoyod.candidate_orders import (
-    API_STATUS_TO_KEY,
-    UNIFIED_CANDIDATE_AUTO_FLAG,
-    build_candidate_audit,
-)
-from integrations.qoyod.eligible_orders import QOYOD_SYNC_START_DATE
 from integrations.qoyod_manual.canary_batch import SAFE_ALREADY_SENT_CODES
+from integrations.qoyod_manual.pending import list_pending_orders
 from integrations.qoyod_manual.send import ManualSendRefused, manual_send_one
 from salla_integration.sync import resync_single_order
 
@@ -58,8 +53,8 @@ _LAST_ROUND: dict[str, Any] = {}
 
 # Settings store the exact Salla slug selected by the operator.  Salla can
 # expose the in-delivery state under more than one equivalent slug, so map the
-# closed approved list to the three keys used to partition the single unified
-# candidate snapshot. Nothing outside these aliases can arm the worker.
+# closed approved list to the three keys understood by ``list_pending_orders``.
+# Nothing outside these aliases can arm the automatic worker.
 _TRIGGER_TO_PENDING_STATUS = {
     "completed": "completed",
     "تم التنفيذ": "completed",
@@ -84,9 +79,6 @@ _PENDING_STATUS_NATIVE_VALUES = {
     "delivered": frozenset({"delivered", "تم التوصيل"}),
 }
 
-_CANONICAL_PENDING_STATUSES = ("completed", "in_delivery", "delivered")
-
-
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -106,10 +98,7 @@ def _configured_pending_statuses(settings: dict) -> list[str]:
         status_key = _TRIGGER_TO_PENDING_STATUS.get(value)
         if status_key and status_key not in resolved:
             resolved.append(status_key)
-    # Settings may validate safety, but they cannot silently narrow the
-    # canonical candidate definition. Rollout authorization is handled by the
-    # independent, default-off UNIFIED_CANDIDATE_AUTO_FLAG.
-    return list(_CANONICAL_PENDING_STATUSES) if resolved else []
+    return resolved
 
 
 def _trigger_statuses_are_safe(settings: dict) -> bool:
@@ -128,9 +117,6 @@ def _trigger_statuses_are_safe(settings: dict) -> bool:
 
 
 def _pending_row_matches_status(row: dict[str, Any], status_key: str) -> bool:
-    canonical_status = API_STATUS_TO_KEY.get(status_key)
-    if row.get("current_status_key") and canonical_status:
-        return row.get("current_status_key") == canonical_status
     native = str(row.get("salla_status") or "").strip().lower()
     return native in _PENDING_STATUS_NATIVE_VALUES.get(status_key, frozenset())
 
@@ -192,7 +178,6 @@ def is_armed(settings: dict) -> bool:
     """Cheap runtime gate. Full validation happens when settings are saved."""
     return bool(
         is_live_requested(settings)
-        and settings.get(UNIFIED_CANDIDATE_AUTO_FLAG) is True
         and settings.get("plan_b_auto_send_armed_at")
         and settings.get("plan_b_auto_send_orders_user_id")
         and settings.get("legacy_pipeline_frozen")
@@ -209,9 +194,6 @@ def status_snapshot(settings: dict) -> dict[str, Any]:
         "armed_by": settings.get("plan_b_auto_send_actor"),
         "last_error": settings.get("plan_b_auto_send_last_error"),
         "disabled_reason": settings.get("plan_b_auto_send_disabled_reason"),
-        "unified_candidate_auto_enabled": (
-            settings.get(UNIFIED_CANDIDATE_AUTO_FLAG) is True
-        ),
         "worker": liveness(),
     }
 
@@ -499,123 +481,22 @@ async def _refresh_and_verify_salla_status(
 
 
 async def _open_quarantined_order_numbers(
-    db, order_numbers: Optional[list[str]] = None,
+    db, order_numbers: list[str],
 ) -> set[str]:
-    query: dict[str, Any] = {"user_id": _TENANT, "status": "open"}
-    if order_numbers is not None:
-        normalized = [str(value) for value in order_numbers if str(value)]
-        if not normalized:
-            return set()
-        query["order_number"] = {"$in": normalized}
+    if not order_numbers:
+        return set()
     result: set[str] = set()
     cursor = db.qoyod_manual_auto_quarantines.find(
-        query,
+        {
+            "user_id": _TENANT,
+            "order_number": {"$in": order_numbers},
+            "status": "open",
+        },
         {"_id": 0, "order_number": 1},
     )
     async for row in cursor:
         result.add(str(row.get("order_number") or ""))
     return result
-
-
-async def _load_candidate_rows(
-    db, *, settings: dict[str, Any], orders_user_id: str,
-    batch_limit: int,
-) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Load one unified snapshot and select a fair, bounded worker batch.
-
-    A round performs exactly one ``build_candidate_audit`` call for its Orders
-    owner.  The three status groups, every counter, and the persisted run-audit
-    metadata are derived from that same in-memory result.  No Salla request is
-    made here; the selected order alone is refreshed immediately before its
-    existing ``manual_send_one`` path is allowed to POST.
-    """
-    snapshot = await build_candidate_audit(
-        db,
-        orders_user_id=str(orders_user_id),
-        markers_user_id=_TENANT,
-        marker_user_ids=(_TENANT, str(orders_user_id)),
-        from_date=QOYOD_SYNC_START_DATE,
-    )
-    all_candidates = [
-        row for row in (snapshot.get("orders") or [])
-        if row.get("worker_candidate") is True
-    ]
-    quarantined = await _open_quarantined_order_numbers(
-        db,
-        [str(row.get("order_number") or "") for row in all_candidates],
-    )
-    runnable_candidates = [
-        row for row in all_candidates
-        if str(row.get("order_number") or "") not in quarantined
-    ]
-    pending_statuses = _configured_pending_statuses(settings)
-    candidate_groups = [
-        [
-            row for row in runnable_candidates
-            if _pending_row_matches_status(row, pending_status)
-        ]
-        for pending_status in pending_statuses
-    ]
-
-    candidates: list[dict[str, Any]] = []
-    seen_order_numbers: set[str] = set()
-    max_group_size = max((len(group) for group in candidate_groups), default=0)
-    for index in range(max_group_size):
-        for group in candidate_groups:
-            if index >= len(group):
-                continue
-            row = group[index]
-            order_number = str(row.get("order_number") or "")
-            if not order_number or order_number in seen_order_numbers:
-                continue
-            seen_order_numbers.add(order_number)
-            candidates.append(row)
-            if len(candidates) >= max(1, int(batch_limit)):
-                break
-        if len(candidates) >= max(1, int(batch_limit)):
-            break
-
-    authoritative_status_counts = {
-        API_STATUS_TO_KEY[pending_status]: sum(
-            _pending_row_matches_status(row, pending_status)
-            for row in all_candidates
-        )
-        for pending_status in pending_statuses
-    }
-    runnable_status_counts = {
-        API_STATUS_TO_KEY[pending_status]: len(group)
-        for pending_status, group in zip(pending_statuses, candidate_groups)
-    }
-    snapshot_captured_at = snapshot.get("captured_at") or _now().isoformat()
-    snapshot_fingerprint = (
-        snapshot.get("snapshot_fingerprint")
-        or (snapshot.get("reference_hashes") or {}).get("worker_candidates")
-    )
-    return candidates, {
-        "authoritative_backlog_count": len(all_candidates),
-        "runnable_candidate_count": len(runnable_candidates),
-        "open_quarantined_candidate_count": max(
-            0, len(all_candidates) - len(runnable_candidates)
-        ),
-        "status_candidate_count": sum(runnable_status_counts.values()),
-        "batch_candidate_count": len(candidates),
-        "candidate_snapshot": {
-            "source_authority": snapshot.get("source_authority"),
-            "orders_user_id": str(orders_user_id),
-            "from_date": snapshot.get("from_date"),
-            "to_date": snapshot.get("to_date"),
-            "captured_at": snapshot_captured_at,
-            "snapshot_fingerprint": snapshot_fingerprint,
-            "status_counts": (
-                snapshot.get("worker_candidate_status_counts")
-                or authoritative_status_counts
-            ),
-            "status_display_counts": snapshot.get(
-                "worker_candidate_status_display_counts"
-            ) or {},
-            "runnable_status_counts": runnable_status_counts,
-        },
-    }
 
 
 async def _quarantine_order(
@@ -649,17 +530,6 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
     """Run one bounded, sequential automatic-send round."""
     global _LAST_RUN_AT, _LAST_RUN_OK, _LAST_ROUND
     settings = await _current_settings(db)
-    if settings.get(UNIFIED_CANDIDATE_AUTO_FLAG) is not True:
-        result = {
-            "ok": True,
-            "status": "unified_auto_rollout_disabled",
-            "sent_count": 0,
-            "candidate_count": 0,
-        }
-        _LAST_RUN_OK = True
-        _LAST_ROUND = result
-        _LAST_RUN_AT = _now()
-        return result
     recovered = await _recover_legacy_circuit_breaker(db, settings)
     if recovered is not None:
         settings = recovered
@@ -689,23 +559,54 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
             return result
 
         orders_user_id = str(settings["plan_b_auto_send_orders_user_id"])
-        candidates, candidate_counts = await _load_candidate_rows(
-            db,
-            settings=settings,
-            orders_user_id=orders_user_id,
-            batch_limit=batch_limit,
+        candidate_groups: list[list[dict[str, Any]]] = []
+        for pending_status in _configured_pending_statuses(settings):
+            pending = await list_pending_orders(
+                db,
+                user_id=_TENANT,
+                orders_user_id=orders_user_id,
+                days=60,
+                limit=max(25, batch_limit * 5),
+                status=pending_status,
+            )
+            # The status-tab query classifies the newest trace for each order.
+            # Keep an explicit second check here, then perform the authoritative
+            # live Salla refresh below before any Qoyod write.
+            candidate_groups.append([
+                row for row in (pending.get("orders") or [])
+                if _pending_row_matches_status(row, pending_status)
+            ])
+
+        # Round-robin across the configured states so a busy completed queue
+        # cannot indefinitely starve in-delivery or delivered orders.
+        eligible_candidates: list[dict[str, Any]] = []
+        seen_order_numbers: set[str] = set()
+        max_group_size = max(
+            (len(group) for group in candidate_groups),
+            default=0,
         )
+        for index in range(max_group_size):
+            for group in candidate_groups:
+                if index >= len(group):
+                    continue
+                row = group[index]
+                order_number = str(row.get("order_number") or "")
+                if not order_number or order_number in seen_order_numbers:
+                    continue
+                seen_order_numbers.add(order_number)
+                eligible_candidates.append(row)
+        quarantined = await _open_quarantined_order_numbers(
+            db,
+            [str(row.get("order_number") or "")
+             for row in eligible_candidates],
+        )
+        candidates = [
+            row for row in eligible_candidates
+            if str(row.get("order_number") or "") not in quarantined
+        ][:max(1, int(batch_limit))]
 
         if not candidates:
-            result = {
-                "ok": True,
-                "status": "idle",
-                "sent_count": 0,
-                "candidate_count": candidate_counts[
-                    "authoritative_backlog_count"
-                ],
-                **candidate_counts,
-            }
+            result = {"ok": True, "status": "idle", "sent_count": 0}
             _LAST_RUN_OK = True
             _LAST_ROUND = result
             return result
@@ -719,7 +620,6 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
             "order_numbers": [str(r["order_number"]) for r in candidates],
             "started_at": started_at,
             "settings_armed_at": settings.get("plan_b_auto_send_armed_at"),
-            **candidate_counts,
         }
         # Audit exists before the first external write.
         await db.qoyod_manual_auto_runs.insert_one(audit)
@@ -824,10 +724,6 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
             "already_sent_count": already_count,
             "manual_review_count": manual_review_count,
             "retry_later_count": 0,
-            "candidate_count": candidate_counts[
-                "authoritative_backlog_count"
-            ],
-            **candidate_counts,
             "results": results,
             "started_at": started_at.isoformat(),
             "finished_at": finished_at.isoformat(),

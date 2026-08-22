@@ -34,12 +34,6 @@ from integrations.qoyod.eligible_orders import (
     QOYOD_SYNC_START_DATE, _parse_iso_date,
 )
 from integrations.qoyod.unsent_orders import _is_real
-from integrations.qoyod.candidate_orders import (
-    build_candidate_audit,
-    load_qoyod_reference_evidence,
-    reference_set_sha256,
-    resolve_candidate_date_range,
-)
 from integrations.qoyod_manual.missing_diagnostics import (
     _status_key_from_unified, _unified_salla_date,
 )
@@ -302,19 +296,10 @@ def _fmt(v):
     return None if v is None else round(float(v), 2)
 
 
-def _invoice_row_in_range(inv: dict, *, start: date, end: date) -> bool:
-    issue_date = _parse_iso_date(inv.get("issue_date"))
-    return issue_date is not None and start <= issue_date <= end
-
-
 async def run_reconciliation_v2(
     db, *,
     orders_user_id: str,
     markers_user_id: Optional[str] = None,
-    from_date: Any = None,
-    to_date: Any = None,
-    days: int = 90,
-    now: Optional[datetime] = None,
 ) -> dict:
     """The reconciliation report itself. Read-only."""
     if markers_user_id is None:
@@ -326,63 +311,22 @@ async def run_reconciliation_v2(
         ) if value
     ))
 
-    date_range = resolve_candidate_date_range(
-        from_date=from_date,
-        to_date=to_date,
-        days=days,
-        now=now,
-    )
-    audit = await build_candidate_audit(
-        db,
-        orders_user_id=str(orders_user_id),
-        markers_user_id=str(markers_user_id),
-        marker_user_ids=marker_user_ids,
-        from_date=date_range.from_date,
-        to_date=date_range.to_date,
-        days=days,
-        now=now,
-    )
-    unified = {
-        row["order_number"]: {
-            **(row.get("unified_order") or {}),
-            "order_number": row["order_number"],
-            "order_date": row.get("order_date"),
-            "order_status": row.get("current_status"),
-            "total_amount": row.get("total_amount"),
-            "customer_name": row.get("customer_name"),
-        }
-        for row in audit["orders"]
-    }
-    invoice_evidence = await load_qoyod_reference_evidence(
-        db, markers_user_id=str(markers_user_id)
-    )
-    local_inv: dict[str, dict] = {}
-    for reference, invoice_rows in invoice_evidence["by_reference"].items():
-        if not invoice_rows:
-            continue
-        invoice = dict(invoice_rows[0])
-        invoice["_match_key"] = reference
-        invoice["_match_source"] = invoice.get(
-            "reference_match_provenance", "qoyod.reference"
-        )
-        local_inv[reference] = invoice
-    for invoice in invoice_evidence["unreferenced"]:
-        key = f"__ORPHAN__:{invoice.get('qoyod_invoice_id')}"
-        orphan = dict(invoice)
-        orphan["_match_key"] = None
-        orphan["_match_source"] = invoice.get(
-            "reference_match_provenance", "orphan"
-        )
-        local_inv[key] = orphan
+    unified = await _load_eligible_unified(db, user_id=orders_user_id)
+    local_inv = await _load_local_qoyod_invoices(
+        db, markers_user_id=markers_user_id)
 
-    # The candidate audit already bulk-loaded every inbox trace for the exact
-    # eligible set. Reuse that evidence instead of issuing a second query or
-    # falling back to a per-invoice lookup.
-    inbox_marker_rows = {
-        proof["order_number"]: list(proof.get("inbox_rows") or [])
-        for proof in audit["orders"]
-        if proof["order_number"] in local_inv
-    }
+    # Marker rows are only relevant when both sides already have an exact
+    # order-number match.  Fetch all of them in one tenant-isolated query;
+    # never perform an inbox query from inside the reconciliation loop.
+    matched_order_numbers = [
+        order_number for order_number in unified
+        if order_number in local_inv
+    ]
+    inbox_marker_rows = await _load_inbox_marker_rows(
+        db,
+        marker_user_ids=marker_user_ids,
+        order_numbers=matched_order_numbers,
+    )
 
     counts: dict[str, int] = {k: 0 for k in _ALL_STATUSES}
     rows: list[dict] = []
@@ -503,10 +447,6 @@ async def run_reconciliation_v2(
         if ref.startswith("__ORPHAN__:") or ref not in claimed_refs:
             if not ref.startswith("__ORPHAN__:") and ref in claimed_refs:
                 continue
-            if not _invoice_row_in_range(
-                inv, start=date_range.from_date, end=date_range.to_date
-            ):
-                continue
             counts[QOYOD_ONLY] += 1
             match_key = inv.get("_match_key")
             match_source = inv.get("_match_source", "orphan")
@@ -555,69 +495,13 @@ async def run_reconciliation_v2(
     all_matched = all(counts[k] == 0 for k in _ALL_STATUSES
                        if k != MATCHED)
 
-    eligible_refs = set(unified)
-    exact_invoice_refs = set(invoice_evidence["references"])
-    sent_refs = eligible_refs & exact_invoice_refs
-    unsent_refs = eligible_refs - exact_invoice_refs
-    qoyod_only_refs = {
-        reference
-        for reference, invoice_rows in invoice_evidence[
-            "by_reference"
-        ].items()
-        if reference not in eligible_refs
-        and invoice_rows
-        and _invoice_row_in_range(
-            invoice_rows[0],
-            start=date_range.from_date,
-            end=date_range.to_date,
-        )
-    }
     return {
         "ok":                    True,
         "run_at":                datetime.now(timezone.utc).isoformat(),
         "sync_start_date":       _FLOOR_DATE.isoformat(),
-        "from_date":             date_range.from_date.isoformat(),
-        "to_date":               date_range.to_date.isoformat(),
-        "source_authority":      "unified_orders",
-        "match_contract":        audit["match_contract"],
-        "captured_at":           audit["captured_at"],
-        "snapshot_fingerprint":  audit["snapshot_fingerprint"],
-        "status_counts":         audit["status_counts"],
-        "status_display_counts": audit["status_display_counts"],
-        "worker_candidate_status_counts": audit[
-            "worker_candidate_status_counts"
-        ],
-        "worker_candidate_status_display_counts": audit[
-            "worker_candidate_status_display_counts"
-        ],
         "counts":                counts,
         "salla_orders_total":    len(unified),
         "qoyod_invoices_total":  len(local_inv),
-        "set_counts": {
-            "eligible": len(eligible_refs),
-            "sent_exact": len(sent_refs),
-            "needs_plan_b_send": len(unsent_refs),
-            "qoyod_only": len(qoyod_only_refs),
-        },
-        "reference_sets": {
-            "eligible": sorted(eligible_refs),
-            "sent_exact": sorted(sent_refs),
-            "needs_plan_b_send": sorted(unsent_refs),
-            "qoyod_only": sorted(qoyod_only_refs),
-        },
-        "reference_hashes": {
-            "eligible": reference_set_sha256(eligible_refs),
-            "sent_exact": reference_set_sha256(sent_refs),
-            "needs_plan_b_send": reference_set_sha256(unsent_refs),
-            "qoyod_only": reference_set_sha256(qoyod_only_refs),
-        },
-        "duplicate_qoyod_references": {
-            ref: len(rows) for ref, rows in
-            invoice_evidence["duplicate_references"].items()
-        },
-        "invariant_holds": len(eligible_refs) == (
-            len(sent_refs) + len(unsent_refs)
-        ),
         "all_matched":           all_matched,
         "rows":                  rows,
         "outcome_labels":        list(_ALL_STATUSES),

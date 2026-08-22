@@ -3,12 +3,15 @@
 Surfaces orders that "should be in Qoyod by now" but aren't, so an
 operator can intervene before invoices are silently lost.
 
-The public compliance layer is purely **read-only**. It consumes one
-authoritative candidate audit from `unified_orders`, covering the canonical
-`completed`, `delivering`, and `delivered` states, and matches actual order
-references against official Qoyod invoice references.  Historical samples
-such as the completed-only 60-order incident benchmark are evidence, never
-runtime policy or totals.
+The compliance layer is purely **read-only**. It scans
+`unified_orders` (the Salla orders ledger) and joins against
+`qoyod_invoices` (the Qoyod send-state ledger) to produce two
+buckets:
+
+  • orphan_orders     — Salla status = "تم التنفيذ" AND no
+                        corresponding `qoyod_invoices` row.
+  • problem_orders    — `qoyod_invoices` row exists but its
+                        `eligibility_status` is NOT `sent_to_qoyod`.
 
 The Dashboard Alert (rendered only on the Qoyod page per user spec)
 calls `compliance_summary()` to get counts. The Invoices Data Grid
@@ -17,7 +20,7 @@ calls `list_orphan_orders()` for the detailed table.
 ADR-001 compliance:
    #4  Canonical Domain  — single source for eligibility computation.
    #11 Multi-Tenant      — every query is scoped by `user_id`.
-   #13 Versioning        — public output carries `schema_version: 2`.
+   #13 Versioning        — output dict carries `schema_version: 1`.
 """
 from __future__ import annotations
 
@@ -27,18 +30,17 @@ from typing import Any, Optional
 from integrations.qoyod.models import (
     ELIGIBILITY_STATUSES, ELIGIBILITY_REASONS,
 )
-from integrations.qoyod.candidate_orders import (
-    build_candidate_audit,
-    unified_status_key,
-)
 
 
-# Compatibility vocabulary used only by the private legacy helpers retained
-# below.  Public reports use `unified_status_key` / `build_candidate_audit`
-# and therefore cover all three canonical states dynamically.
+# Statuses that the user defined as the trigger for "must be in Qoyod"
+# (Arabic "تم التنفيذ" + the English aliases the order_status_policy
+# already classifies as `confirmed`).
 COMPLETED_TRIGGER_STATUSES: frozenset[str] = frozenset({
     "تم التنفيذ",
     "completed",
+    # Note: "تم التوصيل" (delivered) is also category=confirmed but the
+    # user explicitly singled out "تم التنفيذ" as the Qoyod trigger
+    # — so we only include the trigger value, not the wider category.
 })
 
 
@@ -62,7 +64,8 @@ def classify_eligibility(
 
     Pure function — no DB access, no time-of-day dependencies.
     """
-    if unified_status_key(order) is None:
+    status = str(order.get("order_status") or "").strip()
+    if status not in COMPLETED_TRIGGER_STATUSES:
         return ("not_eligible", "order_status_not_completed")
 
     # From here on, the order IS supposed to be in Qoyod.
@@ -109,7 +112,7 @@ async def _fetch_qoyod_rows(db, user_id: str,
     return rows
 
 
-async def _list_orphan_orders_legacy(
+async def list_orphan_orders(
     db, user_id: str,
     limit: int = 200,
     since: Optional[datetime] = None,
@@ -174,7 +177,7 @@ async def _list_orphan_orders_legacy(
     return output
 
 
-async def _reconciliation_check_legacy(db, user_id: str) -> dict:
+async def reconciliation_check(db, user_id: str) -> dict:
     """Reconciliation card — three numbers + drilldown trigger.
 
     Output:
@@ -227,7 +230,7 @@ async def _reconciliation_check_legacy(db, user_id: str) -> dict:
 
 
 
-async def _compliance_summary_legacy(db, user_id: str) -> dict:
+async def compliance_summary(db, user_id: str) -> dict:
     """Aggregate counts for the Dashboard Alert card on the Qoyod page.
 
     Output:
@@ -284,220 +287,4 @@ async def _compliance_summary_legacy(db, user_id: str) -> dict:
         # Echo the closed vocabularies so the UI knows what to render.
         "eligibility_statuses":        list(ELIGIBILITY_STATUSES),
         "eligibility_reasons":         list(ELIGIBILITY_REASONS),
-    }
-
-
-async def _candidate_audit(
-    db, *, user_id: str, orders_user_id: Optional[str],
-    from_date: Any = None, to_date: Any = None,
-) -> dict:
-    owner_id = str(orders_user_id or user_id)
-    return await build_candidate_audit(
-        db,
-        orders_user_id=owner_id,
-        markers_user_id=str(user_id),
-        marker_user_ids=(str(user_id), owner_id),
-        from_date=from_date,
-        to_date=to_date,
-        days=3650,
-    )
-
-
-def _is_failed_stage(value: Any) -> bool:
-    stage = str(value or "").upper()
-    return (
-        stage == "FAILED"
-        or stage.startswith("FAILED_")
-        or stage in {"DEAD_LETTER", "TOTALS_MISMATCH"}
-    )
-
-
-async def list_orphan_orders(
-    db, user_id: str,
-    limit: int = 200,
-    since: Optional[datetime] = None,
-    *,
-    orders_user_id: Optional[str] = None,
-    from_date: Any = None,
-    to_date: Any = None,
-) -> list[dict]:
-    """Return exact unified candidates missing a Qoyod reference."""
-    if from_date is None and since is not None:
-        from_date = since.date().isoformat()
-    audit = await _candidate_audit(
-        db,
-        user_id=user_id,
-        orders_user_id=orders_user_id,
-        from_date=from_date,
-        to_date=to_date,
-    )
-    output: list[dict] = []
-    for proof in audit["orders"]:
-        if not proof.get("worker_candidate"):
-            continue
-        unified = proof.get("unified_order") or {}
-        inbox_row = proof.get("inbox_row") or {}
-        inbox_stage = str(inbox_row.get("pipeline_stage") or "").upper()
-        error = inbox_row.get("pipeline_error") or {}
-        error_code = str(
-            error.get("code") if isinstance(error, dict) else error
-        ).lower()
-        failed = _is_failed_stage(inbox_stage)
-        if "customer" in error_code:
-            eligibility_reason = "missing_customer_data"
-        elif "product" in error_code:
-            eligibility_reason = "missing_product_mapping"
-        elif "payment" in error_code:
-            eligibility_reason = "payment_method_mapping_missing"
-        else:
-            eligibility_reason = (
-                "qoyod_api_error" if failed
-                else proof.get("candidate_reason")
-            )
-        output.append({
-            "salla_order_id": unified.get("order_id"),
-            "order_number": proof["order_number"],
-            "order_status": proof.get("current_status"),
-            "order_date": proof.get("order_date"),
-            "completed_at": unified.get("completed_at"),
-            "customer_name": proof.get("customer_name"),
-            "customer_phone": proof.get("customer_phone"),
-            "customer_email": unified.get("customer_email"),
-            "payment_method": proof.get("payment_method"),
-            "total_amount": proof.get("total_amount"),
-            "eligibility_status": (
-                "failed_before_qoyod" if failed else "eligible_pending"
-            ),
-            "eligibility_reason": eligibility_reason,
-            "qoyod_status": None,
-            "qoyod_invoice_id": None,
-            "qoyod_trace_id": proof.get("trace_id"),
-            "qoyod_invoice_row": None,
-            "in_integration_inbox": proof.get("in_integration_inbox"),
-            "legacy_worker_visibility_reason": proof.get(
-                "legacy_worker_visibility_reason"
-            ),
-        })
-        if len(output) >= max(1, min(int(limit), 5000)):
-            break
-    return output
-
-
-async def reconciliation_check(
-    db, user_id: str, *,
-    orders_user_id: Optional[str] = None,
-    from_date: Any = None,
-    to_date: Any = None,
-) -> dict:
-    """Exact set reconciliation; never subtract unrelated totals."""
-    audit = await _candidate_audit(
-        db,
-        user_id=user_id,
-        orders_user_id=orders_user_id,
-        from_date=from_date,
-        to_date=to_date,
-    )
-    unsent_rows = [
-        row for row in audit["orders"] if row.get("worker_candidate")
-    ]
-    return {
-        "schema_version": 2,
-        "generated_at": _now(),
-        "eligible_orders_count": len(audit["eligible_references"]),
-        "qoyod_invoices_count": len(audit["sent_references"]),
-        "difference": len(audit["unsent_references"]),
-        "has_diff": bool(audit["unsent_references"]),
-        "drilldown_url": "/integrations/qoyod/invoices?filter=unsent",
-        "oldest_unsent_at": (
-            min((row.get("order_date") for row in unsent_rows), default=None)
-        ),
-        "from_date": audit["from_date"],
-        "to_date": audit["to_date"],
-        "source_authority": "unified_orders",
-        "match_contract": audit["match_contract"],
-        "captured_at": audit["captured_at"],
-        "snapshot_fingerprint": audit["snapshot_fingerprint"],
-        "status_counts": audit["status_counts"],
-        "status_display_counts": audit["status_display_counts"],
-        "worker_candidate_status_counts": audit[
-            "worker_candidate_status_counts"
-        ],
-        "worker_candidate_status_display_counts": audit[
-            "worker_candidate_status_display_counts"
-        ],
-        "reference_hashes": audit["reference_hashes"],
-        "invariant_holds": len(audit["eligible_references"]) == (
-            len(audit["sent_references"]) +
-            len(audit["unsent_references"])
-        ),
-    }
-
-
-async def compliance_summary(
-    db, user_id: str, *,
-    orders_user_id: Optional[str] = None,
-    from_date: Any = None,
-    to_date: Any = None,
-) -> dict:
-    """Dashboard counts derived from the same exact candidate sets."""
-    audit = await _candidate_audit(
-        db,
-        user_id=user_id,
-        orders_user_id=orders_user_id,
-        from_date=from_date,
-        to_date=to_date,
-    )
-    pending_rows = [
-        row for row in audit["orders"] if row.get("worker_candidate")
-    ]
-    failed_refs = {
-        row["order_number"]
-        for row in pending_rows
-        if _is_failed_stage(
-            (row.get("inbox_row") or {}).get("pipeline_stage")
-        )
-    }
-    actionable_pending_refs = (
-        set(audit["unsent_references"]) - failed_refs
-    )
-    failed_before = len(failed_refs)
-    receipt_failed = sum(
-        str((row.get("qoyod_invoice") or {}).get("status") or "").lower()
-        == "invoice_sent_receipt_failed"
-        for row in audit["orders"]
-    )
-    actionable_pending_rows = [
-        row for row in pending_rows
-        if row["order_number"] in actionable_pending_refs
-    ]
-    oldest_at = min(
-        (row.get("order_date") for row in actionable_pending_rows),
-        default=None,
-    )
-    return {
-        "schema_version": 2,
-        "generated_at": _now(),
-        "completed_orders_total": len(audit["eligible_references"]),
-        "sent_to_qoyod": len(audit["sent_references"]),
-        "eligible_pending": len(actionable_pending_refs),
-        "failed_before_qoyod": failed_before,
-        "invoice_sent_receipt_failed": receipt_failed,
-        "oldest_pending_at": oldest_at,
-        "from_date": audit["from_date"],
-        "to_date": audit["to_date"],
-        "source_authority": "unified_orders",
-        "match_contract": audit["match_contract"],
-        "captured_at": audit["captured_at"],
-        "snapshot_fingerprint": audit["snapshot_fingerprint"],
-        "status_counts": audit["status_counts"],
-        "status_display_counts": audit["status_display_counts"],
-        "worker_candidate_status_counts": audit[
-            "worker_candidate_status_counts"
-        ],
-        "worker_candidate_status_display_counts": audit[
-            "worker_candidate_status_display_counts"
-        ],
-        "reference_hashes": audit["reference_hashes"],
-        "eligibility_statuses": list(ELIGIBILITY_STATUSES),
-        "eligibility_reasons": list(ELIGIBILITY_REASONS),
     }
