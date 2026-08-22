@@ -3,7 +3,8 @@
 These permissions intentionally do not belong to Mezan's operational
 ``PERMISSIONS`` catalogue. Granting native access never grants a browser page
 or an operational Mezan permission. Native access remains explicit for staff;
-the account owner receives only the fixed supervisory baseline declared below.
+the account owner receives full native-app access dynamically so newly added
+app pages and actions are available without a separate permission migration.
 """
 from __future__ import annotations
 
@@ -14,6 +15,8 @@ MOBILE_APP_CLIENT = "amasi_mobile"
 MOBILE_APP_ACCESS = "mezan_mobile_app_access_v1"
 MOBILE_APP_ACCESS_OWNER_FIELD = "owner_user_id"
 MOBILE_APP_MANAGER = "app.role.manager"
+# Retained for backwards compatibility with older imports. Owner access is no
+# longer limited to this legacy monitoring-only baseline.
 OWNER_BASELINE_PERMISSIONS = {"app.page.operations_monitoring"}
 
 MOBILE_APP_PERMISSION_GROUPS = [
@@ -224,12 +227,16 @@ async def mobile_app_access_for_user(db: Any, user: dict[str, Any]) -> dict[str,
         account_active=account_active,
     ))
     if is_owner and account_active:
-        permissions.update(OWNER_BASELINE_PERMISSIONS)
+        # The account owner is the native-app super-admin. Use the live
+        # catalogue rather than a copied list so every current and future app
+        # page/action becomes available automatically while Mezan web RBAC
+        # remains completely separate.
+        permissions.update(MOBILE_APP_PERMISSIONS)
     permissions_list = sorted(permissions)
     return {
         "configured": access is not None or is_owner,
         "enabled": bool(account_active and (access is not None or is_owner)),
-        "owner_override": False,
+        "owner_override": bool(is_owner and account_active),
         "owner_baseline": bool(is_owner),
         "manager": MOBILE_APP_MANAGER in permissions,
         "permissions": permissions_list,
