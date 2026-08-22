@@ -1701,6 +1701,138 @@ async def _receive_preparation_piece(
     }
 
 
+def _direct_assembly_piece_id(
+    order_number: str,
+    order_item_id: str,
+    unit_index: int,
+) -> str:
+    return "direct_" + hashlib.sha256(
+        f"{order_number}:{order_item_id}:{unit_index}".encode("utf-8")
+    ).hexdigest()[:32]
+
+
+def _workflow_assembly_pieces(
+    workflow: dict[str, Any],
+    *,
+    order_number: str,
+) -> list[dict[str, Any]]:
+    """Expose non-supplier assembly work as virtual pieces.
+
+    These rows are deliberately not inserted into the physical preparation
+    piece registry, so they never enter a supplier file, employee custody or
+    preparation receipt.
+    """
+    pieces: list[dict[str, Any]] = []
+    for row in workflow.get("operational_items") or []:
+        if row.get("blocks_order_completion") is False:
+            continue
+        piece_id = _text(row.get("operational_item_id")).lower()
+        if not piece_id:
+            continue
+        pieces.append({
+            "piece_id": piece_id,
+            "order_number": order_number,
+            "order_item_id": _text(row.get("source_order_item_id")) or None,
+            "unit_index": 1,
+            "product_id": None,
+            "product_name": _text(row.get("name")) or "منتج تشغيلي",
+            "sku": None,
+            "image_url": None,
+            "specifications_snapshot": list(row.get("linked_specs") or []),
+            "responsible_employee_name": "التجميع والعنونة",
+            "status": PIECE_STATUS_READY_FOR_ASSEMBLY,
+            "assembly_status": (
+                "ready"
+                if _text(row.get("assembly_status")) == "ready"
+                or _text(row.get("preparation_status")) == "ready"
+                else "pending"
+            ),
+            "assembly_ready_at": row.get("assembly_ready_at"),
+            "assembly_ready_by_name": row.get("assembly_ready_by_name"),
+            "item_type": "internal_operational",
+            "virtual_kind": "operational",
+            "source_product_name": _text(
+                row.get("source_product_name")
+            ) or None,
+            "supplier_export": False,
+            "inventory_item": False,
+            "financial_item": False,
+            "mezan_only": True,
+            "services": [],
+        })
+
+    for row in workflow.get("items") or []:
+        if _text(row.get("preparation_route")) != "direct_assembly":
+            continue
+        order_item_id = _text(row.get("order_item_id"))
+        quantity = max(1, int(row.get("quantity") or 1))
+        stored_piece_ids = [
+            _text(value).lower()
+            for value in (row.get("direct_assembly_piece_ids") or [])
+            if _text(value)
+        ]
+        ready_piece_ids = {
+            _text(value).lower()
+            for value in (row.get("assembly_ready_piece_ids") or [])
+            if _text(value)
+        }
+        for unit_index in range(1, quantity + 1):
+            piece_id = (
+                stored_piece_ids[unit_index - 1]
+                if unit_index <= len(stored_piece_ids)
+                else _direct_assembly_piece_id(
+                    order_number,
+                    order_item_id,
+                    unit_index,
+                )
+            )
+            pieces.append({
+                "piece_id": piece_id,
+                "order_number": order_number,
+                "order_item_id": order_item_id or None,
+                "unit_index": unit_index,
+                "product_id": (
+                    _text(
+                        row.get("product_id")
+                        or row.get("parent_product_id")
+                    )
+                    or None
+                ),
+                "product_name": _text(row.get("product_name")) or "منتج",
+                "sku": _text(row.get("sku")) or None,
+                "selected_image_url": (
+                    _text(row.get("selected_image_url")) or None
+                ),
+                "specifications_snapshot": list(
+                    row.get("specifications_snapshot") or []
+                ),
+                "responsible_employee_name": "مخزون المستودع",
+                "status": PIECE_STATUS_READY_FOR_ASSEMBLY,
+                "assembly_status": (
+                    "ready" if piece_id in ready_piece_ids else "pending"
+                ),
+                "assembly_ready_at": (
+                    (row.get("assembly_ready_metadata") or {})
+                    .get(piece_id, {})
+                    .get("ready_at")
+                ),
+                "assembly_ready_by_name": (
+                    (row.get("assembly_ready_metadata") or {})
+                    .get(piece_id, {})
+                    .get("ready_by_name")
+                ),
+                "item_type": "direct_assembly_product",
+                "virtual_kind": "direct_assembly",
+                "source_product_name": None,
+                "supplier_export": False,
+                "inventory_item": True,
+                "financial_item": True,
+                "mezan_only": True,
+                "services": [],
+            })
+    return pieces
+
+
 def assembly_piece_blocker(piece: dict[str, Any]) -> str | None:
     """Return why a received piece cannot be completed in assembly."""
     if _text(piece.get("assembly_status")) == "ready":
@@ -1737,6 +1869,19 @@ def _assembly_piece_public(
             matched_piece_id=matched_piece_id,
         ),
         "piece_id": piece_id,
+        "item_type": _text(piece.get("item_type")) or "physical_product",
+        "is_operational_item": (
+            _text(piece.get("item_type")) == "internal_operational"
+        ),
+        "is_direct_assembly": (
+            _text(piece.get("item_type")) == "direct_assembly_product"
+        ),
+        "source_product_name": (
+            _text(piece.get("source_product_name")) or None
+        ),
+        "supplier_export": piece.get("supplier_export") is not False,
+        "inventory_item": piece.get("inventory_item") is not False,
+        "financial_item": piece.get("financial_item") is not False,
         "services": services,
         "assembly_ready": assembly_ready,
         "assembly_status": "ready" if assembly_ready else "pending",
@@ -1768,6 +1913,10 @@ async def _assembly_progress(
     actor_name: str,
     now: datetime,
 ) -> dict[str, Any]:
+    workflow = await db[WORKFLOWS].find_one(
+        {"user_id": user_id, "order_number": order_number},
+        {"_id": 0},
+    ) or {}
     pieces = await db[PIECES].find(
         {
             "user_id": user_id,
@@ -1780,15 +1929,17 @@ async def _assembly_progress(
         },
         {"_id": 0, "piece_id": 1, "assembly_status": 1},
     ).to_list(10000)
+    pieces.extend(
+        _workflow_assembly_pieces(
+            workflow,
+            order_number=order_number,
+        )
+    )
     total_count = len(pieces)
     ready_count = sum(
         1 for piece in pieces if _text(piece.get("assembly_status")) == "ready"
     )
     completed = bool(total_count and total_count == ready_count)
-    workflow = await db[WORKFLOWS].find_one(
-        {"user_id": user_id, "order_number": order_number},
-        {"_id": 0},
-    ) or {}
     batch_id = _text(
         workflow.get("shipping_print_batch_id")
     )
@@ -1925,6 +2076,12 @@ async def _assembly_search(
         },
         {"_id": 0, "image_b64": 0},
     ).to_list(1000)
+    pieces.extend(
+        _workflow_assembly_pieces(
+            workflow,
+            order_number=order_number,
+        )
+    )
     if not pieces:
         raise HTTPException(
             status_code=404,
@@ -1997,6 +2154,211 @@ async def _assembly_search(
     }
 
 
+async def _mark_virtual_assembly_piece_ready(
+    db: Any,
+    *,
+    user_id: str,
+    piece_id: str,
+    client_request_id: str,
+    actor_id: str,
+    actor_name: str,
+) -> dict[str, Any] | None:
+    workflow = await db[WORKFLOWS].find_one(
+        {
+            "user_id": user_id,
+            "$or": [
+                {"operational_items.operational_item_id": piece_id},
+                {"items.direct_assembly_piece_ids": piece_id},
+            ],
+        },
+        {"_id": 0},
+    )
+    if not workflow:
+        return None
+    order_number = _text(workflow.get("order_number"))
+    if _text(workflow.get("stage")) not in {"ready_to_ship", "completed"}:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "assembly_order_not_ready"},
+        )
+    virtual_pieces = _workflow_assembly_pieces(
+        workflow,
+        order_number=order_number,
+    )
+    piece = next(
+        (
+            row for row in virtual_pieces
+            if _text(row.get("piece_id")).lower() == piece_id
+        ),
+        None,
+    )
+    if piece is None:
+        return None
+    now = _now()
+    if _text(piece.get("assembly_status")) == "ready":
+        progress = await _assembly_progress(
+            db,
+            user_id=user_id,
+            order_number=order_number,
+            actor_id=actor_id,
+            actor_name=actor_name,
+            now=now,
+        )
+        return {
+            "ok": True,
+            "idempotent": True,
+            "piece": _assembly_piece_public(piece),
+            "progress": progress,
+        }
+
+    await enforce_stage_instructions(
+        db,
+        user_id=user_id,
+        order_number=order_number,
+        order_item_id=_text(piece.get("order_item_id")),
+        piece_id=piece_id,
+        stage="assembly_labeling",
+        actor_id=actor_id,
+    )
+    operational_items = [
+        dict(row) for row in (workflow.get("operational_items") or [])
+    ]
+    items = [dict(row) for row in (workflow.get("items") or [])]
+    if _text(piece.get("virtual_kind")) == "operational":
+        target = next(
+            (
+                row for row in operational_items
+                if _text(row.get("operational_item_id")).lower() == piece_id
+            ),
+            None,
+        )
+        if target is None:
+            return None
+        target.update({
+            "preparation_status": "ready",
+            "assembly_status": "ready",
+            "assembly_ready_at": now,
+            "assembly_ready_by": actor_id,
+            "assembly_ready_by_name": actor_name,
+            "assembly_client_request_id": client_request_id,
+            "updated_at": now,
+            "updated_by": actor_id,
+        })
+    else:
+        target = next(
+            (
+                row for row in items
+                if piece_id in {
+                    _text(value).lower()
+                    for value in (
+                        row.get("direct_assembly_piece_ids") or []
+                    )
+                }
+            ),
+            None,
+        )
+        if target is None:
+            return None
+        ready_piece_ids = list(dict.fromkeys([
+            *[
+                _text(value).lower()
+                for value in (target.get("assembly_ready_piece_ids") or [])
+                if _text(value)
+            ],
+            piece_id,
+        ]))
+        metadata = dict(target.get("assembly_ready_metadata") or {})
+        metadata[piece_id] = {
+            "ready_at": now,
+            "ready_by": actor_id,
+            "ready_by_name": actor_name,
+            "client_request_id": client_request_id,
+        }
+        target.update({
+            "assembly_ready_piece_ids": ready_piece_ids,
+            "assembly_ready_metadata": metadata,
+            "assembly_status": (
+                "ready"
+                if len(ready_piece_ids)
+                >= max(1, int(target.get("quantity") or 1))
+                else "partial"
+            ),
+            "updated_at": now,
+            "updated_by": actor_id,
+        })
+
+    revision = int(workflow.get("revision") or 0)
+    result = await db[WORKFLOWS].update_one(
+        {
+            "user_id": user_id,
+            "order_number": order_number,
+            "revision": revision,
+            "stage": {"$in": ["ready_to_ship", "completed"]},
+        },
+        {
+            "$set": {
+                "operational_items": operational_items,
+                "items": items,
+                "updated_at": now,
+                "updated_by": actor_id,
+            },
+            "$inc": {"revision": 1},
+        },
+    )
+    if not result.matched_count:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "assembly_piece_ready_conflict"},
+        )
+    updated_workflow = {
+        **workflow,
+        "operational_items": operational_items,
+        "items": items,
+        "revision": revision + 1,
+    }
+    updated_piece = next(
+        row
+        for row in _workflow_assembly_pieces(
+            updated_workflow,
+            order_number=order_number,
+        )
+        if _text(row.get("piece_id")).lower() == piece_id
+    )
+    await db[PIECE_EVENTS].insert_one({
+        "id": uuid.uuid4().hex,
+        "user_id": user_id,
+        "piece_id": piece_id,
+        "order_number": order_number,
+        "order_item_id": _text(piece.get("order_item_id")) or None,
+        "event_type": (
+            "operational_assembly_item_marked_ready"
+            if _text(piece.get("virtual_kind")) == "operational"
+            else "direct_assembly_product_marked_ready"
+        ),
+        "client_request_id": client_request_id,
+        "actor_id": actor_id,
+        "actor_name": actor_name,
+        "occurred_at": now,
+        "mezan_only": True,
+        "salla_updated": False,
+        "qoyod_updated": False,
+    })
+    progress = await _assembly_progress(
+        db,
+        user_id=user_id,
+        order_number=order_number,
+        actor_id=actor_id,
+        actor_name=actor_name,
+        now=now,
+    )
+    return {
+        "ok": True,
+        "idempotent": False,
+        "piece": _assembly_piece_public(updated_piece),
+        "progress": progress,
+    }
+
+
 async def _mark_assembly_piece_ready(
     db: Any,
     *,
@@ -2018,6 +2380,16 @@ async def _mark_assembly_piece_ready(
         {"_id": 0},
     )
     if not piece:
+        virtual_response = await _mark_virtual_assembly_piece_ready(
+            db,
+            user_id=user_id,
+            piece_id=normalized_piece_id,
+            client_request_id=client_request_id,
+            actor_id=actor_id,
+            actor_name=actor_name,
+        )
+        if virtual_response is not None:
+            return virtual_response
         raise HTTPException(
             status_code=404,
             detail={"code": "assembly_piece_not_found"},

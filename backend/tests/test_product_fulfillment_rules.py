@@ -11,6 +11,12 @@ from fulfillment_v2_routes import (
     _satisfy_preparation_with_ready_stock,
     _warehouse_allowed,
 )
+from order_review_export_controls import (
+    ReviewExportControlPatch,
+    apply_export_control_patch,
+    item_export_control_view,
+    partition_review_items_for_preparation,
+)
 from product_fulfillment_rules import (
     FULFILLMENT_TYPE_INSTANT,
     FULFILLMENT_TYPE_PREPARATION,
@@ -423,6 +429,45 @@ def test_only_active_reservations_reduce_current_physical_availability():
 def test_stockout_policy_and_threshold_are_bounded():
     assert normalize_stockout_policy("حجز مسبق") == "allow_preorder"
     assert normalize_low_stock_threshold("5") == 5
+
+
+def test_direct_assembly_route_skips_supplier_and_employee_custody():
+    state = apply_export_control_patch(
+        {},
+        ReviewExportControlPatch(
+            preparation_route="direct_assembly",
+            save_assignment_as_default=True,
+        ),
+        operational_items=[],
+        order_item_id="item-1",
+        actor_id="owner-1",
+    )
+
+    assert state["preparation_route"] == "direct_assembly"
+    assert state["supplier_export"] is False
+    assert state["assigned_employee_id"] is None
+    assert state["preparation_status"] == "awaiting_assembly"
+
+    partition = partition_review_items_for_preparation([state])
+    assert partition["supplier_file_items"] == []
+    assert partition["internal_preparation_items"] == []
+    assert partition["direct_assembly_items"] == [state]
+
+
+def test_product_default_exposes_direct_assembly_on_future_order():
+    view = item_export_control_view(
+        {},
+        operational_items=[],
+        order_item_id="future-item",
+        product_key="product:100",
+        default_assignment={"preparation_route": "direct_assembly"},
+    )
+
+    assert view["preparation_route"] == "direct_assembly"
+    assert view["direct_assembly"] is True
+    assert view["route_source"] == "default"
+    assert view["supplier_export"] is False
+    assert view["preparation_status"] == "awaiting_assembly"
 
 
 def test_unready_preparation_work_keeps_stock_reserved():

@@ -234,15 +234,18 @@ def test_reviewed_stage_and_salla_admin_link_are_active():
     assert 'listReviewedOrderReviews' in service_source
 
 
-def test_operational_item_starts_in_progress_and_moves_specs_out_of_supplier_export():
+def test_operational_item_waits_for_assembly_and_moves_specs_out_of_supplier_export():
     backend_source = (ROOT / "backend/order_review_routes.py").read_text(encoding="utf-8")
     frontend_source = (ROOT / "frontend/src/pages/OrderReview.jsx").read_text(encoding="utf-8")
 
-    assert '"preparation_status": "in_progress"' in backend_source
+    assert '"preparation_status": "pending"' in backend_source
+    assert 'operational_status_managed_in_assembly' in backend_source
     assert 'supplier_export_excluded_spec_keys' in backend_source
     assert 'moved_to_operational_item_ids' in backend_source
     assert 'existing_excluded.update(seen_specs)' in backend_source
-    assert '|| "قيد التجهيز"' in frontend_source
+    assert 'بانتظار التجميع والعنونة' in frontend_source
+    assert '>قيد التجهيز</button>' not in frontend_source
+    assert '>جاهز</button>' not in frontend_source
 
 
 def test_operational_item_can_be_renamed_or_unlinked_before_review_completion():
