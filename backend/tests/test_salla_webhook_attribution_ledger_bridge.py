@@ -1,72 +1,4 @@
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[1]
-TARGET = ROOT / "backend/salla_integration/webhook_order_sync.py"
-TEST = ROOT / "backend/tests/test_salla_webhook_attribution_ledger_bridge.py"
-
-text = TARGET.read_text(encoding="utf-8")
-
-needle = '''        result = await upsert_order(
-            db,
-            user_id,
-            order_number,
-            doc,
-            source="salla_direct",
-            raw=payload,
-        )
-        first_party_attribution = {
-'''
-replacement = '''        result = await upsert_order(
-            db,
-            user_id,
-            order_number,
-            doc,
-            source="salla_direct",
-            raw=payload,
-        )
-        attribution_ledger = {
-            "synced": False,
-            "reason": "not_attempted",
-        }
-        try:
-            from mezan_attribution_ledger_sync import (
-                safe_sync_order_to_attribution_ledger,
-            )
-
-            attribution_ledger = await safe_sync_order_to_attribution_ledger(
-                db,
-                user_id=user_id,
-                order=result.get("doc") or doc,
-            )
-        except Exception as exc:
-            # Ledger attribution is analytics enrichment only. It must never
-            # block authoritative Salla ingestion or fulfilment.
-            attribution_ledger = {
-                "synced": False,
-                "reason": "ledger_bridge_unavailable",
-                "error_type": type(exc).__name__,
-            }
-        first_party_attribution = {
-'''
-if needle not in text:
-    raise SystemExit("target upsert insertion point not found")
-text = text.replace(needle, replacement, 1)
-
-needle2 = '''            "auto_fulfillment": auto_fulfillment,
-            "first_party_attribution": first_party_attribution,
-            "no_salla_api_calls": True,
-'''
-replacement2 = '''            "auto_fulfillment": auto_fulfillment,
-            "first_party_attribution": first_party_attribution,
-            "attribution_ledger": attribution_ledger,
-            "no_salla_api_calls": True,
-'''
-if needle2 not in text:
-    raise SystemExit("target return insertion point not found")
-text = text.replace(needle2, replacement2, 1)
-TARGET.write_text(text, encoding="utf-8")
-
-TEST.write_text(r'''import sys
+import sys
 import types
 
 import pytest
@@ -214,7 +146,3 @@ async def test_ledger_failure_never_blocks_salla_order_ingestion(monkeypatch):
     assert result["synced"] is True
     assert result["attribution_ledger"]["synced"] is False
     assert result["attribution_ledger"]["reason"] == "ledger_bridge_unavailable"
-''', encoding="utf-8")
-
-print(f"updated {TARGET.relative_to(ROOT)}")
-print(f"wrote {TEST.relative_to(ROOT)}")
