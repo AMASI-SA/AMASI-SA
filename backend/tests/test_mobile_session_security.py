@@ -269,3 +269,35 @@ async def test_mobile_refresh_rejects_expired_or_invalid_token(monkeypatch):
 
     assert start["status"] == 401
     assert payload["code"] == "mobile_refresh_token_invalid"
+
+def test_explicit_bearer_token_wins_over_ambient_cookie():
+    from starlette.requests import Request
+
+    from auth import _extract_token
+
+    request = Request({
+        "type": "http",
+        "method": "GET",
+        "path": "/api/orders-v2",
+        "headers": [
+            (b"authorization", b"Bearer native-mobile-token"),
+            (b"cookie", b"access_token=browser-cookie-token"),
+        ],
+    })
+
+    assert _extract_token(request) == "native-mobile-token"
+
+
+def test_browser_cookie_remains_supported_without_bearer_header():
+    from starlette.requests import Request
+
+    from auth import _extract_token
+
+    request = Request({
+        "type": "http",
+        "method": "GET",
+        "path": "/api/dashboard",
+        "headers": [(b"cookie", b"access_token=browser-cookie-token")],
+    })
+
+    assert _extract_token(request) == "browser-cookie-token"
