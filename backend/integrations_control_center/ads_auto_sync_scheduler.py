@@ -62,6 +62,14 @@ from .snapchat_native_data_common import (
     snapchat_native_sync_enabled,
 )
 from .snapchat_oauth_security import snapchat_oauth_configured
+from .snapchat_distributed_lease import (
+    DEFAULT_LEASE_TTL as SNAPCHAT_LEASE_TTL,
+    SnapchatLeaseHandle,
+    acquire_snapchat_lease,
+    bind_run_to_lease,
+    release_snapchat_lease,
+    renew_snapchat_lease,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +81,16 @@ STARTUP_DELAY_ENV = "MEZAN_ADS_AUTO_SYNC_STARTUP_DELAY_SECONDS"
 DEFAULT_INTERVAL_SECONDS = 300
 MIN_INTERVAL_SECONDS = 300
 MAX_INTERVAL_SECONDS = 3600
+# Snapchat's Ads API is more rate-limited than Meta/Google, and its
+# analytics_refresh does per-hour fetches per selected account.  Enforce a
+# provider-scoped minimum cadence of 10 minutes even when the global
+# scheduler tick is faster – the distributed lease is the real guarantee
+# against concurrent runs across replicas, but the cadence gate prevents
+# needless attempts.
+SNAPCHAT_MIN_INTERVAL_SECONDS_ENV = "MEZAN_ADS_AUTO_SYNC_SNAPCHAT_INTERVAL_SECONDS"
+SNAPCHAT_MIN_INTERVAL_SECONDS_DEFAULT = 600
+SNAPCHAT_MIN_INTERVAL_SECONDS_FLOOR = 300
+SNAPCHAT_MIN_INTERVAL_SECONDS_CEILING = 3600
 DEFAULT_ROLLING_DAYS = 2
 MAX_ROLLING_DAYS = 7
 CAMPAIGN_AI_EXECUTION_PROOF_DAYS = 3
@@ -1179,10 +1197,30 @@ async def _refresh_snapchat(
 ) -> dict[str, Any]:
     if not snapchat_oauth_configured() or not snapchat_native_sync_enabled():
         return {"provider": SNAPCHAT_PROVIDER_ID, "status": "skipped", "reason": "disabled"}
+    if not await _snapchat_cadence_ready(db, user_id=user_id, now=now):
+        return {
+            "provider": SNAPCHAT_PROVIDER_ID,
+            "status": "skipped",
+            "reason": "cadence_gate_10m",
+        }
+
+    # Distributed atomic lease – prevents more than one Snapchat refresh
+    # from running per (tenant, provider) across replicas.  Only the owner
+    # of the freshly-issued token proceeds; other callers observe
+    # ``running_elsewhere`` and short-circuit without creating a spurious
+    # failed run row that would otherwise poison the fail-closed reader.
+    lease = await acquire_snapchat_lease(db, user_id=user_id, now=now, ttl=SNAPCHAT_LEASE_TTL)
+    if lease is None:
+        return {
+            "provider": SNAPCHAT_PROVIDER_ID,
+            "status": "skipped",
+            "reason": "running_elsewhere",
+        }
     active = await _active_run(
         db, user_id=user_id, provider=SNAPCHAT_PROVIDER_ID, now=now
     )
     if active:
+        await release_snapchat_lease(db, lease, final_status="skipped_active_run", now=now)
         return {
             "provider": SNAPCHAT_PROVIDER_ID,
             "status": "skipped",
@@ -1199,6 +1237,7 @@ async def _refresh_snapchat(
         end_date=end_date,
         now=now,
     )
+    await bind_run_to_lease(db, lease, run_id=run_id)
     failure_stage = SNAPCHAT_DEFAULT_FAILURE_STAGE
 
     def observe_failure_stage(stage: str) -> None:
@@ -1216,6 +1255,7 @@ async def _refresh_snapchat(
         await ensure_snapchat_native_sync_indexes(db)
         token_context = SnapchatSyncContext(db, user_id, now=_utcnow)
         token_context.failure_stage_observer = observe_failure_stage
+        token_context.run_id = run_id
         observe_failure_stage("credential_decrypt_or_refresh")
         access_token = await token_context.access_token()
         items: list[dict[str, Any]] = []
@@ -1232,6 +1272,7 @@ async def _refresh_snapchat(
                 account_context.failure_stage_observer = observe_failure_stage
                 account_context.defer_financial_fact_writes = True
                 account_context.deferred_financial_fact_writes = []
+                account_context.run_id = run_id
                 deferred_financial_contexts.append(account_context)
                 account_id = str(account.get("ad_account_id") or "").strip()
                 try:
@@ -1631,6 +1672,7 @@ async def _refresh_snapchat(
         await _finish_run(
             db, user_id=user_id, run_id=run_id, status=status, result=result
         )
+        await release_snapchat_lease(db, lease, final_status=status, now=now)
         if status == "complete":
             observe_failure_stage("decision_outcomes_evaluation")
             decision_outcomes = await _evaluate_snapchat_outcomes_after_sync(
@@ -1691,6 +1733,7 @@ async def _refresh_snapchat(
         )
         if needs_reauth:
             await _mark_needs_reauth(db, user_id, SNAPCHAT_PROVIDER_ID)
+        await release_snapchat_lease(db, lease, final_status="failed", now=now)
         return {"provider": SNAPCHAT_PROVIDER_ID, "run_id": run_id, "status": "failed", "code": exc.code}
     except Exception as exc:  # noqa: BLE001
         code = "snapchat_scheduler_runtime_error"
@@ -1762,12 +1805,64 @@ async def _refresh_snapchat(
             },
         )
         await _mark_snapchat_sync_unhealthy(db, user_id)
+        await release_snapchat_lease(db, lease, final_status="failed", now=now)
         return {
             "provider": SNAPCHAT_PROVIDER_ID,
             "run_id": run_id,
             "status": "failed",
             "code": code,
         }
+
+
+async def _snapchat_cadence_ready(
+    db: Any,
+    *,
+    user_id: str,
+    now: datetime,
+) -> bool:
+    """Return True when the Snapchat 10-minute cadence gate is open.
+
+    The gate looks at the last non-skipped Snapchat analytics_refresh run
+    for this tenant.  If that run started within the configured minimum
+    interval, the current tick is deferred without allocating a lease.
+    Skipped runs (running_elsewhere or sync_in_progress) are ignored so
+    a briefly-noisy replica loop cannot lock a tenant out of retries.
+    """
+
+    try:
+        interval = int(
+            os.environ.get(
+                SNAPCHAT_MIN_INTERVAL_SECONDS_ENV,
+                SNAPCHAT_MIN_INTERVAL_SECONDS_DEFAULT,
+            )
+        )
+    except (TypeError, ValueError):
+        interval = SNAPCHAT_MIN_INTERVAL_SECONDS_DEFAULT
+    interval = max(
+        SNAPCHAT_MIN_INTERVAL_SECONDS_FLOOR,
+        min(interval, SNAPCHAT_MIN_INTERVAL_SECONDS_CEILING),
+    )
+    threshold = now.astimezone(timezone.utc) - timedelta(seconds=interval)
+    runs_collection = _collection(db, RUNS_COLLECTION)
+    find_one = getattr(runs_collection, "find_one", None)
+    if not callable(find_one):
+        return True
+    latest = await find_one(
+        {
+            "user_id": user_id,
+            "provider": SNAPCHAT_PROVIDER_ID,
+            "run_type": SNAP_RUN_TYPE,
+            "status": {"$in": ["complete", "partial", "failed", "running", "queued"]},
+        },
+        {"_id": 0, "started_at": 1, "status": 1},
+        sort=[("started_at", -1), ("created_at", -1)],
+    )
+    if not latest:
+        return True
+    marker = _parse_datetime(latest.get("started_at"))
+    if marker is None:
+        return True
+    return marker <= threshold
 
 
 async def run_auto_sync_cycle(
