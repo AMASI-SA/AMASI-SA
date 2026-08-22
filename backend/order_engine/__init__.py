@@ -39,6 +39,7 @@ def make_order_engine_router(*args, **kwargs):
     from warehouse_location_v2_routes import make_warehouse_location_v2_router
     from warehouse_room_routes import make_warehouse_room_router
     from warehouse_reset_routes import make_warehouse_reset_router
+    from mezan_attribution_owner_routes import make_mezan_attribution_owner_router
     from product_v2_workspace_routes import make_product_v2_workspace_router
     from product_v2_creation_order_routes import make_product_v2_creation_order_router
     from product_creation_routes import make_product_creation_router
@@ -135,6 +136,7 @@ def make_order_engine_router(*args, **kwargs):
         make_warehouse_location_v2_router(db, current_user),
         make_warehouse_room_router(db, current_user),
         make_warehouse_reset_router(db, current_user),
+        make_mezan_attribution_owner_router(db, current_user),
         make_ai_store_operations_router(db, current_user),
         make_product_google_taxonomy_ai_pilot_router(db, current_user),
         make_product_google_taxonomy_salla_publish_router(db, current_user),
