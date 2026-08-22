@@ -1793,6 +1793,26 @@ async def run_campaign_ai_monitor(
                 "available": False,
                 "reason": "dashboard_profit_context_failed",
             }
+        try:
+            from campaign_ai_monthly_causal_memory import (
+                load_monthly_causal_memory_context,
+                refresh_monthly_causal_memory,
+            )
+            current_month_memory = await refresh_monthly_causal_memory(
+                db,
+                user_id,
+                month_end=end,
+                goal_context=business_profit.get("monthly_profit_goal"),
+            )
+            prior_decisions["monthly_causal_memory"] = await load_monthly_causal_memory_context(
+                db, user_id, limit=6
+            )
+        except Exception as exc:
+            current_month_memory = None
+            errors.append({
+                "source": "monthly_causal_memory",
+                "code": _text(type(exc).__name__, limit=100),
+            })
         if not candidates:
             recommendation_source = "none"
             result = RecommendationOutput(
@@ -1892,6 +1912,8 @@ async def run_campaign_ai_monitor(
             "context_windows_days": [3, 7, 30],
             "writes_performed": False, "meta_refresh": meta_refresh,
             "business_profit_context_available": bool(business_profit.get("available")),
+            "monthly_causal_memory": current_month_memory,
+            "monthly_causal_memory_available": current_month_memory is not None,
         }
         await db[RECOMMENDATION_COLLECTION].insert_one(document)
         await db[RUN_COLLECTION].update_one(
