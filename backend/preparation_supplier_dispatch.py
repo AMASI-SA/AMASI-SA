@@ -223,8 +223,18 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _actor_id(user: dict[str, Any]) -> str:
+    """Return the real employee id behind a merchant-scoped mobile principal."""
+    return _text(user.get("_mobile_actor_id") or user.get("id"))
+
+
 def _actor_name(user: dict[str, Any]) -> str:
-    return _text(user.get("name") or user.get("email")) or "موظف"
+    return _text(
+        user.get("_mobile_actor_name")
+        or user.get("_mobile_actor_email")
+        or user.get("name")
+        or user.get("email")
+    ) or "موظف"
 
 
 def _is_manager(user: dict[str, Any]) -> bool:
@@ -1295,7 +1305,7 @@ def make_preparation_supplier_dispatch_router(
         result = await _employee_workspace(
             db,
             user_id=_merchant_user_id(worker),
-            employee_id=_text(worker.get("id")),
+            employee_id=_actor_id(worker),
             limit=limit,
             piece_grain=grain == "piece",
         )
@@ -1335,7 +1345,7 @@ def make_preparation_supplier_dispatch_router(
             permission="preparation.assigned.work",
         )
         user_id = _merchant_user_id(worker)
-        employee_id = _text(worker.get("id"))
+        employee_id = _actor_id(worker)
         await ensure_supplier_dispatch_indexes(db)
         existing = await db[DISPATCHES].find_one(
             {"user_id": user_id, "client_request_id": payload.client_request_id},
@@ -1661,7 +1671,7 @@ def make_preparation_supplier_dispatch_router(
             permission="preparation.assigned.work",
         )
         user_id = _merchant_user_id(worker)
-        employee_id = _text(worker.get("id"))
+        employee_id = _actor_id(worker)
         await ensure_supplier_dispatch_indexes(db)
         previous = await db[DISPATCH_EVENTS].find_one(
             {"user_id": user_id, "client_request_id": payload.client_request_id},
@@ -1925,7 +1935,7 @@ def make_preparation_supplier_dispatch_router(
                 return {"ok": True, "dispatch_id": dispatch_id, "status": DISPATCH_STATUS_READY}
             raise HTTPException(status_code=404, detail={"code": "supplier_dispatch_not_found"})
         if (
-            _text(dispatch.get("sent_by_id")) != _text(worker.get("id"))
+            _text(dispatch.get("sent_by_id")) != _actor_id(worker)
             and not _is_manager(worker)
         ):
             raise HTTPException(status_code=403, detail={"code": "supplier_dispatch_owner_required"})
@@ -1943,7 +1953,7 @@ def make_preparation_supplier_dispatch_router(
                 "execution_status": "supplier_ready_for_receipt",
                 "supplier_dispatch_status": DISPATCH_STATUS_READY,
                 "supplier_ready_at": now,
-                "supplier_ready_confirmed_by": _text(worker.get("id")),
+                "supplier_ready_confirmed_by": _actor_id(worker),
                 "supplier_ready_confirmed_by_name": _actor_name(worker),
                 "updated_at": now,
             }},
@@ -1953,7 +1963,7 @@ def make_preparation_supplier_dispatch_router(
             {"$set": {
                 "status": DISPATCH_STATUS_READY,
                 "ready_at": now,
-                "ready_confirmed_by": _text(worker.get("id")),
+                "ready_confirmed_by": _actor_id(worker),
                 "ready_confirmed_by_name": _actor_name(worker),
                 "ready_note": _text(payload.note) or None,
                 "updated_at": now,
@@ -1967,7 +1977,7 @@ def make_preparation_supplier_dispatch_router(
             "supplier_id": _text(dispatch.get("supplier_id")),
             "piece_ids": piece_ids,
             "piece_count": len(piece_ids),
-            "actor_id": _text(worker.get("id")),
+            "actor_id": _actor_id(worker),
             "actor_name": _actor_name(worker),
             "note": _text(payload.note) or None,
             "occurred_at": now,

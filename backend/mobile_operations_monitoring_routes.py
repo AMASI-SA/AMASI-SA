@@ -13,7 +13,12 @@ from typing import Any, Callable
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from employees_v2_routes import EMPLOYEES
-from mobile_app_permissions import mobile_app_access_for_user
+from mobile_app_permissions import (
+    MOBILE_APP_ACCESS,
+    MOBILE_APP_ACCESS_OWNER_FIELD,
+    effective_mobile_app_permissions,
+    mobile_app_access_for_user,
+)
 from preparation_piece_operations import (
     PIECES,
     PIECE_STATUS_ASSIGNED,
@@ -213,6 +218,27 @@ def summarize_courier(
     }
 
 
+def preparation_workload_sort_key(row: dict[str, Any]) -> tuple[Any, ...]:
+    """Put the employee with the largest live unfinished custody first."""
+    return (
+        -int(row.get("current_held_pieces") or 0),
+        -int(row.get("pending_review_count") or 0),
+        -int(row.get("in_progress_count") or 0),
+        _text(row.get("employee_name")).casefold(),
+        _text(row.get("employee_id")),
+    )
+
+
+def courier_live_sort_key(row: dict[str, Any]) -> tuple[Any, ...]:
+    """Rank couriers by live out-for-delivery work, never delivered history."""
+    return (
+        -int(row.get("out_for_delivery_count") or 0),
+        -int(row.get("assigned_count") or 0),
+        _text(row.get("driver_name")).casefold(),
+        _text(row.get("driver_id")),
+    )
+
+
 def _monitoring_piece_view(piece: dict[str, Any]) -> dict[str, Any]:
     return {
         "piece_id": _text(piece.get("piece_id") or piece.get("id")) or None,
@@ -300,10 +326,55 @@ def make_mobile_operations_monitoring_router(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail={"code": str(exc)}) from exc
 
+        app_access_rows = await db[MOBILE_APP_ACCESS].find(
+            {
+                MOBILE_APP_ACCESS_OWNER_FIELD: owner_id,
+                "enabled": {"$ne": False},
+            },
+            {"_id": 0, "user_id": 1, "permissions": 1, "enabled": 1},
+        ).to_list(5000)
+        permitted_subject_ids = {
+            _text(row.get("user_id"))
+            for row in app_access_rows
+            if _text(row.get("user_id")) and effective_mobile_app_permissions(row)
+        }
         employees = await db[EMPLOYEES].find(
             {"user_id": owner_id, "status": {"$ne": "terminated"}},
-            {"_id": 0, "id": 1, "display_name": 1, "job_title": 1, "department": 1, "status": 1},
+            {
+                "_id": 0,
+                "id": 1,
+                "account_user_id": 1,
+                "display_name": 1,
+                "job_title": 1,
+                "department": 1,
+                "status": 1,
+            },
         ).sort("display_name", 1).to_list(5000)
+        employees = [
+            row for row in employees
+            if (
+                _text(row.get("account_user_id")) in permitted_subject_ids
+                or _text(row.get("id")) in permitted_subject_ids
+            )
+        ]
+        owner = await db.users.find_one(
+            {"id": owner_id},
+            {"_id": 0, "id": 1, "name": 1, "display_name": 1, "email": 1},
+        )
+        if owner and not any(_text(row.get("id")) == owner_id for row in employees):
+            employees.append({
+                "id": owner_id,
+                "account_user_id": owner_id,
+                "display_name": (
+                    _text(owner.get("display_name"))
+                    or _text(owner.get("name"))
+                    or _text(owner.get("email"))
+                    or "مالك المتجر"
+                ),
+                "job_title": "مالك المتجر",
+                "department": None,
+                "status": "active",
+            })
         employee_ids = [_text(row.get("id")) for row in employees if _text(row.get("id"))]
         pieces = await db[PIECES].find(
             {"user_id": owner_id, "responsible_employee_id": {"$in": employee_ids}},
@@ -328,6 +399,7 @@ def make_mobile_operations_monitoring_router(
                     end=end,
                 ),
             })
+        rows.sort(key=preparation_workload_sort_key)
         return {
             "ok": True,
             "read_only": True,
@@ -441,6 +513,7 @@ def make_mobile_operations_monitoring_router(
                     end=end,
                 ),
             })
+        rows.sort(key=courier_live_sort_key)
         return {
             "ok": True,
             "read_only": True,
@@ -499,7 +572,9 @@ def make_mobile_operations_monitoring_router(
 
 __all__ = [
     "MONITORING_PERMISSION",
+    "courier_live_sort_key",
     "make_mobile_operations_monitoring_router",
+    "preparation_workload_sort_key",
     "resolve_monitoring_range",
     "summarize_preparation_employee",
     "summarize_courier",

@@ -12,6 +12,15 @@ from typing import Any, Iterable
 from fastapi import HTTPException
 
 from mobile_app_permissions import MOBILE_APP_CLIENT, mobile_app_access_for_user
+from preparation_route_history import install_supplier_dispatch_route_guard
+from supplier_receipt_employee_custody import install_supplier_receipt_employee_custody
+
+
+# Install the two native-operation guards once per process. They preserve
+# physical-piece history while enforcing current route visibility and transfer
+# employee custody only when supplier receipt is finally approved.
+install_supplier_dispatch_route_guard()
+install_supplier_receipt_employee_custody()
 
 
 def _permissions(*values: str) -> frozenset[str]:
@@ -135,6 +144,7 @@ async def mobile_app_request_user(
     principal = dict(owner)
     principal["_session_client"] = MOBILE_APP_CLIENT
     principal["_mobile_actor_id"] = str(user.get("id") or "")
+    principal["_mobile_actor_name"] = str(user.get("name") or user.get("display_name") or "")
     principal["_mobile_actor_email"] = str(user.get("email") or "")
     principal["_mobile_app_permissions"] = sorted(set(granted))
     principal["_mobile_request_method"] = str(method or "").upper()
