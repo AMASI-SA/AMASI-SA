@@ -1,9 +1,9 @@
 """Read-only operations monitoring for the native AMASI app.
 
-The module reads canonical employee and preparation-piece facts.  It never
-mutates preparation state, invoices, supplier dispatches, custody, product cost,
-or any external system.  Product cost/service edits remain owned by their
-existing governed routes.
+The module reads canonical employee, preparation-piece and store-delivery facts.
+It never mutates preparation state, invoices, supplier dispatches, custody,
+product cost, delivery state, or any external system. Product cost/service edits
+remain owned by their existing governed routes.
 """
 from __future__ import annotations
 
@@ -24,6 +24,8 @@ from preparation_piece_operations import (
     PIECE_STATUS_BLOCKED,
     PIECE_STATUS_CANCELLED,
 )
+from store_delivery_driver_routes import STORE_DRIVERS
+from store_delivery_handover_routes import ASSIGNMENTS
 
 MONITORING_PERMISSION = "app.page.operations_monitoring"
 
@@ -139,8 +141,67 @@ def summarize_preparation_employee(
     }
 
 
+def summarize_courier(
+    assignments: list[dict[str, Any]],
+    *,
+    start: datetime,
+    end: datetime,
+) -> dict[str, Any]:
+    """Calculate current workload and actual delivery-time metrics."""
+    delivery_durations: list[int] = []
+    assignment_cycle_durations: list[int] = []
+    delivered_count = 0
+    assigned_count = 0
+    out_for_delivery_count = 0
+
+    for row in assignments:
+        status = _text(row.get("status"))
+        active = row.get("active") is not False
+        if active and status == "assigned":
+            assigned_count += 1
+        elif active and status == "out_for_delivery":
+            out_for_delivery_count += 1
+
+        delivered_at = row.get("delivered_at")
+        if status != "delivered" or not _inside(delivered_at, start, end):
+            continue
+        delivered_count += 1
+        actual_seconds = _positive_duration_seconds(
+            row.get("out_for_delivery_at"),
+            delivered_at,
+        )
+        if actual_seconds is not None:
+            delivery_durations.append(actual_seconds)
+        assignment_seconds = _positive_duration_seconds(
+            row.get("assigned_at"),
+            delivered_at,
+        )
+        if assignment_seconds is not None:
+            assignment_cycle_durations.append(assignment_seconds)
+
+    measured_count = len(delivery_durations)
+    assignment_cycle_measured_count = len(assignment_cycle_durations)
+    return {
+        "assigned_count": assigned_count,
+        "out_for_delivery_count": out_for_delivery_count,
+        "current_delivery_count": assigned_count + out_for_delivery_count,
+        "delivered_count": delivered_count,
+        "average_delivery_seconds": (
+            round(sum(delivery_durations) / measured_count)
+            if measured_count
+            else None
+        ),
+        "measured_count": measured_count,
+        "average_assignment_cycle_seconds": (
+            round(sum(assignment_cycle_durations) / assignment_cycle_measured_count)
+            if assignment_cycle_measured_count
+            else None
+        ),
+        "assignment_cycle_measured_count": assignment_cycle_measured_count,
+    }
+
+
 def _monitoring_piece_view(piece: dict[str, Any]) -> dict[str, Any]:
-    """Return only read-only fields needed by the mobile drill-down."""
     return {
         "piece_id": _text(piece.get("piece_id") or piece.get("id")) or None,
         "file_number": _text(piece.get("file_number")) or None,
@@ -170,6 +231,24 @@ def _monitoring_piece_view(piece: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _monitoring_assignment_view(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "assignment_id": _text(row.get("id")) or None,
+        "order_id": _text(row.get("order_id")) or None,
+        "order_number": _text(row.get("order_number")) or None,
+        "barcode": _text(row.get("barcode")) or None,
+        "status": _text(row.get("status")) or None,
+        "active": row.get("active") is not False,
+        "assigned_at": row.get("assigned_at"),
+        "out_for_delivery_at": row.get("out_for_delivery_at"),
+        "delivered_at": row.get("delivered_at"),
+        "driver_name_snapshot": _text(row.get("driver_name_snapshot")) or None,
+        "shipping_city_snapshot": _text(row.get("shipping_city_snapshot")) or None,
+        "delivery_fee_snapshot": row.get("delivery_fee_snapshot"),
+        "read_only": True,
+    }
+
+
 def make_mobile_operations_monitoring_router(
     db: Any,
     current_user: Callable[..., Any],
@@ -184,7 +263,11 @@ def make_mobile_operations_monitoring_router(
                 detail={"code": "mobile_operations_monitoring_permission_required"},
             )
         role = _text(user.get("role")).casefold()
-        owner_id = _text(user.get("id")) if role == "owner" or user.get("is_owner") is True else _text(user.get("created_by"))
+        owner_id = (
+            _text(user.get("id"))
+            if role == "owner" or user.get("is_owner") is True
+            else _text(user.get("created_by"))
+        )
         if not owner_id:
             raise HTTPException(status_code=403, detail={"code": "mobile_owner_scope_required"})
         return owner_id, access
@@ -302,6 +385,99 @@ def make_mobile_operations_monitoring_router(
             },
         }
 
+    @router.get("/couriers")
+    async def courier_summary(
+        from_at: str | None = Query(default=None),
+        to_at: str | None = Query(default=None),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        owner_id, _ = await require_monitoring_access(user)
+        try:
+            start, end = resolve_monitoring_range(from_at=from_at, to_at=to_at)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail={"code": str(exc)}) from exc
+
+        drivers = await db[STORE_DRIVERS].find(
+            {"user_id": owner_id},
+            {"_id": 0, "id": 1, "name": 1, "phone": 1, "city": 1, "status": 1},
+        ).sort("name", 1).to_list(5000)
+        driver_ids = [_text(row.get("id")) for row in drivers if _text(row.get("id"))]
+        assignments = await db[ASSIGNMENTS].find(
+            {"user_id": owner_id, "driver_id": {"$in": driver_ids}},
+            {"_id": 0},
+        ).to_list(100000)
+        by_driver: dict[str, list[dict[str, Any]]] = {}
+        for assignment in assignments:
+            by_driver.setdefault(_text(assignment.get("driver_id")), []).append(assignment)
+
+        rows = []
+        for driver in drivers:
+            driver_id = _text(driver.get("id"))
+            rows.append({
+                "driver_id": driver_id,
+                "driver_name": _text(driver.get("name")) or "موصل",
+                "phone": _text(driver.get("phone")) or None,
+                "city": _text(driver.get("city")) or None,
+                "status": _text(driver.get("status")) or None,
+                **summarize_courier(
+                    by_driver.get(driver_id, []),
+                    start=start,
+                    end=end,
+                ),
+            })
+        return {
+            "ok": True,
+            "read_only": True,
+            "range": {"from_at": start.isoformat(), "to_at": end.isoformat()},
+            "couriers": rows,
+        }
+
+    @router.get("/couriers/{driver_id}")
+    async def courier_detail(
+        driver_id: str,
+        from_at: str | None = Query(default=None),
+        to_at: str | None = Query(default=None),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        owner_id, _ = await require_monitoring_access(user)
+        driver = await db[STORE_DRIVERS].find_one(
+            {"user_id": owner_id, "id": driver_id},
+            {"_id": 0, "id": 1, "name": 1, "phone": 1, "city": 1, "status": 1},
+        )
+        if not driver:
+            raise HTTPException(status_code=404, detail={"code": "store_driver_not_found"})
+        try:
+            start, end = resolve_monitoring_range(from_at=from_at, to_at=to_at)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail={"code": str(exc)}) from exc
+
+        assignments = await db[ASSIGNMENTS].find(
+            {"user_id": owner_id, "driver_id": driver_id},
+            {"_id": 0},
+        ).sort("assigned_at", -1).to_list(5000)
+        summary = summarize_courier(assignments, start=start, end=end)
+        buckets = {"assigned": [], "out_for_delivery": [], "delivered": []}
+        for assignment in assignments:
+            status = _text(assignment.get("status"))
+            if status in {"assigned", "out_for_delivery"} and assignment.get("active") is not False:
+                buckets[status].append(_monitoring_assignment_view(assignment))
+            elif status == "delivered" and _inside(assignment.get("delivered_at"), start, end):
+                buckets["delivered"].append(_monitoring_assignment_view(assignment))
+        return {
+            "ok": True,
+            "read_only": True,
+            "range": {"from_at": start.isoformat(), "to_at": end.isoformat()},
+            "courier": {
+                "driver_id": driver_id,
+                "driver_name": _text(driver.get("name")) or "موصل",
+                "phone": _text(driver.get("phone")) or None,
+                "city": _text(driver.get("city")) or None,
+                "status": _text(driver.get("status")) or None,
+            },
+            "summary": summary,
+            "buckets": buckets,
+        }
+
     return router
 
 
@@ -310,4 +486,5 @@ __all__ = [
     "make_mobile_operations_monitoring_router",
     "resolve_monitoring_range",
     "summarize_preparation_employee",
+    "summarize_courier",
 ]
