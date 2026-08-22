@@ -1104,6 +1104,26 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
                 "product_name": _text(getattr(item, "name", None)) or "منتج",
                 "sku": _text(getattr(item, "sku", None)) or None,
                 "quantity": int(getattr(item, "quantity", 1) or 1),
+                "direct_assembly_piece_ids": (
+                    [
+                        "direct_" + hashlib.sha256(
+                            (
+                                f"{order.order_number}:"
+                                f"{item.order_item_id}:{unit_index}"
+                            ).encode("utf-8")
+                        ).hexdigest()[:32]
+                        for unit_index in range(
+                            1,
+                            int(getattr(item, "quantity", 1) or 1) + 1,
+                        )
+                    ]
+                    if _text(
+                        states.get(item.order_item_id, {}).get(
+                            "preparation_route"
+                        )
+                    ) == DIRECT_ASSEMBLY_ROUTE
+                    else []
+                ),
                 "specifications_snapshot": order_item_specifications(item),
                 "review_status": "reviewed",
                 "selected_image_url": view["selected_image_url"],
