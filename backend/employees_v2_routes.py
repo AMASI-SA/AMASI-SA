@@ -48,6 +48,7 @@ from mobile_app_permissions import (
     MOBILE_APP_ACCESS,
     MOBILE_APP_ACCESS_OWNER_FIELD,
     MOBILE_APP_CLIENT,
+    MOBILE_APP_MANAGER,
     effective_mobile_app_permissions,
     find_mobile_app_access,
     mobile_app_permission_catalog,
@@ -1551,11 +1552,20 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
     async def management_workspace(
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
-        _require_owner(user)
-        return await _employee_management_response(
-            db,
-            owner_id=_text(user.get("id")),
-        )
+        role = _text(user.get("role")).casefold()
+        is_owner = role == "owner" or user.get("is_owner") is True
+        if is_owner:
+            owner_id = _text(user.get("id"))
+        else:
+            if user.get("_session_client") != MOBILE_APP_CLIENT:
+                raise HTTPException(status_code=403, detail={"code": "owner_required"})
+            actor_access = await mobile_app_access_for_user(db, user)
+            if MOBILE_APP_MANAGER not in set(actor_access.get("permissions") or []):
+                raise HTTPException(status_code=403, detail={"code": "mobile_app_manager_required"})
+            owner_id = _text(user.get("created_by"))
+        if not owner_id:
+            raise HTTPException(status_code=403, detail={"code": "mobile_app_owner_scope_required"})
+        return await _employee_management_response(db, owner_id=owner_id)
 
     @router.post("/management/employees")
     async def create_employee(
@@ -2118,13 +2128,22 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
         payload: dict[str, Any] = Body(...),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
-        _require_owner(user)
+        role = _text(user.get("role")).casefold()
+        is_owner = role == "owner" or user.get("is_owner") is True
+        actor_is_app_manager = False
+        if not is_owner:
+            if user.get("_session_client") != MOBILE_APP_CLIENT:
+                raise HTTPException(status_code=403, detail={"code": "owner_required"})
+            actor_access = await mobile_app_access_for_user(db, user)
+            actor_is_app_manager = MOBILE_APP_MANAGER in set(actor_access.get("permissions") or [])
+            if not actor_is_app_manager:
+                raise HTTPException(status_code=403, detail={"code": "mobile_app_manager_required"})
         if _text(payload.get("confirmation")) != EMPLOYEE_MOBILE_APP_PERMISSIONS_CONFIRMATION:
             raise HTTPException(
                 status_code=422,
                 detail={"code": "employee_mobile_app_permissions_confirmation_required"},
             )
-        owner_id = _text(user.get("id"))
+        owner_id = _text(user.get("id")) if is_owner else _text(user.get("created_by"))
         employee = _require_managed_employee(await db[EMPLOYEES].find_one(
             {"user_id": owner_id, "id": employee_id},
             {"_id": 0},
@@ -2157,6 +2176,23 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
                 status_code=422,
                 detail={"code": str(exc)},
             ) from exc
+
+        before = await find_mobile_app_access(
+            db,
+            owner_user_id=owner_id,
+            user_id=account_id,
+        )
+        if actor_is_app_manager:
+            if MOBILE_APP_MANAGER in set(selected_permissions):
+                raise HTTPException(
+                    status_code=403,
+                    detail={"code": "mobile_app_manager_grant_requires_owner_console"},
+                )
+            if MOBILE_APP_MANAGER in set((before or {}).get("permissions") or []):
+                raise HTTPException(
+                    status_code=403,
+                    detail={"code": "mobile_app_manager_changes_require_owner_console"},
+                )
 
         before = await find_mobile_app_access(
             db,
