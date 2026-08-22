@@ -1,0 +1,229 @@
+name: Apply mobile app manager routes
+
+on:
+  push:
+    branches:
+      - feat/mobile-app-manager-role-20260822
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/mobile-app-manager-role-20260822
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Patch Employees V2 mobile manager routes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('backend/employees_v2_routes.py')
+          s = p.read_text()
+          old = '''from mobile_app_permissions import (\n    MOBILE_APP_ACCESS,\n    MOBILE_APP_ACCESS_OWNER_FIELD,\n    MOBILE_APP_CLIENT,\n'''
+          new = '''from mobile_app_permissions import (\n    MOBILE_APP_ACCESS,\n    MOBILE_APP_ACCESS_OWNER_FIELD,\n    MOBILE_APP_CLIENT,\n    MOBILE_APP_MANAGER,\n'''
+          if old in s and '    MOBILE_APP_MANAGER,\n' not in s:
+              s = s.replace(old, new, 1)
+
+          marker = '    @router.get("")\n'
+          if '@router.get("/mobile-management")' not in s:
+              block = r'''    @router.get("/mobile-management")
+    async def mobile_app_management_workspace(
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        if user.get("_session_client") != MOBILE_APP_CLIENT:
+            raise HTTPException(status_code=403, detail={"code": "mobile_app_session_required"})
+        access = await mobile_app_access_for_user(db, user)
+        if MOBILE_APP_MANAGER not in set(access.get("permissions") or []):
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "mobile_app_manager_required", "permission": MOBILE_APP_MANAGER},
+            )
+        role = _text(user.get("role")).casefold()
+        owner_id = _text(user.get("id")) if role == "owner" or user.get("is_owner") is True else _text(user.get("created_by"))
+        if not owner_id:
+            raise HTTPException(status_code=403, detail={"code": "mobile_app_owner_scope_required"})
+
+        employees = await db[EMPLOYEES].find(
+            {"user_id": owner_id},
+            {
+                "_id": 0,
+                "id": 1,
+                "display_name": 1,
+                "phone": 1,
+                "contact_email": 1,
+                "job_title": 1,
+                "department": 1,
+                "status": 1,
+                "account_user_id": 1,
+            },
+        ).sort("display_name", 1).to_list(5000)
+        account_ids = [_text(row.get("account_user_id")) for row in employees if _text(row.get("account_user_id"))]
+        accounts = await db.users.find(
+            {"id": {"$in": account_ids}},
+            {"_id": 0, "id": 1, "disabled": 1, "is_active": 1, "deleted_at": 1},
+        ).to_list(max(len(account_ids), 1))
+        accounts_by_id = {_text(row.get("id")): row for row in accounts}
+        access_rows = await db[MOBILE_APP_ACCESS].find(
+            {MOBILE_APP_ACCESS_OWNER_FIELD: owner_id, "user_id": {"$in": account_ids}},
+            {"_id": 0},
+        ).to_list(max(len(account_ids), 1))
+        access_by_user = {_text(row.get("user_id")): row for row in access_rows}
+
+        items = []
+        for employee in employees:
+            account_id = _text(employee.get("account_user_id"))
+            account = accounts_by_id.get(account_id)
+            account_active = bool(
+                account
+                and account.get("disabled") is not True
+                and account.get("is_active") is not False
+                and not account.get("deleted_at")
+            )
+            stored_access = access_by_user.get(account_id)
+            items.append({
+                "id": _text(employee.get("id")),
+                "name": _text(employee.get("display_name")),
+                "phone": employee.get("phone"),
+                "contact_email": employee.get("contact_email"),
+                "job_title": employee.get("job_title"),
+                "department": employee.get("department"),
+                "status": _text(employee.get("status") or "inactive"),
+                "account": {
+                    "user_id": account_id or None,
+                    "access_enabled": account_active,
+                },
+                "mobile_app_access": {
+                    "configured": stored_access is not None,
+                    "enabled": bool(stored_access and stored_access.get("enabled", True) and account_active),
+                    "permissions": effective_mobile_app_permissions(stored_access, account_active=account_active),
+                    "stored_permissions": list((stored_access or {}).get("permissions") or []),
+                    "manager": MOBILE_APP_MANAGER in set(effective_mobile_app_permissions(stored_access, account_active=account_active)),
+                    "scope": "amasi_mobile_only",
+                },
+            })
+
+        catalog = []
+        for group in mobile_app_permission_catalog():
+            permissions = [item for item in group.get("permissions") or [] if item.get("key") != MOBILE_APP_MANAGER]
+            if permissions:
+                catalog.append({**group, "permissions": permissions})
+        return {
+            "ok": True,
+            "employees": items,
+            "mobile_app_permission_catalog": catalog,
+            "mobile_app_permission_scope": "amasi_mobile_only",
+            "manager_role_managed_in": "mezan_only",
+        }
+
+    @router.put("/mobile-management/employees/{employee_id}/permissions")
+    async def mobile_app_manager_assign_employee_permissions(
+        employee_id: str,
+        payload: dict[str, Any] = Body(...),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        if user.get("_session_client") != MOBILE_APP_CLIENT:
+            raise HTTPException(status_code=403, detail={"code": "mobile_app_session_required"})
+        actor_access = await mobile_app_access_for_user(db, user)
+        if MOBILE_APP_MANAGER not in set(actor_access.get("permissions") or []):
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "mobile_app_manager_required", "permission": MOBILE_APP_MANAGER},
+            )
+        if _text(payload.get("confirmation")) != EMPLOYEE_MOBILE_APP_PERMISSIONS_CONFIRMATION:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "employee_mobile_app_permissions_confirmation_required"},
+            )
+        role = _text(user.get("role")).casefold()
+        owner_id = _text(user.get("id")) if role == "owner" or user.get("is_owner") is True else _text(user.get("created_by"))
+        employee = _require_managed_employee(await db[EMPLOYEES].find_one(
+            {"user_id": owner_id, "id": employee_id},
+            {"_id": 0},
+        ))
+        account_id = _text(employee.get("account_user_id"))
+        if not account_id:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "employee_account_link_required_before_mobile_app_permissions"},
+            )
+        before = await find_mobile_app_access(db, owner_user_id=owner_id, user_id=account_id)
+        if MOBILE_APP_MANAGER in set(effective_mobile_app_permissions(before)):
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "mobile_app_manager_managed_in_mezan_only"},
+            )
+        try:
+            selected_permissions = validate_mobile_app_permissions(payload.get("permissions"))
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail={"code": str(exc)}) from exc
+        if MOBILE_APP_MANAGER in set(selected_permissions):
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "mobile_app_manager_grant_requires_mezan"},
+            )
+        now = _now()
+        enabled = bool(payload.get("enabled", True))
+        document = {
+            "id": (before or {}).get("id") or f"mobapp_{uuid.uuid4().hex}",
+            MOBILE_APP_ACCESS_OWNER_FIELD: owner_id,
+            "user_id": account_id,
+            "employee_v2_id": employee_id,
+            "enabled": enabled,
+            "permissions": selected_permissions,
+            "scope": "amasi_mobile_only",
+            "updated_at": now,
+            "updated_by": _text(user.get("id")),
+        }
+        await db[MOBILE_APP_ACCESS].update_one(
+            {MOBILE_APP_ACCESS_OWNER_FIELD: owner_id, "user_id": account_id},
+            {"$set": document, "$setOnInsert": {"created_at": now, "created_by": _text(user.get("id"))}},
+            upsert=True,
+        )
+        saved = await find_mobile_app_access(db, owner_user_id=owner_id, user_id=account_id) or document
+        await _record_employee_event(
+            db,
+            owner_id=owner_id,
+            employee_id=employee_id,
+            event_type="employee_mobile_app_permissions_assigned",
+            actor=user,
+            before=_mobile_app_access_audit_view(before),
+            after=_mobile_app_access_audit_view(saved),
+            metadata={
+                "permission_count": len(selected_permissions),
+                "scope": "amasi_mobile_only",
+                "actor_scope": "amasi_app_manager",
+                "manager_role_changes": 0,
+                "mezan_permission_changes": 0,
+            },
+        )
+        return {
+            "ok": True,
+            "mobile_app_access": _mobile_app_access_audit_view(saved),
+        }
+
+'''
+              if marker not in s:
+                  raise SystemExit('router insertion marker not found')
+              s = s.replace(marker, block + marker, 1)
+          p.write_text(s)
+          PY
+      - name: Remove temporary workflow and commit patch
+        shell: bash
+        run: |
+          git rm .github/workflows/mobile-app-manager-patch.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/employees_v2_routes.py
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "feat: add scoped AMASI app manager endpoints"
+          git push origin HEAD:feat/mobile-app-manager-role-20260822
