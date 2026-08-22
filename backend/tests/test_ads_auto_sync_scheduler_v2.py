@@ -747,6 +747,13 @@ async def test_migrated_account_emits_canonical_fact_and_terminal_run_proof(
         "expected_requests": 3,
         "completed_requests": 3,
     }
+    assert result["financial_proof"] == {
+        "version": 1,
+        "status": "complete",
+        "accounts_complete": 1,
+        "errors_count": 0,
+        "coverage": _complete_coverage(expected_state),
+    }
 
     facts = db.rows["mezan_snapchat_performance_daily_v2"]
     assert len(facts) == 2
@@ -777,6 +784,7 @@ async def test_migrated_account_emits_canonical_fact_and_terminal_run_proof(
     assert run["summary"]["accounts_attempted"] == 1
     assert run["summary"]["accounts_complete"] == 1
     assert run["summary"]["coverage"] == result["coverage"]
+    assert run["summary"]["financial_proof"] == result["financial_proof"]
     assert run["summary"]["account_provider_calls"] == (
         result["account_provider_calls"]
     )
@@ -790,6 +798,10 @@ async def test_migrated_account_emits_canonical_fact_and_terminal_run_proof(
     assert integration["connection_provenance"] == "legacy_integration"
     assert integration["source_mode"] == scheduler.ACCOUNT_REFRESH_SOURCE_MODE
     assert integration["coverage"] == result["coverage"]
+    assert integration["financial_coverage"] == (
+        result["financial_proof"]["coverage"]
+    )
+    assert integration["projection_coverage"] == result["coverage"]
     assert integration["last_sync_at"] == write_time.isoformat()
     assert db.rows[selection.SNAPCHAT_CREDENTIALS_COLLECTION] == [credential]
 
@@ -1478,6 +1490,39 @@ def test_safe_summary_preserves_per_account_provider_calls():
     assert summary["campaign_facts_schema_version"] == 4
 
 
+def test_safe_summary_preserves_only_bounded_financial_proof_fields():
+    summary = scheduler._safe_summary({
+        "financial_proof": {
+            "version": 1,
+            "status": "complete",
+            "accounts_complete": 2,
+            "errors_count": 0,
+            "coverage": {
+                "status": "complete",
+                "data_state": "confirmed_data",
+                "expected_requests": 6,
+                "completed_requests": 6,
+                "provider_payload": "Bearer must-not-leak",
+            },
+            "token": "must-not-leak",
+        },
+    })
+
+    assert summary["financial_proof"] == {
+        "version": 1,
+        "status": "complete",
+        "accounts_complete": 2,
+        "errors_count": 0,
+        "coverage": {
+            "status": "complete",
+            "data_state": "confirmed_data",
+            "expected_requests": 6,
+            "completed_requests": 6,
+        },
+    }
+    assert "must-not-leak" not in repr(summary)
+
+
 def _complete_coverage(data_state="confirmed_data"):
     return {
         "status": "complete",
@@ -1516,9 +1561,13 @@ def test_nested_snapchat_performance_error_fails_account_coverage(nested_key):
     }
 
     assert scheduler._snapchat_item_complete(item) is False
+    assert scheduler._snapchat_financial_item_complete(item) is True
     errors = scheduler._snapchat_item_errors(item)
     assert any(error.get("code") == "nested_provider_error" for error in errors)
     assert any(error.get("kind") == nested_key for error in errors)
+    assert scheduler._snapchat_financial_run_coverage(
+        [item], accounts_expected=1
+    ) == _complete_coverage()
 
 
 def test_cached_child_coverage_does_not_inflate_current_run_request_counts():
@@ -1666,12 +1715,18 @@ def test_snapchat_malformed_error_envelope_blocks_complete_proof(target):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("raise_error", "complete_item", "outcome_failure"),
+    (
+        "raise_error",
+        "complete_item",
+        "outcome_failure",
+        "projection_failure",
+    ),
     [
-        (False, False, False),
-        (True, False, False),
-        (False, True, False),
-        (False, True, True),
+        (False, False, False, False),
+        (True, False, False, False),
+        (False, True, False, False),
+        (False, True, True, False),
+        (False, True, False, True),
     ],
 )
 async def test_snapchat_refresh_advances_proof_only_for_complete_account(
@@ -1680,6 +1735,7 @@ async def test_snapchat_refresh_advances_proof_only_for_complete_account(
     raise_error,
     complete_item,
     outcome_failure,
+    projection_failure,
 ):
     account = {
         "ad_account_id": "account-1",
@@ -1716,6 +1772,21 @@ async def test_snapchat_refresh_advances_proof_only_for_complete_account(
         item["rows_saved"] = 1
         item["campaign_rows_saved"] = 1
         item["coverage"] = _complete_coverage()
+    if projection_failure:
+        item["ad_performance"] = {
+            "coverage": {
+                "status": "incomplete",
+                "data_state": "unknown_incomplete",
+                "expected_requests": 2,
+                "completed_requests": 1,
+            },
+            "errors_count": 1,
+            "errors": [{
+                "code": "snapchat_provider_http_429",
+                "message": "Provider rate limited a projection request.",
+                "retryable": True,
+            }],
+        }
 
     async def no_active(*args, **kwargs):
         return None
@@ -1859,6 +1930,31 @@ async def test_snapchat_refresh_advances_proof_only_for_complete_account(
         assert outcome_secret not in repr(result)
         assert outcome_secret not in caplog.text
         return
+    if complete_item and projection_failure:
+        assert result["status"] == "partial"
+        assert result["coverage"]["status"] == "incomplete"
+        assert result["financial_proof"] == {
+            "version": 1,
+            "status": "complete",
+            "accounts_complete": 1,
+            "errors_count": 0,
+            "coverage": _complete_coverage(),
+        }
+        assert finished[0]["status"] == "partial"
+        assert "last_sync_at" not in account_patch
+        assert "last_observed_at" not in account_patch
+        assert "last_sync_at" not in integration_patch
+        assert account_patch["data_quality"] == "incomplete"
+        assert integration_patch["data_quality"] == "incomplete"
+        assert account_patch["financial_last_sync_at"]
+        assert account_patch["financial_last_observed_at"]
+        assert integration_patch["financial_last_sync_at"]
+        assert account_patch["financial_data_quality"] == "complete"
+        assert integration_patch["financial_data_quality"] == "complete"
+        assert integration_patch["coverage"] == result["coverage"]
+        assert integration_patch["financial_coverage"] == _complete_coverage()
+        assert integration_patch["projection_data_quality"] == "incomplete"
+        return
     if complete_item:
         assert result["status"] == "complete"
         assert result["coverage"] == {
@@ -1872,11 +1968,20 @@ async def test_snapchat_refresh_advances_proof_only_for_complete_account(
         assert result["account_provider_calls"] == [
             {"ad_account_id": "account-1", "provider_calls": 3}
         ]
+        assert result["financial_proof"] == {
+            "version": 1,
+            "status": "complete",
+            "accounts_complete": 1,
+            "errors_count": 0,
+            "coverage": _complete_coverage(),
+        }
         assert finished[0]["status"] == "complete"
         assert finished[0]["result"]["coverage"] == result["coverage"]
         assert account_patch["last_sync_at"]
         assert account_patch["last_observed_at"]
         assert integration_patch["last_sync_at"]
+        assert account_patch["financial_last_sync_at"]
+        assert integration_patch["financial_last_sync_at"]
         assert account_patch["health_score"] == 100
         assert integration_patch["health_score"] == 100
     else:
