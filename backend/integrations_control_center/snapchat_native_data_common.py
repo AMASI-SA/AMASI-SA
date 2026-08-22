@@ -257,6 +257,11 @@ class SnapchatSyncContext:
     provider_calls: int = 0
     usd_rate_cache: float | None = None
     failure_stage_observer: Callable[[str], None] | None = None
+    defer_financial_fact_writes: bool = False
+    deferred_financial_fact_writes: list[dict[str, Any]] = field(
+        default_factory=list,
+        repr=False,
+    )
     _provider_request_lock: asyncio.Lock | None = field(
         default=None,
         init=False,
