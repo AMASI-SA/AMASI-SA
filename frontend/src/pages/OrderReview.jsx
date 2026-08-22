@@ -386,22 +386,7 @@ function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged, onC
 
 function OperationalItemCard({ item, workflowRevision, orderNumber, onChanged }) {
     const [busy, setBusy] = useState(false);
-    const statusLabel = { pending: "لم يبدأ", in_progress: "قيد التجهيز", ready: "جاهز" }[item.preparation_status] || "قيد التجهيز";
-    const setStatus = async (preparationStatus) => {
-        setBusy(true);
-        try {
-            const next = await updateOrderReviewOperationalItemStatus(orderNumber, item.operational_item_id, {
-                expected_revision: workflowRevision,
-                preparation_status: preparationStatus,
-            });
-            onChanged(next);
-            toast.success("تم تحديث حالة المنتج التشغيلي.");
-        } catch (error) {
-            toast.error(error.message);
-        } finally {
-            setBusy(false);
-        }
-    };
+    const statusLabel = "بانتظار التجميع والعنونة";
     const rename = async () => {
         const nextName = window.prompt("اسم المنتج التشغيلي", item.name || "");
         if (!nextName || nextName.trim() === item.name) return;
@@ -452,11 +437,9 @@ function OperationalItemCard({ item, workflowRevision, orderNumber, onChanged })
                     ))}
                 </div>
                 <div className="mt-4 rounded-xl bg-white/80 p-3 text-xs font-bold leading-6 text-slate-600">
-                    يظهر داخل ميزان فقط، لا يُرسل إلى سلة أو قيود ولا يدخل ملف المورد. ويمنع اكتمال التجهيز حتى يصبح جاهزًا.
+                    يظهر داخل ميزان فقط، ولا يُرسل إلى سلة أو قيود أو ملف المورد. تُسجل جاهزيته من صفحة التجميع والعنونة فقط، ويمنع طباعة الشحنة حتى يصبح جاهزًا.
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
-                    <button disabled={busy || item.preparation_status === "in_progress"} onClick={() => setStatus("in_progress")} className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-extrabold text-amber-900 disabled:opacity-50">قيد التجهيز</button>
-                    <button disabled={busy || item.preparation_status === "ready"} onClick={() => setStatus("ready")} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-extrabold text-white disabled:opacity-50">جاهز</button>
                     <button disabled={busy} onClick={rename} className="rounded-lg border border-violet-300 bg-white px-3 py-2 text-xs font-extrabold text-violet-800 disabled:opacity-50">تعديل الاسم</button>
                     <button disabled={busy} onClick={unlink} data-testid="order-review-operational-item-unlink" className="rounded-lg border border-rose-300 bg-white px-3 py-2 text-xs font-extrabold text-rose-700 disabled:opacity-50">إلغاء الربط وإرجاع القيم</button>
                 </div>
