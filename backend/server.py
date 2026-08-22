@@ -179,7 +179,19 @@ async def health_check(response: Response):
 
 # ── Dependencies ──────────────────────────────────────────────────────────────
 async def current_user(request: Request) -> dict:
-    return await get_current_user_from_db(request, db)
+    user = await get_current_user_from_db(request, db)
+    # Native employees authenticate as themselves, but Mezan's historical data
+    # remains tenant-scoped by the merchant owner id. Bridge those identities
+    # only for an explicit native-route allow-list and only after checking the
+    # matching independent app-page permission. Browser sessions are unchanged.
+    from mobile_app_request_context import mobile_app_request_user
+
+    return await mobile_app_request_user(
+        db,
+        user,
+        path=request.url.path,
+        method=request.method,
+    )
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
