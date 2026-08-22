@@ -154,12 +154,21 @@ def clear_auth_cookies(response) -> None:
 
 
 def _extract_token(request: Request) -> Optional[str]:
-    token = request.cookies.get("access_token")
-    if not token:
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header[7:]
-    return token
+    """Resolve explicit Bearer credentials before ambient browser cookies.
+
+    React Native can retain the browser Set-Cookie emitted by the inner login
+    handler even though the native-session middleware returns a separately
+    signed AMASI mobile access token in the JSON body. If the cookie wins, the
+    mobile client marker is lost and owner-only operational routes reject an
+    otherwise authorized employee. Normal browser requests send no Bearer
+    header and continue to use the HttpOnly cookie unchanged.
+    """
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:].strip()
+        if token:
+            return token
+    return request.cookies.get("access_token")
 
 
 def _token_predates_password_change(payload: dict, user: dict) -> bool:
