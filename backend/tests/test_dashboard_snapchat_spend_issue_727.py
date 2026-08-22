@@ -583,6 +583,50 @@ async def test_newer_incomplete_attempt_blocks_older_complete_fact():
 
 
 @pytest.mark.asyncio
+async def test_newer_running_attempt_does_not_hide_prior_bound_complete_fact():
+    running = _run(
+        run_id="run-active",
+        status="running",
+        started="2026-08-21T08:06:00+00:00",
+        finished=None,
+    )
+    running["summary"] = {
+        "date_from": DAY.isoformat(),
+        "date_to": DAY.isoformat(),
+    }
+
+    result = await _load(_db(runs=[_run(), running]))
+
+    assert result["total_sar"] == 10.0
+    assert result["quality"]["data_state"] == "confirmed_data"
+    assert result["quality"]["proof_runs"][0]["run_id"] == "run-good"
+
+
+@pytest.mark.asyncio
+async def test_newer_running_writer_cannot_borrow_prior_complete_proof():
+    running = _run(
+        run_id="run-active",
+        status="running",
+        started="2026-08-21T08:06:00+00:00",
+        finished=None,
+    )
+    running["summary"] = {
+        "date_from": DAY.isoformat(),
+        "date_to": DAY.isoformat(),
+    }
+
+    result = await _load(
+        _db(
+            runs=[_run(), running],
+            facts=[_fact(updated="2026-08-21T08:07:00+00:00")],
+        )
+    )
+
+    assert result["total_sar"] is None
+    assert result["quality"]["data_state"] == "unknown_incomplete"
+
+
+@pytest.mark.asyncio
 async def test_failed_diagnostic_run_still_rejects_an_existing_fact():
     failed = _run(status="failed")
     failed["error"] = {
