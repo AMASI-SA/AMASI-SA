@@ -679,6 +679,7 @@ async def build_selective_send_policy_report(
     db,
     *,
     user_id: str,
+    orders_user_id: Optional[str] = None,
     since_days: int = 90,
     limit: int = 200,
 ) -> dict:
@@ -704,6 +705,7 @@ async def build_selective_send_policy_report(
     eo = await build_eligible_orders_report(
         db,
         user_id=user_id,
+        orders_user_id=orders_user_id or user_id,
         since_days=since_days,
         limit=limit,
         show_already_sent=True,

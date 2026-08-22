@@ -397,3 +397,51 @@ def test_foreign_order_always_extracts_fifteen_percent_from_gross(tax_percent):
     prepared = _prepare_sar_invoice_canon(canon=canon, row=row)
     assert prepared["total_amount"] == 100.00
     assert prepared["_qoyod_tax_percent"] == 15.0
+
+
+@pytest.mark.parametrize("currency", ["AED", "QAR", "KWD", "OMR", "BHD"])
+def test_all_supported_gcc_currencies_use_salla_fx_and_round_half_up_to_sar(
+    currency,
+):
+    """Every supported GCC currency uses Salla's rate and decimal half-up."""
+    canon = {
+        "order_number": "275590587",
+        "currency": currency,
+        "total_amount": 100,
+        "subtotal": 90,
+        "shipping_amount": 10,
+        "tax_amount": 0,
+        "discount_amount": 0,
+        "items": [{
+            "sku": f"{currency}-ROUND",
+            "name": "منتج خليجي",
+            "quantity": 1,
+            "unit_price": 100,
+            "tax_amount": 0,
+            "discount_amount": 0,
+            "total": 100,
+        }],
+    }
+    row = _foreign_row(
+        currency=currency,
+        rate="1.00005",
+        tax_percent="8.00",
+        total=100,
+        subtotal=90,
+        shipping=10,
+    )
+
+    prepared = _prepare_sar_invoice_canon(canon=canon, row=row)
+
+    assert prepared["currency"] == "SAR"
+    assert prepared["currency_code"] == "SAR"
+    # Decimal('100') * Decimal('1.00005') == 100.005, which must round
+    # half-up to 100.01 rather than banker's-rounding down to 100.00.
+    assert prepared["total_amount"] == 100.01
+    assert prepared["items"][0]["unit_price"] == 100.01
+    assert prepared["items"][0]["total"] == 100.01
+    assert prepared["_qoyod_tax_percent"] == 15.0
+    assert prepared["_qoyod_fx"]["source"] == "salla_order.exchange_rate"
+    assert prepared["_qoyod_fx"]["original_currency"] == currency
+    assert prepared["_qoyod_fx"]["rate"] == "1.00005"
+    assert prepared["_qoyod_fx"]["converted_total"] == 100.01

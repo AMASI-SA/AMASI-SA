@@ -40,6 +40,8 @@ export default function QoyodUnsentOrders() {
   const [retryConfirmOrder, setRetryConfirmOrder] = useState(null);
   const [retryingOrder, setRetryingOrder] = useState(null);
   const [retryNotice, setRetryNotice] = useState(null);
+  const unifiedReadModel = data?.source_authority === "unified_orders";
+  const bulkRecoveryAvailable = Boolean(data) && !unifiedReadModel;
 
   const recoveryOrderNumbers = Array.from(new Set(
     (data?.orders || [])
@@ -149,9 +151,14 @@ export default function QoyodUnsentOrders() {
           <p className="text-sm text-slate-500 mt-1">
             يعرض فقط الطلبات المؤهلة للفوترة في قيود. حالات انتظار المراجعة
             أو الدفع والطلبات الملغاة لا تُحتسب ضمن «لم يُرسل».
-            {data?.sync_start_date && (
+            {data?.from_date && data?.to_date && (
               <span className="mr-2 text-xs text-slate-400" data-testid="unsent-sync-start-note">
-                (نطاق التكامل يبدأ من {data.sync_start_date} — الطلبات الأقدم مستبعدة)
+                (الفترة الفعلية: {data.from_date} إلى {data.to_date})
+              </span>
+            )}
+            {unifiedReadModel && (
+              <span className="mr-2 text-xs text-amber-700" data-testid="unsent-unified-readonly-note">
+                (المصدر: الطلبات الموحدة؛ إعادة الإرسال الجماعي متوقفة حتى موافقة منفصلة)
               </span>
             )}
             {(data?.excluded_not_eligible ?? 0) > 0 && (
@@ -193,21 +200,23 @@ export default function QoyodUnsentOrders() {
             className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700">
             تحديث
           </button>
-          <button
-            type="button"
-            onClick={() => setRecoveryOpen((open) => !open)}
-            aria-expanded={recoveryOpen}
-            aria-controls="qoyod-recovery-panel"
-            data-testid="qoyod-recovery-toggle"
-            className="rounded-lg border border-rose-300 bg-rose-50 px-4 py-2 text-sm font-bold text-rose-800 hover:bg-rose-100">
-            {recoveryOpen
-              ? "إغلاق إعادة الإرسال"
-              : `إعادة إرسال الكل (${recoveryOrderNumbers.length})`}
-          </button>
+          {bulkRecoveryAvailable && (
+            <button
+              type="button"
+              onClick={() => setRecoveryOpen((open) => !open)}
+              aria-expanded={recoveryOpen}
+              aria-controls="qoyod-recovery-panel"
+              data-testid="qoyod-recovery-toggle"
+              className="rounded-lg border border-rose-300 bg-rose-50 px-4 py-2 text-sm font-bold text-rose-800 hover:bg-rose-100">
+              {recoveryOpen
+                ? "إغلاق إعادة الإرسال"
+                : `إعادة إرسال الكل (${recoveryOrderNumbers.length})`}
+            </button>
+          )}
         </div>
       </div>
 
-      {recoveryOpen && (
+      {bulkRecoveryAvailable && recoveryOpen && (
         <div id="qoyod-recovery-panel"
              className="rounded-xl border border-rose-300 bg-rose-50 p-4 space-y-3"
              data-testid="qoyod-recovery-panel">
@@ -355,7 +364,9 @@ export default function QoyodUnsentOrders() {
                     data-testid={`unsent-row-${o.order_number}`}>
                   <td className="px-3 py-2 font-medium">{o.order_number || "—"}</td>
                   <td className="px-3 py-2 text-slate-500" dir="ltr">
-                    {o.received_at ? String(o.received_at).slice(0, 16).replace("T", " ") : "—"}
+                    {(o.order_date || o.received_at)
+                      ? String(o.order_date || o.received_at).slice(0, 16).replace("T", " ")
+                      : "—"}
                   </td>
                   <td className="px-3 py-2">{o.total_amount != null ? `${o.total_amount} ر.س` : "—"}</td>
                   <td className="px-3 py-2">{o.payment_method || "—"}</td>

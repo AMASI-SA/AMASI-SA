@@ -32,6 +32,10 @@ from integrations.qoyod.eligible_orders import (
     QOYOD_SYNC_START_DATE, _parse_iso_date, _normalize_status,
 )
 from integrations.qoyod.unsent_orders import _is_real
+from integrations.qoyod.candidate_orders import (
+    build_candidate_audit,
+    json_safe_audit,
+)
 from integrations.qoyod_manual.pending import (
     _matches_status, _salla_order_created_date, SUPPORTED_STATUSES,
 )
@@ -168,7 +172,7 @@ def _classify_eligible(  # noqa: C901 — trivial branches
     return "hidden", "missing_from_plan_b_pending", "unknown_reason"
 
 
-async def list_missing_from_plan_b(
+async def _list_missing_from_plan_b_legacy(
     db, *,
     orders_user_id: str,
     markers_user_id: Optional[str] = None,
@@ -532,3 +536,132 @@ async def list_missing_from_plan_b(
 def _re_escape(s: str) -> str:
     import re
     return re.escape(s)
+
+
+async def list_missing_from_plan_b(
+    db, *,
+    orders_user_id: str,
+    markers_user_id: Optional[str] = None,
+    days: int = 90,
+    limit: int = 1000,
+    search: Optional[str] = None,
+    include_already_sent: bool = True,
+    from_date: Any = None,
+    to_date: Any = None,
+    now: Optional[datetime] = None,
+) -> dict:
+    """Read-only diagnostic over the canonical exact-reference audit."""
+    markers_user_id = str(markers_user_id or orders_user_id)
+    days = max(1, min(int(days), 365))
+    limit = max(1, min(int(limit), 5000))
+    now_utc = now or datetime.now(timezone.utc)
+    if now_utc.tzinfo is None:
+        now_utc = now_utc.replace(tzinfo=timezone.utc)
+
+    audit = await build_candidate_audit(
+        db,
+        orders_user_id=str(orders_user_id),
+        markers_user_id=markers_user_id,
+        marker_user_ids=(markers_user_id, str(orders_user_id)),
+        from_date=from_date,
+        to_date=to_date,
+        days=days,
+        now=now_utc,
+        search=search,
+    )
+    safe = json_safe_audit(audit)
+    sent_refs = audit["sent_references"]
+    candidate_refs = audit["unsent_references"]
+    legacy_visible_refs = {
+        row["order_number"]
+        for row in audit["orders"]
+        if row.get("worker_candidate")
+        and row.get("legacy_worker_visibility_reason")
+        == "eligible_in_legacy_inbox_queue"
+    }
+    legacy_hidden_refs = candidate_refs - legacy_visible_refs
+    legacy_by_stage: dict[str, int] = {}
+    for row in audit["orders"]:
+        if row["order_number"] not in legacy_hidden_refs:
+            continue
+        reason = str(row.get("legacy_worker_visibility_reason") or "unknown")
+        legacy_by_stage[reason] = legacy_by_stage.get(reason, 0) + 1
+
+    displayed: list[dict[str, Any]] = []
+    for row in safe["orders"]:
+        reference = row["order_number"]
+        is_sent = reference in sent_refs
+        if is_sent and not include_already_sent:
+            continue
+        displayed.append({
+            **row,
+            "salla_created_date": row.get("order_date"),
+            "salla_status": row.get("current_status"),
+            "salla_status_key": row.get("current_status_key"),
+            "visible_in_plan_b": reference in candidate_refs,
+            "has_qoyod_invoice": is_sent,
+            "missing_stage": (
+                "already_in_qoyod_by_exact_reference"
+                if is_sent else "visible_in_plan_b"
+            ),
+            "reason": (
+                "already_in_qoyod_by_exact_reference"
+                if is_sent else row.get("candidate_reason")
+            ),
+        })
+        if len(displayed) >= limit:
+            break
+
+    eligible_count = len(audit["eligible_references"])
+    sent_count = len(sent_refs)
+    visible_count = len(candidate_refs)
+    return {
+        "ok": True,
+        "read_only": True,
+        "at": now_utc.isoformat(),
+        "floor_date": _FLOOR_DATE.isoformat(),
+        "from_date": audit["from_date"],
+        "to_date": audit["to_date"],
+        "days_window": days,
+        "supported_statuses": list(_PLAN_B_STATUSES),
+        "source_authority": "unified_orders",
+        "match_contract": audit["match_contract"],
+        "captured_at": audit["captured_at"],
+        "snapshot_fingerprint": audit["snapshot_fingerprint"],
+        "status_counts": audit["status_counts"],
+        "status_display_counts": audit["status_display_counts"],
+        "worker_candidate_status_counts": audit[
+            "worker_candidate_status_counts"
+        ],
+        "worker_candidate_status_display_counts": audit[
+            "worker_candidate_status_display_counts"
+        ],
+        "counts": {
+            "eligible_salla_orders": eligible_count,
+            "sent_to_qoyod": sent_count,
+            "visible_in_plan_b": visible_count,
+            "hidden_with_reason": 0,
+            "legacy_visible_in_plan_b": len(legacy_visible_refs),
+            "legacy_hidden_before_fix": len(legacy_hidden_refs),
+            "webhooks_without_unified": 0,
+            "status_out_of_scope_unified": audit[
+                "unified_exclusions"
+            ]["status_not_eligible"],
+            "returned": len(displayed),
+        },
+        "invariant_holds": eligible_count == sent_count + visible_count,
+        "by_stage": {
+            "already_in_qoyod_by_exact_reference": sent_count,
+            "visible_in_plan_b": visible_count,
+        },
+        "by_reason": {
+            "already_in_qoyod_by_exact_reference": sent_count,
+            "eligible_unified_missing_exact_qoyod_reference": visible_count,
+        },
+        "legacy_hidden_by_reason": legacy_by_stage,
+        "orders": displayed,
+        "audit_orders": safe["orders"][:limit],
+        "reference_sets": safe["reference_sets"],
+        "duplicate_qoyod_references": safe["duplicate_qoyod_references"],
+        "webhooks_without_unified": [],
+    }
