@@ -43,6 +43,7 @@ MOBILE_ROUTE_PERMISSIONS: tuple[tuple[str, frozenset[str]], ...] = (
     ("/api/fulfillment-v2/carrier-handoff", _permissions("app.page.carrier_handoff")),
     ("/api/fulfillment-v2/completed", _permissions("app.page.assembly_shipping", "app.page.carrier_handoff")),
     ("/api/orders-v2", _permissions("app.page.orders")),
+    ("/api/order-items-v2", _permissions("app.page.orders")),
     ("/api/product-costs", _permissions("app.page.products", "app.page.my_products")),
     ("/api/products-v2", _permissions("app.page.products", "app.page.my_products")),
     ("/api/service-candidates", _permissions("app.page.products", "app.page.my_products")),
