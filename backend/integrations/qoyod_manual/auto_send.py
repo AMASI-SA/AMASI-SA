@@ -46,7 +46,7 @@ from integrations.qoyod.candidate_orders import (
 from integrations.qoyod.eligible_orders import QOYOD_SYNC_START_DATE
 from integrations.qoyod_manual.canary_batch import SAFE_ALREADY_SENT_CODES
 from integrations.qoyod_manual.send import ManualSendRefused, manual_send_one
-from salla_integration.sync import resync_single_order
+from salla_integration.sync import refresh_single_order_status
 
 logger = logging.getLogger(__name__)
 
@@ -475,7 +475,7 @@ async def _refresh_and_verify_salla_status(
     worker scans.  A failed authoritative refresh is a real preflight error
     and the caller quarantines only that order before any Qoyod mutation.
     """
-    refresh = await resync_single_order(
+    refresh = await refresh_single_order_status(
         db,
         orders_user_id,
         order_number,
@@ -510,9 +510,14 @@ async def _open_quarantined_order_numbers(
     result: set[str] = set()
     cursor = db.qoyod_manual_auto_quarantines.find(
         query,
-        {"_id": 0, "order_number": 1},
+        {"_id": 0, "order_number": 1, "code": 1},
     )
     async for row in cursor:
+        # A failed Salla status refresh is transient. It must never become a
+        # permanent backlog exclusion; the next cycle rechecks it before any
+        # Qoyod write.
+        if row.get("code") == "salla_status_refresh_failed":
+            continue
         result.add(str(row.get("order_number") or ""))
     return result
 
@@ -771,6 +776,15 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
                         "code": exc.code,
                     })
                     continue
+                if exc.code == "salla_status_refresh_failed":
+                    results.append({
+                        "order_number": order_number,
+                        "outcome": "retry_later",
+                        "code": exc.code,
+                        "message": exc.message,
+                        "detail": exc.extra,
+                    })
+                    continue
                 await _quarantine_order(
                     db,
                     order_number=order_number,
@@ -816,6 +830,9 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
         manual_review_count = sum(
             r["outcome"] == "manual_review" for r in results
         )
+        retry_later_count = sum(
+            r["outcome"] == "retry_later" for r in results
+        )
         result = {
             "ok": True,
             "status": "succeeded",
@@ -823,7 +840,7 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
             "sent_count": sent_count,
             "already_sent_count": already_count,
             "manual_review_count": manual_review_count,
-            "retry_later_count": 0,
+            "retry_later_count": retry_later_count,
             "candidate_count": candidate_counts[
                 "authoritative_backlog_count"
             ],
