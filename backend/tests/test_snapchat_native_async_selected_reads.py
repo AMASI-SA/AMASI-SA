@@ -285,10 +285,18 @@ async def test_async_job_returns_queued_then_records_child_result(
     assert accepted["selected_accounts"] == 2
     assert accepted["accounts_attempted"] == 0
 
-    async def fake_execute(db_value, user_id, payload, *, now):
+    async def fake_execute(
+        db_value,
+        user_id,
+        payload,
+        *,
+        now,
+        parent_run_id,
+    ):
         assert db_value is db
         assert user_id == "owner-1"
         assert payload.days == 2
+        assert parent_run_id == accepted["run_id"]
         return {
             "run_id": "child-run-1",
             "provider": "snapchat_ads",
@@ -327,6 +335,12 @@ async def test_async_job_returns_queued_then_records_child_result(
     assert final["rows_saved"] == 15604
     assert final["child_run_id"] == "child-run-1"
     assert final["error"] is None
+    parent = next(
+        row
+        for row in db.rows["mezan_integration_sync_runs_v2"]
+        if row["run_id"] == accepted["run_id"]
+    )
+    assert parent["worker_heartbeat_at"] == "2026-07-30T18:00:00+00:00"
 
 
 @pytest.mark.asyncio
@@ -340,6 +354,8 @@ async def test_async_job_rejects_a_second_active_sync(monkeypatch):
             "run_type": async_routes.ASYNC_SYNC_RUN_TYPE,
             "status": "running",
             "started_at": "2026-07-30T17:00:00+00:00",
+            "worker_started_at": "2026-07-30T17:00:00+00:00",
+            "worker_heartbeat_at": "2026-07-30T17:59:00+00:00",
             "lock_expires_at": "2026-07-30T22:00:00+00:00",
         }
     )
@@ -362,6 +378,65 @@ async def test_async_job_rejects_a_second_active_sync(monkeypatch):
     assert exc.value.code == "snapchat_analytics_sync_in_progress"
     assert exc.value.status_code == 409
     assert exc.value.run_id == "already-running"
+
+
+@pytest.mark.asyncio
+async def test_manual_job_recovers_async_worker_with_stale_heartbeat(
+    monkeypatch,
+):
+    db = _db()
+    db.rows["mezan_integration_sync_runs_v2"].extend(
+        [
+            {
+                "run_id": "orphaned-parent",
+                "user_id": "owner-1",
+                "provider": "snapchat_ads",
+                "run_type": async_routes.ASYNC_SYNC_RUN_TYPE,
+                "status": "running",
+                "started_at": "2026-07-30T17:00:00+00:00",
+                "worker_started_at": "2026-07-30T17:00:00+00:00",
+                "worker_heartbeat_at": "2026-07-30T17:10:00+00:00",
+                "lock_expires_at": "2026-07-30T22:00:00+00:00",
+            },
+            {
+                "run_id": "orphaned-child",
+                "user_id": "owner-1",
+                "provider": "snapchat_ads",
+                "run_type": async_routes.SCHEDULER_SYNC_RUN_TYPE,
+                "status": "running",
+                "started_at": "2026-07-30T17:00:00+00:00",
+                "worker_started_at": "2026-07-30T17:00:00+00:00",
+                "worker_heartbeat_at": "2026-07-30T17:10:00+00:00",
+                "lock_expires_at": "2026-07-30T22:00:00+00:00",
+            },
+        ]
+    )
+    monkeypatch.setattr(
+        async_routes,
+        "snapchat_native_sync_enabled",
+        lambda: True,
+    )
+
+    accepted = await async_routes.create_snapchat_native_sync_job(
+        db,
+        "owner-1",
+        SnapchatNativeSyncInput(days=1),
+        now=lambda: datetime(2026, 7, 30, 18, 0, tzinfo=timezone.utc),
+    )
+
+    assert accepted["status"] == "queued"
+    stale_rows = [
+        row
+        for row in db.rows["mezan_integration_sync_runs_v2"]
+        if row["run_id"] in {"orphaned-parent", "orphaned-child"}
+    ]
+    assert {row["status"] for row in stale_rows} == {"failed"}
+    assert {
+        row["error"]["code"] for row in stale_rows
+    } == {
+        "snapchat_async_sync_stale",
+        "snapchat_scheduler_sync_stale",
+    }
 
 
 @pytest.mark.asyncio

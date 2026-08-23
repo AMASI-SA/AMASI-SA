@@ -381,11 +381,15 @@ async def test_executor_audits_native_provenance_and_safe_contract(monkeypatch):
         db, "owner-1",
         native.SnapchatNativeSyncInput(from_date="2026-07-29", to_date="2026-07-29"),
         now=lambda: NOW,
+        parent_run_id="parent-run-1",
     )
     SnapchatAnalyticsSyncResponse.model_validate(result)
     assert result["status"] == "complete"
     assert result["source_only"] is True
     run = db.rows["mezan_integration_sync_runs_v2"][0]
+    assert run["parent_run_id"] == "parent-run-1"
+    assert run["worker_started_at"] == NOW.isoformat()
+    assert run["worker_heartbeat_at"] == NOW.isoformat()
     assert run["summary"]["legacy_collection_read"] is False
     assert run["summary"]["legacy_collection_write"] is False
     assert run["summary"]["campaign_write_reached"] is False

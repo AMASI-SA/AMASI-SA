@@ -12,6 +12,7 @@ from .snapchat_native_data_common import (
     BUSINESS_TIMEZONE,
     SNAPCHAT_NATIVE_SYNC_LOCK_TTL,
     SNAPCHAT_PROVIDER_ID,
+    SNAPCHAT_SYNC_HEARTBEAT_STALE_AFTER,
     SnapchatNativeSyncError,
     SnapchatNativeSyncInput,
     _collection,
@@ -19,6 +20,8 @@ from .snapchat_native_data_common import (
     _parse_datetime,
     _timezone,
     _utcnow,
+    _start_sync_run_heartbeat,
+    _stop_sync_run_heartbeat,
     enumerate_native_sync_dates,
     snapchat_native_sync_enabled,
 )
@@ -120,6 +123,9 @@ async def _recover_stale_jobs(
             "started_at": 1,
             "created_at": 1,
             "lock_expires_at": 1,
+            "status": 1,
+            "worker_started_at": 1,
+            "worker_heartbeat_at": 1,
         },
     )
     rows = (
@@ -129,24 +135,49 @@ async def _recover_stale_jobs(
     )
     for row in rows:
         run_type = str(row.get("run_type") or "")
+        heartbeat = _parse_datetime(row.get("worker_heartbeat_at"))
+        heartbeat_live = bool(
+            heartbeat
+            and now_value - SNAPCHAT_SYNC_HEARTBEAT_STALE_AFTER
+            <= heartbeat
+            <= now_value + RUN_CLOCK_SKEW_TOLERANCE
+        )
         if run_type == ASYNC_SYNC_RUN_TYPE:
             expiry = _parse_datetime(row.get("lock_expires_at"))
-            live = bool(
-                expiry
-                and now_value < expiry <= now_value + SNAPCHAT_NATIVE_SYNC_LOCK_TTL
-            )
+            if heartbeat is not None:
+                live = heartbeat_live
+            elif row.get("status") == "queued":
+                live = bool(
+                    expiry
+                    and now_value < expiry
+                    <= now_value + SNAPCHAT_NATIVE_SYNC_LOCK_TTL
+                )
+            else:
+                marker = _parse_datetime(
+                    row.get("worker_started_at")
+                    or row.get("started_at")
+                    or row.get("created_at")
+                )
+                live = bool(
+                    marker
+                    and now_value - SCHEDULER_ACTIVE_RUN_TTL
+                    <= marker
+                    <= now_value + RUN_CLOCK_SKEW_TOLERANCE
+                )
             error_code = "snapchat_async_sync_stale"
             message = (
-                "The asynchronous Snapchat sync did not finish "
-                "before its safety deadline."
+                "The asynchronous Snapchat sync worker stopped "
+                "heartbeating before it finished."
             )
         else:
             marker = _parse_datetime(
                 row.get("started_at") or row.get("created_at")
             )
-            live = bool(
-                marker
-                and now_value - SCHEDULER_ACTIVE_RUN_TTL <= marker
+            live = heartbeat_live or bool(
+                heartbeat is None
+                and marker
+                and now_value - SCHEDULER_ACTIVE_RUN_TTL
+                <= marker
                 <= now_value + RUN_CLOCK_SKEW_TOLERANCE
             )
             error_code = "snapchat_scheduler_sync_stale"
@@ -271,6 +302,7 @@ async def execute_snapchat_native_sync_job(
 ) -> None:
     """Run the existing bounded sync after the HTTP response has returned."""
     collection = _collection(db, "mezan_integration_sync_runs_v2")
+    worker_started_at = now().astimezone(timezone.utc)
     await collection.update_one(
         {
             "user_id": user_id,
@@ -281,15 +313,32 @@ async def execute_snapchat_native_sync_job(
         {
             "$set": {
                 "status": "running",
-                "worker_started_at": _iso(now()),
+                "worker_started_at": _iso(worker_started_at),
+                "worker_heartbeat_at": _iso(worker_started_at),
             }
         },
     )
     payload = SnapchatNativeSyncInput(**payload_data)
+    heartbeat = _start_sync_run_heartbeat(
+        collection,
+        {
+            "user_id": user_id,
+            "run_id": run_id,
+            "run_type": ASYNC_SYNC_RUN_TYPE,
+        },
+        now=now,
+    )
     try:
-        result = await execute_snapchat_native_sync(
-            db, user_id, payload, now=now
-        )
+        try:
+            result = await execute_snapchat_native_sync(
+                db,
+                user_id,
+                payload,
+                now=now,
+                parent_run_id=run_id,
+            )
+        finally:
+            await _stop_sync_run_heartbeat(heartbeat)
     except SnapchatNativeSyncError as exc:
         failure = exc.result or {}
         await collection.update_one(
