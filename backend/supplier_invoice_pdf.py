@@ -6,6 +6,8 @@ import io
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 from reportlab.lib.colors import HexColor
 from reportlab.lib.pagesizes import A4
@@ -84,117 +86,219 @@ def _amasi_logo() -> ImageReader | None:
         return None
 
 
+def _product_image(value: Any) -> ImageReader | None:
+    url = _text(value)
+    try:
+        parsed = urlparse(url)
+        host = (parsed.hostname or "").casefold()
+        trusted = (
+            host in {"salla.sa", "salla.network"}
+            or host.endswith(".salla.sa")
+            or host.endswith(".salla.network")
+        )
+        if parsed.scheme != "https" or not trusted:
+            return None
+        request = Request(url, headers={"User-Agent": "AMASI-Supplier-Invoice/1.0"})
+        with urlopen(request, timeout=4) as response:
+            content_type = _text(response.headers.get("Content-Type")).casefold()
+            if not content_type.startswith("image/"):
+                return None
+            raw = response.read(5 * 1024 * 1024 + 1)
+        if not raw or len(raw) > 5 * 1024 * 1024:
+            return None
+        return ImageReader(io.BytesIO(raw))
+    except Exception:
+        return None
+
+
 def generate_supplier_invoice_pdf(invoice: dict[str, Any]) -> bytes:
-    """Render one durable supplier invoice with selected services only."""
+    """Render a compact RTL AMASI supplier invoice table."""
     regular_font, bold_font = _register_font()
     buffer = io.BytesIO()
     page = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
     right = width - 15 * mm
     left = 15 * mm
+    content_width = right - left
+    supplier = dict(invoice.get("supplier_snapshot") or {})
+    logo = _amasi_logo()
     y = height - 18 * mm
 
-    def new_page() -> None:
+    burgundy = HexColor("#74102F")
+    gold = HexColor("#CDA14A")
+    ink = HexColor("#0F172A")
+    muted = HexColor("#64748B")
+    grid = HexColor("#CBD5E1")
+    soft = HexColor("#F8FAFC")
+    cream = HexColor("#FFF8E7")
+
+    # RTL order from the right edge: image, product, quantity, unit price,
+    # services, line total. Widths add up to the full printable width (180 mm).
+    column_widths = [18, 42, 18, 32, 42, 28]
+    column_labels = ["صورة", "اسم المنتج", "الكمية", "سعر القطعة", "الخدمات", "الإجمالي"]
+    boundaries = [right]
+    for column_width in column_widths:
+        boundaries.append(boundaries[-1] - column_width * mm)
+
+    def product_name(value: Any) -> str:
+        words = [word for word in _text(value).split() if word]
+        return " ".join(words[:2]) or "منتج"
+
+    def draw_brand_header(*, compact: bool = False) -> None:
         nonlocal y
-        page.showPage()
-        y = height - 18 * mm
+        if compact:
+            page.setFillColor(burgundy)
+            page.roundRect(left, height - 27 * mm, content_width, 15 * mm, 3 * mm, fill=1, stroke=0)
+            page.setFillColor(HexColor("#FFFFFF"))
+            page.setFont(bold_font, 12)
+            page.drawRightString(right - 4 * mm, height - 21 * mm, _ar("فاتورة مورد — أماسي"))
+            page.setFont(regular_font, 8)
+            page.drawString(left + 4 * mm, height - 21 * mm, _text(invoice.get("invoice_number")))
+            y = height - 34 * mm
+            return
 
-    def ensure_space(required_mm: float) -> None:
-        if y < required_mm * mm:
-            new_page()
-
-    supplier = dict(invoice.get("supplier_snapshot") or {})
-    page.setFillColor(HexColor("#74102F"))
-    page.roundRect(left, height - 42 * mm, width - 30 * mm, 28 * mm, 4 * mm, fill=1, stroke=0)
-    page.setFillColor(HexColor("#FFFFFF"))
-    page.setFont(bold_font, 18)
-    page.drawRightString(right - 5 * mm, height - 25 * mm, _ar("فاتورة مورد — أماسي"))
-    logo = _amasi_logo()
-    if logo is not None:
-        page.drawImage(
-            logo,
-            left + 5 * mm,
-            height - 37 * mm,
-            width=18 * mm,
-            height=18 * mm,
-            preserveAspectRatio=True,
-            anchor="c",
-            mask="auto",
-        )
-    page.setFont(regular_font, 9)
-    page.drawString(left + 26 * mm, height - 25 * mm, _text(invoice.get("invoice_number")))
-    y = height - 52 * mm
-
-    header_rows = [
-        ("المورد", _text(supplier.get("company_name")) or "—"),
-        ("رقم الفاتورة", _text(invoice.get("invoice_number")) or "—"),
-        ("التاريخ", _date(invoice.get("approved_at") or invoice.get("created_at"))),
-        ("أصدرها", _text(invoice.get("supplier_approved_by_name")) or "—"),
-    ]
-    for label, value in header_rows:
-        page.setFillColor(HexColor("#64748B"))
+        page.setFillColor(burgundy)
+        page.roundRect(left, height - 42 * mm, content_width, 28 * mm, 4 * mm, fill=1, stroke=0)
+        page.setFillColor(HexColor("#FFFFFF"))
+        page.setFont(bold_font, 18)
+        page.drawRightString(right - 5 * mm, height - 25 * mm, _ar("فاتورة مورد — أماسي"))
+        if logo is not None:
+            page.drawImage(
+                logo,
+                left + 5 * mm,
+                height - 37 * mm,
+                width=18 * mm,
+                height=18 * mm,
+                preserveAspectRatio=True,
+                anchor="c",
+                mask="auto",
+            )
         page.setFont(regular_font, 9)
-        page.drawRightString(right, y, _ar(label))
-        page.setFillColor(HexColor("#0F172A"))
-        page.setFont(bold_font, 11)
-        page.drawRightString(right - 36 * mm, y, _ar(value))
-        y -= 8 * mm
+        page.drawString(left + 26 * mm, height - 25 * mm, _text(invoice.get("invoice_number")))
+        y = height - 52 * mm
 
-    y -= 3 * mm
+        header_rows = [
+            ("المورد", _text(supplier.get("company_name")) or "—"),
+            ("رقم الفاتورة", _text(invoice.get("invoice_number")) or "—"),
+            ("التاريخ", _date(invoice.get("approved_at") or invoice.get("created_at"))),
+            ("أصدرها", _text(invoice.get("supplier_approved_by_name")) or "—"),
+        ]
+        for label, value in header_rows:
+            page.setFillColor(muted)
+            page.setFont(regular_font, 9)
+            page.drawRightString(right, y, _ar(label))
+            page.setFillColor(ink)
+            page.setFont(bold_font, 11)
+            page.drawRightString(right - 36 * mm, y, _ar(value))
+            y -= 8 * mm
+        y -= 5 * mm
+
+    def draw_table_header() -> None:
+        nonlocal y
+        header_height = 10 * mm
+        page.setFillColor(soft)
+        page.setStrokeColor(grid)
+        page.setLineWidth(0.5)
+        page.rect(left, y - header_height, content_width, header_height, fill=1, stroke=1)
+        for boundary in boundaries[1:-1]:
+            page.line(boundary, y, boundary, y - header_height)
+        page.setFillColor(burgundy)
+        page.setFont(bold_font, 8.5)
+        for index, label in enumerate(column_labels):
+            center_x = (boundaries[index] + boundaries[index + 1]) / 2
+            page.drawCentredString(center_x, y - 6.5 * mm, _ar(label))
+        y -= header_height
+
+    def new_table_page() -> None:
+        page.showPage()
+        draw_brand_header(compact=True)
+        draw_table_header()
+
+    draw_brand_header()
+    draw_table_header()
+
     for line in invoice.get("lines") or []:
-        ensure_space(62)
-        line_top = y
-        page.setFillColor(HexColor("#F8FAFC"))
-        page.setStrokeColor(HexColor("#E2E8F0"))
-        page.roundRect(left, y - 13 * mm, width - 30 * mm, 16 * mm, 3 * mm, fill=1, stroke=1)
-        page.setFillColor(HexColor("#0F172A"))
-        page.setFont(bold_font, 11)
-        page.drawRightString(right - 4 * mm, y - 4 * mm, _ar(_text(line.get("product_name")) or "منتج"))
-        page.setFont(regular_font, 8)
-        facts = (
-            f"الكمية: {int(line.get('quantity') or 0)}  |  "
-            f"سعر المنتج: {_money(line.get('product_unit_price_halalas'))}  |  "
-            f"إجمالي المنتج: {_money(line.get('product_total_halalas'))}"
-        )
-        page.drawRightString(right - 4 * mm, y - 10 * mm, _ar(facts))
-        y -= 19 * mm
-
         services = list(line.get("services") or [])
-        if services:
-            page.setFillColor(HexColor("#CDA14A"))
-            page.setFont(bold_font, 9)
-            page.drawRightString(right - 4 * mm, y, _ar("الخدمات المختارة"))
-            y -= 6 * mm
+        row_height_mm = max(18.0, 8.0 + (7.0 * len(services)))
+        row_height = row_height_mm * mm
+        if y - row_height < 30 * mm:
+            new_table_page()
+
+        row_top = y
+        row_bottom = y - row_height
+        page.setFillColor(HexColor("#FFFFFF"))
+        page.setStrokeColor(grid)
+        page.setLineWidth(0.45)
+        page.rect(left, row_bottom, content_width, row_height, fill=1, stroke=1)
+        for boundary in boundaries[1:-1]:
+            page.line(boundary, row_top, boundary, row_bottom)
+
+        center_y = (row_top + row_bottom) / 2
+        image = _product_image(line.get("selected_image_url"))
+        if image is not None:
+            image_center_x = (boundaries[0] + boundaries[1]) / 2
+            page.drawImage(
+                image,
+                image_center_x - 4 * mm,
+                center_y - 4 * mm,
+                width=8 * mm,
+                height=8 * mm,
+                preserveAspectRatio=True,
+                anchor="c",
+                mask="auto",
+            )
+
+        page.setFillColor(ink)
+        page.setFont(bold_font, 9)
+        product_center_x = (boundaries[1] + boundaries[2]) / 2
+        page.drawCentredString(product_center_x, center_y - 1.5 * mm, _ar(product_name(line.get("product_name"))))
+
+        page.setFont(bold_font, 9)
+        quantity_center_x = (boundaries[2] + boundaries[3]) / 2
+        page.drawCentredString(quantity_center_x, center_y - 1.5 * mm, str(int(line.get("quantity") or 0)))
+
+        page.setFont(regular_font, 8.5)
+        unit_center_x = (boundaries[3] + boundaries[4]) / 2
+        page.drawCentredString(unit_center_x, center_y - 1.5 * mm, _ar(_money(line.get("product_unit_price_halalas"))))
+
+        services_center_x = (boundaries[4] + boundaries[5]) / 2
+        if not services:
+            page.setFont(regular_font, 9)
+            page.drawCentredString(services_center_x, center_y - 1.5 * mm, "—")
+        else:
+            service_line_height = 6.5 * mm
+            service_y = center_y + ((len(services) - 1) * service_line_height / 2)
             for service in services:
-                ensure_space(28)
-                page.setFillColor(HexColor("#334155"))
-                page.setFont(regular_font, 8.5)
-                text = (
-                    f"• {_text(service.get('service_name')) or 'خدمة'} — "
-                    f"{service.get('total_quantity') or 0:g} × "
-                    f"{_money(service.get('unit_price_halalas'))} = "
-                    f"{_money(service.get('total_halalas'))}"
-                )
-                page.drawRightString(right - 8 * mm, y, _ar(text))
-                y -= 6 * mm
+                service_name = product_name(service.get("service_name") or "خدمة")
+                service_amount = _money(service.get("total_halalas"))
+                page.setFont(bold_font, 7.5)
+                page.drawCentredString(services_center_x, service_y, _ar(service_name))
+                page.setFont(regular_font, 7)
+                page.drawCentredString(services_center_x, service_y - 3.5 * mm, _ar(service_amount))
+                service_y -= service_line_height
 
-        page.setFillColor(HexColor("#74102F"))
-        page.setFont(bold_font, 10)
-        page.drawRightString(right - 4 * mm, y, _ar(f"إجمالي السطر: {_money(line.get('total_halalas'))}"))
-        y -= 11 * mm
-        if line_top == y:
-            y -= 5 * mm
+        total_center_x = (boundaries[5] + boundaries[6]) / 2
+        page.setFillColor(burgundy)
+        page.setFont(bold_font, 8.5)
+        page.drawCentredString(total_center_x, center_y - 1.5 * mm, _ar(_money(line.get("total_halalas"))))
+        y = row_bottom
 
-    ensure_space(32)
-    page.setFillColor(HexColor("#FFF8E7"))
-    page.setStrokeColor(HexColor("#CDA14A"))
-    page.roundRect(left, y - 17 * mm, width - 30 * mm, 20 * mm, 4 * mm, fill=1, stroke=1)
-    page.setFillColor(HexColor("#74102F"))
+    if y - 24 * mm < 18 * mm:
+        page.showPage()
+        draw_brand_header(compact=True)
+
+    y -= 8 * mm
+    page.setFillColor(cream)
+    page.setStrokeColor(gold)
+    page.setLineWidth(0.8)
+    page.roundRect(left, y - 17 * mm, content_width, 20 * mm, 4 * mm, fill=1, stroke=1)
+    page.setFillColor(burgundy)
     page.setFont(bold_font, 15)
-    page.drawCentredString(width / 2, y - 9 * mm, _ar(f"الإجمالي النهائي: {_money(invoice.get('total_halalas'))}"))
-    page.setFillColor(HexColor("#64748B"))
-    page.setFont(regular_font, 7.5)
-    page.drawCentredString(width / 2, 10 * mm, _ar("فاتورة داخلية صادرة من أماسي — لا يوجد إرسال تلقائي إلى سلة أو قيود"))
+    page.drawCentredString(
+        width / 2,
+        y - 9 * mm,
+        _ar(f"الإجمالي النهائي: {_money(invoice.get('total_halalas'))}"),
+    )
 
     page.save()
     return buffer.getvalue()

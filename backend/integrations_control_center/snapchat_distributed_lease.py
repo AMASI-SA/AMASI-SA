@@ -132,8 +132,6 @@ async def acquire_snapchat_lease(
     if existing is None:
         upsert = True
         set_on_insert = {
-            "user_id": user_id,
-            "provider": SNAPCHAT_PROVIDER_ID,
             "created_at": _iso(current),
         }
         filter_ors.append(
