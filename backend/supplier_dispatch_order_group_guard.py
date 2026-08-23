@@ -1,18 +1,17 @@
 """Keep same-order pieces of the same product together in supplier dispatches.
 
-The native app allows an employee to select a partial quantity of a product for
-one supplier.  A quantity boundary must never split a customer's multiple
-pieces of that same product across supplier files.  This module provides a
-read-only preview used by the app and installs a server-side planner guard so
-bypassing the preview still cannot silently split an order inside a source
-preparation file.
+A quantity boundary must never split a customer's multiple pieces of the same
+product across supplier files.  The native app gets a read-only preview before
+sending; the server also expands the canonical dispatch request so a stale or
+bypassing client cannot silently split an order.
 """
 from __future__ import annotations
 
+import json
 from collections import defaultdict
 from typing import Any, Callable
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 import preparation_supplier_dispatch as _dispatch
@@ -46,7 +45,7 @@ def _order_identity(piece: dict[str, Any]) -> str:
     order_number = _text(piece.get("order_number"))
     if order_number:
         return order_number
-    # Missing order identity must never group unrelated pieces together.
+    # Never combine unrelated legacy pieces when an order number is missing.
     return f"piece:{_text(piece.get('piece_id') or piece.get('id'))}"
 
 
@@ -58,12 +57,7 @@ def expand_same_order_product_closure(
     candidates: list[dict[str, Any]],
     planned: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Add every available same-order/same-product peer of selected pieces.
-
-    The closure is limited to the candidate set supplied by the caller, which is
-    already tenant/employee/status/file scoped.  Already dispatched or stopped
-    pieces therefore cannot be pulled back into a new supplier file.
-    """
+    """Add every eligible same-order/same-product peer of selected pieces."""
     selected_keys = {
         (_order_identity(piece), _product_identity(piece))
         for piece in planned
@@ -110,12 +104,103 @@ def _exact_file_selections(
     ]
 
 
+async def _eligible_employee_candidates(
+    db: Any,
+    *,
+    user_id: str,
+    employee_id: str,
+) -> list[dict[str, Any]]:
+    rows = await db[_dispatch.PIECES].find(
+        {
+            "user_id": user_id,
+            "responsible_employee_id": employee_id,
+            "experiment_archived_at": None,
+            "status": {"$in": [
+                _dispatch.PIECE_STATUS_ASSIGNED,
+                _dispatch.PIECE_STATUS_IN_PROGRESS,
+            ]},
+            "$or": [
+                {"supplier_dispatch_status": {"$exists": False}},
+                {"supplier_dispatch_status": None},
+                {"supplier_dispatch_status": ""},
+                {"supplier_dispatch_status": _dispatch.DISPATCH_STATUS_PARTIAL},
+            ],
+        },
+        {"_id": 0},
+    ).to_list(50000)
+    return [
+        piece for piece in rows
+        if _dispatch.piece_is_available_for_supplier_dispatch(piece)
+    ]
+
+
 _ORIGINAL_PLAN = _dispatch.plan_piece_selections
+_ORIGINAL_ROUTER_FACTORY = _dispatch.make_preparation_supplier_dispatch_router
 _GUARD_INSTALLED = False
 
 
+def _requested_plan(
+    candidates: list[dict[str, Any]],
+    files: list[_dispatch.SupplierDispatchFileSelection],
+) -> list[dict[str, Any]]:
+    by_file: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for piece in candidates:
+        by_file[_text(piece.get("file_number"))].append(piece)
+    planned: list[dict[str, Any]] = []
+    for file_request in files:
+        file_number = _text(file_request.file_number)
+        planned.extend(_ORIGINAL_PLAN(
+            by_file[file_number],
+            [row.model_dump() for row in file_request.selections],
+        ))
+    return planned
+
+
+def _preview_result(
+    planned: list[dict[str, Any]],
+    expanded: list[dict[str, Any]],
+) -> dict[str, Any]:
+    requested_count = len(planned)
+    suggested_count = len(expanded)
+    return {
+        "ok": True,
+        "expansion_required": suggested_count > requested_count,
+        "requested_piece_count": requested_count,
+        "suggested_piece_count": suggested_count,
+        "affected_order_numbers": _added_order_numbers(planned, expanded),
+        "files": _exact_file_selections(expanded),
+        "message": (
+            f"للحفاظ على طلب العميل كاملًا، هذه الدفعة ستصبح {suggested_count} قطعة."
+            if suggested_count > requested_count
+            else "الكمية المحددة لا تقسّم قطع أي طلب."
+        ),
+        "read_only": True,
+        "mezan_only": True,
+    }
+
+
+async def _plan_for_worker(
+    db: Any,
+    *,
+    worker: dict[str, Any],
+    files: list[_dispatch.SupplierDispatchFileSelection],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+    user_id = _dispatch._merchant_user_id(worker)
+    employee_id = _dispatch._actor_id(worker)
+    candidates = await _eligible_employee_candidates(
+        db,
+        user_id=user_id,
+        employee_id=employee_id,
+    )
+    planned = _requested_plan(candidates, files)
+    expanded = expand_same_order_product_closure(candidates, planned)
+    if len(expanded) > _dispatch.MAX_SELECTED_PIECES:
+        raise ValueError("supplier_dispatch_order_group_expansion_limit_exceeded")
+    return planned, expanded, _preview_result(planned, expanded)
+
+
 def install_supplier_dispatch_order_group_guard() -> None:
-    """Make the canonical dispatch planner close selections over order groups."""
+    """Install both planner and route-level fail-safe expansion exactly once."""
     global _GUARD_INSTALLED
     if _GUARD_INSTALLED:
         return
@@ -130,7 +215,60 @@ def install_supplier_dispatch_order_group_guard() -> None:
             raise ValueError("supplier_dispatch_order_group_expansion_limit_exceeded")
         return expanded
 
+    def guarded_router_factory(db: Any, current_user: Callable[..., Any]) -> APIRouter:
+        router = _ORIGINAL_ROUTER_FACTORY(db, current_user)
+        for route in router.routes:
+            if getattr(route, "path", "") != "/supplier-dispatch-v1/dispatches":
+                continue
+            original_call = route.dependant.call
+
+            async def guarded_create_dispatch(
+                payload: _dispatch.CreateSupplierDispatchRequest,
+                user: dict,
+                _original_call=original_call,
+            ):
+                user_id = _dispatch._merchant_user_id(user)
+                existing = await db[_dispatch.DISPATCHES].find_one(
+                    {"user_id": user_id, "client_request_id": payload.client_request_id},
+                    {"_id": 1},
+                )
+                if existing:
+                    return await _original_call(payload=payload, user=user)
+                worker = await _dispatch._require_preparation_worker(
+                    db,
+                    user,
+                    permission="preparation.assigned.work",
+                )
+                try:
+                    _, expanded, _ = await _plan_for_worker(
+                        db,
+                        worker=worker,
+                        files=payload.file_requests(),
+                    )
+                except ValueError as exc:
+                    raise HTTPException(
+                        status_code=409,
+                        detail={"code": str(exc)},
+                    ) from exc
+                exact_files = [
+                    _dispatch.SupplierDispatchFileSelection(**row)
+                    for row in _exact_file_selections(expanded)
+                ]
+                expanded_payload = payload.model_copy(update={
+                    "file_number": None,
+                    "selections": None,
+                    "files": exact_files,
+                })
+                return await _original_call(payload=expanded_payload, user=user)
+
+            route.endpoint = guarded_create_dispatch
+            route.dependant.call = guarded_create_dispatch
+            break
+
+        return router
+
     _dispatch.plan_piece_selections = guarded_plan
+    _dispatch.make_preparation_supplier_dispatch_router = guarded_router_factory
     _GUARD_INSTALLED = True
 
 
@@ -143,55 +281,22 @@ def make_supplier_dispatch_order_group_preview_router(
         tags=["Preparation Supplier Dispatch"],
     )
 
-    @router.post("/order-group-preview")
-    async def order_group_preview(
+    async def build_preview(
         payload: SupplierDispatchOrderGroupPreviewRequest,
-        user: dict = Depends(current_user),
+        user: dict,
     ) -> dict[str, Any]:
         worker = await _dispatch._require_preparation_worker(
             db,
             user,
             permission="preparation.assigned.work",
         )
-        user_id = _dispatch._merchant_user_id(worker)
-        employee_id = _dispatch._actor_id(worker)
-        file_numbers = [_text(row.file_number) for row in payload.files]
-
-        candidates = await db[_dispatch.PIECES].find(
-            {
-                "user_id": user_id,
-                "file_number": {"$in": file_numbers},
-                "responsible_employee_id": employee_id,
-                "experiment_archived_at": None,
-                "status": {"$in": [
-                    _dispatch.PIECE_STATUS_ASSIGNED,
-                    _dispatch.PIECE_STATUS_IN_PROGRESS,
-                ]},
-                "$or": [
-                    {"supplier_dispatch_status": {"$exists": False}},
-                    {"supplier_dispatch_status": None},
-                    {"supplier_dispatch_status": ""},
-                    {"supplier_dispatch_status": _dispatch.DISPATCH_STATUS_PARTIAL},
-                ],
-            },
-            {"_id": 0},
-        ).to_list(50000)
-        candidates = [
-            piece for piece in candidates
-            if _dispatch.piece_is_available_for_supplier_dispatch(piece)
-        ]
-        by_file: dict[str, list[dict[str, Any]]] = defaultdict(list)
-        for piece in candidates:
-            by_file[_text(piece.get("file_number"))].append(piece)
-
-        planned: list[dict[str, Any]] = []
         try:
-            for file_request in payload.files:
-                file_number = _text(file_request.file_number)
-                planned.extend(_ORIGINAL_PLAN(
-                    by_file[file_number],
-                    [row.model_dump() for row in file_request.selections],
-                ))
+            _, _, result = await _plan_for_worker(
+                db,
+                worker=worker,
+                files=payload.files,
+            )
+            return result
         except ValueError as exc:
             raise HTTPException(
                 status_code=409,
@@ -201,30 +306,27 @@ def make_supplier_dispatch_order_group_preview_router(
                 },
             ) from exc
 
-        expanded = expand_same_order_product_closure(candidates, planned)
-        if len(expanded) > _dispatch.MAX_SELECTED_PIECES:
+    @router.post("/order-group-preview")
+    async def order_group_preview_post(
+        payload: SupplierDispatchOrderGroupPreviewRequest,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        return await build_preview(payload, user)
+
+    @router.get("/order-group-preview")
+    async def order_group_preview_get(
+        payload_json: str = Query(..., min_length=2, max_length=100000),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        try:
+            raw = json.loads(payload_json)
+            payload = SupplierDispatchOrderGroupPreviewRequest.model_validate(raw)
+        except Exception as exc:
             raise HTTPException(
-                status_code=409,
-                detail={"code": "supplier_dispatch_order_group_expansion_limit_exceeded"},
-            )
-        requested_count = len(planned)
-        suggested_count = len(expanded)
-        affected_orders = _added_order_numbers(planned, expanded)
-        return {
-            "ok": True,
-            "expansion_required": suggested_count > requested_count,
-            "requested_piece_count": requested_count,
-            "suggested_piece_count": suggested_count,
-            "affected_order_numbers": affected_orders,
-            "files": _exact_file_selections(expanded),
-            "message": (
-                f"للحفاظ على طلب العميل كاملًا، هذه الدفعة ستصبح {suggested_count} قطعة."
-                if suggested_count > requested_count
-                else "الكمية المحددة لا تقسّم قطع أي طلب."
-            ),
-            "read_only": True,
-            "mezan_only": True,
-        }
+                status_code=422,
+                detail={"code": "supplier_dispatch_order_group_preview_invalid"},
+            ) from exc
+        return await build_preview(payload, user)
 
     return router
 
