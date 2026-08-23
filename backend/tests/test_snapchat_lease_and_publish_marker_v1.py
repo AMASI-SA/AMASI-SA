@@ -294,6 +294,39 @@ async def test_lease_concurrent_gather_only_one_winner():
     assert len(winners) == 1
 
 
+@pytest.mark.asyncio
+async def test_lease_reclaims_expired_bson_datetime():
+    db = FakeDB()
+    first = await acquire_snapchat_lease(db, user_id="owner-1", now=NOW)
+    assert first is not None
+    row = db[lease_module.LEASE_COLLECTION].rows[0]
+    row["lease_until"] = NOW - timedelta(seconds=1)
+
+    second = await acquire_snapchat_lease(db, user_id="owner-1", now=NOW)
+
+    assert second is not None
+    assert second.owner_token != first.owner_token
+    assert second.took_over_from == first.owner_token
+
+
+@pytest.mark.asyncio
+async def test_lease_reclaims_after_absolute_max_age():
+    db = FakeDB()
+    first = await acquire_snapchat_lease(db, user_id="owner-1", now=NOW)
+    assert first is not None
+    row = db[lease_module.LEASE_COLLECTION].rows[0]
+    row["acquired_at"] = lease_module._iso(
+        NOW - lease_module.MAX_LEASE_TTL - timedelta(seconds=1)
+    )
+    row["lease_until"] = lease_module._iso(NOW + timedelta(hours=2))
+
+    second = await acquire_snapchat_lease(db, user_id="owner-1", now=NOW)
+
+    assert second is not None
+    assert second.owner_token != first.owner_token
+    assert await release_snapchat_lease(db, first, final_status="failed", now=NOW) is False
+
+
 # --------------------------------------------------------------------
 # Reader publish-marker binding tests
 # --------------------------------------------------------------------
