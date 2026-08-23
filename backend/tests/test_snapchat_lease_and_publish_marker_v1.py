@@ -629,6 +629,69 @@ async def test_snapchat_cadence_gate_allows_when_last_run_older_than_10m():
 
 
 @pytest.mark.asyncio
+async def test_snapchat_cadence_gate_ignores_far_future_run():
+    from integrations_control_center import ads_auto_sync_scheduler as scheduler
+
+    future = NOW + scheduler.RUN_CLOCK_SKEW_TOLERANCE + timedelta(seconds=1)
+    db = FakeDB(
+        {
+            scheduler.RUNS_COLLECTION: [
+                {
+                    "user_id": "owner-1",
+                    "provider": SNAPCHAT_PROVIDER_ID,
+                    "run_type": scheduler.SNAP_RUN_TYPE,
+                    "status": "complete",
+                    "started_at": future.isoformat(),
+                    "created_at": future.isoformat(),
+                }
+            ]
+        }
+    )
+
+    ready = await scheduler._snapchat_cadence_ready(
+        db, user_id="owner-1", now=NOW
+    )
+
+    assert ready is True
+
+
+@pytest.mark.asyncio
+async def test_snapchat_cadence_gate_uses_valid_run_below_future_poison():
+    from integrations_control_center import ads_auto_sync_scheduler as scheduler
+
+    future = NOW + scheduler.RUN_CLOCK_SKEW_TOLERANCE + timedelta(seconds=1)
+    recent = NOW - timedelta(minutes=3)
+    db = FakeDB(
+        {
+            scheduler.RUNS_COLLECTION: [
+                {
+                    "user_id": "owner-1",
+                    "provider": SNAPCHAT_PROVIDER_ID,
+                    "run_type": scheduler.SNAP_RUN_TYPE,
+                    "status": "complete",
+                    "started_at": future.isoformat(),
+                    "created_at": future.isoformat(),
+                },
+                {
+                    "user_id": "owner-1",
+                    "provider": SNAPCHAT_PROVIDER_ID,
+                    "run_type": scheduler.SNAP_RUN_TYPE,
+                    "status": "failed",
+                    "started_at": recent.isoformat(),
+                    "created_at": recent.isoformat(),
+                },
+            ]
+        }
+    )
+
+    ready = await scheduler._snapchat_cadence_ready(
+        db, user_id="owner-1", now=NOW
+    )
+
+    assert ready is False
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("status", ["running", "queued"])
 async def test_snapchat_cadence_gate_ignores_inflight_runs(status):
     from integrations_control_center import ads_auto_sync_scheduler as scheduler

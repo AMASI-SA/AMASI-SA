@@ -279,6 +279,38 @@ async def test_stale_snapchat_run_is_failed_before_replacement():
     }
 
 
+@pytest.mark.asyncio
+async def test_future_snapchat_run_is_failed_before_replacement():
+    now = datetime(2026, 8, 23, 1, 30, tzinfo=timezone.utc)
+    future_started = (
+        now + scheduler.RUN_CLOCK_SKEW_TOLERANCE + timedelta(seconds=1)
+    )
+    db = _DB({
+        scheduler.RUNS_COLLECTION: [{
+            "run_id": "future-snap-run",
+            "user_id": "owner-1",
+            "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+            "run_type": scheduler.SNAP_RUN_TYPE,
+            "status": "running",
+            "started_at": future_started.isoformat(),
+            "finished_at": None,
+        }]
+    })
+
+    active = await scheduler._active_run(
+        db,
+        user_id="owner-1",
+        provider=scheduler.SNAPCHAT_PROVIDER_ID,
+        now=now,
+    )
+
+    assert active is None
+    recovered = db.rows[scheduler.RUNS_COLLECTION][0]
+    assert recovered["status"] == "failed"
+    assert recovered["finished_at"] == now.isoformat()
+    assert recovered["error"]["code"] == "scheduled_sync_stale_job_recovered"
+
+
 def test_scheduler_can_be_disabled_explicitly(monkeypatch):
     monkeypatch.setenv(scheduler.ENABLED_ENV, "false")
     assert scheduler.auto_sync_enabled() is False

@@ -108,6 +108,9 @@ DEFAULT_STARTUP_DELAY_SECONDS = 45
 HEARTBEAT_SECONDS = 15
 LEASE_TTL = timedelta(minutes=25)
 ACTIVE_JOB_TTL = timedelta(minutes=25)
+# Tolerate small replica/provider clock differences without allowing a
+# malformed future timestamp to keep a tenant's scheduler gate closed forever.
+RUN_CLOCK_SKEW_TOLERANCE = timedelta(minutes=5)
 
 SCHEDULER_COLLECTION = "mezan_ads_auto_sync_scheduler_v2"
 SCHEDULER_ID = "ads-v2-server-scheduler"
@@ -451,8 +454,13 @@ async def _active_run(
     )
     if not active:
         return None
+    current = now.astimezone(timezone.utc)
     marker = _parse_datetime(active.get("started_at") or active.get("created_at"))
-    if marker and marker >= now - ACTIVE_JOB_TTL:
+    if (
+        marker
+        and current - ACTIVE_JOB_TTL <= marker
+        and marker <= current + RUN_CLOCK_SKEW_TOLERANCE
+    ):
         return active
     await runs.update_one(
         {
@@ -1900,27 +1908,44 @@ async def _snapchat_cadence_ready(
         SNAPCHAT_MIN_INTERVAL_SECONDS_FLOOR,
         min(interval, SNAPCHAT_MIN_INTERVAL_SECONDS_CEILING),
     )
-    threshold = now.astimezone(timezone.utc) - timedelta(seconds=interval)
+    current = now.astimezone(timezone.utc)
+    threshold = current - timedelta(seconds=interval)
+    future_limit = current + RUN_CLOCK_SKEW_TOLERANCE
     runs_collection = _collection(db, RUNS_COLLECTION)
-    find_one = getattr(runs_collection, "find_one", None)
-    if not callable(find_one):
-        return True
-    latest = await find_one(
-        {
-            "user_id": user_id,
-            "provider": SNAPCHAT_PROVIDER_ID,
-            "run_type": SNAP_RUN_TYPE,
-            "status": {"$in": ["complete", "partial", "failed"]},
-        },
-        {"_id": 0, "started_at": 1, "status": 1},
-        sort=[("started_at", -1), ("created_at", -1)],
-    )
-    if not latest:
-        return True
-    marker = _parse_datetime(latest.get("started_at"))
-    if marker is None:
-        return True
-    return marker <= threshold
+    query = {
+        "user_id": user_id,
+        "provider": SNAPCHAT_PROVIDER_ID,
+        "run_type": SNAP_RUN_TYPE,
+        "status": {"$in": ["complete", "partial", "failed"]},
+    }
+    projection = {"_id": 0, "started_at": 1, "created_at": 1, "status": 1}
+    find = getattr(runs_collection, "find", None)
+    if callable(find):
+        cursor = find(query, projection)
+        if hasattr(cursor, "sort"):
+            cursor = cursor.sort(
+                [("started_at", -1), ("created_at", -1)]
+            )
+        if hasattr(cursor, "limit"):
+            cursor = cursor.limit(50)
+        candidates = await _to_list(cursor, 50)
+    else:
+        find_one = getattr(runs_collection, "find_one", None)
+        if not callable(find_one):
+            return True
+        latest = await find_one(
+            query,
+            projection,
+            sort=[("started_at", -1), ("created_at", -1)],
+        )
+        candidates = [latest] if latest else []
+
+    for candidate in candidates:
+        marker = _parse_datetime(candidate.get("started_at"))
+        if marker is None or marker > future_limit:
+            continue
+        return marker <= threshold
+    return True
 
 
 async def run_auto_sync_cycle(
