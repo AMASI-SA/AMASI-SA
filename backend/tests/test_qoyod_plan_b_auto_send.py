@@ -72,7 +72,7 @@ def test_live_sender_requires_the_existing_safe_settings_contract():
 async def test_live_sender_refreshes_salla_before_accepting_status(monkeypatch):
     calls = []
 
-    async def fake_resync(db, user_id, order_number):
+    async def fake_status_refresh(db, user_id, order_number):
         calls.append((user_id, order_number))
         return {
             "ok": True,
@@ -86,7 +86,11 @@ async def test_live_sender_refreshes_salla_before_accepting_status(monkeypatch):
         assert orders_user_id == "orders-user"
         return True
 
-    monkeypatch.setattr(auto_send, "resync_single_order", fake_resync)
+    monkeypatch.setattr(
+        auto_send,
+        "refresh_single_order_status",
+        fake_status_refresh,
+    )
     monkeypatch.setattr(auto_send, "_still_qoyod_eligible", fake_eligible)
 
     exact, refresh = await auto_send._refresh_and_verify_salla_status(
@@ -173,6 +177,66 @@ async def test_salla_refresh_failure_refuses_before_qoyod(monkeypatch):
 
     assert exc_info.value.code == "salla_status_refresh_failed"
     assert exc_info.value.extra["needs_reauth"] is True
+
+
+@pytest.mark.asyncio
+async def test_qoyod_live_preflight_skips_items_and_shipments(monkeypatch):
+    from salla_integration import sync as salla_sync
+
+    calls = []
+
+    async def fake_call_salla(db, user_id, method, endpoint, params=None):
+        calls.append((method, endpoint, params))
+        if endpoint == "/orders":
+            return {
+                "data": [{
+                    "id": 123,
+                    "reference_id": "273000002",
+                }],
+            }
+        if endpoint == "/orders/123":
+            return {
+                "data": {
+                    "id": 123,
+                    "reference_id": "273000002",
+                    "status": {
+                        "slug": "completed",
+                        "name": "تم التنفيذ",
+                    },
+                    "payment_method": {
+                        "code": "mada",
+                        "name": "مدى",
+                    },
+                },
+            }
+        raise AssertionError(f"unexpected Salla endpoint: {endpoint}")
+
+    async def fake_snapshot(db, user_id, order_number, order_doc):
+        assert order_doc["order_status_slug"] == "completed"
+        return {
+            "status_slug": "completed",
+            "status_native": "تم التنفيذ",
+        }
+
+    monkeypatch.setattr(salla_sync, "call_salla", fake_call_salla)
+    monkeypatch.setattr(
+        salla_sync,
+        "_refresh_plan_b_status_snapshot",
+        fake_snapshot,
+    )
+
+    result = await salla_sync.refresh_single_order_status(
+        object(),
+        "orders-user",
+        "273000002",
+    )
+
+    assert result["ok"] is True
+    assert result["found"] is True
+    assert [endpoint for _, endpoint, _ in calls] == [
+        "/orders",
+        "/orders/123",
+    ]
 
 
 class _UpdateResult:
@@ -697,7 +761,7 @@ async def test_qoyod_http_error_is_quarantined_and_next_candidate_sends(
 
 
 @pytest.mark.asyncio
-async def test_salla_refresh_failure_is_quarantined_and_next_candidate_sends(
+async def test_salla_refresh_failure_retries_later_and_next_candidate_sends(
     monkeypatch,
 ):
     sent = []
@@ -741,13 +805,12 @@ async def test_salla_refresh_failure_is_quarantined_and_next_candidate_sends(
     assert result["ok"] is True
     assert result["status"] == "succeeded"
     assert result["sent_count"] == 1
-    assert result["manual_review_count"] == 1
-    assert result["retry_later_count"] == 0
-    assert result["results"][0]["outcome"] == "manual_review"
+    assert result["manual_review_count"] == 0
+    assert result["retry_later_count"] == 1
+    assert result["results"][0]["outcome"] == "retry_later"
     assert result["results"][0]["order_number"] == "276776919"
     assert result["results"][1]["outcome"] == "sent"
-    quarantine = db.qoyod_manual_auto_quarantines.rows["main:276776919"]
-    assert quarantine["code"] == "salla_status_refresh_failed"
+    assert db.qoyod_manual_auto_quarantines.rows == {}
 
 
 @pytest.mark.asyncio

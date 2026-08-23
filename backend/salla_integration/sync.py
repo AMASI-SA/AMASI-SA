@@ -1231,6 +1231,144 @@ async def _fetch_salla_order_details(
     return enriched_details
 
 
+async def refresh_single_order_status(
+    db,
+    user_id: str,
+    order_number: str,
+) -> dict:
+    """Refresh only the authoritative Salla state needed before Qoyod.
+
+    The Qoyod preflight needs the current order status and payment evidence,
+    not line items or shipment details. Keeping this lookup narrow prevents a
+    non-accounting failure in the items or shipments endpoints from
+    quarantining an otherwise valid order before the unchanged sender runs.
+    """
+    order_number = str(order_number or "").strip()
+    if not order_number:
+        return {
+            "ok": False,
+            "found": False,
+            "error": "missing_order_number",
+            "stage": "validate_order_number",
+        }
+
+    stage = "search_order"
+    try:
+        search_resp = await call_salla(
+            db,
+            user_id,
+            "GET",
+            "/orders",
+            params={
+                "keyword": order_number,
+                "format": "light",
+                "per_page": 10,
+            },
+        )
+        rows = search_resp.get("data") if isinstance(search_resp, dict) else None
+        if not isinstance(rows, list):
+            rows = []
+
+        match = None
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            reference_id = str(row.get("reference_id") or "").strip()
+            row_id = str(row.get("id") or "").strip()
+            if reference_id == order_number or row_id == order_number:
+                match = row
+                break
+        if match is None and len(rows) == 1 and isinstance(rows[0], dict):
+            match = rows[0]
+        if match is None:
+            return {
+                "ok": True,
+                "found": False,
+                "error": "not_found_in_salla",
+                "stage": stage,
+            }
+
+        internal_id = str(match.get("id") or "").strip()
+        if not internal_id:
+            raise RuntimeError(
+                f"Salla search result missing internal id: {order_number}"
+            )
+
+        stage = "fetch_order_status"
+        details_resp = await call_salla(
+            db,
+            user_id,
+            "GET",
+            f"/orders/{internal_id}",
+        )
+        details = (
+            details_resp.get("data")
+            if isinstance(details_resp, dict)
+            else None
+        )
+        if not isinstance(details, dict):
+            raise RuntimeError(
+                f"Salla Order Details returned invalid payload: {order_number}"
+            )
+
+        actual_reference = str(
+            details.get("reference_id")
+            or details.get("order_number")
+            or ""
+        ).strip()
+        if actual_reference and actual_reference != order_number:
+            raise RuntimeError(
+                "Salla Order Details reference mismatch: "
+                f"expected={order_number} actual={actual_reference}"
+            )
+
+        stage = "map_order_status"
+        doc = _salla_order_to_doc(details)
+        current_slug = str(
+            doc.get("order_status_slug")
+            or doc.get("order_status")
+            or ""
+        ).strip().lower()
+        if not current_slug:
+            raise RuntimeError(
+                f"Salla Order Details missing status: {order_number}"
+            )
+
+        stage = "plan_b_status_snapshot"
+        snapshot = await _refresh_plan_b_status_snapshot(
+            db,
+            user_id,
+            order_number,
+            doc,
+        )
+        return {
+            "ok": True,
+            "found": True,
+            "plan_b_status_snapshot": snapshot,
+            "status_slug": snapshot.get("status_slug") or current_slug,
+            "status_native": snapshot.get("status_native"),
+        }
+    except SallaError as exc:
+        return {
+            "ok": False,
+            "found": False,
+            "error": str(exc),
+            "stage": stage,
+            "exception_type": type(exc).__name__,
+            "needs_reauth": exc.needs_reauth,
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "found": False,
+            "error": "status_refresh_stage_failed",
+            "stage": stage,
+            "exception_type": type(exc).__name__,
+            "exception_message": str(exc)[:300],
+            "order_number": order_number,
+        }
+
+
 async def resync_single_order(db, user_id: str, order_number: str) -> dict:
     """Pull one authoritative Order Details payload from Salla.
 
