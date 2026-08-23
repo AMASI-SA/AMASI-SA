@@ -68,6 +68,16 @@ def test_live_sender_requires_the_existing_safe_settings_contract():
     }
 
 
+def test_explicit_operator_activation_does_not_require_canary():
+    issues = auto_send.activation_issues(
+        _ready_settings(),
+        credentials_configured=True,
+        canary_succeeded=False,
+        salla_connected=True,
+    )
+    assert issues == []
+
+
 @pytest.mark.asyncio
 async def test_live_sender_refreshes_salla_before_accepting_status(monkeypatch):
     calls = []
