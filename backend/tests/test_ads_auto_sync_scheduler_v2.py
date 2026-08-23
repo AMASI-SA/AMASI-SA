@@ -2143,6 +2143,18 @@ def test_status_never_exposes_global_results_from_another_tenant():
                         "finished_at": "2026-08-12T12:01:00+00:00",
                         "results": [
                             {
+                                "user_id": "tenant-a",
+                                "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                                "status": "skipped",
+                                "reason": "running_elsewhere",
+                                "run_id": "tenant-a-run",
+                                "access_token": owner_secret,
+                            },
+                            {
+                                "user_id": "tenant-b",
+                                "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                                "status": "skipped",
+                                "reason": "sync_in_progress",
                                 "run_id": "foreign-run-b",
                                 "account_provider_calls": [
                                     {
@@ -2256,6 +2268,14 @@ def test_status_never_exposes_global_results_from_another_tenant():
         "started_at": "2026-08-12T12:00:00+00:00",
         "finished_at": "2026-08-12T12:01:00+00:00",
     }
+    assert result["scheduler"]["last_provider_outcomes"] == [
+        {
+            "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+            "status": "skipped",
+            "reason": "running_elsewhere",
+            "run_id": "tenant-a-run",
+        }
+    ]
     assert result["scheduler"]["last_error"] == {
         "code": "ads_auto_sync_cycle_failed",
         "retryable": True,
