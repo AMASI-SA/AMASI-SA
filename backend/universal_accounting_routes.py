@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 from typing import Optional, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from auth import get_current_user_from_db
 from ledger_core import (
@@ -250,18 +250,28 @@ class BankTransferIn(BaseModel):
 #   (2) partial transfer + shipping cost withheld    → bank_amount + shipping_cost
 #   (3) partial transfer + COD fee                   → bank_amount + cod_fee
 #   (4) partial transfer + shipping + COD fee + ...  → all legs
+#   (5) no bank transfer; courier keeps COD against shipping/fees
 # Anything left unsettled stays on the courier's `cod_receivable`.
 class CodSettleIn(BaseModel):
     bank_amount: float = Field(0, ge=0)
     bank_account_id: Optional[str] = None
     shipping_cost: float = Field(0, ge=0)
+    # COD commission and its recoverable input VAT are separate legs.  The
+    # provider tax invoice/statement supplies the authoritative split.
     cod_fee: float = Field(0, ge=0)
+    cod_fee_vat: float = Field(0, ge=0)
     other_fees: float = Field(0, ge=0)
     other_fees_category: Optional[str] = Field(
         None, description="Required when other_fees > 0. Expense "
                           "category code (e.g. 'gateway_fees').")
     payment_date: Optional[str] = None
     notes: Optional[str] = ""
+
+    @model_validator(mode="after")
+    def _validate_cod_fee_vat(self):
+        if self.cod_fee_vat > 0 and self.cod_fee <= 0:
+            raise ValueError("cod_fee_vat requires a positive cod_fee")
+        return self
 
 
 class ExpenseRecordIn(BaseModel):
@@ -2445,7 +2455,9 @@ def make_universal_router(db) -> APIRouter:
                     entity_id=courier_id, sub_account="cod_receivable")}
 
     # ───────────────────────────────────────────────────────────────
-    # Iter-190 — Multi-leg COD settlement with a shipping company.
+    # Iter-190 / MZ2-FIN-CUTOVER-001 — Multi-leg COD settlement with a
+    # shipping company. The bank leg may be zero when the courier nets the
+    # whole collection against shipping/fees.
     # Replaces the simple `cod-deposit` for non-trivial real-world
     # settlements (partial transfer + withheld shipping + COD fee +
     # other fees). Posts ONE balanced txn_group:
@@ -2472,8 +2484,9 @@ def make_universal_router(db) -> APIRouter:
         bank_amt = round(float(payload.bank_amount or 0), 2)
         ship_amt = round(float(payload.shipping_cost or 0), 2)
         cod_fee  = round(float(payload.cod_fee or 0), 2)
+        cod_fee_vat = round(float(payload.cod_fee_vat or 0), 2)
         other    = round(float(payload.other_fees or 0), 2)
-        total    = round(bank_amt + ship_amt + cod_fee + other, 2)
+        total    = round(bank_amt + ship_amt + cod_fee + cod_fee_vat + other, 2)
 
         if total <= 0:
             raise HTTPException(
@@ -2561,6 +2574,15 @@ def make_universal_router(db) -> APIRouter:
                 "metadata": {"leg": "cod_fee",
                               "courier_id": courier_id},
             })
+        if cod_fee_vat > 0:
+            entries.append({
+                "entity_type": "tax", "entity_id": "input_vat",
+                "sub_account": "recoverable",
+                "side": "debit", "amount": cod_fee_vat,
+                "entry_type": "courier_cod_settle",
+                "metadata": {"leg": "cod_fee_input_vat",
+                              "courier_id": courier_id},
+            })
         if other > 0:
             entries.append({
                 "entity_type": "expense",
@@ -2593,6 +2615,7 @@ def make_universal_router(db) -> APIRouter:
                 "bank_amount": bank_amt,
                 "shipping_cost": ship_amt,
                 "cod_fee": cod_fee,
+                "cod_fee_vat": cod_fee_vat,
                 "other_fees": other,
                 "other_fees_category": payload.other_fees_category,
             },

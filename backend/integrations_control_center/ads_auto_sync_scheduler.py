@@ -1904,7 +1904,7 @@ async def _snapchat_cadence_ready(
             "user_id": user_id,
             "provider": SNAPCHAT_PROVIDER_ID,
             "run_type": SNAP_RUN_TYPE,
-            "status": {"$in": ["complete", "partial", "failed", "running", "queued"]},
+            "status": {"$in": ["complete", "partial", "failed"]},
         },
         {"_id": 0, "started_at": 1, "status": 1},
         sort=[("started_at", -1), ("created_at", -1)],

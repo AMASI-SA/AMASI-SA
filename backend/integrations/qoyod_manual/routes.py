@@ -119,6 +119,8 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
     @router.get("/pending-orders")
     async def pending_orders(
         days: int = Query(60, ge=1, le=365),
+        from_date: Optional[str] = Query(None),
+        to_date: Optional[str] = Query(None),
         limit: int = Query(500, ge=1, le=1000),
         search: Optional[str] = Query(None),
         status: str = Query(
@@ -147,7 +149,8 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
         return await list_pending_orders(
             db, user_id=_TENANT, orders_user_id=orders_owner_id(user),
             days=days, limit=limit,
-            search=search, status=status)
+            search=search, status=status,
+            from_date=from_date, to_date=to_date)
 
     # ── Diagnostic-only endpoint (temporary, opt-in) ──────────────
     # Read-only. Simulates the exact filter chain of
@@ -564,6 +567,8 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
     @router.get("/missing-from-plan-b")
     async def missing_from_plan_b(
         days: int = Query(90, ge=1, le=365),
+        from_date: Optional[str] = Query(None),
+        to_date: Optional[str] = Query(None),
         limit: int = Query(1000, ge=1, le=5000),
         search: Optional[str] = Query(None),
         include_already_sent: bool = Query(
@@ -596,7 +601,8 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
             orders_user_id=orders_owner_id(user),
             markers_user_id=_TENANT,
             days=days, limit=limit,
-            search=search, include_already_sent=include_already_sent)
+            search=search, include_already_sent=include_already_sent,
+            from_date=from_date, to_date=to_date)
 
     @router.get("/audit/plan-b-sent-vs-diagnostic")
     async def audit_sent(

@@ -48,6 +48,13 @@ function Stat({ label, value, hint, Icon }) {
 
 function FeeRule({ rule }) {
     const values = [];
+    if (rule.min_amount !== undefined) {
+        const lower = `${rule.min_inclusive === false ? ">" : "≥"} ${fmt(rule.min_amount)}`;
+        const upper = rule.max_amount == null
+            ? "بدون حد أعلى"
+            : `${rule.max_inclusive === false ? "<" : "≤"} ${fmt(rule.max_amount)}`;
+        values.push(`المبلغ ${lower} و${upper}`);
+    }
     if (rule.commission_percent !== undefined) values.push(`نسبة ${rule.commission_percent}%`);
     if (rule.fixed_fee !== undefined) values.push(`ثابت ${fmt(rule.fixed_fee)} ر.س`);
     if (rule.cost_per_order !== undefined) values.push(`تكلفة/طلب ${fmt(rule.cost_per_order)} ر.س`);
@@ -194,6 +201,13 @@ function ProviderCard({ app, onInvoice }) {
                     <div className="rounded-lg border border-dashed p-3 text-xs text-amber-700">لا توجد قاعدة رسوم مضبوطة لهذا المزود.</div>
                 )}
             </div>
+
+            {app.kind === "shipping_company" && app.settlementNettingSupported && (
+                <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] font-semibold leading-5 text-amber-900">
+                    تدعم المقاصة: قد تخصم الشركة الشحن وعمولة COD وضريبتها من التحصيل، وقد تكون قيمة التحويل للبنك صفرًا.
+                    <div className="mt-2"><Link to="/shipping/settings" className="font-extrabold text-amber-950 underline">ضبط شرائح عمولة COD</Link></div>
+                </div>
+            )}
 
             <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl border border-slate-100 p-3 text-xs">
                 <div><div className="text-slate-400">الفواتير</div><div className="mt-1 font-mono font-black">{app.taxInvoiceCount}</div></div>

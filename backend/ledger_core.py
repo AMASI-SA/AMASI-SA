@@ -111,6 +111,9 @@ ENTRY_TYPES = (
     "expense_record",       # مصروف عام: مصروف + نقص bank
     # Couriers / shipping companies
     "courier_cod_settle",   # تسوية COD متعددة الأرجل (Iter-190): نقص cod_receivable + bank/cash + مصروفات
+    # Mezan 2 store drivers — individual driver sub-ledgers.
+    "store_delivery_accrual",    # توصيل ناجح: عهدة COD + أجرة الموصل
+    "store_delivery_settlement", # توريد COD / دفع الأجرة / المقاصة الصريحة
     # ── Phase 3 (Iter-196) — manual employee correction ──
     "correction",           # تصحيح: نقل أثر بين كيانَين دون مساس بالبنك/الصندوق
     # ── Iter-219 — BNPL bridge (Tabby/Tamara) ──

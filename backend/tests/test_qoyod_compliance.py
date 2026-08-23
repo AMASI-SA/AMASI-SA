@@ -120,57 +120,77 @@ async def test_orphan_listing_and_summary(db):
         #   2) completed + qoyod sent       → sent_to_qoyod (NOT in orphans)
         #   3) completed + qoyod failed     → failed_before_qoyod
         #   4) shipping (not completed)     → not_eligible (NOT in orphans)
+        def paid(total):
+            return {
+                "payment_method": "visa",
+                "payment_status": "paid",
+                "payment_collection_status": "paid",
+                "paid_amount": total,
+                "remaining_amount": 0,
+                "has_remaining_amount": False,
+            }
+
+        refs = [f"{user_id}-N{i}" for i in range(1, 5)]
         await db.unified_orders.insert_many([
             {"user_id": user_id, "salla_order_id": "O-1",
-             "order_number": f"{user_id}-N1",
+             "order_number": refs[0],
              "order_status": "تم التنفيذ",
-             "order_date": now - timedelta(days=3),
+             "order_date": (now - timedelta(days=3)).date().isoformat(),
              "customer_name": "أحمد", "customer_phone": "0500000001",
-             "total_amount": 100.0},
+             "total_amount": 100.0, **paid(100.0)},
             {"user_id": user_id, "salla_order_id": "O-2",
-             "order_number": f"{user_id}-N2",
+             "order_number": refs[1],
              "order_status": "تم التنفيذ",
-             "order_date": now - timedelta(days=2),
+             "order_date": (now - timedelta(days=2)).date().isoformat(),
              "customer_name": "محمد", "customer_phone": "0500000002",
-             "total_amount": 200.0},
+             "total_amount": 200.0, **paid(200.0)},
             {"user_id": user_id, "salla_order_id": "O-3",
-             "order_number": f"{user_id}-N3",
+             "order_number": refs[2],
              "order_status": "تم التنفيذ",
-             "order_date": now - timedelta(days=1),
+             "order_date": (now - timedelta(days=1)).date().isoformat(),
              "customer_name": "فاطمة", "customer_phone": "0500000003",
-             "total_amount": 300.0},
+             "total_amount": 300.0, **paid(300.0)},
             {"user_id": user_id, "salla_order_id": "O-4",
-             "order_number": f"{user_id}-N4",
+             "order_number": refs[3],
              "order_status": "تم الشحن",
-             "order_date": now,
+             "order_date": now.date().isoformat(),
              "customer_name": "خالد", "customer_phone": "0500000004",
-             "total_amount": 400.0},
+             "total_amount": 400.0, **paid(400.0)},
         ])
 
-        # Seed qoyod_invoices for O-2 (sent) and O-3 (failed_customer).
-        await db.qoyod_invoices.insert_many([
-            {"user_id": user_id, "salla_order_id": "O-2",
-             "status": "sent", "trace_id": "trace-2",
-             "updated_at": now},
-            {"user_id": user_id, "salla_order_id": "O-3",
-             "status": "failed",
-             "last_error": {"code": "missing_customer_phone"},
-             "trace_id": "trace-3",
-             "updated_at": now},
-        ])
+        # Qoyod existence is proven only by its official exact reference.
+        await db.qoyod_invoices.insert_one({
+            "user_id": user_id,
+            "qoyod_invoice_id": "qoyod-2",
+            "reference": refs[1],
+            "qoyod_official_reference": refs[1],
+            "reference_provenance": "qoyod.reference",
+            "status": "sent",
+            "trace_id": "trace-2",
+            "updated_at": now,
+        })
+        # Inbox is failure evidence only; it cannot expand the unified set.
+        await db.integration_inbox.insert_one({
+            "user_id": user_id,
+            "salla_order_number": refs[2],
+            "pipeline_stage": "failed",
+            "pipeline_error": {"code": "missing_customer_phone"},
+            "trace_id": "trace-3",
+            "received_at": now,
+        })
 
         items = await list_orphan_orders(db, user_id)
-        ids = {i["salla_order_id"] for i in items}
+        ids = {i["order_number"] for i in items}
         # Only O-1 and O-3 should be listed — O-2 is sent, O-4 not eligible.
-        assert ids == {"O-1", "O-3"}
+        assert ids == {refs[0], refs[2]}
 
-        by_id = {i["salla_order_id"]: i for i in items}
-        assert by_id["O-1"]["eligibility_status"] == "eligible_pending"
-        assert by_id["O-3"]["eligibility_status"] == "failed_before_qoyod"
-        assert by_id["O-3"]["eligibility_reason"] == "missing_customer_data"
+        by_id = {i["order_number"]: i for i in items}
+        assert by_id[refs[0]]["eligibility_status"] == "eligible_pending"
+        assert by_id[refs[2]]["eligibility_status"] == "failed_before_qoyod"
+        assert by_id[refs[2]]["eligibility_reason"] == "missing_customer_data"
 
         summary = await compliance_summary(db, user_id)
-        assert summary["schema_version"] == 1
+        assert summary["schema_version"] == 2
         assert summary["completed_orders_total"] == 3
         assert summary["sent_to_qoyod"] == 1
         assert summary["failed_before_qoyod"] == 1
@@ -182,6 +202,7 @@ async def test_orphan_listing_and_summary(db):
     finally:
         await db.unified_orders.delete_many({"user_id": user_id})
         await db.qoyod_invoices.delete_many({"user_id": user_id})
+        await db.integration_inbox.delete_many({"user_id": user_id})
 
 
 def test_completed_trigger_includes_arabic_and_english():
@@ -201,15 +222,25 @@ async def test_reconciliation_check_counts_and_diff(db):
             {"user_id": user_id, "salla_order_id": f"R-{i}",
              "order_number": f"{user_id}-N{i}",
              "order_status": "تم التنفيذ",
-             "order_date": now - timedelta(days=i + 1)}
+             "order_date": (now - timedelta(days=i + 1)).date().isoformat(),
+             "payment_method": "visa", "payment_status": "paid",
+             "payment_collection_status": "paid", "total_amount": 100.0,
+             "paid_amount": 100.0, "remaining_amount": 0,
+             "has_remaining_amount": False}
             for i in range(5)
         ])
         # 2 of the 5 are already in Qoyod as "sent".
         await db.qoyod_invoices.insert_many([
-            {"user_id": user_id, "salla_order_id": "R-0",
-             "status": "sent", "trace_id": "t0", "updated_at": now},
-            {"user_id": user_id, "salla_order_id": "R-1",
-             "status": "sent", "trace_id": "t1", "updated_at": now},
+            {"user_id": user_id, "salla_order_id": "R-0", "qoyod_invoice_id": "q-0",
+             "reference": f"{user_id}-N0", "status": "sent",
+             "qoyod_official_reference": f"{user_id}-N0",
+             "reference_provenance": "qoyod.reference",
+             "trace_id": "t0", "updated_at": now},
+            {"user_id": user_id, "salla_order_id": "R-1", "qoyod_invoice_id": "q-1",
+             "reference": f"{user_id}-N1", "status": "sent",
+             "qoyod_official_reference": f"{user_id}-N1",
+             "reference_provenance": "qoyod.reference",
+             "trace_id": "t1", "updated_at": now},
         ])
         rec = await reconciliation_check(db, user_id)
         assert rec["eligible_orders_count"] == 5
@@ -218,7 +249,7 @@ async def test_reconciliation_check_counts_and_diff(db):
         assert rec["has_diff"] is True
         assert "filter=unsent" in rec["drilldown_url"]
         assert rec["oldest_unsent_at"] is not None
-        assert rec["schema_version"] == 1
+        assert rec["schema_version"] == 2
     finally:
         await db.unified_orders.delete_many({"user_id": user_id})
         await db.qoyod_invoices.delete_many({"user_id": user_id})
@@ -232,11 +263,18 @@ async def test_reconciliation_check_no_diff_when_all_sent(db):
         await db.unified_orders.insert_one({
             "user_id": user_id, "salla_order_id": "R-X",
             "order_number": f"{user_id}-N1",
-            "order_status": "تم التنفيذ", "order_date": now,
+            "order_status": "تم التنفيذ", "order_date": now.date().isoformat(),
+            "payment_method": "visa", "payment_status": "paid",
+            "payment_collection_status": "paid", "total_amount": 100.0,
+            "paid_amount": 100.0, "remaining_amount": 0,
+            "has_remaining_amount": False,
         })
         await db.qoyod_invoices.insert_one({
-            "user_id": user_id, "salla_order_id": "R-X",
-            "status": "sent", "trace_id": "tx", "updated_at": now,
+            "user_id": user_id, "qoyod_invoice_id": "q-x",
+            "reference": f"{user_id}-N1", "status": "sent",
+            "qoyod_official_reference": f"{user_id}-N1",
+            "reference_provenance": "qoyod.reference",
+            "trace_id": "tx", "updated_at": now,
         })
         rec = await reconciliation_check(db, user_id)
         assert rec["eligible_orders_count"] == 1

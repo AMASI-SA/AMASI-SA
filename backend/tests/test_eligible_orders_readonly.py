@@ -4,6 +4,11 @@ Guards
 ──────
     • Endpoint is GET-only (no writes on any collection).
     • NO Qoyod API calls.
+    • `unified_orders` is the only candidate authority; inbox is evidence.
+    • `already_sent` requires an exact official Qoyod reference plus a real
+      invoice id; inbox markers do not prove it.
+    • Explicit `from_date` / `to_date` are honoured without a 2026-07-01
+      floor, using the Salla business date in Asia/Riyadh.
     • `already_sent` orders are hidden from `items` when
       `show_already_sent=False` but always counted in `counts`.
     • bank_transfer → `blocked_bank_transfer_routing`.
@@ -11,8 +16,9 @@ Guards
     • Order missing from inbox → `missing_from_pipeline`.
     • Order with DRY product → `blocked_product`.
     • Order with unmapped customer → `blocked_customer`.
-    • Order with prior real invoice → `already_sent`.
-    • cancelled / refunded / deleted are excluded from the query.
+    • Order with an exact official prior invoice → `already_sent`.
+    • cancelled / refunded / deleted remain visible in scanned/excluded
+      accounting but never enter the eligible classifier.
 """
 from __future__ import annotations
 
@@ -432,6 +438,9 @@ class TestEndToEndReport:
             "user_id": uid, "salla_order_id": oid,
             "salla_order_number": oid,
             "qoyod_invoice_id": invoice_id,
+            "reference": oid,
+            "qoyod_official_reference": oid,
+            "reference_provenance": "qoyod.reference",
             "posting_mode": posting_mode,
             "created_at": self._now_iso(),
         })
@@ -537,7 +546,13 @@ class TestEndToEndReport:
             await self._seed_order(db, uid, status="deleted")
             report = await build_eligible_orders_report(db, user_id=uid)
             assert sum(report["counts"].values()) == 0
-            assert report["total_scanned"] == 0
+            # Scanned is the authoritative unified universe before status
+            # eligibility; exclusions remain visible and auditable.
+            assert report["total_scanned"] == 3
+            assert report["excluded_status_count"] == 3
+            assert report["excluded_reason_counts"][
+                "status_not_eligible"
+            ] == 3
         finally:
             await self._clean(db, uid)
 
@@ -640,8 +655,13 @@ class TestEndToEndReport:
             await self._seed_order(db, uid, status="cancelled")
             await self._seed_order(db, uid, status="بإنتظار_الدفع")
             report = await build_eligible_orders_report(db, user_id=uid)
-            # Only the 2 eligible ones enter the classifier.
-            assert report["total_scanned"] == 2
+            # All four unified rows are scanned; only two enter classifier.
+            assert report["total_scanned"] == 4
+            assert report["total_classified"] == 2
+            assert report["excluded_status_count"] == 2
+            assert report["excluded_reason_counts"][
+                "status_not_eligible"
+            ] == 2
             assert report["invariant_holds"] is True
             # Response shape contract.
             assert "total_eligible_by_status" in report
@@ -662,23 +682,35 @@ class TestEndToEndReport:
         finally:
             await self._clean(db, uid)
 
-    # ── Iter-001f: Tax-period sync cutoff end-to-end ───────────────
-    async def test_response_advertises_sync_cutoff_fields(self, db):
+    # ── 2026-08-22: exact requested accounting interval ───────────
+    async def test_response_advertises_exact_date_contract(self, db):
         uid = self._uid()
         try:
-            r = await build_eligible_orders_report(db, user_id=uid)
+            r = await build_eligible_orders_report(
+                db,
+                user_id=uid,
+                from_date="2026-06-10",
+                to_date="2026-06-30",
+            )
+            # Rollout metadata remains visible but never clamps the request.
             assert r["sync_start_date"] == "2026-07-01"
             assert r["tax_period"] == "Q3-2026"
-            assert r["date_filter_basis"] == "salla_order_created_at"
+            assert r["from_date"] == "2026-06-10"
+            assert r["to_date"] == "2026-06-30"
+            assert r["since_date"] == "2026-06-10"
+            assert r["date_filter_basis"] == (
+                "salla_order_created_at_Asia/Riyadh"
+            )
             assert "excluded_before_sync_start_date_count" in r
             assert "excluded_missing_order_created_at_count" in r
             notes = " ".join(r.get("notes") or [])
             assert "2026-07-01" in notes
+            assert "never silently clamped" in notes
         finally:
             await self._clean(db, uid)
 
-    async def test_order_before_cutoff_excluded(self, db):
-        """Iter-001f: order created 2026-06-30 (Q2) must NOT appear."""
+    async def test_order_before_july_is_included_when_requested(self, db):
+        """An explicit Q2 interval is honoured without a July floor."""
         uid = self._uid()
         try:
             await self._seed_customer(db, uid)
@@ -689,14 +721,19 @@ class TestEndToEndReport:
                 created_at="2026-06-30T14:00:00+03:00")
             await self._seed_inbox(db, uid, oid, stage="COMPLETED")
             r = await build_eligible_orders_report(
-                db, user_id=uid, since_days=180)
-            # Row was fetched by the query (order_date in window)
-            # but MUST be excluded by the cutoff, not classified.
+                db,
+                user_id=uid,
+                from_date="2026-06-30",
+                to_date="2026-06-30",
+            )
             assert r["total_scanned"] == 1
-            assert r["excluded_before_sync_start_date_count"] == 1
-            assert r["total_classified"] == 0
+            assert r["from_date"] == "2026-06-30"
+            assert r["to_date"] == "2026-06-30"
+            assert r["excluded_before_sync_start_date_count"] == 0
+            assert r["total_classified"] == 1
+            assert r["counts"]["ready_for_preview"] == 1
             assert r["invariant_holds"] is True
-            assert all(i["order_number"] != oid for i in r["items"])
+            assert any(i["order_number"] == oid for i in r["items"])
         finally:
             await self._clean(db, uid)
 
@@ -711,7 +748,12 @@ class TestEndToEndReport:
                 order_date="2026-07-01",
                 created_at="2026-07-01T00:05:00+03:00")
             await self._seed_inbox(db, uid, oid, stage="COMPLETED")
-            r = await build_eligible_orders_report(db, user_id=uid)
+            r = await build_eligible_orders_report(
+                db,
+                user_id=uid,
+                from_date="2026-07-01",
+                to_date="2026-07-01",
+            )
             assert r["total_scanned"] == 1
             assert r["excluded_before_sync_start_date_count"] == 0
             assert r["counts"]["ready_for_preview"] == 1
@@ -720,9 +762,8 @@ class TestEndToEndReport:
         finally:
             await self._clean(db, uid)
 
-    async def test_late_arrival_of_old_order_still_excluded(self, db):
-        """Legacy Q2 order that arrived at our pipeline AFTER 2026-07-01
-        must STILL be excluded — created_at wins over received_at."""
+    async def test_late_arrival_uses_salla_date_and_requested_range(self, db):
+        """Inbox arrival time cannot move an old Salla order out of range."""
         uid = self._uid()
         try:
             await self._seed_customer(db, uid)
@@ -734,9 +775,17 @@ class TestEndToEndReport:
             # `received_at` is auto-set to `_now_iso()` (today = Q3).
             await self._seed_inbox(db, uid, oid, stage="COMPLETED")
             r = await build_eligible_orders_report(
-                db, user_id=uid, since_days=180)
-            assert r["excluded_before_sync_start_date_count"] == 1
-            assert r["total_classified"] == 0
+                db,
+                user_id=uid,
+                from_date="2026-05-15",
+                to_date="2026-05-15",
+            )
+            assert r["from_date"] == "2026-05-15"
+            assert r["to_date"] == "2026-05-15"
+            assert r["excluded_before_sync_start_date_count"] == 0
+            assert r["total_scanned"] == 1
+            assert r["total_classified"] == 1
+            assert any(i["order_number"] == oid for i in r["items"])
             assert r["invariant_holds"] is True
         finally:
             await self._clean(db, uid)
@@ -779,13 +828,13 @@ class TestEndToEndReport:
             assert r["excluded_missing_order_created_at_count"] == 1
             assert r["total_classified"] == 0
             assert r["invariant_holds"] is True
-            assert "missing_order_created_at" in \
+            assert "missing_or_inferred_order_date" in \
                 r["excluded_reason_counts"]
         finally:
             await self._clean(db, uid)
 
-    async def test_invariant_holds_with_cutoff_mix(self, db):
-        """Mix Q2 + Q3 + missing-date orders; invariant stays true."""
+    async def test_invariant_holds_across_requested_q2_q3_range(self, db):
+        """An explicit cross-quarter range classifies every eligible row."""
         uid = self._uid()
         try:
             await self._seed_customer(db, uid)
@@ -803,10 +852,16 @@ class TestEndToEndReport:
                 order_date="2026-06-15",
                 created_at="2026-06-15T10:00:00+03:00")
             r = await build_eligible_orders_report(
-                db, user_id=uid, since_days=180)
+                db,
+                user_id=uid,
+                from_date="2026-06-01",
+                to_date="2026-07-31",
+            )
             assert r["total_scanned"] == 3
-            assert r["excluded_before_sync_start_date_count"] == 1
+            assert r["excluded_before_sync_start_date_count"] == 0
             assert r["counts"]["ready_for_preview"] == 2
+            assert r["counts"]["missing_from_pipeline"] == 1
+            assert r["total_classified"] == 3
             assert r["invariant_holds"] is True
         finally:
             await self._clean(db, uid)
@@ -850,8 +905,7 @@ class TestEndToEndReport:
             await self._clean(db, uid)
 
     async def test_debug_diagnostic_block_when_enabled(self, db):
-        """Iter-001b — `debug=true` emits collection totals + samples
-        + status breakdowns without changing counts. Read-only."""
+        """Debug exposes safe reference-set evidence, never raw samples."""
         uid = self._uid()
         try:
             await self._seed_customer(db, uid)
@@ -862,16 +916,14 @@ class TestEndToEndReport:
                 db, user_id=uid, debug=True)
             assert "_diagnostic" in report
             d = report["_diagnostic"]
-            assert d["user_id_used_in_query"] == uid
-            assert d["unified_orders_total_all_time"] >= 1
-            assert d["unified_orders_total_90d"] >= 1
-            assert d["integration_inbox_total_all_time"] >= 1
-            assert isinstance(
-                d["unified_orders_status_breakdown_all_time"], dict)
-            assert isinstance(
-                d["sample_unified_orders_all_time"], list)
-            assert len(d["sample_unified_orders_all_time"]) >= 1
-            assert d["eligible_statuses_configured"]
+            assert d["orders_user_id"] == uid
+            assert d["markers_user_id"] == uid
+            assert d["reference_sets"]["eligible"] == [oid]
+            assert d["reference_sets"]["sent_exact"] == []
+            assert d["reference_sets"]["worker_candidates"] == [oid]
+            assert d["duplicate_qoyod_references"] == []
+            assert not any("sample" in key for key in d)
+            assert not any("raw" in key for key in d)
         finally:
             await self._clean(db, uid)
 
@@ -911,18 +963,14 @@ class TestEndToEndReport:
         finally:
             await self._clean(db, uid)
 
-    async def test_fallback_to_integration_inbox_when_unified_empty(
+    async def test_inbox_only_order_does_not_expand_unified_universe(
             self, db):
-        """Iter-001c — when `unified_orders` is empty for the tenant,
-        the report reconstructs orders from `integration_inbox`
-        (BSON datetime filter fixed). Production scenario."""
+        """Inbox is evidence only and can never create a candidate."""
         uid = self._uid()
         try:
             await self._seed_customer(db, uid)
             await self._seed_product(db, uid, "X")
-            # DO NOT seed unified_orders — this is the fallback case.
-            # Seed an inbox row with a canonical_payload that describes
-            # a Salla order.
+            # Deliberately do not seed unified_orders.
             await db.integration_inbox.insert_one({
                 "user_id": uid,
                 "salla_order_id":     "268307955",
@@ -950,31 +998,24 @@ class TestEndToEndReport:
             })
             report = await build_eligible_orders_report(
                 db, user_id=uid, debug=True)
-            assert report["source_mode"] == "integration_inbox_fallback"
-            assert "unified_orders is empty" in report["source_reason"]
-            assert report["total_scanned"] == 1
-            assert any("missing_from_pipeline unavailable"
-                       in n for n in report["notes"])
-            # The row should be classified (not missing_from_pipeline).
-            item = report["items"][0]
-            assert item["order_number"] == "268307955"
-            assert item["classification"] != "missing_from_pipeline"
-            # Diagnostic block reports the source correctly.
-            assert report["_diagnostic"]["source_mode"] == \
-                "integration_inbox_fallback"
-            assert report["_diagnostic"]["integration_inbox_total_90d"] \
-                >= 1
-            assert "date" in report["_diagnostic"][
-                "received_at_type_breakdown"] \
-                or "string" in report["_diagnostic"][
-                    "received_at_type_breakdown"]
+            assert report["source_mode"] == "unified_orders"
+            assert report["source_authority"] == "unified_orders"
+            assert "only candidate authority" in report["source_reason"]
+            assert report["total_scanned"] == 0
+            assert report["total_classified"] == 0
+            assert report["worker_candidate_count"] == 0
+            assert report["items"] == []
+            assert report["_diagnostic"]["reference_sets"] == {
+                "eligible": [],
+                "sent_exact": [],
+                "worker_candidates": [],
+            }
         finally:
             await db.integration_inbox.delete_many({"user_id": uid})
             await self._clean(db, uid)
 
-    async def test_fallback_already_sent_detected_from_inbox(self, db):
-        """When inbox row carries a real qoyod_invoice_id we synthesise
-        an invoice dict so classifier catches `already_sent`."""
+    async def test_inbox_marker_alone_does_not_prove_already_sent(self, db):
+        """A local inbox marker is not an exact official Qoyod reference."""
         uid = self._uid()
         try:
             await self._seed_customer(db, uid)
@@ -1000,51 +1041,46 @@ class TestEndToEndReport:
             })
             report = await build_eligible_orders_report(
                 db, user_id=uid, show_already_sent=True)
-            assert report["source_mode"] == "integration_inbox_fallback"
-            assert report["counts"]["already_sent"] == 1
+            assert report["source_mode"] == "unified_orders"
+            assert report["total_scanned"] == 0
+            assert report["counts"]["already_sent"] == 0
+            assert report["exact_qoyod_reference_matches"] == 0
+            assert report["items"] == []
         finally:
             await db.integration_inbox.delete_many({"user_id": uid})
             await self._clean(db, uid)
 
     async def test_invariant_holds_all_scanned_rows_accounted_for(self, db):
-        """Iter-001d — the invariant
+        """The unified-authority invariant
             total_classified + excluded_status_count == total_scanned
-        must hold in every scenario, including mixed statuses in
-        fallback mode."""
+        accounts for eligible and status-excluded unified rows."""
         uid = self._uid()
         now = datetime.now(timezone.utc)
         try:
             await self._seed_customer(db, uid)
             await self._seed_product(db, uid, "X")
-            # 3 rows with billable status + 2 rows with ineligible
-            # status → all must land somewhere.
-            for i, st in enumerate(
-                    ["delivered", "completed", "shipping",
-                     "pending",   "waiting"]):
-                await db.integration_inbox.insert_one({
-                    "user_id": uid,
-                    "connector_key": "salla",
-                    "idempotency_key": f"inv-{i}",
-                    "salla_order_number": f"INV-{i}",
-                    "trace_id": f"t-INV-{i}",
-                    "pipeline_stage": "COMPLETED"
-                                       if st in ("delivered", "completed",
-                                                 "shipping")
-                                       else "WAITING",
-                    "received_at": now,
-                    "canonical_payload": {
-                        "order_status": st,
-                        "payment_method": "mada",
-                        "total_amount": 100.0,
-                        "shipping_amount": 0, "tax_amount": 0,
-                        "items": [{"sku": "X", "quantity": 1,
-                                   "unit_price": 100.0}],
-                        "customer": {"phone": "+966554681361"},
-                        "order_date": now.date().isoformat(),
-                    },
-                })
+            # 3 billable + 2 ineligible rows in unified_orders. Inbox is
+            # attached only as explanatory evidence for the billable rows.
+            for st in (
+                "delivered", "completed", "shipping", "pending", "waiting",
+            ):
+                oid = await self._seed_order(
+                    db,
+                    uid,
+                    status=st,
+                    pm="mada",
+                    order_date=now.date().isoformat(),
+                )
+                if st in ("delivered", "completed", "shipping"):
+                    await self._seed_inbox(
+                        db,
+                        uid,
+                        oid,
+                        stage="COMPLETED",
+                        canonical_status=st,
+                    )
             report = await build_eligible_orders_report(db, user_id=uid)
-            assert report["source_mode"] == "integration_inbox_fallback"
+            assert report["source_mode"] == "unified_orders"
             assert report["total_scanned"] == 5
             # 3 billable statuses land in `counts`.
             assert report["total_classified"] == 3
@@ -1057,8 +1093,9 @@ class TestEndToEndReport:
                     == report["total_scanned"])
             # Reason breakdown present.
             assert report["excluded_reason_counts"]
-            assert any("pending" in k or "waiting" in k
-                       for k in report["excluded_reason_counts"].keys())
+            assert report["excluded_reason_counts"][
+                "status_not_eligible"
+            ] == 2
             # No mystery bucket.
             assert report["unclassified_count"] == 0
         finally:
@@ -1082,31 +1119,17 @@ class TestEndToEndReport:
         """`total_hidden_already_sent` should equal already_sent count
         when `show_already_sent=False`."""
         uid = self._uid()
-        now = datetime.now(timezone.utc)
         try:
             await self._seed_customer(db, uid)
             await self._seed_product(db, uid, "X")
             for i in range(3):
-                await db.integration_inbox.insert_one({
-                    "user_id": uid,
-                    "connector_key": "salla",
-                    "idempotency_key": f"sent-{i}",
-                    "salla_order_number": f"SENT-{i}",
-                    "trace_id": f"t-{i}",
-                    "pipeline_stage": "COMPLETED",
-                    "received_at": now,
-                    "qoyod_invoice_id": f"Q-REAL-{i}",
-                    "canonical_payload": {
-                        "order_status": "delivered",
-                        "payment_method": "mada",
-                        "total_amount": 100.0,
-                        "shipping_amount": 0, "tax_amount": 0,
-                        "items": [{"sku": "X", "quantity": 1,
-                                   "unit_price": 100.0}],
-                        "customer": {"phone": "+966554681361"},
-                        "order_date": now.date().isoformat(),
-                    },
-                })
+                oid = await self._seed_order(
+                    db, uid, status="delivered", pm="mada",
+                )
+                await self._seed_inbox(db, uid, oid, stage="COMPLETED")
+                await self._seed_invoice(
+                    db, uid, oid, invoice_id=f"Q-REAL-{i}",
+                )
             report = await build_eligible_orders_report(
                 db, user_id=uid, show_already_sent=False)
             assert report["counts"]["already_sent"] == 3

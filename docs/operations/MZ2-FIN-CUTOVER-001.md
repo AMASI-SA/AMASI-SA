@@ -40,6 +40,14 @@ This operation ID is the stable handoff reference for every later session:
    workflow; not every cash movement is a generic transfer.
 7. The cutover date and signed opening-balance sheet are not yet approved.
    No production opening balance may be posted before that approval.
+8. Each provider has one **current settlement bank**. The accountant changes
+   that bank before recording a settlement; the change applies immediately to
+   the next unposted settlement and requires no date range. Posted settlements
+   keep their original bank.
+9. A newly observed payment method is attached to Salla only when the gateway
+   or settlement evidence identifies Salla as the settler. Unknown methods are
+   held as unclassified with an unapproved fee rule; the system must not guess
+   the provider or commission.
 
 ## Provider account model
 
@@ -63,6 +71,59 @@ Provider groups:
 | Emkan | Independent BNPL receivable and settlement account | Emkan invoice and settlement |
 | Each shipping company | COD receivable plus shipping/fee payable | Courier invoice and COD statement |
 
+### Store-delivery drivers (مندوب المتجر)
+
+- ``مندوب المتجر`` is a presentation group only and never owns an aggregate
+  accounting balance.
+- Every active store driver keeps the existing ``store_drivers.id`` as the
+  accounting identity. Do not duplicate the person in counterparties.
+- The delivery fee is configured per driver and snapshotted on assignment, so
+  a later price change cannot rewrite a delivered shipment.
+- On successful delivery, cash COD is debited to that driver's
+  ``cod_receivable`` and the snapshotted delivery fee is credited to that
+  driver's ``delivery_fee_payable``. Prepaid/non-cash orders do not create COD
+  custody on the driver.
+- The driver screen must show, per individual: **عليه لنا (COD)**, **له علينا
+  (أجرة التوصيل)**, and the signed net balance. Driver 1 and Driver 2 may never
+  be netted together.
+- A normal COD remittance and a fee payment are separate movements. Explicit
+  net settlement is allowed as one balanced journal that preserves the gross
+  COD cleared, fee offset, and bank/cash amount. No silent auto-netting.
+- SMSA, Aramex, iMile, and other external couriers remain one account per
+  company; they are not children of the store-driver group.
+- This bridge posts only new canonical delivered/settlement events. It does
+  not scan or backfill old orders or legacy Mezan balances.
+- Delivery posting fails closed until tenant setting
+  ``mezan2_financial_cutover`` carries this operation ID, ``status=active``,
+  and the approved timezone-aware ``cutover_at``. This implementation does not
+  activate that setting or invent the timestamp.
+
+### Courier COD commission tiers and netting
+
+- A courier may retain all or part of COD proceeds against shipping charges,
+  COD commission, commission VAT, and other evidenced adjustments. Therefore
+  a valid courier settlement may have **zero bank transfer**.
+- Never record only the net. Keep gross COD receivable, shipping cost,
+  commission before VAT, commission input VAT, other adjustments, and bank
+  transfer as separate legs of one balanced settlement.
+- COD commission tiers are calculated per delivered COD shipment amount, not
+  on the aggregate courier balance, unless the signed provider contract says
+  otherwise.
+- Each tier stores: lower bound/operator, upper bound/operator, percentage,
+  fixed fee, and VAT percentage. Shared boundaries must be unambiguous.
+- Any COD amount not covered by a configured tier is flagged for review and is
+  never silently assigned a zero commission.
+- Merchant-stated SMSA example awaiting invoice/contract confirmation:
+
+| Per-shipment COD amount | Commission before VAT | Boundary behavior |
+|---|---:|---|
+| SAR 50 to SAR 1,000 | 1% + SAR 2 | includes 50 and 1,000 |
+| Above SAR 1,000 to SAR 3,000 | 2% + SAR 5 | excludes 1,000; includes 3,000 |
+| Above SAR 3,000 | 3% | fixed component not stated; confirm from evidence |
+
+Commission VAT is calculated separately on the commission result for the
+matched tier. The official courier invoice/statement remains authoritative.
+
 ## Movement routing contract
 
 | Real event | Canonical operation | Accounting meaning |
@@ -70,7 +131,7 @@ Provider groups:
 | Bank/cash account A to bank/cash account B | Internal account transfer | Debit destination, credit source; no revenue or expense |
 | Salla pays the bank | Salla provider settlement | Debit bank, credit Salla receivable; fees/VAT use statement facts |
 | Tamara/Tabby/Emkan pays the bank | BNPL provider settlement | Debit bank, debit fees/VAT/adjustments, credit provider receivable |
-| Courier remits COD and withholds shipping/fees | Courier COD settlement | Debit bank and expenses, credit courier COD receivable |
+| Courier remits COD and/or withholds shipping/fees | Courier COD settlement | Debit bank (possibly zero), shipping/fee legs and fee input VAT; credit courier COD receivable |
 | Merchant pays courier invoice | Courier payment | Debit courier payable, credit bank/cash |
 | Bank charges a fee | General expense / bank fees | Debit bank-fee expense, credit bank |
 | Salary is earned after cutover | Salary accrual | Debit salary expense, credit salary payable |
@@ -141,8 +202,21 @@ Implementation references:
 - Added deep-link support to the unified movement screen for courier COD
   settlement.
 - Added a visible transfer-vs-settlement rule to the unified movement screen.
+- Added per-shipment courier COD commission tiers with explicit inclusive/
+  exclusive boundaries, percentage, fixed fee, and VAT rate.
+- Added uncovered-tier review protection and tier-aware courier ledgers.
+- Split courier COD commission from recoverable input VAT in the settlement
+  journal and financial position.
+- Kept courier settlement valid when the bank leg is zero because the courier
+  retained the whole COD amount against shipping/fees.
 - Added backend/frontend regression tests for provider grouping, invoice
   guards, routing, navigation, and absence of legacy balances.
+- Connected successful store-driver delivery to the general ledger per
+  individual driver: cash COD receivable plus snapshotted delivery-fee payable.
+- Connected driver COD remittance, fee payment, and explicit net settlement to
+  balanced bank/driver journals with idempotency metadata.
+- Added separate store-driver COD assets and delivery-fee liabilities to the
+  financial position, plus a per-driver debit/credit settlement view.
 
 Primary files:
 
@@ -153,6 +227,11 @@ Primary files:
 - `frontend/src/lib/integrationWorkspaces.js`
 - `frontend/src/components/MezanV2NavigationShell.jsx`
 - `backend/tests/test_financial_provider_apps_v2.py`
+- `backend/store_delivery_accounting.py`
+- `backend/store_delivery_driver_app_routes.py`
+- `backend/store_delivery_settlement_routes.py`
+- `backend/tests/test_store_delivery_accounting.py`
+- `frontend/src/pages/StoreDeliverySettlements.jsx`
 - `frontend/src/services/financialProviderApps.test.js`
 
 ## Remaining work, in order

@@ -310,13 +310,16 @@ async def compute_financial_position(db, user_id: str) -> dict[str, Any]:
         "employee_custody": 0.0,
         "external_receivable": 0.0,
         "courier_cod_receivable": 0.0,
+        "store_driver_cod_receivable": 0.0,
         "ad_account_prepaid": 0.0,
+        "input_vat": 0.0,
     }
     # Liabilities (credit-positive)
     liabilities = {
         "salaries_unpaid": 0.0,
         "supplier_payable": 0.0,
         "courier_payable": 0.0,
+        "store_driver_payable": 0.0,
         "external_payable": 0.0,
         "ad_accounts_unpaid": 0.0,
     }
@@ -336,6 +339,12 @@ async def compute_financial_position(db, user_id: str) -> dict[str, Any]:
             liabilities["courier_payable"] += max(-net, 0.0)
         elif et == "courier" and sub == "cod_receivable":
             assets["courier_cod_receivable"] += max(net, 0.0)
+        elif et == "store_driver" and sub == "cod_receivable":
+            assets["store_driver_cod_receivable"] += max(net, 0.0)
+        elif et == "store_driver" and sub == "delivery_fee_payable":
+            liabilities["store_driver_payable"] += max(-net, 0.0)
+        elif et == "tax" and sub == "recoverable":
+            assets["input_vat"] += max(net, 0.0)
         elif et == "external_person" and sub == "receivable":
             assets["external_receivable"] += max(net, 0.0)
         elif et == "external_person" and sub == "payable":

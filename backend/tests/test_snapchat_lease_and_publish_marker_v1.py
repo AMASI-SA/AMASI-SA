@@ -328,6 +328,33 @@ async def test_lease_reclaims_after_absolute_max_age():
 
 
 # --------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_lease_reclaims_legacy_far_future_without_acquired_at():
+    db = FakeDB()
+    first = await acquire_snapchat_lease(db, user_id="owner-1", now=NOW)
+    assert first is not None
+    row = db[lease_module.LEASE_COLLECTION].rows[0]
+    row.pop("acquired_at", None)
+    row["lease_until"] = lease_module._iso(
+        NOW + lease_module.MAX_LEASE_TTL + timedelta(seconds=1)
+    )
+    second = await acquire_snapchat_lease(db, user_id="owner-1", now=NOW)
+    assert second is not None
+    assert second.owner_token != first.owner_token
+
+
+@pytest.mark.asyncio
+async def test_lease_preserves_legacy_current_window_without_acquired_at():
+    db = FakeDB()
+    first = await acquire_snapchat_lease(db, user_id="owner-1", now=NOW)
+    assert first is not None
+    row = db[lease_module.LEASE_COLLECTION].rows[0]
+    row.pop("acquired_at", None)
+    row["lease_until"] = lease_module._iso(NOW + lease_module.DEFAULT_LEASE_TTL)
+    second = await acquire_snapchat_lease(db, user_id="owner-1", now=NOW)
+    assert second is None
+
+
 # Reader publish-marker binding tests
 # --------------------------------------------------------------------
 
@@ -598,6 +625,34 @@ async def test_snapchat_cadence_gate_allows_when_last_run_older_than_10m():
     ready = await scheduler._snapchat_cadence_ready(
         db, user_id="owner-1", now=NOW
     )
+    assert ready is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["running", "queued"])
+async def test_snapchat_cadence_gate_ignores_inflight_runs(status):
+    from integrations_control_center import ads_auto_sync_scheduler as scheduler
+
+    recent = NOW - timedelta(minutes=1)
+    db = FakeDB(
+        {
+            scheduler.RUNS_COLLECTION: [
+                {
+                    "user_id": "owner-1",
+                    "provider": SNAPCHAT_PROVIDER_ID,
+                    "run_type": scheduler.SNAP_RUN_TYPE,
+                    "status": status,
+                    "started_at": recent,
+                    "created_at": recent,
+                }
+            ]
+        }
+    )
+
+    ready = await scheduler._snapchat_cadence_ready(
+        db, user_id="owner-1", now=NOW
+    )
+
     assert ready is True
 
 
