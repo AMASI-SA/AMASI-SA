@@ -439,6 +439,207 @@ estimate only for captured orders that do not yet have an official row.
 - Kept refund handling statement-authoritative because the four samples contain
   no refunds, and kept bank selection changeable before accountant approval.
 
+## Approved accounting UI architecture — 2026-08-23
+
+Design status: **approved product plan and reference mockups; implementation is
+still pending unless a screen is explicitly listed in “Implemented in this
+change” above.** The mockups must never be used as evidence that a route has
+already shipped.
+
+### One top-level module, not scattered pages
+
+All accounting work belongs under exactly one Mezan 2 navigation entry named
+**`المحاسبة`**. It must not be distributed across unrelated Mezan pages. The
+accounting module owns these eight pages:
+
+1. `الرئيسية المحاسبية`
+2. `التسويات`
+3. `الشحن والتحصيل`
+4. `المخزون والمشتريات`
+5. `الحركات المالية`
+6. `الرواتب والالتزامات`
+7. `الأرصدة الافتتاحية`
+8. `القيود والتقارير`
+
+The financial position is a generated report under `القيود والتقارير`; it is
+not a form where a user types assets, liabilities, or equity totals.
+
+### Shared simplicity and layout contract
+
+- Arabic RTL layout throughout. Page titles and field text start on the right;
+  supporting icons/actions sit on the left where the component allows it.
+- Display financial values using English digits, consistent with the existing
+  merchant preference.
+- Each task page has one visually dominant primary action. Secondary actions
+  are limited to `حفظ كمسودة`, attachment, or cancel/back.
+- An ordinary user records the real business event. Mezan derives the debit,
+  credit, fee, VAT, and counterparty accounts and shows a readable preview.
+- Account codes, debit/credit mechanics, fee-rule editing, and other expert
+  controls stay behind `تفاصيل إضافية` or accountant permissions.
+- Posted journals cannot be edited or deleted. Corrections use a linked
+  reversal or adjustment journal.
+- New pages and sensitive actions are denied to employees by default. The
+  owner/admin assigns permission per accounting subpage and per sensitive
+  action; access to one page never grants the whole module.
+- Operators may enter and save assigned drafts. Accountants may reconcile and
+  post. Opening-balance approval, manual journals, reversal, and financial-rule
+  changes require explicit elevated permission.
+
+### Page 1 — `الرئيسية المحاسبية`
+
+Purpose: one command center for the accountant and a simple task launcher for
+other permitted users.
+
+- Summary cards: bank balances, unsettled provider amounts, courier balances,
+  and items requiring review.
+- `جاهزية المركز المالي` shows which cutover/reconciliation requirements are
+  incomplete; it must not invent readiness from missing data.
+- Four daily shortcuts: `تسوية دفعات`, `حركة مالية`, `فاتورة شراء`, and
+  `راتب أو التزام`.
+- `مهام اليوم` lists only actionable exceptions and opens the relevant page.
+
+Reference: [01-accounting-center.png](../assets/mz2-accounting-ui/01-accounting-center.png)
+
+### Page 2 — `التسويات`
+
+Purpose: import, reconcile, and post official Salla, Tamara, Tabby, Emkan, and
+supported courier statements without asking the user to build a journal.
+
+- Three steps only: `ارفع الملف` → `راجع الفروقات` → `اعتمد القيد`.
+- Provider selector: Salla, Tamara, Tabby, Emkan, or shipping company.
+- The provider’s current settlement bank is preselected. The accountant may
+  change it before posting; no settlement date range is required for the bank
+  change, and posted settlements keep the snapshotted bank.
+- Review shows gross sales, fee, fee VAT, adjustments/refunds, net settlement,
+  matching percentage, and unresolved rows.
+- Official statement values override editable estimated fee rules for the
+  statement’s covered transactions/period.
+- A newly observed payment method may be proposed under Salla only when the
+  evidence identifies Salla as settler. Otherwise it remains unclassified and
+  cannot silently inherit an approved fee.
+- Primary action: `اعتماد وإنشاء القيد`.
+
+Reference: [02-settlements.png](../assets/mz2-accounting-ui/02-settlements.png)
+
+### Page 3 — `الشحن والتحصيل`
+
+Purpose: keep external couriers, COD custody, and individual store drivers
+auditable without netting unrelated people or companies.
+
+- Tabs: `شركات الشحن`, `مندوبي المتجر`, and `قواعد العمولات`.
+- Each external courier card shows `لنا`, `علينا`, pending settlement, and
+  exceptions. Settlement keeps gross COD, shipping, commission, commission
+  VAT, adjustments, and bank transfer as separate legs.
+- Courier commission rules support amount tiers, percentage, fixed fee, VAT,
+  and explicit inclusive/exclusive boundaries. Uncovered amounts stop for
+  review instead of receiving a zero fee.
+- `مندوب المتجر` is a presentation group only. Each driver has an independent
+  COD receivable, delivery-fee payable, shipment list, and signed net balance.
+- Primary action per selected company/person: `سجل التسوية` or `سجل القيد`.
+
+Reference: [03-shipping-cod.png](../assets/mz2-accounting-ui/03-shipping-cod.png)
+
+### Page 4 — `المخزون والمشتريات`
+
+Purpose: record purchase evidence and update inventory quantity/cost through a
+business form rather than a manual journal.
+
+- Tabs: `المخزون`, `فواتير الشراء`, and `الجرد والافتتاح`.
+- Essential invoice fields: supplier, invoice number/date, paid or credit,
+  invoice attachment, product, quantity, unit cost, VAT, and total.
+- Posting a purchase invoice updates inventory and supplier/bank balances and
+  displays a balanced readable journal preview.
+- Default costing design is weighted average, subject to final accounting
+  approval before production use.
+- A sale recognition event posts cost of goods sold and reduces stock once;
+  no cost is inferred from Salla selling price.
+- Opening inventory uses approved physical count and approved cost evidence at
+  the exact cutover instant. Damaged/obsolete stock is reviewed separately.
+- Primary action: `حفظ الفاتورة وتحديث المخزون`.
+
+Reference: [04-inventory-purchases.png](../assets/mz2-accounting-ui/04-inventory-purchases.png)
+
+### Page 5 — `الحركات المالية`
+
+Purpose: provide the single entry point for ordinary money movement while
+routing the event to its canonical workflow.
+
+- First choice has only three tiles: `دخل مبلغ`, `خرج مبلغ`, or
+  `تحويل بين حسابين`.
+- Essential fields: source, destination, amount, movement date, reference or
+  description, and optional attachment.
+- A provider settlement is not reduced to a generic transfer. When `هذه
+  تسوية` is selected, provider-specific reconciliation and bank snapshot rules
+  apply.
+- The user does not select a settlement period merely to change the receiving
+  bank; the actual movement/statement date is sufficient.
+- The preview uses readable labels such as `خصم من سلة` and `إضافة إلى بنك
+  الإنماء`; accountant-only details may expose ledger lines.
+- Primary action: `تسجيل الحركة`.
+
+Reference: [05-financial-movement.png](../assets/mz2-accounting-ui/05-financial-movement.png)
+
+### Page 6 — `الرواتب والالتزامات`
+
+Purpose: manage current payroll and evidenced recurring/annual liabilities
+without reposting historical expenses.
+
+- Tabs: `رواتب الموظفين`, `التزامات دورية`, and `الأرصدة الافتتاحية`.
+- Payroll list shows salary, additions/deductions, net, payment status, and a
+  simple multi-select payment action.
+- Recurring obligations cover rent, subscriptions, VAT/tax, and annual
+  commitments with due date, amount, evidence, and `سجل السداد`.
+- Earned unpaid pre-cutover salaries are entered once per employee as opening
+  salary liabilities. They are not a new post-cutover salary expense.
+- Primary action: `تسجيل الرواتب المحددة`; each obligation has `سجل السداد`.
+
+Reference: [06-payroll-obligations.png](../assets/mz2-accounting-ui/06-payroll-obligations.png)
+
+### Page 7 — `الأرصدة الافتتاحية`
+
+Purpose: a one-time, controlled cutover wizard, never a recurring data-entry
+screen.
+
+- The first mandatory field is the exact timezone-aware `توقيت القطع`.
+- Checklist: banks/cash, Salla/payment methods, couriers/COD, inventory,
+  suppliers, salaries/obligations, and capital/equity reconciliation.
+- Every row requires an evidence reference and the same cutover instant.
+- The preview shows total debit, total credit, and difference. Approval stays
+  disabled until all required evidence is present and the batch balances.
+- Historical sales, historical paid salaries, and the legacy financial
+  position are not re-entered; reviewed pre-cutover net history is represented
+  through opening equity/retained result.
+- Primary action: `اعتماد الرصيد الافتتاحي`, protected by owner/accountant
+  approval and one idempotent operation key.
+
+Reference: [07-opening-balances.png](../assets/mz2-accounting-ui/07-opening-balances.png)
+
+### Page 8 — `القيود والتقارير`
+
+Purpose: accountant audit, reconciliation, and reporting after business-event
+screens have produced journals.
+
+- Tabs: `القيود اليومية`, `المركز المالي`, `قائمة الدخل`, and `دفتر الأستاذ`.
+- Journal rows show number, date, source, description, amount, status,
+  attachments, and expandable debit/credit details.
+- Sources are visibly classified, for example Salla settlement, purchase
+  invoice, salary, or shipping company.
+- `قيد يدوي جديد` is accountant-only and should be exceptional, not the normal
+  workflow.
+- Posted entries offer `عكس القيد` with reason/evidence; no destructive edit.
+- The financial position is reproduced from journals and visibly verifies
+  `الأصول = الالتزامات + حقوق الملكية`.
+
+Reference: [08-journals-reports.png](../assets/mz2-accounting-ui/08-journals-reports.png)
+
+### Mockup interpretation rule
+
+The eight PNG files are product-direction references. Exact sample amounts,
+dates, logos, and decorative placement are not accounting requirements. The
+Arabic labels, route grouping, workflow order, permission boundaries, and
+accounting controls in this document are authoritative when a mockup detail
+conflicts with the written plan.
+
 Primary files:
 
 - `backend/financial_provider_apps.py`
@@ -520,8 +721,16 @@ Primary files:
 
 Use this exact message:
 
-> Continue GitHub operation `MZ2-FIN-CUTOVER-001`. Read
-> `docs/operations/MZ2-FIN-CUTOVER-001.md`, inspect the latest merged commit
-> and tests, report the current gate, then continue only the next incomplete
-> item. Do not import legacy Mezan balances or sales and do not post production
-> opening entries without the approved cutover evidence sheet.
+> Continue GitHub operation `MZ2-FIN-CUTOVER-001` in repository
+> `AMASI-SA/AMASI-SA` from the Production source branch
+> `hotfix/prod-snap-meta-final`. First read
+> `docs/operations/MZ2-FIN-CUTOVER-001.md` completely and inspect the eight UI
+> mockups under `docs/assets/mz2-accounting-ui/`. All eight accounting pages
+> belong under one top-level Mezan 2 section named `المحاسبة`; do not scatter
+> them across the application. Treat the images as design references and the
+> written workflow/permissions as authoritative. Inspect the latest merged
+> commit and tests, report what is implemented versus design-only and identify
+> the current cutover gate before changing code. Continue only the next
+> incomplete approved item. Do not import legacy Mezan balances or sales, do
+> not guess the cutover timestamp or opening values, and do not post production
+> opening entries without the signed evidence sheet and explicit approval.
