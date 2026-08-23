@@ -6,6 +6,8 @@ import io
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 from reportlab.lib.colors import HexColor
 from reportlab.lib.pagesizes import A4
@@ -84,6 +86,38 @@ def _amasi_logo() -> ImageReader | None:
         return None
 
 
+def _short_text(value: Any, limit: int = 52) -> str:
+    text = _text(value)
+    if len(text) <= limit:
+        return text
+    return f"{text[: max(1, limit - 1)].rstrip()}…"
+
+
+def _product_image(value: Any) -> ImageReader | None:
+    url = _text(value)
+    try:
+        parsed = urlparse(url)
+        host = (parsed.hostname or "").casefold()
+        trusted = (
+            host in {"salla.sa", "salla.network"}
+            or host.endswith(".salla.sa")
+            or host.endswith(".salla.network")
+        )
+        if parsed.scheme != "https" or not trusted:
+            return None
+        request = Request(url, headers={"User-Agent": "AMASI-Supplier-Invoice/1.0"})
+        with urlopen(request, timeout=4) as response:
+            content_type = _text(response.headers.get("Content-Type")).casefold()
+            if not content_type.startswith("image/"):
+                return None
+            raw = response.read(5 * 1024 * 1024 + 1)
+        if not raw or len(raw) > 5 * 1024 * 1024:
+            return None
+        return ImageReader(io.BytesIO(raw))
+    except Exception:
+        return None
+
+
 def generate_supplier_invoice_pdf(invoice: dict[str, Any]) -> bytes:
     """Render one durable supplier invoice with selected services only."""
     regular_font, bold_font = _register_font()
@@ -146,18 +180,33 @@ def generate_supplier_invoice_pdf(invoice: dict[str, Any]) -> bytes:
         line_top = y
         page.setFillColor(HexColor("#F8FAFC"))
         page.setStrokeColor(HexColor("#E2E8F0"))
-        page.roundRect(left, y - 13 * mm, width - 30 * mm, 16 * mm, 3 * mm, fill=1, stroke=1)
+        page.roundRect(left, y - 17 * mm, width - 30 * mm, 20 * mm, 3 * mm, fill=1, stroke=1)
+        image = _product_image(line.get("selected_image_url"))
+        text_right = right - 4 * mm
+        if image is not None:
+            page.drawImage(
+                image,
+                right - 19 * mm,
+                y - 15 * mm,
+                width=14 * mm,
+                height=14 * mm,
+                preserveAspectRatio=True,
+                anchor="c",
+                mask="auto",
+            )
+            text_right = right - 23 * mm
         page.setFillColor(HexColor("#0F172A"))
-        page.setFont(bold_font, 11)
-        page.drawRightString(right - 4 * mm, y - 4 * mm, _ar(_text(line.get("product_name")) or "منتج"))
+        page.setFont(bold_font, 10)
+        product_name = _short_text(line.get("product_name") or "منتج")
+        page.drawRightString(text_right, y - 4 * mm, _ar(product_name))
         page.setFont(regular_font, 8)
         facts = (
             f"الكمية: {int(line.get('quantity') or 0)}  |  "
             f"سعر المنتج: {_money(line.get('product_unit_price_halalas'))}  |  "
             f"إجمالي المنتج: {_money(line.get('product_total_halalas'))}"
         )
-        page.drawRightString(right - 4 * mm, y - 10 * mm, _ar(facts))
-        y -= 19 * mm
+        page.drawRightString(text_right, y - 11 * mm, _ar(facts))
+        y -= 23 * mm
 
         services = list(line.get("services") or [])
         if services:
