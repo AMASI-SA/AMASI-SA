@@ -15,8 +15,9 @@ const LEGACY_SECTION_SNAPSHOT = MEZAN_V2_NAV_SECTIONS.map((section) => ({
     items: section.items.map((item) => ({ ...item })),
 }));
 
-// Compatibility contract for static route-wiring guards. The visible shell is
-// still derived from LEGACY_SECTION_SNAPSHOT plus the accounting replacement.
+// Compatibility contracts for static route-wiring guards. The visible shell
+// is still derived from LEGACY_SECTION_SNAPSHOT plus the accounting replacement.
+export const ADVERTISING_ACCOUNTS_ROUTE_CONTRACT = "/integrations-v2?workspace=accounts";
 export const EMPLOYEES_V2_ROUTE_CONTRACT = [
     { to: "/employees-v2", label: "إدارة الموظفين", exactSearch: true },
     { to: "/employees-v2?workspace=migration", label: "تقرير الترحيل والرواتب" },
