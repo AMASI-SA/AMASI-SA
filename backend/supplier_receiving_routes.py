@@ -3020,6 +3020,37 @@ def make_supplier_receiving_router(
             ),
         }
 
+    @router.post("/sessions/{session_id}/refresh")
+    async def refresh_session(
+        session_id: str,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        """Rebuild the open invoice draft from current Mezan costs and services."""
+        context = await _actor_context(db, user)
+        _require_permission(context, RECEIVE_PERMISSION)
+        session = await _session_for_actor(
+            db,
+            context=context,
+            session_id=session_id,
+        )
+        if _text(session.get("status")) != "open":
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "supplier_receiving_session_not_open"},
+            )
+        scans = await _recent_session_events(
+            db,
+            user_id=context["merchant_id"],
+            session_id=session_id,
+            limit=MAX_SESSION_SCANS,
+        )
+        return {
+            "ok": True,
+            "session": _public_session(session),
+            "scans": scans,
+            "refreshed": True,
+        }
+
     @router.post("/sessions/{session_id}/scan")
     async def scan_piece(
         session_id: str,

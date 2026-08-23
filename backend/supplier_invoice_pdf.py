@@ -1,6 +1,7 @@
 """Arabic supplier invoice PDF for Mezan supplier receiving."""
 from __future__ import annotations
 
+import base64
 import io
 from datetime import datetime
 from pathlib import Path
@@ -9,6 +10,7 @@ from typing import Any
 from reportlab.lib.colors import HexColor
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
@@ -73,6 +75,15 @@ def _date(value: Any) -> str:
     return _text(value)[:10] or "—"
 
 
+def _amasi_logo() -> ImageReader | None:
+    path = Path(__file__).resolve().parent / "assets" / "amasi_qr_logo.b64"
+    try:
+        raw = base64.b64decode(path.read_text(encoding="ascii").strip(), validate=True)
+        return ImageReader(io.BytesIO(raw))
+    except Exception:
+        return None
+
+
 def generate_supplier_invoice_pdf(invoice: dict[str, Any]) -> bytes:
     """Render one durable supplier invoice with selected services only."""
     regular_font, bold_font = _register_font()
@@ -93,13 +104,25 @@ def generate_supplier_invoice_pdf(invoice: dict[str, Any]) -> bytes:
             new_page()
 
     supplier = dict(invoice.get("supplier_snapshot") or {})
-    page.setFillColor(HexColor("#047857"))
+    page.setFillColor(HexColor("#74102F"))
     page.roundRect(left, height - 42 * mm, width - 30 * mm, 28 * mm, 4 * mm, fill=1, stroke=0)
     page.setFillColor(HexColor("#FFFFFF"))
     page.setFont(bold_font, 18)
-    page.drawRightString(right - 5 * mm, height - 25 * mm, _ar("فاتورة مورد — Mezan OS"))
+    page.drawRightString(right - 5 * mm, height - 25 * mm, _ar("فاتورة مورد — أماسي"))
+    logo = _amasi_logo()
+    if logo is not None:
+        page.drawImage(
+            logo,
+            left + 5 * mm,
+            height - 37 * mm,
+            width=18 * mm,
+            height=18 * mm,
+            preserveAspectRatio=True,
+            anchor="c",
+            mask="auto",
+        )
     page.setFont(regular_font, 9)
-    page.drawString(left + 5 * mm, height - 25 * mm, _text(invoice.get("invoice_number")))
+    page.drawString(left + 26 * mm, height - 25 * mm, _text(invoice.get("invoice_number")))
     y = height - 52 * mm
 
     header_rows = [
@@ -138,7 +161,7 @@ def generate_supplier_invoice_pdf(invoice: dict[str, Any]) -> bytes:
 
         services = list(line.get("services") or [])
         if services:
-            page.setFillColor(HexColor("#6D28D9"))
+            page.setFillColor(HexColor("#CDA14A"))
             page.setFont(bold_font, 9)
             page.drawRightString(right - 4 * mm, y, _ar("الخدمات المختارة"))
             y -= 6 * mm
@@ -155,7 +178,7 @@ def generate_supplier_invoice_pdf(invoice: dict[str, Any]) -> bytes:
                 page.drawRightString(right - 8 * mm, y, _ar(text))
                 y -= 6 * mm
 
-        page.setFillColor(HexColor("#065F46"))
+        page.setFillColor(HexColor("#74102F"))
         page.setFont(bold_font, 10)
         page.drawRightString(right - 4 * mm, y, _ar(f"إجمالي السطر: {_money(line.get('total_halalas'))}"))
         y -= 11 * mm
@@ -163,15 +186,15 @@ def generate_supplier_invoice_pdf(invoice: dict[str, Any]) -> bytes:
             y -= 5 * mm
 
     ensure_space(32)
-    page.setFillColor(HexColor("#ECFDF5"))
-    page.setStrokeColor(HexColor("#6EE7B7"))
+    page.setFillColor(HexColor("#FFF8E7"))
+    page.setStrokeColor(HexColor("#CDA14A"))
     page.roundRect(left, y - 17 * mm, width - 30 * mm, 20 * mm, 4 * mm, fill=1, stroke=1)
-    page.setFillColor(HexColor("#065F46"))
+    page.setFillColor(HexColor("#74102F"))
     page.setFont(bold_font, 15)
     page.drawCentredString(width / 2, y - 9 * mm, _ar(f"الإجمالي النهائي: {_money(invoice.get('total_halalas'))}"))
     page.setFillColor(HexColor("#64748B"))
     page.setFont(regular_font, 7.5)
-    page.drawCentredString(width / 2, 10 * mm, _ar("فاتورة داخلية صادرة من ميزان — لا يوجد إرسال تلقائي إلى سلة أو قيود"))
+    page.drawCentredString(width / 2, 10 * mm, _ar("فاتورة داخلية صادرة من أماسي — لا يوجد إرسال تلقائي إلى سلة أو قيود"))
 
     page.save()
     return buffer.getvalue()
