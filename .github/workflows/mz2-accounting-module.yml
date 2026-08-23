@@ -1,0 +1,87 @@
+name: MZ2 Accounting Module
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+    paths:
+      - "backend/accounting_module_*.py"
+      - "backend/financial_provider_apps*.py"
+      - "backend/tests/test_mz2_accounting_module.py"
+      - "frontend/src/pages/accounting/**"
+      - "frontend/src/pages/FinancialProviderApps*.jsx"
+      - "frontend/src/components/MezanV2NavigationShell*.jsx"
+      - "frontend/src/components/OwnerOnlyRoute*.jsx"
+      - "frontend/src/services/accountingModule.js"
+      - ".github/workflows/mz2-accounting-module.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend-contract:
+    name: Accounting backend contract
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused backend dependencies
+        run: >-
+          python -m pip install -q
+          fastapi==0.140.0
+          pydantic==2.13.4
+          pymongo==4.6.3
+          bcrypt==4.1.3
+          PyJWT==2.13.0
+          openpyxl==3.1.5
+          pytest==9.0.3
+      - name: Compile accounting modules
+        run: >-
+          python -m py_compile
+          accounting_module_contract.py
+          accounting_module_ledger.py
+          accounting_module_permission_routes.py
+          accounting_module_readiness.py
+          accounting_module_status_routes.py
+          financial_provider_apps.py
+          financial_provider_apps_legacy.py
+          tests/test_mz2_accounting_module.py
+      - name: Run accounting contract tests
+        run: python -m pytest tests/test_mz2_accounting_module.py -q --tb=short
+
+  frontend-contract:
+    name: Accounting frontend contract
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Run focused accounting tests
+        run: >-
+          CI=true yarn test
+          --watchAll=false
+          --runInBand
+          src/pages/accounting/accountingPages.test.js
+          src/components/OwnerOnlyRoute.test.jsx
+          src/components/MezanV2NavigationShell.test.jsx
+      - name: Build frontend
+        run: CI=false yarn build

@@ -6,11 +6,18 @@ jest.mock("react-router-dom", () => ({
     ),
 }));
 
+jest.mock("../context/AuthContext", () => ({
+    useOptionalAuth: () => ({
+        user: { id: "owner-1", role: "owner", is_owner: true },
+    }),
+}));
+
 import MezanV2NavigationShell, {
     MEZAN_V2_NAV_SECTIONS,
     activeNavigationSection,
     isMezanV2Route,
     isNavigationItemActive,
+    navigationSectionsForAccountingAccess,
     navigationSectionsForDisplay,
 } from "./MezanV2NavigationShell";
 
@@ -32,6 +39,11 @@ const MARKETING_LOCATION = {
 const FULFILLMENT_LOCATION = {
     pathname: "/fulfillment-v2",
     search: "?stage=reviewed&view=products",
+};
+
+const ACCOUNTING_LOCATION = {
+    pathname: "/integrations-v2",
+    search: "?workspace=financial&page=shipping-cod",
 };
 
 test("Mezan 2 shell is limited to Mezan 2 routes including the advanced dashboard", () => {
@@ -178,15 +190,47 @@ test("Mezan 2 exposes an independent suppliers section", () => {
     expect(activeNavigationSection({ pathname: "/suppliers-v2", search: "" })?.id).toBe("suppliers");
 });
 
-test("finance keeps recurring obligations and store-driver accounting workspaces", () => {
-    const finance = MEZAN_V2_NAV_SECTIONS.find((section) => section.id === "finance");
-    expect(finance.label).toBe("الإدارة المالية");
-    expect(finance.items).toEqual([
-        { to: "/recurring-obligations", label: "الالتزامات والمصاريف الدورية", exactSearch: true },
-        { to: "/bank-transfer-review?workspace=store-delivery", label: "مراجعة تحصيلات الموصلين" },
-        { to: "/settlements-overview?workspace=store-delivery", label: "تسويات موصلي المتجر" },
+test("accounting owns exactly the approved eight pages and is removed from apps", () => {
+    const accounting = MEZAN_V2_NAV_SECTIONS.find((section) => section.id === "accounting");
+    expect(accounting.label).toBe("المحاسبة");
+    expect(accounting.items.map((item) => item.label)).toEqual([
+        "الرئيسية المحاسبية",
+        "التسويات",
+        "الشحن والتحصيل",
+        "المخزون والمشتريات",
+        "الحركات المالية",
+        "الرواتب والالتزامات",
+        "الأرصدة الافتتاحية",
+        "القيود والتقارير",
     ]);
-    expect(activeNavigationSection({ pathname: "/recurring-obligations", search: "" })?.id).toBe("finance");
+    expect(accounting.items.every((item) => item.to.includes("workspace=financial"))).toBe(true);
+    expect(activeNavigationSection(ACCOUNTING_LOCATION)?.id).toBe("accounting");
+
+    const activeItems = accounting.items.filter(
+        (item) => isNavigationItemActive(ACCOUNTING_LOCATION, item),
+    );
+    expect(activeItems.map((item) => item.label)).toEqual(["الشحن والتحصيل"]);
+
+    const apps = MEZAN_V2_NAV_SECTIONS.find((section) => section.id === "apps");
+    expect(apps.items.some((item) => item.to.includes("workspace=financial"))).toBe(false);
+});
+
+test("employees see only explicitly assigned accounting pages", () => {
+    const none = navigationSectionsForAccountingAccess({
+        is_owner: false,
+        permissions: [],
+    });
+    expect(none.some((section) => section.id === "accounting")).toBe(false);
+
+    const assigned = navigationSectionsForAccountingAccess({
+        is_owner: false,
+        permissions: ["accounting.settlements.view", "accounting.payroll.view"],
+    });
+    const accounting = assigned.find((section) => section.id === "accounting");
+    expect(accounting.items.map((item) => item.label)).toEqual([
+        "التسويات",
+        "الرواتب والالتزامات",
+    ]);
 });
 
 test("marketing report and cost routes are separate from app integration routes", () => {
