@@ -1,18 +1,28 @@
-"""Independent Snapchat provider-total reads used only for reconciliation."""
+"""Independent Snapchat provider-total reads used only for reconciliation.
+
+The Dashboard uses an Asia/Riyadh calendar day while the Snapchat page uses the
+ad-account calendar.  A single UTC total cannot prove both views when those
+windows differ.  This module therefore reads the requested Dashboard window
+and, when necessary, a second account-local window for the same Riyadh date.
+"""
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from .client import (
     HTTP_TIMEOUT_SECONDS,
     SNAPCHAT_API_BASE,
     SnapchatClientError,
     SnapchatV2Client,
+    _account_timezone,
     _coverage,
     _number,
 )
 from .models import clean_text, ensure_aware_utc
+
+RIYADH_TZ = ZoneInfo("Asia/Riyadh")
 
 
 def _total_metric_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -70,15 +80,45 @@ def _total_metric_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
-async def fetch_provider_total(
+def _ceil_current_hour(value: datetime) -> datetime:
+    current = ensure_aware_utc(value, field="now")
+    floor = current.replace(minute=0, second=0, microsecond=0)
+    return floor if current == floor else floor + timedelta(hours=1)
+
+
+def _local_day_window(report_date: date, timezone_name: str) -> tuple[datetime, datetime]:
+    local_tz = _account_timezone(timezone_name)
+    local_start = datetime.combine(report_date, time.min, tzinfo=local_tz)
+    local_end = datetime.combine(report_date + timedelta(days=1), time.min, tzinfo=local_tz)
+    return local_start.astimezone(timezone.utc), local_end.astimezone(timezone.utc)
+
+
+def _clamp_open_window(
+    start: datetime,
+    end: datetime,
+    *,
+    now: datetime,
+) -> tuple[datetime, datetime]:
+    cap = _ceil_current_hour(now)
+    if end > cap:
+        end = cap
+    if end <= start:
+        raise SnapchatClientError(
+            "snapchat_total_window_not_open",
+            "Snapchat TOTAL reconciliation window has not started.",
+        )
+    return start, end
+
+
+async def _fetch_window_total(
     client: SnapchatV2Client,
     account: dict[str, Any],
     *,
     start_utc: datetime,
     end_utc: datetime,
-    action_report_time: str = "conversion",
-    swipe_attribution_window: str = "28_DAY",
-    view_attribution_window: str = "1_DAY",
+    action_report_time: str,
+    swipe_attribution_window: str,
+    view_attribution_window: str,
 ) -> dict[str, Any]:
     start = ensure_aware_utc(start_utc, field="start_utc")
     end = ensure_aware_utc(end_utc, field="end_utc")
@@ -93,8 +133,6 @@ async def fetch_provider_total(
     timezone_name = clean_text(account.get("timezone"), limit=80)
     if not account_id or not timezone_name:
         raise ValueError("Snapchat account ID and timezone are required")
-    from .client import _account_timezone
-
     account_tz = _account_timezone(timezone_name)
     url = f"{SNAPCHAT_API_BASE}/adaccounts/{account_id}/stats"
     params = {
@@ -142,6 +180,8 @@ async def fetch_provider_total(
     spend_native = round(spend_micro / 1_000_000, 6)
     return {
         "provider_spend_native": spend_native,
+        "window_start_utc": start,
+        "window_end_utc": end,
         "coverage": _coverage(
             status="complete",
             data_state="confirmed_data" if spend_native > 0 else "confirmed_zero",
@@ -149,6 +189,71 @@ async def fetch_provider_total(
             completed_requests=completed,
             rows_received=1,
         ),
+    }
+
+
+async def fetch_provider_total(
+    client: SnapchatV2Client,
+    account: dict[str, Any],
+    *,
+    start_utc: datetime,
+    end_utc: datetime,
+    action_report_time: str = "conversion",
+    swipe_attribution_window: str = "28_DAY",
+    view_attribution_window: str = "1_DAY",
+) -> dict[str, Any]:
+    """Return Dashboard-window total plus an account-day comparison total.
+
+    ``provider_spend_native`` remains the requested-window result for backward
+    compatibility.  The additional ``account_day_*`` fields are consumed by
+    reconciliation so the Snapchat page is never compared against a Riyadh
+    UTC window by mistake.
+    """
+    current = client.now().astimezone(timezone.utc)
+    dashboard_start, dashboard_end = _clamp_open_window(
+        ensure_aware_utc(start_utc, field="start_utc"),
+        ensure_aware_utc(end_utc, field="end_utc"),
+        now=current,
+    )
+    dashboard = await _fetch_window_total(
+        client,
+        account,
+        start_utc=dashboard_start,
+        end_utc=dashboard_end,
+        action_report_time=action_report_time,
+        swipe_attribution_window=swipe_attribution_window,
+        view_attribution_window=view_attribution_window,
+    )
+
+    report_date = dashboard_start.astimezone(RIYADH_TZ).date()
+    account_timezone = clean_text(account.get("timezone"), limit=80)
+    account_start, account_end = _local_day_window(report_date, account_timezone)
+    account_start, account_end = _clamp_open_window(
+        account_start,
+        account_end,
+        now=current,
+    )
+    if account_start == dashboard_start and account_end == dashboard_end:
+        account_day = dashboard
+    else:
+        account_day = await _fetch_window_total(
+            client,
+            account,
+            start_utc=account_start,
+            end_utc=account_end,
+            action_report_time=action_report_time,
+            swipe_attribution_window=swipe_attribution_window,
+            view_attribution_window=view_attribution_window,
+        )
+
+    return {
+        **dashboard,
+        "dashboard_provider_spend_native": dashboard["provider_spend_native"],
+        "dashboard_coverage": dashboard["coverage"],
+        "account_day_provider_spend_native": account_day["provider_spend_native"],
+        "account_day_coverage": account_day["coverage"],
+        "account_day_window_start_utc": account_day["window_start_utc"],
+        "account_day_window_end_utc": account_day["window_end_utc"],
         "provider_calls": client.provider_calls,
     }
 
