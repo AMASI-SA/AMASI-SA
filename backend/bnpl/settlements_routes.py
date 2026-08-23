@@ -865,7 +865,7 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
                        "thursday": 3, "friday": 4, "saturday": 5,
                        "sunday": 6}
         _PROVIDER_DEFAULTS = {
-            "tabby":  {"invoice": "monday", "transfer": "tuesday"},
+            "tabby":  {"invoice": "monday", "transfer": "monday"},
             "tamara": {"invoice": "saturday", "transfer": "tuesday"},
         }
         settings_doc = await db.bnpl_settings.find_one(
@@ -886,6 +886,14 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
                 inv_wds = ["saturday"]
         tr_wds  = (settings_doc.get("transfer_weekdays")
                    or [defaults_for_p.get("transfer", "tuesday")])
+        if provider == "tabby":
+            from bnpl.config_store import TABBY_STATEMENT_DEFAULTS_VERSION
+            if (
+                settings_doc.get("statement_cycle_defaults_version")
+                != TABBY_STATEMENT_DEFAULTS_VERSION
+                and tr_wds == ["tuesday", "wednesday"]
+            ):
+                tr_wds = ["monday"]
         invoice_wd = WEEKDAY_MAP.get(
             (inv_wds[0] or "").lower(),
             WEEKDAY_MAP[defaults_for_p.get("invoice", "monday")],

@@ -34,7 +34,7 @@ Output structure (per provider):
 from __future__ import annotations
 
 import math
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_HALF_EVEN, ROUND_HALF_UP
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -99,7 +99,7 @@ DEFAULT_FEE_RATES: Dict[str, Dict[str, float]] = {
     "tabby":  {"commission_pct": 6.99, "vat_pct": 15.0,
                "fixed_fee_per_order": 1.0,
                "refundable_commission_pct": 4.99,
-               "settlement_fee_per_invoice": 6.0,
+               "settlement_fee_per_invoice": 0.0,
                "settlement_fee_vat_applicable": True,
                "settlement_period_days": 7},
     "tamara": {"commission_pct": 6.99, "vat_pct": 15.0,
@@ -172,19 +172,29 @@ def _round_sar(value: Decimal | float) -> float:
     return float(decimal_value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
+def _round_sar_even(value: Decimal | float) -> float:
+    """Round like the VAT legs displayed in Tabby's merchant reports."""
+    decimal_value = (
+        value if isinstance(value, Decimal) else Decimal(str(value or 0))
+    )
+    return float(decimal_value.quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_EVEN,
+    ))
+
+
 def _capture_fee_components(
     provider: str,
     amount: float,
     commission_rate: float,
     fixed_fee: float,
     vat_rate: float,
+    refundable_rate: Optional[float] = None,
 ) -> tuple[float, float]:
     """Return capture fee and fee VAT using the provider's rounding model.
 
-    Tamara's five verified 2026-08 statements round the fee per capture and
-    then calculate VAT on that displayed rounded fee.  Tabby retains the
-    existing sum-first behavior, so its unrounded components are returned for
-    accumulation and final rounding by the caller.
+    Tamara rounds the combined fee per capture and then VAT. Tabby rounds the
+    4.99% refundable and 2.00% non-refundable legs separately, adds SAR 1,
+    then rounds VAT half-even per displayed fee leg.
     """
     if provider == "tamara":
         amount_d = Decimal(str(amount or 0))
@@ -194,6 +204,35 @@ def _capture_fee_components(
         fee = _round_sar(amount_d * rate_d + fixed_d)
         vat = _round_sar(Decimal(str(fee)) * vat_d)
         return fee, vat
+
+    if provider == "tabby":
+        amount_d = Decimal(str(amount or 0))
+        total_rate_d = Decimal(str(commission_rate or 0))
+        refundable_rate_d = Decimal(str(
+            refundable_rate
+            if refundable_rate is not None
+            else min(float(commission_rate or 0), 0.0499)
+        ))
+        refundable_rate_d = min(refundable_rate_d, total_rate_d)
+        nonrefundable_rate_d = max(
+            total_rate_d - refundable_rate_d,
+            Decimal("0"),
+        )
+        fixed_d = Decimal(str(fixed_fee or 0))
+        vat_d = Decimal(str(vat_rate or 0))
+        refundable_fee = Decimal(str(_round_sar(
+            amount_d * refundable_rate_d,
+        )))
+        nonrefundable_fee = Decimal(str(_round_sar(
+            amount_d * nonrefundable_rate_d,
+        )))
+        fee = refundable_fee + nonrefundable_fee + fixed_d
+        vat = (
+            Decimal(str(_round_sar_even(refundable_fee * vat_d)))
+            + Decimal(str(_round_sar_even(nonrefundable_fee * vat_d)))
+            + Decimal(str(_round_sar_even(fixed_d * vat_d)))
+        )
+        return float(fee), float(vat)
 
     fee_unrounded = float(amount or 0) * commission_rate + fixed_fee
     return fee_unrounded, fee_unrounded * vat_rate
@@ -269,11 +308,10 @@ async def _merchant_fee_rates(
         "settlement_fee_per_invoice": 0, "settlement_period_days": 7,
     })
     rates: Dict[str, Any] = dict(defaults)
-    # Iter-121 — weekday defaults (canonical).  Tabby = Monday close,
-    # Tue/Wed payouts; Tamara statements close Friday and issue Saturday.
+    # Provider statement issue/transfer defaults (canonical weekdays).
     weekday_defaults = {
         "tabby":  {"invoice_weekdays":  ["monday"],
-                   "transfer_weekdays": ["tuesday", "wednesday"]},
+                   "transfer_weekdays": ["monday"]},
         "tamara": {"invoice_weekdays":  ["saturday"],
                    "transfer_weekdays": ["tuesday"]},
     }
@@ -325,6 +363,13 @@ async def _merchant_fee_rates(
     # payment_methods entry didn't supply them (graceful migration).
 
     if doc:
+        tabby_legacy_defaults = False
+        if provider == "tabby":
+            from .config_store import TABBY_STATEMENT_DEFAULTS_VERSION
+            tabby_legacy_defaults = (
+                doc.get("statement_cycle_defaults_version")
+                != TABBY_STATEMENT_DEFAULTS_VERSION
+            )
         if rates["fee_source"] != "payment_methods_settings":
             # No payment_methods entry yet — fall back to bnpl_settings.
             if (doc.get("mdr_percent") is not None
@@ -341,7 +386,10 @@ async def _merchant_fee_rates(
         # since payment_methods has no equivalent.
         if (doc.get("settlement_fee_per_invoice") is not None
                 and "settlement_fee_per_invoice" not in auto_locked_fields):
-            rates["settlement_fee_per_invoice"] = float(doc["settlement_fee_per_invoice"])
+            stored_settlement_fee = float(doc["settlement_fee_per_invoice"])
+            if tabby_legacy_defaults and stored_settlement_fee == 6.0:
+                stored_settlement_fee = 0.0
+            rates["settlement_fee_per_invoice"] = stored_settlement_fee
         if doc.get("settlement_period_days") is not None:
             rates["settlement_period_days"] = int(doc["settlement_period_days"])
         if "invoice_weekdays" in doc and isinstance(doc["invoice_weekdays"], list):
@@ -356,7 +404,13 @@ async def _merchant_fee_rates(
                     invoice_weekdays = ["saturday"]
             rates["invoice_weekdays"] = invoice_weekdays
         if "transfer_weekdays" in doc and isinstance(doc["transfer_weekdays"], list):
-            rates["transfer_weekdays"] = list(doc["transfer_weekdays"])
+            transfer_weekdays = list(doc["transfer_weekdays"])
+            if (
+                tabby_legacy_defaults
+                and transfer_weekdays == ["tuesday", "wednesday"]
+            ):
+                transfer_weekdays = ["monday"]
+            rates["transfer_weekdays"] = transfer_weekdays
         # Iter-134 — per-order commission split + VAT on settlement fee
         if (doc.get("refundable_commission_percent") is not None
                 and "refundable_commission_percent" not in auto_locked_fields):
@@ -868,6 +922,98 @@ async def _aggregate_official_totals(
     }
 
 
+async def _aggregate_tabby_official_totals(
+    db, user_id: str, date_from: str, date_to: str,
+) -> Optional[Dict[str, Any]]:
+    """Aggregate deduplicated Tabby settlement-file totals by cycle.
+
+    Tabby reports are issued/transferred on Monday for the preceding
+    Monday→Sunday period. The parser stores that explicit period on the file
+    header, which avoids assigning late-Sunday UTC rows to the wrong week.
+    """
+    if not date_from or not date_to:
+        return None
+
+    try:
+        from accounting_cutoffs import get_cutoff
+        cutoff = await get_cutoff(db, user_id, "tabby")
+    except Exception:
+        cutoff = None
+    effective_from = (
+        max(date_from, cutoff) if cutoff and cutoff > date_from else date_from
+    )
+
+    cursor = db.settlement_files.find(
+        {"user_id": user_id, "provider": "tabby"},
+        {
+            "_id": 0, "header": 1, "totals": 1,
+            "uploaded_at": 1, "id": 1,
+        },
+    )
+    try:
+        cursor = cursor.sort("uploaded_at", -1)
+    except Exception:
+        pass
+
+    statements: dict[str, dict] = {}
+    async for doc in cursor:
+        header = doc.get("header") or {}
+        period_start = str(header.get("period_start") or "")
+        period_end = str(header.get("period_end") or "")
+        if not period_start or not period_end:
+            continue
+        if period_start < effective_from or period_end > date_to:
+            continue
+        statement_id = str(
+            header.get("statement_id") or doc.get("id") or ""
+        )
+        if not statement_id or statement_id in statements:
+            continue
+        statements[statement_id] = doc
+
+    if not statements:
+        return None
+
+    transactions_count = 0
+    refunds_count = 0
+    gross_sales = 0.0
+    total_refunds = 0.0
+    commission = 0.0
+    commission_vat = 0.0
+    settlement_fee = 0.0
+    settlement_fee_vat = 0.0
+    net_payable = 0.0
+    for doc in statements.values():
+        totals = doc.get("totals") or {}
+        transactions_count += int(totals.get("transactions_count") or 0)
+        refunds_count += int(totals.get("refunds_count") or 0)
+        gross_sales += float(totals.get("gross") or 0)
+        total_refunds += float(totals.get("refund_full") or 0)
+        total_refunds += float(totals.get("refund_partial") or 0)
+        commission += float(totals.get("fees") or 0)
+        commission_vat += float(totals.get("fees_vat") or 0)
+        settlement_fee += float(totals.get("settlement_fee") or 0)
+        settlement_fee_vat += float(
+            totals.get("settlement_fee_vat") or 0,
+        )
+        net_payable += float(totals.get("net") or 0)
+
+    return {
+        "transactions_count": transactions_count,
+        "refunds_count": refunds_count,
+        "canceled_count": 0,
+        "canceled_amount": 0.0,
+        "gross_sales": _r(gross_sales),
+        "total_refunds": _r(total_refunds),
+        "commission": _r(commission),
+        "commission_vat": _r(commission_vat),
+        "settlement_fee": _r(settlement_fee),
+        "settlement_fee_vat": _r(settlement_fee_vat),
+        "settlement_invoices_count": len(statements),
+        "net_payable": _r(net_payable),
+    }
+
+
 async def compute_settlement_for_provider(
     db, user_id: str, provider: str,
     date_from: Optional[str] = None,
@@ -940,6 +1086,7 @@ async def compute_settlement_for_provider(
             commission_rate,
             fixed_fee_per_order,
             vat_rate,
+            refundable_rate,
         )
         sales_commission += capture_fee
         sales_vat += capture_vat
@@ -1004,6 +1151,7 @@ async def compute_settlement_for_provider(
                 commission_rate,
                 fixed_fee_per_order,
                 vat_rate,
+                refundable_rate,
             )
             sales_commission += capture_fee
             sales_vat += capture_vat
@@ -1014,9 +1162,19 @@ async def compute_settlement_for_provider(
     refund_vat_rebate = 0.0
     async for r in db.payment_refunds.find(refund_match, {"_id": 0, "amount": 1}):
         amt = float(r.get("amount") or 0)
-        rebate_unrounded = amt * refundable_rate
-        refund_rebate += rebate_unrounded
-        refund_vat_rebate += rebate_unrounded * vat_rate
+        if provider == "tabby":
+            rebate = _round_sar(
+                Decimal(str(amt)) * Decimal(str(refundable_rate)),
+            )
+            rebate_vat = _round_sar_even(
+                Decimal(str(rebate)) * Decimal(str(vat_rate)),
+            )
+            refund_rebate += rebate
+            refund_vat_rebate += rebate_vat
+        else:
+            rebate_unrounded = amt * refundable_rate
+            refund_rebate += rebate_unrounded
+            refund_vat_rebate += rebate_unrounded * vat_rate
 
     commission     = _r(sales_commission - refund_rebate)
     commission_vat = _r(sales_vat        - refund_vat_rebate)
@@ -1038,17 +1196,20 @@ async def compute_settlement_for_provider(
         - settlement_fee - settlement_fee_vat
     )
 
-    # Iter-147 v3 — When the merchant has uploaded an OFFICIAL Tamara
-    # settlement file covering this period, use the file's totals as
-    # the source of truth.  This guarantees the displayed weekly
-    # invoice matches Tamara's invoice to the cent — eliminating any
-    # discrepancy caused by missing/extra orders in our DB.
+    # Provider settlement files are authoritative for the covered cycle.
+    # Tamara uses per-entry aggregation; Tabby uses deduplicated file totals
+    # because its Monday report explicitly covers the preceding Mon→Sun week.
     data_source = "computed"
     system_totals: Optional[Dict[str, Any]] = None
-    if provider == "tamara" and date_from and date_to:
-        official = await _aggregate_official_totals(
-            db, user_id, date_from, date_to,
-        )
+    if provider in {"tamara", "tabby"} and date_from and date_to:
+        if provider == "tamara":
+            official = await _aggregate_official_totals(
+                db, user_id, date_from, date_to,
+            )
+        else:
+            official = await _aggregate_tabby_official_totals(
+                db, user_id, date_from, date_to,
+            )
         if official and (
             official.get("transactions_count", 0)
             or official.get("refunds_count", 0)
@@ -1063,9 +1224,11 @@ async def compute_settlement_for_provider(
                 "net_sales": totals["net_sales"],
                 "commission": _r(commission),
                 "commission_vat": _r(commission_vat),
+                "settlement_fee": _r(settlement_fee),
+                "settlement_fee_vat": _r(settlement_fee_vat),
                 "net_payable": _r(net_payable),
             }
-            # Override with Tamara's official numbers.
+            # Override with the provider's official numbers.
             totals["transactions_count"] = official["transactions_count"]
             totals["refunds_count"] = official.get("refunds_count", 0)
             totals["canceled_count"] = official.get("canceled_count", 0)
@@ -1077,9 +1240,12 @@ async def compute_settlement_for_provider(
             )
             commission = official["commission"]
             commission_vat = official["commission_vat"]
-            # Tamara's official files don't separate fixed_fee_per_order
-            # from variable_rate fees — they roll up into "fees".  Keep
-            # settlement_fee as 0 (Tamara has no per-invoice fee).
+            settlement_fee = official.get("settlement_fee", 0.0)
+            settlement_fee_vat = official.get("settlement_fee_vat", 0.0)
+            settlement_invoices_count = int(
+                official.get("settlement_invoices_count")
+                or settlement_invoices_count
+            )
             net_payable = _r(official["net_payable"])
             data_source = "provider_official_file"
 
