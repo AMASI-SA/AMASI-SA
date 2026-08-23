@@ -192,9 +192,6 @@ def generate_supplier_invoice_pdf(invoice: dict[str, Any]) -> bytes:
     page.setFillColor(HexColor("#74102F"))
     page.setFont(bold_font, 15)
     page.drawCentredString(width / 2, y - 9 * mm, _ar(f"الإجمالي النهائي: {_money(invoice.get('total_halalas'))}"))
-    page.setFillColor(HexColor("#64748B"))
-    page.setFont(regular_font, 7.5)
-    page.drawCentredString(width / 2, 10 * mm, _ar("فاتورة داخلية صادرة من أماسي — لا يوجد إرسال تلقائي إلى سلة أو قيود"))
 
     page.save()
     return buffer.getvalue()
