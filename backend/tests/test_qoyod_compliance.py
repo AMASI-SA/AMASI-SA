@@ -231,12 +231,12 @@ async def test_reconciliation_check_counts_and_diff(db):
         ])
         # 2 of the 5 are already in Qoyod as "sent".
         await db.qoyod_invoices.insert_many([
-            {"user_id": user_id, "qoyod_invoice_id": "q-0",
+            {"user_id": user_id, "salla_order_id": "R-0", "qoyod_invoice_id": "q-0",
              "reference": f"{user_id}-N0", "status": "sent",
              "qoyod_official_reference": f"{user_id}-N0",
              "reference_provenance": "qoyod.reference",
              "trace_id": "t0", "updated_at": now},
-            {"user_id": user_id, "qoyod_invoice_id": "q-1",
+            {"user_id": user_id, "salla_order_id": "R-1", "qoyod_invoice_id": "q-1",
              "reference": f"{user_id}-N1", "status": "sent",
              "qoyod_official_reference": f"{user_id}-N1",
              "reference_provenance": "qoyod.reference",
