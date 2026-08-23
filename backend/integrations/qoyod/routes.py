@@ -570,6 +570,9 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             activation_issues,
             is_live_requested,
         )
+        from integrations.qoyod.candidate_orders import (
+            UNIFIED_CANDIDATE_AUTO_FLAG,
+        )
         if is_live_requested(valid):
             orders_owner = orders_owner_id(user)
             canary = await db.qoyod_manual_canary_runs.find_one(
@@ -597,6 +600,7 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                         "issues": issues,
                     },
                 )
+            valid[UNIFIED_CANDIDATE_AUTO_FLAG] = True
             valid["plan_b_auto_send_armed_at"] = (
                 valid.get("plan_b_auto_send_armed_at")
                 or _now().isoformat()
@@ -605,10 +609,16 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             valid["plan_b_auto_send_actor"] = str(
                 (user or {}).get("email") or user["id"]
             )
-            valid["plan_b_auto_send_canary_run_id"] = canary.get("run_id")
+            valid["plan_b_auto_send_canary_run_id"] = (
+                canary.get("run_id") if canary else None
+            )
+            valid["plan_b_auto_send_activation_basis"] = (
+                "successful_canary" if canary else "operator_live_settings"
+            )
             valid["plan_b_auto_send_disabled_reason"] = None
             valid["plan_b_auto_send_last_error"] = None
         else:
+            valid[UNIFIED_CANDIDATE_AUTO_FLAG] = False
             valid["plan_b_auto_send_armed_at"] = None
             valid["plan_b_auto_send_disabled_at"] = _now().isoformat()
             if not valid.get("enabled"):
