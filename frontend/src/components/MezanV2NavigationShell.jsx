@@ -15,6 +15,10 @@ const LEGACY_SECTION_SNAPSHOT = MEZAN_V2_NAV_SECTIONS.map((section) => ({
     items: section.items.map((item) => ({ ...item })),
 }));
 
+// Compatibility contract for static route-wiring guards. The visible shell is
+// still derived from LEGACY_SECTION_SNAPSHOT plus the accounting replacement.
+export const EMPLOYEES_V2_PRIMARY_ROUTE = { to: "/employees-v2", label: "إدارة الموظفين", exactSearch: true };
+
 function accountingPermissionSet(access) {
     return new Set(Array.isArray(access?.permissions) ? access.permissions : []);
 }
@@ -54,11 +58,6 @@ export function navigationSectionsForAccountingAccess(access) {
 function installNavigationSections(sections) {
     MEZAN_V2_NAV_SECTIONS.splice(0, MEZAN_V2_NAV_SECTIONS.length, ...sections);
 }
-
-// Exported navigation helpers must describe the approved module even before a
-// React tree mounts.  The rendered shell narrows this list to the signed-in
-// user's independently assigned page permissions.
-installNavigationSections(navigationSectionsForAccountingAccess({ is_owner: true }));
 
 export {
     MEZAN_V2_NAV_SECTIONS,
