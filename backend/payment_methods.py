@@ -26,6 +26,7 @@ CASH_ON_DELIVERY   = "الدفع عند الاستلام"
 # Salla sub-methods (rolled up under "سلة" — never their own asset account).
 MADA               = "مدى"
 APPLE_PAY          = "Apple Pay"
+GOOGLE_PAY         = "Google Pay"
 STC_PAY            = "STC Pay"
 VISA               = "Visa"
 MASTERCARD         = "MasterCard"
@@ -36,16 +37,33 @@ SALLA_WALLET       = "محفظة سلة"
 
 # ── Default payment methods (used to seed user settings) ─────────────────
 # Order matters → it's the order shown in Settings → Payment Methods.
+#
+# ``salla-invoices-2026-08-v1`` was reconstructed from seven merchant Salla
+# payment-detail invoices (528 rows).  The observed rails matched every
+# positive transaction exactly:
+#
+#   mada         = amount × 1.00% + SAR 1.00
+#   credit card  = amount × 2.20% + SAR 1.00
+#   STC Pay      = amount × 1.30% + SAR 1.00
+#
+# VAT is 15% of the *unrounded* per-order fee, rounded to halalas afterwards.
+# Apple Pay / Google Pay / Visa / MasterCard did not appear as separate invoice
+# labels in that evidence set.  They therefore inherit the observed generic
+# credit-card rate as an explicit estimate until a later provider invoice
+# proves a rail-specific rate.
+PAYMENT_FEE_DEFAULTS_VERSION = "salla-invoices-2026-08-v1"
+
 DEFAULT_PAYMENT_METHODS: list[dict] = [
     # Salla card rails — editable so the merchant can override Salla's
     # actual commission for each rail.
     {"name": MADA,             "commission_percent": 1.00, "fixed_fee": 1.0, "vat_percent": 15.0},
-    {"name": APPLE_PAY,        "commission_percent": 2.50, "fixed_fee": 1.0, "vat_percent": 15.0},
-    {"name": STC_PAY,          "commission_percent": 2.50, "fixed_fee": 1.0, "vat_percent": 15.0},
-    {"name": VISA,             "commission_percent": 2.75, "fixed_fee": 1.0, "vat_percent": 15.0},
-    {"name": MASTERCARD,       "commission_percent": 2.75, "fixed_fee": 1.0, "vat_percent": 15.0},
-    {"name": CREDIT_CARD,      "commission_percent": 2.75, "fixed_fee": 1.0, "vat_percent": 15.0},
-    {"name": DEBIT_CARD,       "commission_percent": 2.00, "fixed_fee": 1.0, "vat_percent": 15.0},
+    {"name": APPLE_PAY,        "commission_percent": 2.20, "fixed_fee": 1.0, "vat_percent": 15.0},
+    {"name": GOOGLE_PAY,       "commission_percent": 2.20, "fixed_fee": 1.0, "vat_percent": 15.0},
+    {"name": STC_PAY,          "commission_percent": 1.30, "fixed_fee": 1.0, "vat_percent": 15.0},
+    {"name": VISA,             "commission_percent": 2.20, "fixed_fee": 1.0, "vat_percent": 15.0},
+    {"name": MASTERCARD,       "commission_percent": 2.20, "fixed_fee": 1.0, "vat_percent": 15.0},
+    {"name": CREDIT_CARD,      "commission_percent": 2.20, "fixed_fee": 1.0, "vat_percent": 15.0},
+    {"name": DEBIT_CARD,       "commission_percent": 2.20, "fixed_fee": 1.0, "vat_percent": 15.0},
     {"name": SALLA_WALLET,     "commission_percent": 0.00, "fixed_fee": 0.0, "vat_percent": 0.0},
     # BNPL — own accounts
     {"name": TAMARA,           "commission_percent": 6.99, "fixed_fee": 0.0, "vat_percent": 15.0},
@@ -70,6 +88,10 @@ PAYMENT_ALIASES: list[tuple[str, str, str, str | None]] = [
     ("apple_pay",     APPLE_PAY,     "ابل باي",                "salla"),
     ("apple_pay",     APPLE_PAY,     "أبل باي",                "salla"),
     ("apple_pay",     APPLE_PAY,     "آبل باي",                "salla"),
+    ("google_pay",    GOOGLE_PAY,    "google pay",            "salla"),
+    ("google_pay",    GOOGLE_PAY,    "googlepay",             "salla"),
+    ("google_pay",    GOOGLE_PAY,    "جوجل باي",               "salla"),
+    ("google_pay",    GOOGLE_PAY,    "قوقل باي",               "salla"),
     ("stc_pay",       STC_PAY,       "stc pay",               "salla"),
     ("stc_pay",       STC_PAY,       "stcpay",                "salla"),
     ("stc_pay",       STC_PAY,       "اس تي سي",              "salla"),
@@ -267,3 +289,90 @@ def normalize_payment_method(raw: str) -> tuple[str, str, str | None]:
 SALLA_SUB_KEYS = frozenset(
     k for k, _, _, parent in PAYMENT_ALIASES if parent == "salla"
 )
+
+# All aliases that represent a known payment sub-method.  Consumers use this
+# to distinguish a genuinely unknown label (where fuzzy matching is useful)
+# from two different known card rails (which must not steal each other's fee
+# rule merely because both are cards).
+KNOWN_PAYMENT_SUB_KEYS = frozenset(k for k, *_ in PAYMENT_ALIASES)
+
+# A specific card rail may fall back to the generic credit-card fee only when
+# the merchant has no explicit row for that rail.  Exact rail settings always
+# win first.
+CARD_FALLBACK_SUB_KEYS = frozenset({
+    "apple_pay", "google_pay", "visa", "mastercard", "debit_card",
+})
+
+
+# Previous bundled values.  They are used only by the safe settings migration:
+# an existing row is upgraded when it still equals one of these untouched
+# defaults.  Merchant-edited values are never overwritten automatically.
+_LEGACY_FEE_DEFAULTS_BY_KEY: dict[str, tuple[float, float, float]] = {
+    "mada": (1.00, 1.00, 15.00),
+    "apple_pay": (2.50, 1.00, 15.00),
+    "stc_pay": (2.50, 1.00, 15.00),
+    "visa": (2.75, 1.00, 15.00),
+    "mastercard": (2.75, 1.00, 15.00),
+    "credit_card": (2.75, 1.00, 15.00),
+    "debit_card": (2.00, 1.00, 15.00),
+    "salla_wallet": (0.00, 0.00, 0.00),
+    "tamara": (6.99, 0.00, 15.00),
+    "tabby": (5.00, 0.00, 15.00),
+    "emkan": (5.00, 0.00, 15.00),
+    "bank_transfer": (0.00, 0.00, 0.00),
+    "cash_on_delivery": (0.00, 0.00, 0.00),
+}
+
+
+def _fee_tuple(row: dict) -> tuple[float, float, float]:
+    return (
+        round(float(row.get("commission_percent") or 0), 4),
+        round(float(row.get("fixed_fee") or 0), 2),
+        round(float(row.get("vat_percent") or 0), 4),
+    )
+
+
+def migrate_payment_method_defaults(
+    rows: list[dict] | None,
+    *,
+    current_version: str | None,
+) -> tuple[list[dict], bool]:
+    """Append new methods and safely upgrade untouched bundled fee defaults.
+
+    The version protects the migration from repeating.  A merchant-edited fee
+    survives because only an exact match with the prior bundled tuple is
+    replaced.  Missing canonical rows (for example the new Google Pay rail)
+    are appended from ``DEFAULT_PAYMENT_METHODS``.
+    """
+    migrated = [dict(row) for row in (rows or [])]
+    by_key: dict[str, int] = {}
+    for index, row in enumerate(migrated):
+        key, _display, _parent = normalize_payment_method(row.get("name") or "")
+        if key and key not in by_key:
+            by_key[key] = index
+
+    changed = False
+    for default in DEFAULT_PAYMENT_METHODS:
+        key, _display, _parent = normalize_payment_method(default.get("name") or "")
+        index = by_key.get(key)
+        if index is None:
+            migrated.append(dict(default))
+            by_key[key] = len(migrated) - 1
+            changed = True
+            continue
+
+        if current_version == PAYMENT_FEE_DEFAULTS_VERSION:
+            continue
+        legacy = _LEGACY_FEE_DEFAULTS_BY_KEY.get(key)
+        if legacy is None or _fee_tuple(migrated[index]) != legacy:
+            continue
+        migrated[index] = {
+            **migrated[index],
+            "commission_percent": default["commission_percent"],
+            "fixed_fee": default["fixed_fee"],
+            "vat_percent": default["vat_percent"],
+        }
+        if _fee_tuple(migrated[index]) != legacy:
+            changed = True
+
+    return migrated, changed

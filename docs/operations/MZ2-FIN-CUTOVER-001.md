@@ -186,6 +186,41 @@ Implementation references:
 - https://zatca.gov.sa/ar/RulesRegulations/Taxes/Pages/VATImplementingRegulations.aspx
 - https://zatca.gov.sa/ar/RulesRegulations/VAT/Pages/default.aspx
 
+## Salla payment-fee evidence — 2026-08-23
+
+Seven Salla payment-detail invoices were analysed: `6585798`, `6610174`,
+`6613353`, `6616833`, `6620818`, `6640541`, and `6643529`.  They contain 528
+transaction rows: 516 positive sales and 12 negative refund rows.  Aggregate
+evidence totals are SAR 107,099.16 gross, SAR 2,014.93 fees before VAT, SAR
+302.23 fee VAT, and SAR 104,782.00 net after fee VAT.
+
+Observed positive rows reproduce exactly with these per-order rules:
+
+| Salla invoice label | Positive rows | Commission before VAT | Evidence status |
+|---|---:|---:|---|
+| مدى | 359 | 1.00% of order + SAR 1.00 | Verified 359/359 |
+| البطاقة الائتمانية | 149 | 2.20% of order + SAR 1.00 | Verified 149/149 |
+| أس تي سي باي | 8 | 1.30% of order + SAR 1.00 | Verified 8/8 |
+
+Salla first calculates the unrounded per-order fee. The displayed fee is that
+value rounded to halalas, while fee VAT is 15% of the **unrounded** fee and is
+then rounded independently. This matters on half-halala boundaries; VAT must
+not be calculated from the already rounded displayed fee. The 12 negative
+refund rows in this evidence set carry zero new fee and zero fee VAT.
+
+Apple Pay, Google Pay, Visa, MasterCard, and generic bank card did not appear
+as separate invoice labels. They use the observed generic credit-card rule
+(2.20% + SAR 1.00, VAT 15%) only as an editable fallback estimate. It must not
+be described as a directly verified rail-specific rate. A later invoice row
+with one of those explicit labels supersedes the fallback.
+
+Implementation uses settings version `salla-invoices-2026-08-v1`. Existing
+rows that still equal the old bundled defaults are upgraded safely; explicitly
+merchant-edited rows are preserved. Missing Google Pay is added as a Salla
+sub-method. Fee estimates use per-order rounding when individual orders are
+available and retain aggregate calculation only for legacy aggregate-only
+callers.
+
 ## Implemented in this change
 
 - Added tenant-scoped endpoint `GET /api/financial-provider-apps`.
@@ -217,6 +252,19 @@ Implementation references:
   balanced bank/driver journals with idempotency metadata.
 - Added separate store-driver COD assets and delivery-fee liabilities to the
   financial position, plus a per-driver debit/credit settlement view.
+- Reconstructed Salla payment fees from seven merchant invoices and replaced
+  the old STC Pay/card estimates with the verified per-order rules above.
+- Added Google Pay as a Salla sub-method and made Apple Pay/Google Pay/card
+  rails inherit the documented generic-card fallback until direct evidence is
+  available.
+- Added versioned default migration that upgrades untouched legacy defaults,
+  appends missing methods, and preserves merchant-edited fee rows.
+- Changed fee estimation to Salla's per-order fee/VAT rounding semantics and
+  prevented one known card rail from silently taking another rail's rule.
+- Routed the central gateway metrics, Salla reconciliation rollup, and Salla
+  settlement classifier through the expanded rail set, with estimates loaded
+  from the unified payment-method settings instead of their old hardcoded
+  Mada/card/STC rates.
 
 Primary files:
 
@@ -233,6 +281,11 @@ Primary files:
 - `backend/tests/test_store_delivery_accounting.py`
 - `frontend/src/pages/StoreDeliverySettlements.jsx`
 - `frontend/src/services/financialProviderApps.test.js`
+- `backend/payment_methods.py`
+- `backend/excel_parser.py`
+- `backend/payment_gateway_metrics.py`
+- `backend/reconciliation_routes.py`
+- `backend/tests/test_salla_payment_fee_defaults.py`
 
 ## Remaining work, in order
 

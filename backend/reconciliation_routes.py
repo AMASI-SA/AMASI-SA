@@ -28,7 +28,10 @@ from payment_gateway_metrics import compute_metrics
 # covers all card rails). Used to keep Reconciliation/Accounts numbers
 # perfectly aligned with the /payment-gateway-metrics endpoint.
 ACCOUNT_KEY_TO_CENTRAL_KEYS: dict[str, list[str]] = {
-    "salla":            ["salla", "mada", "applepay", "stcpay", "credit_card"],
+    "salla":            [
+        "salla", "mada", "applepay", "googlepay", "stcpay", "visa",
+        "mastercard", "credit_card", "debit_card", "salla_wallet",
+    ],
     "tamara":           ["tamara"],
     "tabby":            ["tabby"],
     "emkan":            ["emkan"],

@@ -421,7 +421,11 @@ async def seed_admin(db) -> None:
     await _install_login_security_for_loaded_app(db)
 
 
-from payment_methods import DEFAULT_PAYMENT_METHODS  # noqa: F401 — re-exported
+from payment_methods import (  # noqa: F401 — defaults are re-exported
+    DEFAULT_PAYMENT_METHODS,
+    PAYMENT_FEE_DEFAULTS_VERSION,
+    migrate_payment_method_defaults,
+)
 
 
 DEFAULT_SHIPPING_COMPANIES = [
@@ -438,28 +442,31 @@ async def ensure_user_settings(db, user_id: str) -> dict:
     if settings is None:
         settings = {
             "user_id": user_id,
-            "payment_methods": DEFAULT_PAYMENT_METHODS,
+            "payment_methods": [dict(row) for row in DEFAULT_PAYMENT_METHODS],
+            "payment_fee_defaults_version": PAYMENT_FEE_DEFAULTS_VERSION,
             "shipping_companies": DEFAULT_SHIPPING_COMPANIES,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
         await db.settings.insert_one(settings)
     else:
-        # iter-62 — backfill any new canonical payment methods that the
-        # user is missing (added in newer releases). Preserves the user's
-        # existing commission/vat edits — only APPENDS new rows.
-        current_pms = settings.get("payment_methods") or []
-        current_names = {(pm.get("name") or "").strip() for pm in current_pms}
-        added = [pm for pm in DEFAULT_PAYMENT_METHODS
-                 if (pm.get("name") or "").strip() not in current_names]
-        if added:
-            new_pms = list(current_pms) + added
+        # Backfill new canonical rails and upgrade only untouched historical
+        # defaults.  Exact merchant edits survive the version migration.
+        current_version = settings.get("payment_fee_defaults_version")
+        new_pms, defaults_changed = migrate_payment_method_defaults(
+            settings.get("payment_methods"),
+            current_version=current_version,
+        )
+        update_fields: dict = {}
+        if defaults_changed:
+            update_fields["payment_methods"] = new_pms
+        if current_version != PAYMENT_FEE_DEFAULTS_VERSION:
+            update_fields["payment_fee_defaults_version"] = PAYMENT_FEE_DEFAULTS_VERSION
+        if update_fields:
+            update_fields["updated_at"] = datetime.now(timezone.utc).isoformat()
             await db.settings.update_one(
                 {"user_id": user_id},
-                {"$set": {
-                    "payment_methods": new_pms,
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
-                }},
+                {"$set": update_fields},
             )
-            settings["payment_methods"] = new_pms
+            settings.update(update_fields)
     settings.pop("_id", None)
     return settings

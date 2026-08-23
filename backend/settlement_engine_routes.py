@@ -59,9 +59,10 @@ PROVIDER_MATCHERS: dict[str, list[str]] = {
     "salla":   [
         # Salla gateway payment-methods (everything routed through Salla
         # checkout that ends up in Salla's wallet for later transfer).
-        "مدى", "mada", "apple pay", "applepay",
+        "مدى", "mada", "apple pay", "applepay", "google pay", "googlepay",
         "البطاقة الإئتمانية", "بطاقة ائتمانية",
-        "credit", "stc pay", "stcpay",
+        "بطاقة بنكية", "debit card", "visa", "mastercard",
+        "محفظة سلة", "salla wallet", "credit", "stc pay", "stcpay",
     ],
 }
 

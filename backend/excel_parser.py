@@ -8,9 +8,17 @@ from __future__ import annotations
 import io
 import re
 from datetime import date, datetime
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional
 
 import openpyxl
+
+from payment_methods import (
+    CARD_FALLBACK_SUB_KEYS,
+    KNOWN_PAYMENT_SUB_KEYS,
+    SALLA_SUB_KEYS,
+    normalize_payment_method,
+)
 
 
 MAX_SALLA_ROWS = 50_000
@@ -380,6 +388,8 @@ _RAW_PAYMENT_SYNONYMS: list[set[str]] = [
      "امكان للتقسيط", "إمكان للتقسيط"},
     # Apple Pay
     {"ابل باي", "ابل بي", "applepay", "apple pay", "apple"},
+    # Google Pay
+    {"جوجل باي", "قوقل باي", "googlepay", "google pay", "google"},
     # STC Pay
     {"اس تي سي باي", "stcpay", "stc pay", "stc"},
     # Credit / debit cards (Visa / MasterCard / generic credit)
@@ -439,23 +449,32 @@ def match_settings(
 ) -> dict:
     """Cross-reference parsed totals with user-provided commission rates and shipping costs.
 
-    Payment fee formula:
-        base_commission = (total_sales * commission_percent / 100)
-                        + (orders_count * fixed_fee)
-        vat_amount      = base_commission * vat_percent / 100
-        fee_amount      = base_commission + vat_amount
+    Salla payment fee formula (when individual orders are available):
+        unrounded_order_fee = order_amount * commission_percent / 100 + fixed_fee
+        base_commission     = sum(round(unrounded_order_fee, 2))
+        vat_amount          = sum(round(unrounded_order_fee * vat_percent / 100, 2))
+        fee_amount          = base_commission + vat_amount
+
+    Other providers and aggregate-only callers retain the historical aggregate
+    formula.  Per-order rounding is the authoritative Salla invoice method.
 
     Unmatched names get 0 / 0 / 0 but are still returned.
     """
-    # Build lookup: normalized name -> full config dict
-    payment_map = {
-        normalize_name(p["name"]): {
+    # Build lookups by exact display spelling and canonical sub-method.  Exact
+    # canonical matching prevents a generic card row from accidentally taking
+    # Visa's fee merely because the legacy synonym group contains both.
+    payment_map: dict[str, dict] = {}
+    canonical_payment_map: dict[str, dict] = {}
+    for p in payment_settings:
+        config = {
             "commission_percent": float(p.get("commission_percent", 0) or 0),
             "fixed_fee": float(p.get("fixed_fee", 0) or 0),
             "vat_percent": float(p.get("vat_percent", 0) or 0),
         }
-        for p in payment_settings
-    }
+        payment_map[normalize_name(p["name"])] = config
+        sub_key, _display, _parent = normalize_payment_method(p.get("name") or "")
+        if sub_key in KNOWN_PAYMENT_SUB_KEYS:
+            canonical_payment_map.setdefault(sub_key, config)
     shipping_map = {
         normalize_name(s["name"]): {
             "cost_per_order": float(s.get("cost_per_order", 0) or 0),
@@ -467,13 +486,35 @@ def match_settings(
 
     payment_breakdown = []
     total_payment_fees = 0.0
+    individual_orders = parsed.get("orders_individual") or []
+
+    def _same_payment_method(raw: str, grouped_name: str) -> bool:
+        raw_key = normalize_name(raw)
+        grouped_key = normalize_name(grouped_name)
+        if raw_key == grouped_key:
+            return True
+        raw_sub, _raw_display, _raw_parent = normalize_payment_method(raw)
+        grouped_sub, _grouped_display, _grouped_parent = normalize_payment_method(grouped_name)
+        if raw_sub in KNOWN_PAYMENT_SUB_KEYS and grouped_sub in KNOWN_PAYMENT_SUB_KEYS:
+            return raw_sub == grouped_sub
+        return _payment_synonym_match(raw_key, grouped_key)
+
+    cent = Decimal("0.01")
+
+    def _round_money(value: Decimal) -> Decimal:
+        return value.quantize(cent, rounding=ROUND_HALF_UP)
+
     for pm in parsed["payment_methods"]:
         key = normalize_name(pm["name"])
         cfg = payment_map.get(key)
-        # Iteration 30: synonym + fuzzy match (bidirectional). Covers
-        # cross-language pairs like "مدى" ↔ "Mada", spelling variants
-        # like "البطاقة الإئتمانية" ↔ "بطاقة ائتمانية" ↔ "credit card".
-        if cfg is None:
+        order_sub_key, _display, _parent = normalize_payment_method(pm["name"])
+        if cfg is None and order_sub_key in KNOWN_PAYMENT_SUB_KEYS:
+            cfg = canonical_payment_map.get(order_sub_key)
+            if cfg is None and order_sub_key in CARD_FALLBACK_SUB_KEYS:
+                cfg = canonical_payment_map.get("credit_card")
+        # Iteration 30 fallback: use broad synonym/fuzzy matching only for an
+        # unknown legacy label.  Two different known rails stay distinct.
+        if cfg is None and order_sub_key not in KNOWN_PAYMENT_SUB_KEYS:
             for k, v in payment_map.items():
                 if _payment_synonym_match(k, key):
                     cfg = v
@@ -485,8 +526,49 @@ def match_settings(
         fixed = cfg["fixed_fee"]
         vat_pct = cfg["vat_percent"]
 
-        base_commission = round(pm["total_sales"] * pct / 100.0 + pm["orders_count"] * fixed, 2)
-        vat_amount = round(base_commission * vat_pct / 100.0, 2)
+        method_orders = [
+            order for order in individual_orders
+            if _same_payment_method(
+                str(order.get("payment_method") or ""),
+                str(pm.get("name") or ""),
+            )
+        ]
+        if (
+            order_sub_key in SALLA_SUB_KEYS
+            and method_orders
+            and len(method_orders) == int(pm.get("orders_count") or 0)
+        ):
+            # Salla invoice semantics: calculate on every positive sale,
+            # round the fee per order, and calculate VAT from the unrounded
+            # fee before independently rounding VAT.  Negative refund rows in
+            # the supplied invoices carry no new fee or VAT.
+            pct_decimal = Decimal(str(pct)) / Decimal("100")
+            fixed_decimal = Decimal(str(fixed))
+            vat_decimal = Decimal(str(vat_pct)) / Decimal("100")
+            base_total = Decimal("0")
+            vat_total = Decimal("0")
+            for order in method_orders:
+                raw_amount = order.get("total_amount")
+                if raw_amount is None:
+                    raw_amount = order.get("amount")
+                amount = Decimal(str(raw_amount or 0))
+                if amount <= 0:
+                    continue
+                unrounded_fee = amount * pct_decimal + fixed_decimal
+                base_total += _round_money(unrounded_fee)
+                vat_total += _round_money(unrounded_fee * vat_decimal)
+            base_commission = float(_round_money(base_total))
+            vat_amount = float(_round_money(vat_total))
+            calculation_basis = "per_order_salla_rounding"
+        else:
+            # Backwards-compatible fallback for callers that only provide
+            # method aggregates and no individual order rows.
+            base_commission = round(
+                pm["total_sales"] * pct / 100.0 + pm["orders_count"] * fixed,
+                2,
+            )
+            vat_amount = round(base_commission * vat_pct / 100.0, 2)
+            calculation_basis = "aggregate_fallback"
         fee_amount = round(base_commission + vat_amount, 2)
         total_payment_fees += fee_amount
 
@@ -502,6 +584,7 @@ def match_settings(
             "fee_amount": fee_amount,
             "net_amount": round(pm["total_sales"] - fee_amount, 2),
             "matched": matched,
+            "fee_calculation_basis": calculation_basis,
         })
 
     shipping_breakdown = []

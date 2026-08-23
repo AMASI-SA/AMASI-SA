@@ -16,16 +16,19 @@ refund_partial / net / expected_in_assets / orders_count /
 refund_orders_count / cancelled_orders_count.
 
 The canonical method list is the one the user enumerated:
-سلة، مدى، Apple Pay، STC Pay، البطاقة الائتمانية، تمارا، تابي،
-إمكان، تحويل بنكي، الدفع عند الاستلام.
+سلة، مدى، Apple Pay، Google Pay، STC Pay، Visa، MasterCard، البطاقة
+الائتمانية، البطاقة البنكية، محفظة سلة، تمارا، تابي، إمكان، تحويل بنكي،
+والدفع عند الاستلام.
 """
 from __future__ import annotations
 
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, Request
 
-from auth import get_current_user_from_db
+from auth import ensure_user_settings, get_current_user_from_db
+from payment_methods import normalize_payment_method
 
 
 # ── Canonical registry ────────────────────────────────────────────────
@@ -37,8 +40,9 @@ PAYMENT_METHOD_REGISTRY: dict[str, dict] = {
         "name_ar": "سلة",
         "type": "gateway",
         "aliases": ["salla", "سلة", "سله", "سلّة", "salla_pay", "سلة باي"],
-        "estimated_fee_rate": 1.75,
+        "estimated_fee_rate": 2.20,
         "estimated_vat_rate": 15.0,
+        "estimated_fixed_fee": 1.0,
     },
     "mada": {
         "name_ar": "مدى",
@@ -46,29 +50,73 @@ PAYMENT_METHOD_REGISTRY: dict[str, dict] = {
         "aliases": ["mada", "مدى"],
         "estimated_fee_rate": 1.0,
         "estimated_vat_rate": 15.0,
+        "estimated_fixed_fee": 1.0,
     },
     "applepay": {
         "name_ar": "Apple Pay",
         "type": "gateway",
         "aliases": ["apple pay", "applepay", "apple_pay", "آبل باي", "أبل باي"],
-        "estimated_fee_rate": 1.75,
+        "estimated_fee_rate": 2.20,
         "estimated_vat_rate": 15.0,
+        "estimated_fixed_fee": 1.0,
+    },
+    "googlepay": {
+        "name_ar": "Google Pay",
+        "type": "gateway",
+        "aliases": ["google pay", "googlepay", "google_pay", "جوجل باي", "قوقل باي"],
+        "estimated_fee_rate": 2.20,
+        "estimated_vat_rate": 15.0,
+        "estimated_fixed_fee": 1.0,
     },
     "stcpay": {
         "name_ar": "STC Pay",
         "type": "gateway",
         "aliases": ["stc pay", "stcpay", "stc_pay", "اس تي سي باي", "stc"],
-        "estimated_fee_rate": 1.75,
+        "estimated_fee_rate": 1.30,
         "estimated_vat_rate": 15.0,
+        "estimated_fixed_fee": 1.0,
+    },
+    "visa": {
+        "name_ar": "Visa",
+        "type": "gateway",
+        "aliases": ["visa", "فيزا"],
+        "estimated_fee_rate": 2.20,
+        "estimated_vat_rate": 15.0,
+        "estimated_fixed_fee": 1.0,
+    },
+    "mastercard": {
+        "name_ar": "MasterCard",
+        "type": "gateway",
+        "aliases": ["mastercard", "master card", "ماستر كارد", "ماستركارد"],
+        "estimated_fee_rate": 2.20,
+        "estimated_vat_rate": 15.0,
+        "estimated_fixed_fee": 1.0,
     },
     "credit_card": {
         "name_ar": "البطاقة الائتمانية",
         "type": "gateway",
         "aliases": ["credit", "credit_card", "creditcard", "credit card",
-                    "visa", "mastercard", "البطاقة الائتمانية",
+                    "البطاقة الائتمانية",
                     "بطاقة ائتمانية", "بطاقة ائتمان"],
-        "estimated_fee_rate": 2.75,
+        "estimated_fee_rate": 2.20,
         "estimated_vat_rate": 15.0,
+        "estimated_fixed_fee": 1.0,
+    },
+    "debit_card": {
+        "name_ar": "بطاقة بنكية",
+        "type": "gateway",
+        "aliases": ["debit card", "debit_card", "بطاقة بنكية", "بطاقه بنكيه"],
+        "estimated_fee_rate": 2.20,
+        "estimated_vat_rate": 15.0,
+        "estimated_fixed_fee": 1.0,
+    },
+    "salla_wallet": {
+        "name_ar": "محفظة سلة",
+        "type": "gateway",
+        "aliases": ["salla wallet", "salla_wallet", "محفظة سلة", "محفظه سلة"],
+        "estimated_fee_rate": 0.0,
+        "estimated_vat_rate": 0.0,
+        "estimated_fixed_fee": 0.0,
     },
     "tamara": {
         "name_ar": "تمارا",
@@ -155,10 +203,56 @@ def resolve_canonical(raw: Optional[str]) -> Optional[str]:
     if s in _ALIAS_INDEX:
         return _ALIAS_INDEX[s]
     # Substring fallback — handles "البطاقة الائتمانية (Visa)" etc.
-    for alias, key in _ALIAS_INDEX.items():
+    for alias, key in sorted(_ALIAS_INDEX.items(), key=lambda item: len(item[0]), reverse=True):
         if alias and alias in s:
             return key
     return None
+
+
+_METRIC_KEY_BY_SETTING_SUBKEY = {
+    "mada": "mada",
+    "apple_pay": "applepay",
+    "google_pay": "googlepay",
+    "stc_pay": "stcpay",
+    "visa": "visa",
+    "mastercard": "mastercard",
+    "credit_card": "credit_card",
+    "debit_card": "debit_card",
+    "salla_wallet": "salla_wallet",
+    "tamara": "tamara",
+    "tabby": "tabby",
+    "emkan": "emkan",
+    "bank_transfer": "bank_transfer",
+    "cash_on_delivery": "cod",
+}
+
+_SALLA_METRIC_KEYS = frozenset({
+    "salla", "mada", "applepay", "googlepay", "stcpay", "visa",
+    "mastercard", "credit_card", "debit_card", "salla_wallet",
+})
+
+
+def _configured_fee_rules(settings_doc: dict) -> dict[str, dict]:
+    """Translate unified payment-method settings into metric registry keys."""
+    rules: dict[str, dict] = {}
+    for row in settings_doc.get("payment_methods") or []:
+        sub_key, _display, _parent = normalize_payment_method(row.get("name") or "")
+        metric_key = _METRIC_KEY_BY_SETTING_SUBKEY.get(sub_key)
+        if not metric_key:
+            continue
+        rules[metric_key] = {
+            "estimated_fee_rate": float(row.get("commission_percent") or 0),
+            "estimated_fixed_fee": float(row.get("fixed_fee") or 0),
+            "estimated_vat_rate": float(row.get("vat_percent") or 0),
+        }
+    return rules
+
+
+_SAR_CENT = Decimal("0.01")
+
+
+def _round_sar(value: Decimal) -> float:
+    return float(value.quantize(_SAR_CENT, rounding=ROUND_HALF_UP))
 
 
 # ── Aggregator ────────────────────────────────────────────────────────
@@ -191,10 +285,8 @@ async def compute_metrics(
     # Iter-207 — Honour the same `report_included_statuses` setting
     # Profit Summary uses, so the two cards report the SAME order
     # universe. Empty list ⇒ no filter (count everything).
-    settings_doc = await db.settings.find_one(
-        {"user_id": user_id},
-        {"_id": 0, "report_included_statuses": 1},
-    ) or {}
+    settings_doc = await ensure_user_settings(db, user_id)
+    configured_fee_rules = _configured_fee_rules(settings_doc)
     included_statuses = [
         (s or "").strip().lower()
         for s in (settings_doc.get("report_included_statuses") or [])
@@ -322,12 +414,13 @@ async def compute_metrics(
                 net = float(net)
         else:
             # Estimated using registry rates
-            meta = PAYMENT_METHOD_REGISTRY.get(canon)
-            rate = (meta or {}).get("estimated_fee_rate", 0.0)
-            vat_rate = (meta or {}).get("estimated_vat_rate", 0.0)
+            meta = PAYMENT_METHOD_REGISTRY.get(canon) or {}
+            fee_rule = configured_fee_rules.get(canon) or meta
+            rate = fee_rule.get("estimated_fee_rate", 0.0)
+            vat_rate = fee_rule.get("estimated_vat_rate", 0.0)
             # Iter-118 — fixed per-order fee (e.g. Tabby charges 1 SAR
             # per order in addition to the percentage MDR).
-            fixed_fee = (meta or {}).get("estimated_fixed_fee", 0.0)
+            fixed_fee = fee_rule.get("estimated_fixed_fee", 0.0)
             if category == "refunded":
                 # Refunded orders — gateway waives fees, book gross as
                 # a full refund so net comes out to 0 for that order.
@@ -338,8 +431,18 @@ async def compute_metrics(
                 net = 0.0
             else:
                 # confirmed
-                fee = round(gross * rate / 100 + fixed_fee, 4)
-                vat = round(fee * vat_rate / 100, 4)
+                if canon in _SALLA_METRIC_KEYS:
+                    unrounded_fee = (
+                        Decimal(str(gross)) * Decimal(str(rate)) / Decimal("100")
+                        + Decimal(str(fixed_fee))
+                    )
+                    fee = _round_sar(unrounded_fee)
+                    vat = _round_sar(
+                        unrounded_fee * Decimal(str(vat_rate)) / Decimal("100")
+                    )
+                else:
+                    fee = round(gross * rate / 100 + fixed_fee, 4)
+                    vat = round(fee * vat_rate / 100, 4)
                 rfull = 0.0
                 rpart = 0.0
                 net = gross - fee - vat
