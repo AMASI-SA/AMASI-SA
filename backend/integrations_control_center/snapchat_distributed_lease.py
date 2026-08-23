@@ -150,7 +150,12 @@ async def acquire_snapchat_lease(
         lease_is_hard_stale = (
             observed_acquired is not None and observed_acquired < hard_deadline
         )
-        if lease_is_expired or lease_is_hard_stale:
+        lease_is_malformed_future = (
+            observed_acquired is None
+            and observed_until is not None
+            and observed_until > current + MAX_LEASE_TTL
+        )
+        if lease_is_expired or lease_is_hard_stale or lease_is_malformed_future:
             # Compare-and-swap against the exact document we observed. This makes
             # legacy string/BSON/null leases reclaimable without stealing a lease
             # that another worker renewed between find_one and find_one_and_update.
