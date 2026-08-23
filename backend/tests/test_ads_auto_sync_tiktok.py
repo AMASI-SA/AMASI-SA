@@ -56,6 +56,14 @@ async def test_five_minute_cycle_dispatches_tiktok_native_reporting(monkeypatch)
     assert result["status"] == "complete"
     assert result["targets"] == 3
     assert result["succeeded"] == 3
+    assert {
+        (item["user_id"], item["provider"])
+        for item in result["results"]
+    } == {
+        ("owner-1", scheduler.META_PROVIDER_ID),
+        ("owner-1", scheduler.SNAPCHAT_PROVIDER_ID),
+        ("owner-1", scheduler.TIKTOK_PROVIDER_ID),
+    }
     assert set(calls) == {
         ("owner-1", scheduler.META_PROVIDER_ID),
         ("owner-1", scheduler.SNAPCHAT_PROVIDER_ID),
