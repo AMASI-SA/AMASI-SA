@@ -59,7 +59,9 @@ def role_name(user: dict[str, Any]) -> str:
 
 
 def is_owner(user: dict[str, Any]) -> bool:
-    return role_name(user) == "owner" or user.get("is_owner") is True
+    # The persisted role is the only owner authority. Never trust a stored or
+    # client-provided boolean marker for financial privilege.
+    return role_name(user) == "owner"
 
 
 def accounting_owner_id(user: dict[str, Any]) -> str | None:
