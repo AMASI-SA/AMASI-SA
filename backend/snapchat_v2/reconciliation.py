@@ -157,6 +157,10 @@ async def calculate_cost_components(
     }
 
 
+def _within_tolerance(value: float) -> bool:
+    return abs(value) < NATIVE_TOLERANCE
+
+
 async def reconcile_day(
     db: Any,
     *,
@@ -166,57 +170,110 @@ async def reconcile_day(
     provider_total: dict[str, Any],
     snap_page_projection: dict[str, Any],
     dashboard_projection: dict[str, Any],
+    dashboard_provider_total: dict[str, Any] | None = None,
     action_report_time: str = "conversion",
     current_open_hour: bool = False,
     sync_run_id: str | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
+    """Reconcile each UI against the matching UTC window.
+
+    The Snapchat page uses the account-local calendar while accounting uses
+    Asia/Riyadh. Those calendar days are different UTC windows, so each is
+    compared to a provider TOTAL request over its own exact window. Both still
+    read the same immutable UTC facts collection.
+    """
     current = (now or _utcnow()).astimezone(timezone.utc)
     account_id = clean_text(
         account.get("ad_account_id") or account.get("external_account_id"),
         limit=128,
     )
     currency = clean_text(account.get("currency"), limit=12).upper()
-    provider_spend_native = float(provider_total.get("provider_spend_native") or 0)
+    dashboard_provider_total = dashboard_provider_total or provider_total
+
+    provider_page_native = float(provider_total.get("provider_spend_native") or 0)
+    provider_dashboard_native = float(
+        dashboard_provider_total.get("provider_spend_native") or 0
+    )
     page_spend_native = float(snap_page_projection.get("base_spend_native") or 0)
     dashboard_spend_native = float(
         dashboard_projection.get("base_spend_native") or 0
     )
-    projection_match = abs(page_spend_native - dashboard_spend_native) < 0.000001
-    base_spend_native = dashboard_spend_native
-    difference_native = round(base_spend_native - provider_spend_native, 6)
+    page_difference_native = round(page_spend_native - provider_page_native, 6)
+    dashboard_difference_native = round(
+        dashboard_spend_native - provider_dashboard_native,
+        6,
+    )
+    same_window = bool(
+        snap_page_projection.get("window_start_utc")
+        == dashboard_projection.get("window_start_utc")
+        and snap_page_projection.get("window_end_utc")
+        == dashboard_projection.get("window_end_utc")
+    )
+    projection_numeric_match = abs(page_spend_native - dashboard_spend_native) < 0.000001
+    projection_source_match = bool(
+        snap_page_projection.get("provider") == SNAPCHAT_PROVIDER
+        and dashboard_projection.get("provider") == SNAPCHAT_PROVIDER
+        and snap_page_projection.get("ad_account_id") == account_id
+        and dashboard_projection.get("ad_account_id") == account_id
+        and snap_page_projection.get("action_report_time")
+        == dashboard_projection.get("action_report_time")
+    )
+
     costs = await calculate_cost_components(
         db,
         user_id=str(user_id),
         account=account,
-        spend_native=base_spend_native,
+        spend_native=dashboard_spend_native,
     )
     exchange_rate = float(costs.get("exchange_rate_to_sar") or 0)
-    difference_sar = round(difference_native * exchange_rate, 2)
-    provider_complete = (
+    page_difference_sar = round(page_difference_native * exchange_rate, 2)
+    dashboard_difference_sar = round(
+        dashboard_difference_native * exchange_rate,
+        2,
+    )
+    page_provider_complete = (
         (provider_total.get("coverage") or {}).get("status") == "complete"
+    )
+    dashboard_provider_complete = (
+        (dashboard_provider_total.get("coverage") or {}).get("status") == "complete"
     )
     projections_complete = bool(
         snap_page_projection.get("amount_complete")
         and dashboard_projection.get("amount_complete")
     )
-    native_within_tolerance = abs(difference_native) < NATIVE_TOLERANCE
-    explained_open_hour = bool(current_open_hour and difference_native != 0)
-    reconciled = bool(
-        provider_complete
-        and projections_complete
-        and projection_match
-        and (native_within_tolerance or explained_open_hour)
+    page_within = _within_tolerance(page_difference_native)
+    dashboard_within = _within_tolerance(dashboard_difference_native)
+    explained_open_hour = bool(
+        current_open_hour and (not page_within or not dashboard_within)
     )
+    reconciled = bool(
+        page_provider_complete
+        and dashboard_provider_complete
+        and projections_complete
+        and projection_source_match
+        and (page_within or explained_open_hour)
+        and (dashboard_within or explained_open_hour)
+        and (projection_numeric_match if same_window else True)
+    )
+
     reasons: list[str] = []
-    if not provider_complete:
-        reasons.append("provider_total_incomplete")
+    if not page_provider_complete:
+        reasons.append("provider_account_day_total_incomplete")
+    if not dashboard_provider_complete:
+        reasons.append("provider_riyadh_window_total_incomplete")
     if not projections_complete:
         reasons.append("projection_incomplete")
-    if not projection_match:
-        reasons.append("snap_page_dashboard_mismatch")
-    if not native_within_tolerance and not explained_open_hour:
-        reasons.append("native_difference_exceeds_tolerance")
+    if not projection_source_match:
+        reasons.append("projection_source_mismatch")
+    if same_window and not projection_numeric_match:
+        reasons.append("same_window_projection_mismatch")
+    if not same_window:
+        reasons.append("timezone_window_difference_expected")
+    if not page_within and not explained_open_hour:
+        reasons.append("account_day_native_difference_exceeds_tolerance")
+    if not dashboard_within and not explained_open_hour:
+        reasons.append("riyadh_window_native_difference_exceeds_tolerance")
     if explained_open_hour:
         reasons.append("current_open_hour_difference")
 
@@ -226,10 +283,15 @@ async def reconcile_day(
         "ad_account_id": account_id,
         "report_date": report_date.isoformat(),
         "account_timezone": account.get("timezone"),
+        "dashboard_timezone": dashboard_projection.get("projection_timezone"),
         "currency": currency,
         "action_report_time": clean_text(action_report_time, limit=32).lower(),
-        "provider_spend_native": round(provider_spend_native, 6),
-        "hourly_facts_spend_native": round(base_spend_native, 6),
+        "provider_spend_native": round(provider_page_native, 6),
+        "provider_riyadh_window_spend_native": round(
+            provider_dashboard_native,
+            6,
+        ),
+        "hourly_facts_spend_native": round(dashboard_spend_native, 6),
         "snap_page_spend_native": round(page_spend_native, 6),
         "dashboard_spend_native": round(dashboard_spend_native, 6),
         "base_spend_sar": costs["base_spend_sar"],
@@ -239,11 +301,17 @@ async def reconcile_day(
         "apply_bank_commission": costs["apply_bank_commission"],
         "exchange_rate_to_sar": costs["exchange_rate_to_sar"],
         "cost_setting_configured": costs["cost_setting_configured"],
-        "difference_native": difference_native,
-        "difference_sar": difference_sar,
+        "difference_native": page_difference_native,
+        "difference_sar": page_difference_sar,
+        "dashboard_difference_native": dashboard_difference_native,
+        "dashboard_difference_sar": dashboard_difference_sar,
         "native_tolerance": NATIVE_TOLERANCE,
-        "projection_match": projection_match,
+        "same_utc_window": same_window,
+        "projection_numeric_match": projection_numeric_match,
+        "projection_source_match": projection_source_match,
         "provider_coverage": provider_total.get("coverage") or {},
+        "dashboard_provider_coverage": dashboard_provider_total.get("coverage")
+        or {},
         "snap_page_coverage": snap_page_projection.get("coverage") or {},
         "dashboard_coverage": dashboard_projection.get("coverage") or {},
         "cost_coverage": costs.get("cost_coverage") or {},
