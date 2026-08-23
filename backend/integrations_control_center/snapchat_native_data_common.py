@@ -42,6 +42,8 @@ SNAPCHAT_ENTITY_COLLECTION = "mezan_snapchat_entities_v2"
 SNAPCHAT_PERFORMANCE_COLLECTION = "mezan_snapchat_performance_daily_v2"
 SNAPCHAT_NATIVE_SYNC_LOCK_TTL = timedelta(hours=4)
 SNAPCHAT_NATIVE_SYNC_IDEMPOTENCY_WINDOW = timedelta(minutes=5)
+SNAPCHAT_SYNC_HEARTBEAT_INTERVAL_SECONDS = 15.0
+SNAPCHAT_SYNC_HEARTBEAT_STALE_AFTER = timedelta(minutes=2)
 NATIVE_RESPONSE_KEYS = (
     "run_id", "provider", "status", "date_from", "date_to",
     "accounts_attempted", "accounts_complete", "rows_saved", "errors_count",
@@ -80,6 +82,48 @@ def _collection(db: Any, name: str) -> Any:
         return db[name]
     except (KeyError, TypeError, AttributeError):
         return getattr(db, name)
+
+
+async def _sync_run_heartbeat(
+    collection: Any,
+    query: dict[str, Any],
+    *,
+    now: Callable[[], datetime] = _utcnow,
+) -> None:
+    """Keep an in-process sync lease observable across worker restarts."""
+    while True:
+        await asyncio.sleep(SNAPCHAT_SYNC_HEARTBEAT_INTERVAL_SECONDS)
+        heartbeat_at = now().astimezone(timezone.utc)
+        await collection.update_one(
+            {**query, "status": "running"},
+            {
+                "$set": {
+                    "worker_heartbeat_at": _iso(heartbeat_at),
+                    "lock_expires_at": _iso(
+                        heartbeat_at + SNAPCHAT_NATIVE_SYNC_LOCK_TTL
+                    ),
+                }
+            },
+        )
+
+
+def _start_sync_run_heartbeat(
+    collection: Any,
+    query: dict[str, Any],
+    *,
+    now: Callable[[], datetime] = _utcnow,
+) -> asyncio.Task:
+    return asyncio.create_task(
+        _sync_run_heartbeat(collection, query, now=now)
+    )
+
+
+async def _stop_sync_run_heartbeat(task: asyncio.Task) -> None:
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
 
 
 def _parse_datetime(value: Any) -> datetime | None:
