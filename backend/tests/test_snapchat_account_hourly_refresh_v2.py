@@ -453,6 +453,7 @@ class _RefreshContext:
 def test_refresh_persists_two_campaign_days_and_exact_account_total(
     monkeypatch,
 ):
+    fetch_calls = []
     rows = [
         {
             "campaign_id": "campaign-1",
@@ -487,6 +488,7 @@ def test_refresh_persists_two_campaign_days_and_exact_account_total(
     ]
 
     async def fake_fetch(*args, **kwargs):
+        fetch_calls.append(deepcopy(kwargs))
         return hourly.AccountHourFetchResult(
             rows=rows,
             errors=[],
@@ -524,6 +526,14 @@ def test_refresh_persists_two_campaign_days_and_exact_account_total(
     assert result["campaign_facts_schema_version"] == (
         CAMPAIGN_FACTS_SCHEMA_VERSION
     )
+    assert fetch_calls == [{
+        "account_id": "account-1",
+        "request_start": datetime.fromisoformat("2026-08-01T14:00:00-07:00"),
+        "request_end": datetime.fromisoformat("2026-08-02T14:00:00-07:00"),
+        "action_report_time": hourly.ACTION_REPORT_TIME,
+        "swipe_attribution_window": hourly.SWIPE_ATTRIBUTION_WINDOW,
+        "view_attribution_window": hourly.VIEW_ATTRIBUTION_WINDOW,
+    }]
     assert CAMPAIGN_FACTS_SCHEMA_VERSION == 4
     assert len(context.db.performance.updates) == 3
 
