@@ -151,6 +151,9 @@ async def acquire_snapchat_lease(
             observed_acquired is not None and observed_acquired < hard_deadline
         )
         lease_is_malformed_future = (
+            observed_acquired is not None
+            and observed_acquired > current + MAX_LEASE_TTL
+        ) or (
             observed_acquired is None
             and observed_until is not None
             and observed_until > current + MAX_LEASE_TTL
