@@ -116,6 +116,8 @@ export default function FinancialPosition() {
                     employee_custody: a.employee_custody ?? 0,
                     external_receivable: a.external_receivable ?? 0,
                     courier_cod_receivable: a.courier_cod_receivable ?? 0,
+                    store_driver_cod_receivable:
+                        a.store_driver_cod_receivable ?? 0,
                     ad_account_prepaid: a.ad_account_prepaid ?? 0,
                     total: totals.total_assets ?? 0,
                 },
@@ -123,6 +125,7 @@ export default function FinancialPosition() {
                     salaries_unpaid: li.salaries_unpaid ?? 0,
                     ad_accounts_unpaid: li.ad_accounts_unpaid ?? 0,
                     shipping_unpaid: li.courier_payable ?? 0,
+                    store_driver_payable: li.store_driver_payable ?? 0,
                     supplier_unpaid: li.supplier_payable ?? 0,
                     external_payable: li.external_payable ?? 0,
                     by_ad_provider: p.by_ad_provider || {},
@@ -253,6 +256,14 @@ export default function FinancialPosition() {
                     testid="kpi-assets-platforms"
                 />
                 <Card
+                    title="عهدة COD لدى موصلي المتجر"
+                    value={fmtMoney(a.store_driver_cod_receivable)}
+                    sub="مبالغ نقدية على كل موصل باسمه حتى يوردها"
+                    tone="amber"
+                    Icon={Users}
+                    testid="kpi-assets-store-drivers-cod"
+                />
+                <Card
                     title="إجمالي الأصول"
                     value={fmtMoney(a.total)}
                     sub="البنوك + المنصات + المديونيات (بدون تكرار)"
@@ -299,6 +310,14 @@ export default function FinancialPosition() {
                     tone="amber"
                     Icon={Truck}
                     testid="kpi-liab-shipping"
+                />
+                <Card
+                    title="أجور موصلي المتجر المستحقة"
+                    value={fmtMoney(l.store_driver_payable)}
+                    sub="تكلفة التوصيل المسجلة لكل موصل على حدة"
+                    tone="amber"
+                    Icon={Users}
+                    testid="kpi-liab-store-drivers"
                 />
                 {/* Iter-144 — Unified courier ledger summary */}
                 <ShippingLedgerSummary />

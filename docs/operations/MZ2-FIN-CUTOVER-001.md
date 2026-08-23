@@ -71,6 +71,33 @@ Provider groups:
 | Emkan | Independent BNPL receivable and settlement account | Emkan invoice and settlement |
 | Each shipping company | COD receivable plus shipping/fee payable | Courier invoice and COD statement |
 
+### Store-delivery drivers (مندوب المتجر)
+
+- ``مندوب المتجر`` is a presentation group only and never owns an aggregate
+  accounting balance.
+- Every active store driver keeps the existing ``store_drivers.id`` as the
+  accounting identity. Do not duplicate the person in counterparties.
+- The delivery fee is configured per driver and snapshotted on assignment, so
+  a later price change cannot rewrite a delivered shipment.
+- On successful delivery, cash COD is debited to that driver's
+  ``cod_receivable`` and the snapshotted delivery fee is credited to that
+  driver's ``delivery_fee_payable``. Prepaid/non-cash orders do not create COD
+  custody on the driver.
+- The driver screen must show, per individual: **عليه لنا (COD)**, **له علينا
+  (أجرة التوصيل)**, and the signed net balance. Driver 1 and Driver 2 may never
+  be netted together.
+- A normal COD remittance and a fee payment are separate movements. Explicit
+  net settlement is allowed as one balanced journal that preserves the gross
+  COD cleared, fee offset, and bank/cash amount. No silent auto-netting.
+- SMSA, Aramex, iMile, and other external couriers remain one account per
+  company; they are not children of the store-driver group.
+- This bridge posts only new canonical delivered/settlement events. It does
+  not scan or backfill old orders or legacy Mezan balances.
+- Delivery posting fails closed until tenant setting
+  ``mezan2_financial_cutover`` carries this operation ID, ``status=active``,
+  and the approved timezone-aware ``cutover_at``. This implementation does not
+  activate that setting or invent the timestamp.
+
 ### Courier COD commission tiers and netting
 
 - A courier may retain all or part of COD proceeds against shipping charges,
@@ -184,6 +211,12 @@ Implementation references:
   retained the whole COD amount against shipping/fees.
 - Added backend/frontend regression tests for provider grouping, invoice
   guards, routing, navigation, and absence of legacy balances.
+- Connected successful store-driver delivery to the general ledger per
+  individual driver: cash COD receivable plus snapshotted delivery-fee payable.
+- Connected driver COD remittance, fee payment, and explicit net settlement to
+  balanced bank/driver journals with idempotency metadata.
+- Added separate store-driver COD assets and delivery-fee liabilities to the
+  financial position, plus a per-driver debit/credit settlement view.
 
 Primary files:
 
@@ -194,6 +227,11 @@ Primary files:
 - `frontend/src/lib/integrationWorkspaces.js`
 - `frontend/src/components/MezanV2NavigationShell.jsx`
 - `backend/tests/test_financial_provider_apps_v2.py`
+- `backend/store_delivery_accounting.py`
+- `backend/store_delivery_driver_app_routes.py`
+- `backend/store_delivery_settlement_routes.py`
+- `backend/tests/test_store_delivery_accounting.py`
+- `frontend/src/pages/StoreDeliverySettlements.jsx`
 - `frontend/src/services/financialProviderApps.test.js`
 
 ## Remaining work, in order

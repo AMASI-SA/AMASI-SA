@@ -1,9 +1,9 @@
-"""Audited settlements for Amasi store drivers.
+"""Audited, general-ledger-backed settlements for store-delivery drivers.
 
-COD cash custody and driver delivery earnings are separate liabilities. This
-router records accountant-approved remittances/payouts without silently netting
-one against the other. It intentionally does not post to the general ledger yet;
-that bridge can be added after accounting mapping is explicitly approved.
+The parent label ``مندوب المتجر`` never owns a balance.  Each settlement is
+posted against one ``store_drivers.id`` and can preserve gross COD custody,
+the fee due to that driver, and the bank/cash leg separately.  Netting is
+available only through the explicit ``net-settlement`` operation.
 """
 from __future__ import annotations
 
@@ -15,11 +15,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from store_delivery_domain import money, normalize_text
+from store_delivery_accounting import (
+    post_settlement_journal,
+    store_driver_ledger_balances,
+)
 from store_delivery_driver_app_routes import DRIVER_COLLECTIONS, DRIVER_EARNINGS
 from store_delivery_driver_routes import STORE_DRIVERS
 
 SETTLEMENTS = "store_delivery_driver_settlements"
-SettlementType = Literal["cod_remittance", "earning_payment"]
+SettlementType = Literal["cod_remittance", "earning_payment", "net_settlement"]
 
 
 def _now() -> str:
@@ -52,7 +56,8 @@ def _require_accountant(user: Any) -> dict[str, Any]:
 
 class SettlementCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    amount: float = Field(gt=0, le=10_000_000)
+    amount: float = Field(ge=0, le=10_000_000)
+    earning_offset: float = Field(default=0, ge=0, le=10_000_000)
     account_id: str | None = Field(default=None, max_length=120)
     reference: str = Field(default="", max_length=240)
     note: str = Field(default="", max_length=1000)
@@ -84,15 +89,35 @@ async def _totals(db: Any, user_id: str, driver_id: str) -> dict[str, float]:
 
     earned = round(sum(float(row.get("amount") or 0) for row in earnings), 2)
     cash_collected = round(sum(float(row.get("cod_custody_amount") or 0) for row in collections), 2)
-    cod_remitted = round(sum(float(row.get("amount") or 0) for row in settlements if row.get("settlement_type") == "cod_remittance"), 2)
-    earnings_paid = round(sum(float(row.get("amount") or 0) for row in settlements if row.get("settlement_type") == "earning_payment"), 2)
+    cod_remitted = round(sum(
+        float(row.get("cod_settled_amount") if row.get("cod_settled_amount") is not None
+              else row.get("amount") or 0)
+        for row in settlements
+        if row.get("settlement_type") in {"cod_remittance", "net_settlement"}
+    ), 2)
+    earnings_paid = round(sum(
+        float(row.get("delivery_fee_settled_amount") if row.get("delivery_fee_settled_amount") is not None
+              else row.get("amount") or 0)
+        for row in settlements
+        if row.get("settlement_type") in {"earning_payment", "net_settlement"}
+    ), 2)
+    operational_cod = round(max(cash_collected - cod_remitted, 0), 2)
+    operational_fee = round(max(earned - earnings_paid, 0), 2)
+    ledger = await store_driver_ledger_balances(
+        db, user_id=user_id, driver_id=driver_id,
+    )
     return {
         "delivery_earnings_total": earned,
         "delivery_earnings_paid": earnings_paid,
-        "delivery_earnings_due": round(max(earned - earnings_paid, 0), 2),
+        "delivery_earnings_due": operational_fee,
         "cod_cash_collected": cash_collected,
         "cod_cash_remitted": cod_remitted,
-        "cod_cash_custody": round(max(cash_collected - cod_remitted, 0), 2),
+        "cod_cash_custody": operational_cod,
+        "net_due_from_driver": round(max(operational_cod - operational_fee, 0), 2),
+        "net_due_to_driver": round(max(operational_fee - operational_cod, 0), 2),
+        "ledger_cod_receivable": ledger["cod_receivable"],
+        "ledger_delivery_fee_payable": ledger["delivery_fee_payable"],
+        "ledger_net_balance": ledger["net_balance"],
     }
 
 
@@ -146,10 +171,20 @@ def make_store_delivery_settlement_router(db: Any, current_user: Callable[..., A
         await ensure_store_delivery_settlement_indexes(db)
         totals = await _totals(db, user_id, driver_id)
         amount = float(money(payload.amount))
-        available = totals["cod_cash_custody"] if settlement_type == "cod_remittance" else totals["delivery_earnings_due"]
-        if amount > available + 0.0001:
-            raise HTTPException(status_code=409, detail={"code": "store_delivery_settlement_exceeds_balance", "available": available})
+        earning_offset = float(money(payload.earning_offset))
+        if settlement_type in {"cod_remittance", "earning_payment"} and amount <= 0:
+            raise HTTPException(status_code=422, detail={"code": "store_delivery_settlement_amount_required"})
+        cod_settled = amount + earning_offset if settlement_type == "net_settlement" else amount if settlement_type == "cod_remittance" else 0.0
+        fee_settled = earning_offset if settlement_type == "net_settlement" else amount if settlement_type == "earning_payment" else 0.0
+        if settlement_type == "net_settlement" and earning_offset <= 0:
+            raise HTTPException(status_code=422, detail={"code": "store_driver_net_offset_required"})
+        if cod_settled > totals["cod_cash_custody"] + 0.0001:
+            raise HTTPException(status_code=409, detail={"code": "store_delivery_settlement_exceeds_balance", "available": totals["cod_cash_custody"]})
+        if fee_settled > totals["delivery_earnings_due"] + 0.0001:
+            raise HTTPException(status_code=409, detail={"code": "store_delivery_settlement_exceeds_balance", "available": totals["delivery_earnings_due"]})
         account = None
+        if amount > 0 and not payload.account_id:
+            raise HTTPException(status_code=422, detail={"code": "settlement_account_required"})
         if payload.account_id:
             account = await db.accounts.find_one(
                 {"user_id": user_id, "id": normalize_text(payload.account_id), "status": "active"},
@@ -157,14 +192,37 @@ def make_store_delivery_settlement_router(db: Any, current_user: Callable[..., A
             )
             if not account:
                 raise HTTPException(status_code=422, detail={"code": "settlement_account_invalid"})
+            if account.get("account_type") not in {"bank", "cash"}:
+                raise HTTPException(status_code=422, detail={"code": "settlement_account_must_be_bank_or_cash"})
         now = _now()
+        settlement_id = str(uuid.uuid4())
+        accounting = await post_settlement_journal(
+            db,
+            user_id=user_id,
+            actor_id=normalize_text(actor.get("id")),
+            actor_name=normalize_text(actor.get("name")) or "accountant",
+            settlement_id=settlement_id,
+            driver=driver,
+            account=account or {"id": "", "name": ""},
+            settlement_type=settlement_type,
+            bank_amount=amount,
+            earning_offset=earning_offset,
+            reference=payload.reference,
+            note=payload.note,
+        )
         row = {
-            "id": str(uuid.uuid4()), "user_id": user_id, "driver_id": driver_id,
+            "id": settlement_id, "user_id": user_id, "driver_id": driver_id,
             "driver_name_snapshot": driver.get("name"), "settlement_type": settlement_type,
             "amount": amount, "account_id": normalize_text(payload.account_id),
             "account_name_snapshot": (account or {}).get("name") or (account or {}).get("provider"),
+            "cod_settled_amount": round(cod_settled, 2),
+            "delivery_fee_settled_amount": round(fee_settled, 2),
+            "earning_offset": earning_offset,
             "reference": normalize_text(payload.reference), "note": normalize_text(payload.note),
-            "status": "posted", "created_at": now, "created_by": normalize_text(actor.get("id")),
+            "status": "posted", "accounting_status": "posted",
+            "ledger_txn_group_id": accounting.get("txn_group_id"),
+            "accounting_operation_id": "MZ2-FIN-CUTOVER-001",
+            "created_at": now, "created_by": normalize_text(actor.get("id")),
         }
         await db[SETTLEMENTS].insert_one(row)
         row.pop("_id", None); row.pop("user_id", None)
@@ -177,6 +235,10 @@ def make_store_delivery_settlement_router(db: Any, current_user: Callable[..., A
     @router.post("/driver/{driver_id}/earning-payment", status_code=201)
     async def earning_payment(driver_id: str, payload: SettlementCreate, user: dict = Depends(current_user)) -> dict[str, Any]:
         return await _post(driver_id, "earning_payment", payload, _require_accountant(user))
+
+    @router.post("/driver/{driver_id}/net-settlement", status_code=201)
+    async def net_settlement(driver_id: str, payload: SettlementCreate, user: dict = Depends(current_user)) -> dict[str, Any]:
+        return await _post(driver_id, "net_settlement", payload, _require_accountant(user))
 
     return router
 
