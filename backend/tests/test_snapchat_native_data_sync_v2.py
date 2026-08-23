@@ -219,6 +219,22 @@ class UnauthorizedClient(ProviderClient):
         })
 
 
+class SevenDayWindowClient(ProviderClient):
+    async def get(self, url, **kwargs):
+        path = urlsplit(url).path
+        if path.endswith("/stats"):
+            type(self).calls.append((url, deepcopy(kwargs)))
+            params = kwargs["params"]
+            start = datetime.fromisoformat(params["start_time"])
+            end = datetime.fromisoformat(params["end_time"])
+            assert timedelta(0) < end - start <= timedelta(days=7)
+            return FakeResponse({
+                "request_status": "SUCCESS",
+                "timeseries_stats": [],
+            })
+        return await super().get(url, **kwargs)
+
+
 def _db():
     return FakeDB({
         "mezan_snapchat_oauth_credentials_v2": [{
@@ -315,6 +331,44 @@ async def test_account_aggregate_keeps_missing_conversions_unknown(monkeypatch):
     assert account["metrics"]["conversion_purchases"] is None
     assert account["metrics"]["conversion_purchases_value"] is None
     assert account["computed"]["roas"] is None
+
+
+@pytest.mark.asyncio
+async def test_thirty_day_hourly_sync_uses_adjacent_seven_day_windows(
+    monkeypatch,
+):
+    _configure(monkeypatch)
+    SevenDayWindowClient.calls = []
+    monkeypatch.setattr(native.httpx, "AsyncClient", SevenDayWindowClient)
+
+    result = await native.SnapchatNativeDataSync(
+        _db(),
+        now=lambda: NOW,
+    ).run(
+        "owner-1",
+        native.SnapchatNativeSyncInput(
+            from_date="2026-07-01",
+            to_date="2026-07-30",
+        ),
+    )
+
+    stats_calls = [
+        kwargs["params"]
+        for url, kwargs in SevenDayWindowClient.calls
+        if urlsplit(url).path.endswith("/stats")
+    ]
+    assert result["sync_status"] == "complete"
+    assert result["provider_calls"] == 9
+    assert [
+        (params["start_time"], params["end_time"])
+        for params in stats_calls
+    ] == [
+        ("2026-07-01T00:00:00+03:00", "2026-07-08T00:00:00+03:00"),
+        ("2026-07-08T00:00:00+03:00", "2026-07-15T00:00:00+03:00"),
+        ("2026-07-15T00:00:00+03:00", "2026-07-22T00:00:00+03:00"),
+        ("2026-07-22T00:00:00+03:00", "2026-07-29T00:00:00+03:00"),
+        ("2026-07-29T00:00:00+03:00", "2026-07-31T00:00:00+03:00"),
+    ]
 
 
 @pytest.mark.asyncio
