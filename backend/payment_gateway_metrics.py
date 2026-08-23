@@ -124,7 +124,7 @@ PAYMENT_METHOD_REGISTRY: dict[str, dict] = {
         "aliases": ["tamara", "تمارا"],
         "estimated_fee_rate": 6.99,
         "estimated_vat_rate": 15.0,
-        "estimated_fixed_fee": 0.0,
+        "estimated_fixed_fee": 1.5,
     },
     "tabby": {
         "name_ar": "تابي",
@@ -230,6 +230,8 @@ _SALLA_METRIC_KEYS = frozenset({
     "salla", "mada", "applepay", "googlepay", "stcpay", "visa",
     "mastercard", "credit_card", "debit_card", "salla_wallet",
 })
+
+_TAMARA_METRIC_KEYS = frozenset({"tamara"})
 
 
 def _configured_fee_rules(settings_doc: dict) -> dict[str, dict]:
@@ -379,6 +381,37 @@ async def compute_metrics(
             # Iter-207c — cancelled rows count toward "excluded".
             excluded_orders_count += 1
             excluded_gross += row_amount
+            # Five cancellation rows in the merchant's verified Tamara
+            # statements each charged the fixed SAR 1.50 only, plus SAR 0.23
+            # VAT, and did not count as captured gross.  Preserve that expense
+            # even though the cancelled order itself is excluded from sales.
+            if canon in _TAMARA_METRIC_KEYS:
+                if row.get("payment_fee_status") == "actual":
+                    fee = float(row.get("actual_payment_fee") or 0)
+                    vat = float(row.get("actual_payment_vat") or 0)
+                    actual_net = row.get("actual_net_amount")
+                    net = (
+                        float(actual_net)
+                        if actual_net is not None else -(fee + vat)
+                    )
+                else:
+                    meta = PAYMENT_METHOD_REGISTRY.get(canon) or {}
+                    fee_rule = configured_fee_rules.get(canon) or meta
+                    fixed_fee = Decimal(str(
+                        fee_rule.get("estimated_fixed_fee", 0.0),
+                    ))
+                    vat_rate = Decimal(str(
+                        fee_rule.get("estimated_vat_rate", 0.0),
+                    ))
+                    fee = _round_sar(fixed_fee)
+                    vat = _round_sar(
+                        fixed_fee * vat_rate / Decimal("100"),
+                    )
+                    net = -(fee + vat)
+                bkt["fees"] += fee
+                bkt["fees_vat"] += vat
+                bkt["net"] += net
+                bkt["expected_in_assets"] += net
             continue
 
         gross = float(row.get("total_amount") or 0)
@@ -422,13 +455,27 @@ async def compute_metrics(
             # per order in addition to the percentage MDR).
             fixed_fee = fee_rule.get("estimated_fixed_fee", 0.0)
             if category == "refunded":
-                # Refunded orders — gateway waives fees, book gross as
-                # a full refund so net comes out to 0 for that order.
-                fee = 0.0
-                vat = 0.0
+                # Tamara does not rebate the captured-order commission.  Its
+                # refund rows carry zero *new* fee but deduct the refund gross;
+                # cumulatively the original fee and VAT remain charged.  Other
+                # gateways retain the legacy waived-fee estimate.
+                if canon in _TAMARA_METRIC_KEYS:
+                    unrounded_fee = (
+                        Decimal(str(gross)) * Decimal(str(rate))
+                        / Decimal("100")
+                        + Decimal(str(fixed_fee))
+                    )
+                    fee = _round_sar(unrounded_fee)
+                    vat = _round_sar(
+                        Decimal(str(fee)) * Decimal(str(vat_rate))
+                        / Decimal("100")
+                    )
+                else:
+                    fee = 0.0
+                    vat = 0.0
                 rfull = gross
                 rpart = 0.0
-                net = 0.0
+                net = -fee - vat
             else:
                 # confirmed
                 if canon in _SALLA_METRIC_KEYS:
@@ -439,6 +486,21 @@ async def compute_metrics(
                     fee = _round_sar(unrounded_fee)
                     vat = _round_sar(
                         unrounded_fee * Decimal(str(vat_rate)) / Decimal("100")
+                    )
+                elif canon in _TAMARA_METRIC_KEYS:
+                    # Tamara rounds the percentage fee to halalas per capture,
+                    # adds the fixed fee, then calculates VAT on that displayed
+                    # rounded total fee.  This differs from Salla's unrounded
+                    # VAT basis and is verified by all 298 captured rows.
+                    unrounded_fee = (
+                        Decimal(str(gross)) * Decimal(str(rate))
+                        / Decimal("100")
+                        + Decimal(str(fixed_fee))
+                    )
+                    fee = _round_sar(unrounded_fee)
+                    vat = _round_sar(
+                        Decimal(str(fee)) * Decimal(str(vat_rate))
+                        / Decimal("100")
                     )
                 else:
                     fee = round(gross * rate / 100 + fixed_fee, 4)

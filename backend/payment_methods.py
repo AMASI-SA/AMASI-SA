@@ -38,9 +38,10 @@ SALLA_WALLET       = "محفظة سلة"
 # ── Default payment methods (used to seed user settings) ─────────────────
 # Order matters → it's the order shown in Settings → Payment Methods.
 #
-# ``salla-invoices-2026-08-v1`` was reconstructed from seven merchant Salla
-# payment-detail invoices (528 rows).  The observed rails matched every
-# positive transaction exactly:
+# ``salla-tamara-statements-2026-08-v2`` combines two merchant evidence sets:
+# seven Salla payment-detail invoices (528 rows) and five unique Tamara weekly
+# statements (310 rows; three duplicate uploads were ignored by SHA-256).
+# The observed Salla rails matched every positive transaction exactly:
 #
 #   mada         = amount × 1.00% + SAR 1.00
 #   credit card  = amount × 2.20% + SAR 1.00
@@ -51,7 +52,14 @@ SALLA_WALLET       = "محفظة سلة"
 # labels in that evidence set.  They therefore inherit the observed generic
 # credit-card rate as an explicit estimate until a later provider invoice
 # proves a rail-specific rate.
-PAYMENT_FEE_DEFAULTS_VERSION = "salla-invoices-2026-08-v1"
+#
+# Tamara's observed PAY_BY_INSTALMENTS captures matched:
+#
+#   amount × 6.99% (rounded per order) + SAR 1.50 fixed
+#
+# VAT is 15% of the displayed rounded Tamara fee, rounded per event.  Refund
+# rows carry no fee rebate; cancellation rows carry only SAR 1.50 + VAT.
+PAYMENT_FEE_DEFAULTS_VERSION = "salla-tamara-statements-2026-08-v2"
 
 DEFAULT_PAYMENT_METHODS: list[dict] = [
     # Salla card rails — editable so the merchant can override Salla's
@@ -66,7 +74,7 @@ DEFAULT_PAYMENT_METHODS: list[dict] = [
     {"name": DEBIT_CARD,       "commission_percent": 2.20, "fixed_fee": 1.0, "vat_percent": 15.0},
     {"name": SALLA_WALLET,     "commission_percent": 0.00, "fixed_fee": 0.0, "vat_percent": 0.0},
     # BNPL — own accounts
-    {"name": TAMARA,           "commission_percent": 6.99, "fixed_fee": 0.0, "vat_percent": 15.0},
+    {"name": TAMARA,           "commission_percent": 6.99, "fixed_fee": 1.5, "vat_percent": 15.0},
     {"name": TABBY,            "commission_percent": 5.00, "fixed_fee": 0.0, "vat_percent": 15.0},
     {"name": EMKAN,            "commission_percent": 5.00, "fixed_fee": 0.0, "vat_percent": 15.0},
     # Cash / bank — own accounts, zero commission

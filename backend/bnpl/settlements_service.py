@@ -34,6 +34,7 @@ Output structure (per provider):
 from __future__ import annotations
 
 import math
+from decimal import Decimal, ROUND_HALF_UP
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -163,6 +164,41 @@ def _r(x: float) -> float:
     return round(float(x or 0), 2)
 
 
+def _round_sar(value: Decimal | float) -> float:
+    """Round money to halalas with provider-style half-up semantics."""
+    decimal_value = (
+        value if isinstance(value, Decimal) else Decimal(str(value or 0))
+    )
+    return float(decimal_value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def _capture_fee_components(
+    provider: str,
+    amount: float,
+    commission_rate: float,
+    fixed_fee: float,
+    vat_rate: float,
+) -> tuple[float, float]:
+    """Return capture fee and fee VAT using the provider's rounding model.
+
+    Tamara's five verified 2026-08 statements round the fee per capture and
+    then calculate VAT on that displayed rounded fee.  Tabby retains the
+    existing sum-first behavior, so its unrounded components are returned for
+    accumulation and final rounding by the caller.
+    """
+    if provider == "tamara":
+        amount_d = Decimal(str(amount or 0))
+        rate_d = Decimal(str(commission_rate or 0))
+        fixed_d = Decimal(str(fixed_fee or 0))
+        vat_d = Decimal(str(vat_rate or 0))
+        fee = _round_sar(amount_d * rate_d + fixed_d)
+        vat = _round_sar(Decimal(str(fee)) * vat_d)
+        return fee, vat
+
+    fee_unrounded = float(amount or 0) * commission_rate + fixed_fee
+    return fee_unrounded, fee_unrounded * vat_rate
+
+
 def _count_settlements_in_period(
     date_from: Optional[str], date_to: Optional[str],
     settlement_period_days: int = 7,
@@ -234,11 +270,11 @@ async def _merchant_fee_rates(
     })
     rates: Dict[str, Any] = dict(defaults)
     # Iter-121 — weekday defaults (canonical).  Tabby = Monday close,
-    # Tue/Wed payouts; Tamara = Sunday close, Tuesday payout.
+    # Tue/Wed payouts; Tamara statements close Friday and issue Saturday.
     weekday_defaults = {
         "tabby":  {"invoice_weekdays":  ["monday"],
                    "transfer_weekdays": ["tuesday", "wednesday"]},
-        "tamara": {"invoice_weekdays":  ["sunday"],
+        "tamara": {"invoice_weekdays":  ["saturday"],
                    "transfer_weekdays": ["tuesday"]},
     }
     wd = weekday_defaults.get(provider, {})
@@ -309,7 +345,16 @@ async def _merchant_fee_rates(
         if doc.get("settlement_period_days") is not None:
             rates["settlement_period_days"] = int(doc["settlement_period_days"])
         if "invoice_weekdays" in doc and isinstance(doc["invoice_weekdays"], list):
-            rates["invoice_weekdays"] = list(doc["invoice_weekdays"])
+            invoice_weekdays = list(doc["invoice_weekdays"])
+            if provider == "tamara":
+                from .config_store import TAMARA_STATEMENT_CYCLE_VERSION
+                if (
+                    doc.get("statement_cycle_defaults_version")
+                    != TAMARA_STATEMENT_CYCLE_VERSION
+                    and invoice_weekdays == ["sunday"]
+                ):
+                    invoice_weekdays = ["saturday"]
+            rates["invoice_weekdays"] = invoice_weekdays
         if "transfer_weekdays" in doc and isinstance(doc["transfer_weekdays"], list):
             rates["transfer_weekdays"] = list(doc["transfer_weekdays"])
         # Iter-134 — per-order commission split + VAT on settlement fee
@@ -720,10 +765,10 @@ async def _aggregate_official_totals(
     wrong week / fee rate drift).
 
     Field mapping (matches `settlements_import/parsers/tamara.py`):
-      • event_type             — "sale" or "refund"
+      • event_type             — "sale", "refund", or "canceled_fee"
       • actual_gross_amount    — gross order amount  (only on sales)
-      • actual_payment_fee     — Tamara commission   (only on sales)
-      • actual_payment_vat     — VAT on commission   (only on sales)
+      • actual_payment_fee     — commission on sales; fixed fee on cancel
+      • actual_payment_vat     — VAT on those provider fees
       • actual_net_amount      — order net (can be negative for refunds)
       • actual_refund_amount        — full refund amount
       • actual_partial_refund_amount — partial refund amount
@@ -755,6 +800,8 @@ async def _aggregate_official_totals(
     total_refunds = 0.0
     sales_count = 0
     refunds_count = 0
+    canceled_count = 0
+    canceled_amount = 0.0
     commission = 0.0
     commission_vat = 0.0
     net_payable = 0.0
@@ -788,6 +835,16 @@ async def _aggregate_official_totals(
                 or e.get("actual_partial_refund_amount")
                 or 0.0,
             ))
+        elif ev == "canceled_fee":
+            # Cancellation is not captured gross.  Tamara still deducts the
+            # fixed fee and its VAT, so keep those expense legs and the
+            # negative net without incrementing the sale count.
+            canceled_count += 1
+            canceled_amount += abs(float(
+                e.get("actual_canceled_amount") or 0.0,
+            ))
+            commission += float(e.get("actual_payment_fee") or 0.0)
+            commission_vat += float(e.get("actual_payment_vat") or 0.0)
         else:
             sales_count += 1
             gross_sales += float(e.get("actual_gross_amount") or 0.0)
@@ -801,6 +858,8 @@ async def _aggregate_official_totals(
     return {
         "transactions_count": sales_count,
         "refunds_count":      refunds_count,
+        "canceled_count":     canceled_count,
+        "canceled_amount":    _r(canceled_amount),
         "gross_sales":        _r(gross_sales),
         "total_refunds":      _r(total_refunds),
         "commission":         _r(commission),
@@ -833,11 +892,9 @@ async def compute_settlement_for_provider(
 
     totals = await _compute_provider_totals(db, user_id, provider, date_from, date_to)
 
-    # ── Iter-134 — Per-order commission ───────────────────────────
-    # Tabby (and most BNPL providers) compute commission and VAT on
-    # each ORDER individually then sum, applying a 2-decimal rounding
-    # at every step.  Aggregating first and rounding once leaves a
-    # tiny but persistent gap that bewildered the merchant.  We now
+    # ── Provider-specific commission rounding ─────────────────────
+    # Tabby accumulates raw fee products and rounds final totals. Tamara
+    # rounds each capture fee and then VAT on the displayed rounded fee.
     # iterate the raw rows so the totals match the provider's invoice
     # to the cent.
     # Iter-146 / Iter-147 — for Tamara we filter sales by
@@ -866,13 +923,9 @@ async def compute_settlement_for_provider(
             **({"$lte": utc_lte} if utc_lte else {}),
         }
 
-    # Iter-228 — Rounding accuracy fix. Previously we rounded
-    # `amt * commission_rate` PER transaction (and again for VAT),
-    # which caused a ±0.005 SAR drift per transaction. Over 30-50
-    # transactions, this accumulated into a ~0.22 SAR delta vs.
-    # Tabby's official invoice (which sums first, then rounds once).
-    # We now accumulate raw products in full precision and round
-    # ONLY the final totals — matching the processor's math exactly.
+    # Provider-specific rounding: Tabby sums raw products then rounds the
+    # final total; Tamara rounds each capture fee, then VAT on that displayed
+    # rounded fee.  Mixing these rules causes recurring halala drift.
     sales_commission = 0.0
     sales_vat = 0.0
     counted_pids: set[str] = set()
@@ -881,9 +934,15 @@ async def compute_settlement_for_provider(
         {"_id": 0, "amount": 1, "provider_id": 1},
     ):
         amt = float(t.get("amount") or 0)
-        fee_unrounded = amt * commission_rate + fixed_fee_per_order
-        sales_commission += fee_unrounded
-        sales_vat += fee_unrounded * vat_rate
+        capture_fee, capture_vat = _capture_fee_components(
+            provider,
+            amt,
+            commission_rate,
+            fixed_fee_per_order,
+            vat_rate,
+        )
+        sales_commission += capture_fee
+        sales_vat += capture_vat
         pid = t.get("provider_id")
         if pid:
             counted_pids.add(pid)
@@ -939,9 +998,15 @@ async def compute_settlement_for_provider(
             amt = float(orig.get("amount") or 0)
             if amt <= 0:
                 continue
-            fee_unrounded = amt * commission_rate + fixed_fee_per_order
-            sales_commission += fee_unrounded
-            sales_vat += fee_unrounded * vat_rate
+            capture_fee, capture_vat = _capture_fee_components(
+                provider,
+                amt,
+                commission_rate,
+                fixed_fee_per_order,
+                vat_rate,
+            )
+            sales_commission += capture_fee
+            sales_vat += capture_vat
             if orig_pid:
                 counted_pids.add(orig_pid)
 
@@ -984,7 +1049,11 @@ async def compute_settlement_for_provider(
         official = await _aggregate_official_totals(
             db, user_id, date_from, date_to,
         )
-        if official and official.get("transactions_count", 0) > 0:
+        if official and (
+            official.get("transactions_count", 0)
+            or official.get("refunds_count", 0)
+            or official.get("canceled_count", 0)
+        ):
             # Snapshot what our DB computed so the UI can show the diff.
             system_totals = {
                 "transactions_count": totals["transactions_count"],
@@ -999,6 +1068,8 @@ async def compute_settlement_for_provider(
             # Override with Tamara's official numbers.
             totals["transactions_count"] = official["transactions_count"]
             totals["refunds_count"] = official.get("refunds_count", 0)
+            totals["canceled_count"] = official.get("canceled_count", 0)
+            totals["canceled_amount"] = official.get("canceled_amount", 0.0)
             totals["gross_sales"] = official["gross_sales"]
             totals["total_refunds"] = official["total_refunds"]
             totals["net_sales"] = _r(
@@ -1042,6 +1113,8 @@ async def compute_settlement_for_provider(
         "totals": {
             "transactions_count": totals["transactions_count"],
             "refunds_count": totals.get("refunds_count", 0),
+            "canceled_count": totals.get("canceled_count", 0),
+            "canceled_amount": totals.get("canceled_amount", 0.0),
             "gross_sales": totals["gross_sales"],
             "total_refunds": totals["total_refunds"],
             "net_sales": totals["net_sales"],
@@ -1190,6 +1263,8 @@ async def compute_weekly_settlements(
                 ),
                 "transactions_count": t.get("transactions_count", 0),
                 "refunds_count": t.get("refunds_count", 0),
+                "canceled_count": t.get("canceled_count", 0),
+                "canceled_amount": t.get("canceled_amount", 0),
                 "gross_sales": t.get("gross_sales", 0),
                 "total_refunds": t.get("total_refunds", 0),
                 "net_sales": t.get("net_sales", 0),
@@ -1228,6 +1303,8 @@ async def compute_weekly_settlements(
             "expected_transfer_date": None,
             "transactions_count": t.get("transactions_count", 0),
             "refunds_count": t.get("refunds_count", 0),
+            "canceled_count": t.get("canceled_count", 0),
+            "canceled_amount": t.get("canceled_amount", 0),
             "gross_sales": t.get("gross_sales", 0),
             "total_refunds": t.get("total_refunds", 0),
             "net_sales": t.get("net_sales", 0),

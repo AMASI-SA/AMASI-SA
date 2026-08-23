@@ -17,6 +17,7 @@ export function normalizeFinancialProviderApps(payload = {}) {
             configured: Boolean(app?.configured),
             paymentMode: app?.payment_mode || null,
             feeRules: Array.isArray(app?.fee_rules) ? app.fee_rules : [],
+            feePolicy: app?.fee_policy || null,
             codFeeRuleMode: app?.cod_fee_rule_mode || null,
             settlementNettingSupported: app?.settlement_netting_supported === true,
             bankTransferOptional: app?.bank_transfer_optional === true,

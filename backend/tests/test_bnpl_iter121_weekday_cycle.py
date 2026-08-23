@@ -2,7 +2,7 @@
 
 Asserts:
   • Tabby invoices end on Monday by default; expected transfer = Tuesday.
-  • Tamara invoices end on Sunday by default; expected transfer = Tuesday.
+  • Tamara statements issue Saturday after a Saturday→Friday period.
   • Per-user override via PUT /api/bnpl/settings/{provider} with
     `invoice_weekdays` and `transfer_weekdays` lists works end-to-end.
   • The new fields persist + drive subsequent weekly settlement output.
@@ -76,7 +76,7 @@ class TestWeekdayCycle:
                 f"expected_transfer must be Tue/Wed, got {et}"
             )
 
-    def test_tamara_default_invoice_day_is_sunday(self, session):
+    def test_tamara_default_invoice_day_is_saturday(self, session):
         r = session.get(
             f"{BASE_URL}/api/bnpl/settlements/weekly/tamara"
             "?from=2025-05-01&to=2025-05-31", timeout=30,
@@ -84,12 +84,12 @@ class TestWeekdayCycle:
         assert r.status_code == 200, r.text[:300]
         rows = r.json().get("rows") or []
         assert rows, "no Tamara rows returned"
-        # issue_date should be Sunday for every row (Tamara's default).
+        # Five verified merchant statements issue Saturday after Friday close.
         for row in rows:
             issue = row.get("issue_date")
             if issue:  # may be None for the last partial row
-                assert date.fromisoformat(issue).weekday() == 6, (  # Sun=6
-                    f"Tamara issue_date should be Sunday, got "
+                assert date.fromisoformat(issue).weekday() == 5, (  # Sat=5
+                    f"Tamara issue_date should be Saturday, got "
                     f"{date.fromisoformat(issue).weekday()} ({issue})"
                 )
 

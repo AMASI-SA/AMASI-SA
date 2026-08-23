@@ -214,12 +214,56 @@ as separate invoice labels. They use the observed generic credit-card rule
 be described as a directly verified rail-specific rate. A later invoice row
 with one of those explicit labels supersedes the fallback.
 
-Implementation uses settings version `salla-invoices-2026-08-v1`. Existing
-rows that still equal the old bundled defaults are upgraded safely; explicitly
-merchant-edited rows are preserved. Missing Google Pay is added as a Salla
+The Salla component was first introduced as settings version
+`salla-invoices-2026-08-v1`. Missing Google Pay was added as a Salla
 sub-method. Fee estimates use per-order rounding when individual orders are
 available and retain aggregate calculation only for legacy aggregate-only
 callers.
+
+The combined payment-fee settings version is now
+`salla-tamara-statements-2026-08-v2`; this version bump safely upgrades only
+an untouched legacy Tamara row while retaining the previously verified Salla
+rules and merchant edits.
+
+## Tamara fee and statement evidence — 2026-08-23
+
+Eight uploaded workbooks reduce to five unique Tamara statements; the copies
+for `20260731`, `20260807`, and `20260814` are byte-identical duplicates and
+were ignored. The unique statements are:
+
+| Statement ID | Covered period | Captures | Refunds | Cancellations | Fees | Fee VAT | Net payable |
+|---|---|---:|---:|---:|---:|---:|---:|
+| `P0420741SA260725` | 18/07/2026–24/07/2026 | 21 | 1 | 0 | 367.15 | 55.07 | 4,151.97 |
+| `P0420741SA260801` | 25/07/2026–31/07/2026 | 37 | 2 | 0 | 637.05 | 95.55 | 7,254.18 |
+| `P0420741SA260808` | 01/08/2026–07/08/2026 | 50 | 0 | 1 | 803.66 | 120.58 | 9,478.66 |
+| `P0420741SA260815` | 08/08/2026–14/08/2026 | 111 | 1 | 1 | 1,576.21 | 236.52 | 18,167.17 |
+| `P0420741SA260822` | 15/08/2026–21/08/2026 | 79 | 3 | 3 | 1,069.13 | 160.52 | 11,945.82 |
+| **Total** | five weeks | **298** | **7** | **5** | **4,453.20** | **668.24** | **50,997.80** |
+
+Aggregate captured amount is SAR 57,205.33; refunds are SAR 1,086.09. The
+canceled event amounts total SAR 1,181.76 but are not captured sales. All 310
+event rows use `PAY_BY_INSTALMENTS`; observed installment counts range from 2
+to 12 and do not change the fee rule.
+
+Verified Tamara treatment:
+
+1. **Captured order:** variable fee is 6.99% of the captured amount, rounded
+   to halalas per order, then SAR 1.50 fixed fee is added.
+2. **Fee VAT:** 15% of the displayed rounded total fee, rounded per event.
+   This is different from Salla, whose VAT evidence uses the unrounded fee.
+3. **Refund:** the refund row carries zero new fee and zero fee VAT. Tamara
+   does not rebate the commission already charged on the capture; the refund
+   amount is deducted separately.
+4. **Cancellation:** variable fee is zero; Tamara charges SAR 1.50 fixed plus
+   SAR 0.23 VAT, producing a SAR 1.73 deduction. Cancellation is a fee
+   adjustment and must not inflate captured gross.
+5. **Statement fee:** zero in all five statements.
+6. **Cycle/cutoff:** every statement covers Saturday through Friday and is
+   issued on Saturday. The workbooks do not contain a time-of-day cutoff, so
+   Mezan uses Asia/Riyadh date boundaries and must not invent an exact hour.
+
+The official uploaded statement remains authoritative. These defaults estimate
+fees only when no official statement row exists.
 
 ## Implemented in this change
 
@@ -265,6 +309,16 @@ callers.
   settlement classifier through the expanded rail set, with estimates loaded
   from the unified payment-method settings instead of their old hardcoded
   Mada/card/STC rates.
+- Reconciled five unique Tamara statements and ignored three byte-identical
+  duplicates.
+- Changed the unified Tamara default to 6.99% + SAR 1.50, VAT 15%, while
+  preserving merchant-edited settings through the versioned migration.
+- Applied Tamara's own per-capture rounding: fee first, then VAT on the rounded
+  displayed fee; retained Tabby's separate sum-first behavior.
+- Preserved Tamara commission on refunds, represented cancellations as fixed
+  fee adjustments instead of sales, and kept the per-statement fee at zero.
+- Corrected the default Tamara statement cycle to Saturday issue after a
+  Saturday–Friday covered period; exact cutoff time remains unverified.
 
 Primary files:
 
