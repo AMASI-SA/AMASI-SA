@@ -1,3 +1,12 @@
+jest.mock("react-router-dom", () => ({
+    Navigate: () => null,
+    useLocation: () => ({ pathname: "/", search: "" }),
+}));
+
+jest.mock("../context/AuthContext", () => ({
+    useAuth: () => ({ user: { is_owner: true }, loading: false }),
+}));
+
 import { isAccountingWorkspaceLocation } from "./OwnerOnlyRoute";
 
 test("only the financial integrations workspace bypasses the outer owner route", () => {
