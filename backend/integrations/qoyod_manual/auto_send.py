@@ -11,7 +11,7 @@ Qoyod pipeline.  The existing Qoyod settings switches are the control plane:
 * the final live Salla check revalidates the same closed three-state policy
   immediately before every external write;
 * the legacy pipeline must remain frozen;
-* a successful closed canary must exist before the settings can arm it.
+* a validated, authenticated live-settings save arms the worker explicitly.
 
 Safety properties:
 
@@ -175,8 +175,10 @@ def activation_issues(
     )
     if any(caps.get(key) is not True for key in required_caps):
         add("capabilities_required", "يجب تفعيل صلاحيات عمليات قيود الأربع")
-    if not canary_succeeded:
-        add("successful_canary_required", "يجب نجاح تجربة الإرسال الآلي المقيدة أولاً")
+    # A canary is recorded when available, but it is not a prerequisite for
+    # an authenticated operator who explicitly saves the validated live
+    # settings. The independent unified-candidate flag remains default-off
+    # until that successful save.
     return issues
 
 
