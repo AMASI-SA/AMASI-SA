@@ -24,6 +24,7 @@ from fastapi import APIRouter, Depends, Query
 
 from shipping_companies import normalize_shipping_company
 from order_status_policy import get_policy_map, resolve_category
+from courier_cod_fee_rules import calculate_courier_cod_fee
 
 
 def attach_shipping_ledger_routes(parent_router: APIRouter, db,
@@ -43,20 +44,17 @@ def attach_shipping_ledger_routes(parent_router: APIRouter, db,
             out[name] = out[key]
         return out
 
-    async def _cod_fee_map(uid: str) -> dict[str, tuple[float, float]]:
-        """{canonical_key: (percent, fixed_per_order)}"""
+    async def _cod_fee_map(uid: str) -> dict[str, dict]:
+        """Return the full COD fee config per canonical courier key."""
         s = await db.settings.find_one({"user_id": uid},
                                        {"_id": 0, "shipping_companies": 1})
-        out: dict[str, tuple[float, float]] = {}
+        out: dict[str, dict] = {}
         for c in (s or {}).get("shipping_companies", []) or []:
             name = (c.get("name") or "").strip()
             if not name:
                 continue
             key, _ = normalize_shipping_company(name)
-            out[key] = (
-                float(c.get("cod_fee_percent") or 0),
-                float(c.get("cod_fee_fixed_per_order") or 0),
-            )
+            out[key] = c
         return out
 
     async def _cost_map(uid: str) -> dict[str, float]:
@@ -137,6 +135,9 @@ def attach_shipping_ledger_routes(parent_router: APIRouter, db,
             "total_shipping_cost": 0.0,   # = base + tax (SSOT)
             "total_cod": 0.0,
             "total_cod_fees": 0.0,
+            "total_cod_fee_net": 0.0,
+            "total_cod_fee_vat": 0.0,
+            "cod_fee_rules_needing_review": 0,
             "total_settled": 0.0,
             "total_unsettled": 0.0,
             "total_prepaid_shipping": 0.0,
@@ -190,10 +191,33 @@ def attach_shipping_ledger_routes(parent_router: APIRouter, db,
                             (o.get("total_amount") or 0) if is_cod else 0)
             if not is_cod:
                 cod_amt = 0.0
-            cod_fee = float(o.get("cod_fee") or 0)
-            if cod_amt > 0 and cod_fee == 0:
-                pct, fixed = fee_map.get(comp_key, (0.0, 0.0))
-                cod_fee = round(cod_amt * pct + fixed, 2)
+            explicit_cod_fee = float(o.get("cod_fee") or 0)
+            fee_cfg = fee_map.get(comp_key) or {}
+            has_tiers = bool(fee_cfg.get("cod_fee_tiers"))
+            if cod_amt > 0 and has_tiers:
+                fee_calc = calculate_courier_cod_fee(cod_amt, fee_cfg)
+            elif cod_amt > 0 and explicit_cod_fee > 0:
+                # Preserve an official per-order value when no tier contract
+                # is configured. Its VAT split is unknown, so keep it whole.
+                fee_calc = {
+                    "fee_net": explicit_cod_fee,
+                    "fee_vat": 0.0,
+                    "fee_total": explicit_cod_fee,
+                    "source": "order_explicit",
+                    "needs_review": False,
+                    "matched_rule": None,
+                }
+            elif cod_amt > 0:
+                fee_calc = calculate_courier_cod_fee(cod_amt, fee_cfg)
+            else:
+                fee_calc = {
+                    "fee_net": 0.0, "fee_vat": 0.0, "fee_total": 0.0,
+                    "source": "not_cod", "needs_review": False,
+                    "matched_rule": None,
+                }
+            cod_fee_net = round(float(fee_calc["fee_net"]), 2)
+            cod_fee_vat = round(float(fee_calc["fee_vat"]), 2)
+            cod_fee = round(float(fee_calc["fee_total"]), 2)
 
             # net due to merchant from courier = cod - shipping(if deferred) - cod_fee
             shipping_against_cod = ship_cost if mode == "deferred" else 0.0
@@ -243,6 +267,11 @@ def attach_shipping_ledger_routes(parent_router: APIRouter, db,
                 "prepaid_shipping": mode == "prepaid",
                 "cod_amount": round(cod_amt, 2),
                 "cod_fee": round(cod_fee, 2),
+                "cod_fee_net": cod_fee_net,
+                "cod_fee_vat": cod_fee_vat,
+                "cod_fee_source": fee_calc.get("source"),
+                "cod_fee_rule_needs_review": bool(fee_calc.get("needs_review")),
+                "cod_fee_rule": fee_calc.get("matched_rule"),
                 "net_due": net_due,
                 "settlement_status": sstatus,
                 "settlement_type": "—",
@@ -253,6 +282,10 @@ def attach_shipping_ledger_routes(parent_router: APIRouter, db,
             totals["total_shipping_cost"] += ship_cost
             totals["total_cod"] += cod_amt
             totals["total_cod_fees"] += cod_fee
+            totals["total_cod_fee_net"] += cod_fee_net
+            totals["total_cod_fee_vat"] += cod_fee_vat
+            if fee_calc.get("needs_review"):
+                totals["cod_fee_rules_needing_review"] += 1
             totals["total_unsettled"] += net_due
             if mode == "prepaid":
                 totals["total_prepaid_shipping"] += ship_cost
