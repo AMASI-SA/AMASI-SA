@@ -161,6 +161,39 @@ def _within_tolerance(value: float) -> bool:
     return abs(value) < NATIVE_TOLERANCE
 
 
+def _split_dual_window_total(
+    provider_total: dict[str, Any],
+    dashboard_provider_total: dict[str, Any] | None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Normalize the dual-window result emitted by ``fetch_provider_total``.
+
+    Older callers may still pass two explicit totals.  The shadow pipeline
+    passes one backward-compatible object containing both account-day and
+    Riyadh-window totals, so this helper separates them before comparison.
+    """
+    if dashboard_provider_total is not None:
+        return provider_total, dashboard_provider_total
+    account_day_native = provider_total.get("account_day_provider_spend_native")
+    dashboard_native = provider_total.get("dashboard_provider_spend_native")
+    if account_day_native is None or dashboard_native is None:
+        return provider_total, provider_total
+    account_day_total = {
+        "provider_spend_native": account_day_native,
+        "coverage": provider_total.get("account_day_coverage") or {},
+        "window_start_utc": provider_total.get("account_day_window_start_utc"),
+        "window_end_utc": provider_total.get("account_day_window_end_utc"),
+    }
+    dashboard_total = {
+        "provider_spend_native": dashboard_native,
+        "coverage": provider_total.get("dashboard_coverage")
+        or provider_total.get("coverage")
+        or {},
+        "window_start_utc": provider_total.get("window_start_utc"),
+        "window_end_utc": provider_total.get("window_end_utc"),
+    }
+    return account_day_total, dashboard_total
+
+
 async def reconcile_day(
     db: Any,
     *,
@@ -189,7 +222,10 @@ async def reconcile_day(
         limit=128,
     )
     currency = clean_text(account.get("currency"), limit=12).upper()
-    dashboard_provider_total = dashboard_provider_total or provider_total
+    provider_total, dashboard_provider_total = _split_dual_window_total(
+        provider_total,
+        dashboard_provider_total,
+    )
 
     provider_page_native = float(provider_total.get("provider_spend_native") or 0)
     provider_dashboard_native = float(
