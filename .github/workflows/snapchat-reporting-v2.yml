@@ -31,18 +31,8 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-      - name: Install targeted dependencies
-        run: >-
-          python -m pip install -q
-          fastapi==0.110.1
-          httpx==0.28.1
-          pydantic==2.13.4
-          pytest==9.0.3
-          pytest-asyncio
-          cryptography==48.0.0
-          openpyxl==3.1.5
-          pymongo==4.6.3
-          motor==3.3.1
+      - name: Install backend dependencies
+        run: python -m pip install -q -r requirements.txt
       - name: Compile reporting V2
         run: |
           python -m compileall -q snapchat_v2
