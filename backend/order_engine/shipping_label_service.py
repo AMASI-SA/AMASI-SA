@@ -512,8 +512,12 @@ async def _shipment_rows(
         if isinstance(listed, list)
         else embedded_rows
     )
+    # The order-details endpoint is the original permission-compatible
+    # source used by Amasi. If the standalone Shipments API is not granted,
+    # keep using the shipment embedded in order.created/order details instead
+    # of converting a read fallback into a shipping.read_write error.
     if response is None and modern_error is not None and not rows:
-        raise modern_error
+        return embedded_rows
 
     async def enrich(row: dict[str, Any]) -> dict[str, Any]:
         shipment_id = _text(row.get("id"))
@@ -1056,6 +1060,18 @@ async def issue_shipping_label(
         internal_id, order = await _resolve_order(
             db, user_id, normalized
         )
+        # Keep the shipment created with the order before changing status.
+        # Some Salla couriers temporarily remove it from order details during
+        # the completed transition. This snapshot is read-only and must never
+        # be submitted to POST /shipments.
+        order_created_shipments = _active_outbound(
+            [dict(row) for row in order.get("shipments", []) if isinstance(row, dict)]
+            if isinstance(order.get("shipments"), list)
+            else [dict(order["shipments"])]
+            if isinstance(order.get("shipments"), dict)
+            else []
+        )
+
         order, order_status_changed = await _ensure_order_completed(
             db,
             user_id,
@@ -1094,6 +1110,11 @@ async def issue_shipping_label(
             # The normal error below remains more useful than leaking a
             # transient provider response after Salla accepted the status.
             active = []
+        if not active:
+            # Fall back to the immutable shipment attached at order.created.
+            # Subsequent polling refreshes it through GET /orders/{id}; it
+            # never creates or overwrites a shipment.
+            active = order_created_shipments
     if active and (force_store_courier or _is_store_courier(active[0])):
         source = dict(active[0])
         if force_store_courier:
