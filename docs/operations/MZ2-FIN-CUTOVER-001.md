@@ -221,9 +221,9 @@ available and retain aggregate calculation only for legacy aggregate-only
 callers.
 
 The combined payment-fee settings version is now
-`salla-tamara-tabby-statements-2026-08-v3`; this version bump safely upgrades
-only untouched legacy Tamara/Tabby rows while retaining the previously
-verified Salla rules and merchant edits.
+`salla-tamara-tabby-emkan-statements-2026-08-v4`; this version bump safely
+upgrades only untouched legacy Tamara/Tabby/Emkan rows while retaining the
+previously verified Salla rules and merchant edits.
 
 ## Tamara fee and statement evidence — 2026-08-23
 
@@ -311,6 +311,48 @@ Only two- and three-month installment product labels appear in this evidence;
 both use the same fee rule. The official report remains authoritative for its
 covered cycle.
 
+## Emkan fee and settlement evidence — 2026-08-23
+
+The four uploaded workbooks are unique Emkan settlement reports. Each contains
+one captured order and an explicit statement date, but no covered weekly
+period:
+
+| Statement date | Order date | Gross | Reported fee | Fee VAT | Total deduction | Net settlement |
+|---|---|---:|---:|---:|---:|---:|
+| 22/07/2026 | 12/07/2026 | 286.47 | 21.52 | 3.23 | 24.75 | 261.72 |
+| 26/07/2026 | 17/07/2026 | 273.32 | 20.61 | 3.09 | 23.70 | 249.62 |
+| 13/08/2026 | 05/08/2026 | 219.32 | 16.83 | 2.52 | 19.36 | 199.96 |
+| 18/08/2026 | 12/08/2026 | 239.84 | 18.26 | 2.74 | 21.00 | 218.84 |
+| **Total** | four captures | **1,018.95** | **77.22** | **11.58** | **88.81** | **930.14** |
+
+Verified Emkan treatment:
+
+1. **Captured order:** commission is 6.99% of the net bill amount plus SAR
+   1.50 fixed fee.
+2. **Fee VAT:** 15% is applied to the raw percentage commission plus fixed fee
+   before the final settlement net is rounded.
+3. **Halala balance:** the workbook stores sub-halala values but displays two
+   decimals. Independently rounded displayed fee, VAT, and net leave a SAR
+   0.01 aggregate residual. Mezan preserves all source values and assigns the
+   residual to the fee leg, producing balanced accounting amounts: SAR 77.23
+   fee + SAR 11.58 VAT + SAR 930.14 net = SAR 1,018.95 gross.
+4. **Refund:** none of the four reports contains a refund. Refund commission
+   treatment is therefore not verified and must come from the actual report
+   row; the system must not invent a rebate.
+5. **Statement fee:** the header fee is zero in all four reports. Any future
+   non-zero header fee remains explicit evidence requiring review because its
+   VAT split is not identified in these samples.
+6. **Cycle/cutoff:** observed order-to-statement lag is 6–10 calendar days,
+   while statement dates occur on different weekdays. No weekly cycle or
+   time-of-day cutoff is inferred. Each uploaded statement is its own period.
+7. **Order matching:** the report exposes an Emkan UUID, not the Salla order
+   number. Import resolves it through `payment_transactions.provider_id` to
+   the merchant order reference; unresolved UUIDs remain auditable unmatched
+   entries rather than being guessed.
+
+The uploaded statement is authoritative. The 6.99% + SAR 1.50 default is an
+estimate only for captured orders that do not yet have an official row.
+
 ## Implemented in this change
 
 - Added tenant-scoped endpoint `GET /api/financial-provider-apps`.
@@ -380,6 +422,22 @@ covered cycle.
   while preserving merchant-custom schedules through a versioned migration.
 - Allowed deduplicated Tabby official file totals to override computed weekly
   estimates for the exact covered cycle.
+- Reconciled all four Emkan reports and introduced the verified 6.99% + SAR
+  1.50 default with 15% VAT on the raw total fee.
+- Added automatic Emkan report detection/parsing, including recovery from the
+  workbook's incorrect declared `A1` dimension.
+- Preserved report values while allocating the one-halalah display residual to
+  the fee leg so every imported statement remains balanced.
+- Resolved Emkan UUIDs through canonical payment transactions before matching
+  merchant orders; unresolved IDs remain reviewable unmatched evidence.
+- Added Emkan to the BNPL settlement register and official-file override, with
+  one period per statement date and no invented weekly cycle or cutoff.
+- Added Emkan sale/refund receivable support to the idempotent BNPL ledger
+  bridge for post-cutover events. It stays blocked with
+  `missing_bridge_cutoff` until the owner approves an explicit cutoff, so the
+  catch-up scan cannot post historical Emkan sales.
+- Kept refund handling statement-authoritative because the four samples contain
+  no refunds, and kept bank selection changeable before accountant approval.
 
 Primary files:
 
@@ -402,9 +460,12 @@ Primary files:
 - `backend/reconciliation_routes.py`
 - `backend/tests/test_salla_payment_fee_defaults.py`
 - `backend/settlements_import/parsers/tabby.py`
+- `backend/settlements_import/parsers/emkan.py`
 - `backend/bnpl/config_store.py`
 - `backend/bnpl/settlements_service.py`
+- `backend/bnpl/ledger_bridge.py`
 - `backend/tests/test_tabby_payment_fee_defaults.py`
+- `backend/tests/test_emkan_payment_fee_defaults.py`
 
 ## Remaining work, in order
 

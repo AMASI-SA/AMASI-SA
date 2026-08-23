@@ -38,11 +38,12 @@ SALLA_WALLET       = "محفظة سلة"
 # ── Default payment methods (used to seed user settings) ─────────────────
 # Order matters → it's the order shown in Settings → Payment Methods.
 #
-# ``salla-tamara-tabby-statements-2026-08-v3`` combines three merchant
+# ``salla-tamara-tabby-emkan-statements-2026-08-v4`` combines four merchant
 # evidence sets:
 # seven Salla payment-detail invoices (528 rows) and five unique Tamara weekly
 # statements (310 rows; three duplicate uploads were ignored by SHA-256), plus
-# four unique Tabby weekly settlement reports (231 rows).
+# four unique Tabby weekly settlement reports (231 rows), and four unique
+# Emkan settlement reports (four captured rows).
 # The observed Salla rails matched every positive transaction exactly:
 #
 #   mada         = amount × 1.00% + SAR 1.00
@@ -71,7 +72,16 @@ SALLA_WALLET       = "محفظة سلة"
 # The displayed total MDR is therefore 6.99%, but refunds reverse only the
 # 4.99% refundable slice and its VAT; the 2% slice and SAR 1 fixed fee remain.
 # VAT is 15% rounded separately on each displayed fee leg.
-PAYMENT_FEE_DEFAULTS_VERSION = "salla-tamara-tabby-statements-2026-08-v3"
+#
+# Emkan's observed captures matched:
+#
+#   amount × 6.99% + SAR 1.50 fixed
+#
+# VAT is 15% of that raw total fee before the settlement net is rounded.
+# Refund handling and a fixed weekly cycle were not present in the evidence.
+PAYMENT_FEE_DEFAULTS_VERSION = (
+    "salla-tamara-tabby-emkan-statements-2026-08-v4"
+)
 
 DEFAULT_PAYMENT_METHODS: list[dict] = [
     # Salla card rails — editable so the merchant can override Salla's
@@ -88,7 +98,10 @@ DEFAULT_PAYMENT_METHODS: list[dict] = [
     # BNPL — own accounts
     {"name": TAMARA,           "commission_percent": 6.99, "fixed_fee": 1.5, "vat_percent": 15.0},
     {"name": TABBY,            "commission_percent": 6.99, "fixed_fee": 1.0, "vat_percent": 15.0},
-    {"name": EMKAN,            "commission_percent": 5.00, "fixed_fee": 0.0, "vat_percent": 15.0},
+    # Four verified Emkan reports: 6.99% + SAR 1.50, then 15% VAT on
+    # the unrounded total fee. Refund treatment was not present in the
+    # evidence and therefore remains statement-authoritative.
+    {"name": EMKAN,            "commission_percent": 6.99, "fixed_fee": 1.5, "vat_percent": 15.0},
     # Cash / bank — own accounts, zero commission
     {"name": BANK_TRANSFER,    "commission_percent": 0.00, "fixed_fee": 0.0, "vat_percent": 0.0},
     {"name": CASH_ON_DELIVERY, "commission_percent": 0.00, "fixed_fee": 0.0, "vat_percent": 0.0},
@@ -343,6 +356,18 @@ _LEGACY_FEE_DEFAULTS_BY_KEY: dict[str, tuple[float, float, float]] = {
     "cash_on_delivery": (0.00, 0.00, 0.00),
 }
 
+# Emkan also appeared in an intermediate bundled estimate as 6.99% with no
+# fixed fee. It was never statement-complete, so it is safe to upgrade that
+# exact tuple too. Any other merchant edit remains untouched.
+_LEGACY_FEE_DEFAULT_VARIANTS_BY_KEY: dict[
+    str, set[tuple[float, float, float]]
+] = {
+    "emkan": {
+        (5.00, 0.00, 15.00),
+        (6.99, 0.00, 15.00),
+    },
+}
+
 
 def _fee_tuple(row: dict) -> tuple[float, float, float]:
     return (
@@ -384,7 +409,15 @@ def migrate_payment_method_defaults(
         if current_version == PAYMENT_FEE_DEFAULTS_VERSION:
             continue
         legacy = _LEGACY_FEE_DEFAULTS_BY_KEY.get(key)
-        if legacy is None or _fee_tuple(migrated[index]) != legacy:
+        legacy_variants = _LEGACY_FEE_DEFAULT_VARIANTS_BY_KEY.get(key)
+        current_tuple = _fee_tuple(migrated[index])
+        if (
+            legacy is None
+            or (
+                current_tuple != legacy
+                and current_tuple not in (legacy_variants or set())
+            )
+        ):
             continue
         migrated[index] = {
             **migrated[index],
@@ -392,7 +425,7 @@ def migrate_payment_method_defaults(
             "fixed_fee": default["fixed_fee"],
             "vat_percent": default["vat_percent"],
         }
-        if _fee_tuple(migrated[index]) != legacy:
+        if _fee_tuple(migrated[index]) != current_tuple:
             changed = True
 
     return migrated, changed

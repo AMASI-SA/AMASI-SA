@@ -114,9 +114,18 @@ DEFAULT_FEE_RATES: Dict[str, Dict[str, float]] = {
                "settlement_fee_per_invoice": 0.0,
                "settlement_fee_vat_applicable": True,
                "settlement_period_days": 7},
+    "emkan":  {"commission_pct": 6.99, "vat_pct": 15.0,
+               "fixed_fee_per_order": 1.50,
+               # None of the four verified reports contains a refund.
+               # Keep the conservative no-rebate estimate until an actual
+               # Emkan refund row supplies the authoritative treatment.
+               "refundable_commission_pct": 0.0,
+               "settlement_fee_per_invoice": 0.0,
+               "settlement_fee_vat_applicable": True,
+               "settlement_period_days": 7},
 }
 
-PROVIDERS = ("tabby", "tamara")
+PROVIDERS = ("tabby", "tamara", "emkan")
 
 # ── Iter-121 — Weekday-based settlement cycle ─────────────────────
 # Python's date.weekday() returns 0 = Monday … 6 = Sunday.  We map the
@@ -194,7 +203,9 @@ def _capture_fee_components(
 
     Tamara rounds the combined fee per capture and then VAT. Tabby rounds the
     4.99% refundable and 2.00% non-refundable legs separately, adds SAR 1,
-    then rounds VAT half-even per displayed fee leg.
+    then rounds VAT half-even per displayed fee leg. Emkan keeps the raw
+    6.99% + fixed-fee calculation and applies VAT before the final settlement
+    net is rounded.
     """
     if provider == "tamara":
         amount_d = Decimal(str(amount or 0))
@@ -233,6 +244,14 @@ def _capture_fee_components(
             + Decimal(str(_round_sar_even(fixed_d * vat_d)))
         )
         return float(fee), float(vat)
+
+    if provider == "emkan":
+        amount_d = Decimal(str(amount or 0))
+        rate_d = Decimal(str(commission_rate or 0))
+        fixed_d = Decimal(str(fixed_fee or 0))
+        vat_d = Decimal(str(vat_rate or 0))
+        fee = amount_d * rate_d + fixed_d
+        return float(fee), float(fee * vat_d)
 
     fee_unrounded = float(amount or 0) * commission_rate + fixed_fee
     return fee_unrounded, fee_unrounded * vat_rate
@@ -314,6 +333,10 @@ async def _merchant_fee_rates(
                    "transfer_weekdays": ["monday"]},
         "tamara": {"invoice_weekdays":  ["saturday"],
                    "transfer_weekdays": ["tuesday"]},
+        # Emkan's four reports settle on different weekdays. Do not invent a
+        # weekly issue/transfer day; the statement date is authoritative.
+        "emkan":  {"invoice_weekdays":  [],
+                   "transfer_weekdays": []},
     }
     wd = weekday_defaults.get(provider, {})
     rates["invoice_weekdays"]  = list(wd.get("invoice_weekdays")  or [])
@@ -1014,6 +1037,124 @@ async def _aggregate_tabby_official_totals(
     }
 
 
+async def _unique_emkan_official_statements(
+    db, user_id: str, date_from: str, date_to: str,
+) -> list[dict]:
+    """Return unique Emkan reports selected by explicit statement date."""
+    if not date_from or not date_to:
+        return []
+
+    cursor = db.settlement_files.find(
+        {"user_id": user_id, "provider": "emkan"},
+        {
+            "_id": 0, "header": 1, "totals": 1,
+            "uploaded_at": 1, "id": 1,
+        },
+    )
+    try:
+        cursor = cursor.sort("uploaded_at", -1)
+    except Exception:
+        pass
+
+    statements: dict[str, dict] = {}
+    async for doc in cursor:
+        header = doc.get("header") or {}
+        statement_date = str(
+            header.get("statement_date")
+            or header.get("settlement_date")
+            or ""
+        )[:10]
+        if not statement_date or not (date_from <= statement_date <= date_to):
+            continue
+        statement_id = str(
+            header.get("statement_id") or doc.get("id") or ""
+        )
+        if not statement_id or statement_id in statements:
+            continue
+        statements[statement_id] = doc
+
+    return sorted(
+        statements.values(),
+        key=lambda doc: (
+            str(
+                (doc.get("header") or {}).get("statement_date")
+                or (doc.get("header") or {}).get("settlement_date")
+                or ""
+            ),
+            str((doc.get("header") or {}).get("statement_id") or ""),
+        ),
+    )
+
+
+async def _aggregate_emkan_official_totals(
+    db, user_id: str, date_from: str, date_to: str,
+) -> Optional[Dict[str, Any]]:
+    """Aggregate unique Emkan reports by their explicit settlement date.
+
+    The four verified reports do not expose a weekly covered period and their
+    settlement dates fall on different weekdays.  Selecting by statement date
+    avoids inventing a cycle.  Parsed fee totals already include any one-
+    halalah residual needed to make gross - refunds - fees - VAT = bank net.
+    """
+    statements = await _unique_emkan_official_statements(
+        db, user_id, date_from, date_to,
+    )
+
+    if not statements:
+        return None
+
+    transactions_count = 0
+    refunds_count = 0
+    gross_sales = 0.0
+    total_refunds = 0.0
+    commission = 0.0
+    reported_commission = 0.0
+    commission_vat = 0.0
+    settlement_fee = 0.0
+    settlement_fee_vat = 0.0
+    rounding_adjustment = 0.0
+    net_payable = 0.0
+    for doc in statements:
+        totals = doc.get("totals") or {}
+        transactions_count += int(totals.get("transactions_count") or 0)
+        refunds_count += int(totals.get("refunds_count") or 0)
+        gross_sales += float(totals.get("gross") or 0)
+        total_refunds += float(totals.get("refund_full") or 0)
+        total_refunds += float(totals.get("refund_partial") or 0)
+        commission += float(totals.get("fees") or 0)
+        reported_commission += float(
+            totals.get("reported_fees")
+            if totals.get("reported_fees") is not None
+            else totals.get("fees") or 0
+        )
+        commission_vat += float(totals.get("fees_vat") or 0)
+        settlement_fee += float(totals.get("settlement_fee") or 0)
+        settlement_fee_vat += float(
+            totals.get("settlement_fee_vat") or 0
+        )
+        rounding_adjustment += float(
+            totals.get("rounding_adjustment") or 0
+        )
+        net_payable += float(totals.get("net") or 0)
+
+    return {
+        "transactions_count": transactions_count,
+        "refunds_count": refunds_count,
+        "canceled_count": 0,
+        "canceled_amount": 0.0,
+        "gross_sales": _r(gross_sales),
+        "total_refunds": _r(total_refunds),
+        "commission": _r(commission),
+        "reported_commission": _r(reported_commission),
+        "commission_vat": _r(commission_vat),
+        "settlement_fee": _r(settlement_fee),
+        "settlement_fee_vat": _r(settlement_fee_vat),
+        "rounding_adjustment": _r(rounding_adjustment),
+        "settlement_invoices_count": len(statements),
+        "net_payable": _r(net_payable),
+    }
+
+
 async def compute_settlement_for_provider(
     db, user_id: str, provider: str,
     date_from: Optional[str] = None,
@@ -1201,13 +1342,19 @@ async def compute_settlement_for_provider(
     # because its Monday report explicitly covers the preceding Mon→Sun week.
     data_source = "computed"
     system_totals: Optional[Dict[str, Any]] = None
-    if provider in {"tamara", "tabby"} and date_from and date_to:
+    official_rounding_adjustment = 0.0
+    official_reported_commission: Optional[float] = None
+    if provider in {"tamara", "tabby", "emkan"} and date_from and date_to:
         if provider == "tamara":
             official = await _aggregate_official_totals(
                 db, user_id, date_from, date_to,
             )
-        else:
+        elif provider == "tabby":
             official = await _aggregate_tabby_official_totals(
+                db, user_id, date_from, date_to,
+            )
+        else:
+            official = await _aggregate_emkan_official_totals(
                 db, user_id, date_from, date_to,
             )
         if official and (
@@ -1247,6 +1394,13 @@ async def compute_settlement_for_provider(
                 or settlement_invoices_count
             )
             net_payable = _r(official["net_payable"])
+            official_rounding_adjustment = _r(
+                official.get("rounding_adjustment") or 0
+            )
+            if official.get("reported_commission") is not None:
+                official_reported_commission = _r(
+                    official.get("reported_commission")
+                )
             data_source = "provider_official_file"
 
     # Bank-side reconciliation
@@ -1285,6 +1439,8 @@ async def compute_settlement_for_provider(
             "total_refunds": totals["total_refunds"],
             "net_sales": totals["net_sales"],
             "commission": _r(commission),
+            "reported_commission": official_reported_commission,
+            "statement_rounding_adjustment": official_rounding_adjustment,
             "commission_vat": _r(commission_vat),
             "settlement_fee": _r(settlement_fee),
             "settlement_fee_per_invoice": _r(settlement_fee_per_invoice),
@@ -1346,6 +1502,70 @@ async def compute_weekly_settlements(
 
     if ceil_ < floor:
         return []
+
+    if provider == "emkan":
+        # Emkan evidence has no covered week or stable issue weekday. Each
+        # uploaded report is therefore its own settlement period, keyed by
+        # the report's explicit statement date. This endpoint keeps its
+        # historical name for frontend compatibility only.
+        statements = await _unique_emkan_official_statements(
+            db, user_id, floor.isoformat(), ceil_.isoformat(),
+        )
+        rows: List[Dict[str, Any]] = []
+        for invoice_no, doc in enumerate(statements, start=1):
+            header = doc.get("header") or {}
+            totals = doc.get("totals") or {}
+            statement_date = str(
+                header.get("statement_date")
+                or header.get("settlement_date")
+                or ""
+            )[:10]
+            refunds = (
+                float(totals.get("refund_full") or 0)
+                + float(totals.get("refund_partial") or 0)
+            )
+            net_payable = _r(totals.get("net"))
+            rows.append({
+                "invoice_no": invoice_no,
+                "settlement_reference": (
+                    header.get("statement_id") or doc.get("id")
+                ),
+                "from": statement_date,
+                "to": statement_date,
+                "issue_date": statement_date,
+                "expected_transfer_date": statement_date,
+                "transactions_count": int(
+                    totals.get("transactions_count") or 0
+                ),
+                "refunds_count": int(totals.get("refunds_count") or 0),
+                "canceled_count": 0,
+                "canceled_amount": 0.0,
+                "gross_sales": _r(totals.get("gross")),
+                "total_refunds": _r(refunds),
+                "net_sales": _r(
+                    float(totals.get("gross") or 0) - refunds
+                ),
+                "commission": _r(totals.get("fees")),
+                "reported_commission": _r(
+                    totals.get("reported_fees")
+                    if totals.get("reported_fees") is not None
+                    else totals.get("fees")
+                ),
+                "statement_rounding_adjustment": _r(
+                    totals.get("rounding_adjustment")
+                ),
+                "commission_vat": _r(totals.get("fees_vat")),
+                "settlement_fee": _r(totals.get("settlement_fee")),
+                "settlement_fee_vat": _r(
+                    totals.get("settlement_fee_vat")
+                ),
+                "net_payable": net_payable,
+                "transferred_amount": 0.0,
+                "remaining_with_provider": net_payable,
+                "data_source": "provider_official_file",
+                "system_totals": None,
+            })
+        return rows
 
     fees = await _merchant_fee_rates(db, user_id, provider)
     period_days = int(fees.get("settlement_period_days") or 7)

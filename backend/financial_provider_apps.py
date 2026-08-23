@@ -43,6 +43,27 @@ PAYMENT_PROVIDER_KINDS = {
 }
 
 PAYMENT_PROVIDER_FEE_POLICIES = {
+    "emkan": {
+        "evidence_version": "emkan-statements-2026-08-v1",
+        "capture_basis": "net_bill_amount_per_settlement_row",
+        "commission_percent": 6.99,
+        "fixed_fee_per_order": 1.5,
+        "vat_percent": 15.0,
+        "fee_rounding": "raw_fee_and_vat_then_round_settlement_net",
+        "refund_treatment": "unverified_use_actual_statement_row",
+        "settlement_fee_per_statement_default": 0.0,
+        "settlement_fee_treatment": "actual_statement_header_only",
+        "cycle_verified": False,
+        "observed_order_to_settlement_days_min": 6,
+        "observed_order_to_settlement_days_max": 10,
+        "cutoff_time_verified": False,
+        "summary_ar": (
+            "البيع: 6.99% + 1.50 ر.س، ثم ضريبة 15% على إجمالي الرسوم "
+            "قبل التقريب. التقارير الأربعة بلا استردادات ورسوم التسوية "
+            "فيها صفر؛ لذلك الاسترداد والدورة الثابتة غير معتمدين حتى "
+            "يظهر دليل فعلي، وتبقى سطور تقرير إمكان هي المرجع."
+        ),
+    },
     "tabby": {
         "evidence_version": "tabby-statements-2026-08-v1",
         "capture_basis": "per_captured_order_split_fee",

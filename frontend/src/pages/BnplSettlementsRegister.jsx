@@ -1,7 +1,7 @@
 /**
- * Iter-221 — تسجيل تسويات Tabby و Tamara (Phase 2b UI).
+ * Iter-221 — تسجيل تسويات Tabby و Tamara و Emkan (Phase 2b UI).
  *
- * صفحة مخصصة لتسجيل التسويات الأسبوعية يدوياً عبر:
+ * صفحة مخصصة لمراجعة وتسجيل تسويات مزوّدي BNPL عبر:
  *     POST /api/bnpl/settlements/register
  *
  * تعتمد كذلك على:
@@ -48,6 +48,7 @@ const nowRiyadh = () => {
 const PROVIDERS = {
     tabby:  { name: "Tabby",  badge: "🟣", color: "violet" },
     tamara: { name: "Tamara", badge: "🩷", color: "rose" },
+    emkan:  { name: "إمكان",  badge: "🟡", color: "amber" },
 };
 
 const STATUS_COLORS = {
@@ -129,10 +130,12 @@ function ProviderOverviewCard({ row, onOpenAdd, onOpenAuto }) {
                                    text-white text-xs font-bold rounded-lg
                                    flex items-center gap-1.5"
                         data-testid={`auto-import-btn-${row.provider}`}
-                        title="جلب من API ثم اعتماد"
+                        title={row.provider === "emkan"
+                            ? "جلب من ملف التسوية المرفوع ثم اعتماد"
+                            : "جلب من API ثم اعتماد"}
                     >
                         <span className="text-base">📥</span>
-                        جلب تلقائي
+                        {row.provider === "emkan" ? "جلب من الملف" : "جلب تلقائي"}
                     </button>
                     <button
                         type="button"
@@ -233,7 +236,7 @@ function AddSettlementModal({ provider, banks, prefill, onClose, onSaved }) {
                    "الجمعة","السبت","الأحد"];
     const earliestSaveISO = (() => {
         const pt = importMeta?.period?.to;
-        if (!pt) return null;
+        if (!pt || !(provider in INVOICE_WD)) return null;
         const [y, m, d] = pt.split("-").map(Number);
         const first = new Date(Date.UTC(y, m - 1, d));
         first.setUTCDate(first.getUTCDate() + 1);
@@ -447,7 +450,11 @@ function AddSettlementModal({ provider, banks, prefill, onClose, onSaved }) {
                                     gap-2 flex-wrap">
                         <div className="flex items-center gap-2 text-xs
                                         font-bold text-violet-900">
-                            <span>📥 جلب تلقائي من API</span>
+                            <span>
+                                📥 {provider === "emkan"
+                                    ? "جلب من ملفات التسوية المرفوعة"
+                                    : "جلب تلقائي من API"}
+                            </span>
                             <select
                                 value={importPeriod}
                                 onChange={(e) => setImportPeriod(e.target.value)}
@@ -465,7 +472,7 @@ function AddSettlementModal({ provider, banks, prefill, onClose, onSaved }) {
                             </select>
                         </div>
                         <div className="flex gap-1.5">
-                            <button
+                            {provider !== "emkan" && <button
                                 type="button"
                                 onClick={runResync}
                                 disabled={resyncing || importing}
@@ -480,7 +487,7 @@ function AddSettlementModal({ provider, banks, prefill, onClose, onSaved }) {
                                 {resyncing
                                     ? "جارٍ المزامنة…"
                                     : `🔄 إعادة مزامنة ${meta.name}`}
-                            </button>
+                            </button>}
                             <button
                                 type="button"
                                 onClick={runImport}
@@ -1081,11 +1088,11 @@ export default function BnplSettlementsRegister() {
                 <div>
                     <h1 className="text-2xl sm:text-3xl font-extrabold
                                    text-slate-900">
-                        تسويات تمارا وتابي
+                        تسويات تمارا وتابي وإمكان
                     </h1>
                     <p className="text-xs text-slate-500 mt-1">
-                        تسجيل التسويات الأسبوعية وإنشاء القيود المحاسبية في
-                        الدفتر العام، مع مطابقة فورية مع المتوقَّع.
+                        مراجعة تسويات مزوّدي الدفع وإنشاء القيود المحاسبية في
+                        الدفتر العام بعد اعتماد المحاسب.
                     </p>
                 </div>
                 <button
@@ -1102,7 +1109,7 @@ export default function BnplSettlementsRegister() {
             </div>
 
             {/* Overview cards */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
                 {(overview.providers || []).map((row) => (
                     <ProviderOverviewCard
                         key={row.provider}
@@ -1196,6 +1203,7 @@ export default function BnplSettlementsRegister() {
                                 const meta = {
                                     tabby: { name: "Tabby", badge: "🟣" },
                                     tamara: { name: "Tamara", badge: "🩷" },
+                                    emkan: { name: "إمكان", badge: "🟡" },
                                 }[r.provider] || {};
                                 return (
                                     <tr

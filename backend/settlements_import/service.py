@@ -29,9 +29,7 @@ def _now() -> datetime:
 
 
 def _normalize_order_number(value: Any) -> str:
-    """unified_orders.order_number is stored as str. Salla / Tamara /
-    Tabby all emit numeric strings — but sometimes openpyxl reads them
-    as ints/floats. Always coerce to str + strip trailing `.0`."""
+    """Coerce provider order references to string and strip trailing `.0`."""
     if value is None:
         return ""
     s = str(value).strip()
@@ -163,6 +161,49 @@ async def _apply_entries(
 ) -> dict:
     """Group entries by order_number, aggregate per order (sale + refunds),
     then update unified_orders with the consolidated `actual_*` fields."""
+    # Emkan statements expose the provider UUID, while the order table uses
+    # the merchant/Salla reference. Resolve that UUID through the canonical
+    # payment transaction before grouping. If no transaction exists, retain
+    # the UUID as an auditable unmatched reference.
+    provider_order_ids = sorted({
+        _normalize_order_number(e.get("provider_order_id"))
+        for e in entries
+        if e.get("provider_order_id")
+    })
+    if provider_order_ids:
+        provider_to_order: dict[str, str] = {}
+        cursor = db.payment_transactions.find(
+            {
+                "user_id": user_id,
+                "provider": provider,
+                "provider_id": {"$in": provider_order_ids},
+            },
+            {
+                "_id": 0, "provider_id": 1,
+                "order_reference_id": 1, "order_number": 1,
+            },
+        )
+        async for transaction in cursor:
+            provider_id = _normalize_order_number(
+                transaction.get("provider_id")
+            )
+            merchant_order = _normalize_order_number(
+                transaction.get("order_reference_id")
+                or transaction.get("order_number")
+            )
+            if provider_id and merchant_order:
+                provider_to_order[provider_id] = merchant_order
+        for entry in entries:
+            provider_id = _normalize_order_number(
+                entry.get("provider_order_id")
+            )
+            merchant_order = provider_to_order.get(provider_id)
+            if merchant_order:
+                entry["source_order_number"] = _normalize_order_number(
+                    entry.get("order_number")
+                )
+                entry["order_number"] = merchant_order
+
     by_order: dict[str, list[dict]] = {}
     salla_purchase_orders: list[str] = []
     for e in entries:

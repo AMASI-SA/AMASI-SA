@@ -49,7 +49,7 @@ function ConfirmModal({ open, title, description, confirmLabel, onConfirm, onCan
 /**
  * /payment-settlements — Phase 80
  *
- * Upload Salla / Tamara / Tabby settlement files and let the backend
+ * Upload Salla / Tamara / Tabby / Emkan settlement files and let the backend
  * patch each matched order's `actual_*` fields. Estimated rates remain
  * the fallback for orders never seen in any settlement.
  *
@@ -61,6 +61,7 @@ const PROVIDER_META = {
     salla: { label: "سلة", color: "bg-emerald-500", chip: "bg-emerald-100 text-emerald-700" },
     tamara: { label: "تمارا", color: "bg-orange-500", chip: "bg-orange-100 text-orange-700" },
     tabby: { label: "تابي", color: "bg-violet-500", chip: "bg-violet-100 text-violet-700" },
+    emkan: { label: "إمكان", color: "bg-amber-500", chip: "bg-amber-100 text-amber-700" },
 };
 
 function fmtMoney(n) {
@@ -173,7 +174,7 @@ export default function PaymentSettlements() {
     const onFileSelected = (file) => {
         if (!file) return;
         if (!file.name.toLowerCase().endsWith(".xlsx")) {
-            toast.error("الملف يجب أن يكون بصيغة Excel (.xlsx) من سلة أو تمارا أو تابي");
+            toast.error("الملف يجب أن يكون بصيغة Excel (.xlsx) من سلة أو تمارا أو تابي أو إمكان");
             return;
         }
         handleUpload(file);
@@ -196,7 +197,7 @@ export default function PaymentSettlements() {
                 <div className="flex-1">
                     <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900">فواتير وتسويات بوابات الدفع</h1>
                     <p className="text-sm text-slate-500 mt-1 leading-relaxed">
-                        ارفع ملفات Excel من <strong>سلة / تمارا / تابي</strong> وسيقوم النظام بمطابقة كل طلب مع الرسوم والصافي الفعلي.
+                        ارفع ملفات Excel من <strong>سلة / تمارا / تابي / إمكان</strong> وسيقوم النظام بمطابقة كل طلب مع الرسوم والصافي الفعلي.
                         الطلبات غير المُطابَقة تبقى محسوبة بالنسب التقديرية الحالية كما هي.
                     </p>
                 </div>
@@ -266,7 +267,7 @@ export default function PaymentSettlements() {
                 <CloudArrowUp size={48} weight="duotone" className={`mx-auto mb-3 ${dragActive ? "text-indigo-600" : "text-slate-400"}`} />
                 <h3 className="font-extrabold text-slate-900 mb-1">اسحب وأفلت ملف Excel هنا</h3>
                 <p className="text-xs text-slate-500 mb-4">
-                    يقبل النظام ملفات سلة (فواتير المدفوعات) و تمارا (Merchant Statement) و تابي (Settlement Report). الكشف التلقائي للنوع.
+                    يقبل النظام ملفات سلة (فواتير المدفوعات) وتمارا وتابي وإمكان. الكشف التلقائي للنوع.
                 </p>
                 <input
                     ref={fileInputRef}
@@ -371,7 +372,7 @@ export default function PaymentSettlements() {
                     <div className="text-center py-10 text-slate-400" data-testid="settlements-empty">
                         <FileXls size={36} weight="duotone" className="mx-auto mb-2 opacity-40" />
                         <p className="text-sm">لم يتم رفع أي ملف بعد.</p>
-                        <p className="text-xs mt-1">ارفع أول ملف تسوية من سلة أو تمارا أو تابي للبدء.</p>
+                        <p className="text-xs mt-1">ارفع أول ملف تسوية من سلة أو تمارا أو تابي أو إمكان للبدء.</p>
                     </div>
                 ) : (
                     <div className="overflow-x-auto" data-testid="settlements-table-scroll">

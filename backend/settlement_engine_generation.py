@@ -8,7 +8,7 @@ percentages.
 Source-of-truth resolution
 ==========================
 
-BNPL providers (tamara, tabby)
+BNPL providers (tamara, tabby, Emkan)
     Uses ``bnpl.settlements_service.compute_weekly_settlements`` —
     the SAME function consumed by the
     ``/api/bnpl/settlements/register`` page.  That helper in turn
@@ -28,9 +28,9 @@ Salla
     Uses ``db.settlement_entries`` grouped by ``settlement_reference``
     — exact same source the dry-run engine already groups.
 
-Imkan
-    Skipped (no centralised rule source yet — flagged
-    ``rule_source_missing``).
+Emkan
+    Uses the same central fee source and one period per uploaded official
+    settlement report. No weekly cycle is invented.
 
 Generation safety
 -----------------
@@ -83,11 +83,13 @@ async def _resolve_default_bank(
 ) -> tuple[Optional[str], Optional[str]]:
     """Return (bank_id, bank_name) from
     ``settings.default_bank_for_<provider>`` — never hard-coded."""
+    setting_provider = "imkan" if provider == "emkan" else provider
+    setting_key = f"default_bank_for_{setting_provider}"
     s = await db.settings.find_one(
         {"user_id": uid},
-        {"_id": 0, f"default_bank_for_{provider}": 1},
+        {"_id": 0, setting_key: 1},
     ) or {}
-    bid = s.get(f"default_bank_for_{provider}")
+    bid = s.get(setting_key)
     if not bid:
         return None, None
     acc = await db.accounts.find_one(
@@ -232,6 +234,28 @@ async def _build_salla_periods(
     return rows, rules_snapshot
 
 
+async def _build_emkan_periods(
+    db, uid: str, date_from: Optional[str], date_to: Optional[str],
+) -> tuple[list[dict], dict]:
+    """Build one period per unique uploaded Emkan settlement report."""
+    from bnpl.settlements_service import (
+        _merchant_fee_rates,
+        compute_weekly_settlements,
+    )
+
+    rules = await _merchant_fee_rates(db, uid, "emkan")
+    rules = {
+        **rules,
+        "cycle_source": "provider_statement_date",
+        "cycle_verified": False,
+        "evidence_version": "emkan-statements-2026-08-v1",
+    }
+    rows = await compute_weekly_settlements(
+        db, uid, "emkan", date_from, date_to,
+    )
+    return rows, rules
+
+
 async def generate_for_provider(
     db, uid: str, user: dict, provider: str,
     date_from: Optional[str], date_to: Optional[str],
@@ -251,6 +275,10 @@ async def generate_for_provider(
         rows, rules = await _build_bnpl_periods(
             db, uid, provider, date_from, date_to)
         cycle_kind = "weekly_bnpl"
+    elif provider in ("imkan", "emkan"):
+        rows, rules = await _build_emkan_periods(
+            db, uid, date_from, date_to)
+        cycle_kind = "statement_date_bnpl"
     elif provider == "salla":
         rows, rules = await _build_salla_periods(
             db, uid, date_from, date_to)
@@ -386,6 +414,10 @@ async def generate_for_provider(
             if provider == "salla":
                 invoice_doc["provider_reference"] = r.get(
                     "settlement_reference")
+            elif provider in ("imkan", "emkan"):
+                invoice_doc["provider_reference"] = r.get(
+                    "settlement_reference"
+                )
             await db.settlement_invoices.insert_one(invoice_doc)
             await db.settlement_periods.update_one(
                 {"id": period_id},

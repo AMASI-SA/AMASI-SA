@@ -23,7 +23,7 @@ def _now_iso() -> str:
 
 
 class BNPLSettlementRegisterIn(BaseModel):
-    provider: str               # "tabby" | "tamara"
+    provider: str               # "tabby" | "tamara" | "emkan"
     bank_account_id: str
     transferred_amount: float = Field(..., ge=0)
     commission: float = Field(0.0, ge=0)
@@ -942,6 +942,23 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
             date_from = start.isoformat()
             date_to = end.isoformat()
 
+        emkan_statement = None
+        if provider == "emkan":
+            # Emkan has no API/weekly cycle in the verified evidence. Pick the
+            # latest uploaded official statement inside the selected date
+            # filter and prefill exactly that one report.
+            statement_rows = await compute_weekly_settlements(
+                db, uid, provider, date_from, date_to,
+            )
+            if not statement_rows:
+                raise HTTPException(
+                    400,
+                    "لا يوجد ملف تسوية إمكان مرفوع ضمن الفترة المختارة.",
+                )
+            emkan_statement = statement_rows[-1]
+            date_from = emkan_statement["from"]
+            date_to = emkan_statement["to"]
+
         s = await compute_settlement_for_provider(
             db, uid, provider, date_from, date_to,
         )
@@ -972,9 +989,13 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
         from bnpl.timezone import today_riyadh
         _ry_today = today_riyadh()
         ref_default = (
-            f"{provider.upper()}-{date_from or _ry_today.isoformat()}-AUTO"
-            if date_from
-            else f"{provider.upper()}-AUTO-{_ry_today.strftime('%Y%m%d')}"
+            emkan_statement.get("settlement_reference")
+            if emkan_statement
+            else (
+                f"{provider.upper()}-{date_from or _ry_today.isoformat()}-AUTO"
+                if date_from
+                else f"{provider.upper()}-AUTO-{_ry_today.strftime('%Y%m%d')}"
+            )
         )
 
         # Iter-231 — settlement_date_value is now driven by the
@@ -984,6 +1005,10 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
         # `transfer_weekdays`. Fallback: provider-default behaviour
         # (Tabby: +1 day, Tamara: +4 days) if config is empty/unusable.
         settlement_date_value = date_to
+        if emkan_statement:
+            settlement_date_value = (
+                emkan_statement.get("issue_date") or date_to
+            )
         if date_to:
             try:
                 _dt_to = _dt.strptime(date_to, "%Y-%m-%d").date()
@@ -993,6 +1018,8 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
                     for w in (tr_wds or [])
                     if (w or "").lower() in WEEKDAY_MAP
                 }
+                if emkan_statement:
+                    target_weekdays = set()
                 picked = None
                 if target_weekdays:
                     # Search up to 14 days forward (covers any weekly cycle).
@@ -1003,7 +1030,7 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
                             break
                 if picked is not None:
                     settlement_date_value = picked.isoformat()
-                else:
+                elif not emkan_statement:
                     # Legacy fallback (only if no transfer_weekdays config).
                     if provider == "tamara":
                         settlement_date_value = (

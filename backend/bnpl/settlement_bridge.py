@@ -1,6 +1,6 @@
 """Iter-220 — BNPL Settlement Bridge (Phase 2b).
 
-Closes Tabby/Tamara receivables when a weekly invoice is settled
+Closes Tabby/Tamara/Emkan receivables when a provider statement is settled
 into the merchant's bank account. Splits the gross receivable into
 its accounting components:
 
@@ -8,7 +8,7 @@ its accounting components:
     DEBIT  expense.bnpl_commission                  = commission       (if > 0)
     DEBIT  expense.bnpl_commission_vat              = vat              (if > 0)
     DEBIT  expense.bnpl_settlement_fee              = settlement_fee   (if > 0)
-    CREDIT payment_gateway.{tabby|tamara}/receivable = sum_of_above
+    CREDIT payment_gateway.{tabby|tamara|emkan}/receivable = sum_of_above
 
 Strict invariants:
     1. NO HISTORICAL BACKFILL — new settlements only (post-deployment).
@@ -31,7 +31,9 @@ logger = logging.getLogger(__name__)
 
 def _norm_provider(p: str) -> str:
     p = (p or "").lower().strip()
-    if p not in ("tabby", "tamara"):
+    if p == "imkan":
+        p = "emkan"
+    if p not in ("tabby", "tamara", "emkan"):
         raise HTTPException(400, f"unsupported provider: {p}")
     return p
 
@@ -241,11 +243,11 @@ async def post_bnpl_settlement_to_ledger(
     # settlement BEFORE the provider has officially issued its invoice
     # for the period (Tamara=Saturday, Tabby=Monday, Asia/Riyadh).
     # Saving earlier would post provisional numbers to the books.
-    if period_to:
+    if period_to and provider in _INVOICE_WEEKDAY:
         eligible_iso = _earliest_save_date_for_period(provider, period_to)
         today_iso = _today_riyadh_iso()
         if today_iso < eligible_iso:
-            wd = _INVOICE_WEEKDAY.get(provider, 5)
+            wd = _INVOICE_WEEKDAY[provider]
             day_ar = _WEEKDAY_AR.get(wd, "")
             raise HTTPException(
                 400,
