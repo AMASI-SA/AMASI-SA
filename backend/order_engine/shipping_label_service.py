@@ -1056,6 +1056,24 @@ async def issue_shipping_label(
         internal_id, order = await _resolve_order(
             db, user_id, normalized
         )
+        # Preserve Salla's pending shipment template before changing the order
+        # status. Some couriers remove that pending row as soon as the order
+        # becomes completed, even though its courier, packages and addresses
+        # are still required by POST /shipments.
+        pre_completion_active: list[dict[str, Any]] = []
+        if not _order_is_completed(order):
+            try:
+                pre_completion_active = _active_outbound(
+                    await _shipment_rows(
+                        db,
+                        user_id,
+                        internal_id,
+                        order.get("shipments"),
+                    )
+                )
+            except SallaError:
+                pre_completion_active = []
+
         order, order_status_changed = await _ensure_order_completed(
             db,
             user_id,
@@ -1153,16 +1171,22 @@ async def issue_shipping_label(
                 **snapshot,
             }
 
-    if not active:
+    # A completed-status transition may consume/remove Salla's pending row
+    # before the AWB exists. Use the pre-transition row only as the immutable
+    # creation template; never present it as an issued/printable shipment.
+    creation_templates = pre_completion_active if order_status_changed else []
+    if not active and not creation_templates:
         raise ShippingLabelError(
             "pending_shipment_missing",
-            "لا توجد شحنة صادرة حالية في سلة لإصدار بوليصتها.",
+            "لم تظهر شحنة صادرة بعد تحويل الطلب إلى تم التنفيذ؛ أعد المحاولة لإصدار البوليصة.",
         )
 
-    source = active[0]
-    if (
-        order_status_changed
-        or _status(source.get("status")) in _PENDING
+    source = active[0] if active else creation_templates[0]
+    # Only an actually creating/numbered shipment should be polled. A plain
+    # pending template must be submitted to POST /shipments; treating every
+    # pending row as already issued leaves Salla at «إصدار البوليصة».
+    if active and (
+        _status(source.get("status")) == "creating"
         or _tracking(source)
     ):
         polled = await _poll_shipment(
