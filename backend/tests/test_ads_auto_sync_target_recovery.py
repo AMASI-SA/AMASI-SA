@@ -3,6 +3,7 @@ import pytest
 from integrations_control_center.ads_auto_sync_target_recovery import (
     augment_auto_sync_targets,
     selected_meta_scheduler_targets,
+    selected_snapchat_scheduler_targets,
 )
 
 
@@ -25,13 +26,7 @@ class FakeCollection:
         self.last_projection = projection
         matched = []
         for row in self.rows:
-            if row.get("provider") != query.get("provider"):
-                continue
-            if row.get("connection_status") != query.get("connection_status"):
-                continue
-            if row.get("connection_provenance") != query.get("connection_provenance"):
-                continue
-            if row.get("mezan_selected") is not query.get("mezan_selected"):
+            if any(row.get(key) != value for key, value in query.items()):
                 continue
             matched.append(row)
         return FakeCursor(matched)
@@ -106,4 +101,42 @@ async def test_keeps_normal_targets_and_ignores_unselected_or_disconnected_meta(
     assert result == [
         ("owner-meta-existing", "meta_ads"),
         ("owner-snap", "snapchat_ads"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_recovers_snapchat_target_from_selected_connected_account():
+    db = FakeDb([
+        {
+            "user_id": "owner-snap",
+            "provider": "snapchat_ads",
+            "connection_status": "connected",
+            "mezan_selected": True,
+        },
+        {
+            "user_id": "owner-snap",
+            "provider": "snapchat_ads",
+            "connection_status": "connected",
+            "connection_provenance": "api_connection",
+            "mezan_selected": True,
+        },
+        {
+            "user_id": "owner-unselected",
+            "provider": "snapchat_ads",
+            "connection_status": "connected",
+            "mezan_selected": False,
+        },
+        {
+            "user_id": "owner-disconnected",
+            "provider": "snapchat_ads",
+            "connection_status": "needs_reauth",
+            "mezan_selected": True,
+        },
+    ])
+
+    assert await selected_snapchat_scheduler_targets(db) == {
+        ("owner-snap", "snapchat_ads")
+    }
+    assert await augment_auto_sync_targets(db, []) == [
+        ("owner-snap", "snapchat_ads")
     ]
