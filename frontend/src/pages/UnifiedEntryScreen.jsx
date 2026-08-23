@@ -7,6 +7,7 @@
 // writeoff / adjustment on the resulting ledger entry.
 
 import React, { useState, useEffect, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import api from "../lib/api";
 import HelpToggle from "../components/HelpToggle";
 import Iter245MovementForm from "../components/Iter245MovementForm";
@@ -130,6 +131,7 @@ const ITER245_OPS = {
 };
 
 export default function UnifiedEntryScreen() {
+    const [searchParams] = useSearchParams();
     const [opType, setOpType] = useState("");
     const [busy, setBusy] = useState(false);
     // Iter-209 — Recent ledger transactions panel + green highlight on
@@ -249,6 +251,16 @@ export default function UnifiedEntryScreen() {
         () => OP_TYPES.filter(o => !hiddenTypes.includes(o.value)),
         [hiddenTypes],
     );
+
+    // Financial-provider cards deep-link to the correct canonical form.
+    // Only known operation codes are accepted; arbitrary query values never
+    // change the form or reach an accounting endpoint.
+    useEffect(() => {
+        const requested = searchParams.get("operation") || "";
+        if (OP_TYPES.some((row) => row.value === requested)) {
+            setOpType(requested);
+        }
+    }, [searchParams]);
 
     useEffect(() => {
         let alive = true;
@@ -1046,6 +1058,15 @@ export default function UnifiedEntryScreen() {
                 <p className="text-sm text-slate-500 mb-6">
                     شاشة موحدة لكل العمليات المحاسبية. ينشئ النظام القيود المزدوجة تلقائياً.
                 </p>
+
+                <div className="mb-6 rounded-xl border border-sky-200 bg-sky-50 p-4 text-xs font-semibold leading-6 text-sky-900" data-testid="unified-provider-movement-policy">
+                    <div className="font-extrabold">قاعدة التحويل والتسوية</div>
+                    <div>
+                        التحويل بين بنك أو صندوق هو نقل رصيد ولا يُعد إيرادًا أو مصروفًا.
+                        تحويل سلة/تمارا/تابي/إمكان إلى البنك يُسجّل من كشف تسوية المزود،
+                        وتحصيل شركة الشحن يُسجّل كتسوية COD؛ لذلك لا تُعامل هذه الحالات كتحويل عام.
+                    </div>
+                </div>
 
                 {/* Op type selector */}
                 <div className="mb-6">
@@ -2739,4 +2760,3 @@ export {
     SUB_ACCOUNT_LABELS,
     REVERSAL_REASONS,
 };
-

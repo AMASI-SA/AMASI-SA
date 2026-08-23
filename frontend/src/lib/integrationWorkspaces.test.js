@@ -64,6 +64,12 @@ test("advertising accounts workspace is explicit and excludes commerce apps", ()
     expect(providersForIntegrationWorkspace(providers, "accounts").some((row) => row.provider === "salla")).toBe(false);
 });
 
+test("financial provider workspace is explicit and separate from advertising accounts", () => {
+    const params = new URLSearchParams("workspace=financial");
+    expect(integrationWorkspaceFromSearchParams(params)).toBe("financial");
+    expect(focusedIntegrationProvider(params, providers)).toBe("");
+});
+
 test("advertising summary counts accounts, currencies, timezones and attention without accounting data", () => {
     expect(summarizeAdvertisingWorkspace(providers)).toEqual({
         providers_total: 4,
@@ -81,6 +87,7 @@ test("Mezan 2 applications navigation separates all apps from advertising accoun
     expect(apps.items.map((item) => item.to)).toEqual([
         "/integrations-v2",
         "/integrations-v2?workspace=accounts",
+        "/integrations-v2?workspace=financial",
     ]);
 
     const location = {

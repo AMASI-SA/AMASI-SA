@@ -8,7 +8,9 @@ export const ADVERTISING_PROVIDER_IDS = Object.freeze([
 const ADVERTISING_PROVIDER_SET = new Set(ADVERTISING_PROVIDER_IDS);
 
 export function integrationWorkspaceFromSearchParams(searchParams) {
-    return searchParams?.get?.("workspace") === "accounts" ? "accounts" : "apps";
+    const requested = searchParams?.get?.("workspace");
+    if (requested === "accounts" || requested === "financial") return requested;
+    return "apps";
 }
 
 export function focusedIntegrationProvider(searchParams, providers = []) {

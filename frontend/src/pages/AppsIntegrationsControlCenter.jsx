@@ -14,6 +14,7 @@ import { useOptionalAuth } from "../context/AuthContext";
 import CapabilityMatrix from "../components/integrationsV2/CapabilityMatrix";
 import IntegrationActivityPanel from "../components/integrationsV2/IntegrationActivityPanel";
 import IntegrationCard from "../components/integrationsV2/IntegrationCard";
+import FinancialProviderAppsWorkspace from "./FinancialProviderAppsWorkspace";
 import {
     focusedIntegrationProvider,
     integrationWorkspaceFromSearchParams,
@@ -108,6 +109,7 @@ export default function AppsIntegrationsControlCenter() {
 
     const workspace = integrationWorkspaceFromSearchParams(searchParams);
     const accountsWorkspace = workspace === "accounts";
+    const financialWorkspace = workspace === "financial";
 
     const load = useCallback(async ({ silent = false } = {}) => {
         if (!silent) setLoading(true);
@@ -140,8 +142,13 @@ export default function AppsIntegrationsControlCenter() {
     }, [isMetaReviewer]);
 
     useEffect(() => {
+        if (financialWorkspace) {
+            setLoading(false);
+            setActivityLoading(false);
+            return;
+        }
         load();
-    }, [load]);
+    }, [load, financialWorkspace]);
 
     useEffect(() => {
         if (accountsWorkspace && activeTab === "capabilities") {
@@ -252,6 +259,7 @@ export default function AppsIntegrationsControlCenter() {
         navigate(target);
     }
 
+    if (financialWorkspace) return <FinancialProviderAppsWorkspace />;
     if (loading) return <PageSkeleton />;
 
     return (

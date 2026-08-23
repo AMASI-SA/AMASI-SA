@@ -1,0 +1,215 @@
+# MZ2-FIN-CUTOVER-001 — Mezan 2 clean financial cutover
+
+Status: **implementation in progress**
+
+Owner: AMASI / Mezan owner
+
+Started: 2026-08-23
+
+Production source branch: `hotfix/prod-snap-meta-final`
+
+## Purpose
+
+Replace the untrusted financial position and sales history in legacy Mezan
+with a clean, evidence-based accounting start in Mezan 2. Legacy Mezan remains
+read-only archive material and must never feed Mezan 2 balances, sales,
+profit, tax, settlement, or financial-position reports.
+
+This operation ID is the stable handoff reference for every later session:
+
+> `MZ2-FIN-CUTOVER-001`
+
+## Decisions already approved
+
+1. Do not migrate historical sales, balances, journals, or the legacy
+   financial position.
+2. Trusted sources only: Salla, real Qoyod invoices, bank statements,
+   provider settlement statements, provider tax invoices, courier statements,
+   physical inventory count, employee contracts/payments, supplier evidence,
+   and advertising-platform facts.
+3. Salla, Tamara, Tabby, Emkan, and every shipping company are independent
+   financial provider accounts/apps in Mezan 2.
+4. A provider tax invoice is evidence attached to the provider account; it is
+   not a separate account and does not post a journal merely because it was
+   saved.
+5. Merchant fee settings are estimates. A verified provider invoice or
+   settlement statement is authoritative and overrides the estimate for the
+   covered transaction/period.
+6. All manual financial activity starts from **New unified financial
+   movement**. The selected operation determines the canonical double-entry
+   workflow; not every cash movement is a generic transfer.
+7. The cutover date and signed opening-balance sheet are not yet approved.
+   No production opening balance may be posted before that approval.
+
+## Provider account model
+
+Each provider account owns separate accounting dimensions where applicable:
+
+- receivable from provider;
+- payable to provider;
+- provider fees;
+- VAT on provider fees;
+- settlements/transfers;
+- refunds and adjustments;
+- attached provider tax invoices and statements.
+
+Provider groups:
+
+| Provider | Account behavior | Authoritative evidence |
+|---|---|---|
+| Salla and its payment methods | One Salla provider account with method-level fee rules | Salla tax invoice / settlement statement |
+| Tamara | Independent BNPL receivable and settlement account | Tamara invoice and settlement |
+| Tabby | Independent BNPL receivable and settlement account | Tabby invoice and settlement |
+| Emkan | Independent BNPL receivable and settlement account | Emkan invoice and settlement |
+| Each shipping company | COD receivable plus shipping/fee payable | Courier invoice and COD statement |
+
+## Movement routing contract
+
+| Real event | Canonical operation | Accounting meaning |
+|---|---|---|
+| Bank/cash account A to bank/cash account B | Internal account transfer | Debit destination, credit source; no revenue or expense |
+| Salla pays the bank | Salla provider settlement | Debit bank, credit Salla receivable; fees/VAT use statement facts |
+| Tamara/Tabby/Emkan pays the bank | BNPL provider settlement | Debit bank, debit fees/VAT/adjustments, credit provider receivable |
+| Courier remits COD and withholds shipping/fees | Courier COD settlement | Debit bank and expenses, credit courier COD receivable |
+| Merchant pays courier invoice | Courier payment | Debit courier payable, credit bank/cash |
+| Bank charges a fee | General expense / bank fees | Debit bank-fee expense, credit bank |
+| Salary is earned after cutover | Salary accrual | Debit salary expense, credit salary payable |
+| Salary is paid | Salary settlement | Debit salary payable, credit bank/cash |
+
+Direct bank/cash transfers into Tamara or Tabby accounts are prohibited
+because they bypass the canonical BNPL settlement bridge. COD and generic
+bank-transfer labels are also not transferable wallets.
+
+## Opening-balance rules
+
+Opening balances are a separate, signed cutover operation and are never
+derived from legacy Mezan.
+
+### Employees
+
+- Opening salary liability = earned and unpaid salary **as of the cutover
+  instant**, per employee.
+- Do not carry historical gross salary or amounts already paid.
+- Open employee advances and custody balances are separate opening assets and
+  require employee-level evidence and confirmation.
+- After cutover, salary expense/payable accrues through normal journals and
+  payment clears the payable.
+
+### Orders at cutover
+
+- Unpaid/unprepared order or undelivered COD: no journal.
+- Prepaid but unfulfilled order: customer advance and VAT treatment according
+  to the verified tax point.
+- Delivered but unsettled order: opening receivable from the payment provider
+  or shipping company.
+- Order created before cutover but delivered after cutover: normal journal at
+  the post-cutover recognition event.
+- Existing real Qoyod invoice before cutover: link/reclassify only; do not
+  duplicate the invoice.
+
+### Other balances
+
+- Bank: statement closing balance at the cutover timestamp.
+- Providers: official unsettled statement at cutover.
+- Couriers: signed COD receivable and shipping payable reconciliation.
+- Inventory: approved physical count multiplied by approved unit cost.
+- Suppliers, annual obligations, rent, and other liabilities: only open,
+  evidenced amounts as of cutover.
+
+## VAT control
+
+The Saudi standard VAT rate is 15%. Tax timing must be checked against the
+actual supply/invoice/payment event; do not infer VAT solely from order status.
+Implementation references:
+
+- https://zatca.gov.sa/ar/RulesRegulations/Taxes/Pages/VATImplementingRegulations.aspx
+- https://zatca.gov.sa/ar/RulesRegulations/VAT/Pages/default.aspx
+
+## Implemented in this change
+
+- Added tenant-scoped endpoint `GET /api/financial-provider-apps`.
+- Added provider cards for Salla, Tamara, Tabby, Emkan, and configured shipping
+  companies.
+- Added tax-invoice evidence endpoints under
+  `/api/financial-provider-apps/{provider_id}/tax-invoices`.
+- Enforced invoice arithmetic and verified-document evidence references.
+- Rejected migration-shaped invoice payloads, including `opening_balance`.
+- Marked all provider cards `legacy_financial_data_included=false`.
+- Kept provider invoices `unposted_evidence`; no automatic ledger write.
+- Routed each provider to its existing canonical settlement flow.
+- Added Mezan 2 workspace **Accounts for shipping and payment** under Apps.
+- Added deep-link support to the unified movement screen for courier COD
+  settlement.
+- Added a visible transfer-vs-settlement rule to the unified movement screen.
+- Added backend/frontend regression tests for provider grouping, invoice
+  guards, routing, navigation, and absence of legacy balances.
+
+Primary files:
+
+- `backend/financial_provider_apps.py`
+- `frontend/src/pages/FinancialProviderAppsWorkspace.jsx`
+- `frontend/src/services/financialProviderApps.js`
+- `frontend/src/pages/UnifiedEntryScreen.jsx`
+- `frontend/src/lib/integrationWorkspaces.js`
+- `frontend/src/components/MezanV2NavigationShell.jsx`
+- `backend/tests/test_financial_provider_apps_v2.py`
+- `frontend/src/services/financialProviderApps.test.js`
+
+## Remaining work, in order
+
+### Gate 1 — approve cutover evidence
+
+1. Select the exact Riyadh cutover timestamp.
+2. Export and archive trusted bank/provider/courier/Qoyod/inventory/payroll
+   evidence at that timestamp.
+3. Prepare an opening-balance worksheet with source reference per row.
+4. Reconcile debit total to credit total and obtain owner approval.
+
+### Gate 2 — post opening balances
+
+1. Add a dedicated preview/approve/post workflow with idempotency key tied to
+   this operation ID.
+2. Post bank, provider, courier, inventory, supplier, employee, tax, and equity
+   opening entries as one controlled cutover batch.
+3. Block legacy Mezan collections from all Mezan 2 financial readers.
+4. Run trial-balance and financial-position reconciliation.
+
+### Gate 3 — event journals after cutover
+
+1. Journal trusted Salla order/payment/fulfilment/refund events once each.
+2. Complete Salla settlement posting from official files.
+3. Keep Tamara/Tabby/Emkan on their idempotent settlement bridge; add Emkan
+   connector coverage where official data is available.
+4. Journal courier COD receivable, shipping payable, fees, VAT, remittances,
+   and payments from the canonical shipping workflow.
+5. Complete payroll accrual schedule and payment clearing after cutover.
+
+### Gate 4 — production acceptance
+
+1. Trial balance is balanced.
+2. Provider subledgers reconcile to official statements.
+3. Bank balances reconcile to statements.
+4. Employee salary payable, advances, and custody reconcile per employee.
+5. Inventory reconciles to approved count/cost.
+6. No legacy sales or financial-position numbers appear in Mezan 2.
+7. Financial position contains assets, liabilities, VAT, equity, retained
+   result/current result, and the result is reproducible from journals.
+
+## Safety constraints for future sessions
+
+- Do not post production financial data from this document alone.
+- Do not guess a cutover date or an opening balance.
+- Do not convert every provider movement into a generic transfer.
+- Do not let saving a tax invoice double-post a settlement.
+- Do not delete or rewrite posted journals; use reversal/adjustment workflows.
+- Follow `AGENTS.md` and the production release guard before deployment.
+
+## Handoff prompt for the next conversation
+
+Use this exact message:
+
+> Continue GitHub operation `MZ2-FIN-CUTOVER-001`. Read
+> `docs/operations/MZ2-FIN-CUTOVER-001.md`, inspect the latest merged commit
+> and tests, report the current gate, then continue only the next incomplete
+> item. Do not import legacy Mezan balances or sales and do not post production
+> opening entries without the approved cutover evidence sheet.
