@@ -30,6 +30,23 @@ def db():
 async def _insert_sent(
     db, *, order_number: str, order_date: str, received_at: datetime,
 ) -> None:
+    await db.unified_orders.insert_one({
+        "user_id": TENANT,
+        "order_id": f"salla-{order_number}",
+        "order_number": order_number,
+        "order_date": order_date,
+        "order_status": "completed",
+        "order_status_slug": "completed",
+        "order_status_native": "تم التنفيذ",
+        "payment_method": "mada",
+        "payment_status": "paid",
+        "payment_collection_status": "paid",
+        "paid_amount": 100.0,
+        "remaining_amount": 0.0,
+        "has_remaining_amount": False,
+        "total_amount": 100.0,
+        "currency": "SAR",
+    })
     await db.integration_inbox.insert_one({
         "id": f"row-{order_number}",
         "trace_id": f"trace-{order_number}",
@@ -55,12 +72,32 @@ async def _insert_sent(
     await db.qoyod_invoices.insert_one({
         "user_id": TENANT,
         "reference": order_number,
+        "qoyod_official_reference": order_number,
+        "reference_provenance": "qoyod.reference",
+        "qoyod_invoice_id": f"invoice-{order_number}",
     })
 
 
 async def _insert_quarantined(
     db, *, order_number: str, status_slug: str, status_native: str,
 ) -> None:
+    await db.unified_orders.insert_one({
+        "user_id": TENANT,
+        "order_id": f"salla-{order_number}",
+        "order_number": order_number,
+        "order_date": "2026-08-08",
+        "order_status": status_slug,
+        "order_status_slug": status_slug,
+        "order_status_native": status_native,
+        "payment_method": "cod",
+        "payment_status": "paid",
+        "payment_collection_status": "paid",
+        "paid_amount": 315.88,
+        "remaining_amount": 0.0,
+        "has_remaining_amount": False,
+        "total_amount": 315.88,
+        "currency": "SAR",
+    })
     await db.integration_inbox.insert_one({
         "id": f"row-{order_number}",
         "trace_id": f"trace-{order_number}",
@@ -119,7 +156,12 @@ async def test_range_uses_salla_order_date_not_recent_backfill_time(db):
         db, user_id=TENANT, days=30, limit=1000, now=NOW,
     )
     ninety = await list_unsent_orders(
-        db, user_id=TENANT, days=90, limit=1000, now=NOW,
+        db,
+        user_id=TENANT,
+        days=90,
+        from_date="2026-07-01",
+        limit=1000,
+        now=NOW,
     )
 
     assert seven["requested_order_start_date"] == "2026-08-06"
@@ -148,6 +190,7 @@ async def test_cards_count_full_period_before_table_row_limit(db):
         db,
         user_id=TENANT,
         days=90,
+        from_date="2026-07-01",
         limit=2,
         now=NOW,
     )
