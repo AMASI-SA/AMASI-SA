@@ -47,13 +47,11 @@ jobs:
           python -m compileall -q snapchat_v2
           python -m py_compile snapchat_v2_test_bootstrap.py
           python -m py_compile integrations_control_center/snapchat_native_tracking_routes.py
-          python -m py_compile tests/test_snapchat_reporting_v2_foundation.py
-          python -m py_compile tests/test_snapchat_reporting_v2_resilience.py
+          python -m py_compile tests/test_snapchat_reporting_v2_*.py
       - name: Run reporting V2 tests
         run: >-
           python -m pytest
           -p snapchat_v2_test_bootstrap
-          tests/test_snapchat_reporting_v2_foundation.py
-          tests/test_snapchat_reporting_v2_resilience.py
+          tests/test_snapchat_reporting_v2_*.py
           -q
           --tb=short
