@@ -120,6 +120,12 @@ TIKTOK_RUN_TYPE = "tiktok_reporting_async"
 GOOGLE_RUN_TYPE = "google_ads_reporting_async"
 ACTIVE_STATUSES = ("queued", "running")
 TERMINAL_STATUSES = ("complete", "partial", "failed", "skipped")
+SCHEDULER_OUTCOME_REASONS = frozenset({
+    "disabled",
+    "cadence_gate_10m",
+    "running_elsewhere",
+    "sync_in_progress",
+})
 SNAPCHAT_PERFORMANCE_RESULT_KEYS = (
     "ad_squad_performance",
     "ad_performance",
@@ -1987,15 +1993,20 @@ async def run_auto_sync_cycle(
                 provider,
                 item,
             )
-            results.append(
-                {
-                    "provider": provider,
-                    "status": "failed",
-                    "code": "scheduler_provider_task_failed",
-                }
-            )
+            outcome = {
+                "provider": provider,
+                "status": "failed",
+                "code": "scheduler_provider_task_failed",
+            }
         else:
-            results.append(item)
+            outcome = dict(item)
+            # The scheduler row is global across tenants. Persist the tenant
+            # identity with each provider outcome so the owner-only status
+            # route can expose a minimal, sanitized outcome for the requesting
+            # tenant without leaking another tenant's run metadata.
+            outcome["provider"] = provider
+        outcome["user_id"] = user_id
+        results.append(outcome)
     failed = sum(item.get("status") == "failed" for item in results)
     succeeded = sum(item.get("status") in {"complete", "partial"} for item in results)
     skipped = sum(item.get("status") == "skipped" for item in results)
@@ -2249,6 +2260,45 @@ def _safe_provider_run_status(run: dict[str, Any]) -> dict[str, Any]:
     return safe_run
 
 
+def _safe_scheduler_provider_outcome(
+    outcome: Any,
+    *,
+    user_id: str,
+) -> dict[str, Any]:
+    """Return tenant-bound scheduler telemetry safe for the status route."""
+
+    if not isinstance(outcome, dict):
+        return {}
+    if str(outcome.get("user_id") or "") != user_id:
+        return {}
+    provider = str(outcome.get("provider") or "")
+    if provider not in {
+        META_PROVIDER_ID,
+        SNAPCHAT_PROVIDER_ID,
+        TIKTOK_PROVIDER_ID,
+        GOOGLE_ADS_PROVIDER_ID,
+    }:
+        return {}
+    status = str(outcome.get("status") or "")
+    if status not in TERMINAL_STATUSES:
+        return {}
+
+    safe: dict[str, Any] = {
+        "provider": provider,
+        "status": status,
+    }
+    reason = str(outcome.get("reason") or "")
+    if reason in SCHEDULER_OUTCOME_REASONS:
+        safe["reason"] = reason
+    code = _safe_status_identifier(outcome.get("code"))
+    if code:
+        safe["code"] = code
+    run_id = _safe_status_identifier(outcome.get("run_id"))
+    if run_id:
+        safe["run_id"] = run_id
+    return safe
+
+
 async def auto_sync_status(db: Any, user_id: str) -> dict[str, Any]:
     scheduler = await _collection(db, SCHEDULER_COLLECTION).find_one(
         {"_id": SCHEDULER_ID},
@@ -2304,6 +2354,16 @@ async def auto_sync_status(db: Any, user_id: str) -> dict[str, Any]:
     global_last_error = (
         global_last_error if isinstance(global_last_error, dict) else None
     )
+    last_provider_outcomes: list[dict[str, Any]] = []
+    raw_provider_outcomes = global_last_result.get("results")
+    if isinstance(raw_provider_outcomes, list):
+        for outcome in raw_provider_outcomes:
+            safe_outcome = _safe_scheduler_provider_outcome(
+                outcome,
+                user_id=user_id,
+            )
+            if safe_outcome:
+                last_provider_outcomes.append(safe_outcome)
     return {
         "enabled": auto_sync_enabled(),
         "interval_seconds": interval_seconds(),
@@ -2324,6 +2384,7 @@ async def auto_sync_status(db: Any, user_id: str) -> dict[str, Any]:
                 if global_last_result
                 else None
             ),
+            "last_provider_outcomes": last_provider_outcomes,
             "last_error": (
                 {
                     "code": "ads_auto_sync_cycle_failed",
