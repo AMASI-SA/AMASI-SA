@@ -33,6 +33,8 @@ class ProductCostCategoryRequest(BaseModel):
 class ProductCostCompletionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     complete: bool = True
+    reviewed: bool = False
+    expected_review_revision: int | None = Field(default=None, ge=1)
 
 
 class ProductCostReviewCompleteRequest(BaseModel):
@@ -81,6 +83,62 @@ def _serialize_review_product(product: dict[str, Any]) -> dict[str, Any]:
     row["review_reason_code"] = _text(product.get("cost_review_reason_code")) or "cost_setup_completed"
     row["review_reason_label"] = _text(product.get("cost_review_reason_label")) or "اكتملت تكلفة المنتج"
     return row
+
+
+async def _mark_reviewed(
+    db: Any,
+    *,
+    user_id: str,
+    product_id: str,
+    product: dict[str, Any],
+    expected_revision: int,
+) -> dict[str, Any]:
+    if product.get("cost_setup_complete") is not True:
+        raise HTTPException(status_code=409, detail={"code": "product_cost_setup_not_complete"})
+    current_revision = _review_revision(product)
+    if expected_revision != current_revision:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "product_cost_review_revision_conflict",
+                "expected_revision": expected_revision,
+                "current_revision": current_revision,
+            },
+        )
+    if product.get("cost_review_status") == "reviewed" and int(product.get("cost_reviewed_revision") or 0) == current_revision:
+        return {"ok": True, "idempotent_replay": True, "review_revision": current_revision}
+    now = _now()
+    revision_selector: Any = {"$in": [current_revision, None]} if current_revision == 1 else current_revision
+    result = await db[PRODUCTS].update_one(
+        {
+            "user_id": user_id,
+            "id": product.get("id"),
+            "cost_setup_complete": True,
+            "cost_review_revision": revision_selector,
+            "cost_review_status": {"$in": ["pending", None]},
+        },
+        {"$set": {
+            "cost_review_status": "reviewed",
+            "cost_reviewed_revision": current_revision,
+            "cost_reviewed_at": now,
+            "cost_reviewed_by": user_id,
+            "updated_at": now,
+        }},
+    )
+    if result.modified_count != 1:
+        latest = await _product(db, user_id, product_id)
+        if latest.get("cost_review_status") == "reviewed" and int(latest.get("cost_reviewed_revision") or 0) == current_revision:
+            return {"ok": True, "idempotent_replay": True, "review_revision": current_revision}
+        raise HTTPException(status_code=409, detail={"code": "product_cost_review_concurrent_update"})
+    await db[AUDIT].insert_one({
+        "id": f"product-cost-review:{product.get('id')}:{now.timestamp()}",
+        "user_id": user_id,
+        "event_type": "product_cost_review_completed",
+        "product_id": product.get("mezan_product_id") or product.get("id"),
+        "review_revision": current_revision,
+        "created_at": now,
+    })
+    return {"ok": True, "idempotent_replay": False, "review_revision": current_revision}
 
 
 async def _view(
@@ -198,8 +256,6 @@ def make_product_cost_setup_router(
             "meta": {"source": "products_v2_cost_review", "server_ssot": True},
         }
 
-    # Registered before the older operations routes so both web and mobile see
-    # the product-level category and manual completion state from one endpoint.
     @router.get("/{product_id}/operations")
     async def get_product_operations(
         product_id: str,
@@ -220,18 +276,11 @@ def make_product_cost_setup_router(
         product = await _product(db, user_id, product_id)
         category_id = _text(payload.category_id)
         category = await db[COMPONENT_CATEGORIES].find_one(
-            {
-                "user_id": user_id,
-                "id": category_id,
-                "status": {"$ne": "inactive"},
-            },
+            {"user_id": user_id, "id": category_id, "status": {"$ne": "inactive"}},
             {"_id": 0},
         )
         if not category:
-            raise HTTPException(
-                status_code=422,
-                detail={"code": "product_cost_category_not_found"},
-            )
+            raise HTTPException(status_code=422, detail={"code": "product_cost_category_not_found"})
         now = _now()
         before = {
             "cost_category_id": product.get("cost_category_id"),
@@ -278,13 +327,23 @@ def make_product_cost_setup_router(
     ) -> dict[str, Any]:
         user_id = str(user["id"])
         product = await _product(db, user_id, product_id)
+        if payload.reviewed:
+            if payload.expected_review_revision is None:
+                raise HTTPException(status_code=422, detail={"code": "product_cost_review_revision_required"})
+            result = await _mark_reviewed(
+                db,
+                user_id=user_id,
+                product_id=product_id,
+                product=product,
+                expected_revision=payload.expected_review_revision,
+            )
+            refreshed = await _product(db, user_id, product_id)
+            return {**result, **(await _view(db, user_id=user_id, product=refreshed))}
+
         now = _now()
         complete = bool(payload.complete)
         was_complete = product.get("cost_setup_complete") is True
-        patch: dict[str, Any] = {
-            "cost_setup_complete": complete,
-            "updated_at": now,
-        }
+        patch: dict[str, Any] = {"cost_setup_complete": complete, "updated_at": now}
         unset: dict[str, str] = {}
         if complete:
             if not was_complete:
@@ -332,51 +391,13 @@ def make_product_cost_setup_router(
     ) -> dict[str, Any]:
         user_id = str(user["id"])
         product = await _product(db, user_id, product_id)
-        if product.get("cost_setup_complete") is not True:
-            raise HTTPException(status_code=409, detail={"code": "product_cost_setup_not_complete"})
-        current_revision = _review_revision(product)
-        if payload.expected_revision != current_revision:
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "code": "product_cost_review_revision_conflict",
-                    "expected_revision": payload.expected_revision,
-                    "current_revision": current_revision,
-                },
-            )
-        if product.get("cost_review_status") == "reviewed" and int(product.get("cost_reviewed_revision") or 0) == current_revision:
-            return {"ok": True, "idempotent_replay": True, "review_revision": current_revision}
-        now = _now()
-        result = await db[PRODUCTS].update_one(
-            {
-                "user_id": user_id,
-                "id": product.get("id"),
-                "cost_setup_complete": True,
-                "cost_review_revision": {"$in": [current_revision, None]} if current_revision == 1 else current_revision,
-                "cost_review_status": {"$in": ["pending", None]},
-            },
-            {"$set": {
-                "cost_review_status": "reviewed",
-                "cost_reviewed_revision": current_revision,
-                "cost_reviewed_at": now,
-                "cost_reviewed_by": user_id,
-                "updated_at": now,
-            }},
+        return await _mark_reviewed(
+            db,
+            user_id=user_id,
+            product_id=product_id,
+            product=product,
+            expected_revision=payload.expected_revision,
         )
-        if result.modified_count != 1:
-            latest = await _product(db, user_id, product_id)
-            if latest.get("cost_review_status") == "reviewed" and int(latest.get("cost_reviewed_revision") or 0) == current_revision:
-                return {"ok": True, "idempotent_replay": True, "review_revision": current_revision}
-            raise HTTPException(status_code=409, detail={"code": "product_cost_review_concurrent_update"})
-        await db[AUDIT].insert_one({
-            "id": f"product-cost-review:{product.get('id')}:{now.timestamp()}",
-            "user_id": user_id,
-            "event_type": "product_cost_review_completed",
-            "product_id": product.get("mezan_product_id") or product.get("id"),
-            "review_revision": current_revision,
-            "created_at": now,
-        })
-        return {"ok": True, "idempotent_replay": False, "review_revision": current_revision}
 
     return router
 
