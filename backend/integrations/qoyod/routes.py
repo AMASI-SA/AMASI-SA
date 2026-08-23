@@ -609,12 +609,7 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             valid["plan_b_auto_send_actor"] = str(
                 (user or {}).get("email") or user["id"]
             )
-            valid["plan_b_auto_send_canary_run_id"] = (
-                canary.get("run_id") if canary else None
-            )
-            valid["plan_b_auto_send_activation_basis"] = (
-                "successful_canary" if canary else "operator_live_settings"
-            )
+            valid["plan_b_auto_send_canary_run_id"] = canary.get("run_id")
             valid["plan_b_auto_send_disabled_reason"] = None
             valid["plan_b_auto_send_last_error"] = None
         else:
