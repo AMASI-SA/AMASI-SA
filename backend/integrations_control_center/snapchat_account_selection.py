@@ -26,6 +26,9 @@ from .snapchat_oauth_security import (
 )
 
 ACCOUNT_SELECTION_SOURCE_MODE = "snapchat_marketing_account_selection_v2"
+SCHEDULER_PROJECTION_RECOVERY_SOURCE_MODE = (
+    "snapchat_scheduler_projection_recovery_v1"
+)
 
 
 class SnapchatAccountSelectionInput(BaseModel):
@@ -536,7 +539,8 @@ async def _load_canonical_scheduler_accounts(
             "connection_status": 1,
         },
     )
-    if (
+    integration_missing = integration is None
+    if not integration_missing and (
         not isinstance(integration, dict)
         or integration.get("user_id") != user_id
         or integration.get("provider") != SNAPCHAT_PROVIDER_ID
@@ -568,11 +572,56 @@ async def _load_canonical_scheduler_accounts(
     )
     if failure_stage_observer is not None:
         failure_stage_observer("integration_account_credential_proof")
-    return _validate_canonical_scheduler_accounts(
+    accounts = _validate_canonical_scheduler_accounts(
         user_id=user_id,
         credential_rows=credential_rows,
         rows=rows,
     )
+    if integration_missing:
+        now_iso = _now_iso()
+        collection = _collection(db, "mezan_integrations_v2")
+        await collection.update_one(
+            {"user_id": user_id, "provider": SNAPCHAT_PROVIDER_ID},
+            {
+                "$setOnInsert": {
+                    "user_id": user_id,
+                    "provider": SNAPCHAT_PROVIDER_ID,
+                    "connection_status": "connected",
+                    "connection_provenance": "api_connection",
+                    "source_mode": SCHEDULER_PROJECTION_RECOVERY_SOURCE_MODE,
+                    "data_quality": "incomplete",
+                    "data_delay_minutes": None,
+                    "health_score": 70,
+                    "checked_at": now_iso,
+                    "created_at": now_iso,
+                    "updated_at": now_iso,
+                    "projection_recovered_at": now_iso,
+                }
+            },
+            upsert=True,
+        )
+        recovered = await collection.find_one(
+            {"user_id": user_id, "provider": SNAPCHAT_PROVIDER_ID},
+            {
+                "_id": 0,
+                "user_id": 1,
+                "provider": 1,
+                "connection_status": 1,
+            },
+        )
+        if (
+            not isinstance(recovered, dict)
+            or recovered.get("user_id") != user_id
+            or recovered.get("provider") != SNAPCHAT_PROVIDER_ID
+            or recovered.get("connection_status") != "connected"
+        ):
+            raise SnapchatNativeSyncError(
+                "snapchat_integration_not_connected",
+                "Snapchat integration is not connected.",
+                status_code=409,
+                retryable=False,
+            )
+    return accounts
 
 
 async def _load_selected_accounts(db: Any, user_id: str) -> list[dict[str, Any]]:

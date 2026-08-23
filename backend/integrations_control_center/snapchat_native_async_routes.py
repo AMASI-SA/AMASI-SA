@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -27,6 +27,9 @@ from .snapchat_native_data_sync import execute_snapchat_native_sync
 ASYNC_SYNC_RUN_TYPE = "analytics_refresh_async"
 ASYNC_SYNC_SOURCE_MODE = "snapchat_marketing_native_async_sync_v2"
 ACTIVE_SYNC_STATUSES = ("queued", "running")
+SCHEDULER_SYNC_RUN_TYPE = "analytics_refresh"
+SCHEDULER_ACTIVE_RUN_TTL = timedelta(minutes=25)
+RUN_CLOCK_SKEW_TOLERANCE = timedelta(minutes=5)
 
 
 def _safe_job(document: dict[str, Any]) -> dict[str, Any]:
@@ -105,10 +108,19 @@ async def _recover_stale_jobs(
         {
             "user_id": user_id,
             "provider": SNAPCHAT_PROVIDER_ID,
-            "run_type": ASYNC_SYNC_RUN_TYPE,
+            "run_type": {
+                "$in": [ASYNC_SYNC_RUN_TYPE, SCHEDULER_SYNC_RUN_TYPE]
+            },
             "status": {"$in": list(ACTIVE_SYNC_STATUSES)},
         },
-        {"_id": 0, "run_id": 1, "lock_expires_at": 1},
+        {
+            "_id": 0,
+            "run_id": 1,
+            "run_type": 1,
+            "started_at": 1,
+            "created_at": 1,
+            "lock_expires_at": 1,
+        },
     )
     rows = (
         await cursor.to_list(length=20)
@@ -116,13 +128,39 @@ async def _recover_stale_jobs(
         else [row async for row in cursor]
     )
     for row in rows:
-        expiry = _parse_datetime(row.get("lock_expires_at"))
-        if expiry and expiry > now_value:
+        run_type = str(row.get("run_type") or "")
+        if run_type == ASYNC_SYNC_RUN_TYPE:
+            expiry = _parse_datetime(row.get("lock_expires_at"))
+            live = bool(
+                expiry
+                and now_value < expiry <= now_value + SNAPCHAT_NATIVE_SYNC_LOCK_TTL
+            )
+            error_code = "snapchat_async_sync_stale"
+            message = (
+                "The asynchronous Snapchat sync did not finish "
+                "before its safety deadline."
+            )
+        else:
+            marker = _parse_datetime(
+                row.get("started_at") or row.get("created_at")
+            )
+            live = bool(
+                marker
+                and now_value - SCHEDULER_ACTIVE_RUN_TTL <= marker
+                <= now_value + RUN_CLOCK_SKEW_TOLERANCE
+            )
+            error_code = "snapchat_scheduler_sync_stale"
+            message = (
+                "The scheduled Snapchat sync was orphaned before "
+                "the manual recovery request."
+            )
+        if live:
             continue
         await collection.update_one(
             {
                 "user_id": user_id,
                 "run_id": row.get("run_id"),
+                "run_type": run_type,
                 "status": {"$in": list(ACTIVE_SYNC_STATUSES)},
             },
             {
@@ -130,11 +168,8 @@ async def _recover_stale_jobs(
                     "status": "failed",
                     "finished_at": _iso(now_value),
                     "error": {
-                        "code": "snapchat_async_sync_stale",
-                        "message": (
-                            "The asynchronous Snapchat sync did not finish "
-                            "before its safety deadline."
-                        ),
+                        "code": error_code,
+                        "message": message,
                         "retryable": True,
                     },
                 }
@@ -150,7 +185,7 @@ async def _assert_no_active_sync(db: Any, user_id: str) -> None:
             "user_id": user_id,
             "provider": SNAPCHAT_PROVIDER_ID,
             "run_type": {
-                "$in": [ASYNC_SYNC_RUN_TYPE, "analytics_refresh"]
+                "$in": [ASYNC_SYNC_RUN_TYPE, SCHEDULER_SYNC_RUN_TYPE]
             },
             "status": {"$in": list(ACTIVE_SYNC_STATUSES)},
         },

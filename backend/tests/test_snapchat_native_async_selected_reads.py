@@ -362,3 +362,101 @@ async def test_async_job_rejects_a_second_active_sync(monkeypatch):
     assert exc.value.code == "snapchat_analytics_sync_in_progress"
     assert exc.value.status_code == 409
     assert exc.value.run_id == "already-running"
+
+
+@pytest.mark.asyncio
+async def test_manual_job_recovers_orphaned_scheduler_run(monkeypatch):
+    db = _db()
+    db.rows["mezan_integration_sync_runs_v2"].append(
+        {
+            "run_id": "orphaned-scheduler-run",
+            "user_id": "owner-1",
+            "provider": "snapchat_ads",
+            "run_type": async_routes.SCHEDULER_SYNC_RUN_TYPE,
+            "status": "running",
+            "started_at": "2026-07-30T17:00:00+00:00",
+        }
+    )
+    monkeypatch.setattr(
+        async_routes,
+        "snapchat_native_sync_enabled",
+        lambda: True,
+    )
+
+    accepted = await async_routes.create_snapchat_native_sync_job(
+        db,
+        "owner-1",
+        SnapchatNativeSyncInput(days=1),
+        now=lambda: datetime(2026, 7, 30, 18, 0, tzinfo=timezone.utc),
+    )
+
+    assert accepted["status"] == "queued"
+    stale = next(
+        row
+        for row in db.rows["mezan_integration_sync_runs_v2"]
+        if row["run_id"] == "orphaned-scheduler-run"
+    )
+    assert stale["status"] == "failed"
+    assert stale["error"]["code"] == "snapchat_scheduler_sync_stale"
+
+
+@pytest.mark.asyncio
+async def test_manual_job_preserves_recent_scheduler_run(monkeypatch):
+    db = _db()
+    db.rows["mezan_integration_sync_runs_v2"].append(
+        {
+            "run_id": "live-scheduler-run",
+            "user_id": "owner-1",
+            "provider": "snapchat_ads",
+            "run_type": async_routes.SCHEDULER_SYNC_RUN_TYPE,
+            "status": "running",
+            "started_at": "2026-07-30T17:50:00+00:00",
+        }
+    )
+    monkeypatch.setattr(
+        async_routes,
+        "snapchat_native_sync_enabled",
+        lambda: True,
+    )
+
+    with pytest.raises(SnapchatNativeSyncError) as exc:
+        await async_routes.create_snapchat_native_sync_job(
+            db,
+            "owner-1",
+            SnapchatNativeSyncInput(days=1),
+            now=lambda: datetime(2026, 7, 30, 18, 0, tzinfo=timezone.utc),
+        )
+
+    assert exc.value.code == "snapchat_analytics_sync_in_progress"
+    assert exc.value.run_id == "live-scheduler-run"
+    assert db.rows["mezan_integration_sync_runs_v2"][0]["status"] == "running"
+
+
+@pytest.mark.asyncio
+async def test_manual_job_recovers_far_future_scheduler_timestamp(monkeypatch):
+    db = _db()
+    db.rows["mezan_integration_sync_runs_v2"].append(
+        {
+            "run_id": "future-scheduler-run",
+            "user_id": "owner-1",
+            "provider": "snapchat_ads",
+            "run_type": async_routes.SCHEDULER_SYNC_RUN_TYPE,
+            "status": "running",
+            "started_at": "2026-07-31T18:00:00+00:00",
+        }
+    )
+    monkeypatch.setattr(
+        async_routes,
+        "snapchat_native_sync_enabled",
+        lambda: True,
+    )
+
+    accepted = await async_routes.create_snapchat_native_sync_job(
+        db,
+        "owner-1",
+        SnapchatNativeSyncInput(days=1),
+        now=lambda: datetime(2026, 7, 30, 18, 0, tzinfo=timezone.utc),
+    )
+
+    assert accepted["status"] == "queued"
+    assert db.rows["mezan_integration_sync_runs_v2"][0]["status"] == "failed"

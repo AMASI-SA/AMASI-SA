@@ -264,6 +264,85 @@ async def test_canonical_scheduler_includes_migrated_account_with_tenant_credent
 
 
 @pytest.mark.asyncio
+async def test_canonical_scheduler_recovers_missing_provider_projection_after_proof(
+    monkeypatch,
+):
+    db = _db()
+    db.rows["mezan_integrations_v2"] = []
+    account = db.rows["mezan_integration_accounts_v2"][1]
+    account["mezan_selected"] = True
+    account["selection_status"] = "selected"
+    account.pop("connection_provenance")
+    db.rows[selection.SNAPCHAT_CREDENTIALS_COLLECTION] = [
+        {
+            "user_id": "owner-1",
+            "provider": "snapchat_ads",
+            "refresh_token_ciphertext": b"tenant-refresh",
+            "organization_ids": ["org-1"],
+        }
+    ]
+    monkeypatch.setattr(
+        selection,
+        "decrypt_snapchat_token",
+        lambda value: "refresh-token" if value == b"tenant-refresh" else "",
+    )
+    monkeypatch.setattr(
+        selection,
+        "_now_iso",
+        lambda: "2026-08-23T07:15:00+00:00",
+    )
+
+    rows = await selection._load_canonical_scheduler_accounts(db, "owner-1")
+
+    assert [row["ad_account_id"] for row in rows] == ["account-2"]
+    assert db.rows["mezan_integrations_v2"] == [
+        {
+            "user_id": "owner-1",
+            "provider": "snapchat_ads",
+            "connection_status": "connected",
+            "connection_provenance": "api_connection",
+            "source_mode": selection.SCHEDULER_PROJECTION_RECOVERY_SOURCE_MODE,
+            "data_quality": "incomplete",
+            "data_delay_minutes": None,
+            "health_score": 70,
+            "checked_at": "2026-08-23T07:15:00+00:00",
+            "created_at": "2026-08-23T07:15:00+00:00",
+            "updated_at": "2026-08-23T07:15:00+00:00",
+            "projection_recovered_at": "2026-08-23T07:15:00+00:00",
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_canonical_scheduler_never_overwrites_disconnected_projection(
+    monkeypatch,
+):
+    db = _db()
+    db.rows["mezan_integrations_v2"][0]["connection_status"] = "needs_reauth"
+    account = db.rows["mezan_integration_accounts_v2"][1]
+    account["mezan_selected"] = True
+    db.rows[selection.SNAPCHAT_CREDENTIALS_COLLECTION] = [
+        {
+            "user_id": "owner-1",
+            "provider": "snapchat_ads",
+            "refresh_token_ciphertext": b"tenant-refresh",
+            "organization_ids": ["org-1"],
+        }
+    ]
+    monkeypatch.setattr(
+        selection,
+        "decrypt_snapchat_token",
+        lambda _value: "refresh-token",
+    )
+
+    with pytest.raises(selection.SnapchatNativeSyncError) as exc:
+        await selection._load_canonical_scheduler_accounts(db, "owner-1")
+
+    assert exc.value.code == "snapchat_integration_not_connected"
+    assert db.rows["mezan_integrations_v2"][0]["connection_status"] == "needs_reauth"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("mutation", "expected_code"),
     [
