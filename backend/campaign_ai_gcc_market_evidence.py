@@ -8,7 +8,7 @@ market scores, or return costs. The output is shaped for
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from mezan_attribution_order_ledger import LEDGER_COLLECTION
@@ -404,11 +404,84 @@ def merge_market_observations(
     return list(merged.values())
 
 
+def build_market_observation_document(
+    *,
+    observation_id: str,
+    market: str,
+    source_name: str,
+    source_type: str,
+    reliability: str,
+    observed_at: str,
+    values: dict[str, Any],
+    url: str | None = None,
+    limitations: list[str] | None = None,
+) -> dict[str, Any]:
+    """Validate one governed market observation before internal persistence."""
+    canonical_market = _market(market)
+    if not canonical_market:
+        raise ValueError("unsupported_gcc_market")
+    oid = _text(observation_id, 180)
+    source = _text(source_name, 160)
+    source_kind = _text(source_type, 80)
+    reliability_value = _text(reliability, 40).casefold()
+    observed = _text(observed_at, 80)
+    if not oid or not source or not source_kind or not observed:
+        raise ValueError("observation_identity_and_provenance_required")
+    if reliability_value not in {"official", "first_party", "high", "contextual"}:
+        raise ValueError("invalid_observation_reliability")
+    clean_values = {
+        field: values[field]
+        for field in MEASURED_FIELDS
+        if isinstance(values, dict) and field in values and values[field] is not None
+    }
+    if not clean_values:
+        raise ValueError("observation_values_required")
+    return {
+        "contract_version": CONTRACT_VERSION,
+        "observation_id": oid,
+        "market": canonical_market,
+        "source_name": source,
+        "source_type": source_kind,
+        "reliability": reliability_value,
+        "observed_at": observed,
+        "url": _text(url, 500) or None,
+        "values": clean_values,
+        "limitations": [
+            _text(item, 240)
+            for item in (limitations or [])
+            if _text(item, 240)
+        ][:20],
+        "read_only_business_effect": True,
+    }
+
+
 async def ensure_indexes(db: Any) -> None:
+    await db[OBSERVATION_COLLECTION].create_index(
+        [("user_id", 1), ("observation_id", 1)],
+        unique=True,
+        name="gcc_market_observation_user_id_unique",
+    )
     await db[OBSERVATION_COLLECTION].create_index(
         [("user_id", 1), ("market", 1), ("observed_at", -1)],
         name="gcc_market_observation_user_market_recent",
     )
+
+
+async def upsert_gcc_market_observation(
+    db: Any,
+    user_id: str,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    await ensure_indexes(db)
+    document = build_market_observation_document(**kwargs)
+    now_iso = datetime.now(timezone.utc).isoformat()
+    stored = {**document, "user_id": str(user_id), "updated_at": now_iso}
+    await db[OBSERVATION_COLLECTION].update_one(
+        {"user_id": str(user_id), "observation_id": document["observation_id"]},
+        {"$set": stored, "$setOnInsert": {"created_at": now_iso}},
+        upsert=True,
+    )
+    return {key: value for key, value in stored.items() if key != "user_id"}
 
 
 async def load_gcc_market_evidence(
@@ -422,26 +495,29 @@ async def load_gcc_market_evidence(
     """Load tenant-scoped first-party + governed external evidence from Mezan."""
     await ensure_indexes(db)
     uid = str(user_id)
+    days = max(1, min(365, int(observed_days)))
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
+    capped_orders = max(1, min(10000, int(order_limit)))
+    capped_observations = max(1, min(2000, int(observation_limit)))
     orders = await db[ORDER_COLLECTION].find(
-        {"user_id": uid, "raw_by_source.salla_direct": {"$exists": True}},
+        {
+            "user_id": uid,
+            "raw_by_source.salla_direct": {"$exists": True},
+            "order_date": {"$gte": cutoff},
+        },
         {"_id": 0},
-    ).sort("order_date", -1).limit(max(1, min(10000, int(order_limit)))).to_list(
-        length=max(1, min(10000, int(order_limit)))
-    )
+    ).sort("order_date", -1).limit(capped_orders).to_list(length=capped_orders)
     ledger_rows = await db[LEDGER_COLLECTION].find(
-        {"user_id": uid}, {"_id": 0, "user_id": 0}
-    ).sort("order_created_at", -1).limit(max(1, min(10000, int(order_limit)))).to_list(
-        length=max(1, min(10000, int(order_limit)))
-    )
+        {"user_id": uid, "order_created_at": {"$gte": cutoff}},
+        {"_id": 0, "user_id": 0},
+    ).sort("order_created_at", -1).limit(capped_orders).to_list(length=capped_orders)
     observations = await db[OBSERVATION_COLLECTION].find(
         {"user_id": uid}, {"_id": 0, "user_id": 0}
-    ).sort("observed_at", -1).limit(max(1, min(2000, int(observation_limit)))).to_list(
-        length=max(1, min(2000, int(observation_limit)))
-    )
+    ).sort("observed_at", -1).limit(capped_observations).to_list(length=capped_observations)
     first_party = build_first_party_market_evidence(
         orders=orders,
         ledger_rows=ledger_rows,
-        observed_days=observed_days,
+        observed_days=days,
     )
     return merge_market_observations(first_party=first_party, observations=observations)
 
@@ -451,7 +527,9 @@ __all__ = [
     "MARKET_BY_CODE",
     "OBSERVATION_COLLECTION",
     "build_first_party_market_evidence",
+    "build_market_observation_document",
     "ensure_indexes",
     "load_gcc_market_evidence",
     "merge_market_observations",
+    "upsert_gcc_market_observation",
 ]
