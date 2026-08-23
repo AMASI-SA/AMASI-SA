@@ -71,6 +71,10 @@ from salla_integration import attach_salla_routes, ensure_salla_indexes
 from settlements_import import attach_payment_settlements_routes, ensure_settlements_indexes as ensure_payment_settlements_indexes
 from refunds_alert_routes import attach_refunds_alert_routes
 from payment_gateway_metrics import attach_payment_gateway_metrics_routes
+from financial_provider_apps import (
+    ensure_financial_provider_app_indexes,
+    make_financial_provider_apps_router,
+)
 from order_status_policy import attach_order_status_policy_routes
 from shipping_ledger_routes import attach_shipping_ledger_routes
 from orders_explorer_routes import attach_orders_explorer_routes
@@ -4055,6 +4059,7 @@ attach_salla_routes(api, db)
 attach_payment_settlements_routes(api, db)
 attach_refunds_alert_routes(api, db)
 attach_payment_gateway_metrics_routes(api, db)
+api.include_router(make_financial_provider_apps_router(db, current_user))
 attach_order_status_policy_routes(api, db)
 attach_shipping_ledger_routes(api, db, current_user)
 attach_orders_explorer_routes(api, db)
@@ -4474,6 +4479,7 @@ async def on_startup():
     await ensure_purchase_invoices_indexes(db)
     await ensure_custom_app_indexes(db)
     await ensure_ad_account_indexes(db)
+    await ensure_financial_provider_app_indexes(db)
     await ensure_bnpl_indexes(db)
     await ensure_alerts_indexes(db)
     # Employees V2 — canonical employee identity and read-only salary-contract
