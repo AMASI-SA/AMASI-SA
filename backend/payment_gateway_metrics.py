@@ -22,7 +22,7 @@ The canonical method list is the one the user enumerated:
 """
 from __future__ import annotations
 
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_HALF_EVEN, ROUND_HALF_UP
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -130,11 +130,10 @@ PAYMENT_METHOD_REGISTRY: dict[str, dict] = {
         "name_ar": "تابي",
         "type": "gateway",
         "aliases": ["tabby", "تابي"],
-        "estimated_fee_rate": 5.00,
+        "estimated_fee_rate": 6.99,
+        "estimated_refundable_fee_rate": 4.99,
         "estimated_vat_rate": 15.0,
-        "estimated_fixed_fee": 1.0,        # 1 SAR per order — Tabby's
-                                           # standard merchant fee in
-                                           # addition to the 5% MDR.
+        "estimated_fixed_fee": 1.0,
     },
     "emkan": {
         "name_ar": "إمكان",
@@ -232,6 +231,7 @@ _SALLA_METRIC_KEYS = frozenset({
 })
 
 _TAMARA_METRIC_KEYS = frozenset({"tamara"})
+_TABBY_METRIC_KEYS = frozenset({"tabby"})
 
 
 def _configured_fee_rules(settings_doc: dict) -> dict[str, dict]:
@@ -255,6 +255,11 @@ _SAR_CENT = Decimal("0.01")
 
 def _round_sar(value: Decimal) -> float:
     return float(value.quantize(_SAR_CENT, rounding=ROUND_HALF_UP))
+
+
+def _round_sar_even(value: Decimal) -> float:
+    """Tabby's reports use half-even VAT rounding per displayed fee leg."""
+    return float(value.quantize(_SAR_CENT, rounding=ROUND_HALF_EVEN))
 
 
 # ── Aggregator ────────────────────────────────────────────────────────
@@ -470,6 +475,38 @@ async def compute_metrics(
                         Decimal(str(fee)) * Decimal(str(vat_rate))
                         / Decimal("100")
                     )
+                elif canon in _TABBY_METRIC_KEYS:
+                    # Tabby reverses only the 4.99% refundable fee leg.
+                    # The 2.00% non-refundable leg and SAR 1 fixed charge,
+                    # together with their VAT, remain after a full refund.
+                    gross_d = Decimal(str(gross))
+                    total_rate_d = Decimal(str(rate))
+                    refundable_rate_d = min(
+                        total_rate_d,
+                        Decimal(str(
+                            (PAYMENT_METHOD_REGISTRY.get(canon) or {}).get(
+                                "estimated_refundable_fee_rate", 4.99,
+                            ),
+                        )),
+                    )
+                    nonrefundable_rate_d = max(
+                        total_rate_d - refundable_rate_d,
+                        Decimal("0"),
+                    )
+                    nonrefundable_fee = Decimal(str(_round_sar(
+                        gross_d * nonrefundable_rate_d / Decimal("100"),
+                    )))
+                    fixed_fee_d = Decimal(str(fixed_fee))
+                    fee = float(nonrefundable_fee + fixed_fee_d)
+                    vat_rate_d = Decimal(str(vat_rate)) / Decimal("100")
+                    vat = _round_sar(
+                        Decimal(str(_round_sar_even(
+                            nonrefundable_fee * vat_rate_d,
+                        )))
+                        + Decimal(str(_round_sar_even(
+                            fixed_fee_d * vat_rate_d,
+                        )))
+                    )
                 else:
                     fee = 0.0
                     vat = 0.0
@@ -501,6 +538,47 @@ async def compute_metrics(
                     vat = _round_sar(
                         Decimal(str(fee)) * Decimal(str(vat_rate))
                         / Decimal("100")
+                    )
+                elif canon in _TABBY_METRIC_KEYS:
+                    # Four merchant reports (225 captures) prove Tabby
+                    # rounds its 4.99% refundable and 2.00% non-refundable
+                    # legs separately, then adds SAR 1.00.  VAT is rounded
+                    # half-even per displayed fee leg and summed.
+                    gross_d = Decimal(str(gross))
+                    total_rate_d = Decimal(str(rate))
+                    refundable_rate_d = min(
+                        total_rate_d,
+                        Decimal(str(
+                            (PAYMENT_METHOD_REGISTRY.get(canon) or {}).get(
+                                "estimated_refundable_fee_rate", 4.99,
+                            ),
+                        )),
+                    )
+                    nonrefundable_rate_d = max(
+                        total_rate_d - refundable_rate_d,
+                        Decimal("0"),
+                    )
+                    refundable_fee = Decimal(str(_round_sar(
+                        gross_d * refundable_rate_d / Decimal("100"),
+                    )))
+                    nonrefundable_fee = Decimal(str(_round_sar(
+                        gross_d * nonrefundable_rate_d / Decimal("100"),
+                    )))
+                    fixed_fee_d = Decimal(str(fixed_fee))
+                    fee = float(
+                        refundable_fee + nonrefundable_fee + fixed_fee_d
+                    )
+                    vat_rate_d = Decimal(str(vat_rate)) / Decimal("100")
+                    vat = _round_sar(
+                        Decimal(str(_round_sar_even(
+                            refundable_fee * vat_rate_d,
+                        )))
+                        + Decimal(str(_round_sar_even(
+                            nonrefundable_fee * vat_rate_d,
+                        )))
+                        + Decimal(str(_round_sar_even(
+                            fixed_fee_d * vat_rate_d,
+                        )))
                     )
                 else:
                     fee = round(gross * rate / 100 + fixed_fee, 4)

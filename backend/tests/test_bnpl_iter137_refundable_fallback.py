@@ -101,7 +101,7 @@ async def test_auto_mode_ignores_stale_doc_values():
             "user_id": "u1", "provider": "tabby",
             "mdr_percent": 0.05,                 # stale
             "fixed_fee_per_order": 1.0,
-            "settlement_fee_per_invoice": 5.0,    # stale
+            "settlement_fee_per_invoice": 6.0,    # former bundled default
             "refundable_commission_percent": 0.0499,
             "commission_mode": "auto",
         },
@@ -109,7 +109,7 @@ async def test_auto_mode_ignores_stale_doc_values():
     rates = await svc._merchant_fee_rates(db, "u1", "tabby")
     # Auto mode → canonical Tabby defaults win, not the stale doc
     assert rates["commission_pct"] == pytest.approx(6.99)
-    assert rates["settlement_fee_per_invoice"] == pytest.approx(6.0)
+    assert rates["settlement_fee_per_invoice"] == pytest.approx(0.0)
     assert rates["refundable_commission_pct"] == pytest.approx(4.99)
     assert rates["fee_source"] == "auto_canonical_defaults"
 
@@ -182,6 +182,8 @@ def test_full_invoice_math_matches_actual_bank_transfer():
 
     commission = round(sales_commission - refund_rebate, 2)
     commission_vat = round(sales_vat - refund_vat_rebate, 2)
+    # This older invoice explicitly carried a SAR 6 payout-fee row. It is an
+    # actual statement adjustment, not the default for every weekly report.
     settlement_fee = 6.0
     settlement_fee_vat = round(settlement_fee * vat, 2)
 

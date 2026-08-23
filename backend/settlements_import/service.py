@@ -173,6 +173,10 @@ async def _apply_entries(
         if e.get("event_type") == "salla_purchase":
             salla_purchase_orders.append(_normalize_order_number(e.get("order_number")))
             continue
+        # Provider-level payout fees have no order to update. They remain in
+        # settlement_entries / settlement_files for official reconciliation.
+        if e.get("event_type") == "settlement_fee":
+            continue
         key = _normalize_order_number(e.get("order_number"))
         if not key:
             continue
@@ -279,8 +283,8 @@ def _consolidate_rows(rows: list[dict]) -> dict:
 
     Convention:
         actual_gross_amount = max(positive gross seen)  ← original order
-        actual_payment_fee  = sum(positive fees)        ← only sale rows
-        actual_payment_vat  = sum(positive vat)
+        actual_payment_fee  = sum(sale fees + signed refund rebates)
+        actual_payment_vat  = sum(sale VAT + signed refund VAT rebates)
         actual_net_amount   = sum(all net amounts)      ← captured - refund
         actual_refund_amount        = sum(refund_full)
         actual_partial_refund_amount= sum(refund_partial)
