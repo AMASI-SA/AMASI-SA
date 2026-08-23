@@ -40,6 +40,14 @@ This operation ID is the stable handoff reference for every later session:
    workflow; not every cash movement is a generic transfer.
 7. The cutover date and signed opening-balance sheet are not yet approved.
    No production opening balance may be posted before that approval.
+8. Each provider has one **current settlement bank**. The accountant changes
+   that bank before recording a settlement; the change applies immediately to
+   the next unposted settlement and requires no date range. Posted settlements
+   keep their original bank.
+9. A newly observed payment method is attached to Salla only when the gateway
+   or settlement evidence identifies Salla as the settler. Unknown methods are
+   held as unclassified with an unapproved fee rule; the system must not guess
+   the provider or commission.
 
 ## Provider account model
 
@@ -63,6 +71,32 @@ Provider groups:
 | Emkan | Independent BNPL receivable and settlement account | Emkan invoice and settlement |
 | Each shipping company | COD receivable plus shipping/fee payable | Courier invoice and COD statement |
 
+### Courier COD commission tiers and netting
+
+- A courier may retain all or part of COD proceeds against shipping charges,
+  COD commission, commission VAT, and other evidenced adjustments. Therefore
+  a valid courier settlement may have **zero bank transfer**.
+- Never record only the net. Keep gross COD receivable, shipping cost,
+  commission before VAT, commission input VAT, other adjustments, and bank
+  transfer as separate legs of one balanced settlement.
+- COD commission tiers are calculated per delivered COD shipment amount, not
+  on the aggregate courier balance, unless the signed provider contract says
+  otherwise.
+- Each tier stores: lower bound/operator, upper bound/operator, percentage,
+  fixed fee, and VAT percentage. Shared boundaries must be unambiguous.
+- Any COD amount not covered by a configured tier is flagged for review and is
+  never silently assigned a zero commission.
+- Merchant-stated SMSA example awaiting invoice/contract confirmation:
+
+| Per-shipment COD amount | Commission before VAT | Boundary behavior |
+|---|---:|---|
+| SAR 50 to SAR 1,000 | 1% + SAR 2 | includes 50 and 1,000 |
+| Above SAR 1,000 to SAR 3,000 | 2% + SAR 5 | excludes 1,000; includes 3,000 |
+| Above SAR 3,000 | 3% | fixed component not stated; confirm from evidence |
+
+Commission VAT is calculated separately on the commission result for the
+matched tier. The official courier invoice/statement remains authoritative.
+
 ## Movement routing contract
 
 | Real event | Canonical operation | Accounting meaning |
@@ -70,7 +104,7 @@ Provider groups:
 | Bank/cash account A to bank/cash account B | Internal account transfer | Debit destination, credit source; no revenue or expense |
 | Salla pays the bank | Salla provider settlement | Debit bank, credit Salla receivable; fees/VAT use statement facts |
 | Tamara/Tabby/Emkan pays the bank | BNPL provider settlement | Debit bank, debit fees/VAT/adjustments, credit provider receivable |
-| Courier remits COD and withholds shipping/fees | Courier COD settlement | Debit bank and expenses, credit courier COD receivable |
+| Courier remits COD and/or withholds shipping/fees | Courier COD settlement | Debit bank (possibly zero), shipping/fee legs and fee input VAT; credit courier COD receivable |
 | Merchant pays courier invoice | Courier payment | Debit courier payable, credit bank/cash |
 | Bank charges a fee | General expense / bank fees | Debit bank-fee expense, credit bank |
 | Salary is earned after cutover | Salary accrual | Debit salary expense, credit salary payable |
@@ -141,6 +175,13 @@ Implementation references:
 - Added deep-link support to the unified movement screen for courier COD
   settlement.
 - Added a visible transfer-vs-settlement rule to the unified movement screen.
+- Added per-shipment courier COD commission tiers with explicit inclusive/
+  exclusive boundaries, percentage, fixed fee, and VAT rate.
+- Added uncovered-tier review protection and tier-aware courier ledgers.
+- Split courier COD commission from recoverable input VAT in the settlement
+  journal and financial position.
+- Kept courier settlement valid when the bank leg is zero because the courier
+  retained the whole COD amount against shipping/fees.
 - Added backend/frontend regression tests for provider grouping, invoice
   guards, routing, navigation, and absence of legacy balances.
 
