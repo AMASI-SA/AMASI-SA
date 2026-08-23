@@ -73,7 +73,7 @@ MAKE_ORDERS = [
     # إمكان → fee = 150 * 5% * 1.15 = 8.625 ; جندل = 19 * 1.15 = 21.85
     {"order_number": "DM-4", "order_date": "2026-01-16", "total_amount": 150.0,
      "payment_method": "إمكان", "shipping_company": "جندل", "order_status": "completed"},
-    # Apple Pay → fee = (250 * 2.5% + 1) * 1.15 = 8.3375 ; سمسا = 26.45
+    # Apple Pay → generic-card fallback = (250 * 2.2% + 1) * 1.15 = 7.475 ; سمسا = 26.45
     {"order_number": "DM-5", "order_date": "2026-01-17", "total_amount": 250.0,
      "payment_method": "Apple Pay", "shipping_company": "سمسا", "order_status": "completed"},
 ]
@@ -85,7 +85,7 @@ EXP_FEES_MADA = (100 * 0.01 + 1) * 1.15           # 2.30
 EXP_FEES_TAMARA = (200 * 0.0699) * 1.15            # 16.077
 EXP_FEES_TABBY = (300 * 0.05) * 1.15               # 17.25
 EXP_FEES_EMKAN = (150 * 0.05) * 1.15               # 8.625
-EXP_FEES_APPLEPAY = (250 * 0.025 + 1) * 1.15       # 8.3375
+EXP_FEES_APPLEPAY = (250 * 0.022 + 1) * 1.15       # 7.475
 EXP_TOTAL_FEES = (
     EXP_FEES_MADA + EXP_FEES_TAMARA + EXP_FEES_TABBY + EXP_FEES_EMKAN + EXP_FEES_APPLEPAY
 )

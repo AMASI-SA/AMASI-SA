@@ -923,6 +923,7 @@ def orders_to_parsed(orders: list[dict]) -> dict:
     shippings: dict[str, dict] = {}
     sources: dict[str, dict] = {}
     sample: list[dict] = []
+    individual: list[dict] = []
 
     for o in orders:
         amount = float(o.get("total_amount") or 0)
@@ -947,6 +948,15 @@ def orders_to_parsed(orders: list[dict]) -> dict:
         sr = sources.setdefault(src, {"name": src, "orders_count": 0, "total_sales": 0.0})
         sr["orders_count"] += 1
         sr["total_sales"] += amount
+
+        # Preserve the minimum per-order inputs needed for processor-accurate
+        # fee rounding.  Salla rounds the commission and its VAT per order;
+        # aggregating a rail first can drift by several halalas.
+        individual.append({
+            "order_number": str(o.get("order_number") or ""),
+            "total_amount": amount,
+            "payment_method": pay,
+        })
 
         if len(sample) < 10:
             sample.append({
@@ -973,5 +983,6 @@ def orders_to_parsed(orders: list[dict]) -> dict:
             for v in sorted(sources.values(), key=lambda x: -x["orders_count"])
         ],
         "orders_sample": sample,
+        "orders_individual": individual,
         "detected_columns": {"unified": True},
     }

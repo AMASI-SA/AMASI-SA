@@ -38,7 +38,7 @@ const DEVICE_LABELS = { mobile: "جوال", desktop: "كمبيوتر", tablet: "
 
 const PAYMENT_LABELS = {
     mada: "مدى", credit_card: "البطاقة الائتمانية", card: "البطاقة الائتمانية",
-    apple_pay: "Apple Pay", stc_pay: "STC Pay", tabby: "تابي",
+    apple_pay: "Apple Pay", google_pay: "Google Pay", stc_pay: "STC Pay", tabby: "تابي",
     tabby_installment: "تابي", tamara: "تمارا", tamara_installment: "تمارا",
     emkan: "إمكان", bank: "التحويل البنكي", bank_transfer: "التحويل البنكي",
     transfer: "التحويل البنكي", cod: "الدفع عند الاستلام",

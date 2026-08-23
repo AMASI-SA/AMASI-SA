@@ -41,7 +41,7 @@ def test_normalize_classifies_every_spelling():
     from payment_methods import normalize_payment_method as n
 
     # Salla rollups
-    for raw in ["مدى", "Mada", "Apple Pay", "ابل باي", "STC Pay", "Visa",
+    for raw in ["مدى", "Mada", "Apple Pay", "ابل باي", "Google Pay", "جوجل باي", "STC Pay", "Visa",
                 "MasterCard", "ماستر كارد", "بطاقة ائتمانية",
                 "البطاقة الإئتمانية", "بطاقة بنكية", "محفظة سلة", "سلة"]:
         sub_key, _, parent = n(raw)
@@ -88,7 +88,7 @@ def test_resolve_account_key_refuses_unknown():
             f"{bad!r} should be unclassified"
 
     # Accepted — every result must be in the canonical set.
-    for raw in ["مدى", "Apple Pay", "بطاقة ائتمانية", "تابي", "تمارا",
+    for raw in ["مدى", "Apple Pay", "Google Pay", "بطاقة ائتمانية", "تابي", "تمارا",
                 "إمكان", "تحويل بنكي", "حوالة بنكيةمصرف الراجحي",
                 "الدفع عند الاستلام", "COD"]:
         key, display = resolve_account_key(raw)
