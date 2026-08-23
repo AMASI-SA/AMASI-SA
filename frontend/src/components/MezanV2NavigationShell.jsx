@@ -106,6 +106,7 @@ export const MEZAN_V2_NAV_SECTIONS = [
         items: [
             { to: "/integrations-v2", label: "كل التطبيقات والتكاملات", exactSearch: true },
             { to: "/integrations-v2?workspace=accounts", label: "الحسابات الإعلانية" },
+            { to: "/integrations-v2?workspace=financial", label: "حسابات الشحن والدفع" },
         ],
     },
     {
