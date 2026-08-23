@@ -8,7 +8,7 @@ from fastapi import HTTPException
 
 from store_delivery_customer_instruction_routes import _require_customer_service
 from store_delivery_driver_app_routes import _require_store_driver
-from store_delivery_driver_routes import DRIVER_ACCOUNT_ROLE, DriverAccountCreate
+from store_delivery_driver_routes import DRIVER_ACCOUNT_ROLE, DriverAccountCreate, DriverCreate
 
 SERVER_SOURCE = (Path(__file__).resolve().parents[1] / "server.py").read_text(encoding="utf-8")
 
@@ -32,14 +32,29 @@ def test_driver_app_accepts_only_store_driver_role():
     assert _require_store_driver(user) is user
 
 
-def test_driver_password_minimum_is_enforced():
-    with pytest.raises(Exception):
-        DriverAccountCreate(email="driver@example.com", password="short")
+def test_driver_pin_requires_exactly_six_ascii_digits():
+    for invalid in ("short", "12345", "1234567", "abcdef", "١٢٣٤٥٦"):
+        with pytest.raises(Exception):
+            DriverAccountCreate(email="driver@example.com", password=invalid)
 
-    payload = DriverAccountCreate(
-        email="driver@example.com",
-        password="DeliveryPass123!",
-    )
+    payload = DriverAccountCreate(email="driver@example.com", password="123456")
+    assert str(payload.email) == "driver@example.com"
+    assert payload.password == "123456"
+
+
+def test_driver_creation_requires_email_and_pin_together():
+    base = {
+        "name": "موصل",
+        "phone": "0500000000",
+        "city": "الرياض",
+        "delivery_fee": 20,
+    }
+    with pytest.raises(Exception):
+        DriverCreate(**base, email="driver@example.com")
+    with pytest.raises(Exception):
+        DriverCreate(**base, password="123456")
+
+    payload = DriverCreate(**base, email="driver@example.com", password="123456")
     assert str(payload.email) == "driver@example.com"
 
 
