@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 from pymongo.errors import DuplicateKeyError
 
 from auth import hash_password, validate_bcrypt_secret
@@ -31,11 +31,18 @@ STORE_DRIVER_EVENTS = "store_driver_events"
 STORE_DELIVERY_ASSIGNMENTS = "store_delivery_assignments"
 MANAGE_PERMISSION = "store_delivery.manage"
 DRIVER_ACCOUNT_ROLE = "store_driver"
-MIN_DRIVER_PASSWORD_LENGTH = 12
+DRIVER_PIN_LENGTH = 6
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _validate_driver_pin(value: str) -> str:
+    validate_bcrypt_secret(value)
+    if len(value) != DRIVER_PIN_LENGTH or not value.isascii() or not value.isdigit():
+        raise ValueError("driver PIN must contain exactly 6 ASCII digits")
+    return value
 
 
 def _merchant_user_id(user: dict[str, Any]) -> str:
@@ -87,6 +94,19 @@ class DriverCreate(BaseModel):
     status: str = DRIVER_STATUS_ACTIVE
     coverage_mode: str = COVERAGE_MODE_CITY
     notes: str = Field(default="", max_length=1000)
+    email: EmailStr | None = None
+    password: str | None = Field(default=None, min_length=DRIVER_PIN_LENGTH, max_length=DRIVER_PIN_LENGTH)
+
+    @field_validator("password")
+    @classmethod
+    def valid_password(cls, value: str | None) -> str | None:
+        return None if value is None else _validate_driver_pin(value)
+
+    @model_validator(mode="after")
+    def login_fields_together(self) -> "DriverCreate":
+        if (self.email is None) != (self.password is None):
+            raise ValueError("email and password must be provided together")
+        return self
 
     @field_validator("status")
     @classmethod
@@ -132,14 +152,14 @@ class DriverUpdate(BaseModel):
 class DriverAccountCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     email: EmailStr
-    password: str = Field(min_length=MIN_DRIVER_PASSWORD_LENGTH, max_length=128)
-    _password_utf8_limit = field_validator("password")(validate_bcrypt_secret)
+    password: str = Field(min_length=DRIVER_PIN_LENGTH, max_length=DRIVER_PIN_LENGTH)
+    _valid_pin = field_validator("password")(_validate_driver_pin)
 
 
 class DriverPasswordReset(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    new_password: str = Field(min_length=MIN_DRIVER_PASSWORD_LENGTH, max_length=128)
-    _password_utf8_limit = field_validator("new_password")(validate_bcrypt_secret)
+    new_password: str = Field(min_length=DRIVER_PIN_LENGTH, max_length=DRIVER_PIN_LENGTH)
+    _valid_pin = field_validator("new_password")(_validate_driver_pin)
 
 
 async def ensure_store_driver_indexes(db: Any) -> None:
@@ -211,6 +231,12 @@ def make_store_delivery_driver_router(db: Any, current_user: Callable[..., Any])
         actor = _require_manager(user)
         user_id = _merchant_user_id(actor)
         await ensure_store_driver_indexes(db)
+        account_email = str(payload.email).strip().lower() if payload.email is not None else ""
+        account_id = str(uuid.uuid4()) if account_email else None
+        if account_email:
+            _require_account_manager(actor)
+            if await db.users.find_one({"email": account_email}, {"_id": 1}):
+                raise HTTPException(status_code=409, detail={"code": "store_driver_account_email_exists"})
         try:
             fee = float(money(payload.delivery_fee))
         except StoreDeliveryRuleError as exc:
@@ -222,16 +248,32 @@ def make_store_delivery_driver_router(db: Any, current_user: Callable[..., Any])
             "city_key": normalize_text(payload.city).casefold(), "region": normalize_text(payload.region),
             "district": normalize_text(payload.district), "street": normalize_text(payload.street),
             "coverage_mode": COVERAGE_MODE_CITY, "delivery_fee": fee, "status": payload.status,
-            "notes": normalize_text(payload.notes), "account_user_id": None,
-            "account_role": DRIVER_ACCOUNT_ROLE, "version": 1, "created_at": now, "updated_at": now,
+            "notes": normalize_text(payload.notes), "account_user_id": account_id,
+            "account_email": account_email or None, "account_role": DRIVER_ACCOUNT_ROLE,
+            "version": 1, "created_at": now, "updated_at": now,
             "created_by": normalize_text(actor.get("id")),
         }
+        if account_id:
+            account = {
+                "id": account_id, "name": doc["name"] or "موصل المتجر", "email": account_email,
+                "password_hash": hash_password(payload.password or ""), "role": DRIVER_ACCOUNT_ROLE,
+                "extra_permissions": [], "denied_permissions": [], "created_at": now,
+                "created_by": user_id, "linked_driver_id": driver_id, "account_type": DRIVER_ACCOUNT_ROLE,
+                "disabled": payload.status != DRIVER_STATUS_ACTIVE,
+                "is_active": payload.status == DRIVER_STATUS_ACTIVE,
+            }
+            try:
+                await db.users.insert_one(account)
+            except DuplicateKeyError as exc:
+                raise HTTPException(status_code=409, detail={"code": "store_driver_account_email_exists"}) from exc
         try:
             await db[STORE_DRIVERS].insert_one(doc)
         except DuplicateKeyError as exc:
+            if account_id:
+                await db.users.delete_one({"id": account_id, "role": DRIVER_ACCOUNT_ROLE})
             raise HTTPException(status_code=409, detail={"code": "store_driver_phone_exists"}) from exc
         await _event(db, user_id=user_id, driver_id=driver_id, event_type="store_driver_created",
-                     actor_id=normalize_text(actor.get("id")), payload={"city": doc["city"], "delivery_fee": fee})
+                     actor_id=normalize_text(actor.get("id")), payload={"city": doc["city"], "delivery_fee": fee, "account_created": bool(account_id), "email": account_email or None})
         return _public_driver(doc)
 
     @router.get("")
@@ -320,7 +362,8 @@ def make_store_delivery_driver_router(db: Any, current_user: Callable[..., Any])
         await db.users.insert_one(account)
         linked = await db[STORE_DRIVERS].update_one(
             {"user_id": user_id, "id": driver_id, "account_user_id": None},
-            {"$set": {"account_user_id": account_id, "account_role": DRIVER_ACCOUNT_ROLE,
+            {"$set": {"account_user_id": account_id, "account_email": email,
+                      "account_role": DRIVER_ACCOUNT_ROLE,
                       "updated_at": now, "updated_by": normalize_text(actor.get("id"))}},
         )
         if linked.modified_count != 1:
@@ -358,7 +401,8 @@ def make_store_delivery_driver_router(db: Any, current_user: Callable[..., Any])
         )
         await db[STORE_DRIVERS].update_one(
             {"user_id": user_id, "id": driver_id},
-            {"$set": {"account_user_id": None, "updated_at": now, "updated_by": normalize_text(actor.get("id"))}},
+            {"$set": {"account_user_id": None, "account_email": None,
+                      "updated_at": now, "updated_by": normalize_text(actor.get("id"))}},
         )
         await _event(db, user_id=user_id, driver_id=driver_id, event_type="store_driver_account_unlinked",
                      actor_id=normalize_text(actor.get("id")), payload={"account_user_id": account_id})
