@@ -120,6 +120,14 @@ def attach_snapchat_native_tracking_routes(
     install_snapchat_tracking_error_detail_persistence()
     install_snapchat_native_tracking_actions()
 
+    # The new reporting plane is attached beside the existing native routes.
+    # It remains shadow-only and does not change any current Dashboard reader.
+    from snapchat_v2.routes import attach_snapchat_v2_routes
+    from snapchat_v2.scheduler import attach_shadow_scheduler
+
+    attach_snapchat_v2_routes(router, db, current_user, require_owner)
+    attach_shadow_scheduler(router, db)
+
     @router.get(
         f"/{SNAPCHAT_PROVIDER_ID}/order-source-audit",
         name="get_snapchat_order_source_audit",

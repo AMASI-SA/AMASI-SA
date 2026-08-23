@@ -1,0 +1,62 @@
+name: Snapchat Reporting V2 Shadow
+
+on:
+  pull_request:
+    branches:
+      - main
+      - hotfix/prod-snap-meta-final
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+    paths:
+      - "backend/snapchat_v2/**"
+      - "backend/snapchat_v2_test_bootstrap.py"
+      - "backend/integrations_control_center/snapchat_native_tracking_routes.py"
+      - "backend/tests/test_snapchat_reporting_v2_*.py"
+      - ".github/workflows/snapchat-reporting-v2.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reporting-v2-tests:
+    name: Snapchat reporting V2 foundation
+    runs-on: ubuntu-latest
+    env:
+      JWT_SECRET: snapchat-reporting-v2-test-secret
+      SNAPCHAT_TOKEN_ENC_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install targeted dependencies
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1
+          httpx==0.28.1
+          pydantic==2.13.4
+          pytest==9.0.3
+          pytest-asyncio
+          cryptography==48.0.0
+          openpyxl==3.1.5
+      - name: Compile reporting V2
+        run: |
+          python -m compileall -q snapchat_v2
+          python -m py_compile snapchat_v2_test_bootstrap.py
+          python -m py_compile integrations_control_center/snapchat_native_tracking_routes.py
+          python -m py_compile tests/test_snapchat_reporting_v2_*.py
+      - name: Run reporting V2 tests
+        run: >-
+          python -m pytest
+          -p snapchat_v2_test_bootstrap
+          tests/test_snapchat_reporting_v2_*.py
+          -q
+          --tb=short
