@@ -179,6 +179,45 @@ def build_provider_catalog(
             if raw_cod_fee_percent <= 1
             else raw_cod_fee_percent
         )
+        cod_fee_tiers = []
+        for index, tier in enumerate(row.get("cod_fee_tiers") or []):
+            tier_percent = float(tier.get("commission_percent") or 0)
+            if tier_percent <= 1:
+                tier_percent *= 100
+            cod_fee_tiers.append({
+                "code": f"cod_tier_{index + 1}",
+                "name": "شريحة عمولة التحصيل عند الاستلام",
+                "calculation_basis": "per_delivered_cod_shipment_amount",
+                "min_amount": round(float(tier.get("min_amount") or 0), 2),
+                "max_amount": (
+                    round(float(tier["max_amount"]), 2)
+                    if tier.get("max_amount") is not None else None
+                ),
+                "min_inclusive": tier.get("min_inclusive", True) is not False,
+                "max_inclusive": tier.get("max_inclusive", True) is not False,
+                "commission_percent": round(tier_percent, 4),
+                "fixed_fee": round(float(tier.get("fixed_fee") or 0), 2),
+                "vat_percent": round(float(tier.get("vat_percent") or 0), 4),
+                "source": "settings.shipping_companies.cod_fee_tiers",
+                "authority": "estimate_until_provider_invoice_or_statement",
+            })
+        fee_rules = cod_fee_tiers or [{
+            "code": "shipping_and_cod",
+            "name": "تكلفة الشحن ورسوم التحصيل",
+            "calculation_basis": "per_delivered_cod_shipment_amount",
+            "cost_per_order": round(float(row.get("cost_per_order") or 0), 2),
+            "cod_fee_percent": round(cod_fee_percent, 4),
+            "cod_fee_fixed_per_order": round(
+                float(row.get("cod_fee_fixed_per_order") or 0), 2,
+            ),
+            "vat_percent": round(float(
+                row.get("cod_fee_vat_percent")
+                if row.get("cod_fee_vat_percent") is not None
+                else (row.get("vat_percent") or 0)
+            ), 4),
+            "source": "settings.shipping_companies",
+            "authority": "estimate_until_provider_invoice_or_statement",
+        }]
         apps.append({
             "provider_id": provider_id,
             "provider_code": key,
@@ -187,18 +226,10 @@ def build_provider_catalog(
             "currency": "SAR",
             "configured": True,
             "payment_mode": "deferred" if row.get("is_deferred") else "prepaid",
-            "fee_rules": [{
-                "code": "shipping_and_cod",
-                "name": "تكلفة الشحن ورسوم التحصيل",
-                "cost_per_order": round(float(row.get("cost_per_order") or 0), 2),
-                "cod_fee_percent": round(cod_fee_percent, 4),
-                "cod_fee_fixed_per_order": round(
-                    float(row.get("cod_fee_fixed_per_order") or 0), 2,
-                ),
-                "vat_percent": round(float(row.get("vat_percent") or 0), 4),
-                "source": "settings.shipping_companies",
-                "authority": "estimate_until_provider_invoice_or_statement",
-            }],
+            "fee_rules": fee_rules,
+            "cod_fee_rule_mode": "tiered" if cod_fee_tiers else "flat",
+            "settlement_netting_supported": True,
+            "bank_transfer_optional": True,
             "fee_rule_authority": "estimated",
             "actual_source_priority": [
                 "provider_tax_invoice",

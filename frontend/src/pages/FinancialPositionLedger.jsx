@@ -17,6 +17,7 @@ const ASSET_LABELS = {
     external_receivable: "مستحقات من أشخاص خارجيين",
     courier_cod_receivable: "COD لم يُحوَّل من شركات الشحن",
     ad_account_prepaid: "أرصدة مدفوعة مقدماً للحسابات الإعلانية",
+    input_vat: "ضريبة مدخلات قابلة للاسترداد",
 };
 
 const LIABILITY_LABELS = {
