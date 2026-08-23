@@ -660,6 +660,7 @@ def build_supplier_receiving_invoice(
             "line_number": line_number,
             "product_id": _text(first.get("product_id")) or None,
             "product_name": _text(first.get("product_name")) or "منتج",
+            "selected_image_url": _text(first.get("selected_image_url")) or None,
             "sku": _text(first.get("sku")) or None,
             "variant_id": _text(first.get("variant_id")) or None,
             "product_charge_eligible": product_charge_eligible,
