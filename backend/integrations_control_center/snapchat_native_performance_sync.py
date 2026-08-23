@@ -83,6 +83,7 @@ CONVERSION_SOURCE_TYPES = "total"
 ACTION_REPORT_TIME = "conversion"
 SWIPE_ATTRIBUTION_WINDOW = "28_DAY"
 VIEW_ATTRIBUTION_WINDOW = "1_DAY"
+SNAPCHAT_HOUR_MAX_WINDOW_DAYS = 7
 
 
 def _computed(metrics: dict[str, Any]) -> dict[str, float | None]:
@@ -210,6 +211,28 @@ def riyadh_business_window(
     return start, end
 
 
+def riyadh_hourly_windows(
+    start_date: date,
+    end_date: date,
+) -> list[tuple[datetime, datetime]]:
+    """Split an inclusive Riyadh date range into valid Snapchat HOUR windows.
+
+    Snapchat requires HOUR report boundaries to be no more than seven days
+    apart.  Adjacent half-open windows preserve every hour exactly once.
+    """
+    start, end = riyadh_business_window(start_date, end_date)
+    windows: list[tuple[datetime, datetime]] = []
+    cursor = start
+    while cursor < end:
+        next_end = min(
+            cursor + timedelta(days=SNAPCHAT_HOUR_MAX_WINDOW_DAYS),
+            end,
+        )
+        windows.append((cursor, next_end))
+        cursor = next_end
+    return windows
+
+
 def riyadh_date_for_point(value: Any) -> str | None:
     point = _parse_datetime(value)
     if point is None:
@@ -322,86 +345,90 @@ async def sync_snapchat_performance(
     *, start_date: date, end_date: date,
 ) -> tuple[int, list[dict[str, str]]]:
     account_id = account["ad_account_id"]
-    start, end = riyadh_business_window(start_date, end_date)
     headers = {
         "Authorization": f"Bearer {access_token}",
         "Accept": "application/json",
     }
-    url = f"{SNAPCHAT_API_BASE}/adaccounts/{account_id}/stats"
-    params: dict[str, Any] | None = {
-        "start_time": start.isoformat(timespec="seconds"),
-        "end_time": end.isoformat(timespec="seconds"),
-        "granularity": "HOUR",
-        "breakdown": "campaign",
-        "fields": ",".join(STAT_FIELDS),
-        "limit": 200,
-        "omit_empty": "false",
-        "conversion_source_types": CONVERSION_SOURCE_TYPES,
-        "swipe_up_attribution_window": SWIPE_ATTRIBUTION_WINDOW,
-        "view_attribution_window": VIEW_ATTRIBUTION_WINDOW,
-        "action_report_time": ACTION_REPORT_TIME,
-    }
     rows: list[dict[str, Any]] = []
     errors: list[dict[str, str]] = []
-    for _ in range(MAX_PAGES):
-        payload = await context.get_json(
-            client, url, headers=headers, params=params
-        )
-        wrapped_stats = payload.get("timeseries_stats") or []
-        if not isinstance(wrapped_stats, list):
-            raise SnapchatNativeSyncError(
-                "snapchat_stats_payload_invalid",
-                "Snapchat returned invalid performance data.",
-                status_code=502,
-                retryable=True,
+    endpoint = f"{SNAPCHAT_API_BASE}/adaccounts/{account_id}/stats"
+    for window_start, window_end in riyadh_hourly_windows(
+        start_date,
+        end_date,
+    ):
+        url = endpoint
+        params: dict[str, Any] | None = {
+            "start_time": window_start.isoformat(timespec="seconds"),
+            "end_time": window_end.isoformat(timespec="seconds"),
+            "granularity": "HOUR",
+            "breakdown": "campaign",
+            "fields": ",".join(STAT_FIELDS),
+            "limit": 200,
+            "omit_empty": "false",
+            "conversion_source_types": CONVERSION_SOURCE_TYPES,
+            "swipe_up_attribution_window": SWIPE_ATTRIBUTION_WINDOW,
+            "view_attribution_window": VIEW_ATTRIBUTION_WINDOW,
+            "action_report_time": ACTION_REPORT_TIME,
+        }
+        for _ in range(MAX_PAGES):
+            payload = await context.get_json(
+                client, url, headers=headers, params=params
             )
-        for wrapped in wrapped_stats:
-            if not isinstance(wrapped, dict):
-                continue
-            status = str(
-                wrapped.get("sub_request_status") or "SUCCESS"
-            ).upper()
-            if "FAIL" in status or "ERROR" in status:
-                errors.append({"kind": "stats", "error": status[:80]})
-                continue
-            stat = wrapped.get("timeseries_stat", wrapped)
-            if not isinstance(stat, dict):
-                continue
-            entities: list[dict[str, Any]] = []
-            breakdown = stat.get("breakdown_stats")
-            if (
-                isinstance(breakdown, dict)
-                and isinstance(breakdown.get("campaign"), list)
-            ):
-                entities.extend(
-                    item
-                    for item in breakdown["campaign"]
-                    if isinstance(item, dict)
+            wrapped_stats = payload.get("timeseries_stats") or []
+            if not isinstance(wrapped_stats, list):
+                raise SnapchatNativeSyncError(
+                    "snapchat_stats_payload_invalid",
+                    "Snapchat returned invalid performance data.",
+                    status_code=502,
+                    retryable=True,
                 )
-            if not entities and stat.get("id"):
-                entities = [stat]
-            for entity in entities:
-                external_id = str(entity.get("id") or "").strip()
-                points = entity.get("timeseries")
-                if not external_id or not isinstance(points, list):
+            for wrapped in wrapped_stats:
+                if not isinstance(wrapped, dict):
                     continue
-                for point in points:
-                    if (
-                        isinstance(point, dict)
-                        and isinstance(point.get("stats"), dict)
-                    ):
-                        rows.append({
-                            "external_id": external_id,
-                            "start_time": point.get("start_time"),
-                            "end_time": point.get("end_time"),
-                            "metrics": point["stats"],
-                        })
-        next_url = _safe_next_url(
-            (payload.get("paging") or {}).get("next_link")
-        )
-        if not next_url:
-            break
-        url, params = next_url, None
+                status = str(
+                    wrapped.get("sub_request_status") or "SUCCESS"
+                ).upper()
+                if "FAIL" in status or "ERROR" in status:
+                    errors.append({"kind": "stats", "error": status[:80]})
+                    continue
+                stat = wrapped.get("timeseries_stat", wrapped)
+                if not isinstance(stat, dict):
+                    continue
+                entities: list[dict[str, Any]] = []
+                breakdown = stat.get("breakdown_stats")
+                if (
+                    isinstance(breakdown, dict)
+                    and isinstance(breakdown.get("campaign"), list)
+                ):
+                    entities.extend(
+                        item
+                        for item in breakdown["campaign"]
+                        if isinstance(item, dict)
+                    )
+                if not entities and stat.get("id"):
+                    entities = [stat]
+                for entity in entities:
+                    external_id = str(entity.get("id") or "").strip()
+                    points = entity.get("timeseries")
+                    if not external_id or not isinstance(points, list):
+                        continue
+                    for point in points:
+                        if (
+                            isinstance(point, dict)
+                            and isinstance(point.get("stats"), dict)
+                        ):
+                            rows.append({
+                                "external_id": external_id,
+                                "start_time": point.get("start_time"),
+                                "end_time": point.get("end_time"),
+                                "metrics": point["stats"],
+                            })
+            next_url = _safe_next_url(
+                (payload.get("paging") or {}).get("next_link")
+            )
+            if not next_url:
+                break
+            url, params = next_url, None
 
     campaign_daily: dict[tuple[str, str], dict[str, Any]] = {}
     for row in rows:
@@ -474,11 +501,13 @@ __all__ = [
     "NON_ADDITIVE_TOTAL_FIELDS",
     "STAT_FIELDS",
     "TOTAL_STAT_FIELDS",
+    "SNAPCHAT_HOUR_MAX_WINDOW_DAYS",
     "_funnel_metrics",
     "_metric_provenance",
     "SWIPE_ATTRIBUTION_WINDOW",
     "VIEW_ATTRIBUTION_WINDOW",
     "riyadh_business_window",
+    "riyadh_hourly_windows",
     "riyadh_date_for_point",
     "sync_snapchat_performance",
 ]
