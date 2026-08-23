@@ -86,13 +86,6 @@ def _amasi_logo() -> ImageReader | None:
         return None
 
 
-def _short_text(value: Any, limit: int = 52) -> str:
-    text = _text(value)
-    if len(text) <= limit:
-        return text
-    return f"{text[: max(1, limit - 1)].rstrip()}…"
-
-
 def _product_image(value: Any) -> ImageReader | None:
     url = _text(value)
     try:
