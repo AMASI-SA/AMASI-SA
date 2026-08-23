@@ -648,6 +648,36 @@ async def test_snapchat_cadence_gate_allows_when_last_run_older_than_10m():
 
 
 @pytest.mark.asyncio
+async def test_snapchat_cadence_gate_caps_configured_interval_at_10m(
+    monkeypatch,
+):
+    from integrations_control_center import ads_auto_sync_scheduler as scheduler
+
+    monkeypatch.setenv(scheduler.SNAPCHAT_MIN_INTERVAL_SECONDS_ENV, "3600")
+    older = (NOW - timedelta(minutes=15)).isoformat()
+    db = FakeDB(
+        {
+            scheduler.RUNS_COLLECTION: [
+                {
+                    "user_id": "owner-1",
+                    "provider": SNAPCHAT_PROVIDER_ID,
+                    "run_type": scheduler.SNAP_RUN_TYPE,
+                    "status": "complete",
+                    "started_at": older,
+                    "created_at": older,
+                }
+            ]
+        }
+    )
+
+    ready = await scheduler._snapchat_cadence_ready(
+        db, user_id="owner-1", now=NOW
+    )
+
+    assert ready is True
+
+
+@pytest.mark.asyncio
 async def test_snapchat_cadence_gate_ignores_far_future_run():
     from integrations_control_center import ads_auto_sync_scheduler as scheduler
 

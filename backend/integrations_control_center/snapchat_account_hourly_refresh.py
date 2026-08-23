@@ -846,6 +846,9 @@ async def refresh_snapchat_account_hours(
             account_id=account_id,
             request_start=request["provider_start"],
             request_end=request["provider_end"],
+            action_report_time=ACTION_REPORT_TIME,
+            swipe_attribution_window=SWIPE_ATTRIBUTION_WINDOW,
+            view_attribution_window=VIEW_ATTRIBUTION_WINDOW,
         )
         rows, errors = fetched
     except SnapchatNativeSyncError as exc:
@@ -872,6 +875,9 @@ async def refresh_snapchat_account_hours(
             account_id=account_id,
             request_start=request["provider_start"],
             request_end=request["provider_end"],
+            action_report_time=ACTION_REPORT_TIME,
+            swipe_attribution_window=SWIPE_ATTRIBUTION_WINDOW,
+            view_attribution_window=VIEW_ATTRIBUTION_WINDOW,
         )
         rows, errors = fetched
 

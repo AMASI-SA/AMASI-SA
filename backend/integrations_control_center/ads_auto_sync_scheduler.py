@@ -83,14 +83,14 @@ MIN_INTERVAL_SECONDS = 300
 MAX_INTERVAL_SECONDS = 3600
 # Snapchat's Ads API is more rate-limited than Meta/Google, and its
 # analytics_refresh does per-hour fetches per selected account.  Enforce a
-# provider-scoped minimum cadence of 10 minutes even when the global
+# provider-scoped cadence of at most 10 minutes even when the global
 # scheduler tick is faster – the distributed lease is the real guarantee
 # against concurrent runs across replicas, but the cadence gate prevents
 # needless attempts.
 SNAPCHAT_MIN_INTERVAL_SECONDS_ENV = "MEZAN_ADS_AUTO_SYNC_SNAPCHAT_INTERVAL_SECONDS"
 SNAPCHAT_MIN_INTERVAL_SECONDS_DEFAULT = 600
 SNAPCHAT_MIN_INTERVAL_SECONDS_FLOOR = 300
-SNAPCHAT_MIN_INTERVAL_SECONDS_CEILING = 3600
+SNAPCHAT_MIN_INTERVAL_SECONDS_CEILING = 600
 SNAPCHAT_ACCOUNT_REFRESH_TIMEOUT_SECONDS_ENV = (
     "MEZAN_ADS_AUTO_SYNC_SNAPCHAT_ACCOUNT_TIMEOUT_SECONDS"
 )
