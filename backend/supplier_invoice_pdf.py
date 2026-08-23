@@ -78,7 +78,7 @@ def _date(value: Any) -> str:
 
 
 def _amasi_logo() -> ImageReader | None:
-    path = Path(__file__).resolve().parent / "assets" / "amasi_qr_logo.b64"
+    path = Path(__file__).resolve().parent / "assets" / "amasi_logo_transparent.b64"
     try:
         raw = base64.b64decode(path.read_text(encoding="ascii").strip(), validate=True)
         return ImageReader(io.BytesIO(raw))
