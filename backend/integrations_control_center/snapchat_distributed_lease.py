@@ -41,6 +41,24 @@ def _iso(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat(timespec="seconds")
 
 
+def _timestamp(value: Any) -> datetime | None:
+    """Normalize legacy ISO strings and BSON datetimes for lease comparisons."""
+
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
 def _worker_id() -> str:
     return f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:10]}"
 
@@ -110,11 +128,6 @@ async def acquire_snapchat_lease(
     previous_owner = None
     filter_ors: list[dict[str, Any]] = [
         {"user_id": user_id, "provider": SNAPCHAT_PROVIDER_ID, "released": True},
-        {
-            "user_id": user_id,
-            "provider": SNAPCHAT_PROVIDER_ID,
-            "lease_until": {"$lt": _iso(current)},
-        },
     ]
     if existing is None:
         upsert = True
@@ -130,6 +143,27 @@ async def acquire_snapchat_lease(
         upsert = False
         set_on_insert = {}
         previous_owner = str(existing.get("owner_token") or "").strip() or None
+        observed_until = _timestamp(existing.get("lease_until"))
+        observed_acquired = _timestamp(existing.get("acquired_at"))
+        hard_deadline = current - MAX_LEASE_TTL
+        lease_is_expired = observed_until is None or observed_until < current
+        lease_is_hard_stale = (
+            observed_acquired is not None and observed_acquired < hard_deadline
+        )
+        if lease_is_expired or lease_is_hard_stale:
+            # Compare-and-swap against the exact document we observed. This makes
+            # legacy string/BSON/null leases reclaimable without stealing a lease
+            # that another worker renewed between find_one and find_one_and_update.
+            observed_filter: dict[str, Any] = {
+                "user_id": user_id,
+                "provider": SNAPCHAT_PROVIDER_ID,
+            }
+            for field in ("owner_token", "lease_until", "acquired_at", "released"):
+                if field in existing:
+                    observed_filter[field] = existing[field]
+                else:
+                    observed_filter[field] = {"$exists": False}
+            filter_ors.append(observed_filter)
 
     result = await collection.find_one_and_update(
         {"$or": filter_ors},
