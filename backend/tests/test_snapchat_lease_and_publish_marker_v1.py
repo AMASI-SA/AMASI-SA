@@ -344,6 +344,25 @@ async def test_lease_reclaims_legacy_far_future_without_acquired_at():
 
 
 @pytest.mark.asyncio
+async def test_lease_reclaims_far_future_acquired_at_and_until():
+    db = FakeDB()
+    first = await acquire_snapchat_lease(db, user_id="owner-1", now=NOW)
+    assert first is not None
+    row = db[lease_module.LEASE_COLLECTION].rows[0]
+    row["acquired_at"] = lease_module._iso(
+        NOW + lease_module.MAX_LEASE_TTL + timedelta(seconds=1)
+    )
+    row["lease_until"] = lease_module._iso(
+        NOW + (lease_module.MAX_LEASE_TTL * 2)
+    )
+
+    second = await acquire_snapchat_lease(db, user_id="owner-1", now=NOW)
+
+    assert second is not None
+    assert second.owner_token != first.owner_token
+
+
+@pytest.mark.asyncio
 async def test_lease_preserves_legacy_current_window_without_acquired_at():
     db = FakeDB()
     first = await acquire_snapchat_lease(db, user_id="owner-1", now=NOW)
