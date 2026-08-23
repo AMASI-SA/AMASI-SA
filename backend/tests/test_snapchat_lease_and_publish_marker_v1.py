@@ -328,6 +328,33 @@ async def test_lease_reclaims_after_absolute_max_age():
 
 
 # --------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_lease_reclaims_legacy_far_future_without_acquired_at():
+    db = FakeDB()
+    first = await acquire_snapchat_lease(db, user_id="owner-1", now=NOW)
+    assert first is not None
+    row = db[lease_module.LEASE_COLLECTION].rows[0]
+    row.pop("acquired_at", None)
+    row["lease_until"] = lease_module._iso(
+        NOW + lease_module.MAX_LEASE_TTL + timedelta(seconds=1)
+    )
+    second = await acquire_snapchat_lease(db, user_id="owner-1", now=NOW)
+    assert second is not None
+    assert second.owner_token != first.owner_token
+
+
+@pytest.mark.asyncio
+async def test_lease_preserves_legacy_current_window_without_acquired_at():
+    db = FakeDB()
+    first = await acquire_snapchat_lease(db, user_id="owner-1", now=NOW)
+    assert first is not None
+    row = db[lease_module.LEASE_COLLECTION].rows[0]
+    row.pop("acquired_at", None)
+    row["lease_until"] = lease_module._iso(NOW + lease_module.DEFAULT_LEASE_TTL)
+    second = await acquire_snapchat_lease(db, user_id="owner-1", now=NOW)
+    assert second is None
+
+
 # Reader publish-marker binding tests
 # --------------------------------------------------------------------
 
