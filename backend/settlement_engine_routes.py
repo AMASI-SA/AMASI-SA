@@ -67,8 +67,8 @@ PROVIDER_MATCHERS: dict[str, list[str]] = {
 }
 
 # Default settlement cycle (ISO weekday → end of cycle).
-# 1 = Mon ... 7 = Sun. Convention: Tamara/Tabby/Emkan close weekly
-# on Sunday (ISO weekday 7); Salla relies on actual settlement files.
+# 1 = Mon ... 7 = Sun. Emkan's verified reports have no stable weekday,
+# so it relies on actual settlement entries rather than an invented week.
 PROVIDER_CYCLES: dict[str, dict] = {
     "tamara": {"period": "weekly", "anchor_weekday": 7,
                 "commission_rate": 0.06,
@@ -76,9 +76,7 @@ PROVIDER_CYCLES: dict[str, dict] = {
     "tabby":  {"period": "weekly", "anchor_weekday": 7,
                 "commission_rate": 0.06,
                 "vat_rate_on_commission": 0.15},
-    "imkan":  {"period": "weekly", "anchor_weekday": 7,
-                "commission_rate": 0.05,
-                "vat_rate_on_commission": 0.15},
+    "imkan":  {"period": "settlement_entries"},
     "salla":  {"period": "settlement_entries"},
 }
 
@@ -98,12 +96,16 @@ async def _resolve_provider_rules(db, uid: str, provider: str) -> dict:
     src = "estimated_default"
     rate = {"commission_pct": 0.0, "vat_pct": 0.0,
             "fixed_fee_per_order": 0.0}
-    if provider in ("tamara", "tabby"):
+    canonical_provider = "emkan" if provider == "imkan" else provider
+    if provider in ("tamara", "tabby", "imkan"):
         try:
             from bnpl.settlements_service import _merchant_fee_rates
-            r = await _merchant_fee_rates(db, uid, provider) or {}
+            r = await _merchant_fee_rates(db, uid, canonical_provider) or {}
             rate["commission_pct"] = float(r.get("commission_pct") or 0)
             rate["vat_pct"]        = float(r.get("vat_pct") or 0)
+            rate["fixed_fee_per_order"] = float(
+                r.get("fixed_fee_per_order") or 0
+            )
             src = r.get("fee_source") or "bnpl_settlements_service"
         except Exception:
             pass
@@ -436,9 +438,9 @@ def make_settlement_engine_router(db, current_user):
         return {
             "rules": out,
             "notes": [
-                "تمارا/تابي يقرآن من نفس مصدر صفحة "
+                "تمارا/تابي/إمكان يقرؤون من نفس مصدر صفحة "
                 "/bnpl-settlements/register عبر _merchant_fee_rates.",
-                "إمكان/سلة يستخدمان defaults حتى نضيف إعداداتهما لاحقاً.",
+                "إمكان يعتمد على ملفات التسوية الفعلية ولا يفترض دورة أسبوعية.",
                 "أي تعديل في commission_pct/vat_pct من صفحة الإعدادات "
                 "ينعكس تلقائياً هنا وفي Dry-Run والتقارير الأخرى.",
             ],
@@ -519,8 +521,9 @@ def make_settlement_engine_router(db, current_user):
             )
             invoices = []
             for idx, c in enumerate(calendar_entries, start=1):
+                canonical_provider = "emkan" if prov == "imkan" else prov
                 s = await compute_settlement_for_provider(
-                    db, uid, prov,
+                    db, uid, canonical_provider,
                     c["period_start"], c["period_end"],
                 )
                 t = s.get("totals", {}) or {}
@@ -754,8 +757,9 @@ def make_settlement_engine_router(db, current_user):
 
     async def _simulate_from_settlements(uid, prov):
         # Group existing settlement_entries by settlement_reference.
+        storage_provider = "emkan" if prov == "imkan" else prov
         cursor = db.settlement_entries.aggregate([
-            {"$match": {"user_id": uid, "provider": prov}},
+            {"$match": {"user_id": uid, "provider": storage_provider}},
             {"$group": {
                 "_id": "$settlement_reference",
                 "orders_count": {"$sum": 1},

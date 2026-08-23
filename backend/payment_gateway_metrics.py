@@ -4,7 +4,7 @@ Replaces ad-hoc per-page aggregations with one canonical service that
 every page in the system reads from. Implements the user's required
 priority chain:
 
-    1. Settlement-file actual_* fields (Salla / Tamara / Tabby)
+    1. Settlement-file actual_* fields (Salla / Tamara / Tabby / Emkan)
     2. Salla Direct
     3. Make.com
     4. Excel
@@ -141,7 +141,7 @@ PAYMENT_METHOD_REGISTRY: dict[str, dict] = {
         "aliases": ["emkan", "إمكان", "امكان"],
         "estimated_fee_rate": 6.99,
         "estimated_vat_rate": 15.0,
-        "estimated_fixed_fee": 0.0,
+        "estimated_fixed_fee": 1.5,
     },
     "bank_transfer": {
         "name_ar": "تحويل بنكي",

@@ -189,7 +189,7 @@ async def test_phase2b_cancel_invoice(db):
 async def test_phase2b_unknown_provider_returns_rule_source_missing(db):
     uid = f"u_{uuid.uuid4().hex[:6]}"
     res = await generate_for_provider(
-        db, uid, _user(uid), "imkan",
+        db, uid, _user(uid), "unknown-provider",
         "2026-02-01", "2026-02-28", dry_run=False)
     assert res.get("rule_source_missing") is True
     assert res["generated"]["periods"] == 0

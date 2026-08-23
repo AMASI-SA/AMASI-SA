@@ -31,7 +31,7 @@ def test_tabby_unified_and_bnpl_defaults_match_four_reports():
         "vat_percent": 15.0,
     }
     assert PAYMENT_FEE_DEFAULTS_VERSION == (
-        "salla-tamara-tabby-statements-2026-08-v3"
+        "salla-tamara-tabby-emkan-statements-2026-08-v4"
     )
     tabby = DEFAULTS["tabby"]
     assert tabby["refundable_commission_percent"] == pytest.approx(0.0499)

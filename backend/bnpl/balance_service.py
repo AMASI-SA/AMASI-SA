@@ -1,6 +1,6 @@
 """BNPL Single Source of Truth (SSOT) for provider balances.
 
-🔒 OFFICIAL FORMULA — every page that shows a Tabby/Tamara balance
+🔒 OFFICIAL FORMULA — every page that shows a Tabby/Tamara/Emkan balance
 MUST call `get_bnpl_provider_balance()` from this module.  No page
 is allowed to compute the balance with a different formula.
 
@@ -80,7 +80,7 @@ async def get_bnpl_provider_balance(
 
 
 async def get_all_bnpl_balances(db, user_id: str) -> List[Dict[str, Any]]:
-    """Return canonical balances for ALL BNPL providers (Tabby + Tamara)."""
+    """Return canonical balances for all registered BNPL providers."""
     out: List[Dict[str, Any]] = []
     for p in PROVIDERS:
         out.append(await get_bnpl_provider_balance(db, user_id, p))
@@ -88,7 +88,7 @@ async def get_all_bnpl_balances(db, user_id: str) -> List[Dict[str, Any]]:
 
 
 def is_bnpl_account(account: Dict[str, Any]) -> str | None:
-    """Return the provider key ('tabby'/'tamara') if `account` is a
+    """Return the provider key ('tabby'/'tamara'/'emkan') if `account` is a
     BNPL payment_platform wallet for one of them, else None."""
     if not account or account.get("account_type") != "payment_platform":
         return None

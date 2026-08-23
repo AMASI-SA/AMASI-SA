@@ -15,7 +15,7 @@ def _settings():
             {"name": "مدى", "commission_percent": 1.0, "fixed_fee": 1.0, "vat_percent": 15.0},
             {"name": "تمارا", "commission_percent": 6.99, "fixed_fee": 1.5, "vat_percent": 15.0},
             {"name": "تابي", "commission_percent": 6.99, "fixed_fee": 1.0, "vat_percent": 15.0},
-            {"name": "إمكان", "commission_percent": 6.99, "fixed_fee": 0.0, "vat_percent": 15.0},
+            {"name": "إمكان", "commission_percent": 6.99, "fixed_fee": 1.5, "vat_percent": 15.0},
         ],
         "shipping_companies": [
             {
@@ -77,6 +77,10 @@ def test_catalog_models_financial_providers_as_apps_without_legacy_balances():
     assert by_id["payment:tabby"]["fee_policy"]["refundable_commission_percent"] == 4.99
     assert by_id["payment:tabby"]["fee_policy"]["transfer_weekday"] == "monday"
     assert by_id["payment:tabby"]["fee_policy"]["settlement_fee_per_statement_default"] == 0.0
+    assert by_id["payment:emkan"]["fee_rules"][0]["fixed_fee"] == 1.5
+    assert by_id["payment:emkan"]["fee_policy"]["commission_percent"] == 6.99
+    assert by_id["payment:emkan"]["fee_policy"]["cycle_verified"] is False
+    assert by_id["payment:emkan"]["fee_policy"]["cutoff_time_verified"] is False
     assert by_id["shipping:smsa"]["cod_fee_rule_mode"] == "tiered"
     assert by_id["shipping:smsa"]["fee_rules"][0]["commission_percent"] == 1.0
     assert by_id["shipping:smsa"]["fee_rules"][1]["min_inclusive"] is False
