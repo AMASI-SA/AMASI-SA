@@ -2662,7 +2662,55 @@ def make_supplier_receiving_router(
             context=context,
             invoice_id=invoice_id,
         )
-        content = generate_supplier_invoice_pdf(invoice)
+        # Historical invoices may predate the persisted selected image URL.
+        # Enrich a copy at download time from the current Mezan V2 catalog so
+        # reprints and newly-created invoices both show the product thumbnail.
+        invoice_lines = [dict(line) for line in (invoice.get("lines") or [])]
+        missing_product_ids = {
+            _text(line.get("product_id"))
+            for line in invoice_lines
+            if not _text(line.get("selected_image_url"))
+            and _text(line.get("product_id"))
+        }
+        if missing_product_ids:
+            products = await db[PRODUCTS].find(
+                {
+                    "user_id": context["merchant_id"],
+                    "$or": [
+                        {"id": {"$in": list(missing_product_ids)}},
+                        {"mezan_product_id": {"$in": list(missing_product_ids)}},
+                        {"salla_product_id": {"$in": list(missing_product_ids)}},
+                    ],
+                },
+                {
+                    "_id": 0,
+                    "id": 1,
+                    "mezan_product_id": 1,
+                    "salla_product_id": 1,
+                    "main_image": 1,
+                },
+            ).to_list(length=max(len(missing_product_ids), 1))
+            image_by_product_id: dict[str, str] = {}
+            for product in products:
+                image_url = _text(product.get("main_image"))
+                if not image_url:
+                    continue
+                for identifier in (
+                    product.get("id"),
+                    product.get("mezan_product_id"),
+                    product.get("salla_product_id"),
+                ):
+                    normalized_identifier = _text(identifier)
+                    if normalized_identifier:
+                        image_by_product_id[normalized_identifier] = image_url
+            for line in invoice_lines:
+                if _text(line.get("selected_image_url")):
+                    continue
+                image_url = image_by_product_id.get(_text(line.get("product_id")))
+                if image_url:
+                    line["selected_image_url"] = image_url
+        invoice_for_pdf = {**invoice, "lines": invoice_lines}
+        content = generate_supplier_invoice_pdf(invoice_for_pdf)
         filename = _supplier_invoice_filename(invoice)
         fallback = f"supplier-invoice-{_text(invoice.get('invoice_number')) or invoice_id}.pdf"
         return Response(
