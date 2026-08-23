@@ -40,6 +40,7 @@ jobs:
           pytest==9.0.3
           pytest-asyncio
           cryptography==48.0.0
+          openpyxl==3.1.5
       - name: Compile reporting V2
         run: |
           python -m compileall -q snapchat_v2
