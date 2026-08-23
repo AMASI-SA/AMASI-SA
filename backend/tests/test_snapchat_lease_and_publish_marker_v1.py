@@ -134,6 +134,7 @@ class FakeCollection:
     def __init__(self, rows=None):
         self.rows = list(rows or [])
         self._lock = asyncio.Lock()
+        self.find_one_and_update_calls = []
 
     def find(self, query, projection=None):
         return FakeCursor(row for row in self.rows if _matches(row, query))
@@ -158,6 +159,11 @@ class FakeCollection:
         projection=None,
     ):
         async with self._lock:
+            self.find_one_and_update_calls.append({
+                "query": deepcopy(query),
+                "update": deepcopy(update),
+                "upsert": upsert,
+            })
             for row in self.rows:
                 if _matches(row, query):
                     _apply_update(row, update)
@@ -215,6 +221,14 @@ async def test_lease_acquires_when_none_held():
     assert handle is not None
     assert handle.owner_token
     assert handle.lease_until > NOW
+
+    update = db[lease_module.LEASE_COLLECTION].find_one_and_update_calls[0][
+        "update"
+    ]
+    assert set(update["$set"]).isdisjoint(update["$setOnInsert"])
+    assert update["$setOnInsert"] == {
+        "created_at": lease_module._iso(NOW),
+    }
 
 
 @pytest.mark.asyncio
