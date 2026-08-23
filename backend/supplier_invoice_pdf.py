@@ -189,7 +189,7 @@ def generate_supplier_invoice_pdf(invoice: dict[str, Any]) -> bytes:
     page.setFillColor(HexColor("#FFF8E7"))
     page.setStrokeColor(HexColor("#CDA14A"))
     page.roundRect(left, y - 17 * mm, width - 30 * mm, 20 * mm, 4 * mm, fill=1, stroke=1)
-    page.setFillColor(HexColor("#065F46"))
+    page.setFillColor(HexColor("#74102F"))
     page.setFont(bold_font, 15)
     page.drawCentredString(width / 2, y - 9 * mm, _ar(f"الإجمالي النهائي: {_money(invoice.get('total_halalas'))}"))
     page.setFillColor(HexColor("#64748B"))
