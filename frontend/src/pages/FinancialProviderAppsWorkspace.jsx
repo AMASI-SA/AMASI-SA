@@ -202,6 +202,13 @@ function ProviderCard({ app, onInvoice }) {
                 )}
             </div>
 
+            {app.feePolicy?.summary_ar && (
+                <div className="mt-3 rounded-xl border border-violet-200 bg-violet-50 p-3 text-[11px] font-semibold leading-5 text-violet-950">
+                    <div className="font-extrabold">معاملة الرسوم حسب كشوف المزود</div>
+                    <div className="mt-1">{app.feePolicy.summary_ar}</div>
+                </div>
+            )}
+
             {app.kind === "shipping_company" && app.settlementNettingSupported && (
                 <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] font-semibold leading-5 text-amber-900">
                     تدعم المقاصة: قد تخصم الشركة الشحن وعمولة COD وضريبتها من التحصيل، وقد تكون قيمة التحويل للبنك صفرًا.

@@ -284,6 +284,7 @@ def _consolidate_rows(rows: list[dict]) -> dict:
         actual_net_amount   = sum(all net amounts)      ← captured - refund
         actual_refund_amount        = sum(refund_full)
         actual_partial_refund_amount= sum(refund_partial)
+        actual_canceled_amount      = sum(canceled events)
         actual_fee_rate     = weighted avg (against gross)
         settlement_date     = latest event date
     """
@@ -293,6 +294,7 @@ def _consolidate_rows(rows: list[dict]) -> dict:
     net = 0.0
     refund_full = 0.0
     refund_partial = 0.0
+    canceled_amount = 0.0
     fee_rate_acc = 0.0
     fee_rate_weight = 0.0
     payment_method = ""
@@ -306,6 +308,7 @@ def _consolidate_rows(rows: list[dict]) -> dict:
         net += float(r.get("actual_net_amount") or 0)
         refund_full += float(r.get("actual_refund_amount") or 0)
         refund_partial += float(r.get("actual_partial_refund_amount") or 0)
+        canceled_amount += float(r.get("actual_canceled_amount") or 0)
         rate = float(r.get("actual_fee_rate") or 0)
         if rate > 0:
             w = float(r.get("actual_gross_amount") or 0) or 1.0
@@ -328,6 +331,7 @@ def _consolidate_rows(rows: list[dict]) -> dict:
             "actual_net_amount": round(net, 2),
             "actual_refund_amount": round(refund_full, 2),
             "actual_partial_refund_amount": round(refund_partial, 2),
+            "actual_canceled_amount": round(canceled_amount, 2),
             "actual_fee_rate": fee_rate,
         },
         "settlement_date": settlement_date,
@@ -382,6 +386,7 @@ async def delete_file(db, user_id: str, file_id: str) -> dict:
             "actual_net_amount": "",
             "actual_refund_amount": "",
             "actual_partial_refund_amount": "",
+            "actual_canceled_amount": "",
             "actual_fee_rate": "",
             "settlement_source": "",
             "settlement_date": "",

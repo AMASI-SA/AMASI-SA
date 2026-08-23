@@ -42,6 +42,26 @@ PAYMENT_PROVIDER_KINDS = {
     "emkan": "bnpl",
 }
 
+PAYMENT_PROVIDER_FEE_POLICIES = {
+    "tamara": {
+        "evidence_version": "tamara-statements-2026-08-v1",
+        "capture_basis": "per_captured_order",
+        "fee_rounding": "round_fee_then_vat_per_event",
+        "refund_treatment": "no_commission_rebate",
+        "cancellation_treatment": "fixed_fee_only_plus_vat",
+        "settlement_fee_per_statement": 0.0,
+        "period_start_weekday": "saturday",
+        "period_end_weekday": "friday",
+        "statement_issue_weekday": "saturday",
+        "cutoff_time_verified": False,
+        "summary_ar": (
+            "البيع: 6.99% + 1.50 ر.س؛ الاسترداد لا يعكس العمولة؛ "
+            "الإلغاء: 1.50 ر.س + ضريبتها؛ الفترة من السبت إلى الجمعة "
+            "ويصدر الكشف السبت. ساعة القطع غير ظاهرة في الملفات."
+        ),
+    },
+}
+
 
 class ProviderTaxInvoiceIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -150,6 +170,7 @@ def build_provider_catalog(
             "currency": "SAR",
             "configured": bool(fee_lines[provider]),
             "fee_rules": fee_lines[provider],
+            "fee_policy": PAYMENT_PROVIDER_FEE_POLICIES.get(provider),
             "fee_rule_authority": "estimated",
             "actual_source_priority": [
                 "provider_tax_invoice",

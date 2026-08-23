@@ -10,6 +10,7 @@ test("normalizes financial provider apps without inventing legacy balances", () 
             kind: "shipping_company",
             configured: true,
             fee_rules: [{ code: "cod_tier_1", commission_percent: 1 }],
+            fee_policy: { summary_ar: "قاعدة موثقة" },
             cod_fee_rule_mode: "tiered",
             settlement_netting_supported: true,
             bank_transfer_optional: true,
@@ -35,6 +36,7 @@ test("normalizes financial provider apps without inventing legacy balances", () 
         codFeeRuleMode: "tiered",
         settlementNettingSupported: true,
         bankTransferOptional: true,
+        feePolicy: { summary_ar: "قاعدة موثقة" },
     });
     expect(model.apps[0].openingBalance).toBeUndefined();
     expect(model.summary.verifiedTaxInvoices).toBe(1);

@@ -38,6 +38,7 @@ from .crypto import decrypt_token, encrypt_token
 
 
 BNPL_PROVIDERS = ("tabby", "tamara")
+TAMARA_STATEMENT_CYCLE_VERSION = "tamara-statements-2026-08-v1"
 
 # Canonical weekday vocabulary — lowercase English so we don't have
 # any localisation ambiguity in the database.  UI maps these to Arabic.
@@ -86,8 +87,10 @@ DEFAULTS = {
         "refundable_commission_percent": 0.0,
         "settlement_period_days": 7,
         "transfer_days": 2,
-        # Iter-121 — Tamara closes invoices Sunday, pays Tuesday.
-        "invoice_weekdays":  ["sunday"],
+        # Five verified merchant statements cover Saturday → Friday and
+        # are issued on Saturday.  The exact time-of-day is not present in
+        # the files, so the engine keeps Asia/Riyadh date boundaries.
+        "invoice_weekdays":  ["saturday"],
         "transfer_weekdays": ["tuesday"],
         "settlement_fee_per_invoice": 0.0,   # Tamara doesn't charge it
         "settlement_fee_vat_applicable": True,
@@ -212,6 +215,26 @@ async def get_settings(db, user_id: str, provider: str) -> dict:
     doc = await db.bnpl_settings.find_one(
         {"user_id": user_id, "provider": provider}, {"_id": 0},
     ) or {}
+    # Safely move the untouched legacy Tamara Sunday default to the Saturday
+    # issue day verified across five statements.  Other weekday selections are
+    # merchant edits and survive unchanged.
+    if (
+        provider == "tamara"
+        and doc.get("statement_cycle_defaults_version")
+        != TAMARA_STATEMENT_CYCLE_VERSION
+    ):
+        cycle_update = {
+            "statement_cycle_defaults_version": TAMARA_STATEMENT_CYCLE_VERSION,
+            "updated_at": _now_iso(),
+        }
+        if (doc.get("invoice_weekdays") or ["sunday"]) == ["sunday"]:
+            cycle_update["invoice_weekdays"] = ["saturday"]
+        await db.bnpl_settings.update_one(
+            {"user_id": user_id, "provider": provider},
+            {"$set": cycle_update},
+            upsert=True,
+        )
+        doc = {**doc, **cycle_update}
     defaults = DEFAULTS.get(provider, {})
 
     return {
@@ -398,6 +421,10 @@ async def save_settings(
             # Deduplicate while preserving order
             seen = set()
             update[k] = [d for d in clean if not (d in seen or seen.add(d))]
+            if provider == "tamara" and k == "invoice_weekdays":
+                update["statement_cycle_defaults_version"] = (
+                    TAMARA_STATEMENT_CYCLE_VERSION
+                )
 
     await db.bnpl_settings.update_one(
         {"user_id": user_id, "provider": provider},
