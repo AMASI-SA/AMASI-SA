@@ -39,6 +39,7 @@ from .crypto import decrypt_token, encrypt_token
 
 BNPL_PROVIDERS = ("tabby", "tamara")
 TAMARA_STATEMENT_CYCLE_VERSION = "tamara-statements-2026-08-v1"
+TABBY_STATEMENT_DEFAULTS_VERSION = "tabby-statements-2026-08-v1"
 
 # Canonical weekday vocabulary — lowercase English so we don't have
 # any localisation ambiguity in the database.  UI maps these to Arabic.
@@ -60,17 +61,14 @@ DEFAULTS = {
         "refundable_commission_percent": 0.0499,
         "settlement_period_days": 7,
         "transfer_days": 2,
-        # Iter-121 — weekday cycle.  Tabby officially closes invoices
-        # on Mondays and pays out 1-2 business days later.
+        # Four consecutive merchant reports cover Monday→Sunday and show
+        # both statement issue and Transfer Date on Monday.
         "invoice_weekdays":  ["monday"],
-        "transfer_weekdays": ["tuesday", "wednesday"],
-        "settlement_fee_per_invoice": 6.0,   # SAR charged ONCE per
-                                             # weekly settlement invoice
-                                             # (not per order) — Tabby
-                                             # invoice shows 6.00 SAR
-        # Iter-134 — KSA VAT applies to payment-processor service fees,
-        # so the per-invoice settlement fee carries 15% VAT.  Default
-        # ON for both providers, user can disable per agreement.
+        "transfer_weekdays": ["monday"],
+        # No payout fee appears in any of the four reports. Their note says
+        # such a fee is conditional, so the default is zero and an explicit
+        # provider statement row remains authoritative when one is charged.
+        "settlement_fee_per_invoice": 0.0,
         "settlement_fee_vat_applicable": True,
         "api_base_url": "https://api.tabby.sa",
     },
@@ -235,6 +233,32 @@ async def get_settings(db, user_id: str, provider: str) -> dict:
             upsert=True,
         )
         doc = {**doc, **cycle_update}
+    # Safely replace Tabby's former bundled assumptions (Tue/Wed transfer and
+    # SAR 6 on every statement) with the four-report evidence. Exact legacy
+    # values move; merchant-custom values remain untouched.
+    if (
+        provider == "tabby"
+        and doc.get("statement_cycle_defaults_version")
+        != TABBY_STATEMENT_DEFAULTS_VERSION
+    ):
+        tabby_update = {
+            "statement_cycle_defaults_version": (
+                TABBY_STATEMENT_DEFAULTS_VERSION
+            ),
+            "updated_at": _now_iso(),
+        }
+        if (doc.get("transfer_weekdays") or ["tuesday", "wednesday"]) == [
+            "tuesday", "wednesday",
+        ]:
+            tabby_update["transfer_weekdays"] = ["monday"]
+        if float(doc.get("settlement_fee_per_invoice", 6.0) or 0) == 6.0:
+            tabby_update["settlement_fee_per_invoice"] = 0.0
+        await db.bnpl_settings.update_one(
+            {"user_id": user_id, "provider": provider},
+            {"$set": tabby_update},
+            upsert=True,
+        )
+        doc = {**doc, **tabby_update}
     defaults = DEFAULTS.get(provider, {})
 
     return {
@@ -390,6 +414,10 @@ async def save_settings(
                 update[k] = float(payload[k])
             except (TypeError, ValueError):
                 pass
+    if provider == "tabby" and "settlement_fee_per_invoice" in payload:
+        update["statement_cycle_defaults_version"] = (
+            TABBY_STATEMENT_DEFAULTS_VERSION
+        )
     # Iter-134 — bool toggle for VAT on the settlement fee.
     if "settlement_fee_vat_applicable" in payload:
         update["settlement_fee_vat_applicable"] = bool(
@@ -424,6 +452,10 @@ async def save_settings(
             if provider == "tamara" and k == "invoice_weekdays":
                 update["statement_cycle_defaults_version"] = (
                     TAMARA_STATEMENT_CYCLE_VERSION
+                )
+            if provider == "tabby":
+                update["statement_cycle_defaults_version"] = (
+                    TABBY_STATEMENT_DEFAULTS_VERSION
                 )
 
     await db.bnpl_settings.update_one(

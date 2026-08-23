@@ -1,7 +1,7 @@
 """Iter-121 — Weekday-based settlement cycle.
 
 Asserts:
-  • Tabby invoices end on Monday by default; expected transfer = Tuesday.
+  • Tabby reports issue and transfer Monday for a Monday→Sunday cycle.
   • Tamara statements issue Saturday after a Saturday→Friday period.
   • Per-user override via PUT /api/bnpl/settings/{provider} with
     `invoice_weekdays` and `transfer_weekdays` lists works end-to-end.
@@ -61,7 +61,7 @@ class TestWeekdayCycle:
         # Iter-123 — period STARTS on Monday and runs to Sunday.
         # Each row that's not the partial first one should start on Monday.
         # The issue_date is the NEXT Monday after the period ends.
-        # expected_transfer_date is Tuesday or Wednesday after issue_date.
+        # expected_transfer_date is the report's Monday issue day.
         for row in rows:
             issue = row.get("issue_date")
             assert issue is not None, row
@@ -72,8 +72,8 @@ class TestWeekdayCycle:
             )
             et = row.get("expected_transfer_date")
             assert et, row
-            assert date.fromisoformat(et).weekday() in {1, 2}, (
-                f"expected_transfer must be Tue/Wed, got {et}"
+            assert date.fromisoformat(et).weekday() == 0, (
+                f"expected_transfer must be Monday, got {et}"
             )
 
     def test_tamara_default_invoice_day_is_saturday(self, session):
@@ -137,14 +137,14 @@ class TestWeekdayCycle:
                 f"{BASE_URL}/api/bnpl/settings/tabby",
                 json={
                     "invoice_weekdays":  ["monday"],
-                    "transfer_weekdays": ["tuesday", "wednesday"],
+                    "transfer_weekdays": ["monday"],
                 }, timeout=30,
             )
 
     def test_settlement_fee_counts_per_invoice_weekday(self, session):
         """With Tabby default = Monday in 1-Mar→31-Mar 2025, expect 5
         Mondays within the range (3, 10, 17, 24, 31).  The aggregate
-        endpoint charges `settlement_fee_per_invoice` (5 SAR) × 5 = 25."""
+        endpoint counts five statements but does not invent a payout fee."""
         r = session.get(
             f"{BASE_URL}/api/bnpl/settlements/tabby"
             "?from=2025-03-03&to=2025-03-31", timeout=30,  # Mon → Mon
@@ -154,7 +154,7 @@ class TestWeekdayCycle:
         assert body["success"] is True, body
         totals = body["totals"]
         assert totals["settlement_invoices_count"] == 5, totals
-        assert abs(totals["settlement_fee"] - 25.0) < 0.01, totals
+        assert abs(totals["settlement_fee"] - 0.0) < 0.01, totals
 
     def test_invalid_weekday_names_are_silently_dropped(self, session):
         """Saving ['typo','monday'] keeps only 'monday'."""

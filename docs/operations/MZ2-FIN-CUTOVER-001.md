@@ -221,9 +221,9 @@ available and retain aggregate calculation only for legacy aggregate-only
 callers.
 
 The combined payment-fee settings version is now
-`salla-tamara-statements-2026-08-v2`; this version bump safely upgrades only
-an untouched legacy Tamara row while retaining the previously verified Salla
-rules and merchant edits.
+`salla-tamara-tabby-statements-2026-08-v3`; this version bump safely upgrades
+only untouched legacy Tamara/Tabby rows while retaining the previously
+verified Salla rules and merchant edits.
 
 ## Tamara fee and statement evidence — 2026-08-23
 
@@ -264,6 +264,52 @@ Verified Tamara treatment:
 
 The official uploaded statement remains authoritative. These defaults estimate
 fees only when no official statement row exists.
+
+## Tabby fee and settlement evidence — 2026-08-23
+
+The four uploaded workbooks are unique weekly settlement reports:
+
+| Statement ID | Covered period | Sales | Full refunds | Partial refunds | Gross sales | Net fees | Net fee VAT | Net transfer |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| `Tabby20260727SAR` | 20/07/2026–26/07/2026 | 19 | 1 | 0 | 4,848.93 | 349.01 | 52.34 | 4,268.71 |
+| `Tabby20260803SAR` | 27/07/2026–02/08/2026 | 52 | 0 | 0 | 13,221.95 | 976.26 | 146.49 | 12,099.20 |
+| `Tabby20260810SAR` | 03/08/2026–09/08/2026 | 103 | 2 | 1 | 19,752.30 | 1,449.50 | 217.47 | 17,399.51 |
+| `Tabby20260817SAR` | 10/08/2026–16/08/2026 | 51 | 0 | 2 | 9,133.62 | 663.33 | 99.53 | 7,846.87 |
+| **Total** | four weeks | **225** | **3** | **3** | **46,956.80** | **3,438.10** | **515.83** | **41,614.29** |
+
+Total refunds are SAR 1,388.58. Before refund rebates, capture fees are SAR
+3,507.40 and fee VAT is SAR 526.22. Tabby rebates SAR 69.30 of fees and SAR
+10.39 of their VAT, leaving the net values in the table. The reports contain
+225 sales and six refunds (three full, three partial), for 231 event rows.
+Every sale and refund row reconciles exactly to the following rules:
+
+1. **Captured order:** calculate and round the 4.99% refundable commission and
+   the 2.00% non-refundable commission separately, then add SAR 1.00 fixed.
+   The displayed total rate is 6.99%, but calculating one combined 6.99% leg
+   can differ by one halala and is therefore not authoritative.
+2. **Fee VAT:** calculate 15% VAT separately on each displayed fee leg
+   (4.99% leg, 2% leg, and SAR 1 fixed), using half-even halala rounding, then
+   sum the VAT legs.
+3. **Full or partial refund:** reverse only 4.99% of the refunded amount and
+   the VAT on that reversed fee. The 2% fee, SAR 1 fixed fee, and their VAT
+   remain charged. The report's `Type` column is authoritative for full versus
+   partial refund; transferred net must not be used for that classification.
+4. **Payout fee:** none of the four reports charges one. The report note says
+   it is conditional when the transferred total is below an unstated threshold
+   and a non-monthly payout cycle is used. Mezan therefore defaults it to zero
+   and applies it only when an explicit provider statement row supplies it.
+5. **Cycle/cutoff:** each report covers Monday through Sunday, is issued on
+   Monday, and its `Transfer Date` is Monday. Adjacent report timestamps are
+   consistent with a 00:00 Asia/Riyadh boundary (21:00 UTC Sunday), but the
+   file does not label the timezone; the exact cutoff remains marked inferred,
+   not provider-verified.
+6. **Tax evidence:** these workbooks explicitly state that they are not the
+   official tax invoice. The official Tabby tax invoice arrives after month
+   end and must be attached separately without double-posting the settlements.
+
+Only two- and three-month installment product labels appear in this evidence;
+both use the same fee rule. The official report remains authoritative for its
+covered cycle.
 
 ## Implemented in this change
 
@@ -314,11 +360,26 @@ fees only when no official statement row exists.
 - Changed the unified Tamara default to 6.99% + SAR 1.50, VAT 15%, while
   preserving merchant-edited settings through the versioned migration.
 - Applied Tamara's own per-capture rounding: fee first, then VAT on the rounded
-  displayed fee; retained Tabby's separate sum-first behavior.
+  displayed fee.
 - Preserved Tamara commission on refunds, represented cancellations as fixed
   fee adjustments instead of sales, and kept the per-statement fee at zero.
 - Corrected the default Tamara statement cycle to Saturday issue after a
   Saturday–Friday covered period; exact cutoff time remains unverified.
+- Reconciled all four Tabby reports: 225/225 sales and 6/6 refunds match the
+  split-fee and VAT rules above to the halala.
+- Changed the unified Tabby default to 6.99% + SAR 1.00, with a 4.99%
+  refundable slice and 2.00% non-refundable slice.
+- Corrected Tabby's parser so `Type` no longer binds to `Product Type`, full
+  and partial refunds use Order Amount rather than transferred net, and signed
+  fee/VAT rebates remain in the official totals.
+- Replaced Tabby's old sum-first estimate with per-order component rounding,
+  including half-even VAT per displayed fee leg.
+- Removed the unconditional SAR 6 weekly payout-fee estimate; explicit payout
+  fee rows remain supported and authoritative when a provider charges one.
+- Corrected Tabby's default cycle to Monday–Sunday with Monday issue/transfer,
+  while preserving merchant-custom schedules through a versioned migration.
+- Allowed deduplicated Tabby official file totals to override computed weekly
+  estimates for the exact covered cycle.
 
 Primary files:
 
@@ -340,6 +401,10 @@ Primary files:
 - `backend/payment_gateway_metrics.py`
 - `backend/reconciliation_routes.py`
 - `backend/tests/test_salla_payment_fee_defaults.py`
+- `backend/settlements_import/parsers/tabby.py`
+- `backend/bnpl/config_store.py`
+- `backend/bnpl/settlements_service.py`
+- `backend/tests/test_tabby_payment_fee_defaults.py`
 
 ## Remaining work, in order
 

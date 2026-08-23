@@ -38,9 +38,11 @@ SALLA_WALLET       = "محفظة سلة"
 # ── Default payment methods (used to seed user settings) ─────────────────
 # Order matters → it's the order shown in Settings → Payment Methods.
 #
-# ``salla-tamara-statements-2026-08-v2`` combines two merchant evidence sets:
+# ``salla-tamara-tabby-statements-2026-08-v3`` combines three merchant
+# evidence sets:
 # seven Salla payment-detail invoices (528 rows) and five unique Tamara weekly
-# statements (310 rows; three duplicate uploads were ignored by SHA-256).
+# statements (310 rows; three duplicate uploads were ignored by SHA-256), plus
+# four unique Tabby weekly settlement reports (231 rows).
 # The observed Salla rails matched every positive transaction exactly:
 #
 #   mada         = amount × 1.00% + SAR 1.00
@@ -59,7 +61,17 @@ SALLA_WALLET       = "محفظة سلة"
 #
 # VAT is 15% of the displayed rounded Tamara fee, rounded per event.  Refund
 # rows carry no fee rebate; cancellation rows carry only SAR 1.50 + VAT.
-PAYMENT_FEE_DEFAULTS_VERSION = "salla-tamara-statements-2026-08-v2"
+#
+# Tabby's observed sale split matched every row exactly:
+#
+#   refundable commission     = amount × 4.99% (rounded per order)
+#   non-refundable commission = amount × 2.00% (rounded per order)
+#   fixed fee                 = SAR 1.00 per captured order
+#
+# The displayed total MDR is therefore 6.99%, but refunds reverse only the
+# 4.99% refundable slice and its VAT; the 2% slice and SAR 1 fixed fee remain.
+# VAT is 15% rounded separately on each displayed fee leg.
+PAYMENT_FEE_DEFAULTS_VERSION = "salla-tamara-tabby-statements-2026-08-v3"
 
 DEFAULT_PAYMENT_METHODS: list[dict] = [
     # Salla card rails — editable so the merchant can override Salla's
@@ -75,7 +87,7 @@ DEFAULT_PAYMENT_METHODS: list[dict] = [
     {"name": SALLA_WALLET,     "commission_percent": 0.00, "fixed_fee": 0.0, "vat_percent": 0.0},
     # BNPL — own accounts
     {"name": TAMARA,           "commission_percent": 6.99, "fixed_fee": 1.5, "vat_percent": 15.0},
-    {"name": TABBY,            "commission_percent": 5.00, "fixed_fee": 0.0, "vat_percent": 15.0},
+    {"name": TABBY,            "commission_percent": 6.99, "fixed_fee": 1.0, "vat_percent": 15.0},
     {"name": EMKAN,            "commission_percent": 5.00, "fixed_fee": 0.0, "vat_percent": 15.0},
     # Cash / bank — own accounts, zero commission
     {"name": BANK_TRANSFER,    "commission_percent": 0.00, "fixed_fee": 0.0, "vat_percent": 0.0},

@@ -43,6 +43,29 @@ PAYMENT_PROVIDER_KINDS = {
 }
 
 PAYMENT_PROVIDER_FEE_POLICIES = {
+    "tabby": {
+        "evidence_version": "tabby-statements-2026-08-v1",
+        "capture_basis": "per_captured_order_split_fee",
+        "fee_rounding": "round_4_99_and_2_00_then_vat_each_leg",
+        "refundable_commission_percent": 4.99,
+        "non_refundable_commission_percent": 2.0,
+        "fixed_fee_per_capture": 1.0,
+        "refund_treatment": "reverse_refundable_4_99_and_its_vat_only",
+        "settlement_fee_per_statement_default": 0.0,
+        "settlement_fee_treatment": "actual_statement_row_only",
+        "period_start_weekday": "monday",
+        "period_end_weekday": "sunday",
+        "statement_issue_weekday": "monday",
+        "transfer_weekday": "monday",
+        "cutoff_time_verified": False,
+        "cutoff_time_inferred": "00:00 Asia/Riyadh",
+        "summary_ar": (
+            "البيع: 4.99% قابلة للاسترداد + 2% غير قابلة للاسترداد "
+            "+ 1 ر.س ثابت؛ عند الاسترداد تنعكس 4.99% وضريبتها فقط. "
+            "الفترة من الاثنين إلى الأحد ويصدر التحويل الاثنين. لا توجد "
+            "رسوم تسوية في التقارير الأربعة؛ أي رسم مشروط يؤخذ من التقرير."
+        ),
+    },
     "tamara": {
         "evidence_version": "tamara-statements-2026-08-v1",
         "capture_basis": "per_captured_order",

@@ -4,8 +4,7 @@ Verifies:
   1. get_settings returns commission_mode='auto' by default.
   2. save_settings accepts commission_mode in payload and persists it.
   3. Invalid values are ignored.
-  4. Auto preset values match the Tabby invoice contract (6.99% MDR,
-     4.99% refundable, 6 SAR settlement fee + VAT).
+  4. Auto preset values match the four verified Tabby reports.
 
 Uses a minimal in-memory async-DB stub so the test runs without a
 real Mongo instance.
@@ -96,15 +95,13 @@ async def test_invalid_commission_mode_ignored(db):
 
 
 def test_tabby_auto_preset_matches_invoice_contract():
-    """Tabby's official invoice shows 6.99% MDR (4.99% refundable +
-    2.00% non-refundable), 1 SAR fixed/order, 6 SAR weekly settlement
-    fee with 15% VAT."""
+    """Tabby uses a split 6.99% MDR + SAR 1 and no unconditional payout fee."""
     tabby = DEFAULTS["tabby"]
     assert tabby["mdr_percent"] == pytest.approx(0.0699)
     assert tabby["refundable_commission_percent"] == pytest.approx(0.0499)
     assert tabby["fixed_fee_per_order"] == pytest.approx(1.0)
     assert tabby["vat_on_fees_percent"] == pytest.approx(0.15)
-    assert tabby["settlement_fee_per_invoice"] == pytest.approx(6.0)
+    assert tabby["settlement_fee_per_invoice"] == pytest.approx(0.0)
     assert tabby["settlement_fee_vat_applicable"] is True
 
 

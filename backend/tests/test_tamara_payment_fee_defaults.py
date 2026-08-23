@@ -25,7 +25,7 @@ def test_tamara_unified_default_matches_verified_statements():
         "fixed_fee": 1.5,
         "vat_percent": 15.0,
     }
-    assert PAYMENT_FEE_DEFAULTS_VERSION == "salla-tamara-statements-2026-08-v2"
+    assert PAYMENT_FEE_DEFAULTS_VERSION == "salla-tamara-tabby-statements-2026-08-v3"
 
 
 def test_migration_upgrades_only_untouched_tamara_default():

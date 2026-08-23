@@ -48,7 +48,7 @@ def session():
 class TestDynamicSettlementDate:
 
     def test_tabby_uses_configured_transfer_weekday(self, session):
-        # Ensure Tabby is on defaults: invoice=Mon, transfer=Tue/Wed.
+        # Explicit custom schedule: invoice=Mon, transfer=Tue/Wed.
         session.put(
             f"{BASE_URL}/api/bnpl/settings/tabby",
             json={
@@ -119,7 +119,7 @@ class TestDynamicSettlementDate:
 
     def test_period_end_on_transfer_day_skips_to_next_week(self, session):
         """If date_to is already a transfer day, picker must skip to NEXT
-        week (not return date_to itself). Tabby transfer=Tue/Wed, set
+        week (not return date_to itself). With custom transfer=Tue/Wed, set
         date_to=2025-09-02 (Tuesday) → settlement = 2025-09-03 (Wed)."""
         session.put(
             f"{BASE_URL}/api/bnpl/settings/tabby",
