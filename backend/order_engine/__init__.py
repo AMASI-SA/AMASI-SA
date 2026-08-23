@@ -75,6 +75,10 @@ def make_order_engine_router(*args, **kwargs):
     from preparation_file_registry import make_preparation_file_registry_router
     from preparation_piece_operations import install_preparation_piece_operations, make_preparation_piece_operations_router
     from preparation_supplier_dispatch import make_preparation_supplier_dispatch_router
+    from supplier_dispatch_order_group_guard import (
+        install_supplier_dispatch_order_group_guard,
+        make_supplier_dispatch_order_group_preview_router,
+    )
     from supplier_dispatch_pdf import make_supplier_dispatch_pdf_router
     from supplier_dispatch_share_evidence import make_supplier_dispatch_share_evidence_router
     from preparation_piece_line_services import install_preparation_piece_line_services
@@ -120,6 +124,7 @@ def make_order_engine_router(*args, **kwargs):
     install_preparation_piece_line_services()
     install_preparation_piece_execution_guard()
     install_preparation_finalize_safety()
+    install_supplier_dispatch_order_group_guard()
     install_dashboard_eligibility_filter()
     _product_v2_routes.run_product_v2_sync = run_product_v2_sync_fixed
     install_product_source_authority()
@@ -181,6 +186,7 @@ def make_order_engine_router(*args, **kwargs):
         make_preparation_file_failure_safety_router(db, current_user),
         make_preparation_piece_operations_router(db, current_user),
         make_preparation_supplier_dispatch_router(db, current_user),
+        make_supplier_dispatch_order_group_preview_router(db, current_user),
         make_supplier_dispatch_pdf_router(db, current_user),
         make_supplier_dispatch_share_evidence_router(db, current_user),
         make_mezan_supplier_management_router(db, current_user),

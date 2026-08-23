@@ -92,7 +92,11 @@ export default function ShippingLedgerStub() {
                                     <td className="p-2 num text-emerald-700">{fmt(r.cod_approved)}</td>
                                     <td className="p-2 num text-slate-500" title="غير داخل في الصافي">{fmt(r.cod_pending)}</td>
                                     <td className="p-2 num text-rose-700">{fmt(r.shipping_cost)}</td>
-                                    <td className="p-2 num text-rose-700">{fmt(r.cod_fee)}</td>
+                                    <td className="p-2 num text-rose-700">
+                                        <div className="font-bold">{fmt(r.cod_fee)}</div>
+                                        <div className="text-[9px] text-slate-500">عمولة {fmt(r.cod_fee_net)} + ضريبة {fmt(r.cod_fee_vat)}</div>
+                                        {r.cod_fee_rules_needing_review > 0 && <div className="text-[9px] font-bold text-rose-700">{r.cod_fee_rules_needing_review} شحنة خارج الشرائح</div>}
+                                    </td>
                                     <td className="p-2 num text-blue-700">{fmt(r.courier_to_bank)}</td>
                                     <td className="p-2 num text-emerald-700">{fmt(r.bank_to_courier)}</td>
                                     <td className={`p-2 num font-extrabold ${r.net_balance >= 0 ? "text-emerald-700" : "text-rose-700"}`}>{fmt(r.net_balance)}</td>

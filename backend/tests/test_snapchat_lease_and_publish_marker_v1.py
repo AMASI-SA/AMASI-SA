@@ -602,6 +602,34 @@ async def test_snapchat_cadence_gate_allows_when_last_run_older_than_10m():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["running", "queued"])
+async def test_snapchat_cadence_gate_ignores_inflight_runs(status):
+    from integrations_control_center import ads_auto_sync_scheduler as scheduler
+
+    recent = NOW - timedelta(minutes=1)
+    db = FakeDB(
+        {
+            scheduler.RUNS_COLLECTION: [
+                {
+                    "user_id": "owner-1",
+                    "provider": SNAPCHAT_PROVIDER_ID,
+                    "run_type": scheduler.SNAP_RUN_TYPE,
+                    "status": status,
+                    "started_at": recent,
+                    "created_at": recent,
+                }
+            ]
+        }
+    )
+
+    ready = await scheduler._snapchat_cadence_ready(
+        db, user_id="owner-1", now=NOW
+    )
+
+    assert ready is True
+
+
+@pytest.mark.asyncio
 async def test_snapchat_cadence_gate_allows_when_no_prior_run():
     from integrations_control_center import ads_auto_sync_scheduler as scheduler
 

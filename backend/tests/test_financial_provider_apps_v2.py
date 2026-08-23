@@ -25,6 +25,26 @@ def _settings():
                 "is_deferred": True,
                 "cod_fee_percent": 0.05,
                 "cod_fee_fixed_per_order": 1.0,
+                "cod_fee_tiers": [
+                    {
+                        "min_amount": 50,
+                        "max_amount": 1000,
+                        "min_inclusive": True,
+                        "max_inclusive": True,
+                        "commission_percent": 0.01,
+                        "fixed_fee": 2,
+                        "vat_percent": 15,
+                    },
+                    {
+                        "min_amount": 1000,
+                        "max_amount": None,
+                        "min_inclusive": False,
+                        "max_inclusive": True,
+                        "commission_percent": 0.02,
+                        "fixed_fee": 5,
+                        "vat_percent": 15,
+                    },
+                ],
             },
         ],
     }
@@ -49,7 +69,11 @@ def test_catalog_models_financial_providers_as_apps_without_legacy_balances():
     }
     assert by_id["payment:salla"]["fee_rules"][0]["code"] == "mada"
     assert by_id["payment:tamara"]["tax_invoice_count"] == 2
-    assert by_id["shipping:smsa"]["fee_rules"][0]["cod_fee_percent"] == 5.0
+    assert by_id["shipping:smsa"]["cod_fee_rule_mode"] == "tiered"
+    assert by_id["shipping:smsa"]["fee_rules"][0]["commission_percent"] == 1.0
+    assert by_id["shipping:smsa"]["fee_rules"][1]["min_inclusive"] is False
+    assert by_id["shipping:smsa"]["settlement_netting_supported"] is True
+    assert by_id["shipping:smsa"]["bank_transfer_optional"] is True
     assert all(app["legacy_financial_data_included"] is False for app in apps)
     assert all("opening_balance" not in app for app in apps)
     assert all("sales_total" not in app for app in apps)

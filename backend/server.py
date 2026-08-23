@@ -75,6 +75,10 @@ from financial_provider_apps import (
     ensure_financial_provider_app_indexes,
     make_financial_provider_apps_router,
 )
+from courier_cod_fee_rules import (
+    CourierCodFeeTier,
+    validate_courier_cod_fee_tiers,
+)
 from order_status_policy import attach_order_status_policy_routes
 from shipping_ledger_routes import attach_shipping_ledger_routes
 from orders_explorer_routes import attach_orders_explorer_routes
@@ -392,6 +396,12 @@ class ShippingCompany(BaseModel):
     # weren't declared here.
     cod_fee_percent: Optional[float] = Field(default=0.0, ge=0, le=1)
     cod_fee_fixed_per_order: Optional[float] = Field(default=0.0, ge=0)
+    # MZ2-FIN-CUTOVER-001 — optional per-shipment COD brackets. When at
+    # least one tier exists it takes priority over the legacy flat fields.
+    # The VAT percentage belongs to the collection commission itself and is
+    # kept separate from the normal shipping-service VAT.
+    cod_fee_vat_percent: float = Field(default=15.0, ge=0, le=100)
+    cod_fee_tiers: List[CourierCodFeeTier] = Field(default_factory=list)
 
     @root_validator(pre=False, skip_on_failure=True)
     def _sync_payment_mode(cls, values):  # noqa: N805
@@ -410,6 +420,10 @@ class ShippingCompany(BaseModel):
         else:
             values["payment_mode"] = (
                 "deferred" if values.get("is_deferred") else "prepaid")
+        try:
+            validate_courier_cod_fee_tiers(values.get("cod_fee_tiers") or [])
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
         return values
 
 

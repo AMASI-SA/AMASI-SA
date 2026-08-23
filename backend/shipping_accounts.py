@@ -25,6 +25,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from auth import get_current_user_from_db, ensure_user_settings, DEFAULT_SHIPPING_COMPANIES
+from courier_cod_fee_rules import calculate_courier_cod_fee
 
 
 # Iter-101 — orders are an accrued shipping liability ONLY when they
@@ -567,9 +568,14 @@ def _build_router(db) -> APIRouter:
                 "shipping_cost": 0.0,
                 "delivered_orders_count": 0,
                 "pending_cod_orders_count": 0,
+                "cod_fee_net": 0.0,
+                "cod_fee_vat": 0.0,
+                "cod_fee_total": 0.0,
+                "cod_fee_rules_needing_review": 0,
                 "cod_fee_percent": float(cfg_map.get(n.lower(), {}).get("cod_fee_percent") or 0),
                 "cod_fee_fixed_per_order": float(cfg_map.get(n.lower(), {}).get("cod_fee_fixed_per_order") or 0),
                 "vat_rate": float(cfg_map.get(n.lower(), {}).get("vat_rate") or 0),
+                "cod_fee_config": cfg_map.get(n.lower(), {}),
             }
 
         from balances import _is_cod_method
@@ -611,9 +617,14 @@ def _build_router(db) -> APIRouter:
                 "shipping_tax":  0.0,   # VAT amount
                 "shipping_cost": 0.0,   # = base + tax (kept for backward compat)
                 "delivered_orders_count": 0, "pending_cod_orders_count": 0,
+                "cod_fee_net": 0.0,
+                "cod_fee_vat": 0.0,
+                "cod_fee_total": 0.0,
+                "cod_fee_rules_needing_review": 0,
                 "cod_fee_percent": float(cfg.get("cod_fee_percent") or 0),
                 "cod_fee_fixed_per_order": float(cfg.get("cod_fee_fixed_per_order") or 0),
                 "vat_rate": float(cfg.get("vat_rate") or 0),
+                "cod_fee_config": cfg,
             })
             delivered = status_is_delivered(o.get("order_status", ""))
             is_cod = _is_cod_method(o.get("payment_method") or "")
@@ -629,6 +640,12 @@ def _build_router(db) -> APIRouter:
                 row["shipping_cost"] += bd["total"]   # base + tax
                 if is_cod:
                     row["cod_approved"] += total
+                    fee_calc = calculate_courier_cod_fee(total, cfg)
+                    row["cod_fee_net"] += fee_calc["fee_net"]
+                    row["cod_fee_vat"] += fee_calc["fee_vat"]
+                    row["cod_fee_total"] += fee_calc["fee_total"]
+                    if fee_calc.get("needs_review"):
+                        row["cod_fee_rules_needing_review"] += 1
             else:
                 if is_cod:
                     row["cod_pending"] += total
@@ -662,11 +679,9 @@ def _build_router(db) -> APIRouter:
             shipping_base = round(r.get("shipping_base", 0.0), 2)
             shipping_tax = round(r.get("shipping_tax", 0.0), 2)
             shipping_cost = round(r["shipping_cost"], 2)   # = base + tax
-            cod_fee = round(
-                r["cod_fee_percent"] * cod_approved
-                + r["cod_fee_fixed_per_order"] * r["delivered_orders_count"],
-                2,
-            )
+            cod_fee_net = round(r.get("cod_fee_net", 0.0), 2)
+            cod_fee_vat = round(r.get("cod_fee_vat", 0.0), 2)
+            cod_fee = round(r.get("cod_fee_total", 0.0), 2)
             c2b = round(r.get("courier_to_bank", 0.0), 2)
             b2c = round(r.get("bank_to_courier", 0.0), 2)
             net = round(cod_approved - shipping_cost - cod_fee - c2b + b2c, 2)
@@ -684,6 +699,15 @@ def _build_router(db) -> APIRouter:
                 "shipping_tax":   shipping_tax,
                 "shipping_cost":  shipping_cost,   # base + tax (SSOT)
                 "cod_fee": cod_fee,
+                "cod_fee_net": cod_fee_net,
+                "cod_fee_vat": cod_fee_vat,
+                "cod_fee_rule_mode": (
+                    "tiered" if (r.get("cod_fee_config") or {}).get("cod_fee_tiers")
+                    else "flat"
+                ),
+                "cod_fee_rules_needing_review": int(
+                    r.get("cod_fee_rules_needing_review") or 0
+                ),
                 "courier_to_bank": c2b,
                 "bank_to_courier": b2c,
                 "net_balance": net,
@@ -704,6 +728,11 @@ def _build_router(db) -> APIRouter:
             "shipping_tax":  round(sum(r.get("shipping_tax", 0)  for r in rows), 2),
             "shipping_cost": round(sum(r["shipping_cost"] for r in rows), 2),  # base+tax
             "cod_fee":     round(sum(r["cod_fee"]     for r in rows), 2),
+            "cod_fee_net": round(sum(r.get("cod_fee_net", 0) for r in rows), 2),
+            "cod_fee_vat": round(sum(r.get("cod_fee_vat", 0) for r in rows), 2),
+            "cod_fee_rules_needing_review": sum(
+                int(r.get("cod_fee_rules_needing_review") or 0) for r in rows
+            ),
             "courier_to_bank": round(sum(r["courier_to_bank"] for r in rows), 2),
             "bank_to_courier": round(sum(r["bank_to_courier"] for r in rows), 2),
             "net_owed_to_us": round(sum(r["net_balance"] for r in rows if r["net_balance"] > 0), 2),
