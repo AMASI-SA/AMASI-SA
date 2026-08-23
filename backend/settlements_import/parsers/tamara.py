@@ -12,7 +12,7 @@ Real sample layout (verified — 2026-06):
         col6: Order Status (fully_captured / fully_refunded / partially_refunded)
         col7: Currency
         col8: Order Amount
-        col9: Event (Captured / Refunded)
+        col9: Event (Captured / Refunded / Canceled)
         col10: Event Amount (NEGATIVE when refunded)
         col11: Event Date DD/MM/YYYY
         col12: Tamara Fixed Fees
@@ -28,10 +28,14 @@ A single Merchant Order ID may appear MULTIPLE times when the order
 has both a Captured event and one or more Refund events. We emit one
 entry per event row; the importer collapses them when applying to
 unified_orders so the final actual_* values reflect:
-    net   = sum(Event=Captured → net) + sum(Event=Refunded → net)
-    fees  = sum(positive Total Fees only)  (refund rows have no fees)
+    net   = captured net + refund deductions + cancellation-fee deductions
+    fees  = sum(positive Total Fees on captures and cancellations)
     vat   = sum(positive VAT only)
     refund_full / refund_partial — split by order status
+
+Cancellation rows are fee adjustments, not sales.  In five verified 2026-08
+merchant statements every cancellation carried only the SAR 1.50 fixed fee
+plus SAR 0.23 VAT; it must reduce the payable without inflating captured gross.
 """
 from __future__ import annotations
 
@@ -145,6 +149,10 @@ def parse(workbook: openpyxl.Workbook) -> dict:
     total_net = 0.0
     total_refund_full = 0.0
     total_refund_partial = 0.0
+    total_canceled_amount = 0.0
+    total_canceled_fees = 0.0
+    total_canceled_vat = 0.0
+    canceled_count = 0
 
     required = ["merchant_order_id", "order_amount", "event_amount", "total_payable"]
     missing = [k for k in required if k not in cols]
@@ -179,24 +187,44 @@ def parse(workbook: openpyxl.Workbook) -> dict:
         if gross == 0 and net == 0 and event_amount == 0:
             continue
 
-        is_refund = ("refund" in event) or (net < 0) or ("refunded" in status)
+        # The Event column is authoritative.  A Captured row may already carry
+        # order_status=partially_refunded because the order was refunded later;
+        # classifying by status would erase the capture, its fee, and its VAT.
+        # Status/net are fallbacks only for legacy files with a blank Event.
+        if event:
+            is_canceled = "cancel" in event
+            is_refund = (not is_canceled) and ("refund" in event)
+        else:
+            is_canceled = "cancel" in status
+            is_refund = (
+                not is_canceled
+                and ((net < 0) or ("refunded" in status))
+            )
         refund_full = abs(event_amount) if (is_refund and "fully_refunded" in status) else 0.0
         refund_partial = abs(event_amount) if (is_refund and "partially_refunded" in status) else 0.0
 
-        fee_rate = round((fees / gross) * 100, 4) if gross > 0 and not is_refund else 0.0
+        fee_rate = (
+            round((fees / gross) * 100, 4)
+            if gross > 0 and not is_refund and not is_canceled else 0.0
+        )
+        event_type = (
+            "canceled_fee" if is_canceled
+            else ("refund" if is_refund else "sale")
+        )
 
         entries.append({
             "provider": "tamara",
             "order_number": order_no,
             "actual_payment_method": "tamara",
-            "actual_gross_amount": gross,
+            "actual_gross_amount": 0.0 if is_canceled else gross,
             "actual_payment_fee": fees if not is_refund else 0.0,
             "actual_payment_vat": vat if not is_refund else 0.0,
             "actual_net_amount": net,
             "actual_fee_rate": fee_rate,
             "actual_refund_amount": refund_full,
             "actual_partial_refund_amount": refund_partial,
-            "event_type": "refund" if is_refund else "sale",
+            "actual_canceled_amount": abs(event_amount) if is_canceled else 0.0,
+            "event_type": event_type,
             "settlement_reference": statement_ref,
             "settlement_date": event_date or txn_date,
             "installments": installments,
@@ -204,7 +232,15 @@ def parse(workbook: openpyxl.Workbook) -> dict:
             "tamara_order_id": to_str(r[cols.get("tamara_order_id", -1)] if cols.get("tamara_order_id") is not None else ""),
         })
 
-        if is_refund:
+        if is_canceled:
+            canceled_count += 1
+            total_canceled_amount += abs(event_amount)
+            total_canceled_fees += fees
+            total_canceled_vat += vat
+            total_fees += fees
+            total_vat += vat
+            total_net += net
+        elif is_refund:
             total_refund_full += refund_full
             total_refund_partial += refund_partial
             total_net += net  # negative
@@ -230,5 +266,9 @@ def parse(workbook: openpyxl.Workbook) -> dict:
             "net": round(total_net, 2),
             "refund_full": round(total_refund_full, 2),
             "refund_partial": round(total_refund_partial, 2),
+            "canceled_count": canceled_count,
+            "canceled_amount": round(total_canceled_amount, 2),
+            "canceled_fees": round(total_canceled_fees, 2),
+            "canceled_fees_vat": round(total_canceled_vat, 2),
         },
     }

@@ -128,7 +128,7 @@ def test_default_migration_updates_only_untouched_legacy_rows():
     assert by_name["STC Pay"]["commission_percent"] == 1.3
     assert by_name["بطاقة ائتمانية"]["commission_percent"] == 1.5
     assert by_name["Google Pay"]["commission_percent"] == 2.2
-    assert PAYMENT_FEE_DEFAULTS_VERSION == "salla-invoices-2026-08-v1"
+    assert PAYMENT_FEE_DEFAULTS_VERSION == "salla-tamara-statements-2026-08-v2"
 
 
 def test_known_card_rails_do_not_steal_each_others_settings():
