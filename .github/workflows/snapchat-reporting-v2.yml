@@ -5,6 +5,11 @@ on:
     branches:
       - main
       - hotfix/prod-snap-meta-final
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
     paths:
       - "backend/snapchat_v2/**"
       - "backend/snapchat_v2_test_bootstrap.py"
