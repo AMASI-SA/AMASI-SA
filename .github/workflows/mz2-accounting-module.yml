@@ -70,18 +70,18 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20.19.0"
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
       - name: Install frontend dependencies
-        run: npm install --legacy-peer-deps --no-audit --no-fund
+        run: yarn install --non-interactive
       - name: Run focused accounting tests
-        env:
-          CI: "true"
         run: >-
-          npm test --
+          CI=true yarn test
           --watchAll=false
           --runInBand
           src/pages/accounting/accountingPages.test.js
           src/components/OwnerOnlyRoute.test.jsx
           src/components/MezanV2NavigationShell.test.jsx
       - name: Build frontend
-        run: npm run build
+        run: CI=false yarn build
