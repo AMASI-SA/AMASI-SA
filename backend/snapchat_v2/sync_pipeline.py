@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 
 from .client import SnapchatClientError, SnapchatV2Client
 from .connection import SnapchatConnectionError, SnapchatConnectionManager
-from .entities import sync_entities
+from .entities import list_entities, sync_entities
 from .facts import upsert_hourly_facts
 from .lease import (
     acquire_lease,
@@ -218,6 +218,119 @@ class SnapchatV2SyncPipeline:
         )
         return summary, errors
 
+    async def _sync_breakdown_performance(
+        self,
+        client: SnapchatV2Client,
+        *,
+        user_id: str,
+        account: dict[str, Any],
+        sync_run_id: str,
+        entity_type: str,
+        campaign_rows: list[dict[str, Any]],
+        start_utc: datetime,
+        end_utc: datetime,
+        action_report_time: str,
+    ) -> tuple[dict[str, Any], dict[str, Any] | None]:
+        campaign_ids = sorted(
+            {
+                str(row.get("campaign_id") or "").strip()
+                for row in campaign_rows
+                if str(row.get("campaign_id") or "").strip()
+                and any(
+                    float(row.get(field) or 0) > 0
+                    for field in (
+                        "spend_native",
+                        "impressions",
+                        "swipes",
+                        "video_views",
+                        "purchases",
+                        "purchase_value_native",
+                    )
+                )
+            }
+        )
+        parent_lookup: dict[str, str] = {}
+        if entity_type == "ad":
+            identities = await list_entities(
+                self.db,
+                user_id=user_id,
+                ad_account_id=str(account["ad_account_id"]),
+                entity_type="ad",
+                active_only=False,
+                limit=20_000,
+            )
+            parent_lookup = {
+                str(row.get("external_id") or "").strip(): str(
+                    row.get("ad_squad_id") or ""
+                ).strip()
+                for row in identities
+                if str(row.get("external_id") or "").strip()
+                and str(row.get("ad_squad_id") or "").strip()
+            }
+        await update_sync_stage(
+            self.db,
+            sync_run_id,
+            f"{entity_type}_performance_fetch",
+            details={"campaigns_with_activity": len(campaign_ids)},
+            now=self.now,
+        )
+        try:
+            performance = await client.fetch_breakdown_hourly_facts(
+                account,
+                campaign_ids=campaign_ids,
+                entity_type=entity_type,
+                start_utc=start_utc,
+                end_utc=end_utc,
+                sync_run_id=sync_run_id,
+                action_report_time=action_report_time,
+                ad_squad_by_ad_id=parent_lookup,
+            )
+            write = await upsert_hourly_facts(
+                self.db,
+                performance["rows"],
+                now=self.now(),
+            )
+            coverage = {
+                **dict(performance.get("coverage") or {}),
+                "campaigns_requested": len(campaign_ids),
+                "identity_parent_matches": len(parent_lookup),
+            }
+            await set_level_status(
+                self.db,
+                sync_run_id,
+                entity_type,
+                "complete",
+                coverage=coverage,
+                now=self.now,
+            )
+            return {
+                **write,
+                "coverage": coverage,
+            }, None
+        except Exception as exc:  # noqa: BLE001
+            code = str(getattr(exc, "code", type(exc).__name__))[:96]
+            coverage = {
+                **dict(getattr(exc, "coverage", {}) or {}),
+                "status": "partial",
+                "data_state": "unknown_incomplete",
+                "reason": code,
+                "campaigns_requested": len(campaign_ids),
+            }
+            await set_level_status(
+                self.db,
+                sync_run_id,
+                entity_type,
+                "partial",
+                coverage=coverage,
+                now=self.now,
+            )
+            error = {
+                "level": entity_type,
+                "code": code,
+                "retryable": bool(getattr(exc, "retryable", False)),
+            }
+            return {"rows_saved": 0, "coverage": coverage}, error
+
     async def run(
         self,
         user_id: str,
@@ -301,6 +414,7 @@ class SnapchatV2SyncPipeline:
         client = self._client(str(user_id))
         warnings: list[dict[str, Any]] = []
         financial_committed = False
+        identity_summary: dict[str, Any] = {}
         try:
             await update_sync_stage(
                 self.db,
@@ -310,14 +424,6 @@ class SnapchatV2SyncPipeline:
                 details={"ad_account_id": account_id},
                 now=self.now,
             )
-            identity_summary, identity_errors = await self._sync_identities(
-                client,
-                user_id=str(user_id),
-                account_id=account_id,
-                sync_run_id=sync_run_id,
-            )
-            warnings.extend(identity_errors)
-
             await update_sync_stage(
                 self.db,
                 sync_run_id,
@@ -372,30 +478,33 @@ class SnapchatV2SyncPipeline:
                 },
                 now=self.now,
             )
-            await set_level_status(
-                self.db,
-                sync_run_id,
-                "ad_squad",
-                "partial",
-                coverage={
-                    "status": "partial",
-                    "reason": "ad_squad_performance_shadow_pending",
-                    "identity": identity_summary.get("ad_squad") or {},
-                },
-                now=self.now,
+            # Publish the financially authoritative account/campaign facts
+            # before the large identity catalog. Production accounts can have
+            # more than ten thousand Ads, and catalog discovery must not make
+            # the visible spend stale while a rolling run is still healthy.
+            identity_summary, identity_errors = await self._sync_identities(
+                client,
+                user_id=str(user_id),
+                account_id=account_id,
+                sync_run_id=sync_run_id,
             )
-            await set_level_status(
-                self.db,
-                sync_run_id,
-                "ad",
-                "partial",
-                coverage={
-                    "status": "partial",
-                    "reason": "ad_performance_shadow_pending",
-                    "identity": identity_summary.get("ad") or {},
-                },
-                now=self.now,
-            )
+            warnings.extend(identity_errors)
+            breakdown_summary: dict[str, Any] = {}
+            for entity_type in ("ad_squad", "ad"):
+                level_summary, level_error = await self._sync_breakdown_performance(
+                    client,
+                    user_id=str(user_id),
+                    account=account,
+                    sync_run_id=sync_run_id,
+                    entity_type=entity_type,
+                    campaign_rows=hourly["campaign_rows"],
+                    start_utc=start_utc,
+                    end_utc=end_utc,
+                    action_report_time=action_report_time,
+                )
+                breakdown_summary[entity_type] = level_summary
+                if level_error:
+                    warnings.append(level_error)
 
             await update_sync_stage(
                 self.db,
@@ -485,6 +594,7 @@ class SnapchatV2SyncPipeline:
                 "rows_saved": fact_write["rows_saved"],
                 "campaign_rows": len(hourly["campaign_rows"]),
                 "account_rows": len(hourly["account_rows"]),
+                "breakdown_performance": breakdown_summary,
                 "provider_calls": client.provider_calls,
                 "request_windows": hourly["request_windows"],
                 "identity": identity_summary,
