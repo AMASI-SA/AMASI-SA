@@ -16,7 +16,7 @@ from .token_store import SnapchatTokenStore, SnapchatTokenStoreError
 
 SNAPCHAT_API_BASE = "https://adsapi.snapchat.com/v1"
 MAX_HOUR_WINDOW = timedelta(days=7)
-MAX_PAGES = 50
+MAX_PAGES = 100
 MAX_PROVIDER_CALLS = 500
 MAX_ENTITY_ROWS = 20_000
 HTTP_RETRIES = 3
