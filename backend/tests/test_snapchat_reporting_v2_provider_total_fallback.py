@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import pytest
 
 from snapchat_v2.client import SnapchatClientError, SnapchatV2Client
-from snapchat_v2.provider_total import _fetch_window_total
+from snapchat_v2.provider_total import _fetch_window_total, fetch_provider_total
 
 
 class _HTTPContext:
@@ -97,3 +97,10 @@ async def test_provider_total_falls_back_to_fresh_hour_read_on_total_http_400():
     assert result["coverage"]["status"] == "complete"
     assert result["coverage"]["provider_granularity"] == "HOUR"
     assert result["coverage"]["fallback_from"] == "snapchat_provider_http_400"
+
+
+def test_provider_total_defaults_match_ads_manager_conversion_time_window():
+    defaults = fetch_provider_total.__kwdefaults__
+    assert defaults["action_report_time"] == "conversion"
+    assert defaults["swipe_attribution_window"] == "28_DAY"
+    assert defaults["view_attribution_window"] == "7_DAY"

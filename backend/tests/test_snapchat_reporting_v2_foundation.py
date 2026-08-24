@@ -104,7 +104,7 @@ def _fact(**overrides):
         "account_timezone": "America/Los_Angeles",
         "currency": "USD",
         "action_report_time": "conversion",
-        "attribution_windows": {"swipe": "28_DAY", "view": "1_DAY"},
+        "attribution_windows": {"swipe": "28_DAY", "view": "7_DAY"},
         "spend_native": 12.5,
         "impressions": 100,
         "swipes": 5,

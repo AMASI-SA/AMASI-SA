@@ -11,7 +11,13 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
 
-from .models import SNAPCHAT_PROVIDER, clean_text, ensure_aware_utc
+from .models import (
+    DEFAULT_SWIPE_ATTRIBUTION_WINDOW,
+    DEFAULT_VIEW_ATTRIBUTION_WINDOW,
+    SNAPCHAT_PROVIDER,
+    clean_text,
+    ensure_aware_utc,
+)
 from .token_store import SnapchatTokenStore, SnapchatTokenStoreError
 
 SNAPCHAT_API_BASE = "https://adsapi.snapchat.com/v1"
@@ -663,8 +669,8 @@ class SnapchatV2Client:
         end_utc: datetime,
         sync_run_id: str,
         action_report_time: str = "conversion",
-        swipe_attribution_window: str = "28_DAY",
-        view_attribution_window: str = "1_DAY",
+        swipe_attribution_window: str = DEFAULT_SWIPE_ATTRIBUTION_WINDOW,
+        view_attribution_window: str = DEFAULT_VIEW_ATTRIBUTION_WINDOW,
         ad_squad_by_ad_id: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         config = PERFORMANCE_BREAKDOWNS.get(entity_type)
@@ -906,8 +912,8 @@ class SnapchatV2Client:
         end_utc: datetime,
         sync_run_id: str,
         action_report_time: str = "conversion",
-        swipe_attribution_window: str = "28_DAY",
-        view_attribution_window: str = "1_DAY",
+        swipe_attribution_window: str = DEFAULT_SWIPE_ATTRIBUTION_WINDOW,
+        view_attribution_window: str = DEFAULT_VIEW_ATTRIBUTION_WINDOW,
     ) -> dict[str, Any]:
         account_id = clean_text(
             account.get("ad_account_id") or account.get("external_account_id"),
