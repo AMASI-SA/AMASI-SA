@@ -5,6 +5,7 @@ import { WarningCircle } from "@phosphor-icons/react";
 import api from "../lib/api";
 
 const QOYOD_BASE = "/integrations/qoyod";
+const QOYOD_SYNC_START_DATE = "2026-07-01";
 const REFRESH_INTERVAL_MS = 15_000;
 
 export function eligibleQoyodUnsentCount(payload) {
@@ -20,7 +21,7 @@ export default function QoyodUnsentHeaderAlert() {
         try {
             const { data } = await api.get(`${QOYOD_BASE}/unsent-orders`, {
                 params: {
-                    days: 365,
+                    from_date: QOYOD_SYNC_START_DATE,
                     limit: 5000,
                     status: "لم يُرسل",
                 },
@@ -62,7 +63,7 @@ export default function QoyodUnsentHeaderAlert() {
                     >
                         {count.toLocaleString("ar-SA")}
                     </span>{" "}
-                    طلب مؤهل لم يُرسل إلى قيود
+                    طلب مؤهل منذ 1 يوليو 2026 لم يُرسل إلى قيود
                 </div>
                 <Link
                     to="/integrations-v2/qoyod?tab=exceptions"
