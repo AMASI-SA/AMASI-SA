@@ -66,6 +66,19 @@ def install_accounting_settlement_identity_routes(router, db, current_user):
             statement_reference=reference,
             source_hash=current.get("source_file_hash") or "",
         )
+        if (
+            reference == str(current.get("statement_reference") or "").strip()
+            and next_key == str(current.get("idempotency_key") or "").strip()
+        ):
+            return {
+                "id": draft_id,
+                "statement_reference": reference,
+                "idempotency_key": next_key,
+                "version": int(current.get("version") or 1),
+                "updated_at": current.get("updated_at"),
+                "unchanged": True,
+            }
+
         duplicate = await db.accounting_settlements_v2.find_one(
             {
                 "user_id": owner_id,
@@ -152,6 +165,7 @@ def install_accounting_settlement_identity_routes(router, db, current_user):
             "idempotency_key": next_key,
             "version": revision["version"],
             "updated_at": now,
+            "unchanged": False,
         }
 
     return router
