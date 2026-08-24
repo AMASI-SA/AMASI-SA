@@ -36,13 +36,22 @@ def test_file_currency_is_explicit_and_unsupported_currency_fails_closed():
     assert exc.value.detail["currency"] == "USD"
 
 
+def test_persisted_importer_provenance_is_preserved_on_the_draft():
+    assert settlement_currency_from_file({
+        "provider": "tabby",
+        "currency": "SAR",
+        "currency_source": "workbook.currency_column",
+        "header": {"currency": "SAR"},
+    }) == ("SAR", "workbook.currency_column")
+
+
 def test_missing_parser_currency_uses_auditable_provider_contract_not_silent_default():
     currency, source = settlement_currency_from_file({
         "provider": "salla",
         "header": {},
     })
     assert currency == "SAR"
-    assert source == "provider_contract_sar"
+    assert source == "provider_contract_sar:salla"
 
 
 def test_existing_drafts_without_explicit_supported_currency_are_blocked():
@@ -97,7 +106,7 @@ async def test_guarded_create_persists_currency_and_provenance_on_draft():
 
     assert seen["file_doc"]["header"]["currency"] == "SAR"
     assert result["currency"] == "SAR"
-    assert result["currency_source"] == "provider_contract_sar"
+    assert result["currency_source"] == "provider_contract_sar:salla"
     assert result["source_snapshot"]["currency"] == "SAR"
     assert db.accounting_settlements_v2.calls
     update = db.accounting_settlements_v2.calls[0][1]["$set"]
