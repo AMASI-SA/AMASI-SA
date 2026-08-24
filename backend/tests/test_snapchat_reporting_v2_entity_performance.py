@@ -135,7 +135,7 @@ async def test_fetches_ad_squad_hourly_facts_from_campaign_breakdown():
             "account_timezone": "UTC",
             "currency": "USD",
             "action_report_time": "conversion",
-            "attribution_windows": {"swipe": "28_DAY", "view": "1_DAY"},
+            "attribution_windows": {"swipe": "28_DAY", "view": "7_DAY"},
             "spend_native": 1.25,
             "impressions": 100,
             "swipes": 5,
@@ -168,6 +168,9 @@ async def test_fetches_ad_squad_hourly_facts_from_campaign_breakdown():
     url, params = factory.clients[0].calls[0]
     assert url.endswith("/campaigns/c1/stats")
     assert params["breakdown"] == "adsquad"
+    assert params["action_report_time"] == "conversion"
+    assert params["swipe_up_attribution_window"] == "28_DAY"
+    assert params["view_attribution_window"] == "7_DAY"
 
 
 @pytest.mark.asyncio

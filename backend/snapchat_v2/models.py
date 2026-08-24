@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from typing import Any, Literal, TypedDict
 
 SNAPCHAT_PROVIDER = "snapchat_ads"
+DEFAULT_SWIPE_ATTRIBUTION_WINDOW = "28_DAY"
+DEFAULT_VIEW_ATTRIBUTION_WINDOW = "7_DAY"
 
 EntityType = Literal["ad_account", "campaign", "ad_squad", "ad"]
 SyncState = Literal[

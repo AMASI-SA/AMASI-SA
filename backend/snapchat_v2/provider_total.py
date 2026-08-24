@@ -28,6 +28,7 @@ from .client import (
     _number,
 )
 from .models import clean_text, ensure_aware_utc
+from .models import DEFAULT_SWIPE_ATTRIBUTION_WINDOW, DEFAULT_VIEW_ATTRIBUTION_WINDOW
 
 RIYADH_TZ = ZoneInfo("Asia/Riyadh")
 
@@ -283,8 +284,8 @@ async def fetch_provider_total(
     start_utc: datetime,
     end_utc: datetime,
     action_report_time: str = "conversion",
-    swipe_attribution_window: str = "28_DAY",
-    view_attribution_window: str = "1_DAY",
+    swipe_attribution_window: str = DEFAULT_SWIPE_ATTRIBUTION_WINDOW,
+    view_attribution_window: str = DEFAULT_VIEW_ATTRIBUTION_WINDOW,
 ) -> dict[str, Any]:
     """Return Dashboard-window total plus an account-day comparison total.
 

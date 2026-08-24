@@ -6,6 +6,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable
 
 from .models import (
+    DEFAULT_SWIPE_ATTRIBUTION_WINDOW,
+    DEFAULT_VIEW_ATTRIBUTION_WINDOW,
     SNAPCHAT_PROVIDER,
     build_attribution_key,
     clean_text,
@@ -235,6 +237,7 @@ async def load_hourly_facts(
     end_utc: datetime,
     entity_type: str | None = None,
     action_report_time: str | None = None,
+    attribution_windows: dict[str, Any] | None = None,
     limit: int = MAX_FACT_ROWS_PER_WRITE,
 ) -> list[dict[str, Any]]:
     start = ensure_aware_utc(start_utc, field="start_utc")
@@ -250,7 +253,16 @@ async def load_hourly_facts(
     if entity_type:
         query["entity_type"] = entity_type
     if action_report_time:
-        query["action_report_time"] = clean_text(action_report_time, limit=32).lower()
+        normalized_action_time = clean_text(action_report_time, limit=32).lower()
+        query["action_report_time"] = normalized_action_time
+        selected_windows = attribution_windows or {
+            "swipe": DEFAULT_SWIPE_ATTRIBUTION_WINDOW,
+            "view": DEFAULT_VIEW_ATTRIBUTION_WINDOW,
+        }
+        query["attribution_key"] = build_attribution_key(
+            normalized_action_time,
+            selected_windows,
+        )
     cursor = db[SNAPCHAT_HOURLY_FACTS_COLLECTION].find(query, {"_id": 0})
     if hasattr(cursor, "sort"):
         cursor = cursor.sort([("hour_start_utc", 1), ("entity_type", 1), ("external_id", 1)])
