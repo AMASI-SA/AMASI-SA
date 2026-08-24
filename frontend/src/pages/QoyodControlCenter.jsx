@@ -43,7 +43,7 @@ function Card({ label, value, hint, tone = "slate", testid }) {
   return (
     <div className={`rounded-2xl border p-4 ${tones[tone]}`} data-testid={testid}>
       <div className="text-xs font-extrabold opacity-70">{label}</div>
-      <div className="mt-2 text-2xl font-black">{value}</div>
+      <div className="mt-2 text-2xl font-black" dir="ltr">{value}</div>
       <div className="mt-2 text-xs font-semibold opacity-70">{hint}</div>
     </div>
   );
@@ -60,9 +60,17 @@ export function QoyodOverview({ settings, unsent, loading, error, onRefresh, onO
   const worker = automatic.worker || {};
   const live = automatic.armed === true && worker.running === true;
   const lastError = automatic.last_error;
-  const pending = Number(unsent?.counts?.["لم يُرسل"] || 0);
-  const failed = Number(unsent?.counts?.["فشل"] || 0);
+  const queue = unsent?.queue_counts || {};
+  const legacyPending = Number(unsent?.counts?.["لم يُرسل"] || 0);
+  const legacyFailed = Number(unsent?.counts?.["فشل"] || 0);
   const duplicate = Number(unsent?.counts?.["مكرر"] || 0);
+  const ready = Number(queue.ready_to_send ?? legacyPending);
+  const quarantined = Number(queue.quarantined ?? legacyFailed);
+  const paymentVerification = Number(queue.needs_payment_verification || 0);
+  const inQoyod = Number(
+    queue.in_qoyod ?? unsent?.counts?.["أُرسل"] ?? 0,
+  );
+  const retryableSync = Number(queue.retryable_sync || 0);
   const credentials = settings?.credentials?.configured === true;
 
   return (
@@ -81,7 +89,7 @@ export function QoyodOverview({ settings, unsent, loading, error, onRefresh, onO
               </h2>
               <p className="mt-1 text-sm font-semibold opacity-75">
                 {live
-                  ? "طلبات تم التنفيذ تُرسل مرة واحدة، والفواتير والسداد تُسجّل تلقائيًا."
+                  ? "يعالج الطلبات المؤهلة من الأقدم إلى الأحدث، ويحفظ الفاتورة والسداد في ميزان فورًا."
                   : REASON_LABELS[automatic.disabled_reason] || "راجع الإعدادات وحالة العامل."}
               </p>
             </div>
@@ -104,7 +112,7 @@ export function QoyodOverview({ settings, unsent, loading, error, onRefresh, onO
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2">
         <Card
           label="مفتاح قيود"
           value={credentials ? "محفوظ" : "غير محفوظ"}
@@ -119,19 +127,38 @@ export function QoyodOverview({ settings, unsent, loading, error, onRefresh, onO
           tone={worker.running ? "emerald" : "rose"}
           testid="qoyod-v2-worker"
         />
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" data-testid="qoyod-v2-queue-counts">
         <Card
-          label="بانتظار الإرسال"
-          value={pending}
-          hint="طلبات ضمن نطاق التكامل ولم تُرسل"
-          tone={pending ? "amber" : "emerald"}
-          testid="qoyod-v2-pending"
+          label="جاهز للإرسال"
+          value={ready}
+          hint={retryableSync
+            ? `إعادة مزامنة مجدولة لعدد ${retryableSync}`
+            : "طلبات مؤهلة وستُعالج من الأقدم أولًا"}
+          tone={ready ? "amber" : "emerald"}
+          testid="qoyod-v2-ready"
         />
         <Card
-          label="فشل / يحتاج مراجعة"
-          value={failed}
-          hint={`المكرر المستبعد: ${duplicate}`}
-          tone={failed ? "rose" : "emerald"}
-          testid="qoyod-v2-failed"
+          label="محجور للمراجعة"
+          value={quarantined}
+          hint={`أخطاء محاسبية حقيقية · المكرر: ${duplicate}`}
+          tone={quarantined ? "rose" : "emerald"}
+          testid="qoyod-v2-quarantined"
+        />
+        <Card
+          label="يحتاج تحقق دفع"
+          value={paymentVerification}
+          hint="لا يُرسل حتى يثبت سداد الطلب من سلة"
+          tone={paymentVerification ? "amber" : "emerald"}
+          testid="qoyod-v2-payment-verification"
+        />
+        <Card
+          label="موجود في قيود"
+          value={inQoyod}
+          hint="مطابقة دقيقة لرقم الطلب في مرجع الفاتورة"
+          tone="sky"
+          testid="qoyod-v2-in-qoyod"
         />
       </div>
 
@@ -151,7 +178,7 @@ export function QoyodOverview({ settings, unsent, loading, error, onRefresh, onO
           className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-right hover:bg-amber-100"
         >
           <div className="font-black text-amber-950">مراجعة الاستثناءات</div>
-          <div className="mt-2 text-sm text-amber-800">الطلبات التي لم ينجح الإرسال التلقائي لها وأسبابها.</div>
+          <div className="mt-2 text-sm text-amber-800">الأخطاء الحقيقية فقط؛ أخطاء المزامنة يعاد جدولتها تلقائيًا.</div>
         </button>
         <button
           type="button"
@@ -173,7 +200,7 @@ export function QoyodOverview({ settings, unsent, loading, error, onRefresh, onO
 
       <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
         <span className="font-black">سياسة التشغيل النهائية:</span>{" "}
-        لا توجد صفحة إرسال يدوي يومية. الإرسال تلقائي فقط، وأي طلب غير آمن يبقى في الاستثناءات دون إعادة إرسال عمياء.
+        الإرسال تلقائي فقط. الفاتورة الموجودة في قيود تُصالح ولا تُعاد، وأي طلب غير آمن يبقى محجورًا بسبب واضح.
       </div>
     </div>
   );
