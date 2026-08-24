@@ -3,13 +3,12 @@ import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { useOptionalAuth } from "../../context/AuthContext";
 import { getAccountingAccess, getAccountingModuleStatus } from "../../services/accountingModule";
-import LegacyFinancialProviderAppsWorkspace from "../FinancialProviderAppsLegacyWorkspace";
 import AccountingHome from "./AccountingHome";
 import AccountingPermissionsDialog from "./AccountingPermissionsDialog";
+import AccountingSettlements from "./AccountingSettlements";
 import {
     AccessDenied,
     AccountingHeader,
-    ImplementationNotice,
     LoadingBlock,
 } from "./AccountingShared";
 import { OpeningBalancesBlocked, PartialWorkflowPage } from "./AccountingWorkflowPages";
@@ -71,7 +70,7 @@ export default function AccountingWorkspace() {
             ? <LoadingBlock />
             : <AccountingHome status={status} user={user} accountingPermissions={permissions} />;
     } else if (page.id === "settlements") {
-        content = <div className="space-y-5"><ImplementationNotice page={page} /><LegacyFinancialProviderAppsWorkspace /></div>;
+        content = <AccountingSettlements accountingPermissions={permissions} />;
     } else if (page.id === "opening-balances") {
         content = statusLoading ? <LoadingBlock /> : <OpeningBalancesBlocked status={status} />;
     } else {
