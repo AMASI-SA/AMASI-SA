@@ -85,6 +85,14 @@ export async function updateAccountingSettlementDraft(draftId, payload) {
     return data;
 }
 
+export async function matchAccountingSettlementEntry(draftId, payload) {
+    const { data } = await api.post(
+        `${SETTLEMENTS}/drafts/${encodeURIComponent(draftId)}/match-entry`,
+        payload,
+    );
+    return data;
+}
+
 export async function submitAccountingSettlementDraft(draftId, notes = "") {
     const { data } = await api.post(
         `${SETTLEMENTS}/drafts/${encodeURIComponent(draftId)}/submit`,
