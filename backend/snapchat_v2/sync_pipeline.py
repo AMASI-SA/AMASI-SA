@@ -300,6 +300,7 @@ class SnapchatV2SyncPipeline:
         outcome = "failed"
         client = self._client(str(user_id))
         warnings: list[dict[str, Any]] = []
+        financial_committed = False
         try:
             await update_sync_stage(
                 self.db,
@@ -359,6 +360,7 @@ class SnapchatV2SyncPipeline:
                 coverage=hourly["coverage"],
                 now=self.now,
             )
+            financial_committed = True
             await set_level_status(
                 self.db,
                 sync_run_id,
@@ -527,24 +529,29 @@ class SnapchatV2SyncPipeline:
                 "summary": summary,
             }
         except Exception as exc:  # noqa: BLE001
-            await set_level_status(
-                self.db,
-                sync_run_id,
-                "financial",
-                "failed",
-                coverage=getattr(exc, "coverage", None)
-                or {
-                    "status": "incomplete",
-                    "data_state": "unknown_incomplete",
-                    "reason": str(getattr(exc, "code", type(exc).__name__))[:96],
-                },
-                now=self.now,
-            )
+            if not financial_committed:
+                await set_level_status(
+                    self.db,
+                    sync_run_id,
+                    "financial",
+                    "failed",
+                    coverage=getattr(exc, "coverage", None)
+                    or {
+                        "status": "incomplete",
+                        "data_state": "unknown_incomplete",
+                        "reason": str(getattr(exc, "code", type(exc).__name__))[:96],
+                    },
+                    now=self.now,
+                )
             await fail_sync_run(
                 self.db,
                 sync_run_id,
                 exc,
-                stage="financial_sync_failed",
+                stage=(
+                    "post_financial_sync_failed"
+                    if financial_committed
+                    else "financial_sync_failed"
+                ),
                 now=self.now,
             )
             await self.db["mezan_snapchat_connections_v2"].update_one(
