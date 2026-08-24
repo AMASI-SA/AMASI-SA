@@ -45,7 +45,16 @@ describe("QoyodControlCenter", () => {
             worker: { running: true, last_run_at: "2026-08-08T10:00:00Z" },
           },
         }}
-        unsent={{ counts: { "لم يُرسل": 0, "فشل": 0, "مكرر": 1 } }}
+        unsent={{
+          counts: { "لم يُرسل": 0, "فشل": 0, "مكرر": 1, "أُرسل": 14 },
+          queue_counts: {
+            ready_to_send: 3,
+            quarantined: 2,
+            needs_payment_verification: 4,
+            in_qoyod: 14,
+            retryable_sync: 1,
+          },
+        }}
         loading={false}
         error=""
         onRefresh={() => {}}
@@ -54,7 +63,12 @@ describe("QoyodControlCenter", () => {
     );
 
     expect(html).toContain("الإرسال التلقائي إلى قيود يعمل");
-    expect(html).toContain("لا توجد صفحة إرسال يدوي يومية");
+    expect(html).toContain("جاهز للإرسال");
+    expect(html).toContain("محجور للمراجعة");
+    expect(html).toContain("يحتاج تحقق دفع");
+    expect(html).toContain("موجود في قيود");
+    expect(html).toContain("إعادة مزامنة مجدولة لعدد 1");
+    expect(html).toContain("الفاتورة الموجودة في قيود تُصالح ولا تُعاد");
     expect(html).not.toContain("تأكيد الإرسال إلى قيود");
   });
 });
