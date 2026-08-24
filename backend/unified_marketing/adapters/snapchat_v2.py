@@ -8,6 +8,7 @@ from unified_marketing.contract import (
     UnifiedAccount,
     UnifiedCommerceOrderSummary,
     UnifiedCommerceOutcomes,
+    UnifiedCommerceProfitability,
     UnifiedDeliveryMetrics,
     UnifiedEntityIdentity,
     UnifiedLineage,
@@ -15,6 +16,7 @@ from unified_marketing.contract import (
     UnifiedMarketingRow,
     UnifiedPeriod,
     UnifiedPlatformOutcomes,
+    UnifiedProductProfitability,
     UnifiedQuality,
 )
 
@@ -36,6 +38,7 @@ PROVIDER_METRIC_MAPPING = {
     "platform_outcomes.revenue": "purchase_value_native",
     "commerce_outcomes.orders": "salla_results.orders",
     "commerce_outcomes.revenue": "salla_results.sales_sar",
+    "commerce_profitability": "salla_results.profitability",
 }
 
 
@@ -157,6 +160,60 @@ def _commerce(
             if entity_type == "account"
             else "exact_campaign_match"
         ),
+    )
+
+
+def _profitability(row: dict[str, Any]) -> UnifiedCommerceProfitability:
+    value = (row.get("salla_results") or {}).get("profitability")
+    if not isinstance(value, dict):
+        return UnifiedCommerceProfitability(
+            status="unavailable",
+            orders=None,
+            sales=MoneyValue(amount=None, currency="SAR"),
+            product_cost=MoneyValue(amount=None, currency="SAR"),
+            known_product_cost=MoneyValue(amount=None, currency="SAR"),
+            ad_spend=MoneyValue(amount=_number(row.get("spend_sar")), currency="SAR"),
+            contribution_profit=MoneyValue(amount=None, currency="SAR"),
+            cost_status="unavailable",
+            profit_scope="campaign_exact_match_only",
+        )
+    products = [
+        UnifiedProductProfitability(
+            identity=str(product.get("identity") or "unknown"),
+            salla_product_id=product.get("salla_product_id") or None,
+            mezan_product_id=product.get("mezan_product_id") or None,
+            name=str(product.get("name") or "منتج بدون اسم"),
+            sku=product.get("sku") or None,
+            image_url=product.get("image_url") or None,
+            units=max(0.0, _number(product.get("units")) or 0.0),
+            orders=_integer(product.get("orders")),
+            sales=MoneyValue(amount=_number(product.get("sales_sar")), currency="SAR"),
+            product_cost=MoneyValue(amount=_number(product.get("product_cost_sar")), currency="SAR"),
+            allocated_ad_spend=MoneyValue(amount=_number(product.get("allocated_ad_spend_sar")), currency="SAR"),
+            contribution_profit=MoneyValue(amount=_number(product.get("contribution_profit_sar")), currency="SAR"),
+            profit_margin_pct=_number(product.get("profit_margin_pct")),
+            cost_status=str(product.get("cost_status") or "unavailable"),
+            cost_sources=list(product.get("cost_sources") or []),
+        )
+        for product in value.get("products") or []
+        if isinstance(product, dict)
+    ]
+    missing = int(value.get("missing_cost_orders") or 0)
+    return UnifiedCommerceProfitability(
+        status="complete" if not missing else "partial",
+        orders=_integer(value.get("orders")),
+        sales=MoneyValue(amount=_number(value.get("sales_sar")), currency="SAR"),
+        product_cost=MoneyValue(amount=_number(value.get("product_cost_sar")), currency="SAR"),
+        known_product_cost=MoneyValue(amount=_number(value.get("known_product_cost_sar")), currency="SAR"),
+        ad_spend=MoneyValue(amount=_number(value.get("ad_spend_sar")), currency="SAR"),
+        contribution_profit=MoneyValue(amount=_number(value.get("contribution_profit_sar")), currency="SAR"),
+        profit_margin_pct=_number(value.get("profit_margin_pct")),
+        cost_status=str(value.get("cost_status") or "unavailable"),
+        missing_cost_orders=missing,
+        product_count=len(products),
+        products=products,
+        profit_scope=str(value.get("profit_scope") or "campaign_exact_match_only"),
+        allocation_method=value.get("allocation_method"),
     )
 
 
@@ -301,6 +358,7 @@ def adapt_snapchat_v2_row(
             roas=_number(row.get("roas")) if metrics_known else None,
         ),
         commerce_outcomes=_commerce(row, entity_type=entity_type),
+        commerce_profitability=_profitability(row),
         quality=UnifiedQuality(
             sync_status=row_sync_status,
             coverage_status=coverage_status,
