@@ -1,7 +1,7 @@
 # P01 — التسويات وربط البنوك الفعلية
 
 الحالة: **IN_PROGRESS**  
-بوابة الخروج: **PARTIAL_AUTOMATED_PASS**  
+بوابة الخروج: **DEPLOYED_AWAITING_BROWSER_ACCEPTANCE**  
 المرحلة التالية المقفلة: P02
 
 ## الهدف
@@ -20,7 +20,7 @@
 
 ## الحالة الحالية
 
-تم تنفيذ نطاق P01 على PR `#868` دون فتح P02 أو إنشاء أرصدة افتتاحية. يشمل التنفيذ:
+تم تنفيذ نطاق P01 ودمجه ونشره على Production عبر PR `#868` دون فتح P02 أو إنشاء أرصدة افتتاحية. يشمل التنفيذ:
 
 - صفحة تسويات موحدة وسجلًا قابلًا للبحث.
 - ربط البنك الحالي للمزودين وشركات الشحن الخارجية المدعومة.
@@ -31,7 +31,19 @@
 - حماية ملف الدليل ومنع التكرار وترحيل مجموعة قيد واحدة متوازنة.
 - صلاحيات محاسبية مستقلة وواجهات RTL بأرقام إنجليزية.
 
-نجح Workflow المحاسبة رقم `32766041235` في اختبارات Backend واختبارات Frontend والبناء الكامل. ما زال إغلاق المرحلة ممنوعًا حتى دمج PR، ونشر Runtime، والتحقق عبر release guard والمتصفح.
+نجح Workflow المحاسبة رقم `32769235392` في اختبارات Backend واختبارات Frontend والبناء الكامل. تم دمج PR على SHA `97f5197cee143b080c499f08cd4eecff42564ea6`، ونُشر Runtime نفسه، ونجح `production_release_guard.py verify` بثلاث قراءات متتالية. ما زال إغلاق المرحلة ممنوعًا حتى تنفيذ سيناريوهات المتصفح الثمانية وتوثيق نتائجها.
+
+### إثبات النشر إلى Production
+
+- Merge SHA وProduction SHA: `97f5197cee143b080c499f08cd4eecff42564ea6`
+- Release ID: `37060d5b-b857-449c-8b49-33b4cf7800de`
+- `verified=true`
+- `checks=3`
+- `/api/health`: `ok=true`
+- `critical_file_hashes_match=true`
+- `production_release_guard.py status`: `active=false` بعد التحقق
+- أول هوية إقلاع مرصودة: `2026-08-24T21:03:45.282177+00:00`
+- هوية إقلاع إضافية مرصودة: `2026-08-24T21:04:04.239581+00:00`
 
 ## القرارات الثابتة
 
@@ -166,8 +178,8 @@
 - [x] الصلاحيات مستقلة ومختبرة.
 - [x] اختبارات Backend ناجحة.
 - [x] اختبارات Frontend والبناء ناجحة.
-- [ ] PR مدمج في Production branch.
-- [ ] Runtime منشور ومتحقق عبر release guard.
+- [x] PR مدمج في Production branch.
+- [x] Runtime منشور ومتحقق عبر release guard.
 - [ ] سيناريوهات المتصفح ناجحة وموثقة.
 - [x] تم تحديث `STATUS.json` بحالة التنفيذ الحالية.
 - [ ] تم فتح P02؛ يبقى هذا البند مقفلًا حتى نجاح جميع البنود السابقة.
@@ -175,10 +187,11 @@
 ## سجل الأدلة
 
 - PR: `#868`
-- Implementation head: `8be06eb60dbdf38596d7ba8cc8a33607008af380`
-- Accounting workflow: `32766041235` — Backend `PASS`, Frontend tests `PASS`, Frontend build `PASS`
-- Merge SHA: `—`
-- Production SHA: `—`
-- Release verification: `—`
-- Browser verification: `—`
-- آخر مانع: `P01_PR_868_not_merged_or_deployed`
+- Implementation head: `0c9b00ffa7d0f1f694fd76d7f1a67c9ec7f83a1c`
+- Accounting workflow: `32769235392` — Backend `PASS`, Frontend tests `PASS`, Frontend build `PASS`
+- Merge SHA: `97f5197cee143b080c499f08cd4eecff42564ea6`
+- Production SHA: `97f5197cee143b080c499f08cd4eecff42564ea6`
+- Release ID: `37060d5b-b857-449c-8b49-33b4cf7800de`
+- Release verification: `verified=true`, `checks=3`, `health.ok=true`, `critical_file_hashes_match=true`, final lease `active=false`
+- Browser verification: `PENDING`
+- آخر مانع: `P01_browser_acceptance_not_completed`
