@@ -1,6 +1,7 @@
 import api from "../lib/api";
 
 const BASE = "/financial-provider-apps/accounting-module";
+const SETTLEMENTS = `${BASE}/settlements`;
 
 export async function getAccountingAccess() {
     const { data } = await api.get(`${BASE}/access`);
@@ -26,5 +27,92 @@ export async function updateAccountingPermissionUser(userId, permissions) {
     const { data } = await api.put(`${BASE}/permissions/users/${encodeURIComponent(userId)}`, {
         permissions,
     });
+    return data;
+}
+
+export async function getAccountingSettlementContext() {
+    const { data } = await api.get(`${SETTLEMENTS}/context`);
+    return data;
+}
+
+export async function saveAccountingProviderBankBinding(provider, payload) {
+    const { data } = await api.put(
+        `${SETTLEMENTS}/bindings/${encodeURIComponent(provider)}`,
+        payload,
+    );
+    return data;
+}
+
+export async function uploadAccountingSettlementDraft({
+    provider,
+    bankAccountId,
+    statementDate,
+    notes,
+    file,
+}) {
+    const form = new FormData();
+    form.append("provider", provider);
+    form.append("file", file);
+    if (bankAccountId) form.append("bank_account_id", bankAccountId);
+    if (statementDate) form.append("statement_date", statementDate);
+    if (notes) form.append("notes", notes);
+    const { data } = await api.post(`${SETTLEMENTS}/drafts/upload`, form, {
+        headers: { "Content-Type": "multipart/form-data" },
+    });
+    return data;
+}
+
+export async function createAccountingSettlementDraftFromFile(payload) {
+    const { data } = await api.post(`${SETTLEMENTS}/drafts/from-file`, payload);
+    return data;
+}
+
+export async function getAccountingSettlementDrafts(params = {}) {
+    const { data } = await api.get(`${SETTLEMENTS}/drafts`, { params });
+    return data;
+}
+
+export async function getAccountingSettlementDraft(draftId) {
+    const { data } = await api.get(`${SETTLEMENTS}/drafts/${encodeURIComponent(draftId)}`);
+    return data;
+}
+
+export async function updateAccountingSettlementDraft(draftId, payload) {
+    const { data } = await api.patch(
+        `${SETTLEMENTS}/drafts/${encodeURIComponent(draftId)}`,
+        payload,
+    );
+    return data;
+}
+
+export async function submitAccountingSettlementDraft(draftId, notes = "") {
+    const { data } = await api.post(
+        `${SETTLEMENTS}/drafts/${encodeURIComponent(draftId)}/submit`,
+        { notes },
+    );
+    return data;
+}
+
+export async function reviewAccountingSettlementDraft(draftId, notes = "") {
+    const { data } = await api.post(
+        `${SETTLEMENTS}/drafts/${encodeURIComponent(draftId)}/review`,
+        { notes },
+    );
+    return data;
+}
+
+export async function rejectAccountingSettlementDraft(draftId, reason) {
+    const { data } = await api.post(
+        `${SETTLEMENTS}/drafts/${encodeURIComponent(draftId)}/reject`,
+        { reason },
+    );
+    return data;
+}
+
+export async function postAccountingSettlementDraft(draftId, notes = "") {
+    const { data } = await api.post(
+        `${SETTLEMENTS}/drafts/${encodeURIComponent(draftId)}/post`,
+        { notes },
+    );
     return data;
 }
