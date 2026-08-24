@@ -253,6 +253,7 @@ def test_router_registers_full_p01_settlement_contract():
         "/financial-provider-apps/accounting-module/settlements/drafts/from-file",
         "/financial-provider-apps/accounting-module/settlements/drafts",
         "/financial-provider-apps/accounting-module/settlements/drafts/{draft_id}",
+        "/financial-provider-apps/accounting-module/settlements/drafts/{draft_id}/match-entry",
         "/financial-provider-apps/accounting-module/settlements/drafts/{draft_id}/submit",
         "/financial-provider-apps/accounting-module/settlements/drafts/{draft_id}/review",
         "/financial-provider-apps/accounting-module/settlements/drafts/{draft_id}/reject",
