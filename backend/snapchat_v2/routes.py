@@ -547,6 +547,14 @@ def attach_snapchat_v2_routes(
             include_stale=True,
         )
         rows = performance["rows"]
+        totals = dict(performance["totals"])
+        _, cost_coverage = await _add_sar_spend(
+            db,
+            user_id=user_id,
+            account=account,
+            rows=rows,
+            totals=totals,
+        )
         account_id = str(account["ad_account_id"])
         identities = [
             {
@@ -568,6 +576,13 @@ def attach_snapchat_v2_routes(
                 platform_purchases=int(
                     performance["totals"].get("purchases") or 0
                 ),
+                campaign_spend_sar={
+                    str(row.get("campaign_id") or ""): float(
+                        row.get("spend_sar") or 0
+                    )
+                    for row in rows
+                    if row.get("campaign_id")
+                },
             )
             salla_available = True
         except Exception as exc:  # noqa: BLE001
@@ -590,15 +605,6 @@ def attach_snapchat_v2_routes(
                 "source_collection": "unified_orders",
                 "source_only": True,
             }
-        totals = dict(performance["totals"])
-        _, cost_coverage = await _add_sar_spend(
-            db,
-            user_id=user_id,
-            account=account,
-            rows=rows,
-            totals=totals,
-        )
-
         for row in rows:
             salla_result = (
                 {
