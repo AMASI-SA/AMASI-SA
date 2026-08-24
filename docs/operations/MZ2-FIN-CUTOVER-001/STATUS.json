@@ -1,0 +1,121 @@
+{
+  "operation_id": "MZ2-FIN-CUTOVER-001",
+  "plan_version": 1,
+  "last_updated_date": "2026-08-24",
+  "production_branch": "hotfix/prod-snap-meta-final",
+  "foundation_pr": 851,
+  "foundation_merge_sha": "c116d80fd375c0ddfd4acf0eb0ea7e8a8a0dd092",
+  "phase_lock_enabled": true,
+  "current_phase": "P01",
+  "current_phase_file": "PHASE-01-SETTLEMENTS.md",
+  "current_phase_status": "READY_TO_START",
+  "next_allowed_action": "inspect_current_settlement_code_and_implement_P01_only",
+  "current_blocker": "P01_runtime_work_not_started",
+  "legacy_mezan_policy": {
+    "dynamic_financial_dependency_allowed": false,
+    "copy_reference_values_allowed": true,
+    "copied_value_status": "unverified_draft",
+    "copied_values_may_post_journals": false,
+    "copied_values_may_create_opening_balances": false,
+    "owner_confirmation_required": true,
+    "prohibited_copy_categories": [
+      "bank_balances",
+      "provider_balances",
+      "courier_balances",
+      "sales",
+      "profit",
+      "tax",
+      "journals",
+      "supplier_payables",
+      "employee_or_driver_balances",
+      "inventory_opening_value",
+      "financial_position"
+    ]
+  },
+  "browser_agent_policy": {
+    "read_status_first": true,
+    "work_current_phase_only": true,
+    "ask_only_missing_fields": true,
+    "draft_entry_allowed": true,
+    "irreversible_action_requires_explicit_same_session_authorization": true,
+    "secrets_in_github_forbidden": true,
+    "update_status_after_session": true
+  },
+  "phases": [
+    {
+      "id": "P00",
+      "name": "الأساس والحوكمة",
+      "status": "COMPLETE",
+      "file": "PHASE-00-FOUNDATION.md",
+      "evidence": {
+        "pr": 851,
+        "merge_sha": "c116d80fd375c0ddfd4acf0eb0ea7e8a8a0dd092",
+        "production_ui_observed": true
+      }
+    },
+    {
+      "id": "P01",
+      "name": "التسويات وربط البنوك الفعلية",
+      "status": "READY_TO_START",
+      "file": "PHASE-01-SETTLEMENTS.md",
+      "blocked_by": null,
+      "exit_gate": "NOT_EVALUATED"
+    },
+    {
+      "id": "P02",
+      "name": "الشحن وCOD ومناديب المتجر",
+      "status": "BLOCKED_BY_PREVIOUS_PHASE",
+      "file": "PHASE-02-SHIPPING-COD.md",
+      "blocked_by": "P01",
+      "exit_gate": "LOCKED"
+    },
+    {
+      "id": "P03",
+      "name": "المخزون والمشتريات",
+      "status": "BLOCKED_BY_PREVIOUS_PHASE",
+      "file": "PHASE-03-INVENTORY-PURCHASES.md",
+      "blocked_by": "P02",
+      "exit_gate": "LOCKED"
+    },
+    {
+      "id": "P04",
+      "name": "الحركات المالية",
+      "status": "BLOCKED_BY_PREVIOUS_PHASE",
+      "file": "PHASE-04-FINANCIAL-MOVEMENTS.md",
+      "blocked_by": "P03",
+      "exit_gate": "LOCKED"
+    },
+    {
+      "id": "P05",
+      "name": "الرواتب والالتزامات",
+      "status": "BLOCKED_BY_PREVIOUS_PHASE",
+      "file": "PHASE-05-PAYROLL-OBLIGATIONS.md",
+      "blocked_by": "P04",
+      "exit_gate": "LOCKED"
+    },
+    {
+      "id": "P06",
+      "name": "القيود والتقارير والعكس",
+      "status": "BLOCKED_BY_PREVIOUS_PHASE",
+      "file": "PHASE-06-JOURNALS-REPORTS.md",
+      "blocked_by": "P05",
+      "exit_gate": "LOCKED"
+    },
+    {
+      "id": "P07",
+      "name": "الأرصدة الافتتاحية والقطع",
+      "status": "BLOCKED_BY_PREVIOUS_PHASE",
+      "file": "PHASE-07-OPENING-BALANCES.md",
+      "blocked_by": "P06",
+      "exit_gate": "LOCKED"
+    },
+    {
+      "id": "P08",
+      "name": "التفعيل والتحقق بعد القطع",
+      "status": "BLOCKED_BY_PREVIOUS_PHASE",
+      "file": "PHASE-08-ACTIVATION-VERIFICATION.md",
+      "blocked_by": "P07",
+      "exit_gate": "LOCKED"
+    }
+  ]
+}
