@@ -49,11 +49,15 @@ test("accounting workspace no longer renders the legacy provider catalogue as P0
     expect(workspaceSource).not.toContain("LegacyFinancialProviderAppsWorkspace");
 });
 
-test("frontend client exposes separate draft, match, review, and post operations", () => {
+test("frontend client exposes separate identity, draft, match, review, and post operations", () => {
     expect(serviceSource).toContain("uploadAccountingSettlementDraft");
+    expect(serviceSource).toContain("updateAccountingSettlementIdentity");
     expect(serviceSource).toContain("matchAccountingSettlementEntry");
     expect(serviceSource).toContain("submitAccountingSettlementDraft");
     expect(serviceSource).toContain("reviewAccountingSettlementDraft");
     expect(serviceSource).toContain("postAccountingSettlementDraft");
+    expect(serviceSource).toContain("/identity");
     expect(serviceSource).toContain("/match-entry");
+    expect(serviceSource.indexOf("updateAccountingSettlementIdentity"))
+        .toBeLessThan(serviceSource.indexOf("api.patch(\n        `${SETTLEMENTS}/drafts/${encodeURIComponent(draftId)}`,"));
 });
