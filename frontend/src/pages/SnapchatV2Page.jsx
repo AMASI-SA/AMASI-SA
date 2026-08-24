@@ -35,6 +35,20 @@ function localTimeInTimezone(timezone, nowMs) {
     }
 }
 
+function localHourInTimezone(timezone, nowMs) {
+    try {
+        const value = new Intl.DateTimeFormat("en-GB", {
+            timeZone: timezone || "Asia/Riyadh",
+            hour: "2-digit",
+            hour12: false,
+        }).format(new Date(nowMs));
+        const hour = Number(value);
+        return Number.isFinite(hour) ? hour : null;
+    } catch {
+        return null;
+    }
+}
+
 function money(value, currency = "USD") {
     const amount = Number(value);
     if (!Number.isFinite(amount)) return "—";
@@ -55,7 +69,23 @@ function isCampaignActive(campaign) {
     return ["ACTIVE", "RUNNING", "LIVE"].includes(String(campaign?.status || "").toUpperCase());
 }
 
-function displayHourStatus(row, nowMs) {
+function displayHourStatus(row, selectedDate, timezone, nowMs) {
+    const today = localDateInTimezone(timezone);
+    const currentHour = localHourInTimezone(timezone, nowMs);
+    const rowHour = Number(String(row?.local_hour || "").slice(0, 2));
+
+    if (selectedDate > today) return "future";
+    if (
+        selectedDate === today
+        && Number.isFinite(rowHour)
+        && currentHour !== null
+    ) {
+        if (rowHour > currentHour) return "future";
+        if (rowHour === currentHour) {
+            return row?.spend_native == null ? "provisional_unavailable" : "provisional";
+        }
+    }
+
     const start = Date.parse(row?.hour_start_utc || "");
     const end = Date.parse(row?.hour_end_utc || "");
     if (!Number.isFinite(start) || !Number.isFinite(end)) return row?.status || "—";
@@ -293,7 +323,7 @@ export default function SnapchatV2Page() {
                             && row?.spend_native !== undefined
                             && Number.isFinite(spend);
                         const pct = known ? Math.max(4, (spend / maxHourSpend) * 100) : 0;
-                        const effectiveStatus = displayHourStatus(row, clockNow);
+                        const effectiveStatus = displayHourStatus(row, date, accountTimezone, clockNow);
                         return (
                             <div key={row.local_hour} className="rounded-lg border border-slate-100 bg-slate-50 p-2">
                                 <div className="text-xs font-black" dir="ltr">{row.local_hour}</div>
