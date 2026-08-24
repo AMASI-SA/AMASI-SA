@@ -346,3 +346,134 @@ def test_duplicate_exact_reference_is_never_auto_reconciled():
 
     assert classification["status"] == "مكرر"
     assert classification["retry_allowed"] is False
+
+
+class _UpdateManyCollection:
+    def __init__(self):
+        self.calls = []
+
+    async def update_many(self, query, update, **kwargs):
+        self.calls.append((deepcopy(query), deepcopy(update), deepcopy(kwargs)))
+        return _Result(modified_count=1)
+
+
+class _InvoiceCollection:
+    def __init__(self, rows):
+        self.rows = [deepcopy(row) for row in rows]
+
+    def find(self, query, projection=None):
+        return _Cursor(self.rows)
+
+
+class _ReconcileInbox(_UpdateManyCollection):
+    pass
+
+
+class _ReconcileDB:
+    def __init__(self, invoices):
+        self.unified_orders = _UnifiedOrders({
+            "user_id": "owner-1",
+            "order_number": "279460595",
+            "payment_method": "mada",
+        })
+        self.qoyod_invoices = _InvoiceCollection(invoices)
+        self.integration_inbox = _ReconcileInbox()
+        self.qoyod_manual_auto_quarantines = _UpdateManyCollection()
+        self.qoyod_manual_send_locks = _UpdateManyCollection()
+
+
+def test_qoyod_sync_reconciliation_rejects_unproven_local_reference():
+    from qoyod_auto_unified.reconcile import _reconcile_local_mirror_after_sync
+
+    db = _ReconcileDB([{
+        "qoyod_invoice_id": "2116",
+        "invoice_number": "2116",
+        "reference": "279460595",
+        "source": "synced_from_qoyod",
+        "total": 187.92,
+        "paid_amount": 187.92,
+        "remaining": 0.0,
+        "status": "paid",
+        "raw_response": {},
+    }])
+
+    result = asyncio.run(_reconcile_local_mirror_after_sync(
+        db,
+        orders_user_id="owner-1",
+        markers_user_id="main",
+    ))
+
+    assert result["strict_invoice_count"] == 0
+    assert result["resolved_exception_count"] == 0
+    assert db.integration_inbox.calls == []
+    assert db.qoyod_manual_auto_quarantines.calls == []
+
+
+def test_qoyod_sync_reconciliation_closes_unique_paid_official_reference():
+    from qoyod_auto_unified.reconcile import _reconcile_local_mirror_after_sync
+
+    db = _ReconcileDB([{
+        "qoyod_invoice_id": "2116",
+        "invoice_number": "2116",
+        "reference": "279460595",
+        "source": "synced_from_qoyod",
+        "total": 187.92,
+        "paid_amount": 187.92,
+        "remaining": 0.0,
+        "status": "paid",
+        "raw_response": {"reference": "279460595"},
+    }])
+
+    result = asyncio.run(_reconcile_local_mirror_after_sync(
+        db,
+        orders_user_id="owner-1",
+        markers_user_id="main",
+    ))
+
+    assert result["strict_invoice_count"] == 1
+    assert result["resolved_exception_count"] == 1
+    assert result["inbox_markers_updated"] == 1
+    assert db.unified_orders.row["qoyod_invoice_id"] == "2116"
+    assert db.qoyod_manual_auto_quarantines.calls
+    assert db.qoyod_manual_send_locks.calls
+
+
+def test_qoyod_sync_reconciliation_keeps_duplicate_reference_open():
+    from qoyod_auto_unified.reconcile import _reconcile_local_mirror_after_sync
+
+    rows = [
+        {
+            "qoyod_invoice_id": "2116",
+            "invoice_number": "2116",
+            "reference": "279460595",
+            "source": "synced_from_qoyod",
+            "total": 187.92,
+            "paid_amount": 187.92,
+            "remaining": 0.0,
+            "status": "paid",
+            "raw_response": {"reference": "279460595"},
+        },
+        {
+            "qoyod_invoice_id": "2117",
+            "invoice_number": "2117",
+            "reference": "279460595",
+            "source": "synced_from_qoyod",
+            "total": 187.92,
+            "paid_amount": 187.92,
+            "remaining": 0.0,
+            "status": "paid",
+            "raw_response": {"reference": "279460595"},
+        },
+    ]
+    db = _ReconcileDB(rows)
+
+    result = asyncio.run(_reconcile_local_mirror_after_sync(
+        db,
+        orders_user_id="owner-1",
+        markers_user_id="main",
+    ))
+
+    assert result["strict_invoice_count"] == 2
+    assert result["duplicate_invoice_rows_not_auto_resolved"] == 2
+    assert result["resolved_exception_count"] == 0
+    assert db.qoyod_manual_auto_quarantines.calls == []
