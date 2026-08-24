@@ -31,11 +31,17 @@ from accounting_module_status_routes import (
     fresh_accounting_user,
     install_accounting_status_routes,
 )
+from accounting_settlement_bank_match_routes import (
+    install_accounting_settlement_bank_match_routes,
+)
 from accounting_settlement_evidence_guard import delete_unlinked_settlement_file
 from accounting_settlement_identity_routes import (
     install_accounting_settlement_identity_routes,
 )
 from accounting_settlement_import_guard import import_accounting_settlement_file
+from accounting_settlement_lifecycle_routes import (
+    install_accounting_settlement_lifecycle_routes,
+)
 import accounting_settlement_routes as accounting_settlement_routes_module
 from accounting_settlement_routes import (  # noqa: F401
     ensure_accounting_settlement_indexes,
@@ -73,7 +79,13 @@ def make_financial_provider_apps_router(db, current_user):
     router = _legacy_router(db, provider_user)
     install_accounting_status_routes(router, db, current_user)
     install_accounting_permission_routes(router, db, current_user)
+
+    # Lifecycle handlers are registered before compatibility handlers. Starlette
+    # dispatches the first matching route, so ``matched`` and bank-evidence
+    # checks are authoritative while the older handlers remain import-safe.
+    install_accounting_settlement_lifecycle_routes(router, db, current_user)
     install_accounting_settlement_routes(router, db, current_user)
+    install_accounting_settlement_bank_match_routes(router, db, current_user)
     install_accounting_settlement_identity_routes(router, db, current_user)
     install_accounting_courier_bank_routes(router, db, current_user)
     return router
