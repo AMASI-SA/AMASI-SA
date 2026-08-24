@@ -674,7 +674,7 @@ def attach_snapchat_v2_routes(
                 },
                 "salla_results": {
                     "status": "complete" if salla_available else "partial",
-                    "orders": salla["summary"]["campaign_matched_financial_orders"],
+                    "orders": salla["summary"]["campaign_matched_orders"],
                     "sales_sar": salla["summary"]["campaign_matched_financial_sales_sar"],
                     "roas": (
                         round(

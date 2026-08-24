@@ -499,7 +499,9 @@ async def test_salla_outcomes_match_v2_campaigns_without_distributing_direct_ord
         platform_purchases=3,
     )
 
-    assert result["by_campaign"]["c1"] == {"orders": 1, "sales_sar": 250.0}
+    # Count every created Salla order matched to the campaign, while revenue
+    # remains limited to financially included statuses.
+    assert result["by_campaign"]["c1"] == {"orders": 2, "sales_sar": 250.0}
     assert result["summary"]["campaign_matched_orders"] == 2
     assert result["summary"]["campaign_matched_financial_orders"] == 1
     assert result["summary"]["non_campaign_orders"] == 2
