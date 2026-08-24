@@ -107,6 +107,26 @@ class UnifiedCommerceProfitability(StrictModel):
     allocation_method: str | None = None
 
 
+class UnifiedAbandonedCartProduct(StrictModel):
+    product_id: str
+    name: str | None = None
+    abandoned_carts: int = Field(default=0, ge=0)
+    units: float = Field(default=0, ge=0)
+    value: MoneyValue
+
+
+class UnifiedAbandonedCartOutcomes(StrictModel):
+    status: CoverageStatus
+    scope: str
+    cart_snapshots: int | None = Field(default=None, ge=0)
+    abandoned_carts: int | None = Field(default=None, ge=0)
+    recovered_carts: int | None = Field(default=None, ge=0)
+    abandoned_value: MoneyValue
+    top_products: list[UnifiedAbandonedCartProduct] = Field(default_factory=list)
+    is_campaign_attributed: bool = False
+    causality_guard: str
+
+
 class UnifiedQuality(StrictModel):
     sync_status: str
     coverage_status: CoverageStatus
@@ -132,6 +152,7 @@ class UnifiedMarketingRow(StrictModel):
     platform_outcomes: UnifiedPlatformOutcomes
     commerce_outcomes: UnifiedCommerceOutcomes
     commerce_profitability: UnifiedCommerceProfitability
+    abandoned_cart_outcomes: UnifiedAbandonedCartOutcomes
     quality: UnifiedQuality
     lineage: UnifiedLineage
 
@@ -199,6 +220,8 @@ __all__ = [
     "CONTRACT_VERSION",
     "MoneyValue",
     "UnifiedAccount",
+    "UnifiedAbandonedCartOutcomes",
+    "UnifiedAbandonedCartProduct",
     "UnifiedCommerceOutcomes",
     "UnifiedCommerceProfitability",
     "UnifiedCommerceOrder",
