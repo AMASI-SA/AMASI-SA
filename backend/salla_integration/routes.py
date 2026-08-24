@@ -21,6 +21,8 @@ make.com webhooks. The integration is entirely additive.
 """
 from __future__ import annotations
 
+import asyncio
+import logging
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -29,6 +31,8 @@ from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from fastapi.responses import RedirectResponse, HTMLResponse
+from pymongo import ReturnDocument
+from pymongo.errors import DuplicateKeyError
 
 from customer_identity import CUSTOMER_IDENTITY_COLLECTION
 
@@ -57,6 +61,7 @@ from .config_store import (
 )
 from .sync import (
     compute_sources_comparison,
+    create_sync_log,
     ensure_sync_indexes,
     run_orders_sync,
     run_products_sync,
@@ -75,6 +80,54 @@ HISTORICAL_ABANDONED_CART_IMPORT_ENABLED = False
 HISTORICAL_ABANDONED_CART_STOP_REASON = (
     "historical_import_disabled_live_webhooks_only"
 )
+
+
+logger = logging.getLogger(__name__)
+_MANUAL_ORDER_SYNC_TASKS: dict[str, asyncio.Task] = {}
+_ORDER_SYNC_LEASE_SECONDS = 30 * 60
+
+
+async def _acquire_order_sync_lease(db, user_id: str) -> tuple[Optional[str], Optional[dict]]:
+    now = datetime.now(timezone.utc)
+    lease_id = f"salla-orders:{user_id}"
+    lease_token = secrets.token_urlsafe(18)
+    try:
+        lease = await db.salla_sync_leases.find_one_and_update(
+            {
+                "_id": lease_id,
+                "$or": [
+                    {"lease_until": {"$lte": now}},
+                    {"lease_until": {"$exists": False}},
+                ],
+            },
+            {"$set": {
+                "user_id": str(user_id),
+                "kind": "orders",
+                "lease_token": lease_token,
+                "lease_until": now + timedelta(seconds=_ORDER_SYNC_LEASE_SECONDS),
+                "acquired_at": now,
+            }},
+            upsert=True,
+            return_document=ReturnDocument.AFTER,
+        )
+    except DuplicateKeyError:
+        lease = None
+    if lease and lease.get("lease_token") == lease_token:
+        return lease_token, None
+    active = await db.salla_sync_leases.find_one(
+        {"_id": lease_id}, {"_id": 0, "log_id": 1, "lease_until": 1}
+    )
+    return None, active
+
+
+async def _release_order_sync_lease(db, user_id: str, lease_token: str) -> None:
+    await db.salla_sync_leases.update_one(
+        {
+            "_id": f"salla-orders:{user_id}",
+            "lease_token": lease_token,
+        },
+        {"$set": {"lease_until": datetime.now(timezone.utc)}, "$unset": {"log_id": ""}},
+    )
 
 
 async def close_running_historical_cart_imports(
@@ -153,6 +206,41 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
     from server import current_user  # type: ignore  # circular by design
 
     router = APIRouter(prefix="/salla", tags=["salla"])
+
+    async def run_orders_sync_background(
+        *,
+        user_id: str,
+        lease_token: str,
+        log_id: str,
+        from_date: Optional[str],
+        to_date: Optional[str],
+        updated_since_hours: Optional[int],
+    ) -> None:
+        task_key = str(user_id)
+        try:
+            await run_orders_sync(
+                db,
+                task_key,
+                from_date=from_date,
+                to_date=to_date,
+                updated_since_hours=updated_since_hours,
+                log_id=log_id,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception(
+                "Background Salla order sync failed user_id=%s log_id=%s",
+                task_key,
+                log_id,
+            )
+        finally:
+            try:
+                await _release_order_sync_lease(db, task_key, lease_token)
+            finally:
+                current = _MANUAL_ORDER_SYNC_TASKS.get(task_key)
+                if current is asyncio.current_task():
+                    _MANUAL_ORDER_SYNC_TASKS.pop(task_key, None)
 
     # ── 0. Easy Mode webhook (PUBLIC — gated by HMAC) ─────────────────
     # Iter-292 — Salla Easy Mode delivers tokens via webhook instead of
@@ -590,22 +678,71 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
         }
 
     # ── 8. Manual sync — orders / products ────────────────────────────
-    @router.post("/sync/orders")
+    @router.post("/sync/orders", status_code=202)
     async def sync_orders(payload: Optional[dict] = None, user: dict = Depends(current_user)):
         payload = payload or {}
+        user_id = str(user["id"])
+        now = datetime.now(timezone.utc)
+        await db.salla_sync_logs.update_many(
+            {
+                "user_id": user_id,
+                "kind": "orders",
+                "status": "running",
+                "started_at": {"$lt": now - timedelta(minutes=30)},
+            },
+            {"$set": {
+                "status": "interrupted",
+                "ended_at": now,
+                "last_error": "stale_running_sync_recovered",
+            }},
+        )
+
+        lease_token, active = await _acquire_order_sync_lease(db, user_id)
+        if not lease_token:
+            return {
+                "ok": True,
+                "accepted": True,
+                "already_running": True,
+                "log_id": (active or {}).get("log_id"),
+            }
+
         try:
-            result = await run_orders_sync(
-                db, user["id"],
-                from_date=payload.get("from_date"),
-                to_date=payload.get("to_date"),
-                updated_since_hours=payload.get("updated_since_hours"),
+            log_id = await create_sync_log(db, user_id, "orders")
+            await db.salla_sync_leases.update_one(
+                {
+                    "_id": f"salla-orders:{user_id}",
+                    "lease_token": lease_token,
+                },
+                {"$set": {"log_id": log_id}},
             )
-        except SallaError as e:
-            raise HTTPException(
-                status_code=e.status_code if e.status_code != 200 else 400,
-                detail={"message": str(e), "needs_reauth": e.needs_reauth},
+        except Exception:
+            await _release_order_sync_lease(db, user_id, lease_token)
+            raise
+        try:
+            task = asyncio.create_task(
+                run_orders_sync_background(
+                    user_id=user_id,
+                    lease_token=lease_token,
+                    log_id=log_id,
+                    from_date=payload.get("from_date"),
+                    to_date=payload.get("to_date"),
+                    updated_since_hours=payload.get("updated_since_hours"),
+                ),
+                name=f"salla-manual-order-sync:{user_id}",
             )
-        return {"ok": True, **result}
+            _MANUAL_ORDER_SYNC_TASKS[user_id] = task
+        except Exception:
+            await db.salla_sync_logs.update_one(
+                {"id": log_id},
+                {"$set": {
+                    "status": "failed",
+                    "ended_at": datetime.now(timezone.utc),
+                    "last_error": "failed_to_schedule_background_sync",
+                }},
+            )
+            await _release_order_sync_lease(db, user_id, lease_token)
+            raise
+        return {"ok": True, "accepted": True, "log_id": log_id}
 
     @router.post("/sync/products")
     async def sync_products(user: dict = Depends(current_user)):
