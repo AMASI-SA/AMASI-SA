@@ -14,6 +14,31 @@ from .invoice_state import (
 
 logger = logging.getLogger(__name__)
 
+_RECONCILIATION_REPAIR_LIMIT = 250
+
+
+def _reconciliation_signature(
+    invoice: dict[str, Any],
+    *,
+    reference: str,
+    provenance: str,
+    financials: dict[str, Any],
+    is_cod: bool,
+) -> str:
+    """Return the local facts that make an invoice repair idempotent."""
+    values = (
+        invoice.get("qoyod_invoice_id"),
+        invoice.get("invoice_number"),
+        reference,
+        provenance,
+        financials.get("total"),
+        financials.get("paid_amount"),
+        financials.get("remaining"),
+        financials.get("status"),
+        bool(is_cod),
+    )
+    return "|".join("" if value is None else str(value) for value in values)
+
 
 async def _reconcile_existing_reference(
     db: Any,
@@ -43,7 +68,8 @@ async def _reconcile_existing_reference(
                     invoice = {**invoice, **details}
             except Exception:
                 logger.exception(
-                    "Qoyod exact-reference detail read failed order=%s invoice=%s",
+                    "Qoyod exact-reference detail read failed "
+                    "order=%s invoice=%s",
                     order_number, invoice_id,
                 )
         mirror = await _write_exact_invoice_mirror(
@@ -82,9 +108,14 @@ async def _reconcile_existing_reference(
             {"_id": 0, "payment_method": 1, "payment_method_native": 1},
         ) or {}
         is_cod = is_cod_family(
-            unified.get("payment_method_native") or unified.get("payment_method")
+            unified.get("payment_method_native")
+            or unified.get("payment_method")
         )
-        status = "unpaid" if is_cod and not mirror["resolved_paid"] else mirror["status"]
+        status = (
+            "unpaid"
+            if is_cod and not mirror["resolved_paid"]
+            else mirror["status"]
+        )
         await sync_unified_order_accounting(
             db,
             orders_user_id=str(orders_user_id),
@@ -132,6 +163,7 @@ async def _reconcile_local_mirror_after_sync(
     *,
     orders_user_id: str,
     markers_user_id: str,
+    repair_limit: int = _RECONCILIATION_REPAIR_LIMIT,
 ) -> dict[str, Any]:
     """Project and close only unique, official-reference Qoyod rows.
 
@@ -164,13 +196,17 @@ async def _reconcile_local_mirror_after_sync(
             "remaining": 1,
             "status": 1,
             "issue_date": 1,
+            "qoyod_reconciliation_signature": 1,
         },
     ).sort([("issue_date", -1), ("qoyod_invoice_id", -1)]).limit(5000)
     async for invoice in cursor:
         invoice_id = invoice.get("qoyod_invoice_id")
         reference, provenance = official_qoyod_reference(invoice)
         reference = str(reference or "").strip()
-        if not _is_real(invoice_id) or not _ORDER_NUMBER_RE.fullmatch(reference):
+        if (
+            not _is_real(invoice_id)
+            or not _ORDER_NUMBER_RE.fullmatch(reference)
+        ):
             continue
         invoices.append({
             **invoice,
@@ -183,26 +219,64 @@ async def _reconcile_local_mirror_after_sync(
         reference = invoice["_strict_reference"]
         reference_counts[reference] = reference_counts.get(reference, 0) + 1
 
+    unified_by_reference: dict[str, dict[str, Any]] = {}
+    if reference_counts:
+        unified_cursor = db.unified_orders.find(
+            {
+                "user_id": str(orders_user_id),
+                "order_number": {"$in": list(reference_counts)},
+            },
+            {
+                "_id": 0,
+                "order_number": 1,
+                "payment_method": 1,
+                "payment_method_native": 1,
+            },
+        )
+        async for unified in unified_cursor:
+            reference = str(unified.get("order_number") or "").strip()
+            if reference:
+                unified_by_reference[reference] = unified
+
     projected = 0
     markers_updated = 0
     resolved = 0
     skipped_duplicates = 0
+    skipped_missing_unified = 0
+    skipped_already_reconciled = 0
+    deferred_repair_count = 0
+    processed_invoice_count = 0
+    repair_limit = max(1, min(int(repair_limit or 1), 1000))
     for invoice in invoices:
         reference = invoice["_strict_reference"]
         if reference_counts.get(reference, 0) != 1:
             skipped_duplicates += 1
             continue
+        unified = unified_by_reference.get(reference)
+        if not unified:
+            skipped_missing_unified += 1
+            continue
         financials = _invoice_financials(invoice)
-        unified = await db.unified_orders.find_one(
-            {
-                "user_id": str(orders_user_id),
-                "order_number": reference,
-            },
-            {"_id": 0, "payment_method": 1, "payment_method_native": 1},
-        ) or {}
         is_cod = is_cod_family(
-            unified.get("payment_method_native") or unified.get("payment_method")
+            unified.get("payment_method_native")
+            or unified.get("payment_method")
         )
+        reconciliation_signature = _reconciliation_signature(
+            invoice,
+            reference=reference,
+            provenance=invoice["_reference_provenance"],
+            financials=financials,
+            is_cod=is_cod,
+        )
+        if invoice.get("qoyod_reconciliation_signature") == (
+            reconciliation_signature
+        ):
+            skipped_already_reconciled += 1
+            continue
+        if processed_invoice_count >= repair_limit:
+            deferred_repair_count += 1
+            continue
+        processed_invoice_count += 1
         status = (
             "unpaid"
             if is_cod and not financials["resolved_paid"]
@@ -263,9 +337,26 @@ async def _reconcile_local_mirror_after_sync(
                 actor="qoyod_invoice_sync_auto_reconcile",
             )
             resolved += 1
+        await db.qoyod_invoices.update_one(
+            {
+                "user_id": str(markers_user_id),
+                "qoyod_invoice_id": str(invoice["qoyod_invoice_id"]),
+            },
+            {"$set": {
+                "qoyod_reconciliation_signature": reconciliation_signature,
+                "qoyod_reconciled_at": _now(),
+                "qoyod_reconciled_by": "qoyod_invoice_sync_auto_reconcile",
+            }},
+        )
     return {
         "ok": True,
         "strict_invoice_count": len(invoices),
+        "repair_limit": repair_limit,
+        "processed_invoice_count": processed_invoice_count,
+        "skipped_already_reconciled": skipped_already_reconciled,
+        "skipped_missing_unified_order": skipped_missing_unified,
+        "deferred_repair_count": deferred_repair_count,
+        "repair_backlog_drained": deferred_repair_count == 0,
         "unified_orders_projected": projected,
         "inbox_markers_updated": markers_updated,
         "resolved_exception_count": resolved,
