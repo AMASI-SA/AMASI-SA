@@ -5,10 +5,9 @@ from collections import Counter, defaultdict
 from datetime import date
 from typing import Any
 
-from salla_integration.abandoned_carts import ABANDONED_CART_COLLECTION
-
 MAX_CARTS = 10_000
 MAX_PRODUCTS = 20
+ABANDONED_CART_COLLECTION = "salla_abandoned_carts_v1"
 
 
 def _text(value: Any, limit: int = 300) -> str:
