@@ -1,10 +1,10 @@
 """Fail-closed currency contract for P01 provider settlements.
 
-P01 posts only SAR journals. Provider parsers do not all expose a currency cell,
-so a missing cell is resolved through the documented provider contract and is
-stored explicitly as ``SAR`` with ``provider_contract_sar`` provenance. An
-explicit non-SAR currency is rejected before a draft is written. Existing
-legacy drafts without an explicit currency are blocked from submit/review/post.
+P01 posts only SAR journals. The accounting importer validates explicit
+workbook currency cells before any write. A file without a currency cell is
+resolved through the documented Saudi provider contract and stored explicitly
+with provenance. Existing drafts without a supported explicit currency are
+blocked from submit/review/post.
 """
 from __future__ import annotations
 
@@ -64,13 +64,25 @@ def normalize_settlement_currency(value: Any) -> str:
 def settlement_currency_from_file(file_doc: dict[str, Any]) -> tuple[str, str]:
     header = file_doc.get("header") or {}
     totals = file_doc.get("totals") or {}
+    file_source = _clean(file_doc.get("currency_source"))
+    header_source = _clean(header.get("currency_source")) if isinstance(header, dict) else ""
+    totals_source = _clean(totals.get("currency_source")) if isinstance(totals, dict) else ""
     candidates: list[tuple[Any, str]] = []
     for key in _CURRENCY_KEYS:
-        candidates.append((file_doc.get(key), f"file.{key}"))
+        candidates.append((
+            file_doc.get(key),
+            file_source or f"file.{key}",
+        ))
         if isinstance(header, dict):
-            candidates.append((header.get(key), f"header.{key}"))
+            candidates.append((
+                header.get(key),
+                header_source or file_source or f"header.{key}",
+            ))
         if isinstance(totals, dict):
-            candidates.append((totals.get(key), f"totals.{key}"))
+            candidates.append((
+                totals.get(key),
+                totals_source or file_source or f"totals.{key}",
+            ))
 
     for value, source in candidates:
         if not _clean(value):
@@ -94,9 +106,8 @@ def settlement_currency_from_file(file_doc: dict[str, Any]) -> tuple[str, str]:
 
     provider = canonical_provider(file_doc.get("provider"))
     if provider in PROVIDERS:
-        # This is an explicit provider-contract resolution, not a silent UI
-        # assumption. The provenance is persisted on the accounting record.
-        return "SAR", "provider_contract_sar"
+        # Explicit provider-contract resolution, never an invisible UI default.
+        return "SAR", f"provider_contract_sar:{provider}"
 
     raise HTTPException(
         400,
