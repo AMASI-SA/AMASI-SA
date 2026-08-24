@@ -43,6 +43,19 @@ export async function saveAccountingProviderBankBinding(provider, payload) {
     return data;
 }
 
+export async function getAccountingCourierBankBindings() {
+    const { data } = await api.get(`${SETTLEMENTS}/courier-bindings`);
+    return data;
+}
+
+export async function saveAccountingCourierBankBinding(courierKey, payload) {
+    const { data } = await api.put(
+        `${SETTLEMENTS}/courier-bindings/${encodeURIComponent(courierKey)}`,
+        payload,
+    );
+    return data;
+}
+
 export async function uploadAccountingSettlementDraft({
     provider,
     bankAccountId,
