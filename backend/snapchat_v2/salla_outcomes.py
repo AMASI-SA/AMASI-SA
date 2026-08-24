@@ -286,9 +286,12 @@ async def load_salla_campaign_outcomes(
             identity = identity_by_key.get(key, {})
             campaign_id = key[1]
             campaign_name = _text(identity.get("campaign_name")) or campaign_id
+            # The campaign table's order count is a created-order metric.  It
+            # must remain stable when an order moves between Salla statuses.
+            # Revenue and profitability stay financial-only below.
+            by_campaign[key]["orders"] += 1
             if financial:
                 counters["campaign_matched_financial_orders"] += 1
-                by_campaign[key]["orders"] += 1
                 by_campaign[key]["sales_sar"] += amount
                 if cost_context is not None:
                     _add_order_to_campaign(
@@ -339,9 +342,7 @@ async def load_salla_campaign_outcomes(
         sum(float(value["sales_sar"]) for value in by_campaign.values()),
         2,
     )
-    matched_financial_orders = sum(
-        int(value["orders"]) for value in by_campaign.values()
-    )
+    matched_financial_orders = int(counters["campaign_matched_financial_orders"])
     spend_by_campaign = dict(campaign_spend_sar or {})
     profitability_by_campaign = (
         {
