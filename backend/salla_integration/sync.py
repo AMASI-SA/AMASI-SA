@@ -49,6 +49,13 @@ logger = logging.getLogger(__name__)
 # 15; we ask for the max (50) for fewer round-trips.
 ORDERS_PER_PAGE = 50
 MAX_PAGES_PER_RUN = 40  # 50 * 40 = 2000 orders / run — protects against runaway pulls
+# Explicit date-range imports are operator-requested historical jobs. Salla
+# currently caps `/orders` at 30 rows even when `per_page=50`, so the normal
+# 40-page ceiling silently stopped a 2026-07-01 import after only 1,200 rows.
+# The route runs these longer imports in the background; keep a separate hard
+# ceiling that covers the approved tax period without allowing an unbounded
+# crawl.
+MAX_RANGE_PAGES_PER_RUN = 120
 PRODUCTS_PER_PAGE = 60
 MAX_PRODUCT_PAGES = 20
 
@@ -829,6 +836,7 @@ async def run_orders_sync(
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
     updated_since_hours: Optional[int] = None,
+    log_id: Optional[str] = None,
 ) -> dict:
     """Pull orders from Salla and upsert into unified_orders.
 
@@ -840,7 +848,7 @@ async def run_orders_sync(
         N hours (uses the `updated_at_gt` filter). Convenient for cron-style
         incremental syncs.
     """
-    log_id = await create_sync_log(db, user_id, "orders")
+    log_id = log_id or await create_sync_log(db, user_id, "orders")
 
     created = 0
     updated = 0
@@ -848,10 +856,16 @@ async def run_orders_sync(
     errors_count = 0
     errors_sample: list[dict] = []
     pages_fetched = 0
+    last_total_pages = 0
 
     try:
         page = 1
-        while page <= MAX_PAGES_PER_RUN:
+        max_pages = (
+            MAX_RANGE_PAGES_PER_RUN
+            if from_date and to_date
+            else MAX_PAGES_PER_RUN
+        )
+        while page <= max_pages:
             params: dict = {"page": page, "per_page": ORDERS_PER_PAGE, "format": "light"}
             if from_date:
                 params["from_date"] = from_date
@@ -918,6 +932,7 @@ async def run_orders_sync(
                 or pagination.get("last_page")
                 or 0
             )
+            last_total_pages = max(last_total_pages, total_pages)
             current_page = int(
                 pagination.get("currentPage")
                 or pagination.get("current_page")
@@ -930,13 +945,25 @@ async def run_orders_sync(
 
             page += 1
             # Be polite to Salla's rate limiter
-            await asyncio.sleep(0.15)
+            await asyncio.sleep(0.25 if from_date and to_date else 0.15)
 
+        truncated = bool(last_total_pages and last_total_pages > max_pages)
         await finish_sync_log(db, log_id, "completed", extra={
             "created": created, "updated": updated, "skipped": skipped,
             "errors_count": errors_count, "errors_sample": errors_sample[:20],
             "pages_fetched": pages_fetched,
+            "source_total_pages": last_total_pages,
+            "truncated": truncated,
         })
+    except asyncio.CancelledError:
+        await finish_sync_log(db, log_id, "interrupted", extra={
+            "created": created, "updated": updated, "skipped": skipped,
+            "errors_count": errors_count,
+            "errors_sample": errors_sample[:20],
+            "pages_fetched": pages_fetched,
+            "last_error": "sync_task_cancelled_before_completion",
+        })
+        raise
     except Exception as exc:
         await finish_sync_log(db, log_id, "failed", extra={
             "created": created, "updated": updated, "skipped": skipped,
@@ -954,6 +981,8 @@ async def run_orders_sync(
         "skipped": skipped,
         "errors_count": errors_count,
         "pages_fetched": pages_fetched,
+        "source_total_pages": last_total_pages,
+        "truncated": bool(last_total_pages and last_total_pages > max_pages),
     }
 
 
