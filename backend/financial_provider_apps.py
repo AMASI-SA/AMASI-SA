@@ -1,9 +1,10 @@
 """Financial-provider apps plus the unified Mezan 2 accounting module.
 
-The legacy provider catalogue remains byte-for-byte preserved in
-``financial_provider_apps_legacy``. This wrapper adds only the new read-only
-accounting home, independent permission control, and fail-closed cutover
-readiness. It does not choose a cutover instant or post opening balances.
+The legacy provider catalogue remains preserved in
+``financial_provider_apps_legacy``. This wrapper owns the accounting home,
+independent permissions, fail-closed cutover readiness, and the P01 unified
+settlement draft/review/post workflow. It never chooses a cutover instant or
+posts opening balances.
 """
 from fastapi import Depends
 
@@ -29,6 +30,20 @@ from accounting_module_status_routes import (
     fresh_accounting_user,
     install_accounting_status_routes,
 )
+from accounting_settlement_routes import (  # noqa: F401
+    ensure_accounting_settlement_indexes,
+    install_accounting_settlement_routes,
+)
+from accounting_settlement_service import (  # noqa: F401
+    BLOCKING_REASON_CODES,
+    PROVIDERS,
+    PROVIDER_LABELS,
+    build_journal_preview,
+    build_review_reasons,
+    calculate_settlement_totals,
+    canonical_provider,
+    settlement_idempotency_key,
+)
 
 
 def make_financial_provider_apps_router(db, current_user):
@@ -40,4 +55,5 @@ def make_financial_provider_apps_router(db, current_user):
     router = _legacy_router(db, provider_user)
     install_accounting_status_routes(router, db, current_user)
     install_accounting_permission_routes(router, db, current_user)
+    install_accounting_settlement_routes(router, db, current_user)
     return router
