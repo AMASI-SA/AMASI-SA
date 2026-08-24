@@ -1,11 +1,12 @@
-"""Normalize Salla product fields and make text fields cost-aware.
+"""Normalize Salla product fields and keep Mezan product costs consistent.
 
 Rules:
 - Variants expose a human-readable combination label, not only a Salla id.
 - Product custom fields are normalized with their Salla field type.
 - Text-like custom fields and text-like Salla options can carry a conditional
-  cost through the synthetic value ``filled``. The cost is applied only when
-  the customer submitted a non-empty value on the order item.
+  cost through the synthetic value ``filled``.
+- Open supplier-invoice sessions are live views of current Mezan product cost,
+  option surcharges, components and services until the invoice is approved.
 """
 from __future__ import annotations
 
@@ -25,6 +26,14 @@ def _text(value: Any) -> str:
                 return result
         return ""
     return str(value).strip()
+
+
+def _number(value: Any) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return 0.0
+    return parsed if parsed == parsed else 0.0
 
 
 def normalize_custom_fields(raw: Any) -> list[dict[str, Any]]:
@@ -131,12 +140,31 @@ def _option_is_fill_based(option: dict[str, Any]) -> bool:
     return _text(option.get("type")).lower() in FILL_BASED_TYPES and not (option.get("values") or [])
 
 
+def _supplier_cost_item(piece: dict[str, Any]) -> dict[str, Any]:
+    """Expose preparation-piece customer choices to the canonical option matcher."""
+    normalized = (
+        piece.get("options_normalized")
+        or piece.get("product_options")
+        or piece.get("selected_options")
+        or {}
+    )
+    return {
+        "variant_id": piece.get("variant_id") or piece.get("salla_variant_id"),
+        "sku": piece.get("sku"),
+        "options_raw": piece.get("options_raw") or piece.get("options") or [],
+        "options_normalized": normalized if isinstance(normalized, dict) else {},
+        "custom_fields": piece.get("custom_fields") or [],
+    }
+
+
 def install_product_field_cost_support() -> None:
     import product_v2_details_routes as details_module
     import product_option_cost_routes as cost_module
     import order_option_cost_snapshot_routes as snapshot_module
     import product_v2_routes as product_v2_module
     import product_cost_setup_routes as cost_setup_module
+    import product_fulfillment_rules as fulfillment_rules
+    import supplier_receiving_routes as supplier_module
 
     original_details: Callable[..., dict[str, Any]] = details_module._details_patch
     if not getattr(original_details, "_mezan_field_cost_support", False):
@@ -186,7 +214,8 @@ def install_product_field_cost_support() -> None:
     if not getattr(original_tokens, "_mezan_field_cost_support", False):
         def tokens_with_custom_fields(item: Any):
             tokens = set(original_tokens(item))
-            for row in getattr(item, "options_raw", None) or []:
+            rows = item.get("options_raw", []) if isinstance(item, dict) else getattr(item, "options_raw", None) or []
+            for row in rows:
                 if not isinstance(row, dict):
                     continue
                 option = row.get("option") if isinstance(row.get("option"), dict) else {}
@@ -204,7 +233,8 @@ def install_product_field_cost_support() -> None:
                 if option_name not in (None, ""):
                     tokens.add((f"name:{snapshot_module._norm(option_name)}", f"name:{snapshot_module._norm('عند تعبئة الحقل')}"))
 
-            for row in getattr(item, "custom_fields", None) or []:
+            fields = item.get("custom_fields", []) if isinstance(item, dict) else getattr(item, "custom_fields", None) or []
+            for row in fields:
                 if not isinstance(row, dict):
                     continue
                 field = row.get("field") if isinstance(row.get("field"), dict) else {}
@@ -232,3 +262,159 @@ def install_product_field_cost_support() -> None:
             return product_router
         product_router_with_cost_review_first._mezan_cost_review_order_fix = True  # type: ignore[attr-defined]
         product_v2_module.make_product_v2_router = product_router_with_cost_review_first
+
+    original_supplier_price = supplier_module._supplier_product_reference_price
+    if not getattr(original_supplier_price, "_mezan_live_invoice_costs", False):
+        async def live_supplier_product_price(
+            db: Any,
+            *,
+            user_id: str,
+            piece: dict[str, Any],
+            mongo_session: Any = None,
+        ) -> dict[str, Any]:
+            kwargs = {"session": mongo_session} if mongo_session is not None else {}
+            base = await original_supplier_price(
+                db,
+                user_id=user_id,
+                piece=piece,
+                mongo_session=mongo_session,
+            )
+            product_id = _text(piece.get("product_id"))
+            product = await db[product_v2_module.PRODUCTS].find_one(
+                {
+                    "user_id": user_id,
+                    "$or": [
+                        {"id": product_id},
+                        {"mezan_product_id": product_id},
+                        {"salla_product_id": product_id},
+                    ],
+                },
+                {"_id": 0, "id": 1, "mezan_product_id": 1, "salla_product_id": 1},
+                **kwargs,
+            )
+            if not product:
+                return base
+            salla_id = _text(product.get("salla_product_id")) or _text(product.get("mezan_product_id") or product.get("id"))
+            product_links = await db[fulfillment_rules.PRODUCT_RESOURCE_BINDINGS].find(
+                {"user_id": user_id, "salla_product_id": salla_id},
+                {"_id": 0},
+                **kwargs,
+            ).to_list(5000)
+            option_links = await db[cost_module.BINDINGS].find(
+                {"user_id": user_id, "salla_product_id": salla_id},
+                {"_id": 0},
+                **kwargs,
+            ).to_list(10000)
+            resource_ids = {
+                _text(row.get("resource_id"))
+                for row in [*product_links, *option_links]
+                if _text(row.get("resource_id"))
+            }
+            resources = (
+                await db[cost_module.RESOURCES].find(
+                    {"user_id": user_id, "id": {"$in": sorted(resource_ids)}},
+                    {"_id": 0},
+                    **kwargs,
+                ).to_list(max(1, len(resource_ids)))
+                if resource_ids else []
+            )
+            resource_map = {_text(row.get("id")): row for row in resources}
+            component_halalas = 0
+            for binding in product_links:
+                resource = resource_map.get(_text(binding.get("resource_id"))) or {}
+                if _text(resource.get("kind")).casefold() == "service":
+                    continue
+                amount = _number(resource.get("unit_cost")) * (_number(binding.get("quantity")) or 1.0)
+                component_halalas += round(amount * 100)
+
+            tokens = snapshot_module.selected_option_tokens(_supplier_cost_item(piece))
+            option_halalas = 0
+            for binding in option_links:
+                if not snapshot_module.binding_matches(binding, tokens):
+                    continue
+                if _text(binding.get("mode")).casefold() == "resource":
+                    resource = resource_map.get(_text(binding.get("resource_id"))) or {}
+                    if _text(resource.get("kind")).casefold() == "service":
+                        continue
+                    amount = _number(resource.get("unit_cost")) * (_number(binding.get("quantity")) or 1.0)
+                else:
+                    amount = _number(binding.get("direct_amount"))
+                option_halalas += round(amount * 100)
+
+            total = int(base.get("reference_product_unit_price_halalas") or 0) + component_halalas + option_halalas
+            return {
+                **base,
+                "reference_product_unit_price_halalas": total,
+                "reference_product_component_cost_halalas": component_halalas,
+                "reference_product_option_cost_halalas": option_halalas,
+                "reference_product_price_live": True,
+            }
+        live_supplier_product_price._mezan_live_invoice_costs = True  # type: ignore[attr-defined]
+        supplier_module._supplier_product_reference_price = live_supplier_product_price
+
+    original_recent_events = supplier_module._recent_session_events
+    if not getattr(original_recent_events, "_mezan_live_invoice_costs", False):
+        async def recent_events_with_live_product_state(
+            db: Any,
+            *,
+            user_id: str,
+            session_id: str,
+            limit: int = 100,
+            mongo_session: Any = None,
+        ) -> list[dict[str, Any]]:
+            rows = await original_recent_events(
+                db,
+                user_id=user_id,
+                session_id=session_id,
+                limit=limit,
+                mongo_session=mongo_session,
+            )
+            if not rows:
+                return rows
+            kwargs = {"session": mongo_session} if mongo_session is not None else {}
+            piece_ids = [_text(row.get("piece_id")) for row in rows if _text(row.get("piece_id"))]
+            pieces = await db[supplier_module.PIECES].find(
+                {"user_id": user_id, "piece_id": {"$in": piece_ids}},
+                {"_id": 0},
+                **kwargs,
+            ).to_list(max(1, len(piece_ids)))
+            piece_map = {_text(row.get("piece_id")): row for row in pieces}
+            session = await db[supplier_module.SESSIONS].find_one(
+                {"user_id": user_id, "id": session_id},
+                {"_id": 0},
+                **kwargs,
+            )
+            if not session:
+                return rows
+            service_catalog = await supplier_module._supplier_service_catalog(
+                db,
+                user_id=user_id,
+                session=session,
+                mongo_session=mongo_session,
+            )
+            for row in rows:
+                current_piece = piece_map.get(_text(row.get("piece_id")))
+                if current_piece:
+                    for field in (
+                        "services", "product_options", "options_raw", "options_normalized",
+                        "custom_fields", "variant_id", "salla_variant_id", "sku",
+                        "product_id", "product_name", "selected_image_url",
+                    ):
+                        if field in current_piece:
+                            row[field] = current_piece.get(field)
+                row["invoice_services"] = supplier_module.supplier_piece_invoice_services(
+                    row,
+                    session,
+                    service_catalog,
+                )
+                if row.get("product_charge_eligible") is not False:
+                    row.update(await supplier_module._supplier_product_reference_price(
+                        db,
+                        user_id=user_id,
+                        piece=row,
+                        mongo_session=mongo_session,
+                    ))
+                row["supplier_invoice_live_draft"] = True
+            return rows
+        recent_events_with_live_product_state._mezan_live_invoice_costs = True  # type: ignore[attr-defined]
+        supplier_module._recent_session_events = recent_events_with_live_product_state
