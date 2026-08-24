@@ -5,6 +5,8 @@ from typing import Any, Literal
 
 from unified_marketing.contract import (
     MoneyValue,
+    UnifiedAbandonedCartOutcomes,
+    UnifiedAbandonedCartProduct,
     UnifiedAccount,
     UnifiedCommerceOrderSummary,
     UnifiedCommerceOutcomes,
@@ -39,6 +41,7 @@ PROVIDER_METRIC_MAPPING = {
     "commerce_outcomes.orders": "salla_results.orders",
     "commerce_outcomes.revenue": "salla_results.sales_sar",
     "commerce_profitability": "salla_results.profitability",
+    "abandoned_cart_outcomes": "salla_results.abandoned_carts",
 }
 
 
@@ -217,6 +220,40 @@ def _profitability(row: dict[str, Any]) -> UnifiedCommerceProfitability:
     )
 
 
+def _abandoned_carts(row: dict[str, Any]) -> UnifiedAbandonedCartOutcomes:
+    value = (row.get("salla_results") or {}).get("abandoned_carts")
+    if not isinstance(value, dict):
+        return UnifiedAbandonedCartOutcomes(
+            status="unavailable",
+            scope="campaign_only",
+            abandoned_value=MoneyValue(amount=None, currency="SAR"),
+            is_campaign_attributed=False,
+            causality_guard="unattributed_store_carts_are_not_campaign_revenue",
+        )
+    products = [
+        UnifiedAbandonedCartProduct(
+            product_id=str(product.get("product_id") or "unknown"),
+            name=product.get("name") or None,
+            abandoned_carts=_integer(product.get("abandoned_carts")),
+            units=max(0.0, _number(product.get("units")) or 0.0),
+            value=MoneyValue(amount=_number(product.get("value_sar")), currency="SAR"),
+        )
+        for product in value.get("top_products") or []
+        if isinstance(product, dict)
+    ]
+    return UnifiedAbandonedCartOutcomes(
+        status="complete",
+        scope=str(value.get("scope") or "exact_cart_campaign_id_match"),
+        cart_snapshots=_integer(value.get("cart_snapshots")),
+        abandoned_carts=_integer(value.get("abandoned_carts")),
+        recovered_carts=_integer(value.get("recovered_carts")),
+        abandoned_value=MoneyValue(amount=_number(value.get("abandoned_value_sar")) or 0.0, currency="SAR"),
+        top_products=products,
+        is_campaign_attributed=True,
+        causality_guard="cart_intent_evidence_only_not_campaign_revenue",
+    )
+
+
 def _commerce_orders(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     output: list[dict[str, Any]] = []
     for row in rows:
@@ -359,6 +396,7 @@ def adapt_snapchat_v2_row(
         ),
         commerce_outcomes=_commerce(row, entity_type=entity_type),
         commerce_profitability=_profitability(row),
+        abandoned_cart_outcomes=_abandoned_carts(row),
         quality=UnifiedQuality(
             sync_status=row_sync_status,
             coverage_status=coverage_status,
