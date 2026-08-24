@@ -6,7 +6,9 @@ Rules:
 - Text-like custom fields and text-like Salla options can carry a conditional
   cost through the synthetic value ``filled``.
 - Open supplier-invoice sessions are live views of current Mezan product cost,
-  option surcharges, components and services until the invoice is approved.
+  direct customer-option surcharges and services until the invoice is approved.
+- Product/component recipe costs are internal Mezan costs and are never charged
+  to the supplier invoice unless represented as the product base/variant price.
 """
 from __future__ import annotations
 
@@ -344,19 +346,16 @@ def install_product_field_cost_support() -> None:
                 if resource_ids else []
             )
             resource_map = {_text(row.get("id")): row for row in resources}
-            component_halalas = 0
             live_services: list[dict[str, Any]] = []
             seen_service_ids: set[str] = set()
             for binding in product_links:
                 resource = resource_map.get(_text(binding.get("resource_id"))) or {}
-                if _text(resource.get("kind")).casefold() == "service":
-                    service_id = _text(resource.get("id"))
-                    if service_id and service_id not in seen_service_ids:
-                        live_services.append(_live_service_row(resource, binding, option_selected=False))
-                        seen_service_ids.add(service_id)
+                if _text(resource.get("kind")).casefold() != "service":
                     continue
-                amount = _number(resource.get("unit_cost")) * (_number(binding.get("quantity")) or 1.0)
-                component_halalas += round(amount * 100)
+                service_id = _text(resource.get("id"))
+                if service_id and service_id not in seen_service_ids:
+                    live_services.append(_live_service_row(resource, binding, option_selected=False))
+                    seen_service_ids.add(service_id)
 
             tokens = snapshot_module.selected_option_tokens(_supplier_cost_item(piece))
             option_halalas = 0
@@ -370,19 +369,19 @@ def install_product_field_cost_support() -> None:
                         if service_id and service_id not in seen_service_ids:
                             live_services.append(_live_service_row(resource, binding, option_selected=True))
                             seen_service_ids.add(service_id)
-                        continue
-                    amount = _number(resource.get("unit_cost")) * (_number(binding.get("quantity")) or 1.0)
-                else:
-                    amount = _number(binding.get("direct_amount"))
-                option_halalas += round(amount * 100)
+                    # Resource-backed component costs are internal recipe costs;
+                    # they never become supplier-invoice product surcharges.
+                    continue
+                option_halalas += round(_number(binding.get("direct_amount")) * 100)
 
-            total = int(base.get("reference_product_unit_price_halalas") or 0) + component_halalas + option_halalas
+            total = int(base.get("reference_product_unit_price_halalas") or 0) + option_halalas
             return {
                 **base,
                 "reference_product_unit_price_halalas": total,
-                "reference_product_component_cost_halalas": component_halalas,
+                "reference_product_component_cost_halalas": 0,
                 "reference_product_option_cost_halalas": option_halalas,
                 "reference_product_price_live": True,
+                "supplier_invoice_components_excluded": True,
                 "live_invoice_services": live_services,
             }
         live_supplier_product_price._mezan_live_invoice_costs = True  # type: ignore[attr-defined]
