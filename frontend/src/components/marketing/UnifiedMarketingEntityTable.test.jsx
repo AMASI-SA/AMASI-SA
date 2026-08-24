@@ -127,6 +127,10 @@ describe("UnifiedMarketingEntityTable", () => {
 
         expect(container.textContent).toContain("10.00 USD");
         expect(container.textContent).toContain("150.00 SAR");
+        expect(container.textContent).toContain("تكلفة الطلب حسب Snapchat");
+        expect(container.textContent).toContain("5.00 USD");
+        expect(container.textContent).toContain("تكلفة الطلب حسب سلة");
+        expect(container.textContent).toContain("12.50 SAR");
         const button = Array.from(container.querySelectorAll("button"))
             .find((item) => item.textContent.includes("Ad Squads"));
         await act(async () => button.click());
@@ -139,6 +143,7 @@ describe("UnifiedMarketingEntityTable", () => {
 
     test("renders unavailable ad-level Salla attribution as unknown, not zero", async () => {
         const ad = row("ad", "ad-1", "unavailable");
+        ad.platform_outcomes.conversions = 0;
         await act(async () => {
             root.render(
                 <UnifiedMarketingEntityTable
@@ -152,7 +157,12 @@ describe("UnifiedMarketingEntityTable", () => {
             );
         });
 
-        expect(container.textContent).not.toContain("0.00 SAR");
+        const headers = Array.from(container.querySelectorAll("thead th"));
+        const snapchatCostIndex = headers.findIndex((item) => item.textContent === "تكلفة الطلب حسب Snapchat");
+        const sallaCostIndex = headers.findIndex((item) => item.textContent === "تكلفة الطلب حسب سلة");
+        const cells = container.querySelectorAll("tbody tr:first-child td");
+        expect(cells[snapchatCostIndex].textContent).toBe("—");
+        expect(cells[sallaCostIndex].textContent).toBe("—");
         expect(container.textContent).toContain("—");
     });
 
