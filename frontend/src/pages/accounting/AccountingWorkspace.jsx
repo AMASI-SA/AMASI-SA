@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { useOptionalAuth } from "../../context/AuthContext";
 import { getAccountingAccess, getAccountingModuleStatus } from "../../services/accountingModule";
+import AccountingCourierBankBindings from "./AccountingCourierBankBindings";
 import AccountingHome from "./AccountingHome";
 import AccountingPermissionsDialog from "./AccountingPermissionsDialog";
 import AccountingSettlements from "./AccountingSettlements";
@@ -70,7 +71,12 @@ export default function AccountingWorkspace() {
             ? <LoadingBlock />
             : <AccountingHome status={status} user={user} accountingPermissions={permissions} />;
     } else if (page.id === "settlements") {
-        content = <AccountingSettlements accountingPermissions={permissions} />;
+        content = (
+            <div className="space-y-5">
+                <AccountingSettlements accountingPermissions={permissions} />
+                <AccountingCourierBankBindings accountingPermissions={permissions} />
+            </div>
+        );
     } else if (page.id === "opening-balances") {
         content = statusLoading ? <LoadingBlock /> : <OpeningBalancesBlocked status={status} />;
     } else {
