@@ -34,13 +34,21 @@ from accounting_module_status_routes import (
 from accounting_settlement_bank_match_routes import (
     install_accounting_settlement_bank_match_routes,
 )
+from accounting_settlement_currency_guard import (
+    install_accounting_settlement_currency_guard,
+)
 from accounting_settlement_evidence_guard import delete_unlinked_settlement_file
 from accounting_settlement_identity_routes import (
     install_accounting_settlement_identity_routes,
 )
 from accounting_settlement_import_guard import import_accounting_settlement_file
+import accounting_settlement_lifecycle_routes as accounting_settlement_lifecycle_routes_module
 from accounting_settlement_lifecycle_routes import (
     install_accounting_settlement_lifecycle_routes,
+)
+import accounting_settlement_register_routes as accounting_settlement_register_routes_module
+from accounting_settlement_register_routes import (
+    install_accounting_settlement_register_routes,
 )
 import accounting_settlement_routes as accounting_settlement_routes_module
 from accounting_settlement_routes import (  # noqa: F401
@@ -76,6 +84,16 @@ def make_financial_provider_apps_router(db, current_user):
     # preserving normal deletion for files that never entered accounting.
     settlement_import_routes_module.delete_file = delete_unlinked_settlement_file
 
+    # Currency is explicit on every new draft. Unsupported currencies stop
+    # before insertion, and old drafts without currency cannot cross lifecycle
+    # gates. The register also surfaces missing currency instead of defaulting
+    # silently to SAR.
+    install_accounting_settlement_currency_guard(
+        accounting_settlement_routes_module,
+        accounting_settlement_lifecycle_routes_module,
+        accounting_settlement_register_routes_module,
+    )
+
     router = _legacy_router(db, provider_user)
     install_accounting_status_routes(router, db, current_user)
     install_accounting_permission_routes(router, db, current_user)
@@ -87,5 +105,6 @@ def make_financial_provider_apps_router(db, current_user):
     install_accounting_settlement_routes(router, db, current_user)
     install_accounting_settlement_bank_match_routes(router, db, current_user)
     install_accounting_settlement_identity_routes(router, db, current_user)
+    install_accounting_settlement_register_routes(router, db, current_user)
     install_accounting_courier_bank_routes(router, db, current_user)
     return router
