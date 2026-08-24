@@ -34,6 +34,25 @@ function commerce(row) {
     return row?.commerce_outcomes || {};
 }
 
+function sallaCostPerOrder(row) {
+    const orders = Number(commerce(row).orders);
+    const spend = Number(row?.delivery?.spend_sar?.amount);
+    if (commerce(row).status !== "complete" || !Number.isFinite(orders) || orders <= 0 || !Number.isFinite(spend)) {
+        return { amount: null, currency: "SAR" };
+    }
+    return { amount: spend / orders, currency: "SAR" };
+}
+
+function snapchatCostPerPurchase(row) {
+    const purchases = Number(row?.platform_outcomes?.conversions);
+    const spend = Number(row?.delivery?.spend?.amount);
+    const currency = row?.delivery?.spend?.currency || "USD";
+    if (!Number.isFinite(purchases) || purchases <= 0 || !Number.isFinite(spend)) {
+        return { amount: null, currency };
+    }
+    return { amount: spend / purchases, currency };
+}
+
 function profitability(row) {
     return row?.commerce_profitability || {};
 }
@@ -150,7 +169,7 @@ export default function UnifiedMarketingEntityTable({
                 </div>
             </header>
             <div className="overflow-x-auto">
-                <table className="min-w-[1500px] w-full text-right text-xs">
+                <table className="min-w-[1800px] w-full text-right text-xs">
                     <thead className="bg-slate-50 text-slate-600">
                         <tr>
                             <th className="px-4 py-3 font-black">الكيان</th>
@@ -160,9 +179,11 @@ export default function UnifiedMarketingEntityTable({
                             <th className="px-4 py-3 font-black">المشاهدات</th>
                             <th className="px-4 py-3 font-black">النقرات/السحب</th>
                             <th className="px-4 py-3 font-black">مشتريات Snapchat</th>
+                            <th className="px-4 py-3 font-black">تكلفة الطلب حسب Snapchat</th>
                             <th className="px-4 py-3 font-black">قيمة Snapchat</th>
                             <th className="px-4 py-3 font-black">ROAS Snapchat</th>
                             <th className="px-4 py-3 font-black">طلبات سلة</th>
+                            <th className="px-4 py-3 font-black">تكلفة الطلب حسب سلة</th>
                             <th className="px-4 py-3 font-black">مبيعات سلة</th>
                             <th className="px-4 py-3 font-black">ROAS سلة</th>
                             {level === "campaign" && <th className="px-4 py-3 font-black">المنتجات والربح</th>}
@@ -189,9 +210,11 @@ export default function UnifiedMarketingEntityTable({
                                 <td className="px-4 py-4 font-mono">{number(row.delivery.views)}</td>
                                 <td className="px-4 py-4 font-mono">{number(row.delivery.clicks)}</td>
                                 <td className="px-4 py-4 font-mono">{number(row.platform_outcomes.conversions)}</td>
+                                <td className="px-4 py-4 font-mono" dir="ltr">{money(snapchatCostPerPurchase(row))}</td>
                                 <td className="px-4 py-4 font-mono" dir="ltr">{money(row.platform_outcomes.revenue)}</td>
                                 <td className="px-4 py-4 font-mono">{ratio(row.platform_outcomes.roas)}</td>
                                 <td className="px-4 py-4 font-mono">{commerce(row).status === "complete" ? number(commerce(row).orders) : "—"}</td>
+                                <td className="px-4 py-4 font-mono" dir="ltr">{money(sallaCostPerOrder(row))}</td>
                                 <td className="px-4 py-4 font-mono" dir="ltr">{commerce(row).status === "complete" ? money(commerce(row).revenue) : "—"}</td>
                                 <td className="px-4 py-4 font-mono">{commerce(row).status === "complete" ? ratio(commerce(row).roas) : "—"}</td>
                                 {level === "campaign" && <td className="px-4 py-4"><button type="button" onClick={() => setProfitRow(row)} className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 font-black text-emerald-800">{profitability(row).missing_cost_orders ? `${profitability(row).missing_cost_orders} تكلفة ناقصة` : `${number(profitability(row).product_count)} منتجات`}</button></td>}
@@ -241,11 +264,15 @@ export default function UnifiedMarketingEntityTable({
                                 <td className="px-4 py-4 font-mono">{number(totals.delivery.views)}</td>
                                 <td className="px-4 py-4 font-mono">{number(totals.delivery.clicks)}</td>
                                 <td className="px-4 py-4 font-mono">{number(totals.platform_outcomes.conversions)}</td>
+                                <td className="px-4 py-4 font-mono" dir="ltr">{money(snapchatCostPerPurchase(totals))}</td>
                                 <td className="px-4 py-4 font-mono" dir="ltr">{money(totals.platform_outcomes.revenue)}</td>
                                 <td className="px-4 py-4 font-mono">{ratio(totals.platform_outcomes.roas)}</td>
                                 <td className="px-4 py-4 font-mono">{commerce(totals).status === "complete" ? number(commerce(totals).orders) : "—"}</td>
+                                <td className="px-4 py-4 font-mono" dir="ltr">{money(sallaCostPerOrder(totals))}</td>
                                 <td className="px-4 py-4 font-mono" dir="ltr">{commerce(totals).status === "complete" ? money(commerce(totals).revenue) : "—"}</td>
                                 <td className="px-4 py-4 font-mono">{commerce(totals).status === "complete" ? ratio(commerce(totals).roas) : "—"}</td>
+                                {level === "campaign" && <td className="px-4 py-4" />}
+                                {level === "campaign" && <td className="px-4 py-4" />}
                                 <td className="px-4 py-4">{totals.quality.sync_status}</td>
                                 <td className="px-4 py-4" />
                                 {canOpenChildren && <td className="px-4 py-4" />}
