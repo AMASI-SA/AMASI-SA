@@ -1,9 +1,16 @@
 """Independent Snapchat provider-total reads used only for reconciliation.
 
 The Dashboard uses an Asia/Riyadh calendar day while the Snapchat page uses the
-ad-account calendar.  A single UTC total cannot prove both views when those
-windows differ.  This module therefore reads the requested Dashboard window
-and, when necessary, a second account-local window for the same Riyadh date.
+ad-account calendar. A single UTC total cannot prove both views when those
+windows differ. This module therefore reads the requested Dashboard window and,
+when necessary, a second account-local window for the same Riyadh date.
+
+Snapchat's ad-account stats endpoint does not accept ``granularity=TOTAL`` for
+all account/API combinations. Reconciliation therefore prefers TOTAL, but when
+Snapchat explicitly rejects that request with HTTP 400 it performs a fresh
+provider-side HOUR read for the exact same window and sums campaign spend. The
+fallback is still independent from the persisted V2 facts/projections and is
+used only as reconciliation evidence.
 """
 from __future__ import annotations
 
@@ -55,6 +62,7 @@ def _total_metric_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
         direct = stat.get("stats")
         if isinstance(direct, dict):
             rows.append(direct)
+            continue
         breakdown = stat.get("breakdown_stats")
         if isinstance(breakdown, dict):
             for entities in breakdown.values():
@@ -78,6 +86,20 @@ def _total_metric_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
             "Snapchat TOTAL response contains no metrics.",
         )
     return rows
+
+
+def _hour_spend_micro(client: SnapchatV2Client, payload: dict[str, Any]) -> float:
+    rows = client._extract_hour_rows(payload)
+    spend_micro = 0.0
+    for row in rows:
+        metrics = row.get("metrics") or {}
+        if "spend" not in metrics:
+            raise SnapchatClientError(
+                "snapchat_hour_spend_missing",
+                "Snapchat HOUR reconciliation response is missing spend.",
+            )
+        spend_micro += float(_number(metrics.get("spend"), field="spend"))
+    return spend_micro
 
 
 def _ceil_current_hour(value: datetime) -> datetime:
@@ -110,6 +132,33 @@ def _clamp_open_window(
     return start, end
 
 
+def _stats_params(
+    *,
+    start: datetime,
+    end: datetime,
+    account_tz: Any,
+    granularity: str,
+    action_report_time: str,
+    swipe_attribution_window: str,
+    view_attribution_window: str,
+) -> dict[str, Any]:
+    params: dict[str, Any] = {
+        "start_time": start.astimezone(account_tz).isoformat(timespec="seconds"),
+        "end_time": end.astimezone(account_tz).isoformat(timespec="seconds"),
+        "granularity": granularity,
+        "fields": "spend",
+        "limit": 200,
+        "omit_empty": "false",
+        "conversion_source_types": "total",
+        "swipe_up_attribution_window": swipe_attribution_window,
+        "view_attribution_window": view_attribution_window,
+        "action_report_time": clean_text(action_report_time, limit=32).lower(),
+    }
+    if granularity == "HOUR":
+        params["breakdown"] = "campaign"
+    return params
+
+
 async def _fetch_window_total(
     client: SnapchatV2Client,
     account: dict[str, Any],
@@ -135,37 +184,65 @@ async def _fetch_window_total(
         raise ValueError("Snapchat account ID and timezone are required")
     account_tz = _account_timezone(timezone_name)
     url = f"{SNAPCHAT_API_BASE}/adaccounts/{account_id}/stats"
-    params = {
-        "start_time": start.astimezone(account_tz).isoformat(timespec="seconds"),
-        "end_time": end.astimezone(account_tz).isoformat(timespec="seconds"),
-        "granularity": "TOTAL",
-        "fields": "spend",
-        "limit": 200,
-        "omit_empty": "false",
-        "conversion_source_types": "total",
-        "swipe_up_attribution_window": swipe_attribution_window,
-        "view_attribution_window": view_attribution_window,
-        "action_report_time": clean_text(action_report_time, limit=32).lower(),
-    }
     completed = 0
     spend_micro = 0.0
+    provider_granularity = "TOTAL"
+    fallback_from: str | None = None
     try:
         async with client.client_factory(timeout=HTTP_TIMEOUT_SECONDS) as http_client:
-            pages, completed = await client._pages(http_client, url, params=params)
+            try:
+                pages, completed = await client._pages(
+                    http_client,
+                    url,
+                    params=_stats_params(
+                        start=start,
+                        end=end,
+                        account_tz=account_tz,
+                        granularity="TOTAL",
+                        action_report_time=action_report_time,
+                        swipe_attribution_window=swipe_attribution_window,
+                        view_attribution_window=view_attribution_window,
+                    ),
+                )
+            except SnapchatClientError as exc:
+                if exc.code != "snapchat_provider_http_400":
+                    raise
+                fallback_from = exc.code
+                provider_granularity = "HOUR"
+                pages, completed = await client._pages(
+                    http_client,
+                    url,
+                    params=_stats_params(
+                        start=start,
+                        end=end,
+                        account_tz=account_tz,
+                        granularity="HOUR",
+                        action_report_time=action_report_time,
+                        swipe_attribution_window=swipe_attribution_window,
+                        view_attribution_window=view_attribution_window,
+                    ),
+                )
+
         observed = 0
-        for payload in pages:
-            for metrics in _total_metric_rows(payload):
-                if "spend" not in metrics:
-                    raise SnapchatClientError(
-                        "snapchat_total_spend_missing",
-                        "Snapchat TOTAL response is missing spend.",
-                    )
-                spend_micro += float(_number(metrics.get("spend"), field="spend"))
+        if provider_granularity == "TOTAL":
+            for payload in pages:
+                for metrics in _total_metric_rows(payload):
+                    if "spend" not in metrics:
+                        raise SnapchatClientError(
+                            "snapchat_total_spend_missing",
+                            "Snapchat TOTAL response is missing spend.",
+                        )
+                    spend_micro += float(_number(metrics.get("spend"), field="spend"))
+                    observed += 1
+        else:
+            for payload in pages:
+                spend_micro += _hour_spend_micro(client, payload)
                 observed += 1
+
         if observed == 0:
             raise SnapchatClientError(
                 "snapchat_total_spend_unobserved",
-                "Snapchat TOTAL spend was not observed.",
+                "Snapchat reconciliation spend was not observed.",
             )
     except SnapchatClientError as exc:
         exc.coverage = _coverage(
@@ -177,18 +254,25 @@ async def _fetch_window_total(
             reason=exc.code,
         )
         raise
+
     spend_native = round(spend_micro / 1_000_000, 6)
+    coverage = _coverage(
+        status="complete",
+        data_state="confirmed_data" if spend_native > 0 else "confirmed_zero",
+        expected_requests=completed,
+        completed_requests=completed,
+        rows_received=1,
+    )
+    coverage["provider_granularity"] = provider_granularity
+    if fallback_from:
+        coverage["fallback_from"] = fallback_from
     return {
         "provider_spend_native": spend_native,
         "window_start_utc": start,
         "window_end_utc": end,
-        "coverage": _coverage(
-            status="complete",
-            data_state="confirmed_data" if spend_native > 0 else "confirmed_zero",
-            expected_requests=completed,
-            completed_requests=completed,
-            rows_received=1,
-        ),
+        "provider_granularity": provider_granularity,
+        "fallback_from": fallback_from,
+        "coverage": coverage,
     }
 
 
@@ -205,9 +289,9 @@ async def fetch_provider_total(
     """Return Dashboard-window total plus an account-day comparison total.
 
     ``provider_spend_native`` remains the requested-window result for backward
-    compatibility.  The additional ``account_day_*`` fields are consumed by
-    reconciliation so the Snapchat page is never compared against a Riyadh
-    UTC window by mistake.
+    compatibility. The additional ``account_day_*`` fields are consumed by
+    reconciliation so the Snapchat page is never compared against a Riyadh UTC
+    window by mistake.
     """
     current = client.now().astimezone(timezone.utc)
     dashboard_start, dashboard_end = _clamp_open_window(
