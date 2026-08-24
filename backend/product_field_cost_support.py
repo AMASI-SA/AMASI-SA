@@ -157,6 +157,31 @@ def _supplier_cost_item(piece: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _live_service_row(resource: dict[str, Any], binding: dict[str, Any], *, option_selected: bool) -> dict[str, Any]:
+    amount = _number(resource.get("unit_cost"))
+    quantity = _number(binding.get("quantity")) or 1.0
+    return {
+        "service_id": _text(resource.get("id")),
+        "service_name": _text(resource.get("name")) or _text(resource.get("id")),
+        "service_code": _text(resource.get("code")) or None,
+        "unit": _text(resource.get("unit")) or "job",
+        "required_quantity": quantity,
+        "reference_unit_price_halalas": round(amount * 100),
+        "reference_price_complete": resource.get("unit_cost") not in (None, ""),
+        "linked_to_product": not option_selected,
+        "eligibility_source": "option" if option_selected else "product_live",
+        "eligibility_condition": ({
+            "option_id": binding.get("option_id"),
+            "option_name": binding.get("option_name"),
+            "value_id": binding.get("value_id"),
+            "value_name": binding.get("value_name"),
+        } if option_selected else None),
+        "customer_selected": option_selected,
+        "supplier_invoice_required": True,
+        "add_to_product": False,
+    }
+
+
 def install_product_field_cost_support() -> None:
     import product_v2_details_routes as details_module
     import product_option_cost_routes as cost_module
@@ -320,9 +345,15 @@ def install_product_field_cost_support() -> None:
             )
             resource_map = {_text(row.get("id")): row for row in resources}
             component_halalas = 0
+            live_services: list[dict[str, Any]] = []
+            seen_service_ids: set[str] = set()
             for binding in product_links:
                 resource = resource_map.get(_text(binding.get("resource_id"))) or {}
                 if _text(resource.get("kind")).casefold() == "service":
+                    service_id = _text(resource.get("id"))
+                    if service_id and service_id not in seen_service_ids:
+                        live_services.append(_live_service_row(resource, binding, option_selected=False))
+                        seen_service_ids.add(service_id)
                     continue
                 amount = _number(resource.get("unit_cost")) * (_number(binding.get("quantity")) or 1.0)
                 component_halalas += round(amount * 100)
@@ -335,6 +366,10 @@ def install_product_field_cost_support() -> None:
                 if _text(binding.get("mode")).casefold() == "resource":
                     resource = resource_map.get(_text(binding.get("resource_id"))) or {}
                     if _text(resource.get("kind")).casefold() == "service":
+                        service_id = _text(resource.get("id"))
+                        if service_id and service_id not in seen_service_ids:
+                            live_services.append(_live_service_row(resource, binding, option_selected=True))
+                            seen_service_ids.add(service_id)
                         continue
                     amount = _number(resource.get("unit_cost")) * (_number(binding.get("quantity")) or 1.0)
                 else:
@@ -348,6 +383,7 @@ def install_product_field_cost_support() -> None:
                 "reference_product_component_cost_halalas": component_halalas,
                 "reference_product_option_cost_halalas": option_halalas,
                 "reference_product_price_live": True,
+                "live_invoice_services": live_services,
             }
         live_supplier_product_price._mezan_live_invoice_costs = True  # type: ignore[attr-defined]
         supplier_module._supplier_product_reference_price = live_supplier_product_price
@@ -402,18 +438,30 @@ def install_product_field_cost_support() -> None:
                     ):
                         if field in current_piece:
                             row[field] = current_piece.get(field)
-                row["invoice_services"] = supplier_module.supplier_piece_invoice_services(
+
+                existing_services = supplier_module.supplier_piece_invoice_services(
                     row,
                     session,
                     service_catalog,
                 )
+                live_price = await supplier_module._supplier_product_reference_price(
+                    db,
+                    user_id=user_id,
+                    piece=row,
+                    mongo_session=mongo_session,
+                )
+                live_services = list(live_price.pop("live_invoice_services", []) or [])
+                merged_services: list[dict[str, Any]] = []
+                seen: set[str] = set()
+                for service in [*live_services, *existing_services]:
+                    service_id = _text(service.get("service_id"))
+                    if not service_id or service_id in seen:
+                        continue
+                    seen.add(service_id)
+                    merged_services.append(service)
+                row["invoice_services"] = merged_services
                 if row.get("product_charge_eligible") is not False:
-                    row.update(await supplier_module._supplier_product_reference_price(
-                        db,
-                        user_id=user_id,
-                        piece=row,
-                        mongo_session=mongo_session,
-                    ))
+                    row.update(live_price)
                 row["supplier_invoice_live_draft"] = True
             return rows
         recent_events_with_live_product_state._mezan_live_invoice_costs = True  # type: ignore[attr-defined]
