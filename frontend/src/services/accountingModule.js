@@ -77,10 +77,34 @@ export async function getAccountingSettlementDraft(draftId) {
     return data;
 }
 
+export async function updateAccountingSettlementIdentity(
+    draftId,
+    statementReference,
+    reason = "تحديث مرجع الكشف من شاشة التسويات",
+) {
+    const { data } = await api.patch(
+        `${SETTLEMENTS}/drafts/${encodeURIComponent(draftId)}/identity`,
+        {
+            statement_reference: statementReference || "",
+            reason,
+        },
+    );
+    return data;
+}
+
 export async function updateAccountingSettlementDraft(draftId, payload) {
+    const next = { ...(payload || {}) };
+    if (Object.prototype.hasOwnProperty.call(next, "statement_reference")) {
+        await updateAccountingSettlementIdentity(
+            draftId,
+            next.statement_reference,
+            next.manual_override_reason || "تحديث مرجع الكشف من شاشة التسويات",
+        );
+        delete next.statement_reference;
+    }
     const { data } = await api.patch(
         `${SETTLEMENTS}/drafts/${encodeURIComponent(draftId)}`,
-        payload,
+        next,
     );
     return data;
 }
