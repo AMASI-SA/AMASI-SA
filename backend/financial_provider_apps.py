@@ -30,6 +30,7 @@ from accounting_module_status_routes import (
     fresh_accounting_user,
     install_accounting_status_routes,
 )
+from accounting_settlement_evidence_guard import delete_unlinked_settlement_file
 from accounting_settlement_identity_routes import (
     install_accounting_settlement_identity_routes,
 )
@@ -49,6 +50,7 @@ from accounting_settlement_service import (  # noqa: F401
     canonical_provider,
     settlement_idempotency_key,
 )
+import settlements_import.routes as settlement_import_routes_module
 
 
 def make_financial_provider_apps_router(db, current_user):
@@ -61,6 +63,11 @@ def make_financial_provider_apps_router(db, current_user):
     # only its local reference for a fail-closed detector that compares the
     # selected provider with the workbook before any draft is created.
     accounting_settlement_routes_module.import_file = import_accounting_settlement_file
+
+    # The legacy delete endpoint resolves this module-level symbol at request
+    # time. Protect every workbook referenced by a P01 accounting record while
+    # preserving normal deletion for files that never entered accounting.
+    settlement_import_routes_module.delete_file = delete_unlinked_settlement_file
 
     router = _legacy_router(db, provider_user)
     install_accounting_status_routes(router, db, current_user)
