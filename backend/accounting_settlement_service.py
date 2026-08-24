@@ -36,6 +36,7 @@ BLOCKING_REASON_CODES = frozenset({
     "missing_statement_reference",
     "unmatched_rows",
     "statement_equation_difference",
+    "statement_rows_difference",
     "source_requires_review",
     "negative_bank_net",
     "zero_receivable_close",
@@ -240,7 +241,7 @@ def build_review_reasons(
         })
     if abs(calc.get("statement_net_difference") or 0) > 0.01:
         reasons.append({
-            "code": "source_requires_review",
+            "code": "statement_rows_difference",
             "message": (
                 "صافي رأس كشف المزود لا يطابق مجموع صفوفه "
                 f"({calc['statement_net_difference']:.2f} SAR)"
@@ -277,12 +278,14 @@ def has_blocking_reasons(reasons: list[dict[str, Any]] | None) -> bool:
 def settlement_idempotency_key(
     *, user_id: str, provider: str, statement_reference: str, source_hash: str = ""
 ) -> str:
+    reference = str(statement_reference or "").strip().lower()
+    file_hash = str(source_hash or "").strip().lower()
+    identity = f"reference:{reference}" if reference else f"hash:{file_hash or 'missing'}"
     raw = "|".join((
         OPERATION_ID,
         str(user_id or "").strip(),
         canonical_provider(provider),
-        str(statement_reference or "").strip().lower(),
-        str(source_hash or "").strip().lower(),
+        identity,
     ))
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
@@ -523,7 +526,6 @@ __all__ = [
     "calculate_settlement_totals",
     "canonical_provider",
     "has_blocking_reasons",
-    "normalize_amounts",
     "period_from_file",
     "post_reviewed_settlement",
     "provider_label",
