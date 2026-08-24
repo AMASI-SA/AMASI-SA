@@ -16,6 +16,20 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _stored_utc(value: Any, *, field: str) -> datetime:
+    """Normalize UTC datetimes read back from MongoDB.
+
+    Mongo/PyMongo can deserialize BSON UTC datetimes without tzinfo depending
+    on client configuration. Persisted Snapchat V2 timestamps are UTC by
+    contract, so a naive stored value is explicitly re-attached to UTC here.
+    """
+    if not isinstance(value, datetime):
+        raise TypeError(f"{field} must be a datetime")
+    if value.tzinfo is None or value.utcoffset() is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 def _timezone(value: str) -> ZoneInfo:
     name = clean_text(value, limit=80)
     if not name:
@@ -108,7 +122,7 @@ async def build_daily_projection(
         ]
     by_hour: dict[datetime, dict[str, Any]] = {}
     for fact in facts:
-        point = ensure_aware_utc(fact.get("hour_start_utc"), field="hour_start_utc")
+        point = _stored_utc(fact.get("hour_start_utc"), field="hour_start_utc")
         if point in by_hour:
             raise ValueError("duplicate Snapchat account hourly fact")
         by_hour[point] = fact
@@ -252,7 +266,7 @@ async def build_daily_projection(
     )
     latest_update = max(
         (
-            ensure_aware_utc(row.get("updated_at"), field="updated_at")
+            _stored_utc(row.get("updated_at"), field="updated_at")
             for row in known_facts
             if isinstance(row.get("updated_at"), datetime)
         ),
