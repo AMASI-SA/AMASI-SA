@@ -43,6 +43,7 @@ ORDER_PROJECTION = {
     "order_kind": 1,
     "type_of_order": 1,
     "is_gift": 1,
+    "products": 1,
 }
 
 
@@ -199,6 +200,7 @@ async def load_salla_campaign_outcomes(
     timezone_name: str,
     identities: list[dict[str, Any]],
     platform_purchases: int = 0,
+    campaign_spend_sar: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     settings = await _load_report_settings(db, str(user_id))
     query: dict[str, Any] = {
@@ -231,6 +233,22 @@ async def load_salla_campaign_outcomes(
     by_campaign: dict[tuple[str, str], dict[str, Any]] = defaultdict(
         lambda: {"orders": 0, "sales_sar": 0.0}
     )
+    profitability_enabled = hasattr(db, "__getitem__")
+    profitability_raw: dict[tuple[str, str], dict[str, Any]] = {}
+    cost_context = None
+    if profitability_enabled:
+        # Keep the base Salla shadow reader import-safe in lightweight workers.
+        # The authoritative Mezan V2 cost engine is loaded only for a live report.
+        from integrations_control_center.snapchat_campaign_profitability import (
+            _add_order_to_campaign,
+            _finalize_campaign,
+            _load_cost_context,
+            _new_campaign_bucket,
+            _order_cost_and_products,
+        )
+
+        profitability_raw = defaultdict(_new_campaign_bucket)
+        cost_context = await _load_cost_context(db, str(user_id))
     audit_rows: list[dict[str, Any]] = []
     total_financial_sales = 0.0
 
@@ -272,6 +290,11 @@ async def load_salla_campaign_outcomes(
                 counters["campaign_matched_financial_orders"] += 1
                 by_campaign[key]["orders"] += 1
                 by_campaign[key]["sales_sar"] += amount
+                if cost_context is not None:
+                    _add_order_to_campaign(
+                        profitability_raw[key],
+                        _order_cost_and_products(order, cost_context),
+                    )
         elif match_method.startswith("ambiguous"):
             classification = "ambiguous"
             counters["ambiguous_orders"] += 1
@@ -319,6 +342,25 @@ async def load_salla_campaign_outcomes(
     matched_financial_orders = sum(
         int(value["orders"]) for value in by_campaign.values()
     )
+    spend_by_campaign = dict(campaign_spend_sar or {})
+    profitability_by_campaign = (
+        {
+            campaign_id: _finalize_campaign(
+                raw,
+                spend_sar=_number(spend_by_campaign.get(campaign_id)),
+            )
+            for (row_account_id, campaign_id), raw in profitability_raw.items()
+            if row_account_id == account_id
+        }
+        if profitability_enabled
+        else {}
+    )
+    for (row_account_id, campaign_id), value in by_campaign.items():
+        if row_account_id != account_id:
+            continue
+        profitability = profitability_by_campaign.get(campaign_id)
+        if profitability is not None:
+            value["profitability"] = profitability
     return {
         "provider": "snapchat_ads",
         "account_id": account_id,
@@ -348,6 +390,9 @@ async def load_salla_campaign_outcomes(
                 "exact_campaign_id_or_unique_snapchat_campaign_name"
             ),
             "non_campaign_distribution_allowed": False,
+            "profitability_scope": (
+                "sales_minus_product_cost_minus_ad_spend_before_payment_shipping_bnpl_and_operating_allocations"
+            ),
         },
         "orders": audit_rows[:MAX_AUDIT_ROWS],
         "orders_total": len(audit_rows),

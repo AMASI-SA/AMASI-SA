@@ -72,6 +72,41 @@ class UnifiedCommerceOutcomes(StrictModel):
     attribution_scope: str
 
 
+class UnifiedProductProfitability(StrictModel):
+    identity: str
+    salla_product_id: str | None = None
+    mezan_product_id: str | None = None
+    name: str
+    sku: str | None = None
+    image_url: str | None = None
+    units: float = Field(default=0, ge=0)
+    orders: int = Field(default=0, ge=0)
+    sales: MoneyValue
+    product_cost: MoneyValue
+    allocated_ad_spend: MoneyValue
+    contribution_profit: MoneyValue
+    profit_margin_pct: float | None = None
+    cost_status: str
+    cost_sources: list[str] = Field(default_factory=list)
+
+
+class UnifiedCommerceProfitability(StrictModel):
+    status: CoverageStatus
+    orders: int | None = Field(default=None, ge=0)
+    sales: MoneyValue
+    product_cost: MoneyValue
+    known_product_cost: MoneyValue
+    ad_spend: MoneyValue
+    contribution_profit: MoneyValue
+    profit_margin_pct: float | None = None
+    cost_status: str
+    missing_cost_orders: int = Field(default=0, ge=0)
+    product_count: int = Field(default=0, ge=0)
+    products: list[UnifiedProductProfitability] = Field(default_factory=list)
+    profit_scope: str
+    allocation_method: str | None = None
+
+
 class UnifiedQuality(StrictModel):
     sync_status: str
     coverage_status: CoverageStatus
@@ -96,6 +131,7 @@ class UnifiedMarketingRow(StrictModel):
     delivery: UnifiedDeliveryMetrics
     platform_outcomes: UnifiedPlatformOutcomes
     commerce_outcomes: UnifiedCommerceOutcomes
+    commerce_profitability: UnifiedCommerceProfitability
     quality: UnifiedQuality
     lineage: UnifiedLineage
 
@@ -164,6 +200,7 @@ __all__ = [
     "MoneyValue",
     "UnifiedAccount",
     "UnifiedCommerceOutcomes",
+    "UnifiedCommerceProfitability",
     "UnifiedCommerceOrder",
     "UnifiedCommerceOrderSummary",
     "UnifiedDecisionEligibility",
@@ -173,6 +210,7 @@ __all__ = [
     "UnifiedMarketingReport",
     "UnifiedMarketingRow",
     "UnifiedPeriod",
+    "UnifiedProductProfitability",
     "UnifiedPlatformOutcomes",
     "UnifiedQuality",
 ]
