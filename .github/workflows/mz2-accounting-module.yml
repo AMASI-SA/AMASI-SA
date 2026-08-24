@@ -12,12 +12,14 @@ on:
     paths:
       - "backend/accounting_module_*.py"
       - "backend/accounting_settlement_*.py"
+      - "backend/accounting_courier_bank_routes.py"
       - "backend/financial_provider_apps*.py"
       - "backend/tests/test_mz2_accounting_module.py"
       - "backend/tests/test_mz2_settlements_p01.py"
       - "backend/tests/test_mz2_settlement_identity_p01.py"
       - "backend/tests/test_mz2_settlement_import_guard_p01.py"
       - "backend/tests/test_mz2_settlement_evidence_guard_p01.py"
+      - "backend/tests/test_mz2_courier_bank_bindings_p01.py"
       - "frontend/src/pages/accounting/**"
       - "frontend/src/pages/FinancialProviderApps*.jsx"
       - "frontend/src/components/MezanV2NavigationShell*.jsx"
@@ -66,6 +68,7 @@ jobs:
           accounting_settlement_identity_routes.py
           accounting_settlement_import_guard.py
           accounting_settlement_evidence_guard.py
+          accounting_courier_bank_routes.py
           financial_provider_apps.py
           financial_provider_apps_legacy.py
           tests/test_mz2_accounting_module.py
@@ -73,6 +76,7 @@ jobs:
           tests/test_mz2_settlement_identity_p01.py
           tests/test_mz2_settlement_import_guard_p01.py
           tests/test_mz2_settlement_evidence_guard_p01.py
+          tests/test_mz2_courier_bank_bindings_p01.py
       - name: Run accounting contract tests
         run: >-
           python -m pytest
@@ -81,6 +85,7 @@ jobs:
           tests/test_mz2_settlement_identity_p01.py
           tests/test_mz2_settlement_import_guard_p01.py
           tests/test_mz2_settlement_evidence_guard_p01.py
+          tests/test_mz2_courier_bank_bindings_p01.py
           -q --tb=short
 
   frontend-contract:
@@ -105,6 +110,7 @@ jobs:
           --runInBand
           src/pages/accounting/accountingPages.test.js
           src/pages/accounting/AccountingSettlements.test.jsx
+          src/pages/accounting/AccountingCourierBankBindings.test.jsx
           src/components/OwnerOnlyRoute.test.jsx
           src/components/MezanV2NavigationShell.test.jsx
       - name: Build frontend
