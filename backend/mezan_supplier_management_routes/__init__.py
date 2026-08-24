@@ -16,8 +16,10 @@ The endpoint is deliberately one-off and fail-closed:
 from __future__ import annotations
 
 import importlib.util
+import sys
 import uuid
 from datetime import datetime, timezone
+from functools import wraps
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +34,9 @@ _SPEC = importlib.util.spec_from_file_location(
 if _SPEC is None or _SPEC.loader is None:  # pragma: no cover - boot hard-fail
     raise ImportError("unable_to_load_mezan_supplier_management_routes_base")
 _BASE = importlib.util.module_from_spec(_SPEC)
+# Register before execution so Pydantic can resolve postponed annotations such
+# as ``Literal`` against the dynamically loaded sibling module.
+sys.modules[_SPEC.name] = _BASE
 _SPEC.loader.exec_module(_BASE)
 
 # Re-export the existing module contract used elsewhere in the backend.
@@ -39,10 +44,14 @@ MEZAN_SUPPLIERS_V2 = _BASE.MEZAN_SUPPLIERS_V2
 MEZAN_SUPPLIER_AUDIT_V2 = _BASE.MEZAN_SUPPLIER_AUDIT_V2
 MEZAN_SUPPLIER_INVOICES_V2 = _BASE.MEZAN_SUPPLIER_INVOICES_V2
 MezanSupplierWriteRequest = _BASE.MezanSupplierWriteRequest
+MezanSupplierWriteRequest.model_rebuild(_types_namespace=vars(_BASE))
 SUPPLIERS_MANAGE_PERMISSION = _BASE.SUPPLIERS_MANAGE_PERMISSION
 SUPPLIERS_READ_PERMISSION = _BASE.SUPPLIERS_READ_PERMISSION
 ensure_mezan_supplier_indexes = _BASE.ensure_mezan_supplier_indexes
 _audit = _BASE._audit
+_halalas_from_riyals = _BASE._halalas_from_riyals
+_is_service = _BASE._is_service
+_public_financial_invoice = _BASE._public_financial_invoice
 
 TARGET_SUPPLIER_ID = "msv2_e0e83c814a12460295d1b3d539fbcfd5"
 TARGET_SUPPLIER_NAME = "ابو جبل"
@@ -101,6 +110,7 @@ async def _rows(
     return await db[collection].find(query, {"_id": 0}).limit(limit).to_list(limit)
 
 
+@wraps(_BASE.make_mezan_supplier_management_router)
 def make_mezan_supplier_management_router(db: Any, current_user: Any):
     router = _BASE.make_mezan_supplier_management_router(db, current_user)
 
@@ -437,6 +447,9 @@ __all__ = [
     "SUPPLIERS_MANAGE_PERMISSION",
     "SUPPLIERS_READ_PERMISSION",
     "_audit",
+    "_halalas_from_riyals",
+    "_is_service",
+    "_public_financial_invoice",
     "ensure_mezan_supplier_indexes",
     "make_mezan_supplier_management_router",
 ]
