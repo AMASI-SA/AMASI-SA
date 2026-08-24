@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from unified_marketing.adapters.snapchat_v2 import build_snapchat_v2_unified_report
+from unified_marketing.commerce_carts import load_abandoned_cart_outcomes
 
 from .accounts import get_selected_account, list_accounts
 from .entities import list_entities
@@ -605,6 +606,25 @@ def attach_snapchat_v2_routes(
                 "source_collection": "unified_orders",
                 "source_only": True,
             }
+        try:
+            carts = await load_abandoned_cart_outcomes(
+                db,
+                user_id,
+                provider="snapchat_ads",
+                campaign_ids=[row["campaign_id"] for row in identities],
+                date_from=date_from,
+                date_to=date_to,
+            )
+        except Exception as exc:  # noqa: BLE001
+            carts = {
+                "by_campaign": {},
+                "store_level": None,
+                "coverage": {
+                    "status": "partial",
+                    "reason": str(type(exc).__name__)[:96],
+                    "read_only": True,
+                },
+            }
         for row in rows:
             salla_result = (
                 {
@@ -625,6 +645,9 @@ def attach_snapchat_v2_routes(
                 }
             )
             spend_sar = row.get("spend_sar")
+            salla_result["abandoned_carts"] = carts["by_campaign"].get(
+                str(row.get("campaign_id") or "")
+            )
             salla_result["roas"] = (
                 round(float(salla_result.get("sales_sar") or 0) / spend_sar, 6)
                 if salla_available and spend_sar and spend_sar > 0
@@ -701,6 +724,7 @@ def attach_snapchat_v2_routes(
             "campaigns": rows,
             "totals": totals,
             "salla": salla,
+            "abandoned_carts": carts,
             "cost_coverage": cost_coverage,
             "performance_sync_status": performance["performance_sync_status"],
             "source_collection": "mezan_snapchat_hourly_facts_v2",
