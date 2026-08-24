@@ -11,8 +11,10 @@ on:
       - ready_for_review
     paths:
       - "backend/accounting_module_*.py"
+      - "backend/accounting_settlement_*.py"
       - "backend/financial_provider_apps*.py"
       - "backend/tests/test_mz2_accounting_module.py"
+      - "backend/tests/test_mz2_settlements_p01.py"
       - "frontend/src/pages/accounting/**"
       - "frontend/src/pages/FinancialProviderApps*.jsx"
       - "frontend/src/components/MezanV2NavigationShell*.jsx"
@@ -45,7 +47,9 @@ jobs:
           bcrypt==4.1.3
           PyJWT==2.13.0
           openpyxl==3.1.5
+          python-multipart==0.0.20
           pytest==9.0.3
+          pytest-asyncio
       - name: Compile accounting modules
         run: >-
           python -m py_compile
@@ -54,11 +58,18 @@ jobs:
           accounting_module_permission_routes.py
           accounting_module_readiness.py
           accounting_module_status_routes.py
+          accounting_settlement_service.py
+          accounting_settlement_routes.py
           financial_provider_apps.py
           financial_provider_apps_legacy.py
           tests/test_mz2_accounting_module.py
+          tests/test_mz2_settlements_p01.py
       - name: Run accounting contract tests
-        run: python -m pytest tests/test_mz2_accounting_module.py -q --tb=short
+        run: >-
+          python -m pytest
+          tests/test_mz2_accounting_module.py
+          tests/test_mz2_settlements_p01.py
+          -q --tb=short
 
   frontend-contract:
     name: Accounting frontend contract
@@ -81,6 +92,7 @@ jobs:
           --watchAll=false
           --runInBand
           src/pages/accounting/accountingPages.test.js
+          src/pages/accounting/AccountingSettlements.test.jsx
           src/components/OwnerOnlyRoute.test.jsx
           src/components/MezanV2NavigationShell.test.jsx
       - name: Build frontend
