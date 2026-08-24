@@ -6,7 +6,6 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from auth import ensure_user_settings
 from salla_marketing_attribution import (
     SALLA_RAW_ATTRIBUTION_PROJECTION,
     campaign_id_candidates,
@@ -171,6 +170,25 @@ async def _to_list(cursor: Any, limit: int) -> list[dict[str, Any]]:
     return rows
 
 
+async def _load_report_settings(db: Any, user_id: str) -> dict[str, Any]:
+    """Read the existing report policy without creating or mutating settings."""
+    collection = getattr(db, "settings", None)
+    if collection is None and hasattr(db, "__getitem__"):
+        collection = db["settings"]
+    if collection is None:
+        return {}
+    projection = {
+        "_id": 0,
+        "report_included_statuses": 1,
+        "hide_inferred_date_orders": 1,
+    }
+    try:
+        row = await collection.find_one({"user_id": str(user_id)}, projection)
+    except TypeError:
+        row = await collection.find_one({"user_id": str(user_id)})
+    return dict(row or {})
+
+
 async def load_salla_campaign_outcomes(
     db: Any,
     user_id: str,
@@ -182,7 +200,7 @@ async def load_salla_campaign_outcomes(
     identities: list[dict[str, Any]],
     platform_purchases: int = 0,
 ) -> dict[str, Any]:
-    settings = await ensure_user_settings(db, str(user_id))
+    settings = await _load_report_settings(db, str(user_id))
     query: dict[str, Any] = {
         "user_id": str(user_id),
         "order_date": {

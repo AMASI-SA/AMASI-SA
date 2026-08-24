@@ -425,19 +425,23 @@ class OrderCollection:
         return OrderCursor(self.rows)
 
 
+class SettingsCollection:
+    async def find_one(self, *_args, **_kwargs):
+        return {
+            "report_included_statuses": ["completed"],
+            "hide_inferred_date_orders": False,
+        }
+
+
 class OrderDB:
     def __init__(self, rows):
         self.unified_orders = OrderCollection(rows)
+        self.settings = SettingsCollection()
 
 
 @pytest.mark.asyncio
 async def test_salla_outcomes_match_v2_campaigns_without_distributing_direct_orders(
-    monkeypatch,
 ):
-    async def settings(*_args, **_kwargs):
-        return {"report_included_statuses": ["completed"]}
-
-    monkeypatch.setattr("snapchat_v2.salla_outcomes.ensure_user_settings", settings)
     db = OrderDB(
         [
             {
