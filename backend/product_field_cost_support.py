@@ -135,6 +135,8 @@ def install_product_field_cost_support() -> None:
     import product_v2_details_routes as details_module
     import product_option_cost_routes as cost_module
     import order_option_cost_snapshot_routes as snapshot_module
+    import product_v2_routes as product_v2_module
+    import product_cost_setup_routes as cost_setup_module
 
     original_details: Callable[..., dict[str, Any]] = details_module._details_patch
     if not getattr(original_details, "_mezan_field_cost_support", False):
@@ -220,3 +222,13 @@ def install_product_field_cost_support() -> None:
             return tokens
         tokens_with_custom_fields._mezan_field_cost_support = True  # type: ignore[attr-defined]
         snapshot_module.selected_option_tokens = tokens_with_custom_fields
+
+    original_product_router = product_v2_module.make_product_v2_router
+    if not getattr(original_product_router, "_mezan_cost_review_order_fix", False):
+        def product_router_with_cost_review_first(db: Any, current_user: Callable[..., Any]):
+            product_router = original_product_router(db, current_user)
+            cost_setup_router = cost_setup_module.make_product_cost_setup_router(db, current_user)
+            product_router.routes = [*cost_setup_router.routes, *product_router.routes]
+            return product_router
+        product_router_with_cost_review_first._mezan_cost_review_order_fix = True  # type: ignore[attr-defined]
+        product_v2_module.make_product_v2_router = product_router_with_cost_review_first
