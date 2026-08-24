@@ -13,6 +13,7 @@ from financial_provider_apps_legacy import (
     make_financial_provider_apps_router as _legacy_router,
 )
 
+from accounting_courier_bank_routes import install_accounting_courier_bank_routes
 from accounting_module_contract import (  # noqa: F401
     ACCOUNTING_ACTIONS,
     ACCOUNTING_PAGES,
@@ -74,4 +75,5 @@ def make_financial_provider_apps_router(db, current_user):
     install_accounting_permission_routes(router, db, current_user)
     install_accounting_settlement_routes(router, db, current_user)
     install_accounting_settlement_identity_routes(router, db, current_user)
+    install_accounting_courier_bank_routes(router, db, current_user)
     return router
