@@ -78,6 +78,7 @@ async def build_daily_projection(
     projection_timezone: str,
     action_report_time: str = "conversion",
     coverage: dict[str, Any] | None = None,
+    sync_run_id: str | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     current = ensure_aware_utc(now or _utcnow(), field="now")
@@ -100,6 +101,11 @@ async def build_daily_projection(
         entity_type="ad_account",
         action_report_time=action_report_time,
     )
+    if sync_run_id:
+        facts = [
+            row for row in facts
+            if str(row.get("sync_run_id") or "") == str(sync_run_id)
+        ]
     by_hour: dict[datetime, dict[str, Any]] = {}
     for fact in facts:
         point = ensure_aware_utc(fact.get("hour_start_utc"), field="hour_start_utc")
@@ -328,6 +334,7 @@ async def build_and_persist_daily_projections(
     report_dates: list[date],
     action_report_time: str,
     coverage: dict[str, Any],
+    sync_run_id: str | None = None,
     now: datetime | None = None,
 ) -> list[dict[str, Any]]:
     timezones = [clean_text(account.get("timezone"), limit=80), RIYADH_TIMEZONE]
@@ -342,6 +349,7 @@ async def build_and_persist_daily_projections(
                 projection_timezone=timezone_name,
                 action_report_time=action_report_time,
                 coverage=coverage,
+                sync_run_id=sync_run_id,
                 now=now,
             )
             await persist_daily_projection(db, projection)

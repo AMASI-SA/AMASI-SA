@@ -409,6 +409,7 @@ class SnapchatV2SyncPipeline:
                 report_dates=report_dates,
                 action_report_time=action_report_time,
                 coverage=hourly["coverage"],
+                sync_run_id=sync_run_id,
                 now=self.now(),
             )
             by_key = {
