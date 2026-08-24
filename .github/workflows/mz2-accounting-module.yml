@@ -17,6 +17,7 @@ on:
       - "backend/tests/test_mz2_settlements_p01.py"
       - "backend/tests/test_mz2_settlement_identity_p01.py"
       - "backend/tests/test_mz2_settlement_import_guard_p01.py"
+      - "backend/tests/test_mz2_settlement_evidence_guard_p01.py"
       - "frontend/src/pages/accounting/**"
       - "frontend/src/pages/FinancialProviderApps*.jsx"
       - "frontend/src/components/MezanV2NavigationShell*.jsx"
@@ -64,12 +65,14 @@ jobs:
           accounting_settlement_routes.py
           accounting_settlement_identity_routes.py
           accounting_settlement_import_guard.py
+          accounting_settlement_evidence_guard.py
           financial_provider_apps.py
           financial_provider_apps_legacy.py
           tests/test_mz2_accounting_module.py
           tests/test_mz2_settlements_p01.py
           tests/test_mz2_settlement_identity_p01.py
           tests/test_mz2_settlement_import_guard_p01.py
+          tests/test_mz2_settlement_evidence_guard_p01.py
       - name: Run accounting contract tests
         run: >-
           python -m pytest
@@ -77,6 +80,7 @@ jobs:
           tests/test_mz2_settlements_p01.py
           tests/test_mz2_settlement_identity_p01.py
           tests/test_mz2_settlement_import_guard_p01.py
+          tests/test_mz2_settlement_evidence_guard_p01.py
           -q --tb=short
 
   frontend-contract:
