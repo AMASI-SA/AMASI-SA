@@ -20,7 +20,7 @@ jest.mock("../../services/snapchatCampaignManagement", () => ({
 }));
 
 jest.mock("../../context/AuthContext", () => ({
-    useAuth: () => ({ user: { id: "owner-1" } }),
+    useOptionalAuth: () => ({ user: { id: "owner-1" } }),
 }));
 
 jest.mock("../../services/mezanProductsV2", () => ({
@@ -40,7 +40,7 @@ import {
     resumeSnapchatManagementProposal,
 } from "../../services/snapchatCampaignManagement";
 import { listProductsV2 } from "../../services/mezanProductsV2";
-import SnapchatCampaignManagementPanel from "./SnapchatCampaignManagementPanel";
+import SnapchatCampaignManagementPanel, { initialForm } from "./SnapchatCampaignManagementPanel";
 
 function change(element, value) {
     const prototype = element instanceof HTMLSelectElement
@@ -52,6 +52,22 @@ function change(element, value) {
     element.dispatchEvent(new Event("input", { bubbles: true }));
     element.dispatchEvent(new Event("change", { bubbles: true }));
 }
+
+test("prefills governed update identities selected from the V2 hierarchy", () => {
+    expect(initialForm({
+        action: "campaign.update",
+        selectedCampaign: { campaign_id: "campaign-1" },
+    }).targetId).toBe("campaign-1");
+    expect(initialForm({
+        action: "ad_squad.update",
+        selectedCampaign: { campaign_id: "campaign-1" },
+        selectedAdSquad: { ad_squad_id: "squad-1" },
+    })).toMatchObject({ targetId: "squad-1", parentId: "campaign-1" });
+    expect(initialForm({
+        action: "ad.update",
+        selectedAd: { ad_id: "ad-1", ad_squad_id: "squad-1" },
+    })).toMatchObject({ targetId: "ad-1", parentId: "squad-1" });
+});
 
 describe("SnapchatCampaignManagementPanel decision context", () => {
     let container;

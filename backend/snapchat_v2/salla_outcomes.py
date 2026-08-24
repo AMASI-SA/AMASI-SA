@@ -1,0 +1,343 @@
+"""Read-only Salla outcomes matched to Snapchat V2 campaign identities."""
+from __future__ import annotations
+
+from collections import Counter, defaultdict
+from datetime import date, datetime, timedelta, timezone
+from typing import Any
+from zoneinfo import ZoneInfo
+
+from auth import ensure_user_settings
+from salla_marketing_attribution import (
+    SALLA_RAW_ATTRIBUTION_PROJECTION,
+    campaign_id_candidates,
+    campaign_name_candidates,
+    canonical_ad_platform,
+    meaningful_source_label,
+)
+
+MAX_AUDIT_ROWS = 500
+MAX_ORDER_ROWS = 100_000
+
+ORDER_PROJECTION = {
+    **SALLA_RAW_ATTRIBUTION_PROJECTION,
+    "order_number": 1,
+    "reference_id": 1,
+    "order_id": 1,
+    "id": 1,
+    "created_at": 1,
+    "order_created_at": 1,
+    "created_at_utc": 1,
+    "source_created_at": 1,
+    "updated_at": 1,
+    "order_date": 1,
+    "order_date_inferred": 1,
+    "order_status_native": 1,
+    "status_native": 1,
+    "order_status": 1,
+    "status": 1,
+    "total_amount": 1,
+    "total": 1,
+    "source_native": 1,
+    "source": 1,
+    "order_source": 1,
+    "order_type": 1,
+    "order_kind": 1,
+    "type_of_order": 1,
+    "is_gift": 1,
+}
+
+
+def _text(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _norm(value: Any) -> str:
+    return " ".join(_text(value).casefold().replace("_", " ").split())
+
+
+def _number(value: Any) -> float:
+    if value is None or isinstance(value, bool):
+        return 0.0
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return 0.0
+    return parsed if parsed == parsed and abs(parsed) != float("inf") else 0.0
+
+
+def _matches_any(value: Any, allowed: list[str]) -> bool:
+    if not allowed:
+        return True
+    normalized = _norm(value)
+    return any(
+        candidate
+        and (
+            candidate == normalized
+            or candidate in normalized
+            or normalized in candidate
+        )
+        for candidate in (_norm(item) for item in allowed)
+    )
+
+
+def _first_text(order: dict[str, Any], fields: tuple[str, ...]) -> str:
+    for field in fields:
+        value = _text(order.get(field))
+        if value:
+            return value
+    return ""
+
+
+def _parse_datetime(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        raw = _text(value)
+        if not raw:
+            return None
+        try:
+            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return None
+    return parsed.astimezone(timezone.utc)
+
+
+def _order_timestamp(order: dict[str, Any]) -> datetime | None:
+    for field in (
+        "created_at",
+        "order_created_at",
+        "created_at_utc",
+        "source_created_at",
+        "updated_at",
+    ):
+        parsed = _parse_datetime(order.get(field))
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _unique_lookup(
+    identities: list[dict[str, Any]],
+    field: str,
+) -> dict[str, tuple[str, str] | None]:
+    grouped: dict[str, set[tuple[str, str]]] = defaultdict(set)
+    for row in identities:
+        value = _norm(row.get(field))
+        key = (_text(row.get("account_id")), _text(row.get("campaign_id")))
+        if value and all(key):
+            grouped[value].add(key)
+    return {
+        value: next(iter(keys)) if len(keys) == 1 else None
+        for value, keys in grouped.items()
+    }
+
+
+def _match_order_campaign(
+    order: dict[str, Any],
+    *,
+    id_lookup: dict[str, tuple[str, str] | None],
+    name_lookup: dict[str, tuple[str, str] | None],
+) -> tuple[tuple[str, str] | None, str]:
+    platform = canonical_ad_platform(order)
+    if platform and platform != "snapchat":
+        return None, "foreign_platform"
+    for candidate in campaign_id_candidates(order):
+        normalized = _norm(candidate)
+        if normalized and normalized in id_lookup:
+            key = id_lookup[normalized]
+            return (key, "campaign_id") if key else (None, "ambiguous_id")
+    if platform == "snapchat":
+        for candidate in campaign_name_candidates(order):
+            normalized = _norm(candidate)
+            if normalized and normalized in name_lookup:
+                key = name_lookup[normalized]
+                return (key, "campaign_name") if key else (None, "ambiguous_name")
+    return None, "unmatched"
+
+
+async def _to_list(cursor: Any, limit: int) -> list[dict[str, Any]]:
+    if hasattr(cursor, "to_list"):
+        try:
+            return list(await cursor.to_list(length=limit + 1))
+        except TypeError:
+            return list(await cursor.to_list(limit + 1))
+    rows: list[dict[str, Any]] = []
+    async for row in cursor:
+        rows.append(row)
+        if len(rows) > limit:
+            break
+    return rows
+
+
+async def load_salla_campaign_outcomes(
+    db: Any,
+    user_id: str,
+    *,
+    account_id: str,
+    date_from: date,
+    date_to: date,
+    timezone_name: str,
+    identities: list[dict[str, Any]],
+    platform_purchases: int = 0,
+) -> dict[str, Any]:
+    settings = await ensure_user_settings(db, str(user_id))
+    query: dict[str, Any] = {
+        "user_id": str(user_id),
+        "order_date": {
+            "$gte": (date_from - timedelta(days=1)).isoformat(),
+            "$lte": (date_to + timedelta(days=1)).isoformat(),
+        },
+    }
+    if settings.get("hide_inferred_date_orders"):
+        query["order_date_inferred"] = {"$ne": True}
+    orders = await _to_list(
+        db.unified_orders.find(query, ORDER_PROJECTION),
+        MAX_ORDER_ROWS,
+    )
+    if len(orders) > MAX_ORDER_ROWS:
+        raise ValueError("Salla order audit exceeded the safe row limit")
+
+    id_lookup = _unique_lookup(identities, "campaign_id")
+    name_lookup = _unique_lookup(identities, "campaign_name")
+    identity_by_key = {
+        (_text(row.get("account_id")), _text(row.get("campaign_id"))): row
+        for row in identities
+    }
+    zone = ZoneInfo(timezone_name)
+    from_value = date_from.isoformat()
+    to_value = date_to.isoformat()
+    included_statuses = list(settings.get("report_included_statuses") or [])
+    counters: Counter[str] = Counter()
+    by_campaign: dict[tuple[str, str], dict[str, Any]] = defaultdict(
+        lambda: {"orders": 0, "sales_sar": 0.0}
+    )
+    audit_rows: list[dict[str, Any]] = []
+    total_financial_sales = 0.0
+
+    for order in orders:
+        timestamp = _order_timestamp(order)
+        if timestamp is not None:
+            localized = timestamp.astimezone(zone)
+            local_date = localized.date().isoformat()
+            local_created_at = localized.isoformat()
+            date_source = "created_at_localized"
+        else:
+            local_date = _text(order.get("order_date"))[:10]
+            local_created_at = local_date or None
+            date_source = "order_date_fallback"
+        if not local_date or local_date < from_value or local_date > to_value:
+            continue
+
+        counters["total_salla_created_orders"] += 1
+        financial = _matches_any(order.get("order_status"), included_statuses)
+        amount = _number(order.get("total_amount") or order.get("total"))
+        if financial:
+            counters["total_financial_orders"] += 1
+            total_financial_sales += amount
+
+        key, match_method = _match_order_campaign(
+            order,
+            id_lookup=id_lookup,
+            name_lookup=name_lookup,
+        )
+        campaign_id = None
+        campaign_name = None
+        if key is not None:
+            classification = "matched"
+            counters["campaign_matched_orders"] += 1
+            identity = identity_by_key.get(key, {})
+            campaign_id = key[1]
+            campaign_name = _text(identity.get("campaign_name")) or campaign_id
+            if financial:
+                counters["campaign_matched_financial_orders"] += 1
+                by_campaign[key]["orders"] += 1
+                by_campaign[key]["sales_sar"] += amount
+        elif match_method.startswith("ambiguous"):
+            classification = "ambiguous"
+            counters["ambiguous_orders"] += 1
+        else:
+            classification = "non_campaign"
+            counters["non_campaign_orders"] += 1
+
+        audit_rows.append(
+            {
+                "order_number": _first_text(
+                    order,
+                    ("order_number", "reference_id", "order_id", "id"),
+                ),
+                "local_created_at": local_created_at,
+                "local_date": local_date,
+                "date_source": date_source,
+                "timezone": timezone_name,
+                "status": _first_text(
+                    order,
+                    ("order_status_native", "status_native", "order_status", "status"),
+                ),
+                "amount_sar": round(amount, 2),
+                "financially_included": bool(financial),
+                "source_label": meaningful_source_label(order) or None,
+                "classification": classification,
+                "match_method": match_method,
+                "campaign_id": campaign_id,
+                "campaign_name": campaign_name,
+            }
+        )
+
+    for value in by_campaign.values():
+        value["sales_sar"] = round(float(value["sales_sar"]), 2)
+    audit_rows.sort(
+        key=lambda row: (
+            _text(row.get("local_created_at")),
+            _text(row.get("order_number")),
+        ),
+        reverse=True,
+    )
+    matched_financial_sales = round(
+        sum(float(value["sales_sar"]) for value in by_campaign.values()),
+        2,
+    )
+    matched_financial_orders = sum(
+        int(value["orders"]) for value in by_campaign.values()
+    )
+    return {
+        "provider": "snapchat_ads",
+        "account_id": account_id,
+        "date_from": from_value,
+        "date_to": to_value,
+        "timezone": timezone_name,
+        "by_campaign": {
+            campaign_id: value
+            for (row_account_id, campaign_id), value in by_campaign.items()
+            if row_account_id == account_id
+        },
+        "summary": {
+            "coverage_status": "complete",
+            "total_salla_created_orders": int(counters["total_salla_created_orders"]),
+            "total_financial_orders": int(counters["total_financial_orders"]),
+            "total_financial_sales_sar": round(total_financial_sales, 2),
+            "campaign_matched_orders": int(counters["campaign_matched_orders"]),
+            "campaign_matched_financial_orders": matched_financial_orders,
+            "campaign_matched_financial_sales_sar": matched_financial_sales,
+            "non_campaign_orders": int(counters["non_campaign_orders"]),
+            "ambiguous_orders": int(counters["ambiguous_orders"]),
+            "platform_attributed_purchases": int(platform_purchases or 0),
+            "platform_minus_confirmed_campaign_orders": int(platform_purchases or 0)
+            - matched_financial_orders,
+            "date_timezone": timezone_name,
+            "campaign_attribution_policy": (
+                "exact_campaign_id_or_unique_snapchat_campaign_name"
+            ),
+            "non_campaign_distribution_allowed": False,
+        },
+        "orders": audit_rows[:MAX_AUDIT_ROWS],
+        "orders_total": len(audit_rows),
+        "orders_returned": min(len(audit_rows), MAX_AUDIT_ROWS),
+        "truncated": len(audit_rows) > MAX_AUDIT_ROWS,
+        "source_collection": "unified_orders",
+        "source_only": True,
+    }
+
+
+__all__ = ["load_salla_campaign_outcomes"]

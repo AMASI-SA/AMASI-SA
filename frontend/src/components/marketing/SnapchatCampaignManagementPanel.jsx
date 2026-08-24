@@ -92,13 +92,20 @@ function localStartTime() {
     return new Date(value.getTime() - offset).toISOString().slice(0, 16);
 }
 
-function initialForm({ action = "campaign.create", selectedCampaign, selectedAdSquad } = {}) {
+export function initialForm({ action = "campaign.create", selectedCampaign, selectedAdSquad, selectedAd } = {}) {
+    const targetId = action === "campaign.update"
+        ? selectedCampaign?.campaign_id || ""
+        : action === "ad_squad.update"
+            ? selectedAdSquad?.ad_squad_id || ""
+            : action === "ad.update"
+                ? selectedAd?.ad_id || ""
+                : "";
     return {
         action,
         accountId: "",
-        targetId: action === "ad_squad.update" ? selectedAdSquad?.ad_squad_id || "" : "",
+        targetId,
         parentId: action.startsWith("ad.")
-            ? selectedAdSquad?.ad_squad_id || ""
+            ? selectedAdSquad?.ad_squad_id || selectedAd?.ad_squad_id || ""
             : action.startsWith("ad_squad.")
                 ? selectedCampaign?.campaign_id || ""
                 : "",
@@ -489,6 +496,8 @@ export default function SnapchatCampaignManagementPanel({
     entityLevel = "campaigns",
     selectedCampaign = null,
     selectedAdSquad = null,
+    selectedAd = null,
+    initialAction = null,
     onChanged,
 }) {
     // The application always supplies AuthProvider. Component tests and other
@@ -496,15 +505,16 @@ export default function SnapchatCampaignManagementPanel({
     // keep those surfaces non-owner instead of crashing before they can render.
     const user = useOptionalAuth()?.user;
     const ownerId = String(user?.id || "").trim();
-    const preferredAction = entityLevel === "ads"
+    const defaultAction = entityLevel === "ads"
         ? "ad.create"
         : entityLevel === "ad_squads"
             ? "ad_squad.create"
             : "campaign.create";
+    const preferredAction = ACTION_LABELS[initialAction] ? initialAction : defaultAction;
     const [expanded, setExpanded] = useState(false);
     const [readiness, setReadiness] = useState(null);
     const [proposals, setProposals] = useState([]);
-    const [form, setForm] = useState(() => initialForm({ action: preferredAction, selectedCampaign, selectedAdSquad }));
+    const [form, setForm] = useState(() => initialForm({ action: preferredAction, selectedCampaign, selectedAdSquad, selectedAd }));
     const [productQuery, setProductQuery] = useState("");
     const [catalogProducts, setCatalogProducts] = useState([]);
     const [selectedCatalogProduct, setSelectedCatalogProduct] = useState(null);
@@ -656,7 +666,7 @@ export default function SnapchatCampaignManagementPanel({
     useEffect(() => {
         setForm((current) => {
             if (current.action !== preferredAction) return current;
-            const next = initialForm({ action: preferredAction, selectedCampaign, selectedAdSquad });
+            const next = initialForm({ action: preferredAction, selectedCampaign, selectedAdSquad, selectedAd });
             return {
                 ...next,
                 ...retainedDecisionContext(current),
@@ -666,7 +676,7 @@ export default function SnapchatCampaignManagementPanel({
                     : next.pixelId,
             };
         });
-    }, [preferredAction, selectedCampaign, selectedAdSquad, accountId, readiness]);
+    }, [preferredAction, selectedCampaign, selectedAdSquad, selectedAd, accountId, readiness]);
 
     const selectedAccount = useMemo(
         () => readiness?.accounts?.find((item) => item.account_id === form.accountId) || null,
@@ -690,7 +700,7 @@ export default function SnapchatCampaignManagementPanel({
         setNotice("");
         setError("");
         setForm((current) => {
-            const next = initialForm({ action, selectedCampaign, selectedAdSquad });
+            const next = initialForm({ action, selectedCampaign, selectedAdSquad, selectedAd });
             return {
                 ...next,
                 ...retainedDecisionContext(current),
@@ -724,7 +734,7 @@ export default function SnapchatCampaignManagementPanel({
 
         setSelectedCatalogProduct(matchedProduct);
         setForm(() => ({
-            ...initialForm({ action: nextAction, selectedCampaign, selectedAdSquad }),
+            ...initialForm({ action: nextAction, selectedCampaign, selectedAdSquad, selectedAd }),
             accountId: verifiedAccountId,
             pixelId: nextAction === "ad_squad.create"
                 ? solePixelId(readiness, verifiedAccountId)
