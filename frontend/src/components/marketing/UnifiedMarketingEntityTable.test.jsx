@@ -67,6 +67,22 @@ function row(level, id, commerceStatus = "complete") {
                 cost_status: "missing",
             }],
         },
+        abandoned_cart_outcomes: {
+            status: level === "campaign" ? "complete" : "unavailable",
+            scope: "exact_cart_campaign_id_match",
+            cart_snapshots: 5,
+            abandoned_carts: 4,
+            recovered_carts: 1,
+            abandoned_value: money(420, "SAR"),
+            is_campaign_attributed: level === "campaign",
+            top_products: [{
+                product_id: "cart-product-1",
+                name: "منتج سلة متروكة",
+                abandoned_carts: 3,
+                units: 4,
+                value: money(300, "SAR"),
+            }],
+        },
         quality: {
             sync_status: "complete",
             coverage_status: "complete",
@@ -153,5 +169,16 @@ describe("UnifiedMarketingEntityTable", () => {
         const link = container.querySelector('a[href*="/products-v2"]');
         expect(link.getAttribute("href")).toContain("product=mezan-product-1");
         expect(container.textContent).toContain("تكلفة المنتجات—");
+    });
+
+    test("shows only campaign-attributed abandoned carts as intent evidence", async () => {
+        const campaign = row("campaign", "campaign-1");
+        await act(async () => root.render(<UnifiedMarketingEntityTable report={{ entity_level: "campaign", rows: [campaign], totals: campaign }} />));
+        const button = Array.from(container.querySelectorAll("button"))
+            .find((item) => item.textContent.includes("4 متروكة"));
+        await act(async () => button.click());
+        expect(container.textContent).toContain("منتج سلة متروكة");
+        expect(container.textContent).toContain("ليست مبيعات أو ربحًا للحملة");
+        expect(container.textContent).toContain("420.00 SAR");
     });
 });

@@ -38,6 +38,27 @@ function profitability(row) {
     return row?.commerce_profitability || {};
 }
 
+function abandonedCarts(row) {
+    return row?.abandoned_cart_outcomes || {};
+}
+
+function AbandonedCartsDialog({ row, onClose }) {
+    if (!row) return null;
+    const value = abandonedCarts(row);
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/55 p-4" role="dialog" aria-modal="true" data-testid="unified-campaign-abandoned-carts-dialog">
+            <div className="max-h-[88vh] w-full max-w-4xl overflow-hidden rounded-3xl bg-white shadow-2xl" dir="rtl">
+                <header className="flex items-start justify-between border-b border-slate-200 px-5 py-4"><div><div className="text-xs font-black text-violet-700">سلات سلة المرتبطة بمعرف الحملة</div><h2 className="mt-1 text-xl font-black">{row.entity.name}</h2></div><button type="button" onClick={onClose} className="rounded-xl p-2 hover:bg-slate-100" aria-label="إغلاق"><X size={22} /></button></header>
+                <div className="max-h-[calc(88vh-80px)] overflow-y-auto p-5">
+                    <div className="grid gap-3 sm:grid-cols-3">{[["السلات المتروكة", number(value.abandoned_carts)], ["السلات المستعادة", number(value.recovered_carts)], ["قيمة المتروكة", money(value.abandoned_value)]].map(([label, metric]) => <div key={label} className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="text-xs font-black text-slate-500">{label}</div><div className="mt-2 font-mono text-lg font-black">{metric}</div></div>)}</div>
+                    <p className="mt-4 rounded-2xl border border-violet-200 bg-violet-50 p-4 text-sm font-bold text-violet-900">هذه السلات دليل نية شراء مرتبط بمعرف الحملة، وليست مبيعات أو ربحًا للحملة حتى يتحول السجل إلى طلب مالي مؤهل في سلة.</p>
+                    <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200"><table className="w-full text-right text-sm"><thead className="bg-slate-50"><tr><th className="px-4 py-3 font-black">المنتج</th><th className="px-4 py-3 font-black">عدد السلات</th><th className="px-4 py-3 font-black">الكمية</th><th className="px-4 py-3 font-black">القيمة</th></tr></thead><tbody>{(value.top_products || []).map((product) => <tr key={product.product_id} className="border-t border-slate-100"><td className="px-4 py-4 font-black">{product.name || product.product_id}</td><td className="px-4 py-4 font-mono">{number(product.abandoned_carts)}</td><td className="px-4 py-4 font-mono">{number(product.units)}</td><td className="px-4 py-4 font-mono">{money(product.value)}</td></tr>)}{!(value.top_products || []).length && <tr><td colSpan={4} className="px-5 py-10 text-center font-bold text-slate-500">لا توجد منتجات في سلات مرتبطة بهذه الحملة خلال الفترة.</td></tr>}</tbody></table></div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 function ProfitabilityDialog({ row, onClose }) {
     if (!row) return null;
     const value = profitability(row);
@@ -84,6 +105,7 @@ export default function UnifiedMarketingEntityTable({
     const [activeOnly, setActiveOnly] = useState(false);
     const [page, setPage] = useState(1);
     const [profitRow, setProfitRow] = useState(null);
+    const [cartRow, setCartRow] = useState(null);
     const pageSize = 25;
     const filteredRows = useMemo(() => {
         const needle = query.trim().toLocaleLowerCase();
@@ -144,6 +166,7 @@ export default function UnifiedMarketingEntityTable({
                             <th className="px-4 py-3 font-black">مبيعات سلة</th>
                             <th className="px-4 py-3 font-black">ROAS سلة</th>
                             {level === "campaign" && <th className="px-4 py-3 font-black">المنتجات والربح</th>}
+                            {level === "campaign" && <th className="px-4 py-3 font-black">السلات المتروكة</th>}
                             <th className="px-4 py-3 font-black">جودة البيانات</th>
                             <th className="px-4 py-3 font-black">الإدارة</th>
                             {canOpenChildren && <th className="px-4 py-3 font-black">التفاصيل</th>}
@@ -172,6 +195,7 @@ export default function UnifiedMarketingEntityTable({
                                 <td className="px-4 py-4 font-mono" dir="ltr">{commerce(row).status === "complete" ? money(commerce(row).revenue) : "—"}</td>
                                 <td className="px-4 py-4 font-mono">{commerce(row).status === "complete" ? ratio(commerce(row).roas) : "—"}</td>
                                 {level === "campaign" && <td className="px-4 py-4"><button type="button" onClick={() => setProfitRow(row)} className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 font-black text-emerald-800">{profitability(row).missing_cost_orders ? `${profitability(row).missing_cost_orders} تكلفة ناقصة` : `${number(profitability(row).product_count)} منتجات`}</button></td>}
+                                {level === "campaign" && <td className="px-4 py-4">{abandonedCarts(row).status === "complete" ? <button type="button" onClick={() => setCartRow(row)} className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 font-black text-violet-800">{number(abandonedCarts(row).abandoned_carts)} متروكة</button> : "—"}</td>}
                                 <td className="px-4 py-4">
                                     <span className={`rounded-full px-2 py-1 font-black ${row.quality.coverage_status === "complete" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800"}`}>
                                         {row.quality.sync_status}
@@ -240,6 +264,7 @@ export default function UnifiedMarketingEntityTable({
                 </footer>
             )}
             <ProfitabilityDialog row={profitRow} onClose={() => setProfitRow(null)} />
+            <AbandonedCartsDialog row={cartRow} onClose={() => setCartRow(null)} />
         </section>
     );
 }
