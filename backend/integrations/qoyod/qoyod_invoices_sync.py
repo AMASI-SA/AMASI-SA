@@ -32,7 +32,9 @@ paginator (`api_client.list_invoices`).
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
-from typing import Any, Optional
+from typing import Optional
+
+from pymongo import UpdateOne
 
 from integrations.qoyod.eligible_orders import (
     QOYOD_SYNC_START_DATE, _parse_iso_date,
@@ -40,6 +42,7 @@ from integrations.qoyod.eligible_orders import (
 from integrations.qoyod.fresh_start_audit import _coerce_float, _paginate
 
 _FLOOR_DATE: date = date.fromisoformat(QOYOD_SYNC_START_DATE)
+_INVOICE_WRITE_BATCH_SIZE = 500
 
 
 def _trim_raw(it: dict) -> dict:
@@ -101,6 +104,64 @@ def _sync_salla_order_id(qoyod_invoice_id: str) -> str:
     return f"qoyod-sync:{qoyod_invoice_id}"
 
 
+async def _write_invoice_batches(collection, rows: list[dict]) -> dict:
+    """Persist prepared invoice upserts with bounded MongoDB round trips.
+
+    A full Qoyod refresh currently contains more than two thousand rows.
+    Writing them sequentially keeps the HTTP request open long enough to hit
+    the production proxy timeout.  Bulk writes preserve the same upsert
+    semantics while reducing the hot path to a handful of database calls.
+
+    If a bulk batch is rejected, retry its rows individually so one malformed
+    invoice cannot discard the rest of the refresh.
+    """
+    created = 0
+    updated = 0
+    row_errors = 0
+    batches = 0
+    fallback_batches = 0
+
+    for offset in range(0, len(rows), _INVOICE_WRITE_BATCH_SIZE):
+        batch = rows[offset:offset + _INVOICE_WRITE_BATCH_SIZE]
+        operations = [
+            UpdateOne(row["filter"], row["update"], upsert=True)
+            for row in batch
+        ]
+        batches += 1
+        try:
+            result = await collection.bulk_write(
+                operations,
+                ordered=False,
+            )
+            created += int(result.upserted_count or 0)
+            updated += int(result.modified_count or 0)
+            continue
+        except Exception:  # noqa: BLE001
+            fallback_batches += 1
+
+        for row in batch:
+            try:
+                result = await collection.update_one(
+                    row["filter"],
+                    row["update"],
+                    upsert=True,
+                )
+                if result.upserted_id is not None:
+                    created += 1
+                elif result.modified_count:
+                    updated += 1
+            except Exception:  # noqa: BLE001
+                row_errors += 1
+
+    return {
+        "created": created,
+        "updated": updated,
+        "row_errors": row_errors,
+        "write_batches": batches,
+        "bulk_fallback_batches": fallback_batches,
+    }
+
+
 async def sync_qoyod_invoices(
     db, *,
     user_id: str,
@@ -126,6 +187,7 @@ async def sync_qoyod_invoices(
     updated = 0
     skipped = 0
     row_errors = 0
+    prepared_rows: list[dict] = []
 
     try:
         items = await _paginate(
@@ -136,8 +198,9 @@ async def sync_qoyod_invoices(
     except Exception as e:  # noqa: BLE001
         return {
             "ok": False,
-            "error": (f"تعذر جلب فواتير قيود: "
-                       f"{type(e).__name__}: {e}"),
+            "error": (
+                f"تعذر جلب فواتير قيود: {type(e).__name__}: {e}"
+            ),
             "fetched": 0, "in_scope": 0,
             "created": 0, "updated": 0, "skipped": 0,
             "row_errors": 0,
@@ -194,19 +257,26 @@ async def sync_qoyod_invoices(
                 it.get("total") or it.get("total_amount"))
             total = float(total_raw or 0.0)
             paid, remaining = _paid_and_remaining(it, total)
-            reference = str(it.get("reference")
-                            or it.get("external_reference")
-                            or it.get("source_reference") or "").strip()
-            inv_number = str(it.get("invoice_number")
-                              or it.get("number")
-                              or reference or "").strip()
+            reference = str(
+                it.get("reference")
+                or it.get("external_reference")
+                or it.get("source_reference")
+                or ""
+            ).strip()
+            inv_number = str(
+                it.get("invoice_number")
+                or it.get("number")
+                or reference
+                or ""
+            ).strip()
             status = str(it.get("status") or "").strip().lower() or None
             customer = _customer_name(it)
             # Persist the free-text fields at the top level too — the
             # reconciliation match-key fallback (user directive
             # 2026-07-09) reads them without touching `raw_response`.
-            notes = str(it.get("notes") or it.get("internal_notes")
-                          or "").strip() or None
+            notes = str(
+                it.get("notes") or it.get("internal_notes") or ""
+            ).strip() or None
             description = str(it.get("description") or "").strip() \
                 or None
 
@@ -239,24 +309,28 @@ async def sync_qoyod_invoices(
                 "salla_order_id": sync_salla_order_id,
             }
 
-            res = await db.qoyod_invoices.update_one(
-                {"user_id": user_id, "qoyod_invoice_id": qid},
-                {"$set": set_fields, "$setOnInsert": set_on_insert},
-                upsert=True,
-            )
-            if res.upserted_id is not None:
-                created += 1
-            elif res.modified_count:
-                updated += 1
-            else:
-                await db.qoyod_invoices.update_one(
-                    {"user_id": user_id, "qoyod_invoice_id": qid},
-                    {"$set": {"last_sync_at": now_iso}},
-                )
+            prepared_rows.append({
+                "filter": {
+                    "user_id": user_id,
+                    "qoyod_invoice_id": qid,
+                },
+                "update": {
+                    "$set": set_fields,
+                    "$setOnInsert": set_on_insert,
+                },
+            })
         except Exception:  # noqa: BLE001
             # Never let one bad row abort the whole sync. Count and
             # continue — the operator sees `row_errors` in the summary.
             row_errors += 1
+
+    write_summary = await _write_invoice_batches(
+        db.qoyod_invoices,
+        prepared_rows,
+    )
+    created += write_summary["created"]
+    updated += write_summary["updated"]
+    row_errors += write_summary["row_errors"]
 
     finished_at = datetime.now(timezone.utc)
     return {
@@ -267,9 +341,12 @@ async def sync_qoyod_invoices(
         "updated":     updated,
         "skipped":     skipped,
         "row_errors":  row_errors,
+        "write_batches": write_summary["write_batches"],
+        "bulk_fallback_batches": write_summary["bulk_fallback_batches"],
         "sync_start":  sync_start.isoformat(),
         "started_at":  started_at.isoformat(),
         "finished_at": finished_at.isoformat(),
-        "duration_ms": int((finished_at - started_at).total_seconds()
-                            * 1000),
+        "duration_ms": int(
+            (finished_at - started_at).total_seconds() * 1000
+        ),
     }
