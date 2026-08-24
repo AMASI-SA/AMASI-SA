@@ -50,6 +50,7 @@ import OrderDetailsV2 from "./pages/OrderDetailsV2";
 import MezanProducts from "./pages/MezanProducts";
 import MezanComponents from "./pages/MezanComponents";
 import AppsIntegrationsControlCenter from "./pages/AppsIntegrationsControlCenter";
+import SnapchatV2Page from "./pages/SnapchatV2Page";
 import InstagramCustomerIntelligenceIntegration from "./pages/InstagramCustomerIntelligenceIntegration";
 import CustomerIntelligenceCenter from "./pages/CustomerIntelligenceCenter";
 import OrderTrackingNotes from "./pages/OrderTrackingNotes";
@@ -148,7 +149,7 @@ function AppRoutes() {
             <Route path="/reports" element={<ProtectedRoute><Layout><Reports /></Layout></ProtectedRoute>} />
             <Route path="/reports/ads" element={<ProtectedRoute><Layout><AdsReport /></Layout></ProtectedRoute>} />
             <Route path="/reports/advertising-expenses" element={<ProtectedRoute><Layout><AdvertisingExpensesReport /></Layout></ProtectedRoute>} />
-            <Route path="/snapchat-accounts" element={<ProtectedRoute><Navigate to="/integrations-v2?provider=snapchat_ads" replace /></ProtectedRoute>} />
+            <Route path="/snapchat-accounts" element={<ProtectedRoute><Layout><SnapchatV2Page /></Layout></ProtectedRoute>} />
             <Route path="/ads-v2/settings" element={<ProtectedRoute><Layout><AdsV2Settings /></Layout></ProtectedRoute>} />
             <Route path="/ads-v2/report" element={<ProtectedRoute><Layout><AdsV2Report /></Layout></ProtectedRoute>} />
             <Route path="/product-costs" element={<ProtectedRoute><Layout><ProductCosts /></Layout></ProtectedRoute>} />
