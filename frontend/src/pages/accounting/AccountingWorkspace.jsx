@@ -6,6 +6,7 @@ import { getAccountingAccess, getAccountingModuleStatus } from "../../services/a
 import AccountingCourierBankBindings from "./AccountingCourierBankBindings";
 import AccountingHome from "./AccountingHome";
 import AccountingPermissionsDialog from "./AccountingPermissionsDialog";
+import AccountingSettlementRegister from "./AccountingSettlementRegister";
 import AccountingSettlements from "./AccountingSettlements";
 import {
     AccessDenied,
@@ -74,6 +75,7 @@ export default function AccountingWorkspace() {
         content = (
             <div className="space-y-5">
                 <AccountingSettlements accountingPermissions={permissions} />
+                <AccountingSettlementRegister accountingPermissions={permissions} />
                 <AccountingCourierBankBindings accountingPermissions={permissions} />
             </div>
         );
