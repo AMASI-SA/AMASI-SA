@@ -166,12 +166,46 @@ def build_image_preference_identity(item: Any) -> tuple[str, str, dict[str, str]
     return product_key, signature, option_values
 
 
+APP_REVIEW_PERMISSIONS = {
+    "app.role.manager",
+    "app.page.pending_review",
+    "app.page.reviewed_preparation",
+}
+
+
+def _mobile_app_permissions(user: Any) -> set[str]:
+    if not isinstance(user, dict):
+        return set()
+    values: set[str] = set()
+    for raw in (
+        user.get("mobile_app_permissions"),
+        user.get("app_permissions"),
+    ):
+        if isinstance(raw, (list, tuple, set)):
+            values.update(_text(value) for value in raw if _text(value))
+    access = user.get("mobile_app_access")
+    if isinstance(access, dict):
+        raw = access.get("permissions")
+        if isinstance(raw, (list, tuple, set)):
+            values.update(_text(value) for value in raw if _text(value))
+    return values
+
+
 def _can_review(user: Any) -> bool:
     if not isinstance(user, dict):
         return False
     role = _normalized(user.get("role"))
     if role == "owner" or user.get("is_owner") is True:
         return True
+
+    # Native AMASI permissions are intentionally isolated from Mezan web
+    # permissions. A native app manager, or an employee granted either review
+    # page, may use review mutations without receiving orders.manage in Mezan.
+    mobile_permissions = _mobile_app_permissions(user)
+    if mobile_permissions.intersection(APP_REVIEW_PERMISSIONS):
+        return True
+
+    # Preserve the legacy web path for browser users and older integrations.
     if "orders.manage" in set(user.get("denied_permissions") or []):
         return False
     if role in {"admin", "operations"}:
