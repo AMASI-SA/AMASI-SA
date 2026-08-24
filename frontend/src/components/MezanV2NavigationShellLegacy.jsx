@@ -92,7 +92,7 @@ export const MEZAN_V2_NAV_SECTIONS = [
         items: [
             { to: "/ads-manager", label: "جميع المنصات", exactSearch: true },
             { to: "/ads-manager/recommendations", label: "توصيات الحملات", exactSearch: true },
-            { to: "/ads-manager?provider=snapchat", label: "سناب شات" },
+            { to: "/snapchat-accounts", label: "سناب شات", exactSearch: true },
             { to: "/ads-manager?provider=tiktok", label: "تيك توك" },
             { to: "/ads-manager?provider=meta", label: "ميتا" },
             { to: "/ads-manager?provider=google", label: "إعلانات Google" },
@@ -162,6 +162,7 @@ const MEZAN_V2_PATHS = [
     "/assistant",
     "/customer-intelligence",
     "/ads-manager",
+    "/snapchat-accounts",
 ];
 
 export function isMezanV2Route(pathname = "") {
