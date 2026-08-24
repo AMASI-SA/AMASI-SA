@@ -38,7 +38,7 @@ from accounting_settlement_service import (
 )
 from excel_upload_security import read_safe_xlsx_upload
 from ledger_core import write_audit
-from settlements_import.service import import_file
+from settlements_import.service import _apply_entries, import_file
 
 MAX_FILE_BYTES = 10 * 1024 * 1024
 DRAFT_EDITABLE_STATUSES = {"draft", "needs_review", "rejected"}
@@ -110,6 +110,15 @@ class DraftPatchIn(BaseModel):
     amounts: Optional[dict[str, Any]] = None
     notes: Optional[str] = Field(default=None, max_length=1000)
     manual_override_reason: Optional[str] = Field(default=None, max_length=1000)
+    source_review_acknowledged: Optional[bool] = None
+
+
+class ManualMatchIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    settlement_entry_id: str = Field(min_length=1, max_length=120)
+    order_number: str = Field(min_length=1, max_length=120)
+    reason: str = Field(min_length=3, max_length=1000)
 
 
 class DraftActionIn(BaseModel):
@@ -144,6 +153,8 @@ async def ensure_accounting_settlement_indexes(db) -> None:
             name="accounting_settlement_status_v2",
         )
     except Exception:
+        # Route registration tests use lightweight objects. Real Mongo retries
+        # on the first write if index creation was temporarily unavailable.
         return
     _INDEXED_DATABASES.add(key)
 
@@ -190,9 +201,7 @@ async def _binding_view(db, owner_id: str, provider: str) -> dict[str, Any]:
             "configured": bool(bank),
             "bank_account_name": (bank or {}).get("name"),
             "bank_account_type": (bank or {}).get("account_type"),
-            "needs_confirmation": (
-                not bank or doc.get("verification_status") != "verified"
-            ),
+            "needs_confirmation": doc.get("verification_status") != "verified",
         }
 
     settings_key = _settings_bank_key(provider)
@@ -262,7 +271,28 @@ async def _source_review_count(db, owner_id: str, file_id: str) -> int:
         "user_id": owner_id,
         "file_id": file_id,
         "review_required": True,
+        "review_resolved_at": {"$exists": False},
     }))
+
+
+async def _unmatched_entries(db, owner_id: str, file_id: str) -> list[dict[str, Any]]:
+    return await db.settlement_entries.find(
+        {
+            "user_id": owner_id,
+            "file_id": file_id,
+            "matched": {"$ne": True},
+        },
+        {
+            "_id": 0,
+            "id": 1,
+            "order_number": 1,
+            "provider_order_id": 1,
+            "event_type": 1,
+            "actual_gross_amount": 1,
+            "actual_net_amount": 1,
+            "settlement_reference": 1,
+        },
+    ).sort("created_at", 1).to_list(200)
 
 
 async def _bank_snapshot_for_preview(
@@ -385,6 +415,9 @@ async def _create_draft_from_file(
             "matched": int(file_doc.get("matched") or 0),
             "unmatched": int(file_doc.get("unmatched") or 0),
             "unmatched_orders": file_doc.get("unmatched_orders") or [],
+            "unmatched_entries": await _unmatched_entries(
+                db, owner_id, file_doc["id"]
+            ),
             "uploaded_at": file_doc.get("uploaded_at"),
         },
         "bank_account_id": selected_bank_id,
@@ -520,6 +553,8 @@ def install_accounting_settlement_routes(router, db, current_user):
             {"$set": doc, "$setOnInsert": {"created_at": now}},
             upsert=True,
         )
+        # Keep the existing settlement engine compatible. This is a copy into
+        # Mezan 2 settings, never a dynamic read from legacy Mezan.
         await db.settings.update_one(
             {"user_id": owner_id},
             {"$set": {
@@ -664,6 +699,32 @@ def install_accounting_settlement_routes(router, db, current_user):
                     "سبب التعديل اليدوي إلزامي عند تغيير مبالغ الكشف",
                 )
             changes["amounts"] = normalize_amounts(changes["amounts"])
+        if changes.get("source_review_acknowledged") is True:
+            if not _clean(payload.manual_override_reason):
+                raise HTTPException(
+                    400,
+                    "سبب معالجة بند المصدر إلزامي",
+                )
+            changes["source_review_count"] = 0
+            changes["source_review_resolution"] = {
+                "resolved_by": actor.get("id"),
+                "resolved_by_name": actor.get("name") or actor.get("email"),
+                "resolved_at": _now(),
+                "reason": payload.manual_override_reason,
+            }
+            await db.settlement_entries.update_many(
+                {
+                    "user_id": owner_id,
+                    "file_id": current.get("source_file_id"),
+                    "review_required": True,
+                    "review_resolved_at": {"$exists": False},
+                },
+                {"$set": {
+                    "review_resolved_at": _now(),
+                    "review_resolved_by": actor.get("id"),
+                    "review_resolution_reason": payload.manual_override_reason,
+                }},
+            )
         if "bank_account_id" in changes:
             bank_id = _clean(changes["bank_account_id"])
             if bank_id and not await _find_bank(db, owner_id, bank_id):
@@ -716,6 +777,131 @@ def install_accounting_settlement_routes(router, db, current_user):
         await db.accounting_settlements_v2.replace_one(
             {"id": draft_id, "user_id": owner_id},
             replace,
+        )
+        return replace
+
+    @router.post("/accounting-module/settlements/drafts/{draft_id}/match-entry")
+    async def match_settlement_entry(
+        draft_id: str,
+        payload: ManualMatchIn,
+        user: dict = Depends(current_user),
+    ):
+        actor, owner_id = await _scope(
+            db, user, "accounting.drafts.create"
+        )
+        current = await _draft_or_404(db, owner_id, draft_id)
+        if current.get("status") not in DRAFT_EDITABLE_STATUSES:
+            raise HTTPException(409, "لا يمكن تعديل المطابقة بعد إرسال المسودة")
+        entry = await db.settlement_entries.find_one(
+            {
+                "id": payload.settlement_entry_id,
+                "user_id": owner_id,
+                "file_id": current.get("source_file_id"),
+            },
+            {"_id": 0},
+        )
+        if not entry:
+            raise HTTPException(404, "سطر التسوية غير موجود")
+        target = await db.unified_orders.find_one(
+            {
+                "user_id": owner_id,
+                "order_number": _clean(payload.order_number),
+            },
+            {"_id": 0, "order_number": 1},
+        )
+        if not target:
+            raise HTTPException(404, "رقم الطلب غير موجود في بيانات سلة")
+        original_reference = entry.get("order_number")
+        patched_entry = {
+            **entry,
+            "order_number": target["order_number"],
+        }
+        match_result = await _apply_entries(
+            db,
+            owner_id,
+            current["provider"],
+            [patched_entry],
+            file_id=current["source_file_id"],
+        )
+        if int(match_result.get("matched") or 0) != 1:
+            raise HTTPException(409, "تعذر تطبيق المطابقة على الطلب المحدد")
+        now = _now()
+        await db.settlement_entries.update_one(
+            {"id": payload.settlement_entry_id, "user_id": owner_id},
+            {"$set": {
+                "original_order_number": original_reference,
+                "order_number": target["order_number"],
+                "matched": True,
+                "manual_match": True,
+                "manual_match_reason": payload.reason,
+                "manual_matched_by": actor.get("id"),
+                "manual_matched_at": now,
+            }},
+        )
+        unmatched_entries = await _unmatched_entries(
+            db, owner_id, current["source_file_id"]
+        )
+        total_rows = await db.settlement_entries.count_documents({
+            "user_id": owner_id,
+            "file_id": current["source_file_id"],
+        })
+        unmatched_count = len(unmatched_entries)
+        unmatched_orders = [
+            str(item.get("provider_order_id") or item.get("order_number") or "")
+            for item in unmatched_entries
+        ]
+        await db.settlement_files.update_one(
+            {"id": current["source_file_id"], "user_id": owner_id},
+            {"$set": {
+                "matched": max(int(total_rows) - unmatched_count, 0),
+                "unmatched": unmatched_count,
+                "unmatched_orders": unmatched_orders,
+            }},
+        )
+        next_doc = {
+            **current,
+            "source_snapshot": {
+                **(current.get("source_snapshot") or {}),
+                "matched": max(int(total_rows) - unmatched_count, 0),
+                "unmatched": unmatched_count,
+                "unmatched_orders": unmatched_orders,
+                "unmatched_entries": unmatched_entries,
+            },
+            "updated_by": actor.get("id"),
+            "updated_at": now,
+            "version": int(current.get("version") or 1) + 1,
+        }
+        next_doc = await _recomputed_draft(
+            db, owner_id=owner_id, draft=next_doc
+        )
+        next_doc["status"] = (
+            "needs_review" if has_blocking_reasons(next_doc["review_reasons"])
+            else "draft"
+        )
+        replace = dict(next_doc)
+        replace.pop("_id", None)
+        await db.accounting_settlements_v2.replace_one(
+            {"id": draft_id, "user_id": owner_id},
+            replace,
+        )
+        await write_audit(
+            db,
+            user_id=owner_id,
+            actor_id=str(actor.get("id") or ""),
+            actor_name=actor.get("name") or actor.get("email") or "",
+            entity_type="payment_gateway",
+            entity_id=current["provider"],
+            action="manual_match_settlement_entry",
+            notes=payload.reason,
+            before_state={
+                "entry_id": entry.get("id"),
+                "order_number": original_reference,
+            },
+            after_state={
+                "entry_id": entry.get("id"),
+                "order_number": target["order_number"],
+                "remaining_unmatched": unmatched_count,
+            },
         )
         return replace
 
@@ -902,6 +1088,7 @@ __all__ = [
     "ProviderBankBindingIn",
     "DraftFromFileIn",
     "DraftPatchIn",
+    "ManualMatchIn",
     "ensure_accounting_settlement_indexes",
     "install_accounting_settlement_routes",
 ]
