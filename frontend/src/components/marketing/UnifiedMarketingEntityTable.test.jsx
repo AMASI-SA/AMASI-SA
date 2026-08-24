@@ -38,6 +38,35 @@ function row(level, id, commerceStatus = "complete") {
             revenue: money(commerceStatus === "complete" ? 150 : null, "SAR"),
             roas: commerceStatus === "complete" ? 4 : null,
         },
+        commerce_profitability: {
+            status: "partial",
+            orders: 3,
+            sales: money(150, "SAR"),
+            product_cost: money(null, "SAR"),
+            known_product_cost: money(40, "SAR"),
+            ad_spend: money(37.5, "SAR"),
+            contribution_profit: money(null, "SAR"),
+            profit_margin_pct: null,
+            cost_status: "missing",
+            missing_cost_orders: 1,
+            product_count: 1,
+            products: [{
+                identity: "product-1",
+                salla_product_id: "product-1",
+                mezan_product_id: "mezan-product-1",
+                name: "منتج حملة سناب",
+                sku: "SKU-1",
+                image_url: null,
+                units: 2,
+                orders: 1,
+                sales: money(150, "SAR"),
+                product_cost: money(null, "SAR"),
+                allocated_ad_spend: money(37.5, "SAR"),
+                contribution_profit: money(null, "SAR"),
+                profit_margin_pct: null,
+                cost_status: "missing",
+            }],
+        },
         quality: {
             sync_status: "complete",
             coverage_status: "complete",
@@ -109,5 +138,20 @@ describe("UnifiedMarketingEntityTable", () => {
 
         expect(container.textContent).not.toContain("0.00 SAR");
         expect(container.textContent).toContain("—");
+    });
+
+    test("opens campaign products and links missing cost to the product workspace", async () => {
+        const campaign = row("campaign", "campaign-1");
+        await act(async () => {
+            root.render(<UnifiedMarketingEntityTable report={{ entity_level: "campaign", rows: [campaign], totals: campaign }} />);
+        });
+        const button = Array.from(container.querySelectorAll("button"))
+            .find((item) => item.textContent.includes("تكلفة ناقصة"));
+        await act(async () => button.click());
+        expect(container.textContent).toContain("منتج حملة سناب");
+        expect(container.textContent).toContain("فتح المنتج وإضافة التكلفة");
+        const link = container.querySelector('a[href*="/products-v2"]');
+        expect(link.getAttribute("href")).toContain("product=mezan-product-1");
+        expect(container.textContent).toContain("تكلفة المنتجات—");
     });
 });
