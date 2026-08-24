@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { CaretLeft, MagnifyingGlass, PencilSimple } from "@phosphor-icons/react";
+import { CaretLeft, MagnifyingGlass, Package, PencilSimple, X } from "@phosphor-icons/react";
+import { buildProfitabilityProductCostHref } from "../../campaignProfitabilityProductNavigation";
 
 const LEVEL_LABELS = {
     campaign: "الحملات",
@@ -33,6 +34,41 @@ function commerce(row) {
     return row?.commerce_outcomes || {};
 }
 
+function profitability(row) {
+    return row?.commerce_profitability || {};
+}
+
+function ProfitabilityDialog({ row, onClose }) {
+    if (!row) return null;
+    const value = profitability(row);
+    const products = value.products || [];
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/55 p-4" role="dialog" aria-modal="true" data-testid="unified-campaign-profitability-dialog">
+            <div className="max-h-[92vh] w-full max-w-6xl overflow-hidden rounded-3xl bg-white shadow-2xl" dir="rtl">
+                <header className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+                    <div><div className="text-xs font-black text-emerald-700">المنتجات والربحية من طلبات سلة المطابقة</div><h2 className="mt-1 text-xl font-black">{row.entity.name}</h2></div>
+                    <button type="button" onClick={onClose} className="rounded-xl p-2 hover:bg-slate-100" aria-label="إغلاق"><X size={22} /></button>
+                </header>
+                <div className="max-h-[calc(92vh-84px)] overflow-y-auto p-5">
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                        {[["مبيعات سلة", value.sales], ["تكلفة المنتجات", value.product_cost], ["الصرف الإعلاني", value.ad_spend], ["ربح المساهمة", value.contribution_profit], ["هامش الربح", { amount: value.profit_margin_pct, currency: "%" }]].map(([label, metric]) => <div key={label} className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="text-xs font-black text-slate-500">{label}</div><div className="mt-2 font-mono text-lg font-black">{money(metric)}</div></div>)}
+                    </div>
+                    <p className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-900">الربح = مبيعات سلة − تكلفة المنتجات − صرف الحملة. لا يشمل حاليًا رسوم الدفع أو BNPL أو الشحن أو المصاريف التشغيلية.</p>
+                    <div className="mt-5 overflow-x-auto rounded-2xl border border-slate-200">
+                        <table className="w-max min-w-full text-right text-sm"><thead className="bg-slate-50 text-slate-600"><tr>{["المنتج", "الكمية", "المبيعات", "التكلفة", "الصرف الموزع", "الربح", "الهامش"].map((label) => <th key={label} className="px-4 py-3 font-black">{label}</th>)}</tr></thead>
+                            <tbody>{products.map((product) => {
+                                const missing = product.cost_status !== "complete";
+                                const href = buildProfitabilityProductCostHref({ productId: product.mezan_product_id || product.salla_product_id, sku: product.sku, name: product.name });
+                                return <tr key={product.identity} className="border-t border-slate-100"><td className="min-w-[330px] px-4 py-4"><div className="flex gap-3">{product.image_url ? <img src={product.image_url} alt="" className="h-12 w-12 rounded-xl object-cover" /> : <Package size={28} className="text-slate-400" />}<div><div className="font-black">{product.name}</div><div className="font-mono text-[10px] text-slate-400">{product.sku || product.salla_product_id}</div><a href={href} className={`mt-2 inline-flex rounded-lg border px-3 py-1.5 text-xs font-black ${missing ? "border-amber-300 bg-amber-50 text-amber-800" : "border-blue-200 bg-blue-50 text-blue-700"}`}>{missing ? "فتح المنتج وإضافة التكلفة" : "فتح المنتج"}</a></div></div></td><td className="px-4 py-4 font-mono">{number(product.units)}</td><td className="px-4 py-4 font-mono">{money(product.sales)}</td><td className="px-4 py-4 font-mono">{money(product.product_cost)}</td><td className="px-4 py-4 font-mono">{money(product.allocated_ad_spend)}</td><td className="px-4 py-4 font-mono">{money(product.contribution_profit)}</td><td className="px-4 py-4 font-mono">{product.profit_margin_pct == null ? "—" : `${Number(product.profit_margin_pct).toFixed(2)}%`}</td></tr>;
+                            })}{!products.length && <tr><td colSpan={7} className="px-6 py-12 text-center font-bold text-slate-500">لا توجد منتجات في الطلبات المطابقة لهذه الحملة.</td></tr>}</tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export default function UnifiedMarketingEntityTable({
     report,
     loading = false,
@@ -47,6 +83,7 @@ export default function UnifiedMarketingEntityTable({
     const [query, setQuery] = useState("");
     const [activeOnly, setActiveOnly] = useState(false);
     const [page, setPage] = useState(1);
+    const [profitRow, setProfitRow] = useState(null);
     const pageSize = 25;
     const filteredRows = useMemo(() => {
         const needle = query.trim().toLocaleLowerCase();
@@ -106,6 +143,7 @@ export default function UnifiedMarketingEntityTable({
                             <th className="px-4 py-3 font-black">طلبات سلة</th>
                             <th className="px-4 py-3 font-black">مبيعات سلة</th>
                             <th className="px-4 py-3 font-black">ROAS سلة</th>
+                            {level === "campaign" && <th className="px-4 py-3 font-black">المنتجات والربح</th>}
                             <th className="px-4 py-3 font-black">جودة البيانات</th>
                             <th className="px-4 py-3 font-black">الإدارة</th>
                             {canOpenChildren && <th className="px-4 py-3 font-black">التفاصيل</th>}
@@ -133,6 +171,7 @@ export default function UnifiedMarketingEntityTable({
                                 <td className="px-4 py-4 font-mono">{commerce(row).status === "complete" ? number(commerce(row).orders) : "—"}</td>
                                 <td className="px-4 py-4 font-mono" dir="ltr">{commerce(row).status === "complete" ? money(commerce(row).revenue) : "—"}</td>
                                 <td className="px-4 py-4 font-mono">{commerce(row).status === "complete" ? ratio(commerce(row).roas) : "—"}</td>
+                                {level === "campaign" && <td className="px-4 py-4"><button type="button" onClick={() => setProfitRow(row)} className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 font-black text-emerald-800">{profitability(row).missing_cost_orders ? `${profitability(row).missing_cost_orders} تكلفة ناقصة` : `${number(profitability(row).product_count)} منتجات`}</button></td>}
                                 <td className="px-4 py-4">
                                     <span className={`rounded-full px-2 py-1 font-black ${row.quality.coverage_status === "complete" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800"}`}>
                                         {row.quality.sync_status}
@@ -200,6 +239,7 @@ export default function UnifiedMarketingEntityTable({
                     </div>
                 </footer>
             )}
+            <ProfitabilityDialog row={profitRow} onClose={() => setProfitRow(null)} />
         </section>
     );
 }
