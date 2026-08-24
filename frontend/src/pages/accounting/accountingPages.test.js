@@ -22,6 +22,17 @@ test("accounting module exposes the exact approved eight pages in order", () => 
     expect(accountingNavItems().every((item) => item.to.includes("workspace=financial"))).toBe(true);
 });
 
+test("only P00 home and P01 settlements are implemented at this phase", () => {
+    const implemented = ACCOUNTING_PAGES
+        .filter((page) => page.implementationStatus === "implemented")
+        .map((page) => page.id);
+    expect(implemented).toEqual(["home", "settlements"]);
+    expect(ACCOUNTING_PAGES.find((page) => page.id === "shipping-cod")?.implementationStatus)
+        .toBe("partial_existing_workflows");
+    expect(ACCOUNTING_PAGES.find((page) => page.id === "opening-balances")?.implementationStatus)
+        .toBe("blocked_not_implemented");
+});
+
 test("unknown or missing page query fails safely to accounting home", () => {
     expect(accountingPageFromSearchParams(new URLSearchParams("page=unknown")).id).toBe("home");
     expect(accountingPageFromSearchParams(new URLSearchParams()).id).toBe("home");

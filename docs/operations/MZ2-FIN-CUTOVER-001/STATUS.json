@@ -8,9 +8,9 @@
   "phase_lock_enabled": true,
   "current_phase": "P01",
   "current_phase_file": "PHASE-01-SETTLEMENTS.md",
-  "current_phase_status": "READY_TO_START",
-  "next_allowed_action": "inspect_current_settlement_code_and_implement_P01_only",
-  "current_blocker": "P01_runtime_work_not_started",
+  "current_phase_status": "IN_PROGRESS",
+  "next_allowed_action": "finish_pr_868_checks_mark_ready_merge_deploy_and_browser_verify_p01_only",
+  "current_blocker": "P01_PR_868_not_merged_or_deployed",
   "legacy_mezan_policy": {
     "dynamic_financial_dependency_allowed": false,
     "copy_reference_values_allowed": true,
@@ -56,10 +56,22 @@
     {
       "id": "P01",
       "name": "التسويات وربط البنوك الفعلية",
-      "status": "READY_TO_START",
+      "status": "IN_PROGRESS",
       "file": "PHASE-01-SETTLEMENTS.md",
       "blocked_by": null,
-      "exit_gate": "NOT_EVALUATED"
+      "exit_gate": "PARTIAL_AUTOMATED_PASS",
+      "evidence": {
+        "pr": 868,
+        "implementation_head_sha": "8be06eb60dbdf38596d7ba8cc8a33607008af380",
+        "accounting_workflow_run_id": 32766041235,
+        "backend_contract": "PASS",
+        "frontend_contract": "PASS",
+        "frontend_build": "PASS",
+        "merge_sha": null,
+        "production_sha": null,
+        "release_guard_verified": false,
+        "browser_verified": false
+      }
     },
     {
       "id": "P02",

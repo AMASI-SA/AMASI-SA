@@ -62,6 +62,7 @@ test("Mezan 2 shell is limited to Mezan 2 routes including the advanced dashboar
         "/customer-intelligence",
         "/ads-manager",
         "/ads-manager/cost-settings",
+        "/snapchat-accounts",
     ].forEach((pathname) => expect(isMezanV2Route(pathname)).toBe(true));
 
     [
@@ -239,7 +240,7 @@ test("marketing report and cost routes are separate from app integration routes"
     expect(section.items.map((item) => item.to)).toEqual([
         "/ads-manager",
         "/ads-manager/recommendations",
-        "/ads-manager?provider=snapchat",
+        "/snapchat-accounts",
         "/ads-manager?provider=tiktok",
         "/ads-manager?provider=meta",
         "/ads-manager?provider=google",

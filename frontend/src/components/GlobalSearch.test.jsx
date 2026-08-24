@@ -48,7 +48,7 @@ test("navigation aliases find nested Mezan 2 destinations", () => {
 
     expect(
         buildGlobalSearchResults("سناب", { isOwner: true })[0]?.to,
-    ).toBe("/ads-manager?provider=snapchat");
+    ).toBe("/snapchat-accounts");
 });
 
 test("owner-only Mezan 2 pages stay hidden from non-owner users", () => {
