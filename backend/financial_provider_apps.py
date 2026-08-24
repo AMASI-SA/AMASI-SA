@@ -30,6 +30,9 @@ from accounting_module_status_routes import (
     fresh_accounting_user,
     install_accounting_status_routes,
 )
+from accounting_settlement_identity_routes import (
+    install_accounting_settlement_identity_routes,
+)
 from accounting_settlement_routes import (  # noqa: F401
     ensure_accounting_settlement_indexes,
     install_accounting_settlement_routes,
@@ -56,4 +59,5 @@ def make_financial_provider_apps_router(db, current_user):
     install_accounting_status_routes(router, db, current_user)
     install_accounting_permission_routes(router, db, current_user)
     install_accounting_settlement_routes(router, db, current_user)
+    install_accounting_settlement_identity_routes(router, db, current_user)
     return router
