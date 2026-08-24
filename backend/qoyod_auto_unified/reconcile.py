@@ -7,7 +7,7 @@ from typing import Any
 from integrations.qoyod.payment_methods import is_cod_family
 from integrations.qoyod.unsent_orders import _is_real
 
-from .common import _ORDER_NUMBER_RE, _TENANT
+from .common import _ORDER_NUMBER_RE, _TENANT, _now
 from .invoice_state import (
     _invoice_financials, _resolve_order_exception, _write_exact_invoice_mirror,
 )
@@ -133,19 +133,16 @@ async def _reconcile_local_mirror_after_sync(
     orders_user_id: str,
     markers_user_id: str,
 ) -> dict[str, Any]:
-    """Repair exact-reference markers, then close only unique paid rows.
+    """Project and close only unique, official-reference Qoyod rows.
 
-    Duplicate references are genuine accounting exceptions. They are never
-    auto-resolved merely because one of the duplicate invoices is paid.
+    A top-level local ``reference`` copied from external/source reference is
+    not enough. The same strict provenance predicate used by the candidate
+    universe decides whether Qoyod actually accepted the Salla order number.
+    Duplicate references remain true accounting exceptions.
     """
-    from qoyod_order_accounting_sync import repair_qoyod_order_accounting
+    from integrations.qoyod.candidate_orders import official_qoyod_reference
+    from qoyod_order_accounting_sync import sync_unified_order_accounting
 
-    repair = await repair_qoyod_order_accounting(
-        db,
-        orders_user_id=str(orders_user_id),
-        markers_user_id=str(markers_user_id),
-        actor="qoyod_invoice_sync_auto_reconcile",
-    )
     invoices: list[dict[str, Any]] = []
     cursor = db.qoyod_invoices.find(
         {
@@ -155,7 +152,12 @@ async def _reconcile_local_mirror_after_sync(
         {
             "_id": 0,
             "qoyod_invoice_id": 1,
+            "invoice_number": 1,
             "reference": 1,
+            "qoyod_official_reference": 1,
+            "reference_provenance": 1,
+            "raw_response.reference": 1,
+            "source": 1,
             "salla_order_number": 1,
             "total": 1,
             "paid_amount": 1,
@@ -166,20 +168,23 @@ async def _reconcile_local_mirror_after_sync(
     ).sort([("issue_date", -1), ("qoyod_invoice_id", -1)]).limit(5000)
     async for invoice in cursor:
         invoice_id = invoice.get("qoyod_invoice_id")
-        reference = str(
-            invoice.get("reference")
-            or invoice.get("salla_order_number")
-            or ""
-        ).strip()
+        reference, provenance = official_qoyod_reference(invoice)
+        reference = str(reference or "").strip()
         if not _is_real(invoice_id) or not _ORDER_NUMBER_RE.fullmatch(reference):
             continue
-        invoices.append({**invoice, "_strict_reference": reference})
+        invoices.append({
+            **invoice,
+            "_strict_reference": reference,
+            "_reference_provenance": provenance,
+        })
 
     reference_counts: dict[str, int] = {}
     for invoice in invoices:
         reference = invoice["_strict_reference"]
         reference_counts[reference] = reference_counts.get(reference, 0) + 1
 
+    projected = 0
+    markers_updated = 0
     resolved = 0
     skipped_duplicates = 0
     for invoice in invoices:
@@ -188,19 +193,81 @@ async def _reconcile_local_mirror_after_sync(
             skipped_duplicates += 1
             continue
         financials = _invoice_financials(invoice)
-        if not financials["resolved_paid"]:
-            continue
-        await _resolve_order_exception(
+        unified = await db.unified_orders.find_one(
+            {
+                "user_id": str(orders_user_id),
+                "order_number": reference,
+            },
+            {"_id": 0, "payment_method": 1, "payment_method_native": 1},
+        ) or {}
+        is_cod = is_cod_family(
+            unified.get("payment_method_native") or unified.get("payment_method")
+        )
+        status = (
+            "unpaid"
+            if is_cod and not financials["resolved_paid"]
+            else financials["status"]
+        )
+        sync_result = await sync_unified_order_accounting(
             db,
+            orders_user_id=str(orders_user_id),
             order_number=reference,
             invoice_id=invoice["qoyod_invoice_id"],
-            resolution="paid_invoice_found_during_qoyod_sync",
+            invoice_number=(
+                invoice.get("invoice_number") or invoice["qoyod_invoice_id"]
+            ),
+            total=financials["total"],
+            paid_amount=financials["paid_amount"],
+            remaining=financials["remaining"],
+            status=status,
+            source="qoyod_invoice_sync_reconciliation",
             actor="qoyod_invoice_sync_auto_reconcile",
         )
-        resolved += 1
+        if sync_result.get("updated"):
+            projected += 1
+
+        marker_result = await db.integration_inbox.update_many(
+            {
+                "user_id": {
+                    "$in": [str(markers_user_id), str(orders_user_id)]
+                },
+                "salla_order_number": reference,
+            },
+            {"$set": {
+                "qoyod_invoice_id": str(invoice["qoyod_invoice_id"]),
+                "qoyod_invoice_number": str(
+                    invoice.get("invoice_number")
+                    or invoice["qoyod_invoice_id"]
+                ),
+                "qoyod_invoice_source": "qoyod_invoice_sync_reconciliation",
+                "qoyod_marker_repaired_at": _now(),
+                "qoyod_reference_match_provenance": invoice[
+                    "_reference_provenance"
+                ],
+            }},
+        )
+        markers_updated += int(
+            getattr(marker_result, "modified_count", 0) or 0
+        )
+
+        if financials["resolved_paid"] or is_cod:
+            await _resolve_order_exception(
+                db,
+                order_number=reference,
+                invoice_id=invoice["qoyod_invoice_id"],
+                resolution=(
+                    "paid_invoice_found_during_qoyod_sync"
+                    if financials["resolved_paid"]
+                    else "cod_invoice_found_during_qoyod_sync"
+                ),
+                actor="qoyod_invoice_sync_auto_reconcile",
+            )
+            resolved += 1
     return {
         "ok": True,
-        "repair": repair,
+        "strict_invoice_count": len(invoices),
+        "unified_orders_projected": projected,
+        "inbox_markers_updated": markers_updated,
         "resolved_exception_count": resolved,
         "duplicate_invoice_rows_not_auto_resolved": skipped_duplicates,
     }
