@@ -13,7 +13,7 @@ export const ACCOUNTING_PAGES = [
         label: "التسويات",
         permission: "accounting.settlements.view",
         to: "/integrations-v2?workspace=financial&page=settlements",
-        implementationStatus: "partial_existing_workflows",
+        implementationStatus: "implemented",
     },
     {
         id: "shipping-cod",
