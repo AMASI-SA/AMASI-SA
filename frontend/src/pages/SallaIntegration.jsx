@@ -9,6 +9,17 @@ import {
 import { toast } from "sonner";
 import api from "../lib/api";
 
+function riyadhTodayISO() {
+    const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: "Asia/Riyadh",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+    }).formatToParts(new Date());
+    const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    return `${byType.year}-${byType.month}-${byType.day}`;
+}
+
 /**
  * /settings/salla — "ربط متجر سلة"
  *
@@ -102,8 +113,12 @@ export default function SallaIntegration() {
     const [syncLogs, setSyncLogs] = useState([]);
     const [cartStatus, setCartStatus] = useState(null);
     const [webhookMonitor, setWebhookMonitor] = useState(null);
-    const [syncToDate, setSyncToDate] = useState(
-        new Date().toISOString().slice(0, 10)
+    const [syncToDate, setSyncToDate] = useState(riyadhTodayISO);
+    const hasRunningOrderSync = syncLogs.some(
+        (log) => log.kind === "orders"
+            && log.status === "running"
+            && Number.isFinite(Date.parse(log.started_at))
+            && Date.now() - Date.parse(log.started_at) < 30 * 60 * 1_000
     );
 
     const load = useCallback(async () => {
@@ -164,6 +179,19 @@ export default function SallaIntegration() {
     }, [location.search, location.pathname, navigate]);
 
     useEffect(() => { load(); }, [load]);
+
+    useEffect(() => {
+        if (!hasRunningOrderSync) return undefined;
+        const timer = window.setInterval(async () => {
+            try {
+                const { data } = await api.get("/salla/sync/logs?limit=20");
+                setSyncLogs(data?.logs || []);
+            } catch (_) {
+                // Preserve the last progress snapshot; the next poll retries.
+            }
+        }, 5_000);
+        return () => window.clearInterval(timer);
+    }, [hasRunningOrderSync]);
 
     const handleConnect = async () => {
         setBusy(b => ({ ...b, connect: true }));
@@ -272,7 +300,11 @@ export default function SallaIntegration() {
             const { data } = await api.post("/salla/sync/orders", {
                 updated_since_hours: 24 * 30, // last 30 days by default
             });
-            toast.success(`مزامنة الطلبات: ${data.created} جديد · ${data.updated} محدّث · ${data.errors_count} خطأ`);
+            toast.success(
+                data.already_running
+                    ? "مزامنة الطلبات تعمل بالفعل في الخلفية"
+                    : "بدأت مزامنة الطلبات في الخلفية؛ سيُحدّث السجل تلقائيًا"
+            );
             await load();
         } catch (e) {
             const det = e?.response?.data?.detail;
@@ -305,7 +337,9 @@ export default function SallaIntegration() {
             });
 
             toast.success(
-                `مزامنة الفترة: ${data.created} جديد · ${data.updated} محدّث · ${data.errors_count} خطأ`
+                data.already_running
+                    ? "مزامنة الفترة تعمل بالفعل في الخلفية"
+                    : "بدأت مزامنة الفترة في الخلفية؛ سيُحدّث السجل تلقائيًا"
             );
             await load();
         } catch (e) {
@@ -782,16 +816,16 @@ export default function SallaIntegration() {
                             <button
                                 type="button"
                                 onClick={handleSyncOrdersRange}
-                                disabled={busy.syncOrders || !syncToDate}
+                                disabled={busy.syncOrders || hasRunningOrderSync || !syncToDate}
                                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-sm"
                                 data-testid="salla-sync-date-range-btn"
                             >
                                 <ArrowsClockwise
                                     size={14}
                                     weight="bold"
-                                    className={busy.syncOrders ? "animate-spin" : ""}
+                                    className={busy.syncOrders || hasRunningOrderSync ? "animate-spin" : ""}
                                 />
-                                {busy.syncOrders
+                                {busy.syncOrders || hasRunningOrderSync
                                     ? "جاري مزامنة الفترة…"
                                     : "مزامنة من 01-07 إلى التاريخ المحدد"}
                             </button>
@@ -801,12 +835,12 @@ export default function SallaIntegration() {
                         <button
                             type="button"
                             onClick={handleSyncOrders}
-                            disabled={busy.syncOrders}
+                            disabled={busy.syncOrders || hasRunningOrderSync}
                             className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-sm"
                             data-testid="salla-sync-orders-btn"
                         >
-                            <ArrowsClockwise size={14} weight="bold" className={busy.syncOrders ? "animate-spin" : ""} />
-                            {busy.syncOrders ? "جاري المزامنة…" : "مزامنة الطلبات الآن (آخر 30 يوماً)"}
+                            <ArrowsClockwise size={14} weight="bold" className={busy.syncOrders || hasRunningOrderSync ? "animate-spin" : ""} />
+                            {busy.syncOrders || hasRunningOrderSync ? "جاري المزامنة…" : "مزامنة الطلبات الآن (آخر 30 يوماً)"}
                         </button>
                         <button
                             type="button"
@@ -862,6 +896,7 @@ export default function SallaIntegration() {
                                                     {log.status === "completed" && <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[10px] font-bold">✓ مكتمل</span>}
                                                     {log.status === "running" && <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[10px] font-bold">⏳ جارٍ</span>}
                                                     {log.status === "failed" && <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 text-[10px] font-bold" title={log.last_error || ""}>✗ فشل</span>}
+                                                    {log.status === "interrupted" && <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-bold" title={log.last_error || ""}>■ متوقفة</span>}
                                                 </td>
                                                 <td className="px-3 py-2 text-emerald-700 font-bold">{log.created || 0}</td>
                                                 <td className="px-3 py-2 text-sky-700 font-bold">{log.updated || 0}</td>
