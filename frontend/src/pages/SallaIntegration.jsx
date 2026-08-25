@@ -354,6 +354,42 @@ export default function SallaIntegration() {
         }
     };
 
+    const handleRecoverCampaignAttribution = async () => {
+        if (!syncToDate) {
+            toast.error("حدد تاريخ النهاية أولاً");
+            return;
+        }
+
+        const recoveryStart = new Date(`${syncToDate}T12:00:00Z`);
+        recoveryStart.setUTCDate(recoveryStart.getUTCDate() - 2);
+        const recoveryFromDate = recoveryStart.toISOString().slice(0, 10);
+
+        setBusy(b => ({ ...b, syncOrders: true }));
+        try {
+            const { data } = await api.post("/salla/sync/orders", {
+                from_date: recoveryFromDate,
+                to_date: syncToDate,
+                recover_marketing_attribution: true,
+            });
+
+            toast.success(
+                data.already_running
+                    ? "مزامنة طلبات سلة تعمل بالفعل في الخلفية"
+                    : `بدأ استعادة ربط الحملات من ${recoveryFromDate} إلى ${syncToDate}`
+            );
+            await load();
+        } catch (e) {
+            const det = e?.response?.data?.detail;
+            const msg = typeof det === "string"
+                ? det
+                : (det?.message || "فشل استعادة ربط طلبات سلة بالحملات");
+            toast.error(msg);
+            await load();
+        } finally {
+            setBusy(b => ({ ...b, syncOrders: false }));
+        }
+    };
+
     const handleSyncProducts = async () => {
         setBusy(b => ({ ...b, syncProducts: true }));
         try {
@@ -832,6 +868,19 @@ export default function SallaIntegration() {
                         </div>
 
                         <div className="flex flex-wrap gap-2">
+                        <button
+                            type="button"
+                            onClick={handleRecoverCampaignAttribution}
+                            disabled={busy.syncOrders || hasRunningOrderSync || !syncToDate}
+                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold text-sm"
+                            data-testid="salla-recover-campaign-attribution-btn"
+                            title="يستعيد معرّفات حملات Snapchat من تفاصيل طلبات سلة لثلاثة أيام، دون تعديل الطلبات في سلة"
+                        >
+                            <ArrowsClockwise size={14} weight="bold" className={busy.syncOrders || hasRunningOrderSync ? "animate-spin" : ""} />
+                            {busy.syncOrders || hasRunningOrderSync
+                                ? "جاري الاستعادة…"
+                                : "استعادة ربط الحملات (آخر 3 أيام)"}
+                        </button>
                         <button
                             type="button"
                             onClick={handleSyncOrders}
