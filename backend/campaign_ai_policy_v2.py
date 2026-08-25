@@ -4,10 +4,9 @@ The established scheduler, approval and execution machinery remains in
 ``campaign_ai_monitor_legacy``.  This module replaces only the recommendation
 evidence/policy boundary:
 
-* Snapchat Campaign / Ad Squad / Ad metrics use the same selected-account,
-  account-timezone reports as the Snapchat page and are pinned to
-  ``action_report_time=conversion`` (the page's recommended conversion-time
-  mode).
+* Snapchat Campaign / Ad Squad / Ad metrics consume the provider-neutral
+  Unified Marketing Data Contract backed by V2 facts and pinned to
+  ``action_report_time=conversion``.
 * Salla attribution and Mezan V2 product costs are commercial context at
   campaign grain only.  Salla is never fabricated at Ad Squad or Ad grain.
 * Old Mezan recommendations are never sent to OpenAI.  Only owner-approved
@@ -44,6 +43,10 @@ from integrations_control_center.snapchat_campaign_profitability import (
 from integrations_control_center.snapchat_campaign_result_source_routes import (
     RESULT_SOURCE_PLATFORM,
     RESULT_SOURCE_SALLA,
+)
+from campaign_ai_unified_source import (
+    UNIFIED_AI_SOURCE,
+    load_snapchat_unified_ai_entities,
 )
 
 logger = logging.getLogger(__name__)
@@ -246,7 +249,7 @@ async def _account_salla_campaign_results(
     return _salla_campaign_results_map(report), report
 
 
-async def _snapchat_campaign_entities(
+async def _snapchat_v1_campaign_entities(
     db: Any,
     user_id: str,
     start: date,
@@ -410,6 +413,19 @@ async def _snapchat_campaign_entities(
     return rows
 
 
+async def _snapchat_campaign_entities(
+    db: Any,
+    user_id: str,
+    start: date,
+    end: date,
+) -> list[dict[str, Any]]:
+    """Active Snapchat Campaign AI source: Unified Marketing V2."""
+    bundle = await load_snapchat_unified_ai_entities(
+        db, str(user_id), start, end
+    )
+    return list(bundle.get("campaigns") or [])
+
+
 async def _campaign_entities(
     db: Any,
     user_id: str,
@@ -422,7 +438,7 @@ async def _campaign_entities(
     return await _ORIGINAL_CAMPAIGN_ENTITIES(db, user_id, provider, start, end)
 
 
-async def _snapchat_child_entities(
+async def _snapchat_v1_child_entities(
     db: Any,
     user_id: str,
     start: date,
@@ -639,6 +655,19 @@ async def _snapchat_child_entities(
     return rows
 
 
+async def _snapchat_child_entities(
+    db: Any,
+    user_id: str,
+    start: date,
+    end: date,
+) -> list[dict[str, Any]]:
+    """Active Snapchat Ad Group/Ad AI source: Unified Marketing V2."""
+    bundle = await load_snapchat_unified_ai_entities(
+        db, str(user_id), start, end
+    )
+    return list(bundle.get("children") or [])
+
+
 def _candidate_key(row: dict[str, Any]) -> tuple[str, str, str, str]:
     return (
         str(row.get("provider") or ""),
@@ -827,7 +856,9 @@ def _recommendation_explanation(
     brief["decision_facts"] = facts
     financial = dict(brief.get("financial_impact") or {})
     financial.update({
-        "provider_metrics_basis": SNAPCHAT_AI_PLATFORM_SOURCE,
+        "provider_metrics_basis": (
+            row.get("provider_result_source") or SNAPCHAT_AI_PLATFORM_SOURCE
+        ),
         "action_report_time": SNAPCHAT_AI_ACTION_REPORT_TIME,
         "campaign_commercial_source": SNAPCHAT_AI_SALLA_SOURCE,
         "campaign_salla_sales_sar": profit.get("page_salla_sales_sar"),
@@ -986,7 +1017,7 @@ async def _ask_openai(
                 "overall_store_profit_context": business_profit,
                 "executed_experiments": prior_decisions,
                 "source_contract": {
-                    "snapchat_entity_metrics": SNAPCHAT_AI_PLATFORM_SOURCE,
+                    "snapchat_entity_metrics": UNIFIED_AI_SOURCE,
                     "snapchat_action_report_time": SNAPCHAT_AI_ACTION_REPORT_TIME,
                     "campaign_salla_profit": SNAPCHAT_AI_SALLA_SOURCE,
                     "salla_child_attribution_allowed": False,
