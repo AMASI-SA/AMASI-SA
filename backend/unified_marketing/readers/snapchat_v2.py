@@ -6,6 +6,11 @@ from typing import Any
 
 from snapchat_v2.accounts import get_selected_account
 from snapchat_v2.entities import list_entities
+from snapchat_v2.models import (
+    DEFAULT_SWIPE_ATTRIBUTION_WINDOW,
+    DEFAULT_VIEW_ATTRIBUTION_WINDOW,
+    build_attribution_key,
+)
 from snapchat_v2.projections import (
     RIYADH_TIMEZONE,
     SNAPCHAT_DAILY_PROJECTIONS_COLLECTION,
@@ -17,9 +22,12 @@ from snapchat_v2.reconciliation import (
 )
 from snapchat_v2.salla_outcomes import load_salla_campaign_outcomes
 from snapchat_v2.sync_runs import SNAPCHAT_SYNC_RUNS_COLLECTION
+from snapchat_v2.total_facts import SNAPCHAT_TOTAL_FACTS_COLLECTION
 from snapchat_v2.routes import _add_sar_spend, _entity_performance_report
 from unified_marketing.adapters.snapchat_v2 import build_snapchat_v2_unified_report
 from unified_marketing.commerce_carts import load_abandoned_cart_outcomes
+from unified_marketing.contract import UnifiedMarketingDailySeries
+from unified_marketing.adapters.snapchat_v2 import adapt_snapchat_v2_row
 
 INT_FIELDS = (
     "impressions",
@@ -52,6 +60,83 @@ async def load_snapchat_v2_account_identity(
         "currency": str(account.get("currency") or "").upper(),
         "timezone": str(account.get("timezone") or ""),
         "last_sync_at": account.get("last_sync_at"),
+    }
+
+
+async def load_snapchat_v2_entity_metadata(
+    db: Any,
+    user_id: str,
+    *,
+    entity_level: str,
+    entity_id: str,
+) -> dict[str, Any]:
+    """Return provider-neutral creative/destination metadata for one entity."""
+    provider_type = {
+        "campaign": "campaign",
+        "ad_group": "ad_squad",
+        "ad": "ad",
+    }.get(str(entity_level or "").strip().lower())
+    if provider_type is None:
+        raise ValueError(f"unsupported_unified_marketing_entity_level:{entity_level}")
+    account = await get_selected_account(db, str(user_id))
+    if not account:
+        raise ValueError("unified_marketing_snapchat_selected_account_missing")
+    clean_id = str(entity_id or "").strip()
+    identity = await db["mezan_snapchat_entity_facts_v2"].find_one(
+        {
+            "user_id": str(user_id),
+            "ad_account_id": str(account["ad_account_id"]),
+            "entity_type": provider_type,
+            "external_id": clean_id,
+        },
+        {"_id": 0},
+    ) or {}
+    rich = await db["mezan_snapchat_entities_v2"].find_one(
+        {
+            "user_id": str(user_id),
+            "ad_account_id": str(account["ad_account_id"]),
+            "entity_type": provider_type,
+            "external_id": clean_id,
+        },
+        {"_id": 0},
+        sort=[("updated_at", -1)],
+    ) or {}
+    snapshot = (
+        rich.get("provider_snapshot")
+        if isinstance(rich.get("provider_snapshot"), dict)
+        else {}
+    )
+    raw = identity.get("raw") if isinstance(identity.get("raw"), dict) else {}
+    web_view = (
+        snapshot.get("web_view_properties")
+        if isinstance(snapshot.get("web_view_properties"), dict)
+        else {}
+    )
+    available = bool(identity or rich)
+    return {
+        "provider": "snapchat_ads",
+        "account_id": str(account["ad_account_id"]),
+        "entity_level": str(entity_level),
+        "entity_id": clean_id,
+        "creative_id": identity.get("creative_id")
+        or rich.get("creative_id")
+        or snapshot.get("creative_id"),
+        "creative_type": snapshot.get("type") or snapshot.get("creative_type"),
+        "media_id": snapshot.get("top_snap_media_id")
+        or snapshot.get("media_id"),
+        "destination_url": web_view.get("url") or raw.get("destination_url"),
+        "created_at": rich.get("created_at_provider") or identity.get("created_at"),
+        "updated_at": rich.get("updated_at_provider") or identity.get("updated_at"),
+        "status": identity.get("status") or rich.get("status"),
+        "quality": {
+            "status": "complete" if available else "unavailable",
+            "source": (
+                "snapchat_v2_identity_plus_native_metadata_adapter"
+                if rich
+                else "snapchat_v2_identity"
+            ),
+            "read_only": True,
+        },
     }
 
 
@@ -526,6 +611,161 @@ async def load_snapchat_v2_entity_report(
         "reason": "ai_shadow_not_accepted",
     }
     return report
+
+
+async def load_snapchat_v2_entity_daily_series(
+    db: Any,
+    user_id: str,
+    *,
+    entity_level: str,
+    entity_ids: list[str],
+    date_from: date,
+    date_to: date,
+    timezone_name: str,
+) -> dict[str, Any]:
+    """Read exact V2 TOTAL facts as an ordered provider-neutral series."""
+    provider_types = {
+        "campaign": "campaign",
+        "ad_group": "ad_squad",
+        "ad": "ad",
+    }
+    normalized_level = str(entity_level or "").strip().lower()
+    provider_type = provider_types.get(normalized_level)
+    if provider_type is None:
+        raise ValueError(f"unsupported_unified_marketing_entity_level:{entity_level}")
+    ids = sorted({str(value or "").strip() for value in entity_ids if value})
+    if not ids:
+        raise ValueError("unified_marketing_entity_ids_required")
+    if len(ids) > 500:
+        raise ValueError("unified_marketing_entity_ids_limit_exceeded")
+    account = await get_selected_account(db, str(user_id))
+    if not account:
+        raise ValueError("unified_marketing_snapchat_selected_account_missing")
+    account_timezone = str(account.get("timezone") or "")
+    if timezone_name != account_timezone:
+        raise ValueError("unified_marketing_daily_series_requires_account_timezone")
+    days = (date_to - date_from).days + 1
+    if days < 1 or days > 31:
+        raise ValueError("unified_marketing_daily_series_range_invalid")
+    limit = len(ids) * days + 1
+    attribution_key = build_attribution_key(
+        "conversion",
+        {
+            "swipe": DEFAULT_SWIPE_ATTRIBUTION_WINDOW,
+            "view": DEFAULT_VIEW_ATTRIBUTION_WINDOW,
+        },
+    )
+    cursor = db[SNAPCHAT_TOTAL_FACTS_COLLECTION].find(
+        {
+            "user_id": str(user_id),
+            "provider": "snapchat_ads",
+            "ad_account_id": str(account["ad_account_id"]),
+            "entity_type": provider_type,
+            "external_id": {"$in": ids},
+            "report_date": {
+                "$gte": date_from.isoformat(),
+                "$lte": date_to.isoformat(),
+            },
+            "account_timezone": account_timezone,
+            "action_report_time": "conversion",
+            "attribution_key": attribution_key,
+        },
+        {"_id": 0},
+    )
+    if hasattr(cursor, "sort"):
+        cursor = cursor.sort([("report_date", 1), ("external_id", 1)])
+    if hasattr(cursor, "limit"):
+        cursor = cursor.limit(limit)
+    try:
+        facts = list(await cursor.to_list(length=limit))
+    except TypeError:
+        facts = list(await cursor.to_list(limit))
+    if len(facts) >= limit:
+        raise ValueError("unified_marketing_daily_series_truncated")
+    try:
+        cost = await calculate_cost_components(
+            db,
+            user_id=str(user_id),
+            account=account,
+            spend_native=1.0,
+        )
+        exchange_rate = float(cost.get("exchange_rate_to_sar") or 0) or None
+    except Exception:  # noqa: BLE001
+        exchange_rate = None
+
+    rows = []
+    for fact in facts:
+        value = dict(fact)
+        coverage = value.get("coverage") if isinstance(value.get("coverage"), dict) else {}
+        sync_status = "complete" if coverage.get("status") == "complete" else "partial"
+        value.update({
+            "name": value.get("external_id"),
+            "source_fact_count": 1,
+            "source_collection": SNAPCHAT_TOTAL_FACTS_COLLECTION,
+            "performance_sync_status": sync_status,
+            "spend_sar": (
+                round(float(value.get("spend_native") or 0) * exchange_rate, 2)
+                if exchange_rate is not None
+                else None
+            ),
+            "ctr_pct": (
+                round(
+                    float(value.get("swipes") or 0)
+                    / float(value.get("impressions") or 0)
+                    * 100,
+                    6,
+                )
+                if float(value.get("impressions") or 0) > 0
+                else None
+            ),
+            "roas": (
+                round(
+                    float(value.get("purchase_value_native") or 0)
+                    / float(value.get("spend_native") or 0),
+                    6,
+                )
+                if float(value.get("spend_native") or 0) > 0
+                else None
+            ),
+        })
+        row = adapt_snapchat_v2_row(
+            value,
+            account_value=account,
+            period_value={
+                "date_from": str(value.get("report_date")),
+                "date_to": str(value.get("report_date")),
+                "timezone": account_timezone,
+                "action_report_time": "conversion",
+            },
+            entity_type=provider_type,
+            default_sync_status=sync_status,
+        )
+        rows.append(row)
+    report = UnifiedMarketingDailySeries(
+        provider="snapchat_ads",
+        entity_level=normalized_level,
+        account={
+            "id": str(account.get("ad_account_id") or ""),
+            "name": str(
+                account.get("display_name") or account.get("ad_account_id") or ""
+            ),
+            "currency": str(account.get("currency") or "").upper(),
+            "timezone": account_timezone,
+        },
+        period={
+            "date_from": date_from.isoformat(),
+            "date_to": date_to.isoformat(),
+            "timezone": account_timezone,
+            "action_report_time": "conversion",
+        },
+        rows=rows,
+        source_fact_count=len(facts),
+        decision_eligibility={
+            "eligible": False,
+            "reason": "ai_shadow_not_accepted",
+        },
+    )
+    return report.model_dump(mode="json")
 
 
 def _dashboard_bank_commissions(
