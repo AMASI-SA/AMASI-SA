@@ -252,3 +252,68 @@ async def test_ai_shadow_rejects_mismatch_without_exact_total_facts(monkeypatch)
 
     assert result["shadow_passed"] is False
     assert result["acceptance_basis"] == "not_accepted"
+
+
+@pytest.mark.asyncio
+async def test_ai_shadow_accepts_complete_unified_hourly_page_source(monkeypatch):
+    def v2_row(level: str, entity_id: str):
+        row = _row(
+            level,
+            entity_id,
+            spend=104.0,
+            source_fact_collection="mezan_snapchat_hourly_facts_v2",
+        )
+        row.update({
+            "provider_result_source": "unified-marketing-data-v1:snapchat-v2",
+            "action_report_time": "conversion",
+        })
+        return row
+
+    async def v1_campaigns(*_args):
+        return [_row("campaign", "c-1")]
+
+    async def v1_children(*_args):
+        return [_row("ad_group", "g-1"), _row("ad", "a-1")]
+
+    async def unified(*_args):
+        return {
+            "campaigns": [v2_row("campaign", "c-1")],
+            "children": [
+                v2_row("ad_group", "g-1"),
+                v2_row("ad", "a-1"),
+            ],
+            "period": None,
+            "account": {"id": "snap-1"},
+        }
+
+    monkeypatch.setattr(shadow._v1_policy, "_snapchat_campaign_entities", v1_campaigns)
+    monkeypatch.setattr(shadow._v1_policy, "_snapchat_child_entities", v1_children)
+    monkeypatch.setattr(shadow, "load_snapchat_unified_ai_entities", unified)
+
+    result = await shadow.build_campaign_ai_unified_shadow(
+        object(), "owner", days=1, today=date(2026, 8, 24)
+    )
+
+    assert result["shadow_passed"] is True
+    assert result["acceptance_basis"] == (
+        "complete_unified_v2_fallback_v1_observer_drift"
+    )
+    assert all(level["complete_unified_v2_fallback"] for level in result["levels"])
+    assert all(level["mismatch_count"] == 1 for level in result["levels"])
+
+
+def test_unified_hourly_fallback_rejects_unknown_or_non_conversion_lineage():
+    row = _row(
+        "campaign",
+        "c-1",
+        source_fact_collection="mezan_snapchat_hourly_facts_v2",
+    )
+    row.update({
+        "provider_result_source": "unified-marketing-data-v1:snapchat-v2",
+        "action_report_time": "impression",
+    })
+    assert shadow._complete_unified_v2_lineage(row) is False
+
+    row["action_report_time"] = "conversion"
+    row["source_fact_collection"] = "unknown_collection"
+    assert shadow._complete_unified_v2_lineage(row) is False
