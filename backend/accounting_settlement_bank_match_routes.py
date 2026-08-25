@@ -25,6 +25,8 @@ BANK_MATCH_BLOCKING_CODES = frozenset({
     "bank_movement_difference",
 })
 _INDEX_READY: set[int] = set()
+_LEGACY_BANK_MATCH_INDEX = "uniq_accounting_settlement_bank_transaction_v2"
+_BANK_MATCH_INDEX = "uniq_accounting_settlement_bank_transaction_v3"
 
 
 def _now() -> str:
@@ -114,11 +116,23 @@ async def _ensure_index(db) -> None:
         await db.accounting_settlements_v2.create_index(
             [("user_id", 1), ("bank_transaction_id", 1)],
             unique=True,
-            sparse=True,
-            name="uniq_accounting_settlement_bank_transaction_v2",
+            partialFilterExpression={"bank_transaction_id": {"$type": "string"}},
+            name=_BANK_MATCH_INDEX,
         )
     except Exception:
         return
+    try:
+        await db.accounting_settlements_v2.drop_index(_LEGACY_BANK_MATCH_INDEX)
+    except Exception as exc:
+        # The v2 sparse compound index indexed every settlement because
+        # ``user_id`` is always present. Consequently, clearing a match by
+        # writing ``bank_transaction_id=null`` collided with another unlinked
+        # draft. Retire that index after the correct partial index exists.
+        if (
+            getattr(exc, "code", None) != 27
+            and "index not found" not in str(exc).lower()
+        ):
+            return
     _INDEX_READY.add(key)
 
 
@@ -250,16 +264,25 @@ def install_accounting_settlement_bank_match_routes(router, db, current_user):
         now = _now()
 
         if not transaction_id:
+            remaining_reasons = [
+                reason
+                for reason in (draft.get("review_reasons") or [])
+                if str(reason.get("code") or "") not in BANK_MATCH_BLOCKING_CODES
+            ]
             update = {
-                "bank_transaction_id": None,
-                "bank_transaction_snapshot": None,
-                "bank_transaction_difference": None,
-                "bank_matched_by": None,
-                "bank_matched_at": None,
-                "bank_match_notes": payload.notes or "",
-                "status": "draft",
+                "bank_match_notes": "",
+                "review_reasons": remaining_reasons,
+                "status": "needs_review" if remaining_reasons else "draft",
                 "updated_by": actor.get("id"),
                 "updated_at": now,
+            }
+            cleared = {
+                "bank_transaction_id": "",
+                "bank_transaction_snapshot": "",
+                "bank_transaction_difference": "",
+                "bank_matched_by": "",
+                "bank_matched_by_name": "",
+                "bank_matched_at": "",
             }
         else:
             if not payload.confirmed:
@@ -304,8 +327,12 @@ def install_accounting_settlement_bank_match_routes(router, db, current_user):
                 "updated_by": actor.get("id"),
                 "updated_at": now,
             }
+            cleared = {}
 
         await _ensure_index(db)
+        mongo_update: dict[str, Any] = {"$set": update}
+        if cleared:
+            mongo_update["$unset"] = cleared
         try:
             result = await db.accounting_settlements_v2.update_one(
                 {
@@ -313,7 +340,7 @@ def install_accounting_settlement_bank_match_routes(router, db, current_user):
                     "user_id": owner_id,
                     "status": {"$in": list(EDITABLE_STATUSES)},
                 },
-                {"$set": update},
+                mongo_update,
             )
         except DuplicateKeyError as exc:
             raise HTTPException(409, "حركة البنك مرتبطة بتسوية أخرى") from exc
@@ -334,6 +361,7 @@ def install_accounting_settlement_bank_match_routes(router, db, current_user):
             after_state={
                 "draft_id": draft_id,
                 **update,
+                **({field: None for field in cleared} if cleared else {}),
             },
         )
         refreshed = await _draft(db, owner_id, draft_id)
