@@ -7,6 +7,7 @@ It never mutates Salla or Qoyod.
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 from fastapi import APIRouter, Depends, Query
@@ -412,10 +413,36 @@ async def load_reviewed_product_context(
     *,
     user_id: str,
     limit: int = MAX_REVIEWED_ORDERS,
+    reviewed_date: str = "",
 ) -> dict[str, Any]:
     repository = MongoOrderRepository(db)
+    workflow_query: dict[str, Any] = {"user_id": user_id, "stage": "reviewed"}
+    historical = bool(_text(reviewed_date))
+    if historical:
+        # Older workflow rows stored reviewed_at as an ISO string while newer
+        # rows may use BSON datetimes. Match both representations using Riyadh
+        # calendar boundaries. The stage predicate is intentionally removed:
+        # this view answers "passed reviewed on this date", not "is reviewed".
+        local_start = datetime.fromisoformat(reviewed_date).replace(
+            tzinfo=timezone(timedelta(hours=3)),
+        )
+        utc_start = local_start.astimezone(timezone.utc)
+        utc_end = utc_start + timedelta(days=1)
+        workflow_query = {
+            "user_id": user_id,
+            "$or": [
+                {"reviewed_at": {"$regex": f"^{reviewed_date}"}},
+                {
+                    "reviewed_at": {
+                        "$gte": utc_start.isoformat(),
+                        "$lt": utc_end.isoformat(),
+                    },
+                },
+                {"reviewed_at": {"$gte": utc_start, "$lt": utc_end}},
+            ],
+        }
     workflows = await db[WORKFLOWS].find(
-        {"user_id": user_id, "stage": "reviewed"},
+        workflow_query,
         {"_id": 0},
     ).sort("reviewed_at", 1).limit(limit + 1).to_list(limit + 1)
     truncated = len(workflows) > limit
@@ -466,13 +493,16 @@ async def load_reviewed_product_context(
             {"_id": 0},
         ).to_list(100000)
 
-    catalog = apply_preparation_allocations(
-        aggregate_reviewed_products(pairs, product_documents),
+    original_catalog = aggregate_reviewed_products(pairs, product_documents)
+    catalog = original_catalog if historical else apply_preparation_allocations(
+        original_catalog,
         allocation_documents,
     )
     catalog.update({
         "ok": True,
-        "stage": "reviewed",
+        "stage": "reviewed_history" if historical else "reviewed",
+        "historical": historical,
+        "reviewed_date": reviewed_date or None,
         "truncated": truncated,
         "order_limit": limit,
     })
@@ -491,6 +521,7 @@ def make_reviewed_products_catalog_router(db: Any, current_user: Callable) -> AP
     @router.get("/catalog")
     async def reviewed_products_catalog(
         limit: int = Query(500, ge=1, le=MAX_REVIEWED_ORDERS),
+        reviewed_date: str = Query("", pattern=r"^$|^\d{4}-\d{2}-\d{2}$"),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         reviewer = _require_reviewer(user)
@@ -499,6 +530,7 @@ def make_reviewed_products_catalog_router(db: Any, current_user: Callable) -> AP
             db,
             user_id=user_id,
             limit=limit,
+            reviewed_date=reviewed_date,
         )
         return context["catalog"]
 
