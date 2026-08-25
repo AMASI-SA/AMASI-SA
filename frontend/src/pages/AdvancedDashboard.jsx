@@ -158,6 +158,12 @@ export function CampaignAdvisorCard() {
     const visible = recommendations.slice(0, 5);
     const urgent = recommendations.filter((item) => ["PAUSE_AD", "PAUSE_ADSET", "PAUSE_CAMPAIGN", "DECREASE_BUDGET"].includes(item.recommended_action)).length;
     const scale = recommendations.filter((item) => item.recommended_action === "INCREASE_BUDGET").length;
+    const shadowDiagnostics = (unifiedShadow?.levels || []).map((level) =>
+        `${level.level}: مقارنة ${integer(level.compared_nonzero_rows)} · ناقص ${integer(level.unified_incomplete_rows)} · اختلاف ${integer(level.mismatch_count)}`
+    ).join(" | ");
+    const shadowErrors = (unifiedShadow?.errors || []).map((item) =>
+        `${item.source}: ${item.code}`
+    ).join(" | ");
     const approve = async (item) => {
         const canApprove = item.action_type === "ads_write" && item.executable && item.approval_available;
         if (!canApprove) return;
@@ -203,7 +209,7 @@ export function CampaignAdvisorCard() {
                 ? unifiedShadow.acceptance_basis === "provider_total_facts_fallback_v1_observer_drift"
                     ? "Snapchat AI Shadow معتمد عبر TOTAL V2 المصالح مع Snapchat · V1 مراقب أقدم · القرارات غير مفعلة"
                     : "Snapchat AI Shadow متطابق على آخر يوم حساب مغلق · التحليل والقرارات ما زالت معزولة حتى اعتماد التحويل"
-                : "Snapchat AI Shadow قيد المطابقة مع المصدر الموحد V2 · لا توجد قرارات أو كتابات من مسار Shadow"}
+                : `Snapchat AI Shadow قيد المطابقة · ${shadowErrors || shadowDiagnostics || "لا توجد صفوف متقاطعة"} · لا توجد قرارات أو كتابات من مسار Shadow`}
         </div>}
         {visible.length ? <div className="grid gap-2 p-3 lg:grid-cols-5">
             {visible.map((item) => {
