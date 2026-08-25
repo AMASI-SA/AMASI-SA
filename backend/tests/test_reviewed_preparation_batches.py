@@ -32,6 +32,7 @@ from reviewed_preparation_batches import (
     _reconcile_order_stage,
     make_reviewed_preparation_batches_router,
     plan_preparation_allocations,
+    repair_batch_line_customer_options,
     render_preparation_batch_pdf,
 )
 
@@ -431,6 +432,88 @@ async def test_final_unit_moves_order_to_in_progress(monkeypatch):
     assert db[EVENTS].inserted[0]["salla_updated"] is False
 
 
+@pytest.mark.asyncio
+async def test_failed_batch_release_restores_in_progress_order_to_reviewed(monkeypatch):
+    workflow = {
+        "user_id": "owner-1",
+        "order_number": "100",
+        "stage": "in_progress",
+        "reviewed_at": "2026-08-25T10:00:00+00:00",
+        "revision": 2,
+        "items": [],
+    }
+    order = SimpleNamespace(
+        order_number="100",
+        items=[SimpleNamespace(order_item_id="line-a", quantity=2)],
+    )
+    db = _DB(workflow, [
+        {"status": "committed", "order_item_id": "line-a", "unit_index": 1},
+    ])
+
+    async def reviewed_context(*_args, **_kwargs):
+        return {"pairs": []}
+
+    async def canonical_order(*_args, **_kwargs):
+        return order
+
+    monkeypatch.setattr(batch_module, "load_reviewed_product_context", reviewed_context)
+    monkeypatch.setattr(batch_module, "MongoOrderRepository", lambda _db: object())
+    monkeypatch.setattr(batch_module, "get_order", canonical_order)
+
+    complete, remaining = await _reconcile_order_stage(
+        db,
+        user_id="owner-1",
+        order_number="100",
+        batch_id="",
+        actor={"id": "owner-1", "name": "المالك"},
+    )
+
+    assert complete is False
+    assert remaining == 1
+    update = db[WORKFLOWS].last_update
+    assert update["$set"]["stage"] == "reviewed"
+    assert update["$set"]["preparation_progress"]["remaining_quantity"] == 1
+    assert "preparation_batch_ids" not in update.get("$addToSet", {})
+    assert "in_progress_at" in update["$unset"]
+    assert db[EVENTS].inserted[0]["event_type"] == (
+        "order_restored_to_reviewed_after_failed_preparation_file"
+    )
+
+
+def test_old_batch_line_options_are_rebuilt_from_canonical_order_item():
+    identity = SimpleNamespace(
+        order_item_id="line-a",
+        line_index=0,
+        sku="SKU-1",
+        options=[
+            SimpleNamespace(name="المقاس", value="من 3 إلى 6 أشهر"),
+            SimpleNamespace(name="الاسم", value="سلمان"),
+        ],
+        custom_fields=[],
+        color=None,
+        size=None,
+        material=None,
+    )
+    repaired, count, unresolved = repair_batch_line_customer_options(
+        [{
+            "order_number": "100",
+            "order_item_id": "line-a",
+            "line_index": 0,
+            "sku": "SKU-1",
+            "file_spec_fields": [],
+            "product_options": {},
+        }],
+        identities_by_order={"100": [identity]},
+        workflows_by_order={"100": {"items": []}},
+    )
+
+    assert count == 1
+    assert unresolved == []
+    assert repaired[0]["size"] == "من 3 إلى 6 أشهر"
+    assert repaired[0]["customer_name"] == "سلمان"
+    assert len(repaired[0]["file_spec_fields"]) == 2
+
+
 def test_forward_stages_freeze_review_mutations():
     previous = set(REVIEW_COMPLETED_STAGES)
     try:
@@ -474,6 +557,10 @@ def test_router_registers_create_list_and_download_routes():
 
     assert ("/reviewed-preparation-batches-v1/batches", "POST") in routes
     assert ("/reviewed-preparation-batches-v1/batches", "GET") in routes
+    assert (
+        "/reviewed-preparation-batches-v1/batches/{batch_id}/repair-customer-options",
+        "POST",
+    ) in routes
     assert (
         "/reviewed-preparation-batches-v1/batches/{batch_id}/pdf",
         "GET",
