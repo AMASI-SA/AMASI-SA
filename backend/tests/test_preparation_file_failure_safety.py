@@ -9,6 +9,7 @@ from preparation_file_failure_safety import (
     _batch_order_numbers,
     make_preparation_file_failure_safety_router,
     reconcile_released_preparation_stages,
+    release_orphan_ready_batches,
     release_incomplete_preparation_request,
 )
 from preparation_file_registry import REGISTRY
@@ -236,6 +237,44 @@ async def test_in_progress_workflow_without_release_event_is_reconciled(monkeypa
 
     assert result["restored_order_count"] == 1
     assert result["restored_order_numbers"] == ["lost-11"]
+
+
+@pytest.mark.asyncio
+async def test_orphan_ready_batch_releases_unstarted_committed_units():
+    batch = FakeCollection(find_rows=[{
+        "id": "batch-lost",
+        "status": "ready",
+        "client_request_id": "request-lost",
+        "order_numbers": ["4001"],
+    }])
+    registry = FakeCollection(find_one_rows=[])
+    pieces = FakeCollection(find_one_rows=[])
+    allocations = FakeCollection(find_rows=[{
+        "order_number": "4001",
+        "status": "committed",
+    }] * 11)
+    events = FakeCollection()
+    db = FakeDb({
+        BATCHES: batch,
+        REGISTRY: registry,
+        PIECES: pieces,
+        PREPARATION_UNIT_ALLOCATIONS: allocations,
+        EVENTS: events,
+    })
+
+    result = await release_orphan_ready_batches(
+        db,
+        user_id="owner-1",
+        actor={"id": "owner-1", "role": "owner"},
+        threshold=datetime.now(timezone.utc),
+    )
+
+    assert result["released_count"] == 1
+    assert result["released_unit_count"] == 11
+    assert result["released"][0]["order_numbers"] == ["4001"]
+    assert allocations.deleted_many
+    assert batch.deleted_one
+    assert events.inserted[0]["event_type"] == "orphan_ready_batch_released"
 
 
 def test_router_registers_atomic_draft_release_and_stale_recovery():

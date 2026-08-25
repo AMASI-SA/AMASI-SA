@@ -10,6 +10,7 @@ This engine is Mezan-only. It performs no Salla or Qoyod writes.
 from __future__ import annotations
 
 import base64
+import asyncio
 import hashlib
 import io
 import ipaddress
@@ -1187,15 +1188,24 @@ def make_reviewed_preparation_batches_router(
             if isinstance(row, dict) and _text(row.get("order_number"))
         })
         refresh_failures: list[dict[str, Any]] = []
-        for order_number in order_numbers:
-            result = await refresh_order_from_salla(
-                db,
-                user_id,
-                order_number,
-                force=True,
-                minimum_fresh_seconds=0,
-                allow_auto_fulfillment=False,
-            )
+        refresh_limit = asyncio.Semaphore(8)
+
+        async def refresh_one(order_number: str) -> tuple[str, dict[str, Any]]:
+            async with refresh_limit:
+                result = await refresh_order_from_salla(
+                    db,
+                    user_id,
+                    order_number,
+                    force=True,
+                    minimum_fresh_seconds=0,
+                    allow_auto_fulfillment=False,
+                )
+                return order_number, result
+
+        refresh_results = await asyncio.gather(*(
+            refresh_one(order_number) for order_number in order_numbers
+        ))
+        for order_number, result in refresh_results:
             if not result.get("ok") or not result.get("found"):
                 refresh_failures.append({
                     "order_number": order_number,
