@@ -1,4 +1,5 @@
 """Staged Snapchat Integration V2 shadow-sync orchestrator."""
+
 from __future__ import annotations
 
 import asyncio
@@ -262,9 +263,9 @@ class SnapchatV2SyncPipeline:
                 limit=20_000,
             )
             parent_lookup = {
-                str(row.get("external_id") or "").strip(): str(
-                    row.get("ad_squad_id") or ""
-                ).strip()
+                str(row.get("external_id") or "")
+                .strip(): str(row.get("ad_squad_id") or "")
+                .strip()
                 for row in identities
                 if str(row.get("external_id") or "").strip()
                 and str(row.get("ad_squad_id") or "").strip()
@@ -281,9 +282,11 @@ class SnapchatV2SyncPipeline:
             if not selected_dates:
                 account_zone = ZoneInfo(str(account.get("timezone") or "UTC"))
                 first = start_utc.astimezone(account_zone).date()
-                last = (end_utc - timedelta(microseconds=1)).astimezone(
-                    account_zone
-                ).date()
+                last = (
+                    (end_utc - timedelta(microseconds=1))
+                    .astimezone(account_zone)
+                    .date()
+                )
                 selected_dates = [
                     first + timedelta(days=offset)
                     for offset in range((last - first).days + 1)
@@ -490,10 +493,31 @@ class SnapchatV2SyncPipeline:
                 },
                 now=self.now,
             )
-            # Publish the financially authoritative account/campaign facts
-            # before the large identity catalog. Production accounts can have
-            # more than ten thousand Ads, and catalog discovery must not make
-            # the visible spend stale while a rolling run is still healthy.
+            # Publish Ads Manager-compatible campaign DAY facts before the
+            # large identity catalog. Production accounts can have more than
+            # ten thousand Ads; campaign outcome parity must not depend on the
+            # request budget consumed by identity discovery or child levels.
+            total_report_dates = report_dates[-7:]
+            breakdown_summary: dict[str, Any] = {}
+            campaign_summary, campaign_error = await self._sync_breakdown_performance(
+                client,
+                user_id=str(user_id),
+                account=account,
+                sync_run_id=sync_run_id,
+                entity_type="campaign",
+                campaign_rows=hourly["campaign_rows"],
+                start_utc=start_utc,
+                end_utc=end_utc,
+                action_report_time=action_report_time,
+                report_dates=total_report_dates,
+            )
+            breakdown_summary["campaign"] = campaign_summary
+            if campaign_error:
+                warnings.append(campaign_error)
+
+            # Refresh names and parent identities after the account-level
+            # campaign report. Identity freshness is useful for presentation,
+            # but it is not allowed to gate the headline purchase total.
             identity_summary, identity_errors = await self._sync_identities(
                 client,
                 user_id=str(user_id),
@@ -501,14 +525,12 @@ class SnapchatV2SyncPipeline:
                 sync_run_id=sync_run_id,
             )
             warnings.extend(identity_errors)
-            breakdown_summary: dict[str, Any] = {}
-            # Exact TOTAL hierarchy facts are the intelligence/read surface,
+            # Exact account-day hierarchy facts are the intelligence/read surface,
             # not the financial source. Bound each rolling run to seven days
             # so large historical backfills cannot exhaust Snapchat's request
             # budget; older days retain their previously persisted TOTAL rows
             # and hourly facts remain available as the safe fallback.
-            total_report_dates = report_dates[-7:]
-            for entity_type in ("campaign", "ad_squad", "ad"):
+            for entity_type in ("ad_squad", "ad"):
                 level_summary, level_error = await self._sync_breakdown_performance(
                     client,
                     user_id=str(user_id),
@@ -591,7 +613,8 @@ class SnapchatV2SyncPipeline:
                             {
                                 "level": "reconciliation",
                                 "date": report_date.isoformat(),
-                                "reason_codes": reconciliation.get("reason_codes") or [],
+                                "reason_codes": reconciliation.get("reason_codes")
+                                or [],
                             }
                         )
                 except Exception as exc:  # noqa: BLE001
@@ -633,10 +656,13 @@ class SnapchatV2SyncPipeline:
                 summary=summary,
                 now=self.now,
             )
-            finished = await self.db["mezan_snapchat_sync_runs_v2"].find_one(
-                {"sync_run_id": sync_run_id},
-                {"_id": 0, "status": 1},
-            ) or {}
+            finished = (
+                await self.db["mezan_snapchat_sync_runs_v2"].find_one(
+                    {"sync_run_id": sync_run_id},
+                    {"_id": 0, "status": 1},
+                )
+                or {}
+            )
             outcome = str(finished.get("status") or "partial")
             success_at = self.now().astimezone(timezone.utc)
             await self.db["mezan_snapchat_connections_v2"].update_one(
