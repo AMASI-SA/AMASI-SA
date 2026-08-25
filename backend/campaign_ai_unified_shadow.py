@@ -149,14 +149,14 @@ async def build_campaign_ai_unified_shadow(
     start = current - timedelta(days=max(1, days) - 1)
     errors: list[dict[str, str]] = []
     try:
-        v1_campaigns = await _v1_policy._snapchat_campaign_entities(
+        v1_campaigns = await _v1_policy._snapchat_v1_campaign_entities(
             db, str(user_id), start, current, 1
         )
     except Exception as exc:  # noqa: BLE001
         v1_campaigns = []
         errors.append({"source": "v1_campaigns", "code": type(exc).__name__})
     try:
-        v1_children = await _v1_policy._snapchat_child_entities(
+        v1_children = await _v1_policy._snapchat_v1_child_entities(
             db, str(user_id), start, current, 1
         )
     except Exception as exc:  # noqa: BLE001
@@ -194,6 +194,7 @@ async def build_campaign_ai_unified_shadow(
         "provider": "snapchat_ads",
         "contract_version": "unified-marketing-data-v1",
         "mode": "read_only_shadow",
+        "cutover_active": True,
         "shadow_passed": passed,
         "cutover_ready": passed,
         "acceptance_basis": acceptance_basis,
@@ -209,9 +210,9 @@ async def build_campaign_ai_unified_shadow(
         "decision_eligibility": {
             "eligible": False,
             "reason": (
-                "ai_shadow_passed_cutover_not_deployed"
+                "ai_v2_active_v1_observer_matched"
                 if passed
-                else "ai_shadow_not_accepted"
+                else "ai_v2_active_v1_observer_diverged"
             ),
         },
     }
