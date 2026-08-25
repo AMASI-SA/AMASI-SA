@@ -36,6 +36,7 @@ from .sync_runs import (
     set_level_status,
     update_sync_stage,
 )
+from .total_facts import upsert_total_facts
 
 MAX_SYNC_DAYS = 62
 HEARTBEAT_SECONDS = 20.0
@@ -230,6 +231,7 @@ class SnapchatV2SyncPipeline:
         start_utc: datetime,
         end_utc: datetime,
         action_report_time: str,
+        report_dates: list[date] | None = None,
     ) -> tuple[dict[str, Any], dict[str, Any] | None]:
         campaign_ids = sorted(
             {
@@ -275,17 +277,27 @@ class SnapchatV2SyncPipeline:
             now=self.now,
         )
         try:
-            performance = await client.fetch_breakdown_hourly_facts(
+            selected_dates = list(report_dates or [])
+            if not selected_dates:
+                account_zone = ZoneInfo(str(account.get("timezone") or "UTC"))
+                first = start_utc.astimezone(account_zone).date()
+                last = (end_utc - timedelta(microseconds=1)).astimezone(
+                    account_zone
+                ).date()
+                selected_dates = [
+                    first + timedelta(days=offset)
+                    for offset in range((last - first).days + 1)
+                ]
+            performance = await client.fetch_breakdown_daily_total_facts(
                 account,
                 campaign_ids=campaign_ids,
                 entity_type=entity_type,
-                start_utc=start_utc,
-                end_utc=end_utc,
+                report_dates=selected_dates,
                 sync_run_id=sync_run_id,
                 action_report_time=action_report_time,
                 ad_squad_by_ad_id=parent_lookup,
             )
-            write = await upsert_hourly_facts(
+            write = await upsert_total_facts(
                 self.db,
                 performance["rows"],
                 now=self.now(),
@@ -490,7 +502,13 @@ class SnapchatV2SyncPipeline:
             )
             warnings.extend(identity_errors)
             breakdown_summary: dict[str, Any] = {}
-            for entity_type in ("ad_squad", "ad"):
+            # Exact TOTAL hierarchy facts are the intelligence/read surface,
+            # not the financial source. Bound each rolling run to seven days
+            # so large historical backfills cannot exhaust Snapchat's request
+            # budget; older days retain their previously persisted TOTAL rows
+            # and hourly facts remain available as the safe fallback.
+            total_report_dates = report_dates[-7:]
+            for entity_type in ("campaign", "ad_squad", "ad"):
                 level_summary, level_error = await self._sync_breakdown_performance(
                     client,
                     user_id=str(user_id),
@@ -501,6 +519,7 @@ class SnapchatV2SyncPipeline:
                     start_utc=start_utc,
                     end_utc=end_utc,
                     action_report_time=action_report_time,
+                    report_dates=total_report_dates,
                 )
                 breakdown_summary[entity_type] = level_summary
                 if level_error:
