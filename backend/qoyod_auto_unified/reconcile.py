@@ -40,6 +40,102 @@ def _reconciliation_signature(
     return "|".join("" if value is None else str(value) for value in values)
 
 
+async def _requeue_absent_unhandled_after_complete_sync(
+    db: Any,
+    *,
+    markers_user_id: str,
+    sync_started_at: Any,
+) -> dict[str, Any]:
+    """Retry old unknown failures only after a complete Qoyod refresh.
+
+    The invoice-sync wrapper calls this only when the official read completed
+    without row errors and without reaching the pagination ceiling.  Rows
+    touched by that refresh form the authoritative reference set.  An open
+    ``unhandled_exception`` absent from that set is safe to move to the
+    pre-write retry queue: the normal sender still performs its live exact-
+    reference duplicate check before creating anything in Qoyod.
+    """
+    from integrations.qoyod.candidate_orders import official_qoyod_reference
+
+    fresh_references: set[str] = set()
+    invoice_cursor = db.qoyod_invoices.find(
+        {
+            "user_id": str(markers_user_id),
+            "last_sync_at": {"$gte": sync_started_at},
+            "qoyod_invoice_id": {"$nin": [None, ""]},
+        },
+        {
+            "_id": 0,
+            "qoyod_invoice_id": 1,
+            "reference": 1,
+            "qoyod_official_reference": 1,
+            "reference_provenance": 1,
+            "raw_response.reference": 1,
+            "source": 1,
+            "salla_order_number": 1,
+        },
+    )
+    async for invoice in invoice_cursor:
+        reference, _ = official_qoyod_reference(invoice)
+        reference = str(reference or "").strip()
+        if _ORDER_NUMBER_RE.fullmatch(reference):
+            fresh_references.add(reference)
+
+    reopened = 0
+    preserved_present = 0
+    skipped_invalid = 0
+    now = _now()
+    quarantine_cursor = db.qoyod_manual_auto_quarantines.find(
+        {
+            "user_id": _TENANT,
+            "status": "open",
+            "code": "unhandled_exception",
+        },
+        {"_id": 1, "order_number": 1},
+    )
+    async for quarantine in quarantine_cursor:
+        order_number = str(quarantine.get("order_number") or "").strip()
+        if not _ORDER_NUMBER_RE.fullmatch(order_number):
+            skipped_invalid += 1
+            continue
+        if order_number in fresh_references:
+            preserved_present += 1
+            continue
+        selector: dict[str, Any] = {
+            "user_id": _TENANT,
+            "order_number": order_number,
+            "status": "open",
+            "code": "unhandled_exception",
+        }
+        if quarantine.get("_id") is not None:
+            selector["_id"] = quarantine["_id"]
+        result = await db.qoyod_manual_auto_quarantines.update_one(
+            selector,
+            {"$set": {
+                "code": "unified_sender_row_upsert_failed",
+                "message": (
+                    "تأكد غياب الفاتورة بعد مزامنة قيود الكاملة؛ "
+                    "أُعيد الطلب إلى طابور المحاولة الآمنة."
+                ),
+                "recovery_class": "sync_retryable",
+                "next_retry_at": now,
+                "retry_scheduled_at": now,
+                "recovered_from_code": "unhandled_exception",
+                "qoyod_absence_confirmed_at": now,
+                "qoyod_absence_sync_started_at": sync_started_at,
+            }},
+        )
+        reopened += int(getattr(result, "modified_count", 0) or 0)
+
+    return {
+        "ok": True,
+        "fresh_official_reference_count": len(fresh_references),
+        "reopened_absent_unhandled_count": reopened,
+        "preserved_present_unhandled_count": preserved_present,
+        "skipped_invalid_unhandled_count": skipped_invalid,
+    }
+
+
 async def _reconcile_existing_reference(
     db: Any,
     *,
