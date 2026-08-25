@@ -11,7 +11,10 @@ from snapchat_v2.projections import (
     SNAPCHAT_DAILY_PROJECTIONS_COLLECTION,
     list_daily_projections,
 )
-from snapchat_v2.reconciliation import calculate_cost_components
+from snapchat_v2.reconciliation import (
+    calculate_cost_components,
+    list_reconciliation,
+)
 from snapchat_v2.salla_outcomes import load_salla_campaign_outcomes
 from snapchat_v2.sync_runs import SNAPCHAT_SYNC_RUNS_COLLECTION
 from unified_marketing.adapters.snapchat_v2 import build_snapchat_v2_unified_report
@@ -37,18 +40,60 @@ def _sum(rows: list[dict[str, Any]], field: str) -> float:
     return round(sum(float(row.get(field) or 0) for row in rows), 6)
 
 
-async def _latest_financial_status(
+async def _projection_financial_status(
     db: Any,
     *,
     user_id: str,
     ad_account_id: str,
+    projections: list[dict[str, Any]],
 ) -> str:
-    row = await db[SNAPCHAT_SYNC_RUNS_COLLECTION].find_one(
-        {"user_id": str(user_id), "ad_account_id": str(ad_account_id)},
-        {"_id": 0, "financial_sync_status": 1},
-        sort=[("started_at", -1)],
-    ) or {}
-    return str(row.get("financial_sync_status") or "partial")
+    """Prove the selected range from the runs that produced its facts.
+
+    A newer rolling run can legitimately be partial while the current local
+    day is open. It must not downgrade an already closed historical range.
+    Daily projections retain immutable source run ids for this proof.
+    """
+    run_ids = sorted({
+        str(run_id)
+        for projection in projections
+        for run_id in list(projection.get("source_sync_run_ids") or [])
+        if run_id
+    })
+    if not projections or not run_ids:
+        return "partial"
+    cursor = db[SNAPCHAT_SYNC_RUNS_COLLECTION].find(
+        {
+            "user_id": str(user_id),
+            "ad_account_id": str(ad_account_id),
+            "sync_run_id": {"$in": run_ids},
+        },
+        {"_id": 0, "sync_run_id": 1, "financial_sync_status": 1},
+    )
+    try:
+        rows = list(await cursor.to_list(length=len(run_ids)))
+    except TypeError:
+        rows = list(await cursor.to_list(len(run_ids)))
+    complete_ids = {
+        str(row.get("sync_run_id"))
+        for row in rows
+        if row.get("financial_sync_status") == "complete"
+    }
+    return "complete" if set(run_ids).issubset(complete_ids) else "partial"
+
+
+def _reconciliation_status(
+    reconciliations: list[dict[str, Any]],
+    *,
+    date_from: date,
+    date_to: date,
+) -> str:
+    expected_days = (date_to - date_from).days + 1
+    reconciled_dates = {
+        str(row.get("report_date"))
+        for row in reconciliations
+        if row.get("reconciled") is True
+    }
+    return "reconciled" if len(reconciled_dates) == expected_days else "partial"
 
 
 async def load_snapchat_v2_account_report(
@@ -73,10 +118,24 @@ async def load_snapchat_v2_account_report(
         action_report_time="conversion",
     )
     expected_days = (date_to - date_from).days + 1
-    financial_status = await _latest_financial_status(
+    financial_status = await _projection_financial_status(
         db,
         user_id=str(user_id),
         ad_account_id=account_id,
+        projections=projections,
+    )
+    reconciliations = await list_reconciliation(
+        db,
+        user_id=str(user_id),
+        ad_account_id=account_id,
+        date_from=date_from,
+        date_to=date_to,
+        action_report_time="conversion",
+    )
+    reconciliation_status = _reconciliation_status(
+        reconciliations,
+        date_from=date_from,
+        date_to=date_to,
     )
     amount_complete = (
         len(projections) == expected_days
@@ -84,7 +143,9 @@ async def load_snapchat_v2_account_report(
     )
     sync_status = (
         "complete"
-        if amount_complete and financial_status == "complete"
+        if amount_complete
+        and financial_status == "complete"
+        and reconciliation_status == "reconciled"
         else "partial"
     )
     totals: dict[str, Any] = {
@@ -94,10 +155,11 @@ async def load_snapchat_v2_account_report(
         ),
         "performance_sync_status": sync_status,
         "amount_complete": amount_complete,
+        "reconciliation_status": reconciliation_status,
         "performance_reason": (
             None
             if sync_status == "complete"
-            else "riyadh_projection_or_financial_coverage_incomplete"
+            else "riyadh_projection_financial_or_reconciliation_incomplete"
         ),
         "reach_frequency_scope": "exact_total_window_required",
     }
@@ -224,4 +286,3 @@ async def load_snapchat_v2_account_report(
 
 
 __all__ = ["load_snapchat_v2_account_report"]
-

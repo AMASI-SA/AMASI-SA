@@ -349,6 +349,7 @@ function AdsCard({ ads, unifiedShadow }) {
     const shadowLegacy = finiteFinancialValue(shadowComparison.legacy);
     const shadowUnified = finiteFinancialValue(shadowComparison.unified);
     const shadowCoverageComplete = unifiedShadow?.comparison?.coverage_complete === true;
+    const shadowAcceptanceBasis = unifiedShadow?.acceptance_basis;
     const shadowDetails = [
         shadowLegacy === null ? null : `الحالي ${money(shadowLegacy)}`,
         shadowUnified === null ? null : `V2 ${money(shadowUnified)}`,
@@ -361,7 +362,9 @@ function AdsCard({ ads, unifiedShadow }) {
             {!unifiedShadow
                 ? "Snapchat V2 Shadow · جارٍ التحقق من التطابق"
                 : shadowPassed
-                    ? `Snapchat V2 Shadow مطابق${shadowDelta === null ? "" : ` · الفرق ${money(shadowDelta)} ر.س`} · القرارات غير مفعلة`
+                    ? shadowAcceptanceBasis === "provider_reconciliation_fallback"
+                        ? "Snapchat V2 Shadow معتمد · مصالح مباشرة مع Snapchat · V1 غير مكتمل · القرارات غير مفعلة"
+                        : `Snapchat V2 Shadow مطابق${shadowDelta === null ? "" : ` · الفرق ${money(shadowDelta)} ر.س`} · القرارات غير مفعلة`
                     : `Snapchat V2 Shadow غير معتمد · ${shadowDetails || unifiedShadow.reason || "يوجد اختلاف أو نقص تغطية"}`}
         </div>
         <div className="h-[190px] px-2 pt-3" dir="ltr"><ResponsiveContainer width="99%" height="100%" minWidth={0} minHeight={0}><LineChart data={plotRows} margin={{ top: 6, right: 6, left: 0, bottom: 4 }}><CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" /><XAxis dataKey="label" tick={{ fontSize: 9 }} minTickGap={8} interval="preserveStartEnd" /><YAxis tick={{ fontSize: 9 }} width={38} /><Tooltip formatter={(value, name) => [`${money(value)} ر.س`, name]} labelFormatter={(value) => `الوقت: ${value}`} contentStyle={{ direction: "rtl", borderRadius: 10, fontFamily: "Cairo" }} />{PLATFORM_META.map((p) => <Line key={p.key} type="monotone" dataKey={p.key} name={p.label} stroke={p.color} strokeWidth={2.5} dot={false} activeDot={{ r: 3 }} connectNulls={false} />)}</LineChart></ResponsiveContainer></div>

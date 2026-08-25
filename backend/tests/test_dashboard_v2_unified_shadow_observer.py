@@ -40,6 +40,7 @@ async def test_dashboard_observer_compares_without_enabling_decisions(monkeypatc
                 "quality": {
                     "coverage_status": "complete",
                     "amount_complete": True,
+                    "reconciliation_status": "reconciled",
                 },
             },
             "order_summary": {"matched_orders": 86},
@@ -56,7 +57,7 @@ async def test_dashboard_observer_compares_without_enabling_decisions(monkeypatc
     )
 
     assert result["shadow_passed"] is True
-    assert result["cutover_ready"] is False
+    assert result["cutover_ready"] is True
     assert result["comparison"]["spend_sar"]["delta"] == 0.0
     assert result["decision_eligibility"]["eligible"] is False
     assert result["provider_write_reached"] is False

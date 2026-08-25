@@ -51,8 +51,13 @@ never be summed across a longer period.
 `unified_marketing.gateway` is the only read entry point for cross-platform
 consumers. Provider readers live behind that gateway. Dashboard first records
 a fail-closed shadow comparison: its existing source remains authoritative,
-`cutover_ready` remains false, and Decision Intelligence stays ineligible until
-the Production comparison is explicitly accepted.
+and Decision Intelligence stays ineligible until the Production comparison is
+explicitly accepted. `cutover_ready` may become true only for a closed period
+whose Unified projection is complete and reconciled to Snapchat's matching
+provider TOTAL window. The preferred acceptance basis is an exact complete V1
+match. If V1 itself is incomplete, the response records the explicit
+`provider_reconciliation_fallback` basis instead of fabricating a V1 amount.
+Open periods can never pass through this fallback.
 
 ## Decision gate
 
