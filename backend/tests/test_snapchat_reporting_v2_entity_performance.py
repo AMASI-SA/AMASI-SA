@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 import pytest
 
@@ -102,6 +102,43 @@ def performance_payload(key: str, external_id: str) -> dict:
     }
 
 
+def total_performance_payload(key: str, external_id: str) -> dict:
+    return {
+        "request_status": "SUCCESS",
+        "total_stats": [
+            {
+                "sub_request_status": "SUCCESS",
+                "total_stat": {
+                    "granularity": "TOTAL",
+                    "breakdown_stats": {
+                        key: [
+                            {
+                                "id": external_id,
+                                "stats": {
+                                    "spend": 1_250_000,
+                                    "impressions": 100,
+                                    "swipes": 5,
+                                    "video_views": 20,
+                                    "view_completion": 12,
+                                    "conversion_view_content": 8,
+                                    "conversion_add_cart": 4,
+                                    "conversion_start_checkout": 3,
+                                    "conversion_add_billing": 2,
+                                    "conversion_purchases": 1,
+                                    "conversion_purchases_value": 5_000_000,
+                                    "uniques": 80,
+                                    "frequency": 1.25,
+                                },
+                            }
+                        ]
+                    },
+                },
+            }
+        ],
+        "paging": {},
+    }
+
+
 @pytest.mark.asyncio
 async def test_fetches_ad_squad_hourly_facts_from_campaign_breakdown():
     factory = FakeHTTPFactory([FakeResponse(performance_payload("adsquad", "s1"))])
@@ -140,6 +177,11 @@ async def test_fetches_ad_squad_hourly_facts_from_campaign_breakdown():
             "impressions": 100,
             "swipes": 5,
             "video_views": 20,
+            "view_completion": 0,
+            "view_content": 0,
+            "add_to_cart": 0,
+            "start_checkout": 0,
+            "add_billing": 0,
             "purchases": 1,
             "purchase_value_native": 5.0,
             "sync_run_id": "run-1",
@@ -196,7 +238,41 @@ async def test_ad_facts_retain_campaign_and_ad_squad_parent_identity():
 
     assert result["rows"][0]["campaign_id"] == "c1"
     assert result["rows"][0]["ad_squad_id"] == "s1"
-    assert result["rows"][0]["ad_id"] == "ad1"
+
+
+@pytest.mark.asyncio
+async def test_daily_total_facts_preserve_non_additive_frequency_scope():
+    factory = FakeHTTPFactory(
+        [FakeResponse(total_performance_payload("adsquad", "s1"))]
+    )
+    client = SnapchatV2Client(
+        object(),
+        "u1",
+        token_store=FakeTokenStore(),
+        client_factory=factory,
+        now=lambda: datetime(2026, 8, 23, 12, tzinfo=timezone.utc),
+    )
+
+    result = await client.fetch_breakdown_daily_total_facts(
+        {
+            "ad_account_id": "a1",
+            "timezone": "America/Los_Angeles",
+            "currency": "USD",
+        },
+        campaign_ids=["c1"],
+        entity_type="ad_squad",
+        report_dates=[date(2026, 8, 22)],
+        sync_run_id="run-total-1",
+    )
+
+    assert result["coverage"]["frequency_summed"] is False
+    assert result["rows"][0]["paid_reach"] == 80
+    assert result["rows"][0]["paid_frequency"] == 1.25
+    assert result["rows"][0]["add_to_cart"] == 4
+    _, params = factory.clients[0].calls[0]
+    assert params["granularity"] == "TOTAL"
+    assert "frequency" in params["fields"]
+    assert result["rows"][0]["ad_squad_id"] == "s1"
 
 
 @pytest.mark.asyncio
@@ -379,14 +455,14 @@ async def test_pipeline_publishes_child_shadow_facts_and_marks_level_complete(
         calls["coverage"] = kwargs.get("coverage")
 
     monkeypatch.setattr("snapchat_v2.sync_pipeline.update_sync_stage", stage)
-    monkeypatch.setattr("snapchat_v2.sync_pipeline.upsert_hourly_facts", save)
+    monkeypatch.setattr("snapchat_v2.sync_pipeline.upsert_total_facts", save)
     monkeypatch.setattr("snapchat_v2.sync_pipeline.set_level_status", set_status)
 
     class Client:
-        async def fetch_breakdown_hourly_facts(self, _account, **kwargs):
+        async def fetch_breakdown_daily_total_facts(self, _account, **kwargs):
             calls["campaign_ids"] = kwargs["campaign_ids"]
             return {
-                "rows": [{"external_id": "s1"}],
+                "rows": [{"entity_type": "ad_squad", "external_id": "s1"}],
                 "coverage": {"status": "complete", "rows_received": 1},
             }
 

@@ -56,12 +56,20 @@ class UnifiedDeliveryMetrics(StrictModel):
     clicks: int | None = Field(default=None, ge=0)
     views: int | None = Field(default=None, ge=0)
     ctr_pct: float | None = None
+    reach: int | None = Field(default=None, ge=0)
+    frequency: float | None = Field(default=None, ge=0)
+    frequency_scope: str | None = None
+    video_completion: float | None = Field(default=None, ge=0)
 
 
 class UnifiedPlatformOutcomes(StrictModel):
     conversions: int | None = Field(default=None, ge=0)
     revenue: MoneyValue
     roas: float | None = None
+    view_content: int | None = Field(default=None, ge=0)
+    add_to_cart: int | None = Field(default=None, ge=0)
+    start_checkout: int | None = Field(default=None, ge=0)
+    add_billing: int | None = Field(default=None, ge=0)
 
 
 class UnifiedCommerceOutcomes(StrictModel):

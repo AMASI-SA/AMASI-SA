@@ -34,10 +34,17 @@ LEVELS = {
 PROVIDER_METRIC_MAPPING = {
     "delivery.clicks": "swipes",
     "delivery.views": "video_views",
+    "delivery.reach": "paid_reach",
+    "delivery.frequency": "paid_frequency",
+    "delivery.video_completion": "view_completion",
     "delivery.impressions": "impressions",
     "delivery.spend": "spend_native",
     "platform_outcomes.conversions": "purchases",
     "platform_outcomes.revenue": "purchase_value_native",
+    "platform_outcomes.view_content": "view_content",
+    "platform_outcomes.add_to_cart": "add_to_cart",
+    "platform_outcomes.start_checkout": "start_checkout",
+    "platform_outcomes.add_billing": "add_billing",
     "commerce_outcomes.orders": "salla_results.orders",
     "commerce_outcomes.revenue": "salla_results.sales_sar",
     "commerce_profitability": "salla_results.profitability",
@@ -388,11 +395,34 @@ def adapt_snapchat_v2_row(
             clicks=_known_integer(row.get("swipes"), known=metrics_known),
             views=_known_integer(row.get("video_views"), known=metrics_known),
             ctr_pct=_number(row.get("ctr_pct")) if metrics_known else None,
+            reach=(
+                _known_integer(row.get("paid_reach"), known=metrics_known)
+                if row.get("paid_reach") is not None
+                else None
+            ),
+            frequency=(
+                _number(row.get("paid_frequency"))
+                if metrics_known
+                else None
+            ),
+            frequency_scope=row.get("reach_frequency_scope"),
+            video_completion=(
+                _number(row.get("view_completion"))
+                if metrics_known
+                else None
+            ),
         ),
         platform_outcomes=UnifiedPlatformOutcomes(
             conversions=_known_integer(row.get("purchases"), known=metrics_known),
             revenue=MoneyValue(amount=purchase_value, currency=account.currency),
             roas=_number(row.get("roas")) if metrics_known else None,
+            view_content=_known_integer(row.get("view_content"), known=metrics_known),
+            add_to_cart=_known_integer(row.get("add_to_cart"), known=metrics_known),
+            start_checkout=_known_integer(
+                row.get("start_checkout"),
+                known=metrics_known,
+            ),
+            add_billing=_known_integer(row.get("add_billing"), known=metrics_known),
         ),
         commerce_outcomes=_commerce(row, entity_type=entity_type),
         commerce_profitability=_profitability(row),
@@ -408,7 +438,10 @@ def adapt_snapchat_v2_row(
         lineage=UnifiedLineage(
             adapter="snapchat_v2",
             source_version="v2",
-            source_collection="mezan_snapchat_hourly_facts_v2",
+            source_collection=str(
+                row.get("source_collection")
+                or "mezan_snapchat_hourly_facts_v2"
+            ),
             provider_metric_mapping=dict(PROVIDER_METRIC_MAPPING),
         ),
     )

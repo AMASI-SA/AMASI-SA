@@ -58,7 +58,16 @@ def _hour_starts(start_utc: datetime, end_utc: datetime) -> list[datetime]:
 
 def _metric_sum(rows: list[dict[str, Any]], field: str) -> int | float:
     total = sum(float(row.get(field) or 0) for row in rows)
-    if field in {"impressions", "swipes", "video_views", "purchases"}:
+    if field in {
+        "impressions",
+        "swipes",
+        "video_views",
+        "view_content",
+        "add_to_cart",
+        "start_checkout",
+        "add_billing",
+        "purchases",
+    }:
         return int(total)
     return round(total, 6)
 
@@ -164,6 +173,14 @@ async def build_daily_projection(
                 "impressions": int(fact.get("impressions") or 0),
                 "swipes": int(fact.get("swipes") or 0),
                 "video_views": int(fact.get("video_views") or 0),
+                "view_completion": round(
+                    float(fact.get("view_completion") or 0),
+                    6,
+                ),
+                "view_content": int(fact.get("view_content") or 0),
+                "add_to_cart": int(fact.get("add_to_cart") or 0),
+                "start_checkout": int(fact.get("start_checkout") or 0),
+                "add_billing": int(fact.get("add_billing") or 0),
                 "purchases": int(fact.get("purchases") or 0),
                 "purchase_value_native": round(
                     float(fact.get("purchase_value_native") or 0),
@@ -186,6 +203,11 @@ async def build_daily_projection(
                 "impressions": None,
                 "swipes": None,
                 "video_views": None,
+                "view_completion": None,
+                "view_content": None,
+                "add_to_cart": None,
+                "start_checkout": None,
+                "add_billing": None,
                 "purchases": None,
                 "purchase_value_native": None,
                 "sync_run_id": None,
@@ -204,6 +226,11 @@ async def build_daily_projection(
                 "impressions": None,
                 "swipes": None,
                 "video_views": None,
+                "view_completion": None,
+                "view_content": None,
+                "add_to_cart": None,
+                "start_checkout": None,
+                "add_billing": None,
                 "purchases": None,
                 "purchase_value_native": None,
                 "sync_run_id": None,
@@ -223,6 +250,11 @@ async def build_daily_projection(
                 "impressions": None,
                 "swipes": None,
                 "video_views": None,
+                "view_completion": None,
+                "view_content": None,
+                "add_to_cart": None,
+                "start_checkout": None,
+                "add_billing": None,
                 "purchases": None,
                 "purchase_value_native": None,
                 "sync_run_id": None,
@@ -242,6 +274,11 @@ async def build_daily_projection(
                 "impressions": None,
                 "swipes": None,
                 "video_views": None,
+                "view_completion": None,
+                "view_content": None,
+                "add_to_cart": None,
+                "start_checkout": None,
+                "add_billing": None,
                 "purchases": None,
                 "purchase_value_native": None,
                 "sync_run_id": None,
@@ -287,6 +324,11 @@ async def build_daily_projection(
         "impressions": _metric_sum(known_facts, "impressions"),
         "swipes": _metric_sum(known_facts, "swipes"),
         "video_views": _metric_sum(known_facts, "video_views"),
+        "view_completion": _metric_sum(known_facts, "view_completion"),
+        "view_content": _metric_sum(known_facts, "view_content"),
+        "add_to_cart": _metric_sum(known_facts, "add_to_cart"),
+        "start_checkout": _metric_sum(known_facts, "start_checkout"),
+        "add_billing": _metric_sum(known_facts, "add_billing"),
         "purchases": _metric_sum(known_facts, "purchases"),
         "purchase_value_native": _metric_sum(
             known_facts,

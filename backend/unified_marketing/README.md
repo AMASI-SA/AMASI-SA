@@ -19,8 +19,10 @@ only the canonical `entity.level` for hierarchy behavior.
 
 ## Metric boundary
 
-- Delivery: spend, SAR-converted spend, impressions, views, clicks, CTR.
-- Platform outcomes: conversions, revenue, ROAS.
+- Delivery: spend, SAR-converted spend, impressions, views, clicks, CTR,
+  exact-window reach/frequency, and video completion.
+- Platform outcomes: view-content, add-to-cart, checkout, billing, purchases,
+  revenue, and ROAS.
 - Commerce outcomes: attributed Salla orders, revenue, ROAS, and attribution
   scope.
 - Quality and lineage: sync/coverage state, source fact count, reconciliation,
@@ -28,6 +30,10 @@ only the canonical `entity.level` for hierarchy behavior.
 
 Missing or incomplete data is `null` with `partial`/`unavailable` coverage. It
 must never be converted into a confirmed zero by an adapter or UI.
+
+Reach and frequency are non-additive. An adapter may expose them only for the
+exact provider TOTAL window that produced them. Daily or hourly frequency must
+never be summed across a longer period.
 
 ## Adapter rules
 

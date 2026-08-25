@@ -48,6 +48,11 @@ class SnapchatHourlyFact(TypedDict, total=False):
     impressions: int
     swipes: int
     video_views: int
+    view_completion: float
+    view_content: int
+    add_to_cart: int
+    start_checkout: int
+    add_billing: int
     purchases: int
     purchase_value_native: float
     coverage: dict[str, Any]

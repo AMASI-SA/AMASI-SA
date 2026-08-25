@@ -24,6 +24,10 @@ from .reconciliation import calculate_cost_components, list_reconciliation
 from .salla_outcomes import load_salla_campaign_outcomes
 from .status import snapchat_v2_status
 from .sync_pipeline import MAX_SYNC_DAYS, SnapchatV2SyncPipeline
+from .total_facts import (
+    SNAPCHAT_TOTAL_FACTS_COLLECTION,
+    load_total_facts,
+)
 
 
 class SnapchatV2SyncInput(BaseModel):
@@ -109,7 +113,16 @@ def _projection_timezone(account: dict[str, Any], value: str) -> str:
 
 def _sum_projection(rows: list[dict[str, Any]], field: str) -> int | float:
     total = sum(float(row.get(field) or 0) for row in rows)
-    if field in {"impressions", "swipes", "video_views", "purchases"}:
+    if field in {
+        "impressions",
+        "swipes",
+        "video_views",
+        "view_content",
+        "add_to_cart",
+        "start_checkout",
+        "add_billing",
+        "purchases",
+    }:
         return int(total)
     return round(total, 6)
 
@@ -159,11 +172,39 @@ def _metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     impressions = _sum_projection(rows, "impressions")
     swipes = _sum_projection(rows, "swipes")
     video_views = _sum_projection(rows, "video_views")
+    view_completion = _sum_projection(rows, "view_completion")
+    view_content = _sum_projection(rows, "view_content")
+    add_to_cart = _sum_projection(rows, "add_to_cart")
+    start_checkout = _sum_projection(rows, "start_checkout")
+    add_billing = _sum_projection(rows, "add_billing")
+    exact_audience_row = len(rows) == 1 and str(
+        rows[0].get("reach_frequency_scope") or ""
+    ) == "exact_one_day_total"
     return {
         "spend_native": spend,
         "impressions": impressions,
         "swipes": swipes,
         "video_views": video_views,
+        "view_completion": view_completion,
+        "view_content": view_content,
+        "add_to_cart": add_to_cart,
+        "start_checkout": start_checkout,
+        "add_billing": add_billing,
+        "paid_reach": (
+            int(rows[0].get("paid_reach"))
+            if exact_audience_row and rows[0].get("paid_reach") is not None
+            else None
+        ),
+        "paid_frequency": (
+            float(rows[0].get("paid_frequency"))
+            if exact_audience_row and rows[0].get("paid_frequency") is not None
+            else None
+        ),
+        "reach_frequency_scope": (
+            "exact_one_day_total"
+            if exact_audience_row
+            else "exact_total_window_required"
+        ),
         "purchases": purchases,
         "purchase_value_native": purchase_value,
         "roas": (
@@ -206,6 +247,24 @@ async def _entity_performance_report(
         entity_type=entity_type,
         action_report_time=action_report_time,
     )
+    source_collection = "mezan_snapchat_hourly_facts_v2"
+    if timezone_name == str(account.get("timezone") or ""):
+        try:
+            total_facts = await load_total_facts(
+                db,
+                user_id=user_id,
+                ad_account_id=account_id,
+                entity_type=entity_type,
+                date_from=date_from,
+                date_to=date_to,
+                account_timezone=timezone_name,
+                action_report_time=action_report_time,
+            )
+        except (AttributeError, KeyError, TypeError):
+            total_facts = []
+        if total_facts:
+            facts = total_facts
+            source_collection = SNAPCHAT_TOTAL_FACTS_COLLECTION
     identities = await list_entities(
         db,
         user_id=user_id,
@@ -293,6 +352,7 @@ async def _entity_performance_report(
                 parent_ad_squad.get("name") or row_ad_squad_id or None
             ),
             **_metrics(fact_rows),
+            "source_collection": source_collection,
             "performance_sync_status": (
                 "complete"
                 if fact_rows and level_status == "complete"
@@ -321,8 +381,12 @@ async def _entity_performance_report(
     )
     return {
         "rows": rows,
-        "totals": _metrics(selected_facts),
+        "totals": {
+            **_metrics(selected_facts),
+            "source_collection": source_collection,
+        },
         "performance_sync_status": level_status,
+        "source_collection": source_collection,
     }
 
 
@@ -470,6 +534,11 @@ def attach_snapchat_v2_routes(
             "impressions": _sum_projection(rows, "impressions"),
             "swipes": _sum_projection(rows, "swipes"),
             "video_views": _sum_projection(rows, "video_views"),
+            "view_completion": _sum_projection(rows, "view_completion"),
+            "view_content": _sum_projection(rows, "view_content"),
+            "add_to_cart": _sum_projection(rows, "add_to_cart"),
+            "start_checkout": _sum_projection(rows, "start_checkout"),
+            "add_billing": _sum_projection(rows, "add_billing"),
             "purchases": _sum_projection(rows, "purchases"),
             "purchase_value_native": _sum_projection(
                 rows,
@@ -727,7 +796,7 @@ def attach_snapchat_v2_routes(
             "abandoned_carts": carts,
             "cost_coverage": cost_coverage,
             "performance_sync_status": performance["performance_sync_status"],
-            "source_collection": "mezan_snapchat_hourly_facts_v2",
+            "source_collection": performance["source_collection"],
             "unified": unified,
         }
 
@@ -793,7 +862,7 @@ def attach_snapchat_v2_routes(
             "totals": totals,
             "performance_sync_status": performance["performance_sync_status"],
             "cost_coverage": cost_coverage,
-            "source_collection": "mezan_snapchat_hourly_facts_v2",
+            "source_collection": performance["source_collection"],
             "unified": unified,
         }
 
@@ -862,7 +931,7 @@ def attach_snapchat_v2_routes(
             "totals": totals,
             "performance_sync_status": performance["performance_sync_status"],
             "cost_coverage": cost_coverage,
-            "source_collection": "mezan_snapchat_hourly_facts_v2",
+            "source_collection": performance["source_collection"],
             "unified": unified,
         }
 
