@@ -24,6 +24,7 @@ from typing import Any, Optional
 
 from salla_marketing_attribution import (
     canonical_marketing_source,
+    preserve_salla_raw_attribution,
     promoted_salla_attribution,
 )
 
@@ -861,7 +862,11 @@ async def upsert_order(db, user_id: str, order_number: str, incoming: dict,
     if raw is not None:
         # Track raw per source so we can audit later
         raws = dict(merged.get("raw_by_source") or {})
-        raws[source] = raw
+        raws[source] = (
+            preserve_salla_raw_attribution(raws.get(source), raw)
+            if source == "salla_direct"
+            else raw
+        )
         merged["raw_by_source"] = raws
     if not existing:
         merged["received_at"] = _now()
