@@ -1117,6 +1117,7 @@ async def build_dashboard_v2_unified_shadow(
                 "quality": legacy.get("quality") or {},
             },
             unified,
+            period_closed=to_date < _today_riyadh(),
         )
     except Exception as exc:  # noqa: BLE001 - observer always fails closed
         return {
