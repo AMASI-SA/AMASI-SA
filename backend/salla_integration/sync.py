@@ -56,6 +56,8 @@ MAX_PAGES_PER_RUN = 40  # 50 * 40 = 2000 orders / run — protects against runaw
 # ceiling that covers the approved tax period without allowing an unbounded
 # crawl.
 MAX_RANGE_PAGES_PER_RUN = 120
+MAX_ATTRIBUTION_RECOVERY_DAYS = 3
+MAX_ATTRIBUTION_RECOVERY_ORDERS = 500
 PRODUCTS_PER_PAGE = 60
 MAX_PRODUCT_PAGES = 20
 
@@ -837,6 +839,7 @@ async def run_orders_sync(
     to_date: Optional[str] = None,
     updated_since_hours: Optional[int] = None,
     log_id: Optional[str] = None,
+    recover_marketing_attribution: bool = False,
 ) -> dict:
     """Pull orders from Salla and upsert into unified_orders.
 
@@ -848,6 +851,22 @@ async def run_orders_sync(
         N hours (uses the `updated_at_gt` filter). Convenient for cron-style
         incremental syncs.
     """
+    if recover_marketing_attribution:
+        if not from_date or not to_date:
+            raise ValueError(
+                "marketing attribution recovery requires from_date and to_date"
+            )
+        try:
+            recovery_start = datetime.strptime(from_date, "%Y-%m-%d").date()
+            recovery_end = datetime.strptime(to_date, "%Y-%m-%d").date()
+        except ValueError as exc:
+            raise ValueError("invalid attribution recovery date range") from exc
+        recovery_days = (recovery_end - recovery_start).days + 1
+        if recovery_days < 1 or recovery_days > MAX_ATTRIBUTION_RECOVERY_DAYS:
+            raise ValueError(
+                "marketing attribution recovery is limited to three calendar days"
+            )
+
     log_id = log_id or await create_sync_log(db, user_id, "orders")
 
     created = 0
@@ -857,6 +876,9 @@ async def run_orders_sync(
     errors_sample: list[dict] = []
     pages_fetched = 0
     last_total_pages = 0
+    attribution_details_fetched = 0
+    attribution_orders_recovered = 0
+    attribution_recovery_errors = 0
 
     try:
         page = 1
@@ -895,6 +917,38 @@ async def run_orders_sync(
 
             for raw in data:
                 try:
+                    if (
+                        recover_marketing_attribution
+                        and attribution_details_fetched
+                        < MAX_ATTRIBUTION_RECOVERY_ORDERS
+                    ):
+                        internal_id = _str(raw.get("id"))
+                        if internal_id:
+                            attribution_details_fetched += 1
+                            try:
+                                details_response = await call_salla(
+                                    db,
+                                    user_id,
+                                    "GET",
+                                    f"/orders/{internal_id}",
+                                )
+                                details = (
+                                    details_response.get("data")
+                                    if isinstance(details_response, dict)
+                                    else None
+                                )
+                                if isinstance(details, dict):
+                                    raw = details
+                                    recovered = promoted_salla_attribution(details)
+                                    if (
+                                        recovered.get("campaign_id")
+                                        or recovered.get("utm_campaign")
+                                        or recovered.get("campaign_name")
+                                    ):
+                                        attribution_orders_recovered += 1
+                            except Exception:
+                                attribution_recovery_errors += 1
+                            await asyncio.sleep(0.1)
                     raw = await _enrich_order_receiving_bank(
                         db, user_id, raw)
                     doc = _salla_order_to_doc(raw)
@@ -954,6 +1008,9 @@ async def run_orders_sync(
             "pages_fetched": pages_fetched,
             "source_total_pages": last_total_pages,
             "truncated": truncated,
+            "attribution_details_fetched": attribution_details_fetched,
+            "attribution_orders_recovered": attribution_orders_recovered,
+            "attribution_recovery_errors": attribution_recovery_errors,
         })
     except asyncio.CancelledError:
         await finish_sync_log(db, log_id, "interrupted", extra={
@@ -962,6 +1019,9 @@ async def run_orders_sync(
             "errors_sample": errors_sample[:20],
             "pages_fetched": pages_fetched,
             "last_error": "sync_task_cancelled_before_completion",
+            "attribution_details_fetched": attribution_details_fetched,
+            "attribution_orders_recovered": attribution_orders_recovered,
+            "attribution_recovery_errors": attribution_recovery_errors,
         })
         raise
     except Exception as exc:
@@ -971,6 +1031,9 @@ async def run_orders_sync(
             "errors_sample": (errors_sample + [{"error": str(exc)[:300]}])[:20],
             "pages_fetched": pages_fetched,
             "last_error": str(exc)[:500],
+            "attribution_details_fetched": attribution_details_fetched,
+            "attribution_orders_recovered": attribution_orders_recovered,
+            "attribution_recovery_errors": attribution_recovery_errors,
         })
         raise
 
@@ -983,6 +1046,9 @@ async def run_orders_sync(
         "pages_fetched": pages_fetched,
         "source_total_pages": last_total_pages,
         "truncated": bool(last_total_pages and last_total_pages > max_pages),
+        "attribution_details_fetched": attribution_details_fetched,
+        "attribution_orders_recovered": attribution_orders_recovered,
+        "attribution_recovery_errors": attribution_recovery_errors,
     }
 
 
