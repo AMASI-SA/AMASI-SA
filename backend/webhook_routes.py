@@ -363,7 +363,7 @@ def _build_router(db) -> APIRouter:
                     ledger_sync = {"status": "synced", "results": ledger_results}
                 except Exception as exc:
                     logger.exception("TikTok Make ledger reconciliation failed")
-                    ledger_sync = {"status": "failed", "error": type(exc).__name__}
+                    ledger_sync = {"status": "failed", "reason": "ledger_reconciliation_failed"}
             else:
                 ledger_sync = {
                     "status": "skipped",
