@@ -85,10 +85,14 @@ attribution checks, and Shadow Sync acceptance have passed in Production.
 
 Campaign AI Shadow compares only the overlapping V1 rollback entities and
 retains every metric drift in its diagnostics. An exact V1 overlap match is
-preferred. When the open-day V1 snapshot is older, the Shadow may instead
-record the explicit `provider_total_facts_fallback_v1_observer_drift` basis,
-but only when every compared V2 entity is complete and its lineage points to
-`mezan_snapchat_daily_total_facts_v2`. This does not rewrite V1, hide the
+preferred. Exact provider TOTAL facts may use the explicit
+`provider_total_facts_fallback_v1_observer_drift` basis. When Snapchat has no
+daily TOTAL row for a hierarchy level, the page-equivalent, fully synchronized
+V2 hourly facts may use
+`complete_unified_v2_fallback_v1_observer_drift`, but only when every compared
+row is complete, conversion-time, sourced through the Unified V2 adapter, and
+its lineage is one of the approved V2 fact collections. Unknown, incomplete,
+or impression-time sources fail closed. This does not rewrite V1, hide metric
 drift, call OpenAI, create recommendations, or enable decisions.
 
 The Campaign AI acceptance proof always uses the last closed calendar day in
