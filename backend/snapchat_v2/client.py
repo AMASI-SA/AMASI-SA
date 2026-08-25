@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import math
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Any, Callable, Iterable
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -33,9 +33,15 @@ STAT_FIELDS = (
     "swipes",
     "spend",
     "video_views",
+    "view_completion",
+    "conversion_view_content",
+    "conversion_add_cart",
+    "conversion_start_checkout",
+    "conversion_add_billing",
     "conversion_purchases",
     "conversion_purchases_value",
 )
+TOTAL_STAT_FIELDS = (*STAT_FIELDS, "uniques", "frequency")
 
 ENTITY_ENDPOINTS = {
     "campaign": ("campaigns", "campaigns", "campaign"),
@@ -659,6 +665,301 @@ class SnapchatV2Client:
                     )
         return rows
 
+    @staticmethod
+    def _extract_breakdown_total_rows(
+        payload: dict[str, Any],
+        *,
+        entity_type: str,
+        campaign_id: str,
+    ) -> list[dict[str, Any]]:
+        if entity_type not in {"campaign", "ad_squad", "ad"}:
+            raise ValueError(f"Unsupported Snapchat TOTAL level: {entity_type}")
+        wrappers = payload.get("total_stats")
+        if not isinstance(wrappers, list) or not wrappers:
+            raise SnapchatClientError(
+                f"snapchat_{entity_type}_total_envelope_missing",
+                f"Snapchat {entity_type} TOTAL response is missing total_stats.",
+            )
+        config = PERFORMANCE_BREAKDOWNS.get(entity_type)
+        rows: list[dict[str, Any]] = []
+        for wrapper in wrappers:
+            if not isinstance(wrapper, dict):
+                raise SnapchatClientError(
+                    f"snapchat_{entity_type}_total_wrapper_invalid",
+                    f"Snapchat {entity_type} TOTAL wrapper is invalid.",
+                )
+            sub_status = clean_text(wrapper.get("sub_request_status"), limit=40).upper()
+            if sub_status and sub_status != "SUCCESS":
+                raise SnapchatClientError(
+                    f"snapchat_{entity_type}_total_subrequest_failed",
+                    f"Snapchat {entity_type} TOTAL sub-request failed.",
+                    retryable=True,
+                )
+            stat = wrapper.get("total_stat")
+            if not isinstance(stat, dict):
+                raise SnapchatClientError(
+                    f"snapchat_{entity_type}_total_stat_missing",
+                    f"Snapchat {entity_type} TOTAL response is missing total_stat.",
+                )
+            if entity_type == "campaign":
+                metrics = stat.get("stats")
+                if isinstance(metrics, dict):
+                    rows.append(
+                        {
+                            "campaign_id": campaign_id,
+                            "external_id": campaign_id,
+                            "metrics": metrics,
+                        }
+                    )
+                continue
+            breakdown = stat.get("breakdown_stats")
+            entities: list[dict[str, Any]] | None = None
+            if isinstance(breakdown, dict) and config is not None:
+                for key in config["response_keys"]:
+                    value = breakdown.get(key)
+                    if isinstance(value, list):
+                        entities = value
+                        break
+            if entities is None:
+                raise SnapchatClientError(
+                    f"snapchat_{entity_type}_total_breakdown_missing",
+                    f"Snapchat TOTAL response is missing the {entity_type} breakdown.",
+                )
+            for entity in entities:
+                if not isinstance(entity, dict):
+                    raise SnapchatClientError(
+                        f"snapchat_{entity_type}_total_row_invalid",
+                        f"Snapchat {entity_type} TOTAL row is invalid.",
+                    )
+                external_id = clean_text(entity.get("id"), limit=128)
+                metrics = entity.get("stats")
+                if not external_id or not isinstance(metrics, dict):
+                    raise SnapchatClientError(
+                        f"snapchat_{entity_type}_total_identity_invalid",
+                        f"Snapchat {entity_type} TOTAL identity is invalid.",
+                    )
+                rows.append(
+                    {
+                        "campaign_id": campaign_id,
+                        "external_id": external_id,
+                        "metrics": metrics,
+                    }
+                )
+        return rows
+
+    async def fetch_breakdown_daily_total_facts(
+        self,
+        account: dict[str, Any],
+        *,
+        campaign_ids: Iterable[str],
+        entity_type: str,
+        report_dates: Iterable[date],
+        sync_run_id: str,
+        action_report_time: str = "conversion",
+        swipe_attribution_window: str = DEFAULT_SWIPE_ATTRIBUTION_WINDOW,
+        view_attribution_window: str = DEFAULT_VIEW_ATTRIBUTION_WINDOW,
+        ad_squad_by_ad_id: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        if entity_type not in {"campaign", "ad_squad", "ad"}:
+            raise ValueError(f"Unsupported Snapchat TOTAL level: {entity_type}")
+        account_id = clean_text(
+            account.get("ad_account_id") or account.get("external_account_id"),
+            limit=128,
+        )
+        account_timezone = clean_text(account.get("timezone"), limit=80)
+        currency = clean_text(account.get("currency"), limit=12).upper()
+        if not account_id or not account_timezone or not currency:
+            raise SnapchatClientError(
+                "snapchat_account_identity_incomplete",
+                "Snapchat account ID, timezone, or currency is missing.",
+            )
+        campaign_values = sorted(
+            {
+                clean_text(value, limit=128)
+                for value in campaign_ids
+                if clean_text(value, limit=128)
+            }
+        )
+        date_values = sorted(set(report_dates))
+        expected_requests = len(campaign_values) * len(date_values)
+        remaining_budget = max(0, MAX_PROVIDER_CALLS - self.provider_calls)
+        if expected_requests > remaining_budget:
+            raise SnapchatClientError(
+                f"snapchat_{entity_type}_provider_call_budget_exceeded",
+                f"Snapchat {entity_type} TOTAL sync exceeds the provider call budget.",
+                coverage=_coverage(
+                    status="incomplete",
+                    data_state="unknown_incomplete",
+                    expected_requests=expected_requests,
+                    completed_requests=0,
+                    rows_received=0,
+                    reason="provider_call_budget_exceeded",
+                ),
+            )
+        account_tz = _account_timezone(account_timezone)
+        parent_lookup = {
+            clean_text(key, limit=128): clean_text(value, limit=128)
+            for key, value in dict(ad_squad_by_ad_id or {}).items()
+            if clean_text(key, limit=128) and clean_text(value, limit=128)
+        }
+        facts: dict[tuple[str, str], dict[str, Any]] = {}
+        completed_requests = 0
+        try:
+            async with self.client_factory(timeout=HTTP_TIMEOUT_SECONDS) as client:
+                for report_date in date_values:
+                    local_start = datetime.combine(report_date, time.min, tzinfo=account_tz)
+                    local_end = datetime.combine(
+                        report_date + timedelta(days=1),
+                        time.min,
+                        tzinfo=account_tz,
+                    )
+                    start_utc = local_start.astimezone(timezone.utc)
+                    end_utc = local_end.astimezone(timezone.utc)
+                    current_cap = self.now().astimezone(timezone.utc)
+                    current_floor = current_cap.replace(minute=0, second=0, microsecond=0)
+                    if current_cap != current_floor:
+                        current_floor += timedelta(hours=1)
+                    if end_utc > current_floor:
+                        end_utc = current_floor
+                    if end_utc <= start_utc:
+                        continue
+                    for campaign_id in campaign_values:
+                        url = f"{SNAPCHAT_API_BASE}/campaigns/{campaign_id}/stats"
+                        params: dict[str, Any] = {
+                            "start_time": start_utc.astimezone(account_tz).isoformat(timespec="seconds"),
+                            "end_time": end_utc.astimezone(account_tz).isoformat(timespec="seconds"),
+                            "granularity": "TOTAL",
+                            "fields": ",".join(TOTAL_STAT_FIELDS),
+                            "limit": 200,
+                            "omit_empty": "false",
+                            "conversion_source_types": "total",
+                            "swipe_up_attribution_window": swipe_attribution_window,
+                            "view_attribution_window": view_attribution_window,
+                            "action_report_time": clean_text(
+                                action_report_time,
+                                limit=32,
+                            ).lower(),
+                        }
+                        if entity_type != "campaign":
+                            params["breakdown"] = PERFORMANCE_BREAKDOWNS[entity_type][
+                                "request_value"
+                            ]
+                        pages, page_count = await self._pages(client, url, params=params)
+                        completed_requests += page_count
+                        for payload in pages:
+                            for row in self._extract_breakdown_total_rows(
+                                payload,
+                                entity_type=entity_type,
+                                campaign_id=campaign_id,
+                            ):
+                                metrics = row["metrics"]
+                                external_id = str(row["external_id"])
+                                fact = {
+                                    "user_id": self.user_id,
+                                    "provider": SNAPCHAT_PROVIDER,
+                                    "ad_account_id": account_id,
+                                    "entity_type": entity_type,
+                                    "external_id": external_id,
+                                    "campaign_id": campaign_id,
+                                    "ad_squad_id": (
+                                        external_id
+                                        if entity_type == "ad_squad"
+                                        else parent_lookup.get(external_id)
+                                        if entity_type == "ad"
+                                        else None
+                                    ),
+                                    "ad_id": external_id if entity_type == "ad" else None,
+                                    "report_date": report_date.isoformat(),
+                                    "window_start_utc": start_utc,
+                                    "window_end_utc": end_utc,
+                                    "account_timezone": account_timezone,
+                                    "currency": currency,
+                                    "action_report_time": clean_text(
+                                        action_report_time,
+                                        limit=32,
+                                    ).lower(),
+                                    "attribution_windows": {
+                                        "swipe": swipe_attribution_window,
+                                        "view": view_attribution_window,
+                                    },
+                                    "spend_native": float(
+                                        _number(metrics.get("spend"), field="spend")
+                                    ) / 1_000_000,
+                                    "impressions": _number(metrics.get("impressions"), field="impressions", integer=True),
+                                    "swipes": _number(metrics.get("swipes"), field="swipes", integer=True),
+                                    "video_views": _number(metrics.get("video_views"), field="video_views", integer=True),
+                                    "view_completion": _number(metrics.get("view_completion"), field="view_completion"),
+                                    "view_content": _number(metrics.get("conversion_view_content"), field="conversion_view_content", integer=True),
+                                    "add_to_cart": _number(metrics.get("conversion_add_cart"), field="conversion_add_cart", integer=True),
+                                    "start_checkout": _number(metrics.get("conversion_start_checkout"), field="conversion_start_checkout", integer=True),
+                                    "add_billing": _number(metrics.get("conversion_add_billing"), field="conversion_add_billing", integer=True),
+                                    "purchases": _number(metrics.get("conversion_purchases"), field="conversion_purchases", integer=True),
+                                    "purchase_value_native": float(
+                                        _number(
+                                            metrics.get("conversion_purchases_value"),
+                                            field="conversion_purchases_value",
+                                        )
+                                    ) / 1_000_000,
+                                    "paid_reach": (
+                                        _number(metrics.get("uniques"), field="uniques", integer=True)
+                                        if metrics.get("uniques") is not None
+                                        else None
+                                    ),
+                                    "paid_frequency": (
+                                        _number(metrics.get("frequency"), field="frequency")
+                                        if metrics.get("frequency") is not None
+                                        else None
+                                    ),
+                                    "sync_run_id": str(sync_run_id),
+                                    "coverage": {"status": "complete", "data_state": "confirmed_data"},
+                                    "source": {
+                                        "api": "snapchat_marketing_api",
+                                        "granularity": "TOTAL",
+                                        "breakdown": (
+                                            PERFORMANCE_BREAKDOWNS[entity_type]["request_value"]
+                                            if entity_type != "campaign"
+                                            else None
+                                        ),
+                                        "frequency_summed": False,
+                                    },
+                                }
+                                key = (report_date.isoformat(), external_id)
+                                existing = facts.get(key)
+                                if existing is not None and existing != fact:
+                                    raise SnapchatClientError(
+                                        f"snapchat_{entity_type}_total_duplicate_conflict",
+                                        f"Snapchat returned conflicting {entity_type} TOTAL rows.",
+                                    )
+                                facts[key] = fact
+        except SnapchatClientError as exc:
+            if not exc.coverage:
+                exc.coverage = _coverage(
+                    status="incomplete",
+                    data_state="unknown_incomplete",
+                    expected_requests=max(expected_requests, completed_requests + 1),
+                    completed_requests=completed_requests,
+                    rows_received=len(facts),
+                    reason=exc.code,
+                )
+            raise
+        rows = list(facts.values())
+        coverage = _coverage(
+            status="complete",
+            data_state="confirmed_data" if rows else "confirmed_no_data",
+            expected_requests=completed_requests,
+            completed_requests=completed_requests,
+            rows_received=len(rows),
+        )
+        coverage["provider_granularity"] = "TOTAL"
+        coverage["frequency_summed"] = False
+        return {
+            "rows": rows,
+            "coverage": coverage,
+            "provider_calls": self.provider_calls,
+            "campaigns_requested": len(campaign_values),
+            "report_days": len(date_values),
+        }
+
     async def fetch_breakdown_hourly_facts(
         self,
         account: dict[str, Any],
@@ -808,6 +1109,30 @@ class SnapchatV2Client:
                                     "video_views": _number(
                                         metrics.get("video_views"),
                                         field="video_views",
+                                        integer=True,
+                                    ),
+                                    "view_completion": _number(
+                                        metrics.get("view_completion"),
+                                        field="view_completion",
+                                    ),
+                                    "view_content": _number(
+                                        metrics.get("conversion_view_content"),
+                                        field="conversion_view_content",
+                                        integer=True,
+                                    ),
+                                    "add_to_cart": _number(
+                                        metrics.get("conversion_add_cart"),
+                                        field="conversion_add_cart",
+                                        integer=True,
+                                    ),
+                                    "start_checkout": _number(
+                                        metrics.get("conversion_start_checkout"),
+                                        field="conversion_start_checkout",
+                                        integer=True,
+                                    ),
+                                    "add_billing": _number(
+                                        metrics.get("conversion_add_billing"),
+                                        field="conversion_add_billing",
                                         integer=True,
                                     ),
                                     "purchases": _number(
@@ -1005,6 +1330,30 @@ class SnapchatV2Client:
                                     field="video_views",
                                     integer=True,
                                 ),
+                                "view_completion": _number(
+                                    metrics.get("view_completion"),
+                                    field="view_completion",
+                                ),
+                                "view_content": _number(
+                                    metrics.get("conversion_view_content"),
+                                    field="conversion_view_content",
+                                    integer=True,
+                                ),
+                                "add_to_cart": _number(
+                                    metrics.get("conversion_add_cart"),
+                                    field="conversion_add_cart",
+                                    integer=True,
+                                ),
+                                "start_checkout": _number(
+                                    metrics.get("conversion_start_checkout"),
+                                    field="conversion_start_checkout",
+                                    integer=True,
+                                ),
+                                "add_billing": _number(
+                                    metrics.get("conversion_add_billing"),
+                                    field="conversion_add_billing",
+                                    integer=True,
+                                ),
                                 "purchases": _number(
                                     metrics.get("conversion_purchases"),
                                     field="conversion_purchases",
@@ -1070,6 +1419,11 @@ class SnapchatV2Client:
                     "impressions": 0,
                     "swipes": 0,
                     "video_views": 0,
+                    "view_completion": 0.0,
+                    "view_content": 0,
+                    "add_to_cart": 0,
+                    "start_checkout": 0,
+                    "add_billing": 0,
                     "purchases": 0,
                     "purchase_value_native": 0.0,
                 },
@@ -1079,6 +1433,11 @@ class SnapchatV2Client:
                 "impressions",
                 "swipes",
                 "video_views",
+                "view_completion",
+                "view_content",
+                "add_to_cart",
+                "start_checkout",
+                "add_billing",
                 "purchases",
                 "purchase_value_native",
             ):
