@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 
 import pytest
 
@@ -60,17 +60,40 @@ def test_partial_hourly_facts_remain_incomplete():
     assert source._row_complete(row) is False
 
 
+def test_shadow_range_uses_last_closed_account_day(monkeypatch):
+    monkeypatch.setattr(
+        source._legacy,
+        "_utcnow",
+        lambda: datetime(2026, 8, 25, 7, 20, tzinfo=timezone.utc),
+    )
+
+    start, end = source._local_range(
+        "America/Los_Angeles",
+        date(2026, 8, 25),
+        date(2026, 8, 25),
+        1,
+    )
+
+    assert start == date(2026, 8, 24)
+    assert end == date(2026, 8, 24)
+
+
 @pytest.mark.asyncio
 async def test_ai_shadow_passes_overlap_without_requiring_v1_entity_set_equality(
     monkeypatch,
 ):
+    offsets = []
+
     async def v1_campaigns(*_args):
+        offsets.append(_args[-1])
         return [_row("campaign", "c-1")]
 
     async def v1_children(*_args):
+        offsets.append(_args[-1])
         return [_row("ad_group", "g-1"), _row("ad", "a-1")]
 
     async def unified(*_args):
+        offsets.append(_args[-1])
         extra = _row("campaign", "c-v2-extra", spend=0.0)
         return {
             "campaigns": [_row("campaign", "c-1"), extra],
@@ -95,6 +118,9 @@ async def test_ai_shadow_passes_overlap_without_requiring_v1_entity_set_equality
     assert result["shadow_passed"] is True
     assert result["cutover_ready"] is True
     assert result["acceptance_basis"] == "exact_v1_overlap_match"
+    assert result["period_policy"] == "last_closed_account_day"
+    assert result["period_closed"] is True
+    assert offsets == [1, 1, 1]
     assert result["writes_performed"] is False
     assert result["openai_called"] is False
     assert result["decision_eligibility"]["eligible"] is False
