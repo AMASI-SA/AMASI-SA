@@ -329,7 +329,7 @@ export function SummaryStrip({ data, filters, loading = false }) {
     </div>;
 }
 
-function AdsCard({ ads }) {
+function AdsCard({ ads, unifiedShadow }) {
     const [monthly, setMonthly] = useState(false);
     const rows = useMemo(() => {
         const daily = ads?.history || [];
@@ -343,8 +343,18 @@ function AdsCard({ ads }) {
     const chartTotal = totalComplete
         ? finiteFinancialValue(ads?.total, { nonnegative: true })
         : null;
+    const shadowPassed = unifiedShadow?.shadow_passed === true;
+    const shadowComparison = unifiedShadow?.comparison?.spend_sar || {};
+    const shadowDelta = finiteFinancialValue(shadowComparison.delta);
     return <Panel className="border-amber-200" testid="advanced-ads-chart">
         <div className="flex h-14 items-center justify-between border-b border-amber-700 bg-amber-600 px-4 text-white"><h2 className="flex items-center gap-2 font-extrabold"><CircleDollarSign className="h-5 w-5" />مصروفات منصات الإعلانات</h2><div className="rounded-lg border border-white/30 bg-white/15 p-1 text-[10px] font-bold"><button onClick={() => setMonthly(false)} className={`rounded-md px-2 py-1 ${!monthly ? "bg-white text-amber-800" : ""}`}>يومي</button><button onClick={() => setMonthly(true)} className={`rounded-md px-2 py-1 ${monthly ? "bg-white text-amber-800" : ""}`}>شهري</button></div></div>
+        <div data-testid="advanced-snapchat-unified-shadow" className={`border-b px-3 py-2 text-[10px] font-extrabold ${!unifiedShadow ? "bg-slate-50 text-slate-500" : shadowPassed ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-900"}`}>
+            {!unifiedShadow
+                ? "Snapchat V2 Shadow · جارٍ التحقق من التطابق"
+                : shadowPassed
+                    ? `Snapchat V2 Shadow مطابق${shadowDelta === null ? "" : ` · الفرق ${money(shadowDelta)} ر.س`} · القرارات غير مفعلة`
+                    : `Snapchat V2 Shadow غير معتمد · ${unifiedShadow.reason || "يوجد اختلاف أو نقص تغطية"}`}
+        </div>
         <div className="h-[190px] px-2 pt-3" dir="ltr"><ResponsiveContainer width="99%" height="100%" minWidth={0} minHeight={0}><LineChart data={plotRows} margin={{ top: 6, right: 6, left: 0, bottom: 4 }}><CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" /><XAxis dataKey="label" tick={{ fontSize: 9 }} minTickGap={8} interval="preserveStartEnd" /><YAxis tick={{ fontSize: 9 }} width={38} /><Tooltip formatter={(value, name) => [`${money(value)} ر.س`, name]} labelFormatter={(value) => `الوقت: ${value}`} contentStyle={{ direction: "rtl", borderRadius: 10, fontFamily: "Cairo" }} />{PLATFORM_META.map((p) => <Line key={p.key} type="monotone" dataKey={p.key} name={p.label} stroke={p.color} strokeWidth={2.5} dot={false} activeDot={{ r: 3 }} connectNulls={false} />)}</LineChart></ResponsiveContainer></div>
         <div className="grid grid-cols-4 gap-1 p-2">{PLATFORM_META.map((p) => { const value = p.key === "google" ? (breakdown.google ?? breakdown.google_transitional) : breakdown[p.key]; const state = spendQuality?.[p.key]?.data_state; return <div key={p.key} className="rounded-lg border p-2 text-center"><p className="text-[9px] font-bold" style={{ color: p.color }}>{p.label}</p><p className="num mt-1 text-[10px] font-black">{dashboardSpendDisplay(value, state)}</p></div>; })}</div>
         <div className="flex h-11 items-center justify-between border-t bg-amber-50 px-4 font-extrabold"><span>إجمالي المصروفات</span><span className="num">{chartTotal === null ? "غير مكتمل" : `${optionalMoney(chartTotal)} ر.س`}</span></div>
@@ -552,7 +562,7 @@ export async function loadDashboardPeriodSnapshot({
 
 export default function AdvancedDashboard() {
     const [filters, setFilters] = useState(() => defaultFilters("today"));
-    const [data, setData] = useState(null); const [carts, setCarts] = useState([]); const [cartSummary, setCartSummary] = useState({ abandoned_count: 0, recovered_count: 0 }); const [ga, setGa] = useState(null); const [loading, setLoading] = useState(true); const [loadError, setLoadError] = useState(null);
+    const [data, setData] = useState(null); const [carts, setCarts] = useState([]); const [cartSummary, setCartSummary] = useState({ abandoned_count: 0, recovered_count: 0 }); const [ga, setGa] = useState(null); const [unifiedShadow, setUnifiedShadow] = useState(null); const [loading, setLoading] = useState(true); const [loadError, setLoadError] = useState(null);
     const { orders } = useOrders();
     const dashboardDataRef = useRef(null);
     const requestSequenceRef = useRef(0);
@@ -636,6 +646,25 @@ export default function AdvancedDashboard() {
     }, [filters.from, filters.to]);
     useEffect(() => {
         let active = true;
+        setUnifiedShadow(null);
+        const query = new URLSearchParams({
+            from_date: filters.from || "",
+            to_date: filters.to || filters.from || "",
+        }).toString();
+        api.get(`/dashboard-v2/unified-marketing-shadow?${query}`)
+            .then((result) => {
+                if (active) setUnifiedShadow(result.data || null);
+            })
+            .catch(() => {
+                if (active) setUnifiedShadow({
+                    shadow_passed: false,
+                    reason: "تعذر تحميل المقارنة",
+                });
+            });
+        return () => { active = false; };
+    }, [filters.from, filters.to]);
+    useEffect(() => {
+        let active = true;
         const loadGa = async () => {
             try {
                 const result = await api.get("/integrations-v2/google_analytics_4/realtime-dashboard");
@@ -656,7 +685,7 @@ export default function AdvancedDashboard() {
         {(Boolean(data) || loading) && <>
         <SummaryStrip data={data} filters={filters} loading={loading} />
         <CampaignAdvisorCard />
-        <div dir="ltr" className="grid items-start gap-4 min-[1280px]:grid-cols-[clamp(280px,24vw,350px)_minmax(0,1fr)]"><aside dir="rtl" className="space-y-4"><AdsCard ads={data?.ads_v2} /><TopProductsCard rows={data?.product_cost_v2?.product_rows} summary={data?.product_cost_v2} loading={loading} /><AbandonedCartsCard carts={carts} summary={cartSummary} /></aside><main dir="rtl" className="min-w-0"><div dir="ltr" className="grid min-w-0 items-start gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]"><div dir="rtl" className="space-y-4"><ProfitCard data={data} loading={loading} /><LatestOrders orders={orders} totals={data?.totals} /></div><div dir="rtl"><GaLive data={ga} /></div></div></main></div>
+        <div dir="ltr" className="grid items-start gap-4 min-[1280px]:grid-cols-[clamp(280px,24vw,350px)_minmax(0,1fr)]"><aside dir="rtl" className="space-y-4"><AdsCard ads={data?.ads_v2} unifiedShadow={unifiedShadow} /><TopProductsCard rows={data?.product_cost_v2?.product_rows} summary={data?.product_cost_v2} loading={loading} /><AbandonedCartsCard carts={carts} summary={cartSummary} /></aside><main dir="rtl" className="min-w-0"><div dir="ltr" className="grid min-w-0 items-start gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]"><div dir="rtl" className="space-y-4"><ProfitCard data={data} loading={loading} /><LatestOrders orders={orders} totals={data?.totals} /></div><div dir="rtl"><GaLive data={ga} /></div></div></main></div>
         </>}
     </div>;
 }
