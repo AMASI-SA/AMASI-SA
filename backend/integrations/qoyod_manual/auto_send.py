@@ -46,7 +46,7 @@ from integrations.qoyod.candidate_orders import (
 from integrations.qoyod.eligible_orders import QOYOD_SYNC_START_DATE
 from integrations.qoyod_manual.canary_batch import SAFE_ALREADY_SENT_CODES
 from integrations.qoyod_manual.send import ManualSendRefused, manual_send_one
-from salla_integration.sync import refresh_single_order_status
+from salla_integration.sync import resync_single_order
 
 logger = logging.getLogger(__name__)
 
@@ -475,7 +475,7 @@ async def _refresh_and_verify_salla_status(
     worker scans.  A failed authoritative refresh is a real preflight error
     and the caller quarantines only that order before any Qoyod mutation.
     """
-    refresh = await refresh_single_order_status(
+    refresh = await resync_single_order(
         db,
         orders_user_id,
         order_number,
@@ -753,6 +753,7 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
                     orders_user_id=orders_user_id,
                     order_number=order_number,
                     actor=f"auto-plan-b:{run_id}",
+                    allow_historical_positive_total=True,
                 )
                 results.append({
                     "order_number": order_number,
