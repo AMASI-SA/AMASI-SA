@@ -96,6 +96,8 @@ _account_range = _policy._account_range
 _page_aligned_profitability = _policy._page_aligned_profitability
 _snapchat_campaign_entities = _policy._snapchat_campaign_entities
 _snapchat_child_entities = _policy._snapchat_child_entities
+_snapchat_v1_campaign_entities = _policy._snapchat_v1_campaign_entities
+_snapchat_v1_child_entities = _policy._snapchat_v1_child_entities
 _experiment_outcomes_context = _policy._experiment_outcomes_context
 execution_capabilities = _alignment.execution_capabilities
 
