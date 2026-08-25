@@ -186,7 +186,8 @@ async def _daily_spend(
             snapchat.get("daily_sar") or {}
         ).get(day.isoformat())
     facts["snapchat"] = (
-        (snapchat.get("quality") or {}).get("amount_complete") is True
+        (snapchat.get("quality") or {}).get("amount_available") is True
+        or (snapchat.get("quality") or {}).get("amount_complete") is True
     )
 
     for provider, collection_name in DAILY_COLLECTION_BY_PROVIDER.items():
@@ -367,18 +368,24 @@ async def build_dashboard_platform_spend(
         connection_status = str(state.get("connection_status") or "not_connected")
         if provider == "snapchat":
             snap_quality = snapchat.get("quality") or {}
+            snap_amount_available = (
+                snap_quality.get("amount_available") is True
+                or snap_quality.get("amount_complete") is True
+            )
             provider_rows[provider] = {
                 "provider": provider,
                 "integration_provider": SNAPCHAT_PROVIDER_ID,
                 "connection_status": connection_status,
                 "connected": snap_quality.get("connected") is True,
-                "daily_available": snap_quality.get("amount_complete") is True,
+                "daily_available": snap_amount_available,
                 "hourly_available": hourly_facts[provider],
                 "total_sar": totals[provider],
                 "data_quality": snap_quality.get("status"),
                 "data_state": snap_quality.get("data_state"),
                 "coverage_complete": snap_quality.get("coverage_complete") is True,
                 "amount_complete": snap_quality.get("amount_complete") is True,
+                "amount_available": snap_amount_available,
+                "provisional": snap_quality.get("provisional") is True,
                 "reason_codes": list(snap_quality.get("reason_codes") or []),
                 "last_sync_at": state.get("last_sync_at"),
                 "data_delay_minutes": state.get("data_delay_minutes"),
@@ -408,7 +415,16 @@ async def build_dashboard_platform_spend(
     snap_amount_complete = (
         (snapchat.get("quality") or {}).get("amount_complete") is True
     )
-    total_sar = known_total_sar if snap_amount_complete else None
+    snap_amount_available = (
+        snap_amount_complete
+        or (snapchat.get("quality") or {}).get("amount_available") is True
+    )
+    snap_amount_provisional = (
+        snap_amount_available
+        and not snap_amount_complete
+        and (snapchat.get("quality") or {}).get("provisional") is True
+    )
+    total_sar = known_total_sar if snap_amount_available else None
     return {
         "date_from": start.isoformat(),
         "date_to": end.isoformat(),
@@ -421,8 +437,16 @@ async def build_dashboard_platform_spend(
         "total_sar": total_sar,
         "known_total_sar": known_total_sar,
         "spend_quality": {
-            "status": "complete" if snap_amount_complete else "incomplete",
+            "status": (
+                "complete"
+                if snap_amount_complete
+                else "provisional"
+                if snap_amount_provisional
+                else "incomplete"
+            ),
             "amount_complete": snap_amount_complete,
+            "amount_available": snap_amount_available,
+            "provisional": snap_amount_provisional,
             "known_total_sar": known_total_sar,
             "snapchat": snapchat.get("quality") or {},
         },

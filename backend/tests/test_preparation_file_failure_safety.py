@@ -212,6 +212,32 @@ async def test_released_event_replays_stage_reconciliation(monkeypatch):
     assert result["restored_order_numbers"] == ["3001"]
 
 
+@pytest.mark.asyncio
+async def test_in_progress_workflow_without_release_event_is_reconciled(monkeypatch):
+    events = FakeCollection(find_rows=[])
+    workflows = FakeCollection(
+        find_rows=[{"order_number": "lost-11"}],
+        find_one_rows=[{"stage": "in_progress"}],
+    )
+    db = FakeDb({EVENTS: events, WORKFLOWS: workflows})
+
+    async def reconcile(*_args, **kwargs):
+        assert kwargs["order_number"] == "lost-11"
+        return False, 11
+
+    import reviewed_preparation_batches as batch_module
+
+    monkeypatch.setattr(batch_module, "_reconcile_order_stage", reconcile)
+    result = await reconcile_released_preparation_stages(
+        db,
+        user_id="owner-1",
+        actor={"id": "owner-1", "role": "owner"},
+    )
+
+    assert result["restored_order_count"] == 1
+    assert result["restored_order_numbers"] == ["lost-11"]
+
+
 def test_router_registers_atomic_draft_release_and_stale_recovery():
     router = make_preparation_file_failure_safety_router(
         SimpleNamespace(),

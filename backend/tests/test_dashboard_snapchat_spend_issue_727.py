@@ -831,6 +831,82 @@ async def test_chart_and_executive_share_the_same_snapchat_amount_and_state(
         assert executive["total"] == amount
 
 
+@pytest.mark.asyncio
+async def test_chart_and_executive_display_open_day_provisional_amount(monkeypatch):
+    snapshot = {
+        "rows": [{
+            "provider": "snapchat_ads",
+            "ad_account_id": "snap-1",
+            "date": DAY.isoformat(),
+            "spend_native": 42.16,
+            "spend_sar": 42.16,
+            "effective_spend_sar": 42.16,
+            "purchases": 2,
+        }],
+        "daily_sar": {DAY.isoformat(): 42.16},
+        "daily_state": {DAY.isoformat(): "provisional_data"},
+        "hourly_sar": {DAY.isoformat(): []},
+        "total_sar": 42.16,
+        "bank_commissions": {
+            "accounts": [],
+            "total_fee_sar": 0.0,
+            "fee_subject_spend_sar": 0.0,
+            "total_effective_spend_sar": 42.16,
+            "coverage": {"complete": True},
+        },
+        "quality": {
+            "status": "provisional",
+            "data_state": "provisional_data",
+            "coverage_complete": False,
+            "amount_complete": False,
+            "complete": False,
+            "amount_available": True,
+            "provisional": True,
+            "connected": True,
+            "reason_codes": ["open_riyadh_day_reconciliation_pending"],
+        },
+    }
+
+    async def canonical(*_args, **_kwargs):
+        return deepcopy(snapshot)
+
+    monkeypatch.setattr(
+        chart_module,
+        "load_unified_marketing_dashboard_spend",
+        canonical,
+    )
+    monkeypatch.setattr(
+        executive_module,
+        "load_unified_marketing_dashboard_spend",
+        canonical,
+    )
+    db = _db(runs=[], facts=[])
+    chart = await chart_module.build_dashboard_platform_spend(
+        db,
+        "owner-1",
+        date_from=DAY.isoformat(),
+        date_to=DAY.isoformat(),
+    )
+    executive = await executive_module.build_mezan_v2_ads(
+        db,
+        "owner-1",
+        from_date=DAY.isoformat(),
+        to_date=DAY.isoformat(),
+    )
+
+    assert chart["provider_totals_sar"]["snapchat"] == 42.16
+    assert chart["total_sar"] == 42.16
+    assert chart["spend_quality"]["status"] == "provisional"
+    assert chart["spend_quality"]["amount_available"] is True
+    assert chart["spend_quality"]["amount_complete"] is False
+    assert executive["breakdown"]["snapchat"] == 42.16
+    assert executive["total"] == 42.16
+    assert executive["providers"]["snapchat"]["spend"] == 42.16
+    assert executive["spend_quality"]["status"] == "provisional"
+    assert executive["spend_quality"]["amount_available"] is True
+    assert executive["spend_quality"]["amount_complete"] is False
+
+
 def test_executive_provider_summary_preserves_confirmed_no_data():
     ads = {
         "breakdown": {
