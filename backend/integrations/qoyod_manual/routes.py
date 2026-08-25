@@ -513,6 +513,7 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
             db,
             orders_user_id=orders_owner_id(user),
             order_number=order_number,
+        qoyod_user_id=_TENANT,
         )
 
     @router.post("/recheck-payment-bulk")
@@ -535,6 +536,7 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
             db,
             orders_user_id=orders_owner_id(user),
             order_numbers=order_numbers,
+        qoyod_user_id=_TENANT,
         )
 
     @router.get("/status/{order_number}")

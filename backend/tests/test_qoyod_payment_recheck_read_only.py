@@ -83,3 +83,55 @@ async def test_batch_is_bounded_by_route_and_returns_ephemeral_counts():
     assert result["counts"] == {"ready": 2}
     assert result["invoice_sent_count"] == 0
     assert result["read_only"] is True
+
+
+@pytest.mark.asyncio
+async def test_ready_payment_is_held_when_qoyod_preflight_total_is_zero():
+    async def preflight(*_args, **_kwargs):
+        return {"ok": True, "diagnosis_status": "pass", "salla_total": 0}
+
+    result = await recheck_payment_read_only(
+        _NoWriteDb(),
+        orders_user_id="orders-user",
+        qoyod_user_id="main",
+        order_number="278100005",
+        fetch_fn=_fetch({
+            "order_status_slug": "completed",
+            "order_status": "تم التنفيذ",
+            "payment_method": "mada",
+            "is_pending_payment": False,
+        }),
+        preflight_fn=preflight,
+    )
+    assert result["outcome"] == "review"
+    assert result["code"] == "zero_total_refused"
+    assert result["invoice_sent"] is False
+
+
+@pytest.mark.asyncio
+async def test_ready_payment_is_held_when_qoyod_preflight_is_blocked():
+    async def preflight(*_args, **_kwargs):
+        return {
+            "ok": True,
+            "diagnosis_status": "blocked",
+            "code": "qoyod_preflight_total_mismatch",
+            "message": "إجمالي قيود المتوقع يختلف عن إجمالي سلة",
+            "salla_total": 117.34,
+        }
+
+    result = await recheck_payment_read_only(
+        _NoWriteDb(),
+        orders_user_id="orders-user",
+        qoyod_user_id="main",
+        order_number="278100006",
+        fetch_fn=_fetch({
+            "order_status_slug": "completed",
+            "order_status": "تم التنفيذ",
+            "payment_method": "mada",
+            "is_pending_payment": False,
+        }),
+        preflight_fn=preflight,
+    )
+    assert result["outcome"] == "review"
+    assert result["code"] == "qoyod_preflight_total_mismatch"
+    assert result["invoice_sent"] is False
