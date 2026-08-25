@@ -22,6 +22,8 @@ def _number(value: Any) -> float | None:
 def build_dashboard_unified_shadow(
     legacy_snapchat: dict[str, Any],
     unified_report: dict[str, Any],
+    *,
+    period_closed: bool = True,
 ) -> dict[str, Any]:
     legacy_quality = dict(legacy_snapchat.get("quality") or {})
     totals = dict(unified_report.get("totals") or {})
@@ -41,19 +43,39 @@ def build_dashboard_unified_shadow(
         abs(legacy_spend or 0) * RELATIVE_SPEND_TOLERANCE,
     )
     spend_match = delta is not None and abs(delta) <= tolerance
-    coverage_complete = (
-        legacy_quality.get("amount_complete") is True
-        and quality.get("coverage_status") == "complete"
+    legacy_coverage_complete = legacy_quality.get("amount_complete") is True
+    unified_coverage_complete = (
+        quality.get("coverage_status") == "complete"
         and quality.get("amount_complete") is True
+        and quality.get("reconciliation_status") == "reconciled"
     )
-    shadow_passed = bool(spend_match and coverage_complete)
+    provider_reconciled_fallback = bool(
+        period_closed
+        and unified_coverage_complete
+        and not legacy_coverage_complete
+    )
+    legacy_match_accepted = bool(
+        period_closed
+        and unified_coverage_complete
+        and legacy_coverage_complete
+        and spend_match
+    )
+    shadow_passed = bool(legacy_match_accepted or provider_reconciled_fallback)
+    acceptance_basis = (
+        "legacy_match"
+        if legacy_match_accepted
+        else "provider_reconciliation_fallback"
+        if provider_reconciled_fallback
+        else "not_accepted"
+    )
     return {
         "mode": "shadow",
         "provider": "snapchat_ads",
         "contract_version": unified_report.get("contract_version"),
         "period": unified_report.get("period"),
         "shadow_passed": shadow_passed,
-        "cutover_ready": False,
+        "cutover_ready": shadow_passed,
+        "acceptance_basis": acceptance_basis,
         "comparison": {
             "spend_sar": {
                 "legacy": legacy_spend,
@@ -62,7 +84,13 @@ def build_dashboard_unified_shadow(
                 "tolerance": round(tolerance, 4),
                 "match": spend_match,
             },
-            "coverage_complete": coverage_complete,
+            "coverage_complete": bool(
+                unified_coverage_complete
+                and (legacy_coverage_complete or provider_reconciled_fallback)
+            ),
+            "legacy_coverage_complete": legacy_coverage_complete,
+            "unified_coverage_complete": unified_coverage_complete,
+            "period_closed": bool(period_closed),
         },
         "unified_summary": {
             "platform_conversions": platform.get("conversions"),
