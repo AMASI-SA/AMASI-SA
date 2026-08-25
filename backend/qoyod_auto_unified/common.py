@@ -21,6 +21,12 @@ RETRYABLE_SYNC_FAILURE_CODES = frozenset({
     "authoritative_payment_refresh_failed",
     "unified_sender_row_upsert_failed",
     "qoyod_reference_reconciliation_failed",
+    # These refusals happen before any Qoyod resource is created. A later
+    # Salla details refresh can supply the missing SKU or corrected accounting
+    # facts, so retry them slowly instead of quarantining forever.
+    "qoyod_preflight_payload_invalid",
+    "qoyod_preflight_total_mismatch",
+    "zero_total_refused",
 })
 
 

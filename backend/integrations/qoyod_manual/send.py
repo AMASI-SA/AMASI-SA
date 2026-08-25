@@ -2136,6 +2136,35 @@ def _merge_recovered_accounting(
     return result
 
 
+def _replace_with_verified_salla_accounting(
+    live_canon: dict, recovered: dict,
+) -> dict:
+    """Replace stale snapshot accounting with a verified Salla Details view.
+
+    The Plan-B status row deliberately copies status/payment/customer facts
+    from the newest inbox trace.  Its accounting portion may therefore be an
+    older webhook projection.  After an immediate full Salla resync, the
+    exact owner's ``raw_by_source.salla_direct`` document is the stronger
+    source for totals and lines.  Replace accounting fields only; current
+    status/payment/customer facts remain authoritative.
+    """
+    result = dict(live_canon or {})
+    for key in (
+        *_RECOVERED_MONEY_FIELDS,
+        "items", "currency", "currency_code",
+        "cod_fee_source_path", "cod_fee_source_type", "extra_charges",
+    ):
+        if key in recovered:
+            result[key] = recovered.get(key)
+    provenance = recovered.get("_qoyod_historical_recovery")
+    if isinstance(provenance, dict):
+        result["_qoyod_historical_recovery"] = {
+            **provenance,
+            "authority": "fresh_salla_order_details",
+        }
+    return result
+
+
 def _explicit_salla_node_currency(order_node: dict) -> Optional[str]:
     amounts = (order_node or {}).get("amounts") or {}
     currencies: set[str] = set()
@@ -2283,6 +2312,7 @@ async def _find_historical_positive_canon(
     live_canon: Optional[dict] = None,
     unified_owner_id: Optional[str] = None,
     preferred_inbox_owner_id: Optional[str] = None,
+    prefer_verified_unified: bool = False,
 ) -> Optional[dict]:
     """Resolve verified accounting facts for the bounded manual recovery.
 
@@ -2290,7 +2320,8 @@ async def _find_historical_positive_canon(
     Financial facts first come from the exact owner's durable Salla Order
     Details snapshot.  If that snapshot is incomplete, a positive total and
     items may come from separate inbox traces only when order, owner, amount
-    and explicit currency evidence agree.  No automatic-send path opts in.
+    and explicit currency evidence agree. Automatic sending opts in only after
+    its immediate full Salla Order Details refresh succeeds.
     """
     current = dict(live_canon or {})
     current_total = _money_decimal(current.get("total_amount"))
@@ -2318,6 +2349,9 @@ async def _find_historical_positive_canon(
     if unified_recovered is not None:
         recovered_currency = _explicit_recovery_currency(unified_recovered)
         if not live_currency or live_currency == recovered_currency:
+            if prefer_verified_unified:
+                return _replace_with_verified_salla_accounting(
+                    current, unified_recovered)
             return _merge_recovered_accounting(current, unified_recovered)
 
     normalized_owner_ids = list(dict.fromkeys(
@@ -2613,12 +2647,11 @@ async def manual_send_one(
     live_items = _normalized_recovery_items(canon.get("items"))
     if live_items is not None:
         canon["items"] = live_items
-    # Only the operator-confirmed bounded recovery route may reuse stored
-    # accounting facts when the live status refresh is stripped to 0.00 or
-    # omits its items. The automatic worker never opts in and remains blocked.
-    if allow_historical_positive_total and (
-        live_total is None or live_total <= 0 or live_items is None
-    ):
+    # Every production caller that opts in performs an immediate full Salla
+    # Order Details refresh first. Prefer that exact-owner durable snapshot so
+    # a copied status row cannot shadow current totals/SKUs. If it is absent,
+    # the historical fallback remains limited to stripped/incomplete rows.
+    if allow_historical_positive_total:
         historical_canon = await _find_historical_positive_canon(
             db,
             owner_ids=inbox_owner_ids,
@@ -2626,8 +2659,13 @@ async def manual_send_one(
             live_canon=canon,
             unified_owner_id=str(orders_user_id or user_id),
             preferred_inbox_owner_id=str(row.get("user_id") or ""),
+            prefer_verified_unified=True,
         )
-        if historical_canon is not None:
+        if historical_canon is not None and (
+            historical_canon.get("_qoyod_historical_recovery", {}).get(
+                "authority") == "fresh_salla_order_details"
+            or live_total is None or live_total <= 0 or live_items is None
+        ):
             canon = historical_canon
     # Reuse the exact mapper behind New Orders / Order Details. This keeps
     # aliases such as "مصرف الإنماء" and "بنك الإنماء" in one place.

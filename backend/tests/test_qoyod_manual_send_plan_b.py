@@ -1303,6 +1303,73 @@ async def test_recovery_prefers_exact_owner_unified_salla_snapshot(db):
 
 
 @pytest.mark.asyncio
+async def test_fresh_verified_unified_snapshot_replaces_stale_positive_math(db):
+    order_number = "ORDER-UNIFIED-STALE-MATH"
+    await db.unified_orders.insert_one({
+        "user_id": "orders-owner",
+        "order_number": order_number,
+        "raw_by_source": {
+            "salla_direct": {
+                "id": order_number,
+                "reference_id": order_number,
+                "date": "2026-08-25T10:00:00+03:00",
+                "status": {"slug": "completed", "name": "تم التنفيذ"},
+                "payment_method": "credit_card",
+                "customer": {"full_name": "عميل سلة"},
+                "amounts": {
+                    "total": {"amount": "170.83", "currency": "SAR"},
+                    "sub_total": {"amount": "150.83", "currency": "SAR"},
+                    "shipping_cost": {"amount": "20.00", "currency": "SAR"},
+                    "tax": {"amount": "0.00", "currency": "SAR"},
+                    "discount": {"amount": "0.00", "currency": "SAR"},
+                },
+                "items": [{
+                    "variant": {"sku": "CURRENT-SKU-1"},
+                    "product": {"id": "p1", "name": "منتج سلة"},
+                    "quantity": 1,
+                    "amounts": {
+                        "price_without_tax": {
+                            "amount": "131.16", "currency": "SAR",
+                        },
+                        "total": {
+                            "amount": "150.83", "currency": "SAR",
+                        },
+                        "tax": {"amount": "19.67", "currency": "SAR"},
+                    },
+                }],
+            },
+        },
+    })
+    live = _inbox_row(order_number=order_number, total=200.0)[
+        "canonical_payload"
+    ]
+    live["items"][0].update({
+        "sku": "STALE-SKU",
+        "unit_price": 200.0,
+        "total": 200.0,
+    })
+    live["order_status"] = "delivered"
+    live["payment_method"] = "tamara"
+
+    selected = await _find_historical_positive_canon(
+        db,
+        owner_ids=[TENANT, "orders-owner"],
+        unified_owner_id="orders-owner",
+        order_number=order_number,
+        live_canon=live,
+        prefer_verified_unified=True,
+    )
+
+    assert selected["total_amount"] == 170.83
+    assert selected["items"][0]["sku"] == "CURRENT-SKU-1"
+    assert selected["order_status"] == "delivered"
+    assert selected["payment_method"] == "tamara"
+    assert selected["_qoyod_historical_recovery"]["authority"] == (
+        "fresh_salla_order_details"
+    )
+
+
+@pytest.mark.asyncio
 async def test_recovery_refuses_mixed_currency_unified_salla_snapshot(db):
     order_number = "ORDER-UNIFIED-MIXED-CURRENCY"
     await db.unified_orders.insert_one({

@@ -38,6 +38,12 @@ def _retry_delay(code: str) -> timedelta:
         return timedelta(minutes=10)
     if code == "salla_status_refresh_failed":
         return timedelta(minutes=2)
+    if code in {
+        "qoyod_preflight_payload_invalid",
+        "qoyod_preflight_total_mismatch",
+        "zero_total_refused",
+    }:
+        return timedelta(minutes=30)
     return timedelta(minutes=1)
 
 

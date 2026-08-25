@@ -14,6 +14,8 @@ from integrations.qoyod_manual.pending import _salla_order_created_date
 from integrations.qoyod_manual.order_source import get_order_payment_facts
 from integrations.qoyod_manual.send import (
     _build_invoice_payload, _q2, _riyadh_today_iso,
+    _find_historical_positive_canon, _money_decimal,
+    _normalized_recovery_items,
     _overlay_order_engine_facts, _prepare_sar_invoice_canon_from_inbox,
     _within_amount_tolerance, _assert_sar_currency, ManualSendRefused,
 )
@@ -21,7 +23,8 @@ from integrations.qoyod_manual.send import (
 
 async def diagnose_totals(db, *, user_id: str,
                           order_number: str,
-                          orders_user_id: Optional[str] = None) -> dict:
+                          orders_user_id: Optional[str] = None,
+                          allow_verified_salla_recovery: bool = False) -> dict:
     """Compute the same breakdown the guard would surface.
 
     Returns a JSON-safe dict with the full RCA. Never raises for
@@ -30,15 +33,37 @@ async def diagnose_totals(db, *, user_id: str,
     the UI can render the complete LRM breakdown instead of only the
     refusal message.
     """
+    inbox_owner_ids = list(dict.fromkeys(
+        value for value in (str(user_id), str(orders_user_id or "").strip())
+        if value
+    ))
     row = await db.integration_inbox.find_one(
-        {"user_id": user_id,
+        {"user_id": {"$in": inbox_owner_ids},
          "salla_order_number": str(order_number)},
         sort=[("received_at", -1)],
     )
     if not row:
         return {"ok": False, "code": "order_not_found",
                 "message": f"لم يُعثر على الطلب {order_number} في الاستلام"}
-    canon = row.get("canonical_payload") or {}
+    canon = dict(row.get("canonical_payload") or {})
+    live_total = _money_decimal(canon.get("total_amount"))
+    live_items = _normalized_recovery_items(canon.get("items"))
+    if live_total is not None:
+        canon["total_amount"] = _q2(live_total)
+    if live_items is not None:
+        canon["items"] = live_items
+    if allow_verified_salla_recovery:
+        recovered = await _find_historical_positive_canon(
+            db,
+            owner_ids=inbox_owner_ids,
+            order_number=str(order_number),
+            live_canon=canon,
+            unified_owner_id=str(orders_user_id or user_id),
+            preferred_inbox_owner_id=str(row.get("user_id") or ""),
+            prefer_verified_unified=True,
+        )
+        if recovered is not None:
+            canon = recovered
     payment_facts = await get_order_payment_facts(
         db,
         user_id=orders_user_id or user_id,
