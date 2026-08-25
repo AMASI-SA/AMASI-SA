@@ -15,6 +15,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, model_validator
 
 from dashboard_snapchat_spend import load_snapchat_dashboard_spend
+from unified_marketing.dashboard_shadow import (
+    build_dashboard_unified_shadow,
+    load_dashboard_unified_shadow,
+    persist_dashboard_unified_shadow,
+)
+from unified_marketing.gateway import load_unified_marketing_account_report
 
 from .ads_platform_hourly import PLATFORM_HOURLY_COLLECTION
 from .dashboard_ads_platform_refresh import (
@@ -323,6 +329,32 @@ async def build_dashboard_platform_spend(
         start=start,
         end=end,
     )
+    try:
+        unified_shadow = await load_dashboard_unified_shadow(
+            db,
+            user_id=user_id,
+            date_from=start.isoformat(),
+            date_to=end.isoformat(),
+        )
+    except Exception:  # noqa: BLE001 - legacy output stays authoritative
+        unified_shadow = None
+    if unified_shadow is None:
+        unified_shadow = {
+            "mode": "shadow",
+            "provider": "snapchat_ads",
+            "shadow_passed": False,
+            "cutover_ready": False,
+            "reason": "dashboard_shadow_not_refreshed",
+            "decision_eligibility": {
+                "eligible": False,
+                "reason": "dashboard_shadow_unavailable",
+            },
+            "source_only": True,
+            "provider_write_reached": False,
+            "campaign_write_reached": False,
+            "accounting_write_reached": False,
+            "qoyod_write_reached": False,
+        }
     daily, daily_facts = await _daily_spend(db, user_id, start, end, snapchat)
     states = await _connection_states(db, user_id)
     single_day = start == end
@@ -410,6 +442,7 @@ async def build_dashboard_platform_spend(
             "known_total_sar": known_total_sar,
             "snapchat": snapchat.get("quality") or {},
         },
+        "unified_marketing_shadow": unified_shadow,
         "source_only": True,
         "provider_write_reached": False,
         "campaign_write_reached": False,
@@ -457,6 +490,42 @@ def attach_dashboard_ads_platform_spend_routes(
             date_from=payload.date_from,
             date_to=payload.date_to,
         )
+        try:
+            start = date.fromisoformat(payload.date_from)
+            end = date.fromisoformat(payload.date_to)
+            unified_snapchat = await load_unified_marketing_account_report(
+                db,
+                user_id,
+                provider="snapchat_ads",
+                date_from=start,
+                date_to=end,
+                timezone_name="Asia/Riyadh",
+            )
+            unified_shadow = build_dashboard_unified_shadow(
+                {"total_sar": spend.get("provider_totals_sar", {}).get("snapchat"),
+                 "quality": (spend.get("spend_quality") or {}).get("snapchat") or {}},
+                unified_snapchat,
+            )
+            await persist_dashboard_unified_shadow(
+                db,
+                user_id=user_id,
+                date_from=payload.date_from,
+                date_to=payload.date_to,
+                shadow=unified_shadow,
+            )
+            spend["unified_marketing_shadow"] = unified_shadow
+        except Exception as exc:  # noqa: BLE001 - refresh remains fail-closed
+            spend["unified_marketing_shadow"] = {
+                "mode": "shadow",
+                "provider": "snapchat_ads",
+                "shadow_passed": False,
+                "cutover_ready": False,
+                "reason": str(type(exc).__name__)[:96],
+                "decision_eligibility": {
+                    "eligible": False,
+                    "reason": "dashboard_shadow_unavailable",
+                },
+            }
         return {**spend, "refresh": refresh}
 
 
