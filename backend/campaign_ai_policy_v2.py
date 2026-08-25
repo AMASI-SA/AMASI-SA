@@ -78,6 +78,7 @@ def _account_range(
     account: dict[str, Any],
     requested_start: date,
     requested_end: date,
+    account_end_offset_days: int = 0,
 ) -> tuple[date, date]:
     """Use the same valid local calendar window as the Snapchat account page.
 
@@ -90,7 +91,10 @@ def _account_range(
     timezone_name = str(account.get("timezone") or "").strip()
     if not timezone_name:
         return requested_start, requested_end
-    local_end = account_local_today(timezone_name, now=_legacy._utcnow())
+    local_end = account_local_today(
+        timezone_name,
+        now=_legacy._utcnow(),
+    ) - timedelta(days=max(0, int(account_end_offset_days or 0)))
     return local_end - timedelta(days=requested_days - 1), local_end
 
 
@@ -247,6 +251,7 @@ async def _snapchat_campaign_entities(
     user_id: str,
     start: date,
     end: date,
+    account_end_offset_days: int = 0,
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     accounts = await _legacy._snapchat_accounts(db, user_id)
@@ -255,7 +260,12 @@ async def _snapchat_campaign_entities(
         account_name = _legacy._text(
             account.get("display_name") or account.get("name"), limit=180
         )
-        local_start, local_end = _account_range(account, start, end)
+        local_start, local_end = _account_range(
+            account,
+            start,
+            end,
+            account_end_offset_days,
+        )
         platform_report = await build_account_timezone_campaign_report(
             db=db,
             user_id=user_id,
@@ -417,6 +427,7 @@ async def _snapchat_child_entities(
     user_id: str,
     start: date,
     end: date,
+    account_end_offset_days: int = 0,
 ) -> list[dict[str, Any]]:
     """Read child results only from Snapchat conversion-time platform facts.
 
@@ -430,7 +441,12 @@ async def _snapchat_child_entities(
         account_name = _legacy._text(
             account.get("display_name") or account.get("name"), limit=180
         )
-        local_start, local_end = _account_range(account, start, end)
+        local_start, local_end = _account_range(
+            account,
+            start,
+            end,
+            account_end_offset_days,
+        )
         salla_by_id, _salla_report = await _account_salla_campaign_results(
             db,
             user_id,

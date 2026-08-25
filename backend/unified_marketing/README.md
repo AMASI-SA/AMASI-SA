@@ -90,3 +90,9 @@ record the explicit `provider_total_facts_fallback_v1_observer_drift` basis,
 but only when every compared V2 entity is complete and its lineage points to
 `mezan_snapchat_daily_total_facts_v2`. This does not rewrite V1, hide the
 drift, call OpenAI, create recommendations, or enable decisions.
+
+The Campaign AI acceptance proof always uses the last closed calendar day in
+the advertising account timezone. It never rolls to a newly opened local day
+with zero or provisional evidence. Live AI reads may still use the current
+account-local window after cutover; only the immutable acceptance proof is
+anchored to the closed day.

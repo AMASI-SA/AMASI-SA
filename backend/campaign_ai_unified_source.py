@@ -38,11 +38,14 @@ def _local_range(
     timezone_name: str,
     requested_start: date,
     requested_end: date,
+    period_end_offset_days: int = 0,
 ) -> tuple[date, date]:
     days = max(1, (requested_end - requested_start).days + 1)
     now = _legacy._utcnow()
     try:
-        local_end = now.astimezone(ZoneInfo(timezone_name)).date()
+        local_end = now.astimezone(ZoneInfo(timezone_name)).date() - timedelta(
+            days=max(0, int(period_end_offset_days or 0))
+        )
     except Exception:  # noqa: BLE001 - invalid timezone must fail safely below
         return requested_start, requested_end
     return local_end - timedelta(days=days - 1), local_end
@@ -260,6 +263,7 @@ async def load_snapchat_unified_ai_entities(
     user_id: str,
     start: date,
     end: date,
+    period_end_offset_days: int = 0,
 ) -> dict[str, Any]:
     account = await load_unified_marketing_account_identity(
         db,
@@ -278,7 +282,10 @@ async def load_snapchat_unified_ai_entities(
             },
         }
     local_start, local_end = _local_range(
-        str(account.get("timezone") or ""), start, end
+        str(account.get("timezone") or ""),
+        start,
+        end,
+        period_end_offset_days,
     )
     reports = {
         level: await load_unified_marketing_entity_report(
