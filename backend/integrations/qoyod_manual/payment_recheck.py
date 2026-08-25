@@ -21,6 +21,8 @@ async def recheck_payment_read_only(
     orders_user_id: str,
     order_number: str,
     fetch_fn: Callable[..., Awaitable[dict[str, Any]]] | None = None,
+    qoyod_user_id: str | None = None,
+    preflight_fn: Callable[..., Awaitable[dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
     """Read current Salla facts and classify them without side effects."""
     order_number = str(order_number or "").strip()
@@ -73,10 +75,45 @@ async def recheck_payment_read_only(
             if not status_key
             else "بيانات الدفع الحالية تحتاج مراجعة"
         )
+    preflight = None
+    code = None
+    if outcome == "ready" and qoyod_user_id:
+        if preflight_fn is None:
+            from integrations.qoyod_manual.diagnose import diagnose_totals
+            preflight_fn = diagnose_totals
+        preflight = await preflight_fn(
+            db,
+            user_id=qoyod_user_id,
+            order_number=order_number,
+            orders_user_id=orders_user_id,
+        )
+        try:
+            resolved_total = float(preflight.get("salla_total"))
+        except (TypeError, ValueError):
+            resolved_total = None
+        if (
+            not preflight.get("ok")
+            or preflight.get("diagnosis_status") == "blocked"
+            or resolved_total is None
+            or resolved_total <= 0
+        ):
+            outcome = "review"
+            code = (
+                "zero_total_refused"
+                if resolved_total is not None and resolved_total <= 0
+                else preflight.get("code") or "qoyod_preflight_failed"
+            )
+            message = (
+                "لا يمكن إرسال طلب مبلغه 0.00 ريال إلى قيود؛ يحتاج مراجعة"
+                if code == "zero_total_refused"
+                else preflight.get("message")
+                or "حمولة فاتورة قيود تحتاج مراجعة قبل الإرسال"
+            )
 
     return {
         "ok": True,
         "order_number": order_number,
+        "code": code,
         "outcome": outcome,
         "message": message,
         "status_key": status_key,
@@ -91,6 +128,7 @@ async def recheck_payment_read_only(
         "remaining_amount": row.get("remaining_amount"),
         "total_amount": row.get("total_amount"),
         "read_only": True,
+        "qoyod_preflight": preflight,
         "invoice_sent": False,
     }
 
@@ -100,6 +138,8 @@ async def recheck_payment_batch_read_only(
     *,
     orders_user_id: str,
     order_numbers: list[str],
+    qoyod_user_id: str | None = None,
+    preflight_fn: Callable[..., Awaitable[dict[str, Any]]] | None = None,
     fetch_fn: Callable[..., Awaitable[dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
     """Sequentially scan a bounded list to respect Salla rate limits."""
@@ -109,6 +149,8 @@ async def recheck_payment_batch_read_only(
             db,
             orders_user_id=orders_user_id,
             order_number=order_number,
+            qoyod_user_id=qoyod_user_id,
+            preflight_fn=preflight_fn,
             fetch_fn=fetch_fn,
         ))
     counts: dict[str, int] = {}
