@@ -237,6 +237,8 @@ async def test_qoyod_live_preflight_skips_items_and_shipments(monkeypatch):
         "/orders",
         "/orders/123",
     ]
+    assert calls[0][2]["reference_id"] == "273000002"
+    assert "keyword" not in calls[0][2]
 
 
 class _UpdateResult:

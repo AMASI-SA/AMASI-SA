@@ -8,6 +8,10 @@ import {
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api from "../lib/api";
+import {
+  isRecentServerDateTime,
+  parseServerDateTime,
+} from "../lib/serverDateTime";
 
 function riyadhTodayISO() {
     const parts = new Intl.DateTimeFormat("en-US", {
@@ -117,8 +121,7 @@ export default function SallaIntegration() {
     const hasRunningOrderSync = syncLogs.some(
         (log) => log.kind === "orders"
             && log.status === "running"
-            && Number.isFinite(Date.parse(log.started_at))
-            && Date.now() - Date.parse(log.started_at) < 30 * 60 * 1_000
+            && isRecentServerDateTime(log.started_at)
     );
 
     const load = useCallback(async () => {
@@ -952,7 +955,7 @@ export default function SallaIntegration() {
                                                 <td className="px-3 py-2 text-rose-700 font-bold">{log.errors_count || 0}</td>
                                                 <td className="px-3 py-2 text-slate-500">{log.pages_fetched || 0}</td>
                                                 <td className="px-3 py-2 text-slate-500 text-[11px]" dir="ltr">
-                                                    {log.started_at ? new Date(log.started_at).toLocaleString("en-US") : "—"}
+                                                    {log.started_at ? new Date(parseServerDateTime(log.started_at)).toLocaleString("en-US") : "—"}
                                                 </td>
                                             </tr>
                                         ))}

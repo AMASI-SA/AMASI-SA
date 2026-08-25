@@ -365,7 +365,7 @@ def coerce_cod_rows(mapping: list[dict]) -> list[dict]:
     return out
 
 
-def _is_bank_transfer_family(salla_method) -> bool:
+def is_bank_transfer_family(salla_method) -> bool:
     """Return True iff this payment method collapses to the
     bank_transfer family (any alias). Used by `coerce_cod_rows` to
     block the credit_invoice_only mis-configuration."""
@@ -373,6 +373,11 @@ def _is_bank_transfer_family(salla_method) -> bool:
     if not key:
         return False
     return key == "bank_transfer" or PAYMENT_METHOD_ALIASES.get(key) == "bank_transfer"
+
+
+def _is_bank_transfer_family(salla_method) -> bool:
+    """Backward-compatible private alias."""
+    return is_bank_transfer_family(salla_method)
 
 
 def _norm(v: Optional[str]) -> str:

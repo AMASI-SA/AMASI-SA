@@ -20,6 +20,7 @@ async def _refresh_snapshot_with_complete_payment(
     source_fields = (
         "payment_method", "payment_status", "paid_amount",
         "remaining_amount", "has_remaining_amount",
+        "is_pending_payment",
         "payment_collection_status", "payment_checkout_url",
         "receiving_bank_name", "receiving_bank_id",
         "payment_receipt_url",
@@ -90,6 +91,7 @@ async def _promote_snapshot_to_unified(
         "paid_amount": "paid_amount",
         "remaining_amount": "remaining_amount",
         "has_remaining_amount": "has_remaining_amount",
+        "is_pending_payment": "is_pending_payment",
         "payment_collection_status": "payment_collection_status",
         "payment_checkout_url": "payment_checkout_url",
         "receiving_bank_name": "receiving_bank_name",

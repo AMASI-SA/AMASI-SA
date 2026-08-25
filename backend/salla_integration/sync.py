@@ -764,6 +764,11 @@ def _salla_order_to_doc(salla_order: dict) -> dict:
         "paid_amount": paid_amount,
         "remaining_amount": remaining_amount,
         "has_remaining_amount": has_remaining_amount,
+        "is_pending_payment": (
+            salla_order.get("is_pending_payment")
+            if isinstance(salla_order.get("is_pending_payment"), bool)
+            else None
+        ),
         "payment_collection_status": payment_collection_status,
         "payment_checkout_url": checkout_url,
         "receiving_bank_name": receiving_bank_name,
@@ -1250,7 +1255,7 @@ async def _fetch_salla_order_details(
         "GET",
         "/orders",
         params={
-            "keyword": order_number,
+            "reference_id": order_number,
             "format": "light",
             "per_page": 10,
         },
@@ -1355,7 +1360,7 @@ async def refresh_single_order_status(
             "GET",
             "/orders",
             params={
-                "keyword": order_number,
+                "reference_id": order_number,
                 "format": "light",
                 "per_page": 10,
             },
