@@ -146,6 +146,9 @@ test("top products header shows period counts and only five rows initially", () 
         name: `منتج ${index + 1}`,
         units_sold: 10 - index,
         total_sales: 1000 - index,
+        total_cost: (index + 1) * 10,
+        net_profit: 900 - (index * 20),
+        cost_status: "complete",
     }));
     const markup = renderToStaticMarkup(
         <TopProductsCard
@@ -162,7 +165,49 @@ test("top products header shows period counts and only five rows initially", () 
     expect(markup).toContain("بتكلفة سلة 3");
     expect(markup).toContain("بدون تكلفة 2");
     expect(markup).toContain("المزيد");
-    expect(markup).not.toContain("منتج 6");
+    expect(markup).toContain("إجمالي جميع المنتجات");
+    expect(markup).toContain("يشمل المنتجات المخفية تحت المزيد");
+    expect(markup).toContain("49");
+    expect(markup).toContain("6,979.00 ر.س");
+    expect(markup).toContain("280.00 ر.س");
+    expect(markup).toContain("5,880.00 ر.س");
+    expect(markup).not.toContain("منتج 1");
+    expect(markup).toContain('data-testid="advanced-top-product-row-product-5"');
+    expect(markup).not.toContain('data-testid="advanced-top-product-row-product-6"');
+});
+
+test("top products removes visible names and opens an unpriced product in a new Mezan tab", () => {
+    const markup = renderToStaticMarkup(
+        <TopProductsCard
+            filters={{ from: "2026-08-01", to: "2026-08-25" }}
+            rows={[{
+                identity: "missing-product",
+                name: "اسم يجب ألا يظهر",
+                image_url: "https://cdn.example.com/missing-product.png",
+                mezan_product_id: "m-17",
+                salla_product_id: "s-17",
+                catalog_product_found: true,
+                units_sold: 3,
+                total_sales: 300,
+                total_cost: null,
+                net_profit: null,
+                cost_status: "missing",
+            }]}
+            summary={{ missing_all_cost_products_count: 1 }}
+        />
+    );
+
+    expect(markup).not.toContain("اسم يجب ألا يظهر");
+    expect(markup).toContain("https://cdn.example.com/missing-product.png");
+    expect(markup).toContain("بدون تكلفة");
+    expect(markup).toContain('target="_blank"');
+    expect(markup).toContain('rel="noopener noreferrer"');
+    expect(markup).toContain("/products-v2?");
+    expect(markup).toContain("product=m-17");
+    expect(markup).toContain("focus=cost");
+    expect(markup).toContain("from=2026-08-01");
+    expect(markup).toContain("to=2026-08-25");
+    expect(markup).toContain("صافي الربح غير مكتمل");
 });
 
 test("top products count falls back to the rows instead of showing a stale zero", () => {

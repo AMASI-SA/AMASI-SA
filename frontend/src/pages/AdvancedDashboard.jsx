@@ -12,7 +12,7 @@ import AdvancedFilters, { defaultFilters, filtersToQueryString } from "../compon
 import AdsExecutiveBreakdownTable from "../components/AdsExecutiveBreakdownTable";
 import { buildPaymentFeeRows } from "../components/ProfitSummaryCard";
 import { useOrders } from "../hooks/useOrders";
-import { buildMissingMezanCostHref } from "../lib/mezanV2CostLinks";
+import { buildMezanProductCostHref, buildMissingMezanCostHref } from "../lib/mezanV2CostLinks";
 import {
     DASHBOARD_AUTO_REFRESH_MS,
     dashboardOrdersSignature,
@@ -285,26 +285,107 @@ export function AbandonedCartsCard({ carts, summary = {} }) {
     );
 }
 
-export function TopProductsCard({ rows, summary = {}, loading = false }) {
+export function TopProductsCard({ rows, summary = {}, filters = {}, loading = false }) {
     const [visibleCount, setVisibleCount] = useState(5);
     const products = [...(rows || [])].sort((a, b) => Number(b.units_sold || 0) - Number(a.units_sold || 0));
-    const productCount = Math.max(Number(summary?.product_profit_summary?.product_count || 0), products.length);
+    const productSummary = summary?.product_profit_summary || {};
+    const productCount = Math.max(Number(productSummary.product_count || 0), products.length);
+    // The rows contain the complete period cohort; visibleCount only controls
+    // how many rows are expanded. Sum the rows themselves so the footer always
+    // includes products hidden under "المزيد" and stays consistent with the
+    // displayed per-product values.
+    const totalUnits = products.reduce((sum, item) => sum + Number(item.units_sold || 0), 0);
+    const totalSales = products.reduce((sum, item) => sum + Number(item.total_sales || 0), 0);
+    const totalCost = products.reduce((sum, item) => {
+        const value = finiteFinancialValue(item.total_cost, { nonnegative: true });
+        return sum + (value ?? 0);
+    }, 0);
+    const pricedProfits = products
+        .map((item) => finiteFinancialValue(item.net_profit))
+        .filter((value) => value !== null);
+    const totalNetProfit = pricedProfits.length
+        ? pricedProfits.reduce((sum, value) => sum + value, 0)
+        : null;
+    const hasUnpricedProducts = productSummary.has_unpriced_products === true
+        || products.some((item) => item.cost_status === "missing" || finiteFinancialValue(item.net_profit) === null);
     const visibleProducts = products.slice(0, visibleCount);
     const hasMore = visibleCount < products.length;
     useEffect(() => { setVisibleCount(5); }, [rows]);
     return (
         <Panel className="border-indigo-200" testid="advanced-top-products">
             <div className="flex h-14 items-center justify-between border-b border-indigo-800 bg-indigo-700 px-4 text-white"><h2 className="flex items-center gap-2 font-extrabold"><Trophy className="h-5 w-5" />المنتجات الأكثر مبيعًا</h2><div className="text-left text-[9px] font-bold leading-4"><p>{loading && !rows ? "—" : integer(productCount)} منتجًا خلال الفترة</p><p className="text-indigo-100">بتكلفة سلة {loading && !rows ? "—" : integer(summary.salla_fallback_products_count)} · بدون تكلفة {loading && !rows ? "—" : integer(summary.missing_all_cost_products_count)}</p></div></div>
-            <div className="grid grid-cols-[minmax(0,1fr)_58px_94px] gap-2 border-b px-3 py-2 text-[9px] font-bold text-slate-400"><span>المنتج</span><span>الوحدات</span><span>المبيعات</span></div>
+            <div className="grid grid-cols-[48px_48px_minmax(80px,1fr)_minmax(86px,1fr)_minmax(86px,1fr)] gap-1.5 border-b px-3 py-2 text-center text-[8px] font-bold leading-4 text-slate-400">
+                <span>المنتج</span>
+                <span>القطع</span>
+                <span>إجمالي المبيعات</span>
+                <span>إجمالي تكلفة القطع</span>
+                <span>صافي الربح</span>
+            </div>
             <div className="h-[330px] overflow-y-auto overscroll-contain" data-testid="advanced-top-products-scroll">
-            {visibleProducts.length ? visibleProducts.map((item) => <div key={item.identity} className="grid min-h-[66px] grid-cols-[minmax(0,1fr)_58px_94px] items-center gap-2 border-b px-3 py-2 last:border-0">
-                <div className="flex min-w-0 items-center gap-2">{item.image_url ? <img src={item.image_url} alt="" className="h-10 w-10 rounded-lg object-cover" /> : <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-50">📦</div>}<p className="line-clamp-2 text-[10px] font-bold">{item.name}</p></div>
-                <span className="num text-xs font-bold">{integer(item.units_sold)}</span><span className="num whitespace-nowrap text-[10px] font-black text-blue-600">{money(item.total_sales)} ر.س</span>
-            </div>) : <div className="p-8 text-center text-xs text-slate-400">{loading ? "جارٍ مزامنة المنتجات المباعة…" : "لا توجد منتجات مباعة في الفترة."}</div>}
+            {visibleProducts.length ? visibleProducts.map((item) => {
+                const missingMezanCost = item.cost_status !== "complete";
+                const missingAllCost = item.cost_status === "missing" || item.total_cost == null;
+                const canOpenProduct = missingMezanCost
+                    && item.catalog_product_found !== false
+                    && Boolean(item.mezan_product_id || item.salla_product_id);
+                const productImage = item.image_url
+                    ? <img src={item.image_url} alt="" className={`h-10 w-10 rounded-lg object-cover ${missingMezanCost ? "border-2 border-indigo-400" : ""}`} />
+                    : <span className={`flex h-10 w-10 items-center justify-center rounded-lg bg-amber-50 ${missingMezanCost ? "border-2 border-indigo-400" : ""}`}>📦</span>;
+                return <div
+                    key={item.identity}
+                    className={`grid min-h-[66px] grid-cols-[48px_48px_minmax(80px,1fr)_minmax(86px,1fr)_minmax(86px,1fr)] items-center gap-1.5 border-b px-3 py-2 last:border-0 ${missingMezanCost ? "bg-amber-50/40" : ""}`}
+                    data-testid={`advanced-top-product-row-${item.identity}`}
+                >
+                    <div className="flex justify-center">
+                        {canOpenProduct ? (
+                            <Link
+                                to={buildMezanProductCostHref(item, filters)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                aria-label="فتح المنتج في ميزان داخل تبويب جديد لإضافة التكلفة"
+                                className="rounded-lg outline-none ring-indigo-500 focus-visible:ring-2"
+                                data-testid="advanced-top-product-cost-link"
+                            >
+                                {productImage}
+                            </Link>
+                        ) : productImage}
+                    </div>
+                    <span className="num text-center text-xs font-bold">{integer(item.units_sold)}</span>
+                    <span className="num whitespace-nowrap text-center text-[10px] font-black text-slate-900">{money(item.total_sales)} ر.س</span>
+                    <span className={`num text-center text-[10px] font-black ${missingAllCost ? "text-orange-600" : "text-blue-600"}`}>
+                        {missingAllCost ? "بدون تكلفة" : `${money(item.total_cost)} ر.س`}
+                    </span>
+                    <span className={`num whitespace-nowrap text-center text-[10px] font-black ${item.net_profit == null ? "text-slate-400" : Number(item.net_profit) >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                        {item.net_profit == null ? "—" : `${money(item.net_profit)} ر.س`}
+                    </span>
+                </div>;
+            }) : <div className="p-8 text-center text-xs text-slate-400">{loading ? "جارٍ مزامنة المنتجات المباعة…" : "لا توجد منتجات مباعة في الفترة."}</div>}
             </div>
             {products.length > 5 && <button type="button" onClick={() => hasMore ? setVisibleCount((value) => Math.min(value + 5, products.length)) : setVisibleCount(5)} className="w-full border-t border-indigo-200 bg-indigo-50/60 px-4 py-3 text-xs font-extrabold text-indigo-700 hover:bg-indigo-100">{hasMore ? "المزيد" : "عرض أقل"}</button>}
+            {products.length > 0 && (
+                <div className="border-t-2 border-indigo-600 bg-indigo-50/70 px-3 py-3" data-testid="advanced-top-products-footer">
+                    <div className="mb-2 text-center">
+                        <p className="text-[11px] font-extrabold text-indigo-700">إجمالي جميع المنتجات</p>
+                        <p className="text-[8px] font-bold text-slate-400">يشمل المنتجات المخفية تحت المزيد</p>
+                    </div>
+                    <div className="grid grid-cols-4 divide-x divide-x-reverse divide-indigo-200 text-center">
+                        <TopProductsTotal label="إجمالي القطع" value={integer(totalUnits)} />
+                        <TopProductsTotal label="إجمالي المبيعات" value={`${money(totalSales)} ر.س`} />
+                        <TopProductsTotal label="إجمالي تكلفة القطع" value={`${money(totalCost)} ر.س`} tone="indigo" />
+                        <TopProductsTotal label="إجمالي صافي الربح" value={totalNetProfit == null ? "—" : `${money(totalNetProfit)} ر.س`} tone="emerald" />
+                    </div>
+                    {hasUnpricedProducts && (
+                        <p className="mt-2 text-center text-[8px] font-bold text-amber-700">صافي الربح غير مكتمل حتى تُضاف تكلفة المنتجات الناقصة.</p>
+                    )}
+                </div>
+            )}
         </Panel>
     );
+}
+
+function TopProductsTotal({ label, value, tone = "slate" }) {
+    const color = tone === "emerald" ? "text-emerald-700" : tone === "indigo" ? "text-indigo-700" : "text-slate-900";
+    return <div className="min-w-0 px-1.5"><p className="text-[7px] font-bold leading-3 text-slate-500">{label}</p><p className={`num mt-1 whitespace-nowrap text-[9px] font-black ${color}`}>{value}</p></div>;
 }
 
 function Metric({ label, value, Icon, tone, className = "", valueClassName = "" }) {
@@ -715,7 +796,7 @@ export default function AdvancedDashboard() {
         {(Boolean(data) || loading) && <>
         <SummaryStrip data={data} filters={filters} loading={loading} />
         <CampaignAdvisorCard />
-        <div dir="ltr" className="grid items-start gap-4 min-[1280px]:grid-cols-[clamp(280px,24vw,350px)_minmax(0,1fr)]"><aside dir="rtl" className="space-y-4"><AdsCard ads={data?.ads_v2} unifiedShadow={unifiedShadow} /><TopProductsCard rows={data?.product_cost_v2?.product_rows} summary={data?.product_cost_v2} loading={loading} /><AbandonedCartsCard carts={carts} summary={cartSummary} /></aside><main dir="rtl" className="min-w-0"><div dir="ltr" className="grid min-w-0 items-start gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]"><div dir="rtl" className="space-y-4"><ProfitCard data={data} loading={loading} /><LatestOrders orders={orders} totals={data?.totals} /></div><div dir="rtl"><GaLive data={ga} /></div></div></main></div>
+        <div dir="ltr" className="grid items-start gap-4 min-[1280px]:grid-cols-[minmax(420px,460px)_minmax(0,1fr)]"><aside dir="rtl" className="space-y-4"><AdsCard ads={data?.ads_v2} unifiedShadow={unifiedShadow} /><TopProductsCard rows={data?.product_cost_v2?.product_rows} summary={data?.product_cost_v2} filters={filters} loading={loading} /><AbandonedCartsCard carts={carts} summary={cartSummary} /></aside><main dir="rtl" className="min-w-0"><div dir="ltr" className="grid min-w-0 items-start gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]"><div dir="rtl" className="space-y-4"><ProfitCard data={data} loading={loading} /><LatestOrders orders={orders} totals={data?.totals} /></div><div dir="rtl"><GaLive data={ga} /></div></div></main></div>
         </>}
     </div>;
 }

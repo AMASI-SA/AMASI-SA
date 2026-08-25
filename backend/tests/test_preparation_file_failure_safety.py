@@ -8,13 +8,14 @@ from preparation_file_failure_safety import (
     SafePreparationFileDraftRequest,
     _batch_order_numbers,
     make_preparation_file_failure_safety_router,
+    reconcile_released_preparation_stages,
     release_incomplete_preparation_request,
 )
 from preparation_file_registry import REGISTRY
 from preparation_piece_operations import PIECES
 from reviewed_preparation_batches import BATCHES
 from reviewed_products_catalog import PREPARATION_UNIT_ALLOCATIONS
-from order_review_routes import EVENTS
+from order_review_routes import EVENTS, WORKFLOWS
 
 
 class FakeCursor:
@@ -180,6 +181,35 @@ async def test_ready_registry_is_never_released():
         "status": "already_finalized",
         "file_number": "PF-20260803-0011",
     }
+
+
+@pytest.mark.asyncio
+async def test_released_event_replays_stage_reconciliation(monkeypatch):
+    events = FakeCollection(find_rows=[{
+        "event_type": "failed_preparation_request_released",
+        "order_numbers": ["3001", "3001"],
+    }])
+    workflows = FakeCollection(find_one_rows=[{
+        "stage": "in_progress",
+    }])
+    db = FakeDb({EVENTS: events, WORKFLOWS: workflows})
+
+    async def reconcile(*_args, **kwargs):
+        assert kwargs["order_number"] == "3001"
+        assert kwargs["batch_id"] == ""
+        return False, 11
+
+    import reviewed_preparation_batches as batch_module
+
+    monkeypatch.setattr(batch_module, "_reconcile_order_stage", reconcile)
+    result = await reconcile_released_preparation_stages(
+        db,
+        user_id="owner-1",
+        actor={"id": "owner-1", "role": "owner"},
+    )
+
+    assert result["restored_order_count"] == 1
+    assert result["restored_order_numbers"] == ["3001"]
 
 
 def test_router_registers_atomic_draft_release_and_stale_recovery():

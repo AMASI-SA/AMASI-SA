@@ -27,6 +27,7 @@ from pymongo.errors import DuplicateKeyError
 
 from order_review_routes import (
     EVENTS,
+    WORKFLOWS,
     _merchant_user_id,
     _require_reviewer,
     _text,
@@ -50,6 +51,7 @@ from tz_utils import riyadh_now_aware
 
 RECOVERY_GRACE_SECONDS = 120
 MAX_STALE_RECOVERY_ROWS = 100
+MAX_RELEASE_RECONCILIATION_EVENTS = 500
 _INSTALLED = False
 _ORIGINAL_FINALIZE = None
 
@@ -411,11 +413,79 @@ async def recover_stale_preparation_requests(
                 if isinstance(exc.detail, dict)
                 else "not_recoverable",
             })
+    stage_repair = await reconcile_released_preparation_stages(
+        db,
+        user_id=user_id,
+        actor=actor,
+    )
     return {
         "ok": True,
         "recovered_count": len(recovered),
         "recovered": recovered,
         "skipped": skipped,
+        "restored_order_count": stage_repair["restored_order_count"],
+        "restored_order_numbers": stage_repair["restored_order_numbers"],
+    }
+
+
+async def reconcile_released_preparation_stages(
+    db: Any,
+    *,
+    user_id: str,
+    actor: dict[str, Any],
+) -> dict[str, Any]:
+    """Replay released-file events so legacy stranded stages self-heal.
+
+    Older recovery removed the failed allocation ledger correctly but treated
+    ``in_progress`` as permanent completion evidence.  The event retains the
+    exact affected order numbers, allowing the corrected reconciler to return
+    only orders that still have uncovered units to ``reviewed``.  Orders fully
+    covered by another valid file remain in progress.
+    """
+    rows = await db[EVENTS].find(
+        {
+            "user_id": user_id,
+            "event_type": "failed_preparation_request_released",
+        },
+        {"_id": 0, "order_numbers": 1},
+    ).sort("occurred_at", -1).limit(MAX_RELEASE_RECONCILIATION_EVENTS).to_list(
+        MAX_RELEASE_RECONCILIATION_EVENTS
+    )
+    order_numbers = sorted({
+        _text(order_number)
+        for row in rows
+        for order_number in (row.get("order_numbers") or [])
+        if _text(order_number)
+    })
+    import reviewed_preparation_batches as batch_module
+
+    restored: list[str] = []
+    failed: list[str] = []
+    for order_number in order_numbers:
+        before = await db[WORKFLOWS].find_one(
+            {"user_id": user_id, "order_number": order_number},
+            {"_id": 0, "stage": 1},
+        )
+        try:
+            complete, remaining = await batch_module._reconcile_order_stage(
+                db,
+                user_id=user_id,
+                order_number=order_number,
+                batch_id="",
+                actor=actor,
+            )
+            if (
+                _text((before or {}).get("stage")) == "in_progress"
+                and not complete
+                and remaining > 0
+            ):
+                restored.append(order_number)
+        except Exception:
+            failed.append(order_number)
+    return {
+        "restored_order_count": len(restored),
+        "restored_order_numbers": restored,
+        "failed_order_numbers": failed,
     }
 
 
@@ -541,5 +611,6 @@ __all__ = [
     "install_preparation_finalize_safety",
     "make_preparation_file_failure_safety_router",
     "recover_stale_preparation_requests",
+    "reconcile_released_preparation_stages",
     "release_incomplete_preparation_request",
 ]
