@@ -166,9 +166,12 @@ def _commerce(
         ),
         roas=_number(value.get("roas")),
         attribution_scope=(
-            "account_sum_of_exact_campaign_matches"
-            if entity_type == "account"
-            else "exact_campaign_match"
+            str(value.get("attribution_scope") or "").strip()
+            or (
+                "account_sum_of_exact_campaign_matches"
+                if entity_type == "account"
+                else "exact_campaign_match"
+            )
         ),
     )
 

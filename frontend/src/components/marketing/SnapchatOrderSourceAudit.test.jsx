@@ -30,6 +30,7 @@ describe("SnapchatOrderSourceAudit", () => {
             account: { account_name: "حساب الرياض" },
             summary: {
                 campaign_matched_orders: 42,
+                snapchat_attribution_gap_orders: 10,
                 non_campaign_orders: 10,
                 total_salla_created_orders: 52,
                 total_financial_sales_sar: 12345.67,
@@ -79,7 +80,8 @@ describe("SnapchatOrderSourceAudit", () => {
         expect(container.textContent).toContain("10");
         expect(container.textContent).toContain("52");
         expect(container.textContent).toContain("48");
-        expect(container.textContent).toContain("طلبات كل الحملات المؤكدة");
+        expect(container.textContent).toContain("طلبات مرتبطة بحملة");
+        expect(container.textContent).toContain("طلبات سناب بلا ربط تفصيلي");
         expect(container.textContent).toContain("قد يختلف عن جدول النشطة فقط");
 
         const openButton = container.querySelector('[data-testid="open-snapchat-order-audit"]');

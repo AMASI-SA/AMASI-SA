@@ -1,4 +1,9 @@
-"""Read-only Salla outcomes matched to Snapchat V2 campaign identities."""
+"""Read-only Salla outcomes for Snapchat V2 account and campaign reporting.
+
+Account totals union Salla's explicit Snapchat source with exact campaign
+matches. Campaign rows stay exact-only, so source-only orders are never
+distributed or guessed across campaigns.
+"""
 from __future__ import annotations
 
 from collections import Counter, defaultdict
@@ -273,6 +278,8 @@ async def load_salla_campaign_outcomes(
         cost_context = await _load_cost_context(db, str(user_id))
     audit_rows: list[dict[str, Any]] = []
     total_financial_sales = 0.0
+    snapchat_attributed_sales = 0.0
+    snapchat_attributed_financial_sales = 0.0
 
     for order in orders:
         timestamp = _order_timestamp(order)
@@ -295,11 +302,22 @@ async def load_salla_campaign_outcomes(
             counters["total_financial_orders"] += 1
             total_financial_sales += amount
 
+        source_platform = canonical_ad_platform(order)
         key, match_method = _match_order_campaign(
             order,
             id_lookup=id_lookup,
             name_lookup=name_lookup,
         )
+        reported_snapchat_source = source_platform == "snapchat"
+        snapchat_attributed = reported_snapchat_source or key is not None
+        if reported_snapchat_source:
+            counters["salla_reported_snapchat_orders"] += 1
+        if snapchat_attributed:
+            counters["snapchat_attributed_orders"] += 1
+            snapchat_attributed_sales += amount
+            if financial:
+                counters["snapchat_attributed_financial_orders"] += 1
+                snapchat_attributed_financial_sales += amount
         campaign_id = None
         campaign_name = None
         if key is not None:
@@ -365,6 +383,17 @@ async def load_salla_campaign_outcomes(
         2,
     )
     matched_financial_orders = int(counters["campaign_matched_financial_orders"])
+    snapchat_attributed_orders = int(counters["snapchat_attributed_orders"])
+    campaign_match_coverage_pct = (
+        round(
+            int(counters["campaign_matched_orders"])
+            / snapchat_attributed_orders
+            * 100,
+            2,
+        )
+        if snapchat_attributed_orders > 0
+        else None
+    )
     spend_by_campaign = dict(campaign_spend_sar or {})
     profitability_by_campaign = (
         {
@@ -403,6 +432,24 @@ async def load_salla_campaign_outcomes(
             "campaign_matched_orders": int(counters["campaign_matched_orders"]),
             "campaign_matched_financial_orders": matched_financial_orders,
             "campaign_matched_financial_sales_sar": matched_financial_sales,
+            "salla_reported_snapchat_orders": int(
+                counters["salla_reported_snapchat_orders"]
+            ),
+            "snapchat_attributed_orders": snapchat_attributed_orders,
+            "snapchat_attributed_sales_sar": round(snapchat_attributed_sales, 2),
+            "snapchat_attributed_financial_orders": int(
+                counters["snapchat_attributed_financial_orders"]
+            ),
+            "snapchat_attributed_financial_sales_sar": round(
+                snapchat_attributed_financial_sales,
+                2,
+            ),
+            "snapchat_attribution_gap_orders": max(
+                0,
+                snapchat_attributed_orders
+                - int(counters["campaign_matched_orders"]),
+            ),
+            "campaign_match_coverage_pct": campaign_match_coverage_pct,
             "non_campaign_orders": int(counters["non_campaign_orders"]),
             "ambiguous_orders": int(counters["ambiguous_orders"]),
             "platform_attributed_purchases": int(platform_purchases or 0),
@@ -412,6 +459,11 @@ async def load_salla_campaign_outcomes(
             "campaign_attribution_policy": (
                 "exact_campaign_id_or_unique_snapchat_campaign_name"
             ),
+            "account_attribution_policy": (
+                "salla_reported_snapchat_source_or_exact_campaign_match"
+            ),
+            "account_order_scope": "all_orders_created_in_period",
+            "account_sales_scope": "gross_order_total_all_statuses",
             "non_campaign_distribution_allowed": False,
             "profitability_scope": (
                 "sales_minus_product_cost_minus_ad_spend_before_payment_shipping_bnpl_and_operating_allocations"
