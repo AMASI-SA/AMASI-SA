@@ -45,14 +45,24 @@ export default function QoyodUnsentOrders() {
   const [paymentCheckOrder, setPaymentCheckOrder] = useState(null);
   const [paymentCheckResults, setPaymentCheckResults] = useState([]);
   const unifiedReadModel = data?.source_authority === "unified_orders";
-  const bulkRecoveryAvailable = Boolean(data) && !unifiedReadModel;
+  const verifiedReadyOrderNumbers = Array.from(new Set(
+    paymentCheckResults
+      .filter((result) => result.outcome === "ready")
+      .map((result) => String(result.order_number || "").trim())
+      .filter((value) => /^\d+$/.test(value)),
+  ));
 
-  const recoveryOrderNumbers = Array.from(new Set(
+  const allUnsentOrderNumbers = Array.from(new Set(
     (data?.orders || [])
       .filter((order) => order.status === "لم يُرسل")
       .map((order) => String(order.order_number || "").trim())
       .filter((value) => /^\d+$/.test(value)),
   ));
+  const recoveryOrderNumbers = unifiedReadModel
+    ? verifiedReadyOrderNumbers
+    : allUnsentOrderNumbers;
+  const bulkRecoveryAvailable = Boolean(data)
+    && (!unifiedReadModel || verifiedReadyOrderNumbers.length > 0);
   const paymentCheckOrderNumbers = Array.from(new Set(
     (data?.orders || [])
       .filter((order) => ["لم يُرسل", "فشل"].includes(order.status))
@@ -285,7 +295,9 @@ export default function QoyodUnsentOrders() {
               className="rounded-lg border border-rose-300 bg-rose-50 px-4 py-2 text-sm font-bold text-rose-800 hover:bg-rose-100">
               {recoveryOpen
                 ? "إغلاق إعادة الإرسال"
-                : `إعادة إرسال الكل (${recoveryOrderNumbers.length})`}
+                : unifiedReadModel
+                  ? `إرسال المفحوصة الجاهزة (${recoveryOrderNumbers.length})`
+                  : `إعادة إرسال الكل (${recoveryOrderNumbers.length})`}
             </button>
           )}
         </div>
@@ -297,11 +309,15 @@ export default function QoyodUnsentOrders() {
              data-testid="qoyod-recovery-panel">
           <div>
             <h2 className="font-bold text-rose-950">
-              إعادة إرسال جميع الطلبات غير المرسلة
+              {unifiedReadModel
+                ? "إرسال الطلبات المفحوصة والجاهزة فقط"
+                : "إعادة إرسال جميع الطلبات غير المرسلة"}
             </h2>
             <p className="mt-1 text-xs leading-5 text-rose-800">
-              سيأخذ النظام تلقائيًا كل الطلبات المصنفة «لم يُرسل» ضمن الفترة
-              والفلاتر الحالية، وعددها {recoveryOrderNumbers.length}. لا تحتاج
+              {unifiedReadModel
+                ? `اختير فقط ${recoveryOrderNumbers.length} طلبًا أعاد فحص الدفع ووسمها جاهزة في هذه الجلسة. `
+                : `سيأخذ النظام تلقائيًا كل الطلبات المصنفة «لم يُرسل» ضمن الفترة والفلاتر الحالية، وعددها ${recoveryOrderNumbers.length}. `}
+              لا تحتاج
               إلى إدخال أرقام الطلبات. يعيد الخادم قراءة كل طلب من سلة، ولا يقبل
               إلا «تم التنفيذ» أو «جاري التوصيل» أو «تم التوصيل»، ثم يطبق حواجز
               التكرار والمبلغ. «تم التجهيز» يُقبل فقط عندما تصنّفه سلة بالحالة
