@@ -82,3 +82,11 @@ Every report defaults to:
 No adapter may enable this flag. A separate acceptance gate can do so only
 after provider reconciliation, hierarchy performance coverage, Salla
 attribution checks, and Shadow Sync acceptance have passed in Production.
+
+Campaign AI Shadow compares only the overlapping V1 rollback entities and
+retains every metric drift in its diagnostics. An exact V1 overlap match is
+preferred. When the open-day V1 snapshot is older, the Shadow may instead
+record the explicit `provider_total_facts_fallback_v1_observer_drift` basis,
+but only when every compared V2 entity is complete and its lineage points to
+`mezan_snapchat_daily_total_facts_v2`. This does not rewrite V1, hide the
+drift, call OpenAI, create recommendations, or enable decisions.

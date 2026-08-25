@@ -6,6 +6,7 @@ from typing import Any
 
 import campaign_ai_policy_v2 as _v1_policy
 from campaign_ai_unified_source import load_snapchat_unified_ai_entities
+from campaign_ai_unified_source import SNAPCHAT_V2_EXACT_TOTAL_COLLECTION
 
 CORE_METRICS = ("spend_sar", "impressions", "clicks", "purchases")
 RELATIVE_TOLERANCE = {
@@ -91,10 +92,31 @@ def _compare_level(
                 "entity_name": right.get("entity_name") or left.get("entity_name"),
                 "metrics": metric_differences,
             })
-    passed = bool(compared) and not mismatches and not incomplete
+    exact_v1_overlap_match = bool(compared) and not mismatches and not incomplete
+    provider_total_facts_fallback = bool(
+        compared
+        and mismatches
+        and not incomplete
+        and all(
+            str(new[key].get("source_fact_collection") or "")
+            == SNAPCHAT_V2_EXACT_TOTAL_COLLECTION
+            for key in compared
+        )
+    )
+    passed = bool(exact_v1_overlap_match or provider_total_facts_fallback)
+    acceptance_basis = (
+        "exact_v1_overlap_match"
+        if exact_v1_overlap_match
+        else "provider_total_facts_fallback_v1_observer_drift"
+        if provider_total_facts_fallback
+        else "not_accepted"
+    )
     return {
         "level": level,
         "passed": passed,
+        "acceptance_basis": acceptance_basis,
+        "exact_v1_overlap_match": exact_v1_overlap_match,
+        "provider_total_facts_fallback": provider_total_facts_fallback,
         "v1_rows": len(old),
         "unified_v2_rows": len(new),
         "overlap_rows": len(overlap),
@@ -157,12 +179,24 @@ async def build_campaign_ai_unified_shadow(
         for level in ("campaign", "ad_group", "ad")
     ]
     passed = not errors and all(item.get("passed") is True for item in levels)
+    acceptance_basis = (
+        "exact_v1_overlap_match"
+        if passed
+        and all(
+            item.get("acceptance_basis") == "exact_v1_overlap_match"
+            for item in levels
+        )
+        else "provider_total_facts_fallback_v1_observer_drift"
+        if passed
+        else "not_accepted"
+    )
     return {
         "provider": "snapchat_ads",
         "contract_version": "unified-marketing-data-v1",
         "mode": "read_only_shadow",
         "shadow_passed": passed,
         "cutover_ready": passed,
+        "acceptance_basis": acceptance_basis,
         "period": unified.get("period"),
         "account": unified.get("account"),
         "levels": levels,

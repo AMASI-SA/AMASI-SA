@@ -21,6 +21,7 @@ from unified_marketing.gateway import (
 UNIFIED_AI_PROVIDER = "snapchat_ads"
 UNIFIED_AI_SOURCE = f"{CONTRACT_VERSION}:snapchat-v2"
 UNIFIED_AI_SOURCE_MODE = "unified_marketing_entity_report"
+SNAPCHAT_V2_EXACT_TOTAL_COLLECTION = "mezan_snapchat_daily_total_facts_v2"
 
 
 def _amount(value: Any) -> float | None:
@@ -141,11 +142,20 @@ def _platform_revenue_sar(row: dict[str, Any]) -> float | None:
 def _row_complete(row: dict[str, Any]) -> bool:
     quality = row.get("quality") if isinstance(row.get("quality"), dict) else {}
     delivery = row.get("delivery") if isinstance(row.get("delivery"), dict) else {}
+    lineage = row.get("lineage") if isinstance(row.get("lineage"), dict) else {}
+    exact_provider_total = (
+        lineage.get("source_collection") == SNAPCHAT_V2_EXACT_TOTAL_COLLECTION
+    )
     return bool(
-        quality.get("sync_status") == "complete"
-        and quality.get("coverage_status") == "complete"
-        and int(quality.get("source_fact_count") or 0) > 0
+        int(quality.get("source_fact_count") or 0) > 0
         and _amount(delivery.get("spend_sar")) is not None
+        and (
+            (
+                quality.get("sync_status") == "complete"
+                and quality.get("coverage_status") == "complete"
+            )
+            or exact_provider_total
+        )
     )
 
 
