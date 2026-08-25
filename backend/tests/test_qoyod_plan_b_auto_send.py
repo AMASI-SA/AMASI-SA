@@ -1,5 +1,7 @@
 import pytest
 
+from qoyod_auto_unified.common import RETRYABLE_SYNC_FAILURE_CODES
+from qoyod_auto_unified.queue_select import _retry_delay
 from integrations.qoyod_manual import auto_send
 from integrations.qoyod_manual.send import ManualSendRefused
 
@@ -68,6 +70,16 @@ def test_live_sender_requires_the_existing_safe_settings_contract():
     }
 
 
+def test_prewrite_accounting_refusals_retry_slowly_after_fresh_salla_read():
+    codes = {
+        "qoyod_preflight_payload_invalid",
+        "qoyod_preflight_total_mismatch",
+        "zero_total_refused",
+    }
+    assert codes <= RETRYABLE_SYNC_FAILURE_CODES
+    assert all(_retry_delay(code).total_seconds() == 1800 for code in codes)
+
+
 @pytest.mark.asyncio
 async def test_live_sender_refreshes_salla_before_accepting_status(monkeypatch):
     calls = []
@@ -88,7 +100,7 @@ async def test_live_sender_refreshes_salla_before_accepting_status(monkeypatch):
 
     monkeypatch.setattr(
         auto_send,
-        "refresh_single_order_status",
+        "resync_single_order",
         fake_status_refresh,
     )
     monkeypatch.setattr(auto_send, "_still_qoyod_eligible", fake_eligible)
@@ -422,13 +434,21 @@ class _QuarantinesCollection:
 
     async def update_one(self, selector, update, upsert=False):
         self.updated.append((selector, update, upsert))
-        row = self.rows.setdefault(selector["_id"], {"_id": selector["_id"]})
+        row_id = selector.get("_id")
+        if not row_id:
+            row_id = f"{selector.get('user_id')}:{selector.get('order_number')}"
+        row = self.rows.setdefault(row_id, {"_id": row_id})
         for key, value in update.get("$setOnInsert", {}).items():
             row.setdefault(key, value)
         row.update(update.get("$set", {}))
         for key, value in update.get("$inc", {}).items():
             row[key] = row.get(key, 0) + value
         return _UpdateResult()
+
+    async def update_many(self, selector, update):
+        result = _UpdateResult()
+        result.modified_count = 0
+        return result
 
 
 class _RunDb:
@@ -511,6 +531,12 @@ async def _prepare_run(
     monkeypatch.setattr(
         auto_send, "build_candidate_audit", fake_candidate_snapshot
     )
+    # Production installs the oldest-first queue wrapper at import time; its
+    # module keeps its own reference to the same authoritative audit builder.
+    from qoyod_auto_unified import queue_select
+    monkeypatch.setattr(
+        queue_select, "build_candidate_audit", fake_candidate_snapshot
+    )
     monkeypatch.setattr(
         auto_send, "_refresh_and_verify_salla_status", fake_refresh
     )
@@ -526,7 +552,9 @@ async def test_run_once_uses_one_snapshot_and_keeps_all_three_statuses(
 
     async def fake_send(
         db, *, user_id, orders_user_id, order_number, actor,
+        allow_historical_positive_total,
     ):
+        assert allow_historical_positive_total is True
         calls.append(order_number)
         return {"invoice_id": f"q-{order_number}", "payment_id": "p-1"}
 
@@ -565,7 +593,9 @@ async def test_actual_total_mismatch_isolated_and_next_candidate_sends(
     calls = []
     async def fake_send(
         db, *, user_id, orders_user_id, order_number, actor,
+        allow_historical_positive_total,
     ):
+        assert allow_historical_positive_total is True
         calls.append(order_number)
         assert user_id == "main"
         assert orders_user_id == "orders-user"
@@ -619,7 +649,9 @@ async def test_preflight_mismatch_is_quarantined_before_later_order_sends(
 
     async def fake_send(
         db, *, user_id, orders_user_id, order_number, actor,
+        allow_historical_positive_total,
     ):
+        assert allow_historical_positive_total is True
         calls.append(order_number)
         if order_number == "273809026":
             raise ManualSendRefused(
@@ -659,7 +691,9 @@ async def test_open_quarantine_is_skipped_without_consuming_batch_slot(
 
     async def fake_send(
         db, *, user_id, orders_user_id, order_number, actor,
+        allow_historical_positive_total,
     ):
+        assert allow_historical_positive_total is True
         calls.append(order_number)
         return {"invoice_id": 901, "payment_id": 902}
 
@@ -697,7 +731,9 @@ async def test_more_than_prefetch_page_of_quarantines_cannot_starve_older_row(
 
     async def fake_send(
         db, *, user_id, orders_user_id, order_number, actor,
+        allow_historical_positive_total,
     ):
+        assert allow_historical_positive_total is True
         calls.append(order_number)
         return {"invoice_id": 901, "payment_id": 902}
 
@@ -734,7 +770,9 @@ async def test_qoyod_http_error_is_quarantined_and_next_candidate_sends(
 
     async def fake_send(
         db, *, user_id, orders_user_id, order_number, actor,
+        allow_historical_positive_total,
     ):
+        assert allow_historical_positive_total is True
         calls.append(order_number)
         if order_number == "273811870":
             raise ManualSendRefused(
@@ -770,7 +808,9 @@ async def test_salla_refresh_failure_retries_later_and_next_candidate_sends(
 
     async def fake_send(
         db, *, user_id, orders_user_id, order_number, actor,
+        allow_historical_positive_total,
     ):
+        assert allow_historical_positive_total is True
         sent.append(order_number)
         return {"invoice_id": 901, "payment_id": 902}
 
@@ -809,9 +849,9 @@ async def test_salla_refresh_failure_retries_later_and_next_candidate_sends(
     assert result["sent_count"] == 1
     assert result["manual_review_count"] == 0
     assert result["retry_later_count"] == 1
-    assert result["results"][0]["outcome"] == "retry_later"
-    assert result["results"][0]["order_number"] == "276776919"
-    assert result["results"][1]["outcome"] == "sent"
+    assert result["results"][0]["outcome"] == "sent"
+    assert result["results"][1]["outcome"] == "retry_later"
+    assert result["results"][1]["order_number"] == "276776919"
     assert db.qoyod_manual_auto_quarantines.rows == {}
 
 
@@ -823,7 +863,9 @@ async def test_unhandled_order_error_is_quarantined_and_batch_continues(
 
     async def fake_send(
         db, *, user_id, orders_user_id, order_number, actor,
+        allow_historical_positive_total,
     ):
+        assert allow_historical_positive_total is True
         calls.append(order_number)
         if order_number == "276700001":
             raise RuntimeError("unexpected per-order failure")
@@ -888,7 +930,9 @@ async def test_live_unpaid_order_is_refused_by_unchanged_manual_sender(
 
     async def refusing_sender(
         db, *, user_id, orders_user_id, order_number, actor,
+        allow_historical_positive_total,
     ):
+        assert allow_historical_positive_total is True
         sender_calls.append(order_number)
         raise ManualSendRefused(
             "payment_not_completed",
