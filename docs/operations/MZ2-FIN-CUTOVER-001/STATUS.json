@@ -1,7 +1,7 @@
 {
   "operation_id": "MZ2-FIN-CUTOVER-001",
   "plan_version": 1,
-  "last_updated_date": "2026-08-24",
+  "last_updated_date": "2026-08-25",
   "production_branch": "hotfix/prod-snap-meta-final",
   "foundation_pr": 851,
   "foundation_merge_sha": "c116d80fd375c0ddfd4acf0eb0ea7e8a8a0dd092",
@@ -9,8 +9,8 @@
   "current_phase": "P01",
   "current_phase_file": "PHASE-01-SETTLEMENTS.md",
   "current_phase_status": "IN_PROGRESS",
-  "next_allowed_action": "complete_and_document_p01_browser_acceptance_only",
-  "current_blocker": "P01_browser_acceptance_not_completed",
+  "next_allowed_action": "complete_p01_scenario_5_and_obtain_explicit_same_session_authorization_before_scenario_6",
+  "current_blocker": "P01_browser_acceptance_scenarios_5_and_6_not_completed",
   "legacy_mezan_policy": {
     "dynamic_financial_dependency_allowed": false,
     "copy_reference_values_allowed": true,
@@ -75,7 +75,32 @@
         "critical_file_hashes_match": true,
         "release_boot_started_at": "2026-08-24T21:03:45.282177+00:00",
         "release_lease_active_after_verify": false,
-        "browser_verified": false
+        "browser_verified": false,
+        "browser_acceptance_runtime_sha": "47d750b7cf2edbda4262f6d496a885bb1f30ccdc",
+        "browser_acceptance_release_id": "aaa57d5d-8f27-4d46-8d85-4d8ee47f2e7c",
+        "browser_acceptance_release_guard_verified": true,
+        "browser_acceptance_release_guard_checks": 3,
+        "browser_acceptance_boot_started_at_observations": [
+          "2026-08-25T03:01:01.050949+00:00",
+          "2026-08-25T03:01:44.733022+00:00"
+        ],
+        "browser_acceptance_fix_pr": 887,
+        "browser_acceptance_fix_merge_sha": "47d750b7cf2edbda4262f6d496a885bb1f30ccdc",
+        "browser_scenarios": {
+          "1": "PASS_DRAFT_SAVED_AND_REOPENED",
+          "2": "PASS_PROVIDER_FILE_PARSED",
+          "3": "PASS_BANK_CHANGE_PREVIEW_AND_RESTORE",
+          "4": "PASS_DUPLICATE_PREVENTED",
+          "5": "BLOCKED_NO_AUTHENTICATED_NO_POST_ACCOUNT",
+          "6": "BLOCKED_NO_EXPLICIT_POST_AUTHORIZATION",
+          "7": "PASS_DIFFERENCE_BLOCKED_AND_TEMPORARY_MATCH_REMOVED",
+          "8": "PASS_UNSUPPORTED_CURRENCY_REJECTED_NO_WRITE"
+        },
+        "browser_drafts": [
+          "salla:6585798",
+          "tamara:P0420741SA260725"
+        ],
+        "journal_posted_during_browser_acceptance": false
       }
     },
     {
