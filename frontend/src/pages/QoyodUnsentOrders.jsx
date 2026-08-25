@@ -40,6 +40,9 @@ export default function QoyodUnsentOrders() {
   const [retryConfirmOrder, setRetryConfirmOrder] = useState(null);
   const [retryingOrder, setRetryingOrder] = useState(null);
   const [retryNotice, setRetryNotice] = useState(null);
+  const [paymentCheckRunning, setPaymentCheckRunning] = useState(false);
+  const [paymentCheckOrder, setPaymentCheckOrder] = useState(null);
+  const [paymentCheckResults, setPaymentCheckResults] = useState([]);
   const unifiedReadModel = data?.source_authority === "unified_orders";
   const bulkRecoveryAvailable = Boolean(data) && !unifiedReadModel;
 
@@ -49,6 +52,53 @@ export default function QoyodUnsentOrders() {
       .map((order) => String(order.order_number || "").trim())
       .filter((value) => /^\d+$/.test(value)),
   ));
+  const paymentCheckOrderNumbers = Array.from(new Set(
+    (data?.orders || [])
+      .filter((order) => ["لم يُرسل", "فشل"].includes(order.status))
+      .map((order) => String(order.order_number || "").trim())
+      .filter((value) => /^\d+$/.test(value)),
+  )).slice(0, 100);
+
+  const runPaymentCheck = async (orderNumber) => {
+    setPaymentCheckOrder(orderNumber);
+    setRetryNotice(null);
+    try {
+      const { data: result } = await api.post(
+        `${QOYOD_BASE}/manual/recheck-payment/${encodeURIComponent(orderNumber)}`,
+      );
+      setPaymentCheckResults([result]);
+    } catch (requestError) {
+      const detail = requestError?.response?.data?.detail;
+      setPaymentCheckResults([{
+        order_number: orderNumber,
+        outcome: "error",
+        message: typeof detail === "string"
+          ? detail : (detail?.message || "تعذر فحص الدفع من سلة"),
+      }]);
+    } finally {
+      setPaymentCheckOrder(null);
+    }
+  };
+
+  const runPaymentCheckBatch = async () => {
+    if (!paymentCheckOrderNumbers.length) return;
+    setPaymentCheckRunning(true);
+    setPaymentCheckResults([]);
+    setRetryNotice(null);
+    try {
+      const { data: result } = await api.post(
+        `${QOYOD_BASE}/manual/recheck-payment-bulk`,
+        { order_numbers: paymentCheckOrderNumbers },
+      );
+      setPaymentCheckResults(result?.results || []);
+    } catch (requestError) {
+      const detail = requestError?.response?.data?.detail;
+      setError(typeof detail === "string"
+        ? detail : (detail?.message || "تعذر إكمال فحص الدفع فقط"));
+    } finally {
+      setPaymentCheckRunning(false);
+    }
+  };
 
   const runRecoveryBatch = async () => {
     if (!recoveryOrderNumbers.length) {
@@ -200,6 +250,16 @@ export default function QoyodUnsentOrders() {
             className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700">
             تحديث
           </button>
+          <button
+            type="button"
+            onClick={runPaymentCheckBatch}
+            disabled={paymentCheckRunning || !paymentCheckOrderNumbers.length}
+            data-testid="qoyod-payment-recheck-bulk"
+            className="rounded-lg border border-sky-300 bg-sky-50 px-4 py-2 text-sm font-bold text-sky-800 hover:bg-sky-100 disabled:opacity-50">
+            {paymentCheckRunning
+              ? "جاري فحص الدفع فقط…"
+              : `فحص الدفع فقط (${paymentCheckOrderNumbers.length})`}
+          </button>
           {bulkRecoveryAvailable && (
             <button
               type="button"
@@ -332,6 +392,25 @@ export default function QoyodUnsentOrders() {
         </div>
       )}
 
+      {paymentCheckResults.length > 0 && (
+        <div className="rounded-xl border border-sky-200 bg-sky-50 p-4"
+             data-testid="qoyod-payment-recheck-results">
+          <div className="mb-2 text-sm font-bold text-sky-950">
+            نتيجة قراءة سلة فقط — لم تُرسل أي فاتورة ولم تُحفظ تغييرات
+          </div>
+          <div className="max-h-64 overflow-auto space-y-1 text-xs">
+            {paymentCheckResults.map((result) => (
+              <div key={result.order_number}
+                   className="rounded border border-sky-100 bg-white px-3 py-2">
+                <span className="font-mono">{result.order_number}</span>
+                <span className="mx-2 font-bold">{result.outcome}</span>
+                <span>{result.message}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="rounded-xl border border-slate-200 bg-white overflow-x-auto"
            data-testid="unsent-orders-table">
         {loading ? (
@@ -385,6 +464,15 @@ export default function QoyodUnsentOrders() {
                   <td className="px-3 py-2 text-slate-600 max-w-md">{o.reason}</td>
                   <td className="px-3 py-2" dir="ltr">{o.qoyod_invoice_id || "—"}</td>
                   <td className="px-3 py-2 min-w-48">
+                    <button
+                      type="button"
+                      onClick={() => runPaymentCheck(o.order_number)}
+                      disabled={paymentCheckOrder === o.order_number}
+                      data-testid={`qoyod-payment-recheck-${o.order_number}`}
+                      className="mb-1 rounded-lg border border-sky-300 bg-sky-50 px-3 py-1.5 text-xs font-bold text-sky-800 hover:bg-sky-100 disabled:opacity-50">
+                      {paymentCheckOrder === o.order_number
+                        ? "جاري الفحص فقط…" : "فحص الدفع فقط"}
+                    </button>
                     {o.retry_allowed === true ? (
                       retryConfirmOrder === o.order_number ? (
                         <div className="flex items-center gap-2">
