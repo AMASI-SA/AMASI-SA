@@ -670,7 +670,7 @@ class SnapchatV2Client:
         payload: dict[str, Any],
         *,
         entity_type: str,
-        campaign_id: str,
+        campaign_id: str | None,
     ) -> list[dict[str, Any]]:
         if entity_type not in {"campaign", "ad_squad", "ad"}:
             raise ValueError(f"Unsupported Snapchat TOTAL level: {entity_type}")
@@ -702,16 +702,52 @@ class SnapchatV2Client:
                     f"Snapchat {entity_type} TOTAL response is missing total_stat.",
                 )
             if entity_type == "campaign":
+                breakdown = stat.get("breakdown_stats")
+                campaigns = (
+                    breakdown.get("campaign")
+                    if isinstance(breakdown, dict)
+                    else None
+                )
+                if isinstance(campaigns, list):
+                    for campaign in campaigns:
+                        if not isinstance(campaign, dict):
+                            raise SnapchatClientError(
+                                "snapchat_campaign_total_row_invalid",
+                                "Snapchat campaign TOTAL row is invalid.",
+                            )
+                        external_id = clean_text(campaign.get("id"), limit=128)
+                        metrics = campaign.get("stats")
+                        if not external_id or not isinstance(metrics, dict):
+                            raise SnapchatClientError(
+                                "snapchat_campaign_total_identity_invalid",
+                                "Snapchat campaign TOTAL identity is invalid.",
+                            )
+                        rows.append(
+                            {
+                                "campaign_id": external_id,
+                                "external_id": external_id,
+                                "metrics": metrics,
+                            }
+                        )
+                    continue
                 metrics = stat.get("stats")
-                if isinstance(metrics, dict):
+                direct_campaign_id = clean_text(
+                    stat.get("id") or campaign_id,
+                    limit=128,
+                )
+                if isinstance(metrics, dict) and direct_campaign_id:
                     rows.append(
                         {
-                            "campaign_id": campaign_id,
-                            "external_id": campaign_id,
+                            "campaign_id": direct_campaign_id,
+                            "external_id": direct_campaign_id,
                             "metrics": metrics,
                         }
                     )
-                continue
+                    continue
+                raise SnapchatClientError(
+                    "snapchat_campaign_total_breakdown_missing",
+                    "Snapchat TOTAL response is missing the campaign breakdown.",
+                )
             breakdown = stat.get("breakdown_stats")
             entities: list[dict[str, Any]] | None = None
             if isinstance(breakdown, dict) and config is not None:
@@ -781,7 +817,17 @@ class SnapchatV2Client:
             }
         )
         date_values = sorted(set(report_dates))
-        expected_requests = len(campaign_values) * len(date_values)
+        # Snapchat's Ad Account Stats endpoint returns every campaign in one
+        # paginated TOTAL breakdown.  Use that authoritative account-level
+        # report for campaigns so the result matches Ads Manager and does not
+        # become partial when an account has enough campaigns to exhaust the
+        # per-run request budget.  Child levels still require one Campaign
+        # Stats request per parent campaign according to Snapchat's contract.
+        expected_requests = (
+            len(date_values)
+            if entity_type == "campaign"
+            else len(campaign_values) * len(date_values)
+        )
         remaining_budget = max(0, MAX_PROVIDER_CALLS - self.provider_calls)
         if expected_requests > remaining_budget:
             raise SnapchatClientError(
@@ -822,8 +868,27 @@ class SnapchatV2Client:
                     # returns the currently processed portion of today's
                     # complete local-day window while preserving real-time
                     # attribution semantics.
-                    for campaign_id in campaign_values:
-                        url = f"{SNAPCHAT_API_BASE}/campaigns/{campaign_id}/stats"
+                    request_targets: list[tuple[str, str | None, str | None]]
+                    if entity_type == "campaign":
+                        request_targets = [
+                            (
+                                f"{SNAPCHAT_API_BASE}/adaccounts/{account_id}/stats",
+                                None,
+                                "campaign",
+                            )
+                        ]
+                    else:
+                        request_targets = [
+                            (
+                                f"{SNAPCHAT_API_BASE}/campaigns/{campaign_id}/stats",
+                                campaign_id,
+                                PERFORMANCE_BREAKDOWNS[entity_type][
+                                    "request_value"
+                                ],
+                            )
+                            for campaign_id in campaign_values
+                        ]
+                    for url, campaign_id, breakdown in request_targets:
                         params: dict[str, Any] = {
                             "start_time": start_utc.astimezone(account_tz).isoformat(timespec="seconds"),
                             "end_time": end_utc.astimezone(account_tz).isoformat(timespec="seconds"),
@@ -839,10 +904,8 @@ class SnapchatV2Client:
                                 limit=32,
                             ).lower(),
                         }
-                        if entity_type != "campaign":
-                            params["breakdown"] = PERFORMANCE_BREAKDOWNS[entity_type][
-                                "request_value"
-                            ]
+                        if breakdown:
+                            params["breakdown"] = breakdown
                         pages, page_count = await self._pages(client, url, params=params)
                         completed_requests += page_count
                         for payload in pages:
@@ -853,13 +916,19 @@ class SnapchatV2Client:
                             ):
                                 metrics = row["metrics"]
                                 external_id = str(row["external_id"])
+                                row_campaign_id = clean_text(
+                                    row.get("campaign_id")
+                                    or campaign_id
+                                    or external_id,
+                                    limit=128,
+                                )
                                 fact = {
                                     "user_id": self.user_id,
                                     "provider": SNAPCHAT_PROVIDER,
                                     "ad_account_id": account_id,
                                     "entity_type": entity_type,
                                     "external_id": external_id,
-                                    "campaign_id": campaign_id,
+                                    "campaign_id": row_campaign_id,
                                     "ad_squad_id": (
                                         external_id
                                         if entity_type == "ad_squad"
@@ -915,9 +984,7 @@ class SnapchatV2Client:
                                         "api": "snapchat_marketing_api",
                                         "granularity": "TOTAL",
                                         "breakdown": (
-                                            PERFORMANCE_BREAKDOWNS[entity_type]["request_value"]
-                                            if entity_type != "campaign"
-                                            else None
+                                            breakdown
                                         ),
                                         "frequency_summed": False,
                                     },

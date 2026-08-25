@@ -5,7 +5,11 @@ from datetime import date, datetime, timezone
 import pytest
 
 from snapchat_v2.client import SnapchatClientError, SnapchatV2Client
-from snapchat_v2.routes import _add_sar_spend, _entity_performance_report
+from snapchat_v2.routes import (
+    _add_sar_spend,
+    _entity_performance_report,
+    _total_fact_date_coverage_complete,
+)
 from snapchat_v2.salla_outcomes import load_salla_campaign_outcomes
 from snapchat_v2.sync_pipeline import SnapchatV2SyncPipeline
 from snapchat_v2.token_store import SnapchatTokenStoreError
@@ -130,6 +134,43 @@ def total_performance_payload(key: str, external_id: str) -> dict:
                                     "frequency": 1.25,
                                 },
                             }
+                        ]
+                    },
+                },
+            }
+        ],
+        "paging": {},
+    }
+
+
+def campaign_total_performance_payload() -> dict:
+    return {
+        "request_status": "SUCCESS",
+        "total_stats": [
+            {
+                "sub_request_status": "SUCCESS",
+                "total_stat": {
+                    "id": "a1",
+                    "type": "AD_ACCOUNT",
+                    "granularity": "TOTAL",
+                    "breakdown_stats": {
+                        "campaign": [
+                            {
+                                "id": "c1",
+                                "stats": {
+                                    "spend": 3_000_000_000,
+                                    "conversion_purchases": 118,
+                                    "conversion_purchases_value": 7_470_240_000,
+                                },
+                            },
+                            {
+                                "id": "c2",
+                                "stats": {
+                                    "spend": 2_964_780_000,
+                                    "conversion_purchases": 111,
+                                    "conversion_purchases_value": 3_000_000_000,
+                                },
+                            },
                         ]
                     },
                 },
@@ -306,6 +347,69 @@ async def test_daily_total_facts_keep_current_account_day_boundaries():
 
 
 @pytest.mark.asyncio
+async def test_campaign_totals_use_one_account_breakdown_matching_ads_manager():
+    factory = FakeHTTPFactory(
+        [FakeResponse(campaign_total_performance_payload())]
+    )
+    client = SnapchatV2Client(
+        object(),
+        "u1",
+        token_store=FakeTokenStore(),
+        client_factory=factory,
+    )
+
+    result = await client.fetch_breakdown_daily_total_facts(
+        {
+            "ad_account_id": "a1",
+            "timezone": "America/Los_Angeles",
+            "currency": "USD",
+        },
+        # A partial activity seed must not limit the account TOTAL report.
+        campaign_ids=["c1"],
+        entity_type="campaign",
+        report_dates=[date(2026, 8, 25)],
+        sync_run_id="run-campaign-total-1",
+    )
+
+    assert sum(row["purchases"] for row in result["rows"]) == 229
+    assert round(sum(row["spend_native"] for row in result["rows"]), 2) == 5_964.78
+    assert {row["campaign_id"] for row in result["rows"]} == {"c1", "c2"}
+    assert client.provider_calls == 1
+    url, params = factory.clients[0].calls[0]
+    assert url.endswith("/adaccounts/a1/stats")
+    assert params["granularity"] == "TOTAL"
+    assert params["breakdown"] == "campaign"
+    assert params["conversion_source_types"] == "total"
+    assert params["action_report_time"] == "conversion"
+    assert params["swipe_up_attribution_window"] == "28_DAY"
+    assert params["view_attribution_window"] == "7_DAY"
+
+
+@pytest.mark.asyncio
+async def test_campaign_total_budget_depends_on_days_not_campaign_count():
+    factory = FakeHTTPFactory(
+        [FakeResponse(campaign_total_performance_payload())]
+    )
+    client = SnapchatV2Client(
+        object(),
+        "u1",
+        token_store=FakeTokenStore(),
+        client_factory=factory,
+    )
+
+    result = await client.fetch_breakdown_daily_total_facts(
+        {"ad_account_id": "a1", "timezone": "UTC", "currency": "USD"},
+        campaign_ids=[f"c{index}" for index in range(1_000)],
+        entity_type="campaign",
+        report_dates=[date(2026, 8, 25)],
+        sync_run_id="run-campaign-budget-1",
+    )
+
+    assert result["coverage"]["status"] == "complete"
+    assert client.provider_calls == 1
+
+
+@pytest.mark.asyncio
 async def test_breakdown_token_failure_preserves_incomplete_coverage():
     client = SnapchatV2Client(
         object(),
@@ -418,7 +522,6 @@ async def test_entity_report_joins_ad_to_v2_parent_identities(monkeypatch):
     assert result["rows"][0]["ad_name"] == "Creative"
     assert result["rows"][0]["ad_squad_name"] == "Squad"
     assert result["rows"][0]["campaign_name"] == "Campaign"
-
     async def partial(*_args, **_kwargs):
         return "partial"
 
@@ -436,6 +539,25 @@ async def test_entity_report_joins_ad_to_v2_parent_identities(monkeypatch):
         ad_squad_id="s1",
     )
     assert partial_result["rows"][0]["performance_sync_status"] == "partial"
+
+
+def test_total_fact_date_coverage_requires_every_requested_day():
+    rows = [
+        {"report_date": "2026-08-23"},
+        {"report_date": "2026-08-25"},
+    ]
+
+    assert not _total_fact_date_coverage_complete(
+        rows,
+        date_from=date(2026, 8, 23),
+        date_to=date(2026, 8, 25),
+    )
+    rows.append({"report_date": "2026-08-24"})
+    assert _total_fact_date_coverage_complete(
+        rows,
+        date_from=date(2026, 8, 23),
+        date_to=date(2026, 8, 25),
+    )
 
 
 @pytest.mark.asyncio

@@ -221,6 +221,24 @@ def _metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _total_fact_date_coverage_complete(
+    rows: list[dict[str, Any]],
+    *,
+    date_from: date,
+    date_to: date,
+) -> bool:
+    expected = {
+        (date_from + timedelta(days=offset)).isoformat()
+        for offset in range((date_to - date_from).days + 1)
+    }
+    observed = {
+        str(row.get("report_date") or "")
+        for row in rows
+        if row.get("report_date")
+    }
+    return bool(expected) and expected.issubset(observed)
+
+
 async def _entity_performance_report(
     db: Any,
     *,
@@ -238,6 +256,12 @@ async def _entity_performance_report(
     start_utc, _ = business_day_window(date_from, timezone_name)
     _, end_utc = business_day_window(date_to, timezone_name)
     account_id = str(account["ad_account_id"])
+    level_status = await _latest_level_status(
+        db,
+        user_id=user_id,
+        ad_account_id=account_id,
+        entity_type=entity_type,
+    )
     facts = await load_hourly_facts(
         db,
         user_id=user_id,
@@ -262,7 +286,15 @@ async def _entity_performance_report(
             )
         except (AttributeError, KeyError, TypeError):
             total_facts = []
-        if total_facts:
+        if (
+            total_facts
+            and level_status == "complete"
+            and _total_fact_date_coverage_complete(
+                total_facts,
+                date_from=date_from,
+                date_to=date_to,
+            )
+        ):
             facts = total_facts
             source_collection = SNAPCHAT_TOTAL_FACTS_COLLECTION
     identities = await list_entities(
@@ -302,12 +334,6 @@ async def _entity_performance_report(
     identity_by_id = {
         str(row.get("external_id")): row for row in identities
     }
-    level_status = await _latest_level_status(
-        db,
-        user_id=user_id,
-        ad_account_id=account_id,
-        entity_type=entity_type,
-    )
     buckets: dict[str, list[dict[str, Any]]] = {}
     for fact in facts:
         external_id = str(fact.get("external_id") or "")
