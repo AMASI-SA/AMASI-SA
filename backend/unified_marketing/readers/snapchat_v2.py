@@ -1,7 +1,7 @@
 """Read Snapchat V2 through the provider-neutral marketing contract."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 from snapchat_v2.accounts import get_selected_account
@@ -285,4 +285,294 @@ async def load_snapchat_v2_account_report(
     return report
 
 
-__all__ = ["load_snapchat_v2_account_report"]
+def _dashboard_bank_commissions(
+    account: dict[str, Any],
+    cost: dict[str, Any],
+    *,
+    spend_native: float,
+) -> dict[str, Any]:
+    base_spend_sar = round(float(cost.get("base_spend_sar") or 0), 2)
+    commission_sar = round(float(cost.get("commission_sar") or 0), 2)
+    applies = cost.get("apply_bank_commission") is True
+    account_row = {
+        "provider": "snapchat_ads",
+        "provider_label": "Snapchat",
+        "external_account_id": str(account.get("ad_account_id") or ""),
+        "mezan_integration_account_id": account.get(
+            "mezan_integration_account_id"
+        ),
+        "display_name": account.get("display_name")
+        or account.get("ad_account_id"),
+        "native_currency": cost.get("native_currency")
+        or account.get("currency"),
+        "exchange_rate_to_sar": cost.get("exchange_rate_to_sar"),
+        "spend_native": round(float(spend_native), 6),
+        "spend_sar": base_spend_sar,
+        "bank_commission_pct": cost.get("bank_commission_pct"),
+        "apply_bank_commission": applies,
+        "configured": cost.get("cost_setting_configured") is True,
+        "native_spend_complete": True,
+        "source_rows": 1,
+        "bank_commission_fee_sar": commission_sar,
+        "source_mode": "mezan2_ad_account_cost_settings_v1",
+    }
+    return {
+        "accounts": [account_row],
+        "total_fee_sar": commission_sar,
+        "fee_subject_spend_sar": base_spend_sar if applies else 0.0,
+        "total_effective_spend_sar": base_spend_sar,
+        "coverage": {
+            **dict(cost.get("cost_coverage") or {}),
+            "complete": True,
+            "legacy_ads_currency_settings_read": False,
+            "accounting_write_reached": False,
+            "qoyod_write_reached": False,
+        },
+    }
+
+
+async def load_snapchat_v2_dashboard_spend(
+    db: Any,
+    user_id: str,
+    *,
+    date_from: date,
+    date_to: date,
+    timezone_name: str = RIYADH_TIMEZONE,
+) -> dict[str, Any]:
+    """Return a provider-neutral Dashboard snapshot from Snapchat V2 facts.
+
+    This is a read-only projection adapter. It never calls Snapchat and never
+    reaches campaign, Salla, accounting, or Qoyod write paths.
+    """
+    account = await get_selected_account(db, str(user_id))
+    if not account:
+        integration = await db["mezan_integrations_v2"].find_one(
+            {"user_id": str(user_id), "provider": "snapchat_ads"},
+            {"_id": 1},
+        )
+        disconnected = not integration
+        days = [
+            (date_from + timedelta(days=offset)).isoformat()
+            for offset in range((date_to - date_from).days + 1)
+        ]
+        return {
+            "rows": [],
+            "daily_sar": {day: (0.0 if disconnected else None) for day in days},
+            "daily_state": {
+                day: ("not_connected" if disconnected else "unknown_incomplete")
+                for day in days
+            },
+            "hourly_sar": {day: [] for day in days},
+            "total_sar": 0.0 if disconnected else None,
+            "bank_commissions": (
+                {
+                    "accounts": [],
+                    "total_fee_sar": 0.0,
+                    "fee_subject_spend_sar": 0.0,
+                    "total_effective_spend_sar": 0.0,
+                    "coverage": {"complete": True},
+                }
+                if disconnected
+                else None
+            ),
+            "quality": {
+                "status": "complete" if disconnected else "incomplete",
+                "data_state": "not_connected" if disconnected else "unknown_incomplete",
+                "coverage_complete": disconnected,
+                "amount_complete": disconnected,
+                "complete": disconnected,
+                "connected": not disconnected,
+                "reason_codes": [] if disconnected else ["selected_account_missing"],
+                "timezone": timezone_name,
+                "source_collection": SNAPCHAT_DAILY_PROJECTIONS_COLLECTION,
+            },
+            "source_contract": "unified-marketing-data-v1:dashboard-spend",
+            "contract_version": "unified-marketing-data-v1",
+            "source_only": True,
+            "provider_write_reached": False,
+            "campaign_write_reached": False,
+            "accounting_write_reached": False,
+            "qoyod_write_reached": False,
+        }
+    account_id = str(account["ad_account_id"])
+    projections = await list_daily_projections(
+        db,
+        user_id=str(user_id),
+        ad_account_id=account_id,
+        date_from=date_from,
+        date_to=date_to,
+        projection_timezone=timezone_name,
+        action_report_time="conversion",
+    )
+    expected_days = (date_to - date_from).days + 1
+    financial_status = await _projection_financial_status(
+        db,
+        user_id=str(user_id),
+        ad_account_id=account_id,
+        projections=projections,
+    )
+    reconciliations = await list_reconciliation(
+        db,
+        user_id=str(user_id),
+        ad_account_id=account_id,
+        date_from=date_from,
+        date_to=date_to,
+        action_report_time="conversion",
+    )
+    reconciliation_status = _reconciliation_status(
+        reconciliations,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    projection_complete = (
+        len(projections) == expected_days
+        and all(row.get("amount_complete") is True for row in projections)
+    )
+    total_native = _sum(projections, "base_spend_native")
+    try:
+        cost = await calculate_cost_components(
+            db,
+            user_id=str(user_id),
+            account=account,
+            spend_native=total_native,
+        )
+        exchange_rate = float(cost.get("exchange_rate_to_sar") or 0) or None
+    except Exception:  # noqa: BLE001 - fail closed on unresolved FX
+        cost = {}
+        exchange_rate = None
+    amount_complete = bool(
+        projection_complete
+        and financial_status == "complete"
+        and reconciliation_status == "reconciled"
+        and exchange_rate is not None
+    )
+
+    rows: list[dict[str, Any]] = []
+    daily_sar: dict[str, float | None] = {}
+    daily_state: dict[str, str] = {}
+    hourly_sar: dict[str, list[dict[str, Any]]] = {}
+    for projection in projections:
+        day = str(projection.get("report_date") or "")
+        spend_native = float(projection.get("base_spend_native") or 0)
+        day_known = (
+            projection.get("amount_complete") is True
+            and exchange_rate is not None
+        )
+        spend_sar = round(spend_native * exchange_rate, 2) if day_known else None
+        state = (
+            str(projection.get("data_state") or "unknown_incomplete")
+            if day_known
+            else "unknown_incomplete"
+        )
+        daily_sar[day] = spend_sar
+        daily_state[day] = state
+        day_hours: list[dict[str, Any]] = []
+        for hour in list(projection.get("hours") or []):
+            native_value = hour.get("spend_native")
+            hour_spend_sar = (
+                round(float(native_value) * exchange_rate, 2)
+                if native_value is not None and exchange_rate is not None
+                else None
+            )
+            day_hours.append({
+                "date": day,
+                "hour_index": int(hour.get("sequence") or 0),
+                "hour": str(hour.get("local_hour") or ""),
+                "spend_sar": hour_spend_sar,
+                "status": hour.get("status"),
+            })
+        hourly_sar[day] = day_hours
+        rows.append({
+            "provider": "snapchat_ads",
+            "ad_account_id": account_id,
+            "date": day,
+            "currency": account.get("currency"),
+            "currency_native": account.get("currency"),
+            "account_timezone": account.get("timezone"),
+            "spend_native": round(spend_native, 6),
+            "spend_sar": spend_sar,
+            "effective_spend_sar": spend_sar,
+            "effective_exchange_rate_to_sar": exchange_rate,
+            "effective_native_currency": account.get("currency"),
+            "effective_spend_source": "native_spend_x_account_rate",
+            "impressions": int(projection.get("impressions") or 0),
+            "clicks": int(projection.get("swipes") or 0),
+            "purchases": int(projection.get("purchases") or 0),
+            "purchase_value_sar": (
+                round(
+                    float(projection.get("purchase_value_native") or 0)
+                    * exchange_rate,
+                    2,
+                )
+                if exchange_rate is not None
+                else None
+            ),
+            "updated_at": projection.get("updated_at")
+            or projection.get("generated_at"),
+        })
+
+    total_sar = (
+        round(float(cost.get("base_spend_sar") or 0), 2)
+        if amount_complete
+        else None
+    )
+    data_state = (
+        "confirmed_data"
+        if total_sar is not None and total_sar > 0
+        else "confirmed_zero"
+        if total_sar == 0
+        else "unknown_incomplete"
+    )
+    reasons = [] if amount_complete else [
+        "unified_projection_financial_reconciliation_or_fx_incomplete"
+    ]
+    return {
+        "rows": rows if amount_complete else [],
+        "daily_sar": daily_sar,
+        "daily_state": daily_state,
+        "hourly_sar": hourly_sar,
+        "total_sar": total_sar,
+        "bank_commissions": (
+            _dashboard_bank_commissions(
+                account,
+                cost,
+                spend_native=total_native,
+            )
+            if amount_complete
+            else None
+        ),
+        "quality": {
+            "status": "complete" if amount_complete else "incomplete",
+            "data_state": data_state,
+            "coverage_complete": amount_complete,
+            "amount_complete": amount_complete,
+            "complete": amount_complete,
+            "connected": True,
+            "reason_codes": reasons,
+            "timezone": timezone_name,
+            "source_collection": SNAPCHAT_DAILY_PROJECTIONS_COLLECTION,
+            "amount_field": "base_spend_native",
+            "fx_authority": "mezan_ad_account_cost_settings_v2",
+            "reconciliation_status": reconciliation_status,
+            "financial_status": financial_status,
+            "source_sync_run_ids": sorted({
+                str(run_id)
+                for projection in projections
+                for run_id in list(projection.get("source_sync_run_ids") or [])
+                if run_id
+            }),
+        },
+        "source_contract": "unified-marketing-data-v1:dashboard-spend",
+        "contract_version": "unified-marketing-data-v1",
+        "source_only": True,
+        "provider_write_reached": False,
+        "campaign_write_reached": False,
+        "accounting_write_reached": False,
+        "qoyod_write_reached": False,
+    }
+
+
+__all__ = [
+    "load_snapchat_v2_account_report",
+    "load_snapchat_v2_dashboard_spend",
+]
