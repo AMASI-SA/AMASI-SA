@@ -17,12 +17,14 @@ from dashboard_v2_routes import _filtered_orders
 from order_engine.service import _map_row
 from orders_db import _merge_into, orders_to_parsed
 from salla_integration.sync import _salla_order_to_doc
+from snapchat_v2.salla_outcomes import _order_timestamp
 from salla_marketing_attribution import (
     SALLA_RAW_ATTRIBUTION_PROJECTION,
     attach_projected_salla_attribution,
     canonical_marketing_source,
     canonical_order_source,
     meaningful_source_label,
+    preserve_salla_raw_attribution,
     promoted_salla_attribution,
 )
 
@@ -337,6 +339,71 @@ def test_salla_marketing_fields_override_stale_make_attribution_only():
     assert stored["ad_platform_source"] == "snapchat"
 
 
+def test_sparse_salla_list_row_preserves_existing_campaign_evidence():
+    existing = {
+        "id": "order-1",
+        "source": "store",
+        "source_details": {
+            "utm_source": "snapchat",
+            "utm_medium": "paid",
+            "utm_campaign": "campaign-1",
+        },
+    }
+    sparse = {
+        "id": "order-1",
+        "source": "store",
+        "status": {"slug": "in_progress"},
+    }
+
+    merged = preserve_salla_raw_attribution(existing, sparse)
+
+    assert merged["status"]["slug"] == "in_progress"
+    assert merged["utm_source"] == "snapchat"
+    assert merged["utm_medium"] == "paid"
+    assert merged["utm_campaign"] == "campaign-1"
+    assert canonical_marketing_source(merged) == "snapchat"
+
+
+def test_explicit_provider_correction_does_not_keep_stale_snapchat_evidence():
+    existing = {
+        "source_details": {
+            "utm_source": "snapchat",
+            "utm_campaign": "snap-campaign",
+        },
+    }
+    corrected = {
+        "source_details": {
+            "utm_source": "instagram",
+            "utm_campaign": "meta-campaign",
+        },
+    }
+
+    merged = preserve_salla_raw_attribution(existing, corrected)
+
+    assert canonical_marketing_source(merged) == "meta"
+    assert merged["source_details"]["utm_campaign"] == "meta-campaign"
+    assert merged.get("utm_campaign") is None
+
+
+def test_snapchat_v2_uses_salla_creation_clock_not_internal_sync_timestamp():
+    order = {
+        "updated_at": "2026-08-25T00:11:00+00:00",
+        "raw_by_source": {
+            "salla_direct": {
+                "date": {
+                    "date": "2026-08-24 20:15:00.000000",
+                    "timezone": "Asia/Riyadh",
+                },
+            },
+        },
+    }
+
+    timestamp = _order_timestamp(order)
+
+    assert timestamp is not None
+    assert timestamp.isoformat() == "2026-08-24T17:15:00+00:00"
+
+
 def test_legacy_report_source_breakdown_uses_central_source_details():
     parsed = orders_to_parsed([{
         "order_number": "3007",
@@ -543,3 +610,92 @@ async def test_created_order_campaign_path_keeps_safe_raw_attribution():
     )
     assert key == ("account-1", "campaign-6")
     assert method == "campaign_id"
+
+
+@pytest.mark.asyncio
+async def test_bounded_sync_recovery_loads_full_order_attribution(monkeypatch):
+    import salla_integration.sync as sync_module
+
+    calls = []
+    saved = []
+
+    async def fake_call_salla(db, user_id, method, path, params=None):
+        calls.append((method, path, params))
+        if path == "/orders":
+            return {
+                "data": [{
+                    "id": "internal-1",
+                    "reference_id": "3008",
+                    "date": {
+                        "date": "2026-08-24 20:15:00.000000",
+                        "timezone": "Asia/Riyadh",
+                    },
+                    "source": "store",
+                    "status": {"slug": "under_review"},
+                    "amounts": {"total": {"amount": 175, "currency": "SAR"}},
+                }],
+                "pagination": {"currentPage": 1, "totalPages": 1},
+            }
+        assert path == "/orders/internal-1"
+        return {
+            "data": {
+                "id": "internal-1",
+                "reference_id": "3008",
+                "date": {
+                    "date": "2026-08-24 20:15:00.000000",
+                    "timezone": "Asia/Riyadh",
+                },
+                "source": "store",
+                "source_details": {
+                    "utm_source": "snapchat",
+                    "utm_medium": "paid",
+                    "utm_campaign": "campaign-8",
+                },
+                "status": {"slug": "under_review"},
+                "amounts": {"total": {"amount": 175, "currency": "SAR"}},
+            },
+        }
+
+    async def fake_upsert_order(db, user_id, order_number, doc, source, raw):
+        saved.append((order_number, doc, raw))
+        return {"created": False, "doc": doc}
+
+    async def fake_snapshot(*args, **kwargs):
+        return {}
+
+    async def fake_finish(*args, **kwargs):
+        return None
+
+    async def no_sleep(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(sync_module, "call_salla", fake_call_salla)
+    monkeypatch.setattr(sync_module, "upsert_order", fake_upsert_order)
+    monkeypatch.setattr(
+        sync_module,
+        "_refresh_plan_b_status_snapshot",
+        fake_snapshot,
+    )
+    monkeypatch.setattr(sync_module, "finish_sync_log", fake_finish)
+    monkeypatch.setattr(sync_module.asyncio, "sleep", no_sleep)
+
+    result = await sync_module.run_orders_sync(
+        object(),
+        "owner-1",
+        from_date="2026-08-24",
+        to_date="2026-08-25",
+        log_id="log-1",
+        recover_marketing_attribution=True,
+    )
+
+    assert [path for _, path, _ in calls] == [
+        "/orders",
+        "/orders/internal-1",
+    ]
+    assert saved[0][0] == "3008"
+    assert saved[0][1]["utm_source"] == "snapchat"
+    assert saved[0][1]["utm_campaign"] == "campaign-8"
+    assert saved[0][2]["source_details"]["utm_campaign"] == "campaign-8"
+    assert result["attribution_details_fetched"] == 1
+    assert result["attribution_orders_recovered"] == 1
+    assert result["attribution_recovery_errors"] == 0

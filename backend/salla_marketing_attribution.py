@@ -323,6 +323,41 @@ def promoted_salla_attribution(order: dict[str, Any]) -> dict[str, str]:
     return result
 
 
+def preserve_salla_raw_attribution(
+    existing_raw: dict[str, Any] | None,
+    incoming_raw: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Keep proven order attribution when Salla returns a sparse list row.
+
+    ``GET /orders?format=light`` does not consistently include
+    ``source_details`` or ``campaign`` even though ``GET /orders/{id}`` does.
+    Replacing the stored raw order with that sparse row used to erase the only
+    evidence linking an order to its campaign.  Preserve only the normalized,
+    whitelisted marketing fields; operational order fields still come from the
+    newest Salla payload.
+
+    An explicit provider correction wins.  For example, a new Meta payload is
+    never supplemented with stale Snapchat evidence.
+    """
+    previous = existing_raw if isinstance(existing_raw, dict) else {}
+    incoming = dict(incoming_raw) if isinstance(incoming_raw, dict) else {}
+    previous_platform = canonical_ad_platform(previous)
+    incoming_platform = canonical_ad_platform(incoming)
+    if (
+        previous_platform
+        and incoming_platform
+        and previous_platform != incoming_platform
+    ):
+        return incoming
+
+    previous_fields = promoted_salla_attribution(previous)
+    incoming_fields = promoted_salla_attribution(incoming)
+    for field, value in previous_fields.items():
+        if field not in incoming_fields and value not in (None, ""):
+            incoming.setdefault(field, value)
+    return incoming
+
+
 def canonical_order_source(order: dict[str, Any]) -> dict[str, str | None]:
     """Build the source contract consumed by Order Engine and detail pages."""
     promoted = promoted_salla_attribution(order)
@@ -467,5 +502,6 @@ __all__ = [
     "field_values",
     "meaningful_source_label",
     "order_source_candidates",
+    "preserve_salla_raw_attribution",
     "promoted_salla_attribution",
 ]

@@ -215,6 +215,7 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
         from_date: Optional[str],
         to_date: Optional[str],
         updated_since_hours: Optional[int],
+        recover_marketing_attribution: bool,
     ) -> None:
         task_key = str(user_id)
         try:
@@ -225,6 +226,7 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
                 to_date=to_date,
                 updated_since_hours=updated_since_hours,
                 log_id=log_id,
+                recover_marketing_attribution=recover_marketing_attribution,
             )
         except asyncio.CancelledError:
             raise
@@ -727,6 +729,9 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
                     from_date=payload.get("from_date"),
                     to_date=payload.get("to_date"),
                     updated_since_hours=payload.get("updated_since_hours"),
+                    recover_marketing_attribution=(
+                        payload.get("recover_marketing_attribution") is True
+                    ),
                 ),
                 name=f"salla-manual-order-sync:{user_id}",
             )
