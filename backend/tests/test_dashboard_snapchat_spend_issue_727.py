@@ -794,8 +794,16 @@ async def test_chart_and_executive_share_the_same_snapchat_amount_and_state(
     async def canonical(*_args, **_kwargs):
         return deepcopy(_canonical_snapshot(state, amount))
 
-    monkeypatch.setattr(chart_module, "load_snapchat_dashboard_spend", canonical)
-    monkeypatch.setattr(executive_module, "load_snapchat_dashboard_spend", canonical)
+    monkeypatch.setattr(
+        chart_module,
+        "load_unified_marketing_dashboard_spend",
+        canonical,
+    )
+    monkeypatch.setattr(
+        executive_module,
+        "load_unified_marketing_dashboard_spend",
+        canonical,
+    )
     db = _db(runs=[], facts=[])
     chart = await chart_module.build_dashboard_platform_spend(
         db,
