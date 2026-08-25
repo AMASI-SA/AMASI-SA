@@ -60,7 +60,14 @@ def _metric_match(metric: str, v1: Any, v2: Any) -> tuple[bool, float | None]:
 
 
 def _complete_unified_v2_lineage(row: dict[str, Any]) -> bool:
-    """Accept complete conversion-time facts from the Unified V2 page plane."""
+    """Accept only complete conversion-time facts from the Unified V2 plane.
+
+    Exact provider TOTAL facts remain preferred. Some hierarchy levels on the
+    page legitimately use fully-synchronized V2 hourly facts when Snapchat did
+    not persist a daily TOTAL row. V1 is only an observer, so its drift may not
+    veto a complete page-equivalent V2 row; the drift is still retained in the
+    diagnostic response.
+    """
     return bool(
         row.get("data_complete") is True
         and str(row.get("provider_result_source") or "").startswith(
@@ -180,14 +187,14 @@ async def build_campaign_ai_unified_shadow(
     start = current - timedelta(days=max(1, days) - 1)
     errors: list[dict[str, str]] = []
     try:
-        v1_campaigns = await _v1_policy._snapchat_campaign_entities(
+        v1_campaigns = await _v1_policy._snapchat_v1_campaign_entities(
             db, str(user_id), start, current, 1
         )
     except Exception as exc:  # noqa: BLE001
         v1_campaigns = []
         errors.append({"source": "v1_campaigns", "code": type(exc).__name__})
     try:
-        v1_children = await _v1_policy._snapchat_child_entities(
+        v1_children = await _v1_policy._snapchat_v1_child_entities(
             db, str(user_id), start, current, 1
         )
     except Exception as exc:  # noqa: BLE001
@@ -235,6 +242,7 @@ async def build_campaign_ai_unified_shadow(
         "provider": "snapchat_ads",
         "contract_version": "unified-marketing-data-v1",
         "mode": "read_only_shadow",
+        "cutover_active": True,
         "shadow_passed": passed,
         "cutover_ready": passed,
         "acceptance_basis": acceptance_basis,
@@ -250,9 +258,9 @@ async def build_campaign_ai_unified_shadow(
         "decision_eligibility": {
             "eligible": False,
             "reason": (
-                "ai_shadow_passed_cutover_not_deployed"
+                "ai_v2_active_v1_observer_matched"
                 if passed
-                else "ai_shadow_not_accepted"
+                else "ai_v2_active_v1_observer_diverged"
             ),
         },
     }
