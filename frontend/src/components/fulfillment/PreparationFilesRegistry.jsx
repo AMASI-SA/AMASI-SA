@@ -4,12 +4,15 @@ import {
     DownloadSimple,
     FilePdf,
     SpinnerGap,
+    Wrench,
     WarningCircle,
 } from "@phosphor-icons/react";
 
 import {
     downloadReviewedPreparationBatchPdf,
     listPreparationFiles,
+    recoverStalePreparationFiles,
+    repairPreparationBatchCustomerOptions,
 } from "../../services/orderReviewEngine";
 import { preparationFileRecordLabel } from "../../preparationFileRegistryUi";
 
@@ -29,6 +32,9 @@ export default function PreparationFilesRegistry() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [downloadingId, setDownloadingId] = useState("");
+    const [recovering, setRecovering] = useState(false);
+    const [repairingId, setRepairingId] = useState("");
+    const [notice, setNotice] = useState("");
 
     const load = useCallback(async ({ silent = false } = {}) => {
         if (!silent) setLoading(true);
@@ -60,6 +66,44 @@ export default function PreparationFilesRegistry() {
             setError(downloadError.message || "تعذّر تحميل ملف PDF.");
         } finally {
             setDownloadingId("");
+        }
+    };
+
+    const recover = async () => {
+        if (recovering) return;
+        setRecovering(true);
+        setError("");
+        setNotice("");
+        try {
+            const result = await recoverStalePreparationFiles();
+            const restored = Number(result?.restored_order_count || 0);
+            const recovered = Number(result?.recovered_count || 0);
+            setNotice(restored > 0
+                ? `تمت استعادة ${restored} طلب متعثر إلى مرحلة تم المراجعة.`
+                : recovered > 0
+                    ? `تم تنظيف ${recovered} محاولة ملف متعثرة دون فقد أي قطعة.`
+                    : "لا توجد محاولات تجهيز متعثرة تحتاج إلى استعادة.");
+            await load({ silent: true });
+        } catch (recoverError) {
+            setError(recoverError.message || "تعذّرت استعادة ملفات التجهيز المتعثرة.");
+        } finally {
+            setRecovering(false);
+        }
+    };
+
+    const repairOptions = async (file) => {
+        if (!file?.batch_id || repairingId) return;
+        setRepairingId(file.batch_id);
+        setError("");
+        setNotice("");
+        try {
+            const result = await repairPreparationBatchCustomerOptions(file.batch_id);
+            setNotice(`تم إصلاح خيارات العميل في ${file.file_number || "ملف التجهيز"} (${Number(result?.repaired_line_count || 0)} بطاقة).`);
+            await load({ silent: true });
+        } catch (repairError) {
+            setError(repairError.message || "تعذّر إصلاح خيارات العميل في الملف.");
+        } finally {
+            setRepairingId("");
         }
     };
 
@@ -98,6 +142,16 @@ export default function PreparationFilesRegistry() {
                             <ArrowClockwise size={17} weight="bold" className={loading ? "animate-spin" : ""} />
                             تحديث
                         </button>
+                        <button
+                            type="button"
+                            onClick={recover}
+                            disabled={recovering}
+                            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-xs font-extrabold text-emerald-800 transition hover:bg-emerald-100 disabled:opacity-60"
+                            data-testid="recover-stale-preparation-files"
+                        >
+                            <ArrowClockwise size={17} weight="bold" className={recovering ? "animate-spin" : ""} />
+                            {recovering ? "جاري الاستعادة…" : "استعادة الملفات المتعثرة"}
+                        </button>
                     </div>
                 </div>
             </header>
@@ -107,6 +161,12 @@ export default function PreparationFilesRegistry() {
                     <div className="mb-4 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-bold text-rose-800">
                         <WarningCircle size={20} className="mt-0.5 shrink-0" weight="fill" />
                         <span>{error}</span>
+                    </div>
+                )}
+
+                {notice && (
+                    <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-bold text-emerald-900" data-testid="preparation-files-operation-notice">
+                        {notice}
                     </div>
                 )}
 
@@ -142,18 +202,32 @@ export default function PreparationFilesRegistry() {
                                             {fileMeta(file)}
                                         </div>
                                     </div>
-                                    <button
-                                        type="button"
-                                        onClick={() => download(file)}
-                                        disabled={!file.batch_id || Boolean(downloadingId)}
-                                        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 text-sm font-extrabold text-white transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50"
-                                        data-testid="download-preparation-file-pdf"
-                                    >
-                                        {downloading
-                                            ? <SpinnerGap size={19} className="animate-spin" />
-                                            : <DownloadSimple size={19} weight="bold" />}
-                                        {downloading ? "جاري التحميل…" : "تحميل PDF"}
-                                    </button>
+                                    <div className="flex flex-col gap-2 sm:flex-row">
+                                        <button
+                                            type="button"
+                                            onClick={() => repairOptions(file)}
+                                            disabled={!file.batch_id || Boolean(repairingId)}
+                                            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 text-sm font-extrabold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                            data-testid="repair-preparation-file-customer-options"
+                                        >
+                                            {repairingId === file.batch_id
+                                                ? <SpinnerGap size={19} className="animate-spin" />
+                                                : <Wrench size={19} weight="bold" />}
+                                            {repairingId === file.batch_id ? "جاري الإصلاح…" : "إصلاح خيارات العميل"}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => download(file)}
+                                            disabled={!file.batch_id || Boolean(downloadingId)}
+                                            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 text-sm font-extrabold text-white transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50"
+                                            data-testid="download-preparation-file-pdf"
+                                        >
+                                            {downloading
+                                                ? <SpinnerGap size={19} className="animate-spin" />
+                                                : <DownloadSimple size={19} weight="bold" />}
+                                            {downloading ? "جاري التحميل…" : "تحميل PDF"}
+                                        </button>
+                                    </div>
                                 </article>
                             );
                         })}
