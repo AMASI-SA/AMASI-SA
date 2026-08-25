@@ -280,6 +280,7 @@ def _build_router(db) -> APIRouter:
         items = body if isinstance(body, list) else [body]
         accepted = 0
         errors: list[dict] = []
+        synced_dates: set[str] = set()
         for raw in items:
             try:
                 payload = TikTokSpendIn(**raw)
@@ -323,13 +324,57 @@ def _build_router(db) -> APIRouter:
                 upsert=True,
             )
             accepted += 1
+            synced_dates.add(payload.date)
 
         # Update webhook token stats for visibility on the UI
         await db.webhook_tokens.update_one(
             {"token": token},
             {"$set": {"last_sync_at": datetime.now(timezone.utc).isoformat()}},
         )
-        return {"accepted": accepted, "errors": errors}
+        # Make.com is the temporary TikTok transport, while Dashboard Advanced
+        # reads spend strictly from ad_account_ledger. Reconcile only the exact
+        # dates accepted above into the user's sole TikTok ad account. The shared
+        # sync engine applies the cumulative delta, so campaign retries/overwrites
+        # never append duplicate spend.
+        ledger_sync: dict[str, Any] = {"status": "not_requested", "results": []}
+        if synced_dates:
+            tiktok_accounts = await db.counterparties.find(
+                {"user_id": user_id, "kind": "ad_account", "ad_provider": "tiktok"},
+                {"_id": 0, "id": 1},
+            ).sort("created_at", 1).to_list(3)
+            if len(tiktok_accounts) == 1:
+                account_id = tiktok_accounts[0]["id"]
+                ledger_results: list[dict] = []
+                try:
+                    # Lazy import avoids coupling route registration order.
+                    from ad_account_routes import _run_sync_for_all
+
+                    for spend_date in sorted(synced_dates):
+                        ledger_results.extend(await _run_sync_for_all(
+                            db,
+                            user_id,
+                            spend_date,
+                            spend_date,
+                            force=True,
+                            provider_filter={"tiktok"},
+                            include_make=True,
+                            account_ids={account_id},
+                        ))
+                    ledger_sync = {"status": "synced", "results": ledger_results}
+                except Exception as exc:
+                    logger.exception("TikTok Make ledger reconciliation failed")
+                    ledger_sync = {"status": "failed", "error": type(exc).__name__}
+            else:
+                ledger_sync = {
+                    "status": "skipped",
+                    "reason": (
+                        "missing_tiktok_ad_account" if not tiktok_accounts
+                        else "ambiguous_tiktok_ad_accounts"
+                    ),
+                    "accounts_found": len(tiktok_accounts),
+                }
+
+        return {"accepted": accepted, "errors": errors, "ledger_sync": ledger_sync}
 
     @router.get("/tiktok/recent")
     async def tiktok_recent(days: int = Query(30, ge=1, le=365), user: dict = Depends(current_user)):

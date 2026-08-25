@@ -2931,6 +2931,9 @@ async def _apply_uncovered(
 async def _run_sync_for_all(
     db, user_id: str, from_date: str, to_date: str,
     *, force: bool = False,
+    provider_filter: Optional[set[str]] = None,
+    include_make: bool = False,
+    account_ids: Optional[set[str]] = None,
 ) -> list[dict]:
     """For each ad_account counterparty (supported providers only),
     aggregate daily-platform spend in the range and post it as a /spend
@@ -2946,14 +2949,27 @@ async def _run_sync_for_all(
     platform API are processed by this half-hour cron. Anything
     delivered via Make.com (e.g. TikTok) is on Make.com's own 5-hour
     schedule and must NOT be touched here. Direct-API providers are
+
+    Webhook/manual callers may opt into a narrow provider/account set with
+    ``provider_filteri` / ``account_ids`` and set ``include_make=True``. This
+    keeps the half-hour scheduler direct-API-only while allowing Make.com to
+    reconcile the exact TikTok day it delivered into the financial SSOT.
     declared in `HALFHOUR_SYNC_PROVIDERS`; an explicit
     `cp.sync_via == "make_com"` always opts out.
     """
     out = []
+    selected_providers = set(provider_filter or HALFHOUR_SYNC_PROVIDERS)
+    cp_query: dict = {
+        "user_id": user_id,
+        "kind": "ad_account",
+        "ad_provider": {"$in": sorted(selected_providers)},
+    }
+    if not include_make:
+        cp_query["sync_via"] = {"$ne": "make_com"}
+    if account_ids:
+        cp_query["id"] = {"$in": sorted(account_ids)}
     async for cp in db.counterparties.find(
-        {"user_id": user_id, "kind": "ad_account",
-         "ad_provider": {"$in": list(HALFHOUR_SYNC_PROVIDERS)},
-         "sync_via": {"$ne": "make_com"}},
+        cp_query,
         {"_id": 0},
     ):
         # Skip if already synced for this `to_date` (idempotency),
