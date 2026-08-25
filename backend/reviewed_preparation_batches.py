@@ -27,6 +27,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pymongo import ASCENDING, DESCENDING
 from pymongo.errors import BulkWriteError, DuplicateKeyError
 
+from order_engine.repository import MongoOrderRepository
+from order_engine.salla_refresh import refresh_order_from_salla
+from order_engine.service import OrderNotFoundError, get_order
 from order_item_engine.mapper import map_order_item_identities
 from order_tracking_notes import enforce_stage_instructions
 from order_review_routes import (
@@ -420,6 +423,84 @@ def render_preparation_batch_pdf(batch: dict[str, Any]) -> bytes:
     )
 
 
+def repair_batch_line_customer_options(
+    lines: list[dict[str, Any]],
+    *,
+    identities_by_order: dict[str, list[Any]],
+    workflows_by_order: dict[str, dict[str, Any]],
+) -> tuple[list[dict[str, Any]], int, list[str]]:
+    """Rebuild missing PDF option snapshots from canonical Salla order items."""
+    repaired: list[dict[str, Any]] = []
+    repaired_count = 0
+    unresolved: list[str] = []
+    for source in lines:
+        row = dict(source)
+        order_number = _text(row.get("order_number"))
+        order_item_id = _text(row.get("order_item_id"))
+        identities = identities_by_order.get(order_number) or []
+        identity = next(
+            (
+                candidate for candidate in identities
+                if _text(getattr(candidate, "order_item_id", None)) == order_item_id
+            ),
+            None,
+        )
+        if identity is None:
+            line_index = int(row.get("line_index") or 0)
+            identity = next(
+                (
+                    candidate for candidate in identities
+                    if int(getattr(candidate, "line_index", -1) or 0) == line_index
+                    and (
+                        not _text(row.get("sku"))
+                        or _text(getattr(candidate, "sku", None)) == _text(row.get("sku"))
+                    )
+                ),
+                None,
+            )
+        if identity is None:
+            unresolved.append(f"{order_number}:{order_item_id}")
+            repaired.append(row)
+            continue
+        workflow = workflows_by_order.get(order_number) or {}
+        states = {
+            _text(state.get("order_item_id")): dict(state)
+            for state in workflow.get("items") or []
+            if isinstance(state, dict) and _text(state.get("order_item_id"))
+        }
+        state = states.get(_text(getattr(identity, "order_item_id", None)), {})
+        spec_fields = supplier_file_spec_fields(identity, state)
+        if not spec_fields:
+            repaired.append(row)
+            continue
+        card_fields = _card_field_projection(
+            spec_fields,
+            row.get("preparation_note") or state.get("preparation_note"),
+        )
+        before = (
+            row.get("file_spec_fields"), row.get("customer_name"),
+            row.get("size"), row.get("color"), row.get("note"),
+            row.get("product_options"),
+        )
+        row.update({
+            "file_spec_fields": spec_fields,
+            "customer_name": card_fields["customer_name"],
+            "size": card_fields["size"],
+            "color": card_fields["color"],
+            "note": card_fields["note"],
+            "product_options": card_fields["product_options"],
+        })
+        after = (
+            row.get("file_spec_fields"), row.get("customer_name"),
+            row.get("size"), row.get("color"), row.get("note"),
+            row.get("product_options"),
+        )
+        if before != after:
+            repaired_count += 1
+        repaired.append(row)
+    return repaired, repaired_count, unresolved
+
+
 def _batch_response(batch: dict[str, Any]) -> dict[str, Any]:
     return {
         "ok": batch.get("status") == "ready",
@@ -669,10 +750,21 @@ async def _reconcile_order_stage(
         ),
         None,
     )
-    # Once already moved to in_progress it is intentionally absent from the
-    # reviewed context. The stage itself is the durable completion evidence.
+    # Recovery can remove a failed batch after the order was moved to
+    # in_progress.  Such orders are absent from the reviewed-only context, so
+    # load the canonical order directly and recompute coverage from the
+    # allocation ledger.  Treating the stage itself as completion evidence
+    # strands released units outside both reviewed products and preparation
+    # files.
     if order is None and stage == "in_progress":
-        return True, 0
+        try:
+            order = await get_order(
+                MongoOrderRepository(db),
+                user_id=user_id,
+                order_number=order_number,
+            )
+        except OrderNotFoundError:
+            return True, 0
     if order is None:
         return False, 0
 
@@ -725,10 +817,12 @@ async def _reconcile_order_stage(
             "updated_at": now,
             "updated_by": actor_id,
         },
-        "$addToSet": {"preparation_batch_ids": batch_id},
         "$inc": {"revision": 1},
     }
+    if batch_id:
+        update["$addToSet"] = {"preparation_batch_ids": batch_id}
     transitioned = remaining == 0 and stage == "reviewed"
+    restored = remaining > 0 and stage == "in_progress"
     if transitioned:
         update["$set"].update({
             "stage": "in_progress",
@@ -737,6 +831,18 @@ async def _reconcile_order_stage(
             "in_progress_by_name": actor_name,
             "preparation_fully_allocated_at": now,
         })
+    elif restored:
+        update["$set"].update({
+            "stage": "reviewed",
+            "reviewed_at": workflow.get("reviewed_at") or now,
+            "reviewed_by": workflow.get("reviewed_by") or actor_id,
+        })
+        update["$unset"] = {
+            "in_progress_at": "",
+            "in_progress_by": "",
+            "in_progress_by_name": "",
+            "preparation_fully_allocated_at": "",
+        }
     await db[WORKFLOWS].update_one(
         {"user_id": user_id, "order_number": order_number},
         update,
@@ -753,7 +859,20 @@ async def _reconcile_order_stage(
             "salla_updated": False,
             "qoyod_updated": False,
         })
-    return transitioned or stage == "in_progress", remaining
+    elif restored:
+        await db[EVENTS].insert_one({
+            "user_id": user_id,
+            "order_number": order_number,
+            "batch_id": batch_id or None,
+            "event_type": "order_restored_to_reviewed_after_failed_preparation_file",
+            "remaining_quantity": remaining,
+            "occurred_at": now,
+            "actor_id": actor_id,
+            "mezan_only": True,
+            "salla_updated": False,
+            "qoyod_updated": False,
+        })
+    return remaining == 0, remaining
 
 
 async def _reconcile_batch_orders(
@@ -1045,6 +1164,108 @@ def make_reviewed_preparation_batches_router(
             "qoyod_updated": False,
         })
         return _batch_response(batch)
+
+    @router.post("/batches/{batch_id}/repair-customer-options")
+    async def repair_customer_options(
+        batch_id: str,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        reviewer = _require_reviewer(user)
+        user_id = _merchant_user_id(reviewer)
+        batch = await db[BATCHES].find_one(
+            {"user_id": user_id, "id": batch_id, "status": "ready"},
+            {"_id": 0},
+        )
+        if not batch:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "preparation_batch_not_found"},
+            )
+        order_numbers = sorted({
+            _text(row.get("order_number"))
+            for row in batch.get("lines") or []
+            if isinstance(row, dict) and _text(row.get("order_number"))
+        })
+        refresh_failures: list[dict[str, Any]] = []
+        for order_number in order_numbers:
+            result = await refresh_order_from_salla(
+                db,
+                user_id,
+                order_number,
+                force=True,
+                minimum_fresh_seconds=0,
+                allow_auto_fulfillment=False,
+            )
+            if not result.get("ok") or not result.get("found"):
+                refresh_failures.append({
+                    "order_number": order_number,
+                    "code": _text(result.get("code")) or "salla_refresh_failed",
+                })
+
+        repository = MongoOrderRepository(db)
+        identities_by_order: dict[str, list[Any]] = {}
+        for order_number in order_numbers:
+            try:
+                order = await get_order(
+                    repository,
+                    user_id=user_id,
+                    order_number=order_number,
+                )
+            except OrderNotFoundError:
+                continue
+            identities_by_order[order_number] = map_order_item_identities(order)
+        workflow_rows = await db[WORKFLOWS].find(
+            {"user_id": user_id, "order_number": {"$in": order_numbers}},
+            {"_id": 0},
+        ).to_list(len(order_numbers) or 1)
+        workflows_by_order = {
+            _text(row.get("order_number")): row for row in workflow_rows
+        }
+        repaired_lines, repaired_count, unresolved = repair_batch_line_customer_options(
+            [dict(row) for row in batch.get("lines") or [] if isinstance(row, dict)],
+            identities_by_order=identities_by_order,
+            workflows_by_order=workflows_by_order,
+        )
+        repaired_batch = {**batch, "lines": repaired_lines}
+        pdf_bytes = render_preparation_batch_pdf(repaired_batch)
+        now = _now()
+        patch = {
+            "lines": repaired_lines,
+            "pdf_size_bytes": len(pdf_bytes),
+            "pdf_sha256": hashlib.sha256(pdf_bytes).hexdigest(),
+            "customer_options_repaired_at": now,
+            "customer_options_repaired_by": _text(reviewer.get("id")),
+            "customer_options_repaired_line_count": repaired_count,
+            "customer_options_repair_unresolved": unresolved,
+            "updated_at": now,
+        }
+        await db[BATCHES].update_one(
+            {"user_id": user_id, "id": batch_id, "status": "ready"},
+            {"$set": patch},
+        )
+        await db[EVENTS].insert_one({
+            "user_id": user_id,
+            "batch_id": batch_id,
+            "event_type": "preparation_batch_customer_options_repaired",
+            "repaired_line_count": repaired_count,
+            "unresolved": unresolved,
+            "refresh_failures": refresh_failures,
+            "occurred_at": now,
+            "actor_id": _text(reviewer.get("id")),
+            "mezan_only": True,
+            "salla_updated": False,
+            "qoyod_updated": False,
+        })
+        return {
+            "ok": not unresolved and not refresh_failures,
+            "batch_id": batch_id,
+            "repaired_line_count": repaired_count,
+            "unresolved": unresolved,
+            "refresh_failures": refresh_failures,
+            "pdf_sha256": patch["pdf_sha256"],
+            "salla_updated": False,
+            "qoyod_updated": False,
+        }
 
     @router.get("/batches")
     async def list_batches(
