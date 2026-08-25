@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import api from "../lib/api";
 
 const QOYOD_BASE = "/integrations/qoyod";
+const PAYMENT_RECHECK_CHUNK_SIZE = 10;
 
 const STATUS_STYLE = {
   "أُرسل":    "bg-emerald-100 text-emerald-800 border-emerald-300",
@@ -85,19 +86,33 @@ export default function QoyodUnsentOrders() {
     setPaymentCheckRunning(true);
     setPaymentCheckResults([]);
     setRetryNotice(null);
-    try {
-      const { data: result } = await api.post(
-        `${QOYOD_BASE}/manual/recheck-payment-bulk`,
-        { order_numbers: paymentCheckOrderNumbers },
+    setError(null);
+    const collected = [];
+    for (let offset = 0; offset < paymentCheckOrderNumbers.length;
+      offset += PAYMENT_RECHECK_CHUNK_SIZE) {
+      const orderNumbers = paymentCheckOrderNumbers.slice(
+        offset,
+        offset + PAYMENT_RECHECK_CHUNK_SIZE,
       );
-      setPaymentCheckResults(result?.results || []);
-    } catch (requestError) {
-      const detail = requestError?.response?.data?.detail;
-      setError(typeof detail === "string"
-        ? detail : (detail?.message || "تعذر إكمال فحص الدفع فقط"));
-    } finally {
-      setPaymentCheckRunning(false);
+      try {
+        const { data: result } = await api.post(
+          `${QOYOD_BASE}/manual/recheck-payment-bulk`,
+          { order_numbers: orderNumbers },
+        );
+        collected.push(...(result?.results || []));
+      } catch (requestError) {
+        const detail = requestError?.response?.data?.detail;
+        const message = typeof detail === "string"
+          ? detail : (detail?.message || "تعذر فحص هذه الدفعة من سلة");
+        collected.push(...orderNumbers.map((orderNumber) => ({
+          order_number: orderNumber,
+          outcome: "error",
+          message,
+        })));
+      }
+      setPaymentCheckResults([...collected]);
     }
+    setPaymentCheckRunning(false);
   };
 
   const runRecoveryBatch = async () => {
