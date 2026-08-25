@@ -38,6 +38,7 @@ from order_review_routes import (
 )
 from order_review_spec_replacements import (
     canonical_spec_key,
+    extract_item_specs,
     supplier_file_spec_fields,
 )
 from preparation_pdf import ProductLine, generate_preparation_pdf
@@ -553,6 +554,45 @@ async def _build_batch_lines(
                     },
                 )
             spec_fields = supplier_file_spec_fields(identity, state)
+            # Fail closed before materialising the employee preparation file:
+            # every customer option visible in Waiting Review must be frozen
+            # into the immutable file snapshot unless the reviewer explicitly
+            # hid that spec from exported files. The supplier PDF later reuses
+            # this exact snapshot, so this one guard protects both files.
+            hidden_spec_keys = {
+                canonical_spec_key(value)
+                for value in state.get("supplier_export_excluded_spec_keys", []) or []
+                if canonical_spec_key(value)
+            }
+            required_specs = {
+                row["spec_key"]: row
+                for row in extract_item_specs(identity)
+                if row.get("spec_key") and row["spec_key"] not in hidden_spec_keys
+            }
+            snapshotted_specs = {
+                canonical_spec_key(row.get("spec_key") or row.get("name"))
+                for row in spec_fields
+                if isinstance(row, dict)
+                and canonical_spec_key(row.get("spec_key") or row.get("name"))
+                and _text(row.get("value"))
+            }
+            missing_spec_keys = sorted(set(required_specs) - snapshotted_specs)
+            if missing_spec_keys:
+                missing_labels = [required_specs[key]["name"] for key in missing_spec_keys]
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "preparation_customer_options_snapshot_incomplete",
+                        "message": (
+                            "تعذّر إنشاء ملف التجهيز لأن بعض خيارات العميل لم تُحفظ بالكامل: "
+                            + "، ".join(missing_labels)
+                            + ". حدّث الطلب ثم أعد المحاولة."
+                        ),
+                        "order_number": order_number,
+                        "order_item_id": order_item_id,
+                        "missing_spec_keys": missing_spec_keys,
+                    },
+                )
             card_fields = _card_field_projection(
                 spec_fields,
                 state.get("preparation_note"),
