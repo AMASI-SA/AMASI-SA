@@ -67,9 +67,12 @@ V2 storage or adapter files. The legacy Dashboard reader remains available
 only to the isolated Shadow observer and rollback path.
 
 Decision Intelligence reads aggregate entity reports and ordered daily TOTAL
-facts through the same gateway. Campaign AI, funnel evidence, temporal
-evidence, product destination evidence, and creative metadata do not import
-Snapchat performance collections. Child levels receive the parent campaign's
+facts through the same gateway. Campaign AI candidate metrics, funnel
+evidence, temporal evidence, product destinations, and creative identifiers do
+not import Snapchat performance collections. The bounded provider-media
+preview collector remains a separate read-only adapter because fetching an
+actual ad asset is provider-specific; it has no recommendation or write
+authority. Child levels receive the parent campaign's
 Salla/profitability context only; the adapter never invents Salla attribution
 for an Ad Group or Ad. The old Snapchat AI readers remain named rollback
 functions and are used only by the post-cutover observer.
