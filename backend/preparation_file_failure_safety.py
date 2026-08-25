@@ -457,6 +457,26 @@ async def reconcile_released_preparation_stages(
         for order_number in (row.get("order_numbers") or [])
         if _text(order_number)
     })
+    # Some legacy failures happened after the workflow was moved to
+    # ``in_progress`` but before the release event itself was persisted.  Such
+    # orders have no event to replay and otherwise remain invisible forever.
+    # Reconcile every in-progress workflow as a safe fallback: the canonical
+    # allocation ledger keeps fully covered orders in progress, while only
+    # genuinely uncovered units are returned to reviewed.
+    stranded_candidates = await db[WORKFLOWS].find(
+        {"user_id": user_id, "stage": "in_progress"},
+        {"_id": 0, "order_number": 1},
+    ).limit(MAX_RELEASE_RECONCILIATION_EVENTS).to_list(
+        MAX_RELEASE_RECONCILIATION_EVENTS
+    )
+    order_numbers = sorted({
+        *order_numbers,
+        *(
+            _text(row.get("order_number"))
+            for row in stranded_candidates
+            if _text(row.get("order_number"))
+        ),
+    })
     import reviewed_preparation_batches as batch_module
 
     restored: list[str] = []
