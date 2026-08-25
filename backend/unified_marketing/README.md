@@ -59,6 +59,13 @@ match. If V1 itself is incomplete, the response records the explicit
 `provider_reconciliation_fallback` basis instead of fabricating a V1 amount.
 Open periods can never pass through this fallback.
 
+After Production acceptance, both Dashboard read paths obtain Snapchat daily,
+hourly, KPI, FX, commission, and quality fields through
+`load_unified_marketing_dashboard_spend`. The gateway maps the V2 projection
+into the stable Dashboard snapshot; Dashboard modules do not import Snapchat
+V2 storage or adapter files. The legacy Dashboard reader remains available
+only to the isolated Shadow observer and rollback path.
+
 ## Decision gate
 
 Every report defaults to:

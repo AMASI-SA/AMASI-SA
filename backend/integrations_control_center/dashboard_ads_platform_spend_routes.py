@@ -20,7 +20,10 @@ from unified_marketing.dashboard_shadow import (
     load_dashboard_unified_shadow,
     persist_dashboard_unified_shadow,
 )
-from unified_marketing.gateway import load_unified_marketing_account_report
+from unified_marketing.gateway import (
+    load_unified_marketing_account_report,
+    load_unified_marketing_dashboard_spend,
+)
 
 from .ads_platform_hourly import PLATFORM_HOURLY_COLLECTION
 from .dashboard_ads_platform_refresh import (
@@ -34,7 +37,6 @@ from .google_ads_reporting import (
 )
 from .meta_native_reporting import META_REPORTING_COLLECTION
 from .meta_oauth_security import META_PROVIDER_ID
-from .snapchat_account_hourly_chart import SNAPCHAT_ACCOUNT_LOCAL_HOURLY_COLLECTION
 from .snapchat_native_data_common import (
     SNAPCHAT_PERFORMANCE_COLLECTION,
     SNAPCHAT_PROVIDER_ID,
@@ -224,6 +226,7 @@ async def _hourly_spend(
     db: Any,
     user_id: str,
     selected_date: date,
+    snapchat: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], dict[str, bool]]:
     local_start = datetime.combine(selected_date, time.min, tzinfo=RIYADH_TZ)
     local_end = local_start + timedelta(days=1)
@@ -234,34 +237,14 @@ async def _hourly_spend(
         provider: [0.0 for _ in range(24)] for provider in FOUR_PLATFORM_KEYS
     }
     facts = {provider: False for provider in FOUR_PLATFORM_KEYS}
-    selected_snapchat_ids = await _selected_account_ids(
-        db,
-        user_id,
-        SNAPCHAT_PROVIDER_ID,
-    )
-
-    snap_cursor = db[SNAPCHAT_ACCOUNT_LOCAL_HOURLY_COLLECTION].find(
-        {
-            "user_id": user_id,
-            "provider": SNAPCHAT_PROVIDER_ID,
-            "ad_account_id": {"$in": selected_snapchat_ids},
-            "hour_start_utc": {
-                "$gte": utc_start.isoformat(timespec="seconds"),
-                "$lt": utc_end.isoformat(timespec="seconds"),
-            },
-        },
-        {"_id": 0, "hour_start_utc": 1, "spend_sar": 1},
-    )
-    for row in await _to_list(snap_cursor, MAX_HOURLY_ROWS):
-        point = _parse_utc(row.get("hour_start_utc"))
-        spend = _number(row.get("spend_sar"))
-        if point is None or spend is None:
-            continue
-        local = point.astimezone(RIYADH_TZ)
-        if local.date() != selected_date:
-            continue
-        buckets["snapchat"][local.hour] += spend
-        facts["snapchat"] = True
+    snap_hours = {
+        int(row.get("hour_index") or 0): row
+        for row in list((snapchat.get("hourly_sar") or {}).get(
+            selected_date.isoformat()
+        ) or [])
+        if 0 <= int(row.get("hour_index") or 0) <= 23
+    }
+    facts["snapchat"] = bool(snap_hours)
 
     generic_cursor = db[PLATFORM_HOURLY_COLLECTION].find(
         {
@@ -290,18 +273,21 @@ async def _hourly_spend(
 
     hourly = []
     for hour_index in range(24):
+        snap_hour = snap_hours.get(hour_index) or {}
         hourly.append(
             {
                 "date": selected_date.isoformat(),
                 "hour_index": hour_index,
                 "hour": f"{hour_index:02d}:00",
+                "snapchat": _number(snap_hour.get("spend_sar")),
+                "snapchat_status": snap_hour.get("status"),
                 **{
                     provider: (
                         round(buckets[provider][hour_index], 2)
                         if facts[provider]
                         else None
                     )
-                    for provider in FOUR_PLATFORM_KEYS
+                    for provider in ("meta", "tiktok", "google")
                 },
             }
         )
@@ -323,11 +309,13 @@ async def build_dashboard_platform_spend(
     if end < start or (end - start).days + 1 > MAX_READ_DAYS:
         raise HTTPException(status_code=422, detail="invalid_date_range")
 
-    snapchat = await load_snapchat_dashboard_spend(
+    snapchat = await load_unified_marketing_dashboard_spend(
         db,
         user_id,
-        start=start,
-        end=end,
+        provider="snapchat_ads",
+        date_from=start,
+        date_to=end,
+        timezone_name="Asia/Riyadh",
     )
     try:
         unified_shadow = await load_dashboard_unified_shadow(
@@ -361,11 +349,7 @@ async def build_dashboard_platform_spend(
     hourly: list[dict[str, Any]] = []
     hourly_facts = {provider: False for provider in FOUR_PLATFORM_KEYS}
     if single_day:
-        hourly, hourly_facts = await _hourly_spend(db, user_id, start)
-        snap_state = (snapchat.get("quality") or {}).get("data_state")
-        for row in hourly:
-            row["snapchat"] = 0.0 if snap_state == "confirmed_zero" else None
-        hourly_facts["snapchat"] = snap_state == "confirmed_zero"
+        hourly, hourly_facts = await _hourly_spend(db, user_id, start, snapchat)
 
     totals = {
         provider: round(
@@ -443,6 +427,13 @@ async def build_dashboard_platform_spend(
             "snapchat": snapchat.get("quality") or {},
         },
         "unified_marketing_shadow": unified_shadow,
+        "source_contract": {
+            "snapchat": snapchat.get("source_contract")
+            or "unified-marketing-data-v1:snapchat-v2:riyadh-dashboard-spend",
+            "meta": META_REPORTING_COLLECTION,
+            "tiktok": TIKTOK_REPORTING_COLLECTION,
+            "google": GOOGLE_ADS_DAILY_COLLECTION,
+        },
         "source_only": True,
         "provider_write_reached": False,
         "campaign_write_reached": False,

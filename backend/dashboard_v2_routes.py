@@ -57,7 +57,10 @@ from salla_integration.abandoned_carts import (
 )
 from salla_integration.service import SallaError, call_salla
 from unified_marketing.dashboard_shadow import build_dashboard_unified_shadow
-from unified_marketing.gateway import load_unified_marketing_account_report
+from unified_marketing.gateway import (
+    load_unified_marketing_account_report,
+    load_unified_marketing_dashboard_spend,
+)
 
 
 SNAP_FACTS = "mezan_snapchat_performance_daily_v2"
@@ -908,11 +911,13 @@ async def build_mezan_v2_ads(
         raise HTTPException(status_code=422, detail="invalid_date_range")
     start = start_date.isoformat()
     end = end_date.isoformat()
-    snapchat = await load_snapchat_dashboard_spend(
+    snapchat = await load_unified_marketing_dashboard_spend(
         db,
         user_id,
-        start=start_date,
-        end=end_date,
+        provider="snapchat_ads",
+        date_from=start_date,
+        date_to=end_date,
+        timezone_name="Asia/Riyadh",
     )
     raw_platform_rows = {
         provider: await _provider_rows(db, user_id, provider, start, end)
@@ -1071,7 +1076,7 @@ async def build_mezan_v2_ads(
         },
         "bank_commissions": bank_commissions,
         "source_contract": {
-            "snapchat": "dashboard_snapchat_spend:riyadh_ad_account_native_with_run_proof",
+            "snapchat": "unified-marketing-data-v1:snapchat-v2:riyadh-dashboard-spend",
             "meta": f"{META_FACTS}:selected_accounts:spend_native",
             "tiktok": f"{TIKTOK_FACTS}:connected_accounts:spend_native",
             "exchange_rates": "mezan_ad_account_cost_settings_v2:per_account",

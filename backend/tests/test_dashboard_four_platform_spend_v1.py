@@ -118,6 +118,14 @@ async def test_builds_selected_four_platform_daily_and_riyadh_hourly_spend(monke
             "rows": [],
             "daily_sar": {"2026-08-05": 100.0},
             "daily_state": {"2026-08-05": "confirmed_data"},
+            "hourly_sar": {
+                "2026-08-05": [{
+                    "hour_index": 0,
+                    "hour": "00:00",
+                    "spend_sar": 10.0,
+                    "status": "confirmed",
+                }],
+            },
             "total_sar": 100.0,
             "bank_commissions": {},
             "quality": {
@@ -131,12 +139,11 @@ async def test_builds_selected_four_platform_daily_and_riyadh_hourly_spend(monke
             },
         }
 
-    monkeypatch.setattr(module, "load_snapchat_dashboard_spend", canonical_snapchat)
-    selected_midnight = local_hour_start_utc(
-        __import__("datetime").date(2026, 8, 5),
-        0,
-        "Asia/Riyadh",
-    ).isoformat(timespec="seconds")
+    monkeypatch.setattr(
+        module,
+        "load_unified_marketing_dashboard_spend",
+        canonical_snapchat,
+    )
     one_am = local_hour_start_utc(
         __import__("datetime").date(2026, 8, 5),
         1,
@@ -217,22 +224,6 @@ async def test_builds_selected_four_platform_daily_and_riyadh_hourly_spend(monke
                     "spend_sar": 7.5,
                 }
             ],
-            module.SNAPCHAT_ACCOUNT_LOCAL_HOURLY_COLLECTION: [
-                {
-                    "user_id": "owner-1",
-                    "provider": "snapchat_ads",
-                    "ad_account_id": "snap-selected",
-                    "hour_start_utc": selected_midnight,
-                    "spend_sar": 10,
-                },
-                {
-                    "user_id": "owner-1",
-                    "provider": "snapchat_ads",
-                    "ad_account_id": "snap-unselected",
-                    "hour_start_utc": selected_midnight,
-                    "spend_sar": 999,
-                },
-            ],
             "mezan_ads_platform_hourly_v2": [
                 {
                     "user_id": "owner-1",
@@ -280,7 +271,8 @@ async def test_builds_selected_four_platform_daily_and_riyadh_hourly_spend(monke
         "google": 7.5,
     }
     assert result["total_sar"] == 132.5
-    assert result["hourly_spend"][0]["snapchat"] is None
+    assert result["hourly_spend"][0]["snapchat"] == 10.0
+    assert result["hourly_spend"][0]["snapchat_status"] == "confirmed"
     assert result["hourly_spend"][1]["meta"] == 2.0
     assert result["hourly_spend"][1]["tiktok"] == 1.0
     assert result["hourly_spend"][1]["google"] == 0.5
