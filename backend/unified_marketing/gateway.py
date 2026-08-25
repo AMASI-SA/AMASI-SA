@@ -9,6 +9,8 @@ from .readers.snapchat_v2 import (
     load_snapchat_v2_account_identity,
     load_snapchat_v2_dashboard_spend,
     load_snapchat_v2_entity_report,
+    load_snapchat_v2_entity_daily_series,
+    load_snapchat_v2_entity_metadata,
 )
 
 SUPPORTED_PROVIDERS = ("snapchat_ads",)
@@ -23,6 +25,25 @@ async def load_unified_marketing_account_identity(
     provider_key = str(provider or "").strip().lower()
     if provider_key == "snapchat_ads":
         return await load_snapchat_v2_account_identity(db, str(user_id))
+    raise ValueError(f"unsupported_unified_marketing_provider:{provider_key}")
+
+
+async def load_unified_marketing_entity_metadata(
+    db: Any,
+    user_id: str,
+    *,
+    provider: str,
+    entity_level: str,
+    entity_id: str,
+) -> dict[str, Any]:
+    provider_key = str(provider or "").strip().lower()
+    if provider_key == "snapchat_ads":
+        return await load_snapchat_v2_entity_metadata(
+            db,
+            str(user_id),
+            entity_level=entity_level,
+            entity_id=entity_id,
+        )
     raise ValueError(f"unsupported_unified_marketing_provider:{provider_key}")
 
 
@@ -93,10 +114,37 @@ async def load_unified_marketing_entity_report(
     raise ValueError(f"unsupported_unified_marketing_provider:{provider_key}")
 
 
+async def load_unified_marketing_entity_daily_series(
+    db: Any,
+    user_id: str,
+    *,
+    provider: str,
+    entity_level: str,
+    entity_ids: list[str],
+    date_from: date,
+    date_to: date,
+    timezone_name: str,
+) -> dict[str, Any]:
+    provider_key = str(provider or "").strip().lower()
+    if provider_key == "snapchat_ads":
+        return await load_snapchat_v2_entity_daily_series(
+            db,
+            str(user_id),
+            entity_level=entity_level,
+            entity_ids=entity_ids,
+            date_from=date_from,
+            date_to=date_to,
+            timezone_name=timezone_name,
+        )
+    raise ValueError(f"unsupported_unified_marketing_provider:{provider_key}")
+
+
 __all__ = [
     "SUPPORTED_PROVIDERS",
     "load_unified_marketing_account_report",
     "load_unified_marketing_account_identity",
+    "load_unified_marketing_entity_metadata",
     "load_unified_marketing_dashboard_spend",
     "load_unified_marketing_entity_report",
+    "load_unified_marketing_entity_daily_series",
 ]
