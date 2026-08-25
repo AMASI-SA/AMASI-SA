@@ -199,10 +199,10 @@ export function CampaignAdvisorCard() {
             </div>
         </div>
         {unifiedShadow && <div className={`border-b px-4 py-2 text-[10px] font-extrabold ${unifiedShadow.shadow_passed ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"}`} data-testid="campaign-ai-unified-shadow-status">
-            {unifiedShadow.shadow_passed
-                ? unifiedShadow.acceptance_basis === "provider_total_facts_fallback_v1_observer_drift"
-                    ? "Snapchat AI Shadow معتمد عبر TOTAL V2 المصالح مع Snapchat · V1 مراقب أقدم · القرارات غير مفعلة"
-                    : "Snapchat AI Shadow متطابق على آخر يوم حساب مغلق · التحليل والقرارات ما زالت معزولة حتى اعتماد التحويل"
+            {unifiedShadow.cutover_active
+                ? "Snapchat AI يعمل من المصدر الموحد V2 · V1 باقٍ كمراقب وRollback · التنفيذ ما زال بعد موافقتك فقط"
+                : unifiedShadow.shadow_passed
+                ? "Snapchat AI Shadow متطابق مع المصدر الموحد V2 · التحليل والقرارات ما زالت معزولة حتى اعتماد التحويل"
                 : "Snapchat AI Shadow قيد المطابقة مع المصدر الموحد V2 · لا توجد قرارات أو كتابات من مسار Shadow"}
         </div>}
         {visible.length ? <div className="grid gap-2 p-3 lg:grid-cols-5">
