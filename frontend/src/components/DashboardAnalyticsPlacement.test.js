@@ -60,4 +60,8 @@ test("the advanced dashboard retains governed date refresh and latest-snapshot b
     expect(advancedDashboardSource).toContain("backgroundRefreshInFlightRef");
     expect(advancedDashboardSource).toContain("DASHBOARD_AUTO_REFRESH_MS");
     expect(advancedDashboardSource).toContain("Keep the last good cart snapshot");
+    expect(advancedDashboardSource).toContain(
+        "/dashboard-v2/unified-marketing-shadow",
+    );
+    expect(advancedDashboardSource).toContain("القرارات غير مفعلة");
 });
