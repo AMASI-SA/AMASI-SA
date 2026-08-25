@@ -17,7 +17,9 @@ from snapchat_v2.reconciliation import (
 )
 from snapchat_v2.salla_outcomes import load_salla_campaign_outcomes
 from snapchat_v2.sync_runs import SNAPCHAT_SYNC_RUNS_COLLECTION
+from snapchat_v2.routes import _add_sar_spend, _entity_performance_report
 from unified_marketing.adapters.snapchat_v2 import build_snapchat_v2_unified_report
+from unified_marketing.commerce_carts import load_abandoned_cart_outcomes
 
 INT_FIELDS = (
     "impressions",
@@ -34,6 +36,23 @@ FLOAT_FIELDS = (
     "view_completion",
     "purchase_value_native",
 )
+
+
+async def load_snapchat_v2_account_identity(
+    db: Any,
+    user_id: str,
+) -> dict[str, Any] | None:
+    account = await get_selected_account(db, str(user_id))
+    if not account:
+        return None
+    return {
+        "provider": "snapchat_ads",
+        "id": str(account.get("ad_account_id") or ""),
+        "name": account.get("display_name") or account.get("ad_account_id"),
+        "currency": str(account.get("currency") or "").upper(),
+        "timezone": str(account.get("timezone") or ""),
+        "last_sync_at": account.get("last_sync_at"),
+    }
 
 
 def _sum(rows: list[dict[str, Any]], field: str) -> float:
@@ -281,6 +300,230 @@ async def load_snapchat_v2_account_report(
     report["decision_eligibility"] = {
         "eligible": False,
         "reason": "dashboard_shadow_not_accepted",
+    }
+    return report
+
+
+def _management_context(
+    identities: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Expose provider management metadata without leaking provider shape.
+
+    The public contract remains provider neutral.  Budget/status metadata is
+    carried beside the analytical rows because Decision Intelligence needs it
+    to describe an existing entity, while all mutation code remains outside
+    Unified Marketing.
+    """
+    output: dict[str, dict[str, Any]] = {}
+    for identity in identities:
+        entity_id = str(identity.get("external_id") or "").strip()
+        if not entity_id:
+            continue
+        raw = identity.get("raw") if isinstance(identity.get("raw"), dict) else {}
+        daily_micro = raw.get("daily_budget_micro")
+        try:
+            daily_budget_native = (
+                round(float(daily_micro) / 1_000_000, 6)
+                if daily_micro is not None
+                else None
+            )
+        except (TypeError, ValueError, OverflowError):
+            daily_budget_native = None
+        output[entity_id] = {
+            "status": identity.get("status"),
+            "active": identity.get("active"),
+            "campaign_id": identity.get("campaign_id"),
+            "ad_group_id": identity.get("ad_squad_id"),
+            "daily_budget_native": daily_budget_native,
+            "currency_scope": "account_native",
+            "updated_at": identity.get("updated_at"),
+        }
+    return output
+
+
+async def load_snapchat_v2_entity_report(
+    db: Any,
+    user_id: str,
+    *,
+    entity_level: str,
+    date_from: date,
+    date_to: date,
+    timezone_name: str,
+    include_stale: bool = True,
+) -> dict[str, Any]:
+    """Read Campaign/Ad Group/Ad evidence through one V2 contract.
+
+    This adapter is read-only: it uses persisted V2 identity/performance facts,
+    exact campaign-level Salla attribution and abandoned-cart evidence.  Child
+    rows intentionally never receive fabricated Salla outcomes.
+    """
+    provider_types = {
+        "campaign": "campaign",
+        "ad_group": "ad_squad",
+        "ad": "ad",
+    }
+    provider_type = provider_types.get(str(entity_level or "").strip().lower())
+    if provider_type is None:
+        raise ValueError(f"unsupported_unified_marketing_entity_level:{entity_level}")
+    account = await get_selected_account(db, str(user_id))
+    if not account:
+        raise ValueError("unified_marketing_snapchat_selected_account_missing")
+    account_id = str(account["ad_account_id"])
+    performance = await _entity_performance_report(
+        db,
+        user_id=str(user_id),
+        account=account,
+        date_from=date_from,
+        date_to=date_to,
+        timezone_name=timezone_name,
+        action_report_time="conversion",
+        entity_type=provider_type,
+        include_stale=include_stale,
+    )
+    rows = list(performance.get("rows") or [])
+    totals = dict(performance.get("totals") or {})
+    _, cost_coverage = await _add_sar_spend(
+        db,
+        user_id=str(user_id),
+        account=account,
+        rows=rows,
+        totals=totals,
+    )
+    identities = await list_entities(
+        db,
+        user_id=str(user_id),
+        ad_account_id=account_id,
+        entity_type=provider_type,
+        active_only=False,
+        limit=20_000,
+    )
+
+    orders: list[dict[str, Any]] = []
+    order_summary: dict[str, Any] = {}
+    if provider_type == "campaign":
+        campaign_identities = [
+            {
+                "account_id": account_id,
+                "campaign_id": str(row.get("campaign_id") or ""),
+                "campaign_name": row.get("campaign_name"),
+            }
+            for row in rows
+            if row.get("campaign_id")
+        ]
+        try:
+            salla = await load_salla_campaign_outcomes(
+                db,
+                str(user_id),
+                account_id=account_id,
+                date_from=date_from,
+                date_to=date_to,
+                timezone_name=timezone_name,
+                identities=campaign_identities,
+                platform_purchases=int(totals.get("purchases") or 0),
+                campaign_spend_sar={
+                    str(row.get("campaign_id") or ""): float(
+                        row.get("spend_sar") or 0
+                    )
+                    for row in rows
+                    if row.get("campaign_id")
+                },
+            )
+            salla_available = True
+        except Exception as exc:  # noqa: BLE001 - fail closed, never invent Salla
+            salla_available = False
+            salla = {
+                "by_campaign": {},
+                "orders": [],
+                "orders_total": 0,
+                "orders_returned": 0,
+                "truncated": False,
+                "summary": {
+                    "coverage_status": "partial",
+                    "reason": str(type(exc).__name__)[:96],
+                    "platform_attributed_purchases": int(
+                        totals.get("purchases") or 0
+                    ),
+                },
+            }
+        try:
+            carts = await load_abandoned_cart_outcomes(
+                db,
+                str(user_id),
+                provider="snapchat_ads",
+                campaign_ids=[
+                    str(value.get("campaign_id") or "")
+                    for value in campaign_identities
+                    if value.get("campaign_id")
+                ],
+                date_from=date_from,
+                date_to=date_to,
+            )
+        except Exception as exc:  # noqa: BLE001
+            carts = {
+                "by_campaign": {},
+                "coverage": {
+                    "status": "partial",
+                    "reason": str(type(exc).__name__)[:96],
+                    "read_only": True,
+                },
+            }
+        for row in rows:
+            campaign_id = str(row.get("campaign_id") or "")
+            if salla_available:
+                salla_result = {
+                    **dict(
+                        (salla.get("by_campaign") or {}).get(
+                            campaign_id,
+                            {"orders": 0, "sales_sar": 0.0},
+                        )
+                    ),
+                    "status": "complete",
+                }
+            else:
+                salla_result = {
+                    "status": "partial",
+                    "orders": None,
+                    "sales_sar": None,
+                    "roas": None,
+                }
+            spend_sar = row.get("spend_sar")
+            salla_result["abandoned_carts"] = (
+                carts.get("by_campaign") or {}
+            ).get(campaign_id)
+            salla_result["roas"] = (
+                round(float(salla_result.get("sales_sar") or 0) / spend_sar, 6)
+                if salla_available and spend_sar and spend_sar > 0
+                else None
+            )
+            row["salla_results"] = salla_result
+        orders = list(salla.get("orders") or [])
+        order_summary = {
+            **dict(salla.get("summary") or {}),
+            "orders_total": int(salla.get("orders_total") or 0),
+            "orders_returned": int(salla.get("orders_returned") or 0),
+            "truncated": bool(salla.get("truncated")),
+        }
+
+    report = build_snapchat_v2_unified_report(
+        account_value=account,
+        period_value={
+            "date_from": date_from.isoformat(),
+            "date_to": date_to.isoformat(),
+            "timezone": timezone_name,
+            "action_report_time": "conversion",
+        },
+        entity_type=provider_type,
+        rows=rows,
+        totals=totals,
+        sync_status=str(performance.get("performance_sync_status") or "partial"),
+        orders=orders,
+        order_summary=order_summary,
+    )
+    report["management_context"] = _management_context(identities)
+    report["cost_coverage"] = cost_coverage
+    report["decision_eligibility"] = {
+        "eligible": False,
+        "reason": "ai_shadow_not_accepted",
     }
     return report
 

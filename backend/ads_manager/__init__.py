@@ -26,6 +26,9 @@ def make_ads_manager_router(db: Any, current_user: Callable):
         attach_advertising_product_watch_scheduler,
     )
     from campaign_ai_monitor import attach_campaign_ai_routes
+    from campaign_ai_unified_shadow_routes import (
+        attach_campaign_ai_unified_shadow_routes,
+    )
     from campaign_ai_monthly_profit_goal_v1 import (
         attach_monthly_profit_goal_routes,
     )
@@ -49,6 +52,12 @@ def make_ads_manager_router(db: Any, current_user: Callable):
     )
     attach_campaign_ai_public_guard(router, db, current_user)
     attach_campaign_ai_routes(router, db, current_user, _require_owner)
+    attach_campaign_ai_unified_shadow_routes(
+        router,
+        db,
+        current_user,
+        _require_owner,
+    )
     attach_advertising_product_watch_routes(router, db, current_user)
     attach_campaign_ai_subprocess_scheduler(router)
     attach_advertising_product_watch_scheduler(router)
