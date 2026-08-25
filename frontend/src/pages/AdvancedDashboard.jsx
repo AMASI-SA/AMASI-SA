@@ -131,14 +131,19 @@ function aiActionMeta(item) {
 
 export function CampaignAdvisorCard() {
     const [snapshot, setSnapshot] = useState(null);
+    const [unifiedShadow, setUnifiedShadow] = useState(null);
     const [loading, setLoading] = useState(true);
     const [approving, setApproving] = useState({});
     useEffect(() => {
         let active = true;
         const load = async () => {
             try {
-                const response = await api.get("/ads-manager/ai-monitor/latest");
-                if (active) setSnapshot(response.data);
+                const [latestResult, shadowResult] = await Promise.allSettled([
+                    api.get("/ads-manager/ai-monitor/latest"),
+                    api.get("/ads-manager/ai-monitor/unified-shadow?days=1"),
+                ]);
+                if (active && latestResult.status === "fulfilled") setSnapshot(latestResult.value.data);
+                if (active && shadowResult.status === "fulfilled") setUnifiedShadow(shadowResult.value.data);
             } catch {
                 if (active) setSnapshot(null);
             } finally {
@@ -193,6 +198,11 @@ export function CampaignAdvisorCard() {
                 <span className="flex items-center gap-1"><ShieldCheck className="h-3 w-3" />Ads write فقط بعد موافقتك</span>
             </div>
         </div>
+        {unifiedShadow && <div className={`border-b px-4 py-2 text-[10px] font-extrabold ${unifiedShadow.shadow_passed ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"}`} data-testid="campaign-ai-unified-shadow-status">
+            {unifiedShadow.shadow_passed
+                ? "Snapchat AI Shadow متطابق مع المصدر الموحد V2 · التحليل والقرارات ما زالت معزولة حتى اعتماد التحويل"
+                : "Snapchat AI Shadow قيد المطابقة مع المصدر الموحد V2 · لا توجد قرارات أو كتابات من مسار Shadow"}
+        </div>}
         {visible.length ? <div className="grid gap-2 p-3 lg:grid-cols-5">
             {visible.map((item) => {
                 const action = aiActionMeta(item);
