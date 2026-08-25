@@ -56,6 +56,8 @@ from salla_integration.abandoned_carts import (
     reconcile_recent_abandoned_carts,
 )
 from salla_integration.service import SallaError, call_salla
+from unified_marketing.dashboard_shadow import build_dashboard_unified_shadow
+from unified_marketing.gateway import load_unified_marketing_account_report
 
 
 SNAP_FACTS = "mezan_snapchat_performance_daily_v2"
@@ -1080,6 +1082,61 @@ async def build_mezan_v2_ads(
     }
 
 
+async def build_dashboard_v2_unified_shadow(
+    db: Any,
+    user_id: str,
+    *,
+    from_date: date,
+    to_date: date,
+) -> dict[str, Any]:
+    """Compare Dashboard V1 Snapchat spend with the read-only V2 contract.
+
+    This observer is intentionally separate from ``build_mezan_v2_ads`` so a
+    slow commerce attribution read can never delay the authoritative
+    Dashboard response. It does not persist data and cannot make decisions or
+    reach provider/accounting write paths.
+    """
+    try:
+        legacy = await load_snapchat_dashboard_spend(
+            db,
+            str(user_id),
+            start=from_date,
+            end=to_date,
+        )
+        unified = await load_unified_marketing_account_report(
+            db,
+            str(user_id),
+            provider="snapchat_ads",
+            date_from=from_date,
+            date_to=to_date,
+            timezone_name="Asia/Riyadh",
+        )
+        return build_dashboard_unified_shadow(
+            {
+                "total_sar": legacy.get("total_sar"),
+                "quality": legacy.get("quality") or {},
+            },
+            unified,
+        )
+    except Exception as exc:  # noqa: BLE001 - observer always fails closed
+        return {
+            "mode": "shadow",
+            "provider": "snapchat_ads",
+            "shadow_passed": False,
+            "cutover_ready": False,
+            "reason": str(type(exc).__name__)[:96],
+            "decision_eligibility": {
+                "eligible": False,
+                "reason": "dashboard_shadow_unavailable",
+            },
+            "source_only": True,
+            "provider_write_reached": False,
+            "campaign_write_reached": False,
+            "accounting_write_reached": False,
+            "qoyod_write_reached": False,
+        }
+
+
 async def build_provider_summary(db: Any, user_id: str, provider: str) -> dict[str, Any]:
     today = _today_riyadh()
     today_s = today.isoformat()
@@ -1360,6 +1417,28 @@ def make_dashboard_v2_router(
         })
         response["recurring_obligations_v2"] = recurring
         return response
+
+    @router.get("/dashboard-v2/unified-marketing-shadow")
+    async def unified_marketing_shadow(
+        from_date: str | None = Query(default=None),
+        to_date: str | None = Query(default=None),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        current = owner(user)
+        today = _today_riyadh()
+        try:
+            start = date.fromisoformat(from_date or today.isoformat())
+            end = date.fromisoformat(to_date or from_date or today.isoformat())
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail="invalid_date_range") from exc
+        if end < start or (end - start).days + 1 > 90:
+            raise HTTPException(status_code=422, detail="invalid_date_range")
+        return await build_dashboard_v2_unified_shadow(
+            db,
+            str(current["id"]),
+            from_date=start,
+            to_date=end,
+        )
 
     @router.get("/dashboard-v2/abandoned-carts/recent")
     async def recent_abandoned_carts(
@@ -1650,6 +1729,7 @@ def make_dashboard_v2_router(
 
 
 __all__ = [
+    "build_dashboard_v2_unified_shadow",
     "build_mezan_v2_ads",
     "build_mezan_v2_product_cost",
     "calculate_mezan_v2_line_cost",
