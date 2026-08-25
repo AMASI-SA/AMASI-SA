@@ -252,8 +252,8 @@ def _to_candidate(
         return None
     candidate["unified_contract_version"] = CONTRACT_VERSION
     candidate["decision_eligibility"] = {
-        "eligible": False,
-        "reason": "ai_shadow_not_accepted",
+        "eligible": True,
+        "reason": "ai_unified_v2_cutover_deployed",
     }
     return candidate
 
@@ -398,8 +398,8 @@ async def load_snapchat_unified_ai_entities(
             "action_report_time": "conversion",
         },
         "decision_eligibility": {
-            "eligible": False,
-            "reason": "ai_shadow_not_accepted",
+            "eligible": True,
+            "reason": "ai_unified_v2_cutover_deployed",
         },
     }
 
