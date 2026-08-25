@@ -29,6 +29,10 @@ from integrations.qoyod_manual.send import (
     manual_send_one, ManualSendRefused,
 )
 from integrations.qoyod_manual.failed_retry import retry_failed_order
+from integrations.qoyod_manual.payment_recheck import (
+    recheck_payment_batch_read_only,
+    recheck_payment_read_only,
+)
 from integrations.qoyod_manual.diagnose import diagnose_totals
 from integrations.qoyod_manual.missing_diagnostics import (
     list_missing_from_plan_b,
@@ -82,6 +86,12 @@ class CanaryBatchPayload(BaseModel):
     """Explicit confirmation for the closed four-order auto-send canary."""
     model_config = ConfigDict(extra="forbid")
     confirmation: str
+
+
+class PaymentRecheckBatchPayload(BaseModel):
+    """Bounded read-only Salla payment scan; never sends to Qoyod."""
+    model_config = ConfigDict(extra="forbid")
+    order_numbers: list[str]
 
 
 def _now() -> datetime:
@@ -494,6 +504,38 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
                     "error_reference": ref,
                 },
             ) from exc
+
+    @router.post("/recheck-payment/{order_number}")
+    async def recheck_payment(order_number: str,
+                              user=Depends(current_user)):
+        """Read current Salla payment facts only; never send or persist."""
+        return await recheck_payment_read_only(
+            db,
+            orders_user_id=orders_owner_id(user),
+            order_number=order_number,
+        )
+
+    @router.post("/recheck-payment-bulk")
+    async def recheck_payment_bulk(
+        payload: PaymentRecheckBatchPayload = Body(...),
+        user=Depends(current_user),
+    ):
+        order_numbers = list(dict.fromkeys(
+            str(value or "").strip() for value in payload.order_numbers
+        ))
+        if not order_numbers or len(order_numbers) > 100:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "invalid_payment_recheck_batch",
+                    "message": "اختر من 1 إلى 100 طلب للفحص فقط",
+                },
+            )
+        return await recheck_payment_batch_read_only(
+            db,
+            orders_user_id=orders_owner_id(user),
+            order_numbers=order_numbers,
+        )
 
     @router.get("/status/{order_number}")
     async def send_status(order_number: str,
