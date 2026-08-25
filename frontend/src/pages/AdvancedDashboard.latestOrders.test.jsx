@@ -238,6 +238,8 @@ test("dashboard spend formatting keeps zero, no-data, and unknown distinct", () 
     expect(dashboardSpendDisplay(null, "unknown_incomplete")).toBe("غير مكتمل");
     expect(dashboardSpendDisplay(false, "confirmed_zero")).toBe("غير مكتمل");
     expect(dashboardSpendDisplay(10, "confirmed_no_data")).toBe("غير مكتمل");
+    expect(dashboardSpendDisplay(42.16, "provisional_data")).toBe("42.16");
+    expect(dashboardSpendDisplay(0, "provisional_zero")).toBe("0.00");
 });
 
 test("monthly advertising history never turns an unknown day into zero", () => {
@@ -312,6 +314,43 @@ test("profit summary still renders a provider-confirmed zero", () => {
 
     expect(adsRow).toContain(">0.00<");
     expect(adsRow).not.toContain("غير مكتمل");
+});
+
+test("profit summary displays open-day ad spend and profit as provisional", () => {
+    const markup = renderToStaticMarkup(<ProfitCard data={{
+        totals: {
+            total_sales: 250,
+            total_orders: 2,
+            total_product_cost: 50,
+            total_ads_cost: 42.16,
+            total_shipping_cost: 20,
+            total_payment_fees: 5,
+            operating_expenses_total: 10,
+            net_profit: 122.84,
+            avg_cost_per_order: 21.08,
+            overall_roas: 5.93,
+            ads_spend_data_complete: false,
+            ads_spend_amount_available: true,
+            ads_spend_provisional: true,
+        },
+        ads_v2: {
+            spend_quality: {
+                status: "provisional",
+                amount_complete: false,
+                amount_available: true,
+                provisional: true,
+                snapchat: { data_state: "provisional_data" },
+            },
+        },
+    }} />);
+    const rowStart = markup.indexOf('data-testid="advanced-profit-row-ads"');
+    const adsRow = markup.slice(rowStart, markup.indexOf("</button>", rowStart));
+
+    expect(adsRow).toContain("إجمالي تكاليف الإعلانات (مؤقت)");
+    expect(adsRow).toContain(">42.16<");
+    expect(adsRow).not.toContain("غير مكتمل");
+    expect(markup).toContain(">122.84<");
+    expect(markup).toContain("تقديري حتى آخر مزامنة للإعلانات");
 });
 
 test("GA active-user bars stay inside their chart area", () => {
