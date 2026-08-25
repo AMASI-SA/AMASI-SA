@@ -272,7 +272,7 @@ async def test_daily_total_facts_preserve_non_additive_frequency_scope():
     _, params = factory.clients[0].calls[0]
     assert params["granularity"] == "TOTAL"
     assert "frequency" in params["fields"]
-    assert result["rows"][0]["ad_id"] == "ad1"
+    assert result["rows"][0]["ad_squad_id"] == "s1"
 
 
 @pytest.mark.asyncio
