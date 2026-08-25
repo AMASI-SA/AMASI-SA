@@ -169,7 +169,7 @@ export default function UnifiedMarketingEntityTable({
                 </div>
             </header>
             <div className="overflow-x-auto">
-                <table className="min-w-[1800px] w-full text-right text-xs">
+                <table className="min-w-[2450px] w-full text-right text-xs">
                     <thead className="bg-slate-50 text-slate-600">
                         <tr>
                             <th className="px-4 py-3 font-black">الكيان</th>
@@ -178,6 +178,10 @@ export default function UnifiedMarketingEntityTable({
                             <th className="px-4 py-3 font-black">الظهور</th>
                             <th className="px-4 py-3 font-black">المشاهدات</th>
                             <th className="px-4 py-3 font-black">النقرات/السحب</th>
+                            <th className="px-4 py-3 font-black">الوصول</th>
+                            <th className="px-4 py-3 font-black">تكرار المشاهدة</th>
+                            <th className="px-4 py-3 font-black">إضافة للسلة</th>
+                            <th className="px-4 py-3 font-black">بدء الدفع</th>
                             <th className="px-4 py-3 font-black">مشتريات Snapchat</th>
                             <th className="px-4 py-3 font-black">تكلفة الطلب حسب Snapchat</th>
                             <th className="px-4 py-3 font-black">قيمة Snapchat</th>
@@ -209,6 +213,10 @@ export default function UnifiedMarketingEntityTable({
                                 <td className="px-4 py-4 font-mono">{number(row.delivery.impressions)}</td>
                                 <td className="px-4 py-4 font-mono">{number(row.delivery.views)}</td>
                                 <td className="px-4 py-4 font-mono">{number(row.delivery.clicks)}</td>
+                                <td className="px-4 py-4 font-mono">{number(row.delivery.reach)}</td>
+                                <td className="px-4 py-4 font-mono">{row.delivery.frequency == null ? "—" : `${Number(row.delivery.frequency).toFixed(2)}×`}</td>
+                                <td className="px-4 py-4 font-mono">{number(row.platform_outcomes.add_to_cart)}</td>
+                                <td className="px-4 py-4 font-mono">{number(row.platform_outcomes.start_checkout)}</td>
                                 <td className="px-4 py-4 font-mono">{number(row.platform_outcomes.conversions)}</td>
                                 <td className="px-4 py-4 font-mono" dir="ltr">{money(snapchatCostPerPurchase(row))}</td>
                                 <td className="px-4 py-4 font-mono" dir="ltr">{money(row.platform_outcomes.revenue)}</td>
@@ -263,6 +271,10 @@ export default function UnifiedMarketingEntityTable({
                                 <td className="px-4 py-4 font-mono">{number(totals.delivery.impressions)}</td>
                                 <td className="px-4 py-4 font-mono">{number(totals.delivery.views)}</td>
                                 <td className="px-4 py-4 font-mono">{number(totals.delivery.clicks)}</td>
+                                <td className="px-4 py-4 font-mono">{number(totals.delivery.reach)}</td>
+                                <td className="px-4 py-4 font-mono">{totals.delivery.frequency == null ? "—" : `${Number(totals.delivery.frequency).toFixed(2)}×`}</td>
+                                <td className="px-4 py-4 font-mono">{number(totals.platform_outcomes.add_to_cart)}</td>
+                                <td className="px-4 py-4 font-mono">{number(totals.platform_outcomes.start_checkout)}</td>
                                 <td className="px-4 py-4 font-mono">{number(totals.platform_outcomes.conversions)}</td>
                                 <td className="px-4 py-4 font-mono" dir="ltr">{money(snapchatCostPerPurchase(totals))}</td>
                                 <td className="px-4 py-4 font-mono" dir="ltr">{money(totals.platform_outcomes.revenue)}</td>
