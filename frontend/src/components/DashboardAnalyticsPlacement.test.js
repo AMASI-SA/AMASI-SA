@@ -64,4 +64,5 @@ test("the advanced dashboard retains governed date refresh and latest-snapshot b
         "/dashboard-v2/unified-marketing-shadow",
     );
     expect(advancedDashboardSource).toContain("القرارات غير مفعلة");
+    expect(advancedDashboardSource).toContain("التغطية غير مكتملة");
 });
