@@ -1331,17 +1331,16 @@ async def _fetch_salla_order_details(
     return enriched_details
 
 
-async def refresh_single_order_status(
+async def fetch_single_order_status(
     db,
     user_id: str,
     order_number: str,
 ) -> dict:
-    """Refresh only the authoritative Salla state needed before Qoyod.
+    """Read the current Salla order/payment facts without persisting them.
 
-    The Qoyod preflight needs the current order status and payment evidence,
-    not line items or shipment details. Keeping this lookup narrow prevents a
-    non-accounting failure in the items or shipments endpoints from
-    quarantining an otherwise valid order before the unchanged sender runs.
+    This is the shared narrow network boundary for both the guarded sender and
+    the operator's read-only payment check. It never writes to MongoDB and it
+    never calls Qoyod.
     """
     order_number = str(order_number or "").strip()
     if not order_number:
@@ -1378,8 +1377,6 @@ async def refresh_single_order_status(
             if reference_id == order_number or row_id == order_number:
                 match = row
                 break
-        if match is None and len(rows) == 1 and isinstance(rows[0], dict):
-            match = rows[0]
         if match is None:
             return {
                 "ok": True,
@@ -1434,19 +1431,13 @@ async def refresh_single_order_status(
                 f"Salla Order Details missing status: {order_number}"
             )
 
-        stage = "plan_b_status_snapshot"
-        snapshot = await _refresh_plan_b_status_snapshot(
-            db,
-            user_id,
-            order_number,
-            doc,
-        )
         return {
             "ok": True,
             "found": True,
-            "plan_b_status_snapshot": snapshot,
-            "status_slug": snapshot.get("status_slug") or current_slug,
-            "status_native": snapshot.get("status_native"),
+            "order_number": order_number,
+            "order": doc,
+            "status_slug": current_slug,
+            "status_native": doc.get("order_status"),
         }
     except SallaError as exc:
         return {
@@ -1467,6 +1458,44 @@ async def refresh_single_order_status(
             "exception_message": str(exc)[:300],
             "order_number": order_number,
         }
+
+
+async def refresh_single_order_status(
+    db,
+    user_id: str,
+    order_number: str,
+) -> dict:
+    """Refresh the persisted Plan-B snapshot used by the guarded sender."""
+    result = await fetch_single_order_status(db, user_id, order_number)
+    if not result.get("ok") or not result.get("found"):
+        return result
+
+    doc = result.get("order") or {}
+    try:
+        snapshot = await _refresh_plan_b_status_snapshot(
+            db,
+            user_id,
+            str(order_number).strip(),
+            doc,
+        )
+    except Exception as exc:
+        return {
+            "ok": False,
+            "found": False,
+            "error": "status_refresh_stage_failed",
+            "stage": "plan_b_status_snapshot",
+            "exception_type": type(exc).__name__,
+            "exception_message": str(exc)[:300],
+            "order_number": str(order_number).strip(),
+        }
+
+    return {
+        "ok": True,
+        "found": True,
+        "plan_b_status_snapshot": snapshot,
+        "status_slug": snapshot.get("status_slug") or result.get("status_slug"),
+        "status_native": snapshot.get("status_native"),
+    }
 
 
 async def resync_single_order(db, user_id: str, order_number: str) -> dict:
