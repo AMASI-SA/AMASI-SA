@@ -169,15 +169,15 @@ export default function SnapchatOrderSourceAudit({
                 ) : data ? (
                     <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                         <SummaryCard
-                            title="طلبات كل الحملات المؤكدة"
+                            title="طلبات مرتبطة بحملة"
                             value={summary.campaign_matched_orders}
                             note="يشمل الحملات النشطة والمتوقفة؛ قد يختلف عن جدول النشطة فقط"
                             tone="emerald"
                         />
                         <SummaryCard
-                            title="طلبات غير منسوبة لحملة"
-                            value={summary.non_campaign_orders}
-                            note="مباشر أو واتساب أو يدوي أو مصدر غير محدد"
+                            title="طلبات سناب بلا ربط تفصيلي"
+                            value={summary.snapchat_attribution_gap_orders}
+                            note="منسوبة إلى Snapchat في سلة دون حملة محددة"
                             tone="amber"
                         />
                         <SummaryCard

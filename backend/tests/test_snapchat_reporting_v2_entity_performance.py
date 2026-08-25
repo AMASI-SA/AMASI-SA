@@ -802,9 +802,77 @@ async def test_salla_outcomes_match_v2_campaigns_without_distributing_direct_ord
     assert result["by_campaign"]["c1"] == {"orders": 2, "sales_sar": 250.0}
     assert result["summary"]["campaign_matched_orders"] == 2
     assert result["summary"]["campaign_matched_financial_orders"] == 1
+    assert result["summary"]["salla_reported_snapchat_orders"] == 2
+    assert result["summary"]["snapchat_attributed_orders"] == 2
+    assert result["summary"]["snapchat_attributed_sales_sar"] == 349.0
+    assert result["summary"]["snapchat_attributed_financial_orders"] == 1
+    assert result["summary"]["snapchat_attributed_financial_sales_sar"] == 250.0
+    assert result["summary"]["snapchat_attribution_gap_orders"] == 0
+    assert result["summary"]["campaign_match_coverage_pct"] == 100.0
     assert result["summary"]["non_campaign_orders"] == 2
     assert result["summary"]["platform_minus_confirmed_campaign_orders"] == 2
     assert len(result["orders"]) == 4
+
+
+@pytest.mark.asyncio
+async def test_salla_account_total_unions_source_and_exact_campaign_without_guessing():
+    db = OrderDB(
+        [
+            {
+                "order_number": "2001",
+                "order_date": "2026-08-23",
+                "created_at": "2026-08-23T12:00:00+00:00",
+                "order_status": "completed",
+                "total_amount": 300,
+                "source": "snapchat",
+            },
+            {
+                "order_number": "2002",
+                "order_date": "2026-08-23",
+                "created_at": "2026-08-23T13:00:00+00:00",
+                "order_status": "completed",
+                "total_amount": 250,
+                "campaign_id": "c1",
+            },
+            {
+                "order_number": "2003",
+                "order_date": "2026-08-23",
+                "created_at": "2026-08-23T14:00:00+00:00",
+                "order_status": "completed",
+                "total_amount": 500,
+                "campaign_id": "c1",
+                "source": "meta",
+            },
+        ]
+    )
+
+    result = await load_salla_campaign_outcomes(
+        db,
+        "u1",
+        account_id="a1",
+        date_from=datetime(2026, 8, 23, tzinfo=timezone.utc).date(),
+        date_to=datetime(2026, 8, 23, tzinfo=timezone.utc).date(),
+        timezone_name="UTC",
+        identities=[
+            {
+                "account_id": "a1",
+                "campaign_id": "c1",
+                "campaign_name": "Campaign",
+            }
+        ],
+    )
+
+    assert result["by_campaign"]["c1"] == {"orders": 1, "sales_sar": 250.0}
+    assert result["summary"]["salla_reported_snapchat_orders"] == 1
+    assert result["summary"]["snapchat_attributed_orders"] == 2
+    assert result["summary"]["snapchat_attributed_sales_sar"] == 550.0
+    assert result["summary"]["campaign_matched_orders"] == 1
+    assert result["summary"]["snapchat_attribution_gap_orders"] == 1
+    assert result["summary"]["campaign_match_coverage_pct"] == 50.0
+    assert result["summary"]["non_campaign_orders"] == 2
+    audit = {row["order_number"]: row for row in result["orders"]}
+    assert audit["2001"]["match_method"] == "unmatched"
+    assert audit["2003"]["match_method"] == "foreign_platform"
 
 
 def test_snapchat_adapter_emits_provider_neutral_contract_and_blocks_decisions():
@@ -850,7 +918,14 @@ def test_snapchat_adapter_emits_provider_neutral_contract_and_blocks_decisions()
             "purchase_value_native": 40,
             "roas": 4,
             "source_fact_count": 24,
-            "salla_results": {"orders": 3, "sales_sar": 150, "roas": 4},
+            "salla_results": {
+                "orders": 3,
+                "sales_sar": 150,
+                "roas": 4,
+                "attribution_scope": (
+                    "salla_reported_snapchat_source_or_exact_campaign_match"
+                ),
+            },
         },
         sync_status="complete",
         orders=[{"order_number": "1001", "campaign_id": "c1"}],
@@ -865,6 +940,9 @@ def test_snapchat_adapter_emits_provider_neutral_contract_and_blocks_decisions()
     assert report["rows"][0]["delivery"]["clicks"] == 5
     assert report["rows"][0]["platform_outcomes"]["conversions"] == 2
     assert report["rows"][0]["commerce_outcomes"]["orders"] == 3
+    assert report["totals"]["commerce_outcomes"]["attribution_scope"] == (
+        "salla_reported_snapchat_source_or_exact_campaign_match"
+    )
     assert report["rows"][0]["lineage"]["adapter"] == "snapchat_v2"
     assert report["orders"][0]["amount"] == {"amount": None, "currency": "SAR"}
     assert report["order_summary"]["matched_financial_orders"] == 3

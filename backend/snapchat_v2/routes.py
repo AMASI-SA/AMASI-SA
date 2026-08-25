@@ -760,6 +760,7 @@ def attach_snapchat_v2_routes(
             )
 
         totals_spend_sar = totals.get("spend_sar")
+        salla_summary = salla["summary"]
         totals.update(
             {
                 "snapchat_results": {
@@ -769,14 +770,43 @@ def attach_snapchat_v2_routes(
                 },
                 "salla_results": {
                     "status": "complete" if salla_available else "partial",
-                    "orders": salla["summary"]["campaign_matched_orders"],
-                    "sales_sar": salla["summary"]["campaign_matched_financial_sales_sar"],
+                    "orders": (
+                        salla_summary.get("snapchat_attributed_orders")
+                        if salla_available
+                        else None
+                    ),
+                    "sales_sar": (
+                        salla_summary.get("snapchat_attributed_sales_sar")
+                        if salla_available
+                        else None
+                    ),
+                    "matched_orders": (
+                        salla_summary.get("campaign_matched_orders")
+                        if salla_available
+                        else None
+                    ),
+                    "matched_sales_sar": (
+                        salla_summary.get("campaign_matched_financial_sales_sar")
+                        if salla_available
+                        else None
+                    ),
+                    "attribution_gap_orders": (
+                        salla_summary.get("snapchat_attribution_gap_orders")
+                        if salla_available
+                        else None
+                    ),
+                    "campaign_match_coverage_pct": (
+                        salla_summary.get("campaign_match_coverage_pct")
+                        if salla_available
+                        else None
+                    ),
+                    "attribution_scope": (
+                        "salla_reported_snapchat_source_or_exact_campaign_match"
+                    ),
                     "roas": (
                         round(
                             float(
-                                salla["summary"][
-                                    "campaign_matched_financial_sales_sar"
-                                ]
+                                salla_summary["snapchat_attributed_sales_sar"]
                             )
                             / totals_spend_sar,
                             6,
