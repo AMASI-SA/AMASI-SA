@@ -111,6 +111,26 @@ def normalize_hourly_fact(
         "impressions": _nonnegative_int(fact.get("impressions"), field="impressions"),
         "swipes": _nonnegative_int(fact.get("swipes"), field="swipes"),
         "video_views": _nonnegative_int(fact.get("video_views"), field="video_views"),
+        "view_completion": _nonnegative_number(
+            fact.get("view_completion"),
+            field="view_completion",
+        ),
+        "view_content": _nonnegative_int(
+            fact.get("view_content"),
+            field="view_content",
+        ),
+        "add_to_cart": _nonnegative_int(
+            fact.get("add_to_cart"),
+            field="add_to_cart",
+        ),
+        "start_checkout": _nonnegative_int(
+            fact.get("start_checkout"),
+            field="start_checkout",
+        ),
+        "add_billing": _nonnegative_int(
+            fact.get("add_billing"),
+            field="add_billing",
+        ),
         "purchases": _nonnegative_int(fact.get("purchases"), field="purchases"),
         "purchase_value_native": _nonnegative_number(
             fact.get("purchase_value_native"),
