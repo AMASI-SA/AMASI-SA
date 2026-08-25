@@ -48,6 +48,12 @@ never be summed across a longer period.
 5. Dashboard and AI consumers must not import provider files. After cutover,
    they consume this contract only.
 
+`unified_marketing.gateway` is the only read entry point for cross-platform
+consumers. Provider readers live behind that gateway. Dashboard first records
+a fail-closed shadow comparison: its existing source remains authoritative,
+`cutover_ready` remains false, and Decision Intelligence stays ineligible until
+the Production comparison is explicitly accepted.
+
 ## Decision gate
 
 Every report defaults to:
