@@ -224,6 +224,21 @@ class UnifiedMarketingReport(StrictModel):
     )
 
 
+class UnifiedMarketingDailySeries(StrictModel):
+    """Provider-neutral ordered daily entity facts for temporal reasoning."""
+
+    contract_version: Literal["unified-marketing-data-v1"] = CONTRACT_VERSION
+    provider: str
+    entity_level: UnifiedEntityLevel
+    account: UnifiedAccount
+    period: UnifiedPeriod
+    rows: list[UnifiedMarketingRow]
+    source_fact_count: int = Field(default=0, ge=0)
+    decision_eligibility: UnifiedDecisionEligibility = Field(
+        default_factory=UnifiedDecisionEligibility
+    )
+
+
 __all__ = [
     "CONTRACT_VERSION",
     "MoneyValue",
@@ -239,6 +254,7 @@ __all__ = [
     "UnifiedEntityIdentity",
     "UnifiedLineage",
     "UnifiedMarketingReport",
+    "UnifiedMarketingDailySeries",
     "UnifiedMarketingRow",
     "UnifiedPeriod",
     "UnifiedProductProfitability",

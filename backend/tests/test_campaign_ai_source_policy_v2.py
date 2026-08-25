@@ -26,6 +26,30 @@ def test_snapchat_ai_range_is_anchored_to_each_account_local_today(monkeypatch):
     assert (start.isoformat(), end.isoformat()) == ("2026-08-15", "2026-08-17")
 
 
+def test_active_snapchat_ai_source_is_unified_v2(monkeypatch):
+    campaigns = [{"entity_id": "c-v2", "provider_result_source": "unified-marketing-data-v1:snapchat-v2"}]
+    children = [{"entity_id": "a-v2", "provider_result_source": "unified-marketing-data-v1:snapchat-v2"}]
+
+    async def unified(*_args, **_kwargs):
+        return {"campaigns": campaigns, "children": children}
+
+    monkeypatch.setattr(
+        monitor._policy,
+        "load_snapchat_unified_ai_entities",
+        unified,
+    )
+    assert asyncio.run(
+        monitor._snapchat_campaign_entities(
+            object(), "owner", date(2026, 8, 24), date(2026, 8, 24)
+        )
+    ) == campaigns
+    assert asyncio.run(
+        monitor._snapchat_child_entities(
+            object(), "owner", date(2026, 8, 24), date(2026, 8, 24)
+        )
+    ) == children
+
+
 def test_snapchat_campaign_uses_conversion_platform_results_and_separate_salla_profit(monkeypatch):
     async def accounts(_db, _user_id):
         return [_account(timezone_name="Asia/Riyadh")]
@@ -107,7 +131,7 @@ def test_snapchat_campaign_uses_conversion_platform_results_and_separate_salla_p
     )
 
     rows = asyncio.run(
-        monitor._snapchat_campaign_entities(
+        monitor._snapchat_v1_campaign_entities(
             object(), "owner", date(2026, 8, 16), date(2026, 8, 18)
         )
     )
@@ -236,7 +260,7 @@ def test_snapchat_children_use_platform_conversion_and_page_verified_parent_sall
     )
 
     rows = asyncio.run(
-        monitor._snapchat_child_entities(
+        monitor._snapchat_v1_child_entities(
             object(), "owner", date(2026, 8, 16), date(2026, 8, 18)
         )
     )

@@ -27,12 +27,9 @@ from integrations_control_center.meta_oauth_security import (
     meta_appsecret_proof,
     meta_graph_base,
 )
-from integrations_control_center.snapchat_account_timezone_manager import (
-    SNAPCHAT_ACCOUNT_LOCAL_PERFORMANCE_COLLECTION,
-)
-from integrations_control_center.snapchat_native_data_common import (
-    SNAPCHAT_ENTITY_COLLECTION,
-    SNAPCHAT_PERFORMANCE_COLLECTION,
+from unified_marketing.gateway import (
+    load_unified_marketing_entity_daily_series,
+    load_unified_marketing_entity_metadata,
 )
 
 
@@ -203,45 +200,50 @@ def _window_summary(rows: list[dict[str, Any]], *, source: str) -> dict[str, Any
 
 async def _snapchat_rows(db: Any, user_id: str, candidate: dict[str, Any], start: date, end: date) -> list[dict[str, Any]]:
     level = str(candidate.get("entity_level") or "")
-    entity_type = {"campaign": "campaign", "ad_group": "ad_squad", "ad": "ad"}.get(level)
-    if not entity_type:
+    if level not in {"campaign", "ad_group", "ad"}:
         return []
-    account_id = str(candidate.get("account_id") or "")
     entity_id = str(candidate.get("entity_id") or "")
-    selector = {
-        "user_id": user_id,
-        "ad_account_id": account_id,
-        "entity_type": entity_type,
-        "external_id": entity_id,
-        "date": {"$gte": start.isoformat(), "$lte": end.isoformat()},
-    }
-    collection = SNAPCHAT_ACCOUNT_LOCAL_PERFORMANCE_COLLECTION
-    selector["action_report_time"] = ACTION_REPORT_TIME
-    documents = await db[collection].find(selector, {"_id": 0}).limit(1000).to_list(length=1000)
-    if not documents and level == "campaign":
-        selector.pop("action_report_time", None)
-        documents = await db[SNAPCHAT_PERFORMANCE_COLLECTION].find(selector, {"_id": 0}).limit(1000).to_list(length=1000)
+    if not entity_id:
+        return []
+    report = await load_unified_marketing_entity_daily_series(
+        db,
+        user_id,
+        provider="snapchat_ads",
+        entity_level=level,
+        entity_ids=[entity_id],
+        date_from=start,
+        date_to=end,
+        timezone_name=str(candidate.get("account_timezone") or ""),
+    )
     output = []
-    for doc in documents:
-        metrics = doc.get("metrics") if isinstance(doc.get("metrics"), dict) else {}
-        funnel = doc.get("funnel_metrics") if isinstance(doc.get("funnel_metrics"), dict) else {}
-        computed = doc.get("computed") if isinstance(doc.get("computed"), dict) else {}
+    for doc in report.get("rows") or []:
+        delivery = doc.get("delivery") if isinstance(doc.get("delivery"), dict) else {}
+        platform = doc.get("platform_outcomes") if isinstance(doc.get("platform_outcomes"), dict) else {}
+        native_spend = _number((delivery.get("spend") or {}).get("amount"))
+        spend_sar = _number((delivery.get("spend_sar") or {}).get("amount"))
+        native_revenue = _number((platform.get("revenue") or {}).get("amount"))
+        revenue_sar = (
+            round(native_revenue * spend_sar / native_spend, 2)
+            if native_revenue is not None
+            and spend_sar is not None
+            and native_spend not in {None, 0}
+            else None
+        )
         output.append({
-            "date": doc.get("date"),
-            "spend_sar": doc.get("spend_sar"),
-            "purchase_value_sar": doc.get("purchase_value_sar"),
-            "impressions": metrics.get("impressions"),
-            "clicks": metrics.get("swipes"),
-            "view_content": funnel.get("conversion_view_content"),
-            "add_to_cart": funnel.get("conversion_add_cart"),
-            "initiate_checkout": funnel.get("conversion_start_checkout"),
-            "add_payment_info": funnel.get("conversion_add_billing"),
-            "purchases": funnel.get("conversion_purchases"),
-            "video_views": metrics.get("video_views"),
-            "view_completion": metrics.get("view_completion"),
-            "frequency": metrics.get("frequency"),
-            "cpc": computed.get("cpc"),
-            "cpm": computed.get("cpm"),
+            "date": (doc.get("period") or {}).get("date_from"),
+            "spend_sar": spend_sar,
+            "purchase_value_sar": revenue_sar,
+            "impressions": delivery.get("impressions"),
+            "clicks": delivery.get("clicks"),
+            "view_content": platform.get("view_content"),
+            "add_to_cart": platform.get("add_to_cart"),
+            "initiate_checkout": platform.get("start_checkout"),
+            "add_payment_info": platform.get("add_billing"),
+            "purchases": platform.get("conversions"),
+            "video_views": delivery.get("views"),
+            "view_completion": delivery.get("video_completion"),
+            "frequency": delivery.get("frequency"),
+            "source": (doc.get("lineage") or {}).get("source_collection"),
         })
     return output
 
@@ -249,21 +251,22 @@ async def _snapchat_rows(db: Any, user_id: str, candidate: dict[str, Any], start
 async def _snapchat_creative_metadata(db: Any, user_id: str, candidate: dict[str, Any]) -> dict[str, Any]:
     if candidate.get("provider") != "snapchat" or candidate.get("entity_level") != "ad":
         return {}
-    row = await db[SNAPCHAT_ENTITY_COLLECTION].find_one(
-        {"user_id": user_id, "entity_type": "ad", "external_id": str(candidate.get("entity_id") or "")},
-        {"_id": 0, "creative_id": 1, "created_at_provider": 1, "updated_at_provider": 1, "provider_snapshot": 1},
-        sort=[("updated_at", -1)],
-    ) or {}
-    snapshot = row.get("provider_snapshot") if isinstance(row.get("provider_snapshot"), dict) else {}
-    web_view = snapshot.get("web_view_properties") if isinstance(snapshot.get("web_view_properties"), dict) else {}
+    row = await load_unified_marketing_entity_metadata(
+        db,
+        user_id,
+        provider="snapchat_ads",
+        entity_level="ad",
+        entity_id=str(candidate.get("entity_id") or ""),
+    )
     return {
-        "creative_id": row.get("creative_id") or snapshot.get("creative_id"),
-        "creative_type": snapshot.get("type") or snapshot.get("creative_type"),
-        "media_id": snapshot.get("top_snap_media_id") or snapshot.get("media_id"),
-        "destination_url": web_view.get("url"),
-        "created_at": row.get("created_at_provider"),
-        "last_major_edit_at": row.get("updated_at_provider"),
+        "creative_id": row.get("creative_id"),
+        "creative_type": row.get("creative_type"),
+        "media_id": row.get("media_id"),
+        "destination_url": row.get("destination_url"),
+        "created_at": row.get("created_at"),
+        "last_major_edit_at": row.get("updated_at"),
         "learning_or_delivery_status": candidate.get("effective_status") or candidate.get("status"),
+        "metadata_quality": row.get("quality"),
     }
 
 
@@ -392,13 +395,6 @@ async def build_funnel_evidence(
     start = end - timedelta(days=29)
     meta_rows, limitations = await _meta_evidence(db, user_id, candidates, start, end)
     entities: dict[str, Any] = {}
-    windows = {
-        "today": (end, end),
-        "yesterday": (end - timedelta(days=1), end - timedelta(days=1)),
-        "day_minus_2": (end - timedelta(days=2), end - timedelta(days=2)),
-        "baseline_7d": (end - timedelta(days=6), end),
-        "baseline_30d": (start, end),
-    }
     for candidate in candidates:
         key = _entity_key(
             str(candidate.get("provider") or ""),
@@ -407,10 +403,25 @@ async def build_funnel_evidence(
             str(candidate.get("entity_id") or ""),
         )
         if candidate.get("provider") == "snapchat":
-            all_rows = await _snapchat_rows(db, user_id, candidate, start, end)
-            source = "snapchat_ads_manager_conversion_time_daily_facts"
+            try:
+                candidate_end = date.fromisoformat(
+                    str(candidate.get("source_date_to") or "")[:10]
+                )
+            except ValueError:
+                candidate_end = end
+            candidate_start = candidate_end - timedelta(days=29)
+            all_rows = await _snapchat_rows(
+                db,
+                user_id,
+                candidate,
+                candidate_start,
+                candidate_end,
+            )
+            source = "unified-marketing-data-v1:snapchat-v2-total-facts"
             creative = await _snapchat_creative_metadata(db, user_id, candidate)
         else:
+            candidate_end = end
+            candidate_start = start
             all_rows = meta_rows.get(key, [])
             source = "meta_insights_conversion_time_v3"
             creative = {
@@ -418,6 +429,19 @@ async def build_funnel_evidence(
                 "last_major_edit_at": candidate.get("status_updated_at"),
                 "learning_or_delivery_status": candidate.get("effective_status") or candidate.get("status"),
             }
+        windows = {
+            "today": (candidate_end, candidate_end),
+            "yesterday": (
+                candidate_end - timedelta(days=1),
+                candidate_end - timedelta(days=1),
+            ),
+            "day_minus_2": (
+                candidate_end - timedelta(days=2),
+                candidate_end - timedelta(days=2),
+            ),
+            "baseline_7d": (candidate_end - timedelta(days=6), candidate_end),
+            "baseline_30d": (candidate_start, candidate_end),
+        }
         by_window = {}
         for label, (window_start, window_end) in windows.items():
             selected = [

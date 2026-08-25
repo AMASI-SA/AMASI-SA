@@ -23,10 +23,8 @@ import httpx
 from integrations_control_center.campaign_product_associations import (
     list_effective_campaign_products,
 )
-from integrations_control_center.snapchat_native_data_common import (
-    SNAPCHAT_ENTITY_COLLECTION,
-)
 from product_v2_routes import PRODUCTS as PRODUCT_V2_COLLECTION
+from unified_marketing.gateway import load_unified_marketing_entity_metadata
 
 
 SALLA_PRODUCT_CACHE = "salla_products"
@@ -298,18 +296,14 @@ async def probe_public_product_page(
 async def _snapchat_destination(db: Any, user_id: str, row: dict[str, Any]) -> str | None:
     if row.get("provider") != "snapchat" or row.get("entity_level") != "ad":
         return None
-    entity = await db[SNAPCHAT_ENTITY_COLLECTION].find_one(
-        {
-            "user_id": user_id,
-            "entity_type": "ad",
-            "external_id": str(row.get("entity_id") or ""),
-        },
-        {"_id": 0, "provider_snapshot.web_view_properties.url": 1},
-        sort=[("updated_at", -1)],
+    metadata = await load_unified_marketing_entity_metadata(
+        db,
+        user_id,
+        provider="snapchat_ads",
+        entity_level="ad",
+        entity_id=str(row.get("entity_id") or ""),
     )
-    snapshot = (entity or {}).get("provider_snapshot") or {}
-    web_view = snapshot.get("web_view_properties") if isinstance(snapshot, dict) else {}
-    return _text((web_view or {}).get("url"), 2000) or None
+    return _text(metadata.get("destination_url"), 2000) or None
 
 
 async def _products_for_candidate(db: Any, user_id: str, row: dict[str, Any]) -> list[dict[str, Any]]:
