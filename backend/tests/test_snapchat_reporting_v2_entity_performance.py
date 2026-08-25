@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from datetime import date, datetime, timezone
 
 import pytest
@@ -143,33 +144,81 @@ def total_performance_payload(key: str, external_id: str) -> dict:
     }
 
 
-def campaign_total_performance_payload() -> dict:
+def campaign_day_performance_payload() -> dict:
     return {
         "request_status": "SUCCESS",
-        "total_stats": [
+        "timeseries_stats": [
             {
                 "sub_request_status": "SUCCESS",
-                "total_stat": {
+                "timeseries_stat": {
                     "id": "a1",
                     "type": "AD_ACCOUNT",
-                    "granularity": "TOTAL",
+                    "granularity": "DAY",
                     "breakdown_stats": {
                         "campaign": [
                             {
                                 "id": "c1",
-                                "stats": {
-                                    "spend": 3_000_000_000,
-                                    "conversion_purchases": 118,
-                                    "conversion_purchases_value": 7_470_240_000,
-                                },
+                                "timeseries": [
+                                    {
+                                        "start_time": "2026-08-23T00:00:00-07:00",
+                                        "end_time": "2026-08-24T00:00:00-07:00",
+                                        "stats": {
+                                            "spend": 1_000_000_000,
+                                            "conversion_purchases": 40,
+                                            "conversion_purchases_value": 2_500_000_000,
+                                        },
+                                    },
+                                    {
+                                        "start_time": "2026-08-24T00:00:00-07:00",
+                                        "end_time": "2026-08-25T00:00:00-07:00",
+                                        "stats": {
+                                            "spend": 1_000_000_000,
+                                            "conversion_purchases": 40,
+                                            "conversion_purchases_value": 2_500_000_000,
+                                        },
+                                    },
+                                    {
+                                        "start_time": "2026-08-25T00:00:00-07:00",
+                                        "end_time": "2026-08-26T00:00:00-07:00",
+                                        "stats": {
+                                            "spend": 1_000_000_000,
+                                            "conversion_purchases": 38,
+                                            "conversion_purchases_value": 2_470_240_000,
+                                        },
+                                    },
+                                ],
                             },
                             {
                                 "id": "c2",
-                                "stats": {
-                                    "spend": 2_964_780_000,
-                                    "conversion_purchases": 111,
-                                    "conversion_purchases_value": 3_000_000_000,
-                                },
+                                "timeseries": [
+                                    {
+                                        "start_time": "2026-08-23T00:00:00-07:00",
+                                        "end_time": "2026-08-24T00:00:00-07:00",
+                                        "stats": {
+                                            "spend": 1_000_000_000,
+                                            "conversion_purchases": 37,
+                                            "conversion_purchases_value": 1_000_000_000,
+                                        },
+                                    },
+                                    {
+                                        "start_time": "2026-08-24T00:00:00-07:00",
+                                        "end_time": "2026-08-25T00:00:00-07:00",
+                                        "stats": {
+                                            "spend": 1_000_000_000,
+                                            "conversion_purchases": 37,
+                                            "conversion_purchases_value": 1_000_000_000,
+                                        },
+                                    },
+                                    {
+                                        "start_time": "2026-08-25T00:00:00-07:00",
+                                        "end_time": "2026-08-26T00:00:00-07:00",
+                                        "stats": {
+                                            "spend": 964_780_000,
+                                            "conversion_purchases": 37,
+                                            "conversion_purchases_value": 1_000_000_000,
+                                        },
+                                    },
+                                ],
                             },
                         ]
                     },
@@ -234,7 +283,9 @@ async def test_fetches_ad_squad_hourly_facts_from_campaign_breakdown():
                     {
                         "start_utc": datetime(2026, 8, 22, 10, tzinfo=timezone.utc),
                         "end_utc": datetime(2026, 8, 22, 11, tzinfo=timezone.utc),
-                        "provider_start": datetime(2026, 8, 22, 10, tzinfo=timezone.utc),
+                        "provider_start": datetime(
+                            2026, 8, 22, 10, tzinfo=timezone.utc
+                        ),
                         "provider_end": datetime(2026, 8, 22, 11, tzinfo=timezone.utc),
                     }
                 ],
@@ -347,10 +398,8 @@ async def test_daily_total_facts_keep_current_account_day_boundaries():
 
 
 @pytest.mark.asyncio
-async def test_campaign_totals_use_one_account_breakdown_matching_ads_manager():
-    factory = FakeHTTPFactory(
-        [FakeResponse(campaign_total_performance_payload())]
-    )
+async def test_campaign_days_use_one_account_breakdown_matching_ads_manager():
+    factory = FakeHTTPFactory([FakeResponse(campaign_day_performance_payload())])
     client = SnapchatV2Client(
         object(),
         "u1",
@@ -364,10 +413,14 @@ async def test_campaign_totals_use_one_account_breakdown_matching_ads_manager():
             "timezone": "America/Los_Angeles",
             "currency": "USD",
         },
-        # A partial activity seed must not limit the account TOTAL report.
+        # A partial activity seed must not limit the account DAY report.
         campaign_ids=["c1"],
         entity_type="campaign",
-        report_dates=[date(2026, 8, 25)],
+        report_dates=[
+            date(2026, 8, 23),
+            date(2026, 8, 24),
+            date(2026, 8, 25),
+        ],
         sync_run_id="run-campaign-total-1",
     )
 
@@ -377,8 +430,10 @@ async def test_campaign_totals_use_one_account_breakdown_matching_ads_manager():
     assert client.provider_calls == 1
     url, params = factory.clients[0].calls[0]
     assert url.endswith("/adaccounts/a1/stats")
-    assert params["granularity"] == "TOTAL"
+    assert params["granularity"] == "DAY"
     assert params["breakdown"] == "campaign"
+    assert params["start_time"] == "2026-08-23T00:00:00-07:00"
+    assert params["end_time"] == "2026-08-26T00:00:00-07:00"
     assert params["conversion_source_types"] == "total"
     assert params["action_report_time"] == "conversion"
     assert params["swipe_up_attribution_window"] == "28_DAY"
@@ -386,10 +441,8 @@ async def test_campaign_totals_use_one_account_breakdown_matching_ads_manager():
 
 
 @pytest.mark.asyncio
-async def test_campaign_total_budget_depends_on_days_not_campaign_count():
-    factory = FakeHTTPFactory(
-        [FakeResponse(campaign_total_performance_payload())]
-    )
+async def test_campaign_day_budget_depends_on_pages_not_campaign_count_or_days():
+    factory = FakeHTTPFactory([FakeResponse(campaign_day_performance_payload())])
     client = SnapchatV2Client(
         object(),
         "u1",
@@ -398,15 +451,31 @@ async def test_campaign_total_budget_depends_on_days_not_campaign_count():
     )
 
     result = await client.fetch_breakdown_daily_total_facts(
-        {"ad_account_id": "a1", "timezone": "UTC", "currency": "USD"},
+        {
+            "ad_account_id": "a1",
+            "timezone": "America/Los_Angeles",
+            "currency": "USD",
+        },
         campaign_ids=[f"c{index}" for index in range(1_000)],
         entity_type="campaign",
-        report_dates=[date(2026, 8, 25)],
+        report_dates=[
+            date(2026, 8, 23),
+            date(2026, 8, 24),
+            date(2026, 8, 25),
+        ],
         sync_run_id="run-campaign-budget-1",
     )
 
     assert result["coverage"]["status"] == "complete"
     assert client.provider_calls == 1
+
+
+def test_pipeline_fetches_campaign_outcomes_before_identity_catalog():
+    source = inspect.getsource(SnapchatV2SyncPipeline.run)
+
+    assert source.index('entity_type="campaign"') < source.index(
+        "identity_summary, identity_errors"
+    )
 
 
 @pytest.mark.asyncio
@@ -463,9 +532,7 @@ async def test_entity_report_joins_ad_to_v2_parent_identities(monkeypatch):
 
     async def fake_entities(*_args, entity_type, **_kwargs):
         return {
-            "campaign": [
-                {"external_id": "c1", "name": "Campaign", "active": True}
-            ],
+            "campaign": [{"external_id": "c1", "name": "Campaign", "active": True}],
             "ad_squad": [
                 {
                     "external_id": "s1",
@@ -522,6 +589,7 @@ async def test_entity_report_joins_ad_to_v2_parent_identities(monkeypatch):
     assert result["rows"][0]["ad_name"] == "Creative"
     assert result["rows"][0]["ad_squad_name"] == "Squad"
     assert result["rows"][0]["campaign_name"] == "Campaign"
+
     async def partial(*_args, **_kwargs):
         return "partial"
 
@@ -671,8 +739,7 @@ class OrderDB:
 
 
 @pytest.mark.asyncio
-async def test_salla_outcomes_match_v2_campaigns_without_distributing_direct_orders(
-):
+async def test_salla_outcomes_match_v2_campaigns_without_distributing_direct_orders():
     db = OrderDB(
         [
             {

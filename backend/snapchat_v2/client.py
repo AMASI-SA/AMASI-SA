@@ -1,4 +1,5 @@
 """Bounded, read-only Snapchat Marketing API client for reporting V2."""
+
 from __future__ import annotations
 
 import asyncio
@@ -460,9 +461,12 @@ class SnapchatV2Client:
                         "ad_account_id": str(ad_account_id),
                         "entity_type": entity_type,
                         "external_id": external_id,
-                        "name": clean_text(entity.get("name") or external_id, limit=300),
+                        "name": clean_text(
+                            entity.get("name") or external_id, limit=300
+                        ),
                         "status": clean_text(entity.get("status"), limit=64) or None,
-                        "campaign_id": clean_text(entity.get("campaign_id"), limit=128) or None,
+                        "campaign_id": clean_text(entity.get("campaign_id"), limit=128)
+                        or None,
                         "ad_squad_id": clean_text(
                             entity.get("ad_squad_id") or entity.get("adsquad_id"),
                             limit=128,
@@ -533,7 +537,9 @@ class SnapchatV2Client:
                     "Snapchat returned an unexpected reporting granularity.",
                 )
             breakdown = stat.get("breakdown_stats")
-            campaigns = breakdown.get("campaign") if isinstance(breakdown, dict) else None
+            campaigns = (
+                breakdown.get("campaign") if isinstance(breakdown, dict) else None
+            )
             if not isinstance(campaigns, list):
                 raise SnapchatClientError(
                     "snapchat_hour_campaign_breakdown_missing",
@@ -553,7 +559,9 @@ class SnapchatV2Client:
                         "Snapchat HOUR campaign identity is invalid.",
                     )
                 for point in points:
-                    if not isinstance(point, dict) or not isinstance(point.get("stats"), dict):
+                    if not isinstance(point, dict) or not isinstance(
+                        point.get("stats"), dict
+                    ):
                         raise SnapchatClientError(
                             "snapchat_hour_point_invalid",
                             "Snapchat HOUR point is invalid.",
@@ -643,7 +651,9 @@ class SnapchatV2Client:
                         f"Snapchat {entity_type} HOUR identity is invalid.",
                     )
                 for point in points:
-                    if not isinstance(point, dict) or not isinstance(point.get("stats"), dict):
+                    if not isinstance(point, dict) or not isinstance(
+                        point.get("stats"), dict
+                    ):
                         raise SnapchatClientError(
                             f"snapchat_{entity_type}_hour_point_invalid",
                             f"Snapchat {entity_type} HOUR point is invalid.",
@@ -704,9 +714,7 @@ class SnapchatV2Client:
             if entity_type == "campaign":
                 breakdown = stat.get("breakdown_stats")
                 campaigns = (
-                    breakdown.get("campaign")
-                    if isinstance(breakdown, dict)
-                    else None
+                    breakdown.get("campaign") if isinstance(breakdown, dict) else None
                 )
                 if isinstance(campaigns, list):
                     for campaign in campaigns:
@@ -783,6 +791,324 @@ class SnapchatV2Client:
                 )
         return rows
 
+    @staticmethod
+    def _extract_campaign_day_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
+        """Extract account-level campaign DAY points without summing HOUR rows."""
+        wrappers = payload.get("timeseries_stats")
+        if not isinstance(wrappers, list) or not wrappers:
+            raise SnapchatClientError(
+                "snapchat_campaign_day_envelope_missing",
+                "Snapchat campaign DAY response is missing timeseries_stats.",
+            )
+        rows: list[dict[str, Any]] = []
+        for wrapper in wrappers:
+            if not isinstance(wrapper, dict):
+                raise SnapchatClientError(
+                    "snapchat_campaign_day_wrapper_invalid",
+                    "Snapchat campaign DAY wrapper is invalid.",
+                )
+            sub_status = clean_text(wrapper.get("sub_request_status"), limit=40).upper()
+            if sub_status and sub_status != "SUCCESS":
+                raise SnapchatClientError(
+                    "snapchat_campaign_day_subrequest_failed",
+                    "Snapchat campaign DAY sub-request failed.",
+                    retryable=True,
+                )
+            stat = wrapper.get("timeseries_stat")
+            if not isinstance(stat, dict):
+                raise SnapchatClientError(
+                    "snapchat_campaign_day_stat_missing",
+                    "Snapchat campaign DAY response is missing timeseries_stat.",
+                )
+            granularity = clean_text(stat.get("granularity"), limit=20).upper()
+            if granularity and granularity != "DAY":
+                raise SnapchatClientError(
+                    "snapchat_campaign_day_granularity_invalid",
+                    "Snapchat returned an unexpected campaign granularity.",
+                )
+            breakdown = stat.get("breakdown_stats")
+            campaigns = (
+                breakdown.get("campaign") if isinstance(breakdown, dict) else None
+            )
+            if not isinstance(campaigns, list):
+                raise SnapchatClientError(
+                    "snapchat_campaign_day_breakdown_missing",
+                    "Snapchat DAY response is missing the campaign breakdown.",
+                )
+            for campaign in campaigns:
+                if not isinstance(campaign, dict):
+                    raise SnapchatClientError(
+                        "snapchat_campaign_day_row_invalid",
+                        "Snapchat campaign DAY row is invalid.",
+                    )
+                external_id = clean_text(campaign.get("id"), limit=128)
+                points = campaign.get("timeseries")
+                if not external_id or not isinstance(points, list):
+                    raise SnapchatClientError(
+                        "snapchat_campaign_day_identity_invalid",
+                        "Snapchat campaign DAY identity is invalid.",
+                    )
+                for point in points:
+                    if not isinstance(point, dict) or not isinstance(
+                        point.get("stats"), dict
+                    ):
+                        raise SnapchatClientError(
+                            "snapchat_campaign_day_point_invalid",
+                            "Snapchat campaign DAY point is invalid.",
+                        )
+                    rows.append(
+                        {
+                            "campaign_id": external_id,
+                            "external_id": external_id,
+                            "start_time": point.get("start_time"),
+                            "end_time": point.get("end_time"),
+                            "metrics": dict(point["stats"]),
+                        }
+                    )
+        return rows
+
+    async def _fetch_campaign_daily_breakdown_facts(
+        self,
+        *,
+        account_id: str,
+        account_timezone: str,
+        currency: str,
+        account_tz: ZoneInfo,
+        campaign_values: list[str],
+        date_values: list[date],
+        sync_run_id: str,
+        action_report_time: str,
+        swipe_attribution_window: str,
+        view_attribution_window: str,
+    ) -> dict[str, Any]:
+        """Fetch Ads Manager-compatible daily campaign facts in one report."""
+        if not date_values:
+            coverage = _coverage(
+                status="complete",
+                data_state="confirmed_no_data",
+                expected_requests=0,
+                completed_requests=0,
+                rows_received=0,
+            )
+            coverage["provider_granularity"] = "DAY"
+            coverage["frequency_summed"] = False
+            return {
+                "rows": [],
+                "coverage": coverage,
+                "provider_calls": self.provider_calls,
+                "campaigns_requested": len(campaign_values),
+                "report_days": 0,
+            }
+
+        remaining_budget = max(0, MAX_PROVIDER_CALLS - self.provider_calls)
+        if remaining_budget < 1:
+            raise SnapchatClientError(
+                "snapchat_campaign_provider_call_budget_exceeded",
+                "Snapchat campaign DAY sync exceeds the provider call budget.",
+                coverage=_coverage(
+                    status="incomplete",
+                    data_state="unknown_incomplete",
+                    expected_requests=1,
+                    completed_requests=0,
+                    rows_received=0,
+                    reason="provider_call_budget_exceeded",
+                ),
+            )
+
+        local_start = datetime.combine(date_values[0], time.min, tzinfo=account_tz)
+        local_end = datetime.combine(
+            date_values[-1] + timedelta(days=1),
+            time.min,
+            tzinfo=account_tz,
+        )
+        action = clean_text(action_report_time, limit=32).lower()
+        expected_dates = set(date_values)
+        facts: dict[tuple[str, str], dict[str, Any]] = {}
+        completed_requests = 0
+        try:
+            async with self.client_factory(timeout=HTTP_TIMEOUT_SECONDS) as client:
+                url = f"{SNAPCHAT_API_BASE}/adaccounts/{account_id}/stats"
+                params: dict[str, Any] = {
+                    "start_time": local_start.isoformat(timespec="seconds"),
+                    "end_time": local_end.isoformat(timespec="seconds"),
+                    "granularity": "DAY",
+                    "breakdown": "campaign",
+                    "fields": ",".join(TOTAL_STAT_FIELDS),
+                    "limit": 200,
+                    "omit_empty": "false",
+                    "conversion_source_types": "total",
+                    "swipe_up_attribution_window": swipe_attribution_window,
+                    "view_attribution_window": view_attribution_window,
+                    "action_report_time": action,
+                }
+                pages, page_count = await self._pages(client, url, params=params)
+                completed_requests += page_count
+                for payload in pages:
+                    for row in self._extract_campaign_day_rows(payload):
+                        point_start = _parse_datetime(
+                            row.get("start_time"), field="start_time"
+                        )
+                        point_end = _parse_datetime(
+                            row.get("end_time"), field="end_time"
+                        )
+                        report_date = point_start.astimezone(account_tz).date()
+                        expected_start = datetime.combine(
+                            report_date,
+                            time.min,
+                            tzinfo=account_tz,
+                        ).astimezone(timezone.utc)
+                        expected_end = datetime.combine(
+                            report_date + timedelta(days=1),
+                            time.min,
+                            tzinfo=account_tz,
+                        ).astimezone(timezone.utc)
+                        if report_date not in expected_dates:
+                            # The API returns every day between the outer
+                            # boundaries. Ignore intermediate days when this
+                            # lower-level method receives a sparse date set.
+                            continue
+                        if point_start != expected_start or point_end != expected_end:
+                            raise SnapchatClientError(
+                                "snapchat_campaign_day_window_invalid",
+                                "Snapchat returned a campaign point outside account-day boundaries.",
+                            )
+                        metrics = row["metrics"]
+                        external_id = str(row["external_id"])
+                        fact = {
+                            "user_id": self.user_id,
+                            "provider": SNAPCHAT_PROVIDER,
+                            "ad_account_id": account_id,
+                            "entity_type": "campaign",
+                            "external_id": external_id,
+                            "campaign_id": external_id,
+                            "ad_squad_id": None,
+                            "ad_id": None,
+                            "report_date": report_date.isoformat(),
+                            "window_start_utc": point_start,
+                            "window_end_utc": point_end,
+                            "account_timezone": account_timezone,
+                            "currency": currency,
+                            "action_report_time": action,
+                            "attribution_windows": {
+                                "swipe": swipe_attribution_window,
+                                "view": view_attribution_window,
+                            },
+                            "spend_native": float(
+                                _number(metrics.get("spend"), field="spend")
+                            )
+                            / 1_000_000,
+                            "impressions": _number(
+                                metrics.get("impressions"),
+                                field="impressions",
+                                integer=True,
+                            ),
+                            "swipes": _number(
+                                metrics.get("swipes"), field="swipes", integer=True
+                            ),
+                            "video_views": _number(
+                                metrics.get("video_views"),
+                                field="video_views",
+                                integer=True,
+                            ),
+                            "view_completion": _number(
+                                metrics.get("view_completion"), field="view_completion"
+                            ),
+                            "view_content": _number(
+                                metrics.get("conversion_view_content"),
+                                field="conversion_view_content",
+                                integer=True,
+                            ),
+                            "add_to_cart": _number(
+                                metrics.get("conversion_add_cart"),
+                                field="conversion_add_cart",
+                                integer=True,
+                            ),
+                            "start_checkout": _number(
+                                metrics.get("conversion_start_checkout"),
+                                field="conversion_start_checkout",
+                                integer=True,
+                            ),
+                            "add_billing": _number(
+                                metrics.get("conversion_add_billing"),
+                                field="conversion_add_billing",
+                                integer=True,
+                            ),
+                            "purchases": _number(
+                                metrics.get("conversion_purchases"),
+                                field="conversion_purchases",
+                                integer=True,
+                            ),
+                            "purchase_value_native": float(
+                                _number(
+                                    metrics.get("conversion_purchases_value"),
+                                    field="conversion_purchases_value",
+                                )
+                            )
+                            / 1_000_000,
+                            "paid_reach": (
+                                _number(
+                                    metrics.get("uniques"),
+                                    field="uniques",
+                                    integer=True,
+                                )
+                                if metrics.get("uniques") is not None
+                                else None
+                            ),
+                            "paid_frequency": (
+                                _number(metrics.get("frequency"), field="frequency")
+                                if metrics.get("frequency") is not None
+                                else None
+                            ),
+                            "sync_run_id": str(sync_run_id),
+                            "coverage": {
+                                "status": "complete",
+                                "data_state": "confirmed_data",
+                            },
+                            "source": {
+                                "api": "snapchat_marketing_api",
+                                "granularity": "DAY",
+                                "breakdown": "campaign",
+                                "frequency_summed": False,
+                            },
+                        }
+                        key = (report_date.isoformat(), external_id)
+                        existing = facts.get(key)
+                        if existing is not None and existing != fact:
+                            raise SnapchatClientError(
+                                "snapchat_campaign_day_duplicate_conflict",
+                                "Snapchat returned conflicting campaign DAY rows.",
+                            )
+                        facts[key] = fact
+        except SnapchatClientError as exc:
+            if not exc.coverage:
+                exc.coverage = _coverage(
+                    status="incomplete",
+                    data_state="unknown_incomplete",
+                    expected_requests=max(1, completed_requests + 1),
+                    completed_requests=completed_requests,
+                    rows_received=len(facts),
+                    reason=exc.code,
+                )
+            raise
+
+        rows = list(facts.values())
+        coverage = _coverage(
+            status="complete",
+            data_state="confirmed_data" if rows else "confirmed_no_data",
+            expected_requests=completed_requests,
+            completed_requests=completed_requests,
+            rows_received=len(rows),
+        )
+        coverage["provider_granularity"] = "DAY"
+        coverage["frequency_summed"] = False
+        return {
+            "rows": rows,
+            "coverage": coverage,
+            "provider_calls": self.provider_calls,
+            "campaigns_requested": len(campaign_values),
+            "report_days": len(date_values),
+        }
+
     async def fetch_breakdown_daily_total_facts(
         self,
         account: dict[str, Any],
@@ -817,17 +1143,28 @@ class SnapchatV2Client:
             }
         )
         date_values = sorted(set(report_dates))
-        # Snapchat's Ad Account Stats endpoint returns every campaign in one
-        # paginated TOTAL breakdown.  Use that authoritative account-level
-        # report for campaigns so the result matches Ads Manager and does not
-        # become partial when an account has enough campaigns to exhaust the
-        # per-run request budget.  Child levels still require one Campaign
-        # Stats request per parent campaign according to Snapchat's contract.
-        expected_requests = (
-            len(date_values)
-            if entity_type == "campaign"
-            else len(campaign_values) * len(date_values)
-        )
+        account_tz = _account_timezone(account_timezone)
+        if entity_type == "campaign":
+            # Ads Manager's range total is additive across account-local DAY
+            # points when conversions are reported by conversion time.  Fetch
+            # the whole range from one account breakdown so this path remains
+            # independent of the 1,000+ campaign identity catalog and avoids
+            # summing HOUR conversion observations.
+            return await self._fetch_campaign_daily_breakdown_facts(
+                account_id=account_id,
+                account_timezone=account_timezone,
+                currency=currency,
+                account_tz=account_tz,
+                campaign_values=campaign_values,
+                date_values=date_values,
+                sync_run_id=sync_run_id,
+                action_report_time=action_report_time,
+                swipe_attribution_window=swipe_attribution_window,
+                view_attribution_window=view_attribution_window,
+            )
+        # Child levels require one Campaign Stats request per parent campaign
+        # and account-local day according to Snapchat's reporting contract.
+        expected_requests = len(campaign_values) * len(date_values)
         remaining_budget = max(0, MAX_PROVIDER_CALLS - self.provider_calls)
         if expected_requests > remaining_budget:
             raise SnapchatClientError(
@@ -842,7 +1179,6 @@ class SnapchatV2Client:
                     reason="provider_call_budget_exceeded",
                 ),
             )
-        account_tz = _account_timezone(account_timezone)
         parent_lookup = {
             clean_text(key, limit=128): clean_text(value, limit=128)
             for key, value in dict(ad_squad_by_ad_id or {}).items()
@@ -853,7 +1189,9 @@ class SnapchatV2Client:
         try:
             async with self.client_factory(timeout=HTTP_TIMEOUT_SECONDS) as client:
                 for report_date in date_values:
-                    local_start = datetime.combine(report_date, time.min, tzinfo=account_tz)
+                    local_start = datetime.combine(
+                        report_date, time.min, tzinfo=account_tz
+                    )
                     local_end = datetime.combine(
                         report_date + timedelta(days=1),
                         time.min,
@@ -868,30 +1206,22 @@ class SnapchatV2Client:
                     # returns the currently processed portion of today's
                     # complete local-day window while preserving real-time
                     # attribution semantics.
-                    request_targets: list[tuple[str, str | None, str | None]]
-                    if entity_type == "campaign":
-                        request_targets = [
-                            (
-                                f"{SNAPCHAT_API_BASE}/adaccounts/{account_id}/stats",
-                                None,
-                                "campaign",
-                            )
-                        ]
-                    else:
-                        request_targets = [
-                            (
-                                f"{SNAPCHAT_API_BASE}/campaigns/{campaign_id}/stats",
-                                campaign_id,
-                                PERFORMANCE_BREAKDOWNS[entity_type][
-                                    "request_value"
-                                ],
-                            )
-                            for campaign_id in campaign_values
-                        ]
+                    request_targets: list[tuple[str, str | None, str | None]] = [
+                        (
+                            f"{SNAPCHAT_API_BASE}/campaigns/{campaign_id}/stats",
+                            campaign_id,
+                            PERFORMANCE_BREAKDOWNS[entity_type]["request_value"],
+                        )
+                        for campaign_id in campaign_values
+                    ]
                     for url, campaign_id, breakdown in request_targets:
                         params: dict[str, Any] = {
-                            "start_time": start_utc.astimezone(account_tz).isoformat(timespec="seconds"),
-                            "end_time": end_utc.astimezone(account_tz).isoformat(timespec="seconds"),
+                            "start_time": start_utc.astimezone(account_tz).isoformat(
+                                timespec="seconds"
+                            ),
+                            "end_time": end_utc.astimezone(account_tz).isoformat(
+                                timespec="seconds"
+                            ),
                             "granularity": "TOTAL",
                             "fields": ",".join(TOTAL_STAT_FIELDS),
                             "limit": 200,
@@ -906,7 +1236,9 @@ class SnapchatV2Client:
                         }
                         if breakdown:
                             params["breakdown"] = breakdown
-                        pages, page_count = await self._pages(client, url, params=params)
+                        pages, page_count = await self._pages(
+                            client, url, params=params
+                        )
                         completed_requests += page_count
                         for payload in pages:
                             for row in self._extract_breakdown_total_rows(
@@ -932,11 +1264,15 @@ class SnapchatV2Client:
                                     "ad_squad_id": (
                                         external_id
                                         if entity_type == "ad_squad"
-                                        else parent_lookup.get(external_id)
-                                        if entity_type == "ad"
-                                        else None
+                                        else (
+                                            parent_lookup.get(external_id)
+                                            if entity_type == "ad"
+                                            else None
+                                        )
                                     ),
-                                    "ad_id": external_id if entity_type == "ad" else None,
+                                    "ad_id": (
+                                        external_id if entity_type == "ad" else None
+                                    ),
                                     "report_date": report_date.isoformat(),
                                     "window_start_utc": start_utc,
                                     "window_end_utc": end_utc,
@@ -952,40 +1288,84 @@ class SnapchatV2Client:
                                     },
                                     "spend_native": float(
                                         _number(metrics.get("spend"), field="spend")
-                                    ) / 1_000_000,
-                                    "impressions": _number(metrics.get("impressions"), field="impressions", integer=True),
-                                    "swipes": _number(metrics.get("swipes"), field="swipes", integer=True),
-                                    "video_views": _number(metrics.get("video_views"), field="video_views", integer=True),
-                                    "view_completion": _number(metrics.get("view_completion"), field="view_completion"),
-                                    "view_content": _number(metrics.get("conversion_view_content"), field="conversion_view_content", integer=True),
-                                    "add_to_cart": _number(metrics.get("conversion_add_cart"), field="conversion_add_cart", integer=True),
-                                    "start_checkout": _number(metrics.get("conversion_start_checkout"), field="conversion_start_checkout", integer=True),
-                                    "add_billing": _number(metrics.get("conversion_add_billing"), field="conversion_add_billing", integer=True),
-                                    "purchases": _number(metrics.get("conversion_purchases"), field="conversion_purchases", integer=True),
+                                    )
+                                    / 1_000_000,
+                                    "impressions": _number(
+                                        metrics.get("impressions"),
+                                        field="impressions",
+                                        integer=True,
+                                    ),
+                                    "swipes": _number(
+                                        metrics.get("swipes"),
+                                        field="swipes",
+                                        integer=True,
+                                    ),
+                                    "video_views": _number(
+                                        metrics.get("video_views"),
+                                        field="video_views",
+                                        integer=True,
+                                    ),
+                                    "view_completion": _number(
+                                        metrics.get("view_completion"),
+                                        field="view_completion",
+                                    ),
+                                    "view_content": _number(
+                                        metrics.get("conversion_view_content"),
+                                        field="conversion_view_content",
+                                        integer=True,
+                                    ),
+                                    "add_to_cart": _number(
+                                        metrics.get("conversion_add_cart"),
+                                        field="conversion_add_cart",
+                                        integer=True,
+                                    ),
+                                    "start_checkout": _number(
+                                        metrics.get("conversion_start_checkout"),
+                                        field="conversion_start_checkout",
+                                        integer=True,
+                                    ),
+                                    "add_billing": _number(
+                                        metrics.get("conversion_add_billing"),
+                                        field="conversion_add_billing",
+                                        integer=True,
+                                    ),
+                                    "purchases": _number(
+                                        metrics.get("conversion_purchases"),
+                                        field="conversion_purchases",
+                                        integer=True,
+                                    ),
                                     "purchase_value_native": float(
                                         _number(
                                             metrics.get("conversion_purchases_value"),
                                             field="conversion_purchases_value",
                                         )
-                                    ) / 1_000_000,
+                                    )
+                                    / 1_000_000,
                                     "paid_reach": (
-                                        _number(metrics.get("uniques"), field="uniques", integer=True)
+                                        _number(
+                                            metrics.get("uniques"),
+                                            field="uniques",
+                                            integer=True,
+                                        )
                                         if metrics.get("uniques") is not None
                                         else None
                                     ),
                                     "paid_frequency": (
-                                        _number(metrics.get("frequency"), field="frequency")
+                                        _number(
+                                            metrics.get("frequency"), field="frequency"
+                                        )
                                         if metrics.get("frequency") is not None
                                         else None
                                     ),
                                     "sync_run_id": str(sync_run_id),
-                                    "coverage": {"status": "complete", "data_state": "confirmed_data"},
+                                    "coverage": {
+                                        "status": "complete",
+                                        "data_state": "confirmed_data",
+                                    },
                                     "source": {
                                         "api": "snapchat_marketing_api",
                                         "granularity": "TOTAL",
-                                        "breakdown": (
-                                            breakdown
-                                        ),
+                                        "breakdown": (breakdown),
                                         "frequency_summed": False,
                                     },
                                 }
@@ -1097,8 +1477,12 @@ class SnapchatV2Client:
                     for campaign_id in normalized_campaign_ids:
                         url = f"{SNAPCHAT_API_BASE}/campaigns/{campaign_id}/stats"
                         params = {
-                            "start_time": window.provider_start.isoformat(timespec="seconds"),
-                            "end_time": window.provider_end.isoformat(timespec="seconds"),
+                            "start_time": window.provider_start.isoformat(
+                                timespec="seconds"
+                            ),
+                            "end_time": window.provider_end.isoformat(
+                                timespec="seconds"
+                            ),
                             "granularity": "HOUR",
                             "breakdown": config["request_value"],
                             "fields": ",".join(STAT_FIELDS),
@@ -1112,7 +1496,9 @@ class SnapchatV2Client:
                                 limit=32,
                             ).lower(),
                         }
-                        pages, page_count = await self._pages(client, url, params=params)
+                        pages, page_count = await self._pages(
+                            client, url, params=params
+                        )
                         completed_requests += page_count
                         for payload in pages:
                             rows = self._extract_breakdown_hour_rows(
@@ -1134,7 +1520,10 @@ class SnapchatV2Client:
                                         f"snapchat_{entity_type}_hour_window_invalid",
                                         f"Snapchat returned a non-hourly {entity_type} point.",
                                     )
-                                if point_start < window.start_utc or point_end > window.end_utc:
+                                if (
+                                    point_start < window.start_utc
+                                    or point_end > window.end_utc
+                                ):
                                     raise SnapchatClientError(
                                         f"snapchat_{entity_type}_hour_window_mismatch",
                                         f"Snapchat returned {entity_type} data outside the requested window.",
@@ -1224,7 +1613,9 @@ class SnapchatV2Client:
                                     fact["ad_squad_id"] = external_id
                                 else:
                                     fact["ad_id"] = external_id
-                                    fact["ad_squad_id"] = parent_lookup.get(external_id) or None
+                                    fact["ad_squad_id"] = (
+                                        parent_lookup.get(external_id) or None
+                                    )
                                 key = (external_id, point_start)
                                 existing = facts.get(key)
                                 if existing is not None and existing != fact:
@@ -1270,9 +1661,7 @@ class SnapchatV2Client:
         data_state = (
             "confirmed_no_data"
             if not rows
-            else "confirmed_zero"
-            if all_zero
-            else "confirmed_data"
+            else "confirmed_zero" if all_zero else "confirmed_data"
         )
         coverage = _coverage(
             status="complete",
@@ -1330,7 +1719,9 @@ class SnapchatV2Client:
                 for window in windows:
                     url = f"{SNAPCHAT_API_BASE}/adaccounts/{account_id}/stats"
                     params = {
-                        "start_time": window.provider_start.isoformat(timespec="seconds"),
+                        "start_time": window.provider_start.isoformat(
+                            timespec="seconds"
+                        ),
                         "end_time": window.provider_end.isoformat(timespec="seconds"),
                         "granularity": "HOUR",
                         "breakdown": "campaign",
@@ -1340,21 +1731,30 @@ class SnapchatV2Client:
                         "conversion_source_types": "total",
                         "swipe_up_attribution_window": swipe_attribution_window,
                         "view_attribution_window": view_attribution_window,
-                        "action_report_time": clean_text(action_report_time, limit=32).lower(),
+                        "action_report_time": clean_text(
+                            action_report_time, limit=32
+                        ).lower(),
                     }
                     pages, page_count = await self._pages(client, url, params=params)
                     completed_requests += page_count
                     source_windows.append(window.as_dict())
                     for payload in pages:
                         for row in self._extract_hour_rows(payload):
-                            point_start = _parse_datetime(row.get("start_time"), field="start_time")
-                            point_end = _parse_datetime(row.get("end_time"), field="end_time")
+                            point_start = _parse_datetime(
+                                row.get("start_time"), field="start_time"
+                            )
+                            point_end = _parse_datetime(
+                                row.get("end_time"), field="end_time"
+                            )
                             if point_end != point_start + timedelta(hours=1):
                                 raise SnapchatClientError(
                                     "snapchat_hour_window_invalid",
                                     "Snapchat returned a non-hourly point.",
                                 )
-                            if point_start < window.start_utc or point_end > window.end_utc:
+                            if (
+                                point_start < window.start_utc
+                                or point_end > window.end_utc
+                            ):
                                 raise SnapchatClientError(
                                     "snapchat_hour_window_mismatch",
                                     "Snapchat returned data outside the requested window.",
@@ -1519,9 +1919,7 @@ class SnapchatV2Client:
         data_state = (
             "confirmed_no_data"
             if not rows
-            else "confirmed_zero"
-            if all_zero
-            else "confirmed_data"
+            else "confirmed_zero" if all_zero else "confirmed_data"
         )
         coverage = _coverage(
             status="complete",
