@@ -22,7 +22,11 @@ from preparation_supplier_dispatch import (
     _require_preparation_worker,
 )
 from preparation_piece_operations import PIECES
-from reviewed_preparation_batches import BATCHES, _line_from_batch_storage
+from reviewed_preparation_batches import (
+    BATCHES,
+    _card_field_projection,
+    _line_from_batch_storage,
+)
 
 RIYADH = ZoneInfo("Asia/Riyadh")
 
@@ -83,6 +87,67 @@ def _line_match(piece: dict[str, Any], rows: list[dict[str, Any]]) -> dict[str, 
     return None
 
 
+def _assert_saved_customer_options_preserved(
+    source: dict[str, Any],
+    line: Any,
+    *,
+    piece: dict[str, Any],
+) -> None:
+    """Fail closed if a saved customer option would disappear from supplier PDF.
+
+    The employee preparation PDF may stay compact, but the supplier PDF must
+    never silently drop customer-selected fields that were frozen into the
+    reviewed batch snapshot. Empty snapshots are allowed because some products
+    genuinely have no customer options.
+    """
+    stored_fields = [
+        row for row in (source.get("file_spec_fields") or [])
+        if isinstance(row, dict)
+    ]
+    if not stored_fields:
+        return
+
+    expected = _card_field_projection(
+        stored_fields,
+        source.get("preparation_note"),
+    )
+    missing: list[str] = []
+    scalar_checks = (
+        ("customer_name", getattr(line, "customer_name", None)),
+        ("size", getattr(line, "size", None)),
+        ("color", getattr(line, "color", None)),
+        ("note", getattr(line, "note", None)),
+    )
+    for key, actual in scalar_checks:
+        wanted = _text(expected.get(key))
+        if wanted and _text(actual) != wanted:
+            missing.append(key)
+
+    actual_options = {
+        _text(key): _text(value)
+        for key, value in (getattr(line, "product_options", None) or {}).items()
+        if _text(key) and _text(value)
+    }
+    for key, value in (expected.get("product_options") or {}).items():
+        visible_key = _text(key)
+        visible_value = _text(value)
+        if visible_key and visible_value and actual_options.get(visible_key) != visible_value:
+            missing.append(f"product_options.{visible_key}")
+
+    if missing:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "supplier_dispatch_customer_options_incomplete",
+                "message": "بيانات خيارات العميل المحفوظة غير مكتملة في ملف المورد. لم تتم طباعة ملف ناقص.",
+                "order_number": _text(source.get("order_number")),
+                "order_item_id": _text(source.get("order_item_id") or piece.get("order_item_id")),
+                "piece_id": _text(piece.get("piece_id")),
+                "missing_fields": missing,
+            },
+        )
+
+
 async def build_supplier_dispatch_pdf(db: Any, *, user_id: str, dispatch: dict[str, Any]) -> bytes:
     piece_ids = [_text(value) for value in dispatch.get("piece_ids") or [] if _text(value)]
     if not piece_ids:
@@ -116,7 +181,9 @@ async def build_supplier_dispatch_pdf(db: Any, *, user_id: str, dispatch: dict[s
         unit_row["unit_index"] = int(piece.get("unit_index") or 1)
         unit_row["unit_indices"] = [unit_row["unit_index"]]
         unit_row["quantity"] = 1
-        lines.append(_line_from_batch_storage(unit_row, batch))
+        line = _line_from_batch_storage(unit_row, batch)
+        _assert_saved_customer_options_preserved(source, line, piece=piece)
+        lines.append(line)
 
     return generate_amasi_product_file_pdf(
         lines,
@@ -160,4 +227,8 @@ def make_supplier_dispatch_pdf_router(db: Any, current_user: Callable) -> APIRou
     return router
 
 
-__all__ = ["build_supplier_dispatch_pdf", "make_supplier_dispatch_pdf_router"]
+__all__ = [
+    "_assert_saved_customer_options_preserved",
+    "build_supplier_dispatch_pdf",
+    "make_supplier_dispatch_pdf_router",
+]
