@@ -815,14 +815,13 @@ class SnapchatV2Client:
                     )
                     start_utc = local_start.astimezone(timezone.utc)
                     end_utc = local_end.astimezone(timezone.utc)
-                    current_cap = self.now().astimezone(timezone.utc)
-                    current_floor = current_cap.replace(minute=0, second=0, microsecond=0)
-                    if current_cap != current_floor:
-                        current_floor += timedelta(hours=1)
-                    if end_utc > current_floor:
-                        end_utc = current_floor
-                    if end_utc <= start_utc:
-                        continue
+                    # Snapchat requires TOTAL report boundaries to remain on
+                    # account-local day boundaries.  Clamping an open day to
+                    # the current hour produces a provider-invalid TOTAL
+                    # request and drops every child breakdown.  The provider
+                    # returns the currently processed portion of today's
+                    # complete local-day window while preserving real-time
+                    # attribution semantics.
                     for campaign_id in campaign_values:
                         url = f"{SNAPCHAT_API_BASE}/campaigns/{campaign_id}/stats"
                         params: dict[str, Any] = {
