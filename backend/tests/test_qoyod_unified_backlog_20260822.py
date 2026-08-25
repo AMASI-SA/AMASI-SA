@@ -1070,7 +1070,9 @@ async def test_live_worker_uses_resynced_owner_row_without_compatibility_write(
 
     async def sender_sees_owner_row(
         inner_db, *, user_id, orders_user_id, order_number, actor,
+        **kwargs,
     ):
+        assert kwargs["allow_historical_positive_total"] is True
         assert user_id == QOYOD_TENANT
         assert orders_user_id == ORDERS_OWNER
         owner_row = await inner_db.integration_inbox.find_one({

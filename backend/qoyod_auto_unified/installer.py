@@ -10,7 +10,11 @@ from .common import RETRYABLE_SYNC_FAILURE_CODES, _TENANT, _now
 from .live_source import _refresh_snapshot_with_complete_payment
 from .queue_api import _list_unsent_orders_with_queue_counts
 from .queue_select import _load_candidate_rows_oldest_first, _retry_delay
-from .reconcile import _reconcile_existing_reference, _reconcile_local_mirror_after_sync
+from .reconcile import (
+    _reconcile_existing_reference,
+    _reconcile_local_mirror_after_sync,
+    _requeue_absent_unhandled_after_complete_sync,
+)
 from .invoice_state import _resolve_order_exception
 from .sender_projection import sync_authoritative_payment_to_inbox
 
@@ -50,12 +54,21 @@ def install_auto_send_payment_freshness_patch() -> None:
         automatic = actor.startswith("auto-plan-b:")
         effective_owner = str(orders_user_id or user_id)
         if automatic:
-            freshness = await sync_authoritative_payment_to_inbox(
-                db,
-                orders_user_id=effective_owner,
-                legacy_user_id=str(user_id),
-                order_number=str(order_number),
-            )
+            try:
+                freshness = await sync_authoritative_payment_to_inbox(
+                    db,
+                    orders_user_id=effective_owner,
+                    legacy_user_id=str(user_id),
+                    order_number=str(order_number),
+                )
+            except Exception as exc:  # pre-Qoyod projection boundary
+                freshness = {
+                    "ok": False,
+                    "code": "authoritative_payment_refresh_failed",
+                    "stage": "authoritative_sender_projection",
+                    "exception_type": type(exc).__name__,
+                    "order_number": str(order_number),
+                }
             if not freshness.get("ok"):
                 code = (
                     freshness.get("code")
@@ -230,6 +243,37 @@ def install_auto_send_payment_freshness_patch() -> None:
                     markers_user_id=str(kwargs.get("user_id") or _TENANT),
                 )
             )
+            max_pages = max(1, int(kwargs.get("max_pages") or 200))
+            page_size = max(1, int(kwargs.get("page_size") or 50))
+            sync_is_complete = (
+                int(result.get("row_errors") or 0) == 0
+                and int(result.get("fetched") or 0) < max_pages * page_size
+            )
+            if sync_is_complete:
+                started_at = result.get("started_at")
+                if isinstance(started_at, str):
+                    try:
+                        started_at = datetime.fromisoformat(started_at)
+                    except ValueError:
+                        started_at = None
+                if isinstance(started_at, datetime):
+                    if started_at.tzinfo is None:
+                        started_at = started_at.replace(tzinfo=timezone.utc)
+                    result["unhandled_recovery"] = (
+                        await _requeue_absent_unhandled_after_complete_sync(
+                            db,
+                            markers_user_id=str(
+                                kwargs.get("user_id") or _TENANT
+                            ),
+                            sync_started_at=started_at,
+                        )
+                    )
+            else:
+                result["unhandled_recovery"] = {
+                    "ok": False,
+                    "skipped": True,
+                    "reason": "qoyod_sync_not_proven_complete",
+                }
         return result
 
     salla_sync_module._refresh_plan_b_status_snapshot = refresh_status_snapshot_complete

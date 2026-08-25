@@ -77,30 +77,53 @@ class _UnifiedOrders:
 
 
 class _IntegrationInbox:
-    def __init__(self, *, snapshot=None, markers=None):
+    def __init__(self, *, snapshot=None, markers=None, existing_projection=None,
+                 projection_error=None):
         self.snapshot = deepcopy(snapshot) if snapshot else None
         self.markers = list(markers or [])
+        self.existing_projection = (
+            deepcopy(existing_projection) if existing_projection else None
+        )
+        self.projection_error = projection_error
         self.upserts = []
 
     async def find_one(self, query, projection=None, sort=None):
         if query.get("connector_key") == "salla_direct_status_resync":
             return deepcopy(self.snapshot)
+        if self.existing_projection:
+            if query.get("id") == self.existing_projection.get("id"):
+                return deepcopy(self.existing_projection)
+            if (
+                query.get("user_id") == self.existing_projection.get("user_id")
+                and query.get("connector_key")
+                == self.existing_projection.get("connector_key")
+                and query.get("salla_order_number")
+                == self.existing_projection.get("salla_order_number")
+            ):
+                return deepcopy(self.existing_projection)
         return None
 
     def find(self, query, projection=None):
         return _Cursor(self.markers)
 
     async def update_one(self, query, update, upsert=False):
+        if self.projection_error and query.get("connector_key") == (
+            "qoyod_unified_auto_sender"
+        ):
+            raise self.projection_error
         self.upserts.append((deepcopy(query), deepcopy(update), upsert))
         return _Result(matched_count=0, modified_count=0, upserted_id="new")
 
 
 class _DB:
-    def __init__(self, unified, *, snapshot=None, markers=None):
+    def __init__(self, unified, *, snapshot=None, markers=None,
+                 existing_projection=None, projection_error=None):
         self.unified_orders = _UnifiedOrders(unified)
         self.integration_inbox = _IntegrationInbox(
             snapshot=snapshot,
             markers=markers,
+            existing_projection=existing_projection,
+            projection_error=projection_error,
         )
 
 
@@ -167,6 +190,51 @@ def test_paid_order_without_legacy_inbox_row_creates_sender_projection():
     assert canonical["payment_status"] == "paid"
     assert canonical["items"][0]["sku"] == "AMS-1"
     assert canonical["customer"]["name"] == "عزيزة الجهني"
+
+
+def test_sender_projection_adopts_stable_row_from_previous_owner():
+    db = _DB(_paid_order(), existing_projection={
+        "_id": "mongo-row-1",
+        "id": "qoyod-unified-279460595",
+        "user_id": "owner-1",
+        "connector_key": "qoyod_unified_auto_sender",
+        "salla_order_number": "279460595",
+    })
+
+    result = asyncio.run(sync_authoritative_payment_to_inbox(
+        db,
+        orders_user_id="owner-1",
+        legacy_user_id="main",
+        order_number="279460595",
+    ))
+
+    assert result["ok"] is True
+    selector, update, upsert = db.integration_inbox.upserts[-1]
+    assert selector == {"_id": "mongo-row-1"}
+    assert update["$set"]["user_id"] == "main"
+    assert upsert is True
+
+
+def test_sender_projection_exception_becomes_retryable_prewrite_failure():
+    db = _DB(
+        _paid_order(),
+        projection_error=RuntimeError("simulated projection failure"),
+    )
+
+    result = asyncio.run(sync_authoritative_payment_to_inbox(
+        db,
+        orders_user_id="owner-1",
+        legacy_user_id="main",
+        order_number="279460595",
+    ))
+
+    assert result == {
+        "ok": False,
+        "code": "unified_sender_row_upsert_failed",
+        "stage": "upsert_sender_projection",
+        "exception_type": "RuntimeError",
+        "order_number": "279460595",
+    }
 
 
 def test_live_snapshot_payment_is_promoted_before_projection():
@@ -408,6 +476,74 @@ class _ReconcileDB:
         self.integration_inbox = _ReconcileInbox()
         self.qoyod_manual_auto_quarantines = _UpdateManyCollection()
         self.qoyod_manual_send_locks = _UpdateManyCollection()
+
+
+class _RecoveryCollection:
+    def __init__(self, rows):
+        self.rows = [deepcopy(row) for row in rows]
+        self.updates = []
+
+    def find(self, query, projection=None):
+        rows = self.rows
+        if query.get("code"):
+            rows = [row for row in rows if row.get("code") == query["code"]]
+        return _Cursor(rows)
+
+    async def update_one(self, query, update, **kwargs):
+        self.updates.append((deepcopy(query), deepcopy(update)))
+        for row in self.rows:
+            if query.get("_id") is not None and row.get("_id") != query["_id"]:
+                continue
+            if query.get("order_number") and row.get("order_number") != query["order_number"]:
+                continue
+            row.update(deepcopy(update.get("$set") or {}))
+            return _Result(modified_count=1)
+        return _Result(matched_count=0, modified_count=0)
+
+
+def test_complete_qoyod_sync_requeues_only_absent_unhandled_orders():
+    from datetime import datetime, timezone
+    from qoyod_auto_unified.reconcile import (
+        _requeue_absent_unhandled_after_complete_sync,
+    )
+
+    db = type("RecoveryDB", (), {})()
+    db.qoyod_invoices = _RecoveryCollection([{
+        "qoyod_invoice_id": "2116",
+        "reference": "279460595",
+        "source": "synced_from_qoyod",
+        "raw_response": {"reference": "279460595"},
+    }])
+    db.qoyod_manual_auto_quarantines = _RecoveryCollection([
+        {
+            "_id": "main:279460595",
+            "user_id": "main",
+            "order_number": "279460595",
+            "status": "open",
+            "code": "unhandled_exception",
+        },
+        {
+            "_id": "main:279460596",
+            "user_id": "main",
+            "order_number": "279460596",
+            "status": "open",
+            "code": "unhandled_exception",
+        },
+    ])
+
+    result = asyncio.run(_requeue_absent_unhandled_after_complete_sync(
+        db,
+        markers_user_id="main",
+        sync_started_at=datetime(2026, 8, 25, tzinfo=timezone.utc),
+    ))
+
+    assert result["reopened_absent_unhandled_count"] == 1
+    assert result["preserved_present_unhandled_count"] == 1
+    assert len(db.qoyod_manual_auto_quarantines.updates) == 1
+    recovered = db.qoyod_manual_auto_quarantines.rows[1]
+    assert recovered["code"] == "unified_sender_row_upsert_failed"
+    assert recovered["recovery_class"] == "sync_retryable"
+    assert recovered["recovered_from_code"] == "unhandled_exception"
 
 
 def test_qoyod_sync_reconciliation_rejects_unproven_local_reference():

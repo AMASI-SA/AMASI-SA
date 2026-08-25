@@ -4,6 +4,8 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
+from pymongo.errors import DuplicateKeyError
+
 from integrations.qoyod.candidate_orders import (
     PAYMENT_INELIGIBLE, PAYMENT_NEEDS_LIVE_VERIFICATION, payment_eligibility,
 )
@@ -91,6 +93,7 @@ async def _upsert_sender_projection(
         "connector_key": _SENDER_CONNECTOR,
         "salla_order_number": str(order_number),
     }
+    stable_id = f"qoyod-unified-{order_number}"
     markers = await _marker_fields(
         db,
         orders_user_id=orders_user_id,
@@ -123,17 +126,49 @@ async def _upsert_sender_projection(
         },
         **markers,
     }
-    result = await db.integration_inbox.update_one(
-        selector,
-        {
-            "$set": patch,
-            "$setOnInsert": {
-                "id": f"qoyod-unified-{order_number}",
-                "created_at": now,
-            },
-        },
-        upsert=True,
+    # Older rollout builds could write the same stable projection id under
+    # the Orders owner instead of the legacy Qoyod tenant.  ``id`` is unique
+    # across integration_inbox, so upserting only by the new owner selector
+    # raises DuplicateKeyError before any Qoyod request.  Adopt that exact
+    # stable row by ``_id`` first; marker fields above already reconcile both
+    # approved owners and no unrelated order can be selected.
+    existing = await db.integration_inbox.find_one(
+        {"id": stable_id},
+        {"_id": 1},
     )
+    if not existing:
+        existing = await db.integration_inbox.find_one(
+            selector,
+            {"_id": 1},
+            sort=[("received_at", -1)],
+        )
+    update_selector = (
+        {"_id": existing["_id"]}
+        if isinstance(existing, dict) and existing.get("_id") is not None
+        else selector
+    )
+    update = {
+        "$set": patch,
+        "$setOnInsert": {
+            "id": stable_id,
+            "created_at": now,
+        },
+    }
+    try:
+        result = await db.integration_inbox.update_one(
+            update_selector,
+            update,
+            upsert=True,
+        )
+    except DuplicateKeyError:
+        # A concurrent replica may have inserted the stable row after the
+        # read above.  Resolve that race by updating the unique identity;
+        # never create a second projection and never continue on ambiguity.
+        result = await db.integration_inbox.update_one(
+            {"id": stable_id},
+            {"$set": patch},
+            upsert=False,
+        )
     matched = int(getattr(result, "matched_count", 0) or 0)
     upserted = getattr(result, "upserted_id", None)
     if not matched and upserted is None:
@@ -170,15 +205,24 @@ async def sync_authoritative_payment_to_inbox(
     orders_user_id = str(orders_user_id or "").strip()
     legacy_user_id = str(legacy_user_id or _TENANT).strip() or _TENANT
 
-    await _promote_snapshot_to_unified(
-        db,
-        orders_user_id=orders_user_id,
-        order_number=order_number,
-    )
-    unified = await db.unified_orders.find_one(
-        {"user_id": orders_user_id, "order_number": order_number},
-        {"_id": 0},
-    )
+    try:
+        await _promote_snapshot_to_unified(
+            db,
+            orders_user_id=orders_user_id,
+            order_number=order_number,
+        )
+        unified = await db.unified_orders.find_one(
+            {"user_id": orders_user_id, "order_number": order_number},
+            {"_id": 0},
+        )
+    except Exception as exc:  # fail closed before any Qoyod request
+        return {
+            "ok": False,
+            "code": "authoritative_payment_refresh_failed",
+            "stage": "promote_authoritative_snapshot",
+            "exception_type": type(exc).__name__,
+            "order_number": order_number,
+        }
     if not unified:
         return {
             "ok": False,
@@ -215,10 +259,19 @@ async def sync_authoritative_payment_to_inbox(
             "remaining_amount": unified.get("remaining_amount"),
         }
 
-    return await _upsert_sender_projection(
-        db,
-        orders_user_id=orders_user_id,
-        legacy_user_id=legacy_user_id,
-        order_number=order_number,
-        unified=unified,
-    )
+    try:
+        return await _upsert_sender_projection(
+            db,
+            orders_user_id=orders_user_id,
+            legacy_user_id=legacy_user_id,
+            order_number=order_number,
+            unified=unified,
+        )
+    except Exception as exc:  # fail closed before any Qoyod request
+        return {
+            "ok": False,
+            "code": "unified_sender_row_upsert_failed",
+            "stage": "upsert_sender_projection",
+            "exception_type": type(exc).__name__,
+            "order_number": order_number,
+        }
