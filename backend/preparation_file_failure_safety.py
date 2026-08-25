@@ -610,6 +610,77 @@ async def release_orphan_ready_batches(
             "released_unit_count": len(allocations),
             "order_numbers": order_numbers,
         })
+    released_batch_ids = {row["batch_id"] for row in released}
+    committed_rows = await db[PREPARATION_UNIT_ALLOCATIONS].find(
+        {
+            "user_id": user_id,
+            "status": "committed",
+            "committed_at": {"$lte": threshold},
+        },
+        {"_id": 0, "batch_id": 1, "order_number": 1},
+    ).limit(100000).to_list(100000)
+    allocations_by_batch: dict[str, list[dict[str, Any]]] = {}
+    for row in committed_rows:
+        batch_id = _text(row.get("batch_id"))
+        if batch_id and batch_id not in released_batch_ids:
+            allocations_by_batch.setdefault(batch_id, []).append(row)
+    for batch_id, allocations in allocations_by_batch.items():
+        batch = await db[BATCHES].find_one(
+            {"user_id": user_id, "id": batch_id},
+            {"_id": 0},
+        )
+        # A ready batch is authoritative here. Missing-registry ready batches
+        # were handled above; never infer that a visible file is orphaned.
+        if batch and _text(batch.get("status")) == "ready":
+            continue
+        started_piece = await db[PIECES].find_one(
+            {
+                "user_id": user_id,
+                "batch_id": batch_id,
+                "$or": [
+                    {"started_at": {"$nin": [None, ""]}},
+                    {"execution_status": {"$nin": [None, "not_started", "assigned"]}},
+                ],
+            },
+            {"_id": 0, "piece_id": 1},
+        )
+        if started_piece:
+            continue
+        order_numbers = _batch_order_numbers(batch, allocations)
+        await db[PREPARATION_UNIT_ALLOCATIONS].delete_many({
+            "user_id": user_id,
+            "batch_id": batch_id,
+            "status": "committed",
+        })
+        await db[PIECES].delete_many({
+            "user_id": user_id,
+            "batch_id": batch_id,
+            "started_at": {"$in": [None, ""]},
+        })
+        if batch:
+            await db[BATCHES].delete_one({
+                "user_id": user_id,
+                "id": batch_id,
+                "status": {"$ne": "ready"},
+            })
+        await db[EVENTS].insert_one({
+            "id": uuid.uuid4().hex,
+            "user_id": user_id,
+            "batch_id": batch_id,
+            "event_type": "orphan_committed_allocation_released",
+            "order_numbers": order_numbers,
+            "released_unit_count": len(allocations),
+            "actor_id": _text(actor.get("id")),
+            "occurred_at": datetime.now(timezone.utc),
+            "mezan_only": True,
+            "salla_updated": False,
+            "qoyod_updated": False,
+        })
+        released.append({
+            "batch_id": batch_id,
+            "released_unit_count": len(allocations),
+            "order_numbers": order_numbers,
+        })
     return {
         "released_count": len(released),
         "released_unit_count": sum(row["released_unit_count"] for row in released),

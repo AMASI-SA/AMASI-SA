@@ -250,6 +250,7 @@ async def test_orphan_ready_batch_releases_unstarted_committed_units():
     registry = FakeCollection(find_one_rows=[])
     pieces = FakeCollection(find_one_rows=[])
     allocations = FakeCollection(find_rows=[{
+        "batch_id": "batch-lost",
         "order_number": "4001",
         "status": "committed",
     }] * 11)
@@ -275,6 +276,35 @@ async def test_orphan_ready_batch_releases_unstarted_committed_units():
     assert allocations.deleted_many
     assert batch.deleted_one
     assert events.inserted[0]["event_type"] == "orphan_ready_batch_released"
+
+
+@pytest.mark.asyncio
+async def test_committed_allocations_without_batch_are_released():
+    allocations = FakeCollection(find_rows=[{
+        "batch_id": "deleted-batch",
+        "order_number": "5001",
+        "status": "committed",
+    }] * 11)
+    events = FakeCollection()
+    db = FakeDb({
+        BATCHES: FakeCollection(),
+        REGISTRY: FakeCollection(),
+        PIECES: FakeCollection(),
+        PREPARATION_UNIT_ALLOCATIONS: allocations,
+        EVENTS: events,
+    })
+
+    result = await release_orphan_ready_batches(
+        db,
+        user_id="owner-1",
+        actor={"id": "owner-1", "role": "owner"},
+        threshold=datetime.now(timezone.utc),
+    )
+
+    assert result["released_count"] == 1
+    assert result["released_unit_count"] == 11
+    assert result["released"][0]["order_numbers"] == ["5001"]
+    assert events.inserted[0]["event_type"] == "orphan_committed_allocation_released"
 
 
 def test_router_registers_atomic_draft_release_and_stale_recovery():
