@@ -202,7 +202,7 @@ export function CampaignAdvisorCard() {
             {unifiedShadow.shadow_passed
                 ? unifiedShadow.acceptance_basis === "provider_total_facts_fallback_v1_observer_drift"
                     ? "Snapchat AI Shadow معتمد عبر TOTAL V2 المصالح مع Snapchat · V1 مراقب أقدم · القرارات غير مفعلة"
-                    : "Snapchat AI Shadow متطابق مع المصدر الموحد V2 · التحليل والقرارات ما زالت معزولة حتى اعتماد التحويل"
+                    : "Snapchat AI Shadow متطابق على آخر يوم حساب مغلق · التحليل والقرارات ما زالت معزولة حتى اعتماد التحويل"
                 : "Snapchat AI Shadow قيد المطابقة مع المصدر الموحد V2 · لا توجد قرارات أو كتابات من مسار Shadow"}
         </div>}
         {visible.length ? <div className="grid gap-2 p-3 lg:grid-cols-5">
