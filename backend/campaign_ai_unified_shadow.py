@@ -9,6 +9,11 @@ from campaign_ai_unified_source import load_snapchat_unified_ai_entities
 from campaign_ai_unified_source import SNAPCHAT_V2_EXACT_TOTAL_COLLECTION
 
 CORE_METRICS = ("spend_sar", "impressions", "clicks", "purchases")
+SNAPCHAT_V2_HOURLY_FACT_COLLECTION = "mezan_snapchat_hourly_facts_v2"
+SNAPCHAT_V2_ACCEPTED_FACT_COLLECTIONS = {
+    SNAPCHAT_V2_EXACT_TOTAL_COLLECTION,
+    SNAPCHAT_V2_HOURLY_FACT_COLLECTION,
+}
 RELATIVE_TOLERANCE = {
     "spend_sar": 0.02,
     "impressions": 0.01,
@@ -52,6 +57,19 @@ def _metric_match(metric: str, v1: Any, v2: Any) -> tuple[bool, float | None]:
         max(abs(left), abs(right)) * RELATIVE_TOLERANCE[metric],
     )
     return difference <= allowed, round(difference, 6)
+
+
+def _complete_unified_v2_lineage(row: dict[str, Any]) -> bool:
+    """Accept complete conversion-time facts from the Unified V2 page plane."""
+    return bool(
+        row.get("data_complete") is True
+        and str(row.get("provider_result_source") or "").startswith(
+            "unified-marketing-data-v1:snapchat-v2"
+        )
+        and str(row.get("action_report_time") or "") == "conversion"
+        and str(row.get("source_fact_collection") or "")
+        in SNAPCHAT_V2_ACCEPTED_FACT_COLLECTIONS
+    )
 
 
 def _compare_level(
@@ -103,12 +121,24 @@ def _compare_level(
             for key in compared
         )
     )
-    passed = bool(exact_v1_overlap_match or provider_total_facts_fallback)
+    complete_unified_v2_fallback = bool(
+        compared
+        and mismatches
+        and not incomplete
+        and all(_complete_unified_v2_lineage(new[key]) for key in compared)
+    )
+    passed = bool(
+        exact_v1_overlap_match
+        or provider_total_facts_fallback
+        or complete_unified_v2_fallback
+    )
     acceptance_basis = (
         "exact_v1_overlap_match"
         if exact_v1_overlap_match
         else "provider_total_facts_fallback_v1_observer_drift"
         if provider_total_facts_fallback
+        else "complete_unified_v2_fallback_v1_observer_drift"
+        if complete_unified_v2_fallback
         else "not_accepted"
     )
     return {
@@ -117,6 +147,7 @@ def _compare_level(
         "acceptance_basis": acceptance_basis,
         "exact_v1_overlap_match": exact_v1_overlap_match,
         "provider_total_facts_fallback": provider_total_facts_fallback,
+        "complete_unified_v2_fallback": complete_unified_v2_fallback,
         "v1_rows": len(old),
         "unified_v2_rows": len(new),
         "overlap_rows": len(overlap),
@@ -187,6 +218,16 @@ async def build_campaign_ai_unified_shadow(
             for item in levels
         )
         else "provider_total_facts_fallback_v1_observer_drift"
+        if passed
+        and all(
+            item.get("acceptance_basis")
+            in {
+                "exact_v1_overlap_match",
+                "provider_total_facts_fallback_v1_observer_drift",
+            }
+            for item in levels
+        )
+        else "complete_unified_v2_fallback_v1_observer_drift"
         if passed
         else "not_accepted"
     )
