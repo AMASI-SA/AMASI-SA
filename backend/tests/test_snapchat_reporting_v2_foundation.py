@@ -7,7 +7,12 @@ import httpx
 import pytest
 
 from snapchat_v2.client import SnapchatV2Client, split_hour_windows
-from snapchat_v2.facts import hourly_fact_identity, normalize_hourly_fact, upsert_hourly_fact
+from snapchat_v2.facts import (
+    hourly_fact_identity,
+    load_hourly_facts,
+    normalize_hourly_fact,
+    upsert_hourly_fact,
+)
 from snapchat_v2.lease import acquire_lease
 from snapchat_v2.models import SNAPCHAT_PROVIDER
 from snapchat_v2.projections import build_daily_projection, business_day_window
@@ -176,6 +181,44 @@ async def test_hourly_upsert_does_not_overlap_set_and_set_on_insert():
     assert result["inserted"] is True
     assert set(collection.update["$set"]).isdisjoint(collection.update["$setOnInsert"])
     assert collection.upsert is True
+
+
+@pytest.mark.asyncio
+async def test_hourly_read_falls_back_to_confirmed_previous_attribution_series():
+    legacy = normalize_hourly_fact(
+        _fact(attribution_windows={"swipe": "28_DAY", "view": "1_DAY"})
+    )
+
+    class Collection:
+        def __init__(self):
+            self.queries = []
+
+        def find(self, query, _projection):
+            self.queries.append(dict(query))
+            if "attribution_key" in query:
+                return Cursor([])
+            return Cursor([legacy])
+
+    collection = Collection()
+
+    class DB:
+        def __getitem__(self, _name):
+            return collection
+
+    rows = await load_hourly_facts(
+        DB(),
+        user_id="u1",
+        ad_account_id="a1",
+        start_utc=datetime(2026, 8, 22, tzinfo=timezone.utc),
+        end_utc=datetime(2026, 8, 23, tzinfo=timezone.utc),
+        entity_type="campaign",
+        action_report_time="conversion",
+    )
+
+    assert rows == [legacy]
+    assert len(collection.queries) == 2
+    assert "attribution_key" in collection.queries[0]
+    assert "attribution_key" not in collection.queries[1]
 
 
 @pytest.mark.asyncio
