@@ -276,6 +276,36 @@ async def test_daily_total_facts_preserve_non_additive_frequency_scope():
 
 
 @pytest.mark.asyncio
+async def test_daily_total_facts_keep_current_account_day_boundaries():
+    factory = FakeHTTPFactory(
+        [FakeResponse(total_performance_payload("adsquad", "s1"))]
+    )
+    client = SnapchatV2Client(
+        object(),
+        "u1",
+        token_store=FakeTokenStore(),
+        client_factory=factory,
+        now=lambda: datetime(2026, 8, 25, 4, 30, tzinfo=timezone.utc),
+    )
+
+    await client.fetch_breakdown_daily_total_facts(
+        {
+            "ad_account_id": "a1",
+            "timezone": "America/Los_Angeles",
+            "currency": "USD",
+        },
+        campaign_ids=["c1"],
+        entity_type="ad_squad",
+        report_dates=[date(2026, 8, 24)],
+        sync_run_id="run-current-total-1",
+    )
+
+    _, params = factory.clients[0].calls[0]
+    assert params["start_time"] == "2026-08-24T00:00:00-07:00"
+    assert params["end_time"] == "2026-08-25T00:00:00-07:00"
+
+
+@pytest.mark.asyncio
 async def test_breakdown_token_failure_preserves_incomplete_coverage():
     client = SnapchatV2Client(
         object(),
