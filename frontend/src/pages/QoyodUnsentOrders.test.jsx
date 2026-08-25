@@ -196,3 +196,50 @@ test("unified backlog stays visible while bulk recovery is hidden", async () => 
     await cleanup(container, root);
   }
 });
+
+test("payment-only bulk check never calls a Qoyod send endpoint", async () => {
+  api.get.mockResolvedValue({
+    data: {
+      source_authority: "unified_orders",
+      counts: { "لم يُرسل": 2 },
+      orders: [
+        { order_number: "278100001", status: "لم يُرسل" },
+        { order_number: "278100002", status: "فشل" },
+      ],
+      salla_status_counts: {},
+    },
+  });
+  api.post.mockResolvedValue({
+    data: {
+      read_only: true,
+      invoice_sent_count: 0,
+      results: [{
+        order_number: "278100001",
+        outcome: "ready",
+        message: "مؤهل ولم يتم الإرسال",
+      }],
+    },
+  });
+
+  const { container, root } = await renderRecoveryPage();
+  try {
+    const check = container.querySelector('[data-testid="qoyod-payment-recheck-bulk"]');
+    expect(check.textContent).toContain("فحص الدفع فقط (2)");
+    await act(async () => {
+      check.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(api.post).toHaveBeenCalledWith(
+      "/integrations/qoyod/manual/recheck-payment-bulk",
+      { order_numbers: ["278100001", "278100002"] },
+    );
+    expect(api.post.mock.calls[0][0]).not.toContain("/send/");
+    expect(container.querySelector('[data-testid="qoyod-payment-recheck-results"]')?.textContent)
+      .toContain("لم تُرسل أي فاتورة");
+  } finally {
+    await cleanup(container, root);
+  }
+});
