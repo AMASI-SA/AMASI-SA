@@ -21,7 +21,10 @@ from typing import Any, Iterable, Optional
 from zoneinfo import ZoneInfo
 
 from integrations.qoyod.eligible_orders import _parse_iso_date
-from integrations.qoyod.payment_methods import is_cod_family
+from integrations.qoyod.payment_methods import (
+    is_bank_transfer_family,
+    is_cod_family,
+)
 
 
 RIYADH_TZ = ZoneInfo("Asia/Riyadh")
@@ -157,6 +160,8 @@ def payment_eligibility(row: dict[str, Any]) -> str:
         return PAYMENT_INELIGIBLE
     if statuses & INELIGIBLE_PAYMENT_STATUSES:
         return PAYMENT_INELIGIBLE
+    if row.get("is_pending_payment") is True:
+        return PAYMENT_INELIGIBLE
     try:
         remaining_raw = row.get("remaining_amount")
         paid_raw = row.get("paid_amount")
@@ -173,6 +178,22 @@ def payment_eligibility(row: dict[str, Any]) -> str:
         or (remaining is not None and remaining > 0)
     ):
         return PAYMENT_INELIGIBLE
+    if (
+        row.get("is_pending_payment") is False
+        and not is_bank_transfer_family(payment_method)
+    ):
+        # Salla Order Details exposes this boolean even when the light
+        # response omits paid_amount/payment.status. Keep contradictory
+        # partial numeric evidence fail-closed.
+        if (
+            paid is not None
+            and paid > 0
+            and total is not None
+            and total > 0
+            and paid + 0.01 < total
+        ):
+            return PAYMENT_INELIGIBLE
+        return PAYMENT_ELIGIBLE
     # Prepaid/BNPL/bank-transfer orders require positive proof of collection;
     # method alone is not proof that the order was paid. A positive amount is
     # proof only when it covers the known order total (within one halalah), or
@@ -516,6 +537,7 @@ async def load_unified_candidates(
         "paid_amount": 1,
         "remaining_amount": 1,
         "has_remaining_amount": 1,
+        "is_pending_payment": 1,
         "payment_method": 1,
         "payment_method_native": 1,
         "total_amount": 1,
