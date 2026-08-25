@@ -413,6 +413,12 @@ async def recover_stale_preparation_requests(
                 if isinstance(exc.detail, dict)
                 else "not_recoverable",
             })
+    orphan_recovery = await release_orphan_ready_batches(
+        db,
+        user_id=user_id,
+        actor=actor,
+        threshold=threshold,
+    )
     stage_repair = await reconcile_released_preparation_stages(
         db,
         user_id=user_id,
@@ -423,6 +429,9 @@ async def recover_stale_preparation_requests(
         "recovered_count": len(recovered),
         "recovered": recovered,
         "skipped": skipped,
+        "orphan_batch_count": orphan_recovery["released_count"],
+        "orphan_released_unit_count": orphan_recovery["released_unit_count"],
+        "orphan_batches": orphan_recovery["released"],
         "restored_order_count": stage_repair["restored_order_count"],
         "restored_order_numbers": stage_repair["restored_order_numbers"],
     }
@@ -506,6 +515,105 @@ async def reconcile_released_preparation_stages(
         "restored_order_count": len(restored),
         "restored_order_numbers": restored,
         "failed_order_numbers": failed,
+    }
+
+
+async def release_orphan_ready_batches(
+    db: Any,
+    *,
+    user_id: str,
+    actor: dict[str, Any],
+    threshold: datetime,
+) -> dict[str, Any]:
+    """Release finalized allocations that never gained a file registry row.
+
+    A network interruption can finish the batch and commit its unit ledger,
+    then fail before the authoritative numbered-file registry is created.
+    Only old batches with no ready registry row and no physically started
+    piece are eligible; visible files and begun employee work are untouched.
+    """
+    candidates = await db[BATCHES].find(
+        {
+            "user_id": user_id,
+            "status": "ready",
+            "created_at": {"$lte": threshold},
+        },
+        {"_id": 0},
+    ).sort("created_at", 1).limit(MAX_STALE_RECOVERY_ROWS).to_list(
+        MAX_STALE_RECOVERY_ROWS
+    )
+    released: list[dict[str, Any]] = []
+    for batch in candidates:
+        batch_id = _text(batch.get("id"))
+        if not batch_id:
+            continue
+        registry = await db[REGISTRY].find_one(
+            {"user_id": user_id, "batch_id": batch_id, "status": "ready"},
+            {"_id": 0, "file_number": 1},
+        )
+        if registry:
+            continue
+        started_piece = await db[PIECES].find_one(
+            {
+                "user_id": user_id,
+                "batch_id": batch_id,
+                "$or": [
+                    {"started_at": {"$nin": [None, ""]}},
+                    {"execution_status": {"$nin": [None, "not_started", "assigned"]}},
+                ],
+            },
+            {"_id": 0, "piece_id": 1},
+        )
+        if started_piece:
+            continue
+        allocations = await db[PREPARATION_UNIT_ALLOCATIONS].find(
+            {
+                "user_id": user_id,
+                "batch_id": batch_id,
+                "status": {"$in": ["reserved", "committed"]},
+            },
+            {"_id": 0, "order_number": 1},
+        ).to_list(100000)
+        order_numbers = _batch_order_numbers(batch, allocations)
+        await db[PREPARATION_UNIT_ALLOCATIONS].delete_many({
+            "user_id": user_id,
+            "batch_id": batch_id,
+            "status": {"$in": ["reserved", "committed"]},
+        })
+        await db[PIECES].delete_many({
+            "user_id": user_id,
+            "batch_id": batch_id,
+            "started_at": {"$in": [None, ""]},
+        })
+        await db[BATCHES].delete_one({
+            "user_id": user_id,
+            "id": batch_id,
+            "status": "ready",
+        })
+        event = {
+            "id": uuid.uuid4().hex,
+            "user_id": user_id,
+            "batch_id": batch_id,
+            "client_request_id": _text(batch.get("client_request_id")) or None,
+            "event_type": "orphan_ready_batch_released",
+            "order_numbers": order_numbers,
+            "released_unit_count": len(allocations),
+            "actor_id": _text(actor.get("id")),
+            "occurred_at": datetime.now(timezone.utc),
+            "mezan_only": True,
+            "salla_updated": False,
+            "qoyod_updated": False,
+        }
+        await db[EVENTS].insert_one(event)
+        released.append({
+            "batch_id": batch_id,
+            "released_unit_count": len(allocations),
+            "order_numbers": order_numbers,
+        })
+    return {
+        "released_count": len(released),
+        "released_unit_count": sum(row["released_unit_count"] for row in released),
+        "released": released,
     }
 
 
@@ -632,5 +740,6 @@ __all__ = [
     "make_preparation_file_failure_safety_router",
     "recover_stale_preparation_requests",
     "reconcile_released_preparation_stages",
+    "release_orphan_ready_batches",
     "release_incomplete_preparation_request",
 ]
