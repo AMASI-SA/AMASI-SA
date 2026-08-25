@@ -285,7 +285,8 @@ def _build_router(db) -> APIRouter:
             try:
                 payload = TikTokSpendIn(**raw)
             except Exception as exc:
-                errors.append({"data": raw, "error": str(exc)})
+                logger.exception("TikTok webhook payload validation failed", exc_info=exc)
+                errors.append({"data": raw, "error": "Invalid TikTok payload"})
                 continue
             # Strict date format
             import re
