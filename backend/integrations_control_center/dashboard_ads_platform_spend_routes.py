@@ -505,6 +505,7 @@ def attach_dashboard_ads_platform_spend_routes(
                 {"total_sar": spend.get("provider_totals_sar", {}).get("snapchat"),
                  "quality": (spend.get("spend_quality") or {}).get("snapchat") or {}},
                 unified_snapchat,
+                period_closed=end < datetime.now(RIYADH_TZ).date(),
             )
             await persist_dashboard_unified_shadow(
                 db,
