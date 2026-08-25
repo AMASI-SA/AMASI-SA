@@ -107,8 +107,8 @@ async def test_ai_shadow_passes_overlap_without_requiring_v1_entity_set_equality
             "account": {"id": "snap-1"},
         }
 
-    monkeypatch.setattr(shadow._v1_policy, "_snapchat_campaign_entities", v1_campaigns)
-    monkeypatch.setattr(shadow._v1_policy, "_snapchat_child_entities", v1_children)
+    monkeypatch.setattr(shadow._v1_policy, "_snapchat_v1_campaign_entities", v1_campaigns)
+    monkeypatch.setattr(shadow._v1_policy, "_snapchat_v1_child_entities", v1_children)
     monkeypatch.setattr(shadow, "load_snapchat_unified_ai_entities", unified)
 
     result = await shadow.build_campaign_ai_unified_shadow(
@@ -117,6 +117,7 @@ async def test_ai_shadow_passes_overlap_without_requiring_v1_entity_set_equality
 
     assert result["shadow_passed"] is True
     assert result["cutover_ready"] is True
+    assert result["cutover_active"] is True
     assert result["acceptance_basis"] == "exact_v1_overlap_match"
     assert result["period_policy"] == "last_closed_account_day"
     assert result["period_closed"] is True
@@ -148,8 +149,8 @@ async def test_ai_shadow_fails_closed_on_metric_mismatch(monkeypatch):
             "account": {"id": "snap-1"},
         }
 
-    monkeypatch.setattr(shadow._v1_policy, "_snapchat_campaign_entities", v1_campaigns)
-    monkeypatch.setattr(shadow._v1_policy, "_snapchat_child_entities", v1_children)
+    monkeypatch.setattr(shadow._v1_policy, "_snapchat_v1_campaign_entities", v1_campaigns)
+    monkeypatch.setattr(shadow._v1_policy, "_snapchat_v1_child_entities", v1_children)
     monkeypatch.setattr(shadow, "load_snapchat_unified_ai_entities", unified)
 
     result = await shadow.build_campaign_ai_unified_shadow(
@@ -206,8 +207,8 @@ async def test_ai_shadow_accepts_exact_provider_total_facts_and_keeps_v1_drift(
             "account": {"id": "snap-1"},
         }
 
-    monkeypatch.setattr(shadow._v1_policy, "_snapchat_campaign_entities", v1_campaigns)
-    monkeypatch.setattr(shadow._v1_policy, "_snapchat_child_entities", v1_children)
+    monkeypatch.setattr(shadow._v1_policy, "_snapchat_v1_campaign_entities", v1_campaigns)
+    monkeypatch.setattr(shadow._v1_policy, "_snapchat_v1_child_entities", v1_children)
     monkeypatch.setattr(shadow, "load_snapchat_unified_ai_entities", unified)
 
     result = await shadow.build_campaign_ai_unified_shadow(
@@ -242,8 +243,8 @@ async def test_ai_shadow_rejects_mismatch_without_exact_total_facts(monkeypatch)
             "account": {"id": "snap-1"},
         }
 
-    monkeypatch.setattr(shadow._v1_policy, "_snapchat_campaign_entities", v1_campaigns)
-    monkeypatch.setattr(shadow._v1_policy, "_snapchat_child_entities", v1_children)
+    monkeypatch.setattr(shadow._v1_policy, "_snapchat_v1_campaign_entities", v1_campaigns)
+    monkeypatch.setattr(shadow._v1_policy, "_snapchat_v1_child_entities", v1_children)
     monkeypatch.setattr(shadow, "load_snapchat_unified_ai_entities", unified)
 
     result = await shadow.build_campaign_ai_unified_shadow(
@@ -256,11 +257,11 @@ async def test_ai_shadow_rejects_mismatch_without_exact_total_facts(monkeypatch)
 
 @pytest.mark.asyncio
 async def test_ai_shadow_accepts_complete_unified_hourly_page_source(monkeypatch):
-    def v2_row(level: str, entity_id: str):
+    def v2_row(level: str, entity_id: str, *, spend: float = 104.0):
         row = _row(
             level,
             entity_id,
-            spend=104.0,
+            spend=spend,
             source_fact_collection="mezan_snapchat_hourly_facts_v2",
         )
         row.update({
@@ -286,8 +287,8 @@ async def test_ai_shadow_accepts_complete_unified_hourly_page_source(monkeypatch
             "account": {"id": "snap-1"},
         }
 
-    monkeypatch.setattr(shadow._v1_policy, "_snapchat_campaign_entities", v1_campaigns)
-    monkeypatch.setattr(shadow._v1_policy, "_snapchat_child_entities", v1_children)
+    monkeypatch.setattr(shadow._v1_policy, "_snapchat_v1_campaign_entities", v1_campaigns)
+    monkeypatch.setattr(shadow._v1_policy, "_snapchat_v1_child_entities", v1_children)
     monkeypatch.setattr(shadow, "load_snapchat_unified_ai_entities", unified)
 
     result = await shadow.build_campaign_ai_unified_shadow(
