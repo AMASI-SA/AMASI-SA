@@ -81,6 +81,24 @@ export async function listPreparationFiles({ limit = 30 } = {}) {
     }
 }
 
+export async function recoverStalePreparationFiles() {
+    try {
+        return (await api.post("/preparation-file-safety-v1/recover-stale")).data;
+    } catch (error) {
+        throw new Error(message(error, "تعذّرت استعادة ملفات التجهيز المتعثرة."));
+    }
+}
+
+export async function repairPreparationBatchCustomerOptions(batchId) {
+    try {
+        return (await api.post(
+            `/reviewed-preparation-batches-v1/batches/${encodeURIComponent(batchId)}/repair-customer-options`,
+        )).data;
+    } catch (error) {
+        throw new Error(message(error, "تعذّر إصلاح خيارات العميل في ملف التجهيز."));
+    }
+}
+
 export async function createReviewedPreparationBatch({ clientRequestId, selections }) {
     try {
         const metadata = typeof window !== "undefined"
