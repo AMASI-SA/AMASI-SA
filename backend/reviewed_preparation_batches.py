@@ -324,6 +324,16 @@ def _line_from_batch_storage(
     row: dict[str, Any],
     batch: dict[str, Any] | None = None,
 ) -> ProductLine:
+    # Rebuild customer-selected option fields from the immutable reviewed
+    # file snapshot when older/stale batch rows are missing the projected
+    # convenience fields. Both the employee preparation PDF and the supplier
+    # dispatch PDF pass through this function, so one canonical fallback keeps
+    # both files consistent without changing the original Salla values.
+    stored_spec_fields = [
+        field for field in (row.get("file_spec_fields") or [])
+        if isinstance(field, dict)
+    ]
+    fallback_fields = _card_field_projection(stored_spec_fields, row.get("preparation_note"))
     image_bytes = None
     if row.get("image_b64"):
         try:
@@ -358,19 +368,38 @@ def _line_from_batch_storage(
         order_number=_text(row.get("order_number")),
         order_date=_text(row.get("order_date")) or None,
         product_name=_text(row.get("product_name")) or None,
-        customer_name=_text(row.get("customer_name")) or None,
-        note=_text(row.get("note")) or None,
+        customer_name=(
+            _text(row.get("customer_name"))
+            or _text(fallback_fields.get("customer_name"))
+            or None
+        ),
+        note=(
+            _text(row.get("note"))
+            or _text(fallback_fields.get("note"))
+            or None
+        ),
         quantity=int(row.get("quantity") or 1),
         total_products_in_order=max(1, int(row.get("total_products_in_order") or 1)),
         item_index=int(row.get("line_index") or 0),
         image_bytes=image_bytes,
         image_mime=_text(row.get("image_mime")) or None,
         shipping_company=_text(row.get("shipping_company")) or None,
-        size=_text(row.get("size")) or None,
-        color=_text(row.get("color")) or None,
+        size=(
+            _text(row.get("size"))
+            or _text(fallback_fields.get("size"))
+            or None
+        ),
+        color=(
+            _text(row.get("color"))
+            or _text(fallback_fields.get("color"))
+            or None
+        ),
         product_id=_text(row.get("product_id")) or None,
         sku=_text(row.get("sku")) or None,
-        product_options=dict(row.get("product_options") or {}),
+        product_options={
+            **dict(fallback_fields.get("product_options") or {}),
+            **dict(row.get("product_options") or {}),
+        },
         barcode_payload=barcode_payload,
     )
 
