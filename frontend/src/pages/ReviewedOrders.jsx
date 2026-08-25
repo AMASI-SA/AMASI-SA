@@ -229,6 +229,8 @@ function BatchSuccess({ batch, onDownload, downloading }) {
 }
 
 export default function ReviewedOrders() {
+    const reviewedDate = new URLSearchParams(window.location.search).get("reviewed_date") || "";
+    const historical = Boolean(reviewedDate);
     const [catalog, setCatalog] = useState({ products: [], categories: [], summary: {}, truncated: false });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
@@ -247,7 +249,7 @@ export default function ReviewedOrders() {
         if (!silent) setLoading(true);
         setError("");
         try {
-            const nextCatalog = await listReviewedProductCatalog({ limit: 2000 });
+            const nextCatalog = await listReviewedProductCatalog({ limit: 2000, reviewedDate });
             setCatalog(nextCatalog);
             setSelectedQuantities((current) => reconcileReviewedPreparationSelection(
                 current,
@@ -258,7 +260,7 @@ export default function ReviewedOrders() {
         } finally {
             if (!silent) setLoading(false);
         }
-    }, []);
+    }, [reviewedDate]);
 
     useEffect(() => { load(); }, [load]);
 
@@ -349,8 +351,8 @@ export default function ReviewedOrders() {
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div>
-                        <h2 className="text-xl font-black text-slate-950 sm:text-2xl">منتجات تمت مراجعتها</h2>
-                        <p className="mt-1 text-sm text-slate-500">حدد المنتجات والكمية التي تريد إضافتها إلى ملف التجهيز الحالي.</p>
+                        <h2 className="text-xl font-black text-slate-950 sm:text-2xl">{historical ? `المنتجات التي مرّت بالمراجعة بتاريخ ${reviewedDate}` : "منتجات تمت مراجعتها"}</h2>
+                        <p className="mt-1 text-sm text-slate-500">{historical ? "عرض تاريخي للكمية الأصلية وأرقام الطلبات، حتى لو انتقلت المنتجات لاحقًا إلى مرحلة أخرى." : "حدد المنتجات والكمية التي تريد إضافتها إلى ملف التجهيز الحالي."}</p>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-center sm:flex sm:text-right">
                         <div className="rounded-xl bg-violet-50 px-3 py-2">
@@ -358,7 +360,7 @@ export default function ReviewedOrders() {
                             <div className="mt-0.5 text-lg font-black text-violet-900">{filteredProducts.length}</div>
                         </div>
                         <div className="rounded-xl bg-emerald-50 px-3 py-2">
-                            <div className="text-[11px] font-bold text-emerald-600">إجمالي المتبقي</div>
+                            <div className="text-[11px] font-bold text-emerald-600">{historical ? "إجمالي ما مرّ بالمراجعة" : "إجمالي المتبقي"}</div>
                             <div className="mt-0.5 text-lg font-black text-emerald-900">{displayReviewedQuantity(shownQuantity)}</div>
                         </div>
                     </div>
@@ -502,17 +504,22 @@ export default function ReviewedOrders() {
                                         </div>
                                         <div className="mt-3 flex items-end justify-between gap-2">
                                             <div className="text-xs font-bold text-slate-400">
-                                                متبقي في <b className="text-slate-700">{product.source_order_count || 0}</b> طلب
+                                                {historical ? "ظهر في" : "متبقي في"} <b className="text-slate-700">{product.source_order_count || 0}</b> طلب
                                             </div>
                                             <div className="min-w-20 rounded-2xl bg-emerald-600 px-3 py-2 text-center text-white shadow-sm shadow-emerald-200">
-                                                <div className="text-[10px] font-bold text-emerald-100">المتاح</div>
+                                                <div className="text-[10px] font-bold text-emerald-100">{historical ? "الكمية الأصلية" : "المتاح"}</div>
                                                 <div className="text-2xl font-black leading-none">{displayReviewedQuantity(remaining)}</div>
                                             </div>
                                         </div>
+                                        {historical && (product.source_order_numbers || []).length > 0 && (
+                                            <div className="mt-2 break-words text-[11px] font-bold text-violet-700" dir="ltr">
+                                                {(product.source_order_numbers || []).join(" • ")}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 
-                                <div className="border-t border-slate-100 px-3 pb-3 sm:px-4 sm:pb-4">
+                                {!historical && <div className="border-t border-slate-100 px-3 pb-3 sm:px-4 sm:pb-4">
                                     {selected ? (
                                         <QuantitySelector
                                             product={product}
@@ -530,7 +537,7 @@ export default function ReviewedOrders() {
                                             تحديد للملف
                                         </button>
                                     )}
-                                </div>
+                                </div>}
                             </article>
                         );
                     })}
@@ -551,7 +558,7 @@ export default function ReviewedOrders() {
                 onClose={() => setMobileFiltersOpen(false)}
             />
 
-            {selectionSummary.productCount > 0 && (
+            {!historical && selectionSummary.productCount > 0 && (
                 <div className="sticky bottom-3 z-50 mx-auto max-w-3xl rounded-2xl border border-violet-200 bg-white/95 p-3 shadow-2xl shadow-violet-200/60 backdrop-blur" data-testid="reviewed-preparation-selection-bar">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div className="grid grid-cols-2 gap-2 text-center sm:flex sm:text-right">

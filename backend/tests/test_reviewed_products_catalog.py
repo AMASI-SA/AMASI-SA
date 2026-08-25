@@ -204,3 +204,16 @@ def test_router_registers_catalog_endpoint():
         for method in route.methods
     }
     assert ("/reviewed-products-v1/catalog", "GET") in routes
+
+
+def test_historical_catalog_does_not_subtract_later_allocations():
+    base = aggregate_reviewed_products(
+        [(_order("25", [_item("line-11", "p-11", quantity=11)]), {
+            "reviewed_at": "2026-08-25T10:00:00+03:00",
+            "items": [],
+        })],
+        [],
+    )
+
+    assert base["summary"]["total_quantity"] == 11
+    assert base["products"][0]["quantity"] == 11
