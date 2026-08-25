@@ -66,6 +66,35 @@ into the stable Dashboard snapshot; Dashboard modules do not import Snapchat
 V2 storage or adapter files. The legacy Dashboard reader remains available
 only to the isolated Shadow observer and rollback path.
 
+Decision Intelligence reads aggregate entity reports and ordered daily TOTAL
+facts through the same gateway. Campaign AI candidate metrics, funnel
+evidence, temporal evidence, product destinations, and creative identifiers do
+not import Snapchat performance collections. The bounded provider-media
+preview collector remains a separate read-only adapter because fetching an
+actual ad asset is provider-specific; it has no recommendation or write
+authority. Child levels receive the parent campaign's
+Salla/profitability context only; the adapter never invents Salla attribution
+for an Ad Group or Ad. The old Snapchat AI readers remain named rollback
+functions and are used only by the post-cutover observer.
+
+Campaign AI Shadow compares only the overlapping V1 rollback entities and
+retains every metric drift in its diagnostics. An exact V1 overlap match is
+preferred. Exact provider TOTAL facts may use the explicit
+`provider_total_facts_fallback_v1_observer_drift` basis. When Snapchat has no
+daily TOTAL row for a hierarchy level, the page-equivalent, fully synchronized
+V2 hourly facts may use
+`complete_unified_v2_fallback_v1_observer_drift`, but only when every compared
+row is complete, conversion-time, sourced through the Unified V2 adapter, and
+its lineage is one of the approved V2 fact collections. Unknown, incomplete,
+or impression-time sources fail closed. This does not rewrite V1 or hide
+metric drift.
+
+The acceptance proof always uses the last closed calendar day in the
+advertising account timezone. It never rolls to a newly opened local day with
+zero or provisional evidence. Live AI reads use the current account-local
+window after cutover; only the immutable observer proof is anchored to the
+closed day.
+
 ## Decision gate
 
 Every report defaults to:
@@ -82,21 +111,3 @@ Every report defaults to:
 No adapter may enable this flag. A separate acceptance gate can do so only
 after provider reconciliation, hierarchy performance coverage, Salla
 attribution checks, and Shadow Sync acceptance have passed in Production.
-
-Campaign AI Shadow compares only the overlapping V1 rollback entities and
-retains every metric drift in its diagnostics. An exact V1 overlap match is
-preferred. Exact provider TOTAL facts may use the explicit
-`provider_total_facts_fallback_v1_observer_drift` basis. When Snapchat has no
-daily TOTAL row for a hierarchy level, the page-equivalent, fully synchronized
-V2 hourly facts may use
-`complete_unified_v2_fallback_v1_observer_drift`, but only when every compared
-row is complete, conversion-time, sourced through the Unified V2 adapter, and
-its lineage is one of the approved V2 fact collections. Unknown, incomplete,
-or impression-time sources fail closed. This does not rewrite V1, hide metric
-drift, call OpenAI, create recommendations, or enable decisions.
-
-The Campaign AI acceptance proof always uses the last closed calendar day in
-the advertising account timezone. It never rolls to a newly opened local day
-with zero or provisional evidence. Live AI reads may still use the current
-account-local window after cutover; only the immutable acceptance proof is
-anchored to the closed day.
