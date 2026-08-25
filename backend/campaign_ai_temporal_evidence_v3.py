@@ -14,9 +14,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from integrations_control_center.meta_campaign_reporting import (
     META_CAMPAIGN_REPORTING_COLLECTION,
 )
-from integrations_control_center.snapchat_account_timezone_manager import (
-    SNAPCHAT_ACCOUNT_LOCAL_PERFORMANCE_COLLECTION,
-)
+from unified_marketing.gateway import load_unified_marketing_entity_daily_series
 
 
 META_ENTITY_COLLECTION = "mezan_meta_entity_performance_daily_v1"
@@ -134,22 +132,53 @@ async def _daily_facts(
     provider, level, account_id, entity_id = entity_key(candidate)
     start = end - timedelta(days=29)
     if provider == "snapchat":
-        entity_type = {"campaign": "campaign", "ad_group": "ad_squad", "ad": "ad"}.get(level)
-        if not entity_type:
+        if level not in {"campaign", "ad_group", "ad"}:
             return []
-        query = {
-            "user_id": user_id,
-            "ad_account_id": account_id,
-            "entity_type": entity_type,
-            "external_id": entity_id,
-            "date": {"$gte": start.isoformat(), "$lte": end.isoformat()},
-            "action_report_time": ACTION_REPORT_TIME,
-        }
-        docs = await db[SNAPCHAT_ACCOUNT_LOCAL_PERFORMANCE_COLLECTION].find(
-            query,
-            {"_id": 0},
-        ).sort("date", 1).limit(MAX_FACT_ROWS).to_list(length=MAX_FACT_ROWS)
-        return [_snap_fact(doc) for doc in docs]
+        report = await load_unified_marketing_entity_daily_series(
+            db,
+            user_id,
+            provider="snapchat_ads",
+            entity_level=level,
+            entity_ids=[entity_id],
+            date_from=start,
+            date_to=end,
+            timezone_name=str(candidate.get("account_timezone") or ""),
+        )
+        output = []
+        for doc in report.get("rows") or []:
+            delivery = doc.get("delivery") or {}
+            platform = doc.get("platform_outcomes") or {}
+            spend = _number((delivery.get("spend_sar") or {}).get("amount"))
+            native_spend = _number((delivery.get("spend") or {}).get("amount"))
+            native_revenue = _number((platform.get("revenue") or {}).get("amount"))
+            revenue = (
+                round(native_revenue * spend / native_spend, 4)
+                if native_revenue is not None
+                and spend is not None
+                and native_spend not in {None, 0}
+                else None
+            )
+            purchases = _number(platform.get("conversions"))
+            impressions = _number(delivery.get("impressions"))
+            clicks = _number(delivery.get("clicks"))
+            output.append({
+                "date": str((doc.get("period") or {}).get("date_from") or "")[:10],
+                "spend_sar": spend,
+                "revenue_sar": revenue,
+                "purchases": purchases,
+                "impressions": impressions,
+                "clicks": clicks,
+                "roas": round(revenue / spend, 4) if spend not in {None, 0} and revenue is not None else None,
+                "cpa_sar": round(spend / purchases, 4) if spend is not None and purchases not in {None, 0} else None,
+                "ctr_pct": delivery.get("ctr_pct"),
+                "cpc_sar": round(spend / clicks, 4) if spend is not None and clicks not in {None, 0} else None,
+                "cpm_sar": round(spend * 1000 / impressions, 4) if spend is not None and impressions not in {None, 0} else None,
+                "source": (doc.get("lineage") or {}).get("source_collection"),
+                "action_report_time": (doc.get("period") or {}).get("action_report_time"),
+                "provider_window_start": (doc.get("period") or {}).get("date_from"),
+                "provider_window_end": (doc.get("period") or {}).get("date_to"),
+            })
+        return output
 
     if provider == "meta" and level == "campaign":
         query = {
