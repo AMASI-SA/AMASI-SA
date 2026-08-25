@@ -44,6 +44,9 @@ ORDER_PROJECTION = {
     "type_of_order": 1,
     "is_gift": 1,
     "products": 1,
+    "raw_by_source.salla_direct.date.date": 1,
+    "raw_by_source.salla_direct.date.timezone": 1,
+    "raw_by_source.salla_direct.created_at": 1,
 }
 
 
@@ -89,6 +92,10 @@ def _first_text(order: dict[str, Any], fields: tuple[str, ...]) -> str:
 
 
 def _parse_datetime(value: Any) -> datetime | None:
+    timezone_name = ""
+    if isinstance(value, dict):
+        timezone_name = _text(value.get("timezone"))
+        value = value.get("date") or value.get("value")
     if isinstance(value, datetime):
         parsed = value
     else:
@@ -100,7 +107,12 @@ def _parse_datetime(value: Any) -> datetime | None:
         except ValueError:
             return None
     if parsed.tzinfo is None or parsed.utcoffset() is None:
-        return None
+        if not timezone_name:
+            return None
+        try:
+            parsed = parsed.replace(tzinfo=ZoneInfo(timezone_name))
+        except Exception:
+            return None
     return parsed.astimezone(timezone.utc)
 
 
@@ -110,11 +122,21 @@ def _order_timestamp(order: dict[str, Any]) -> datetime | None:
         "order_created_at",
         "created_at_utc",
         "source_created_at",
-        "updated_at",
     ):
         parsed = _parse_datetime(order.get(field))
         if parsed is not None:
             return parsed
+    raw_by_source = order.get("raw_by_source")
+    raw = (
+        raw_by_source.get("salla_direct")
+        if isinstance(raw_by_source, dict)
+        else None
+    )
+    if isinstance(raw, dict):
+        for value in (raw.get("created_at"), raw.get("date")):
+            parsed = _parse_datetime(value)
+            if parsed is not None:
+                return parsed
     return None
 
 
