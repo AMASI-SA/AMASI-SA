@@ -19,6 +19,7 @@ import json
 import logging
 import re
 import uuid
+from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -173,6 +174,82 @@ def _is_empty(v: Any) -> bool:
     if isinstance(v, (list, dict)):
         return len(v) == 0
     return False
+
+
+def _salla_item_identity(item: Any) -> Optional[tuple[str, str]]:
+    """Return a stable identity for merging two Salla order-item snapshots."""
+    if not isinstance(item, dict):
+        return None
+    for field in ("id", "item_id", "order_item_id"):
+        value = item.get(field)
+        if value not in (None, ""):
+            return "source_item_id", str(value).strip()
+    for field in ("product_sku_id", "variant_id"):
+        value = item.get(field)
+        if value not in (None, ""):
+            return "variant_id", str(value).strip()
+    sku = str(item.get("sku") or "").strip()
+    return ("sku", sku) if sku else None
+
+
+def _merge_salla_order_items(
+    existing_items: list[Any],
+    incoming_items: list[Any],
+) -> list[Any]:
+    """Keep immutable customer choices when a later item snapshot is sparse."""
+    existing_by_identity = {
+        identity: item
+        for item in existing_items
+        if (identity := _salla_item_identity(item)) is not None
+    }
+    merged: list[Any] = []
+    for index, incoming_item in enumerate(incoming_items):
+        if not isinstance(incoming_item, dict):
+            merged.append(deepcopy(incoming_item))
+            continue
+        identity = _salla_item_identity(incoming_item)
+        existing_item = existing_by_identity.get(identity) if identity else None
+        if existing_item is None and identity is None and index < len(existing_items):
+            positional = existing_items[index]
+            if isinstance(positional, dict):
+                existing_item = positional
+        merged.append(_merge_salla_item_snapshot(existing_item or {}, incoming_item))
+    return merged
+
+
+def _merge_salla_item_snapshot(existing: dict, incoming: dict) -> dict:
+    """Overlay one item while treating omitted customer choices as immutable."""
+    immutable_detail_fields = {
+        "options", "custom_fields", "customizations", "personalization",
+        "fields", "questions", "attachments", "files", "choices",
+        "attributes", "product_options", "selected_options", "customer_options",
+    }
+    merged = deepcopy(existing)
+    for key, incoming_value in incoming.items():
+        if (
+            key in immutable_detail_fields
+            and incoming_value in (None, "", [], {})
+            and key in merged
+        ):
+            continue
+        merged[key] = deepcopy(incoming_value)
+    return merged
+
+
+def _merge_salla_raw_snapshot(existing: Any, incoming: Any) -> Any:
+    """Preserve rich order items without reviving unrelated stale raw facts."""
+    previous = existing if isinstance(existing, dict) else {}
+    merged = deepcopy(incoming) if isinstance(incoming, dict) else {}
+    existing_items = previous.get("items")
+    incoming_items = merged.get("items")
+    if isinstance(incoming_items, list) and incoming_items:
+        merged["items"] = _merge_salla_order_items(
+            existing_items if isinstance(existing_items, list) else [],
+            incoming_items,
+        )
+    elif isinstance(existing_items, list) and existing_items:
+        merged["items"] = deepcopy(existing_items)
+    return merged
     
     # ── Phase 1: Auto-seed /products from order line-items ──────────────
 # Safe scope:
@@ -862,11 +939,14 @@ async def upsert_order(db, user_id: str, order_number: str, incoming: dict,
     if raw is not None:
         # Track raw per source so we can audit later
         raws = dict(merged.get("raw_by_source") or {})
-        raws[source] = (
-            preserve_salla_raw_attribution(raws.get(source), raw)
-            if source == "salla_direct"
-            else raw
-        )
+        if source == "salla_direct":
+            # List Orders (format=light) and some webhooks are sparse. A later
+            # status refresh must not erase options obtained from Order Items.
+            existing_raw = raws.get(source) or {}
+            attributed_raw = preserve_salla_raw_attribution(existing_raw, raw)
+            raws[source] = _merge_salla_raw_snapshot(existing_raw, attributed_raw)
+        else:
+            raws[source] = raw
         merged["raw_by_source"] = raws
     if not existing:
         merged["received_at"] = _now()
