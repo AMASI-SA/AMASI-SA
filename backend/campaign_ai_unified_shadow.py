@@ -150,21 +150,21 @@ async def build_campaign_ai_unified_shadow(
     errors: list[dict[str, str]] = []
     try:
         v1_campaigns = await _v1_policy._snapchat_campaign_entities(
-            db, str(user_id), start, current
+            db, str(user_id), start, current, 1
         )
     except Exception as exc:  # noqa: BLE001
         v1_campaigns = []
         errors.append({"source": "v1_campaigns", "code": type(exc).__name__})
     try:
         v1_children = await _v1_policy._snapchat_child_entities(
-            db, str(user_id), start, current
+            db, str(user_id), start, current, 1
         )
     except Exception as exc:  # noqa: BLE001
         v1_children = []
         errors.append({"source": "v1_children", "code": type(exc).__name__})
     try:
         unified = await load_snapchat_unified_ai_entities(
-            db, str(user_id), start, current
+            db, str(user_id), start, current, 1
         )
     except Exception as exc:  # noqa: BLE001
         unified = {"campaigns": [], "children": [], "period": None, "account": None}
@@ -197,6 +197,8 @@ async def build_campaign_ai_unified_shadow(
         "shadow_passed": passed,
         "cutover_ready": passed,
         "acceptance_basis": acceptance_basis,
+        "period_policy": "last_closed_account_day",
+        "period_closed": True,
         "period": unified.get("period"),
         "account": unified.get("account"),
         "levels": levels,
