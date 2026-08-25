@@ -40,7 +40,7 @@ MOBILE_ROUTE_PERMISSIONS: tuple[tuple[str, frozenset[str]], ...] = (
     ("/api/reviewed-product-sorting-v1", _permissions("app.page.reviewed_preparation")),
     ("/api/mobile-preparation-execution-v1", _permissions("app.page.my_products")),
     ("/api/mobile-product-file-v1", _permissions("app.page.my_products")),
-    ("/api/preparation-file-registry-v1", _permissions("app.page.my_products")),
+    ("/api/preparation-file-registry-v1", _permissions("app.page.reviewed_preparation")),
     ("/api/preparation-file-safety-v1", _permissions("app.page.my_products")),
     ("/api/supplier-dispatch-pdf-v1", _permissions("app.page.my_products")),
     ("/api/supplier-dispatch-share-v1", _permissions("app.page.my_products")),

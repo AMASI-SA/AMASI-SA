@@ -16,11 +16,12 @@ from pydantic import BaseModel, ConfigDict, Field
 from pymongo import ASCENDING, DESCENDING, ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
-from order_review_export_controls import (
-    assignable_employee_view,
-    user_can_manage_preparation,
+from mobile_app_permissions import (
+    MOBILE_APP_ACCESS,
+    MOBILE_APP_ACCESS_OWNER_FIELD,
+    effective_mobile_app_permissions,
 )
-from ai_store_access_contract import effective_permissions, find_role_assignments
+from order_review_export_controls import assignable_employee_view
 from order_review_routes import EVENTS, _merchant_user_id, _require_reviewer, _text
 from reviewed_preparation_batches import BATCHES
 from tz_utils import riyadh_now_aware
@@ -120,58 +121,98 @@ async def _assignable_employees(
     user_id: str,
     reviewer: dict[str, Any],
 ) -> list[dict[str, Any]]:
+    """Return active AMASI-app employees eligible for preparation assignment.
+
+    Eligibility comes only from the native-app access contract, never Mezan web
+    RBAC. The assignee must have active app access to ``app.page.my_products``
+    because that is the page used to work assigned preparation files. The
+    merchant owner remains eligible through the native owner override. Employees
+    that already owned preparation files are surfaced first.
+    """
+    access_rows = await db[MOBILE_APP_ACCESS].find(
+        {
+            MOBILE_APP_ACCESS_OWNER_FIELD: user_id,
+            "enabled": {"$ne": False},
+        },
+        {"_id": 0, "user_id": 1, "permissions": 1, "enabled": 1},
+    ).to_list(1000)
+    access_by_id = {
+        _text(row.get("user_id")): row
+        for row in access_rows
+        if _text(row.get("user_id"))
+    }
+
+    # ``user_id`` is the merchant owner resolved by _merchant_user_id(). The
+    # caller may itself be a staff reviewer, so never treat reviewer.id as owner.
+    owner_id = _text(user_id)
+    reviewer_id = _text(reviewer.get("id"))
+    candidate_ids = sorted(set(access_by_id) | ({owner_id} if owner_id else set()))
     docs = await db.users.find(
-        {"created_by": user_id},
+        {"id": {"$in": candidate_ids}},
         {
             "_id": 0,
             "id": 1,
             "name": 1,
             "email": 1,
             "role": 1,
-            "extra_permissions": 1,
-            "denied_permissions": 1,
+            "is_owner": 1,
             "disabled": 1,
             "is_active": 1,
             "deleted_at": 1,
         },
-    ).sort("name", 1).to_list(500)
-    candidates = [reviewer, *docs]
-    candidate_ids = [
-        _text(row.get("id")) for row in candidates if _text(row.get("id"))
-    ]
-    assignment_rows = await find_role_assignments(
-        db,
-        owner_user_id=user_id,
-        user_ids=candidate_ids,
-        limit=max(len(candidate_ids), 1),
-    )
-    permissions_by_employee = {
-        _text(row.get("user_id")): set(effective_permissions(row))
-        for row in assignment_rows
-        if _text(row.get("user_id"))
-    }
-    result: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for row in candidates:
-        employee_id = _text(row.get("id"))
+    ).to_list(max(len(candidate_ids), 1))
+    users_by_id = {_text(row.get("id")): row for row in docs if _text(row.get("id"))}
+    if owner_id and owner_id not in users_by_id and reviewer_id == owner_id:
+        users_by_id[owner_id] = reviewer
+
+    eligible_by_id: dict[str, dict[str, Any]] = {}
+    for employee_id in candidate_ids:
+        row = users_by_id.get(employee_id)
+        if not row:
+            continue
         if (
-            not employee_id
-            or employee_id in seen
-            or row.get("disabled") is True
+            row.get("disabled") is True
             or row.get("is_active") is False
             or row.get("deleted_at")
-            or not (
-                user_can_manage_preparation(row)
-                or {
-                    "preparation.assigned.read",
-                    "preparation.assigned.work",
-                }.issubset(permissions_by_employee.get(employee_id, set()))
-            )
+            or not _text(row.get("email"))
         ):
             continue
-        seen.add(employee_id)
-        result.append(assignable_employee_view(row))
-    result.sort(key=lambda row: (_text(row.get("name")).casefold(), row["id"]))
+
+        is_owner = employee_id == owner_id
+        permissions = set(
+            effective_mobile_app_permissions(
+                access_by_id.get(employee_id),
+                account_active=True,
+            )
+        )
+        if not is_owner and "app.page.my_products" not in permissions:
+            continue
+        eligible_by_id[employee_id] = row
+
+    employee_ids = list(eligible_by_id)
+    previously_assigned: set[str] = set()
+    if employee_ids:
+        rows = await db[REGISTRY].find(
+            {
+                "user_id": user_id,
+                "responsible_employee_id": {"$in": employee_ids},
+            },
+            {"_id": 0, "responsible_employee_id": 1},
+        ).to_list(5000)
+        previously_assigned = {
+            _text(row.get("responsible_employee_id"))
+            for row in rows
+            if _text(row.get("responsible_employee_id"))
+        }
+
+    result = [assignable_employee_view(row) for row in eligible_by_id.values()]
+    result.sort(
+        key=lambda row: (
+            0 if row["id"] in previously_assigned else 1,
+            _text(row.get("name")).casefold(),
+            row["id"],
+        )
+    )
     return result
 
 
@@ -351,7 +392,7 @@ def make_preparation_file_registry_router(
                 status_code=422,
                 detail={
                     "code": "responsible_employee_unavailable",
-                    "message": "اختر موظفًا مسؤولًا نشطًا يملك صلاحية إدارة التجهيز.",
+                    "message": "اختر موظفًا نشطًا لديه وصول لتطبيق أماسي وصفحة إدارة منتجاتي.",
                 },
             )
 
