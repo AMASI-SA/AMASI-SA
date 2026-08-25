@@ -269,3 +269,112 @@ async def test_dashboard_snapshot_uses_v2_projection_hours_and_cost_settings(
     assert result["bank_commissions"]["total_fee_sar"] == 8.64
     assert result["provider_write_reached"] is False
     assert result["accounting_write_reached"] is False
+
+
+@pytest.mark.asyncio
+async def test_open_riyadh_day_exposes_observed_spend_as_provisional_only(
+    monkeypatch,
+):
+    report_day = date(2026, 8, 26)
+
+    async def selected(*_args, **_kwargs):
+        return {
+            "ad_account_id": "snap-1",
+            "display_name": "Snap Account",
+            "currency": "USD",
+            "timezone": "America/Los_Angeles",
+        }
+
+    async def projections(*_args, **_kwargs):
+        return [{
+            "report_date": report_day.isoformat(),
+            "base_spend_native": 42.16,
+            "purchase_value_native": 100.0,
+            "impressions": 500,
+            "swipes": 20,
+            "purchases": 2,
+            "amount_complete": True,
+            "data_state": "confirmed_data",
+            "source_fact_count": 8,
+            "source_sync_run_ids": ["run-open-day"],
+            "hours": [{
+                "sequence": 0,
+                "local_hour": "00:00",
+                "spend_native": 42.16,
+                "status": "confirmed_data",
+            }, {
+                "sequence": 23,
+                "local_hour": "23:00",
+                "spend_native": None,
+                "status": "future",
+            }],
+        }]
+
+    async def complete_financial(*_args, **_kwargs):
+        return "complete"
+
+    async def unreconciled(*_args, **_kwargs):
+        return []
+
+    async def cost(*_args, **_kwargs):
+        native = float(_kwargs["spend_native"])
+        return {
+            "native_currency": "USD",
+            "exchange_rate_to_sar": 3.75,
+            "cost_setting_configured": True,
+            "bank_commission_pct": 2.0,
+            "apply_bank_commission": True,
+            "base_spend_sar": round(native * 3.75, 2),
+            "commission_sar": round(native * 3.75 * 0.02, 2),
+            "final_cost_sar": round(native * 3.75 * 1.02, 2),
+            "cost_coverage": {"complete": True},
+        }
+
+    monkeypatch.setattr(reader, "get_selected_account", selected)
+    monkeypatch.setattr(reader, "list_daily_projections", projections)
+    monkeypatch.setattr(reader, "_projection_financial_status", complete_financial)
+    monkeypatch.setattr(reader, "list_reconciliation", unreconciled)
+    monkeypatch.setattr(reader, "calculate_cost_components", cost)
+    monkeypatch.setattr(
+        reader,
+        "_today_in_timezone",
+        lambda _timezone_name: date(2026, 8, 26),
+    )
+
+    open_result = await reader.load_snapchat_v2_dashboard_spend(
+        object(),
+        "owner-1",
+        date_from=report_day,
+        date_to=report_day,
+        timezone_name="Asia/Riyadh",
+    )
+
+    assert open_result["total_sar"] == 158.1
+    assert open_result["rows"][0]["effective_spend_sar"] == 158.1
+    assert open_result["daily_state"][report_day.isoformat()] == "provisional_data"
+    assert open_result["quality"]["status"] == "provisional"
+    assert open_result["quality"]["amount_available"] is True
+    assert open_result["quality"]["amount_complete"] is False
+    assert open_result["quality"]["provisional"] is True
+    assert open_result["quality"]["closed_reconciliation_status"] == (
+        "not_required_open_day"
+    )
+    assert open_result["quality"]["reason_codes"] == [
+        "open_riyadh_day_reconciliation_pending"
+    ]
+    assert open_result["bank_commissions"]["total_fee_sar"] == 3.16
+
+    report_day = date(2026, 8, 25)
+    closed_result = await reader.load_snapchat_v2_dashboard_spend(
+        object(),
+        "owner-1",
+        date_from=report_day,
+        date_to=report_day,
+        timezone_name="Asia/Riyadh",
+    )
+
+    assert closed_result["total_sar"] is None
+    assert closed_result["rows"] == []
+    assert closed_result["quality"]["status"] == "incomplete"
+    assert closed_result["quality"]["amount_available"] is False
+    assert closed_result["quality"]["provisional"] is False

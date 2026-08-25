@@ -1,8 +1,9 @@
 """Read Snapchat V2 through the provider-neutral marketing contract."""
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from snapchat_v2.accounts import get_selected_account
 from snapchat_v2.entities import list_entities
@@ -44,6 +45,43 @@ FLOAT_FIELDS = (
     "view_completion",
     "purchase_value_native",
 )
+
+
+def _today_in_timezone(timezone_name: str) -> date:
+    return datetime.now(ZoneInfo(timezone_name)).date()
+
+
+def _open_day_has_source_evidence(projection: dict[str, Any]) -> bool:
+    """Return whether the open-day projection contains provider observations.
+
+    Future/provisional placeholder hours alone are not evidence. A stored source
+    fact, including a provider-confirmed zero hour, is enough to expose the
+    running amount as provisional while final reconciliation remains pending.
+    """
+    if int(projection.get("source_fact_count") or 0) > 0:
+        return True
+    return any(
+        hour.get("spend_native") is not None
+        and str(hour.get("status") or "")
+        not in {"future", "provisional_unavailable", "unknown_incomplete"}
+        for hour in list(projection.get("hours") or [])
+    )
+
+
+def _closed_reconciliation_status(
+    reconciliations: list[dict[str, Any]],
+    *,
+    date_from: date,
+    open_day: date,
+) -> str:
+    closed_to = open_day - timedelta(days=1)
+    if date_from > closed_to:
+        return "not_required_open_day"
+    return _reconciliation_status(
+        reconciliations,
+        date_from=date_from,
+        date_to=closed_to,
+    )
 
 
 async def load_snapchat_v2_account_identity(
@@ -864,6 +902,10 @@ async def load_snapchat_v2_dashboard_spend(
                 "coverage_complete": disconnected,
                 "amount_complete": disconnected,
                 "complete": disconnected,
+                "amount_available": disconnected,
+                "provisional": False,
+                "contains_open_day": False,
+                "range_ends_on_open_day": False,
                 "connected": not disconnected,
                 "reason_codes": [] if disconnected else ["selected_account_missing"],
                 "timezone": timezone_name,
@@ -911,6 +953,26 @@ async def load_snapchat_v2_dashboard_spend(
         len(projections) == expected_days
         and all(row.get("amount_complete") is True for row in projections)
     )
+    today = _today_in_timezone(timezone_name)
+    contains_open_day = date_from <= today <= date_to
+    range_ends_on_open_day = contains_open_day and date_to == today
+    open_day_projection = next(
+        (
+            row
+            for row in projections
+            if str(row.get("report_date") or "") == today.isoformat()
+        ),
+        None,
+    )
+    closed_reconciliation_status = (
+        _closed_reconciliation_status(
+            reconciliations,
+            date_from=date_from,
+            open_day=today,
+        )
+        if range_ends_on_open_day
+        else reconciliation_status
+    )
     total_native = _sum(projections, "base_spend_native")
     try:
         cost = await calculate_cost_components(
@@ -929,6 +991,18 @@ async def load_snapchat_v2_dashboard_spend(
         and reconciliation_status == "reconciled"
         and exchange_rate is not None
     )
+    provisional_amount_available = bool(
+        not amount_complete
+        and range_ends_on_open_day
+        and projection_complete
+        and financial_status == "complete"
+        and closed_reconciliation_status
+        in {"reconciled", "not_required_open_day"}
+        and exchange_rate is not None
+        and isinstance(open_day_projection, dict)
+        and _open_day_has_source_evidence(open_day_projection)
+    )
+    amount_available = amount_complete or provisional_amount_available
 
     rows: list[dict[str, Any]] = []
     daily_sar: dict[str, float | None] = {}
@@ -942,11 +1016,14 @@ async def load_snapchat_v2_dashboard_spend(
             and exchange_rate is not None
         )
         spend_sar = round(spend_native * exchange_rate, 2) if day_known else None
-        state = (
-            str(projection.get("data_state") or "unknown_incomplete")
-            if day_known
-            else "unknown_incomplete"
-        )
+        if day_known and provisional_amount_available and day == today.isoformat():
+            state = "provisional_data" if spend_native > 0 else "provisional_zero"
+        else:
+            state = (
+                str(projection.get("data_state") or "unknown_incomplete")
+                if day_known
+                else "unknown_incomplete"
+            )
         daily_sar[day] = spend_sar
         daily_state[day] = state
         day_hours: list[dict[str, Any]] = []
@@ -996,21 +1073,29 @@ async def load_snapchat_v2_dashboard_spend(
 
     total_sar = (
         round(float(cost.get("base_spend_sar") or 0), 2)
-        if amount_complete
+        if amount_available
         else None
     )
     data_state = (
-        "confirmed_data"
+        "provisional_data"
+        if provisional_amount_available and total_sar is not None and total_sar > 0
+        else "provisional_zero"
+        if provisional_amount_available and total_sar == 0
+        else "confirmed_data"
         if total_sar is not None and total_sar > 0
         else "confirmed_zero"
         if total_sar == 0
         else "unknown_incomplete"
     )
-    reasons = [] if amount_complete else [
-        "unified_projection_financial_reconciliation_or_fx_incomplete"
-    ]
+    reasons = (
+        []
+        if amount_complete
+        else ["open_riyadh_day_reconciliation_pending"]
+        if provisional_amount_available
+        else ["unified_projection_financial_reconciliation_or_fx_incomplete"]
+    )
     return {
-        "rows": rows if amount_complete else [],
+        "rows": rows if amount_available else [],
         "daily_sar": daily_sar,
         "daily_state": daily_state,
         "hourly_sar": hourly_sar,
@@ -1021,15 +1106,25 @@ async def load_snapchat_v2_dashboard_spend(
                 cost,
                 spend_native=total_native,
             )
-            if amount_complete
+            if amount_available
             else None
         ),
         "quality": {
-            "status": "complete" if amount_complete else "incomplete",
+            "status": (
+                "complete"
+                if amount_complete
+                else "provisional"
+                if provisional_amount_available
+                else "incomplete"
+            ),
             "data_state": data_state,
             "coverage_complete": amount_complete,
             "amount_complete": amount_complete,
             "complete": amount_complete,
+            "amount_available": amount_available,
+            "provisional": provisional_amount_available,
+            "contains_open_day": contains_open_day,
+            "range_ends_on_open_day": range_ends_on_open_day,
             "connected": True,
             "reason_codes": reasons,
             "timezone": timezone_name,
@@ -1037,6 +1132,7 @@ async def load_snapchat_v2_dashboard_spend(
             "amount_field": "base_spend_native",
             "fx_authority": "mezan_ad_account_cost_settings_v2",
             "reconciliation_status": reconciliation_status,
+            "closed_reconciliation_status": closed_reconciliation_status,
             "financial_status": financial_status,
             "source_sync_run_ids": sorted({
                 str(run_id)

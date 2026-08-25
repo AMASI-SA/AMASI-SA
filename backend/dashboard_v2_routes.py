@@ -954,8 +954,16 @@ async def build_mezan_v2_ads(
     )
     snap_quality = snapchat.get("quality") if isinstance(snapchat.get("quality"), dict) else {}
     amount_complete = snap_quality.get("amount_complete") is True
+    amount_available = (
+        amount_complete or snap_quality.get("amount_available") is True
+    )
+    provisional_amount = (
+        amount_available
+        and not amount_complete
+        and snap_quality.get("provisional") is True
+    )
     bank_commissions: dict[str, Any] | None = None
-    if amount_complete:
+    if amount_available:
         base_bank = {
             key: value for key, value in account_costs.items()
             if key != "platform_rows"
@@ -1035,7 +1043,7 @@ async def build_mezan_v2_ads(
         for provider, rows in platform_rows.items()
         if provider != "snapchat"
     }
-    if amount_complete:
+    if amount_available:
         provider_metrics["snapchat"] = _aggregate_provider_rows(
             platform_rows["snapchat"], start, end
         )
@@ -1051,6 +1059,8 @@ async def build_mezan_v2_ads(
         "data_state": snap_quality.get("data_state") or "unknown_incomplete",
         "coverage_complete": snap_quality.get("coverage_complete") is True,
         "amount_complete": amount_complete,
+        "amount_available": amount_available,
+        "provisional": provisional_amount,
     })
     known_subtotal = round(sum(
         float(value)
@@ -1059,7 +1069,7 @@ async def build_mezan_v2_ads(
     ), 2)
     total = (
         round(known_subtotal + float(breakdown["snapchat"]), 2)
-        if amount_complete and breakdown["snapchat"] is not None
+        if amount_available and breakdown["snapchat"] is not None
         else None
     )
     return {
@@ -1069,8 +1079,16 @@ async def build_mezan_v2_ads(
         "history": history,
         "providers": provider_metrics,
         "spend_quality": {
-            "status": "complete" if amount_complete else "incomplete",
+            "status": (
+                "complete"
+                if amount_complete
+                else "provisional"
+                if provisional_amount
+                else "incomplete"
+            ),
             "amount_complete": amount_complete,
+            "amount_available": amount_available,
+            "provisional": provisional_amount,
             "known_subtotal_sar": known_subtotal,
             "snapchat": snap_quality,
         },
@@ -1298,11 +1316,24 @@ def make_dashboard_v2_router(
         operating_total = salary_total + recurring_total
         product_total = product_cost["total"]
         ads_total = ads["total"]
+        ads_quality = ads.get("spend_quality") or {}
+        ads_amount_available = (
+            ads_total is not None
+            and (
+                ads_quality.get("amount_available") is True
+                or ads_quality.get("amount_complete") is True
+            )
+        )
         ads_amount_complete = (
             ads_total is not None
-            and (ads.get("spend_quality") or {}).get("amount_complete") is True
+            and ads_quality.get("amount_complete") is True
         )
-        if ads_amount_complete:
+        ads_amount_provisional = (
+            ads_amount_available
+            and not ads_amount_complete
+            and ads_quality.get("provisional") is True
+        )
+        if ads_amount_available:
             totals["net_profit"] = round(
                 _float(totals.get("net_profit"))
                 + sales_delta
@@ -1330,7 +1361,7 @@ def make_dashboard_v2_router(
                     + previous_ads - float(ads_total),
                     2,
                 )
-                if ads_amount_complete
+                if ads_amount_available
                 else None
             )
         if config.get("deduct_operating_expenses", True):
@@ -1350,10 +1381,12 @@ def make_dashboard_v2_router(
             "total_ads_cost": ads_total,
             "daily_ads_total": ads_total,
             "ads_spend_data_complete": ads_amount_complete,
+            "ads_spend_amount_available": ads_amount_available,
+            "ads_spend_provisional": ads_amount_provisional,
             "daily_products_total": product_total,
             "daily_costs_total": (
                 round(product_total + float(ads_total), 2)
-                if ads_amount_complete
+                if ads_amount_available
                 else None
             ),
             "daily_expenses_total": product_total,
@@ -1368,12 +1401,12 @@ def make_dashboard_v2_router(
             "operating_daily_other_total": 0.0,
             "overall_roas": (
                 round(_float(totals.get("total_sales")) / float(ads_total), 2)
-                if ads_amount_complete and float(ads_total) > 0
+                if ads_amount_available and float(ads_total) > 0
                 else None
             ),
             "avg_cost_per_order": (
                 round(float(ads_total) / int(totals.get("total_orders") or 0), 2)
-                if ads_amount_complete
+                if ads_amount_available
                 and float(ads_total) > 0
                 and int(totals.get("total_orders") or 0) > 0
                 else None
@@ -1389,7 +1422,7 @@ def make_dashboard_v2_router(
             "legacy_analyses_count": 0,
             "analyses_count": 0,
         })
-        if ads_amount_complete and ads.get("bank_commissions") is not None:
+        if ads_amount_available and ads.get("bank_commissions") is not None:
             merge_ad_bank_fees_into_dashboard(response, ads)
         else:
             totals["ad_bank_commission_fees"] = None
