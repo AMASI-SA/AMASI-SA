@@ -65,4 +65,5 @@ test("the advanced dashboard retains governed date refresh and latest-snapshot b
     );
     expect(advancedDashboardSource).toContain("القرارات غير مفعلة");
     expect(advancedDashboardSource).toContain("التغطية غير مكتملة");
+    expect(advancedDashboardSource).toContain("مصالح مباشرة مع Snapchat");
 });
