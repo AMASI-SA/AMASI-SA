@@ -346,6 +346,15 @@ function AdsCard({ ads, unifiedShadow }) {
     const shadowPassed = unifiedShadow?.shadow_passed === true;
     const shadowComparison = unifiedShadow?.comparison?.spend_sar || {};
     const shadowDelta = finiteFinancialValue(shadowComparison.delta);
+    const shadowLegacy = finiteFinancialValue(shadowComparison.legacy);
+    const shadowUnified = finiteFinancialValue(shadowComparison.unified);
+    const shadowCoverageComplete = unifiedShadow?.comparison?.coverage_complete === true;
+    const shadowDetails = [
+        shadowLegacy === null ? null : `الحالي ${money(shadowLegacy)}`,
+        shadowUnified === null ? null : `V2 ${money(shadowUnified)}`,
+        shadowDelta === null ? null : `الفرق ${money(shadowDelta)}`,
+        unifiedShadow?.comparison && !shadowCoverageComplete ? "التغطية غير مكتملة" : null,
+    ].filter(Boolean).join(" · ");
     return <Panel className="border-amber-200" testid="advanced-ads-chart">
         <div className="flex h-14 items-center justify-between border-b border-amber-700 bg-amber-600 px-4 text-white"><h2 className="flex items-center gap-2 font-extrabold"><CircleDollarSign className="h-5 w-5" />مصروفات منصات الإعلانات</h2><div className="rounded-lg border border-white/30 bg-white/15 p-1 text-[10px] font-bold"><button onClick={() => setMonthly(false)} className={`rounded-md px-2 py-1 ${!monthly ? "bg-white text-amber-800" : ""}`}>يومي</button><button onClick={() => setMonthly(true)} className={`rounded-md px-2 py-1 ${monthly ? "bg-white text-amber-800" : ""}`}>شهري</button></div></div>
         <div data-testid="advanced-snapchat-unified-shadow" className={`border-b px-3 py-2 text-[10px] font-extrabold ${!unifiedShadow ? "bg-slate-50 text-slate-500" : shadowPassed ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-900"}`}>
@@ -353,7 +362,7 @@ function AdsCard({ ads, unifiedShadow }) {
                 ? "Snapchat V2 Shadow · جارٍ التحقق من التطابق"
                 : shadowPassed
                     ? `Snapchat V2 Shadow مطابق${shadowDelta === null ? "" : ` · الفرق ${money(shadowDelta)} ر.س`} · القرارات غير مفعلة`
-                    : `Snapchat V2 Shadow غير معتمد · ${unifiedShadow.reason || "يوجد اختلاف أو نقص تغطية"}`}
+                    : `Snapchat V2 Shadow غير معتمد · ${shadowDetails || unifiedShadow.reason || "يوجد اختلاف أو نقص تغطية"}`}
         </div>
         <div className="h-[190px] px-2 pt-3" dir="ltr"><ResponsiveContainer width="99%" height="100%" minWidth={0} minHeight={0}><LineChart data={plotRows} margin={{ top: 6, right: 6, left: 0, bottom: 4 }}><CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" /><XAxis dataKey="label" tick={{ fontSize: 9 }} minTickGap={8} interval="preserveStartEnd" /><YAxis tick={{ fontSize: 9 }} width={38} /><Tooltip formatter={(value, name) => [`${money(value)} ر.س`, name]} labelFormatter={(value) => `الوقت: ${value}`} contentStyle={{ direction: "rtl", borderRadius: 10, fontFamily: "Cairo" }} />{PLATFORM_META.map((p) => <Line key={p.key} type="monotone" dataKey={p.key} name={p.label} stroke={p.color} strokeWidth={2.5} dot={false} activeDot={{ r: 3 }} connectNulls={false} />)}</LineChart></ResponsiveContainer></div>
         <div className="grid grid-cols-4 gap-1 p-2">{PLATFORM_META.map((p) => { const value = p.key === "google" ? (breakdown.google ?? breakdown.google_transitional) : breakdown[p.key]; const state = spendQuality?.[p.key]?.data_state; return <div key={p.key} className="rounded-lg border p-2 text-center"><p className="text-[9px] font-bold" style={{ color: p.color }}>{p.label}</p><p className="num mt-1 text-[10px] font-black">{dashboardSpendDisplay(value, state)}</p></div>; })}</div>
