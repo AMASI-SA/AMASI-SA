@@ -18,6 +18,13 @@ class Cursor:
     async def to_list(self, length=None):
         return self.rows[:length]
 
+    def sort(self, *_args, **_kwargs):
+        return self
+
+    def limit(self, length):
+        self.rows = self.rows[:length]
+        return self
+
 
 class Collection:
     def __init__(self, rows):
@@ -32,6 +39,14 @@ class Collection:
             and row.get("user_id") == query["user_id"]
             and row.get("ad_account_id") == query["ad_account_id"]
         ])
+
+
+class DailyCollection:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def find(self, _query, _projection):
+        return Cursor(self.rows)
 
 
 class Database(dict):
@@ -111,6 +126,65 @@ def test_reconciliation_proof_requires_every_day_in_the_range():
         date_from=date(2026, 8, 23),
         date_to=date(2026, 8, 24),
     ) == "partial"
+
+
+@pytest.mark.asyncio
+async def test_entity_daily_series_uses_exact_v2_total_facts(monkeypatch):
+    async def selected(*_args, **_kwargs):
+        return {
+            "ad_account_id": "snap-1",
+            "display_name": "Snap Account",
+            "currency": "USD",
+            "timezone": "America/Los_Angeles",
+        }
+
+    async def cost(*_args, **_kwargs):
+        return {"exchange_rate_to_sar": 3.75}
+
+    monkeypatch.setattr(reader, "get_selected_account", selected)
+    monkeypatch.setattr(reader, "calculate_cost_components", cost)
+    db = Database({
+        "mezan_snapchat_daily_total_facts_v2": DailyCollection([{
+            "external_id": "campaign-1",
+            "entity_type": "campaign",
+            "report_date": "2026-08-24",
+            "account_timezone": "America/Los_Angeles",
+            "currency": "USD",
+            "spend_native": 100.0,
+            "impressions": 1000,
+            "swipes": 50,
+            "video_views": 500,
+            "view_completion": 0.4,
+            "view_content": 40,
+            "add_to_cart": 10,
+            "start_checkout": 8,
+            "add_billing": 6,
+            "purchases": 4,
+            "purchase_value_native": 250.0,
+            "coverage": {"status": "complete"},
+        }])
+    })
+
+    result = await reader.load_snapchat_v2_entity_daily_series(
+        db,
+        "owner-1",
+        entity_level="campaign",
+        entity_ids=["campaign-1"],
+        date_from=date(2026, 8, 24),
+        date_to=date(2026, 8, 24),
+        timezone_name="America/Los_Angeles",
+    )
+
+    assert result["contract_version"] == "unified-marketing-data-v1"
+    assert result["entity_level"] == "campaign"
+    assert result["source_fact_count"] == 1
+    assert result["decision_eligibility"]["eligible"] is False
+    row = result["rows"][0]
+    assert row["delivery"]["spend_sar"]["amount"] == 375.0
+    assert row["platform_outcomes"]["conversions"] == 4
+    assert row["lineage"]["source_collection"] == (
+        "mezan_snapchat_daily_total_facts_v2"
+    )
 
 
 @pytest.mark.asyncio
