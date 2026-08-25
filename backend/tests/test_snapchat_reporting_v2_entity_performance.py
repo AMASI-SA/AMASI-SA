@@ -875,6 +875,63 @@ async def test_salla_account_total_unions_source_and_exact_campaign_without_gues
     assert audit["2003"]["match_method"] == "foreign_platform"
 
 
+@pytest.mark.asyncio
+async def test_salla_account_total_uses_salla_order_date_not_snapchat_timezone_day():
+    db = OrderDB(
+        [
+            {
+                "order_number": "3001",
+                "order_date": "2026-08-23",
+                # The account-local date is still Aug 22 in Los Angeles.
+                "created_at": "2026-08-23T02:00:00+00:00",
+                "order_status": "completed",
+                "total_amount": 100,
+                "campaign_id": "c1",
+                "source": "snapchat",
+            },
+            {
+                "order_number": "3002",
+                "order_date": "2026-08-22",
+                # This one is Aug 23 in Los Angeles but belongs to Aug 22 in Salla.
+                "created_at": "2026-08-23T10:00:00+00:00",
+                "order_status": "completed",
+                "total_amount": 200,
+                "campaign_id": "c1",
+            },
+        ]
+    )
+
+    result = await load_salla_campaign_outcomes(
+        db,
+        "u1",
+        account_id="a1",
+        date_from=datetime(2026, 8, 23, tzinfo=timezone.utc).date(),
+        date_to=datetime(2026, 8, 23, tzinfo=timezone.utc).date(),
+        timezone_name="America/Los_Angeles",
+        identities=[
+            {
+                "account_id": "a1",
+                "campaign_id": "c1",
+                "campaign_name": "Campaign",
+            }
+        ],
+    )
+
+    # The account card follows Salla's own calendar date.
+    assert result["summary"]["snapchat_attributed_orders"] == 1
+    assert result["summary"]["snapchat_attributed_sales_sar"] == 100.0
+    assert result["summary"]["account_period_campaign_matched_orders"] == 1
+    assert result["summary"]["snapchat_attribution_gap_orders"] == 0
+    assert result["summary"]["campaign_match_coverage_pct"] == 100.0
+    assert result["summary"]["account_date_scope"] == "salla_order_date"
+
+    # Campaign detail keeps the Snapchat account-timezone interpretation.
+    assert result["by_campaign"]["c1"] == {"orders": 1, "sales_sar": 200.0}
+    assert result["summary"]["campaign_matched_orders"] == 1
+    assert result["orders_total"] == 1
+    assert result["orders"][0]["order_number"] == "3002"
+
+
 def test_snapchat_adapter_emits_provider_neutral_contract_and_blocks_decisions():
     report = build_snapchat_v2_unified_report(
         account_value={

@@ -1,8 +1,9 @@
 """Read-only Salla outcomes for Snapchat V2 account and campaign reporting.
 
 Account totals union Salla's explicit Snapchat source with exact campaign
-matches. Campaign rows stay exact-only, so source-only orders are never
-distributed or guessed across campaigns.
+matches on Salla's own ``order_date`` calendar. Campaign rows stay exact-only
+on the selected Snapchat timezone, so source-only orders are never distributed
+or guessed across campaigns.
 """
 from __future__ import annotations
 
@@ -292,16 +293,10 @@ async def load_salla_campaign_outcomes(
             local_date = _text(order.get("order_date"))[:10]
             local_created_at = local_date or None
             date_source = "order_date_fallback"
-        if not local_date or local_date < from_value or local_date > to_value:
-            continue
-
-        counters["total_salla_created_orders"] += 1
+        salla_order_date = _text(order.get("order_date"))[:10]
+        account_date = salla_order_date or local_date
         financial = _matches_any(order.get("order_status"), included_statuses)
         amount = _number(order.get("total_amount") or order.get("total"))
-        if financial:
-            counters["total_financial_orders"] += 1
-            total_financial_sales += amount
-
         source_platform = canonical_ad_platform(order)
         key, match_method = _match_order_campaign(
             order,
@@ -310,14 +305,29 @@ async def load_salla_campaign_outcomes(
         )
         reported_snapchat_source = source_platform == "snapchat"
         snapchat_attributed = reported_snapchat_source or key is not None
-        if reported_snapchat_source:
-            counters["salla_reported_snapchat_orders"] += 1
-        if snapchat_attributed:
-            counters["snapchat_attributed_orders"] += 1
-            snapchat_attributed_sales += amount
-            if financial:
-                counters["snapchat_attributed_financial_orders"] += 1
-                snapchat_attributed_financial_sales += amount
+        account_period_included = bool(
+            account_date
+            and from_value <= account_date <= to_value
+        )
+        if account_period_included:
+            if reported_snapchat_source:
+                counters["salla_reported_snapchat_orders"] += 1
+            if snapchat_attributed:
+                counters["snapchat_attributed_orders"] += 1
+                snapchat_attributed_sales += amount
+                if key is not None:
+                    counters["account_period_campaign_matched_orders"] += 1
+                if financial:
+                    counters["snapchat_attributed_financial_orders"] += 1
+                    snapchat_attributed_financial_sales += amount
+
+        if not local_date or local_date < from_value or local_date > to_value:
+            continue
+
+        counters["total_salla_created_orders"] += 1
+        if financial:
+            counters["total_financial_orders"] += 1
+            total_financial_sales += amount
         campaign_id = None
         campaign_name = None
         if key is not None:
@@ -384,9 +394,12 @@ async def load_salla_campaign_outcomes(
     )
     matched_financial_orders = int(counters["campaign_matched_financial_orders"])
     snapchat_attributed_orders = int(counters["snapchat_attributed_orders"])
+    account_period_campaign_matched_orders = int(
+        counters["account_period_campaign_matched_orders"]
+    )
     campaign_match_coverage_pct = (
         round(
-            int(counters["campaign_matched_orders"])
+            account_period_campaign_matched_orders
             / snapchat_attributed_orders
             * 100,
             2,
@@ -444,10 +457,13 @@ async def load_salla_campaign_outcomes(
                 snapchat_attributed_financial_sales,
                 2,
             ),
+            "account_period_campaign_matched_orders": (
+                account_period_campaign_matched_orders
+            ),
             "snapchat_attribution_gap_orders": max(
                 0,
                 snapchat_attributed_orders
-                - int(counters["campaign_matched_orders"]),
+                - account_period_campaign_matched_orders,
             ),
             "campaign_match_coverage_pct": campaign_match_coverage_pct,
             "non_campaign_orders": int(counters["non_campaign_orders"]),
@@ -464,6 +480,7 @@ async def load_salla_campaign_outcomes(
             ),
             "account_order_scope": "all_orders_created_in_period",
             "account_sales_scope": "gross_order_total_all_statuses",
+            "account_date_scope": "salla_order_date",
             "non_campaign_distribution_allowed": False,
             "profitability_scope": (
                 "sales_minus_product_cost_minus_ad_spend_before_payment_shipping_bnpl_and_operating_allocations"
