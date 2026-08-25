@@ -263,22 +263,39 @@ async def load_hourly_facts(
             normalized_action_time,
             selected_windows,
         )
-    cursor = db[SNAPCHAT_HOURLY_FACTS_COLLECTION].find(query, {"_id": 0})
-    if hasattr(cursor, "sort"):
-        cursor = cursor.sort([("hour_start_utc", 1), ("entity_type", 1), ("external_id", 1)])
-    if hasattr(cursor, "limit"):
-        cursor = cursor.limit(limit + 1)
-    if hasattr(cursor, "to_list"):
-        try:
-            rows = list(await cursor.to_list(length=limit + 1))
-        except TypeError:
-            rows = list(await cursor.to_list(limit + 1))
-    else:
-        rows = []
+    async def _read_rows(selected_query: dict[str, Any]) -> list[dict[str, Any]]:
+        cursor = db[SNAPCHAT_HOURLY_FACTS_COLLECTION].find(
+            selected_query,
+            {"_id": 0},
+        )
+        if hasattr(cursor, "sort"):
+            cursor = cursor.sort(
+                [("hour_start_utc", 1), ("entity_type", 1), ("external_id", 1)]
+            )
+        if hasattr(cursor, "limit"):
+            cursor = cursor.limit(limit + 1)
+        if hasattr(cursor, "to_list"):
+            try:
+                return list(await cursor.to_list(length=limit + 1))
+            except TypeError:
+                return list(await cursor.to_list(limit + 1))
+        selected_rows: list[dict[str, Any]] = []
         async for row in cursor:
-            rows.append(row)
-            if len(rows) > limit:
+            selected_rows.append(row)
+            if len(selected_rows) > limit:
                 break
+        return selected_rows
+
+    rows = await _read_rows(query)
+    # An attribution-window change creates a new immutable fact series. During
+    # its first shadow sync the selected 28d-click/7d-view series may not exist
+    # yet. Returning confirmed facts from the previous series is safer than
+    # publishing false zero spend/conversions. Keep the action-report-time
+    # boundary so conversion-time and impression-time facts never mix.
+    if not rows and action_report_time and "attribution_key" in query:
+        fallback_query = dict(query)
+        fallback_query.pop("attribution_key", None)
+        rows = await _read_rows(fallback_query)
     if len(rows) > limit:
         raise ValueError("Snapchat hourly fact read was truncated")
     return rows
