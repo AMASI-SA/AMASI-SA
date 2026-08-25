@@ -1095,6 +1095,86 @@ async def _fetch_salla_order_items(
     ]
 
 
+def _order_item_sku(item: dict) -> str:
+    product = item.get("product") or {}
+    variant = item.get("variant") or {}
+    return _str(
+        item.get("sku")
+        or (product.get("sku") if isinstance(product, dict) else None)
+        or (variant.get("sku") if isinstance(variant, dict) else None)
+    )
+
+
+async def _enrich_missing_order_item_skus(
+    db, user_id: str, items: list[dict],
+) -> list[dict]:
+    """Resolve omitted order-item SKUs from Salla's read-only catalogue.
+
+    Order Items can carry only a variant/product id. Qoyod requires the real
+    merchant SKU, so query Salla's documented variant/product detail endpoint
+    rather than inventing an accounting identity. Failed or blank lookups stay
+    blank and are refused by the existing Qoyod SKU guard.
+    """
+    cache: dict[str, str] = {}
+    enriched: list[dict] = []
+    for original in items:
+        item = dict(original)
+        if _order_item_sku(item):
+            enriched.append(item)
+            continue
+
+        product = item.get("product") or {}
+        variant = item.get("variant") or {}
+        variant_id = _str(
+            item.get("product_sku_id")
+            or item.get("variant_id")
+            or (variant.get("id") if isinstance(variant, dict) else None)
+        )
+        product_id = _str(
+            item.get("product_id")
+            or (product.get("id") if isinstance(product, dict) else None)
+        )
+        candidates = []
+        if variant_id:
+            candidates.append((
+                f"/products/variants/{variant_id}", "variant_details"))
+        if product_id:
+            candidates.append((f"/products/{product_id}", "product_details"))
+
+        for endpoint, source in candidates:
+            sku = cache.get(endpoint)
+            if sku is None:
+                try:
+                    response = await call_salla(
+                        db, user_id, "GET", endpoint)
+                    payload = (
+                        response.get("data")
+                        if isinstance(response, dict)
+                        else None
+                    )
+                    sku = _str(
+                        payload.get("sku")
+                        if isinstance(payload, dict)
+                        else None
+                    )
+                except Exception as exc:  # keep the hard SKU guard closed
+                    logger.warning(
+                        "Could not resolve Salla SKU from %s: %s",
+                        endpoint, exc,
+                    )
+                    sku = ""
+                cache[endpoint] = sku
+            if sku:
+                item["sku"] = sku
+                item["_mezan_sku_resolution"] = {
+                    "source": source,
+                    "endpoint": endpoint,
+                }
+                break
+        enriched.append(item)
+    return enriched
+
+
 _SHIPMENT_CLEARABLE_FIELDS = {
     "label",
     "label_url",
@@ -1319,6 +1399,7 @@ async def _fetch_salla_order_details(
             details.get("shipments"),
         ),
     )
+    items = await _enrich_missing_order_item_skus(db, user_id, items)
 
     enriched_details = dict(details)
     enriched_details = await _enrich_order_receiving_bank(
