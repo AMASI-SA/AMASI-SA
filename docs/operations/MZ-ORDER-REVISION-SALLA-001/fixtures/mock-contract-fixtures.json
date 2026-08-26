@@ -1,0 +1,20 @@
+{
+  "classification": "MOCK_CONTRACT_FIXTURE",
+  "result": "NOT_EXECUTED",
+  "source": "sanitized shapes based on documented Salla Merchant API contracts",
+  "cases": [
+    {"id": "simple-product", "product": {"id": 1001, "sku": "P0-SIMPLE", "options": []}},
+    {"id": "size-color", "product": {"id": 1002, "sku": "P0-VARIANT", "options": [{"id": 2101, "type": "radio", "value": [{"id": 3101, "name": "size-a"}]}, {"id": 2102, "type": "radio", "value": [{"id": 3201, "name": "color-a"}]}]}},
+    {"id": "text-option", "product": {"id": 1003, "sku": "P0-TEXT", "options": [{"id": 2103, "type": "text", "value": [{"id": 3301, "name": "sample-redacted"}]}]}},
+    {"id": "checkbox-option", "product": {"id": 1004, "sku": "P0-CHECK", "options": [{"id": 2104, "type": "checkbox", "value": [{"id": 3401, "name": "yes"}]}]}},
+    {"id": "multiple-quantity", "request": {"quantity": 3}},
+    {"id": "change-quantity", "before": {"quantity": 1}, "request": {"quantity": 2}},
+    {"id": "change-price", "before": {"price": 100}, "request": {"price": 120}},
+    {"id": "change-options", "before": {"value_id": 3101}, "request": {"value_id": 3102}},
+    {"id": "replacement", "steps": ["create_replacement", "fetch_confirm_replacement", "delete_old"]},
+    {"id": "delete-item", "method": "DELETE", "expected": "documented success envelope"},
+    {"id": "webhook-duplicate", "events": [{"id": "evt-1", "type": "order.products.updated"}, {"id": "evt-1", "type": "order.products.updated"}]},
+    {"id": "webhook-out-of-order", "events": [{"id": "evt-2", "occurred_at": "2026-01-01T00:00:02Z"}, {"id": "evt-1", "occurred_at": "2026-01-01T00:00:01Z"}]},
+    {"id": "success-timeout", "write_result": "unknown_to_caller", "required_next_action": "fetch_before_retry"}
+  ]
+}

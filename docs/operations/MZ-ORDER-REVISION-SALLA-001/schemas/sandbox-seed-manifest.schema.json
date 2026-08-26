@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MZ-ORDER-REVISION-SALLA-001 Sandbox Seed Manifest",
+  "type": "object",
+  "required": ["classification", "store_id", "orders", "products"],
+  "properties": {
+    "classification": {"const": "SANDBOX_SEED_MANIFEST"},
+    "store_id": {"type": ["string", "integer"]},
+    "orders": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["state", "order_id", "order_number", "item_id", "product_id", "sku", "payment_method"]
+      }
+    },
+    "products": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["kind", "product_id", "sku"]
+      }
+    }
+  }
+}

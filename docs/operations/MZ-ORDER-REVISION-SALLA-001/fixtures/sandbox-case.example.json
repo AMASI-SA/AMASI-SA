@@ -1,0 +1,16 @@
+{
+  "classification": "SANDBOX_CASE_TEMPLATE",
+  "id": "pending-create-simple",
+  "method": "POST",
+  "path": "/orders/items",
+  "before_fetch_path": "/orders/items?order_id=REPLACE_WITH_SANDBOX_ORDER_ID",
+  "after_fetch_path": "/orders/items?order_id=REPLACE_WITH_SANDBOX_ORDER_ID",
+  "body": {
+    "order_id": "REPLACE_WITH_SANDBOX_ORDER_ID",
+    "product_id": "REPLACE_WITH_SANDBOX_PRODUCT_ID",
+    "quantity": 1
+  },
+  "retry_once": false,
+  "simulate_lost_response": false,
+  "steps": []
+}

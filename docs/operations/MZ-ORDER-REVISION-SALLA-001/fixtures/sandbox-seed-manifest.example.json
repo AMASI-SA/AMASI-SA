@@ -1,0 +1,21 @@
+{
+  "classification": "SANDBOX_SEED_MANIFEST",
+  "store_id": "",
+  "orders": [
+    {"state": "pending", "order_id": "", "order_number": "", "item_id": "", "product_id": "", "sku": "", "payment_method": ""},
+    {"state": "under_review", "order_id": "", "order_number": "", "item_id": "", "product_id": "", "sku": "", "payment_method": ""},
+    {"state": "in_progress", "order_id": "", "order_number": "", "item_id": "", "product_id": "", "sku": "", "payment_method": ""},
+    {"state": "paid", "order_id": "", "order_number": "", "item_id": "", "product_id": "", "sku": "", "transaction_id": "", "payment_method": ""},
+    {"state": "partially_paid", "order_id": "", "order_number": "", "item_id": "", "product_id": "", "sku": "", "transaction_id": "", "payment_method": ""},
+    {"state": "completed", "order_id": "", "order_number": "", "item_id": "", "product_id": "", "sku": "", "payment_method": ""},
+    {"state": "cancelled", "order_id": "", "order_number": "", "item_id": "", "product_id": "", "sku": "", "payment_method": ""}
+  ],
+  "products": [
+    {"kind": "simple", "product_id": "", "sku": ""},
+    {"kind": "size_color_variant", "product_id": "", "sku": "", "option_ids": [], "value_ids": []},
+    {"kind": "text_option", "product_id": "", "sku": "", "option_ids": []},
+    {"kind": "checkbox_yes_no", "product_id": "", "sku": "", "option_ids": [], "value_ids": []},
+    {"kind": "multi_quantity", "product_id": "", "sku": ""},
+    {"kind": "replacement", "product_id": "", "sku": ""}
+  ]
+}

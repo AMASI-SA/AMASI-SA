@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MZ-ORDER-REVISION-SALLA-001 Sanitized Evidence Record",
+  "type": "object",
+  "required": [
+    "classification", "timestamp", "test_case_id", "order_status_before",
+    "request", "response_status", "response_body", "source_item_id_before",
+    "source_item_id_after", "order_total_before", "order_total_after",
+    "payment_state_before", "payment_state_after", "webhook_events",
+    "retry_behavior", "final_fetch_result", "verdict"
+  ],
+  "properties": {
+    "classification": {"enum": ["SALLA_SANDBOX_EVIDENCE", "MOCK_CONTRACT_FIXTURE"]},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "test_case_id": {"type": "string"},
+    "request": {"type": "object"},
+    "webhook_events": {"type": "array"},
+    "verdict": {"enum": ["PASS", "FAIL", "BLOCKED", "NOT_EXECUTED"]}
+  }
+}

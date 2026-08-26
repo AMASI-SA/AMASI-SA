@@ -18,12 +18,14 @@ accepts it for every order or payment status.
 
 No Salla Sandbox base URL, access token, test-store identity, or seeded Sandbox
 order identifiers were available in the execution environment. The following
-variables were checked by presence only; no secret value was printed:
+dedicated variables are required; no secret value is printed:
 
 - `SALLA_SANDBOX_ACCESS_TOKEN`
-- `SALLA_SANDBOX_TOKEN`
 - `SALLA_SANDBOX_BASE_URL`
-- `SALLA_TEST_STORE_ID`
+- `SALLA_SANDBOX_STORE_ID`
+- `SALLA_SANDBOX_SEED_MANIFEST`
+- `SALLA_SANDBOX_EVIDENCE_DIR`
+- `SALLA_SANDBOX_RUN_WRITES` (must equal `true` for writes)
 
 All were absent. Consequently, the state matrix below is intentionally marked
 `NOT_EXECUTED`; filling it with inferred pass/fail results would be false
@@ -142,3 +144,25 @@ P0 is complete only when:
   `COMPLETE` with evidence references.
 
 Until then, P1 is not authorized to start under the approved phase gate.
+
+## Runner commands
+
+From the repository root, populate the dedicated Sandbox variables from
+`.env.salla-sandbox.example`, then run the read-only gate:
+
+```powershell
+python scripts/research/salla_order_item_contract_runner.py readiness
+```
+
+After readiness succeeds and the owner explicitly opts into destructive
+Sandbox writes, run one reviewed case at a time:
+
+```powershell
+$env:SALLA_SANDBOX_RUN_WRITES='true'
+python scripts/research/salla_order_item_contract_runner.py run --case-file docs/operations/MZ-ORDER-REVISION-SALLA-001/fixtures/sandbox-case.example.json --webhook-events C:\path\to\sanitized-webhook-events.json
+```
+
+The runner never loads production variables. A missing Sandbox configuration
+returns `SALLA_SANDBOX_NOT_CONFIGURED`. Mock transport output is always
+`MOCK_CONTRACT_FIXTURE / NOT_EXECUTED`; only an actual HTTP Sandbox transport
+can emit `SALLA_SANDBOX_EVIDENCE`.
