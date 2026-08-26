@@ -812,6 +812,7 @@ function ProductSummaryTile({ label, value, tone = "slate" }) {
 function ProductProfitRow({ row, href }) {
     const isMissing = row.cost_status === "missing";
     const isFallback = row.cost_status === "salla_fallback";
+    const hasPartialCost = isMissing && row.total_cost != null;
     const profit = row.net_profit == null ? null : Number(row.net_profit);
     return (
         <tr
@@ -832,7 +833,11 @@ function ProductProfitRow({ row, href }) {
                         <span className="mt-1 block text-xs text-slate-500">{row.sku || "بدون SKU"}</span>
                         {(isMissing || isFallback) && (
                             <span className="mt-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-extrabold text-amber-900">
-                                {isMissing ? "بدون تكلفة — أضف التكلفة" : "تكلفة سلة فقط — أضف تكلفة ميزان"}
+                                {isMissing
+                                    ? hasPartialCost
+                                        ? "تكلفة جزئية — أضف التكلفة الأساسية"
+                                        : "بدون تكلفة — أضف التكلفة"
+                                    : "تكلفة سلة فقط — أضف تكلفة ميزان"}
                             </span>
                         )}
                     </span>
