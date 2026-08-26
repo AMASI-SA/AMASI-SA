@@ -1126,10 +1126,14 @@ class SnapchatManagementProvider:
         plural: str,
         singular: str,
         params: dict[str, Any] | None = None,
+        include_limit: bool = True,
     ) -> list[dict[str, Any]]:
         """Read every bounded, trusted page or fail without using partial data."""
         next_path = path
-        next_params = {"limit": 1000, **(params or {})}
+        next_params = {
+            **({"limit": 1000} if include_limit else {}),
+            **(params or {}),
+        }
         rows: list[dict[str, Any]] = []
         seen: set[str] = set()
         for page in range(MAX_MANAGEMENT_LIST_PAGES):
@@ -1279,6 +1283,10 @@ class SnapchatManagementProvider:
                 "optimization_goal": optimization_goal,
                 "conversion_window": conversion_window,
             },
+            # Snapchat documents only these three filters for the eligibility
+            # endpoint.  Sending the generic catalogue ``limit`` parameter
+            # makes the provider reject the otherwise valid read.
+            include_limit=False,
         )
         matches: list[dict[str, Any]] = []
         for value in eligibility_rows:
