@@ -217,3 +217,24 @@ def test_historical_catalog_does_not_subtract_later_allocations():
 
     assert base["summary"]["total_quantity"] == 11
     assert base["products"][0]["quantity"] == 11
+
+
+def test_incident_recovered_lines_are_allocated_before_existing_reviewed_lines():
+    result = aggregate_reviewed_products(
+        [
+            (_order("existing", [_item("existing-line", "p-11", sku="AMS11353")]), {
+                "reviewed_at": "2026-08-24T10:00:00+00:00",
+                "items": [],
+            }),
+            (_order("recovered", [_item("recovered-line", "p-11", sku="AMS11353")]), {
+                "reviewed_at": "2026-08-25T01:00:00+00:00",
+                "incident_recovery_id": "recovery-1",
+                "items": [],
+            }),
+        ],
+        [],
+    )
+
+    lines = result["products"][0]["source_lines"]
+    assert [line["order_number"] for line in lines] == ["recovered", "existing"]
+    assert lines[0]["incident_recovery_id"] == "recovery-1"
