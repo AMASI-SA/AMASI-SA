@@ -997,6 +997,16 @@ async def test_eligibility_reads_trusted_pagination_and_blocks_ineligible():
         )
     assert blocked.value.detail["code"] == "snapchat_management_pixel_ineligible"
     assert len(provider.calls) == 2
+    assert provider.calls[0] == (
+        "GET",
+        "/pixels/pixel-1/campaign_eligibilities",
+        {
+            "ad_account_id": "account-1",
+            "optimization_goal": "PIXEL_PURCHASE",
+            "conversion_window": "SWIPE_28DAY_VIEW_1DAY",
+        },
+    )
+    assert "limit" not in provider.calls[0][2]
 
 
 class _CreateExecutionProvider:
