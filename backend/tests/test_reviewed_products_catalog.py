@@ -71,6 +71,40 @@ def test_same_salla_product_across_fifty_orders_becomes_one_card():
     assert product["source_lines"][0]["shipping_company"] == "iMile"
 
 
+def test_missing_sku_and_product_id_rejoin_unique_catalog_product_card():
+    named_product = "فستان بناتي أنيق بتصميم النخيل واللون الأخضر"
+    result = aggregate_reviewed_products(
+        [
+            (_order("with-id", [_item(
+                "line-with-id", "p-13062", quantity=6,
+                name=named_product, sku="AMS13062",
+            )]), {"items": []}),
+            (_order("legacy", [{**_item(
+                "line-without-id", "", quantity=1,
+                name=named_product, sku="",
+            ), "options_normalized": {}}]), {
+                "items": [{
+                    "order_item_id": "line-without-id",
+                    "specifications_snapshot": {"مقاس الطفل": "8 سنوات"},
+                }],
+            }),
+        ],
+        [{
+            "salla_product_id": "p-13062",
+            "name": named_product,
+            "sku": "AMS13062",
+        }],
+    )
+
+    assert result["summary"]["unique_product_count"] == 1
+    product = result["products"][0]
+    assert product["quantity"] == 7
+    assert product["sku"] == "AMS13062"
+    assert product["group_key"] == "product:p-13062"
+    legacy = next(row for row in product["source_lines"] if row["order_number"] == "legacy")
+    assert legacy["options_normalized"] == {"مقاس الطفل": "8 سنوات"}
+
+
 def test_thirty_allocated_units_leave_twenty_available():
     base = aggregate_reviewed_products(
         [(

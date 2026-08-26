@@ -218,6 +218,7 @@ def aggregate_reviewed_products(
     product_documents: list[dict[str, Any]],
 ) -> dict[str, Any]:
     product_lookup: dict[str, dict[str, Any]] = {}
+    products_by_name: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for product in product_documents:
         for identity in (
             product.get("salla_product_id"),
@@ -227,6 +228,9 @@ def aggregate_reviewed_products(
             value = _text(identity)
             if value:
                 product_lookup[value] = product
+        normalized_name = _normalized(product.get("name"))
+        if normalized_name:
+            products_by_name[normalized_name].append(product)
 
     category_catalog = build_category_catalog(product_documents)
     categories_by_id = {
@@ -265,10 +269,32 @@ def aggregate_reviewed_products(
             if quantity_units <= 0:
                 continue
             total_source_lines += 1
-            key = _product_group_key(item)
-            product_id = _text(item.get("product_id") or item.get("parent_product_id"))
-            sku = _text(item.get("sku"))
-            product = product_lookup.get(product_id) or product_lookup.get(sku) or {}
+            raw_product_id = _text(
+                item.get("product_id") or item.get("parent_product_id")
+            )
+            raw_sku = _text(item.get("sku"))
+            product = product_lookup.get(raw_product_id) or product_lookup.get(raw_sku) or {}
+            if not product:
+                # Some legacy Salla/order snapshots lose both SKU and product
+                # id while retaining the exact catalog name. Resolve by name
+                # only when it is unambiguous so the line rejoins the real
+                # product card instead of becoming a second name-only card.
+                name_matches = products_by_name.get(_normalized(item.get("name")), [])
+                if len(name_matches) == 1:
+                    product = name_matches[0]
+            product_id = _text(
+                product.get("salla_product_id")
+                or product.get("product_id")
+                or raw_product_id
+            )
+            sku = raw_sku or _text(product.get("sku"))
+            canonical_item = {
+                **item,
+                "product_id": product_id or None,
+                "sku": sku or None,
+                "name": _text(product.get("name")) or _text(item.get("name")),
+            }
+            key = _product_group_key(canonical_item)
             product_categories = _raw_product_categories(product)
             direct_category_ids = {
                 _text(row.get("id"))
@@ -321,7 +347,11 @@ def aggregate_reviewed_products(
                 "incident_recovery_id": _text(workflow.get("incident_recovery_id")) or None,
                 "shipping_company": _text(shipping.get("company")) or None,
                 "total_products_in_order": total_products_in_order,
-                "options_normalized": item.get("options_normalized") or {},
+                "options_normalized": (
+                    item.get("options_normalized")
+                    or state.get("specifications_snapshot")
+                    or {}
+                ),
                 "selected_image_url": selected_image or None,
                 "preparation_note": _text(state.get("preparation_note")) or None,
             })

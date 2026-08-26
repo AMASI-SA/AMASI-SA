@@ -618,6 +618,10 @@ async def _build_batch_lines(
                     status_code=409,
                     detail={
                         "code": "reviewed_line_changed_reload_required",
+                        "message": (
+                            "تغيّرت بيانات المنتج بعد فتح الملف. حدّث منتجات "
+                            "تمت المراجعة ثم أعد تحديد الكمية. لم يتم إنشاء ملف."
+                        ),
                         "order_number": order_number,
                     },
                 )
@@ -632,6 +636,10 @@ async def _build_batch_lines(
                     status_code=409,
                     detail={
                         "code": "reviewed_line_no_longer_exportable",
+                        "message": (
+                            "هذا المنتج لم يعد متاحًا لملف التجهيز. حدّث الصفحة "
+                            "ثم أعد الاختيار. لم يتم إنشاء ملف."
+                        ),
                         "order_number": order_number,
                     },
                 )
