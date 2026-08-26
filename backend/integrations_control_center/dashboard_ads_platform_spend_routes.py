@@ -180,7 +180,6 @@ async def _daily_spend(
         }
         for day in dates
     }
-    tiktok_native_dates: set[str] = set()
     facts = {provider: False for provider in FOUR_PLATFORM_KEYS}
     for day in dates:
         by_date[day.isoformat()]["snapchat"] = (
@@ -218,15 +217,14 @@ async def _daily_spend(
             observed_dates.add(day_text)
         if observed_dates:
             facts[provider] = True
-            if provider == "tiktok":
-                tiktok_native_dates = observed_dates
             for day_text in by_date:
                 by_date[day_text][provider] = round(totals.get(day_text, 0.0), 2)
 
     # Make.com is the temporary TikTok transport until the merchant completes
     # the direct Marketing API connection. The financial SSOT for that bridge
-    # is ad_account_ledger. Prefer native reporting for every date where it is
-    # present, and fill only uncovered dates from the ledger so the transition
+    # is ad_account_ledger. While Make has a ledger amount for a date, keep it
+    # authoritative even if partial native reporting also exists. Native data
+    # remains the fallback for dates without Make rows, so the transition
     # to direct TikTok can never double-count spend.
     tiktok_accounts = await _to_list(
         db.counterparties.find(
@@ -265,7 +263,7 @@ async def _daily_spend(
                 continue
             ledger_totals[day_text] += amount
             ledger_dates.add(day_text)
-        for day_text in ledger_dates - tiktok_native_dates:
+        for day_text in ledger_dates:
             by_date[day_text]["tiktok"] = round(ledger_totals[day_text], 2)
         if ledger_dates:
             facts["tiktok"] = True

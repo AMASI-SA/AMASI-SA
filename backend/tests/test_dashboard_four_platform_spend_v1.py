@@ -101,7 +101,7 @@ class FakeDB:
 
 
 @pytest.mark.asyncio
-async def test_tiktok_make_ledger_fills_only_dates_without_native_reporting():
+async def test_tiktok_make_ledger_overrides_partial_native_reporting_without_summing():
     db = FakeDB(
         {
             "counterparties": [
@@ -154,7 +154,7 @@ async def test_tiktok_make_ledger_fills_only_dates_without_native_reporting():
         {"daily_sar": {}, "quality": {}},
     )
 
-    assert daily[0]["tiktok"] == 50.0
+    assert daily[0]["tiktok"] == 99.0
     assert daily[1]["tiktok"] == 1092.71
     assert facts["tiktok"] is True
 
