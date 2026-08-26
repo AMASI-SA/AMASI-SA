@@ -833,6 +833,7 @@ export default function AdvancedDashboard() {
     return <div dir="rtl" className="space-y-4" data-testid="advanced-dashboard-page">
         <header className="flex flex-wrap items-center justify-between gap-3">
             <div><p className="text-xs text-slate-400">لوحة التحكم الافتراضية</p><h1 className="text-2xl font-black sm:text-3xl">لوحة التحكم المتقدمة</h1></div>
+<Link to={`/dashboard-charts?from=${filters.from}&to=${filters.to}`} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-2 text-sm font-black text-white shadow-sm"><BarChart3 className="h-4 w-4" />لوحة الرسم البياني</Link>
             <Link to="/dashboard-v2" className="inline-flex items-center gap-2 rounded-xl border bg-white px-4 py-2 text-sm font-bold"><ArrowRight className="h-4 w-4" />لوحة التحكم القديمة</Link>
         </header>
         <div className="flex items-stretch gap-2"><div className="min-w-0 flex-1"><AdvancedFilters value={filters} onChange={setFilters} defaultPreset="today" /></div><button onClick={() => loadPeriod(filters)} className="rounded-xl border bg-white px-4 text-blue-700" aria-label="تحديث بيانات الفترة"><RefreshCw className={`h-5 w-5 ${loading ? "animate-spin" : ""}`} /></button></div>
