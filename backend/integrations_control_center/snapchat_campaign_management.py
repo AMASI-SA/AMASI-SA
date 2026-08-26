@@ -1363,15 +1363,12 @@ class SnapchatManagementProvider:
             )
         pixel_status = str(matching[0].get("status") or "").upper()
         effective_status = str(matching[0].get("effective_status") or "").upper()
-        if pixel_status != "ACTIVE" or effective_status != "ACTIVE":
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "code": "snapchat_management_pixel_not_active",
-                    "status": pixel_status or None,
-                    "effective_status": effective_status or None,
-                },
-            )
+        # Pixel entity status is not an authoritative optimization gate. In
+        # particular, server-side events delivered through Snap CAPI can make a
+        # Pixel eligible even when a cached or account-list status is missing or
+        # stale. Snapchat's campaign-eligibility endpoint evaluates all supported
+        # event sources and is also the gate enforced when an Ad Squad is created.
+        # Keep the raw statuses as audit evidence, but let that endpoint decide.
         proof = await self.pixel_eligibility(
             account_id=account_id,
             pixel_id=pixel_id,

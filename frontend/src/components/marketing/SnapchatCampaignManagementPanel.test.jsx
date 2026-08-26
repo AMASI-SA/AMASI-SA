@@ -390,7 +390,7 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
         expect(request.payload).not.toHaveProperty("conversion_window");
     });
 
-    test("does not auto-select or permit an inactive sole Pixel", async () => {
+    test("requires explicit selection for an uncertain Pixel then defers to Snapchat eligibility", async () => {
         getSnapchatManagementReadiness.mockResolvedValue({
             proposal_enabled: true,
             execution_enabled: false,
@@ -439,10 +439,19 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
             '[data-testid="snapchat-management-pixel-select"]',
         );
         expect(pixelSelect.value).toBe("");
-        expect(pixelSelect.querySelector('option[value="inactive-pixel"]').disabled).toBe(true);
+        expect(pixelSelect.querySelector('option[value="inactive-pixel"]').disabled).toBe(false);
+        expect(pixelSelect.querySelector('option[value="inactive-pixel"]').label)
+            .toContain("الأهلية تُفحص من Snapchat");
         expect(container.querySelector(
             '[data-testid="snapchat-management-create-preview"]',
         ).disabled).toBe(true);
+
+        await act(async () => {
+            change(pixelSelect, "inactive-pixel");
+        });
+        expect(container.querySelector(
+            '[data-testid="snapchat-management-create-preview"]',
+        ).disabled).toBe(false);
     });
 
     test("requires an explicit Pixel choice when the account has multiple pixels", async () => {
