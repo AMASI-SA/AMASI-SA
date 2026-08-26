@@ -869,7 +869,7 @@ async def test_ad_squad_point_read_requests_placement_v2_for_exact_verification(
 
 
 @pytest.mark.asyncio
-async def test_pixel_validation_requires_account_association_active_and_exact_eligibility():
+async def test_pixel_validation_requires_account_association_and_exact_eligibility():
     operation = management.build_snapchat_operation(_ad_squad_payload())
     provider = _PagedProvider([])
     provider.read_entity = lambda *_args: None
@@ -909,17 +909,6 @@ async def test_pixel_validation_requires_account_association_active_and_exact_el
     assert proof["pixel_status"] == "ACTIVE"
     assert proof["pixel_effective_status"] == "ACTIVE"
 
-    async def inactive(*_args):
-        return [{"id": "pixel-1", "effective_status": "PAUSED"}]
-
-    provider.list_account_pixels = inactive
-    with pytest.raises(HTTPException) as blocked:
-        await provider.validate_pixel_ad_squad_intent(
-            account_id="account-1", parent_id="campaign-1", operation=operation
-        )
-    assert blocked.value.detail["code"] == "snapchat_management_pixel_not_active"
-
-
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("status", "effective_status"),
@@ -931,7 +920,7 @@ async def test_pixel_validation_requires_account_association_active_and_exact_el
         ("ACTIVE", None),
     ],
 )
-async def test_pixel_membership_requires_raw_and_effective_active(
+async def test_pixel_membership_defers_status_to_authoritative_eligibility(
     status, effective_status
 ):
     operation = management.build_snapchat_operation(_ad_squad_payload())
@@ -947,19 +936,29 @@ async def test_pixel_membership_requires_raw_and_effective_active(
             "effective_status": effective_status,
         }]
 
-    async def should_not_check_eligibility(**_kwargs):
-        raise AssertionError("inactive membership must block before eligibility")
+    async def eligible(**_kwargs):
+        return {
+            "verified": True,
+            "pixel_id": "pixel-1",
+            "account_id": "account-1",
+            "optimization_goal": "PIXEL_PURCHASE",
+            "conversion_window": "SWIPE_28DAY_VIEW_1DAY",
+            "eligibility_status": "ELIGIBLE",
+            "warning": False,
+        }
 
     provider.read_entity = parent
     provider.list_account_pixels = pixels
-    provider.pixel_eligibility = should_not_check_eligibility
-    with pytest.raises(HTTPException) as blocked:
-        await provider.validate_pixel_ad_squad_intent(
-            account_id="account-1",
-            parent_id="campaign-1",
-            operation=operation,
-        )
-    assert blocked.value.detail["code"] == "snapchat_management_pixel_not_active"
+    provider.pixel_eligibility = eligible
+    proof = await provider.validate_pixel_ad_squad_intent(
+        account_id="account-1",
+        parent_id="campaign-1",
+        operation=operation,
+    )
+    assert proof["verified"] is True
+    assert proof["eligibility_status"] == "ELIGIBLE"
+    assert proof["pixel_status"] == (status or "")
+    assert proof["pixel_effective_status"] == (effective_status or "")
 
 
 @pytest.mark.asyncio

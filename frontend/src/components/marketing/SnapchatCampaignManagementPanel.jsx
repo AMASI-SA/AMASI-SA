@@ -1110,8 +1110,7 @@ export default function SnapchatCampaignManagementPanel({
                                                 <option
                                                     key={pixel.pixel_id}
                                                     value={pixel.pixel_id}
-                                                    disabled={!activePixel(pixel)}
-                                                    label={`${pixel.display_name} · ${pixel.pixel_id}${activePixel(pixel) ? "" : " · غير نشط"}`}
+                                                    label={`${pixel.display_name} · ${pixel.pixel_id}${activePixel(pixel) ? "" : " · الأهلية تُفحص من Snapchat"}`}
                                                 />
                                             ))}
                                         </SelectField>
