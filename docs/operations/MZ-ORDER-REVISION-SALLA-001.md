@@ -2,15 +2,59 @@
 
 ## الحالة
 
-`READY_FOR_CODEX_IMPLEMENTATION`
+`APPROVED_FOR_PHASED_IMPLEMENTATION_P0_FIRST`
 
 ## المستودع والفرع
 
 - المستودع: `AMASI-SA/AMASI-SA`
 - فرع التعليمات: `docs/mz-order-revision-salla-items-20260825`
 - فرع Production المرجعي: `hotfix/prod-snap-meta-final`
-- نطاق المهمة: **Mezan Web + Backend فقط**
-- خارج النطاق في هذه العملية: `AMASI-SA/amasi-mobile` وتطبيق الموصلين
+- نطاق الواجهة: **تطبيق أماسي فقط** في `AMASI-SA/amasi-mobile`.
+- نطاق Backend وSalla والـWorkflow: `AMASI-SA/AMASI-SA`.
+- خارج النطاق: إضافة واجهة جديدة في Mezan Web وتطبيق الموصلين.
+
+> هذا هو النطاق النهائي المعتمد ويستبدل أي نص سابق يجعل الواجهة في
+> Mezan Web. لا يبدأ تنفيذ واجهة تطبيق أماسي قبل اكتمال P0 وP1 وموافقة
+> مالك المشروع الصريحة على بدء P2.
+
+## قرار التنفيذ المرحلي المعتمد
+
+التنفيذ مقسم إلى مراحل إلزامية لا يجوز دمجها في دفعة واحدة:
+
+1. **P0 — Salla Contract Evidence:** إثبات عقود إنشاء وتعديل وحذف عناصر
+   الطلب وقرار فرق المبلغ باستخدام Sandbox أو mocks رسمية فقط. لا Product
+   code ولا كتابة على Production.
+2. **P1 — Reconciliation and Completeness Protection:** Backend فقط؛ operation
+   model وidempotency وper-order lock ومطابقة قراءة فقط وcompleteness snapshot
+   وحارس مركزي للانتقالات النهائية. لا Salla writes ولا Mobile UI ولا OTA.
+3. **P2 — Zero-difference item add/edit:** لا تبدأ دون موافقة جديدة؛ إضافة
+   وتعديل فرق المبلغ فيها صفر مع Workflow مستقل وواجهة تطبيق أماسي.
+4. **P3 — Positive difference:** بعد إثبات واعتماد مسار الدفع.
+5. **P4 — Negative difference/refund:** بصلاحية وFeature Flag مستقلين.
+6. **P5 — Post-supplier revision:** supplier file versioning وinvalidation
+   وhold وacknowledgment.
+
+يجب التوقف بعد P0 وP1 وتسليم الأدلة وPR الحماية؛ لا merge ولا Production
+deploy ولا OTA دون موافقة صريحة.
+
+## ملخص المراجعة المرجعية المعتمدة
+
+- Salla هي المصدر التجاري والمالي والمخزني؛ لا ينشأ order item مالي محلي
+  قبل نجاح Salla ثم إعادة Fetch ومطابقة النتيجة.
+- Salla توثق Order Items APIs للإنشاء والتعديل والحذف، لكن السماح حسب حالة
+  الطلب، وسلوك الطلب المدفوع، وفرق المبلغ يجب إثباته في P0 ولا يستنتج من
+  وجود Endpoint فقط.
+- `unified_orders` و`order_review_workflows.items` و
+  `mezan_preparation_pieces_v1` قد تختلف إذا تغيرت عناصر Salla بعد تجميد
+  Workflow؛ لا توجد completeness gate مركزية مكتملة حاليًا.
+- `POST /fulfillment-v2/batches/{batch_id}/handoff` يحتاج حماية صريحة من
+  snapshot حديثة ولا يجوز أن يستدعي Salla synchronously أثناء handoff.
+- `order_adjustments` الحالي لا يقدم versioning/audit كافيًا للـvariant
+  والخيارات وcustom fields.
+- نظام تعليمات خدمة العملاء الحالي يعاد استخدامه كما هو معماريًا عبر
+  `scope`, `target_ids`, `target_stages`, `enforcement`, و`operational_hold`.
+- واجهة الإضافة والتعديل ستكون في صفحة تفاصيل الطلب وبطاقة المنتج داخل
+  تطبيق أماسي، مع صلاحيات Mobile مستقلة لا تمنح وصول Mezan Web.
 
 ## تعليمات البدء الإلزامية
 
