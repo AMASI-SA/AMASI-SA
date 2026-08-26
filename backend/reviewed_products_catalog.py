@@ -103,19 +103,53 @@ def _order_items_with_review_snapshot(
         for item in live_items
         if _text(item.get("order_item_id"))
     }
-    for row in workflow.get("items") or []:
+
+    def product_signature(item: dict[str, Any]) -> tuple[str, str, str, str]:
+        return (
+            _text(item.get("product_id")),
+            _text(item.get("parent_product_id")),
+            _text(item.get("variant_id")),
+            _text(item.get("sku")).upper(),
+        )
+
+    # Old review snapshots can predate preservation of Salla's order-item id.
+    # Track live quantity by product identity so those anonymous rows can be
+    # reconciled without duplicating a line that Salla still returns.
+    unmatched_live_quantity: dict[tuple[str, str, str, str], int] = defaultdict(int)
+    for item in live_items:
+        unmatched_live_quantity[product_signature(item)] += _unit_quantity(item.get("quantity"))
+
+    order_number = _text(order.get("order_number") or workflow.get("order_number"))
+    for snapshot_index, row in enumerate(workflow.get("items") or []):
         snapshot = _dict(row)
         order_item_id = _text(snapshot.get("order_item_id"))
-        if not order_item_id or order_item_id in live_ids:
+        quantity = _unit_quantity(snapshot.get("quantity"))
+        if quantity <= 0:
             continue
-        if _unit_quantity(snapshot.get("quantity")) <= 0:
+
+        signature = product_signature(snapshot)
+        if order_item_id and order_item_id in live_ids:
+            unmatched_live_quantity[signature] = max(
+                0, unmatched_live_quantity[signature] - quantity
+            )
             continue
+
+        if not order_item_id:
+            represented = min(quantity, unmatched_live_quantity[signature])
+            unmatched_live_quantity[signature] -= represented
+            quantity -= represented
+            if quantity <= 0:
+                continue
+            order_item_id = f"review-snapshot:{order_number}:{snapshot_index}"
+
         live_items.append({
             **snapshot,
             "order_item_id": order_item_id,
+            "quantity": quantity,
             "name": _text(snapshot.get("product_name")) or "منتج بدون اسم",
             "image_url": _text(snapshot.get("selected_image_url")) or None,
             "options_normalized": snapshot.get("specifications_snapshot") or {},
+            "_review_snapshot_state": True,
         })
         live_ids.add(order_item_id)
     return live_items
@@ -219,6 +253,8 @@ def aggregate_reviewed_products(
 
         for line_index, item in enumerate(order_items):
             state = states.get(_text(item.get("order_item_id")), {})
+            if item.get("_review_snapshot_state"):
+                state = {**item, **state}
             # A reviewer may deliberately exclude a line from supplier files or
             # route it to internal preparation. Such a line is already routed
             # operationally and must not appear in this supplier-file queue.
