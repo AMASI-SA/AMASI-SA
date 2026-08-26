@@ -289,3 +289,55 @@ def test_review_snapshot_does_not_duplicate_a_live_salla_line():
 
     assert result["summary"]["total_quantity"] == 1
     assert result["products"][0]["source_line_count"] == 1
+
+
+def test_anonymous_review_snapshot_line_is_restored_without_order_item_id():
+    result = aggregate_reviewed_products(
+        [(
+            _order("279803951", []),
+            {
+                "order_number": "279803951",
+                "incident_recovery_id": "recovery-11",
+                "items": [{
+                    "product_id": "p-dress",
+                    "sku": "AMS11353",
+                    "product_name": "فستان بناتي أخضر",
+                    "quantity": 2,
+                    "supplier_export": True,
+                    "specifications_snapshot": {"size": "10 سنوات"},
+                }],
+            },
+        )],
+        [],
+    )
+
+    product = result["products"][0]
+    assert product["quantity"] == 2
+    assert product["source_lines"][0]["order_item_id"].startswith(
+        "review-snapshot:279803951:"
+    )
+    assert product["source_lines"][0]["options_normalized"] == {
+        "size": "10 سنوات"
+    }
+
+
+def test_anonymous_review_snapshot_does_not_duplicate_matching_live_quantity():
+    result = aggregate_reviewed_products(
+        [(
+            _order("279773618", [_item("live-dress", "p-dress", quantity=2, sku="AMS11353")]),
+            {
+                "order_number": "279773618",
+                "incident_recovery_id": "recovery-11",
+                "items": [{
+                    "product_id": "p-dress",
+                    "sku": "AMS11353",
+                    "product_name": "فستان بناتي أخضر",
+                    "quantity": 2,
+                }],
+            },
+        )],
+        [],
+    )
+
+    assert result["summary"]["total_quantity"] == 2
+    assert result["products"][0]["source_line_count"] == 1
