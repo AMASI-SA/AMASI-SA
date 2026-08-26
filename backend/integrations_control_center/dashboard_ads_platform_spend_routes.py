@@ -91,6 +91,19 @@ def _number(value: Any) -> float | None:
     return parsed
 
 
+def _ledger_number(value: Any) -> float | None:
+    """Parse signed ledger amounts, including cumulative correction rows."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if parsed != parsed or abs(parsed) == float("inf"):
+        return None
+    return parsed
+
+
 def _parse_utc(value: Any) -> datetime | None:
     if isinstance(value, datetime):
         parsed = value
@@ -258,7 +271,7 @@ async def _daily_spend(
         ledger_dates: set[str] = set()
         for row in ledger_rows:
             day_text = str(row.get("date") or "")[:10]
-            amount = _number(row.get("amount"))
+            amount = _ledger_number(row.get("amount"))
             if day_text not in by_date or amount is None:
                 continue
             ledger_totals[day_text] += amount
