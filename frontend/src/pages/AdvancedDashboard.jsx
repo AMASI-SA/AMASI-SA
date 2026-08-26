@@ -298,10 +298,12 @@ export function TopProductsCard({ rows, summary = {}, filters = {}, loading = fa
     // displayed per-product values.
     const totalUnits = products.reduce((sum, item) => sum + Number(item.units_sold || 0), 0);
     const totalSales = products.reduce((sum, item) => sum + Number(item.total_sales || 0), 0);
-    const totalCost = products.reduce((sum, item) => {
+    const rowTotalCost = products.reduce((sum, item) => {
         const value = finiteFinancialValue(item.total_cost, { nonnegative: true });
         return sum + (value ?? 0);
     }, 0);
+    const authoritativeTotalCost = finiteFinancialValue(productSummary.total_cost, { nonnegative: true });
+    const totalCost = authoritativeTotalCost ?? rowTotalCost;
     const pricedProfits = products
         .map((item) => finiteFinancialValue(item.net_profit))
         .filter((value) => value !== null);
@@ -315,7 +317,7 @@ export function TopProductsCard({ rows, summary = {}, filters = {}, loading = fa
     useEffect(() => { setVisibleCount(5); }, [rows]);
     return (
         <Panel className="border-indigo-200" testid="advanced-top-products">
-            <div className="flex h-14 items-center justify-between border-b border-indigo-800 bg-indigo-700 px-4 text-white"><h2 className="flex items-center gap-2 font-extrabold"><Trophy className="h-5 w-5" />المنتجات الأكثر مبيعًا</h2><div className="text-left text-[9px] font-bold leading-4"><p>{loading && !rows ? "—" : integer(productCount)} منتجًا خلال الفترة</p><p className="text-indigo-100">بتكلفة سلة {loading && !rows ? "—" : integer(summary.salla_fallback_products_count)} · بدون تكلفة {loading && !rows ? "—" : integer(summary.missing_all_cost_products_count)}</p></div></div>
+            <div className="flex h-14 items-center justify-between border-b border-indigo-800 bg-indigo-700 px-4 text-white"><h2 className="flex items-center gap-2 font-extrabold"><Trophy className="h-5 w-5" />المنتجات الأكثر مبيعًا</h2><div className="text-left text-[9px] font-bold leading-4"><p>{loading && !rows ? "—" : integer(productCount)} منتجًا خلال الفترة</p><p className="text-indigo-100">بتكلفة سلة {loading && !rows ? "—" : integer(summary.salla_fallback_products_count)} · تكلفة ناقصة {loading && !rows ? "—" : integer(summary.missing_all_cost_products_count)}</p></div></div>
             <div className="grid grid-cols-[48px_48px_minmax(80px,1fr)_minmax(86px,1fr)_minmax(86px,1fr)] gap-1.5 border-b px-3 py-2 text-center text-[8px] font-bold leading-4 text-slate-400">
                 <span>المنتج</span>
                 <span>القطع</span>
@@ -326,7 +328,8 @@ export function TopProductsCard({ rows, summary = {}, filters = {}, loading = fa
             <div className="h-[330px] overflow-y-auto overscroll-contain" data-testid="advanced-top-products-scroll">
             {visibleProducts.length ? visibleProducts.map((item) => {
                 const missingMezanCost = item.cost_status !== "complete";
-                const missingAllCost = item.cost_status === "missing" || item.total_cost == null;
+                const missingAllCost = item.cost_status === "missing" && item.total_cost == null;
+                const partialCost = item.cost_status === "missing" && item.total_cost != null;
                 const canOpenProduct = missingMezanCost
                     && item.catalog_product_found !== false
                     && Boolean(item.mezan_product_id || item.salla_product_id);
@@ -354,8 +357,9 @@ export function TopProductsCard({ rows, summary = {}, filters = {}, loading = fa
                     </div>
                     <span className="num text-center text-xs font-bold">{integer(item.units_sold)}</span>
                     <span className="num whitespace-nowrap text-center text-[10px] font-black text-slate-900">{money(item.total_sales)} ر.س</span>
-                    <span className={`num text-center text-[10px] font-black ${missingAllCost ? "text-orange-600" : "text-blue-600"}`}>
+                    <span className={`num text-center text-[10px] font-black ${missingAllCost || partialCost ? "text-orange-600" : "text-blue-600"}`}>
                         {missingAllCost ? "بدون تكلفة" : `${money(item.total_cost)} ر.س`}
+                        {partialCost && <span className="mt-0.5 block text-[7px]">تكلفة جزئية</span>}
                     </span>
                     <span className={`num whitespace-nowrap text-center text-[10px] font-black ${item.net_profit == null ? "text-slate-400" : Number(item.net_profit) >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
                         {item.net_profit == null ? "—" : `${money(item.net_profit)} ر.س`}

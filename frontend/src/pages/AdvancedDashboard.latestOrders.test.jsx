@@ -163,7 +163,7 @@ test("top products header shows period counts and only five rows initially", () 
 
     expect(markup).toContain("7 منتجًا خلال الفترة");
     expect(markup).toContain("بتكلفة سلة 3");
-    expect(markup).toContain("بدون تكلفة 2");
+    expect(markup).toContain("تكلفة ناقصة 2");
     expect(markup).toContain("المزيد");
     expect(markup).toContain("إجمالي جميع المنتجات");
     expect(markup).toContain("يشمل المنتجات المخفية تحت المزيد");
@@ -207,6 +207,46 @@ test("top products removes visible names and opens an unpriced product in a new 
     expect(markup).toContain("focus=cost");
     expect(markup).toContain("from=2026-08-01");
     expect(markup).toContain("to=2026-08-25");
+    expect(markup).toContain("صافي الربح غير مكتمل");
+});
+
+test("top products shows partial option costs and uses the authoritative all-products total", () => {
+    const markup = renderToStaticMarkup(
+        <TopProductsCard
+            rows={[
+                {
+                    identity: "partial-product",
+                    units_sold: 12,
+                    total_sales: 1312.25,
+                    total_cost: 45,
+                    net_profit: null,
+                    cost_status: "missing",
+                    cost_is_partial: true,
+                },
+                {
+                    identity: "complete-product",
+                    units_sold: 2,
+                    total_sales: 200,
+                    total_cost: 80,
+                    net_profit: 120,
+                    cost_status: "complete",
+                },
+            ]}
+            summary={{
+                product_profit_summary: {
+                    product_count: 2,
+                    total_cost: 619.4,
+                    has_unpriced_products: true,
+                },
+                missing_all_cost_products_count: 1,
+            }}
+        />
+    );
+
+    expect(markup).toContain("45.00 ر.س");
+    expect(markup).toContain("تكلفة جزئية");
+    expect(markup).toContain("619.40 ر.س");
+    expect(markup).toContain("تكلفة ناقصة 1");
     expect(markup).toContain("صافي الربح غير مكتمل");
 });
 

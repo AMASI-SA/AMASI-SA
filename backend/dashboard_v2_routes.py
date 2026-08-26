@@ -356,7 +356,14 @@ def _finalize_product_profit_rows(
         else:
             cost_status = "complete"
 
-        reportable_cost = None if cost_status == "missing" else accumulated_cost
+        # A line can have real option/component/service costs even when its
+        # base Mezan cost is still missing.  Keep that known partial cost
+        # visible so product-row totals reconcile with the authoritative
+        # executive product-cost total.  Profit remains hidden until the full
+        # base cost is available; otherwise we would present partial cost as a
+        # complete profit calculation.
+        partial_cost = cost_status == "missing" and accumulated_cost > 0
+        reportable_cost = accumulated_cost if cost_status != "missing" or partial_cost else None
         average_unit_cost = (
             round(reportable_cost / units, 2)
             if reportable_cost is not None and units > 0
@@ -364,7 +371,7 @@ def _finalize_product_profit_rows(
         )
         net_profit = (
             round(sales - reportable_cost, 2)
-            if reportable_cost is not None
+            if reportable_cost is not None and cost_status != "missing"
             else None
         )
         items.append({
@@ -387,6 +394,7 @@ def _finalize_product_profit_rows(
                 else None
             ),
             "cost_status": cost_status,
+            "cost_is_partial": partial_cost,
             "uses_salla_fallback": uses_salla_fallback,
             "missing_everywhere": missing_everywhere,
             "cost_sources": sorted(raw.get("cost_sources") or []),
