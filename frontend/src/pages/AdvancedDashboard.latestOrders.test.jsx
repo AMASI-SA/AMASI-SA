@@ -497,6 +497,28 @@ test("selected-period Google spend is included in executive ad cost and profit",
     expect(currentData.ads_v2.executive_breakdown.total.spend_sar).toBe(758.53);
 });
 
+test("a stalled platform spend request never blocks the executive dashboard", async () => {
+    let currentData = null;
+    await loadDashboardPeriodSnapshot({
+        next: { from: "2026-08-26", to: "2026-08-26" },
+        requestSequence: 1,
+        isLatest: () => true,
+        apiClient: {
+            get: jest.fn().mockResolvedValue({
+                data: { totals: { total_ads_cost: 723.93 } },
+            }),
+        },
+        platformSpendLoader: jest.fn(() => new Promise(() => {})),
+        platformSpendTimeoutMs: 1,
+        setData: (value) => { currentData = value; },
+        setLoading: jest.fn(),
+        setLoadError: jest.fn(),
+        now: () => 1,
+    });
+
+    expect(currentData).toEqual({ totals: { total_ads_cost: 723.93 } });
+});
+
 
 test("manual refresh failure preserves the current verified dashboard snapshot", async () => {
     const verified = { snapshot_id: "verified-snapshot" };
