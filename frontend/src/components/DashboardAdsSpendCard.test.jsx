@@ -176,6 +176,50 @@ test("shows a truthful state for a connected platform without hourly facts", () 
 });
 
 
+test("labels the temporary TikTok Make daily-total marker truthfully", () => {
+    const html = renderToStaticMarkup(
+        <DashboardAdsSpendCardContent
+            fromDate="2026-08-26"
+            toDate="2026-08-26"
+            data={{
+                total_sar: 308.17,
+                provider_totals_sar: {
+                    snapchat: null,
+                    meta: null,
+                    tiktok: 308.17,
+                    google: null,
+                },
+                providers: {
+                    ...providers({ hourly: false }),
+                    tiktok: {
+                        connected: true,
+                        daily_available: true,
+                        hourly_available: true,
+                        hourly_source: "make_daily_total_marker",
+                    },
+                },
+                hourly_spend: Array.from({ length: 24 }, (_, hourIndex) => ({
+                    date: "2026-08-26",
+                    hour_index: hourIndex,
+                    hour: `${String(hourIndex).padStart(2, "0")}:00`,
+                    snapchat: null,
+                    meta: null,
+                    tiktok: hourIndex === 16 ? 308.17 : null,
+                    google: null,
+                })),
+            }}
+            onRefresh={() => {}}
+        />,
+    );
+
+    expect(html).toContain("line:تيك توك");
+    expect(html).toContain("إجمالي Make عند آخر تحديث");
+    expect(html).toContain("علامة تيك توك تمثل إجمالي اليوم");
+    expect(html).toContain("لا يتم توزيع الإجمالي بالتخمين");
+    expect(html).not.toContain("بيانات ساعية أصلية");
+});
+
+
 test("uses Riyadh today and yesterday labels", () => {
     const today = todaySA();
     const yesterday = addDaysISO(today, -1);

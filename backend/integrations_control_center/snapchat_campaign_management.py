@@ -1478,6 +1478,14 @@ class SnapchatManagementProvider:
                 detail={"code": "snapchat_management_reconciliation_unsupported"},
             )
         path, plural, singular = config
+        params = {"read_deleted_entities": "true"}
+        if entity_type == "ad_squad":
+            # Snapchat omits ``placement_v2`` from Ad Squad reads unless this
+            # flag is explicit.  ``placement_v2`` is one of Mezan's governed
+            # create controls, so omitting the flag turns an exact provider
+            # match into a false drift and leaves an uncertain create stuck in
+            # manual reconciliation.
+            params["return_placement_v2"] = "true"
         return await self._list_complete(
             path,
             plural=plural,
@@ -1485,7 +1493,7 @@ class SnapchatManagementProvider:
             # Deleted-aware catalogs are required for safe absence proof. Snap
             # forbids combining this flag with sort, so consume every bounded
             # page in provider order.
-            params={"read_deleted_entities": "true"},
+            params=params,
         )
 
     async def read_entity(self, entity_type: str, entity_id: str) -> dict[str, Any]:
@@ -1495,7 +1503,14 @@ class SnapchatManagementProvider:
             "ad": "ads",
             "creative": "creatives",
         }[entity_type]
-        payload = await self._request("GET", f"/{path_kind}/{entity_id}")
+        params = (
+            {"return_placement_v2": "true"}
+            if entity_type == "ad_squad"
+            else None
+        )
+        payload = await self._request(
+            "GET", f"/{path_kind}/{entity_id}", params=params
+        )
         return _extract_entity(
             payload, path_kind, "adsquad" if entity_type == "ad_squad" else entity_type
         )
