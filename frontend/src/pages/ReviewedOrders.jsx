@@ -18,6 +18,8 @@ import {
     createReviewedPreparationBatch,
     downloadReviewedPreparationBatchPdf,
     listReviewedProductCatalog,
+    previewAms11353IncidentRecovery,
+    applyAms11353IncidentRecovery,
 } from "../services/orderReviewEngine";
 import {
     displayReviewedQuantity,
@@ -82,6 +84,37 @@ function CategoryCheckbox({ category, selected, onToggle }) {
                 {category.product_count || 0}
             </span>
         </button>
+    );
+}
+
+function Ams11353IncidentRecovery({ onRecovered }) {
+    const [preview, setPreview] = useState(null);
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState("");
+    const load = useCallback(async () => {
+        setBusy(true); setError("");
+        try { setPreview(await previewAms11353IncidentRecovery()); }
+        catch (e) { setError(e?.message || "تعذرت معاينة الاستعادة."); }
+        finally { setBusy(false); }
+    }, []);
+    useEffect(() => { load(); }, [load]);
+    const apply = async () => {
+        if (!preview?.ok || preview?.resolved_quantity !== 11) return;
+        if (!window.confirm("تأكيد إعادة 11 قطعة من AMS11353 إلى تمت المراجعة داخل ميزان فقط؟")) return;
+        setBusy(true); setError("");
+        try { await applyAms11353IncidentRecovery(); await load(); await onRecovered?.(); }
+        catch (e) { setError(e?.response?.data?.detail?.code || e?.message || "تعذرت الاستعادة."); setBusy(false); }
+    };
+    return (
+        <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-4" data-testid="ams11353-incident-recovery">
+            <h3 className="text-lg font-black text-amber-950">استعادة ملف AMS11353 المفقود</h3>
+            <p className="mt-1 text-sm font-bold text-amber-900">معاينة مقيدة بـ8 طلبات و11 قطعة؛ لا تغيّر سلة ولا ملف PF-20260825-0042.</p>
+            {preview && <div className="mt-3 grid grid-cols-3 gap-2 text-center text-sm font-black"><div className="rounded-xl bg-white p-2">الطلبات<br />{preview.expected_order_count}</div><div className="rounded-xl bg-white p-2">القطع<br />{preview.resolved_quantity}</div><div className="rounded-xl bg-white p-2">الحجوزات<br />{preview.target_allocations?.length || 0}</div></div>}
+            {preview?.already_recovered && <div className="mt-3 rounded-xl bg-emerald-100 p-3 text-sm font-black text-emerald-900">اكتملت الاستعادة سابقًا.</div>}
+            {preview?.problems?.length > 0 && <div className="mt-3 rounded-xl bg-rose-100 p-3 text-xs font-bold text-rose-900">{preview.problems.join(" · ")}</div>}
+            {error && <div className="mt-3 text-sm font-bold text-rose-700">{error}</div>}
+            <div className="mt-3 flex gap-2"><button type="button" onClick={load} disabled={busy} className="rounded-xl border bg-white px-4 py-2 font-black">تحديث المعاينة</button><button type="button" onClick={apply} disabled={busy || !preview?.ok || preview?.already_recovered || preview?.resolved_quantity !== 11} className="rounded-xl bg-amber-700 px-4 py-2 font-black text-white disabled:opacity-40">{busy ? "جاري الفحص…" : "استعادة 11 قطعة"}</button></div>
+        </div>
     );
 }
 
@@ -348,6 +381,7 @@ export default function ReviewedOrders() {
 
     return (
         <section className={`space-y-4 ${selectionSummary.productCount > 0 ? "pb-28 sm:pb-24" : ""}`} dir="rtl" data-testid="reviewed-orders-stage" data-view="reviewed-products">
+            {new URLSearchParams(window.location.search).get("incident") === "ams11353-20260825" && <Ams11353IncidentRecovery onRecovered={() => load({ silent: true })} />}
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div>
