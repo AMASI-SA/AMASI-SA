@@ -381,6 +381,15 @@ def _preflight_qoyod_invoice_payload(
     }
 
 
+def _prepare_qoyod_invoice_payload_for_write(
+    payload: dict, *, salla_total: float,
+) -> tuple[float, dict]:
+    """Normalize and validate the exact payload object sent to Qoyod."""
+    result = _preflight_qoyod_invoice_payload(
+        payload, salla_total=salla_total)
+    return float(result["qoyod_predicted_total"]), result
+
+
 def _preflight_qoyod_invoice(
     *, canon: dict, settings: dict, salla_total: float,
 ) -> dict:
@@ -402,8 +411,9 @@ def _preflight_qoyod_invoice(
         settings=settings,
         send_date_iso=_riyadh_today_iso(),
     )
-    return _preflight_qoyod_invoice_payload(
+    _, result = _prepare_qoyod_invoice_payload_for_write(
         payload, salla_total=salla_total)
+    return result
 
 
 _STALE_PAYMENT_METHODS = frozenset({
@@ -3063,6 +3073,11 @@ async def _run_all_steps(
         canon=canon, contact_id=contact_id,
         line_resolutions=line_resolutions, settings=settings,
         send_date_iso=send_date_iso)
+    expected_total, payload_preflight = (
+        _prepare_qoyod_invoice_payload_for_write(
+            invoice_payload, salla_total=salla_total)
+    )
+    breakdown["final_payload_preflight"] = payload_preflight
     diff = _q2(expected_total - salla_total)
     if not _within_amount_tolerance(diff):
         # If the ONLY reason we still exceed tolerance is that the
