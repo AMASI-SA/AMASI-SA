@@ -707,6 +707,48 @@ def _hydrate_piece_images_from_batches(
         piece["image_url"] = source or None
 
 
+def _hydrate_legacy_piece_identity(pieces: list[dict[str, Any]]) -> None:
+    """Join an old SKU-less snapshot to its single canonical sibling.
+
+    Preparation files created before product-identity reconciliation may hold
+    two physical-piece groups for the same product: one complete group and one
+    group whose Salla item snapshot omitted SKU/product identity.  Reconcile
+    only inside the same batch and exact normalized product name, and only when
+    every identified sibling agrees on one canonical identity.  The operation
+    is response-local: piece IDs, order facts, customer options, services and
+    the immutable database snapshot are not changed.
+    """
+    pieces_by_product: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    for piece in pieces:
+        batch_id = _text(piece.get("batch_id"))
+        product_name = _normalized(piece.get("product_name"))
+        if batch_id and product_name:
+            pieces_by_product[(batch_id, product_name)].append(piece)
+
+    for siblings in pieces_by_product.values():
+        canonical_identities = {
+            (
+                _text(piece.get("group_key")),
+                _text(piece.get("product_id")),
+                _text(piece.get("sku")),
+            )
+            for piece in siblings
+            if (
+                _text(piece.get("group_key"))
+                and _text(piece.get("sku"))
+            )
+        }
+        if len(canonical_identities) != 1:
+            continue
+        group_key, product_id, sku = next(iter(canonical_identities))
+        for piece in siblings:
+            if _text(piece.get("sku")):
+                continue
+            piece["group_key"] = group_key
+            piece["product_id"] = product_id or None
+            piece["sku"] = sku
+
+
 def _hydrate_piece_print_facts_from_batches(
     pieces: list[dict[str, Any]],
     batches: list[dict[str, Any]],
@@ -1011,6 +1053,7 @@ async def _employee_workspace(
         else []
     )
     _hydrate_piece_images_from_batches(pieces, image_batches)
+    _hydrate_legacy_piece_identity(pieces)
     registries = (
         await db[REGISTRY].find(
             {"user_id": user_id, "batch_id": {"$in": batch_ids}},
@@ -1401,6 +1444,7 @@ def make_preparation_supplier_dispatch_router(
             },
             {"_id": 0},
         ).to_list(50000)
+        _hydrate_legacy_piece_identity(all_candidates)
         candidates_by_file: dict[str, list[dict[str, Any]]] = defaultdict(list)
         for candidate in all_candidates:
             if piece_is_available_for_supplier_dispatch(candidate):

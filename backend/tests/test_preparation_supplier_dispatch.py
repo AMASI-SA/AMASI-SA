@@ -24,6 +24,7 @@ from preparation_supplier_dispatch import (
     _employee_workspace,
     _group_piece_products,
     _hydrate_piece_images_from_batches,
+    _hydrate_legacy_piece_identity,
     _hydrate_piece_print_facts_from_batches,
     _mark_orders_started_if_fully_dispatched,
     _piece_products,
@@ -147,6 +148,50 @@ def test_product_quantity_selection_chooses_stable_physical_units():
         "piece-2",
         "other-1",
     ]
+
+
+def test_legacy_sku_less_pieces_join_the_single_canonical_sibling_in_memory():
+    canonical = _piece(
+        "canonical",
+        group_key="product:ams13067",
+        batch_id="batch-pf0042",
+        product_name="أفرول مواليد اليوم الوطني السعودي",
+        product_id="salla-product-13067",
+        sku="AMS13067",
+        product_options_snapshot={"الاسم": "محمد"},
+    )
+    legacy = _piece(
+        "legacy",
+        group_key="title:legacy-afrol",
+        batch_id="batch-pf0042",
+        product_name="  أفرول مواليد اليوم الوطني السعودي  ",
+        product_id=None,
+        sku=None,
+        product_options_snapshot={"الاسم": "خالد"},
+    )
+
+    _hydrate_legacy_piece_identity([canonical, legacy])
+    products = _group_piece_products([canonical, legacy])
+
+    assert len(products) == 1
+    assert products[0]["sku"] == "AMS13067"
+    assert products[0]["available_quantity"] == 2
+    assert legacy["group_key"] == canonical["group_key"]
+    assert legacy["product_id"] == canonical["product_id"]
+    assert legacy["product_options_snapshot"] == {"الاسم": "خالد"}
+
+
+def test_legacy_identity_is_not_guessed_when_named_siblings_disagree():
+    pieces = [
+        _piece("one", group_key="product:1", batch_id="b1", product_name="فستان", sku="AMS1"),
+        _piece("two", group_key="product:2", batch_id="b1", product_name="فستان", sku="AMS2"),
+        _piece("legacy", group_key="title:dress", batch_id="b1", product_name="فستان", sku=None),
+    ]
+
+    _hydrate_legacy_piece_identity(pieces)
+
+    assert pieces[-1]["group_key"] == "title:dress"
+    assert pieces[-1].get("sku") is None
 
 
 def test_same_product_with_and_without_service_uses_two_independent_cards():
