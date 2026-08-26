@@ -96,6 +96,7 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
                 pixels: [{
                     pixel_id: "pixel-1",
                     display_name: "AMASI Pixel",
+                    status: "ACTIVE",
                     effective_status: "ACTIVE",
                 }],
             }],
@@ -276,7 +277,12 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
                     management_allowed: true,
                     creative_allowed: true,
                     creative_role: "admin",
-                    pixels: [{ pixel_id: "pixel-1", display_name: "AMASI Pixel" }],
+                    pixels: [{
+                        pixel_id: "pixel-1",
+                        display_name: "AMASI Pixel",
+                        status: "ACTIVE",
+                        effective_status: "ACTIVE",
+                    }],
                 }],
             });
         diagnoseSnapchatManagementPixels.mockResolvedValue({
@@ -384,6 +390,61 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
         expect(request.payload).not.toHaveProperty("conversion_window");
     });
 
+    test("does not auto-select or permit an inactive sole Pixel", async () => {
+        getSnapchatManagementReadiness.mockResolvedValue({
+            proposal_enabled: true,
+            execution_enabled: false,
+            activation_enabled: false,
+            accounts: [{
+                account_id: "account-1",
+                display_name: "AMASI",
+                currency: "USD",
+                role: "admin",
+                management_allowed: true,
+                creative_allowed: true,
+                creative_role: "admin",
+                pixels: [{
+                    pixel_id: "inactive-pixel",
+                    display_name: "Inactive Pixel",
+                    status: "PAUSED",
+                    effective_status: "PAUSED",
+                }],
+            }],
+        });
+
+        await act(async () => {
+            root.render(
+                <SnapchatCampaignManagementPanel
+                    accountId="account-1"
+                    entityLevel="ad_squads"
+                    selectedCampaign={{ campaign_id: "campaign-1" }}
+                />,
+            );
+        });
+        await act(async () => {
+            container.querySelector(
+                '[data-testid="snapchat-campaign-management-panel"] > button',
+            ).click();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        await act(async () => {
+            change(
+                container.querySelector('[data-testid="snapchat-management-product-select"]'),
+                "710474094",
+            );
+        });
+
+        const pixelSelect = container.querySelector(
+            '[data-testid="snapchat-management-pixel-select"]',
+        );
+        expect(pixelSelect.value).toBe("");
+        expect(pixelSelect.querySelector('option[value="inactive-pixel"]').disabled).toBe(true);
+        expect(container.querySelector(
+            '[data-testid="snapchat-management-create-preview"]',
+        ).disabled).toBe(true);
+    });
+
     test("requires an explicit Pixel choice when the account has multiple pixels", async () => {
         getSnapchatManagementReadiness.mockResolvedValue({
             proposal_enabled: true,
@@ -398,8 +459,18 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
                 creative_allowed: true,
                 creative_role: "creative",
                 pixels: [
-                    { pixel_id: "pixel-1", display_name: "Pixel One" },
-                    { pixel_id: "pixel-2", display_name: "Pixel Two" },
+                    {
+                        pixel_id: "pixel-1",
+                        display_name: "Pixel One",
+                        status: "ACTIVE",
+                        effective_status: "ACTIVE",
+                    },
+                    {
+                        pixel_id: "pixel-2",
+                        display_name: "Pixel Two",
+                        status: "ACTIVE",
+                        effective_status: "ACTIVE",
+                    },
                 ],
             }],
         });
