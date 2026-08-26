@@ -11,25 +11,27 @@
 - Product code changed: **none**
 
 This document distinguishes documented API capability from behavior proven in
-a Salla Sandbox. An endpoint being documented is not evidence that Salla
+a Salla Demo Store. An endpoint being documented is not evidence that Salla
 accepts it for every order or payment status.
 
 ## Environment gate
 
-No Salla Sandbox base URL, access token, test-store identity, or seeded Sandbox
+No Salla Demo access token, verified Demo identity, or seeded Demo
 order identifiers were available in the execution environment. The following
 dedicated variables are required; no secret value is printed:
 
 - `SALLA_SANDBOX_ACCESS_TOKEN`
-- `SALLA_SANDBOX_BASE_URL`
-- `SALLA_SANDBOX_STORE_ID`
+- `SALLA_SANDBOX_BASE_URL` (must be `https://api.salla.dev/admin/v2`)
+- `SALLA_DEMO_STORE_ID`
+- `SALLA_DEMO_TOKEN_SCOPES` (`orders.read_write` plus product read access)
 - `SALLA_SANDBOX_SEED_MANIFEST`
 - `SALLA_SANDBOX_EVIDENCE_DIR`
+- `SALLA_DEMO_STORE_CONFIRMED=true`
 - `SALLA_SANDBOX_RUN_WRITES` (must equal `true` for writes)
 
 All were absent. Consequently, the state matrix below is intentionally marked
 `NOT_EXECUTED`; filling it with inferred pass/fail results would be false
-evidence. P1 must not start until this matrix has real Sandbox evidence or an
+evidence. P1 must not start until this matrix has real Demo Store evidence or an
 official Salla mock environment that models the status restrictions and
 payment side effects.
 
@@ -41,7 +43,6 @@ payment side effects.
 | Update item | `PUT /admin/v2/orders/items/{item_id}` | `orders.read_write` | `order_id`, quantity, branch, options, price/weight | Returns updated order item representation | Whether options change the resolved variant; whether `item_id` stays stable; paid-order balance |
 | Delete item | `DELETE /admin/v2/orders/items/{item_id}` | `orders.read_write` | Path item id | Success/message envelope | Allowed statuses; stock restoration; total/payment/refund behavior; retry semantics |
 | Read items | `GET /admin/v2/orders/items?order_id=...` | `orders.read` | Order id | Authoritative item list | Read-after-write convergence time |
-| Refund/void/reverse | `PUT /admin/v2/transactions/{transaction_id}` | `transactions.read_write` | action, amount, currency | Success/message envelope; partial refund is documented | Eligibility per transaction and accounting policy; not a payment-link mechanism |
 
 Official references reviewed:
 
@@ -49,7 +50,6 @@ Official references reviewed:
 - Salla Merchant API, Update Order Item
 - Salla Merchant API, Delete Order Item
 - Salla Merchant API, List Order Items
-- Salla Merchant API, Transactions / Update Transaction
 - Salla order webhook model and changelog (`order.products.updated`,
   `order.total.price.updated`, `order.payment.updated`, `order.updated`)
 
@@ -68,8 +68,8 @@ Legend:
 | `pending` | NOT_EXECUTED | NOT_EXECUTED | NOT_EXECUTED | Sandbox order required |
 | `under_review` | NOT_EXECUTED | NOT_EXECUTED | NOT_EXECUTED | Sandbox order required |
 | `in_progress` | NOT_EXECUTED | NOT_EXECUTED | NOT_EXECUTED | Sandbox order required |
-| `paid` | NOT_EXECUTED | NOT_EXECUTED | NOT_EXECUTED | Sandbox order and payment transaction required |
-| `partially_paid` | NOT_EXECUTED | NOT_EXECUTED | NOT_EXECUTED | Sandbox order and payment transaction required |
+| `paid` | NOT_EXECUTED | NOT_EXECUTED | NOT_EXECUTED | Demo order and Order API payment facts required |
+| `partially_paid` | NOT_EXECUTED | NOT_EXECUTED | NOT_EXECUTED | Demo order and Order API payment facts required |
 | `completed` | NOT_EXECUTED | NOT_EXECUTED | NOT_EXECUTED | Sandbox order required |
 | `cancelled` | NOT_EXECUTED | NOT_EXECUTED | NOT_EXECUTED | Sandbox order required |
 
@@ -89,6 +89,11 @@ Each executed cell must record, with tokens and customer data redacted:
 9. Repeated identical call outcome.
 10. Simulated lost-response outcome: do not repeat a commercial write until a
     read-after-write reconciliation proves whether the first call committed.
+
+Transactions and Branch APIs are excluded from P0 because those scopes are not
+granted. Payment facts are extracted only from Order API, Order Items, and
+correlated webhooks. `branch_id` comes from the reviewed Seed/order/product
+data. No transaction-level behavior may be marked proven.
 
 ## Product configuration cases
 
@@ -159,10 +164,11 @@ Sandbox writes, run one reviewed case at a time:
 
 ```powershell
 $env:SALLA_SANDBOX_RUN_WRITES='true'
+$env:SALLA_DEMO_STORE_CONFIRMED='true'
 python scripts/research/salla_order_item_contract_runner.py run --case-file docs/operations/MZ-ORDER-REVISION-SALLA-001/fixtures/sandbox-case.example.json --webhook-events C:\path\to\sanitized-webhook-events.json
 ```
 
 The runner never loads production variables. A missing Sandbox configuration
 returns `SALLA_SANDBOX_NOT_CONFIGURED`. Mock transport output is always
-`MOCK_CONTRACT_FIXTURE / NOT_EXECUTED`; only an actual HTTP Sandbox transport
-can emit `SALLA_SANDBOX_EVIDENCE`.
+`MOCK_CONTRACT_FIXTURE / NOT_EXECUTED`; only an identity-verified HTTP Demo
+Store transport can emit `SALLA_DEMO_STORE_EVIDENCE`.

@@ -12,11 +12,13 @@ Provide:
 
 - Sandbox store id and display alias.
 - Sandbox API base URL.
-- OAuth app/client identity used for the test store.
-- Confirmation that the token has `orders.read`, `orders.read_write`, and, for
-  refund observation only, the applicable transaction scopes.
+- OAuth app/client identity used for the Demo Store.
+- Confirmation that the token has `orders.read_write` and product access via
+  `products.read` or the granted `products.read_write` scope. P0 performs
+  product reads only.
 - Webhook receiver URL or an exported sanitized webhook event log.
-- Currency, branch id and inventory location/branch used by the fixtures.
+- Currency and the `branch_id` already exposed by the order, product, or Seed.
+  P0 does not call a Branch API.
 
 Secrets belong in environment variables, not this manifest or Git.
 
@@ -30,13 +32,18 @@ at least one replaceable test item and must not contain real customer data.
 | `pending` | order id/number, item id, product id, SKU, state id/slug, payment method |
 | `under_review` | order id/number, item id, product id, SKU, state id/slug, payment method |
 | `in_progress` | order id/number, item id, product id, SKU, state id/slug, payment method |
-| `paid` | all above plus transaction id, paid amount, total and checkout/payment URLs if any |
-| `partially_paid` | all above plus transaction id, paid/outstanding amounts and payment URLs if any |
+| `paid` | all above plus paid amount, total and checkout/payment URLs if exposed by Order API |
+| `partially_paid` | all above plus paid/outstanding amounts and payment URLs if exposed by Order API |
 | `completed` | order id/number, item id, product id, SKU, state id/slug, payment method |
 | `cancelled` | order id/number, item id, product id, SKU, state id/slug, payment method |
 
 Record the initial order total, payment status and relevant branch inventory so
 the runner can compare before/after effects.
+
+Transaction and Branch scopes are deliberately out of scope. No transaction-
+level behavior may be claimed. Payment evidence is limited to Order API, Order
+Items, and correlated webhooks (`order.updated`, `order.products.updated`,
+`order.payment.updated`, and `order.total.price.updated`).
 
 ## Required products
 

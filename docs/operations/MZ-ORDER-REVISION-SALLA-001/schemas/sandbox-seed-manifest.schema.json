@@ -10,7 +10,7 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["state", "order_id", "order_number", "item_id", "product_id", "sku", "payment_method"]
+        "required": ["state", "order_id", "order_number", "item_id", "product_id", "sku", "payment_method", "branch_id"]
       }
     },
     "products": {

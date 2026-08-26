@@ -3,18 +3,25 @@
   "title": "MZ-ORDER-REVISION-SALLA-001 Sanitized Evidence Record",
   "type": "object",
   "required": [
-    "classification", "timestamp", "test_case_id", "order_status_before",
-    "request", "response_status", "response_body", "source_item_id_before",
-    "source_item_id_after", "order_total_before", "order_total_after",
-    "payment_state_before", "payment_state_after", "webhook_events",
-    "retry_behavior", "final_fetch_result", "verdict"
+    "classification", "timestamp", "test_case_id", "store_id_hash",
+    "identity_verified", "request", "response_status", "response_body",
+    "before", "after", "semantic_diff", "webhook_events",
+    "assertions_executed", "assertions", "verdict",
+    "final_verdict_reason", "idempotency", "transaction_level_behavior"
   ],
   "properties": {
-    "classification": {"enum": ["SALLA_SANDBOX_EVIDENCE", "MOCK_CONTRACT_FIXTURE"]},
+    "classification": {"enum": ["SALLA_DEMO_STORE_EVIDENCE", "MOCK_CONTRACT_FIXTURE"]},
     "timestamp": {"type": "string", "format": "date-time"},
-    "test_case_id": {"type": "string"},
+    "store_id_hash": {"type": "string"},
+    "identity_verified": {"type": "boolean"},
     "request": {"type": "object"},
+    "before": {"type": "object"},
+    "after": {"type": "object"},
+    "semantic_diff": {"type": "object"},
     "webhook_events": {"type": "array"},
-    "verdict": {"enum": ["PASS", "FAIL", "BLOCKED", "NOT_EXECUTED"]}
+    "assertions": {"type": "array"},
+    "verdict": {"enum": ["PASS", "FAIL", "INCONCLUSIVE", "BLOCKED", "NOT_EXECUTED"]},
+    "idempotency": {"enum": ["SALLA_IDEMPOTENCY_UNSUPPORTED", "SALLA_IDEMPOTENCY_OBSERVED", "SALLA_IDEMPOTENCY_INCONCLUSIVE"]},
+    "transaction_level_behavior": {"const": "UNAVAILABLE_SCOPE_NOT_GRANTED"}
   }
 }
