@@ -442,12 +442,59 @@ test("profit rows keep labels on the right and render amount then currency then 
     expect(markup).toContain("flex min-w-0 flex-1 items-center");
 });
 
-test("advanced ads card uses the same Dashboard V2 snapshot as the profit card", () => {
-    expect(source).not.toContain("getDashboardAdsSpend");
+test("advanced ads card and profit card use the same selected-period platform spend", () => {
+    expect(source).toContain("getDashboardAdsSpend");
+    expect(source).toContain("mergeDashboardWithPlatformSpend");
     expect(source).not.toContain("chartData");
     expect(source).toContain("const daily = ads?.history || []");
     expect(source).toContain("const breakdown = ads?.breakdown || {}");
     expect(source).toContain('connectNulls={false}');
+});
+
+test("selected-period Google spend is included in executive ad cost and profit", async () => {
+    let currentData = null;
+    await loadDashboardPeriodSnapshot({
+        next: { from: "2026-08-26", to: "2026-08-26" },
+        requestSequence: 1,
+        isLatest: () => true,
+        apiClient: {
+            get: jest.fn().mockResolvedValue({
+                data: {
+                    totals: {
+                        total_sales: 3458.85,
+                        total_orders: 16,
+                        total_product_cost: 1000,
+                        total_ads_cost: 723.93,
+                        net_profit: 1500,
+                        net_sales: 1734.92,
+                    },
+                    net_sales_config: { deduct_ads: true },
+                    ads_v2: { executive_breakdown: { providers: {}, total: {} } },
+                },
+            }),
+        },
+        platformSpendLoader: jest.fn().mockResolvedValue({
+            date_from: "2026-08-26",
+            date_to: "2026-08-26",
+            provider_totals_sar: {
+                snapchat: 599.46,
+                meta: 124.47,
+                tiktok: 0,
+                google: 34.60,
+            },
+            total_sar: 758.53,
+        }),
+        setData: (value) => { currentData = value; },
+        setLoading: jest.fn(),
+        setLoadError: jest.fn(),
+        now: () => 1,
+    });
+
+    expect(currentData.totals.total_ads_cost).toBe(758.53);
+    expect(currentData.totals.google_ads_spend).toBe(34.60);
+    expect(currentData.totals.net_profit).toBe(1465.4);
+    expect(currentData.ads_v2.executive_breakdown.providers.google.spend_sar).toBe(34.60);
+    expect(currentData.ads_v2.executive_breakdown.total.spend_sar).toBe(758.53);
 });
 
 
