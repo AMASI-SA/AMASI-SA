@@ -289,7 +289,9 @@ async def _hourly_spend(
     user_id: str,
     selected_date: date,
     snapchat: dict[str, Any],
-) -> tuple[list[dict[str, Any]], dict[str, bool]]:
+    *,
+    tiktok_daily_total: float | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, bool], dict[str, str]]:
     local_start = datetime.combine(selected_date, time.min, tzinfo=RIYADH_TZ)
     local_end = local_start + timedelta(days=1)
     utc_start = local_start.astimezone(timezone.utc)
@@ -299,6 +301,7 @@ async def _hourly_spend(
         provider: [0.0 for _ in range(24)] for provider in FOUR_PLATFORM_KEYS
     }
     facts = {provider: False for provider in FOUR_PLATFORM_KEYS}
+    sources = {provider: "" for provider in FOUR_PLATFORM_KEYS}
     snap_hours = {
         int(row.get("hour_index") or 0): row
         for row in list((snapchat.get("hourly_sar") or {}).get(
@@ -307,6 +310,8 @@ async def _hourly_spend(
         if 0 <= int(row.get("hour_index") or 0) <= 23
     }
     facts["snapchat"] = bool(snap_hours)
+    if facts["snapchat"]:
+        sources["snapchat"] = "provider_native"
 
     generic_cursor = db[PLATFORM_HOURLY_COLLECTION].find(
         {
@@ -333,9 +338,56 @@ async def _hourly_spend(
         buckets[provider][local.hour] += spend
         facts[provider] = True
 
+    for provider in ("meta", "tiktok", "google"):
+        if facts[provider]:
+            sources[provider] = "provider_native"
+
+    # Make.com supplies a cumulative daily TikTok total, not hourly spend.
+    # Show the exact total as one labelled marker at its latest update hour.
+    # Native hourly facts remain authoritative once the direct API is live.
+    tiktok_marker_hour: int | None = None
+    if not facts["tiktok"] and tiktok_daily_total is not None:
+        make_rows = await _to_list(
+            db.tiktok_ads_daily.find(
+                {"user_id": user_id, "date": selected_date.isoformat()},
+                {"_id": 0, "updated_at": 1, "created_at": 1},
+            ),
+            MAX_DAILY_ROWS,
+        )
+        observed_points = [
+            point
+            for row in make_rows
+            if (point := _parse_utc(row.get("updated_at") or row.get("created_at")))
+            is not None
+        ]
+        if observed_points:
+            latest_local = max(observed_points).astimezone(RIYADH_TZ)
+            if latest_local.date() < selected_date:
+                tiktok_marker_hour = 0
+            elif latest_local.date() > selected_date:
+                tiktok_marker_hour = 23
+            else:
+                tiktok_marker_hour = latest_local.hour
+            facts["tiktok"] = True
+            sources["tiktok"] = "make_daily_total_marker"
+
     hourly = []
     for hour_index in range(24):
         snap_hour = snap_hours.get(hour_index) or {}
+        provider_values = {}
+        for provider in ("meta", "tiktok", "google"):
+            if provider == "tiktok" and sources[provider] == "make_daily_total_marker":
+                provider_values[provider] = (
+                    round(tiktok_daily_total, 2)
+                    if hour_index == tiktok_marker_hour
+                    else None
+                )
+                continue
+            provider_values[provider] = (
+                round(buckets[provider][hour_index], 2)
+                if facts[provider]
+                else None
+            )
         hourly.append(
             {
                 "date": selected_date.isoformat(),
@@ -343,17 +395,10 @@ async def _hourly_spend(
                 "hour": f"{hour_index:02d}:00",
                 "snapchat": _number(snap_hour.get("spend_sar")),
                 "snapchat_status": snap_hour.get("status"),
-                **{
-                    provider: (
-                        round(buckets[provider][hour_index], 2)
-                        if facts[provider]
-                        else None
-                    )
-                    for provider in ("meta", "tiktok", "google")
-                },
+                **provider_values,
             }
         )
-    return hourly, facts
+    return hourly, facts, sources
 
 
 async def build_dashboard_platform_spend(
@@ -410,8 +455,15 @@ async def build_dashboard_platform_spend(
     single_day = start == end
     hourly: list[dict[str, Any]] = []
     hourly_facts = {provider: False for provider in FOUR_PLATFORM_KEYS}
+    hourly_sources = {provider: "" for provider in FOUR_PLATFORM_KEYS}
     if single_day:
-        hourly, hourly_facts = await _hourly_spend(db, user_id, start, snapchat)
+        hourly, hourly_facts, hourly_sources = await _hourly_spend(
+            db,
+            user_id,
+            start,
+            snapchat,
+            tiktok_daily_total=_number(daily[0].get("tiktok")),
+        )
 
     totals = {
         provider: round(
@@ -440,6 +492,7 @@ async def build_dashboard_platform_spend(
                 "connected": snap_quality.get("connected") is True,
                 "daily_available": snap_amount_available,
                 "hourly_available": hourly_facts[provider],
+                "hourly_source": hourly_sources[provider] or None,
                 "total_sar": totals[provider],
                 "data_quality": snap_quality.get("status"),
                 "data_state": snap_quality.get("data_state"),
@@ -464,6 +517,7 @@ async def build_dashboard_platform_spend(
             },
             "daily_available": daily_facts[provider],
             "hourly_available": hourly_facts[provider],
+            "hourly_source": hourly_sources[provider] or None,
             "total_sar": totals[provider],
             "data_quality": state.get("data_quality"),
             "last_sync_at": state.get("last_sync_at"),

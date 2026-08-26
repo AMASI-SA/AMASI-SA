@@ -238,3 +238,54 @@ def test_incident_recovered_lines_are_allocated_before_existing_reviewed_lines()
     lines = result["products"][0]["source_lines"]
     assert [line["order_number"] for line in lines] == ["recovered", "existing"]
     assert lines[0]["incident_recovery_id"] == "recovery-1"
+
+
+def test_missing_live_salla_line_is_restored_from_review_snapshot():
+    result = aggregate_reviewed_products(
+        [(
+            _order("279778158", []),
+            {
+                "reviewed_at": "2026-08-25T00:02:29+03:00",
+                "incident_recovery_id": "recovery-11",
+                "items": [{
+                    "order_item_id": "lost-dress-line",
+                    "product_id": "p-dress",
+                    "parent_product_id": None,
+                    "sku": "AMS11353",
+                    "product_name": "فستان بناتي أخضر",
+                    "quantity": 2,
+                    "selected_image_url": "https://example.test/dress.jpg",
+                    "specifications_snapshot": {"size": "8 سنوات"},
+                }],
+            },
+        )],
+        [],
+    )
+
+    assert result["summary"]["total_quantity"] == 2
+    product = result["products"][0]
+    assert product["sku"] == "AMS11353"
+    assert product["quantity"] == 2
+    assert product["source_lines"][0]["options_normalized"] == {"size": "8 سنوات"}
+
+
+def test_review_snapshot_does_not_duplicate_a_live_salla_line():
+    result = aggregate_reviewed_products(
+        [(
+            _order("279756840", [_item("same-line", "p-dress", sku="AMS11353")]),
+            {
+                "incident_recovery_id": "recovery-11",
+                "items": [{
+                    "order_item_id": "same-line",
+                    "product_id": "p-dress",
+                    "sku": "AMS11353",
+                    "product_name": "فستان بناتي أخضر",
+                    "quantity": 1,
+                }],
+            },
+        )],
+        [],
+    )
+
+    assert result["summary"]["total_quantity"] == 1
+    assert result["products"][0]["source_line_count"] == 1

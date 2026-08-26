@@ -40,6 +40,9 @@ function fourPlatformPayload(overrides = {}) {
                     connected: true,
                     daily_available: true,
                     hourly_available: true,
+                    hourly_source: provider === "tiktok"
+                        ? "make_daily_total_marker"
+                        : "provider_native",
                     total_sar: 1,
                 },
             ]),
@@ -94,6 +97,8 @@ test("normalizes and sorts all four Riyadh hourly provider series", () => {
     });
     expect(Object.keys(normalized.providers)).toEqual(DASHBOARD_ADS_PROVIDERS);
     expect(normalized.provider_totals_sar.google).toBe(7.5);
+    expect(normalized.providers.tiktok.hourly_source)
+        .toBe("make_daily_total_marker");
     expect(normalized.total_sar).toBe(132.5);
     expect(normalized.provider_write_reached).toBe(false);
     expect(normalized.accounting_write_reached).toBe(false);
