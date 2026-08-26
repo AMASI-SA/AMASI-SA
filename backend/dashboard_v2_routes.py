@@ -1218,6 +1218,109 @@ def make_dashboard_v2_router(
         require_owner(user)
         return user
 
+    @router.get("/dashboard-v2/chart-orders")
+    async def dashboard_v2_chart_orders(
+        from_date: str,
+        to_date: str,
+        payment_methods: str | None = None,
+        shipping_companies: str | None = None,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        current = owner(user)
+        try:
+            start = date.fromisoformat(from_date)
+            end = date.fromisoformat(to_date)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail="invalid_date_range") from exc
+        if end < start or (end - start).days > 90:
+            raise HTTPException(status_code=400, detail="invalid_date_range")
+
+        orders = await _filtered_orders(
+            db,
+            str(current["id"]),
+            from_date=from_date,
+            to_date=to_date,
+            payment_methods=payment_methods,
+            shipping_companies=shipping_companies,
+        )
+        hourly = start == end
+        if hourly:
+            rows = [
+                {
+                    "key": f"{hour:02d}:00",
+                    "label": f"{hour:02d}:00",
+                    "hour_index": hour,
+                    "sales": 0.0,
+                    "orders": 0,
+                }
+                for hour in range(24)
+            ]
+            row_map = {row["hour_index"]: row for row in rows}
+        else:
+            rows = []
+            cursor = start
+            while cursor <= end:
+                day_key = cursor.isoformat()
+                rows.append({
+                    "key": day_key,
+                    "label": day_key,
+                    "date": day_key,
+                    "sales": 0.0,
+                    "orders": 0,
+                })
+                cursor += timedelta(days=1)
+            row_map = {row["date"]: row for row in rows}
+
+        imprecise_timestamps = 0
+        for order in orders:
+            raw = order.get("created_at") or order.get("order_date_raw") or order.get("order_date")
+            parsed: datetime | None = None
+            if isinstance(raw, datetime):
+                parsed = raw
+            elif isinstance(raw, date):
+                parsed = datetime.combine(raw, datetime.min.time())
+                imprecise_timestamps += 1
+            elif raw:
+                text_value = str(raw).strip()
+                try:
+                    parsed = datetime.fromisoformat(text_value.replace("Z", "+00:00"))
+                    if len(text_value) <= 10:
+                        imprecise_timestamps += 1
+                except ValueError:
+                    try:
+                        parsed = datetime.combine(date.fromisoformat(text_value[:10]), datetime.min.time())
+                        imprecise_timestamps += 1
+                    except ValueError:
+                        parsed = None
+            if parsed is None:
+                imprecise_timestamps += 1
+                continue
+            parsed = parsed.replace(tzinfo=RIYADH_TZ) if parsed.tzinfo is None else parsed.astimezone(RIYADH_TZ)
+            bucket = row_map.get(parsed.hour if hourly else parsed.date().isoformat())
+            if bucket is None:
+                continue
+            bucket["sales"] = round(_float(bucket["sales"]) + _float(order.get("total_amount")), 2)
+            bucket["orders"] += 1
+
+        return {
+            "from_date": from_date,
+            "to_date": to_date,
+            "timezone": "Asia/Riyadh",
+            "granularity": "hour" if hourly else "day",
+            "series": rows,
+            "summary": {
+                "sales": round(sum(_float(row["sales"]) for row in rows), 2),
+                "orders": sum(int(row["orders"]) for row in rows),
+            },
+            "data_quality": {
+                "orders_without_precise_time": imprecise_timestamps,
+                "hourly_precision_complete": imprecise_timestamps == 0,
+            },
+            "source_only": True,
+            "accounting_write_reached": False,
+            "qoyod_write_reached": False,
+        }
+
     @router.get("/dashboard-v2")
     async def dashboard_v2(
         from_date: str | None = None,

@@ -8,6 +8,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import AdvancedDashboard from "./pages/AdvancedDashboard";
+import ChartDashboard from "./pages/ChartDashboard";
 import CampaignRecommendations from "./pages/CampaignRecommendations";
 import UploadExcel from "./pages/UploadExcel";
 import AnalysisResult from "./pages/AnalysisResult";
@@ -277,6 +278,16 @@ function AppRoutes() {
                     </ProtectedRoute>
                 }
             />
+      <Route
+        path="/dashboard-charts"
+        element={
+          <ProtectedRoute>
+            <OwnerOnlyRoute>
+              <Layout><ChartDashboard /></Layout>
+            </OwnerOnlyRoute>
+          </ProtectedRoute>
+        }
+      />
             <Route
                 path="/ads-manager/recommendations"
                 element={
