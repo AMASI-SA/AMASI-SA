@@ -842,7 +842,30 @@ async def test_create_reconciliation_catalog_is_account_scoped_deleted_aware_wit
     assert provider.calls[0][1] == path
     params = provider.calls[0][2]
     assert params["read_deleted_entities"] == "true"
+    assert params.get("return_placement_v2") == (
+        "true" if entity_type == "ad_squad" else None
+    )
     assert "sort" not in params
+
+
+@pytest.mark.asyncio
+async def test_ad_squad_point_read_requests_placement_v2_for_exact_verification():
+    provider = _PagedProvider([{
+        "request_status": "SUCCESS",
+        "adsquads": [{
+            "sub_request_status": "SUCCESS",
+            "adsquad": {"id": "squad-1", "placement_v2": {"config": "AUTOMATIC"}},
+        }],
+    }])
+
+    entity = await provider.read_entity("ad_squad", "squad-1")
+
+    assert entity["id"] == "squad-1"
+    assert provider.calls == [(
+        "GET",
+        "/adsquads/squad-1",
+        {"return_placement_v2": "true"},
+    )]
 
 
 @pytest.mark.asyncio

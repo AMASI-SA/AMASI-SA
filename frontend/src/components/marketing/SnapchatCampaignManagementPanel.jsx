@@ -214,9 +214,15 @@ function productLabel(product) {
     return sku ? `${name} · ${sku}` : name;
 }
 
+function activePixel(pixel) {
+    return String(pixel?.status || "").toUpperCase() === "ACTIVE"
+        && String(pixel?.effective_status || "").toUpperCase() === "ACTIVE";
+}
+
 function solePixelId(readiness, accountId) {
     const account = readiness?.accounts?.find((item) => item.account_id === accountId);
-    return account?.pixels?.length === 1 ? account.pixels[0].pixel_id : "";
+    const activePixels = (account?.pixels || []).filter(activePixel);
+    return activePixels.length === 1 ? activePixels[0].pixel_id : "";
 }
 
 function verifiedContinuationContext(proposal) {
@@ -1101,7 +1107,12 @@ export default function SnapchatCampaignManagementPanel({
                                         <SelectField label="Snap Pixel · مطلوب لتحسين الشراء" value={form.pixelId} onChange={(value) => field("pixelId", value)} required testId="snapchat-management-pixel-select">
                                             <option value="" label={selectedAccount?.pixels?.length ? "اختر Pixel المرتبط بالحساب" : "لا يوجد Pixel مكتشف لهذا الحساب"} />
                                             {(selectedAccount?.pixels || []).map((pixel) => (
-                                                <option key={pixel.pixel_id} value={pixel.pixel_id} label={`${pixel.display_name} · ${pixel.pixel_id}`} />
+                                                <option
+                                                    key={pixel.pixel_id}
+                                                    value={pixel.pixel_id}
+                                                    disabled={!activePixel(pixel)}
+                                                    label={`${pixel.display_name} · ${pixel.pixel_id}${activePixel(pixel) ? "" : " · غير نشط"}`}
+                                                />
                                             ))}
                                         </SelectField>
                                     )}
