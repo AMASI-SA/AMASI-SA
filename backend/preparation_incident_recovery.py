@@ -48,27 +48,57 @@ def _qty(value: Any) -> int:
         return 0
 
 
+def _item_value(item: Any, key: str) -> Any:
+    return item.get(key) if isinstance(item, dict) else getattr(item, key, None)
+
+
+def _resolved_target_items(
+    order_number: str,
+    expected_quantity: int,
+    order_items: list[Any],
+    workflow: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    """Resolve the exact incident lines without relying on product names.
+
+    Salla may stop returning ``items`` on an in-progress order while Mezan's
+    immutable review snapshot still contains the original SKU, quantity and
+    order-item identity.  The snapshot is accepted only when its SKU-exact
+    total equals the incident's pre-recorded quantity for that order.
+    """
+    live = [
+        {
+            "order_number": order_number,
+            "order_item_id": _text(_item_value(item, "order_item_id")),
+            "quantity": _qty(_item_value(item, "quantity")),
+            "source": "order",
+        }
+        for item in order_items
+        if _text(_item_value(item, "sku")).upper() == SKU
+    ]
+    if sum(row["quantity"] for row in live) == expected_quantity:
+        return live
+
+    frozen = [
+        {
+            "order_number": order_number,
+            "order_item_id": _text(row.get("order_item_id")),
+            "quantity": _qty(row.get("quantity")),
+            "source": "review_snapshot",
+        }
+        for row in ((workflow or {}).get("items") or [])
+        if isinstance(row, dict) and _text(row.get("sku")).upper() == SKU
+    ]
+    if sum(row["quantity"] for row in frozen) == expected_quantity:
+        return frozen
+    return live
+
+
 async def _preview(db: Any, user_id: str) -> dict[str, Any]:
     repo = MongoOrderRepository(db)
     target_items: list[dict[str, Any]] = []
     workflow_rows: list[dict[str, Any]] = []
     problems: list[str] = []
     for order_number, expected_quantity in EXPECTED.items():
-        try:
-            order = await get_order(repo, user_id=user_id, order_number=order_number)
-        except OrderNotFoundError:
-            problems.append(f"order_missing:{order_number}")
-            continue
-        matches = [item for item in order.items if _text(item.sku).upper() == SKU]
-        actual = sum(_qty(item.quantity) for item in matches)
-        if actual != expected_quantity:
-            problems.append(f"quantity_mismatch:{order_number}:{actual}:{expected_quantity}")
-        for item in matches:
-            target_items.append({
-                "order_number": order_number,
-                "order_item_id": _text(item.order_item_id),
-                "quantity": _qty(item.quantity),
-            })
         workflow = await db[WORKFLOWS].find_one(
             {"user_id": user_id, "order_number": order_number}, {"_id": 0}
         )
@@ -76,6 +106,21 @@ async def _preview(db: Any, user_id: str) -> dict[str, Any]:
             problems.append(f"workflow_missing:{order_number}")
         else:
             workflow_rows.append(workflow)
+        try:
+            order = await get_order(repo, user_id=user_id, order_number=order_number)
+        except OrderNotFoundError:
+            problems.append(f"order_missing:{order_number}")
+            continue
+        matches = _resolved_target_items(
+            order_number,
+            expected_quantity,
+            list(order.items),
+            workflow,
+        )
+        actual = sum(row["quantity"] for row in matches)
+        if actual != expected_quantity:
+            problems.append(f"quantity_mismatch:{order_number}:{actual}:{expected_quantity}")
+        target_items.extend(matches)
 
     target_keys = {
         (row["order_number"], row["order_item_id"])
