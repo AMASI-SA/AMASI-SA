@@ -297,6 +297,19 @@ def _preflight_qoyod_invoice_payload(
             "لا تحتوي فاتورة قيود على بنود قابلة للتحقق قبل الإرسال.",
         )
 
+    for index, line in enumerate(lines):
+        if not isinstance(line, dict):
+            continue
+        for field in ("unit_price", "discount"):
+            value = _strict_decimal(
+                line.get(field) or 0,
+                field=f"line_items[{index}].{field}",
+            )
+            line[field] = float(value.quantize(
+                _TWO_PLACES, rounding=ROUND_HALF_UP))
+    _align_qoyod_document_total(
+        lines, salla_total=salla_total,
+        item_line_count=len(lines), adjustment_product_id=None)
     subtotal_raw = Decimal("0")
     tax_raw = Decimal("0")
     for index, line in enumerate(lines):
