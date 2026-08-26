@@ -111,3 +111,11 @@ Every report defaults to:
 No adapter may enable this flag. A separate acceptance gate can do so only
 after provider reconciliation, hierarchy performance coverage, Salla
 attribution checks, and Shadow Sync acceptance have passed in Production.
+
+`GET /api/integrations-v2/snapchat-v2/unified-readiness` is the fail-closed
+acceptance proof for Snapchat V2. With no dates it evaluates the last closed
+account-local day. It requires a complete reconciled account contract, complete
+campaign/ad-group/ad reports, a complete non-truncated Salla comparison, and an
+explicit Decision Intelligence isolation guard. A passing proof makes the
+contract data ready to consume; it does not connect or enable Decision
+Intelligence.

@@ -1020,5 +1020,28 @@ def attach_snapchat_v2_routes(
             "reconciled": bool(rows) and all(row.get("reconciled") for row in rows),
         }
 
+    @router.get("/snapchat-v2/unified-readiness")
+    async def snapchat_v2_unified_readiness_route(
+        date_from: date | None = Query(default=None),
+        date_to: date | None = Query(default=None),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        # Imported lazily because the provider-neutral reader reuses the
+        # entity projection helpers in this module.
+        from unified_marketing.readiness import build_snapchat_unified_readiness
+
+        if date_from is not None and date_to is not None:
+            _read_days(date_from, date_to)
+        user_id = _user_id(user, require_owner)
+        try:
+            return await build_snapchat_unified_readiness(
+                db,
+                user_id,
+                date_from=date_from,
+                date_to=date_to,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
 
 __all__ = ["SnapchatV2SyncInput", "attach_snapchat_v2_routes"]
