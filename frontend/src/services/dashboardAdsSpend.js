@@ -52,6 +52,7 @@ function normalizeProvider(provider, value = {}) {
         connected: row.connected === true,
         daily_available: row.daily_available === true,
         hourly_available: row.hourly_available === true,
+        hourly_source: String(row.hourly_source || ""),
         total_sar: nonnegative(row.total_sar),
         data_quality: row.data_quality ? String(row.data_quality) : null,
         last_sync_at: row.last_sync_at ? String(row.last_sync_at) : null,

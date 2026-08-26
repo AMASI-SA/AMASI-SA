@@ -104,6 +104,8 @@ export function DashboardAdsSpendCardContent({
         [points],
     );
     const hasAnySeries = Object.values(availableSeries).some(Boolean);
+    const hasTikTokMakeMarker = singleDay
+        && data?.providers?.tiktok?.hourly_source === "make_daily_total_marker";
 
     return (
         <section
@@ -183,7 +185,10 @@ export function DashboardAdsSpendCardContent({
                                 </div>
                                 <div className="mt-0.5 text-[9px] font-semibold text-slate-400">
                                     {singleDay
-                                        ? state.hourly_available
+                                        ? provider === "tiktok"
+                                            && state.hourly_source === "make_daily_total_marker"
+                                            ? "إجمالي Make عند آخر تحديث"
+                                            : state.hourly_available
                                             ? "بيانات ساعية أصلية"
                                             : state.daily_available
                                                 ? "إجمالي اليوم متاح"
@@ -203,7 +208,9 @@ export function DashboardAdsSpendCardContent({
 
                 {singleDay && (
                     <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-semibold text-slate-600">
-                        خطوط الساعات مبنية على ساعات المنصات الأصلية فقط، ولا يتم توزيع إجمالي اليوم على الساعات بالتخمين.
+                        {hasTikTokMakeMarker
+                            ? "علامة تيك توك تمثل إجمالي اليوم عند ساعة آخر تحديث من Make؛ بقية الخطوط مبنية على ساعات المنصات الأصلية، ولا يتم توزيع الإجمالي بالتخمين."
+                            : "خطوط الساعات مبنية على ساعات المنصات الأصلية فقط، ولا يتم توزيع إجمالي اليوم على الساعات بالتخمين."}
                     </div>
                 )}
 
@@ -264,7 +271,9 @@ export function DashboardAdsSpendCardContent({
                                             stroke={PROVIDER_META[provider].stroke}
                                             strokeWidth={provider === "snapchat" ? 2.5 : 2.25}
                                             connectNulls={false}
-                                            dot={false}
+                                            dot={provider === "tiktok" && hasTikTokMakeMarker
+                                                ? { r: 4, strokeWidth: 2 }
+                                                : false}
                                         />
                                     ) : null
                                 ))}

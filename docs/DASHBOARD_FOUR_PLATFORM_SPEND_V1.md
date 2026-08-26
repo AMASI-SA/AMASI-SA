@@ -12,6 +12,9 @@ The Mezan 2 Dashboard advertising card reads provider-reported spend for:
 - A single selected Riyadh date uses original hourly provider facts.
 - A multi-day selection uses provider daily facts.
 - Daily totals are never spread across hours as an estimate.
+- While TikTok uses the temporary Make.com transport, its exact daily total is
+  shown as a single labelled marker at the latest Make update hour. It is not
+  presented as native hourly spend and disappears once native hourly facts exist.
 - A connected provider without facts is displayed as awaiting data rather than zero.
 
 ## Sources
