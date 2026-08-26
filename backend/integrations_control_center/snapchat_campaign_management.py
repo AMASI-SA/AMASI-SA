@@ -847,6 +847,9 @@ def _assert_stored_operation_integrity(
             pixel_id = _identifier(entity.get("pixel_id"), field="pixel_id")
             window = str(entity.get("conversion_window") or "").upper()
             proof = row.get("pixel_eligibility")
+            # Raw account-list Pixel statuses are retained in the proof for
+            # audit only. Snapchat's campaign-eligibility result is the
+            # authoritative optimization gate, including for CAPI events.
             if (
                 not isinstance(proof, dict)
                 or proof.get("verified") is not True
@@ -857,9 +860,6 @@ def _assert_stored_operation_integrity(
                 or str(proof.get("eligibility_status") or "").upper()
                 not in PIXEL_ELIGIBLE_STATUSES
                 or proof.get("membership_verified") is not True
-                or str(proof.get("pixel_status") or "").upper() != "ACTIVE"
-                or str(proof.get("pixel_effective_status") or "").upper()
-                != "ACTIVE"
             ):
                 raise ValueError("stored Pixel eligibility proof is invalid")
 
