@@ -1072,7 +1072,9 @@ class _CreateExecutionProvider:
 
 
 @pytest.mark.asyncio
-async def test_pixel_final_preflight_is_immediately_before_exact_paused_post(monkeypatch):
+async def test_pixel_final_preflight_accepts_stale_raw_status_before_exact_paused_post(
+    monkeypatch,
+):
     _prepare_execution(monkeypatch)
     db = _DB()
     operation = management.build_snapchat_operation(_ad_squad_payload())
@@ -1084,8 +1086,8 @@ async def test_pixel_final_preflight_is_immediately_before_exact_paused_post(mon
         "conversion_window": "SWIPE_28DAY_VIEW_1DAY",
         "eligibility_status": "ELIGIBLE",
         "membership_verified": True,
-        "pixel_status": "ACTIVE",
-        "pixel_effective_status": "ACTIVE",
+        "pixel_status": "PAUSED",
+        "pixel_effective_status": "",
     }
     row = _approved_v2_create_row("pixel-final-preflight", operation, pixel_proof=proof)
     db[management.PROPOSAL_COLLECTION].rows.append(deepcopy(row))
