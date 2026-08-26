@@ -125,14 +125,14 @@ async def test_tiktok_make_ledger_overrides_partial_native_reporting_without_sum
                     "counterparty_id": "tiktok-account-1",
                     "type": "spend",
                     "date": "2026-08-25",
-                    "amount": 808.26,
+                    "amount": 2170.48,
                 },
                 {
                     "user_id": "owner-1",
                     "counterparty_id": "tiktok-account-1",
                     "type": "spend",
                     "date": "2026-08-25",
-                    "amount": 284.45,
+                    "amount": -1077.77,
                 },
             ],
             "mezan_tiktok_performance_daily_v2": [
