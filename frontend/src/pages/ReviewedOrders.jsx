@@ -376,12 +376,19 @@ export default function ReviewedOrders() {
         }
     };
 
-    if (loading) return <div className="flex min-h-80 items-center justify-center"><SpinnerGap size={34} className="animate-spin text-violet-600" /></div>;
-    if (error) return <div className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-rose-800"><WarningCircle className="ml-2 inline" />{error}</div>;
+    const incidentRecovery = new URLSearchParams(window.location.search).get("incident") === "ams11353-20260825"
+        ? <Ams11353IncidentRecovery onRecovered={() => load({ silent: true })} />
+        : null;
+
+    // The incident preview must not be hidden behind the reviewed-products
+    // catalog request.  That catalog can be slow or temporarily unavailable,
+    // while the recovery endpoint is deliberately narrow and independent.
+    if (loading) return <section className="space-y-4" dir="rtl">{incidentRecovery}<div className="flex min-h-80 items-center justify-center"><SpinnerGap size={34} className="animate-spin text-violet-600" /></div></section>;
+    if (error) return <section className="space-y-4" dir="rtl">{incidentRecovery}<div className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-rose-800"><WarningCircle className="ml-2 inline" />{error}</div></section>;
 
     return (
         <section className={`space-y-4 ${selectionSummary.productCount > 0 ? "pb-28 sm:pb-24" : ""}`} dir="rtl" data-testid="reviewed-orders-stage" data-view="reviewed-products">
-            {new URLSearchParams(window.location.search).get("incident") === "ams11353-20260825" && <Ams11353IncidentRecovery onRecovered={() => load({ silent: true })} />}
+            {incidentRecovery}
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div>
