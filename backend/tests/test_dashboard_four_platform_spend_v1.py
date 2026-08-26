@@ -159,6 +159,46 @@ async def test_tiktok_make_ledger_overrides_partial_native_reporting_without_sum
     assert facts["tiktok"] is True
 
 
+@pytest.mark.asyncio
+async def test_tiktok_make_daily_total_is_a_single_latest_update_marker():
+    db = FakeDB(
+        {
+            "mezan_ads_platform_hourly_v2": [],
+            "tiktok_ads_daily": [
+                {
+                    "user_id": "owner-1",
+                    "date": "2026-08-26",
+                    "campaign_id": "campaign-1",
+                    "updated_at": "2026-08-26T12:10:00+00:00",
+                },
+                {
+                    "user_id": "owner-1",
+                    "date": "2026-08-26",
+                    "campaign_id": "campaign-2",
+                    "updated_at": "2026-08-26T13:45:00+00:00",
+                },
+            ],
+        }
+    )
+
+    hourly, facts, sources = await module._hourly_spend(
+        db,
+        "owner-1",
+        date(2026, 8, 26),
+        {"hourly_sar": {}},
+        tiktok_daily_total=308.17,
+    )
+
+    assert facts["tiktok"] is True
+    assert sources["tiktok"] == "make_daily_total_marker"
+    assert hourly[16]["tiktok"] == 308.17
+    assert all(
+        row["tiktok"] is None
+        for hour_index, row in enumerate(hourly)
+        if hour_index != 16
+    )
+
+
 
 def _connected(provider):
     return {
@@ -336,6 +376,7 @@ async def test_builds_selected_four_platform_daily_and_riyadh_hourly_spend(monke
     assert result["hourly_spend"][1]["meta"] == 2.0
     assert result["hourly_spend"][1]["tiktok"] == 1.0
     assert result["hourly_spend"][1]["google"] == 0.5
+    assert result["providers"]["tiktok"]["hourly_source"] == "provider_native"
     assert all(result["providers"][provider]["connected"] for provider in (
         "snapchat",
         "meta",
