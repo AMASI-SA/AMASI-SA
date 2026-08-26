@@ -672,6 +672,7 @@ export async function loadDashboardPeriodSnapshot({
     setLoading,
     setLoadError,
     platformSpendLoader = null,
+    platformSpendTimeoutMs = 12000,
     now = Date.now,
 }) {
     if (!background) {
@@ -690,7 +691,13 @@ export async function loadDashboardPeriodSnapshot({
         const response = await apiClient.get(`/dashboard-v2?${query.toString()}`, {
             headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
         });
-        const platformSpend = await platformSpendPromise;
+        let timeoutId;
+        const platformSpend = await Promise.race([
+            platformSpendPromise,
+            new Promise((resolve) => {
+                timeoutId = setTimeout(() => resolve(null), platformSpendTimeoutMs);
+            }),
+        ]).finally(() => clearTimeout(timeoutId));
         const periodData = platformSpend
             ? mergeDashboardWithPlatformSpend(response.data, platformSpend)
             : response.data;
