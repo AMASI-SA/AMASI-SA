@@ -13,6 +13,8 @@ import AdsExecutiveBreakdownTable from "../components/AdsExecutiveBreakdownTable
 import DashboardAdsSpendCard from "../components/DashboardAdsSpendCard";
 import { buildPaymentFeeRows } from "../components/ProfitSummaryCard";
 import { useOrders } from "../hooks/useOrders";
+import { mergeDashboardWithPlatformSpend } from "../lib/dashboardPlatformSpendMerge";
+import { getDashboardAdsSpend } from "../services/dashboardAdsSpend";
 import { buildMezanProductCostHref, buildMissingMezanCostHref } from "../lib/mezanV2CostLinks";
 import {
     DASHBOARD_AUTO_REFRESH_MS,
@@ -669,6 +671,7 @@ export async function loadDashboardPeriodSnapshot({
     setData,
     setLoading,
     setLoadError,
+    platformSpendLoader = null,
     now = Date.now,
 }) {
     if (!background) {
@@ -678,11 +681,21 @@ export async function loadDashboardPeriodSnapshot({
     try {
         const query = new URLSearchParams(filtersToQueryString(next));
         query.set("_refresh", String(now()));
+        const platformSpendPromise = typeof platformSpendLoader === "function"
+            ? platformSpendLoader({
+                dateFrom: next.from,
+                dateTo: next.to || next.from,
+            }).catch(() => null)
+            : Promise.resolve(null);
         const response = await apiClient.get(`/dashboard-v2?${query.toString()}`, {
             headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
         });
+        const platformSpend = await platformSpendPromise;
+        const periodData = platformSpend
+            ? mergeDashboardWithPlatformSpend(response.data, platformSpend)
+            : response.data;
         if (isLatest(requestSequence)) {
-            setData(response.data);
+            setData(periodData);
             setLoadError(null);
         }
     } catch {
@@ -716,6 +729,7 @@ export default function AdvancedDashboard() {
                 setData,
                 setLoading,
                 setLoadError,
+                platformSpendLoader: getDashboardAdsSpend,
             });
         } finally {
             if (background) backgroundRefreshInFlightRef.current = false;
