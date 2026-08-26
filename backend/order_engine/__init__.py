@@ -87,6 +87,7 @@ def make_order_engine_router(*args, **kwargs):
     from fulfillment_experiment_routes import make_fulfillment_experiment_router
     from mezan_supplier_management_routes import make_mezan_supplier_management_router
     from preparation_file_failure_safety import install_preparation_finalize_safety, make_preparation_file_failure_safety_router
+    from preparation_incident_recovery import make_preparation_incident_recovery_router
     from product_inventory_receipt_routes import make_product_inventory_receipt_router
     from stock_preparation_order_routes import make_stock_preparation_order_router
     from salla_inventory_sync_routes import make_salla_inventory_sync_router
@@ -184,6 +185,7 @@ def make_order_engine_router(*args, **kwargs):
         make_reviewed_preparation_batches_router(db, current_user),
         make_preparation_file_registry_router(db, current_user),
         make_preparation_file_failure_safety_router(db, current_user),
+        make_preparation_incident_recovery_router(db, current_user),
         make_preparation_piece_operations_router(db, current_user),
         make_preparation_supplier_dispatch_router(db, current_user),
         make_supplier_dispatch_order_group_preview_router(db, current_user),
