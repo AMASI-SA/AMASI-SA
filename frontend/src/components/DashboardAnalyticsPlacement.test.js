@@ -43,7 +43,7 @@ test("the advanced dashboard owns GA4, ads, payment fees, and profit details", (
     expect(advancedDashboardSource).toContain('testid="advanced-profit-payment-details"');
     expect(advancedDashboardSource).toContain('data-testid="advanced-ga-active-chart"');
     expect(advancedDashboardSource).toContain("<GaLive data={ga} />");
-    expect(advancedDashboardSource).toContain("<AdsCard ads={data?.ads_v2}");
+    expect(advancedDashboardSource).toContain("<DashboardAdsSpendCard");
     expect(advancedDashboardSource).not.toContain("getDashboardAdsSpend");
     expect(advancedDashboardSource).not.toContain("chartData");
     expect(frontendIndexSource).not.toContain("dashboardExecutivePlatformSpendInterceptor");
