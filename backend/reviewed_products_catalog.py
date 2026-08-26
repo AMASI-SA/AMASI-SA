@@ -83,6 +83,44 @@ def _review_state_map(workflow: dict[str, Any]) -> dict[str, dict[str, Any]]:
     }
 
 
+def _order_items_with_review_snapshot(
+    order: dict[str, Any],
+    workflow: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Keep reviewed lines visible when Salla later omits live order items.
+
+    Review completion freezes the operational identity, quantity, SKU and
+    customer specifications for every line.  The live Salla order remains the
+    preferred source, while missing identities are appended from that durable
+    snapshot.  Matching by order-item identity prevents double counting when
+    Salla still returns a line normally.
+    """
+    live_items = [
+        _dict(value) for value in (order.get("items") or []) if _dict(value)
+    ]
+    live_ids = {
+        _text(item.get("order_item_id"))
+        for item in live_items
+        if _text(item.get("order_item_id"))
+    }
+    for row in workflow.get("items") or []:
+        snapshot = _dict(row)
+        order_item_id = _text(snapshot.get("order_item_id"))
+        if not order_item_id or order_item_id in live_ids:
+            continue
+        if _unit_quantity(snapshot.get("quantity")) <= 0:
+            continue
+        live_items.append({
+            **snapshot,
+            "order_item_id": order_item_id,
+            "name": _text(snapshot.get("product_name")) or "منتج بدون اسم",
+            "image_url": _text(snapshot.get("selected_image_url")) or None,
+            "options_normalized": snapshot.get("specifications_snapshot") or {},
+        })
+        live_ids.add(order_item_id)
+    return live_items
+
+
 def _raw_product_categories(product: dict[str, Any]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     raw = product.get("raw_salla") if isinstance(product.get("raw_salla"), dict) else {}
@@ -173,9 +211,7 @@ def aggregate_reviewed_products(
         if order_number:
             reviewed_order_numbers.add(order_number)
         states = _review_state_map(workflow)
-        order_items = [
-            _dict(value) for value in (order.get("items") or []) if _dict(value)
-        ]
+        order_items = _order_items_with_review_snapshot(order, workflow)
         total_products_in_order = sum(
             _unit_quantity(item.get("quantity")) for item in order_items
         ) or 1
