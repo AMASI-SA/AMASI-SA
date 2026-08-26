@@ -52,6 +52,39 @@ def test_extract_item_specs_keeps_name_and_value_separate():
     }]
 
 
+def test_supplier_file_uses_review_snapshot_when_live_item_options_are_missing():
+    sparse = item(size=None)
+    state = {
+        "specifications_snapshot": {
+            "مقاس الطفل بالعمر": "8 سنوات",
+            "الاسم المطلوب": "سارة",
+        },
+    }
+
+    assert supplier_file_spec_fields(sparse, state) == [
+        {
+            "spec_key": "مقاس الطفل بالعمر",
+            "name": "مقاس الطفل بالعمر",
+            "value": "8 سنوات",
+            "text": "مقاس الطفل بالعمر: 8 سنوات",
+        },
+        {
+            "spec_key": "الاسم المطلوب",
+            "name": "الاسم المطلوب",
+            "value": "سارة",
+            "text": "الاسم المطلوب: سارة",
+        },
+    ]
+
+
+def test_live_option_wins_over_older_review_snapshot_value():
+    current = item(size="10 سنوات")
+    state = {"specifications_snapshot": {"المقاس": "8 سنوات"}}
+
+    fields = supplier_file_spec_fields(current, state)
+    assert fields[0]["value"] == "10 سنوات"
+
+
 def test_name_and_value_can_be_replaced_independently_for_file_only():
     product = item()
     state = {

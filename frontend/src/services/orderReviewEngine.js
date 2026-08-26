@@ -10,6 +10,10 @@ function message(error, fallback) {
     if (detail?.code === "preparation_quantity_exceeds_remaining") return "الكمية المختارة أكبر من الكمية المتبقية.";
     if (detail?.code === "preparation_units_already_allocated") return "حجز موظف آخر بعض القطع. حدّث الصفحة وأعد الاختيار.";
     if (detail?.code === "reviewed_product_not_available") return "المنتج لم يعد متاحًا في هذه المرحلة. حدّث الصفحة.";
+    if (detail?.code === "reviewed_line_changed_reload_required") return "تغيّرت بيانات المنتج بعد فتح الملف. حدّث منتجات تمت المراجعة ثم أعد تحديد الكمية. لم يتم إنشاء ملف.";
+    if (detail?.code === "reviewed_line_no_longer_exportable") return "هذا المنتج لم يعد متاحًا لملف التجهيز. حدّث الصفحة ثم أعد الاختيار. لم يتم إنشاء ملف.";
+    if (detail?.code === "reviewed_product_allocation_incomplete") return "تعذّر توزيع الكمية على الطلبات الحالية. حدّث الصفحة ثم أعد تحديد الكمية. لم يتم إنشاء ملف.";
+    if (detail?.code === "preparation_batch_build_in_progress") return "يجري إنشاء هذا الملف بالفعل؛ انتظر لحظات ولا تكرر الحفظ.";
     if (detail?.code === "reviewed_catalog_truncated") return "لا يمكن إنشاء ملف من قائمة ناقصة. راجع تنبيه الحد التشغيلي.";
     if (detail?.code === "preparation_batch_generation_failed") return "تعذّر إنشاء ملف التجهيز ولم تُخصم أي قطعة.";
     if (detail?.code === "responsible_employee_unavailable") return "اختر موظفًا مسؤولًا نشطًا يملك صلاحية إدارة التجهيز.";

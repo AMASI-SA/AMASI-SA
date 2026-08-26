@@ -131,6 +131,36 @@ def extract_item_specs(item: Any) -> list[dict[str, str]]:
     return rows
 
 
+def _snapshot_spec_rows(state: Optional[dict[str, Any]]) -> list[dict[str, str]]:
+    """Read immutable review options when the later live Salla line is sparse."""
+    snapshot = (state or {}).get("specifications_snapshot") or {}
+    rows: list[dict[str, str]] = []
+
+    def add(name: Any, value: Any) -> None:
+        display_name = _text(name).rstrip(":：").strip()
+        display_value = _display_value(value)
+        spec_key = canonical_spec_key(display_name)
+        if display_name and display_value and spec_key:
+            rows.append({
+                "spec_key": spec_key,
+                "name": display_name,
+                "value": display_value,
+            })
+
+    if isinstance(snapshot, dict):
+        for name, value in snapshot.items():
+            add(name, value)
+    elif isinstance(snapshot, list):
+        for row in snapshot:
+            if not isinstance(row, dict):
+                continue
+            add(
+                row.get("name") or row.get("label") or row.get("spec_key"),
+                row.get("value") if row.get("value") not in (None, "") else row.get("answer"),
+            )
+    return rows
+
+
 def _without_redundant_component(value: Any, original: Any) -> Optional[str]:
     visible = _text(value)
     if not visible or visible == _text(original):
@@ -244,7 +274,13 @@ def effective_spec_rows(
     defaults = defaults or {}
     overrides = replacement_override_map(state)
     rows: list[dict[str, Any]] = []
-    for spec in extract_item_specs(item):
+    source_specs = extract_item_specs(item)
+    live_keys = {row["spec_key"] for row in source_specs}
+    source_specs.extend(
+        row for row in _snapshot_spec_rows(state)
+        if row["spec_key"] not in live_keys
+    )
+    for spec in source_specs:
         spec_key = spec["spec_key"]
         if spec_key in overrides:
             components = replacement_components(overrides[spec_key], spec)
