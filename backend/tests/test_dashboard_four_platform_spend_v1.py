@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 import pytest
 
@@ -98,6 +98,66 @@ class FakeDB:
 
     def __getattr__(self, name):
         return self[name]
+
+
+@pytest.mark.asyncio
+async def test_tiktok_make_ledger_fills_only_dates_without_native_reporting():
+    db = FakeDB(
+        {
+            "counterparties": [
+                {
+                    "user_id": "owner-1",
+                    "kind": "ad_account",
+                    "ad_provider": "tiktok",
+                    "id": "tiktok-account-1",
+                }
+            ],
+            "ad_account_ledger": [
+                {
+                    "user_id": "owner-1",
+                    "counterparty_id": "tiktok-account-1",
+                    "type": "spend",
+                    "date": "2026-08-24",
+                    "amount": 99.0,
+                },
+                {
+                    "user_id": "owner-1",
+                    "counterparty_id": "tiktok-account-1",
+                    "type": "spend",
+                    "date": "2026-08-25",
+                    "amount": 808.26,
+                },
+                {
+                    "user_id": "owner-1",
+                    "counterparty_id": "tiktok-account-1",
+                    "type": "spend",
+                    "date": "2026-08-25",
+                    "amount": 284.45,
+                },
+            ],
+            "mezan_tiktok_performance_daily_v2": [
+                {
+                    "user_id": "owner-1",
+                    "provider": "tiktok_ads",
+                    "date": "2026-08-24",
+                    "spend_sar": 50.0,
+                }
+            ],
+        }
+    )
+
+    daily, facts = await module._daily_spend(
+        db,
+        "owner-1",
+        date(2026, 8, 24),
+        date(2026, 8, 25),
+        {"daily_sar": {}, "quality": {}},
+    )
+
+    assert daily[0]["tiktok"] == 50.0
+    assert daily[1]["tiktok"] == 1092.71
+    assert facts["tiktok"] is True
+
 
 
 def _connected(provider):

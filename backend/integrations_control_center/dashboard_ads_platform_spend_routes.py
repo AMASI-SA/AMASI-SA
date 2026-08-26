@@ -180,6 +180,7 @@ async def _daily_spend(
         }
         for day in dates
     }
+    tiktok_native_dates: set[str] = set()
     facts = {provider: False for provider in FOUR_PLATFORM_KEYS}
     for day in dates:
         by_date[day.isoformat()]["snapchat"] = (
@@ -217,8 +218,57 @@ async def _daily_spend(
             observed_dates.add(day_text)
         if observed_dates:
             facts[provider] = True
+            if provider == "tiktok":
+                tiktok_native_dates = observed_dates
             for day_text in by_date:
                 by_date[day_text][provider] = round(totals.get(day_text, 0.0), 2)
+
+    # Make.com is the temporary TikTok transport until the merchant completes
+    # the direct Marketing API connection. The financial SSOT for that bridge
+    # is ad_account_ledger. Prefer native reporting for every date where it is
+    # present, and fill only uncovered dates from the ledger so the transition
+    # to direct TikTok can never double-count spend.
+    tiktok_accounts = await _to_list(
+        db.counterparties.find(
+            {
+                "user_id": user_id,
+                "kind": "ad_account",
+                "ad_provider": "tiktok",
+            },
+            {"_id": 0, "id": 1},
+        ),
+        200,
+    )
+    tiktok_account_ids = [row.get("id") for row in tiktok_accounts if row.get("id")]
+    if tiktok_account_ids:
+        ledger_rows = await _to_list(
+            db.ad_account_ledger.find(
+                {
+                    "user_id": user_id,
+                    "counterparty_id": {"$in": tiktok_account_ids},
+                    "type": "spend",
+                    "date": {
+                        "$gte": start.isoformat(),
+                        "$lte": end.isoformat(),
+                    },
+                },
+                {"_id": 0, "date": 1, "amount": 1},
+            ),
+            MAX_DAILY_ROWS,
+        )
+        ledger_totals: dict[str, float] = defaultdict(float)
+        ledger_dates: set[str] = set()
+        for row in ledger_rows:
+            day_text = str(row.get("date") or "")[:10]
+            amount = _number(row.get("amount"))
+            if day_text not in by_date or amount is None:
+                continue
+            ledger_totals[day_text] += amount
+            ledger_dates.add(day_text)
+        for day_text in ledger_dates - tiktok_native_dates:
+            by_date[day_text]["tiktok"] = round(ledger_totals[day_text], 2)
+        if ledger_dates:
+            facts["tiktok"] = True
 
     return [by_date[day.isoformat()] for day in dates], facts
 
