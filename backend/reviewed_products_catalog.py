@@ -246,6 +246,7 @@ def aggregate_reviewed_products(
                 "image_url": image or None,
                 "order_date": order.get("created_at"),
                 "reviewed_at": workflow.get("reviewed_at"),
+                "incident_recovery_id": _text(workflow.get("incident_recovery_id")) or None,
                 "shipping_company": _text(shipping.get("company")) or None,
                 "total_products_in_order": total_products_in_order,
                 "options_normalized": item.get("options_normalized") or {},
@@ -270,6 +271,7 @@ def aggregate_reviewed_products(
     total_quantity = 0
     for group in groups.values():
         group["source_lines"].sort(key=lambda row: (
+            0 if _text(row.get("incident_recovery_id")) else 1,
             _text(row.get("reviewed_at")),
             _text(row.get("order_number")),
             int(row.get("line_index") or 0),

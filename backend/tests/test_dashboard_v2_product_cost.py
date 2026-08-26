@@ -321,9 +321,11 @@ def test_product_profit_rows_show_complete_fallback_and_missing_costs_safely():
     missing = by_status["missing"]
     fallback = by_status["salla_fallback"]
     complete = by_status["complete"]
-    assert missing["average_unit_cost"] is None
-    assert missing["total_cost"] is None
+    assert missing["average_unit_cost"] == 5
+    assert missing["total_cost"] == 5
+    assert missing["cost_is_partial"] is True
     assert missing["net_profit"] is None
+    assert fallback["cost_is_partial"] is False
     assert fallback["average_unit_cost"] == 30
     assert fallback["net_profit"] == 210
     assert complete["average_unit_cost"] == 40
@@ -337,6 +339,31 @@ def test_product_profit_rows_show_complete_fallback_and_missing_costs_safely():
         "has_unpriced_products": True,
         "uses_salla_fallback": True,
     }
+
+
+def test_product_profit_rows_keep_truly_missing_zero_cost_hidden():
+    rows, summary = _finalize_product_profit_rows({
+        "missing": {
+            "identity": "missing",
+            "name": "بدون أي تكلفة",
+            "units_sold": 2,
+            "orders_count": 1,
+            "total_sales": 100,
+            "total_cost": 0,
+            "mezan_cost_complete": False,
+            "uses_salla_fallback": False,
+            "missing_everywhere": True,
+            "catalog_product_found": True,
+            "cost_sources": {"missing"},
+        },
+    })
+
+    assert rows[0]["total_cost"] is None
+    assert rows[0]["average_unit_cost"] is None
+    assert rows[0]["net_profit"] is None
+    assert rows[0]["cost_is_partial"] is False
+    assert summary["total_cost"] == 0
+    assert summary["net_profit"] is None
 
 
 def test_snapchat_v2_cards_keep_today_and_month_metrics_separate_per_account():

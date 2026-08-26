@@ -35,6 +35,16 @@ export async function listReviewedOrderReviews({ limit = 50 } = {}) {
     } catch (error) { throw new Error(message(error, "تعذّر تحميل الطلبات التي تمت مراجعتها.")); }
 }
 
+export async function previewAms11353IncidentRecovery() {
+    const { data } = await api.get("/preparation-recovery-v1/incidents/ams11353-lost-11-20260825");
+    return data;
+}
+
+export async function applyAms11353IncidentRecovery() {
+    const { data } = await api.post("/preparation-recovery-v1/incidents/ams11353-lost-11-20260825/apply");
+    return data;
+}
+
 export async function listReviewedProductCatalog({ limit = 500, reviewedDate = "" } = {}) {
     try {
         const params = { limit };
