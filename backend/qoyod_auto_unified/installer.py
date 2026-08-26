@@ -19,6 +19,15 @@ from .invoice_state import _resolve_order_exception
 from .sender_projection import sync_authoritative_payment_to_inbox
 
 
+def _consume_historical_total_override(
+    kwargs: dict[str, Any], *, automatic: bool
+) -> bool:
+    """Remove the caller override before forwarding to the original sender."""
+    requested = bool(kwargs.pop("allow_historical_positive_total", False))
+    # Automatic sending has already passed the unified eligibility/payment gates.
+    return True if automatic else requested
+
+
 def install_auto_send_payment_freshness_patch() -> None:
     """Install the unified source, recovery, queue and reconciliation patch."""
     from integrations.qoyod import qoyod_invoices_sync, unsent_orders
@@ -53,6 +62,9 @@ def install_auto_send_payment_freshness_patch() -> None:
     ) -> dict[str, Any]:
         automatic = actor.startswith("auto-plan-b:")
         effective_owner = str(orders_user_id or user_id)
+        historical_total_override = _consume_historical_total_override(
+            kwargs, automatic=automatic
+        )
         if automatic:
             try:
                 freshness = await sync_authoritative_payment_to_inbox(
@@ -95,11 +107,7 @@ def install_auto_send_payment_freshness_patch() -> None:
                 orders_user_id=orders_user_id,
                 order_number=order_number,
                 actor=actor,
-                allow_historical_positive_total=(
-                    True if automatic else kwargs.pop(
-                        "allow_historical_positive_total", False
-                    )
-                ),
+                allow_historical_positive_total=historical_total_override,
                 **kwargs,
             )
         except ManualSendRefused as exc:
