@@ -1,4 +1,5 @@
 import io
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import fitz
@@ -29,6 +30,8 @@ from reviewed_products_catalog import PREPARATION_UNIT_ALLOCATIONS
 from reviewed_preparation_batches import (
     _batch_response,
     _card_field_projection,
+    _finalize_batch_assignment,
+    _review_snapshot_identity,
     _reconcile_order_stage,
     make_reviewed_preparation_batches_router,
     plan_preparation_allocations,
@@ -91,6 +94,89 @@ def _reference_line(index=1):
         sku=f"SKU-{index}",
         product_options={"الخامة": "ستانلس"},
     )
+
+
+def test_review_snapshot_recovery_identity_keeps_stale_guard_strict():
+    order = SimpleNamespace(
+        order_id="order-279803951",
+        order_number="279803951",
+        created_at=datetime(2026, 8, 25, tzinfo=timezone.utc),
+        source=SimpleNamespace(source_order_id="salla-order-1"),
+    )
+    workflow = {"items": [{
+        "product_id": "p-dress",
+        "sku": "AMS11353",
+        "product_name": "فستان بناتي أخضر",
+        "quantity": 2,
+        "options": [{"name": "المقاس", "value": "10 سنوات"}],
+    }]}
+    allocation = {
+        "order_item_id": "review-snapshot:279803951:0",
+        "quantity": 2,
+        "line": {
+            "identity_source": "review_snapshot",
+            "review_snapshot_index": 0,
+            "line_index": 0,
+            "product_id": "p-dress",
+            "sku": "AMS11353",
+            "product_name": "فستان بناتي أخضر",
+        },
+    }
+
+    recovered = _review_snapshot_identity(order, workflow, allocation)
+
+    assert recovered is not None
+    identity, state = recovered
+    assert identity.order_item_id == "review-snapshot:279803951:0"
+    assert identity.product_id == "p-dress"
+    assert identity.sku == "AMS11353"
+    assert identity.options[0].value == "10 سنوات"
+    assert state is workflow["items"][0]
+
+    changed = {**allocation, "line": {**allocation["line"], "sku": "OTHER"}}
+    assert _review_snapshot_identity(order, workflow, changed) is None
+
+    workflow["items"][0]["order_item_id"] = "historical-line-1"
+    historical = {
+        **allocation,
+        "order_item_id": "historical-line-1",
+    }
+    assert _review_snapshot_identity(order, workflow, historical) is not None
+
+
+@pytest.mark.asyncio
+async def test_batch_success_requires_employee_piece_registry_ready(monkeypatch):
+    import preparation_file_registry as registry_module
+
+    responses = iter([
+        {
+            "status": "ready",
+            "piece_registry_status": "recovery_required",
+            "responsible_employee_id": "employee-1",
+        },
+        {
+            "status": "ready",
+            "piece_registry_status": "ready",
+            "responsible_employee_id": "employee-1",
+        },
+    ])
+    calls = []
+
+    async def finalize(*_args, **_kwargs):
+        calls.append(True)
+        return next(responses)
+
+    monkeypatch.setattr(registry_module, "_finalize_registry_row", finalize)
+
+    result = await _finalize_batch_assignment(
+        object(),
+        user_id="owner-1",
+        client_request_id="request-123",
+        actor={"id": "reviewer-1"},
+    )
+
+    assert result["piece_registry_status"] == "ready"
+    assert len(calls) == 2
 
 
 class _Cursor:

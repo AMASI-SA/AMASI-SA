@@ -103,6 +103,11 @@ def _order_items_with_review_snapshot(
         for item in live_items
         if _text(item.get("order_item_id"))
     }
+    live_by_id = {
+        _text(item.get("order_item_id")): item
+        for item in live_items
+        if _text(item.get("order_item_id"))
+    }
 
     def product_signature(item: dict[str, Any]) -> tuple[str, str, str, str]:
         return (
@@ -129,6 +134,20 @@ def _order_items_with_review_snapshot(
 
         signature = product_signature(snapshot)
         if order_item_id and order_item_id in live_ids:
+            live = live_by_id[order_item_id]
+            # The review snapshot is the durable identity captured before
+            # Salla later returned a sparse in-progress order.  Restore only
+            # missing facts; never replace a current non-empty value.
+            for field in (
+                "product_id",
+                "parent_product_id",
+                "variant_id",
+                "source_item_id",
+                "sku",
+                "barcode",
+            ):
+                if not _text(live.get(field)) and _text(snapshot.get(field)):
+                    live[field] = snapshot.get(field)
             unmatched_live_quantity[signature] = max(
                 0, unmatched_live_quantity[signature] - quantity
             )
@@ -150,6 +169,7 @@ def _order_items_with_review_snapshot(
             "image_url": _text(snapshot.get("selected_image_url")) or None,
             "options_normalized": snapshot.get("specifications_snapshot") or {},
             "_review_snapshot_state": True,
+            "_review_snapshot_index": snapshot_index,
         })
         live_ids.add(order_item_id)
     return live_items
@@ -269,10 +289,20 @@ def aggregate_reviewed_products(
             if quantity_units <= 0:
                 continue
             total_source_lines += 1
+            frozen_product_key = _text(state.get("product_key"))
+            frozen_kind, _, frozen_value = frozen_product_key.partition(":")
             raw_product_id = _text(
-                item.get("product_id") or item.get("parent_product_id")
+                item.get("product_id")
+                or item.get("parent_product_id")
+                or state.get("product_id")
+                or state.get("parent_product_id")
+                or (frozen_value if frozen_kind in {"product", "parent"} else "")
             )
-            raw_sku = _text(item.get("sku"))
+            raw_sku = _text(
+                item.get("sku")
+                or state.get("sku")
+                or (frozen_value if frozen_kind == "sku" else "")
+            )
             product = product_lookup.get(raw_product_id) or product_lookup.get(raw_sku) or {}
             if not product:
                 # Some legacy Salla/order snapshots lose both SKU and product
@@ -291,6 +321,12 @@ def aggregate_reviewed_products(
             canonical_item = {
                 **item,
                 "product_id": product_id or None,
+                "parent_product_id": _text(
+                    item.get("parent_product_id") or state.get("parent_product_id")
+                ) or None,
+                "variant_id": _text(
+                    item.get("variant_id") or state.get("variant_id")
+                ) or None,
                 "sku": sku or None,
                 "name": _text(product.get("name")) or _text(item.get("name")),
             }
@@ -312,7 +348,7 @@ def aggregate_reviewed_products(
             group = groups.setdefault(key, {
                 "group_key": key,
                 "product_id": product_id or None,
-                "parent_product_id": _text(item.get("parent_product_id")) or None,
+                "parent_product_id": _text(canonical_item.get("parent_product_id")) or None,
                 "sku": sku or _text(product.get("sku")) or None,
                 "name": product_name,
                 "image_url": image or None,
@@ -337,7 +373,10 @@ def aggregate_reviewed_products(
                 "order_item_id": _text(item.get("order_item_id")),
                 "line_index": line_index,
                 "quantity": quantity_units,
-                "variant_id": _text(item.get("variant_id")) or None,
+                "variant_id": _text(canonical_item.get("variant_id")) or None,
+                "parent_product_id": _text(canonical_item.get("parent_product_id")) or None,
+                "barcode": _text(item.get("barcode") or state.get("barcode")) or None,
+                "source_item_id": _text(item.get("source_item_id") or state.get("source_item_id")) or None,
                 "product_id": product_id or None,
                 "product_name": product_name,
                 "sku": sku or None,
@@ -354,6 +393,8 @@ def aggregate_reviewed_products(
                 ),
                 "selected_image_url": selected_image or None,
                 "preparation_note": _text(state.get("preparation_note")) or None,
+                "identity_source": "review_snapshot" if item.get("_review_snapshot_state") else "live_order",
+                "review_snapshot_index": item.get("_review_snapshot_index"),
             })
 
     if any(UNCATEGORIZED_ID in group["category_ids"] for group in groups.values()):
@@ -573,6 +614,23 @@ async def load_reviewed_product_context(
                 product_ids.add(_text(item.parent_product_id))
             if _text(item.sku):
                 skus.add(_text(item.sku))
+        # Product V2 enrichment must also be available when Salla returns a
+        # sparse in-progress order and the durable review snapshot is the only
+        # remaining source of product identity.
+        for state in workflow.get("items") or []:
+            if not isinstance(state, dict):
+                continue
+            for value in (state.get("product_id"), state.get("parent_product_id")):
+                if _text(value):
+                    product_ids.add(_text(value))
+            if _text(state.get("sku")):
+                skus.add(_text(state.get("sku")))
+            product_key = _text(state.get("product_key"))
+            kind, _, value = product_key.partition(":")
+            if kind in {"product", "parent"} and _text(value):
+                product_ids.add(_text(value))
+            elif kind == "sku" and _text(value):
+                skus.add(_text(value))
 
     clauses: list[dict[str, Any]] = []
     if product_ids:

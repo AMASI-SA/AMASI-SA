@@ -21,6 +21,7 @@ from order_engine.salla_refresh import refresh_order_from_salla
 from order_engine.service import InvalidOrderCursorError, OrderNotFoundError, get_order, list_orders
 from order_item_engine.mapper import map_order_item_identities
 from order_engine.product_image_enrichment import enrich_order_item_images
+from order_engine.product_identity_enrichment import enrich_order_item_identity
 from order_tracking_notes import enforce_stage_instructions
 from product_inventory_rules import order_item_specifications
 from salla_integration.auto_sync import schedule_salla_auto_sync
@@ -354,8 +355,13 @@ async def _review_item_identities(db: Any, user_id: str, order: OrderDTO) -> lis
     seeing every catalogue image is operationally required, so a product with
     a one-image cache is refreshed and the full gallery is persisted locally.
     """
+    identities = await enrich_order_item_identity(
+        db,
+        user_id=user_id,
+        items=map_order_item_identities(order),
+    )
     identities = await enrich_order_item_images(
-        db, user_id=user_id, items=map_order_item_identities(order)
+        db, user_id=user_id, items=identities
     )
     candidates = {
         (_text(getattr(item, "product_id", None)), _text(getattr(item, "sku", None)))
@@ -480,6 +486,11 @@ async def _review_item_identities(db: Any, user_id: str, order: OrderDTO) -> lis
         refreshed = True
 
     if refreshed:
+        identities = await enrich_order_item_identity(
+            db,
+            user_id=user_id,
+            items=identities,
+        )
         identities = await enrich_order_item_images(db, user_id=user_id, items=identities)
     return identities
 
@@ -1135,8 +1146,17 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
                 "parent_product_id": _text(
                     getattr(item, "parent_product_id", None)
                 ) or None,
+                "variant_id": _text(getattr(item, "variant_id", None)) or None,
+                "source_item_id": _text(
+                    getattr(getattr(item, "source", None), "source_order_item_id", None)
+                ) or None,
                 "product_name": _text(getattr(item, "name", None)) or "منتج",
                 "sku": _text(getattr(item, "sku", None)) or None,
+                "barcode": _text(getattr(item, "barcode", None)) or None,
+                "options": [
+                    option.model_dump(mode="json")
+                    for option in (getattr(item, "options", None) or [])
+                ],
                 "quantity": int(getattr(item, "quantity", 1) or 1),
                 "direct_assembly_piece_ids": (
                     [
