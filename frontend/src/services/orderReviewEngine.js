@@ -136,7 +136,11 @@ export async function createReviewedPreparationBatch({ clientRequestId, selectio
             client_request_id: clientRequestId,
             selections,
         });
-        const registered = await finalizePreparationFile(clientRequestId);
+        const registered = data?.file_registered === true
+            && data?.registry_status === "ready"
+            && data?.piece_registry_status === "ready"
+            ? data
+            : await finalizePreparationFile(clientRequestId);
         if (typeof window !== "undefined") {
             delete window.__mezanPreparationFileMetadata;
             window.dispatchEvent(new CustomEvent("mezan:preparation-file-created", {

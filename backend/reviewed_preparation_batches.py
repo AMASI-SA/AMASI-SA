@@ -32,6 +32,11 @@ from order_engine.repository import MongoOrderRepository
 from order_engine.salla_refresh import refresh_order_from_salla
 from order_engine.service import OrderNotFoundError, get_order
 from order_item_engine.mapper import map_order_item_identities
+from order_item_engine.models import (
+    OrderItemIdentityDTO,
+    OrderItemOptionDTO,
+    OrderItemSourceDTO,
+)
 from order_tracking_notes import enforce_stage_instructions
 from order_review_routes import (
     EVENTS,
@@ -114,6 +119,83 @@ def _unit_quantity(value: Any) -> int:
     if number <= 0 or abs(number - rounded) > 0.000001:
         return 0
     return rounded
+
+
+def _review_snapshot_identity(
+    order: Any,
+    workflow: dict[str, Any],
+    allocation: dict[str, Any],
+) -> tuple[OrderItemIdentityDTO, dict[str, Any]] | None:
+    """Resolve a catalog recovery line from its durable review snapshot.
+
+    The reviewed catalog can intentionally restore a line that Salla no longer
+    returns.  Such a line uses ``review-snapshot:<order>:<index>`` as a recovery
+    identity.  Re-validate every available strong fact before materialising a
+    file; unrelated missing identities still hit the stale-data guard.
+    """
+    order_item_id = _text(allocation.get("order_item_id"))
+    line = allocation.get("line") if isinstance(allocation.get("line"), dict) else {}
+    if _text(line.get("identity_source")) != "review_snapshot":
+        return None
+    try:
+        snapshot_index = int(line.get("review_snapshot_index"))
+    except (TypeError, ValueError):
+        try:
+            snapshot_index = int(order_item_id.rsplit(":", 1)[1])
+        except (IndexError, ValueError):
+            return None
+    snapshots = workflow.get("items") or []
+    if snapshot_index < 0 or snapshot_index >= len(snapshots):
+        return None
+    snapshot = snapshots[snapshot_index]
+    if not isinstance(snapshot, dict):
+        return None
+    historical_id = _text(snapshot.get("order_item_id"))
+    if historical_id and historical_id != order_item_id:
+        return None
+    for field in ("product_id", "parent_product_id", "variant_id", "sku", "barcode"):
+        current = _text(line.get(field))
+        frozen = _text(snapshot.get(field))
+        if current and frozen and current.casefold() != frozen.casefold():
+            return None
+    snapshot_quantity = _unit_quantity(snapshot.get("quantity"))
+    if snapshot_quantity <= 0 or _unit_quantity(allocation.get("quantity")) > snapshot_quantity:
+        return None
+
+    raw_options = snapshot.get("options") or []
+    options: list[OrderItemOptionDTO] = []
+    for raw in raw_options if isinstance(raw_options, list) else []:
+        if not isinstance(raw, dict):
+            continue
+        name = _text(raw.get("name") or raw.get("label") or raw.get("key"))
+        value = raw.get("value")
+        if name and value not in (None, ""):
+            options.append(OrderItemOptionDTO(name=name, value=value))
+
+    identity = OrderItemIdentityDTO(
+        order_item_id=order_item_id,
+        order_id=_text(getattr(order, "order_id", None)) or _text(getattr(order, "order_number", None)),
+        order_number=_text(getattr(order, "order_number", None)),
+        order_created_at=getattr(order, "created_at"),
+        line_index=max(0, int(line.get("line_index") or snapshot_index)),
+        source=OrderItemSourceDTO(
+            provider="salla",
+            source_order_id=_text(getattr(getattr(order, "source", None), "source_order_id", None)) or None,
+            source_order_item_id=_text(snapshot.get("source_item_id")) or None,
+            source_product_id=_text(snapshot.get("product_id") or line.get("product_id")) or None,
+            source_variant_id=_text(snapshot.get("variant_id") or line.get("variant_id")) or None,
+        ),
+        product_id=_text(snapshot.get("product_id") or line.get("product_id")) or None,
+        parent_product_id=_text(snapshot.get("parent_product_id") or line.get("parent_product_id")) or None,
+        variant_id=_text(snapshot.get("variant_id") or line.get("variant_id")) or None,
+        sku=_text(snapshot.get("sku") or line.get("sku")) or None,
+        barcode=_text(snapshot.get("barcode") or line.get("barcode")) or None,
+        name=_text(snapshot.get("product_name") or line.get("product_name")) or "منتج",
+        quantity=snapshot_quantity,
+        image_url=_text(snapshot.get("selected_image_url") or line.get("image_url")) or None,
+        options=options,
+    )
+    return identity, snapshot
 
 
 def plan_preparation_allocations(
@@ -583,6 +665,98 @@ async def _cleanup_stale_builds(db: Any, user_id: str) -> None:
     })
 
 
+async def _finalize_batch_assignment(
+    db: Any,
+    *,
+    user_id: str,
+    client_request_id: str,
+    actor: dict[str, Any],
+) -> dict[str, Any]:
+    """Require registry and employee-piece materialisation before success."""
+    import preparation_file_registry as registry_module
+
+    row = await registry_module._finalize_registry_row(
+        db,
+        user_id=user_id,
+        client_request_id=client_request_id,
+        actor=actor,
+    )
+    if _text(row.get("piece_registry_status")) != "ready":
+        # The installed safety wrapper marks transient materialisation failures
+        # as recovery_required. One idempotent retry covers a short DB race;
+        # deterministic identity errors still fail closed below.
+        row = await registry_module._finalize_registry_row(
+            db,
+            user_id=user_id,
+            client_request_id=client_request_id,
+            actor=actor,
+        )
+    if (
+        _text(row.get("status")) != "ready"
+        or _text(row.get("piece_registry_status")) != "ready"
+        or not _text(row.get("responsible_employee_id"))
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "preparation_employee_assignment_incomplete",
+                "message": (
+                    "لم يكتمل رفع ملف التجهيز للموظف؛ أُعيدت القطع إلى "
+                    "تمت المراجعة ولم يتم اعتماد الملف."
+                ),
+            },
+        )
+    return row
+
+
+async def _rollback_unassigned_batch(
+    db: Any,
+    *,
+    user_id: str,
+    client_request_id: str,
+    batch_id: str,
+    actor: dict[str, Any],
+    reason: str,
+) -> None:
+    """Compensate a just-created batch that never reached the employee."""
+    from preparation_file_registry import REGISTRY
+    from preparation_piece_operations import PIECES
+
+    await db[PREPARATION_UNIT_ALLOCATIONS].delete_many({
+        "user_id": user_id,
+        "batch_id": batch_id,
+        "status": {"$in": ["reserved", "committed"]},
+    })
+    await db[PIECES].delete_many({
+        "user_id": user_id,
+        "batch_id": batch_id,
+        "started_at": {"$in": [None, ""]},
+    })
+    await db[BATCHES].delete_one({
+        "user_id": user_id,
+        "id": batch_id,
+        "execution_status": {"$ne": "in_progress"},
+    })
+    await db[REGISTRY].delete_one({
+        "user_id": user_id,
+        "client_request_id": client_request_id,
+        "batch_id": {"$in": [None, "", batch_id]},
+    })
+    await db[EVENTS].insert_one({
+        "id": uuid.uuid4().hex,
+        "user_id": user_id,
+        "batch_id": batch_id,
+        "client_request_id": client_request_id,
+        "event_type": "preparation_employee_assignment_rolled_back",
+        "reason": reason[:240],
+        "occurred_at": _now(),
+        "actor_id": _text(actor.get("id")),
+        "mezan_only": True,
+        "salla_updated": False,
+        "qoyod_updated": False,
+    })
+
+
 async def _build_batch_lines(
     context: dict[str, Any],
     planned: list[dict[str, Any]],
@@ -613,6 +787,11 @@ async def _build_batch_lines(
             order = orders_by_number.get(order_number)
             workflow = workflows_by_number.get(order_number) or {}
             identity = (identities_by_order.get(order_number) or {}).get(order_item_id)
+            snapshot_state: dict[str, Any] | None = None
+            if order is not None and identity is None:
+                recovered = _review_snapshot_identity(order, workflow, allocation)
+                if recovered is not None:
+                    identity, snapshot_state = recovered
             if order is None or identity is None:
                 raise HTTPException(
                     status_code=409,
@@ -630,7 +809,7 @@ async def _build_batch_lines(
                 for row in workflow.get("items") or []
                 if isinstance(row, dict) and _text(row.get("order_item_id"))
             }
-            state = states.get(order_item_id, {})
+            state = states.get(order_item_id, {}) or snapshot_state or {}
             if state.get("supplier_export") is False:
                 raise HTTPException(
                     status_code=409,
@@ -949,6 +1128,23 @@ def make_reviewed_preparation_batches_router(
         )
         if existing:
             if _text(existing.get("status")) == "ready":
+                registry = await _finalize_batch_assignment(
+                    db,
+                    user_id=user_id,
+                    client_request_id=payload.client_request_id,
+                    actor=reviewer,
+                )
+                await db[PREPARATION_UNIT_ALLOCATIONS].update_many(
+                    {
+                        "user_id": user_id,
+                        "batch_id": existing.get("id"),
+                        "status": "reserved",
+                    },
+                    {
+                        "$set": {"status": "committed", "committed_at": _now()},
+                        "$unset": {"expires_at": ""},
+                    },
+                )
                 reconciliation = await _reconcile_batch_orders(
                     db,
                     user_id=user_id,
@@ -960,7 +1156,17 @@ def make_reviewed_preparation_batches_router(
                     {"$set": reconciliation},
                 )
                 existing.update(reconciliation)
-                return _batch_response(existing)
+                response = _batch_response(existing)
+                response.update({
+                    "file_registered": True,
+                    "file_number": _text(registry.get("file_number")),
+                    "file_name": _text(registry.get("file_name")) or response["file_name"],
+                    "registry_status": _text(registry.get("status")),
+                    "piece_registry_status": _text(registry.get("piece_registry_status")),
+                    "responsible_employee_id": _text(registry.get("responsible_employee_id")),
+                    "responsible_employee_name": _text(registry.get("responsible_employee_name")),
+                })
+                return response
             raise HTTPException(
                 status_code=409,
                 detail={
@@ -1123,13 +1329,6 @@ def make_reviewed_preparation_batches_router(
                 {"user_id": user_id, "id": batch_id, "status": "building"},
                 {"$set": ready_patch, "$unset": {"expires_at": ""}},
             )
-            await db[PREPARATION_UNIT_ALLOCATIONS].update_many(
-                {"user_id": user_id, "batch_id": batch_id, "status": "reserved"},
-                {
-                    "$set": {"status": "committed", "committed_at": ready_at},
-                    "$unset": {"expires_at": ""},
-                },
-            )
         except HTTPException:
             await db[PREPARATION_UNIT_ALLOCATIONS].delete_many({"user_id": user_id, "batch_id": batch_id})
             await db[BATCHES].delete_one({"user_id": user_id, "id": batch_id})
@@ -1149,6 +1348,44 @@ def make_reviewed_preparation_batches_router(
             {"user_id": user_id, "id": batch_id},
             {"_id": 0},
         ) or {**shell, **ready_patch}
+        try:
+            registry = await _finalize_batch_assignment(
+                db,
+                user_id=user_id,
+                client_request_id=payload.client_request_id,
+                actor=reviewer,
+            )
+        except Exception as exc:
+            await _rollback_unassigned_batch(
+                db,
+                user_id=user_id,
+                client_request_id=payload.client_request_id,
+                batch_id=batch_id,
+                actor=reviewer,
+                reason=type(exc).__name__,
+            )
+            if isinstance(exc, HTTPException):
+                raise
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "preparation_employee_assignment_incomplete",
+                    "message": (
+                        "لم يكتمل رفع ملف التجهيز للموظف؛ أُعيدت القطع إلى "
+                        "تمت المراجعة ولم يتم اعتماد الملف."
+                    ),
+                },
+            ) from exc
+
+        # Only a file that is registered and visible to its responsible
+        # employee may consume reviewed quantities or advance order stages.
+        await db[PREPARATION_UNIT_ALLOCATIONS].update_many(
+            {"user_id": user_id, "batch_id": batch_id, "status": "reserved"},
+            {
+                "$set": {"status": "committed", "committed_at": _now()},
+                "$unset": {"expires_at": ""},
+            },
+        )
         reconciliation = await _reconcile_batch_orders(
             db,
             user_id=user_id,
@@ -1172,7 +1409,17 @@ def make_reviewed_preparation_batches_router(
             "salla_updated": False,
             "qoyod_updated": False,
         })
-        return _batch_response(batch)
+        response = _batch_response(batch)
+        response.update({
+            "file_registered": True,
+            "file_number": _text(registry.get("file_number")),
+            "file_name": _text(registry.get("file_name")) or response["file_name"],
+            "registry_status": _text(registry.get("status")),
+            "piece_registry_status": _text(registry.get("piece_registry_status")),
+            "responsible_employee_id": _text(registry.get("responsible_employee_id")),
+            "responsible_employee_name": _text(registry.get("responsible_employee_name")),
+        })
+        return response
 
     @router.post("/batches/{batch_id}/repair-customer-options")
     async def repair_customer_options(

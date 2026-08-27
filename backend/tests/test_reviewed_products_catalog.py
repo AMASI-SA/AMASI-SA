@@ -105,6 +105,40 @@ def test_missing_sku_and_product_id_rejoin_unique_catalog_product_card():
     assert legacy["options_normalized"] == {"مقاس الطفل": "8 سنوات"}
 
 
+def test_sparse_live_line_reuses_strong_identity_from_review_snapshot():
+    name = "كوب زهور أحمر ووردي 200 مل مخصص بالاسم"
+    result = aggregate_reviewed_products(
+        [
+            (_order("with-sku", [_item(
+                "cup-a", "p-13032", name=name, sku="AMS13032",
+            )]), {"items": []}),
+            (_order("sparse", [{**_item(
+                "cup-b", "", name=name, sku="",
+            ), "options_normalized": {}}]), {
+                "items": [{
+                    "order_item_id": "cup-b",
+                    "product_id": "p-13032",
+                    "product_key": "product:p-13032",
+                    "sku": "AMS13032",
+                    "product_name": name,
+                    "quantity": 1,
+                }],
+            }),
+        ],
+        [{
+            "salla_product_id": "p-13032",
+            "name": name,
+            "sku": "AMS13032",
+        }],
+    )
+
+    assert result["summary"]["unique_product_count"] == 1
+    product = result["products"][0]
+    assert product["group_key"] == "product:p-13032"
+    assert product["sku"] == "AMS13032"
+    assert product["quantity"] == 2
+
+
 def test_thirty_allocated_units_leave_twenty_available():
     base = aggregate_reviewed_products(
         [(
