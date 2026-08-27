@@ -52,6 +52,7 @@ from order_review_spec_replacements import (
 )
 from preparation_pdf import ProductLine, generate_preparation_pdf
 from preparation_piece_barcode import preparation_piece_barcode
+from reviewed_preparation_v3 import bounded_map_ordered
 from reviewed_products_catalog import (
     ACTIVE_PREPARATION_ALLOCATION_STATUSES,
     MAX_REVIEWED_ORDERS,
@@ -73,6 +74,7 @@ class PreparationProductSelection(BaseModel):
 
     group_key: str = Field(min_length=1, max_length=500)
     quantity: int = Field(ge=1, le=MAX_BATCH_UNITS)
+    revision: str | None = Field(default=None, min_length=64, max_length=64)
 
 
 class CreatePreparationBatchRequest(BaseModel):
@@ -241,6 +243,10 @@ def plan_preparation_allocations(
         product = by_key.get(group_key)
         if not product:
             raise ValueError("reviewed_product_not_available")
+        expected_revision = _text(selection.get("revision"))
+        current_revision = _text(product.get("revision"))
+        if expected_revision and expected_revision != current_revision:
+            raise ValueError("reviewed_selection_stale")
         remaining = _unit_quantity(
             product.get("remaining_quantity")
             if product.get("remaining_quantity") is not None
@@ -797,135 +803,150 @@ async def _build_batch_lines(
     }
 
     result: list[dict[str, Any]] = []
+    for index, allocation in enumerate(planned, start=1):
+        order_number = _text(allocation.get("order_number"))
+        order_item_id = _text(allocation.get("order_item_id"))
+        order = orders_by_number.get(order_number)
+        workflow = workflows_by_number.get(order_number) or {}
+        identity = (identities_by_order.get(order_number) or {}).get(order_item_id)
+        snapshot_state: dict[str, Any] | None = None
+        if order is not None and identity is None:
+            recovered = _review_snapshot_identity(order, workflow, allocation)
+            if recovered is not None:
+                identity, snapshot_state = recovered
+        if order is None or identity is None:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "reviewed_line_changed_reload_required",
+                    "message": (
+                        "تغيّرت بيانات المنتج بعد فتح الملف. حدّث منتجات "
+                        "تمت المراجعة ثم أعد تحديد الكمية. لم يتم إنشاء ملف."
+                    ),
+                    "order_number": order_number,
+                },
+            )
+        states = {
+            _text(row.get("order_item_id")): dict(row)
+            for row in workflow.get("items") or []
+            if isinstance(row, dict) and _text(row.get("order_item_id"))
+        }
+        state = states.get(order_item_id, {}) or snapshot_state or {}
+        if state.get("supplier_export") is False:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "reviewed_line_no_longer_exportable",
+                    "message": (
+                        "هذا المنتج لم يعد متاحًا لملف التجهيز. حدّث الصفحة "
+                        "ثم أعد الاختيار. لم يتم إنشاء ملف."
+                    ),
+                    "order_number": order_number,
+                },
+            )
+        spec_fields = supplier_file_spec_fields(identity, state)
+        # Fail closed before materialising the employee preparation file:
+        # every customer option visible in Waiting Review must be frozen
+        # into the immutable file snapshot unless the reviewer explicitly
+        # hid that spec from exported files. The supplier PDF later reuses
+        # this exact snapshot, so this one guard protects both files.
+        hidden_spec_keys = {
+            canonical_spec_key(value)
+            for value in state.get("supplier_export_excluded_spec_keys", []) or []
+            if canonical_spec_key(value)
+        }
+        required_specs = {
+            row["spec_key"]: row
+            for row in extract_item_specs(identity)
+            if row.get("spec_key") and row["spec_key"] not in hidden_spec_keys
+        }
+        snapshotted_specs = {
+            canonical_spec_key(row.get("spec_key") or row.get("name"))
+            for row in spec_fields
+            if isinstance(row, dict)
+            and canonical_spec_key(row.get("spec_key") or row.get("name"))
+            and _text(row.get("value"))
+        }
+        missing_spec_keys = sorted(set(required_specs) - snapshotted_specs)
+        if missing_spec_keys:
+            missing_labels = [required_specs[key]["name"] for key in missing_spec_keys]
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "preparation_customer_options_snapshot_incomplete",
+                    "message": (
+                        "تعذّر إنشاء ملف التجهيز لأن بعض خيارات العميل لم تُحفظ بالكامل: "
+                        + "، ".join(missing_labels)
+                        + ". حدّث الطلب ثم أعد المحاولة."
+                    ),
+                    "order_number": order_number,
+                    "order_item_id": order_item_id,
+                    "missing_spec_keys": missing_spec_keys,
+                },
+            )
+        card_fields = _card_field_projection(
+            spec_fields,
+            state.get("preparation_note"),
+        )
+        image_url = (
+            _text(state.get("selected_image_url"))
+            or _text(getattr(identity, "image_url", None))
+            or _text((allocation.get("line") or {}).get("image_url"))
+        )
+        image_bytes, image_mime = (None, None)
+        total_products = sum(
+            _unit_quantity(getattr(item, "quantity", 0))
+            for item in getattr(order, "items", None) or []
+        ) or 1
+        result.append({
+            "line_number": index,
+            "group_key": _text(allocation.get("group_key")),
+            "order_number": order_number,
+            "order_item_id": order_item_id,
+            "unit_indices": list(allocation.get("unit_indices") or []),
+            "quantity": int(allocation.get("quantity") or 0),
+            "product_name": _text(getattr(identity, "name", None)) or _text(allocation.get("product_name")),
+            "product_id": _text(getattr(identity, "product_id", None)) or None,
+            "sku": _text(getattr(identity, "sku", None)) or None,
+            "line_index": int(getattr(identity, "line_index", 0) or 0),
+            "order_date": str(getattr(order, "created_at", "") or ""),
+            "shipping_company": _text(getattr(getattr(order, "shipping", None), "company", None)) or None,
+            "total_products_in_order": total_products,
+            "selected_image_url": image_url or None,
+            "image_b64": base64.b64encode(image_bytes).decode("ascii") if image_bytes else None,
+            "image_mime": image_mime,
+            "customer_name": card_fields["customer_name"],
+            "size": card_fields["size"],
+            "color": card_fields["color"],
+            "note": card_fields["note"],
+            "product_options": card_fields["product_options"],
+            "file_spec_fields": spec_fields,
+            "preparation_note": _text(state.get("preparation_note")) or None,
+        })
+
     image_cache: dict[str, tuple[bytes | None, str | None]] = {}
-    timeout = httpx.Timeout(10.0, connect=5.0)
+    timeout = httpx.Timeout(3.0, connect=2.0)
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-        for index, allocation in enumerate(planned, start=1):
-            order_number = _text(allocation.get("order_number"))
-            order_item_id = _text(allocation.get("order_item_id"))
-            order = orders_by_number.get(order_number)
-            workflow = workflows_by_number.get(order_number) or {}
-            identity = (identities_by_order.get(order_number) or {}).get(order_item_id)
-            snapshot_state: dict[str, Any] | None = None
-            if order is not None and identity is None:
-                recovered = _review_snapshot_identity(order, workflow, allocation)
-                if recovered is not None:
-                    identity, snapshot_state = recovered
-            if order is None or identity is None:
-                raise HTTPException(
-                    status_code=409,
-                    detail={
-                        "code": "reviewed_line_changed_reload_required",
-                        "message": (
-                            "تغيّرت بيانات المنتج بعد فتح الملف. حدّث منتجات "
-                            "تمت المراجعة ثم أعد تحديد الكمية. لم يتم إنشاء ملف."
-                        ),
-                        "order_number": order_number,
-                    },
-                )
-            states = {
-                _text(row.get("order_item_id")): dict(row)
-                for row in workflow.get("items") or []
-                if isinstance(row, dict) and _text(row.get("order_item_id"))
-            }
-            state = states.get(order_item_id, {}) or snapshot_state or {}
-            if state.get("supplier_export") is False:
-                raise HTTPException(
-                    status_code=409,
-                    detail={
-                        "code": "reviewed_line_no_longer_exportable",
-                        "message": (
-                            "هذا المنتج لم يعد متاحًا لملف التجهيز. حدّث الصفحة "
-                            "ثم أعد الاختيار. لم يتم إنشاء ملف."
-                        ),
-                        "order_number": order_number,
-                    },
-                )
-            spec_fields = supplier_file_spec_fields(identity, state)
-            # Fail closed before materialising the employee preparation file:
-            # every customer option visible in Waiting Review must be frozen
-            # into the immutable file snapshot unless the reviewer explicitly
-            # hid that spec from exported files. The supplier PDF later reuses
-            # this exact snapshot, so this one guard protects both files.
-            hidden_spec_keys = {
-                canonical_spec_key(value)
-                for value in state.get("supplier_export_excluded_spec_keys", []) or []
-                if canonical_spec_key(value)
-            }
-            required_specs = {
-                row["spec_key"]: row
-                for row in extract_item_specs(identity)
-                if row.get("spec_key") and row["spec_key"] not in hidden_spec_keys
-            }
-            snapshotted_specs = {
-                canonical_spec_key(row.get("spec_key") or row.get("name"))
-                for row in spec_fields
-                if isinstance(row, dict)
-                and canonical_spec_key(row.get("spec_key") or row.get("name"))
-                and _text(row.get("value"))
-            }
-            missing_spec_keys = sorted(set(required_specs) - snapshotted_specs)
-            if missing_spec_keys:
-                missing_labels = [required_specs[key]["name"] for key in missing_spec_keys]
-                raise HTTPException(
-                    status_code=409,
-                    detail={
-                        "code": "preparation_customer_options_snapshot_incomplete",
-                        "message": (
-                            "تعذّر إنشاء ملف التجهيز لأن بعض خيارات العميل لم تُحفظ بالكامل: "
-                            + "، ".join(missing_labels)
-                            + ". حدّث الطلب ثم أعد المحاولة."
-                        ),
-                        "order_number": order_number,
-                        "order_item_id": order_item_id,
-                        "missing_spec_keys": missing_spec_keys,
-                    },
-                )
-            card_fields = _card_field_projection(
-                spec_fields,
-                state.get("preparation_note"),
-            )
-            image_url = (
-                _text(state.get("selected_image_url"))
-                or _text(getattr(identity, "image_url", None))
-                or _text((allocation.get("line") or {}).get("image_url"))
-            )
-            image_bytes, image_mime = await _download_card_image(
+        async def hydrate(row: dict[str, Any]) -> tuple[bytes | None, str | None]:
+            return await _download_card_image(
                 client,
-                image_url,
+                row.get("selected_image_url"),
                 image_cache,
             )
-            total_products = sum(
-                _unit_quantity(getattr(item, "quantity", 0))
-                for item in getattr(order, "items", None) or []
-            ) or 1
-            result.append({
-                "line_number": index,
-                "group_key": _text(allocation.get("group_key")),
-                "order_number": order_number,
-                "order_item_id": order_item_id,
-                "unit_indices": list(allocation.get("unit_indices") or []),
-                "quantity": int(allocation.get("quantity") or 0),
-                "product_name": _text(getattr(identity, "name", None)) or _text(allocation.get("product_name")),
-                "product_id": _text(getattr(identity, "product_id", None)) or None,
-                "sku": _text(getattr(identity, "sku", None)) or None,
-                "line_index": int(getattr(identity, "line_index", 0) or 0),
-                "order_date": str(getattr(order, "created_at", "") or ""),
-                "shipping_company": _text(getattr(getattr(order, "shipping", None), "company", None)) or None,
-                "total_products_in_order": total_products,
-                "selected_image_url": image_url or None,
-                "image_b64": base64.b64encode(image_bytes).decode("ascii") if image_bytes else None,
-                "image_mime": image_mime,
-                "customer_name": card_fields["customer_name"],
-                "size": card_fields["size"],
-                "color": card_fields["color"],
-                "note": card_fields["note"],
-                "product_options": card_fields["product_options"],
-                "file_spec_fields": spec_fields,
-                "preparation_note": _text(state.get("preparation_note")) or None,
-            })
-    return result
 
+        hydrated = await bounded_map_ordered(
+            result,
+            hydrate,
+            concurrency=8,
+        )
+    for row, (image_bytes, image_mime) in zip(result, hydrated):
+        row["image_b64"] = (
+            base64.b64encode(image_bytes).decode("ascii")
+            if image_bytes
+            else None
+        )
+        row["image_mime"] = image_mime
+    return result
 
 async def _reconcile_order_stage(
     db: Any,
@@ -1220,6 +1241,10 @@ def make_reviewed_preparation_batches_router(
                 "preparation_quantity_exceeds_remaining": "الكمية المختارة أكبر من الكمية المتبقية.",
                 "reviewed_product_allocation_incomplete": "تعذّر توزيع الكمية على الطلبات المتاحة. حدّث الصفحة.",
                 "duplicate_product_group": "لا يمكن تكرار المنتج نفسه داخل الملف.",
+                "reviewed_selection_stale": (
+                    "تغيّرت الكمية أو هوية القطعة بعد فتح الصفحة. "
+                    "تم تحديث القائمة؛ أعد تحديد الكمية."
+                ),
             }
             raise HTTPException(
                 status_code=409,
