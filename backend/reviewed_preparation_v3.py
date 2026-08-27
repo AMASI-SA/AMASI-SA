@@ -22,21 +22,24 @@ def _text(value: Any) -> str:
 def stable_reviewed_line_revision(line: dict[str, Any]) -> str:
     """Hash only frozen commercial/operational identity facts.
 
-    Display names, catalog images and category labels are deliberately excluded:
-    enriching those fields must not invalidate an already-open selection.
+    Display/catalog enrichment must not invalidate an already-open selection.
+    Recovery lines therefore use their immutable review snapshot identity
+    instead of the Product V2-enriched projection. Live lines still use the
+    current canonical identity because they have no frozen recovery identity.
     """
+    frozen_identity = line.get("review_snapshot_identity")
+    identity = frozen_identity if isinstance(frozen_identity, dict) else line
     payload = {
         "order_number": _text(line.get("order_number")),
-        "order_item_id": _text(line.get("order_item_id")),
-        "source_item_id": _text(line.get("source_item_id")),
-        "product_id": _text(line.get("product_id")),
-        "parent_product_id": _text(line.get("parent_product_id")),
-        "variant_id": _text(line.get("variant_id")),
-        "sku": _text(line.get("sku")).upper(),
-        "barcode": _text(line.get("barcode")),
-        "quantity": int(line.get("quantity") or 0),
+        "order_item_id": _text(identity.get("order_item_id") or line.get("order_item_id")),
+        "source_item_id": _text(identity.get("source_item_id")),
+        "product_id": _text(identity.get("product_id")),
+        "parent_product_id": _text(identity.get("parent_product_id")),
+        "variant_id": _text(identity.get("variant_id")),
+        "sku": _text(identity.get("sku")).upper(),
+        "barcode": _text(identity.get("barcode")),
+        "quantity": int(identity.get("quantity") or line.get("quantity") or 0),
         "options": line.get("options_normalized") or {},
-        "review_snapshot_identity": line.get("review_snapshot_identity") or {},
     }
     encoded = json.dumps(
         payload,
@@ -67,6 +70,11 @@ def stable_reviewed_product_revision(product: dict[str, Any]) -> str:
                 or 0
             ),
         })
+    lines.sort(key=lambda row: (
+        row["line_revision"],
+        row["available_unit_indices"],
+        row["remaining_quantity"],
+    ))
     payload = {
         "group_key": _text(product.get("group_key")),
         "remaining_quantity": int(
