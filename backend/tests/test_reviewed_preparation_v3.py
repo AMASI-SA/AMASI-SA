@@ -1,0 +1,106 @@
+from __future__ import annotations
+
+import asyncio
+
+import pytest
+
+from reviewed_preparation_v3 import (
+    bounded_map_ordered,
+    stable_reviewed_line_revision,
+    stable_reviewed_product_revision,
+)
+from reviewed_preparation_batches import plan_preparation_allocations
+
+
+def _line(**patch):
+    row = {
+        "order_number": "1001",
+        "order_item_id": "line-1",
+        "source_item_id": "source-1",
+        "product_id": "product-1",
+        "parent_product_id": "parent-1",
+        "variant_id": "variant-1",
+        "sku": "AMS1001",
+        "barcode": "123",
+        "quantity": 2,
+        "options_normalized": {"size": "8"},
+        "available_unit_indices": [1, 2],
+    }
+    row.update(patch)
+    return row
+
+
+def test_line_revision_ignores_display_enrichment_but_tracks_identity():
+    original = _line(name="قديم", image_url="https://old.example/image.jpg")
+    enriched = _line(name="اسم الكتالوج", image_url="https://new.example/image.jpg")
+
+    assert stable_reviewed_line_revision(original) == stable_reviewed_line_revision(enriched)
+    assert stable_reviewed_line_revision(original) != stable_reviewed_line_revision(
+        _line(sku="AMS-CHANGED")
+    )
+    assert stable_reviewed_line_revision(original) != stable_reviewed_line_revision(
+        _line(options_normalized={"size": "10"})
+    )
+
+
+def test_product_revision_tracks_exact_available_units():
+    line = _line()
+    product = {
+        "group_key": "product:product-1",
+        "quantity": 2,
+        "remaining_quantity": 2,
+        "source_lines": [{**line, "line_revision": stable_reviewed_line_revision(line)}],
+    }
+    original = stable_reviewed_product_revision(product)
+    changed = stable_reviewed_product_revision({
+        **product,
+        "remaining_quantity": 1,
+        "source_lines": [{
+            **product["source_lines"][0],
+            "remaining_quantity": 1,
+            "available_unit_indices": [2],
+        }],
+    })
+    assert original != changed
+
+
+def test_plan_rejects_stale_selection_revision_fail_closed():
+    line = _line()
+    product = {
+        "group_key": "product:product-1",
+        "name": "منتج",
+        "quantity": 2,
+        "remaining_quantity": 2,
+        "revision": "a" * 64,
+        "source_lines": [line],
+    }
+    with pytest.raises(ValueError, match="reviewed_selection_stale"):
+        plan_preparation_allocations(
+            [product],
+            [{"group_key": product["group_key"], "quantity": 1, "revision": "b" * 64}],
+        )
+
+    planned = plan_preparation_allocations(
+        [product],
+        [{"group_key": product["group_key"], "quantity": 1, "revision": "a" * 64}],
+    )
+    assert planned[0]["unit_indices"] == [1]
+
+
+@pytest.mark.asyncio
+async def test_bounded_map_preserves_order_and_limits_parallelism():
+    active = 0
+    peak = 0
+
+    async def worker(value: int) -> int:
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        await asyncio.sleep(0)
+        active -= 1
+        return value * 10
+
+    result = await bounded_map_ordered(range(12), worker, concurrency=3)
+
+    assert result == [value * 10 for value in range(12)]
+    assert peak == 3
