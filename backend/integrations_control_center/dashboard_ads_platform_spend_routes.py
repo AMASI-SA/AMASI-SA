@@ -610,7 +610,8 @@ async def build_dashboard_platform_spend(
         row.get("connected") is True and row.get("amount_available") is not True
         for row in provider_rows.values()
     )
-    total_sar = known_total_sar if snap_amount_available and not connected_waiting else None
+    any_provider_fact = any(daily_facts.values())
+    total_sar = known_total_sar if any_provider_fact else None
     total_amount_available = total_sar is not None
     return {
         "date_from": start.isoformat(),

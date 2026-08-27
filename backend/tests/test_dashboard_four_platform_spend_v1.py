@@ -420,6 +420,87 @@ def test_account_local_hour_is_normalized_to_riyadh_reader_utc():
 
 
 @pytest.mark.asyncio
+async def test_partial_provider_facts_keep_known_total_available(monkeypatch):
+    midnight_riyadh = datetime(2026, 8, 27, 21, 0, tzinfo=timezone.utc)
+
+    async def confirmed_snapchat(*_args, **_kwargs):
+        return {
+            "daily_sar": {"2026-08-28": 91.36},
+            "daily_state": {"2026-08-28": "confirmed_data"},
+            "hourly_sar": {"2026-08-28": []},
+            "total_sar": 91.36,
+            "quality": {
+                "status": "complete",
+                "data_state": "confirmed_data",
+                "coverage_complete": True,
+                "amount_complete": True,
+                "amount_available": True,
+                "connected": True,
+                "reason_codes": [],
+            },
+        }
+
+    monkeypatch.setattr(
+        module,
+        "load_unified_marketing_dashboard_spend",
+        confirmed_snapchat,
+    )
+    db = FakeDB(
+        {
+            "mezan_integrations_v2": [
+                _connected("snapchat_ads"),
+                _connected("meta_ads"),
+                _connected("tiktok_ads"),
+                _connected("google_ads"),
+            ],
+            "mezan_integration_accounts_v2": [],
+            "mezan_meta_performance_daily_v2": [{
+                "user_id": "owner-1",
+                "provider": "meta_ads",
+                "date": "2026-08-28",
+                "spend_sar": 30.87,
+                "empty_provider_row": False,
+            }],
+            "mezan_tiktok_performance_daily_v2": [{
+                "user_id": "owner-1",
+                "provider": "tiktok_ads",
+                "date": "2026-08-28",
+                "spend_sar": 0.0,
+                "empty_provider_row": True,
+            }],
+            "mezan_google_ads_performance_daily_v2": [{
+                "user_id": "owner-1",
+                "provider": "google_ads",
+                "date": "2026-08-28",
+                "spend_sar": 0.0,
+                "empty_provider_row": False,
+            }],
+            "mezan_ads_platform_hourly_v2": [],
+        }
+    )
+
+    result = await module.build_dashboard_platform_spend(
+        db,
+        "owner-1",
+        date_from="2026-08-28",
+        date_to="2026-08-28",
+        now=midnight_riyadh,
+    )
+
+    assert result["provider_totals_sar"] == {
+        "snapchat": 91.36,
+        "meta": 30.87,
+        "tiktok": None,
+        "google": 0.0,
+    }
+    assert result["total_sar"] == 122.23
+    assert result["spend_quality"]["status"] == "incomplete"
+    assert result["spend_quality"]["amount_available"] is True
+    assert result["spend_quality"]["amount_complete"] is False
+    assert result["providers"]["tiktok"]["data_state"] == "waiting_incomplete"
+
+
+@pytest.mark.asyncio
 async def test_riyadh_midnight_rollover_waits_for_first_provider_payload_and_refreshes_day_28(
     monkeypatch,
 ):
