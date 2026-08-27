@@ -360,6 +360,7 @@ def test_missing_live_salla_line_is_restored_from_review_snapshot():
         "sku": "AMS11353",
         "barcode": "",
         "quantity": 2,
+        "options": {"size": "8 سنوات"},
     }
 
 
