@@ -10,7 +10,6 @@ import json
 import os
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable
-from zoneinfo import ZoneInfo
 
 import httpx
 from pydantic import BaseModel, Field, model_validator
@@ -298,9 +297,8 @@ async def run_tiktok_reporting_sync(
     await ensure_tiktok_reporting_indexes(db)
     access_token = await _credential(db, user_id)
     accounts = await _accounts(db, user_id)
-    now_value = now().astimezone(timezone.utc)
-    days = _dates(payload, now_value.date())
-    observed_at = _iso(now_value)
+    days = _dates(payload, now().astimezone(timezone.utc).date())
+    observed_at = _iso(now())
     account_summaries = []
     error_items = []
     provider_calls = 0
@@ -308,7 +306,6 @@ async def run_tiktok_reporting_sync(
     async with httpx.AsyncClient(timeout=30.0) as client:
         for account in accounts:
             saved = 0
-            empty_rows = 0
             account_errors = []
             currency = str(account.get("currency") or "").strip().upper() or None
             fx_rate, fx_source = _fx_to_sar(currency)
@@ -358,7 +355,6 @@ async def run_tiktok_reporting_sync(
                         upsert=True,
                     )
                     saved += 1
-                    empty_rows += int(row["empty"] is True)
                 except TikTokReportingError as exc:
                     provider_calls += 1
                     if exc.code == "tiktok_needs_reauth":
@@ -397,14 +393,12 @@ async def run_tiktok_reporting_sync(
                     "currency": currency,
                     "timezone": account.get("timezone"),
                     "rows_saved": saved,
-                    "empty_rows": empty_rows,
                     "errors": len(account_errors),
                     "complete": complete,
                 }
             )
 
     rows_saved = sum(item["rows_saved"] for item in account_summaries)
-    empty_rows = sum(int(item.get("empty_rows") or 0) for item in account_summaries)
     accounts_complete = sum(bool(item["complete"]) for item in account_summaries)
     if rows_saved == 0:
         raise TikTokReportingError(
@@ -423,14 +417,6 @@ async def run_tiktok_reporting_sync(
     sync_status = (
         "complete" if accounts_complete == len(account_summaries) else "partial"
     )
-    riyadh_today = now_value.astimezone(ZoneInfo("Asia/Riyadh")).date()
-    open_day_waiting = (
-        days[0] <= riyadh_today <= days[-1]
-        and rows_saved > 0
-        and empty_rows == rows_saved
-    )
-    if open_day_waiting and sync_status == "complete":
-        sync_status = "partial"
     await db.mezan_integrations_v2.update_one(
         {"user_id": user_id, "provider": TIKTOK_PROVIDER_ID},
         {
@@ -440,7 +426,7 @@ async def run_tiktok_reporting_sync(
                 "source_mode": TIKTOK_REPORTING_SOURCE_MODE,
                 "last_sync_at": observed_at,
                 "data_delay_minutes": 0 if sync_status == "complete" else None,
-                "data_quality": "good" if sync_status == "complete" else "incomplete" if open_day_waiting else "degraded",
+                "data_quality": "good" if sync_status == "complete" else "degraded",
                 "has_data": True,
                 "checked_at": observed_at,
                 "updated_at": observed_at,
@@ -470,8 +456,6 @@ async def run_tiktok_reporting_sync(
         "accounts_attempted": len(account_summaries),
         "accounts_complete": accounts_complete,
         "rows_saved": rows_saved,
-        "empty_rows": empty_rows,
-        "open_day_waiting": open_day_waiting,
         "errors_count": len(error_items),
         "items": account_summaries,
         "errors": error_items[:100],

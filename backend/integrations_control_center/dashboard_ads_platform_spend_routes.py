@@ -184,15 +184,8 @@ async def _daily_spend(
     start: date,
     end: date,
     snapchat: dict[str, Any],
-    *,
-    now: datetime | None = None,
-) -> tuple[
-    list[dict[str, Any]],
-    dict[str, bool],
-    dict[str, dict[str, str]],
-]:
+) -> tuple[list[dict[str, Any]], dict[str, bool]]:
     dates = _date_list(start, end)
-    current_day = (now or datetime.now(timezone.utc)).astimezone(RIYADH_TZ).date()
     by_date: dict[str, dict[str, Any]] = {
         day.isoformat(): {
             "date": day.isoformat(),
@@ -201,19 +194,10 @@ async def _daily_spend(
         for day in dates
     }
     facts = {provider: False for provider in FOUR_PLATFORM_KEYS}
-    daily_states = {
-        provider: {day.isoformat(): "waiting_incomplete" for day in dates}
-        for provider in FOUR_PLATFORM_KEYS
-    }
     for day in dates:
-        day_text = day.isoformat()
-        by_date[day_text]["snapchat"] = (
+        by_date[day.isoformat()]["snapchat"] = (
             snapchat.get("daily_sar") or {}
-        ).get(day_text)
-        daily_states["snapchat"][day_text] = str(
-            (snapchat.get("daily_state") or {}).get(day_text)
-            or "waiting_incomplete"
-        )
+        ).get(day.isoformat())
     facts["snapchat"] = (
         (snapchat.get("quality") or {}).get("amount_available") is True
         or (snapchat.get("quality") or {}).get("amount_complete") is True
@@ -232,13 +216,7 @@ async def _daily_spend(
         }
         cursor = db[collection_name].find(
             query,
-            {
-                "_id": 0,
-                "date": 1,
-                "spend_sar": 1,
-                "empty_provider_row": 1,
-                "observed_at": 1,
-            },
+            {"_id": 0, "date": 1, "spend_sar": 1},
         )
         rows = await _to_list(cursor, MAX_DAILY_ROWS)
         totals: dict[str, float] = defaultdict(float)
@@ -248,23 +226,12 @@ async def _daily_spend(
             spend = _number(row.get("spend_sar"))
             if day_text not in by_date or spend is None:
                 continue
-            # An empty first provider payload after the Riyadh date rollover is
-            # not proof of a real zero. Keep the open day waiting until at least
-            # one provider row is returned. Closed dates retain their existing
-            # historical zero semantics.
-            if (
-                day_text == current_day.isoformat()
-                and row.get("empty_provider_row") is True
-            ):
-                continue
             totals[day_text] += spend
             observed_dates.add(day_text)
-        for day_text in by_date:
-            if day_text in observed_dates:
+        if observed_dates:
+            facts[provider] = True
+            for day_text in by_date:
                 by_date[day_text][provider] = round(totals.get(day_text, 0.0), 2)
-                daily_states[provider][day_text] = (
-                    "confirmed_data" if totals.get(day_text, 0.0) > 0 else "confirmed_zero"
-                )
 
     # Make.com is the temporary TikTok transport until the merchant completes
     # the direct Marketing API connection. The financial SSOT for that bridge
@@ -311,16 +278,10 @@ async def _daily_spend(
             ledger_dates.add(day_text)
         for day_text in ledger_dates:
             by_date[day_text]["tiktok"] = round(ledger_totals[day_text], 2)
-            daily_states["tiktok"][day_text] = (
-                "confirmed_data" if ledger_totals[day_text] > 0 else "confirmed_zero"
-            )
+        if ledger_dates:
+            facts["tiktok"] = True
 
-    for provider in FOUR_PLATFORM_KEYS:
-        facts[provider] = all(
-            by_date[day.isoformat()].get(provider) is not None for day in dates
-        )
-
-    return [by_date[day.isoformat()] for day in dates], facts, daily_states
+    return [by_date[day.isoformat()] for day in dates], facts
 
 
 async def _hourly_spend(
@@ -446,7 +407,6 @@ async def build_dashboard_platform_spend(
     *,
     date_from: str,
     date_to: str,
-    now: datetime | None = None,
 ) -> dict[str, Any]:
     try:
         start = date.fromisoformat(date_from)
@@ -490,15 +450,7 @@ async def build_dashboard_platform_spend(
             "accounting_write_reached": False,
             "qoyod_write_reached": False,
         }
-    current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
-    daily, daily_facts, daily_states = await _daily_spend(
-        db,
-        user_id,
-        start,
-        end,
-        snapchat,
-        now=current,
-    )
+    daily, daily_facts = await _daily_spend(db, user_id, start, end, snapchat)
     states = await _connection_states(db, user_id)
     single_day = start == end
     hourly: list[dict[str, Any]] = []
@@ -512,13 +464,6 @@ async def build_dashboard_platform_spend(
             snapchat,
             tiktok_daily_total=_number(daily[0].get("tiktok")),
         )
-        for provider in FOUR_PLATFORM_KEYS:
-            if daily_facts[provider]:
-                continue
-            hourly_facts[provider] = False
-            hourly_sources[provider] = ""
-            for row in hourly:
-                row[provider] = None
 
     totals = {
         provider: round(
@@ -575,18 +520,6 @@ async def build_dashboard_platform_spend(
             "hourly_source": hourly_sources[provider] or None,
             "total_sar": totals[provider],
             "data_quality": state.get("data_quality"),
-            "data_state": (
-                "confirmed_data"
-                if daily_facts[provider] and float(totals[provider] or 0) > 0
-                else "confirmed_zero"
-                if daily_facts[provider]
-                else "waiting_incomplete"
-                if connection_status in {"connected", "active", "healthy", "data_available"}
-                else "not_connected"
-            ),
-            "coverage_complete": daily_facts[provider],
-            "amount_complete": daily_facts[provider],
-            "amount_available": daily_facts[provider],
             "last_sync_at": state.get("last_sync_at"),
             "data_delay_minutes": state.get("data_delay_minutes"),
         }
@@ -606,13 +539,7 @@ async def build_dashboard_platform_spend(
         and not snap_amount_complete
         and (snapchat.get("quality") or {}).get("provisional") is True
     )
-    connected_waiting = any(
-        row.get("connected") is True and row.get("amount_available") is not True
-        for row in provider_rows.values()
-    )
-    any_provider_fact = any(daily_facts.values())
-    total_sar = known_total_sar if any_provider_fact else None
-    total_amount_available = total_sar is not None
+    total_sar = known_total_sar if snap_amount_available else None
     return {
         "date_from": start.isoformat(),
         "date_to": end.isoformat(),
@@ -627,25 +554,16 @@ async def build_dashboard_platform_spend(
         "spend_quality": {
             "status": (
                 "complete"
-                if snap_amount_complete and not connected_waiting
+                if snap_amount_complete
                 else "provisional"
-                if snap_amount_provisional and not connected_waiting
+                if snap_amount_provisional
                 else "incomplete"
             ),
-            "amount_complete": snap_amount_complete and not connected_waiting,
-            "amount_available": total_amount_available,
-            "provisional": snap_amount_provisional and not connected_waiting,
+            "amount_complete": snap_amount_complete,
+            "amount_available": snap_amount_available,
+            "provisional": snap_amount_provisional,
             "known_total_sar": known_total_sar,
             "snapchat": snapchat.get("quality") or {},
-            "providers": {
-                provider: {
-                    "data_state": row.get("data_state"),
-                    "amount_available": row.get("amount_available") is True,
-                    "coverage_complete": row.get("coverage_complete") is True,
-                }
-                for provider, row in provider_rows.items()
-            },
-            "reason_codes": (["open_day_provider_payload_waiting"] if connected_waiting else []),
         },
         "unified_marketing_shadow": unified_shadow,
         "source_contract": {

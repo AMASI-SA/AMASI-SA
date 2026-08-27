@@ -10,7 +10,6 @@ import json
 import os
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable
-from zoneinfo import ZoneInfo
 
 import httpx
 from fastapi import HTTPException
@@ -362,7 +361,6 @@ async def run_meta_reporting_sync(
     async with httpx.AsyncClient(timeout=35.0) as client:
         for account in accounts:
             saved = 0
-            empty_rows = 0
             campaign_saved = 0
             account_errors: list[dict[str, Any]] = []
             campaign_catalog: dict[str, dict[str, Any]] = {}
@@ -441,7 +439,6 @@ async def run_meta_reporting_sync(
                         upsert=True,
                     )
                     saved += 1
-                    empty_rows += int(row["empty"] is True)
                     try:
                         campaign_result = await sync_meta_campaign_day(
                             db,
@@ -513,7 +510,6 @@ async def run_meta_reporting_sync(
                     "currency": account.get("currency"),
                     "timezone": account.get("timezone"),
                     "rows_saved": saved,
-                    "empty_rows": empty_rows,
                     "campaign_rows_saved": campaign_saved,
                     "errors": len(account_errors),
                     "complete": complete,
@@ -521,7 +517,6 @@ async def run_meta_reporting_sync(
             )
 
     rows_saved = sum(item["rows_saved"] for item in account_summaries)
-    empty_rows = sum(int(item.get("empty_rows") or 0) for item in account_summaries)
     campaign_rows_saved = sum(
         item.get("campaign_rows_saved", 0) for item in account_summaries
     )
@@ -541,14 +536,6 @@ async def run_meta_reporting_sync(
         )
 
     sync_status = "complete" if accounts_complete == len(account_summaries) else "partial"
-    riyadh_today = now_value.astimezone(ZoneInfo("Asia/Riyadh")).date()
-    open_day_waiting = (
-        days[0] <= riyadh_today <= days[-1]
-        and rows_saved > 0
-        and empty_rows == rows_saved
-    )
-    if open_day_waiting and sync_status == "complete":
-        sync_status = "partial"
     await db.mezan_integrations_v2.update_one(
         {"user_id": user_id, "provider": META_PROVIDER_ID},
         {
@@ -558,7 +545,7 @@ async def run_meta_reporting_sync(
                 "source_mode": META_REPORTING_SOURCE_MODE,
                 "last_sync_at": observed_at,
                 "data_delay_minutes": 0 if sync_status == "complete" else None,
-                "data_quality": "complete" if sync_status == "complete" else "incomplete" if open_day_waiting else "partial",
+                "data_quality": "complete" if sync_status == "complete" else "partial",
                 "has_data": True,
                 "checked_at": observed_at,
                 "updated_at": observed_at,
@@ -588,8 +575,6 @@ async def run_meta_reporting_sync(
         "accounts_attempted": len(account_summaries),
         "accounts_complete": accounts_complete,
         "rows_saved": rows_saved,
-        "empty_rows": empty_rows,
-        "open_day_waiting": open_day_waiting,
         "campaign_rows_saved": campaign_rows_saved,
         "errors_count": len(error_items),
         "provider_calls": provider_calls,
