@@ -6,6 +6,7 @@ enables Decision Intelligence or any provider/accounting write path.
 """
 from __future__ import annotations
 
+import asyncio
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -14,7 +15,7 @@ from .contract import CONTRACT_VERSION
 from .gateway import (
     load_unified_marketing_account_identity,
     load_unified_marketing_account_report,
-    load_unified_marketing_entity_report,
+    load_unified_marketing_entity_readiness_evidence,
 )
 
 PROVIDER = "snapchat_ads"
@@ -64,6 +65,16 @@ def _contract_valid(report: dict[str, Any], level: str) -> bool:
 
 
 def _level_summary(report: dict[str, Any], level: str) -> dict[str, Any]:
+    if "complete" in report and "contract_valid" in report:
+        return {
+            "entity_level": level,
+            "contract_valid": bool(report.get("contract_valid")),
+            "complete": bool(report.get("complete")),
+            "row_count": int(report.get("row_count") or 0),
+            "source_fact_count": int(report.get("source_fact_count") or 0),
+            "sync_status": report.get("sync_status"),
+            "coverage_status": report.get("coverage_status"),
+        }
     quality = _quality(report)
     contract_valid = _contract_valid(report, level)
     complete = bool(
@@ -210,7 +221,7 @@ async def build_snapchat_unified_readiness(
         raise ValueError("invalid_date_range")
     period_closed = end < account_today
 
-    account_report = await load_unified_marketing_account_report(
+    account_task = load_unified_marketing_account_report(
         db,
         str(user_id),
         provider=PROVIDER,
@@ -218,23 +229,37 @@ async def build_snapchat_unified_readiness(
         date_to=end,
         timezone_name=timezone_name,
     )
+    entity_tasks = [
+        load_unified_marketing_entity_readiness_evidence(
+            db,
+            str(user_id),
+            provider=PROVIDER,
+            entity_level=level,
+            date_from=start,
+            date_to=end,
+            timezone_name=timezone_name,
+        )
+        for level in ENTITY_LEVELS
+    ]
+    results = await asyncio.gather(
+        account_task,
+        *entity_tasks,
+        return_exceptions=True,
+    )
     entity_reports: dict[str, dict[str, Any]] = {}
     errors: dict[str, str] = {}
-    for level in ENTITY_LEVELS:
-        try:
-            entity_reports[level] = await load_unified_marketing_entity_report(
-                db,
-                str(user_id),
-                provider=PROVIDER,
-                entity_level=level,
-                date_from=start,
-                date_to=end,
-                timezone_name=timezone_name,
-                include_stale=True,
-            )
-        except Exception as exc:  # noqa: BLE001 - readiness must fail closed
+    account_result = results[0]
+    if isinstance(account_result, BaseException):
+        account_report: dict[str, Any] = {}
+        errors["account"] = type(account_result).__name__
+    else:
+        account_report = account_result
+    for level, result in zip(ENTITY_LEVELS, results[1:], strict=True):
+        if isinstance(result, BaseException):
             entity_reports[level] = {}
-            errors[level] = type(exc).__name__
+            errors[level] = type(result).__name__
+        else:
+            entity_reports[level] = result
 
     proof = evaluate_snapchat_unified_readiness(
         account_report=account_report,
@@ -244,7 +269,7 @@ async def build_snapchat_unified_readiness(
     if errors:
         proof["ready"] = False
         proof["reasons"] = list(
-            dict.fromkeys([*proof["reasons"], "entity_report_load_failed"])
+            dict.fromkeys([*proof["reasons"], "readiness_evidence_load_failed"])
         )
     totals = dict(account_report.get("totals") or {})
     return {

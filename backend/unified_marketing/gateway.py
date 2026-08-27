@@ -9,6 +9,7 @@ from .readers.snapchat_v2 import (
     load_snapchat_v2_account_identity,
     load_snapchat_v2_dashboard_spend,
     load_snapchat_v2_entity_report,
+    load_snapchat_v2_entity_readiness_evidence,
     load_snapchat_v2_entity_daily_series,
     load_snapchat_v2_entity_metadata,
 )
@@ -114,6 +115,29 @@ async def load_unified_marketing_entity_report(
     raise ValueError(f"unsupported_unified_marketing_provider:{provider_key}")
 
 
+async def load_unified_marketing_entity_readiness_evidence(
+    db: Any,
+    user_id: str,
+    *,
+    provider: str,
+    entity_level: str,
+    date_from: date,
+    date_to: date,
+    timezone_name: str,
+) -> dict[str, Any]:
+    provider_key = str(provider or "").strip().lower()
+    if provider_key == "snapchat_ads":
+        return await load_snapchat_v2_entity_readiness_evidence(
+            db,
+            str(user_id),
+            entity_level=entity_level,
+            date_from=date_from,
+            date_to=date_to,
+            timezone_name=timezone_name,
+        )
+    raise ValueError(f"unsupported_unified_marketing_provider:{provider_key}")
+
+
 async def load_unified_marketing_entity_daily_series(
     db: Any,
     user_id: str,
@@ -146,5 +170,6 @@ __all__ = [
     "load_unified_marketing_entity_metadata",
     "load_unified_marketing_dashboard_spend",
     "load_unified_marketing_entity_report",
+    "load_unified_marketing_entity_readiness_evidence",
     "load_unified_marketing_entity_daily_series",
 ]
