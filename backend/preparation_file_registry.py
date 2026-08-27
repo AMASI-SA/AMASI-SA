@@ -135,7 +135,7 @@ async def _assignable_employees(
             "enabled": {"$ne": False},
         },
         {"_id": 0, "user_id": 1, "permissions": 1, "enabled": 1},
-    ).to_list(1000)
+    ).to_list(length=1000)
     access_by_id = {
         _text(row.get("user_id")): row
         for row in access_rows
@@ -160,7 +160,7 @@ async def _assignable_employees(
             "is_active": 1,
             "deleted_at": 1,
         },
-    ).to_list(max(len(candidate_ids), 1))
+    ).to_list(length=max(len(candidate_ids), 1))
     users_by_id = {_text(row.get("id")): row for row in docs if _text(row.get("id"))}
     if owner_id and owner_id not in users_by_id and reviewer_id == owner_id:
         users_by_id[owner_id] = reviewer
@@ -198,7 +198,7 @@ async def _assignable_employees(
                 "responsible_employee_id": {"$in": employee_ids},
             },
             {"_id": 0, "responsible_employee_id": 1},
-        ).to_list(5000)
+        ).to_list(length=5000)
         previously_assigned = {
             _text(row.get("responsible_employee_id"))
             for row in rows
