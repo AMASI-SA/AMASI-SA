@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowsClockwise, CheckCircle, Clock, Ghost, WarningCircle } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -95,6 +95,7 @@ function managementLevel(level) {
 export default function SnapchatV2Page() {
     const [status, setStatus] = useState(null);
     const [readiness, setReadiness] = useState(null);
+    const [readinessLoading, setReadinessLoading] = useState(true);
     const [report, setReport] = useState(null);
     const [hourly, setHourly] = useState(null);
     const [campaignContract, setCampaignContract] = useState(null);
@@ -112,6 +113,7 @@ export default function SnapchatV2Page() {
     const [syncing, setSyncing] = useState(false);
     const [error, setError] = useState("");
     const [clockNow, setClockNow] = useState(() => Date.now());
+    const readinessRequestId = useRef(0);
 
     const account = status?.selected_account || null;
     const accountId = account?.ad_account_id || "";
@@ -120,7 +122,11 @@ export default function SnapchatV2Page() {
     const activeContract = entityLevel === "campaign" ? campaignContract : childContract;
 
     const load = useCallback(async (requestedRange = null) => {
+        const requestId = readinessRequestId.current + 1;
+        readinessRequestId.current = requestId;
         setLoading(true);
+        setReadinessLoading(true);
+        setReadiness(null);
         setError("");
         try {
             const { data: statusData } = await api.get("/integrations-v2/snapchat-v2/status");
@@ -132,16 +138,14 @@ export default function SnapchatV2Page() {
             if (!dateTo) setDateTo(range.dateTo);
             setAppliedRange(range);
             const common = { action_report_time: "conversion", timezone: "account" };
-            const [reportResult, hourlyResult, campaignsResult, readinessResult] = await Promise.all([
+            const [reportResult, hourlyResult, campaignsResult] = await Promise.all([
                 api.get("/integrations-v2/snapchat-v2/report", { params: { ...common, date_from: range.dateFrom, date_to: range.dateTo } }),
                 api.get("/integrations-v2/snapchat-v2/hourly", { params: { ...common, report_date: range.dateTo } }),
                 api.get("/integrations-v2/snapchat-v2/campaigns", { params: { ...common, date_from: range.dateFrom, date_to: range.dateTo } }),
-                api.get("/integrations-v2/snapchat-v2/unified-readiness"),
             ]);
             setReport(reportResult.data);
             setHourly(hourlyResult.data);
             setCampaignContract(campaignsResult.data?.unified || null);
-            setReadiness(readinessResult.data || null);
             setSallaSummary(campaignsResult.data?.salla?.summary || {});
             setChildContract(null);
             setSelectedCampaign(null);
@@ -149,9 +153,21 @@ export default function SnapchatV2Page() {
             setManagementTarget(null);
             setEntityLevel("campaign");
             setClockNow(Date.now());
+            api.get("/integrations-v2/snapchat-v2/unified-readiness")
+                .then(({ data }) => {
+                    if (readinessRequestId.current === requestId) setReadiness(data || null);
+                })
+                .catch(() => {
+                    if (readinessRequestId.current === requestId) setReadiness({ ready: false, reasons: ["readiness_request_failed"] });
+                })
+                .finally(() => {
+                    if (readinessRequestId.current === requestId) setReadinessLoading(false);
+                });
         } catch (requestError) {
             const message = formatApiErrorDetail(requestError.response?.data?.detail) || "تعذر تحميل بيانات Snapchat V2";
             setError(message);
+            setReadiness({ ready: false, reasons: ["readiness_request_failed"] });
+            setReadinessLoading(false);
             toast.error(message);
         } finally {
             setLoading(false);
@@ -308,7 +324,7 @@ export default function SnapchatV2Page() {
                 <div className="rounded-xl border border-violet-200 bg-violet-50 p-4"><div className="text-xs font-bold text-violet-700">نتائج Snapchat (TOTAL)</div><div className="mt-2 text-2xl font-black text-violet-950">{number(snapchatPurchases)}</div><div className="mt-1 text-xs font-bold text-violet-700">قيمة {contractMoney(snapchatPurchaseValue)} · ROAS {number(snapchatRoas)}</div></div>
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4"><div className="text-xs font-bold text-emerald-700">نتائج سلة المنسوبة لـ Snapchat</div><div className="mt-2 text-2xl font-black text-emerald-950">{sallaTotals.status === "complete" ? number(sallaTotals.orders) : "—"}</div><div className="mt-1 text-xs font-bold text-emerald-700">قيمة الطلبات {contractMoney(sallaTotals.revenue)} · ROAS {number(sallaTotals.roas)}</div>{sallaTotals.status === "complete" && <div className="mt-1 text-[11px] font-bold text-emerald-700">ربط تفصيلي {number(sallaSummary.account_period_campaign_matched_orders)} من {number(sallaSummary.snapchat_attributed_orders)}{sallaSummary.campaign_match_coverage_pct !== null && sallaSummary.campaign_match_coverage_pct !== undefined && Number.isFinite(Number(sallaSummary.campaign_match_coverage_pct)) ? ` · تغطية ${number(sallaSummary.campaign_match_coverage_pct)}%` : ""}</div>}</div>
                 <div className="rounded-xl border border-slate-200 bg-white p-4"><div className="text-xs font-bold text-slate-500">حالة المزامنة</div><div className="mt-2 flex items-center gap-2 text-xl font-black">{report?.amount_complete ? <CheckCircle className="text-emerald-600" weight="fill" /> : <Clock className="text-amber-600" />}{report?.amount_complete ? "مكتمل" : "قيد التحديث"}</div><div className={`mt-2 inline-flex rounded-full border px-2 py-1 text-xs font-black ${statusTone(financialDisplayStatus)}`}>Financial: {financialDisplayStatus}</div></div>
-                <div data-testid="snapchat-unified-readiness" className={`rounded-xl border p-4 ${readiness?.ready ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}><div className={`text-xs font-bold ${readiness?.ready ? "text-emerald-700" : "text-amber-700"}`}>جاهزية العقد الموحد</div><div className="mt-2 flex items-center gap-2 text-xl font-black">{readiness?.ready ? <CheckCircle className="text-emerald-600" weight="fill" /> : <Clock className="text-amber-600" />}{readiness?.ready ? "جاهز" : "غير مكتمل"}</div><div className="mt-2 text-[11px] font-bold text-slate-600">{readiness?.period?.date_from || "آخر يوم مغلق"} · Decision Intelligence غير مربوط</div></div>
+                <div data-testid="snapchat-unified-readiness" className={`rounded-xl border p-4 ${readiness?.ready ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}><div className={`text-xs font-bold ${readiness?.ready ? "text-emerald-700" : "text-amber-700"}`}>جاهزية العقد الموحد</div><div className="mt-2 flex items-center gap-2 text-xl font-black">{readiness?.ready ? <CheckCircle className="text-emerald-600" weight="fill" /> : <Clock className="text-amber-600" />}{readinessLoading ? "جارٍ التحقق" : readiness?.reasons?.includes("readiness_request_failed") ? "تعذر التحقق" : readiness?.ready ? "جاهز" : "غير مكتمل"}</div><div className="mt-2 text-[11px] font-bold text-slate-600">{readiness?.period?.date_from || "آخر يوم مغلق"} · Decision Intelligence غير مربوط</div></div>
             </section>
 
             <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
