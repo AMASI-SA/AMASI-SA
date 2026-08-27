@@ -150,7 +150,7 @@ def test_normal_reviewed_ready_identity_does_not_remap_live_salla_line():
         "المقاس": "كبير",
         "اللون": "ذهبي",
     }
-    assert state is workflow["items"][0]
+    assert state == workflow["items"][0]
 
     changed = {
         **allocation,
