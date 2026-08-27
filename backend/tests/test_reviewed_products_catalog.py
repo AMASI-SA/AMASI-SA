@@ -68,7 +68,23 @@ def test_same_salla_product_across_fifty_orders_becomes_one_card():
     assert product["source_line_count"] == 50
     assert len(product["source_lines"]) == 50
     assert product["image_url"] == "https://example.test/selected.jpg"
-    assert product["source_lines"][0]["shipping_company"] == "iMile"
+    source_line = product["source_lines"][0]
+    assert source_line["shipping_company"] == "iMile"
+    assert source_line["identity_source"] == "reviewed_ready"
+    assert source_line["ready_item_id"].startswith("ready-item:")
+    assert source_line["ready_item_identity"] == {
+        "order_item_id": "line-0",
+        "source_item_id": "",
+        "product_id": "p-name",
+        "parent_product_id": "",
+        "variant_id": "",
+        "sku": "NAME-1",
+        "barcode": "",
+        "quantity": 1,
+        "product_name": "سلسال بالاسم",
+        "selected_image_url": "https://example.test/selected.jpg",
+        "options": {"engraving": "اسم مختلف لكل عميل"},
+    }
 
 
 def test_missing_sku_and_product_id_rejoin_unique_catalog_product_card():
