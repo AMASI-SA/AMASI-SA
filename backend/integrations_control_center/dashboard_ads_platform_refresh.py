@@ -8,6 +8,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import httpx
+from snapchat_v2.sync_pipeline import SnapchatV2SyncPipeline
 
 from .ads_platform_hourly import (
     ensure_platform_hourly_indexes,
@@ -280,17 +281,44 @@ async def _refresh_snapchat(
     start: date,
     end: date,
 ) -> dict[str, Any]:
-    # The canonical Snapchat writer is the durable analytics scheduler.  A
-    # second writer without a run record could be mistaken for a scheduler
-    # fact when their write windows overlap, so Dashboard refresh is read-only.
-    del db, user_id, start, end
+    # Reuse the canonical V2 pipeline, distributed lease, and sync-run proof.
+    # This is a bounded financial refresh for the open Riyadh day only; it does
+    # not execute campaign management, AI, or the scheduler lifecycle.
+    today = _utcnow().astimezone(ZoneInfo("Asia/Riyadh")).date()
+    if not start <= today <= end:
+        return {
+            "provider": SNAPCHAT_PROVIDER_ID,
+            "status": "skipped",
+            "reason": "closed_range_read_only",
+            "projection_write_reached": False,
+            "rows_saved": 0,
+            "errors_count": 0,
+        }
+    result = await SnapchatV2SyncPipeline(db).run(
+        user_id,
+        date_from=today,
+        date_to=today,
+        run_type="dashboard_spend_refresh",
+        financial_only=True,
+    )
+    status = str(result.get("status") or "failed")
+    summary = dict(result.get("summary") or {})
     return {
         "provider": SNAPCHAT_PROVIDER_ID,
-        "status": "incomplete",
-        "reason": "canonical_dashboard_scheduler_required",
-        "projection_write_reached": False,
-        "rows_saved": 0,
-        "errors_count": 0,
+        "status": status,
+        "reason": result.get("reason") or (result.get("error") or {}).get("code"),
+        "sync_run_id": result.get("sync_run_id"),
+        "projection_write_reached": status in {"complete", "partial"},
+        "rows_saved": int(summary.get("rows_saved") or 0)
+        + int(summary.get("current_hour_provisional_rows_saved") or 0),
+        "current_hour_provisional_rows_saved": int(
+            summary.get("current_hour_provisional_rows_saved") or 0
+        ),
+        "errors_count": 1 if status == "failed" else 0,
+        "provider_write_reached": False,
+        "campaign_write_reached": False,
+        "accounting_write_reached": False,
+        "qoyod_write_reached": False,
     }
 
 
