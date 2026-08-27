@@ -62,6 +62,109 @@ function rangeDays(from, to) {
   ) + 1;
 }
 
+function riyadhHour() {
+  return Number(new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Riyadh",
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).format(new Date()));
+}
+
+const VALID_PRESETS = new Set([
+  "today", "two_days", "seven_days", "thirty_days", "this_month", "custom",
+]);
+
+function inferPreset(from, to, requested) {
+  if (requested && VALID_PRESETS.has(requested)) return requested;
+  const today = riyadhToday();
+  if (from === today && to === today) return "today";
+  if (from === shiftDay(today, -1) && to === today) return "two_days";
+  if (from === shiftDay(today, -6) && to === today) return "seven_days";
+  if (from === shiftDay(today, -29) && to === today) return "thirty_days";
+  if (from === monthStart(today) && to === today) return "this_month";
+  return "custom";
+}
+
+function datesInTwoDayChunks(from, to) {
+  const chunks = [];
+  let cursor = from;
+  while (cursor <= to) {
+    const chunkTo = shiftDay(cursor, 1) <= to ? shiftDay(cursor, 1) : to;
+    chunks.push({ from: cursor, to: chunkTo });
+    cursor = shiftDay(chunkTo, 1);
+  }
+  return chunks;
+}
+
+function mergeAdsPayloads(payloads, from, to) {
+  const providers = ["snapchat", "tiktok", "meta", "google"];
+  const providerTotals = Object.fromEntries(providers.map((provider) => [provider, 0]));
+  const dailyMap = new Map();
+  for (const payload of payloads) {
+    for (const provider of providers) {
+      providerTotals[provider] += Number(payload?.provider_totals_sar?.[provider] || 0);
+    }
+    for (const row of payload?.daily_spend || []) {
+      const target = dailyMap.get(row.date) || { date: row.date };
+      for (const provider of providers) {
+        target[provider] = Number(target[provider] || 0) + Number(row?.[provider] || 0);
+      }
+      dailyMap.set(row.date, target);
+    }
+  }
+  const latest = payloads[payloads.length - 1] || {};
+  return {
+    ...latest,
+    date_from: from,
+    date_to: to,
+    chart_granularity: "day",
+    hourly_spend: [],
+    daily_spend: Array.from(dailyMap.values()).sort((left, right) => left.date.localeCompare(right.date)),
+    provider_totals_sar: providerTotals,
+    total_sar: Object.values(providerTotals).reduce((total, value) => total + value, 0),
+  };
+}
+
+async function loadAdsRange(from, to) {
+  if (rangeDays(from, to) <= 2) {
+    return getDashboardAdsSpend({ dateFrom: from, dateTo: to });
+  }
+  const payloads = [];
+  for (const chunk of datesInTwoDayChunks(from, to)) {
+    payloads.push(await getDashboardAdsSpend({ dateFrom: chunk.from, dateTo: chunk.to }));
+  }
+  return mergeAdsPayloads(payloads, from, to);
+}
+
+function trimOrdersToHour(payload, maxHour) {
+  if (payload?.granularity !== "hour") return payload;
+  const series = (payload.series || []).filter((row) => Number(row.hour_index) <= maxHour);
+  return {
+    ...payload,
+    series,
+    summary: {
+      ...(payload.summary || {}),
+      sales: series.reduce((total, row) => total + Number(row.sales || 0), 0),
+      orders: series.reduce((total, row) => total + Number(row.orders || 0), 0),
+    },
+  };
+}
+
+function trimAdsToHour(payload, maxHour) {
+  const hourly = (payload?.hourly_spend || []).filter((row) => Number(row.hour_index) <= maxHour);
+  if (!hourly.length) return payload;
+  const providers = ["snapchat", "tiktok", "meta", "google"];
+  const providerTotals = Object.fromEntries(providers.map((provider) => [
+    provider,
+    hourly.reduce((total, row) => total + Number(row?.[provider] || 0), 0),
+  ]));
+  return {
+    ...payload,
+    hourly_spend: hourly,
+    provider_totals_sar: providerTotals,
+    total_sar: Object.values(providerTotals).reduce((total, value) => total + value, 0),
+  };
+}
 function previousRange(from, to, preset) {
   if (preset === "this_month") {
     const current = new Date(`${from}T12:00:00Z`);
@@ -207,7 +310,8 @@ export default function ChartDashboard() {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialFrom = searchParams.get("from") || riyadhToday();
   const initialTo = searchParams.get("to") || initialFrom;
-  const [preset, setPreset] = useState(initialFrom === initialTo && initialTo === riyadhToday() ? "today" : "custom");
+  const initialPreset = inferPreset(initialFrom, initialTo, searchParams.get("preset"));
+  const [preset, setPreset] = useState(initialPreset);
   const [range, setRange] = useState({ from: initialFrom, to: initialTo });
   const [platform, setPlatform] = useState(searchParams.get("platform") || "all");
   const [current, setCurrent] = useState(null);
@@ -231,36 +335,46 @@ export default function ChartDashboard() {
         api.get(`/dashboard-v2/chart-orders?${previousQuery}`),
         api.get(`/dashboard-v2?${currentQuery}`),
         api.get(`/dashboard-v2?${previousQuery}`),
-        getDashboardAdsSpend({ dateFrom: range.from, dateTo: range.to }),
-        getDashboardAdsSpend({ dateFrom: comparison.from, dateTo: comparison.to }),
+        loadAdsRange(range.from, range.to),
+        loadAdsRange(comparison.from, comparison.to),
       ]);
       setCurrent({ orders: ordersNow.data, dashboard: dashboardNow.data, ads: adsNow });
       setPrevious({ orders: ordersBefore.data, dashboard: dashboardBefore.data, ads: adsBefore });
-      setSearchParams({ from: range.from, to: range.to, platform }, { replace: true });
+      setSearchParams({ from: range.from, to: range.to, platform, preset }, { replace: true });
     } catch (requestError) {
       setError(requestError?.response?.data?.detail || "تعذر تحميل بيانات الرسم البياني");
     } finally {
       setLoading(false);
     }
-  }, [comparison.from, comparison.to, platform, range.from, range.to, setSearchParams]);
+  }, [comparison.from, comparison.to, platform, preset, range.from, range.to, setSearchParams]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const currentSummary = useMemo(() => summary(current?.orders, current?.ads, platform), [current, platform]);
-  const previousSummary = useMemo(() => summary(previous?.orders, previous?.ads, platform), [previous, platform]);
+  const currentHour = riyadhHour();
+  const sameHourComparison = preset === "today" && range.from === riyadhToday();
+  const previousForComparison = useMemo(() => ({
+    orders: sameHourComparison ? trimOrdersToHour(previous?.orders, currentHour) : previous?.orders,
+    ads: sameHourComparison ? trimAdsToHour(previous?.ads, currentHour) : previous?.ads,
+  }), [currentHour, previous, sameHourComparison]);
+  const currentSummary = useMemo(
+    () => summary(current?.orders, current?.ads, platform),
+    [current, platform],
+  );
+  const previousSummary = useMemo(
+    () => summary(previousForComparison.orders, previousForComparison.ads, platform),
+    [platform, previousForComparison],
+  );
   const chartData = useMemo(
     () => mergeSeries(current?.orders, current?.ads, platform, current?.dashboard),
     [current, platform],
   );
   const hourly = current?.orders?.granularity === "hour";
   const todaySelected = hourly && range.from === riyadhToday();
-  const currentHour = Number(
-    new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Riyadh", hour: "2-digit", hourCycle: "h23" }).format(new Date()),
-  );
-  const comparisonLabel = `مقارنة بـ ${comparison.from} – ${comparison.to}`;
-
+  const comparisonLabel = sameHourComparison
+    ? `مقارنة بـ ${comparison.from} حتى الساعة ${String(currentHour).padStart(2, "0")}:00`
+    : `مقارنة بـ ${comparison.from} – ${comparison.to}`;
   const applyPreset = (value) => {
     setPreset(value);
     setRange(presetRange(value));
@@ -356,4 +470,3 @@ export default function ChartDashboard() {
     </div>
   );
 }
-
