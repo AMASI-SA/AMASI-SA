@@ -158,9 +158,6 @@ async def _latest_level_status(
         {
             "user_id": str(user_id),
             "ad_account_id": str(ad_account_id),
-            # A Dashboard spend-only run intentionally does not refresh entity
-            # TOTAL facts and must not downgrade their last proven status.
-            "run_type": {"$ne": "dashboard_spend_refresh"},
         },
         {"_id": 0, field: 1, "finished_at": 1, "started_at": 1},
         sort=[("started_at", -1)],
