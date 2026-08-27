@@ -27,11 +27,13 @@ from preparation_pdf_wrapped_text import (
     wrap_reference_text,
 )
 from reviewed_products_catalog import PREPARATION_UNIT_ALLOCATIONS
+from reviewed_preparation_v3 import stable_ready_item_id
 from reviewed_preparation_batches import (
     _batch_response,
     _card_field_projection,
     _finalize_batch_assignment,
     _review_snapshot_identity,
+    _reviewed_ready_identity,
     _reconcile_order_stage,
     make_reviewed_preparation_batches_router,
     plan_preparation_allocations,
@@ -94,6 +96,101 @@ def _reference_line(index=1):
         sku=f"SKU-{index}",
         product_options={"الخامة": "ستانلس"},
     )
+
+
+
+def test_normal_reviewed_ready_identity_does_not_remap_live_salla_line():
+    order = SimpleNamespace(
+        order_id="order-200",
+        order_number="200",
+        created_at=datetime(2026, 8, 27, tzinfo=timezone.utc),
+        source=SimpleNamespace(source_order_id="salla-order-200"),
+    )
+    workflow = {"items": [{
+        "order_item_id": "reviewed-line-200",
+        "product_id": "p-ready",
+        "sku": "READY-1",
+        "product_name": "منتج جاهز",
+        "quantity": 3,
+        "specifications_snapshot": {"المقاس": "كبير", "اللون": "ذهبي"},
+    }]}
+    line = {
+        "identity_source": "reviewed_ready",
+        "order_number": "200",
+        "order_item_id": "reviewed-line-200",
+        "line_index": 0,
+        "quantity": 3,
+        "product_id": "p-ready",
+        "product_name": "منتج جاهز",
+        "sku": "READY-1",
+        "ready_item_identity": {
+            "order_item_id": "reviewed-line-200",
+            "product_id": "p-ready",
+            "sku": "READY-1",
+            "quantity": 3,
+            "product_name": "منتج جاهز",
+            "options": {"المقاس": "كبير", "اللون": "ذهبي"},
+        },
+    }
+    line["ready_item_id"] = stable_ready_item_id(line)
+    allocation = {
+        "order_item_id": "reviewed-line-200",
+        "ready_item_id": line["ready_item_id"],
+        "quantity": 3,
+        "line": line,
+    }
+
+    resolved = _reviewed_ready_identity(order, workflow, allocation)
+
+    assert resolved is not None
+    identity, state = resolved
+    assert identity.order_item_id == "reviewed-line-200"
+    assert identity.quantity == 3
+    assert {row.name: row.value for row in identity.options} == {
+        "المقاس": "كبير",
+        "اللون": "ذهبي",
+    }
+    assert state == workflow["items"][0]
+
+    changed = {
+        **allocation,
+        "line": {**line, "line_index": 1},
+    }
+    assert _reviewed_ready_identity(order, workflow, changed) is None
+
+
+def test_full_selected_products_allocate_every_available_piece_into_one_plan():
+    first = _product(
+        "product:p-1",
+        5,
+        [
+            {**_line("100", "line-a", 2), "ready_item_id": "ready-a"},
+            {**_line("101", "line-b", 3), "ready_item_id": "ready-b"},
+        ],
+    )
+    second = _product(
+        "product:p-2",
+        2,
+        [{**_line("102", "line-c", 2), "ready_item_id": "ready-c"}],
+    )
+
+    result = plan_preparation_allocations(
+        [first, second],
+        [
+            {"group_key": "product:p-1", "quantity": 5},
+            {"group_key": "product:p-2", "quantity": 2},
+        ],
+    )
+
+    assert sum(row["quantity"] for row in result) == 7
+    assert [
+        (row["order_item_id"], row["quantity"], row["ready_item_id"])
+        for row in result
+    ] == [
+        ("line-a", 2, "ready-a"),
+        ("line-b", 3, "ready-b"),
+        ("line-c", 2, "ready-c"),
+    ]
 
 
 def test_review_snapshot_recovery_identity_keeps_stale_guard_strict():

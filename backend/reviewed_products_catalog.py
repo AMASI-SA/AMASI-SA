@@ -17,6 +17,7 @@ from order_engine.service import OrderNotFoundError, get_order
 from order_review_routes import WORKFLOWS, _merchant_user_id, _require_reviewer, _text
 from product_category_variant_support import _build_category_catalog, _flatten_categories
 from reviewed_preparation_v3 import (
+    stable_ready_item_id,
     stable_reviewed_line_revision,
     stable_reviewed_product_revision,
 )
@@ -371,7 +372,7 @@ def aggregate_reviewed_products(
             group["direct_category_ids"].update(direct_category_ids)
             if not group.get("image_url") and image:
                 group["image_url"] = image
-            group["source_lines"].append({
+            source_line = {
                 "group_key": key,
                 "order_number": order_number,
                 "order_item_id": _text(item.get("order_item_id")),
@@ -399,8 +400,42 @@ def aggregate_reviewed_products(
                 ),
                 "selected_image_url": selected_image or None,
                 "preparation_note": _text(state.get("preparation_note")) or None,
-                "identity_source": "review_snapshot" if item.get("_review_snapshot_state") else "live_order",
+                "identity_source": "review_snapshot" if item.get("_review_snapshot_state") else "reviewed_ready",
                 "review_snapshot_index": item.get("_review_snapshot_index"),
+                # Normal reviewed lines become immutable, file-ready records.
+                # This is derived lazily from the durable review workflow so
+                # existing reviewed products need no destructive backfill.
+                "ready_item_identity": ({
+                    "order_item_id": _text(item.get("order_item_id")),
+                    "source_item_id": _text(
+                        state.get("source_item_id") or item.get("source_item_id")
+                    ),
+                    "product_id": _text(
+                        state.get("product_id") or item.get("product_id") or product_id
+                    ),
+                    "parent_product_id": _text(
+                        state.get("parent_product_id") or item.get("parent_product_id")
+                    ),
+                    "variant_id": _text(
+                        state.get("variant_id") or item.get("variant_id")
+                    ),
+                    "sku": _text(state.get("sku") or item.get("sku") or sku),
+                    "barcode": _text(state.get("barcode") or item.get("barcode")),
+                    "quantity": quantity_units,
+                    "product_name": _text(
+                        state.get("product_name") or item.get("name") or product_name
+                    ),
+                    "selected_image_url": selected_image or _text(item.get("image_url")),
+                    "options": (
+                        state.get("specifications_snapshot")
+                        if state.get("specifications_snapshot") is not None
+                        else (
+                            state.get("options")
+                            if state.get("options") is not None
+                            else (item.get("options_normalized") or {})
+                        )
+                    ),
+                } if not item.get("_review_snapshot_state") else None),
                 # Keep the immutable facts that identify the reviewed snapshot
                 # separate from the Product V2-enriched display identity above.
                 # File creation can then prove it is materialising the same
@@ -421,7 +456,9 @@ def aggregate_reviewed_products(
                         else (item.get("options_normalized") or {})
                     ),
                 } if item.get("_review_snapshot_state") else None),
-            })
+            }
+            source_line["ready_item_id"] = stable_ready_item_id(source_line)
+            group["source_lines"].append(source_line)
 
     if any(UNCATEGORIZED_ID in group["category_ids"] for group in groups.values()):
         category_catalog.append({

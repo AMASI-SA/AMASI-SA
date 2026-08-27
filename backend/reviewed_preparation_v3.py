@@ -19,6 +19,22 @@ def _text(value: Any) -> str:
     return str(value or "").strip()
 
 
+def stable_ready_item_id(line: dict[str, Any]) -> str:
+    """Return a deterministic id for one reviewed, file-ready order line."""
+    payload = {
+        "order_number": _text(line.get("order_number")),
+        "order_item_id": _text(line.get("order_item_id")),
+        "line_index": int(line.get("line_index") or 0),
+    }
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return f"ready-item:{hashlib.sha256(encoded).hexdigest()[:32]}"
+
+
 def stable_reviewed_line_revision(line: dict[str, Any]) -> str:
     """Hash only frozen commercial/operational identity facts.
 
@@ -27,7 +43,11 @@ def stable_reviewed_line_revision(line: dict[str, Any]) -> str:
     instead of the Product V2-enriched projection. Live lines still use the
     current canonical identity because they have no frozen recovery identity.
     """
-    frozen_identity = line.get("review_snapshot_identity")
+    frozen_identity = (
+        line.get("review_snapshot_identity")
+        if isinstance(line.get("review_snapshot_identity"), dict)
+        else line.get("ready_item_identity")
+    )
     identity = frozen_identity if isinstance(frozen_identity, dict) else line
     payload = {
         "order_number": _text(line.get("order_number")),
@@ -119,6 +139,7 @@ async def bounded_map_ordered(
 
 __all__ = [
     "bounded_map_ordered",
+    "stable_ready_item_id",
     "stable_reviewed_line_revision",
     "stable_reviewed_product_revision",
 ]
