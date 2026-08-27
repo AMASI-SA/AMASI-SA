@@ -1,10 +1,14 @@
 """Read-only Salla outcomes for Snapchat V2 account and campaign reporting.
 
-Account totals and campaign rows are both aligned to the selected Snapchat
-account timezone. When an authoritative order timestamp is available it is
-localized to that timezone before period inclusion; ``order_date`` is only a
-fallback for legacy rows that have no timezone-aware timestamp. Source-only
-orders are never distributed or guessed across campaigns.
+Two date scopes are kept deliberately separate:
+
+* legacy Salla account-audit totals keep their existing ``order_date`` calendar;
+* Snapchat comparison totals and campaign rows use the selected ad-account
+  timezone, localizing an authoritative order timestamp whenever available.
+
+``order_date`` is only a fallback for the account-timezone comparison when no
+usable timestamp exists. Source-only orders are never distributed or guessed
+across campaigns.
 """
 from __future__ import annotations
 
@@ -152,12 +156,7 @@ def _localized_order_period_date(
     *,
     zone: ZoneInfo,
 ) -> tuple[str, str | None, str]:
-    """Return the order date in the advertising-account timezone.
-
-    ``order_date`` is intentionally a fallback only. It is commonly materialized
-    on the store's own calendar and therefore must not override a real timestamp
-    when Snapchat uses another timezone.
-    """
+    """Return the order date in the advertising-account timezone."""
     timestamp = _order_timestamp(order)
     if timestamp is not None:
         localized = timestamp.astimezone(zone)
@@ -303,13 +302,16 @@ async def load_salla_campaign_outcomes(
     total_financial_sales = 0.0
     snapchat_attributed_sales = 0.0
     snapchat_attributed_financial_sales = 0.0
+    account_timezone_snapchat_attributed_sales = 0.0
+    account_timezone_snapchat_attributed_financial_sales = 0.0
 
     for order in orders:
         local_date, local_created_at, date_source = _localized_order_period_date(
             order,
             zone=zone,
         )
-        account_date = local_date
+        salla_order_date = _text(order.get("order_date"))[:10]
+        legacy_account_date = salla_order_date or local_date
         financial = _matches_any(order.get("order_status"), included_statuses)
         amount = _number(order.get("total_amount") or order.get("total"))
         source_platform = canonical_ad_platform(order)
@@ -320,11 +322,12 @@ async def load_salla_campaign_outcomes(
         )
         reported_snapchat_source = source_platform == "snapchat"
         snapchat_attributed = reported_snapchat_source or key is not None
-        account_period_included = bool(
-            account_date
-            and from_value <= account_date <= to_value
+
+        legacy_account_period_included = bool(
+            legacy_account_date
+            and from_value <= legacy_account_date <= to_value
         )
-        if account_period_included:
+        if legacy_account_period_included:
             if reported_snapchat_source:
                 counters["salla_reported_snapchat_orders"] += 1
             if snapchat_attributed:
@@ -336,7 +339,22 @@ async def load_salla_campaign_outcomes(
                     counters["snapchat_attributed_financial_orders"] += 1
                     snapchat_attributed_financial_sales += amount
 
-        if not local_date or local_date < from_value or local_date > to_value:
+        account_timezone_period_included = bool(
+            local_date and from_value <= local_date <= to_value
+        )
+        if account_timezone_period_included:
+            if reported_snapchat_source:
+                counters["salla_reported_snapchat_orders_account_timezone"] += 1
+            if snapchat_attributed:
+                counters["snapchat_attributed_orders_account_timezone"] += 1
+                account_timezone_snapchat_attributed_sales += amount
+                if key is not None:
+                    counters["account_period_campaign_matched_orders_account_timezone"] += 1
+                if financial:
+                    counters["snapchat_attributed_financial_orders_account_timezone"] += 1
+                    account_timezone_snapchat_attributed_financial_sales += amount
+
+        if not account_timezone_period_included:
             continue
 
         counters["total_salla_created_orders"] += 1
@@ -419,6 +437,22 @@ async def load_salla_campaign_outcomes(
         if snapchat_attributed_orders > 0
         else None
     )
+    account_timezone_snapchat_attributed_orders = int(
+        counters["snapchat_attributed_orders_account_timezone"]
+    )
+    account_timezone_campaign_matched_orders = int(
+        counters["account_period_campaign_matched_orders_account_timezone"]
+    )
+    account_timezone_campaign_match_coverage_pct = (
+        round(
+            account_timezone_campaign_matched_orders
+            / account_timezone_snapchat_attributed_orders
+            * 100,
+            2,
+        )
+        if account_timezone_snapchat_attributed_orders > 0
+        else None
+    )
     spend_by_campaign = dict(campaign_spend_sar or {})
     profitability_by_campaign = (
         {
@@ -478,6 +512,34 @@ async def load_salla_campaign_outcomes(
                 - account_period_campaign_matched_orders,
             ),
             "campaign_match_coverage_pct": campaign_match_coverage_pct,
+            "salla_reported_snapchat_orders_account_timezone": int(
+                counters["salla_reported_snapchat_orders_account_timezone"]
+            ),
+            "snapchat_attributed_orders_account_timezone": (
+                account_timezone_snapchat_attributed_orders
+            ),
+            "snapchat_attributed_sales_sar_account_timezone": round(
+                account_timezone_snapchat_attributed_sales,
+                2,
+            ),
+            "snapchat_attributed_financial_orders_account_timezone": int(
+                counters["snapchat_attributed_financial_orders_account_timezone"]
+            ),
+            "snapchat_attributed_financial_sales_sar_account_timezone": round(
+                account_timezone_snapchat_attributed_financial_sales,
+                2,
+            ),
+            "account_period_campaign_matched_orders_account_timezone": (
+                account_timezone_campaign_matched_orders
+            ),
+            "snapchat_attribution_gap_orders_account_timezone": max(
+                0,
+                account_timezone_snapchat_attributed_orders
+                - account_timezone_campaign_matched_orders,
+            ),
+            "campaign_match_coverage_pct_account_timezone": (
+                account_timezone_campaign_match_coverage_pct
+            ),
             "non_campaign_orders": int(counters["non_campaign_orders"]),
             "ambiguous_orders": int(counters["ambiguous_orders"]),
             "platform_attributed_purchases": int(platform_purchases or 0),
@@ -492,7 +554,8 @@ async def load_salla_campaign_outcomes(
             ),
             "account_order_scope": "all_orders_created_in_period",
             "account_sales_scope": "gross_order_total_all_statuses",
-            "account_date_scope": (
+            "account_date_scope": "salla_order_date",
+            "snapchat_comparison_date_scope": (
                 "created_at_localized_to_ad_account_timezone_or_order_date_fallback"
             ),
             "non_campaign_distribution_allowed": False,
