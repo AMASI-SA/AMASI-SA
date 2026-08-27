@@ -390,10 +390,12 @@ def aggregate_reviewed_products(
                 "incident_recovery_id": _text(workflow.get("incident_recovery_id")) or None,
                 "shipping_company": _text(shipping.get("company")) or None,
                 "total_products_in_order": total_products_in_order,
+                # Prefer the frozen reviewed choice, including an empty mapping.
+                # Live OrderDTO enrichment may otherwise reorder these options.
                 "options_normalized": (
-                    item.get("options_normalized")
-                    or state.get("specifications_snapshot")
-                    or {}
+                    state.get("specifications_snapshot")
+                    if state.get("specifications_snapshot") is not None
+                    else (item.get("options_normalized") or {})
                 ),
                 "selected_image_url": selected_image or None,
                 "preparation_note": _text(state.get("preparation_note")) or None,
@@ -413,6 +415,11 @@ def aggregate_reviewed_products(
                     "sku": _text(item.get("sku")),
                     "barcode": _text(item.get("barcode")),
                     "quantity": quantity_units,
+                    "options": (
+                        state.get("specifications_snapshot")
+                        if state.get("specifications_snapshot") is not None
+                        else (item.get("options_normalized") or {})
+                    ),
                 } if item.get("_review_snapshot_state") else None),
             })
 

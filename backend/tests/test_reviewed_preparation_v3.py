@@ -158,3 +158,24 @@ def test_product_revision_ignores_source_line_order_only():
         **product,
         "source_lines": [second, first],
     })
+
+def test_recovery_revision_uses_frozen_options_not_live_order_options():
+    frozen = {
+        "order_item_id": "review-snapshot:1001:0",
+        "quantity": 1,
+        "options": {"size": "10"},
+    }
+    line = _line(
+        review_snapshot_identity=frozen,
+        options_normalized={"size": "12"},
+    )
+    original = stable_reviewed_line_revision(line)
+    assert original == stable_reviewed_line_revision(
+        {**line, "options_normalized": {"size": "14"}}
+    )
+    assert original != stable_reviewed_line_revision(
+        _line(
+            review_snapshot_identity={**frozen, "options": {"size": "12"}},
+            options_normalized={"size": "12"},
+        )
+    )
