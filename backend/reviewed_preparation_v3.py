@@ -39,7 +39,11 @@ def stable_reviewed_line_revision(line: dict[str, Any]) -> str:
         "sku": _text(identity.get("sku")).upper(),
         "barcode": _text(identity.get("barcode")),
         "quantity": int(identity.get("quantity") or line.get("quantity") or 0),
-        "options": line.get("options_normalized") or {},
+        "options": (
+            identity.get("options")
+            if "options" in identity
+            else (line.get("options_normalized") or {})
+        ),
     }
     encoded = json.dumps(
         payload,

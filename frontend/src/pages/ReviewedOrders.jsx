@@ -373,6 +373,12 @@ export default function ReviewedOrders() {
             }
         } catch (createError) {
             setBatchError(createError.message);
+            if (createError?.code === "reviewed_selection_stale") {
+                // The refreshed catalog belongs to a new idempotent attempt;
+                // do not retain the failed request until a browser refresh.
+                requestIdRef.current = "";
+                setSelectedQuantities({});
+            }
             if (createError?.code === "customer_service_instruction_action_required") {
                 setStageInstructions(createError?.detail?.instructions || []);
             }
