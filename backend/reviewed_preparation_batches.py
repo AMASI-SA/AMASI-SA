@@ -150,15 +150,34 @@ def _review_snapshot_identity(
     snapshot = snapshots[snapshot_index]
     if not isinstance(snapshot, dict):
         return None
+    frozen_identity = (
+        line.get("review_snapshot_identity")
+        if isinstance(line.get("review_snapshot_identity"), dict)
+        else {}
+    )
     historical_id = _text(snapshot.get("order_item_id"))
+    frozen_order_item_id = _text(frozen_identity.get("order_item_id"))
     if historical_id and historical_id != order_item_id:
         return None
+    if frozen_order_item_id and frozen_order_item_id != order_item_id:
+        return None
     for field in ("product_id", "parent_product_id", "variant_id", "sku", "barcode"):
-        current = _text(line.get(field))
+        # ``line[field]`` is the canonical Product V2-enriched value used for
+        # grouping and display.  Compare the untouched snapshot identity here;
+        # otherwise legitimate enrichment (not a commercial data change) makes
+        # every old sparse reviewed line look stale at file creation time.
+        current = _text(
+            frozen_identity.get(field)
+            if frozen_identity
+            else line.get(field)
+        )
         frozen = _text(snapshot.get(field))
         if current and frozen and current.casefold() != frozen.casefold():
             return None
+    frozen_quantity = _unit_quantity(frozen_identity.get("quantity"))
     snapshot_quantity = _unit_quantity(snapshot.get("quantity"))
+    if frozen_quantity and frozen_quantity != snapshot_quantity:
+        return None
     if snapshot_quantity <= 0 or _unit_quantity(allocation.get("quantity")) > snapshot_quantity:
         return None
 
@@ -185,11 +204,11 @@ def _review_snapshot_identity(
             source_product_id=_text(snapshot.get("product_id") or line.get("product_id")) or None,
             source_variant_id=_text(snapshot.get("variant_id") or line.get("variant_id")) or None,
         ),
-        product_id=_text(snapshot.get("product_id") or line.get("product_id")) or None,
-        parent_product_id=_text(snapshot.get("parent_product_id") or line.get("parent_product_id")) or None,
-        variant_id=_text(snapshot.get("variant_id") or line.get("variant_id")) or None,
-        sku=_text(snapshot.get("sku") or line.get("sku")) or None,
-        barcode=_text(snapshot.get("barcode") or line.get("barcode")) or None,
+        product_id=_text(line.get("product_id") or snapshot.get("product_id")) or None,
+        parent_product_id=_text(line.get("parent_product_id") or snapshot.get("parent_product_id")) or None,
+        variant_id=_text(line.get("variant_id") or snapshot.get("variant_id")) or None,
+        sku=_text(line.get("sku") or snapshot.get("sku")) or None,
+        barcode=_text(line.get("barcode") or snapshot.get("barcode")) or None,
         name=_text(snapshot.get("product_name") or line.get("product_name")) or "منتج",
         quantity=snapshot_quantity,
         image_url=_text(snapshot.get("selected_image_url") or line.get("image_url")) or None,
