@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from order_engine.mapper import map_salla_order
+from order_engine.product_identity_enrichment import enrich_order_item_identity
 from salla_integration.sync import _fetch_salla_shipment_details
 from order_item_engine.models import (
     OrderItemIdentityDTO,
@@ -244,9 +245,43 @@ class _GalleryDB:
     def __init__(self):
         self.salla_products = _GalleryCollection()
         self.products = _GalleryCollection()
+        self.mezan_products_v2 = _GalleryCollection()
 
     def __getitem__(self, name):
         return getattr(self, name)
+
+
+@pytest.mark.asyncio
+async def test_review_identity_fills_missing_variant_sku_from_product_v2():
+    db = _GalleryDB()
+    db.mezan_products_v2.rows = [{
+        "user_id": "owner-1",
+        "salla_product_id": "p-cup",
+        "sku": "AMS13032",
+        "barcode": "base-barcode",
+        "variants": [{
+            "id": "variant-red",
+            "sku": "AMS13032-RED",
+            "barcode": "red-barcode",
+        }],
+    }]
+    sparse = item(product_id="p-cup").model_copy(update={
+        "variant_id": "variant-red",
+        "sku": None,
+        "barcode": None,
+    })
+
+    enriched = await enrich_order_item_identity(
+        db,
+        user_id="owner-1",
+        items=[sparse],
+    )
+
+    assert enriched[0].order_item_id == sparse.order_item_id
+    assert enriched[0].product_id == "p-cup"
+    assert enriched[0].variant_id == "variant-red"
+    assert enriched[0].sku == "AMS13032-RED"
+    assert enriched[0].barcode == "red-barcode"
 
 
 @pytest.mark.asyncio
