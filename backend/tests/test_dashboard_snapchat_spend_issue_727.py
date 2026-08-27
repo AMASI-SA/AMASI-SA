@@ -17,7 +17,9 @@ DAY = date(2026, 8, 20)
 
 
 @pytest.mark.asyncio
-async def test_dashboard_refresh_never_writes_unproven_snapchat_projection():
+async def test_dashboard_refresh_keeps_closed_snapchat_range_read_only(monkeypatch):
+    monkeypatch.setattr(refresh_module, "_utcnow", lambda: NOW)
+
     class WriteTrap:
         def __getattr__(self, name):
             raise AssertionError(f"unexpected dashboard refresh access: {name}")
@@ -30,12 +32,68 @@ async def test_dashboard_refresh_never_writes_unproven_snapchat_projection():
     )
     assert result == {
         "provider": "snapchat_ads",
-        "status": "incomplete",
-        "reason": "canonical_dashboard_scheduler_required",
+        "status": "skipped",
+        "reason": "closed_range_read_only",
         "projection_write_reached": False,
         "rows_saved": 0,
         "errors_count": 0,
     }
+
+
+@pytest.mark.asyncio
+async def test_dashboard_open_day_refresh_reuses_canonical_financial_pipeline(
+    monkeypatch,
+):
+    monkeypatch.setattr(refresh_module, "_utcnow", lambda: NOW)
+    calls = []
+
+    class Pipeline:
+        def __init__(self, db):
+            calls.append(("init", db))
+
+        async def run(self, user_id, **kwargs):
+            calls.append(("run", user_id, kwargs))
+            return {
+                "status": "complete",
+                "sync_run_id": "run-live",
+                "summary": {
+                    "rows_saved": 24,
+                    "current_hour_provisional_rows_saved": 1,
+                },
+            }
+
+    monkeypatch.setattr(refresh_module, "SnapchatV2SyncPipeline", Pipeline)
+    db = object()
+    current_day = NOW.astimezone(refresh_module.ZoneInfo("Asia/Riyadh")).date()
+
+    result = await refresh_module._refresh_snapchat(
+        db,
+        "owner-1",
+        current_day,
+        current_day,
+    )
+
+    assert calls == [
+        ("init", db),
+        (
+            "run",
+            "owner-1",
+            {
+                "date_from": current_day,
+                "date_to": current_day,
+                "run_type": "dashboard_spend_refresh",
+                "financial_only": True,
+            },
+        ),
+    ]
+    assert result["status"] == "complete"
+    assert result["sync_run_id"] == "run-live"
+    assert result["projection_write_reached"] is True
+    assert result["rows_saved"] == 25
+    assert result["current_hour_provisional_rows_saved"] == 1
+    assert result["campaign_write_reached"] is False
+    assert result["accounting_write_reached"] is False
+    assert result["qoyod_write_reached"] is False
 
 
 def _path(document, dotted):
