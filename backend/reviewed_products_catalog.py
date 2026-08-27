@@ -17,7 +17,6 @@ from order_engine.service import OrderNotFoundError, get_order
 from order_review_routes import WORKFLOWS, _merchant_user_id, _require_reviewer, _text
 from product_category_variant_support import _build_category_catalog, _flatten_categories
 from reviewed_preparation_v3 import (
-    bounded_map_ordered,
     stable_reviewed_line_revision,
     stable_reviewed_product_revision,
 )
@@ -628,10 +627,10 @@ async def load_reviewed_product_context(
     skus: set[str] = set()
     order_numbers: set[str] = set()
 
-    async def load_pair(workflow: dict[str, Any]) -> tuple[Any, dict[str, Any]] | None:
+    for workflow in workflows:
         order_number = _text(workflow.get("order_number"))
         if not order_number:
-            return None
+            continue
         try:
             order = await get_order(
                 repository,
@@ -639,18 +638,7 @@ async def load_reviewed_product_context(
                 order_number=order_number,
             )
         except OrderNotFoundError:
-            return None
-        return order, workflow
-
-    loaded_pairs = await bounded_map_ordered(
-        workflows,
-        load_pair,
-        concurrency=16,
-    )
-    for loaded in loaded_pairs:
-        if loaded is None:
             continue
-        order, workflow = loaded
         order_number = _text(workflow.get("order_number"))
         pairs.append((order, workflow))
         order_numbers.add(order_number)
