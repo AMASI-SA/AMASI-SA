@@ -36,6 +36,9 @@ def make_ads_manager_router(db: Any, current_user: Callable):
     from campaign_ai_subprocess_scheduler import (
         attach_campaign_ai_subprocess_scheduler,
     )
+    from decision_intelligence.routes import (
+        attach_decision_intelligence_phase5_routes,
+    )
 
     router = _make_overview_router(db, current_user)
     attach_account_cost_settings_routes(
@@ -53,6 +56,12 @@ def make_ads_manager_router(db: Any, current_user: Callable):
     attach_campaign_ai_public_guard(router, db, current_user)
     attach_campaign_ai_routes(router, db, current_user, _require_owner)
     attach_campaign_ai_unified_shadow_routes(
+        router,
+        db,
+        current_user,
+        _require_owner,
+    )
+    attach_decision_intelligence_phase5_routes(
         router,
         db,
         current_user,
