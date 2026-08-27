@@ -38,6 +38,20 @@ def _hour(hour: int, spend, **metrics) -> dict:
     }
 
 
+def _snapchat_hour(hour: int, spend, **metrics) -> dict:
+    return _hour(hour, spend, source_granularity="HOUR", **metrics)
+
+
+def _provider_residual(hour: int, spend, **metrics) -> dict:
+    return _hour(
+        hour,
+        spend,
+        source_granularity="TOTAL",
+        source_materialization="current_hour_provider_total_residual_v1",
+        **metrics,
+    )
+
+
 def test_provider_total_residual_materializes_missing_current_hour():
     fact = _current_hour_provider_total_fact(
         user_id="owner-1",
@@ -59,6 +73,7 @@ def test_provider_total_residual_materializes_missing_current_hour():
     assert fact["hour_start_utc"] == NOW.replace(minute=0)
     assert fact["spend_native"] == 30.0
     assert fact["provisional"] is True
+    assert fact["coverage"]["data_state"] == "provisional_data"
     assert fact["source"]["materialization"] == (
         "current_hour_provider_total_residual_v1"
     )
@@ -103,7 +118,7 @@ def test_provider_total_overlay_rejects_hour_fallback_and_never_moves_backwards(
         "hours": [
             _hour(10, 100.0),
             _hour(11, 50.0),
-            _hour(12, 20.0),
+            _snapchat_hour(12, 20.0),
         ]
     }
     common = {
@@ -129,6 +144,51 @@ def test_provider_total_overlay_rejects_hour_fallback_and_never_moves_backwards(
         )
         is None
     )
+
+
+def test_provider_total_residual_can_decrease_when_prior_hour_is_revised():
+    prior_hours = 785.0
+    current_provisional = 120.0
+    revised_prior_hours = prior_hours + 20.0
+    provider_total = 905.0
+
+    assert prior_hours + current_provisional == provider_total
+    fact = _current_hour_provider_total_fact(
+        user_id="owner-1",
+        account=ACCOUNT,
+        projection={
+            "hours": [
+                _hour(10, revised_prior_hours),
+                _provider_residual(12, current_provisional),
+            ]
+        },
+        provider_total=_provider_total(provider_total),
+        current=NOW,
+        sync_run_id="run-next",
+        action_report_time="conversion",
+    )
+
+    assert fact is not None
+    assert fact["spend_native"] == 100.0
+    assert fact["source"]["prior_hours_spend_native"] == revised_prior_hours
+    assert revised_prior_hours + fact["spend_native"] == provider_total
+    assert fact["coverage"]["data_state"] == "provisional_data"
+
+
+def test_zero_provider_total_residual_is_provisional_zero():
+    fact = _current_hour_provider_total_fact(
+        user_id="owner-1",
+        account=ACCOUNT,
+        projection={"hours": [_provider_residual(12, 10.0)]},
+        provider_total=_provider_total(0.0),
+        current=NOW,
+        sync_run_id="run-next",
+        action_report_time="conversion",
+    )
+
+    assert fact is not None
+    assert fact["spend_native"] == 0.0
+    assert fact["coverage"]["data_state"] == "provisional_zero"
 
 
 @pytest.mark.asyncio

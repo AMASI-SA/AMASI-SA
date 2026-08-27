@@ -129,9 +129,10 @@ def _current_hour_provider_total_fact(
     Snapchat can advance the account TOTAL while omitting the still-open HOUR
     point. Closed HOUR facts remain authoritative; the non-negative residual
     between the fresh account-day TOTAL and every other known hour is the
-    current provisional hour. Existing HOUR metrics are preserved, and a
-    provider TOTAL that lags an already-observed HOUR value cannot move the
-    bucket backwards.
+    current provisional hour. Existing HOUR metrics are preserved. A real
+    Snapchat HOUR value is monotonic when provider TOTAL temporarily lags it,
+    while a residual written by an earlier sync is recalculated in either
+    direction so the hourly sum continues to match provider TOTAL.
     """
     coverage = dict(provider_total.get("account_day_coverage") or {})
     if (
@@ -177,9 +178,30 @@ def _current_hour_provider_total_fact(
         if current_row is not None and current_row.get("spend_native") is not None
         else None
     )
+    current_source = dict((current_row or {}).get("source") or {})
+    current_source_granularity = str(
+        (current_row or {}).get("source_granularity")
+        or current_source.get("granularity")
+        or ""
+    ).upper()
+    current_materialization = str(
+        (current_row or {}).get("source_materialization")
+        or current_source.get("materialization")
+        or ""
+    )
+    existing_is_provider_residual = (
+        current_materialization == "current_hour_provider_total_residual_v1"
+    )
     if (
         existing_spend is not None
+        and current_source_granularity == "HOUR"
+        and not existing_is_provider_residual
         and provisional_spend <= existing_spend + PROVISIONAL_SPEND_TOLERANCE
+    ):
+        return None
+    if (
+        existing_spend is not None
+        and abs(provisional_spend - existing_spend) <= PROVISIONAL_SPEND_TOLERANCE
     ):
         return None
 
@@ -211,7 +233,7 @@ def _current_hour_provider_total_fact(
         "coverage": {
             **coverage,
             "data_state": (
-                "confirmed_data" if provisional_spend > 0 else "confirmed_zero"
+                "provisional_data" if provisional_spend > 0 else "provisional_zero"
             ),
             "provisional": True,
         },
