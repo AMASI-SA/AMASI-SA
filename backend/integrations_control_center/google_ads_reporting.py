@@ -11,6 +11,7 @@ import os
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -463,7 +464,12 @@ async def run_google_ads_reporting_sync(
                     bucket["conversion_value_native"] += float(metrics.get("conversionsValue") or 0)
 
                 rows_saved = 0
+                provider_rows_observed = len(rows)
                 for day in requested_days:
+                    day_has_provider_rows = any(
+                        day_text == day.isoformat()
+                        for day_text, _hour_index in hourly
+                    )
                     daily_native = 0.0
                     daily_impressions = 0
                     daily_clicks = 0
@@ -536,6 +542,7 @@ async def run_google_ads_reporting_sync(
                                 "conversions": round(daily_conversions, 6),
                                 "conversion_value_native": round(daily_conversion_value, 6),
                                 "conversion_value_sar": conversion_value_sar,
+                                "empty_provider_row": not day_has_provider_rows,
                                 "source_mode": GOOGLE_ADS_REPORTING_SOURCE_MODE,
                                 "source_only": True,
                                 "accounting_eligible": False,
@@ -579,6 +586,7 @@ async def run_google_ads_reporting_sync(
                     {
                         "ad_account_id": account_id,
                         "rows_saved": rows_saved,
+                        "provider_rows_observed": provider_rows_observed,
                         "complete": True,
                     }
                 )
@@ -600,8 +608,18 @@ async def run_google_ads_reporting_sync(
                 )
 
     rows_saved = sum(int(item["rows_saved"]) for item in account_summaries)
+    provider_rows_observed = sum(
+        int(item.get("provider_rows_observed") or 0)
+        for item in account_summaries
+    )
     accounts_complete = sum(bool(item["complete"]) for item in account_summaries)
     status = "complete" if accounts_complete == len(account_summaries) else "partial"
+    riyadh_today = now_value.astimezone(ZoneInfo("Asia/Riyadh")).date()
+    open_day_waiting = (
+        start <= riyadh_today <= end and provider_rows_observed == 0
+    )
+    if open_day_waiting and status == "complete":
+        status = "partial"
     if rows_saved == 0 and errors:
         status = "failed"
     await db.mezan_integrations_v2.update_one(
@@ -613,7 +631,7 @@ async def run_google_ads_reporting_sync(
                 "has_data": rows_saved > 0,
                 "last_sync_at": observed_at if rows_saved > 0 else None,
                 "data_delay_minutes": 0 if status == "complete" else None,
-                "data_quality": "complete" if status == "complete" else "partial" if rows_saved else "unavailable",
+                "data_quality": "complete" if status == "complete" else "incomplete" if open_day_waiting else "partial" if rows_saved else "unavailable",
                 "health_score": 100 if status == "complete" else 80 if rows_saved else 40,
                 "source_mode": GOOGLE_ADS_REPORTING_SOURCE_MODE,
                 "checked_at": observed_at,
@@ -630,6 +648,8 @@ async def run_google_ads_reporting_sync(
         "accounts_attempted": len(account_summaries),
         "accounts_complete": accounts_complete,
         "rows_saved": rows_saved,
+        "provider_rows_observed": provider_rows_observed,
+        "open_day_waiting": open_day_waiting,
         "errors_count": len(errors),
         "provider_calls": provider_calls,
         "error_samples": errors[:10],

@@ -229,3 +229,48 @@ test("uses Riyadh today and yesterday labels", () => {
     expect(selectedPeriodLabel("2026-08-01", "2026-08-04"))
         .toBe("من 2026-08-01 إلى 2026-08-04");
 });
+
+test("shows waiting instead of 0.00 when the new Riyadh day has no provider payload", () => {
+    const waitingProviders = Object.fromEntries(
+        ["snapchat", "meta", "tiktok", "google"].map((provider) => [
+            provider,
+            {
+                connected: true,
+                daily_available: false,
+                hourly_available: false,
+                data_state: "waiting_incomplete",
+            },
+        ]),
+    );
+    const html = renderToStaticMarkup(
+        <DashboardAdsSpendCardContent
+            fromDate="2026-08-28"
+            toDate="2026-08-28"
+            data={{
+                total_sar: null,
+                provider_totals_sar: {
+                    snapchat: null,
+                    meta: null,
+                    tiktok: null,
+                    google: null,
+                },
+                providers: waitingProviders,
+                spend_quality: { status: "incomplete", amount_available: false },
+                hourly_spend: Array.from({ length: 24 }, (_, hourIndex) => ({
+                    date: "2026-08-28",
+                    hour_index: hourIndex,
+                    hour: `${String(hourIndex).padStart(2, "0")}:00`,
+                    snapchat: null,
+                    meta: null,
+                    tiktok: null,
+                    google: null,
+                })),
+            }}
+            onRefresh={() => {}}
+        />,
+    );
+
+    expect(html).toContain("إجمالي المنصات: بانتظار البيانات");
+    expect(html).toContain("بانتظار وصول أول مزامنة مكتملة لليوم الحالي");
+    expect(html).not.toContain("إجمالي المنصات: 0.00 ر.س");
+});
