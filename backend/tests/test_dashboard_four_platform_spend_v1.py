@@ -6,6 +6,7 @@ from datetime import date, datetime, timezone
 import pytest
 
 from integrations_control_center import dashboard_ads_platform_spend_routes as module
+from integrations_control_center import dashboard_ads_platform_refresh as refresh_module
 from integrations_control_center.ads_platform_hourly import local_hour_start_utc
 
 
@@ -146,7 +147,7 @@ async def test_tiktok_make_ledger_overrides_partial_native_reporting_without_sum
         }
     )
 
-    daily, facts = await module._daily_spend(
+    daily, facts, _states = await module._daily_spend(
         db,
         "owner-1",
         date(2026, 8, 24),
@@ -416,3 +417,128 @@ def test_account_local_hour_is_normalized_to_riyadh_reader_utc():
         "Asia/Riyadh",
     )
     assert point == datetime(2026, 8, 4, 21, 0, tzinfo=timezone.utc)
+
+
+@pytest.mark.asyncio
+async def test_riyadh_midnight_rollover_waits_for_first_provider_payload_and_refreshes_day_28(
+    monkeypatch,
+):
+    before_midnight_riyadh = datetime(2026, 8, 27, 20, 59, tzinfo=timezone.utc)
+    midnight_riyadh = datetime(2026, 8, 27, 21, 0, tzinfo=timezone.utc)
+    assert before_midnight_riyadh.astimezone(module.RIYADH_TZ).date() == date(2026, 8, 27)
+    assert midnight_riyadh.astimezone(module.RIYADH_TZ).date() == date(2026, 8, 28)
+
+    async def waiting_snapchat(*_args, **_kwargs):
+        return {
+            "daily_sar": {"2026-08-28": None},
+            "daily_state": {"2026-08-28": "unknown_incomplete"},
+            "hourly_sar": {"2026-08-28": []},
+            "total_sar": None,
+            "quality": {
+                "status": "incomplete",
+                "data_state": "unknown_incomplete",
+                "coverage_complete": False,
+                "amount_complete": False,
+                "amount_available": False,
+                "connected": True,
+                "reason_codes": ["account_day_fact_missing"],
+            },
+        }
+
+    monkeypatch.setattr(
+        module,
+        "load_unified_marketing_dashboard_spend",
+        waiting_snapchat,
+    )
+    empty_rows = {
+        "mezan_meta_performance_daily_v2": "meta_ads",
+        "mezan_tiktok_performance_daily_v2": "tiktok_ads",
+        "mezan_google_ads_performance_daily_v2": "google_ads",
+    }
+    db = FakeDB(
+        {
+            "mezan_integrations_v2": [
+                _connected("snapchat_ads"),
+                _connected("meta_ads"),
+                _connected("tiktok_ads"),
+                _connected("google_ads"),
+            ],
+            "mezan_integration_accounts_v2": [],
+            **{
+                collection: [{
+                    "user_id": "owner-1",
+                    "provider": provider,
+                    "date": "2026-08-28",
+                    "spend_sar": 0.0,
+                    "empty_provider_row": True,
+                    "observed_at": midnight_riyadh.isoformat(),
+                }]
+                for collection, provider in empty_rows.items()
+            },
+            "mezan_ads_platform_hourly_v2": [
+                {
+                    "user_id": "owner-1",
+                    "provider": provider,
+                    "hour_start_utc": midnight_riyadh.isoformat(timespec="seconds"),
+                    "spend_sar": 0.0,
+                }
+                for provider in ("meta", "tiktok", "google")
+            ],
+        }
+    )
+
+    result = await module.build_dashboard_platform_spend(
+        db,
+        "owner-1",
+        date_from="2026-08-28",
+        date_to="2026-08-28",
+        now=midnight_riyadh,
+    )
+
+    assert result["date_from"] == "2026-08-28"
+    assert result["date_to"] == "2026-08-28"
+    assert result["total_sar"] is None
+    assert result["spend_quality"]["status"] == "incomplete"
+    assert result["spend_quality"]["amount_available"] is False
+    assert result["spend_quality"]["reason_codes"] == [
+        "open_day_provider_payload_waiting"
+    ]
+    assert result["provider_totals_sar"] == {
+        "snapchat": None,
+        "meta": None,
+        "tiktok": None,
+        "google": None,
+    }
+    assert all(
+        result["providers"][provider]["data_state"] in {
+            "unknown_incomplete",
+            "waiting_incomplete",
+        }
+        for provider in ("snapchat", "meta", "tiktok", "google")
+    )
+    assert all(
+        row[provider] is None
+        for row in result["hourly_spend"]
+        for provider in ("snapchat", "meta", "tiktok", "google")
+    )
+
+    refreshed = []
+
+    async def provider_refresh(_db, _user_id, start, end):
+        refreshed.append((start, end))
+        return {"status": "partial", "provider": "test"}
+
+    monkeypatch.setattr(refresh_module, "_refresh_snapchat", provider_refresh)
+    monkeypatch.setattr(refresh_module, "_refresh_meta", provider_refresh)
+    monkeypatch.setattr(refresh_module, "_refresh_tiktok", provider_refresh)
+    monkeypatch.setattr(refresh_module, "_refresh_google", provider_refresh)
+    refresh = await refresh_module.refresh_dashboard_platform_spend(
+        db,
+        "owner-1",
+        date_from="2026-08-28",
+        date_to="2026-08-28",
+    )
+
+    assert refresh["date_from"] == "2026-08-28"
+    assert refresh["date_to"] == "2026-08-28"
+    assert refreshed == [(date(2026, 8, 28), date(2026, 8, 28))] * 4

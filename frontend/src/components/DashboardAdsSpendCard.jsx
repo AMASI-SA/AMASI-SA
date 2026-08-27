@@ -74,7 +74,9 @@ function providerValue(data, provider) {
         return money(total);
     }
     if (!state.connected) return "غير مربوط";
-    return "لا بيانات";
+    return state.data_state === "waiting_incomplete"
+        ? "بانتظار البيانات"
+        : "لا بيانات";
 }
 
 export function DashboardAdsSpendCardContent({
@@ -91,7 +93,9 @@ export function DashboardAdsSpendCardContent({
         () => chartPoints(data, singleDay),
         [data, singleDay],
     );
-    const total = Number(data?.total_sar || 0);
+    const total = data?.total_sar === null || data?.total_sar === undefined
+        ? null
+        : Number(data.total_sar);
     const displayError = error || data?.refresh_error || "";
     const xKey = singleDay ? "hour" : "date";
     const availableSeries = useMemo(
@@ -158,7 +162,7 @@ export function DashboardAdsSpendCardContent({
                             {singleDay ? "عرض ساعي" : "عرض يومي"}
                         </div>
                         <div className="rounded-full border border-yellow-200 bg-yellow-50 px-3 py-1 text-[11px] font-extrabold text-yellow-900">
-                            إجمالي المنصات: {money(total)}
+                            إجمالي المنصات: {total === null ? "بانتظار البيانات" : money(total)}
                         </div>
                     </div>
                 </div>
@@ -287,7 +291,9 @@ export function DashboardAdsSpendCardContent({
                             ? "dashboard-ads-spend-hourly-empty"
                             : "dashboard-ads-spend-daily-empty"}
                     >
-                        لا توجد صرفيات إعلانية أصلية ضمن التاريخ المحدد حتى الآن.
+                        {data?.spend_quality?.status === "incomplete"
+                            ? "بانتظار وصول أول مزامنة مكتملة لليوم الحالي."
+                            : "لا توجد صرفيات إعلانية أصلية ضمن التاريخ المحدد حتى الآن."}
                     </div>
                 )}
             </div>
