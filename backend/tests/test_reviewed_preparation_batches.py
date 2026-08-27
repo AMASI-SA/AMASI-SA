@@ -144,6 +144,62 @@ def test_review_snapshot_recovery_identity_keeps_stale_guard_strict():
     assert _review_snapshot_identity(order, workflow, historical) is not None
 
 
+def test_review_snapshot_allows_proven_canonical_sku_enrichment():
+    order = SimpleNamespace(
+        order_id="order-13062",
+        order_number="13062",
+        created_at=datetime(2026, 8, 27, tzinfo=timezone.utc),
+        source=SimpleNamespace(source_order_id="salla-order-13062"),
+    )
+    workflow = {"items": [{
+        "order_item_id": "historical-line-13062",
+        "source_item_id": "source-line-13062",
+        "product_id": "variant-product-13062",
+        "product_name": "فستان بناتي أنيق",
+        "quantity": 7,
+        # Historical review snapshot was sparse before Product V2 enrichment.
+        "sku": None,
+    }]}
+    allocation = {
+        "order_item_id": "historical-line-13062",
+        "quantity": 7,
+        "line": {
+            "identity_source": "review_snapshot",
+            "review_snapshot_index": 0,
+            "product_id": "canonical-product-13062",
+            "sku": "AMS13062",
+            "product_name": "فستان بناتي أنيق",
+            "review_snapshot_identity": {
+                "order_item_id": "historical-line-13062",
+                "source_item_id": "source-line-13062",
+                "product_id": "variant-product-13062",
+                "sku": "",
+                "quantity": 7,
+            },
+        },
+    }
+
+    recovered = _review_snapshot_identity(order, workflow, allocation)
+
+    assert recovered is not None
+    identity, _state = recovered
+    assert identity.order_item_id == "historical-line-13062"
+    assert identity.product_id == "canonical-product-13062"
+    assert identity.sku == "AMS13062"
+
+    changed_snapshot = {
+        **allocation,
+        "line": {
+            **allocation["line"],
+            "review_snapshot_identity": {
+                **allocation["line"]["review_snapshot_identity"],
+                "product_id": "unrelated-product",
+            },
+        },
+    }
+    assert _review_snapshot_identity(order, workflow, changed_snapshot) is None
+
+
 @pytest.mark.asyncio
 async def test_batch_success_requires_employee_piece_registry_ready(monkeypatch):
     import preparation_file_registry as registry_module

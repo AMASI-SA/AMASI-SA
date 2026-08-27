@@ -335,6 +335,16 @@ def test_missing_live_salla_line_is_restored_from_review_snapshot():
     assert product["sku"] == "AMS11353"
     assert product["quantity"] == 2
     assert product["source_lines"][0]["options_normalized"] == {"size": "8 سنوات"}
+    assert product["source_lines"][0]["review_snapshot_identity"] == {
+        "order_item_id": "lost-dress-line",
+        "source_item_id": "",
+        "product_id": "p-dress",
+        "parent_product_id": "",
+        "variant_id": "",
+        "sku": "AMS11353",
+        "barcode": "",
+        "quantity": 2,
+    }
 
 
 def test_review_snapshot_does_not_duplicate_a_live_salla_line():
