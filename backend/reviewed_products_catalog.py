@@ -16,6 +16,11 @@ from order_engine.repository import MongoOrderRepository
 from order_engine.service import OrderNotFoundError, get_order
 from order_review_routes import WORKFLOWS, _merchant_user_id, _require_reviewer, _text
 from product_category_variant_support import _build_category_catalog, _flatten_categories
+from reviewed_preparation_v3 import (
+    bounded_map_ordered,
+    stable_reviewed_line_revision,
+    stable_reviewed_product_revision,
+)
 
 
 PRODUCTS = "mezan_products_v2"
@@ -428,6 +433,8 @@ def aggregate_reviewed_products(
     products: list[dict[str, Any]] = []
     total_quantity = 0
     for group in groups.values():
+        for source_line in group["source_lines"]:
+            source_line["line_revision"] = stable_reviewed_line_revision(source_line)
         group["source_lines"].sort(key=lambda row: (
             0 if _text(row.get("incident_recovery_id")) else 1,
             _text(row.get("reviewed_at")),
@@ -437,14 +444,16 @@ def aggregate_reviewed_products(
         total_quantity += int(group["quantity"])
         for category_id in group["category_ids"]:
             counts[category_id].add(group["group_key"])
-        products.append({
+        product_row = {
             **group,
             "quantity": int(group["quantity"]),
             "source_order_numbers": sorted(group["source_order_numbers"]),
             "source_order_count": len(group["source_order_numbers"]),
             "category_ids": sorted(group["category_ids"]),
             "direct_category_ids": sorted(group["direct_category_ids"]),
-        })
+        }
+        product_row["revision"] = stable_reviewed_product_revision(product_row)
+        products.append(product_row)
 
     products.sort(key=lambda row: (_normalized(row.get("name")), row.get("group_key") or ""))
     categories = [
@@ -539,6 +548,12 @@ def apply_preparation_allocations(
             "source_order_count": len(remaining_orders),
             "source_line_count": len(source_lines),
         }
+        for source_line in row["source_lines"]:
+            source_line["line_revision"] = (
+                source_line.get("line_revision")
+                or stable_reviewed_line_revision(source_line)
+            )
+        row["revision"] = stable_reviewed_product_revision(row)
         remaining_products.append(row)
         for category_id in row.get("category_ids") or []:
             category_counts[_text(category_id)].add(_text(row.get("group_key")))
@@ -612,14 +627,31 @@ async def load_reviewed_product_context(
     product_ids: set[str] = set()
     skus: set[str] = set()
     order_numbers: set[str] = set()
-    for workflow in workflows:
+
+    async def load_pair(workflow: dict[str, Any]) -> tuple[Any, dict[str, Any]] | None:
         order_number = _text(workflow.get("order_number"))
         if not order_number:
-            continue
+            return None
         try:
-            order = await get_order(repository, user_id=user_id, order_number=order_number)
+            order = await get_order(
+                repository,
+                user_id=user_id,
+                order_number=order_number,
+            )
         except OrderNotFoundError:
+            return None
+        return order, workflow
+
+    loaded_pairs = await bounded_map_ordered(
+        workflows,
+        load_pair,
+        concurrency=16,
+    )
+    for loaded in loaded_pairs:
+        if loaded is None:
             continue
+        order, workflow = loaded
+        order_number = _text(workflow.get("order_number"))
         pairs.append((order, workflow))
         order_numbers.add(order_number)
         for item in order.items:
