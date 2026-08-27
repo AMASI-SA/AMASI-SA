@@ -395,6 +395,21 @@ def aggregate_reviewed_products(
                 "preparation_note": _text(state.get("preparation_note")) or None,
                 "identity_source": "review_snapshot" if item.get("_review_snapshot_state") else "live_order",
                 "review_snapshot_index": item.get("_review_snapshot_index"),
+                # Keep the immutable facts that identify the reviewed snapshot
+                # separate from the Product V2-enriched display identity above.
+                # File creation can then prove it is materialising the same
+                # reviewed line without treating a newly resolved SKU/product id
+                # as a stale-data conflict.
+                "review_snapshot_identity": ({
+                    "order_item_id": _text(item.get("order_item_id")),
+                    "source_item_id": _text(item.get("source_item_id")),
+                    "product_id": _text(item.get("product_id")),
+                    "parent_product_id": _text(item.get("parent_product_id")),
+                    "variant_id": _text(item.get("variant_id")),
+                    "sku": _text(item.get("sku")),
+                    "barcode": _text(item.get("barcode")),
+                    "quantity": quantity_units,
+                } if item.get("_review_snapshot_state") else None),
             })
 
     if any(UNCATEGORIZED_ID in group["category_ids"] for group in groups.values()):
