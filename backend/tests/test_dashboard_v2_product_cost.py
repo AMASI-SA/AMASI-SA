@@ -133,6 +133,95 @@ def test_mezan_base_wins_and_selected_components_are_added_once():
     assert result["line_total"] == 40
 
 
+def test_ams13070_cost_includes_customer_selected_additional_price():
+    product = {
+        "salla_product_id": "653374677",
+        "sku": "AMS13070",
+        "cost_price_from_salla": 60,
+    }
+    profile = {"base_cost": 45}
+    product_bindings = [{
+        "id": "garment-bag",
+        "resource_id": "bag-30x40",
+        "quantity": 1,
+    }]
+    option_bindings = [
+        {
+            "id": "dress-cost",
+            "option_name": "نوع الطلب",
+            "value_name": "فستان",
+            "mode": "direct",
+            "direct_amount": 25,
+        },
+        {
+            "id": "dress-and-vest-cost",
+            "option_name": "نوع الطلب",
+            "value_name": "فستان + سديري",
+            "mode": "direct",
+            "direct_amount": 70,
+        },
+    ]
+    resources = {"bag-30x40": {"id": "bag-30x40", "unit_cost": 1.2}}
+
+    dress = calculate_mezan_v2_line_cost(
+        {
+            "product_id": "653374677",
+            "sku": "AMS13070",
+            "quantity": 1,
+            # Salla's legacy products[] projection keeps plural values as a
+            # list, which is the live shape that previously missed +25.
+            "options": [{"name": "نوع الطلب", "value": ["فستان"]}],
+        },
+        product=product,
+        profile=profile,
+        product_bindings=product_bindings,
+        option_bindings=option_bindings,
+        resources=resources,
+    )
+    dress_and_vest = calculate_mezan_v2_line_cost(
+        {
+            "product_id": "653374677",
+            "sku": "AMS13070",
+            "quantity": 2,
+            "options": [{"name": "نوع الطلب", "value": ["فستان + سديري"]}],
+        },
+        product=product,
+        profile=profile,
+        product_bindings=product_bindings,
+        option_bindings=option_bindings,
+        resources=resources,
+    )
+
+    assert dress["base_total"] == 45
+    assert dress["product_components_total"] == 1.2
+    assert dress["selected_options_total"] == 25
+    assert dress["line_total"] == 71.2
+    assert dress_and_vest["selected_options_total"] == 140
+    assert dress_and_vest["line_total"] == 232.4
+
+    cards, executive = _finalize_product_profit_rows({
+        "653374677": {
+            "identity": "653374677",
+            "name": "أناقة طفلك في احتفالات الوطن",
+            "sku": "AMS13070",
+            "units_sold": 1,
+            "orders_count": 1,
+            "total_sales": 278.64,
+            "total_cost": dress["line_total"],
+            "mezan_cost_complete": True,
+            "uses_salla_fallback": False,
+            "missing_everywhere": False,
+            "catalog_product_found": True,
+            "cost_sources": {"mezan_v2_base"},
+        },
+    })
+
+    assert cards[0]["total_cost"] == 71.2
+    assert cards[0]["net_profit"] == 207.44
+    assert executive["total_cost"] == 71.2
+    assert executive["net_profit"] == 207.44
+
+
 def test_mezan_variant_wins_over_mezan_base_and_salla():
     cost, source = resolve_base_unit_cost(
         {"variant_id": "v-2", "sku": "SKU-2"},
