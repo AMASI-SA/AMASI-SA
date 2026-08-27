@@ -186,14 +186,6 @@ async def build_daily_projection(
                     float(fact.get("purchase_value_native") or 0),
                     6,
                 ),
-                "source_granularity": str(
-                    (fact.get("source") or {}).get("granularity") or ""
-                ).upper()
-                or None,
-                "source_materialization": str(
-                    (fact.get("source") or {}).get("materialization") or ""
-                )
-                or None,
                 "sync_run_id": fact.get("sync_run_id"),
                 "updated_at": fact.get("updated_at"),
             }
