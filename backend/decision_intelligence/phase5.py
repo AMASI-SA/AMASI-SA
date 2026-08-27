@@ -1,16 +1,10 @@
 """Decision Intelligence Phase 5 recommendation-only shadow pipeline."""
 from __future__ import annotations
 
-from dataclasses import asdict, replace
 from datetime import date, datetime
 from typing import Any
 
-from .action_simulator import simulate_action
-from .approval_workflow import create_approval_request
-from .decision_engine import rank_decisions
 from .evidence_adapter import load_decision_evidence
-from .impact_predictor import choose_best_simulation
-from .models import DecisionRecommendation, DecisionSignal
 
 PHASE5_VERSION = "decision-intelligence-phase5-v1"
 
@@ -25,98 +19,110 @@ def _number(value: Any) -> float | None:
     return parsed if parsed == parsed and abs(parsed) != float("inf") else None
 
 
-def _shadow_simulation(candidate: dict[str, Any]):
+def _shadow_simulation(candidate: dict[str, Any]) -> dict[str, Any]:
+    """Describe a bounded scenario without forecasting an unmeasured effect."""
     metrics = candidate.get("metrics") or {}
     current_profit = _number(metrics.get("contribution_profit_sar"))
     commerce_roas = _number(metrics.get("salla_roas"))
     conversions = _number(metrics.get("conversions")) or 0.0
-    if current_profit is None:
-        return None
 
-    if current_profit > 0 and commerce_roas is not None and commerce_roas >= 1.5 and conversions >= 3:
+    if (
+        current_profit is not None
+        and current_profit > 0
+        and commerce_roas is not None
+        and commerce_roas >= 1.5
+        and conversions >= 3
+    ):
         scenario = "bounded_budget_increase_5pct_shadow"
-        expected_profit = current_profit + (current_profit * 0.03)
-        confidence = 0.65
-        assumptions = [
-            "simulation_only_no_platform_write",
-            "budget_change_capped_at_5pct",
-            "60pct_of_current_profit_efficiency_carries_to_incremental_spend",
-            "no_saturation_or_competition_shift_inside_the_window",
-        ]
-    elif current_profit < 0 or (commerce_roas is not None and commerce_roas < 1.0):
+        proposed_change = {"budget_change_pct": 5.0}
+        rationale = "Observed reconciled outcomes qualify this campaign for a bounded shadow test."
+    elif (
+        (current_profit is not None and current_profit < 0)
+        or (commerce_roas is not None and commerce_roas < 1.0)
+    ):
         scenario = "bounded_budget_decrease_5pct_shadow"
-        expected_profit = current_profit + (abs(current_profit) * 0.025)
-        confidence = 0.6
-        assumptions = [
-            "simulation_only_no_platform_write",
-            "budget_change_capped_at_5pct",
-            "50pct_of_avoided_loss_is_recoverable",
-            "no_cross_campaign_cannibalization_modelled",
-        ]
+        proposed_change = {"budget_change_pct": -5.0}
+        rationale = "Observed reconciled outcomes qualify this campaign for a bounded shadow test."
     else:
         scenario = "hold_and_collect_more_evidence"
-        expected_profit = current_profit
-        confidence = 0.75
-        assumptions = [
-            "simulation_only_no_platform_write",
-            "current_budget_and_status_remain_unchanged",
-        ]
-    return simulate_action(
-        scenario=scenario,
-        current_profit_sar=current_profit,
-        expected_profit_sar=expected_profit,
-        confidence=confidence,
-        assumptions=assumptions,
-    )
+        proposed_change = {"budget_change_pct": 0.0}
+        rationale = "Keep current state and collect measured response evidence."
+    return {
+        "status": "SHADOW_SCENARIO_ONLY",
+        "scenario": scenario,
+        "proposed_change": proposed_change,
+        "rationale": rationale,
+        "forecast_used": False,
+        "execution_performed": False,
+    }
 
 
-def _signal(candidate: dict[str, Any], predicted_delta: float | None) -> DecisionSignal:
-    metrics = candidate.get("metrics") or {}
-    evidence_count = sum(
-        value is not None
-        for value in (
-            metrics.get("spend_sar"),
-            metrics.get("conversions"),
-            metrics.get("salla_orders"),
-            metrics.get("salla_revenue_sar"),
-            metrics.get("contribution_profit_sar"),
-        )
-    )
-    contribution = _number(metrics.get("contribution_profit_sar")) or 0.0
-    urgency = 0.8 if contribution < 0 else 0.45
-    return DecisionSignal(
-        signal_id=str(candidate.get("evidence_id") or "unknown"),
-        source="decision_evidence_adapter",
-        title=str((candidate.get("entity") or {}).get("name") or "marketing entity"),
-        evidence_count=evidence_count,
-        confidence=0.65,
-        expected_profit_delta_sar=predicted_delta,
-        urgency=urgency,
-        effort=0.2,
-        evidence=(
+def _unknown_impact_prediction() -> dict[str, Any]:
+    return {
+        "status": "unknown",
+        "expected_profit_delta_sar": None,
+        "downside_sar": None,
+        "upside_sar": None,
+        "confidence": None,
+        "evidence_basis": None,
+        "reason": "measured_elasticity_experiment_or_validated_model_evidence_unavailable",
+        "evidence_required": [
+            "measured_elasticity",
+            "controlled_experiment",
+            "validated_model_output",
+        ],
+    }
+
+
+def _shadow_recommendation(
+    candidate: dict[str, Any],
+    simulation: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "signal_id": str(candidate.get("evidence_id") or "unknown"),
+        "action": "TEST",
+        "priority_score": None,
+        "confidence": None,
+        "expected_profit_delta_sar": None,
+        "reason": (
+            "Reconciled observed evidence supports a shadow scenario only; "
+            "financial impact remains unknown until measured impact evidence exists."
+        ),
+        "scenario": simulation["scenario"],
+        "requires_owner_approval": True,
+        "read_only": True,
+    }
+
+
+def _pending_approval(recommendation: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "decision_id": recommendation["signal_id"],
+        "state": "PENDING",
+        "requested_action": recommendation["action"],
+        "rationale": recommendation["reason"],
+        "requires_owner_approval": True,
+        "execution_performed": False,
+    }
+
+
+def _lineage(evidence: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "reader": (evidence.get("source") or {}).get("reader"),
+        "contract_only": bool((evidence.get("source") or {}).get("contract_only")),
+        "contract_version": evidence.get("contract_version"),
+        "evidence_adapter": evidence.get("adapter"),
+        "provider": evidence.get("provider"),
+        "account_id": (evidence.get("account") or {}).get("id"),
+        "period": evidence.get("period"),
+        "entities": [
             {
-                "contract_version": "unified-marketing-data-v1",
-                "metrics": metrics,
-                "quality": candidate.get("quality") or {},
-                "lineage": candidate.get("lineage") or {},
-            },
-        ),
-    )
-
-
-def _enforce_shadow_mode(
-    recommendation: DecisionRecommendation,
-) -> DecisionRecommendation:
-    if recommendation.action != "EXECUTE_NOW":
-        return recommendation
-    return replace(
-        recommendation,
-        action="TEST",
-        reason=(
-            "Shadow mode downgraded EXECUTE_NOW to a bounded TEST proposal; "
-            "owner approval cannot execute a platform write in Phase 5."
-        ),
-    )
+                "evidence_id": candidate.get("evidence_id"),
+                "entity": candidate.get("entity") or {},
+                "source": candidate.get("lineage") or {},
+            }
+            for candidate in evidence.get("candidates") or []
+        ],
+    }
 
 
 def run_phase5_shadow_from_evidence(
@@ -143,43 +149,17 @@ def run_phase5_shadow_from_evidence(
             continue
 
         simulation = _shadow_simulation(candidate)
-        prediction = choose_best_simulation([simulation] if simulation else [])
-        if prediction is None:
-            item = {
-                "decision_id": candidate.get("evidence_id"),
-                "entity": candidate.get("entity") or {},
-                "status": "BLOCKED",
-                "blocked_by": ["impact_prediction_unavailable"],
-                "simulation": asdict(simulation) if simulation else None,
-                "impact_prediction": None,
-                "approval": None,
-            }
-            blocked.append(item)
-            decisions.append(item)
-            continue
-
-        recommendation = _enforce_shadow_mode(
-            rank_decisions([
-                _signal(candidate, prediction.expected_profit_delta_sar)
-            ])[0]
-        )
-        approval = (
-            asdict(create_approval_request(recommendation))
-            if recommendation.action == "TEST"
-            else {
-                "state": "NOT_REQUESTED",
-                "requires_owner_approval": True,
-                "execution_performed": False,
-            }
-        )
+        prediction = _unknown_impact_prediction()
+        recommendation = _shadow_recommendation(candidate, simulation)
+        approval = _pending_approval(recommendation)
         decisions.append({
             "decision_id": candidate.get("evidence_id"),
             "entity": candidate.get("entity") or {},
             "status": "RECOMMENDATION_SHADOW",
             "blocked_by": [],
-            "recommendation": asdict(recommendation),
-            "simulation": asdict(simulation),
-            "impact_prediction": asdict(prediction),
+            "recommendation": recommendation,
+            "simulation": simulation,
+            "impact_prediction": prediction,
             "approval": approval,
             "execution_allowed": False,
         })
@@ -205,6 +185,7 @@ def run_phase5_shadow_from_evidence(
         "account": evidence.get("account"),
         "period": evidence.get("period"),
         "gates": evidence.get("gates"),
+        "lineage": _lineage(evidence),
         "decision_ready": bool(evidence.get("decision_ready")),
         "decisions": decisions,
         "summary": {

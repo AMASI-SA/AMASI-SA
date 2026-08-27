@@ -207,8 +207,27 @@ def test_closed_reconciled_day_builds_shadow_recommendation_chain():
     decision = result["decisions"][0]
     assert decision["status"] == "RECOMMENDATION_SHADOW"
     assert decision["recommendation"]["action"] == "TEST"
+    assert decision["recommendation"]["confidence"] is None
+    assert decision["recommendation"]["expected_profit_delta_sar"] is None
     assert decision["simulation"]["scenario"] == "bounded_budget_increase_5pct_shadow"
-    assert decision["impact_prediction"]["expected_profit_delta_sar"] == 24.75
+    assert decision["simulation"]["forecast_used"] is False
+    assert decision["impact_prediction"] == {
+        "status": "unknown",
+        "expected_profit_delta_sar": None,
+        "downside_sar": None,
+        "upside_sar": None,
+        "confidence": None,
+        "evidence_basis": None,
+        "reason": "measured_elasticity_experiment_or_validated_model_evidence_unavailable",
+        "evidence_required": [
+            "measured_elasticity",
+            "controlled_experiment",
+            "validated_model_output",
+        ],
+    }
+    assert result["lineage"]["reader"] == "unified_marketing.gateway"
+    assert result["lineage"]["contract_version"] == CONTRACT_VERSION
+    assert result["lineage"]["entities"][0]["source"]["source_version"] == "v2"
     assert decision["approval"]["state"] == "PENDING"
     assert decision["approval"]["execution_performed"] is False
     assert decision["execution_allowed"] is False
@@ -418,6 +437,17 @@ def test_phase5_output_explicitly_disables_writes_and_scheduler():
     }
     assert result["approval_workflow"]["auto_approval_enabled"] is False
     assert result["approval_workflow"]["approval_can_execute"] is False
+
+
+def test_phase5_does_not_invent_forecast_or_confidence():
+    result = run_phase5_shadow_from_evidence(_evidence())
+    decision = result["decisions"][0]
+    assert decision["simulation"]["forecast_used"] is False
+    assert decision["impact_prediction"]["status"] == "unknown"
+    assert decision["impact_prediction"]["expected_profit_delta_sar"] is None
+    assert decision["impact_prediction"]["confidence"] is None
+    assert decision["recommendation"]["expected_profit_delta_sar"] is None
+    assert decision["recommendation"]["confidence"] is None
 
 
 def test_phase5_route_is_get_only_and_owner_guarded():
