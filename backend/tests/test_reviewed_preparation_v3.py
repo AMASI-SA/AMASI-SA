@@ -104,3 +104,57 @@ async def test_bounded_map_preserves_order_and_limits_parallelism():
 
     assert result == [value * 10 for value in range(12)]
     assert peak == 3
+
+
+def test_recovery_revision_uses_frozen_identity_not_catalog_enrichment():
+    frozen = {
+        "order_item_id": "review-snapshot:1001:0",
+        "source_item_id": "",
+        "product_id": "",
+        "parent_product_id": "",
+        "variant_id": "",
+        "sku": "",
+        "barcode": "",
+        "quantity": 1,
+    }
+    sparse = _line(
+        order_item_id=frozen["order_item_id"],
+        source_item_id=None,
+        product_id=None,
+        parent_product_id=None,
+        variant_id=None,
+        sku=None,
+        barcode=None,
+        quantity=1,
+        review_snapshot_identity=frozen,
+    )
+    enriched = {
+        **sparse,
+        "source_item_id": "catalog-source",
+        "product_id": "catalog-product",
+        "parent_product_id": "catalog-parent",
+        "variant_id": "catalog-variant",
+        "sku": "AMS11949",
+        "barcode": "catalog-barcode",
+    }
+
+    assert stable_reviewed_line_revision(sparse) == stable_reviewed_line_revision(enriched)
+    assert stable_reviewed_line_revision(sparse) != stable_reviewed_line_revision({
+        **sparse,
+        "options_normalized": {"size": "10"},
+    })
+
+
+def test_product_revision_ignores_source_line_order_only():
+    first = _line(order_item_id="line-1", available_unit_indices=[1])
+    second = _line(order_item_id="line-2", available_unit_indices=[1])
+    product = {
+        "group_key": "product:product-1",
+        "remaining_quantity": 2,
+        "source_lines": [first, second],
+    }
+
+    assert stable_reviewed_product_revision(product) == stable_reviewed_product_revision({
+        **product,
+        "source_lines": [second, first],
+    })
