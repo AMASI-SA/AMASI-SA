@@ -50,15 +50,39 @@ def selected_option_tokens(item: Any) -> set[tuple[str, str]]:
         if not isinstance(row, dict):
             continue
         option = row.get("option") if isinstance(row.get("option"), dict) else {}
-        value = row.get("value") if isinstance(row.get("value"), dict) else {}
+        raw_value = row.get("value")
+        value = raw_value if isinstance(raw_value, dict) else {}
         option_id = row.get("option_id") or row.get("id") or option.get("id")
         value_id = row.get("value_id") or value.get("id")
         option_name = row.get("option_name") or row.get("name") or option.get("name")
-        value_name = row.get("value_name") or value.get("name") or row.get("value")
+        value_name = row.get("value_name") or value.get("name") or raw_value
         if option_id not in (None, "") and value_id not in (None, ""):
             tokens.add((f"id:{option_id}", f"id:{value_id}"))
-        if option_name not in (None, "") and value_name not in (None, "", {}):
-            tokens.add((f"name:{_norm(option_name)}", f"name:{_norm(value_name)}"))
+        if option_name in (None, ""):
+            continue
+        # The legacy Salla order projection intentionally preserves plural
+        # ``values`` as a list.  Treat every selected value as its own token;
+        # stringifying the whole list (for example ``['فستان']``) prevents a
+        # binding stored as ``فستان`` from matching and silently drops its
+        # additional cost from both product cards and executive totals.
+        selected_values = (
+            value_name
+            if isinstance(value_name, (list, tuple, set))
+            else [value_name]
+        )
+        for selected_value in selected_values:
+            if isinstance(selected_value, dict):
+                selected_value = (
+                    selected_value.get("name")
+                    or selected_value.get("value")
+                    or selected_value.get("label")
+                    or selected_value.get("text")
+                )
+            if selected_value not in (None, "", {}):
+                tokens.add((
+                    f"name:{_norm(option_name)}",
+                    f"name:{_norm(selected_value)}",
+                ))
 
     normalized = _item_value(item, "options_normalized") or {}
     if isinstance(normalized, dict):
