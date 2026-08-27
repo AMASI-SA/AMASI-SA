@@ -1,9 +1,10 @@
 """Read-only Salla outcomes for Snapchat V2 account and campaign reporting.
 
-Account totals union Salla's explicit Snapchat source with exact campaign
-matches on Salla's own ``order_date`` calendar. Campaign rows stay exact-only
-on the selected Snapchat timezone, so source-only orders are never distributed
-or guessed across campaigns.
+Account totals and campaign rows are both aligned to the selected Snapchat
+account timezone. When an authoritative order timestamp is available it is
+localized to that timezone before period inclusion; ``order_date`` is only a
+fallback for legacy rows that have no timezone-aware timestamp. Source-only
+orders are never distributed or guessed across campaigns.
 """
 from __future__ import annotations
 
@@ -146,6 +147,29 @@ def _order_timestamp(order: dict[str, Any]) -> datetime | None:
     return None
 
 
+def _localized_order_period_date(
+    order: dict[str, Any],
+    *,
+    zone: ZoneInfo,
+) -> tuple[str, str | None, str]:
+    """Return the order date in the advertising-account timezone.
+
+    ``order_date`` is intentionally a fallback only. It is commonly materialized
+    on the store's own calendar and therefore must not override a real timestamp
+    when Snapchat uses another timezone.
+    """
+    timestamp = _order_timestamp(order)
+    if timestamp is not None:
+        localized = timestamp.astimezone(zone)
+        return (
+            localized.date().isoformat(),
+            localized.isoformat(),
+            "created_at_localized_to_account_timezone",
+        )
+    fallback = _text(order.get("order_date"))[:10]
+    return fallback, fallback or None, "order_date_fallback"
+
+
 def _unique_lookup(
     identities: list[dict[str, Any]],
     field: str,
@@ -265,8 +289,6 @@ async def load_salla_campaign_outcomes(
     profitability_raw: dict[tuple[str, str], dict[str, Any]] = {}
     cost_context = None
     if profitability_enabled:
-        # Keep the base Salla shadow reader import-safe in lightweight workers.
-        # The authoritative Mezan V2 cost engine is loaded only for a live report.
         from integrations_control_center.snapchat_campaign_profitability import (
             _add_order_to_campaign,
             _finalize_campaign,
@@ -283,18 +305,11 @@ async def load_salla_campaign_outcomes(
     snapchat_attributed_financial_sales = 0.0
 
     for order in orders:
-        timestamp = _order_timestamp(order)
-        if timestamp is not None:
-            localized = timestamp.astimezone(zone)
-            local_date = localized.date().isoformat()
-            local_created_at = localized.isoformat()
-            date_source = "created_at_localized"
-        else:
-            local_date = _text(order.get("order_date"))[:10]
-            local_created_at = local_date or None
-            date_source = "order_date_fallback"
-        salla_order_date = _text(order.get("order_date"))[:10]
-        account_date = salla_order_date or local_date
+        local_date, local_created_at, date_source = _localized_order_period_date(
+            order,
+            zone=zone,
+        )
+        account_date = local_date
         financial = _matches_any(order.get("order_status"), included_statuses)
         amount = _number(order.get("total_amount") or order.get("total"))
         source_platform = canonical_ad_platform(order)
@@ -336,9 +351,6 @@ async def load_salla_campaign_outcomes(
             identity = identity_by_key.get(key, {})
             campaign_id = key[1]
             campaign_name = _text(identity.get("campaign_name")) or campaign_id
-            # The campaign table's order count is a created-order metric.  It
-            # must remain stable when an order moves between Salla statuses.
-            # Revenue and profitability stay financial-only below.
             by_campaign[key]["orders"] += 1
             if financial:
                 counters["campaign_matched_financial_orders"] += 1
@@ -480,7 +492,9 @@ async def load_salla_campaign_outcomes(
             ),
             "account_order_scope": "all_orders_created_in_period",
             "account_sales_scope": "gross_order_total_all_statuses",
-            "account_date_scope": "salla_order_date",
+            "account_date_scope": (
+                "created_at_localized_to_ad_account_timezone_or_order_date_fallback"
+            ),
             "non_campaign_distribution_allowed": False,
             "profitability_scope": (
                 "sales_minus_product_cost_minus_ad_spend_before_payment_shipping_bnpl_and_operating_allocations"
@@ -495,4 +509,7 @@ async def load_salla_campaign_outcomes(
     }
 
 
-__all__ = ["load_salla_campaign_outcomes"]
+__all__ = [
+    "load_salla_campaign_outcomes",
+    "_localized_order_period_date",
+]
