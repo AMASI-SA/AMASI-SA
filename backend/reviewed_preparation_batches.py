@@ -52,7 +52,7 @@ from order_review_spec_replacements import (
 )
 from preparation_pdf import ProductLine, generate_preparation_pdf
 from preparation_piece_barcode import preparation_piece_barcode
-from reviewed_preparation_v3 import bounded_map_ordered
+from reviewed_preparation_v3 import bounded_map_ordered, stable_ready_item_id
 from reviewed_products_catalog import (
     ACTIVE_PREPARATION_ALLOCATION_STATUSES,
     MAX_REVIEWED_ORDERS,
@@ -219,6 +219,120 @@ def _review_snapshot_identity(
     return identity, snapshot
 
 
+def _ready_options(raw_options: Any) -> list[OrderItemOptionDTO]:
+    options: list[OrderItemOptionDTO] = []
+    if isinstance(raw_options, dict):
+        values = [
+            {"name": key, "value": value}
+            for key, value in raw_options.items()
+        ]
+    elif isinstance(raw_options, list):
+        values = raw_options
+    else:
+        values = []
+    for raw in values:
+        if not isinstance(raw, dict):
+            continue
+        name = _text(raw.get("name") or raw.get("label") or raw.get("key"))
+        value = raw.get("value")
+        if name and value not in (None, ""):
+            options.append(OrderItemOptionDTO(name=name, value=value))
+    return options
+
+
+def _reviewed_ready_identity(
+    order: Any,
+    workflow: dict[str, Any],
+    allocation: dict[str, Any],
+) -> tuple[OrderItemIdentityDTO, dict[str, Any]] | None:
+    """Materialise a normal reviewed product from its frozen ready-item record.
+
+    The catalog and file builder both derive this record from the durable
+    review workflow.  File creation therefore does not depend on a second live
+    Salla identity mapping, while recovered incident lines remain on their
+    existing, separate review-snapshot path.
+    """
+    line = allocation.get("line") if isinstance(allocation.get("line"), dict) else {}
+    if _text(line.get("identity_source")) != "reviewed_ready":
+        return None
+    frozen = (
+        line.get("ready_item_identity")
+        if isinstance(line.get("ready_item_identity"), dict)
+        else {}
+    )
+    if not frozen:
+        return None
+    order_item_id = _text(allocation.get("order_item_id"))
+    if not order_item_id or _text(frozen.get("order_item_id")) != order_item_id:
+        return None
+    ready_item_id = _text(line.get("ready_item_id"))
+    if not ready_item_id or ready_item_id != stable_ready_item_id(line):
+        return None
+    if _text(allocation.get("ready_item_id")) not in {"", ready_item_id}:
+        return None
+
+    states = {
+        _text(row.get("order_item_id")): dict(row)
+        for row in workflow.get("items") or []
+        if isinstance(row, dict) and _text(row.get("order_item_id"))
+    }
+    state = states.get(order_item_id, {})
+    if state:
+        for field in (
+            "source_item_id",
+            "product_id",
+            "parent_product_id",
+            "variant_id",
+            "sku",
+            "barcode",
+        ):
+            current = _text(frozen.get(field))
+            reviewed = _text(state.get(field))
+            if current and reviewed and current.casefold() != reviewed.casefold():
+                return None
+        reviewed_quantity = _unit_quantity(state.get("quantity"))
+        frozen_quantity = _unit_quantity(frozen.get("quantity"))
+        if reviewed_quantity and reviewed_quantity != frozen_quantity:
+            return None
+
+    quantity = _unit_quantity(frozen.get("quantity"))
+    if quantity <= 0 or _unit_quantity(allocation.get("quantity")) > quantity:
+        return None
+    identity = OrderItemIdentityDTO(
+        order_item_id=order_item_id,
+        order_id=_text(getattr(order, "order_id", None))
+        or _text(getattr(order, "order_number", None)),
+        order_number=_text(getattr(order, "order_number", None)),
+        order_created_at=getattr(order, "created_at"),
+        line_index=max(0, int(line.get("line_index") or 0)),
+        source=OrderItemSourceDTO(
+            provider="salla",
+            source_order_id=_text(
+                getattr(getattr(order, "source", None), "source_order_id", None)
+            ) or None,
+            source_order_item_id=_text(frozen.get("source_item_id")) or None,
+            source_product_id=_text(frozen.get("product_id")) or None,
+            source_variant_id=_text(frozen.get("variant_id")) or None,
+        ),
+        product_id=_text(line.get("product_id") or frozen.get("product_id")) or None,
+        parent_product_id=_text(
+            line.get("parent_product_id") or frozen.get("parent_product_id")
+        ) or None,
+        variant_id=_text(line.get("variant_id") or frozen.get("variant_id")) or None,
+        sku=_text(line.get("sku") or frozen.get("sku")) or None,
+        barcode=_text(line.get("barcode") or frozen.get("barcode")) or None,
+        name=_text(frozen.get("product_name") or line.get("product_name")) or "منتج",
+        quantity=quantity,
+        image_url=_text(
+            frozen.get("selected_image_url")
+            or line.get("selected_image_url")
+            or line.get("image_url")
+        ) or None,
+        options=_ready_options(frozen.get("options")),
+    )
+    return identity, state
+
+
 def plan_preparation_allocations(
     products: list[dict[str, Any]],
     selections: list[dict[str, Any]],
@@ -283,6 +397,7 @@ def plan_preparation_allocations(
                 "sku": product.get("sku"),
                 "order_number": _text(line.get("order_number")),
                 "order_item_id": _text(line.get("order_item_id")),
+                "ready_item_id": _text(line.get("ready_item_id")) or None,
                 "quantity": take,
                 "unit_indices": available[:take],
                 "line": dict(line),
@@ -794,26 +909,22 @@ async def _build_batch_lines(
         _text(workflow.get("order_number")): workflow
         for _order, workflow in context.get("pairs") or []
     }
-    identities_by_order = {
-        order_number: {
-            _text(identity.order_item_id): identity
-            for identity in map_order_item_identities(order)
-        }
-        for order_number, order in orders_by_number.items()
-    }
-
     result: list[dict[str, Any]] = []
     for index, allocation in enumerate(planned, start=1):
         order_number = _text(allocation.get("order_number"))
         order_item_id = _text(allocation.get("order_item_id"))
         order = orders_by_number.get(order_number)
         workflow = workflows_by_number.get(order_number) or {}
-        identity = (identities_by_order.get(order_number) or {}).get(order_item_id)
+        identity: OrderItemIdentityDTO | None = None
         snapshot_state: dict[str, Any] | None = None
-        if order is not None and identity is None:
-            recovered = _review_snapshot_identity(order, workflow, allocation)
-            if recovered is not None:
-                identity, snapshot_state = recovered
+        if order is not None:
+            line = allocation.get("line") or {}
+            if _text(line.get("identity_source")) == "review_snapshot":
+                resolved = _review_snapshot_identity(order, workflow, allocation)
+            else:
+                resolved = _reviewed_ready_identity(order, workflow, allocation)
+            if resolved is not None:
+                identity, snapshot_state = resolved
         if order is None or identity is None:
             raise HTTPException(
                 status_code=409,
@@ -831,7 +942,7 @@ async def _build_batch_lines(
             for row in workflow.get("items") or []
             if isinstance(row, dict) and _text(row.get("order_item_id"))
         }
-        state = states.get(order_item_id, {}) or snapshot_state or {}
+        state = snapshot_state or states.get(order_item_id, {}) or {}
         if state.get("supplier_export") is False:
             raise HTTPException(
                 status_code=409,
@@ -903,6 +1014,7 @@ async def _build_batch_lines(
             "group_key": _text(allocation.get("group_key")),
             "order_number": order_number,
             "order_item_id": order_item_id,
+            "ready_item_id": _text(allocation.get("ready_item_id")) or None,
             "unit_indices": list(allocation.get("unit_indices") or []),
             "quantity": int(allocation.get("quantity") or 0),
             "product_name": _text(getattr(identity, "name", None)) or _text(allocation.get("product_name")),
@@ -1314,6 +1426,7 @@ def make_reviewed_preparation_batches_router(
                     "group_key": allocation["group_key"],
                     "order_number": allocation["order_number"],
                     "order_item_id": allocation["order_item_id"],
+                    "ready_item_id": allocation.get("ready_item_id"),
                     "unit_index": int(unit_index),
                     "reserved_at": now,
                     "expires_at": reservation_expiry,
