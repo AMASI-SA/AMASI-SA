@@ -352,9 +352,15 @@ export default function ReviewedOrders() {
             requestIdRef.current = createPreparationClientRequestId();
         }
         try {
+            const productsByKey = new Map(
+                (catalog.products || []).map((product) => [product.group_key, product]),
+            );
             const batch = await createReviewedPreparationBatch({
                 clientRequestId: requestIdRef.current,
-                selections: selectionSummary.selections,
+                selections: selectionSummary.selections.map((selection) => ({
+                    ...selection,
+                    revision: productsByKey.get(selection.group_key)?.revision || undefined,
+                })),
             });
             setLastBatch(batch);
             setSelectedQuantities({});
