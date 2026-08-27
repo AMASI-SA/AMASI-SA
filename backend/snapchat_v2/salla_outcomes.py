@@ -453,6 +453,42 @@ async def load_salla_campaign_outcomes(
         if account_timezone_snapchat_attributed_orders > 0
         else None
     )
+    comparison_mode = campaign_spend_sar is not None
+    selected_snapchat_orders = (
+        account_timezone_snapchat_attributed_orders
+        if comparison_mode
+        else snapchat_attributed_orders
+    )
+    selected_snapchat_sales = (
+        account_timezone_snapchat_attributed_sales
+        if comparison_mode
+        else snapchat_attributed_sales
+    )
+    selected_snapchat_financial_orders = (
+        int(counters["snapchat_attributed_financial_orders_account_timezone"])
+        if comparison_mode
+        else int(counters["snapchat_attributed_financial_orders"])
+    )
+    selected_snapchat_financial_sales = (
+        account_timezone_snapchat_attributed_financial_sales
+        if comparison_mode
+        else snapchat_attributed_financial_sales
+    )
+    selected_campaign_matched_orders = (
+        account_timezone_campaign_matched_orders
+        if comparison_mode
+        else account_period_campaign_matched_orders
+    )
+    selected_match_coverage = (
+        account_timezone_campaign_match_coverage_pct
+        if comparison_mode
+        else campaign_match_coverage_pct
+    )
+    selected_date_scope = (
+        "created_at_localized_to_ad_account_timezone_or_order_date_fallback"
+        if comparison_mode
+        else "salla_order_date"
+    )
     spend_by_campaign = dict(campaign_spend_sar or {})
     profitability_by_campaign = (
         {
@@ -491,27 +527,35 @@ async def load_salla_campaign_outcomes(
             "campaign_matched_orders": int(counters["campaign_matched_orders"]),
             "campaign_matched_financial_orders": matched_financial_orders,
             "campaign_matched_financial_sales_sar": matched_financial_sales,
-            "salla_reported_snapchat_orders": int(
-                counters["salla_reported_snapchat_orders"]
+            "salla_reported_snapchat_orders": (
+                int(counters["salla_reported_snapchat_orders_account_timezone"])
+                if comparison_mode
+                else int(counters["salla_reported_snapchat_orders"])
             ),
-            "snapchat_attributed_orders": snapchat_attributed_orders,
-            "snapchat_attributed_sales_sar": round(snapchat_attributed_sales, 2),
-            "snapchat_attributed_financial_orders": int(
-                counters["snapchat_attributed_financial_orders"]
-            ),
+            "snapchat_attributed_orders": selected_snapchat_orders,
+            "snapchat_attributed_sales_sar": round(selected_snapchat_sales, 2),
+            "snapchat_attributed_financial_orders": selected_snapchat_financial_orders,
             "snapchat_attributed_financial_sales_sar": round(
-                snapchat_attributed_financial_sales,
+                selected_snapchat_financial_sales,
                 2,
             ),
-            "account_period_campaign_matched_orders": (
-                account_period_campaign_matched_orders
-            ),
+            "account_period_campaign_matched_orders": selected_campaign_matched_orders,
             "snapchat_attribution_gap_orders": max(
                 0,
-                snapchat_attributed_orders
-                - account_period_campaign_matched_orders,
+                selected_snapchat_orders - selected_campaign_matched_orders,
             ),
-            "campaign_match_coverage_pct": campaign_match_coverage_pct,
+            "campaign_match_coverage_pct": selected_match_coverage,
+            "salla_reported_snapchat_orders_salla_calendar": int(
+                counters["salla_reported_snapchat_orders"]
+            ),
+            "snapchat_attributed_orders_salla_calendar": snapchat_attributed_orders,
+            "snapchat_attributed_sales_sar_salla_calendar": round(
+                snapchat_attributed_sales,
+                2,
+            ),
+            "account_period_campaign_matched_orders_salla_calendar": (
+                account_period_campaign_matched_orders
+            ),
             "salla_reported_snapchat_orders_account_timezone": int(
                 counters["salla_reported_snapchat_orders_account_timezone"]
             ),
@@ -554,7 +598,7 @@ async def load_salla_campaign_outcomes(
             ),
             "account_order_scope": "all_orders_created_in_period",
             "account_sales_scope": "gross_order_total_all_statuses",
-            "account_date_scope": "salla_order_date",
+            "account_date_scope": selected_date_scope,
             "snapchat_comparison_date_scope": (
                 "created_at_localized_to_ad_account_timezone_or_order_date_fallback"
             ),
