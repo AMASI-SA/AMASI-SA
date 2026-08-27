@@ -166,7 +166,11 @@ def _review_snapshot_identity(
         # grouping and display.  Compare the untouched snapshot identity here;
         # otherwise legitimate enrichment (not a commercial data change) makes
         # every old sparse reviewed line look stale at file creation time.
-        current = _text(frozen_identity.get(field))
+        current = _text(
+            frozen_identity.get(field)
+            if frozen_identity
+            else line.get(field)
+        )
         frozen = _text(snapshot.get(field))
         if current and frozen and current.casefold() != frozen.casefold():
             return None
