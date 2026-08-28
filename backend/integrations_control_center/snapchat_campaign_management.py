@@ -61,6 +61,15 @@ FINANCIAL_CONTROL_FIELDS = {
     "bid_micro",
     "bid_strategy",
 }
+SETTINGS_PROVEN_UPDATE_FIELDS = {
+    "daily_budget_micro",
+    "bid_micro",
+    "bid_strategy",
+}
+SETTINGS_UNPROVEN_UPDATE_FIELDS = {
+    "lifetime_budget_micro",
+    "lifetime_spend_cap_micro",
+}
 SETTINGS_MANAGED_UPDATE_ACTIONS = {"campaign.update", "ad_squad.update"}
 
 Action = Literal[
@@ -451,6 +460,92 @@ def _operation_financial_fields(operation: dict[str, Any]) -> set[str]:
     return set(changes).intersection(FINANCIAL_CONTROL_FIELDS)
 
 
+def _assert_settings_proven_update_scope(
+    action: str, financial_fields: set[str]
+) -> None:
+    """Reject update controls absent from the native settings proof contract."""
+    if action not in SETTINGS_MANAGED_UPDATE_ACTIONS:
+        return
+    unsupported = sorted(financial_fields.intersection(SETTINGS_UNPROVEN_UPDATE_FIELDS))
+    if unsupported:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "snapchat_management_financial_field_unproven",
+                "message": (
+                    "غير متاح — لا توجد قراءة إعدادات Snapchat موثقة لهذا الحقل."
+                ),
+                "unsupported_fields": unsupported,
+            },
+        )
+
+
+def _financial_proof_value(field: str, value: Any) -> Any:
+    if field in {"daily_budget_micro", "bid_micro"}:
+        if value is None or isinstance(value, bool):
+            return None
+        try:
+            normalized = int(value)
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if isinstance(value, float) and not value.is_integer():
+            return None
+        return normalized
+    if field == "bid_strategy":
+        normalized = str(value or "").strip().upper()
+        return normalized or None
+    return _canonical_control_value(value)
+
+
+def _assert_provider_financial_snapshot_matches_proof(
+    *,
+    operation: dict[str, Any],
+    provider_snapshot: dict[str, Any],
+    settings_proof: dict[str, Any],
+) -> None:
+    """Bind a financial preview to the provider values behind cached proof."""
+    requested = sorted(
+        _operation_financial_fields(operation).intersection(
+            SETTINGS_PROVEN_UPDATE_FIELDS
+        )
+    )
+    if not requested:
+        return
+    missing_provider: list[str] = []
+    missing_proof: list[str] = []
+    mismatches: list[str] = []
+    for field in requested:
+        if field not in provider_snapshot or provider_snapshot.get(field) is None:
+            missing_provider.append(field)
+            continue
+        if field not in settings_proof or settings_proof.get(field) is None:
+            missing_proof.append(field)
+            continue
+        provider_value = _financial_proof_value(field, provider_snapshot.get(field))
+        proof_value = _financial_proof_value(field, settings_proof.get(field))
+        if provider_value is None:
+            missing_provider.append(field)
+        elif proof_value is None:
+            missing_proof.append(field)
+        elif provider_value != proof_value:
+            mismatches.append(field)
+    if missing_provider or missing_proof or mismatches:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "snapchat_management_financial_settings_provider_mismatch",
+                "message": (
+                    "تختلف قراءة Snapchat الحالية عن إثبات الإعدادات؛ "
+                    "لم تُنشأ معاينة ولم يصل أي تعديل إلى المزود."
+                ),
+                "provider_entity_id": str(provider_snapshot.get("id") or "") or None,
+                "missing_provider_fields": missing_provider,
+                "missing_settings_proof_fields": missing_proof,
+                "mismatched_fields": mismatches,
+            },
+        )
+
+
 def _settings_value(settings: dict[str, Any], key: str) -> Any:
     if key in settings:
         return settings.get(key)
@@ -643,6 +738,7 @@ async def _resolve_management_settings_proof(
         if operation is not None
         else set(payload.payload).intersection(FINANCIAL_CONTROL_FIELDS)
     )
+    _assert_settings_proven_update_scope(payload.action, financial_fields)
     field_controls = (
         proof.get("financial_field_controls")
         if isinstance(proof.get("financial_field_controls"), dict)
@@ -709,6 +805,8 @@ def _structured_field_changes(
     actor_id: str,
     provider_entity_id: str | None,
     verified: dict[str, Any] | None = None,
+    provider_reread_verified: bool | None = None,
+    mismatched_fields: list[str] | None = None,
     occurred_at: str | None = None,
 ) -> dict[str, Any]:
     before = original if isinstance(original, dict) else {}
@@ -733,18 +831,26 @@ def _structured_field_changes(
                     "after_micro": after_value,
                     "before_usd": _micro_to_usd(before_value, currency),
                     "after_usd": _micro_to_usd(after_value, currency),
-                    "currency": (
-                        "USD" if str(currency or "").strip().upper() == "USD" else None
-                    ),
+                    "currency": str(currency or "").strip().upper() or None,
                 }
             )
         changes[field] = entry
+    reread_verified = (
+        isinstance(verified, dict)
+        if provider_reread_verified is None
+        else provider_reread_verified is True
+    )
     return {
         "fields": changes,
         "actor_id": actor_id,
         "occurred_at": occurred_at or _iso(),
         "provider_entity_id": provider_entity_id,
-        "provider_reread_verified": isinstance(verified, dict),
+        "provider_reread_verified": reread_verified,
+        **(
+            {"mismatched_fields": sorted(set(mismatched_fields or []))}
+            if mismatched_fields
+            else {}
+        ),
     }
 
 
@@ -2033,13 +2139,223 @@ async def _audit(
     )
 
 
+LEGACY_FINANCIAL_AUDIT_FIELDS = {
+    "daily_budget_micro",
+    "lifetime_budget_micro",
+    "lifetime_spend_cap_micro",
+    "bid_micro",
+    "bid_strategy",
+}
+PROPOSAL_LIST_PROJECTION = {
+    "_id": 0,
+    "proposal_id": 1,
+    "status": 1,
+    "revision": 1,
+    "action": 1,
+    "account_id": 1,
+    "target_id": 1,
+    "parent_id": 1,
+    "provider_target_id": 1,
+    "provider_parent_id": 1,
+    "provider_entity_id": 1,
+    "settings_proof": 1,
+    "execution_settings_proof": 1,
+    "field_changes": 1,
+    "actor_id": 1,
+    "executed_by": 1,
+    "reason": 1,
+    "operation.summary": 1,
+    "operation.activates_delivery": 1,
+    "operation.changes": 1,
+    "original_snapshot.daily_budget_micro": 1,
+    "original_snapshot.lifetime_budget_micro": 1,
+    "original_snapshot.lifetime_spend_cap_micro": 1,
+    "original_snapshot.bid_micro": 1,
+    "original_snapshot.bid_strategy": 1,
+    "expires_at": 1,
+    "created_at": 1,
+    "approved_at": 1,
+    "executed_at": 1,
+    "failed_at": 1,
+    "verification": 1,
+    "reconciliation": 1,
+    "reconciliation_snapshot": 1,
+    "rollback": 1,
+    "failure": 1,
+    "provider_write_reached": 1,
+    "provider_write_state": 1,
+    "provider_write_uncertain": 1,
+    "execution_retryable": 1,
+    "automatic_retry_allowed": 1,
+    "recovery_action": 1,
+    "rollback_write_state": 1,
+    "rollback_write_uncertain": 1,
+    "rollback_recovery_action": 1,
+    "expected": 1,
+    "baseline": 1,
+    "decision_evidence": 1,
+    "products": 1,
+    "product_link_state": 1,
+    "trend_review": 1,
+    "trend_override_reason": 1,
+    "safety_protocol_version": 1,
+    "pixel_eligibility": 1,
+    "execution_pixel_eligibility": 1,
+    "execution_ad_dependency_verification": 1,
+    "intent_fingerprint": 1,
+}
+
+
+def _historical_currency_proof(row: dict[str, Any]) -> str | None:
+    """Use only currency evidence persisted with the historical operation."""
+    candidates: list[str] = []
+    for key in ("settings_proof", "execution_settings_proof"):
+        proof = row.get(key)
+        if not isinstance(proof, dict):
+            continue
+        value = str(proof.get("currency") or proof.get("account_currency") or "")
+        normalized = value.strip().upper()
+        if normalized:
+            candidates.append(normalized)
+    stored_changes = row.get("field_changes")
+    fields = (
+        stored_changes.get("fields")
+        if isinstance(stored_changes, dict)
+        and isinstance(stored_changes.get("fields"), dict)
+        else {}
+    )
+    for entry in fields.values():
+        if not isinstance(entry, dict):
+            continue
+        normalized = str(entry.get("currency") or "").strip().upper()
+        if normalized:
+            candidates.append(normalized)
+    unique = set(candidates)
+    return next(iter(unique)) if len(unique) == 1 else None
+
+
+def _legacy_field_change_audit(row: dict[str, Any]) -> dict[str, Any]:
+    operation = row.get("operation") if isinstance(row.get("operation"), dict) else {}
+    requested_all = (
+        operation.get("changes") if isinstance(operation.get("changes"), dict) else {}
+    )
+    requested = {
+        field: requested_all.get(field)
+        for field in sorted(
+            set(requested_all).intersection(LEGACY_FINANCIAL_AUDIT_FIELDS)
+        )
+    }
+    if not requested:
+        return {}
+    original = (
+        row.get("original_snapshot")
+        if isinstance(row.get("original_snapshot"), dict)
+        else {}
+    )
+    verification = (
+        row.get("verification") if isinstance(row.get("verification"), dict) else {}
+    )
+    provider_snapshot = (
+        verification.get("provider_snapshot")
+        if isinstance(verification.get("provider_snapshot"), dict)
+        else None
+    )
+    snapshot_covers_requested = bool(
+        provider_snapshot is not None
+        and all(field in provider_snapshot for field in requested)
+    )
+    after_snapshot = None
+    if provider_snapshot is not None:
+        after_snapshot = {
+            field: (
+                provider_snapshot.get(field)
+                if field in provider_snapshot
+                else requested.get(field)
+            )
+            for field in requested
+        }
+    mismatches = verification.get("mismatched_fields")
+    if not isinstance(mismatches, list):
+        failure = row.get("failure") if isinstance(row.get("failure"), dict) else {}
+        mismatches = failure.get("mismatched_fields")
+    return _structured_field_changes(
+        original=original,
+        requested=requested,
+        verified=after_snapshot,
+        provider_reread_verified=(
+            verification.get("verified") is True and snapshot_covers_requested
+        ),
+        mismatched_fields=(mismatches if isinstance(mismatches, list) else None),
+        currency=_historical_currency_proof(row),
+        actor_id=str(row.get("executed_by") or row.get("actor_id") or ""),
+        provider_entity_id=(
+            str(
+                row.get("provider_entity_id")
+                or row.get("provider_target_id")
+                or row.get("target_id")
+                or ""
+            )
+            or None
+        ),
+        occurred_at=str(row.get("executed_at") or row.get("created_at") or "") or None,
+    )
+
+
+def _field_change_audit(row: dict[str, Any]) -> dict[str, Any]:
+    stored = row.get("field_changes")
+    if (
+        isinstance(stored, dict)
+        and isinstance(stored.get("fields"), dict)
+        and stored.get("fields")
+    ):
+        return stored
+    legacy = _legacy_field_change_audit(row)
+    if legacy:
+        return legacy
+    return stored if isinstance(stored, dict) else {}
+
+
+def _public_reconciliation(row: dict[str, Any]) -> dict[str, Any]:
+    reconciliation = row.get("reconciliation")
+    if isinstance(reconciliation, dict) and reconciliation:
+        return reconciliation
+    verification = (
+        row.get("verification") if isinstance(row.get("verification"), dict) else {}
+    )
+    if verification.get("verified") is True and not isinstance(
+        row.get("reconciliation_snapshot"), dict
+    ):
+        return {}
+    snapshot = row.get("reconciliation_snapshot")
+    if not isinstance(snapshot, dict):
+        snapshot = verification.get("provider_snapshot")
+    if not isinstance(snapshot, dict) and not verification:
+        return {}
+    failure = row.get("failure") if isinstance(row.get("failure"), dict) else {}
+    mismatches = verification.get("mismatched_fields")
+    if not isinstance(mismatches, list):
+        mismatches = failure.get("mismatched_fields")
+    return {
+        "verified": verification.get("verified") is True,
+        "provider_entity_id": (
+            verification.get("entity_id")
+            or row.get("provider_entity_id")
+            or row.get("provider_target_id")
+        ),
+        "provider_reread_snapshot": _safe_provider_value(snapshot or {}),
+        "mismatched_fields": (
+            sorted(set(mismatches)) if isinstance(mismatches, list) else []
+        ),
+        "checked_at": verification.get("verified_at") or row.get("failed_at"),
+    }
+
+
 def _public_proposal(
     row: dict[str, Any], *, confirm_token: str | None = None
 ) -> dict[str, Any]:
     operation = dict(row.get("operation") or {})
-    field_change_audit = (
-        row.get("field_changes") if isinstance(row.get("field_changes"), dict) else {}
-    )
+    reconciliation = _public_reconciliation(row)
+    field_change_audit = _field_change_audit(row)
     field_change_fields = (
         field_change_audit.get("fields")
         if isinstance(field_change_audit.get("fields"), dict)
@@ -2087,7 +2403,19 @@ def _public_proposal(
         "approved_at": row.get("approved_at"),
         "executed_at": row.get("executed_at"),
         "failed_at": row.get("failed_at"),
-        "verification": row.get("verification"),
+        "verification": _safe_provider_value(row.get("verification")),
+        "reconciliation": _safe_provider_value(reconciliation),
+        "provider_reread": _safe_provider_value(
+            reconciliation.get("provider_reread")
+            or {
+                "verified": reconciliation.get("verified") is True,
+                "snapshot": reconciliation.get("provider_reread_snapshot") or {},
+                "mismatched_fields": reconciliation.get("mismatched_fields") or [],
+                "checked_at": reconciliation.get("checked_at"),
+            }
+            if reconciliation
+            else {}
+        ),
         "rollback": row.get("rollback"),
         "failure": _safe_provider_value(row.get("failure") or {}),
         "confirmation_phrase": f"تراجع {str(row.get('proposal_id') or '')[:8]}",
@@ -2424,6 +2752,9 @@ async def create_snapchat_management_proposal(
     provider: SnapchatManagementProvider | None = None,
 ) -> dict[str, Any]:
     request_fingerprint = snapchat_management_request_fingerprint(payload)
+    _assert_settings_proven_update_scope(
+        payload.action, set(payload.payload).intersection(FINANCIAL_CONTROL_FIELDS)
+    )
     existing = await _collection(db, PROPOSAL_COLLECTION).find_one(
         {"user_id": user_id, "idempotency_key": payload.idempotency_key},
         {"_id": 0},
@@ -2512,6 +2843,12 @@ async def create_snapchat_management_proposal(
             raise HTTPException(
                 status_code=409,
                 detail={"code": "snapchat_management_provider_identity_mismatch"},
+            )
+        if payload.action in SETTINGS_MANAGED_UPDATE_ACTIONS:
+            _assert_provider_financial_snapshot_matches_proof(
+                operation=operation,
+                provider_snapshot=original,
+                settings_proof=settings_proof,
             )
         if payload.action == "campaign.update":
             if str(original.get("ad_account_id") or "") != payload.account_id:
@@ -4487,6 +4824,14 @@ async def _execute_snapchat_management_proposal_under_lease(
                 status_code=409,
                 detail=_provider_state_conflict_detail(preflight_stale_fields),
             )
+        if str(
+            row.get("action") or ""
+        ) in SETTINGS_MANAGED_UPDATE_ACTIONS and _operation_financial_fields(operation):
+            _assert_provider_financial_snapshot_matches_proof(
+                operation=operation,
+                provider_snapshot=preflight_entity,
+                settings_proof=execution_settings_proof,
+            )
     if _is_delivery_increase(
         operation, dict(row.get("original_snapshot") or {}) or None
     ):
@@ -4751,6 +5096,8 @@ async def _execute_snapchat_management_proposal_under_lease(
         else ""
     )
     expected = _operation_expected_values(operation)
+    latest_provider_reread: dict[str, Any] | None = None
+    provider_reread_failed = False
     try:
         provider_entity = await client.execute(operation)
         provider_write_confirmed = True
@@ -4779,6 +5126,7 @@ async def _execute_snapchat_management_proposal_under_lease(
         verified = await client.read_entity(
             operation["entity_type"], provider_entity_id
         )
+        latest_provider_reread = verified
         verified_ok, mismatches = _changed_values_match(expected, verified)
         if not verified_ok:
             raise HTTPException(
@@ -4813,10 +5161,12 @@ async def _execute_snapchat_management_proposal_under_lease(
                     operation["entity_type"], provider_entity_id
                 )
             except Exception:
-                readback = None
+                provider_reread_failed = True
+                readback = latest_provider_reread
 
+        reread_mismatches: list[str] = []
         if readback is not None:
-            planned_ok, _ = _changed_values_match(expected, readback)
+            planned_ok, reread_mismatches = _changed_values_match(expected, readback)
             if planned_ok:
                 return await _complete_verified_execution(
                     db,
@@ -4830,6 +5180,15 @@ async def _execute_snapchat_management_proposal_under_lease(
                     verified=readback,
                     event="execution_reconciled_applied",
                 )
+        else:
+            detail_mismatches = (
+                detail.get("mismatched_fields") if isinstance(detail, dict) else None
+            )
+            reread_mismatches = (
+                list(detail_mismatches)
+                if isinstance(detail_mismatches, list)
+                else sorted(expected)
+            )
 
         original_ok = False
         if readback is not None and str(row.get("action") or "") in UPDATE_ACTIONS:
@@ -4858,6 +5217,36 @@ async def _execute_snapchat_management_proposal_under_lease(
             else "manual_reconcile_provider_entity_before_retry_or_rollback"
         )
         safe_detail = dict(detail) if isinstance(detail, dict) else {}
+        if reread_mismatches:
+            safe_detail["mismatched_fields"] = sorted(set(reread_mismatches))
+        reconciliation_checked_at = _iso()
+        provider_reread = {
+            "verified": False,
+            "checked_at": reconciliation_checked_at,
+            "provider_entity_id": provider_entity_id or None,
+            "snapshot": _safe_provider_value(readback or {}),
+            "mismatched_fields": sorted(set(reread_mismatches)),
+            "error": "provider_reread_failed" if provider_reread_failed else None,
+        }
+        reconciliation = {
+            "verified": False,
+            "provider_entity_id": provider_entity_id or None,
+            "provider_reread_snapshot": _safe_provider_value(readback or {}),
+            "mismatched_fields": sorted(set(reread_mismatches)),
+            "checked_at": reconciliation_checked_at,
+            "provider_reread": provider_reread,
+        }
+        failed_field_changes = _structured_field_changes(
+            original=dict(row.get("original_snapshot") or {}),
+            requested=dict(operation.get("changes") or {}),
+            verified=readback,
+            provider_reread_verified=False,
+            mismatched_fields=reread_mismatches,
+            currency=_historical_currency_proof(row),
+            actor_id=actor_id,
+            provider_entity_id=provider_entity_id or None,
+            occurred_at=reconciliation_checked_at,
+        )
         safe_detail.update(
             {
                 "reconciliation": (
@@ -4879,6 +5268,18 @@ async def _execute_snapchat_management_proposal_under_lease(
                     "status": "failed",
                     "failed_at": _iso(),
                     "failure": _safe_provider_value(safe_detail),
+                    "verification": {
+                        "verified": False,
+                        "entity_id": provider_entity_id or None,
+                        "verified_at": reconciliation_checked_at,
+                        "provider_snapshot": _safe_provider_value(readback or {}),
+                        "field_changes_verified": False,
+                        "mismatched_fields": sorted(set(reread_mismatches)),
+                        "verification_source": "post_write_reconciliation",
+                        "provider_reread_error": provider_reread.get("error"),
+                    },
+                    "reconciliation": reconciliation,
+                    "field_changes": failed_field_changes,
                     "provider_write_reached": (
                         provider_write_confirmed or readback is not None
                     )
@@ -4907,6 +5308,9 @@ async def _execute_snapchat_management_proposal_under_lease(
                 **safe_detail,
                 "provider_write_state": write_state,
                 "provider_entity_id": provider_entity_id or None,
+                "provider_reread": provider_reread,
+                "reconciliation": reconciliation,
+                "field_changes": failed_field_changes,
             },
         )
         failed_row = await _collection(db, PROPOSAL_COLLECTION).find_one(
@@ -6228,12 +6632,7 @@ def attach_snapchat_campaign_management_routes(
             _collection(db, PROPOSAL_COLLECTION)
             .find(
                 {"user_id": str(owner["id"])},
-                {
-                    "_id": 0,
-                    "confirm_token_hash": 0,
-                    "original_snapshot": 0,
-                    "operation.body": 0,
-                },
+                PROPOSAL_LIST_PROJECTION,
             )
             .sort("created_at", -1)
             .limit(limit)

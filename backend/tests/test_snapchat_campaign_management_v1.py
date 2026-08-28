@@ -599,7 +599,7 @@ async def test_verified_out_of_stock_blocks_budget_increase(monkeypatch):
         "id": "campaign-1",
         "ad_account_id": "account-1",
         "status": "ACTIVE",
-        "daily_budget_micro": 60_000_000,
+        "daily_budget_micro": 100_000_000,
     }
 
     async def selected(*args, **kwargs):
@@ -626,7 +626,7 @@ async def test_verified_out_of_stock_blocks_budget_increase(monkeypatch):
         action="campaign.update",
         account_id="account-1",
         target_id="campaign-1",
-        payload={"daily_budget_micro": 80_000_000},
+        payload={"daily_budget_micro": 120_000_000},
         reason="اختبار منع الرفع مع نفاد المخزون",
         idempotency_key="inventory-blocks-budget-rise",
     )
@@ -1378,6 +1378,7 @@ async def test_entity_settings_get_is_database_only_and_never_writes_provider(
         user_id,
         entity_type=None,
         unified_entity_id=None,
+        parent_unified_id=None,
         *,
         now=None,
         limit=500,
@@ -1655,3 +1656,325 @@ async def test_provider_account_binding_mismatch_blocks_before_provider_io(
     assert provider.reads == []
     assert provider.executions == []
     assert db[module.PROPOSAL_COLLECTION].rows == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("provider_budget", "missing_provider_fields", "mismatched_fields"),
+    [
+        (None, ["daily_budget_micro"], []),
+        (110_000_000, [], ["daily_budget_micro"]),
+    ],
+)
+async def test_provider_financial_read_must_match_cached_proof_before_insert(
+    monkeypatch,
+    provider_budget,
+    missing_provider_fields,
+    mismatched_fields,
+):
+    db = DB()
+    provider = Provider()
+    provider.entities[("campaign", "provider-campaign")] = {
+        "id": "provider-campaign",
+        "ad_account_id": "account-1",
+        "status": "PAUSED",
+        **(
+            {"daily_budget_micro": provider_budget}
+            if provider_budget is not None
+            else {}
+        ),
+    }
+
+    async def selected(*args, **kwargs):
+        return {"ad_account_id": "account-1", "currency": "USD"}
+
+    async def settings(*args, **kwargs):
+        return {
+            "unified_entity_id": "unified-campaign",
+            "provider_entity_id": "provider-campaign",
+            "ad_account_id": "account-1",
+            "mapping_status": "verified",
+            "mapping_verified": True,
+            "settings_status": "settings_complete",
+            "financial_controls_allowed": True,
+            "financial_field_controls": {
+                "daily_budget": {"allowed": True, "reason": "available"},
+                "bid": {"allowed": False, "reason": "not_applicable"},
+            },
+            "account_currency": "USD",
+            "daily_budget_micro": 100_000_000,
+            "daily_budget_usd": 100.0,
+        }
+
+    monkeypatch.setattr(module, "_selected_account", selected)
+    monkeypatch.setattr(module, "resolve_financial_management_settings", settings)
+    payload = module.SnapchatManagementProposalInput(
+        action="campaign.update",
+        account_id="account-1",
+        target_id="unified-campaign",
+        provider_target_id="provider-campaign",
+        payload={"daily_budget_micro": 90_000_000},
+        reason="اختبار مطابقة قراءة Snapchat مع إثبات الإعدادات",
+        idempotency_key=f"provider-proof-mismatch-{provider_budget}",
+    )
+
+    with pytest.raises(HTTPException) as raised:
+        await module.create_snapchat_management_proposal(
+            db,
+            "owner-1",
+            "owner-1",
+            payload,
+            provider=provider,
+        )
+
+    assert raised.value.status_code == 409
+    assert raised.value.detail == {
+        "code": "snapchat_management_financial_settings_provider_mismatch",
+        "message": (
+            "تختلف قراءة Snapchat الحالية عن إثبات الإعدادات؛ "
+            "لم تُنشأ معاينة ولم يصل أي تعديل إلى المزود."
+        ),
+        "provider_entity_id": "provider-campaign",
+        "missing_provider_fields": missing_provider_fields,
+        "missing_settings_proof_fields": [],
+        "mismatched_fields": mismatched_fields,
+    }
+    assert provider.reads == [("campaign", "provider-campaign")]
+    assert provider.executions == []
+    assert db[module.PROPOSAL_COLLECTION].rows == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("action", "field", "parent_id"),
+    [
+        ("campaign.update", "lifetime_spend_cap_micro", None),
+        ("ad_squad.update", "lifetime_budget_micro", "unified-campaign"),
+    ],
+)
+async def test_unproven_lifetime_financial_updates_are_denied_before_provider_io(
+    action,
+    field,
+    parent_id,
+):
+    db = DB()
+    provider = Provider()
+    payload = module.SnapchatManagementProposalInput(
+        action=action,
+        account_id="account-1",
+        target_id="unified-target",
+        parent_id=parent_id,
+        payload={field: 500_000_000},
+        reason="اختبار منع الحقل المالي غير المشمول بإثبات الإعدادات",
+        idempotency_key=f"unproven-{field}",
+    )
+
+    with pytest.raises(HTTPException) as raised:
+        await module.create_snapchat_management_proposal(
+            db,
+            "owner-1",
+            "owner-1",
+            payload,
+            provider=provider,
+        )
+
+    assert raised.value.status_code == 409
+    assert raised.value.detail["code"] == "snapchat_management_financial_field_unproven"
+    assert raised.value.detail["unsupported_fields"] == [field]
+    assert provider.reads == []
+    assert provider.executions == []
+    assert db[module.PROPOSAL_COLLECTION].rows == []
+
+
+@pytest.mark.asyncio
+async def test_failed_post_write_reread_exposes_snapshot_mismatches_and_audit(
+    monkeypatch,
+):
+    class MismatchingProvider(Provider):
+        async def execute(self, operation):
+            result = await super().execute(operation)
+            entity_id = str(operation.get("target_id") or "")
+            self.entities[(operation["entity_type"], entity_id)][
+                "daily_budget_micro"
+            ] = 89_000_000
+            return deepcopy(self.entities[(operation["entity_type"], entity_id)])
+
+    db = DB()
+    provider = MismatchingProvider()
+    provider.entities[("campaign", "provider-campaign")] = {
+        "id": "provider-campaign",
+        "ad_account_id": "account-1",
+        "status": "PAUSED",
+        "daily_budget_micro": 100_000_000,
+    }
+
+    async def selected(*args, **kwargs):
+        return {"ad_account_id": "account-1", "currency": "USD"}
+
+    async def settings(*args, **kwargs):
+        return {
+            "unified_entity_id": "unified-campaign",
+            "provider_entity_id": "provider-campaign",
+            "ad_account_id": "account-1",
+            "mapping_status": "verified",
+            "mapping_verified": True,
+            "settings_status": "settings_complete",
+            "financial_controls_allowed": True,
+            "financial_field_controls": {
+                "daily_budget": {"allowed": True, "reason": "available"},
+                "bid": {"allowed": False, "reason": "not_applicable"},
+            },
+            "account_currency": "USD",
+            "daily_budget_micro": 100_000_000,
+            "daily_budget_usd": 100.0,
+        }
+
+    monkeypatch.setattr(module, "_selected_account", selected)
+    monkeypatch.setattr(module, "resolve_financial_management_settings", settings)
+    monkeypatch.setenv(module.MUTATIONS_ENABLED_ENV, "true")
+    preview = await module.create_snapchat_management_proposal(
+        db,
+        "owner-1",
+        "owner-1",
+        module.SnapchatManagementProposalInput(
+            action="campaign.update",
+            account_id="account-1",
+            target_id="unified-campaign",
+            provider_target_id="provider-campaign",
+            payload={"daily_budget_micro": 90_000_000},
+            reason="اختبار سجل فشل إعادة القراءة بعد الكتابة",
+            idempotency_key="failed-post-write-reread-audit",
+        ),
+        provider=provider,
+    )
+    await module.approve_snapchat_management_proposal(
+        db,
+        "owner-1",
+        "owner-1",
+        preview["proposal_id"],
+        module.SnapchatManagementApprovalInput(
+            confirm_token=preview["confirm_token"],
+            expected_revision=preview["revision"],
+        ),
+    )
+
+    with pytest.raises(HTTPException) as raised:
+        await module.execute_snapchat_management_proposal(
+            db,
+            "owner-1",
+            "owner-1",
+            preview["proposal_id"],
+            provider=provider,
+        )
+    assert raised.value.detail["code"] == "snapchat_management_verification_failed"
+
+    stored = db[module.PROPOSAL_COLLECTION].rows[0]
+    public = module._public_proposal(stored)
+    assert public["status"] == "failed"
+    assert public["verification"]["verified"] is False
+    assert (
+        public["verification"]["provider_snapshot"]["daily_budget_micro"] == 89_000_000
+    )
+    assert public["verification"]["mismatched_fields"] == ["daily_budget_micro"]
+    assert public["reconciliation"]["verified"] is False
+    assert (
+        public["reconciliation"]["provider_reread_snapshot"]["daily_budget_micro"]
+        == 89_000_000
+    )
+    assert public["provider_reread"]["verified"] is False
+    assert public["provider_reread"]["mismatched_fields"] == ["daily_budget_micro"]
+    assert public["field_change_metadata"]["provider_reread_verified"] is False
+    assert public["field_change_metadata"]["mismatched_fields"] == [
+        "daily_budget_micro"
+    ]
+    assert public["field_changes"]["daily_budget_micro"]["before_micro"] == 100_000_000
+    assert public["field_changes"]["daily_budget_micro"]["after_micro"] == 89_000_000
+
+    failed_audit = next(
+        row
+        for row in db[module.AUDIT_COLLECTION].rows
+        if row["event"] == "execution_failed"
+    )
+    assert failed_audit["detail"]["provider_reread"]["verified"] is False
+    assert (
+        failed_audit["detail"]["provider_reread"]["snapshot"]["daily_budget_micro"]
+        == 89_000_000
+    )
+    assert failed_audit["detail"]["reconciliation"]["mismatched_fields"] == [
+        "daily_budget_micro"
+    ]
+
+
+def test_legacy_financial_history_is_derived_without_migration_or_currency_guess():
+    row = {
+        "proposal_id": "legacy-yesterday",
+        "status": "completed",
+        "action": "ad_squad.update",
+        "target_id": "unified-squad",
+        "provider_target_id": "provider-squad",
+        "actor_id": "owner-1",
+        "executed_by": "owner-1",
+        "created_at": "2026-08-27T10:00:00+00:00",
+        "executed_at": "2026-08-27T10:02:00+00:00",
+        "settings_proof": {"currency": "USD"},
+        "operation": {
+            "changes": {
+                "daily_budget_micro": 90_000_000,
+                "bid_micro": 15_000_000,
+                "bid_strategy": "TARGET_COST",
+            }
+        },
+        "original_snapshot": {
+            "daily_budget_micro": 100_000_000,
+            "bid_micro": 20_000_000,
+            "bid_strategy": "LOWEST_COST_WITH_MAX_BID",
+        },
+        "verification": {
+            "verified": True,
+            "verified_at": "2026-08-27T10:02:00+00:00",
+            "provider_snapshot": {
+                "daily_budget_micro": 90_000_000,
+                "bid_micro": 15_000_000,
+                "bid_strategy": "TARGET_COST",
+            },
+        },
+    }
+
+    public = module._public_proposal(row)
+
+    assert public["field_changes"]["daily_budget_micro"] == {
+        "before": 100_000_000,
+        "after": 90_000_000,
+        "before_micro": 100_000_000,
+        "after_micro": 90_000_000,
+        "before_usd": 100.0,
+        "after_usd": 90.0,
+        "currency": "USD",
+    }
+    assert public["field_changes"]["bid_micro"]["before_usd"] == 20.0
+    assert public["field_changes"]["bid_micro"]["after_usd"] == 15.0
+    assert public["field_changes"]["bid_strategy"] == {
+        "before": "LOWEST_COST_WITH_MAX_BID",
+        "after": "TARGET_COST",
+    }
+    assert public["field_change_metadata"]["provider_reread_verified"] is True
+    assert "original_snapshot" not in public
+    assert module.PROPOSAL_LIST_PROJECTION["original_snapshot.daily_budget_micro"] == 1
+    assert "original_snapshot" not in module.PROPOSAL_LIST_PROJECTION
+    assert module.PROPOSAL_LIST_PROJECTION["operation.changes"] == 1
+    assert "operation.body" not in module.PROPOSAL_LIST_PROJECTION
+
+    row["settings_proof"] = {}
+    without_currency_proof = module._public_proposal(row)
+    assert (
+        without_currency_proof["field_changes"]["daily_budget_micro"]["before_usd"]
+        is None
+    )
+    assert (
+        without_currency_proof["field_changes"]["daily_budget_micro"]["after_usd"]
+        is None
+    )
+    assert (
+        without_currency_proof["field_changes"]["daily_budget_micro"]["currency"]
+        is None
+    )

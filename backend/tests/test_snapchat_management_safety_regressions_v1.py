@@ -520,7 +520,7 @@ async def test_stale_selected_variant_inventory_blocks_delivery_increase(monkeyp
         ),
     ],
 )
-async def test_lifetime_budget_or_cap_increase_enters_inventory_gate(
+async def test_lifetime_budget_or_cap_update_is_blocked_without_settings_proof(
     monkeypatch,
     action,
     target_id,
@@ -576,9 +576,8 @@ async def test_lifetime_budget_or_cap_increase_enters_inventory_gate(
         )
 
     assert raised.value.status_code == 409
-    assert raised.value.detail["code"] == (
-        "snapchat_management_inventory_blocks_delivery_increase"
-    )
+    assert raised.value.detail["code"] == "snapchat_management_financial_field_unproven"
+    assert raised.value.detail["unsupported_fields"] == [budget_field]
     assert db[management.PROPOSAL_COLLECTION].rows == []
     assert provider.executions == []
 
