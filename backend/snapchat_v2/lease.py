@@ -169,7 +169,13 @@ async def heartbeat_lease(
             }
         },
     )
-    if int(getattr(result, "modified_count", 0) or 0) != 1:
+    matched_count = getattr(result, "matched_count", None)
+    owned = (
+        int(matched_count or 0) == 1
+        if matched_count is not None
+        else int(getattr(result, "modified_count", 0) or 0) == 1
+    )
+    if not owned:
         raise SnapchatLeaseLost("Snapchat V2 sync lease is no longer owned by this worker")
     return expires_at
 

@@ -1,9 +1,13 @@
 """Idempotent, UTC-normalized Snapchat hourly fact storage."""
 from __future__ import annotations
 
+import asyncio
 import math
+from collections.abc import Awaitable, Callable, Iterable
 from datetime import datetime, timedelta, timezone
-from typing import Any, Iterable
+from typing import Any
+
+from pymongo import UpdateOne
 
 from .models import (
     DEFAULT_SWIPE_ATTRIBUTION_WINDOW,
@@ -17,6 +21,7 @@ from .models import (
 
 SNAPCHAT_HOURLY_FACTS_COLLECTION = "mezan_snapchat_hourly_facts_v2"
 MAX_FACT_ROWS_PER_WRITE = 100_000
+HOURLY_FACT_WRITE_BATCH_SIZE = 200
 
 
 def _utcnow() -> datetime:
@@ -221,30 +226,80 @@ async def upsert_hourly_facts(
     facts: Iterable[dict[str, Any]],
     *,
     now: datetime | None = None,
+    on_batch_persisted: Callable[[dict[str, int]], Awaitable[None]] | None = None,
 ) -> dict[str, int]:
-    await ensure_fact_indexes(db)
     rows = list(facts)
     if len(rows) > MAX_FACT_ROWS_PER_WRITE:
         raise ValueError("Snapchat hourly fact write exceeded the safe row limit")
-    inserted = matched = modified = 0
+
+    # Validate the complete provider payload before the first database write.
+    # A malformed or duplicate row must not leave an avoidable partial publish.
+    timestamp = ensure_aware_utc(now or _utcnow(), field="now")
+    prepared: list[tuple[dict[str, Any], dict[str, Any]]] = []
     seen: set[tuple[Any, ...]] = set()
     for fact in rows:
-        normalized = normalize_hourly_fact(fact, now=now)
+        normalized = normalize_hourly_fact(fact, now=timestamp)
         identity = hourly_fact_identity(normalized)
         key = tuple(identity[field] for field in identity)
         if key in seen:
             raise ValueError("duplicate Snapchat hourly fact in one write batch")
         seen.add(key)
-        result = await upsert_hourly_fact(db, normalized, now=now)
-        inserted += int(result["inserted"])
-        matched += int(result["matched"])
-        modified += int(result["modified"])
+        prepared.append((identity, normalized))
+
+    await ensure_fact_indexes(db)
+    collection = db[SNAPCHAT_HOURLY_FACTS_COLLECTION]
+    inserted = matched = modified = 0
+    batches_total = (
+        math.ceil(len(prepared) / HOURLY_FACT_WRITE_BATCH_SIZE)
+        if prepared
+        else 0
+    )
+    batches_complete = 0
+    rows_persisted = 0
+    for offset in range(0, len(prepared), HOURLY_FACT_WRITE_BATCH_SIZE):
+        batch = prepared[offset : offset + HOURLY_FACT_WRITE_BATCH_SIZE]
+        operations = [
+            UpdateOne(
+                identity,
+                {
+                    "$set": {
+                        **normalized,
+                        "updated_at": timestamp,
+                    },
+                    "$setOnInsert": {
+                        "created_at": timestamp,
+                    },
+                },
+                upsert=True,
+            )
+            for identity, normalized in batch
+        ]
+        result = await collection.bulk_write(operations, ordered=True)
+        inserted += int(getattr(result, "upserted_count", 0) or 0)
+        matched += int(getattr(result, "matched_count", 0) or 0)
+        modified += int(getattr(result, "modified_count", 0) or 0)
+        batches_complete += 1
+        rows_persisted += len(batch)
+        if on_batch_persisted is not None:
+            await on_batch_persisted(
+                {
+                    "batch_rows": len(batch),
+                    "batches_complete": batches_complete,
+                    "batches_total": batches_total,
+                    "rows_persisted": rows_persisted,
+                    "rows_total": len(prepared),
+                }
+            )
+        else:
+            # Keep callers without a progress hook cooperative between batches.
+            await asyncio.sleep(0)
     return {
         "rows_received": len(rows),
-        "rows_saved": len(rows),
+        "rows_saved": rows_persisted,
         "inserted": inserted,
         "matched": matched,
         "modified": modified,
+        "write_batches": batches_complete,
     }
 
 
