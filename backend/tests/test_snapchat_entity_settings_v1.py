@@ -274,6 +274,7 @@ async def test_non_usd_or_unknown_currency_never_gets_usd_fallback():
     )
     unknown_item = unknown["items"][0]
     assert unknown_item["account_currency"] is None
+    assert unknown_item["daily_budget_account_currency"] is None
     assert unknown_item["daily_budget_usd"] is None
     assert unknown_item["quality"]["reason"] == (
         "account_currency_unknown_or_not_usd"
