@@ -160,6 +160,40 @@ def make_order_engine_router(
         )
 
     @router.get(
+        "/latest-sold-products",
+        response_model=OrderListResponse,
+    )
+    async def list_latest_sold_product_rows(
+        limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
+        cursor: Optional[str] = Query(default=None),
+        user: dict = Depends(current_user),
+    ) -> OrderListResponse:
+        """Return latest order items without dashboard-only enrichments."""
+        owner = _require_owner(user)
+        try:
+            page = await list_orders(
+                repository(),
+                user_id=str(owner["id"]),
+                limit=limit,
+                cursor=cursor,
+            )
+        except InvalidOrderCursorError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": "invalid_orders_cursor",
+                    "message": "مؤشر تحميل الطلبات غير صالح.",
+                },
+            ) from exc
+
+        return OrderListResponse(
+            items=page.items,
+            next_cursor=page.next_cursor,
+            limit=limit,
+            skipped_invalid=page.skipped_invalid,
+        )
+
+    @router.get(
         "/{order_number}/customer-history",
         response_model=CustomerHistoryResponse,
     )

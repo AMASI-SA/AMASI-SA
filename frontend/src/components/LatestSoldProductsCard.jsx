@@ -1,6 +1,10 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ChevronDown, PackageOpen } from "lucide-react";
+import {
+    listLatestSoldProductOrders,
+    ORDER_PAGE_SIZE,
+} from "../services/orderEngine";
 
 const ORDERS_PER_PAGE = 5;
 
@@ -62,22 +66,92 @@ function itemDetails(item) {
 }
 
 export default function LatestSoldProductsCard({
-    orders = [],
-    hasMoreOrders = false,
-    ordersLoading = false,
+    orders: suppliedOrders,
+    hasMoreOrders: suppliedHasMoreOrders = false,
+    ordersLoading: suppliedOrdersLoading = false,
     onLoadMoreOrders,
 }) {
+    const usesDedicatedFeed = suppliedOrders === undefined;
+    const [feedOrders, setFeedOrders] = useState([]);
+    const [feedCursor, setFeedCursor] = useState(null);
+    const [feedHasMore, setFeedHasMore] = useState(false);
+    const [feedLoading, setFeedLoading] = useState(usesDedicatedFeed);
+    const [feedError, setFeedError] = useState("");
     const [visibleOrderCount, setVisibleOrderCount] = useState(ORDERS_PER_PAGE);
+    const orders = usesDedicatedFeed ? feedOrders : suppliedOrders;
+    const hasMoreOrders = usesDedicatedFeed ? feedHasMore : suppliedHasMoreOrders;
+    const ordersLoading = usesDedicatedFeed ? feedLoading : suppliedOrdersLoading;
     const sortedOrders = useMemo(() => sortOrdersNewestFirst(orders), [orders]);
     const visibleOrders = sortedOrders.slice(0, visibleOrderCount);
     const rows = useMemo(() => expandSoldProductRows(visibleOrders), [visibleOrders]);
     const canShowMore = visibleOrderCount < sortedOrders.length || hasMoreOrders;
 
+    const loadFirstPage = useCallback(async () => {
+        if (!usesDedicatedFeed) return;
+        setFeedLoading(true);
+        setFeedError("");
+        try {
+            const result = await listLatestSoldProductOrders({
+                limit: ORDER_PAGE_SIZE,
+            });
+            setFeedOrders(result.items);
+            setFeedCursor(result.nextCursor);
+            setFeedHasMore(Boolean(result.nextCursor));
+        } catch (error) {
+            setFeedOrders([]);
+            setFeedCursor(null);
+            setFeedHasMore(false);
+            setFeedError(error.message);
+        } finally {
+            setFeedLoading(false);
+        }
+    }, [usesDedicatedFeed]);
+
+    useEffect(() => {
+        loadFirstPage();
+    }, [loadFirstPage]);
+
+    const loadMoreOrders = useCallback(async () => {
+        if (!usesDedicatedFeed) {
+            onLoadMoreOrders?.();
+            return;
+        }
+        if (feedLoading || !feedHasMore || !feedCursor) return;
+        setFeedLoading(true);
+        setFeedError("");
+        try {
+            const result = await listLatestSoldProductOrders({
+                limit: ORDER_PAGE_SIZE,
+                cursor: feedCursor,
+            });
+            setFeedOrders((current) => {
+                const unique = new Map(
+                    [...current, ...result.items]
+                        .map((order) => [String(order?.order_number || ""), order]),
+                );
+                unique.delete("");
+                return Array.from(unique.values());
+            });
+            setFeedCursor(result.nextCursor);
+            setFeedHasMore(Boolean(result.nextCursor));
+        } catch (error) {
+            setFeedError(error.message);
+        } finally {
+            setFeedLoading(false);
+        }
+    }, [
+        feedCursor,
+        feedHasMore,
+        feedLoading,
+        onLoadMoreOrders,
+        usesDedicatedFeed,
+    ]);
+
     const showMore = () => {
         const nextVisibleCount = visibleOrderCount + ORDERS_PER_PAGE;
         setVisibleOrderCount(nextVisibleCount);
         if (nextVisibleCount > sortedOrders.length && hasMoreOrders && !ordersLoading) {
-            onLoadMoreOrders?.();
+            loadMoreOrders();
         }
     };
 
@@ -117,7 +191,21 @@ export default function LatestSoldProductsCard({
                     </div>
                 </Link>;
             })}
-        </div> : <div className="p-6 text-center text-xs font-bold text-slate-400">لا توجد منتجات في الطلبات المحمّلة.</div>}
+        </div> : <div className="p-6 text-center text-xs font-bold text-slate-400">
+            {ordersLoading
+                ? "جارٍ تحميل أحدث المنتجات…"
+                : feedError || "لا توجد منتجات في الطلبات المحمّلة."}
+        </div>}
+
+        {feedError && !ordersLoading && <div className="border-t border-rose-100 p-3">
+            <button
+                type="button"
+                onClick={loadFirstPage}
+                className="w-full rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-xs font-extrabold text-rose-700 hover:bg-rose-100"
+            >
+                إعادة المحاولة
+            </button>
+        </div>}
 
         {canShowMore && <div className="border-t border-slate-100 p-3">
             <button
