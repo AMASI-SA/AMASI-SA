@@ -499,6 +499,7 @@ def _safe_settings_proof(settings: dict[str, Any]) -> dict[str, Any]:
         "unified_entity_id": _mapping_value(settings, "unified_entity_id"),
         "provider_entity_id": _mapping_value(settings, "provider_entity_id"),
         "provider_parent_id": _mapping_value(settings, "provider_parent_id"),
+        "ad_account_id": _mapping_value(settings, "ad_account_id"),
         "mapping_status": (
             _mapping_value(settings, "mapping_status")
             or (
@@ -559,6 +560,7 @@ async def _resolve_management_settings_proof(
     resolved_unified_id = str(proof.get("unified_entity_id") or "")
     resolved_provider_id = str(proof.get("provider_entity_id") or "")
     resolved_provider_parent_id = str(proof.get("provider_parent_id") or "")
+    resolved_account_id = str(proof.get("ad_account_id") or "")
     mapping_status = str(proof.get("mapping_status") or "").lower()
     if (
         not resolved_unified_id
@@ -581,6 +583,21 @@ async def _resolve_management_settings_proof(
                 ),
                 "unified_entity_id": payload.target_id,
                 "provider_entity_id": resolved_provider_id or None,
+            },
+        )
+    if not resolved_account_id or resolved_account_id != str(payload.account_id):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "snapchat_management_provider_account_mapping_unverified",
+                "message": (
+                    "تعذر إثبات ارتباط الكيان بحساب Snapchat المختار؛ "
+                    "لم تُنشأ معاينة ولم يصل أي تعديل إلى المزود."
+                ),
+                "requested_account_id": payload.account_id,
+                "provider_account_id": resolved_account_id or None,
+                "unified_entity_id": payload.target_id,
+                "provider_entity_id": resolved_provider_id,
             },
         )
     if entity_type == "ad_squad":
@@ -648,7 +665,6 @@ async def _resolve_management_settings_proof(
     )
     if require_financial and (
         proof.get("settings_status") != "settings_complete"
-        or proof.get("financial_controls_allowed") is not True
         or not field_coverage_allowed
     ):
         raise HTTPException(
@@ -2012,6 +2028,17 @@ def _public_proposal(
     row: dict[str, Any], *, confirm_token: str | None = None
 ) -> dict[str, Any]:
     operation = dict(row.get("operation") or {})
+    field_change_audit = (
+        row.get("field_changes") if isinstance(row.get("field_changes"), dict) else {}
+    )
+    field_change_fields = (
+        field_change_audit.get("fields")
+        if isinstance(field_change_audit.get("fields"), dict)
+        else {}
+    )
+    field_change_metadata = {
+        key: value for key, value in field_change_audit.items() if key != "fields"
+    }
     output = {
         "proposal_id": row.get("proposal_id"),
         "status": row.get("status"),
@@ -2036,7 +2063,10 @@ def _public_proposal(
             ),
         },
         "settings_proof": _safe_provider_value(row.get("settings_proof") or {}),
-        "field_changes": _safe_provider_value(row.get("field_changes") or {}),
+        # Keep actual changed fields directly enumerable for UI/audit tables.
+        "field_changes": _safe_provider_value(field_change_fields),
+        "field_change_metadata": _safe_provider_value(field_change_metadata),
+        "change_audit": _safe_provider_value(field_change_audit),
         "actor_id": row.get("actor_id"),
         "executed_by": row.get("executed_by"),
         "reason": row.get("reason"),
@@ -4376,7 +4406,9 @@ async def _execute_snapchat_management_proposal_under_lease(
             detail={"code": "snapchat_management_operation_integrity_failed"},
         ) from exc
     execution_settings_proof: dict[str, Any] = {}
-    if str(row.get("action") or "") in SETTINGS_MANAGED_UPDATE_ACTIONS:
+    if str(
+        row.get("action") or ""
+    ) in SETTINGS_MANAGED_UPDATE_ACTIONS and _operation_financial_fields(operation):
         revalidation_payload = SnapchatManagementProposalInput.model_construct(
             action=str(row.get("action") or ""),
             account_id=str(row.get("account_id") or ""),
@@ -4402,7 +4434,7 @@ async def _execute_snapchat_management_proposal_under_lease(
             user_id,
             revalidation_payload,
             operation=operation,
-            require_financial=bool(_operation_financial_fields(operation)),
+            require_financial=True,
         )
         await _collection(db, PROPOSAL_COLLECTION).update_one(
             {

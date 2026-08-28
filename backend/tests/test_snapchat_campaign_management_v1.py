@@ -106,6 +106,7 @@ def fresh_management_settings_gate(monkeypatch):
             "unified_entity_id": unified_entity_id,
             "provider_entity_id": provider_entity_id or unified_entity_id,
             "provider_parent_id": parent_unified_id,
+            "ad_account_id": "account-1",
             "mapping_status": "verified",
             "mapping_verified": True,
             "settings_status": "settings_complete",
@@ -1065,6 +1066,7 @@ async def test_financial_preview_and_execute_use_only_verified_provider_ids(
             "unified_entity_id": "unified-squad",
             "provider_entity_id": "provider-squad",
             "provider_parent_id": "provider-campaign",
+            "ad_account_id": "account-1",
             "mapping_status": "verified",
             "mapping_verified": True,
             "settings_status": "settings_complete",
@@ -1123,14 +1125,11 @@ async def test_financial_preview_and_execute_use_only_verified_provider_ids(
     assert ("ad_squad", "unified-squad") not in provider.reads
     assert ("campaign", "unified-campaign") not in provider.reads
     assert provider.executions == []
-    assert (
-        preview["field_changes"]["fields"]["daily_budget_micro"]["before_micro"]
-        == 100_000_000
-    )
-    assert preview["field_changes"]["fields"]["daily_budget_micro"]["after_usd"] == 90.0
-    assert preview["field_changes"]["fields"]["bid_micro"]["before_usd"] == 20.0
-    assert preview["field_changes"]["fields"]["bid_micro"]["after_usd"] == 15.0
-    assert preview["field_changes"]["fields"]["bid_strategy"] == {
+    assert preview["field_changes"]["daily_budget_micro"]["before_micro"] == 100_000_000
+    assert preview["field_changes"]["daily_budget_micro"]["after_usd"] == 90.0
+    assert preview["field_changes"]["bid_micro"]["before_usd"] == 20.0
+    assert preview["field_changes"]["bid_micro"]["after_usd"] == 15.0
+    assert preview["field_changes"]["bid_strategy"] == {
         "before": "LOWEST_COST_WITH_MAX_BID",
         "after": "TARGET_COST",
     }
@@ -1160,13 +1159,25 @@ async def test_financial_preview_and_execute_use_only_verified_provider_ids(
         "/campaigns/provider-campaign/adsquads/provider-squad"
     )
     assert "unified-squad" not in str(provider.executions[0])
-    assert completed["field_changes"]["provider_reread_verified"] is True
+    assert completed["field_change_metadata"]["provider_reread_verified"] is True
+    assert completed["field_changes"]["daily_budget_micro"]["after_micro"] == 90_000_000
+    assert completed["field_changes"]["bid_micro"]["after_usd"] == 15.0
+    assert completed["field_changes"]["bid_strategy"] == {
+        "before": "LOWEST_COST_WITH_MAX_BID",
+        "after": "TARGET_COST",
+    }
+    assert completed["field_change_metadata"]["actor_id"] == "owner-1"
+    assert completed["field_change_metadata"]["occurred_at"]
+    assert completed["field_change_metadata"]["provider_entity_id"] == "provider-squad"
+    assert completed["verification"]["field_changes_verified"] is True
     assert (
-        completed["field_changes"]["fields"]["daily_budget_micro"]["after_micro"]
+        completed["verification"]["provider_snapshot"]["daily_budget_micro"]
         == 90_000_000
     )
-    assert completed["field_changes"]["fields"]["bid_micro"]["after_usd"] == 15.0
-    assert completed["verification"]["field_changes_verified"] is True
+    assert completed["verification"]["provider_snapshot"]["bid_micro"] == 15_000_000
+    assert (
+        completed["verification"]["provider_snapshot"]["bid_strategy"] == "TARGET_COST"
+    )
 
 
 @pytest.mark.asyncio
@@ -1183,6 +1194,7 @@ async def test_stale_settings_block_financial_preview_before_provider_read_or_wr
         return {
             "unified_entity_id": "unified-campaign",
             "provider_entity_id": "provider-campaign",
+            "ad_account_id": "account-1",
             "mapping_status": "verified",
             "mapping_verified": True,
             "settings_status": "settings_stale",
@@ -1243,6 +1255,7 @@ async def test_execution_rechecks_settings_freshness_before_provider_write(
         return {
             "unified_entity_id": "unified-campaign",
             "provider_entity_id": "provider-campaign",
+            "ad_account_id": "account-1",
             "mapping_status": "verified",
             "mapping_verified": True,
             "settings_status": (
@@ -1378,3 +1391,233 @@ async def test_entity_settings_get_is_database_only_and_never_writes_provider(
     assert result["items"][0]["provider_entity_id"] == "provider-campaign"
     assert len(provider.executions) == 0
     assert len(provider.reads) == 0
+
+
+@pytest.mark.asyncio
+async def test_bid_only_gate_uses_bid_control_not_daily_budget_global_gate(
+    monkeypatch,
+):
+    async def bid_only_settings(*args, **kwargs):
+        return {
+            "unified_entity_id": "unified-squad",
+            "provider_entity_id": "provider-squad",
+            "provider_parent_id": "provider-campaign",
+            "ad_account_id": "account-1",
+            "mapping_status": "verified",
+            "mapping_verified": True,
+            "settings_status": "settings_complete",
+            # Daily budget is unavailable, so the aggregate/global flag is
+            # false. A bid-only change remains safe when its own proof is fresh.
+            "financial_controls_allowed": False,
+            "financial_field_controls": {
+                "daily_budget": {
+                    "allowed": False,
+                    "reason": "provider_field_missing",
+                },
+                "bid": {"allowed": True, "reason": "available"},
+            },
+            "account_currency": "USD",
+            "bid_micro": 20_000_000,
+            "bid_usd": 20.0,
+            "bid_strategy": "TARGET_COST",
+        }
+
+    monkeypatch.setattr(
+        module, "resolve_financial_management_settings", bid_only_settings
+    )
+    payload = module.SnapchatManagementProposalInput(
+        action="ad_squad.update",
+        account_id="account-1",
+        target_id="unified-squad",
+        parent_id="unified-campaign",
+        provider_target_id="provider-squad",
+        provider_parent_id="provider-campaign",
+        payload={"bid_micro": 18_000_000},
+        reason="اختبار بوابة الحقل المالي المتغير فقط",
+        idempotency_key="bid-only-field-gate",
+    )
+
+    proof = await module._resolve_management_settings_proof(
+        DB(),
+        "owner-1",
+        payload,
+        require_financial=True,
+    )
+
+    assert proof["financial_controls_allowed"] is False
+    assert proof["financial_field_controls"]["bid"]["allowed"] is True
+
+
+def test_public_field_changes_are_directly_enumerable_with_separate_metadata():
+    public = module._public_proposal(
+        {
+            "proposal_id": "proposal-field-contract",
+            "status": "completed",
+            "field_changes": {
+                "fields": {
+                    "daily_budget_micro": {
+                        "before": 100_000_000,
+                        "after": 90_000_000,
+                    },
+                    "bid_strategy": {
+                        "before": "LOWEST_COST_WITH_MAX_BID",
+                        "after": "TARGET_COST",
+                    },
+                },
+                "actor_id": "owner-1",
+                "occurred_at": "2026-08-28T12:30:00+00:00",
+                "provider_entity_id": "provider-squad",
+                "provider_reread_verified": True,
+            },
+        }
+    )
+
+    assert set(public["field_changes"]) == {
+        "daily_budget_micro",
+        "bid_strategy",
+    }
+    assert public["field_change_metadata"] == {
+        "actor_id": "owner-1",
+        "occurred_at": "2026-08-28T12:30:00+00:00",
+        "provider_entity_id": "provider-squad",
+        "provider_reread_verified": True,
+    }
+    assert public["change_audit"]["fields"] == public["field_changes"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("settings_status", "bid_reason"),
+    [
+        ("settings_stale", "settings_stale"),
+        ("settings_complete", "provider_field_missing"),
+    ],
+)
+async def test_bid_only_stale_or_missing_proof_blocks_before_provider_io(
+    monkeypatch,
+    settings_status,
+    bid_reason,
+):
+    db = DB()
+    provider = Provider()
+
+    async def selected(*args, **kwargs):
+        return {"ad_account_id": "account-1", "currency": "USD"}
+
+    async def unavailable_bid(*args, **kwargs):
+        return {
+            "unified_entity_id": "unified-squad",
+            "provider_entity_id": "provider-squad",
+            "provider_parent_id": "provider-campaign",
+            "ad_account_id": "account-1",
+            "mapping_status": "verified",
+            "mapping_verified": True,
+            "settings_status": settings_status,
+            "financial_controls_allowed": False,
+            "financial_field_controls": {
+                "daily_budget": {"allowed": True, "reason": "available"},
+                "bid": {"allowed": False, "reason": bid_reason},
+            },
+            "account_currency": "USD",
+            "bid_micro": None,
+            "bid_usd": None,
+            "bid_strategy": "TARGET_COST",
+        }
+
+    monkeypatch.setattr(module, "_selected_account", selected)
+    monkeypatch.setattr(
+        module, "resolve_financial_management_settings", unavailable_bid
+    )
+    payload = module.SnapchatManagementProposalInput(
+        action="ad_squad.update",
+        account_id="account-1",
+        target_id="unified-squad",
+        parent_id="unified-campaign",
+        provider_target_id="provider-squad",
+        provider_parent_id="provider-campaign",
+        payload={"bid_micro": 18_000_000},
+        reason="اختبار منع المزايدة دون إثبات حديث",
+        idempotency_key=f"bid-proof-{settings_status}-{bid_reason}",
+    )
+
+    with pytest.raises(HTTPException) as raised:
+        await module.create_snapchat_management_proposal(
+            db,
+            "owner-1",
+            "owner-1",
+            payload,
+            provider=provider,
+        )
+
+    assert raised.value.detail["code"] == (
+        "snapchat_management_financial_settings_unavailable"
+    )
+    assert provider.reads == []
+    assert provider.executions == []
+    assert db[module.PROPOSAL_COLLECTION].rows == []
+
+
+@pytest.mark.asyncio
+async def test_provider_account_binding_mismatch_blocks_before_provider_io(
+    monkeypatch,
+):
+    db = DB()
+    provider = Provider()
+
+    async def selected(*args, **kwargs):
+        return {"ad_account_id": "account-1", "currency": "USD"}
+
+    async def wrong_account(*args, **kwargs):
+        return {
+            "unified_entity_id": "unified-campaign",
+            "provider_entity_id": "provider-campaign",
+            "provider_parent_id": None,
+            "ad_account_id": "another-account",
+            "mapping_status": "verified",
+            "mapping_verified": True,
+            "settings_status": "settings_complete",
+            "financial_controls_allowed": True,
+            "financial_field_controls": {
+                "daily_budget": {"allowed": True, "reason": "available"},
+                "bid": {"allowed": False, "reason": "not_applicable"},
+            },
+            "account_currency": "USD",
+            "daily_budget_micro": 100_000_000,
+            "daily_budget_usd": 100.0,
+        }
+
+    monkeypatch.setattr(module, "_selected_account", selected)
+    monkeypatch.setattr(module, "resolve_financial_management_settings", wrong_account)
+    payload = module.SnapchatManagementProposalInput(
+        action="campaign.update",
+        account_id="account-1",
+        target_id="unified-campaign",
+        provider_target_id="provider-campaign",
+        payload={"daily_budget_micro": 90_000_000},
+        reason="اختبار ربط الحساب والكيان الأصلي",
+        idempotency_key="provider-account-binding",
+    )
+
+    with pytest.raises(HTTPException) as raised:
+        await module.create_snapchat_management_proposal(
+            db,
+            "owner-1",
+            "owner-1",
+            payload,
+            provider=provider,
+        )
+
+    assert raised.value.detail == {
+        "code": "snapchat_management_provider_account_mapping_unverified",
+        "message": (
+            "تعذر إثبات ارتباط الكيان بحساب Snapchat المختار؛ "
+            "لم تُنشأ معاينة ولم يصل أي تعديل إلى المزود."
+        ),
+        "requested_account_id": "account-1",
+        "provider_account_id": "another-account",
+        "unified_entity_id": "unified-campaign",
+        "provider_entity_id": "provider-campaign",
+    }
+    assert provider.reads == []
+    assert provider.executions == []
+    assert db[module.PROPOSAL_COLLECTION].rows == []
