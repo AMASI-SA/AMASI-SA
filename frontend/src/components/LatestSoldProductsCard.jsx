@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ChevronDown, PackageOpen } from "lucide-react";
 import {
@@ -7,6 +7,7 @@ import {
 } from "../services/orderEngine";
 
 const ORDERS_PER_PAGE = 5;
+const AUTO_REFRESH_INTERVAL_MS = 10_000;
 
 function orderNumberValue(order) {
     const value = Number(order?.order_number || 0);
@@ -24,6 +25,15 @@ export function sortOrdersNewestFirst(orders = []) {
         const numberDifference = orderNumberValue(right) - orderNumberValue(left);
         return numberDifference || orderTimestamp(right) - orderTimestamp(left);
     });
+}
+
+export function mergeOrdersNewestFirst(current = [], incoming = []) {
+    const unique = new Map();
+    [...current, ...incoming].forEach((order) => {
+        const orderNumber = String(order?.order_number || "").trim();
+        if (orderNumber) unique.set(orderNumber, order);
+    });
+    return sortOrdersNewestFirst(Array.from(unique.values()));
 }
 
 function itemQuantity(item) {
@@ -65,6 +75,35 @@ function itemDetails(item) {
         .join(" · ");
 }
 
+function productImageUrls(item) {
+    return [item?.image_url, ...(item?.image_urls || [])]
+        .map((value) => String(value || "").trim())
+        .filter((value, index, values) => value && values.indexOf(value) === index);
+}
+
+function ProductImage({ item }) {
+    const urls = useMemo(() => productImageUrls(item), [item]);
+    const signature = urls.join("|");
+    const [imageIndex, setImageIndex] = useState(0);
+
+    useEffect(() => {
+        setImageIndex(0);
+    }, [signature]);
+
+    const imageUrl = urls[imageIndex] || "";
+    return <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-100 bg-slate-50">
+        {imageUrl
+            ? <img
+                src={imageUrl}
+                alt=""
+                loading="lazy"
+                className="h-full w-full object-cover"
+                onError={() => setImageIndex((current) => current + 1)}
+            />
+            : <PackageOpen className="h-5 w-5 text-slate-300" />}
+    </div>;
+}
+
 export default function LatestSoldProductsCard({
     orders: suppliedOrders,
     hasMoreOrders: suppliedHasMoreOrders = false,
@@ -78,6 +117,8 @@ export default function LatestSoldProductsCard({
     const [feedLoading, setFeedLoading] = useState(usesDedicatedFeed);
     const [feedError, setFeedError] = useState("");
     const [visibleOrderCount, setVisibleOrderCount] = useState(ORDERS_PER_PAGE);
+    const requestInFlightRef = useRef(false);
+    const loadedAdditionalPagesRef = useRef(false);
     const orders = usesDedicatedFeed ? feedOrders : suppliedOrders;
     const hasMoreOrders = usesDedicatedFeed ? feedHasMore : suppliedHasMoreOrders;
     const ordersLoading = usesDedicatedFeed ? feedLoading : suppliedOrdersLoading;
@@ -86,37 +127,74 @@ export default function LatestSoldProductsCard({
     const rows = useMemo(() => expandSoldProductRows(visibleOrders), [visibleOrders]);
     const canShowMore = visibleOrderCount < sortedOrders.length || hasMoreOrders;
 
-    const loadFirstPage = useCallback(async () => {
-        if (!usesDedicatedFeed) return;
-        setFeedLoading(true);
-        setFeedError("");
+    const loadFirstPage = useCallback(async (background = false) => {
+        if (!usesDedicatedFeed || requestInFlightRef.current) return;
+        requestInFlightRef.current = true;
+        if (!background) {
+            setFeedLoading(true);
+            setFeedError("");
+        }
         try {
             const result = await listLatestSoldProductOrders({
                 limit: ORDER_PAGE_SIZE,
             });
-            setFeedOrders(result.items);
-            setFeedCursor(result.nextCursor);
-            setFeedHasMore(Boolean(result.nextCursor));
+            setFeedOrders((current) => (
+                background
+                    ? mergeOrdersNewestFirst(current, result.items)
+                    : sortOrdersNewestFirst(result.items)
+            ));
+            if (!background || !loadedAdditionalPagesRef.current) {
+                setFeedCursor(result.nextCursor);
+                setFeedHasMore(Boolean(result.nextCursor));
+            }
         } catch (error) {
-            setFeedOrders([]);
-            setFeedCursor(null);
-            setFeedHasMore(false);
-            setFeedError(error.message);
+            if (!background) {
+                setFeedOrders([]);
+                setFeedCursor(null);
+                setFeedHasMore(false);
+                setFeedError(error.message);
+            }
         } finally {
-            setFeedLoading(false);
+            requestInFlightRef.current = false;
+            if (!background) setFeedLoading(false);
         }
     }, [usesDedicatedFeed]);
 
     useEffect(() => {
-        loadFirstPage();
-    }, [loadFirstPage]);
+        if (!usesDedicatedFeed) return undefined;
+
+        void loadFirstPage(false);
+        const refresh = () => {
+            if (document.visibilityState === "visible") {
+                void loadFirstPage(true);
+            }
+        };
+        const interval = window.setInterval(refresh, AUTO_REFRESH_INTERVAL_MS);
+        window.addEventListener("focus", refresh);
+        window.addEventListener("online", refresh);
+        document.addEventListener("visibilitychange", refresh);
+
+        return () => {
+            window.clearInterval(interval);
+            window.removeEventListener("focus", refresh);
+            window.removeEventListener("online", refresh);
+            document.removeEventListener("visibilitychange", refresh);
+        };
+    }, [loadFirstPage, usesDedicatedFeed]);
 
     const loadMoreOrders = useCallback(async () => {
         if (!usesDedicatedFeed) {
             onLoadMoreOrders?.();
             return;
         }
-        if (feedLoading || !feedHasMore || !feedCursor) return;
+        if (
+            requestInFlightRef.current
+            || feedLoading
+            || !feedHasMore
+            || !feedCursor
+        ) return;
+
+        requestInFlightRef.current = true;
         setFeedLoading(true);
         setFeedError("");
         try {
@@ -124,19 +202,16 @@ export default function LatestSoldProductsCard({
                 limit: ORDER_PAGE_SIZE,
                 cursor: feedCursor,
             });
-            setFeedOrders((current) => {
-                const unique = new Map(
-                    [...current, ...result.items]
-                        .map((order) => [String(order?.order_number || ""), order]),
-                );
-                unique.delete("");
-                return Array.from(unique.values());
-            });
+            setFeedOrders((current) => (
+                mergeOrdersNewestFirst(current, result.items)
+            ));
             setFeedCursor(result.nextCursor);
             setFeedHasMore(Boolean(result.nextCursor));
+            loadedAdditionalPagesRef.current = true;
         } catch (error) {
             setFeedError(error.message);
         } finally {
+            requestInFlightRef.current = false;
             setFeedLoading(false);
         }
     }, [
@@ -150,8 +225,12 @@ export default function LatestSoldProductsCard({
     const showMore = () => {
         const nextVisibleCount = visibleOrderCount + ORDERS_PER_PAGE;
         setVisibleOrderCount(nextVisibleCount);
-        if (nextVisibleCount > sortedOrders.length && hasMoreOrders && !ordersLoading) {
-            loadMoreOrders();
+        if (
+            nextVisibleCount > sortedOrders.length
+            && hasMoreOrders
+            && !ordersLoading
+        ) {
+            void loadMoreOrders();
         }
     };
 
@@ -161,11 +240,13 @@ export default function LatestSoldProductsCard({
             <span className="shrink-0 rounded-full bg-white/15 px-2 py-1 text-[10px] font-bold">{visibleOrders.length} طلبات</span>
         </div>
 
-        {rows.length ? <div className="divide-y divide-slate-100">
-            {rows.map(({ order, item, itemIndex, unitIndex, quantity }) => {
+        <div
+            data-testid="latest-sold-products-scroll"
+            className="h-[520px] max-h-[60vh] overflow-y-auto overscroll-contain [scrollbar-gutter:stable] divide-y divide-slate-100"
+        >
+            {rows.length ? rows.map(({ order, item, itemIndex, unitIndex, quantity }) => {
                 const orderNumber = String(order?.order_number || "");
                 const details = itemDetails(item);
-                const imageUrl = String(item?.image_url || item?.image_urls?.[0] || "").trim();
                 const key = `${orderNumber}-${item?.order_item_id || item?.product_id || itemIndex}-${unitIndex}`;
                 return <Link
                     key={key}
@@ -174,11 +255,7 @@ export default function LatestSoldProductsCard({
                     className="flex min-h-[76px] items-center gap-3 px-4 py-3 text-right hover:bg-emerald-50/40"
                     data-testid={`latest-sold-product-${key}`}
                 >
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-100 bg-slate-50">
-                        {imageUrl
-                            ? <img src={imageUrl} alt="" loading="lazy" className="h-full w-full object-cover" onError={(event) => { event.currentTarget.style.display = "none"; }} />
-                            : <PackageOpen className="h-5 w-5 text-slate-300" />}
-                    </div>
+                    <ProductImage item={item} />
                     <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-extrabold text-slate-900">{item?.name || "منتج بدون اسم"}</p>
                         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-bold text-slate-400">
@@ -190,17 +267,17 @@ export default function LatestSoldProductsCard({
                         {details && <p className="mt-1 truncate text-[10px] text-slate-500">{details}</p>}
                     </div>
                 </Link>;
-            })}
-        </div> : <div className="p-6 text-center text-xs font-bold text-slate-400">
-            {ordersLoading
-                ? "جارٍ تحميل أحدث المنتجات…"
-                : feedError || "لا توجد منتجات في الطلبات المحمّلة."}
-        </div>}
+            }) : <div className="flex h-full items-center justify-center p-6 text-center text-xs font-bold text-slate-400">
+                {ordersLoading
+                    ? "جارٍ تحميل أحدث المنتجات…"
+                    : feedError || "لا توجد منتجات في الطلبات المحمّلة."}
+            </div>}
+        </div>
 
         {feedError && !ordersLoading && <div className="border-t border-rose-100 p-3">
             <button
                 type="button"
-                onClick={loadFirstPage}
+                onClick={() => loadFirstPage(false)}
                 className="w-full rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-xs font-extrabold text-rose-700 hover:bg-rose-100"
             >
                 إعادة المحاولة

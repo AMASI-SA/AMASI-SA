@@ -21,6 +21,7 @@ from .gift_db_enrichment import enrich_order_gifts
 from .gift_diagnostic import build_gift_diagnostic
 from .gift_enrichment import enrich_single_order_gift
 from .models import OrderDTO
+from .product_image_enrichment import enrich_order_item_images
 from .recipient_enrichment import enrich_order_recipients
 from .repository import MongoOrderRepository, OrderRepository
 from .salla_refresh import refresh_order_from_salla
@@ -170,10 +171,11 @@ def make_order_engine_router(
     ) -> OrderListResponse:
         """Return latest order items without dashboard-only enrichments."""
         owner = _require_owner(user)
+        owner_id = str(owner["id"])
         try:
             page = await list_orders(
                 repository(),
-                user_id=str(owner["id"]),
+                user_id=owner_id,
                 limit=limit,
                 cursor=cursor,
             )
@@ -186,8 +188,33 @@ def make_order_engine_router(
                 },
             ) from exc
 
+        flat_items = [
+            item
+            for order in page.items
+            for item in order.items
+        ]
+        enriched_flat_items = await enrich_order_item_images(
+            db,
+            user_id=owner_id,
+            items=flat_items,
+        )
+        enriched_orders: list[OrderDTO] = []
+        item_offset = 0
+        for order in page.items:
+            item_count = len(order.items)
+            enriched_orders.append(
+                order.model_copy(
+                    update={
+                        "items": enriched_flat_items[
+                            item_offset:item_offset + item_count
+                        ]
+                    }
+                )
+            )
+            item_offset += item_count
+
         return OrderListResponse(
-            items=page.items,
+            items=enriched_orders,
             next_cursor=page.next_cursor,
             limit=limit,
             skipped_invalid=page.skipped_invalid,
