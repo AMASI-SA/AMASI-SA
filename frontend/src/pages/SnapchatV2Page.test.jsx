@@ -40,6 +40,25 @@ jest.mock("../services/mezanProductsV2", () => ({
     listProductsV2: jest.fn(() => Promise.resolve({ items: [] })),
 }));
 
+jest.mock("../components/marketing/UnifiedMarketingEntityTable", () => (
+    function MockUnifiedMarketingEntityTable({ report, onOpenChildren }) {
+        return (
+            <div data-testid="mock-unified-table">
+                {(report?.rows || []).map((row) => (
+                    <button
+                        key={row.entity.id}
+                        type="button"
+                        data-testid={`open-${row.entity.id}`}
+                        onClick={() => onOpenChildren?.(row)}
+                    >
+                        {row.entity.name}
+                    </button>
+                ))}
+            </div>
+        );
+    }
+));
+
 import api from "../lib/api";
 import {
     createSnapchatManagementProposal,
@@ -60,7 +79,56 @@ describe("SnapchatV2Page read-only load", () => {
         document.body.appendChild(container);
         root = createRoot(container);
         jest.clearAllMocks();
-        getSnapchatEntitySettings.mockResolvedValue([]);
+        getSnapchatEntitySettings.mockImplementation(({ entityType }) => Promise.resolve(
+            entityType === "campaign"
+                ? [{
+                    entity_type: "campaign",
+                    unified_entity_id: "da5049b7-5417-4be9-a596-20a74f9fd54c",
+                    provider_entity_id: "snap-provider-campaign-afrol",
+                    mapping_status: "verified",
+                    mapping_verified: true,
+                    ad_account_id: "account-1",
+                    account_currency: "USD",
+                    daily_budget_micro: null,
+                    daily_budget_availability: "unsupported_at_provider_level",
+                    daily_budget_unavailable_message_ar: "غير متاح من Snapchat على هذا المستوى",
+                    ad_squads_daily_budget_micro: 125_000_000,
+                    ad_squads_daily_budget_usd: 125,
+                    active_ad_squads: 1,
+                    ad_squad_bid_strategies: ["TARGET_COST"],
+                    quality: {
+                        settings_status: "settings_complete",
+                        freshness_seconds: 120,
+                        freshness_threshold_seconds: 1800,
+                        reason: "provider_snapshot_complete",
+                    },
+                }]
+                : [{
+                    entity_type: "ad_squad",
+                    unified_entity_id: "7c0f5bfa-3f59-437b-bb89-1c70b11d0526",
+                    provider_entity_id: "snap-provider-ad-squad-afrol",
+                    provider_parent_id: "snap-provider-campaign-afrol",
+                    mapping_status: "verified",
+                    mapping_verified: true,
+                    ad_account_id: "account-1",
+                    account_currency: "USD",
+                    daily_budget_micro: 125_000_000,
+                    daily_budget_usd: 125,
+                    bid_micro: 15_000_000,
+                    bid_usd: 15,
+                    bid_strategy: "TARGET_COST",
+                    optimization_goal: "PIXEL_PURCHASE",
+                    billing_event: "IMPRESSION",
+                    conversion_window: { swipe_window: "28_DAY", view_window: "1_DAY" },
+                    status: "ACTIVE",
+                    quality: {
+                        settings_status: "settings_complete",
+                        freshness_seconds: 120,
+                        freshness_threshold_seconds: 1800,
+                        reason: "provider_snapshot_complete",
+                    },
+                }],
+        ));
         getSnapchatManagementReadiness.mockResolvedValue({
             proposal_enabled: true,
             execution_enabled: false,
@@ -108,10 +176,49 @@ describe("SnapchatV2Page read-only load", () => {
                         unified: {
                             contract_version: "2",
                             entity_level: "campaign",
-                            rows: [],
+                            rows: [{
+                                entity: {
+                                    level: "campaign",
+                                    provider_level: "campaign",
+                                    id: "da5049b7-5417-4be9-a596-20a74f9fd54c",
+                                    name: "افرول الوطني",
+                                    status: "ACTIVE",
+                                },
+                                quality: {
+                                    sync_status: "complete",
+                                    coverage_status: "complete",
+                                    source_fact_count: 4,
+                                },
+                            }],
                             totals: null,
                         },
                         salla: { summary: {} },
+                    },
+                });
+            }
+            if (url.endsWith("/ad-squads")) {
+                return Promise.resolve({
+                    data: {
+                        unified: {
+                            contract_version: "2",
+                            entity_level: "ad_group",
+                            rows: [{
+                                entity: {
+                                    level: "ad_group",
+                                    provider_level: "ad_squad",
+                                    id: "7c0f5bfa-3f59-437b-bb89-1c70b11d0526",
+                                    campaign_id: "da5049b7-5417-4be9-a596-20a74f9fd54c",
+                                    name: "Ad Squad افرول الوطني",
+                                    status: "ACTIVE",
+                                },
+                                quality: {
+                                    sync_status: "complete",
+                                    coverage_status: "complete",
+                                    source_fact_count: 4,
+                                },
+                            }],
+                            totals: null,
+                        },
                     },
                 });
             }
@@ -134,9 +241,27 @@ describe("SnapchatV2Page read-only load", () => {
             await Promise.resolve();
             await Promise.resolve();
         });
+        expect(getSnapchatEntitySettings).toHaveBeenCalledWith(expect.objectContaining({
+            entityType: "campaign",
+        }));
+        expect(container.textContent).toContain("da5049b7-5417-4be9-a596-20a74f9fd54c");
+        expect(container.textContent).toContain("snap-provider-campaign-afrol");
         expect(api.post).not.toHaveBeenCalled();
         expect(createSnapchatManagementProposal).not.toHaveBeenCalled();
         expect(executeSnapchatManagementProposal).not.toHaveBeenCalled();
+
+        await act(async () => {
+            container.querySelector('[data-testid="open-da5049b7-5417-4be9-a596-20a74f9fd54c"]').click();
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        expect(getSnapchatEntitySettings).toHaveBeenCalledWith(expect.objectContaining({
+            entityType: "ad_squad",
+            parentUnifiedId: "da5049b7-5417-4be9-a596-20a74f9fd54c",
+        }));
+        expect(container.textContent).toContain("7c0f5bfa-3f59-437b-bb89-1c70b11d0526");
+        expect(container.textContent).toContain("snap-provider-ad-squad-afrol");
 
         await act(async () => {
             container.querySelector(
