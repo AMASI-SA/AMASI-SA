@@ -318,6 +318,7 @@ async def build_daily_projection(
         "account_timezone": account_timezone,
         "currency": currency,
         "action_report_time": clean_text(action_report_time, limit=32).lower(),
+        "sync_run_id": clean_text(sync_run_id, limit=128) or None,
         "window_start_utc": start_utc,
         "window_end_utc": end_utc,
         "base_spend_native": base_spend_native,

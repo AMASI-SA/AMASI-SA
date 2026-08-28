@@ -14,6 +14,7 @@ from unified_marketing.commerce_carts import load_abandoned_cart_outcomes
 from .accounts import get_selected_account, list_accounts
 from .entities import list_entities
 from .facts import load_hourly_facts
+from .headline import resolve_report_headline_spend
 from .models import clean_text
 from .projections import (
     RIYADH_TIMEZONE,
@@ -547,6 +548,16 @@ def attach_snapchat_v2_routes(
             date_to=date_to,
             action_report_time=action_report_time,
         )
+        headline = resolve_report_headline_spend(
+            projections=rows,
+            reconciliations=reconciliation,
+            open_report_date=(datetime.now(ZoneInfo(timezone_name)).date().isoformat()),
+            provider_scope=(
+                "account"
+                if timezone_name == str(account.get("timezone") or "")
+                else "dashboard"
+            ),
+        )
         return {
             "provider": "snapchat_ads",
             "ad_account_id": account["ad_account_id"],
@@ -557,6 +568,13 @@ def attach_snapchat_v2_routes(
             "currency": account.get("currency"),
             "action_report_time": action_report_time,
             "base_spend_native": _sum_projection(rows, "base_spend_native"),
+            "headline_spend_native": headline["headline_spend_native"],
+            "hourly_spend_native": headline["hourly_spend_native"],
+            "unallocated_spend_native": headline["unallocated_spend_native"],
+            "headline_spend_source": headline["headline_spend_source"],
+            "hourly_breakdown_status": headline["hourly_breakdown_status"],
+            "hourly_breakdown_complete": headline["hourly_breakdown_complete"],
+            "provider_total_checked_at": headline["provider_total_checked_at"],
             "impressions": _sum_projection(rows, "impressions"),
             "swipes": _sum_projection(rows, "swipes"),
             "video_views": _sum_projection(rows, "video_views"),
