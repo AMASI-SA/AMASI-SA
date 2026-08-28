@@ -206,6 +206,11 @@ function mergeAdvanced(payload, source, protectedFields = []) {
     return { ...payload, ...parsed };
 }
 
+function providerValue(value) {
+    if (value === null || value === undefined || value === "") return "—";
+    return typeof value === "object" ? JSON.stringify(value) : String(value);
+}
+
 function timestamp(value) {
     if (!value) return "—";
     const parsed = new Date(value);
@@ -325,7 +330,7 @@ function CurrentSettingsCard({ action, settings }) {
                         <div><span className="block text-slate-500">bid_strategy</span><strong>{settings?.bid_strategy || "—"}</strong></div>
                         <div><span className="block text-slate-500">optimization_goal</span><strong>{settings?.optimization_goal || "—"}</strong></div>
                         <div><span className="block text-slate-500">billing_event</span><strong>{settings?.billing_event || "—"}</strong></div>
-                        <div><span className="block text-slate-500">conversion_window</span><strong>{settings?.conversion_window || "—"}</strong></div>
+                        <div><span className="block text-slate-500">conversion_window</span><strong>{providerValue(settings?.conversion_window)}</strong></div>
                     </>
                 )}
                 <div><span className="block text-slate-500">freshness</span><strong dir="ltr">{quality.freshness_seconds == null ? "غير متاح" : `${Number(quality.freshness_seconds).toLocaleString("en-US")} ثانية`}</strong></div>
