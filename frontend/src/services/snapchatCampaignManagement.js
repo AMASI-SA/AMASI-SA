@@ -65,6 +65,7 @@ export function normalizeSnapchatEntitySettings(payload = {}) {
     return {
         ...value,
         entity_type: text(value.entity_type || value.provider_entity_type) || null,
+        ad_account_id: text(value.ad_account_id) || null,
         unified_entity_id: text(value.unified_entity_id || value.entity_id) || null,
         provider_entity_id: text(value.provider_entity_id || value.external_id) || null,
         provider_parent_id: text(value.provider_parent_id || value.parent_provider_id) || null,
@@ -119,21 +120,40 @@ export function normalizeSnapchatEntitySettings(payload = {}) {
     };
 }
 
-function baseFinancialSettingsReady(value) {
+function baseFinancialSettingsReady(value, accountId = "") {
+    const freshnessSeconds = number(value.quality.freshness_seconds);
+    const freshnessThreshold = number(value.quality.freshness_threshold_seconds);
+    const settingsSyncedAt = Date.parse(value.settings_synced_at || "");
+    const expectedAccountId = text(accountId);
     return Boolean(
         value.unified_entity_id
         && value.provider_entity_id
         && value.mapping_verified === true
         && value.account_currency === "USD"
+        && value.ad_account_id
+        && (!expectedAccountId || value.ad_account_id === expectedAccountId)
         && FINANCIAL_SETTINGS_READY.has(value.quality.settings_status)
+        && Number.isFinite(freshnessSeconds)
+        && freshnessSeconds >= 0
+        && Number.isFinite(freshnessThreshold)
+        && freshnessThreshold > 0
+        && freshnessThreshold <= 1800
+        && freshnessSeconds <= freshnessThreshold
+        && Number.isFinite(settingsSyncedAt)
     );
 }
 
-export function snapchatFinancialFieldReady(settings, field) {
+function financialControlKey(field) {
+    if (field === "daily_budget_micro") return "daily_budget";
+    if (["bid_micro", "bid_strategy"].includes(field)) return "bid";
+    return field;
+}
+
+export function snapchatFinancialFieldReady(settings, field, accountId = "") {
     const value = normalizeSnapchatEntitySettings(settings);
-    if (!baseFinancialSettingsReady(value)) return false;
+    if (!baseFinancialSettingsReady(value, accountId)) return false;
     const controls = object(value.quality.financial_field_controls);
-    const control = controls[field];
+    const control = controls[financialControlKey(field)];
     if (control === true) return true;
     if (!control || typeof control !== "object") return false;
     return control.allowed === true
@@ -141,9 +161,9 @@ export function snapchatFinancialFieldReady(settings, field) {
         || control.preview_execute_allowed === true;
 }
 
-export function snapchatFinancialSettingsReady(settings) {
+export function snapchatFinancialSettingsReady(settings, accountId = "") {
     const value = normalizeSnapchatEntitySettings(settings);
-    if (!baseFinancialSettingsReady(value)) return false;
+    if (!baseFinancialSettingsReady(value, accountId)) return false;
     const controls = object(value.quality.financial_field_controls);
     const values = Object.values(controls);
     return values.length > 0
@@ -315,7 +335,7 @@ export function normalizeSnapchatManagementReadiness(payload = {}) {
             return {
                 account_id: text(account?.account_id),
                 display_name: text(account?.display_name, account?.account_id || "حساب Snapchat"),
-                currency: text(account?.currency, "SAR"),
+                currency: text(account?.currency) || null,
                 timezone: text(account?.timezone),
                 role: text(account?.role) || null,
                 management_allowed: account?.management_allowed === true,
@@ -405,6 +425,10 @@ export function normalizeSnapchatManagementProposal(payload = {}) {
         actor_id: text(value.actor_id || fieldChangesEnvelope.actor_id || value.executed_by || value.created_by) || null,
         actor_name: text(value.actor_name || fieldChangesEnvelope.actor_name || value.executor_name) || null,
         field_changes: fieldChanges.map(object).filter((item) => Object.keys(item).length),
+        field_changes_known: Array.isArray(value.field_changes)
+            || Array.isArray(fieldChangesEnvelope.fields)
+            || Object.keys(fieldChangesFields).length > 0,
+        preview_changed_fields_known: Array.isArray(value.preview?.changed_fields),
         field_changes_metadata: {
             actor_id: text(fieldChangesEnvelope.actor_id) || null,
             actor_name: text(fieldChangesEnvelope.actor_name) || null,
