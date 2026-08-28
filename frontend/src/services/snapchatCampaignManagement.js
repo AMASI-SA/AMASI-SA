@@ -1,7 +1,7 @@
 import api from "../lib/api";
 
 const BASE = "/integrations-v2/snapchat_ads/management";
-const FINANCIAL_SETTINGS_READY = new Set(["settings_complete", "complete"]);
+const FINANCIAL_SETTINGS_READY = new Set(["settings_complete"]);
 const TARGET_COST_STRATEGIES = new Set(["TARGET_COST"]);
 const ACTIONS = new Set([
     "campaign.create",
@@ -48,7 +48,7 @@ export function normalizeSnapchatEntitySettings(payload = {}) {
     const value = object(payload?.data || payload);
     const quality = object(value.quality);
     const campaignAggregate = object(value.campaign_aggregate);
-    const accountCurrency = text(value.account_currency || value.currency).toUpperCase() || null;
+    const accountCurrency = text(value.account_currency).toUpperCase() || null;
     const settingsStatus = text(
         quality.settings_status || value.settings_status,
         "settings_not_loaded",
@@ -95,7 +95,9 @@ export function normalizeSnapchatEntitySettings(payload = {}) {
         bid_strategy: text(value.bid_strategy) || null,
         optimization_goal: text(value.optimization_goal) || null,
         billing_event: text(value.billing_event) || null,
-        conversion_window: text(value.conversion_window) || null,
+        conversion_window: value.conversion_window && typeof value.conversion_window === "object"
+            ? value.conversion_window
+            : text(value.conversion_window) || null,
         status: text(value.status) || null,
         settings_synced_at: text(value.settings_synced_at || value.last_observed_at) || null,
         provider_updated_at: text(value.provider_updated_at || value.updated_at_provider) || null,
@@ -435,7 +437,7 @@ export async function getSnapchatEntitySettings({
             entity_type: normalizedType,
             unified_entity_id: text(unifiedEntityId) || undefined,
             parent_unified_id: text(parentUnifiedId) || undefined,
-            limit: Math.min(1000, Math.max(1, Math.trunc(Number(limit) || 500))),
+            limit: Math.min(500, Math.max(1, Math.trunc(Number(limit) || 500))),
         },
     });
     return settingsItems(response.data);
