@@ -69,9 +69,10 @@ function microAmount(settings, microValue) {
 
 export function snapchatPerformanceStatus(row) {
     const explicit = String(row?.quality?.performance_status || "");
-    if (["performance_complete", "performance_no_facts", "performance_partial"].includes(explicit)) return explicit;
-    const syncStatus = String(row?.quality?.sync_status || "");
+    if (["performance_complete", "performance_no_facts", "performance_partial", "performance_sync_failed"].includes(explicit)) return explicit;
+    const syncStatus = String(row?.quality?.sync_status || "").toLowerCase();
     const sourceFactCount = row?.quality?.source_fact_count;
+    if (["failed", "error", "sync_failed"].includes(syncStatus)) return "performance_sync_failed";
     if (
         syncStatus === "no_facts"
         || (
@@ -116,7 +117,7 @@ function SettingsDetails({ row, settings }) {
     const settingsComplete = settings?.quality?.settings_status === "settings_complete";
     const budgetUnsupported = type === "campaign"
         && settingsComplete
-        && ["unsupported_at_provider_level", "unsupported"].includes(settings?.daily_budget_availability);
+        && settings?.daily_budget_availability === "unsupported_at_provider_level";
     const campaignBudgetUnavailable = settings?.daily_budget_unavailable_message_ar
         || SNAPCHAT_CAMPAIGN_BUDGET_UNSUPPORTED;
     const budget = budgetUnsupported
@@ -159,7 +160,7 @@ function SettingsDetails({ row, settings }) {
                         <>
                             <Metric label="مجموع ميزانيات Ad Squads الخام">{childBudget.raw}</Metric>
                             <Metric label="مجموع ميزانيات Ad Squads">{childBudget.converted}</Metric>
-                            <Metric label="Ad Squads النشطة">{number(settings?.active_ad_squads)}</Metric>
+                            <Metric label="Ad Squads النشطة">{settingsComplete ? number(settings?.active_ad_squads) : SNAPCHAT_SETTINGS_UNAVAILABLE}</Metric>
                         </>
                     )}
                 </div>
@@ -171,7 +172,7 @@ function SettingsDetails({ row, settings }) {
                     ) : (
                         <>
                             <Metric label={`${snapchatBidLabel(effectiveBidStrategy)} الخام`} testId="snapchat-settings-bid-label">{bid.raw}</Metric>
-                            <Metric label={snapchatBidLabel(settings?.bid_strategy)}>{bid.converted}</Metric>
+                            <Metric label={snapchatBidLabel(effectiveBidStrategy)}>{bid.converted}</Metric>
                             <Metric label="bid_strategy">{providerSetting(settings, settings?.bid_strategy)}</Metric>
                             <Metric label="optimization_goal">{providerSetting(settings, settings?.optimization_goal)}</Metric>
                             <Metric label="billing_event">{providerSetting(settings, settings?.billing_event)}</Metric>
