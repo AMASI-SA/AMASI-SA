@@ -1,7 +1,7 @@
 import { snapchatBidLabel } from "../../services/snapchatCampaignManagement";
 
 export const SNAPCHAT_SETTINGS_UNAVAILABLE = "غير متاح — فشل جلب الإعدادات";
-export const SNAPCHAT_CAMPAIGN_BUDGET_UNSUPPORTED = "غير متاح — Snapchat لا يوفّر ميزانية يومية على مستوى الحملة";
+export const SNAPCHAT_CAMPAIGN_BUDGET_UNSUPPORTED = "غير متاح من Snapchat على هذا المستوى";
 
 const SETTINGS_STATUS_LABELS = {
     settings_not_loaded: "settings_not_loaded · لم تُحمّل الإعدادات",
@@ -65,10 +65,19 @@ function microAmount(settings, microValue, usdValue) {
 
 export function snapchatPerformanceStatus(row) {
     const explicit = String(row?.quality?.performance_status || "");
-    if (["performance_complete", "performance_no_facts"].includes(explicit)) return explicit;
-    return row?.quality?.coverage_status === "complete"
-        ? "performance_complete"
-        : "performance_no_facts";
+    if (["performance_complete", "performance_no_facts", "performance_partial"].includes(explicit)) return explicit;
+    const syncStatus = String(row?.quality?.sync_status || "");
+    const sourceFactCount = row?.quality?.source_fact_count;
+    if (
+        syncStatus === "no_facts"
+        || (
+            sourceFactCount !== null
+            && sourceFactCount !== undefined
+            && Number(sourceFactCount) === 0
+        )
+    ) return "performance_no_facts";
+    if (syncStatus === "complete" || row?.quality?.coverage_status === "complete") return "performance_complete";
+    return "performance_partial";
 }
 
 function Metric({ label, children, testId, dir = "ltr" }) {
@@ -102,7 +111,7 @@ function SettingsDetails({ row, settings }) {
     const quality = settings?.quality || {};
     const budgetUnsupported = type === "campaign" && (
         settings?.campaign_daily_budget_supported === false
-        || settings?.daily_budget_availability === "unsupported"
+        || ["unsupported_at_provider_level", "unsupported"].includes(settings?.daily_budget_availability)
     );
     const campaignBudgetUnavailable = settings?.daily_budget_unavailable_message_ar
         || SNAPCHAT_CAMPAIGN_BUDGET_UNSUPPORTED;
