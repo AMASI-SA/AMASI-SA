@@ -64,6 +64,7 @@ jobs:
               backend/integrations_control_center/snapchat_campaign_management.py|\
               backend/tests/test_snapchat_entity_settings_v1.py|\
               backend/tests/test_snapchat_campaign_management_v1.py|\
+              backend/tests/test_snapchat_management_safety_regressions_v1.py|\
               frontend/src/pages/SnapchatV2Page.jsx|\
               frontend/src/pages/SnapchatV2Page.test.jsx|\
               frontend/src/components/marketing/SnapchatCampaignManagementPanel.jsx|\
@@ -91,6 +92,7 @@ jobs:
               backend/integrations_control_center/snapchat_campaign_management.py|\
               backend/tests/test_snapchat_entity_settings_v1.py|\
               backend/tests/test_snapchat_campaign_management_v1.py|\
+              backend/tests/test_snapchat_management_safety_regressions_v1.py|\
               frontend/src/pages/SnapchatV2Page.jsx|\
               frontend/src/pages/SnapchatV2Page.test.jsx|\
               frontend/src/components/marketing/SnapchatCampaignManagementPanel.jsx|\
@@ -161,12 +163,14 @@ jobs:
             integrations_control_center/snapchat_entity_settings.py \
             integrations_control_center/snapchat_campaign_management.py \
             tests/test_snapchat_entity_settings_v1.py \
-            tests/test_snapchat_campaign_management_v1.py
+            tests/test_snapchat_campaign_management_v1.py \
+            tests/test_snapchat_management_safety_regressions_v1.py
       - name: Run settings, mapping, freshness, audit, and no-write tests
         run: >-
           python -m pytest
           tests/test_snapchat_entity_settings_v1.py
           tests/test_snapchat_campaign_management_v1.py
+          tests/test_snapchat_management_safety_regressions_v1.py
           -q
           --tb=short
 
