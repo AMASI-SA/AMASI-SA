@@ -1,4 +1,4 @@
-import api from "../lib/api";
+import api, { API_BASE } from "../lib/api";
 import { confirmReviewUnitSplit } from "../reviewUnitSplitGuard";
 
 function message(error, fallback) {
@@ -166,29 +166,24 @@ export async function listReviewedPreparationBatches({ limit = 20 } = {}) {
     }
 }
 
+export function reviewedPreparationBatchPdfUrl(batchId) {
+    return `${API_BASE}/reviewed-preparation-batches-v1/batches/${encodeURIComponent(batchId)}/pdf`;
+}
+
 export async function downloadReviewedPreparationBatchPdf(batchId, fileName = "") {
     try {
-        const { data, headers } = await api.get(
-            `/reviewed-preparation-batches-v1/batches/${encodeURIComponent(batchId)}/pdf`,
-            { responseType: "blob" },
-        );
-        const blob = data instanceof Blob
-            ? data
-            : new Blob([data], { type: "application/pdf" });
-        const url = URL.createObjectURL(blob);
         const anchor = document.createElement("a");
-        anchor.href = url;
+        anchor.href = reviewedPreparationBatchPdfUrl(batchId);
         anchor.download = fileName || `preparation-${batchId}.pdf`;
         anchor.style.display = "none";
         document.body.appendChild(anchor);
         anchor.click();
         anchor.remove();
-        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
         return {
             ok: true,
             batchId,
             fileName: anchor.download,
-            contentType: headers?.["content-type"] || "application/pdf",
+            contentType: "application/pdf",
         };
     } catch (error) {
         throw new Error(message(error, "تم إنشاء الدفعة، لكن تعذّر تحميل ملف PDF."));
