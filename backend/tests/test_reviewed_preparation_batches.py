@@ -7,6 +7,7 @@ import pytest
 from PIL import Image
 
 import reviewed_preparation_batches as batch_module
+import preparation_pdf_reference_layout as reference_layout_module
 from order_review_forward_stage_guard import (
     FORWARD_FULFILLMENT_STAGES,
     install_order_review_forward_stage_guard,
@@ -17,6 +18,7 @@ from preparation_pdf_reference_layout import (
     REFERENCE_CARDS_PER_PAGE,
     REFERENCE_COLUMNS,
     REFERENCE_ROWS,
+    build_reference_batch_lines,
     generate_reference_preparation_pdf,
     image_candidate_urls,
     reference_card_rows,
@@ -206,6 +208,112 @@ def test_ready_piece_uses_frozen_identity_even_when_workflow_projection_differs(
     assert identity.sku == "FROZEN-SKU"
     assert identity.quantity == 2
     assert state == workflow["items"][0]
+
+
+@pytest.mark.asyncio
+async def test_reference_builder_keeps_canonical_frozen_piece_identity():
+    order = SimpleNamespace(
+        order_id="order-203",
+        order_number="203",
+        created_at=datetime(2026, 8, 28, tzinfo=timezone.utc),
+        source=SimpleNamespace(source_order_id="salla-order-203"),
+        shipping=SimpleNamespace(company="iMile"),
+        items=[],
+    )
+    workflow = {"order_number": "203", "items": [{
+        "order_item_id": "line-203",
+        "quantity": 1,
+        "specifications_snapshot": {"المقاس": "10 سنوات"},
+    }]}
+    line = {
+        "identity_source": "reviewed_ready",
+        "order_number": "203",
+        "order_item_id": "line-203",
+        "line_index": 0,
+        "quantity": 1,
+        "file_spec_fields": [{
+            "spec_key": "size",
+            "name": "المقاس",
+            "value": "10 سنوات",
+            "text": "المقاس: 10 سنوات",
+        }],
+        "ready_item_identity": {
+            "order_item_id": "line-203",
+            "quantity": 1,
+            "product_name": "منتج محفوظ بعد المراجعة",
+            "options": {"المقاس": "10 سنوات"},
+        },
+    }
+    line["ready_item_id"] = stable_ready_item_id(line)
+    line["ready_unit_id"] = stable_ready_unit_id(line, 1)
+    allocation = {
+        "group_key": line["ready_unit_id"],
+        "order_number": "203",
+        "order_item_id": "line-203",
+        "ready_item_id": line["ready_item_id"],
+        "ready_unit_id": line["ready_unit_id"],
+        "quantity": 1,
+        "unit_indices": [1],
+        "line": line,
+    }
+
+    rows = await build_reference_batch_lines(
+        {"pairs": [(order, workflow)]},
+        [allocation],
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["ready_item_id"] == line["ready_item_id"]
+    assert rows[0]["ready_unit_id"] == line["ready_unit_id"]
+    assert rows[0]["quantity"] == 1
+    assert rows[0]["size"] == "10 سنوات"
+
+
+@pytest.mark.asyncio
+async def test_reference_image_enrichment_pairs_duplicate_group_rows_by_order(
+    monkeypatch,
+):
+    async def canonical_builder(_context, _planned):
+        return [
+            {
+                "group_key": "legacy-group",
+                "order_number": "301",
+                "order_item_id": "line-a",
+                "image_b64": "already-hydrated-a",
+            },
+            {
+                "group_key": "legacy-group",
+                "order_number": "302",
+                "order_item_id": "line-b",
+                "image_b64": "already-hydrated-b",
+            },
+        ]
+
+    monkeypatch.setattr(
+        reference_layout_module,
+        "_ORIGINAL_BATCH_LINE_BUILDER",
+        canonical_builder,
+    )
+    rows = await build_reference_batch_lines(
+        {"pairs": []},
+        [
+            {
+                "group_key": "legacy-group",
+                "order_number": "301",
+                "order_item_id": "line-a",
+                "line": {"image_url": "https://cdn.example/a.jpg"},
+            },
+            {
+                "group_key": "legacy-group",
+                "order_number": "302",
+                "order_item_id": "line-b",
+                "line": {"image_url": "https://cdn.example/b.jpg"},
+            },
+        ],
+    )
+
+    assert rows[0]["image_candidates"] == ["https://cdn.example/a.jpg"]
+    assert rows[1]["image_candidates"] == ["https://cdn.example/b.jpg"]
 
 
 def test_ready_piece_rejects_a_different_physical_unit_identity():

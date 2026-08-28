@@ -159,7 +159,13 @@ async def create_safe_preparation_draft(
         if not same:
             raise HTTPException(
                 status_code=409,
-                detail={"code": "preparation_file_draft_conflict"},
+                detail={
+                    "code": "preparation_file_draft_conflict",
+                    "message": (
+                        "تغيّرت بيانات الملف بعد بدء الحفظ. أغلق نافذة "
+                        "الإنشاء وافتحها من جديد."
+                    ),
+                },
             )
         return existing
 

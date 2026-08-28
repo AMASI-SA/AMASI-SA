@@ -82,6 +82,12 @@ def _display_value(value: Any) -> str:
     return _text(value)
 
 
+def _item_value(item: Any, key: str) -> Any:
+    if isinstance(item, dict):
+        return item.get(key)
+    return getattr(item, key, None)
+
+
 def extract_item_specs(item: Any) -> list[dict[str, str]]:
     """Return stable display specs without changing Salla source values."""
     rows: list[dict[str, str]] = []
@@ -100,10 +106,33 @@ def extract_item_specs(item: Any) -> list[dict[str, str]]:
             "value": display_value,
         })
 
-    for option in getattr(item, "options", None) or []:
-        add(getattr(option, "name", None), getattr(option, "value", None))
+    for option in _item_value(item, "options") or []:
+        add(_item_value(option, "name"), _item_value(option, "value"))
 
-    for field in getattr(item, "custom_fields", None) or []:
+    normalized = _item_value(item, "options_normalized") or {}
+    if isinstance(normalized, dict):
+        for name, value in normalized.items():
+            add(name, value)
+
+    raw_options = _item_value(item, "options_raw") or []
+    if isinstance(raw_options, dict):
+        raw_options = [
+            {"name": name, "value": value}
+            for name, value in raw_options.items()
+        ]
+    for option in raw_options if isinstance(raw_options, list) else []:
+        if not isinstance(option, dict):
+            continue
+        add(
+            option.get("name") or option.get("label") or option.get("key"),
+            option.get("value")
+            if option.get("value") not in (None, "")
+            else option.get("selected")
+            if option.get("selected") not in (None, "")
+            else option.get("text"),
+        )
+
+    for field in _item_value(item, "custom_fields") or []:
         if not isinstance(field, dict):
             continue
         add(
@@ -125,15 +154,19 @@ def extract_item_specs(item: Any) -> list[dict[str, str]]:
             else field.get("response"),
         )
 
-    add("اللون", getattr(item, "color", None))
-    add("المقاس", getattr(item, "size", None))
-    add("الخامة", getattr(item, "material", None))
+    add("اللون", _item_value(item, "color"))
+    add("المقاس", _item_value(item, "size"))
+    add("الخامة", _item_value(item, "material"))
     return rows
 
 
 def _snapshot_spec_rows(state: Optional[dict[str, Any]]) -> list[dict[str, str]]:
     """Read immutable review options when the later live Salla line is sparse."""
-    snapshot = (state or {}).get("specifications_snapshot") or {}
+    snapshot = (
+        (state or {}).get("specifications_snapshot")
+        or (state or {}).get("options")
+        or {}
+    )
     rows: list[dict[str, str]] = []
 
     def add(name: Any, value: Any) -> None:

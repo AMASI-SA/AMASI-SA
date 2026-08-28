@@ -999,7 +999,13 @@ async def _build_batch_lines(
                     "order_number": order_number,
                 },
             )
-        spec_fields = supplier_file_spec_fields(identity, state)
+        line = allocation.get("line") or {}
+        catalog_spec_fields = line.get("file_spec_fields")
+        spec_fields = (
+            [dict(row) for row in catalog_spec_fields if isinstance(row, dict)]
+            if isinstance(catalog_spec_fields, list)
+            else supplier_file_spec_fields(identity, state)
+        )
         # Fail closed before materialising the employee preparation file:
         # every customer option visible in Waiting Review must be frozen
         # into the immutable file snapshot unless the reviewer explicitly
@@ -1046,7 +1052,7 @@ async def _build_batch_lines(
         image_url = (
             _text(state.get("selected_image_url"))
             or _text(getattr(identity, "image_url", None))
-            or _text((allocation.get("line") or {}).get("image_url"))
+            or _text(line.get("image_url"))
         )
         image_bytes, image_mime = (None, None)
         total_products = sum(
@@ -1461,7 +1467,13 @@ def make_reviewed_preparation_batches_router(
             )
             if duplicate and _text(duplicate.get("status")) == "ready":
                 return _batch_response(duplicate)
-            raise HTTPException(status_code=409, detail={"code": "preparation_batch_build_in_progress"})
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "preparation_batch_build_in_progress",
+                    "message": "يجري إنشاء هذا الملف بالفعل؛ انتظر لحظات ولا تكرر الحفظ.",
+                },
+            )
 
         allocation_docs: list[dict[str, Any]] = []
         reservation_expiry = now + timedelta(minutes=BATCH_BUILD_TTL_MINUTES)
