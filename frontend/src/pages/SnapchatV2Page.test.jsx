@@ -69,6 +69,16 @@ import {
 } from "../services/snapchatCampaignManagement";
 import SnapchatV2Page from "./SnapchatV2Page";
 
+function deferred() {
+    let resolve;
+    let reject;
+    const promise = new Promise((resolvePromise, rejectPromise) => {
+        resolve = resolvePromise;
+        reject = rejectPromise;
+    });
+    return { promise, resolve, reject };
+}
+
 describe("SnapchatV2Page read-only load", () => {
     let container;
     let root;
@@ -305,6 +315,144 @@ describe("SnapchatV2Page read-only load", () => {
         expect(container.textContent).toContain("settings_sync_failed");
         expect(container.textContent).toContain("فشل إثبات ارتباط إعدادات الكيان بالحساب الإعلاني المحدد");
         expect(container.textContent).not.toContain("99.00 USD");
+        expect(api.post).not.toHaveBeenCalled();
+        expect(createSnapchatManagementProposal).not.toHaveBeenCalled();
+        expect(executeSnapchatManagementProposal).not.toHaveBeenCalled();
+    });
+
+    test("finishes account readiness after navigating to a child settings context without writes", async () => {
+        const readinessResponse = deferred();
+        const defaultGet = api.get.getMockImplementation();
+        api.get.mockImplementation((url, config) => (
+            url.endsWith("/unified-readiness")
+                ? readinessResponse.promise
+                : defaultGet(url, config)
+        ));
+
+        await act(async () => {
+            root.render(<SnapchatV2Page />);
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        expect(container.querySelector('[data-testid="snapchat-unified-readiness"]').textContent).toContain("جارٍ التحقق");
+
+        await act(async () => {
+            container.querySelector('[data-testid="open-da5049b7-5417-4be9-a596-20a74f9fd54c"]').click();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        await act(async () => {
+            readinessResponse.resolve({ data: { ready: true, reasons: [] } });
+            await readinessResponse.promise;
+            await Promise.resolve();
+        });
+
+        expect(container.querySelector('[data-testid="snapchat-unified-readiness"]').textContent).toContain("جاهز");
+        expect(container.querySelector('[data-testid="snapchat-unified-readiness"]').textContent).not.toContain("جارٍ التحقق");
+        expect(api.post).not.toHaveBeenCalled();
+        expect(createSnapchatManagementProposal).not.toHaveBeenCalled();
+        expect(executeSnapchatManagementProposal).not.toHaveBeenCalled();
+    });
+
+    test("keeps the latest account settings when an older account request resolves last without writes", async () => {
+        const accountASettings = deferred();
+        const accountBSettings = deferred();
+        getSnapchatEntitySettings
+            .mockImplementationOnce(() => accountASettings.promise)
+            .mockImplementationOnce(() => accountBSettings.promise);
+        const defaultGet = api.get.getMockImplementation();
+        let statusRequestCount = 0;
+        api.get.mockImplementation((url, config) => {
+            if (url.endsWith("/status")) {
+                statusRequestCount += 1;
+                const accountSuffix = statusRequestCount === 1 ? "A" : "B";
+                return Promise.resolve({
+                    data: {
+                        selected_account: {
+                            ad_account_id: `account-${accountSuffix}`,
+                            display_name: `AMASI ${accountSuffix}`,
+                            currency: "USD",
+                            timezone: "America/Los_Angeles",
+                        },
+                    },
+                });
+            }
+            return defaultGet(url, config);
+        });
+
+        await act(async () => {
+            root.render(<SnapchatV2Page />);
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        expect(getSnapchatEntitySettings).toHaveBeenCalledTimes(1);
+
+        await act(async () => {
+            container.querySelector('button[type="submit"]').click();
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        expect(getSnapchatEntitySettings).toHaveBeenCalledTimes(2);
+
+        await act(async () => {
+            accountBSettings.resolve([{
+                entity_type: "campaign",
+                unified_entity_id: "da5049b7-5417-4be9-a596-20a74f9fd54c",
+                provider_entity_id: "provider-campaign-B",
+                mapping_status: "verified",
+                mapping_verified: true,
+                ad_account_id: "account-B",
+                account_currency: "USD",
+                daily_budget_micro: null,
+                daily_budget_availability: "unsupported_at_provider_level",
+                daily_budget_unavailable_message_ar: "غير متاح من Snapchat على هذا المستوى",
+                quality: {
+                    settings_status: "settings_complete",
+                    freshness_seconds: 20,
+                    freshness_threshold_seconds: 1800,
+                    reason: "settings-from-account-B",
+                },
+            }]);
+            await accountBSettings.promise;
+            await Promise.resolve();
+        });
+        expect(container.textContent).toContain("provider-campaign-B");
+        expect(container.textContent).toContain("settings-from-account-B");
+        expect(container.textContent).toContain("account-B");
+
+        await act(async () => {
+            accountASettings.resolve([{
+                entity_type: "campaign",
+                unified_entity_id: "da5049b7-5417-4be9-a596-20a74f9fd54c",
+                provider_entity_id: "provider-campaign-A",
+                mapping_status: "verified",
+                mapping_verified: true,
+                ad_account_id: "account-A",
+                account_currency: "USD",
+                daily_budget_micro: null,
+                daily_budget_availability: "unsupported_at_provider_level",
+                daily_budget_unavailable_message_ar: "غير متاح من Snapchat على هذا المستوى",
+                quality: {
+                    settings_status: "settings_complete",
+                    freshness_seconds: 10,
+                    freshness_threshold_seconds: 1800,
+                    reason: "settings-from-account-A",
+                },
+            }]);
+            await accountASettings.promise;
+            await Promise.resolve();
+        });
+
+        expect(container.textContent).toContain("provider-campaign-B");
+        expect(container.textContent).toContain("settings-from-account-B");
+        expect(container.textContent).not.toContain("provider-campaign-A");
+        expect(container.textContent).not.toContain("settings-from-account-A");
         expect(api.post).not.toHaveBeenCalled();
         expect(createSnapchatManagementProposal).not.toHaveBeenCalled();
         expect(executeSnapchatManagementProposal).not.toHaveBeenCalled();

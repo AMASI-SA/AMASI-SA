@@ -221,8 +221,70 @@ async def test_adsquad_settings_preserve_raw_micro_and_exact_provider_mapping():
     assert result["quality"]["settings_status"] == "settings_complete"
     assert result["quality"]["freshness_seconds"] == 300
     assert result["quality"]["financial_controls_allowed"] is True
+    assert result["settings_synced_at"] == "2026-08-28T11:55:00+00:00"
+    assert result["provider_updated_at"] == "2026-08-28T11:45:00Z"
+    assert result["quality"]["settings_synced_at"] == result["settings_synced_at"]
+    assert result["quality"]["provider_updated_at"] == result["provider_updated_at"]
     assert result["settings_synced_at"] != result["provider_updated_at"]
     assert db.write_log == []
+
+
+@pytest.mark.asyncio
+async def test_financial_micro_values_only_use_provider_snapshot():
+    row = entity(
+        "ad_squad",
+        AD_SQUAD_ID,
+        campaign_id=CAMPAIGN_ID,
+        snapshot={
+            "daily_budget_micro": 25_500_000,
+            "bid_micro": 6_250_000,
+            "bid_strategy": "TARGET_COST",
+        },
+    )
+    row["daily_budget_micro"] = 999_000_000
+    row["bid_micro"] = 888_000_000
+
+    result = await module.list_financial_management_settings(
+        DB(entities=[row], accounts=[account()]),
+        USER_ID,
+        "ad_squad",
+        AD_SQUAD_ID,
+        now=NOW,
+    )
+    item = result["items"][0]
+
+    assert item["daily_budget_micro"] == 25_500_000
+    assert item["daily_budget_usd"] == 25.5
+    assert item["bid_micro"] == 6_250_000
+    assert item["bid_usd"] == 6.25
+
+
+@pytest.mark.asyncio
+async def test_legacy_top_level_micro_values_never_fill_missing_snapshot_fields():
+    row = entity(
+        "ad_squad",
+        AD_SQUAD_ID,
+        campaign_id=CAMPAIGN_ID,
+        snapshot={"bid_strategy": "AUTO_BID"},
+    )
+    row["daily_budget_micro"] = 999_000_000
+    row["bid_micro"] = 888_000_000
+
+    result = await module.list_financial_management_settings(
+        DB(entities=[row], accounts=[account()]),
+        USER_ID,
+        "ad_squad",
+        AD_SQUAD_ID,
+        now=NOW,
+    )
+    item = result["items"][0]
+
+    assert item["daily_budget_micro"] is None
+    assert item["daily_budget_usd"] is None
+    assert item["daily_budget_availability"] == "provider_field_missing"
+    assert item["bid_micro"] is None
+    assert item["bid_usd"] is None
+    assert item["bid_availability"] == "unsupported_by_strategy"
 
 
 @pytest.mark.parametrize(
@@ -280,6 +342,55 @@ async def test_non_usd_or_unknown_currency_never_gets_usd_fallback():
 
 
 @pytest.mark.asyncio
+async def test_currency_comes_from_the_exact_entity_account_not_distractors():
+    exact_account_id = "provider-account-sar"
+    row = entity(
+        "ad_squad",
+        AD_SQUAD_ID,
+        campaign_id=CAMPAIGN_ID,
+        snapshot={
+            "daily_budget_micro": 12_500_000,
+            "bid_strategy": "AUTO_BID",
+        },
+    )
+    row["ad_account_id"] = exact_account_id
+    accounts = [
+        {
+            **account("USD"),
+            "external_account_id": "distractor-usd",
+            "ad_account_id": "distractor-usd",
+        },
+        {
+            **account("USD"),
+            "user_id": "other-owner",
+            "external_account_id": exact_account_id,
+            "ad_account_id": exact_account_id,
+        },
+        {
+            **account("SAR"),
+            "external_account_id": exact_account_id,
+            "ad_account_id": exact_account_id,
+        },
+    ]
+
+    result = await module.list_financial_management_settings(
+        DB(entities=[row], accounts=accounts),
+        USER_ID,
+        "ad_squad",
+        AD_SQUAD_ID,
+        now=NOW,
+    )
+    item = result["items"][0]
+
+    assert item["ad_account_id"] == exact_account_id
+    assert item["account_currency_raw"] == "SAR"
+    assert item["account_currency"] == "SAR"
+    assert item["daily_budget_account_currency"] == 12.5
+    assert item["daily_budget_usd"] is None
+    assert item["mapping_source"] == ("mezan_snapchat_entities_v2.provider_snapshot.id")
+
+
+@pytest.mark.asyncio
 async def test_campaign_budget_missing_is_unsupported_and_never_replaced_by_sum():
     campaign = entity(
         "campaign",
@@ -327,13 +438,19 @@ async def test_campaign_budget_missing_is_unsupported_and_never_replaced_by_sum(
     assert item["quality"]["settings_status"] == "settings_complete"
     assert item["quality"]["financial_controls_allowed"] is False
     assert item["quality"]["reason"] == "unsupported_at_provider_level"
+    assert item["quality"]["financial_field_controls"]["daily_budget"] == {
+        "allowed": False,
+        "reason": "unsupported_at_provider_level",
+    }
     assert item["daily_budget_unavailable_message_ar"] == (
         "غير متاح من Snapchat على هذا المستوى"
     )
+    assert item["unavailable_message_ar"] == ("غير متاح من Snapchat على هذا المستوى")
     assert item["ad_squad_daily_budget_sum_micro"] == 30_000_000
     assert item["ad_squad_daily_budget_sum_usd"] == 30.0
     assert item["ad_squads_daily_budget_micro"] == 30_000_000
     assert item["ad_squads_daily_budget_usd"] == 30.0
+    assert item["ad_squad_daily_budget_sum_availability"] == "available"
     assert item["active_ad_squad_count"] == 1
     assert item["active_ad_squads"] == 1
     assert item["shared_ad_squad_bid_strategy"] == "TARGET_COST"
@@ -341,7 +458,106 @@ async def test_campaign_budget_missing_is_unsupported_and_never_replaced_by_sum(
         "LOWEST_COST_WITH_MAX_BID",
         "TARGET_COST",
     ]
-    assert item["daily_budget_micro"] != (item["ad_squad_daily_budget_sum_micro"])
+    assert item["campaign_aggregate"]["loaded_ad_squad_count"] == 2
+    assert (
+        item["campaign_aggregate"]["catalog_coverage"]["campaign_children_complete"]
+        is True
+    )
+    assert item["daily_budget_micro"] != item["ad_squad_daily_budget_sum_micro"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    (
+        "snapshot",
+        "expected_micro",
+        "availability",
+        "message_ar",
+        "quality_reason",
+        "control_allowed",
+    ),
+    [
+        pytest.param(
+            {},
+            None,
+            "unsupported_at_provider_level",
+            "غير متاح من Snapchat على هذا المستوى",
+            "unsupported_at_provider_level",
+            False,
+            id="absent",
+        ),
+        pytest.param(
+            {"daily_budget_micro": None},
+            None,
+            "invalid_provider_value",
+            "غير متاح — فشل جلب الإعدادات",
+            "invalid_provider_value",
+            False,
+            id="null",
+        ),
+        pytest.param(
+            {"daily_budget_micro": 0},
+            0,
+            "invalid_provider_value",
+            "غير متاح — فشل جلب الإعدادات",
+            "invalid_provider_value",
+            False,
+            id="zero",
+        ),
+        pytest.param(
+            {"daily_budget_micro": "not-a-micro-value"},
+            "not-a-micro-value",
+            "invalid_provider_value",
+            "غير متاح — فشل جلب الإعدادات",
+            "invalid_provider_value",
+            False,
+            id="invalid",
+        ),
+        pytest.param(
+            {"daily_budget_micro": 50_000_000},
+            50_000_000,
+            "available",
+            None,
+            "provider_snapshot_fresh",
+            True,
+            id="positive",
+        ),
+    ],
+)
+async def test_campaign_daily_spend_cap_availability_matrix(
+    snapshot,
+    expected_micro,
+    availability,
+    message_ar,
+    quality_reason,
+    control_allowed,
+):
+    campaign = entity("campaign", CAMPAIGN_ID, snapshot=snapshot)
+
+    result = await module.list_financial_management_settings(
+        DB(entities=[campaign], accounts=[account()]),
+        USER_ID,
+        "campaign",
+        CAMPAIGN_ID,
+        now=NOW,
+    )
+    item = result["items"][0]
+
+    assert item["daily_budget_micro"] == expected_micro
+    assert item["daily_budget_account_currency"] == (
+        50.0 if availability == "available" else None
+    )
+    assert item["daily_budget_usd"] == (50.0 if availability == "available" else None)
+    assert item["daily_budget_availability"] == availability
+    assert item["daily_budget_unavailable_message_ar"] == message_ar
+    assert item["unavailable_message_ar"] == message_ar
+    assert item["quality"]["settings_status"] == "settings_complete"
+    assert item["quality"]["financial_controls_allowed"] is control_allowed
+    assert item["quality"]["reason"] == quality_reason
+    assert item["quality"]["financial_field_controls"]["daily_budget"] == {
+        "allowed": control_allowed,
+        "reason": "available" if control_allowed else quality_reason,
+    }
 
 
 @pytest.mark.asyncio
@@ -548,6 +764,60 @@ async def test_empty_children_do_not_use_positive_account_count_as_zero_proof():
     assert aggregate["active_count_availability"] == ("child_catalog_zero_not_proven")
     assert aggregate["ad_squad_bid_strategies"] == []
     assert aggregate["bid_strategies_availability"] == ("child_catalog_zero_not_proven")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("provider_account_count", [2, 4])
+async def test_larger_account_count_never_proves_partial_campaign_coverage(
+    provider_account_count,
+):
+    campaign = entity("campaign", CAMPAIGN_ID, snapshot={})
+    child = entity(
+        "ad_squad",
+        AD_SQUAD_ID,
+        campaign_id=CAMPAIGN_ID,
+        snapshot={
+            "daily_budget_micro": 10_000_000,
+            "bid_strategy": "AUTO_BID",
+            "status": "ACTIVE",
+        },
+    )
+    result = await module.list_financial_management_settings(
+        DB(
+            entities=[campaign, child],
+            accounts=[account()],
+            runs=[catalog_run(ad_squad_count=provider_account_count)],
+        ),
+        USER_ID,
+        "campaign",
+        CAMPAIGN_ID,
+        now=NOW,
+    )
+    aggregate = result["items"][0]["campaign_aggregate"]
+
+    assert aggregate["catalog_coverage"]["complete"] is True
+    assert aggregate["catalog_coverage"]["provider_account_ad_squad_count"] == (
+        provider_account_count
+    )
+    assert aggregate["catalog_coverage"]["campaign_children_complete"] is False
+    assert aggregate["catalog_coverage"]["campaign_children_reason"] == (
+        "child_catalog_campaign_scope_proof_missing"
+    )
+    assert aggregate["loaded_ad_squad_count"] == 1
+    assert aggregate["ad_squad_count"] is None
+    assert aggregate["daily_budget_sum_micro"] is None
+    assert aggregate["daily_budget_sum_usd"] is None
+    assert aggregate["daily_budget_sum_availability"] == (
+        "child_catalog_campaign_scope_proof_missing"
+    )
+    assert aggregate["active_ad_squad_count"] is None
+    assert aggregate["active_count_availability"] == (
+        "child_catalog_campaign_scope_proof_missing"
+    )
+    assert aggregate["ad_squad_bid_strategies"] == []
+    assert aggregate["bid_strategies_availability"] == (
+        "child_catalog_campaign_scope_proof_missing"
+    )
 
 
 @pytest.mark.asyncio
@@ -834,8 +1104,18 @@ async def test_provider_id_or_parent_mismatch_is_fail_closed():
         now=NOW,
     )
     assert wrong_provider["mapping_status"] == "mismatch"
+    assert wrong_provider["mapping_verified"] is False
+    assert wrong_provider["mapping_source"] is None
     assert wrong_provider["quality"]["settings_status"] == ("settings_sync_failed")
+    assert wrong_provider["quality"]["reason"] == "provider_entity_id_mismatch"
     assert wrong_provider["quality"]["financial_controls_allowed"] is False
+    assert wrong_provider["quality"]["financial_field_controls"] == {
+        "daily_budget": {
+            "allowed": False,
+            "reason": "provider_entity_id_mismatch",
+        },
+        "bid": {"allowed": False, "reason": "provider_entity_id_mismatch"},
+    }
 
     wrong_parent = await module.resolve_financial_management_settings(
         db,
@@ -847,7 +1127,10 @@ async def test_provider_id_or_parent_mismatch_is_fail_closed():
         now=NOW,
     )
     assert wrong_parent["mapping_status"] == "parent_mismatch"
+    assert wrong_parent["mapping_verified"] is False
+    assert wrong_parent["mapping_source"] is None
     assert wrong_parent["quality"]["reason"] == ("provider_parent_id_mismatch")
+    assert wrong_parent["quality"]["financial_controls_allowed"] is False
 
 
 @pytest.mark.asyncio
@@ -945,6 +1228,57 @@ async def test_entity_settings_get_route_is_database_read_only():
 def test_financial_settings_freshness_window_is_explicitly_thirty_minutes():
     # Financial preview is fail-closed against entity settings older than 30m.
     assert module.SETTINGS_FRESHNESS_MAX_AGE_SECONDS == 30 * 60
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("age_seconds", "settings_status", "reason", "controls_allowed"),
+    [
+        (1800, "settings_complete", "provider_snapshot_fresh", True),
+        (1801, "settings_stale", "settings_older_than_freshness_threshold", False),
+    ],
+)
+async def test_freshness_boundary_includes_reason_and_separate_timestamps(
+    age_seconds,
+    settings_status,
+    reason,
+    controls_allowed,
+):
+    settings_synced_at = (NOW - timedelta(seconds=age_seconds)).isoformat()
+    provider_updated_at = "2026-08-28T10:45:00Z"
+    row = entity(
+        "ad_squad",
+        AD_SQUAD_ID,
+        campaign_id=CAMPAIGN_ID,
+        observed_at=settings_synced_at,
+        snapshot={
+            "daily_budget_micro": 25_000_000,
+            "bid_strategy": "AUTO_BID",
+            "updated_at": provider_updated_at,
+        },
+    )
+
+    result = await module.list_financial_management_settings(
+        DB(entities=[row], accounts=[account()]),
+        USER_ID,
+        "ad_squad",
+        AD_SQUAD_ID,
+        now=NOW,
+    )
+    item = result["items"][0]
+    quality = item["quality"]
+
+    assert result["settings_freshness_threshold_seconds"] == 1800
+    assert quality["freshness_threshold_seconds"] == 1800
+    assert quality["freshness_seconds"] == age_seconds
+    assert quality["settings_status"] == settings_status
+    assert quality["reason"] == reason
+    assert quality["financial_controls_allowed"] is controls_allowed
+    assert item["settings_synced_at"] == settings_synced_at
+    assert quality["settings_synced_at"] == settings_synced_at
+    assert item["provider_updated_at"] == provider_updated_at
+    assert quality["provider_updated_at"] == provider_updated_at
+    assert item["settings_synced_at"] != item["provider_updated_at"]
 
 
 def test_micro_conversion_rejects_missing_invalid_or_fractional_raw_values():

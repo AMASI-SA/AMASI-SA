@@ -33,6 +33,7 @@ from .snapchat_native_data_common import (
 )
 from .snapchat_native_entities_sync import _safe_provider_value, _upsert_entity
 from .snapchat_entity_settings import (
+    SETTINGS_FRESHNESS_MAX_AGE_SECONDS,
     attach_snapchat_entity_settings_routes,
     resolve_financial_management_settings,
 )
@@ -590,6 +591,12 @@ def _provider_parent_id(row: dict[str, Any]) -> str:
 
 
 def _safe_settings_proof(settings: dict[str, Any]) -> dict[str, Any]:
+    settings_synced_at = (
+        _quality_value(settings, "settings_synced_at")
+        or _settings_value(settings, "settings_synced_at")
+        or _quality_value(settings, "last_synced_at")
+        or _quality_value(settings, "last_observed_at")
+    )
     proof = {
         "unified_entity_id": _mapping_value(settings, "unified_entity_id"),
         "provider_entity_id": _mapping_value(settings, "provider_entity_id"),
@@ -613,16 +620,12 @@ def _safe_settings_proof(settings: dict[str, Any]) -> dict[str, Any]:
             if isinstance(_quality_value(settings, "financial_field_controls"), dict)
             else {}
         ),
-        "last_synced_at": (
-            _quality_value(settings, "settings_synced_at")
-            or _settings_value(settings, "settings_synced_at")
-            or _quality_value(settings, "last_synced_at")
-            or _quality_value(settings, "last_observed_at")
-        ),
+        "settings_synced_at": settings_synced_at,
+        # Backward-compatible alias for already persisted proposals.  The
+        # canonical proof and API detail keep this distinct from provider time.
+        "last_synced_at": settings_synced_at,
         "freshness_seconds": _quality_value(settings, "freshness_seconds"),
-        "freshness_threshold_seconds": _quality_value(
-            settings, "freshness_threshold_seconds"
-        ),
+        "freshness_threshold_seconds": SETTINGS_FRESHNESS_MAX_AGE_SECONDS,
         "reason": _quality_value(settings, "reason"),
         "provider_updated_at": (
             _quality_value(settings, "provider_updated_at")
@@ -639,6 +642,68 @@ def _safe_settings_proof(settings: dict[str, Any]) -> dict[str, Any]:
         "bid_strategy": _settings_value(settings, "bid_strategy"),
     }
     return _safe_provider_value(proof)
+
+
+def _financial_settings_unavailable_detail(
+    proof: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "code": "snapchat_management_financial_settings_unavailable",
+        "message": "غير متاح — فشل جلب الإعدادات",
+        "settings_status": proof.get("settings_status") or "settings_not_loaded",
+        "financial_controls_allowed": False,
+        "settings_synced_at": proof.get("settings_synced_at"),
+        "provider_updated_at": proof.get("provider_updated_at"),
+        "freshness_seconds": proof.get("freshness_seconds"),
+        "freshness_threshold_seconds": proof.get("freshness_threshold_seconds"),
+        "reason": proof.get("reason") or "settings_unavailable",
+    }
+
+
+def _settings_proof_at_provider_write(
+    proof: dict[str, Any], *, now: datetime | None = None
+) -> dict[str, Any]:
+    """Recompute the 1800-second fence synchronously at the write boundary."""
+    checked = dict(proof)
+    checked["freshness_threshold_seconds"] = SETTINGS_FRESHNESS_MAX_AGE_SECONDS
+    synced_at = _provider_datetime(checked.get("settings_synced_at"))
+    if synced_at is None:
+        checked.update(
+            {
+                "settings_status": "settings_not_loaded",
+                "freshness_seconds": None,
+                "reason": "settings_synced_at_missing",
+                "financial_controls_allowed": False,
+            }
+        )
+        raise HTTPException(
+            status_code=409,
+            detail=_financial_settings_unavailable_detail(checked),
+        )
+    age = int(((now or _utcnow()) - synced_at).total_seconds())
+    checked["freshness_seconds"] = max(0, age)
+    if age < -300:
+        checked.update(
+            {
+                "settings_status": "settings_sync_failed",
+                "reason": "settings_synced_at_in_future",
+                "financial_controls_allowed": False,
+            }
+        )
+    elif age > SETTINGS_FRESHNESS_MAX_AGE_SECONDS:
+        checked.update(
+            {
+                "settings_status": "settings_stale",
+                "reason": "settings_older_than_freshness_threshold",
+                "financial_controls_allowed": False,
+            }
+        )
+    if checked.get("settings_status") != "settings_complete":
+        raise HTTPException(
+            status_code=409,
+            detail=_financial_settings_unavailable_detail(checked),
+        )
+    return checked
 
 
 async def _resolve_management_settings_proof(
@@ -774,13 +839,7 @@ async def _resolve_management_settings_proof(
     ):
         raise HTTPException(
             status_code=409,
-            detail={
-                "code": "snapchat_management_financial_settings_unavailable",
-                "message": "غير متاح — فشل جلب الإعدادات",
-                "settings_status": proof.get("settings_status")
-                or "settings_not_loaded",
-                "financial_controls_allowed": False,
-            },
+            detail=_financial_settings_unavailable_detail(proof),
         )
     return proof
 
@@ -810,11 +869,24 @@ def _structured_field_changes(
     occurred_at: str | None = None,
 ) -> dict[str, Any]:
     before = original if isinstance(original, dict) else {}
-    after_source = verified if isinstance(verified, dict) else requested
+    reread_verified = (
+        isinstance(verified, dict)
+        if provider_reread_verified is None
+        else provider_reread_verified is True
+    )
+    # A preview may show the requested value, but a failed/missing provider
+    # reread must never relabel that requested value as an observed "after".
+    use_requested_preview = verified is None and provider_reread_verified is None
+    after_source = (
+        verified
+        if isinstance(verified, dict)
+        else (requested if use_requested_preview else {})
+    )
     changes: dict[str, Any] = {}
     for field in sorted(requested):
         before_value = before.get(field)
-        after_value = after_source.get(field)
+        after_observed = field in after_source
+        after_value = after_source.get(field) if after_observed else None
         entry: dict[str, Any] = {
             "before": _safe_provider_value(before_value),
             "after": _safe_provider_value(after_value),
@@ -835,11 +907,6 @@ def _structured_field_changes(
                 }
             )
         changes[field] = entry
-    reread_verified = (
-        isinstance(verified, dict)
-        if provider_reread_verified is None
-        else provider_reread_verified is True
-    )
     return {
         "fields": changes,
         "actor_id": actor_id,
@@ -879,14 +946,18 @@ def _allow_only(
     return dict(payload)
 
 
+def _strict_micro_integer(value: Any, *, field: str) -> int:
+    """Accept JSON integers only; never coerce booleans, floats, or strings."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{field} must be an integer")
+    return value
+
+
 def _budget_guard(entity: dict[str, Any]) -> None:
     for key in ("daily_budget_micro",):
         if key not in entity:
             continue
-        try:
-            value = int(entity[key])
-        except (TypeError, ValueError) as exc:
-            raise ValueError(f"{key} must be an integer") from exc
+        value = _strict_micro_integer(entity[key], field=key)
         if value < 5_000_000 or value > _max_daily_budget_micro():
             raise ValueError(
                 f"{key} must be between 5000000 and {_max_daily_budget_micro()}"
@@ -895,10 +966,7 @@ def _budget_guard(entity: dict[str, Any]) -> None:
     for key in ("lifetime_budget_micro", "lifetime_spend_cap_micro", "bid_micro"):
         if key not in entity:
             continue
-        try:
-            value = int(entity[key])
-        except (TypeError, ValueError) as exc:
-            raise ValueError(f"{key} must be an integer") from exc
+        value = _strict_micro_integer(entity[key], field=key)
         if value < 0 or value > 50_000_000_000_000:
             raise ValueError(f"{key} is outside the safety range")
         entity[key] = value
@@ -1409,6 +1477,52 @@ def _explicit_provider_validation_no_write_proof(
         "failed_subrequests": len(wrappers),
         "expected_plural": expected_plural,
     }
+
+
+def _assert_provider_entity_identity(
+    entity: Any,
+    expected_entity_id: Any,
+    *,
+    phase: str,
+) -> dict[str, Any]:
+    """Fail closed unless a provider entity is the exact entity we addressed."""
+    expected = str(expected_entity_id or "").strip()
+    actual = str(entity.get("id") or "").strip() if isinstance(entity, dict) else ""
+    if not expected or actual != expected:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "code": "snapchat_management_provider_identity_mismatch",
+                "phase": phase,
+                "expected_provider_entity_id": expected or None,
+                "actual_provider_entity_id": actual or None,
+            },
+        )
+    return entity
+
+
+def _provider_created_entity_id(entity: Any, *, phase: str) -> str:
+    actual = str(entity.get("id") or "").strip() if isinstance(entity, dict) else ""
+    if not actual:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "code": "snapchat_management_provider_identity_missing",
+                "phase": phase,
+            },
+        )
+    return actual
+
+
+async def _read_provider_entity(
+    client: Any,
+    entity_type: str,
+    entity_id: str,
+    *,
+    phase: str,
+) -> dict[str, Any]:
+    entity = await client.read_entity(entity_type, entity_id)
+    return _assert_provider_entity_identity(entity, entity_id, phase=phase)
 
 
 class SnapchatManagementProvider:
@@ -1942,8 +2056,11 @@ class SnapchatManagementProvider:
         }[entity_type]
         params = {"return_placement_v2": "true"} if entity_type == "ad_squad" else None
         payload = await self._request("GET", f"/{path_kind}/{entity_id}", params=params)
-        return _extract_entity(
+        entity = _extract_entity(
             payload, path_kind, "adsquad" if entity_type == "ad_squad" else entity_type
+        )
+        return _assert_provider_entity_identity(
+            entity, entity_id, phase="provider_get_response"
         )
 
     async def execute(self, operation: dict[str, Any]) -> dict[str, Any]:
@@ -2267,12 +2384,9 @@ def _legacy_field_change_audit(row: dict[str, Any]) -> dict[str, Any]:
     after_snapshot = None
     if provider_snapshot is not None:
         after_snapshot = {
-            field: (
-                provider_snapshot.get(field)
-                if field in provider_snapshot
-                else requested.get(field)
-            )
+            field: provider_snapshot.get(field)
             for field in requested
+            if field in provider_snapshot
         }
     mismatches = verification.get("mismatched_fields")
     if not isinstance(mismatches, list):
@@ -2834,16 +2948,12 @@ async def create_snapchat_management_proposal(
     original: dict[str, Any] | None = None
     pixel_eligibility: dict[str, Any] | None = None
     if payload.action in UPDATE_ACTIONS:
-        original = await client.read_entity(
-            operation["entity_type"], effective_payload.target_id or ""
+        original = await _read_provider_entity(
+            client,
+            operation["entity_type"],
+            effective_payload.target_id or "",
+            phase="proposal_target_read",
         )
-        if payload.action in SETTINGS_MANAGED_UPDATE_ACTIONS and str(
-            original.get("id") or ""
-        ) != str(settings_proof.get("provider_entity_id") or ""):
-            raise HTTPException(
-                status_code=409,
-                detail={"code": "snapchat_management_provider_identity_mismatch"},
-            )
         if payload.action in SETTINGS_MANAGED_UPDATE_ACTIONS:
             _assert_provider_financial_snapshot_matches_proof(
                 operation=operation,
@@ -2864,8 +2974,11 @@ async def create_snapchat_management_proposal(
                     status_code=409,
                     detail={"code": "snapchat_management_target_parent_mismatch"},
                 )
-            campaign = await client.read_entity(
-                "campaign", effective_payload.parent_id or ""
+            campaign = await _read_provider_entity(
+                client,
+                "campaign",
+                effective_payload.parent_id or "",
+                phase="proposal_parent_campaign_read",
             )
             if str(campaign.get("id") or "") != str(
                 settings_proof.get("provider_parent_id") or ""
@@ -2887,9 +3000,18 @@ async def create_snapchat_management_proposal(
                     status_code=409,
                     detail={"code": "snapchat_management_target_parent_mismatch"},
                 )
-            ad_squad = await client.read_entity("ad_squad", payload.parent_id or "")
-            campaign = await client.read_entity(
-                "campaign", str(ad_squad.get("campaign_id") or "")
+            ad_squad = await _read_provider_entity(
+                client,
+                "ad_squad",
+                payload.parent_id or "",
+                phase="proposal_parent_ad_squad_read",
+            )
+            campaign_id = str(ad_squad.get("campaign_id") or "")
+            campaign = await _read_provider_entity(
+                client,
+                "campaign",
+                campaign_id,
+                phase="proposal_ancestor_campaign_read",
             )
             if str(campaign.get("ad_account_id") or "") != payload.account_id:
                 raise HTTPException(
@@ -2897,7 +3019,12 @@ async def create_snapchat_management_proposal(
                     detail={"code": "snapchat_management_target_account_mismatch"},
                 )
     elif payload.action == "ad_squad.create":
-        parent = await client.read_entity("campaign", payload.parent_id or "")
+        parent = await _read_provider_entity(
+            client,
+            "campaign",
+            payload.parent_id or "",
+            phase="create_parent_campaign_read",
+        )
         if str(parent.get("id") or "") != str(payload.parent_id or ""):
             raise HTTPException(
                 status_code=409,
@@ -2915,14 +3042,23 @@ async def create_snapchat_management_proposal(
             reread_parent=False,
         )
     elif payload.action == "ad.create":
-        parent = await client.read_entity("ad_squad", payload.parent_id or "")
+        parent = await _read_provider_entity(
+            client,
+            "ad_squad",
+            payload.parent_id or "",
+            phase="create_parent_ad_squad_read",
+        )
         if str(parent.get("id") or "") != str(payload.parent_id or ""):
             raise HTTPException(
                 status_code=409,
                 detail={"code": "snapchat_management_target_parent_mismatch"},
             )
-        campaign = await client.read_entity(
-            "campaign", str(parent.get("campaign_id") or "")
+        campaign_id = str(parent.get("campaign_id") or "")
+        campaign = await _read_provider_entity(
+            client,
+            "campaign",
+            campaign_id,
+            phase="create_ancestor_campaign_read",
         )
         if str(campaign.get("ad_account_id") or "") != payload.account_id:
             raise HTTPException(
@@ -2930,8 +3066,11 @@ async def create_snapchat_management_proposal(
                 detail={"code": "snapchat_management_parent_account_mismatch"},
             )
         ad_entity = operation["body"]["ads"][0]
-        creative = await client.read_entity(
-            "creative", str(ad_entity.get("creative_id") or "")
+        creative = await _read_provider_entity(
+            client,
+            "creative",
+            str(ad_entity.get("creative_id") or ""),
+            phase="create_creative_read",
         )
         if str(creative.get("id") or "") != str(ad_entity.get("creative_id") or ""):
             raise HTTPException(
@@ -3405,6 +3544,11 @@ async def _complete_verified_execution(
     verified: dict[str, Any],
     event: str,
 ) -> dict[str, Any]:
+    _assert_provider_entity_identity(
+        verified,
+        provider_entity_id,
+        phase="verified_execution_completion",
+    )
     now_iso = _iso()
     stored_settings_proof = (
         row.get("settings_proof") if isinstance(row.get("settings_proof"), dict) else {}
@@ -3448,11 +3592,6 @@ async def _complete_verified_execution(
                 "provider_entity_id": provider_entity_id,
                 "verification": verification,
                 "field_changes": field_changes,
-                "execution_settings_proof": (
-                    row.get("execution_settings_proof")
-                    or row.get("settings_proof")
-                    or {}
-                ),
                 "execution_retryable": False,
                 "automatic_retry_allowed": False,
                 "failure": {},
@@ -4559,7 +4698,12 @@ async def _reconcile_uncertain_create_without_id(
 
     candidate_id = str(matches[0].get("id") or "")
     try:
-        verified = await client.read_entity(operation["entity_type"], candidate_id)
+        verified = await _read_provider_entity(
+            client,
+            operation["entity_type"],
+            candidate_id,
+            phase="create_reconciliation_readback",
+        )
     except Exception:
         await _record_create_reconciliation_inconclusive(
             db,
@@ -4752,6 +4896,7 @@ async def _execute_snapchat_management_proposal_under_lease(
             detail={"code": "snapchat_management_operation_integrity_failed"},
         ) from exc
     execution_settings_proof: dict[str, Any] = {}
+    revalidation_payload: SnapchatManagementProposalInput | None = None
     if str(
         row.get("action") or ""
     ) in SETTINGS_MANAGED_UPDATE_ACTIONS and _operation_financial_fields(operation):
@@ -4810,9 +4955,11 @@ async def _execute_snapchat_management_proposal_under_lease(
             status_code=409, detail={"code": "snapchat_management_role_missing"}
         )
     if str(row.get("action") or "") in UPDATE_ACTIONS:
-        preflight_entity = await client.read_entity(
+        preflight_entity = await _read_provider_entity(
+            client,
             str(operation.get("entity_type") or ""),
             _provider_target_id(row),
+            phase="execution_preflight_read",
         )
         preflight_stale_fields = _provider_state_conflict_fields(
             operation,
@@ -4966,9 +5113,11 @@ async def _execute_snapchat_management_proposal_under_lease(
     # immutable preview, fail closed and leave the provider untouched.
     if str(row.get("action") or "") in UPDATE_ACTIONS:
         try:
-            current_entity = await client.read_entity(
+            current_entity = await _read_provider_entity(
+                client,
                 str(operation.get("entity_type") or ""),
                 _provider_target_id(row),
+                phase="execution_final_prewrite_read",
             )
         except Exception:
             # No provider write has been attempted yet.  Release the local
@@ -5064,6 +5213,37 @@ async def _execute_snapchat_management_proposal_under_lease(
             status_code=409,
             detail={"code": "snapchat_campaign_activation_disabled"},
         )
+    final_settings_proof: dict[str, Any] = {}
+    if revalidation_payload is not None:
+        try:
+            final_settings_proof = await _resolve_management_settings_proof(
+                db,
+                user_id,
+                revalidation_payload,
+                operation=operation,
+                require_financial=True,
+            )
+            final_settings_proof = _settings_proof_at_provider_write(
+                final_settings_proof
+            )
+            _assert_provider_financial_snapshot_matches_proof(
+                operation=operation,
+                provider_snapshot=current_entity,
+                settings_proof=final_settings_proof,
+            )
+        except Exception as exc:
+            failure = (
+                exc.detail
+                if isinstance(exc, HTTPException) and isinstance(exc.detail, dict)
+                else {"code": "snapchat_management_final_settings_read_failed"}
+            )
+            await _reset_execution_claim(
+                db,
+                user_id=user_id,
+                proposal_id=proposal_id,
+                failure=failure,
+            )
+            raise
     write_claim = await _collection(db, PROPOSAL_COLLECTION).update_one(
         {
             "user_id": user_id,
@@ -5075,6 +5255,11 @@ async def _execute_snapchat_management_proposal_under_lease(
             "$set": {
                 "provider_write_state": "attempting",
                 "provider_write_attempted_at": _iso(),
+                **(
+                    {"execution_settings_proof": final_settings_proof}
+                    if final_settings_proof
+                    else {}
+                ),
             }
         },
     )
@@ -5089,6 +5274,19 @@ async def _execute_snapchat_management_proposal_under_lease(
             status_code=409,
             detail={"code": "snapchat_management_provider_write_claim_failed"},
         )
+    if final_settings_proof:
+        try:
+            final_settings_proof = _settings_proof_at_provider_write(
+                final_settings_proof
+            )
+        except HTTPException as exc:
+            await _reset_execution_claim(
+                db,
+                user_id=user_id,
+                proposal_id=proposal_id,
+                failure=(exc.detail if isinstance(exc.detail, dict) else None),
+            )
+            raise
     provider_write_confirmed = False
     provider_entity_id = (
         _provider_target_id(row)
@@ -5101,7 +5299,19 @@ async def _execute_snapchat_management_proposal_under_lease(
     try:
         provider_entity = await client.execute(operation)
         provider_write_confirmed = True
-        provider_entity_id = str(provider_entity.get("id") or _provider_target_id(row))
+        response_entity_id = _provider_created_entity_id(
+            provider_entity, phase="provider_write_response"
+        )
+        if str(row.get("action") or "") in UPDATE_ACTIONS:
+            expected_provider_id = _provider_target_id(row)
+            _assert_provider_entity_identity(
+                provider_entity,
+                expected_provider_id,
+                phase="provider_update_response",
+            )
+            provider_entity_id = expected_provider_id
+        else:
+            provider_entity_id = response_entity_id
         await _collection(db, PROPOSAL_COLLECTION).update_one(
             {"user_id": user_id, "proposal_id": proposal_id, "status": "executing"},
             {
@@ -5123,8 +5333,11 @@ async def _execute_snapchat_management_proposal_under_lease(
                 }
             },
         )
-        verified = await client.read_entity(
-            operation["entity_type"], provider_entity_id
+        verified = await _read_provider_entity(
+            client,
+            operation["entity_type"],
+            provider_entity_id,
+            phase="provider_write_readback",
         )
         latest_provider_reread = verified
         verified_ok, mismatches = _changed_values_match(expected, verified)
@@ -5154,20 +5367,44 @@ async def _execute_snapchat_management_proposal_under_lease(
             if isinstance(exc, HTTPException)
             else {"code": "snapchat_management_execution_failed"}
         )
+        identity_mismatch = bool(
+            isinstance(detail, dict)
+            and detail.get("code")
+            in {
+                "snapchat_management_provider_identity_mismatch",
+                "snapchat_management_provider_identity_missing",
+            }
+        )
+        provider_reread_identity_mismatch: dict[str, Any] | None = None
         readback: dict[str, Any] | None = None
         if provider_entity_id:
             try:
-                readback = await client.read_entity(
-                    operation["entity_type"], provider_entity_id
+                readback = await _read_provider_entity(
+                    client,
+                    operation["entity_type"],
+                    provider_entity_id,
+                    phase="provider_write_reconciliation_readback",
                 )
-            except Exception:
+            except Exception as reread_exc:
                 provider_reread_failed = True
+                reread_detail = (
+                    reread_exc.detail
+                    if isinstance(reread_exc, HTTPException)
+                    and isinstance(reread_exc.detail, dict)
+                    else {}
+                )
+                if reread_detail.get("code") in {
+                    "snapchat_management_provider_identity_mismatch",
+                    "snapchat_management_provider_identity_missing",
+                }:
+                    identity_mismatch = True
+                    provider_reread_identity_mismatch = dict(reread_detail)
                 readback = latest_provider_reread
 
         reread_mismatches: list[str] = []
         if readback is not None:
             planned_ok, reread_mismatches = _changed_values_match(expected, readback)
-            if planned_ok:
+            if planned_ok and not identity_mismatch:
                 return await _complete_verified_execution(
                     db,
                     user_id=user_id,
@@ -5204,7 +5441,11 @@ async def _execute_snapchat_management_proposal_under_lease(
             and not provider_write_confirmed
             and not provider_entity_id
         )
-        known_not_applied = original_ok or explicit_validation_no_write
+        # Once a provider write returned the wrong identity, rereading the
+        # intended target unchanged cannot exclude a side effect elsewhere.
+        known_not_applied = bool(
+            (original_ok or explicit_validation_no_write) and not identity_mismatch
+        )
         uncertain = not known_not_applied
         write_state = (
             "confirmed_not_applied"
@@ -5217,6 +5458,10 @@ async def _execute_snapchat_management_proposal_under_lease(
             else "manual_reconcile_provider_entity_before_retry_or_rollback"
         )
         safe_detail = dict(detail) if isinstance(detail, dict) else {}
+        if provider_reread_identity_mismatch:
+            safe_detail["provider_reread_identity_mismatch"] = (
+                provider_reread_identity_mismatch
+            )
         if reread_mismatches:
             safe_detail["mismatched_fields"] = sorted(set(reread_mismatches))
         reconciliation_checked_at = _iso()
@@ -5688,7 +5933,12 @@ async def reconcile_snapchat_management_proposal(
             },
         )
     try:
-        current = await client.read_entity(operation["entity_type"], entity_id)
+        current = await _read_provider_entity(
+            client,
+            operation["entity_type"],
+            entity_id,
+            phase="manual_reconciliation_read",
+        )
     except Exception:
         await _audit(
             db,
@@ -5699,12 +5949,6 @@ async def reconcile_snapchat_management_proposal(
             detail={"recovery_action": "retry_read_only_reconciliation"},
         )
         raise
-    if str(current.get("id") or "") != entity_id:
-        raise HTTPException(
-            status_code=502,
-            detail={"code": "snapchat_management_reconciliation_identity_mismatch"},
-        )
-
     if execution_uncertain:
         expected = _operation_expected_values(operation)
         planned_ok, _ = _changed_values_match(expected, current)
@@ -6159,7 +6403,12 @@ async def _rollback_snapchat_management_proposal_under_lease(
     rollback_write_attempted = False
     rollback: dict[str, Any] | None = None
     try:
-        current = await client.read_entity(operation["entity_type"], entity_id)
+        current = await _read_provider_entity(
+            client,
+            operation["entity_type"],
+            entity_id,
+            phase="rollback_prewrite_read",
+        )
         await _collection(db, PROPOSAL_COLLECTION).update_one(
             {
                 "user_id": user_id,
@@ -6258,6 +6507,11 @@ async def _rollback_snapchat_management_proposal_under_lease(
                 )
             rollback_write_attempted = True
             provider_response = await client.execute(rollback_operation)
+            _assert_provider_entity_identity(
+                provider_response,
+                entity_id,
+                phase="rollback_write_response",
+            )
             await _collection(db, PROPOSAL_COLLECTION).update_one(
                 {
                     "user_id": user_id,
@@ -6273,7 +6527,12 @@ async def _rollback_snapchat_management_proposal_under_lease(
                     }
                 },
             )
-            verified = await client.read_entity(operation["entity_type"], entity_id)
+            verified = await _read_provider_entity(
+                client,
+                operation["entity_type"],
+                entity_id,
+                phase="rollback_write_readback",
+            )
             ok, mismatches = _rollback_values_match(restore, removed_fields, verified)
             if not ok:
                 raise HTTPException(
@@ -6306,15 +6565,28 @@ async def _rollback_snapchat_management_proposal_under_lease(
             if isinstance(exc, HTTPException)
             else {"code": "snapchat_management_rollback_failed"}
         )
+        identity_mismatch = bool(
+            isinstance(failure, dict)
+            and failure.get("code")
+            in {
+                "snapchat_management_provider_identity_mismatch",
+                "snapchat_management_provider_identity_missing",
+            }
+        )
         readback: dict[str, Any] | None = None
         if rollback_write_attempted:
             try:
-                readback = await client.read_entity(operation["entity_type"], entity_id)
+                readback = await _read_provider_entity(
+                    client,
+                    operation["entity_type"],
+                    entity_id,
+                    phase="rollback_reconciliation_readback",
+                )
             except Exception:
                 readback = None
         if readback is not None:
             applied, _ = _rollback_values_match(restore, removed_fields, readback)
-            if applied:
+            if applied and not identity_mismatch:
                 await _refresh_verified_entity_cache_deferred_safe(
                     db,
                     user_id=user_id,
@@ -6349,6 +6621,7 @@ async def _rollback_snapchat_management_proposal_under_lease(
                 and readback is not None
                 and verified_after
                 and not _rollback_drift_fields(operation, verified_after, readback)
+                and not identity_mismatch
             )
             uncertain = rollback_write_attempted and not known_not_applied
             recovery_action = (

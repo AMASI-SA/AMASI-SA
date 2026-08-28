@@ -78,6 +78,13 @@ def _provider_field(row: dict[str, Any], field: str) -> tuple[Any, bool]:
     return deepcopy(snapshot.get(field)), True
 
 
+def _provider_updated_at(row: dict[str, Any]) -> Any:
+    value, present = _provider_field(row, "updated_at")
+    if present and value is not None:
+        return value
+    return row.get("updated_at_provider")
+
+
 def _micro_integer(value: Any) -> int | None:
     if isinstance(value, bool) or value is None:
         return None
@@ -252,9 +259,7 @@ def _settings_quality(
         "reason": reason,
         "financial_controls_allowed": financial_controls_allowed,
         "settings_synced_at": settings_synced_at,
-        "provider_updated_at": (
-            row.get("updated_at_provider") if row is not None else None
-        ),
+        "provider_updated_at": _provider_updated_at(row) if row is not None else None,
         "mapping_status": mapping_status,
         "source_mode": row.get("source_mode") if row is not None else None,
         "provider_snapshot_proof": bool(
@@ -341,15 +346,24 @@ def _base_item(
 
     daily_raw, daily_present = _provider_field(row, "daily_budget_micro")
     daily_micro = _micro_integer(daily_raw)
-    daily_availability = _field_availability(
-        field_present=daily_present,
-        parsed_micro=daily_micro,
-        missing_reason=(
-            "unsupported_at_provider_level"
-            if entity_type == "campaign"
-            else "provider_field_missing"
-        ),
-    )
+    if entity_type == "campaign":
+        # Campaign daily_budget_micro is an optional provider Daily Spend Cap.
+        # An absent key means the setting is unavailable at this level. Null,
+        # zero, and malformed values are present but unusable and must never be
+        # rendered as a real zero budget or replaced with a child aggregate.
+        if not daily_present:
+            daily_availability = "unsupported_at_provider_level"
+        elif daily_micro is None or daily_micro == 0:
+            daily_micro = None
+            daily_availability = "invalid_provider_value"
+        else:
+            daily_availability = "available"
+    else:
+        daily_availability = _field_availability(
+            field_present=daily_present,
+            parsed_micro=daily_micro,
+            missing_reason="provider_field_missing",
+        )
 
     bid_raw, bid_present = _provider_field(row, "bid_micro")
     bid_micro = _micro_integer(bid_raw)
@@ -378,10 +392,10 @@ def _base_item(
     )
     if (
         entity_type == "campaign"
-        and daily_availability == "unsupported_at_provider_level"
+        and daily_availability != "available"
         and quality["settings_status"] == _COMPLETE
     ):
-        quality["reason"] = "unsupported_at_provider_level"
+        quality["reason"] = daily_availability
     bid_control_allowed = bool(
         quality["settings_status"] == _COMPLETE
         and mapping_status == "verified"
@@ -395,7 +409,11 @@ def _base_item(
             "reason": (
                 "available"
                 if quality["financial_controls_allowed"]
-                else quality["reason"]
+                else (
+                    daily_availability
+                    if daily_availability == "unsupported_at_provider_level"
+                    else quality["reason"]
+                )
             ),
         },
         "bid": {
@@ -415,10 +433,6 @@ def _base_item(
     def provider_setting(name: str) -> Any:
         value, present = _provider_field(row, name)
         return value if present else None
-
-    provider_updated_at = provider_setting("updated_at")
-    if provider_updated_at is None:
-        provider_updated_at = row.get("updated_at_provider")
 
     return {
         "entity_type": entity_type,
@@ -467,7 +481,7 @@ def _base_item(
         "conversion_window": provider_setting("conversion_window"),
         "status": provider_setting("status"),
         "settings_synced_at": row.get("last_observed_at"),
-        "provider_updated_at": provider_updated_at,
+        "provider_updated_at": _provider_updated_at(row),
         "quality": quality,
         "daily_budget_unavailable_message_ar": (
             _UNSUPPORTED_CAMPAIGN_BUDGET_AR
@@ -634,23 +648,23 @@ def _attach_campaign_aggregate(
         catalog_coverage.get("provider_account_ad_squad_count")
     )
     # entity_counts proves the complete Ad Squad catalogue only at account
-    # scope. An empty campaign query is therefore a proven zero only when the
-    # complete provider catalogue for that account also contains zero squads.
-    # A positive account count could belong to this campaign, so returning 0
-    # here would turn missing campaign-scoped proof into a fabricated value.
+    # scope. It can conservatively prove this campaign's loaded catalogue only
+    # when every account-level squad is among these children. A larger account
+    # count leaves the campaign partition unknown and must fail closed.
     campaign_children_proven = bool(
-        provider_account_count is not None
-        and (
-            (loaded_total == 0 and provider_account_count == 0)
-            or (loaded_total > 0 and provider_account_count >= loaded_total)
-        )
+        provider_account_count is not None and provider_account_count == loaded_total
     )
     catalog_complete = bool(account_catalog_complete and campaign_children_proven)
-    catalog_reason = (
-        str(catalog_coverage.get("reason") or "child_catalog_proof_missing")
-        if account_catalog_complete is False
-        else ("available" if catalog_complete else "child_catalog_zero_not_proven")
-    )
+    if account_catalog_complete is False:
+        catalog_reason = str(
+            catalog_coverage.get("reason") or "child_catalog_proof_missing"
+        )
+    elif catalog_complete:
+        catalog_reason = "available"
+    elif loaded_total == 0:
+        catalog_reason = "child_catalog_zero_not_proven"
+    else:
+        catalog_reason = "child_catalog_campaign_scope_proof_missing"
     all_settings_complete = all(
         child["quality"]["settings_status"] == _COMPLETE
         and child["mapping_status"] == "verified"

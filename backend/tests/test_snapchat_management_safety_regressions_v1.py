@@ -13,6 +13,17 @@ from integrations_control_center.snapchat_adaptive_decision_ai import (
 )
 
 
+def _fresh_settings_timestamps() -> dict[str, object]:
+    observed = datetime.now(timezone.utc)
+    return {
+        "settings_synced_at": observed.isoformat(),
+        "provider_updated_at": (observed - timedelta(seconds=30)).isoformat(),
+        "freshness_seconds": 0,
+        "freshness_threshold_seconds": 1800,
+        "reason": "provider_snapshot_fresh",
+    }
+
+
 @pytest.fixture(autouse=True)
 def fresh_management_settings(monkeypatch):
     async def settings(
@@ -38,6 +49,7 @@ def fresh_management_settings(monkeypatch):
                 "daily_budget": {"allowed": True, "reason": "available"},
                 "bid": {"allowed": True, "reason": "available"},
             },
+            **_fresh_settings_timestamps(),
             "account_currency": "USD",
             "daily_budget_micro": 60_000_000,
             "daily_budget_usd": 60.0,
@@ -223,6 +235,7 @@ def _prepare_management_dependencies(monkeypatch, baseline):
                 "daily_budget": {"allowed": True, "reason": "available"},
                 "bid": {"allowed": True, "reason": "available"},
             },
+            **_fresh_settings_timestamps(),
             "account_currency": "USD",
             "daily_budget_micro": 60_000_000,
             "daily_budget_usd": 60.0,
