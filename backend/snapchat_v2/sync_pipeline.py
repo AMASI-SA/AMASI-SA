@@ -140,9 +140,28 @@ class SnapchatV2SyncPipeline:
         ad_account_id: str,
         owner_id: str,
         sync_run_id: str,
+        heartbeat_lock: asyncio.Lock,
     ) -> None:
         while True:
             await asyncio.sleep(HEARTBEAT_SECONDS)
+            await self._heartbeat_once(
+                user_id=user_id,
+                ad_account_id=ad_account_id,
+                owner_id=owner_id,
+                sync_run_id=sync_run_id,
+                heartbeat_lock=heartbeat_lock,
+            )
+
+    async def _heartbeat_once(
+        self,
+        *,
+        user_id: str,
+        ad_account_id: str,
+        owner_id: str,
+        sync_run_id: str,
+        heartbeat_lock: asyncio.Lock,
+    ) -> None:
+        async with heartbeat_lock:
             await heartbeat_lease(
                 self.db,
                 user_id,
@@ -417,14 +436,39 @@ class SnapchatV2SyncPipeline:
         )
         await create_sync_run(self.db, run)
         sync_run_id = run["sync_run_id"]
+        heartbeat_lock = asyncio.Lock()
         heartbeat_task = asyncio.create_task(
             self._heartbeat(
                 user_id=str(user_id),
                 ad_account_id=account_id,
                 owner_id=owner_id,
                 sync_run_id=sync_run_id,
+                heartbeat_lock=heartbeat_lock,
             )
         )
+
+        def raise_if_heartbeat_stopped() -> None:
+            if heartbeat_task.done():
+                if heartbeat_task.cancelled():
+                    raise RuntimeError("Snapchat V2 sync heartbeat task was cancelled")
+                heartbeat_error = heartbeat_task.exception()
+                if heartbeat_error is not None:
+                    raise heartbeat_error
+                raise RuntimeError("Snapchat V2 sync heartbeat task stopped unexpectedly")
+
+        async def publish_heartbeat(_progress: dict[str, int]) -> None:
+            # The background task is intentionally independent, but its failure
+            # must not be hidden while facts continue to publish.
+            raise_if_heartbeat_stopped()
+            await self._heartbeat_once(
+                user_id=str(user_id),
+                ad_account_id=account_id,
+                owner_id=owner_id,
+                sync_run_id=sync_run_id,
+                heartbeat_lock=heartbeat_lock,
+            )
+            raise_if_heartbeat_stopped()
+
         outcome = "failed"
         client = self._client(str(user_id))
         warnings: list[dict[str, Any]] = []
@@ -472,6 +516,18 @@ class SnapchatV2SyncPipeline:
                 self.db,
                 hourly["rows"],
                 now=self.now(),
+                on_batch_persisted=publish_heartbeat,
+            )
+            # Fence financial completion even for a valid zero-row payload and
+            # close the recovery race between the final batch and level status.
+            await publish_heartbeat(
+                {
+                    "batch_rows": 0,
+                    "batches_complete": fact_write["write_batches"],
+                    "batches_total": fact_write["write_batches"],
+                    "rows_persisted": fact_write["rows_saved"],
+                    "rows_total": fact_write["rows_received"],
+                }
             )
             await set_level_status(
                 self.db,
