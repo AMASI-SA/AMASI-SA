@@ -302,12 +302,17 @@ def _mapping_status(
         return "unverified"
     if expected_provider_entity_id and expected_provider_entity_id != external_id:
         return "mismatch"
-    if expected_parent_unified_id:
-        provider_parent = _safe_id(
-            (snapshot or {}).get("campaign_id") or row.get("campaign_id")
-        )
-        if expected_parent_unified_id != provider_parent:
-            return "parent_mismatch"
+    row_parent = _safe_id(row.get("campaign_id"))
+    snapshot_parent = _safe_id((snapshot or {}).get("campaign_id"))
+    if row.get("entity_type") == "ad_squad" and (
+        row_parent is None or snapshot_parent != row_parent
+    ):
+        return "unverified"
+    if (
+        expected_parent_unified_id
+        and expected_parent_unified_id != snapshot_parent
+    ):
+        return "parent_mismatch"
     return "verified"
 
 
@@ -692,6 +697,7 @@ async def list_financial_management_settings(
     user_id: str,
     entity_type: Literal["campaign", "ad_squad"] | None = None,
     unified_entity_id: str | None = None,
+    parent_unified_id: str | None = None,
     *,
     now: datetime | Callable[[], datetime] | None = None,
     limit: int = MAX_SETTINGS_ROWS,
@@ -701,6 +707,11 @@ async def list_financial_management_settings(
         raise ValueError("entity_type must be campaign or ad_squad")
     bounded_limit = max(1, min(int(limit), MAX_SETTINGS_ROWS))
     requested_id = _safe_id(unified_entity_id)
+    requested_parent_id = _safe_id(parent_unified_id)
+    if requested_parent_id and entity_type != "ad_squad":
+        raise ValueError(
+            "parent_unified_id is only valid for ad_squad settings"
+        )
     types = [entity_type] if entity_type else list(SUPPORTED_ENTITY_TYPES)
     query: dict[str, Any] = {
         "user_id": str(user_id),
@@ -710,6 +721,11 @@ async def list_financial_management_settings(
     }
     if requested_id:
         query["external_id"] = requested_id
+    if requested_parent_id:
+        # The unified Snapchat campaign ID is the provider campaign ID in the
+        # existing native entity catalogue. Filtering before limit prevents
+        # unrelated campaigns from consuming the bounded Ad Squad page.
+        query["campaign_id"] = requested_parent_id
 
     projection = {
         "_id": 0,
@@ -761,6 +777,7 @@ async def list_financial_management_settings(
             account=accounts.get(_safe_id(row.get("ad_account_id")) or ""),
             latest_run=latest_run,
             now=current,
+            expected_parent_unified_id=requested_parent_id,
         )
         if item["entity_type"] == "campaign":
             shared, present = _provider_field(row, "shared_properties")
@@ -811,6 +828,7 @@ async def list_financial_management_settings(
             _missing_item(
                 entity_type=entity_type or "campaign",
                 unified_entity_id=requested_id,
+                expected_parent_unified_id=requested_parent_id,
             )
         ]
 
@@ -829,6 +847,7 @@ async def list_financial_management_settings(
         "settings_freshness_threshold_seconds": SETTINGS_FRESHNESS_MAX_AGE_SECONDS,
         "rows_truncated": rows_truncated,
         "children_truncated": children_truncated,
+        "requested_parent_unified_id": requested_parent_id,
         "items": items,
     }
 
@@ -852,6 +871,7 @@ async def resolve_financial_management_settings(
         str(user_id),
         entity_type,
         requested_id,
+        None,
         now=now,
         limit=1,
     )
@@ -873,6 +893,7 @@ async def resolve_financial_management_settings(
         },
         {
             "_id": 0,
+            "entity_type": 1,
             "external_id": 1,
             "campaign_id": 1,
             "source_mode": 1,
@@ -922,6 +943,9 @@ def attach_snapchat_entity_settings_routes(
         unified_entity_id: str | None = Query(
             default=None, min_length=1, max_length=128
         ),
+        parent_unified_id: str | None = Query(
+            default=None, min_length=1, max_length=128
+        ),
         limit: int = Query(
             default=MAX_SETTINGS_ROWS, ge=1, le=MAX_SETTINGS_ROWS
         ),
@@ -933,6 +957,7 @@ def attach_snapchat_entity_settings_routes(
             str(owner["id"]),
             entity_type,
             unified_entity_id,
+            parent_unified_id,
             limit=limit,
         )
 
