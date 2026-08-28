@@ -170,7 +170,6 @@ async def _latest_sync_run(db: Any, user_id: str) -> dict[str, Any] | None:
     return rows[0] if rows else None
 
 
-
 def _settings_quality(
     row: dict[str, Any] | None,
     *,
@@ -308,10 +307,7 @@ def _mapping_status(
         row_parent is None or snapshot_parent != row_parent
     ):
         return "unverified"
-    if (
-        expected_parent_unified_id
-        and expected_parent_unified_id != snapshot_parent
-    ):
+    if expected_parent_unified_id and expected_parent_unified_id != snapshot_parent:
         return "parent_mismatch"
     return "verified"
 
@@ -359,9 +355,7 @@ def _base_item(
     bid_micro = _micro_integer(bid_raw)
     bid_strategy_raw, _ = _provider_field(row, "bid_strategy")
     bid_strategy = (
-        str(bid_strategy_raw).strip().upper()
-        if bid_strategy_raw is not None
-        else None
+        str(bid_strategy_raw).strip().upper() if bid_strategy_raw is not None else None
     )
     bid_availability = _field_availability(
         field_present=bid_present,
@@ -478,11 +472,7 @@ def _base_item(
         "daily_budget_unavailable_message_ar": (
             _UNSUPPORTED_CAMPAIGN_BUDGET_AR
             if daily_availability == "unsupported_at_provider_level"
-            else (
-                None
-                if daily_availability == "available"
-                else _UNAVAILABLE_AR
-            )
+            else (None if daily_availability == "available" else _UNAVAILABLE_AR)
         ),
         "unavailable_message_ar": (
             None
@@ -605,24 +595,19 @@ def _ad_squad_catalog_coverage(
     summary = (latest_run or {}).get("summary")
     summary = summary if isinstance(summary, dict) else {}
     counts_by_account = summary.get("entity_counts")
-    counts_by_account = (
-        counts_by_account if isinstance(counts_by_account, dict) else {}
-    )
+    counts_by_account = counts_by_account if isinstance(counts_by_account, dict) else {}
     account_id = _safe_id(campaign_item.get("ad_account_id"))
     account_counts = counts_by_account.get(account_id)
-    account_counts = (
-        account_counts if isinstance(account_counts, dict) else {}
-    )
+    account_counts = account_counts if isinstance(account_counts, dict) else {}
+    if "ad_squad" not in account_counts:
+        base["reason"] = "child_catalog_count_missing"
+        return base
     raw_count = account_counts.get("ad_squad")
     if isinstance(raw_count, bool):
         base["reason"] = "child_catalog_count_invalid"
         return base
-    try:
-        provider_count = int(raw_count)
-    except (TypeError, ValueError, OverflowError):
-        base["reason"] = "child_catalog_count_missing"
-        return base
-    if provider_count < 0:
+    provider_count = _micro_integer(raw_count)
+    if provider_count is None:
         base["reason"] = "child_catalog_count_invalid"
         return base
 
@@ -644,27 +629,44 @@ def _attach_campaign_aggregate(
     catalog_coverage: dict[str, Any],
 ) -> None:
     loaded_total = len(children)
-    catalog_complete = catalog_coverage.get("complete") is True
+    account_catalog_complete = catalog_coverage.get("complete") is True
+    provider_account_count = _micro_integer(
+        catalog_coverage.get("provider_account_ad_squad_count")
+    )
+    # entity_counts proves the complete Ad Squad catalogue only at account
+    # scope. An empty campaign query is therefore a proven zero only when the
+    # complete provider catalogue for that account also contains zero squads.
+    # A positive account count could belong to this campaign, so returning 0
+    # here would turn missing campaign-scoped proof into a fabricated value.
+    campaign_children_proven = bool(
+        provider_account_count is not None
+        and (
+            (loaded_total == 0 and provider_account_count == 0)
+            or (loaded_total > 0 and provider_account_count >= loaded_total)
+        )
+    )
+    catalog_complete = bool(account_catalog_complete and campaign_children_proven)
+    catalog_reason = (
+        str(catalog_coverage.get("reason") or "child_catalog_proof_missing")
+        if account_catalog_complete is False
+        else ("available" if catalog_complete else "child_catalog_zero_not_proven")
+    )
     all_settings_complete = all(
         child["quality"]["settings_status"] == _COMPLETE
         and child["mapping_status"] == "verified"
         for child in children
     )
     all_budgets_available = all(
-        child["daily_budget_availability"] == "available"
-        for child in children
+        child["daily_budget_availability"] == "available" for child in children
     )
     all_statuses_available = all(
         _safe_id(child.get("status")) is not None for child in children
     )
     all_bid_strategies_available = all(
-        _safe_id(child.get("bid_strategy")) is not None
-        for child in children
+        _safe_id(child.get("bid_strategy")) is not None for child in children
     )
     currency = campaign_item.get("account_currency")
-    same_currency = all(
-        child.get("account_currency") == currency for child in children
-    )
+    same_currency = all(child.get("account_currency") == currency for child in children)
 
     budget_complete = bool(
         catalog_complete
@@ -690,18 +692,14 @@ def _attach_campaign_aggregate(
         if truncated:
             return "child_catalog_truncated"
         if not catalog_complete:
-            return str(
-                catalog_coverage.get("reason")
-                or "child_catalog_proof_missing"
-            )
+            return catalog_reason
         if not all_settings_complete:
             return "child_settings_incomplete"
         return field_reason
 
     if budget_complete:
         sum_micro = sum(
-            _micro_integer(child.get("daily_budget_micro")) or 0
-            for child in children
+            _micro_integer(child.get("daily_budget_micro")) or 0 for child in children
         )
         budget_availability = "available"
     else:
@@ -721,16 +719,11 @@ def _attach_campaign_aggregate(
         active_count_availability = "available"
     else:
         active_count = None
-        active_count_availability = unavailable_reason(
-            "child_status_field_missing"
-        )
+        active_count_availability = unavailable_reason("child_status_field_missing")
 
     if bid_strategy_complete:
         strategies = sorted(
-            {
-                str(child.get("bid_strategy")).upper()
-                for child in children
-            }
+            {str(child.get("bid_strategy")).upper() for child in children}
         )
         bid_strategies_availability = "available"
     else:
@@ -760,7 +753,11 @@ def _attach_campaign_aggregate(
             micro_to_usd(sum_micro, currency) if sum_micro is not None else None
         ),
         "daily_budget_sum_availability": budget_availability,
-        "catalog_coverage": deepcopy(catalog_coverage),
+        "catalog_coverage": {
+            **deepcopy(catalog_coverage),
+            "campaign_children_complete": catalog_complete,
+            "campaign_children_reason": catalog_reason,
+        },
         "budget_coverage": {
             "complete": budget_complete,
             "loaded_count": sum(
@@ -776,9 +773,7 @@ def _attach_campaign_aggregate(
         "status_coverage": {
             "complete": active_count_complete,
             "loaded_count": sum(
-                1
-                for child in children
-                if _safe_id(child.get("status")) is not None
+                1 for child in children if _safe_id(child.get("status")) is not None
             ),
             "total_count": loaded_total,
             "truncated": truncated,
@@ -808,28 +803,18 @@ def _attach_campaign_aggregate(
     campaign_item["ad_squad_daily_budget_sum_micro"] = aggregate[
         "daily_budget_sum_micro"
     ]
-    campaign_item["ad_squad_daily_budget_sum_usd"] = aggregate[
-        "daily_budget_sum_usd"
-    ]
+    campaign_item["ad_squad_daily_budget_sum_usd"] = aggregate["daily_budget_sum_usd"]
     campaign_item["ad_squad_daily_budget_sum_availability"] = aggregate[
         "daily_budget_sum_availability"
     ]
-    campaign_item["ad_squad_bid_strategies"] = aggregate[
-        "ad_squad_bid_strategies"
-    ]
+    campaign_item["ad_squad_bid_strategies"] = aggregate["ad_squad_bid_strategies"]
     campaign_item["ad_squad_bid_strategies_availability"] = aggregate[
         "bid_strategies_availability"
     ]
     # Stable aliases used by the Snapchat V2 page contract.
-    campaign_item["ad_squads_daily_budget_micro"] = aggregate[
-        "daily_budget_sum_micro"
-    ]
-    campaign_item["ad_squads_daily_budget_usd"] = aggregate[
-        "daily_budget_sum_usd"
-    ]
-    campaign_item["active_ad_squads"] = aggregate[
-        "active_ad_squad_count"
-    ]
+    campaign_item["ad_squads_daily_budget_micro"] = aggregate["daily_budget_sum_micro"]
+    campaign_item["ad_squads_daily_budget_usd"] = aggregate["daily_budget_sum_usd"]
+    campaign_item["active_ad_squads"] = aggregate["active_ad_squad_count"]
     campaign_item["shared_ad_squad_bid_strategy"] = aggregate[
         "shared_ad_squad_bid_strategy"
     ]
@@ -852,9 +837,7 @@ async def list_financial_management_settings(
     requested_id = _safe_id(unified_entity_id)
     requested_parent_id = _safe_id(parent_unified_id)
     if requested_parent_id and entity_type != "ad_squad":
-        raise ValueError(
-            "parent_unified_id is only valid for ad_squad settings"
-        )
+        raise ValueError("parent_unified_id is only valid for ad_squad settings")
     types = [entity_type] if entity_type else list(SUPPORTED_ENTITY_TYPES)
     query: dict[str, Any] = {
         "user_id": str(user_id),
@@ -1093,9 +1076,7 @@ def attach_snapchat_entity_settings_routes(
         parent_unified_id: str | None = Query(
             default=None, min_length=1, max_length=128
         ),
-        limit: int = Query(
-            default=MAX_SETTINGS_ROWS, ge=1, le=MAX_SETTINGS_ROWS
-        ),
+        limit: int = Query(default=MAX_SETTINGS_ROWS, ge=1, le=MAX_SETTINGS_ROWS),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         owner = require_owner(user)

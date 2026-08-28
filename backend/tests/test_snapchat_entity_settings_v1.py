@@ -7,7 +7,6 @@ from fastapi import APIRouter
 
 from integrations_control_center import snapchat_entity_settings as module
 
-
 CAMPAIGN_ID = "da5049b7-5417-4be9-a596-20a74f9fd54c"
 AD_SQUAD_ID = "7c0f5bfa-3f59-437b-bb89-1c70b11d0526"
 ACCOUNT_ID = "provider-account-usd"
@@ -32,16 +31,9 @@ def _matches(row, query):
 def _project(row, projection):
     if not projection:
         return deepcopy(row)
-    included = {
-        key for key, enabled in projection.items()
-        if enabled and key != "_id"
-    }
+    included = {key for key, enabled in projection.items() if enabled and key != "_id"}
     if included:
-        return {
-            key: deepcopy(value)
-            for key, value in row.items()
-            if key in included
-        }
+        return {key: deepcopy(value) for key, value in row.items() if key in included}
     output = deepcopy(row)
     if projection.get("_id") == 0:
         output.pop("_id", None)
@@ -76,9 +68,7 @@ class Collection:
 
     def find(self, query, projection=None):
         return Cursor(
-            _project(row, projection)
-            for row in self.rows
-            if _matches(row, query)
+            _project(row, projection) for row in self.rows if _matches(row, query)
         )
 
     async def find_one(self, query, projection=None, **kwargs):
@@ -104,21 +94,15 @@ class DB:
     def __init__(self, *, entities=None, accounts=None, runs=None):
         self.write_log = []
         self.collections = {
-            module.SNAPCHAT_ENTITY_COLLECTION: Collection(
-                entities, self.write_log
-            ),
+            module.SNAPCHAT_ENTITY_COLLECTION: Collection(entities, self.write_log),
             module.INTEGRATION_ACCOUNTS_COLLECTION: Collection(
                 accounts, self.write_log
             ),
-            module.SETTINGS_SYNC_RUN_COLLECTION: Collection(
-                runs, self.write_log
-            ),
+            module.SETTINGS_SYNC_RUN_COLLECTION: Collection(runs, self.write_log),
         }
 
     def __getitem__(self, name):
-        return self.collections.setdefault(
-            name, Collection(write_log=self.write_log)
-        )
+        return self.collections.setdefault(name, Collection(write_log=self.write_log))
 
 
 def account(currency="USD"):
@@ -156,19 +140,12 @@ def entity(
         "ad_account_id": ACCOUNT_ID,
         "entity_type": entity_type,
         "external_id": entity_id,
-        "campaign_id": (
-            entity_id if entity_type == "campaign" else campaign_id
-        ),
-        "ad_squad_id": (
-            entity_id if entity_type == "ad_squad" else None
-        ),
+        "campaign_id": (entity_id if entity_type == "campaign" else campaign_id),
+        "ad_squad_id": (entity_id if entity_type == "ad_squad" else None),
         "display_name": provider_snapshot["name"],
         "deleted": False,
         "source_mode": module.SNAPCHAT_NATIVE_SYNC_SOURCE_MODE,
-        "last_observed_at": (
-            observed_at
-            or (NOW - timedelta(minutes=5)).isoformat()
-        ),
+        "last_observed_at": (observed_at or (NOW - timedelta(minutes=5)).isoformat()),
         "updated_at_provider": "2026-08-28T11:44:00Z",
         "provider_snapshot": provider_snapshot,
     }
@@ -257,9 +234,7 @@ async def test_adsquad_settings_preserve_raw_micro_and_exact_provider_mapping():
         ("", "bid"),
     ],
 )
-def test_bid_micro_is_only_target_cost_for_target_cost_strategy(
-    strategy, semantic
-):
+def test_bid_micro_is_only_target_cost_for_target_cost_strategy(strategy, semantic):
     assert module.bid_semantic_for_strategy(strategy) == semantic
 
 
@@ -301,9 +276,7 @@ async def test_non_usd_or_unknown_currency_never_gets_usd_fallback():
     assert unknown_item["account_currency"] is None
     assert unknown_item["daily_budget_account_currency"] is None
     assert unknown_item["daily_budget_usd"] is None
-    assert unknown_item["quality"]["reason"] == (
-        "account_currency_unknown_or_not_usd"
-    )
+    assert unknown_item["quality"]["reason"] == ("account_currency_unknown_or_not_usd")
 
 
 @pytest.mark.asyncio
@@ -311,11 +284,7 @@ async def test_campaign_budget_missing_is_unsupported_and_never_replaced_by_sum(
     campaign = entity(
         "campaign",
         CAMPAIGN_ID,
-        snapshot={
-            "shared_properties": {
-                "shared_ad_squad_bid_strategy": "TARGET_COST"
-            }
-        },
+        snapshot={"shared_properties": {"shared_ad_squad_bid_strategy": "TARGET_COST"}},
     )
     active = entity(
         "ad_squad",
@@ -354,9 +323,7 @@ async def test_campaign_budget_missing_is_unsupported_and_never_replaced_by_sum(
 
     assert item["daily_budget_micro"] is None
     assert item["daily_budget_usd"] is None
-    assert item["daily_budget_availability"] == (
-        "unsupported_at_provider_level"
-    )
+    assert item["daily_budget_availability"] == ("unsupported_at_provider_level")
     assert item["quality"]["settings_status"] == "settings_complete"
     assert item["quality"]["financial_controls_allowed"] is False
     assert item["quality"]["reason"] == "unsupported_at_provider_level"
@@ -374,9 +341,7 @@ async def test_campaign_budget_missing_is_unsupported_and_never_replaced_by_sum(
         "LOWEST_COST_WITH_MAX_BID",
         "TARGET_COST",
     ]
-    assert item["daily_budget_micro"] != (
-        item["ad_squad_daily_budget_sum_micro"]
-    )
+    assert item["daily_budget_micro"] != (item["ad_squad_daily_budget_sum_micro"])
 
 
 @pytest.mark.asyncio
@@ -479,9 +444,7 @@ async def test_campaign_aggregate_coverages_are_independent():
 
     # Each independent aggregate fails closed only on its own missing proof.
     assert aggregate["active_ad_squad_count"] is None
-    assert aggregate["active_count_availability"] == (
-        "child_status_field_missing"
-    )
+    assert aggregate["active_count_availability"] == ("child_status_field_missing")
     assert aggregate["status_coverage"] == {
         "complete": False,
         "loaded_count": 1,
@@ -534,22 +497,137 @@ async def test_empty_children_require_complete_catalog_proof_before_zero():
         "latest_sync_run_id": "partial-catalog",
         "latest_sync_run_status": "partial",
         "provider_account_ad_squad_count": None,
+        "campaign_children_complete": False,
+        "campaign_children_reason": "child_catalog_sync_partial",
     }
     assert aggregate["ad_squad_count"] is None
     assert aggregate["loaded_ad_squad_count"] == 0
     assert aggregate["daily_budget_sum_micro"] is None
     assert aggregate["daily_budget_sum_usd"] is None
+    assert aggregate["daily_budget_sum_availability"] == ("child_catalog_sync_partial")
+    assert aggregate["active_ad_squad_count"] is None
+    assert aggregate["active_count_availability"] == ("child_catalog_sync_partial")
+    assert aggregate["ad_squad_bid_strategies"] == []
+    assert aggregate["bid_strategies_availability"] == ("child_catalog_sync_partial")
+
+
+@pytest.mark.asyncio
+async def test_empty_children_do_not_use_positive_account_count_as_zero_proof():
+    campaign = entity(
+        "campaign",
+        CAMPAIGN_ID,
+        snapshot={"daily_budget_micro": 50_000_000},
+    )
+    result = await module.list_financial_management_settings(
+        DB(
+            entities=[campaign],
+            accounts=[account()],
+            runs=[catalog_run(ad_squad_count=4)],
+        ),
+        USER_ID,
+        "campaign",
+        CAMPAIGN_ID,
+        now=NOW,
+    )
+    aggregate = result["items"][0]["campaign_aggregate"]
+
+    assert aggregate["catalog_coverage"]["complete"] is True
+    assert aggregate["catalog_coverage"]["provider_account_ad_squad_count"] == 4
+    assert aggregate["catalog_coverage"]["campaign_children_complete"] is False
+    assert (
+        aggregate["catalog_coverage"]["campaign_children_reason"]
+        == "child_catalog_zero_not_proven"
+    )
+    assert aggregate["ad_squad_count"] is None
+    assert aggregate["daily_budget_sum_micro"] is None
+    assert aggregate["daily_budget_sum_usd"] is None
     assert aggregate["daily_budget_sum_availability"] == (
-        "child_catalog_sync_partial"
+        "child_catalog_zero_not_proven"
     )
     assert aggregate["active_ad_squad_count"] is None
-    assert aggregate["active_count_availability"] == (
-        "child_catalog_sync_partial"
-    )
+    assert aggregate["active_count_availability"] == ("child_catalog_zero_not_proven")
     assert aggregate["ad_squad_bid_strategies"] == []
-    assert aggregate["bid_strategies_availability"] == (
-        "child_catalog_sync_partial"
+    assert aggregate["bid_strategies_availability"] == ("child_catalog_zero_not_proven")
+
+
+@pytest.mark.asyncio
+async def test_empty_children_are_zero_only_with_complete_zero_count_proof():
+    campaign = entity(
+        "campaign",
+        CAMPAIGN_ID,
+        snapshot={"daily_budget_micro": 50_000_000},
     )
+    result = await module.list_financial_management_settings(
+        DB(
+            entities=[campaign],
+            accounts=[account()],
+            runs=[catalog_run(ad_squad_count=0)],
+        ),
+        USER_ID,
+        "campaign",
+        CAMPAIGN_ID,
+        now=NOW,
+    )
+    aggregate = result["items"][0]["campaign_aggregate"]
+
+    assert aggregate["catalog_coverage"]["complete"] is True
+    assert aggregate["catalog_coverage"]["provider_account_ad_squad_count"] == 0
+    assert aggregate["catalog_coverage"]["campaign_children_complete"] is True
+    assert aggregate["ad_squad_count"] == 0
+    assert aggregate["daily_budget_sum_micro"] == 0
+    assert aggregate["daily_budget_sum_usd"] == 0.0
+    assert aggregate["daily_budget_sum_availability"] == "available"
+    assert aggregate["active_ad_squad_count"] == 0
+    assert aggregate["active_count_availability"] == "available"
+    assert aggregate["ad_squad_bid_strategies"] == []
+    assert aggregate["bid_strategies_availability"] == "available"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("runs", "reason"),
+    [
+        ([], "child_catalog_proof_missing"),
+        (
+            [
+                catalog_run(
+                    status="failed",
+                    ad_squad_count=0,
+                    run_id="failed-catalog",
+                )
+            ],
+            "child_catalog_sync_failed",
+        ),
+    ],
+)
+async def test_empty_children_missing_or_failed_catalog_proof_is_unavailable(
+    runs,
+    reason,
+):
+    campaign = entity(
+        "campaign",
+        CAMPAIGN_ID,
+        snapshot={"daily_budget_micro": 50_000_000},
+    )
+    result = await module.list_financial_management_settings(
+        DB(entities=[campaign], accounts=[account()], runs=runs),
+        USER_ID,
+        "campaign",
+        CAMPAIGN_ID,
+        now=NOW,
+    )
+    aggregate = result["items"][0]["campaign_aggregate"]
+
+    assert aggregate["catalog_coverage"]["campaign_children_complete"] is False
+    assert aggregate["catalog_coverage"]["campaign_children_reason"] == reason
+    assert aggregate["ad_squad_count"] is None
+    assert aggregate["daily_budget_sum_micro"] is None
+    assert aggregate["daily_budget_sum_usd"] is None
+    assert aggregate["daily_budget_sum_availability"] == reason
+    assert aggregate["active_ad_squad_count"] is None
+    assert aggregate["active_count_availability"] == reason
+    assert aggregate["ad_squad_bid_strategies"] == []
+    assert aggregate["bid_strategies_availability"] == reason
 
 
 @pytest.mark.asyncio
@@ -562,9 +640,7 @@ async def test_missing_stale_and_failed_sync_states_are_distinct():
         now=NOW,
     )
     missing_item = missing["items"][0]
-    assert missing_item["quality"]["settings_status"] == (
-        "settings_not_loaded"
-    )
+    assert missing_item["quality"]["settings_status"] == ("settings_not_loaded")
     assert missing_item["daily_budget_micro"] is None
     assert missing_item["daily_budget_usd"] is None
 
@@ -572,10 +648,7 @@ async def test_missing_stale_and_failed_sync_states_are_distinct():
         "campaign",
         CAMPAIGN_ID,
         observed_at=(
-            NOW
-            - timedelta(
-                seconds=module.SETTINGS_FRESHNESS_MAX_AGE_SECONDS + 1
-            )
+            NOW - timedelta(seconds=module.SETTINGS_FRESHNESS_MAX_AGE_SECONDS + 1)
         ).isoformat(),
         snapshot={"daily_budget_micro": 45_000_000},
     )
@@ -621,12 +694,8 @@ async def test_missing_stale_and_failed_sync_states_are_distinct():
         now=NOW,
     )
     failed_item = failed["items"][0]
-    assert failed_item["quality"]["settings_status"] == (
-        "settings_sync_failed"
-    )
-    assert failed_item["quality"]["reason"] == (
-        "latest_native_settings_sync_failed"
-    )
+    assert failed_item["quality"]["settings_status"] == ("settings_sync_failed")
+    assert failed_item["quality"]["reason"] == ("latest_native_settings_sync_failed")
     assert failed_item["quality"]["financial_controls_allowed"] is False
 
 
@@ -692,9 +761,7 @@ async def test_entity_count_never_substitutes_entity_specific_sync_proof():
         "started_at": (NOW - timedelta(minutes=5)).isoformat(),
         "finished_at": (NOW - timedelta(minutes=4)).isoformat(),
         "summary": {
-            "entity_counts": {
-                ACCOUNT_ID: {"campaign": 50, "ad_squad": 500}
-            },
+            "entity_counts": {ACCOUNT_ID: {"campaign": 50, "ad_squad": 500}},
             "errors_count": 1,
         },
     }
@@ -767,9 +834,7 @@ async def test_provider_id_or_parent_mismatch_is_fail_closed():
         now=NOW,
     )
     assert wrong_provider["mapping_status"] == "mismatch"
-    assert wrong_provider["quality"]["settings_status"] == (
-        "settings_sync_failed"
-    )
+    assert wrong_provider["quality"]["settings_status"] == ("settings_sync_failed")
     assert wrong_provider["quality"]["financial_controls_allowed"] is False
 
     wrong_parent = await module.resolve_financial_management_settings(
@@ -782,9 +847,7 @@ async def test_provider_id_or_parent_mismatch_is_fail_closed():
         now=NOW,
     )
     assert wrong_parent["mapping_status"] == "parent_mismatch"
-    assert wrong_parent["quality"]["reason"] == (
-        "provider_parent_id_mismatch"
-    )
+    assert wrong_parent["quality"]["reason"] == ("provider_parent_id_mismatch")
 
 
 @pytest.mark.asyncio
@@ -824,9 +887,7 @@ async def test_parent_campaign_filter_is_applied_before_adsquad_limit():
 
     assert result["requested_parent_unified_id"] == CAMPAIGN_ID
     assert result["rows_truncated"] is False
-    assert [item["provider_entity_id"] for item in result["items"]] == [
-        AD_SQUAD_ID
-    ]
+    assert [item["provider_entity_id"] for item in result["items"]] == [AD_SQUAD_ID]
     assert result["items"][0]["provider_parent_id"] == CAMPAIGN_ID
     assert result["items"][0]["mapping_verified"] is True
 
@@ -869,9 +930,7 @@ async def test_entity_settings_get_route_is_database_read_only():
 
     assert route.methods == {"GET"}
     assert result["provider_write_calls"] == 0
-    assert result["source_collection"] == (
-        "mezan_snapchat_entities_v2"
-    )
+    assert result["source_collection"] == ("mezan_snapchat_entities_v2")
     assert result["requested_parent_unified_id"] == CAMPAIGN_ID
     assert result["items"][0]["provider_entity_id"] == AD_SQUAD_ID
     assert db.write_log == []
