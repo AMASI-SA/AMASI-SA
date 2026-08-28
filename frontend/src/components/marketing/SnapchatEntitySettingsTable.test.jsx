@@ -108,9 +108,10 @@ describe("SnapchatEntitySettingsTable", () => {
                             conversion_window: "SWIPE_7DAY",
                             status: "ACTIVE",
                             quality: {
-                                settings_status: "settings_stale",
-                                freshness_seconds: 4000,
-                                reason: "older_than_freshness_limit",
+                                settings_status: "settings_complete",
+                                freshness_seconds: 120,
+                                freshness_threshold_seconds: 1800,
+                                reason: "provider_snapshot_complete",
                             },
                         },
                     }}
@@ -122,7 +123,7 @@ describe("SnapchatEntitySettingsTable", () => {
         expect(bidLabel.textContent).toContain("Max Bid");
         expect(bidLabel.textContent).not.toContain("Target Cost");
         expect(container.textContent).toContain("performance_no_facts");
-        expect(container.textContent).toContain("settings_stale");
+        expect(container.textContent).toContain("settings_complete");
         expect(container.textContent).toContain("7.50 USD");
     });
 
@@ -152,6 +153,36 @@ describe("SnapchatEntitySettingsTable", () => {
         expect(container.textContent).toContain(SNAPCHAT_SETTINGS_UNAVAILABLE);
         expect(container.textContent).not.toContain("0.00 USD");
         expect(container.textContent).toContain("settings_sync_failed");
+    });
+
+    test("stale snapshots do not expose old provider values as current", async () => {
+        const campaign = row("campaign", "stale-campaign");
+        await act(async () => {
+            root.render(
+                <SnapchatEntitySettingsTable
+                    report={{ rows: [campaign] }}
+                    settingsByEntityId={{
+                        "stale-campaign": {
+                            unified_entity_id: "stale-campaign",
+                            provider_entity_id: "provider-stale-campaign",
+                            account_currency: "USD",
+                            daily_budget_micro: 25_000_000,
+                            status: "ACTIVE",
+                            quality: {
+                                settings_status: "settings_stale",
+                                freshness_seconds: 4000,
+                                freshness_threshold_seconds: 1800,
+                                reason: "older_than_freshness_limit",
+                            },
+                        },
+                    }}
+                />,
+            );
+        });
+        expect(container.textContent).toContain("settings_stale");
+        expect(container.textContent).toContain(SNAPCHAT_SETTINGS_UNAVAILABLE);
+        expect(container.textContent).not.toContain("25.00 USD");
+        expect(container.textContent).not.toContain(">ACTIVE<");
     });
 
     test("separates performance completeness from settings state", () => {
