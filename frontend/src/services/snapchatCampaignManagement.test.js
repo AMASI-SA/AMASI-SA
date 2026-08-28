@@ -22,6 +22,7 @@ import {
     rollbackSnapchatManagementProposal,
     resumeSnapchatManagementProposal,
     snapchatBidLabel,
+    snapchatFinancialFieldReady,
     snapchatFinancialSettingsReady,
     startSnapchatManagementPreviewJob,
     verifiedSnapchatManagementEntityId,
@@ -987,11 +988,17 @@ describe("snapchatCampaignManagement", () => {
             quality: {
                 settings_status: "settings_complete",
                 financial_controls_allowed: true,
+                financial_field_controls: {
+                    daily_budget_micro: { allowed: true },
+                    bid_micro: { allowed: true },
+                },
             },
         });
         expect(usd.daily_budget_usd).toBe(20);
         expect(usd.bid_usd).toBe(5);
         expect(snapchatFinancialSettingsReady(usd)).toBe(true);
+        expect(snapchatFinancialFieldReady(usd, "daily_budget_micro")).toBe(true);
+        expect(snapchatFinancialFieldReady(usd, "bid_strategy")).toBe(false);
 
         const sar = normalizeSnapchatEntitySettings({
             unified_entity_id: "u-2",
@@ -1007,7 +1014,8 @@ describe("snapchatCampaignManagement", () => {
         });
         expect(sar.daily_budget_usd).toBeNull();
         expect(sar.bid_usd).toBeNull();
-        expect(snapchatFinancialSettingsReady(sar)).toBe(true);
+        expect(snapchatFinancialSettingsReady(sar)).toBe(false);
+        expect(snapchatFinancialFieldReady(sar, "daily_budget_micro")).toBe(false);
     });
 
     test("reads settings with unified identifiers without issuing a provider write", async () => {
@@ -1060,12 +1068,17 @@ describe("snapchatCampaignManagement", () => {
             provider_entity_id: "provider-squad-9",
             actor_id: "owner-1",
             field_changes: {
-                daily_budget_micro: {
-                    before: 50_000_000,
-                    after: 60_000_000,
-                    before_usd: 50,
-                    after_usd: 60,
+                fields: {
+                    daily_budget_micro: {
+                        before: 50_000_000,
+                        after: 60_000_000,
+                        before_usd: 50,
+                        after_usd: 60,
+                    },
                 },
+                actor_id: "owner-envelope",
+                occurred_at: "2026-08-28T10:01:00Z",
+                provider_entity_id: "provider-squad-9",
             },
             verification: {
                 verified: true,
@@ -1078,6 +1091,11 @@ describe("snapchatCampaignManagement", () => {
         expect(proposal.target_id).toBe("unified-squad-1");
         expect(proposal.provider_target_id).toBe("provider-squad-9");
         expect(proposal.actor_id).toBe("owner-1");
+        expect(proposal.field_changes_metadata).toMatchObject({
+            actor_id: "owner-envelope",
+            occurred_at: "2026-08-28T10:01:00Z",
+            provider_entity_id: "provider-squad-9",
+        });
         expect(proposal.field_changes[0]).toMatchObject({
             field: "daily_budget_micro",
             before: 50_000_000,
