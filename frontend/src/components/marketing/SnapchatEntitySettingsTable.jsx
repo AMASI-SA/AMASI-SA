@@ -22,6 +22,11 @@ function timestamp(value) {
     return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toLocaleString("ar-SA");
 }
 
+function providerSetting(settings, value) {
+    if (settings?.quality?.settings_status !== "settings_complete") return SNAPCHAT_SETTINGS_UNAVAILABLE;
+    return providerValue(value);
+}
+
 function providerValue(value) {
     if (value === null || value === undefined || value === "") return "—";
     return typeof value === "object" ? JSON.stringify(value) : String(value);
@@ -33,7 +38,10 @@ function freshness(value) {
     return Number.isFinite(seconds) ? `${seconds.toLocaleString("en-US")} ثانية` : "غير متاح";
 }
 
-function microAmount(settings, microValue, usdValue) {
+function microAmount(settings, microValue) {
+    if (settings?.quality?.settings_status !== "settings_complete") {
+        return { raw: SNAPCHAT_SETTINGS_UNAVAILABLE, converted: SNAPCHAT_SETTINGS_UNAVAILABLE };
+    }
     if (microValue === null || microValue === undefined || microValue === "") {
         return { raw: SNAPCHAT_SETTINGS_UNAVAILABLE, converted: SNAPCHAT_SETTINGS_UNAVAILABLE };
     }
@@ -44,14 +52,10 @@ function microAmount(settings, microValue, usdValue) {
     const currency = String(settings?.account_currency || "").toUpperCase();
     const raw = `${micro.toLocaleString("en-US")} micro`;
     if (currency === "USD") {
-        const usd = usdValue === null || usdValue === undefined || usdValue === ""
-            ? micro / 1_000_000
-            : Number(usdValue);
+        const usd = micro / 1_000_000;
         return {
             raw,
-            converted: Number.isFinite(usd)
-                ? `${usd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })} USD`
-                : SNAPCHAT_SETTINGS_UNAVAILABLE,
+            converted: `${usd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })} USD`,
         };
     }
     const native = micro / 1_000_000;
@@ -109,10 +113,10 @@ function SettingsStatus({ row, settings, loading }) {
 function SettingsDetails({ row, settings }) {
     const type = row?.entity?.level === "ad_group" ? "ad_squad" : "campaign";
     const quality = settings?.quality || {};
-    const budgetUnsupported = type === "campaign" && (
-        settings?.campaign_daily_budget_supported === false
-        || ["unsupported_at_provider_level", "unsupported"].includes(settings?.daily_budget_availability)
-    );
+    const settingsComplete = settings?.quality?.settings_status === "settings_complete";
+    const budgetUnsupported = type === "campaign"
+        && settingsComplete
+        && ["unsupported_at_provider_level", "unsupported"].includes(settings?.daily_budget_availability);
     const campaignBudgetUnavailable = settings?.daily_budget_unavailable_message_ar
         || SNAPCHAT_CAMPAIGN_BUDGET_UNSUPPORTED;
     const budget = budgetUnsupported
@@ -124,9 +128,12 @@ function SettingsDetails({ row, settings }) {
         settings?.ad_squads_daily_budget_usd,
     );
     const bid = microAmount(settings, settings?.bid_micro, settings?.bid_usd);
-    const strategies = Array.isArray(settings?.ad_squad_bid_strategies)
-        ? settings.ad_squad_bid_strategies.join("، ")
-        : settings?.campaign_bid_strategy || settings?.bid_strategy || "—";
+    const effectiveBidStrategy = settingsComplete ? settings?.bid_strategy : null;
+    const strategies = settingsComplete
+        ? Array.isArray(settings?.ad_squad_bid_strategies)
+            ? settings.ad_squad_bid_strategies.join("، ")
+            : settings?.campaign_bid_strategy || settings?.bid_strategy || "—"
+        : SNAPCHAT_SETTINGS_UNAVAILABLE;
     return (
         <>
             <td className="px-4 py-4 align-top">
@@ -163,19 +170,19 @@ function SettingsDetails({ row, settings }) {
                         <Metric label="استراتيجيات المزايدة">{strategies}</Metric>
                     ) : (
                         <>
-                            <Metric label={`${snapchatBidLabel(settings?.bid_strategy)} الخام`} testId="snapchat-settings-bid-label">{bid.raw}</Metric>
+                            <Metric label={`${snapchatBidLabel(effectiveBidStrategy)} الخام`} testId="snapchat-settings-bid-label">{bid.raw}</Metric>
                             <Metric label={snapchatBidLabel(settings?.bid_strategy)}>{bid.converted}</Metric>
-                            <Metric label="bid_strategy">{settings?.bid_strategy || "—"}</Metric>
-                            <Metric label="optimization_goal">{settings?.optimization_goal || "—"}</Metric>
-                            <Metric label="billing_event">{settings?.billing_event || "—"}</Metric>
-                            <Metric label="conversion_window">{providerValue(settings?.conversion_window)}</Metric>
+                            <Metric label="bid_strategy">{providerSetting(settings, settings?.bid_strategy)}</Metric>
+                            <Metric label="optimization_goal">{providerSetting(settings, settings?.optimization_goal)}</Metric>
+                            <Metric label="billing_event">{providerSetting(settings, settings?.billing_event)}</Metric>
+                            <Metric label="conversion_window">{providerSetting(settings, settings?.conversion_window)}</Metric>
                         </>
                     )}
                 </div>
             </td>
             <td className="px-4 py-4 align-top">
                 <div className="w-[300px] grid grid-cols-2 gap-2 rounded-xl border border-slate-100 bg-slate-50 p-2">
-                    <Metric label="الحالة الحالية">{settings?.status || row?.entity?.status || "—"}</Metric>
+                    <Metric label="الحالة الحالية">{providerSetting(settings, settings?.status)}</Metric>
                     <Metric label="freshness">{freshness(quality.freshness_seconds)}</Metric>
                     <Metric label="freshness threshold">{freshness(quality.freshness_threshold_seconds)}</Metric>
                     <Metric label="سبب الجودة" dir="rtl">{quality.reason || SNAPCHAT_SETTINGS_UNAVAILABLE}</Metric>
