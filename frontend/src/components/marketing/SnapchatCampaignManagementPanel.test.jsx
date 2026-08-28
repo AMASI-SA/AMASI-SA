@@ -20,7 +20,7 @@ jest.mock("../../services/snapchatCampaignManagement", () => ({
     snapchatBidLabel: (strategy) => strategy === "TARGET_COST" ? "Target Cost" : strategy === "LOWEST_COST_WITH_MAX_BID" ? "Max Bid" : "Bid",
     snapchatFinancialSettingsReady: (settings) => Boolean(
         settings?.mapping_verified
-        && ["settings_complete", "complete"].includes(settings?.quality?.settings_status)
+        && settings?.quality?.settings_status === "settings_complete"
         && settings?.quality?.financial_controls_allowed,
     ),
 }));
