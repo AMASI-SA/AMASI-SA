@@ -338,14 +338,14 @@ function CurrentSettingsCard({ action, settings, accountId }) {
                     <>
                         <div><span className="block text-slate-500">مجموع ميزانيات Ad Squads الخام</span><strong dir="ltr">{childBudget.raw}</strong></div>
                         <div><span className="block text-slate-500">مجموع ميزانيات Ad Squads</span><strong dir="ltr">{childBudget.converted}</strong></div>
-                        <div><span className="block text-slate-500">Ad Squads النشطة</span><strong>{settings?.active_ad_squads ?? "—"}</strong></div>
+                        <div><span className="block text-slate-500">Ad Squads النشطة</span><strong>{settingsComplete ? (settings?.active_ad_squads ?? "—") : "غير متاح — فشل جلب الإعدادات"}</strong></div>
                         <div><span className="block text-slate-500">استراتيجيات المزايدة المتاحة</span><strong>{campaignStrategies}</strong></div>
                     </>
                 )}
                 {action === "ad_squad.update" && (
                     <>
-                        <div><span className="block text-slate-500">{snapchatBidLabel(settings?.bid_strategy)} الخام</span><strong dir="ltr">{bid.raw}</strong></div>
-                        <div data-testid="snapchat-management-current-bid-label"><span className="block text-slate-500">{snapchatBidLabel(settings?.bid_strategy)}</span><strong dir="ltr">{bid.converted}</strong></div>
+                        <div><span className="block text-slate-500">{snapchatBidLabel(settingsComplete ? settings?.bid_strategy : null)} الخام</span><strong dir="ltr">{bid.raw}</strong></div>
+                        <div data-testid="snapchat-management-current-bid-label"><span className="block text-slate-500">{snapchatBidLabel(settingsComplete ? settings?.bid_strategy : null)}</span><strong dir="ltr">{bid.converted}</strong></div>
                         <div><span className="block text-slate-500">bid_strategy</span><strong>{currentProviderValue(settings?.bid_strategy)}</strong></div>
                         <div><span className="block text-slate-500">optimization_goal</span><strong>{currentProviderValue(settings?.optimization_goal)}</strong></div>
                         <div><span className="block text-slate-500">billing_event</span><strong>{currentProviderValue(settings?.billing_event)}</strong></div>
