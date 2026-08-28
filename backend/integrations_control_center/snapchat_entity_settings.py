@@ -170,25 +170,6 @@ async def _latest_sync_run(db: Any, user_id: str) -> dict[str, Any] | None:
     return rows[0] if rows else None
 
 
-def _run_entity_count(
-    run: dict[str, Any] | None,
-    account_id: str | None,
-    entity_type: str,
-) -> int | None:
-    if not run or not account_id:
-        return None
-    summary = run.get("summary")
-    summary = summary if isinstance(summary, dict) else {}
-    counts_by_account = summary.get("entity_counts")
-    counts_by_account = counts_by_account if isinstance(counts_by_account, dict) else {}
-    counts = counts_by_account.get(account_id)
-    counts = counts if isinstance(counts, dict) else {}
-    value = counts.get(entity_type)
-    try:
-        return int(value) if value is not None else None
-    except (TypeError, ValueError, OverflowError):
-        return None
-
 
 def _settings_quality(
     row: dict[str, Any] | None,
@@ -231,25 +212,17 @@ def _settings_quality(
                 run_started = _as_utc((latest_run or {}).get("started_at"))
                 run_status = str((latest_run or {}).get("status") or "").lower()
                 run_after_settings = bool(run_started and run_started > observed)
-                failed_after_settings = bool(
-                    run_after_settings and run_status == "failed"
-                )
-                partial_without_entity_proof = bool(
+                terminal_run_without_entity_proof = bool(
                     run_after_settings
-                    and run_status == "partial"
-                    and _run_entity_count(
-                        latest_run,
-                        _safe_id(row.get("ad_account_id")),
-                        entity_type,
-                    )
-                    in {None, 0}
+                    and run_status in {"complete", "partial", "failed"}
                 )
-                if failed_after_settings:
+                if terminal_run_without_entity_proof:
                     status = _SYNC_FAILED
-                    reason = "latest_native_settings_sync_failed"
-                elif partial_without_entity_proof:
-                    status = _SYNC_FAILED
-                    reason = "latest_native_sync_missing_entity_coverage"
+                    reason = (
+                        "latest_native_settings_sync_failed"
+                        if run_status == "failed"
+                        else "latest_native_sync_missing_entity_specific_proof"
+                    )
                 elif freshness_seconds > SETTINGS_FRESHNESS_MAX_AGE_SECONDS:
                     status = _STALE
                     reason = "settings_older_than_freshness_threshold"
