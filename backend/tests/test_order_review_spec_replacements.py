@@ -152,6 +152,27 @@ def test_hidden_spec_stays_out_of_supplier_file_with_field_overrides():
     assert supplier_file_spec_lines(item(), state) == []
 
 
+def test_mapping_item_specs_include_normalized_options():
+    assert extract_item_specs({
+        "options": [],
+        "options_normalized": {
+            "المقاس": "8 سنوات",
+            "اللون": "أخضر",
+        },
+    }) == [
+        {
+            "spec_key": "size",
+            "name": "المقاس",
+            "value": "8 سنوات",
+        },
+        {
+            "spec_key": "color",
+            "name": "اللون",
+            "value": "أخضر",
+        },
+    ]
+
+
 def test_order_override_has_priority_over_later_product_default():
     state = {
         ORDER_OVERRIDE_FIELD: [{

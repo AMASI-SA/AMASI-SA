@@ -14,6 +14,7 @@ from __future__ import annotations
 import base64
 import io
 import re
+from types import SimpleNamespace
 from typing import Any, Iterable
 from urllib.parse import urlparse
 
@@ -445,69 +446,91 @@ async def build_reference_batch_lines(
     context: dict[str, Any],
     planned: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Build batch snapshots while falling back across every product image."""
-    import reviewed_preparation_batches as batch
+    """Enrich canonical batch snapshots with reference-layout image fallbacks.
 
-    orders_by_number = {
-        batch._text(order.order_number): order
-        for order, _workflow in context.get("pairs") or []
-    }
+    Identity, customer options and stale-data validation belong exclusively to
+    the canonical reviewed-preparation builder. The reference layout only
+    improves image resolution on those already validated immutable rows.
+    """
+    import reviewed_preparation_batches as batch
+    builder = _ORIGINAL_BATCH_LINE_BUILDER or batch._build_batch_lines
+    if builder is build_reference_batch_lines:
+        raise RuntimeError("canonical_preparation_batch_builder_unavailable")
+    result = await builder(context, planned)
+
     workflows_by_number = {
         batch._text(workflow.get("order_number")): workflow
         for _order, workflow in context.get("pairs") or []
     }
-    identities_by_order = {
-        order_number: {
-            batch._text(identity.order_item_id): identity
-            for identity in batch.map_order_item_identities(order)
-        }
-        for order_number, order in orders_by_number.items()
-    }
-
-    result: list[dict[str, Any]] = []
+    live_identities: dict[tuple[str, str], Any] = {}
+    for order, _workflow in context.get("pairs") or []:
+        order_number = batch._text(getattr(order, "order_number", None))
+        try:
+            for identity in batch.map_order_item_identities(order):
+                live_identities[(
+                    order_number,
+                    batch._text(getattr(identity, "order_item_id", None)),
+                )] = identity
+        except Exception:
+            # Live identity is optional here and is used only to discover
+            # secondary image URLs. Canonical frozen identity already won.
+            continue
+    row_allocations = [
+        (row, planned[index] if index < len(planned) else {})
+        for index, row in enumerate(result)
+    ]
     image_cache: dict[str, tuple[bytes | None, str | None]] = {}
-    timeout = httpx.Timeout(16.0, connect=6.0)
+    # Keep the optional fallback bounded. The canonical builder already tried
+    # the primary image; this layer must never push file creation toward the
+    # proxy timeout merely because several secondary images are unavailable.
+    timeout = httpx.Timeout(3.0, connect=2.0)
     async with httpx.AsyncClient(
         timeout=timeout,
         follow_redirects=True,
         headers=_IMAGE_REQUEST_HEADERS,
     ) as client:
-        for index, allocation in enumerate(planned, start=1):
-            order_number = batch._text(allocation.get("order_number"))
-            order_item_id = batch._text(allocation.get("order_item_id"))
-            order = orders_by_number.get(order_number)
+        async def hydrate(
+            pair: tuple[dict[str, Any], dict[str, Any]],
+        ) -> tuple[list[str], bytes | None, str | None, str | None]:
+            row, allocation = pair
+            order_number = batch._text(row.get("order_number"))
             workflow = workflows_by_number.get(order_number) or {}
-            identity = (identities_by_order.get(order_number) or {}).get(order_item_id)
-            if order is None or identity is None:
-                raise batch.HTTPException(
-                    status_code=409,
-                    detail={
-                        "code": "reviewed_line_changed_reload_required",
-                        "order_number": order_number,
-                    },
-                )
             states = {
-                batch._text(row.get("order_item_id")): dict(row)
-                for row in workflow.get("items") or []
-                if isinstance(row, dict) and batch._text(row.get("order_item_id"))
+                batch._text(state_row.get("order_item_id")): dict(state_row)
+                for state_row in workflow.get("items") or []
+                if isinstance(state_row, dict)
+                and batch._text(state_row.get("order_item_id"))
             }
-            state = states.get(order_item_id, {})
-            if state.get("supplier_export") is False:
-                raise batch.HTTPException(
-                    status_code=409,
-                    detail={
-                        "code": "reviewed_line_no_longer_exportable",
-                        "order_number": order_number,
-                    },
-                )
-
-            spec_fields = batch.supplier_file_spec_fields(identity, state)
-            card_fields = batch._card_field_projection(
-                spec_fields,
-                state.get("preparation_note"),
-            )
+            state = states.get(batch._text(row.get("order_item_id")), {})
             source_line = allocation.get("line") or {}
-            candidates = image_candidate_urls(state, identity, source_line)
+            frozen = source_line.get("ready_item_identity") or source_line.get("review_snapshot_identity") or {}
+            live_identity = live_identities.get((
+                order_number,
+                batch._text(row.get("order_item_id")),
+            ))
+            if live_identity is None:
+                live_identity = SimpleNamespace(
+                    image_url=(
+                        frozen.get("selected_image_url")
+                        if isinstance(frozen, dict)
+                        else None
+                    ),
+                    image_urls=[],
+                )
+            candidates = image_candidate_urls(
+                state,
+                live_identity,
+                source_line,
+            )
+            for value in (row.get("selected_image_url"), row.get("resolved_image_url")):
+                url = batch._text(value)
+                if url.startswith("//"):
+                    url = f"https:{url}"
+                if url and url not in candidates:
+                    candidates.append(url)
+
+            if row.get("image_b64"):
+                return candidates, None, None, batch._text(row.get("resolved_image_url") or row.get("selected_image_url")) or None
             image_bytes, image_mime, resolved_image_url = await _download_first_product_image(
                 client,
                 candidates,
@@ -515,61 +538,43 @@ async def build_reference_batch_lines(
                 batch,
                 context,
             )
-            total_products = sum(
-                batch._unit_quantity(getattr(item, "quantity", 0))
-                for item in getattr(order, "items", None) or []
-            ) or 1
-            result.append({
-                "line_number": index,
-                "group_key": batch._text(allocation.get("group_key")),
-                "order_number": order_number,
-                "order_item_id": order_item_id,
-                "unit_indices": list(allocation.get("unit_indices") or []),
-                "quantity": int(allocation.get("quantity") or 0),
-                "product_name": (
-                    batch._text(getattr(identity, "name", None))
-                    or batch._text(allocation.get("product_name"))
-                ),
-                "product_id": batch._text(getattr(identity, "product_id", None)) or None,
-                "sku": batch._text(getattr(identity, "sku", None)) or None,
-                "line_index": int(getattr(identity, "line_index", 0) or 0),
-                "order_date": str(getattr(order, "created_at", "") or ""),
-                "shipping_company": (
-                    batch._text(getattr(getattr(order, "shipping", None), "company", None))
-                    or None
-                ),
-                "total_products_in_order": total_products,
-                "selected_image_url": batch._text(state.get("selected_image_url")) or None,
-                "resolved_image_url": resolved_image_url,
-                "image_b64": (
-                    base64.b64encode(image_bytes).decode("ascii")
-                    if image_bytes else None
-                ),
-                "image_mime": image_mime,
-                "image_missing": image_bytes is None,
-                "image_candidates": candidates,
-                "customer_name": card_fields["customer_name"],
-                "size": card_fields["size"],
-                "color": card_fields["color"],
-                "note": card_fields["note"],
-                "product_options": card_fields["product_options"],
-                "file_spec_fields": spec_fields,
-                "preparation_note": batch._text(state.get("preparation_note")) or None,
-            })
+            return candidates, image_bytes, image_mime, resolved_image_url
+
+        hydrated = await batch.bounded_map_ordered(
+            row_allocations,
+            hydrate,
+            concurrency=8,
+        )
+
+    for row, (candidates, image_bytes, image_mime, resolved_image_url) in zip(result, hydrated):
+        row["image_candidates"] = candidates
+        if row.get("image_b64"):
+            row["image_missing"] = False
+            row["resolved_image_url"] = resolved_image_url
+            continue
+        row["resolved_image_url"] = resolved_image_url
+        row["image_b64"] = (
+            base64.b64encode(image_bytes).decode("ascii")
+            if image_bytes else None
+        )
+        row["image_mime"] = image_mime
+        row["image_missing"] = image_bytes is None
     return result
 
 
 _INSTALLED = False
 _ORIGINAL_CONTEXT_LOADER = None
+_ORIGINAL_BATCH_LINE_BUILDER = None
 
 
 def install_preparation_pdf_reference_layout() -> None:
-    global _INSTALLED, _ORIGINAL_CONTEXT_LOADER
+    global _INSTALLED, _ORIGINAL_CONTEXT_LOADER, _ORIGINAL_BATCH_LINE_BUILDER
     import reviewed_preparation_batches as batch
 
     if _INSTALLED:
         return
     _ORIGINAL_CONTEXT_LOADER = batch.load_reviewed_product_context
+    _ORIGINAL_BATCH_LINE_BUILDER = batch._build_batch_lines
 
     async def load_context_with_image_access(
         database: Any,
