@@ -1,6 +1,7 @@
 import {
     preparationFileMetadataPayload,
     preparationFileRecordLabel,
+    readSelectedProductCount,
     readSelectionMetric,
     riyadhDateParts,
 } from "./preparationFileRegistryUi";
@@ -20,6 +21,15 @@ test("reads the selected products and pieces from the fixed selection bar", () =
     const bar = document.querySelector('[data-testid="reviewed-preparation-selection-bar"]');
     expect(readSelectionMetric(bar, "المنتجات المحددة")).toBe(2);
     expect(readSelectionMetric(bar, "قطع هذا الملف")).toBe(30);
+});
+
+test("reads the selected card count used by the reviewed piece-card layout", () => {
+    document.body.innerHTML = `
+      <div data-testid="reviewed-preparation-selection-bar">
+        <div><div>البطاقات المحددة</div><div>3</div></div>
+      </div>`;
+    const bar = document.querySelector('[data-testid="reviewed-preparation-selection-bar"]');
+    expect(readSelectedProductCount(bar)).toBe(3);
 });
 
 test("metadata payload keeps the responsible employee and immutable counts", () => {

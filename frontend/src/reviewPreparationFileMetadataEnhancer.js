@@ -1,6 +1,7 @@
 import { listPreparationFileEmployees } from "./services/orderReviewEngine";
 import {
     preparationFileMetadataPayload,
+    readSelectedProductCount,
     readSelectionMetric,
     riyadhDateParts,
 } from "./preparationFileRegistryUi";
@@ -230,7 +231,7 @@ async function captureCreate(event) {
 
     const bar = button.closest('[data-testid="reviewed-preparation-selection-bar"]');
     const quantity = readSelectionMetric(bar, "قطع هذا الملف");
-    const productCount = readSelectionMetric(bar, "المنتجات المحددة");
+    const productCount = readSelectedProductCount(bar);
     if (!quantity || !productCount) return;
 
     const metadata = await showMetadataModal({ quantity, productCount });

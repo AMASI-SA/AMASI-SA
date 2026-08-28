@@ -23,6 +23,11 @@ export function readSelectionMetric(root, label) {
     return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
 }
 
+export function readSelectedProductCount(root) {
+    return readSelectionMetric(root, "البطاقات المحددة")
+        || readSelectionMetric(root, "المنتجات المحددة");
+}
+
 export function preparationFileMetadataPayload({
     fileTitle,
     responsibleEmployeeId,
