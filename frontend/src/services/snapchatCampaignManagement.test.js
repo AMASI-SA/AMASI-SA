@@ -6,11 +6,13 @@ import {
     diagnoseSnapchatManagementPixels,
     executeSnapchatManagementProposal,
     getCurrentSnapchatManagementPreviewJob,
+    getSnapchatEntitySettings,
     getSnapchatManagementPreviewResume,
     getSnapchatManagementReadiness,
     listSnapchatManagementProposals,
     microToNativeAmount,
     nativeAmountToMicro,
+    normalizeSnapchatEntitySettings,
     normalizeSnapchatManagementProposal,
     normalizeSnapchatManagementPreviewJob,
     normalizeSnapchatManagementReadiness,
@@ -19,6 +21,8 @@ import {
     reconcileSnapchatManagementProposal,
     rollbackSnapchatManagementProposal,
     resumeSnapchatManagementProposal,
+    snapchatBidLabel,
+    snapchatFinancialSettingsReady,
     startSnapchatManagementPreviewJob,
     verifiedSnapchatManagementEntityId,
 } from "./snapchatCampaignManagement";
@@ -955,4 +959,130 @@ describe("snapchatCampaignManagement", () => {
         expect(wait).toHaveBeenCalledTimes(1);
         expect(api.post).not.toHaveBeenCalled();
     });
+
+    test("converts micro values exactly and keeps missing different from zero", () => {
+        expect(microToNativeAmount(1_500_000)).toBe(1.5);
+        expect(nativeAmountToMicro("1.5")).toBe(1_500_000);
+        expect(microToNativeAmount(null)).toBeNull();
+        expect(microToNativeAmount("")).toBeNull();
+        expect(nativeAmountToMicro("")).toBeNull();
+        expect(microToNativeAmount(0)).toBe(0);
+    });
+
+    test("labels bid_micro according to bid strategy semantics", () => {
+        expect(snapchatBidLabel("TARGET_COST")).toBe("Target Cost");
+        expect(snapchatBidLabel("LOWEST_COST_WITH_MAX_BID")).toBe("Max Bid");
+        expect(snapchatBidLabel("AUTO_BID")).toBe("Bid");
+        expect(snapchatBidLabel(null)).toBe("Bid");
+    });
+
+    test("only exposes USD conversion for USD accounts", () => {
+        const usd = normalizeSnapchatEntitySettings({
+            unified_entity_id: "u-1",
+            provider_entity_id: "p-1",
+            mapping_verified: true,
+            account_currency: "USD",
+            daily_budget_micro: 20_000_000,
+            bid_micro: 5_000_000,
+            quality: {
+                settings_status: "settings_complete",
+                financial_controls_allowed: true,
+            },
+        });
+        expect(usd.daily_budget_usd).toBe(20);
+        expect(usd.bid_usd).toBe(5);
+        expect(snapchatFinancialSettingsReady(usd)).toBe(true);
+
+        const sar = normalizeSnapchatEntitySettings({
+            unified_entity_id: "u-2",
+            provider_entity_id: "p-2",
+            mapping_status: "verified",
+            account_currency: "SAR",
+            daily_budget_micro: 20_000_000,
+            bid_micro: 5_000_000,
+            quality: {
+                settings_status: "settings_complete",
+                financial_controls_allowed: true,
+            },
+        });
+        expect(sar.daily_budget_usd).toBeNull();
+        expect(sar.bid_usd).toBeNull();
+        expect(snapchatFinancialSettingsReady(sar)).toBe(true);
+    });
+
+    test("reads settings with unified identifiers without issuing a provider write", async () => {
+        api.get.mockResolvedValue({
+            data: {
+                items: [{
+                    entity_type: "ad_squad",
+                    unified_entity_id: "7c0f5bfa-3f59-437b-bb89-1c70b11d0526",
+                    provider_entity_id: "provider-ad-squad-original",
+                    mapping_verified: true,
+                    account_currency: "USD",
+                    daily_budget_micro: 100_000_000,
+                    quality: {
+                        settings_status: "settings_complete",
+                        financial_controls_allowed: true,
+                    },
+                }],
+            },
+        });
+
+        const rows = await getSnapchatEntitySettings({
+            entityType: "ad_squad",
+            unifiedEntityId: "7c0f5bfa-3f59-437b-bb89-1c70b11d0526",
+        });
+        expect(api.get).toHaveBeenCalledWith(
+            "/integrations-v2/snapchat_ads/management/entity-settings",
+            expect.objectContaining({
+                params: expect.objectContaining({
+                    entity_type: "ad_squad",
+                    unified_entity_id: "7c0f5bfa-3f59-437b-bb89-1c70b11d0526",
+                }),
+            }),
+        );
+        expect(rows[0]).toMatchObject({
+            unified_entity_id: "7c0f5bfa-3f59-437b-bb89-1c70b11d0526",
+            provider_entity_id: "provider-ad-squad-original",
+            daily_budget_micro: 100_000_000,
+            daily_budget_usd: 100,
+        });
+        expect(api.post).not.toHaveBeenCalled();
+    });
+
+    test("normalizes structured audit data and provider mapping independently", () => {
+        const proposal = normalizeSnapchatManagementProposal({
+            proposal_id: "proposal-1",
+            action: "ad_squad.update",
+            status: "completed",
+            target_id: "unified-squad-1",
+            provider_target_id: "provider-squad-9",
+            provider_entity_id: "provider-squad-9",
+            actor_id: "owner-1",
+            field_changes: {
+                daily_budget_micro: {
+                    before: 50_000_000,
+                    after: 60_000_000,
+                    before_usd: 50,
+                    after_usd: 60,
+                },
+            },
+            verification: {
+                verified: true,
+                entity_id: "provider-squad-9",
+            },
+            provider_write_reached: true,
+            provider_write_state: "confirmed",
+            provider_write_uncertain: false,
+        });
+        expect(proposal.target_id).toBe("unified-squad-1");
+        expect(proposal.provider_target_id).toBe("provider-squad-9");
+        expect(proposal.actor_id).toBe("owner-1");
+        expect(proposal.field_changes[0]).toMatchObject({
+            field: "daily_budget_micro",
+            before: 50_000_000,
+            after: 60_000_000,
+        });
+    });
+
 });
