@@ -334,7 +334,10 @@ async def test_campaign_budget_missing_is_unsupported_and_never_replaced_by_sum(
     )
     assert item["ad_squad_daily_budget_sum_micro"] == 30_000_000
     assert item["ad_squad_daily_budget_sum_usd"] == 30.0
+    assert item["ad_squads_daily_budget_micro"] == 30_000_000
+    assert item["ad_squads_daily_budget_usd"] == 30.0
     assert item["active_ad_squad_count"] == 1
+    assert item["active_ad_squads"] == 1
     assert item["shared_ad_squad_bid_strategy"] == "TARGET_COST"
     assert item["ad_squad_bid_strategies"] == [
         "LOWEST_COST_WITH_MAX_BID",
@@ -466,6 +469,77 @@ async def test_missing_stale_and_failed_sync_states_are_distinct():
         "latest_native_settings_sync_failed"
     )
     assert failed_item["quality"]["financial_controls_allowed"] is False
+
+
+@pytest.mark.asyncio
+async def test_performance_only_partial_run_does_not_hide_fresh_settings():
+    row = entity(
+        "ad_squad",
+        AD_SQUAD_ID,
+        campaign_id=CAMPAIGN_ID,
+        observed_at=(NOW - timedelta(minutes=10)).isoformat(),
+        snapshot={
+            "daily_budget_micro": 25_000_000,
+            "bid_strategy": "AUTO_BID",
+        },
+    )
+    performance_partial = {
+        "user_id": USER_ID,
+        "provider": "snapchat_ads",
+        "run_type": "analytics_refresh",
+        "run_id": "performance-partial",
+        "status": "partial",
+        "started_at": (NOW - timedelta(minutes=5)).isoformat(),
+        "finished_at": (NOW - timedelta(minutes=4)).isoformat(),
+        "summary": {
+            "entity_counts": {
+                ACCOUNT_ID: {"campaign": 1, "ad_squad": 2}
+            },
+            "errors_count": 1,
+        },
+        "error": {"code": "snapchat_native_sync_partial"},
+    }
+    result = await module.list_financial_management_settings(
+        DB(
+            entities=[row],
+            accounts=[account()],
+            runs=[performance_partial],
+        ),
+        USER_ID,
+        "ad_squad",
+        AD_SQUAD_ID,
+        now=NOW,
+    )
+    item = result["items"][0]
+
+    assert item["quality"]["settings_status"] == "settings_complete"
+    assert item["quality"]["reason"] == "provider_snapshot_fresh"
+    assert item["quality"]["latest_sync_run_status"] == "partial"
+
+
+@pytest.mark.asyncio
+async def test_provider_snapshot_absence_is_settings_not_loaded():
+    row = entity(
+        "campaign",
+        CAMPAIGN_ID,
+        snapshot={"daily_budget_micro": 40_000_000},
+    )
+    row.pop("provider_snapshot")
+
+    result = await module.list_financial_management_settings(
+        DB(entities=[row], accounts=[account()]),
+        USER_ID,
+        "campaign",
+        CAMPAIGN_ID,
+        now=NOW,
+    )
+    item = result["items"][0]
+
+    assert item["quality"]["settings_status"] == "settings_not_loaded"
+    assert item["quality"]["reason"] == "provider_snapshot_missing"
+    assert item["mapping_verified"] is False
+    assert item["daily_budget_micro"] is None
+    assert item["daily_budget_usd"] is None
 
 
 @pytest.mark.asyncio
