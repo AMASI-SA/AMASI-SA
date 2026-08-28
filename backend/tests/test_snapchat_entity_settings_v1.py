@@ -328,6 +328,7 @@ async def test_campaign_budget_missing_is_unsupported_and_never_replaced_by_sum(
     assert item["daily_budget_availability"] == (
         "unsupported_at_provider_level"
     )
+    assert item["quality"]["settings_status"] == "settings_complete"
     assert item["quality"]["financial_controls_allowed"] is False
     assert item["quality"]["reason"] == "unsupported_at_provider_level"
     assert item["daily_budget_unavailable_message_ar"] == (
@@ -630,6 +631,50 @@ async def test_provider_id_or_parent_mismatch_is_fail_closed():
 
 
 @pytest.mark.asyncio
+async def test_parent_campaign_filter_is_applied_before_adsquad_limit():
+    other_campaign_id = "provider-other-campaign"
+    unrelated = [
+        entity(
+            "ad_squad",
+            f"unrelated-squad-{index}",
+            campaign_id=other_campaign_id,
+            snapshot={
+                "daily_budget_micro": 10_000_000 + index,
+                "bid_strategy": "AUTO_BID",
+            },
+        )
+        for index in range(3)
+    ]
+    requested = entity(
+        "ad_squad",
+        AD_SQUAD_ID,
+        campaign_id=CAMPAIGN_ID,
+        snapshot={
+            "daily_budget_micro": 25_000_000,
+            "bid_strategy": "AUTO_BID",
+        },
+    )
+
+    result = await module.list_financial_management_settings(
+        DB(entities=[*unrelated, requested], accounts=[account()]),
+        USER_ID,
+        "ad_squad",
+        None,
+        CAMPAIGN_ID,
+        now=NOW,
+        limit=1,
+    )
+
+    assert result["requested_parent_unified_id"] == CAMPAIGN_ID
+    assert result["rows_truncated"] is False
+    assert [item["provider_entity_id"] for item in result["items"]] == [
+        AD_SQUAD_ID
+    ]
+    assert result["items"][0]["provider_parent_id"] == CAMPAIGN_ID
+    assert result["items"][0]["mapping_verified"] is True
+
+
+@pytest.mark.asyncio
 async def test_entity_settings_get_route_is_database_read_only():
     row = entity(
         "ad_squad",
@@ -660,6 +705,7 @@ async def test_entity_settings_get_route_is_database_read_only():
     result = await route.endpoint(
         entity_type="ad_squad",
         unified_entity_id=AD_SQUAD_ID,
+        parent_unified_id=CAMPAIGN_ID,
         limit=50,
         user={"id": USER_ID},
     )
@@ -669,6 +715,7 @@ async def test_entity_settings_get_route_is_database_read_only():
     assert result["source_collection"] == (
         "mezan_snapchat_entities_v2"
     )
+    assert result["requested_parent_unified_id"] == CAMPAIGN_ID
     assert result["items"][0]["provider_entity_id"] == AD_SQUAD_ID
     assert db.write_log == []
 
