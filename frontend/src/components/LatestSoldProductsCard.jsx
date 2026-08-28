@@ -7,7 +7,6 @@ import {
 } from "../services/orderEngine";
 
 const ORDERS_PER_PAGE = 5;
-const AUTO_REFRESH_INTERVAL_MS = 10_000;
 
 function orderNumberValue(order) {
     const value = Number(order?.order_number || 0);
@@ -143,6 +142,7 @@ export default function LatestSoldProductsCard({
                     ? mergeOrdersNewestFirst(current, result.items)
                     : sortOrdersNewestFirst(result.items)
             ));
+        setFeedError("");
             if (!background || !loadedAdditionalPagesRef.current) {
                 setFeedCursor(result.nextCursor);
                 setFeedHasMore(Boolean(result.nextCursor));
@@ -164,21 +164,10 @@ export default function LatestSoldProductsCard({
         if (!usesDedicatedFeed) return undefined;
 
         void loadFirstPage(false);
-        const refresh = () => {
-            if (document.visibilityState === "visible") {
-                void loadFirstPage(true);
-            }
-        };
-        const interval = window.setInterval(refresh, AUTO_REFRESH_INTERVAL_MS);
-        window.addEventListener("focus", refresh);
-        window.addEventListener("online", refresh);
-        document.addEventListener("visibilitychange", refresh);
-
+        const refresh = () => void loadFirstPage(true);
+        window.addEventListener("mezan:dashboard-refresh", refresh);
         return () => {
-            window.clearInterval(interval);
-            window.removeEventListener("focus", refresh);
-            window.removeEventListener("online", refresh);
-            document.removeEventListener("visibilitychange", refresh);
+            window.removeEventListener("mezan:dashboard-refresh", refresh);
         };
     }, [loadFirstPage, usesDedicatedFeed]);
 
@@ -209,7 +198,7 @@ export default function LatestSoldProductsCard({
             setFeedHasMore(Boolean(result.nextCursor));
             loadedAdditionalPagesRef.current = true;
         } catch (error) {
-            setFeedError(error.message);
+            setFeedError("تعذر تحميل أحدث المنتجات مؤقتًا. ستتم إعادة المحاولة تلقائيًا.");
         } finally {
             requestInFlightRef.current = false;
             setFeedLoading(false);

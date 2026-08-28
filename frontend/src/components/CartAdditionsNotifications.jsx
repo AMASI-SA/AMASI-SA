@@ -30,7 +30,11 @@ export function relativeCartTime(value, now = Date.now()) {
     return `منذ ${Math.floor(hours / 24)} يوم`;
 }
 
-export default function CartAdditionsNotifications({ carts = [] }) {
+export default function CartAdditionsNotifications() {
+  return null;
+}
+
+export function FrozenCartAdditionsNotifications({ carts = [] }) {
     const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
     const [clock, setClock] = useState(() => Date.now());
     const events = useMemo(() => cartAdditionEvents(carts), [carts]);
