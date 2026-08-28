@@ -18,19 +18,26 @@ jest.mock("../../services/snapchatCampaignManagement", () => ({
     resumeSnapchatManagementProposal: jest.fn(),
     rollbackSnapchatManagementProposal: jest.fn(),
     snapchatBidLabel: (strategy) => strategy === "TARGET_COST" ? "Target Cost" : strategy === "LOWEST_COST_WITH_MAX_BID" ? "Max Bid" : "Bid",
-    snapchatFinancialFieldReady: (settings, field) => Boolean(
+    snapchatFinancialFieldReady: (settings, field, accountId) => {
+        const controlKey = field === "daily_budget_micro" ? "daily_budget" : ["bid_micro", "bid_strategy"].includes(field) ? "bid" : field;
+        const control = settings?.quality?.financial_field_controls?.[controlKey];
+        return Boolean(
+            settings?.mapping_verified
+            && settings?.account_currency === "USD"
+            && settings?.ad_account_id === accountId
+            && settings?.quality?.settings_status === "settings_complete"
+            && Number(settings?.quality?.freshness_seconds) <= Number(settings?.quality?.freshness_threshold_seconds)
+            && Number(settings?.quality?.freshness_threshold_seconds) <= 1800
+            && settings?.settings_synced_at
+            && (control === true || control?.allowed === true)
+        );
+    },
+    snapchatFinancialSettingsReady: (settings, accountId) => Boolean(
         settings?.mapping_verified
         && settings?.account_currency === "USD"
+        && settings?.ad_account_id === accountId
         && settings?.quality?.settings_status === "settings_complete"
-        && (
-            settings?.quality?.financial_field_controls?.[field] === true
-            || settings?.quality?.financial_field_controls?.[field]?.allowed === true
-        )
-    ),
-    snapchatFinancialSettingsReady: (settings) => Boolean(
-        settings?.mapping_verified
-        && settings?.account_currency === "USD"
-        && settings?.quality?.settings_status === "settings_complete"
+        && Number(settings?.quality?.freshness_seconds) <= Number(settings?.quality?.freshness_threshold_seconds)
         && settings?.quality?.financial_controls_allowed,
     ),
 }));
@@ -1146,6 +1153,7 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
             provider_entity_id: "provider-squad-9",
             provider_parent_id: "provider-campaign-8",
             mapping_verified: true,
+            ad_account_id: "account-1",
             account_currency: "USD",
             daily_budget_micro: 50_000_000,
             daily_budget_usd: 50,
@@ -1161,12 +1169,12 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
             quality: {
                 settings_status: "settings_complete",
                 freshness_seconds: 120,
+                freshness_threshold_seconds: 1800,
                 reason: "provider_snapshot_complete",
                 financial_controls_allowed: true,
                 financial_field_controls: {
-                    daily_budget_micro: { allowed: true },
-                    bid_micro: { allowed: true },
-                    bid_strategy: { allowed: true },
+                    daily_budget: { allowed: true },
+                    bid: { allowed: true },
                 },
             },
         };
@@ -1200,14 +1208,29 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
             .toContain("Max Bid");
         expect(container.querySelector('[data-testid="snapchat-management-new-daily-budget"]').value).toBe("");
         expect(container.querySelector('[data-testid="snapchat-management-new-bid"]').value).toBe("");
+        expect(container.querySelector('[data-testid="snapchat-management-account-select"]').disabled).toBe(true);
         expect(container.querySelector('[data-testid="snapchat-management-provider-target-id"]').value)
             .toBe("provider-squad-9");
 
         await act(async () => {
             change(container.querySelector('[data-testid="snapchat-management-new-daily-budget"]'), "60");
             change(container.querySelector('[data-testid="snapchat-management-new-bid"]'), "8");
+            change(container.querySelector('[data-testid="snapchat-management-new-bid-strategy"]'), "AUTO_BID");
+        });
+        expect(container.querySelector('[data-testid="snapchat-management-new-bid"]').closest("label").textContent)
+            .toContain("Bid");
+        expect(container.querySelector('[data-testid="snapchat-management-bid-strategy-blocked"]')).not.toBeNull();
+        await act(async () => {
+            change(container.querySelector('[data-testid="snapchat-management-new-bid-strategy"]'), "TARGET_COST");
+        });
+        expect(container.querySelector('[data-testid="snapchat-management-new-bid"]').closest("label").textContent)
+            .toContain("Target Cost");
+        expect(container.querySelector('[data-testid="snapchat-management-bid-strategy-blocked"]')).toBeNull();
+        await act(async () => {
             change(container.querySelector('[data-testid="snapchat-management-new-bid-strategy"]'), "LOWEST_COST_WITH_MAX_BID");
         });
+        expect(container.querySelector('[data-testid="snapchat-management-new-bid"]').closest("label").textContent)
+            .toContain("Max Bid");
         await act(async () => {
             container.querySelector('[data-testid="snapchat-management-form"]')
                 .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
@@ -1224,7 +1247,15 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
                 settings_proof: expect.objectContaining({
                     unified_entity_id: "unified-squad-1",
                     provider_entity_id: "provider-squad-9",
-                    settings_status: "settings_complete",
+                    ad_account_id: "account-1",
+                    account_currency: "USD",
+                    quality: expect.objectContaining({
+                        settings_status: "settings_complete",
+                        financial_field_controls: expect.objectContaining({
+                            daily_budget: { allowed: true },
+                            bid: { allowed: true },
+                        }),
+                    }),
                 }),
                 payload: expect.objectContaining({
                     daily_budget_micro: 60_000_000,
@@ -1274,7 +1305,58 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
             change(container.querySelector('[data-testid="snapchat-management-new-daily-budget"]'), "45");
         });
         expect(container.querySelector('[data-testid="snapchat-management-financial-settings-blocked"]')).not.toBeNull();
+        expect(container.querySelector('[data-testid="snapchat-management-current-settings"]').textContent)
+            .not.toContain("40.00 USD");
         expect(container.querySelector('[data-testid="snapchat-management-create-preview"]').disabled).toBe(true);
+        expect(createSnapchatManagementProposal).not.toHaveBeenCalled();
+        expect(executeSnapchatManagementProposal).not.toHaveBeenCalled();
+    });
+
+    test("shows the exact provider-level campaign budget message and disables financial input", async () => {
+        const unsupportedSettings = {
+            unified_entity_id: "unified-campaign-unsupported",
+            provider_entity_id: "provider-campaign-unsupported",
+            mapping_status: "verified",
+            mapping_verified: true,
+            ad_account_id: "account-1",
+            account_currency: "USD",
+            daily_budget_micro: null,
+            daily_budget_availability: "unsupported_at_provider_level",
+            daily_budget_unavailable_message_ar: "غير متاح من Snapchat على هذا المستوى",
+            settings_synced_at: "2026-08-28T10:00:00Z",
+            quality: {
+                settings_status: "settings_complete",
+                freshness_seconds: 120,
+                freshness_threshold_seconds: 1800,
+                reason: "unsupported_at_provider_level",
+                financial_controls_allowed: true,
+                financial_field_controls: {
+                    daily_budget: { allowed: false },
+                },
+            },
+        };
+        await act(async () => {
+            root.render(
+                <SnapchatCampaignManagementPanel
+                    accountId="account-1"
+                    entityLevel="campaigns"
+                    initialAction="campaign.update"
+                    selectedCampaign={{
+                        campaign_id: "unified-campaign-unsupported",
+                        provider_campaign_id: "provider-campaign-unsupported",
+                    }}
+                    currentSettings={unsupportedSettings}
+                />,
+            );
+        });
+        await act(async () => {
+            container.querySelector('[data-testid="snapchat-campaign-management-panel"] > button').click();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        expect(container.querySelector('[data-testid="snapchat-management-campaign-budget-unsupported"]').textContent)
+            .toContain("غير متاح من Snapchat على هذا المستوى");
+        expect(container.querySelector('[data-testid="snapchat-management-new-daily-budget"]').disabled).toBe(true);
         expect(createSnapchatManagementProposal).not.toHaveBeenCalled();
         expect(executeSnapchatManagementProposal).not.toHaveBeenCalled();
     });
@@ -1287,20 +1369,45 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
             created_at: "2026-08-28T10:00:00Z",
             executed_at: "2026-08-28T10:01:00Z",
             actor_id: "owner-1",
+            account_currency: "USD",
             provider_entity_id: "provider-squad-9",
-            verification: { verified: true, entity_id: "provider-squad-9" },
+            verification: {
+                verified: true,
+                entity_id: "provider-squad-9",
+                source: "snapchat_provider_reread",
+                verified_at: "2026-08-28T10:02:00Z",
+                provider_snapshot: {
+                    id: "provider-squad-9",
+                    daily_budget_micro: 60_000_000,
+                    bid_micro: 8_000_000,
+                    bid_strategy: "LOWEST_COST_WITH_MAX_BID",
+                },
+            },
+            provider_readback: {
+                id: "provider-squad-9",
+                daily_budget_micro: 60_000_000,
+                bid_micro: 8_000_000,
+                bid_strategy: "LOWEST_COST_WITH_MAX_BID",
+            },
             field_changes: [{
                 field: "daily_budget_micro",
                 before: 50_000_000,
                 after: 60_000_000,
-                before_usd: 50,
-                after_usd: 60,
+                before_usd: 999,
+                after_usd: 999,
+            }, {
+                field: "bid_micro",
+                before: 7_500_000,
+                after: 8_000_000,
+                before_usd: 999,
+                after_usd: 999,
             }, {
                 field: "bid_strategy",
                 before: "TARGET_COST",
                 after: "LOWEST_COST_WITH_MAX_BID",
             }],
-            preview: { changed_fields: ["daily_budget_micro", "bid_strategy"] },
+            field_changes_known: true,
+            preview: { changed_fields: ["daily_budget_micro", "bid_micro", "bid_strategy"] },
         }]);
         await act(async () => {
             root.render(<SnapchatCampaignManagementPanel accountId="account-1" />);
@@ -1319,12 +1426,19 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
         const changes = container.querySelector('[data-testid="snapchat-management-field-changes"]');
         expect(changes.textContent).toContain("50,000,000 micro");
         expect(changes.textContent).toContain("60 USD");
+        expect(changes.textContent).toContain("7,500,000 micro");
+        expect(changes.textContent).toContain("8 USD");
+        expect(changes.textContent).not.toContain("999 USD");
         expect(changes.textContent).toContain("TARGET_COST");
         expect(changes.textContent).toContain("LOWEST_COST_WITH_MAX_BID");
         expect(container.querySelector('[data-testid="snapchat-management-audit-metadata"]').textContent)
             .toContain("provider-squad-9");
         expect(container.querySelector('[data-testid="snapchat-management-audit-metadata"]').textContent)
             .toContain("مطابقة مؤكدة");
+        expect(container.querySelector('[data-testid="snapchat-management-audit-metadata"]').textContent)
+            .toContain("snapchat_provider_reread");
+        expect(container.querySelector('[data-testid="snapchat-management-provider-readback"]').textContent)
+            .toContain('"bid_micro": 8000000');
     });
 
     test("keeps a GET-only resume control after the preview polling timeout", async () => {
