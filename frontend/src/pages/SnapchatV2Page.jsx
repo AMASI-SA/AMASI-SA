@@ -6,6 +6,7 @@ import SnapchatCampaignManagementPanel from "../components/marketing/SnapchatCam
 import UnifiedMarketingEntityTable from "../components/marketing/UnifiedMarketingEntityTable";
 import UnifiedMarketingOrdersPanel from "../components/marketing/UnifiedMarketingOrdersPanel";
 import api, { formatApiErrorDetail } from "../lib/api";
+import { snapchatV2SpendDisplay } from "../lib/snapchatV2SpendDisplay";
 
 const ENTITY_TABS = [
     { id: "campaign", label: "الحملات" },
@@ -280,7 +281,12 @@ export default function SnapchatV2Page() {
         : (status?.financial_sync_status || "—");
     const totals = campaignContract?.totals || null;
     const sallaTotals = totals?.commerce_outcomes || {};
-    const accountSpendNative = report?.base_spend_native;
+    const spendDisplay = snapchatV2SpendDisplay(report);
+    const accountSpendNative = spendDisplay.spendNative;
+    const unallocatedSpendNative = spendDisplay.unallocatedSpendNative;
+    const hasUnallocatedSpend = Number.isFinite(unallocatedSpendNative)
+        && Math.abs(unallocatedSpendNative) >= 0.01;
+    const hourlyBreakdownComplete = spendDisplay.hourlyBreakdownComplete;
     const snapchatPurchases = totals?.platform_outcomes?.conversions;
     const snapchatPurchaseValue = totals?.platform_outcomes?.revenue;
     const snapchatRoas = totals?.platform_outcomes?.roas;
@@ -320,10 +326,10 @@ export default function SnapchatV2Page() {
 
             <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
                 <div className="rounded-xl border border-slate-200 bg-white p-4"><div className="text-xs font-bold text-slate-500">الحساب المعتمد</div><div className="mt-2 text-lg font-black">{account?.display_name || "—"}</div><div className="mt-1 truncate text-xs text-slate-500" dir="ltr">{accountId || "—"}</div></div>
-                <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-4"><div className="text-xs font-bold text-amber-700">صرف الفترة</div><div className="mt-2 text-2xl font-black text-amber-950">{money(accountSpendNative, currency)}</div><div className="mt-1 text-xs font-bold text-amber-700">{appliedRange?.dateFrom || "—"} — {appliedRange?.dateTo || "—"}</div></div>
+                <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-4"><div className="text-xs font-bold text-amber-700">صرف الفترة</div><div className="mt-2 text-2xl font-black text-amber-950" data-testid="snapchat-v2-spend-headline">{money(accountSpendNative, currency)}</div><div className="mt-1 text-xs font-bold text-amber-700">{appliedRange?.dateFrom || "—"} — {appliedRange?.dateTo || "—"}</div>{hasUnallocatedSpend && <div className="mt-1 text-[11px] font-bold text-amber-800" data-testid="snapchat-v2-unallocated-spend">فرق غير موزع على الساعات: {money(unallocatedSpendNative, currency)}</div>}</div>
                 <div className="rounded-xl border border-violet-200 bg-violet-50 p-4"><div className="text-xs font-bold text-violet-700">نتائج Snapchat (TOTAL)</div><div className="mt-2 text-2xl font-black text-violet-950">{number(snapchatPurchases)}</div><div className="mt-1 text-xs font-bold text-violet-700">قيمة {contractMoney(snapchatPurchaseValue)} · ROAS {number(snapchatRoas)}</div></div>
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4"><div className="text-xs font-bold text-emerald-700">نتائج سلة المنسوبة لـ Snapchat</div><div className="mt-2 text-2xl font-black text-emerald-950">{sallaTotals.status === "complete" ? number(sallaTotals.orders) : "—"}</div><div className="mt-1 text-xs font-bold text-emerald-700">قيمة الطلبات {contractMoney(sallaTotals.revenue)} · ROAS {number(sallaTotals.roas)}</div>{sallaTotals.status === "complete" && <div className="mt-1 text-[11px] font-bold text-emerald-700">ربط تفصيلي {number(sallaSummary.account_period_campaign_matched_orders)} من {number(sallaSummary.snapchat_attributed_orders)}{sallaSummary.campaign_match_coverage_pct !== null && sallaSummary.campaign_match_coverage_pct !== undefined && Number.isFinite(Number(sallaSummary.campaign_match_coverage_pct)) ? ` · تغطية ${number(sallaSummary.campaign_match_coverage_pct)}%` : ""}</div>}</div>
-                <div className="rounded-xl border border-slate-200 bg-white p-4"><div className="text-xs font-bold text-slate-500">حالة المزامنة</div><div className="mt-2 flex items-center gap-2 text-xl font-black">{report?.amount_complete ? <CheckCircle className="text-emerald-600" weight="fill" /> : <Clock className="text-amber-600" />}{report?.amount_complete ? "مكتمل" : "قيد التحديث"}</div><div className={`mt-2 inline-flex rounded-full border px-2 py-1 text-xs font-black ${statusTone(financialDisplayStatus)}`}>Financial: {financialDisplayStatus}</div></div>
+                <div className="rounded-xl border border-slate-200 bg-white p-4"><div className="text-xs font-bold text-slate-500">حالة المزامنة</div><div className="mt-2 flex items-center gap-2 text-xl font-black">{hourlyBreakdownComplete ? <CheckCircle className="text-emerald-600" weight="fill" /> : <Clock className="text-amber-600" />}{hourlyBreakdownComplete ? "مكتمل" : "التوزيع الساعي قيد التحديث"}</div><div className={`mt-2 inline-flex rounded-full border px-2 py-1 text-xs font-black ${statusTone(financialDisplayStatus)}`}>Financial: {financialDisplayStatus}</div></div>
                 <div data-testid="snapchat-unified-readiness" className={`rounded-xl border p-4 ${readiness?.ready ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}><div className={`text-xs font-bold ${readiness?.ready ? "text-emerald-700" : "text-amber-700"}`}>جاهزية العقد الموحد</div><div className="mt-2 flex items-center gap-2 text-xl font-black">{readiness?.ready ? <CheckCircle className="text-emerald-600" weight="fill" /> : <Clock className="text-amber-600" />}{readinessLoading ? "جارٍ التحقق" : readiness?.reasons?.includes("readiness_request_failed") ? "تعذر التحقق" : readiness?.ready ? "جاهز" : "غير مكتمل"}</div><div className="mt-2 text-[11px] font-bold text-slate-600">{readiness?.period?.date_from || "آخر يوم مغلق"} · Decision Intelligence غير مربوط</div></div>
             </section>
 
