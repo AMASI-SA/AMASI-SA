@@ -32,7 +32,10 @@ from .snapchat_native_data_common import (
     _safe_provider_error_detail,
 )
 from .snapchat_native_entities_sync import _safe_provider_value, _upsert_entity
-
+from .snapchat_entity_settings import (
+    attach_snapchat_entity_settings_routes,
+    resolve_financial_management_settings,
+)
 
 PROPOSAL_COLLECTION = "mezan_snapchat_campaign_proposals_v1"
 AUDIT_COLLECTION = "mezan_snapchat_campaign_audit_v1"
@@ -51,6 +54,14 @@ MAX_MANAGEMENT_LIST_ROWS = 10_000
 CREATE_RECONCILIATION_GRACE = timedelta(minutes=5)
 PIXEL_CONVERSION_WINDOWS = {"SWIPE_28DAY_VIEW_1DAY", "SWIPE_7DAY"}
 PIXEL_ELIGIBLE_STATUSES = {"ELIGIBLE", "ELIGIBLE_WARNING"}
+FINANCIAL_CONTROL_FIELDS = {
+    "daily_budget_micro",
+    "lifetime_budget_micro",
+    "lifetime_spend_cap_micro",
+    "bid_micro",
+    "bid_strategy",
+}
+SETTINGS_MANAGED_UPDATE_ACTIONS = {"campaign.update", "ad_squad.update"}
 
 Action = Literal[
     "campaign.create",
@@ -338,12 +349,20 @@ class SnapchatManagementProposalInput(BaseModel):
 
     action: Action
     account_id: str = Field(min_length=1, max_length=160)
+    # ``target_id`` and ``parent_id`` are Mezan unified identifiers.  Provider
+    # identifiers are separate hints only; the server verifies both against the
+    # latest entity/settings catalogue before building a Snapchat path.
     target_id: str | None = Field(default=None, max_length=160)
     parent_id: str | None = Field(default=None, max_length=160)
+    provider_target_id: str | None = Field(default=None, max_length=160)
+    provider_parent_id: str | None = Field(default=None, max_length=160)
     payload: dict[str, Any] = Field(default_factory=dict)
     reason: str = Field(min_length=5, max_length=500)
     idempotency_key: str = Field(min_length=8, max_length=128)
     activation_acknowledged: bool = False
+    # Client proof is accepted only as an idempotency/audit input.  Provider
+    # paths and finance gates always use a fresh server-side resolver result.
+    settings_proof: dict[str, Any] | None = None
     expected_outcome: dict[str, Any] | None = None
     supporting_evidence: list[SnapchatDecisionEvidenceInput] = Field(
         default_factory=list, max_length=30
@@ -358,7 +377,13 @@ class SnapchatManagementProposalInput(BaseModel):
     # read/reconciliation compatibility for durable legacy proposals.
     safety_protocol_version: Literal[1, 2] = 1
 
-    @field_validator("account_id", "target_id", "parent_id")
+    @field_validator(
+        "account_id",
+        "target_id",
+        "parent_id",
+        "provider_target_id",
+        "provider_parent_id",
+    )
     @classmethod
     def normalize_identifiers(cls, value: str | None, info: Any) -> str | None:
         if value is None:
@@ -387,9 +412,9 @@ class SnapchatManagementProposalInput(BaseModel):
     def normalize_payload(cls, value: dict[str, Any]) -> dict[str, Any]:
         return _bounded_payload(value)
 
-    @field_validator("expected_outcome")
+    @field_validator("settings_proof", "expected_outcome")
     @classmethod
-    def normalize_expected_outcome(
+    def normalize_optional_payload(
         cls, value: dict[str, Any] | None
     ) -> dict[str, Any] | None:
         if value is None:
@@ -417,6 +442,285 @@ class SnapchatManagementProposalInput(BaseModel):
         ):
             raise ValueError("activation_acknowledged is required for ACTIVE status")
         return self
+
+
+def _operation_financial_fields(operation: dict[str, Any]) -> set[str]:
+    changes = operation.get("changes")
+    if not isinstance(changes, dict):
+        return set()
+    return set(changes).intersection(FINANCIAL_CONTROL_FIELDS)
+
+
+def _settings_value(settings: dict[str, Any], key: str) -> Any:
+    if key in settings:
+        return settings.get(key)
+    values = settings.get("settings")
+    if isinstance(values, dict) and key in values:
+        return values.get(key)
+    snapshot = settings.get("settings_snapshot")
+    if isinstance(snapshot, dict) and key in snapshot:
+        return snapshot.get(key)
+    return None
+
+
+def _mapping_value(settings: dict[str, Any], key: str) -> Any:
+    if key in settings:
+        return settings.get(key)
+    mapping = settings.get("mapping")
+    if isinstance(mapping, dict):
+        return mapping.get(key)
+    return None
+
+
+def _quality_value(settings: dict[str, Any], key: str) -> Any:
+    if key in settings:
+        return settings.get(key)
+    quality = settings.get("quality")
+    if isinstance(quality, dict):
+        return quality.get(key)
+    return None
+
+
+def _provider_target_id(row: dict[str, Any]) -> str:
+    return str(
+        row.get("provider_target_id")
+        or row.get("provider_entity_id")
+        or row.get("target_id")
+        or ""
+    )
+
+
+def _provider_parent_id(row: dict[str, Any]) -> str:
+    return str(row.get("provider_parent_id") or row.get("parent_id") or "")
+
+
+def _safe_settings_proof(settings: dict[str, Any]) -> dict[str, Any]:
+    proof = {
+        "unified_entity_id": _mapping_value(settings, "unified_entity_id"),
+        "provider_entity_id": _mapping_value(settings, "provider_entity_id"),
+        "provider_parent_id": _mapping_value(settings, "provider_parent_id"),
+        "mapping_status": (
+            _mapping_value(settings, "mapping_status")
+            or (
+                (settings.get("mapping") or {}).get("status")
+                if isinstance(settings.get("mapping"), dict)
+                else None
+            )
+        ),
+        "mapping_verified": (_mapping_value(settings, "mapping_verified") is True),
+        "settings_status": _quality_value(settings, "settings_status"),
+        "financial_controls_allowed": (
+            _quality_value(settings, "financial_controls_allowed") is True
+        ),
+        "financial_field_controls": (
+            _quality_value(settings, "financial_field_controls")
+            if isinstance(_quality_value(settings, "financial_field_controls"), dict)
+            else {}
+        ),
+        "last_synced_at": (
+            _quality_value(settings, "settings_synced_at")
+            or _settings_value(settings, "settings_synced_at")
+            or _quality_value(settings, "last_synced_at")
+            or _quality_value(settings, "last_observed_at")
+        ),
+        "currency": (
+            _settings_value(settings, "currency")
+            or _settings_value(settings, "account_currency")
+        ),
+        "daily_budget_micro": _settings_value(settings, "daily_budget_micro"),
+        "daily_budget_usd": _settings_value(settings, "daily_budget_usd"),
+        "bid_micro": _settings_value(settings, "bid_micro"),
+        "bid_usd": _settings_value(settings, "bid_usd"),
+        "bid_strategy": _settings_value(settings, "bid_strategy"),
+    }
+    return _safe_provider_value(proof)
+
+
+async def _resolve_management_settings_proof(
+    db: Any,
+    user_id: str,
+    payload: SnapchatManagementProposalInput,
+    *,
+    operation: dict[str, Any] | None = None,
+    require_financial: bool,
+) -> dict[str, Any]:
+    entity_type = "campaign" if payload.action == "campaign.update" else "ad_squad"
+    settings = await resolve_financial_management_settings(
+        db,
+        user_id,
+        entity_type,
+        str(payload.target_id or ""),
+        provider_entity_id=payload.provider_target_id,
+        parent_unified_id=payload.parent_id,
+    )
+    if not isinstance(settings, dict):
+        settings = {}
+    proof = _safe_settings_proof(settings)
+    resolved_unified_id = str(proof.get("unified_entity_id") or "")
+    resolved_provider_id = str(proof.get("provider_entity_id") or "")
+    resolved_provider_parent_id = str(proof.get("provider_parent_id") or "")
+    mapping_status = str(proof.get("mapping_status") or "").lower()
+    if (
+        not resolved_unified_id
+        or resolved_unified_id != str(payload.target_id or "")
+        or not resolved_provider_id
+        or mapping_status != "verified"
+        or proof.get("mapping_verified") is not True
+        or (
+            payload.provider_target_id
+            and resolved_provider_id != str(payload.provider_target_id)
+        )
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "snapchat_management_provider_mapping_unverified",
+                "message": (
+                    "تعذر إثبات مطابقة معرف ميزان مع معرف Snapchat؛ "
+                    "لم تُنشأ معاينة ولم يصل أي تعديل إلى المزود."
+                ),
+                "unified_entity_id": payload.target_id,
+                "provider_entity_id": resolved_provider_id or None,
+            },
+        )
+    if entity_type == "ad_squad":
+        if not resolved_provider_parent_id or (
+            payload.provider_parent_id
+            and resolved_provider_parent_id != str(payload.provider_parent_id)
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "snapchat_management_provider_parent_mapping_unverified",
+                    "message": "تعذر إثبات معرف Campaign الأصلي التابع لـ Snapchat.",
+                },
+            )
+    if operation is not None:
+        operation_provider_id = str(operation.get("target_id") or "")
+        operation_parent_id = str(operation.get("parent_id") or "")
+        if operation_provider_id and operation_provider_id != resolved_provider_id:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "snapchat_management_provider_mapping_changed"},
+            )
+        if (
+            entity_type == "ad_squad"
+            and operation_parent_id
+            and operation_parent_id != resolved_provider_parent_id
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "snapchat_management_provider_parent_mapping_changed"},
+            )
+    financial_fields = (
+        _operation_financial_fields(operation)
+        if operation is not None
+        else set(payload.payload).intersection(FINANCIAL_CONTROL_FIELDS)
+    )
+    field_controls = (
+        proof.get("financial_field_controls")
+        if isinstance(proof.get("financial_field_controls"), dict)
+        else {}
+    )
+    daily_control = field_controls.get("daily_budget")
+    bid_control = field_controls.get("bid")
+    daily_required = bool(
+        financial_fields.intersection(
+            {
+                "daily_budget_micro",
+                "lifetime_budget_micro",
+                "lifetime_spend_cap_micro",
+            }
+        )
+    )
+    bid_required = bool(financial_fields.intersection({"bid_micro", "bid_strategy"}))
+    field_coverage_allowed = bool(
+        (
+            not daily_required
+            or (
+                isinstance(daily_control, dict) and daily_control.get("allowed") is True
+            )
+        )
+        and (
+            not bid_required
+            or (isinstance(bid_control, dict) and bid_control.get("allowed") is True)
+        )
+    )
+    if require_financial and (
+        proof.get("settings_status") != "settings_complete"
+        or proof.get("financial_controls_allowed") is not True
+        or not field_coverage_allowed
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "snapchat_management_financial_settings_unavailable",
+                "message": "غير متاح — فشل جلب الإعدادات",
+                "settings_status": proof.get("settings_status")
+                or "settings_not_loaded",
+                "financial_controls_allowed": False,
+            },
+        )
+    return proof
+
+
+def _micro_to_usd(value: Any, currency: Any) -> float | None:
+    if str(currency or "").strip().upper() != "USD" or isinstance(value, bool):
+        return None
+    try:
+        micro = int(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if isinstance(value, float) and not value.is_integer():
+        return None
+    return round(micro / 1_000_000, 6)
+
+
+def _structured_field_changes(
+    *,
+    original: dict[str, Any] | None,
+    requested: dict[str, Any],
+    currency: Any,
+    actor_id: str,
+    provider_entity_id: str | None,
+    verified: dict[str, Any] | None = None,
+    occurred_at: str | None = None,
+) -> dict[str, Any]:
+    before = original if isinstance(original, dict) else {}
+    after_source = verified if isinstance(verified, dict) else requested
+    changes: dict[str, Any] = {}
+    for field in sorted(requested):
+        before_value = before.get(field)
+        after_value = after_source.get(field)
+        entry: dict[str, Any] = {
+            "before": _safe_provider_value(before_value),
+            "after": _safe_provider_value(after_value),
+        }
+        if field in {
+            "daily_budget_micro",
+            "lifetime_budget_micro",
+            "lifetime_spend_cap_micro",
+            "bid_micro",
+        }:
+            entry.update(
+                {
+                    "before_micro": before_value,
+                    "after_micro": after_value,
+                    "before_usd": _micro_to_usd(before_value, currency),
+                    "after_usd": _micro_to_usd(after_value, currency),
+                    "currency": (
+                        "USD" if str(currency or "").strip().upper() == "USD" else None
+                    ),
+                }
+            )
+        changes[field] = entry
+    return {
+        "fields": changes,
+        "actor_id": actor_id,
+        "occurred_at": occurred_at or _iso(),
+        "provider_entity_id": provider_entity_id,
+        "provider_reread_verified": isinstance(verified, dict),
+    }
 
 
 class SnapchatManagementApprovalInput(BaseModel):
@@ -536,9 +840,7 @@ def build_snapchat_operation(
         optimization_goal = str(entity.get("optimization_goal") or "").upper()
         entity["optimization_goal"] = optimization_goal
         if _is_pixel_optimization_goal(optimization_goal):
-            entity["pixel_id"] = _identifier(
-                entity.get("pixel_id"), field="pixel_id"
-            )
+            entity["pixel_id"] = _identifier(entity.get("pixel_id"), field="pixel_id")
             conversion_window = str(entity.get("conversion_window") or "").upper()
             if conversion_window not in PIXEL_CONVERSION_WINDOWS:
                 raise ValueError(
@@ -546,9 +848,7 @@ def build_snapchat_operation(
                 )
             entity["conversion_window"] = conversion_window
         elif entity.get("pixel_id"):
-            entity["pixel_id"] = _identifier(
-                entity.get("pixel_id"), field="pixel_id"
-            )
+            entity["pixel_id"] = _identifier(entity.get("pixel_id"), field="pixel_id")
         entity["delivery_constraint"] = (
             "DAILY_BUDGET"
             if budget_fields == ["daily_budget_micro"]
@@ -683,6 +983,8 @@ def _operation_summary(
         "daily_budget_micro": entity.get("daily_budget_micro"),
         "lifetime_budget_micro": entity.get("lifetime_budget_micro"),
         "lifetime_spend_cap_micro": entity.get("lifetime_spend_cap_micro"),
+        "bid_micro": entity.get("bid_micro"),
+        "bid_strategy": entity.get("bid_strategy"),
         "pixel_id": entity.get("pixel_id"),
         "optimization_goal": entity.get("optimization_goal"),
         "conversion_window": entity.get("conversion_window"),
@@ -694,7 +996,11 @@ def snapchat_management_intent_fingerprint(operation: dict[str, Any]) -> str:
     """Fence logically identical creates even when their proposal IDs differ."""
     body = operation.get("body")
     rows = body.get(operation.get("plural")) if isinstance(body, dict) else None
-    entity = dict(rows[0]) if isinstance(rows, list) and rows and isinstance(rows[0], dict) else {}
+    entity = (
+        dict(rows[0])
+        if isinstance(rows, list) and rows and isinstance(rows[0], dict)
+        else {}
+    )
     for provider_field in (
         "status",
         "ad_account_id",
@@ -725,8 +1031,8 @@ def _assert_stored_operation_integrity(
 ) -> None:
     action = str(row.get("action") or "")
     account_id = _identifier(row.get("account_id"), field="account_id")
-    target_id = row.get("target_id")
-    parent_id = row.get("parent_id")
+    target_id = _provider_target_id(row)
+    parent_id = _provider_parent_id(row)
     if action in UPDATE_ACTIONS:
         target_id = _identifier(target_id, field="target_id")
     if action in {"ad_squad.create", "ad_squad.update", "ad.create", "ad.update"}:
@@ -839,9 +1145,10 @@ def _assert_stored_operation_integrity(
             or stored_intent != snapchat_management_intent_fingerprint(operation)
         ):
             raise ValueError("stored create intent fingerprint is invalid")
-    if action == "ad_squad.create" and int(
-        row.get("safety_protocol_version") or 1
-    ) == 2:
+    if (
+        action == "ad_squad.create"
+        and int(row.get("safety_protocol_version") or 1) == 2
+    ):
         goal = str(entity.get("optimization_goal") or "").upper()
         if _is_pixel_optimization_goal(goal):
             pixel_id = _identifier(entity.get("pixel_id"), field="pixel_id")
@@ -1169,8 +1476,7 @@ class SnapchatManagementProvider:
                     )
                 entity = wrapper.get(singular)
                 if not isinstance(entity, dict) or (
-                    not entity.get("id")
-                    and singular != "campaign_eligibility"
+                    not entity.get("id") and singular != "campaign_eligibility"
                 ):
                     raise HTTPException(
                         status_code=502,
@@ -1291,8 +1597,7 @@ class SnapchatManagementProvider:
         matches: list[dict[str, Any]] = []
         for value in eligibility_rows:
             if (
-                str(value.get("optimization_goal") or "").upper()
-                == optimization_goal
+                str(value.get("optimization_goal") or "").upper() == optimization_goal
                 and str(value.get("conversion_window") or "").upper()
                 == conversion_window
             ):
@@ -1305,9 +1610,7 @@ class SnapchatManagementProvider:
                     "matching_rows": len(matches),
                 },
             )
-        eligibility_status = str(
-            matches[0].get("eligibility_status") or ""
-        ).upper()
+        eligibility_status = str(matches[0].get("eligibility_status") or "").upper()
         proof = {
             "verified": eligibility_status in PIXEL_ELIGIBLE_STATUSES,
             "pixel_id": pixel_id,
@@ -1408,9 +1711,7 @@ class SnapchatManagementProvider:
                 status_code=409,
                 detail={"code": "snapchat_management_target_parent_mismatch"},
             )
-        campaign_id = _identifier(
-            ad_squad.get("campaign_id"), field="campaign_id"
-        )
+        campaign_id = _identifier(ad_squad.get("campaign_id"), field="campaign_id")
         campaign = await self.read_entity("campaign", campaign_id)
         if str(campaign.get("id") or "") != campaign_id:
             raise HTTPException(
@@ -1508,14 +1809,8 @@ class SnapchatManagementProvider:
             "ad": "ads",
             "creative": "creatives",
         }[entity_type]
-        params = (
-            {"return_placement_v2": "true"}
-            if entity_type == "ad_squad"
-            else None
-        )
-        payload = await self._request(
-            "GET", f"/{path_kind}/{entity_id}", params=params
-        )
+        params = {"return_placement_v2": "true"} if entity_type == "ad_squad" else None
+        payload = await self._request("GET", f"/{path_kind}/{entity_id}", params=params)
         return _extract_entity(
             payload, path_kind, "adsquad" if entity_type == "ad_squad" else entity_type
         )
@@ -1596,9 +1891,7 @@ def _extract_entity(
     payload: dict[str, Any], plural: str, singular: str
 ) -> dict[str, Any]:
     present_operation_plurals = [
-        key
-        for key in ("campaigns", "adsquads", "ads", "creatives")
-        if key in payload
+        key for key in ("campaigns", "adsquads", "ads", "creatives") if key in payload
     ]
     if present_operation_plurals != [plural]:
         raise HTTPException(
@@ -1727,6 +2020,25 @@ def _public_proposal(
         "account_id": row.get("account_id"),
         "target_id": row.get("target_id"),
         "parent_id": row.get("parent_id"),
+        "unified_entity_id": row.get("target_id"),
+        "provider_target_id": row.get("provider_target_id"),
+        "provider_parent_id": row.get("provider_parent_id"),
+        "mapping": {
+            "unified_entity_id": row.get("target_id"),
+            "provider_entity_id": (
+                row.get("provider_target_id") or row.get("provider_entity_id")
+            ),
+            "provider_parent_id": row.get("provider_parent_id"),
+            "status": (
+                (row.get("settings_proof") or {}).get("mapping_status")
+                if isinstance(row.get("settings_proof"), dict)
+                else None
+            ),
+        },
+        "settings_proof": _safe_provider_value(row.get("settings_proof") or {}),
+        "field_changes": _safe_provider_value(row.get("field_changes") or {}),
+        "actor_id": row.get("actor_id"),
+        "executed_by": row.get("executed_by"),
         "reason": row.get("reason"),
         "preview": operation.get("summary") or {},
         "creates_paused": row.get("action") in DELIVERY_CREATE_ACTIONS,
@@ -1757,12 +2069,8 @@ def _public_proposal(
         "product_link_state": row.get("product_link_state") or "not_supplied",
         "trend_review": _safe_provider_value(row.get("trend_review") or {}),
         "trend_override_reason": row.get("trend_override_reason"),
-        "safety_protocol_version": int(
-            row.get("safety_protocol_version") or 1
-        ),
-        "pixel_eligibility": _safe_provider_value(
-            row.get("pixel_eligibility") or {}
-        ),
+        "safety_protocol_version": int(row.get("safety_protocol_version") or 1),
+        "pixel_eligibility": _safe_provider_value(row.get("pixel_eligibility") or {}),
         "execution_pixel_eligibility": _safe_provider_value(
             row.get("execution_pixel_eligibility") or {}
         ),
@@ -1985,7 +2293,7 @@ async def _adopt_proposal_products_deferred_safe(
         campaign_id = str(row.get("parent_id") or campaign_id)
         ad_squad_id = provider_entity_id
     elif entity_type == "ad":
-        ad_squad_id = str(row.get("parent_id") or "") or None
+        ad_squad_id = _provider_parent_id(row) or None
         ad_id = provider_entity_id
     if not campaign_id:
         return
@@ -2088,7 +2396,9 @@ async def create_snapchat_management_proposal(
                 status_code=409,
                 detail={
                     "code": "snapchat_management_idempotency_conflict",
-                    "message": ("مفتاح التكرار مستخدم لطلب مختلف؛ أنشئ مفتاحًا جديدًا."),
+                    "message": (
+                        "مفتاح التكرار مستخدم لطلب مختلف؛ أنشئ مفتاحًا جديدًا."
+                    ),
                 },
             )
         if existing.get("status") in {"previewed", "previewed_v2"}:
@@ -2121,8 +2431,30 @@ async def create_snapchat_management_proposal(
                 "message": "الحساب يحتاج دور general أو admin لإدارة الحملات، ودور creative أو admin للإبداع.",
             },
         )
+
+    settings_proof: dict[str, Any] = {}
+    effective_payload = payload
+    if payload.action in SETTINGS_MANAGED_UPDATE_ACTIONS:
+        settings_proof = await _resolve_management_settings_proof(
+            db,
+            user_id,
+            payload,
+            require_financial=bool(
+                set(payload.payload).intersection(FINANCIAL_CONTROL_FIELDS)
+            ),
+        )
+        effective_payload = payload.model_copy(
+            update={
+                "target_id": str(settings_proof["provider_entity_id"]),
+                "parent_id": (
+                    str(settings_proof.get("provider_parent_id") or "")
+                    if payload.action == "ad_squad.update"
+                    else payload.parent_id
+                ),
+            }
+        )
     try:
-        operation = build_snapchat_operation(payload)
+        operation = build_snapchat_operation(effective_payload)
     except ValueError as exc:
         raise HTTPException(
             status_code=422,
@@ -2133,8 +2465,15 @@ async def create_snapchat_management_proposal(
     pixel_eligibility: dict[str, Any] | None = None
     if payload.action in UPDATE_ACTIONS:
         original = await client.read_entity(
-            operation["entity_type"], payload.target_id or ""
+            operation["entity_type"], effective_payload.target_id or ""
         )
+        if payload.action in SETTINGS_MANAGED_UPDATE_ACTIONS and str(
+            original.get("id") or ""
+        ) != str(settings_proof.get("provider_entity_id") or ""):
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "snapchat_management_provider_identity_mismatch"},
+            )
         if payload.action == "campaign.update":
             if str(original.get("ad_account_id") or "") != payload.account_id:
                 raise HTTPException(
@@ -2142,12 +2481,25 @@ async def create_snapchat_management_proposal(
                     detail={"code": "snapchat_management_target_account_mismatch"},
                 )
         elif payload.action == "ad_squad.update":
-            if str(original.get("campaign_id") or "") != str(payload.parent_id or ""):
+            if str(original.get("campaign_id") or "") != str(
+                effective_payload.parent_id or ""
+            ):
                 raise HTTPException(
                     status_code=409,
                     detail={"code": "snapchat_management_target_parent_mismatch"},
                 )
-            campaign = await client.read_entity("campaign", payload.parent_id or "")
+            campaign = await client.read_entity(
+                "campaign", effective_payload.parent_id or ""
+            )
+            if str(campaign.get("id") or "") != str(
+                settings_proof.get("provider_parent_id") or ""
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "snapchat_management_provider_parent_identity_mismatch"
+                    },
+                )
             if str(campaign.get("ad_account_id") or "") != payload.account_id:
                 raise HTTPException(
                     status_code=409,
@@ -2205,9 +2557,7 @@ async def create_snapchat_management_proposal(
         creative = await client.read_entity(
             "creative", str(ad_entity.get("creative_id") or "")
         )
-        if str(creative.get("id") or "") != str(
-            ad_entity.get("creative_id") or ""
-        ):
+        if str(creative.get("id") or "") != str(ad_entity.get("creative_id") or ""):
             raise HTTPException(
                 status_code=409,
                 detail={"code": "snapchat_management_creative_identity_mismatch"},
@@ -2320,11 +2670,11 @@ async def create_snapchat_management_proposal(
     if payload.action == "creative.create":
         creative_rows = (operation.get("body") or {}).get("creatives") or []
         creative = creative_rows[0] if creative_rows else {}
-        web_view = creative.get("web_view_properties") if isinstance(creative, dict) else None
+        web_view = (
+            creative.get("web_view_properties") if isinstance(creative, dict) else None
+        )
         destination_url = (
-            str(web_view.get("url") or "").strip()
-            if isinstance(web_view, dict)
-            else ""
+            str(web_view.get("url") or "").strip() if isinstance(web_view, dict) else ""
         )
         if destination_url:
             from first_party_attribution.core import build_tracking_url
@@ -2333,21 +2683,43 @@ async def create_snapchat_management_proposal(
                 destination_url,
                 user_id=user_id,
                 provider="snapchat",
-                product_id=(product_rows[0].get("product_id") if product_rows else None),
+                product_id=(
+                    product_rows[0].get("product_id") if product_rows else None
+                ),
                 account_id=payload.account_id,
                 link_id=f"snap-proposal:{proposal_id}",
                 snapchat_macros=True,
             )
             web_view["url"] = tracked_url
-            first_party_link_record.update({
-                "proposal_id": proposal_id,
-                "actor_id": actor_id,
-                "status": "proposal_ready",
-            })
+            first_party_link_record.update(
+                {
+                    "proposal_id": proposal_id,
+                    "actor_id": actor_id,
+                    "status": "proposal_ready",
+                }
+            )
     intent_fingerprint = (
         snapchat_management_intent_fingerprint(operation)
         if payload.action in DELIVERY_CREATE_ACTIONS | CREATIVE_ACTIONS
         else None
+    )
+    requested_changes = dict(operation.get("changes") or {})
+    preview_provider_entity_id = (
+        str(settings_proof.get("provider_entity_id") or "")
+        or str((original or {}).get("id") or "")
+        or None
+    )
+    field_changes = _structured_field_changes(
+        original=original,
+        requested=requested_changes,
+        currency=(
+            settings_proof.get("currency")
+            or account.get("currency")
+            or account.get("account_currency")
+        ),
+        actor_id=actor_id,
+        provider_entity_id=preview_provider_entity_id,
+        occurred_at=_iso(now),
     )
     row = {
         "proposal_id": proposal_id,
@@ -2357,6 +2729,18 @@ async def create_snapchat_management_proposal(
         "account_id": payload.account_id,
         "target_id": payload.target_id,
         "parent_id": payload.parent_id,
+        "provider_target_id": (
+            settings_proof.get("provider_entity_id")
+            or payload.provider_target_id
+            or payload.target_id
+        ),
+        "provider_parent_id": (
+            settings_proof.get("provider_parent_id")
+            or payload.provider_parent_id
+            or payload.parent_id
+        ),
+        "settings_proof": settings_proof,
+        "field_changes": field_changes,
         "reason": payload.reason,
         "idempotency_key": payload.idempotency_key,
         "request_fingerprint": request_fingerprint,
@@ -2408,7 +2792,13 @@ async def create_snapchat_management_proposal(
         proposal_id=proposal_id,
         event="previewed",
         actor_id=actor_id,
-        detail={"action": payload.action, "role": role.get("role")},
+        detail={
+            "action": payload.action,
+            "role": role.get("role"),
+            "provider_entity_id": preview_provider_entity_id,
+            "field_changes": field_changes,
+            "settings_status": settings_proof.get("settings_status"),
+        },
     )
     return _public_proposal(row, confirm_token=token)
 
@@ -2447,9 +2837,7 @@ async def approve_snapchat_management_proposal(
         )
     now_iso = _iso()
     preview_status = str(row.get("status") or "")
-    approved_status = (
-        "approved_v2" if preview_status == "previewed_v2" else "approved"
-    )
+    approved_status = "approved_v2" if preview_status == "previewed_v2" else "approved"
     result = await _collection(db, PROPOSAL_COLLECTION).update_one(
         {
             "user_id": user_id,
@@ -2641,19 +3029,36 @@ async def _complete_verified_execution(
     verified: dict[str, Any],
     event: str,
 ) -> dict[str, Any]:
+    now_iso = _iso()
+    stored_settings_proof = (
+        row.get("settings_proof") if isinstance(row.get("settings_proof"), dict) else {}
+    )
+    field_changes = _structured_field_changes(
+        original=dict(row.get("original_snapshot") or {}),
+        requested=dict(operation.get("changes") or {}),
+        verified=verified,
+        currency=(
+            stored_settings_proof.get("currency")
+            or account.get("currency")
+            or account.get("account_currency")
+        ),
+        actor_id=actor_id,
+        provider_entity_id=provider_entity_id,
+        occurred_at=now_iso,
+    )
     verification = {
         "verified": True,
         "entity_id": provider_entity_id,
         "status": verified.get("status"),
-        "verified_at": _iso(),
+        "verified_at": now_iso,
         "provider_snapshot": verified,
+        "field_changes_verified": True,
         "verification_source": (
             "post_error_readback"
             if event == "execution_reconciled_applied"
             else "readback"
         ),
     }
-    now_iso = _iso()
     terminal = await _collection(db, PROPOSAL_COLLECTION).update_one(
         {"user_id": user_id, "proposal_id": proposal_id, "status": "executing"},
         {
@@ -2666,6 +3071,12 @@ async def _complete_verified_execution(
                 "provider_write_uncertain": False,
                 "provider_entity_id": provider_entity_id,
                 "verification": verification,
+                "field_changes": field_changes,
+                "execution_settings_proof": (
+                    row.get("execution_settings_proof")
+                    or row.get("settings_proof")
+                    or {}
+                ),
                 "execution_retryable": False,
                 "automatic_retry_allowed": False,
                 "failure": {},
@@ -2693,7 +3104,16 @@ async def _complete_verified_execution(
         proposal_id=proposal_id,
         event=event,
         actor_id=actor_id,
-        detail={"entity_id": provider_entity_id, "status": verified.get("status")},
+        detail={
+            "entity_id": provider_entity_id,
+            "status": verified.get("status"),
+            "field_changes": field_changes,
+            "provider_reread": {
+                "verified": True,
+                "verified_at": now_iso,
+                "snapshot": _safe_provider_value(verified),
+            },
+        },
     )
     completed_row = await _collection(db, PROPOSAL_COLLECTION).find_one(
         {"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0}
@@ -2756,6 +3176,7 @@ def _provider_state_conflict_detail(stale_fields: list[str]) -> dict[str, Any]:
 def _lease_entity_id(row: dict[str, Any], operation: dict[str, Any]) -> str:
     return str(
         row.get("provider_entity_id")
+        or row.get("provider_target_id")
         or row.get("target_id")
         or (
             f"intent:{row.get('intent_fingerprint')}"
@@ -3112,8 +3533,7 @@ def _create_candidate_matches(
 def _submitted_control_shape_present(expected: Any, actual: Any) -> bool:
     if isinstance(expected, dict):
         return isinstance(actual, dict) and all(
-            key in actual
-            and _submitted_control_shape_present(value, actual.get(key))
+            key in actual and _submitted_control_shape_present(value, actual.get(key))
             for key, value in expected.items()
         )
     if isinstance(expected, list):
@@ -3165,8 +3585,8 @@ def _create_candidate_same_scope_and_window(
 ) -> bool:
     relationship = {
         "campaign.create": ("ad_account_id", str(row.get("account_id") or "")),
-        "ad_squad.create": ("campaign_id", str(row.get("parent_id") or "")),
-        "ad.create": ("ad_squad_id", str(row.get("parent_id") or "")),
+        "ad_squad.create": ("campaign_id", _provider_parent_id(row)),
+        "ad.create": ("ad_squad_id", _provider_parent_id(row)),
     }.get(str(row.get("action") or ""))
     if not relationship or str(candidate.get(relationship[0]) or "") != relationship[1]:
         return False
@@ -3183,8 +3603,7 @@ def _create_candidate_submitted_shape_complete(
 ) -> bool:
     expected = _operation_expected_values(operation)
     return all(
-        key in candidate
-        and _submitted_control_shape_present(value, candidate.get(key))
+        key in candidate and _submitted_control_shape_present(value, candidate.get(key))
         for key, value in expected.items()
     )
 
@@ -3203,10 +3622,9 @@ def _classify_create_reconciliation_catalog(
             return [], [], True
         if not _create_candidate_same_scope_and_window(row, candidate):
             continue
-        if (
-            _create_candidate_deleted(candidate)
-            or not _create_candidate_submitted_shape_complete(operation, candidate)
-        ):
+        if _create_candidate_deleted(
+            candidate
+        ) or not _create_candidate_submitted_shape_complete(operation, candidate):
             plausible.append(candidate)
         elif _create_candidate_matches(row, operation, candidate):
             matches.append(candidate)
@@ -3588,9 +4006,7 @@ async def _reconcile_uncertain_create_without_id(
         )
     previous_reconciliation = row.get("create_reconciliation")
     previous_reconciliation = (
-        previous_reconciliation
-        if isinstance(previous_reconciliation, dict)
-        else {}
+        previous_reconciliation if isinstance(previous_reconciliation, dict) else {}
     )
     sticky_manual = bool(
         int(previous_reconciliation.get("matching_candidates") or 0) > 1
@@ -3600,12 +4016,13 @@ async def _reconcile_uncertain_create_without_id(
         reason = (
             "deleted_candidate_in_attempt_window"
             if any(
-                _create_candidate_deleted(candidate)
-                for candidate in plausible_drift
+                _create_candidate_deleted(candidate) for candidate in plausible_drift
             )
-            else "same_scope_candidate_drifted_in_attempt_window"
-            if plausible_drift
-            else "prior_manual_reconciliation_is_sticky"
+            else (
+                "same_scope_candidate_drifted_in_attempt_window"
+                if plausible_drift
+                else "prior_manual_reconciliation_is_sticky"
+            )
         )
         recorded = await _collection(db, PROPOSAL_COLLECTION).update_one(
             {
@@ -3814,9 +4231,7 @@ async def _reconcile_uncertain_create_without_id(
         )
         raise
     confirmation_matches, confirmation_plausible, confirmation_incomplete = (
-        _classify_create_reconciliation_catalog(
-            row, operation, confirmation_catalog
-        )
+        _classify_create_reconciliation_catalog(row, operation, confirmation_catalog)
     )
     if (
         confirmation_incomplete
@@ -3883,9 +4298,7 @@ async def _reconcile_uncertain_create_without_id(
         verified=verified,
         event="execution_reconciled_create_by_exact_catalog_match",
     )
-    await _release_observed_entity_lease(
-        db, user_id=user_id, lease=intent_lease
-    )
+    await _release_observed_entity_lease(db, user_id=user_id, lease=intent_lease)
     return result
 
 
@@ -3962,6 +4375,44 @@ async def _execute_snapchat_management_proposal_under_lease(
             status_code=409,
             detail={"code": "snapchat_management_operation_integrity_failed"},
         ) from exc
+    execution_settings_proof: dict[str, Any] = {}
+    if str(row.get("action") or "") in SETTINGS_MANAGED_UPDATE_ACTIONS:
+        revalidation_payload = SnapchatManagementProposalInput.model_construct(
+            action=str(row.get("action") or ""),
+            account_id=str(row.get("account_id") or ""),
+            target_id=str(row.get("target_id") or ""),
+            parent_id=str(row.get("parent_id") or "") or None,
+            provider_target_id=_provider_target_id(row),
+            provider_parent_id=_provider_parent_id(row) or None,
+            payload=dict(operation.get("changes") or {}),
+            reason=str(row.get("reason") or "server-side settings revalidation"),
+            idempotency_key=str(
+                row.get("idempotency_key") or row.get("proposal_id") or "revalidation"
+            ),
+            activation_acknowledged=operation.get("activates_delivery") is True,
+            settings_proof=None,
+            expected_outcome=None,
+            supporting_evidence=[],
+            products=[],
+            trend_override_reason=None,
+            safety_protocol_version=int(row.get("safety_protocol_version") or 1),
+        )
+        execution_settings_proof = await _resolve_management_settings_proof(
+            db,
+            user_id,
+            revalidation_payload,
+            operation=operation,
+            require_financial=bool(_operation_financial_fields(operation)),
+        )
+        await _collection(db, PROPOSAL_COLLECTION).update_one(
+            {
+                "user_id": user_id,
+                "proposal_id": proposal_id,
+                "status": row.get("status"),
+            },
+            {"$set": {"execution_settings_proof": execution_settings_proof}},
+        )
+        row["execution_settings_proof"] = execution_settings_proof
     if (
         operation.get("activates_delivery")
         and not snapchat_campaign_activation_enabled()
@@ -3983,7 +4434,7 @@ async def _execute_snapchat_management_proposal_under_lease(
     if str(row.get("action") or "") in UPDATE_ACTIONS:
         preflight_entity = await client.read_entity(
             str(operation.get("entity_type") or ""),
-            str(row.get("target_id") or ""),
+            _provider_target_id(row),
         )
         preflight_stale_fields = _provider_state_conflict_fields(
             operation,
@@ -4005,16 +4456,16 @@ async def _execute_snapchat_management_proposal_under_lease(
             account_id=str(row.get("account_id") or ""),
             campaign_id=(row.get("baseline") or {}).get("campaign_id"),
             ad_squad_id=(
-                str(row.get("target_id") or "")
+                _provider_target_id(row)
                 if operation.get("entity_type") == "ad_squad"
                 else (
-                    str(row.get("parent_id") or "")
+                    _provider_parent_id(row)
                     if operation.get("entity_type") == "ad"
                     else None
                 )
             ),
             ad_id=(
-                str(row.get("target_id") or "")
+                _provider_target_id(row)
                 if operation.get("entity_type") == "ad"
                 else None
             ),
@@ -4108,12 +4559,8 @@ async def _execute_snapchat_management_proposal_under_lease(
                 recommendation_collection="mezan_campaign_ai_recommendations_v1",
                 user_id=user_id,
                 snapshot_id=str(expected_outcome.get("snapshot_id") or ""),
-                recommendation_id=str(
-                    expected_outcome.get("recommendation_id") or ""
-                ),
-                expected_digest=str(
-                    expected_outcome.get("snapshot_digest") or ""
-                ),
+                recommendation_id=str(expected_outcome.get("recommendation_id") or ""),
+                expected_digest=str(expected_outcome.get("snapshot_digest") or ""),
             )
         except execution_quality.ExecutionQualityBlocked as exc:
             failure = {
@@ -4135,7 +4582,7 @@ async def _execute_snapchat_management_proposal_under_lease(
         try:
             current_entity = await client.read_entity(
                 str(operation.get("entity_type") or ""),
-                str(row.get("target_id") or ""),
+                _provider_target_id(row),
             )
         except Exception:
             # No provider write has been attempted yet.  Release the local
@@ -4174,7 +4621,7 @@ async def _execute_snapchat_management_proposal_under_lease(
             # any failure and no other provider call is interposed before POST.
             final_pixel_eligibility = await client.validate_pixel_ad_squad_intent(
                 account_id=str(row.get("account_id") or ""),
-                parent_id=str(row.get("parent_id") or ""),
+                parent_id=_provider_parent_id(row),
                 operation=operation,
                 reread_parent=True,
             )
@@ -4194,7 +4641,7 @@ async def _execute_snapchat_management_proposal_under_lease(
             final_ad_dependency_verification = (
                 await client.validate_ad_create_dependencies(
                     account_id=str(row.get("account_id") or ""),
-                    parent_id=str(row.get("parent_id") or ""),
+                    parent_id=_provider_parent_id(row),
                     operation=operation,
                 )
             )
@@ -4258,7 +4705,7 @@ async def _execute_snapchat_management_proposal_under_lease(
         )
     provider_write_confirmed = False
     provider_entity_id = (
-        str(row.get("target_id") or "")
+        _provider_target_id(row)
         if str(row.get("action") or "") in UPDATE_ACTIONS
         else ""
     )
@@ -4266,9 +4713,7 @@ async def _execute_snapchat_management_proposal_under_lease(
     try:
         provider_entity = await client.execute(operation)
         provider_write_confirmed = True
-        provider_entity_id = str(
-            provider_entity.get("id") or row.get("target_id") or ""
-        )
+        provider_entity_id = str(provider_entity.get("id") or _provider_target_id(row))
         await _collection(db, PROPOSAL_COLLECTION).update_one(
             {"user_id": user_id, "proposal_id": proposal_id, "status": "executing"},
             {
@@ -4377,9 +4822,11 @@ async def _execute_snapchat_management_proposal_under_lease(
                 "reconciliation": (
                     "current_matches_original"
                     if original_ok
-                    else "explicit_provider_validation_rejection"
-                    if explicit_validation_no_write
-                    else "mixed_or_unavailable"
+                    else (
+                        "explicit_provider_validation_rejection"
+                        if explicit_validation_no_write
+                        else "mixed_or_unavailable"
+                    )
                 ),
                 "recovery_action": recovery_action,
             }
@@ -4726,7 +5173,7 @@ async def reconcile_snapchat_management_proposal(
     if not execution_uncertain and not rollback_uncertain:
         return _public_proposal(row)
     operation = dict(row.get("operation") or {})
-    entity_id = str(row.get("provider_entity_id") or row.get("target_id") or "")
+    entity_id = str(row.get("provider_entity_id") or _provider_target_id(row))
     if (
         not entity_id
         and execution_uncertain
@@ -4765,7 +5212,10 @@ async def reconcile_snapchat_management_proposal(
             detail={"code": "snapchat_management_role_missing"},
         )
     if not entity_id:
-        if execution_uncertain and str(row.get("action") or "") in DELIVERY_CREATE_ACTIONS:
+        if (
+            execution_uncertain
+            and str(row.get("action") or "") in DELIVERY_CREATE_ACTIONS
+        ):
             return await _reconcile_uncertain_create_without_id(
                 db,
                 user_id=user_id,
@@ -5224,18 +5674,16 @@ async def _rollback_snapchat_management_proposal_under_lease(
         account_id=str(row.get("account_id") or ""),
         campaign_id=(row.get("baseline") or {}).get("campaign_id"),
         ad_squad_id=(
-            str(row.get("target_id") or "")
+            _provider_target_id(row)
             if operation.get("entity_type") == "ad_squad"
             else (
-                str(row.get("parent_id") or "")
+                _provider_parent_id(row)
                 if operation.get("entity_type") == "ad"
                 else None
             )
         ),
         ad_id=(
-            str(row.get("target_id") or "")
-            if operation.get("entity_type") == "ad"
-            else None
+            _provider_target_id(row) if operation.get("entity_type") == "ad" else None
         ),
         products=list(row.get("products") or []),
     )
@@ -5247,7 +5695,7 @@ async def _rollback_snapchat_management_proposal_under_lease(
         },
         {"$set": {"rollback_baseline": _safe_provider_value(rollback_baseline)}},
     )
-    entity_id = str(row.get("provider_entity_id") or row.get("target_id") or "")
+    entity_id = str(row.get("provider_entity_id") or _provider_target_id(row))
     removed_fields: list[str] = []
     if row.get("action") in UPDATE_ACTIONS:
         original = dict(row.get("original_snapshot") or {})
@@ -5615,9 +6063,9 @@ def _entity_patch_path(entity_type: str, row: dict[str, Any], entity_id: str) ->
     if entity_type == "campaign":
         return f"/adaccounts/{row.get('account_id')}/campaigns/{entity_id}"
     if entity_type == "ad_squad":
-        return f"/campaigns/{row.get('parent_id')}/adsquads/{entity_id}"
+        return f"/campaigns/{_provider_parent_id(row)}/adsquads/{entity_id}"
     if entity_type == "ad":
-        return f"/adsquads/{row.get('parent_id')}/ads/{entity_id}"
+        return f"/adsquads/{_provider_parent_id(row)}/ads/{entity_id}"
     raise HTTPException(
         status_code=409, detail={"code": "snapchat_management_rollback_neutralized"}
     )
@@ -5723,6 +6171,8 @@ def attach_snapchat_campaign_management_routes(
     current_user: Callable,
     require_owner: Callable[[Any], dict],
 ) -> None:
+    attach_snapchat_entity_settings_routes(router, db, current_user, require_owner)
+
     @router.get(f"/{SNAPCHAT_PROVIDER_ID}/management/readiness")
     async def readiness(user: dict = Depends(current_user)) -> dict[str, Any]:
         owner = require_owner(user)

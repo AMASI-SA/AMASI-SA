@@ -6,6 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import ValidationError
 
 from integrations_control_center import snapchat_campaign_management as module
+from integrations_control_center import snapchat_entity_settings as settings_module
 
 
 class Result:
@@ -59,11 +60,13 @@ class Provider:
     def __init__(self):
         self.entities = {}
         self.executions = []
+        self.reads = []
 
     async def management_role(self, account, action):
         return {"allowed": True, "role": "general", "reason": None}
 
     async def read_entity(self, entity_type, entity_id):
+        self.reads.append((entity_type, entity_id))
         return deepcopy(self.entities[(entity_type, entity_id)])
 
     async def execute(self, operation):
@@ -85,6 +88,57 @@ class Provider:
             else:
                 current[key] = deepcopy(patch.get("value"))
         return deepcopy(current)
+
+
+@pytest.fixture(autouse=True)
+def fresh_management_settings_gate(monkeypatch):
+    async def resolve_settings(
+        db,
+        user_id,
+        entity_type,
+        unified_entity_id,
+        provider_entity_id=None,
+        parent_unified_id=None,
+        *,
+        now=None,
+    ):
+        return {
+            "unified_entity_id": unified_entity_id,
+            "provider_entity_id": provider_entity_id or unified_entity_id,
+            "provider_parent_id": parent_unified_id,
+            "mapping_status": "verified",
+            "mapping_verified": True,
+            "settings_status": "settings_complete",
+            "financial_controls_allowed": True,
+            "financial_field_controls": {
+                "daily_budget": {"allowed": True, "reason": "available"},
+                "bid": {"allowed": True, "reason": "available"},
+            },
+            "last_synced_at": "2026-08-28T12:00:00+00:00",
+            "currency": "USD",
+            "daily_budget_micro": 100_000_000,
+            "daily_budget_usd": 100.0,
+            "bid_micro": 20_000_000,
+            "bid_usd": 20.0,
+            "bid_strategy": "LOWEST_COST_WITH_MAX_BID",
+        }
+
+    async def list_settings(
+        db,
+        user_id,
+        entity_type=None,
+        *,
+        limit=500,
+        now=None,
+    ):
+        return []
+
+    monkeypatch.setattr(
+        module, "resolve_financial_management_settings", resolve_settings
+    )
+    monkeypatch.setattr(
+        settings_module, "list_financial_management_settings", list_settings
+    )
 
 
 class FailingAccessTokenContext:
@@ -917,3 +971,410 @@ async def test_execute_route_queues_exactly_one_background_attempt(monkeypatch):
     assert len(background_tasks.tasks) == 1
     await background_tasks()
     assert calls == [(db, "owner-1", "owner-1", proposal_id)]
+
+
+def test_structured_field_changes_preserve_raw_micro_and_exact_usd():
+    changes = module._structured_field_changes(
+        original={
+            "daily_budget_micro": 100_250_000,
+            "bid_micro": 25_000_000,
+            "bid_strategy": "LOWEST_COST_WITH_MAX_BID",
+        },
+        requested={
+            "daily_budget_micro": 90_125_000,
+            "bid_micro": 20_000_000,
+            "bid_strategy": "TARGET_COST",
+        },
+        verified={
+            "daily_budget_micro": 90_125_000,
+            "bid_micro": 20_000_000,
+            "bid_strategy": "TARGET_COST",
+        },
+        currency="USD",
+        actor_id="owner-1",
+        provider_entity_id="provider-squad",
+        occurred_at="2026-08-28T12:30:00+00:00",
+    )
+
+    assert changes["fields"]["daily_budget_micro"] == {
+        "before": 100_250_000,
+        "after": 90_125_000,
+        "before_micro": 100_250_000,
+        "after_micro": 90_125_000,
+        "before_usd": 100.25,
+        "after_usd": 90.125,
+        "currency": "USD",
+    }
+    assert changes["fields"]["bid_micro"]["before_usd"] == 25.0
+    assert changes["fields"]["bid_micro"]["after_usd"] == 20.0
+    assert changes["fields"]["bid_strategy"] == {
+        "before": "LOWEST_COST_WITH_MAX_BID",
+        "after": "TARGET_COST",
+    }
+    assert changes["actor_id"] == "owner-1"
+    assert changes["provider_entity_id"] == "provider-squad"
+    assert changes["provider_reread_verified"] is True
+
+
+@pytest.mark.asyncio
+async def test_financial_preview_and_execute_use_only_verified_provider_ids(
+    monkeypatch,
+):
+    db = DB()
+    provider = Provider()
+    provider.entities.update(
+        {
+            ("ad_squad", "provider-squad"): {
+                "id": "provider-squad",
+                "campaign_id": "provider-campaign",
+                "status": "PAUSED",
+                "daily_budget_micro": 100_000_000,
+                "bid_micro": 20_000_000,
+                "bid_strategy": "LOWEST_COST_WITH_MAX_BID",
+            },
+            ("campaign", "provider-campaign"): {
+                "id": "provider-campaign",
+                "ad_account_id": "account-1",
+                "status": "PAUSED",
+            },
+        }
+    )
+
+    async def selected(*args, **kwargs):
+        return {
+            "ad_account_id": "account-1",
+            "display_name": "AMASI",
+            "currency": "USD",
+        }
+
+    async def exact_settings(
+        db,
+        user_id,
+        entity_type,
+        unified_entity_id,
+        provider_entity_id=None,
+        parent_unified_id=None,
+        *,
+        now=None,
+    ):
+        assert entity_type == "ad_squad"
+        assert unified_entity_id == "unified-squad"
+        assert provider_entity_id in {None, "provider-squad"}
+        assert parent_unified_id == "unified-campaign"
+        return {
+            "unified_entity_id": "unified-squad",
+            "provider_entity_id": "provider-squad",
+            "provider_parent_id": "provider-campaign",
+            "mapping_status": "verified",
+            "mapping_verified": True,
+            "settings_status": "settings_complete",
+            "financial_controls_allowed": True,
+            "financial_field_controls": {
+                "daily_budget": {"allowed": True, "reason": "available"},
+                "bid": {"allowed": True, "reason": "available"},
+            },
+            "last_synced_at": "2026-08-28T12:00:00+00:00",
+            "currency": "USD",
+            "daily_budget_micro": 100_000_000,
+            "daily_budget_usd": 100.0,
+            "bid_micro": 20_000_000,
+            "bid_usd": 20.0,
+            "bid_strategy": "LOWEST_COST_WITH_MAX_BID",
+        }
+
+    async def upsert(*args, **kwargs):
+        return True
+
+    monkeypatch.setattr(module, "_selected_account", selected)
+    monkeypatch.setattr(module, "resolve_financial_management_settings", exact_settings)
+    monkeypatch.setattr(module, "_upsert_entity", upsert)
+    monkeypatch.setenv(module.MUTATIONS_ENABLED_ENV, "true")
+
+    payload = module.SnapchatManagementProposalInput(
+        action="ad_squad.update",
+        account_id="account-1",
+        target_id="unified-squad",
+        parent_id="unified-campaign",
+        provider_target_id="provider-squad",
+        provider_parent_id="provider-campaign",
+        payload={
+            "daily_budget_micro": 90_000_000,
+            "bid_micro": 15_000_000,
+            "bid_strategy": "TARGET_COST",
+        },
+        reason="اختبار معرف المزود وسجل القيم المالية",
+        idempotency_key="provider-id-financial-audit",
+    )
+    preview = await module.create_snapchat_management_proposal(
+        db,
+        "owner-1",
+        "owner-1",
+        payload,
+        provider=provider,
+    )
+
+    stored = db[module.PROPOSAL_COLLECTION].rows[0]
+    assert preview["unified_entity_id"] == "unified-squad"
+    assert preview["provider_target_id"] == "provider-squad"
+    assert preview["provider_parent_id"] == "provider-campaign"
+    assert stored["operation"]["path"] == (
+        "/campaigns/provider-campaign/adsquads/provider-squad"
+    )
+    assert ("ad_squad", "unified-squad") not in provider.reads
+    assert ("campaign", "unified-campaign") not in provider.reads
+    assert provider.executions == []
+    assert (
+        preview["field_changes"]["fields"]["daily_budget_micro"]["before_micro"]
+        == 100_000_000
+    )
+    assert preview["field_changes"]["fields"]["daily_budget_micro"]["after_usd"] == 90.0
+    assert preview["field_changes"]["fields"]["bid_micro"]["before_usd"] == 20.0
+    assert preview["field_changes"]["fields"]["bid_micro"]["after_usd"] == 15.0
+    assert preview["field_changes"]["fields"]["bid_strategy"] == {
+        "before": "LOWEST_COST_WITH_MAX_BID",
+        "after": "TARGET_COST",
+    }
+
+    approved = await module.approve_snapchat_management_proposal(
+        db,
+        "owner-1",
+        "owner-1",
+        preview["proposal_id"],
+        module.SnapchatManagementApprovalInput(
+            confirm_token=preview["confirm_token"],
+            expected_revision=preview["revision"],
+        ),
+    )
+    assert approved["status"] == "approved"
+
+    completed = await module.execute_snapchat_management_proposal(
+        db,
+        "owner-1",
+        "owner-1",
+        preview["proposal_id"],
+        provider=provider,
+    )
+    assert completed["status"] == "completed"
+    assert completed["provider_entity_id"] == "provider-squad"
+    assert provider.executions[0]["path"] == (
+        "/campaigns/provider-campaign/adsquads/provider-squad"
+    )
+    assert "unified-squad" not in str(provider.executions[0])
+    assert completed["field_changes"]["provider_reread_verified"] is True
+    assert (
+        completed["field_changes"]["fields"]["daily_budget_micro"]["after_micro"]
+        == 90_000_000
+    )
+    assert completed["field_changes"]["fields"]["bid_micro"]["after_usd"] == 15.0
+    assert completed["verification"]["field_changes_verified"] is True
+
+
+@pytest.mark.asyncio
+async def test_stale_settings_block_financial_preview_before_provider_read_or_write(
+    monkeypatch,
+):
+    db = DB()
+    provider = Provider()
+
+    async def selected(*args, **kwargs):
+        return {"ad_account_id": "account-1", "currency": "USD"}
+
+    async def stale_settings(*args, **kwargs):
+        return {
+            "unified_entity_id": "unified-campaign",
+            "provider_entity_id": "provider-campaign",
+            "mapping_status": "verified",
+            "mapping_verified": True,
+            "settings_status": "settings_stale",
+            "financial_controls_allowed": False,
+            "currency": "USD",
+        }
+
+    monkeypatch.setattr(module, "_selected_account", selected)
+    monkeypatch.setattr(module, "resolve_financial_management_settings", stale_settings)
+    payload = module.SnapchatManagementProposalInput(
+        action="campaign.update",
+        account_id="account-1",
+        target_id="unified-campaign",
+        provider_target_id="provider-campaign",
+        payload={"daily_budget_micro": 90_000_000},
+        reason="اختبار الإغلاق عند تقادم الإعدادات",
+        idempotency_key="stale-preview-blocked",
+    )
+
+    with pytest.raises(HTTPException) as raised:
+        await module.create_snapchat_management_proposal(
+            db,
+            "owner-1",
+            "owner-1",
+            payload,
+            provider=provider,
+        )
+
+    assert raised.value.detail == {
+        "code": "snapchat_management_financial_settings_unavailable",
+        "message": "غير متاح — فشل جلب الإعدادات",
+        "settings_status": "settings_stale",
+        "financial_controls_allowed": False,
+    }
+    assert provider.reads == []
+    assert provider.executions == []
+    assert db[module.PROPOSAL_COLLECTION].rows == []
+
+
+@pytest.mark.asyncio
+async def test_execution_rechecks_settings_freshness_before_provider_write(
+    monkeypatch,
+):
+    db = DB()
+    provider = Provider()
+    provider.entities[("campaign", "provider-campaign")] = {
+        "id": "provider-campaign",
+        "ad_account_id": "account-1",
+        "status": "PAUSED",
+        "daily_budget_micro": 100_000_000,
+    }
+    gate = {"fresh": True}
+
+    async def selected(*args, **kwargs):
+        return {"ad_account_id": "account-1", "currency": "USD"}
+
+    async def settings(*args, **kwargs):
+        return {
+            "unified_entity_id": "unified-campaign",
+            "provider_entity_id": "provider-campaign",
+            "mapping_status": "verified",
+            "mapping_verified": True,
+            "settings_status": (
+                "settings_complete" if gate["fresh"] else "settings_stale"
+            ),
+            "financial_controls_allowed": gate["fresh"],
+            "financial_field_controls": {
+                "daily_budget": {
+                    "allowed": gate["fresh"],
+                    "reason": "available" if gate["fresh"] else "settings_stale",
+                },
+                "bid": {
+                    "allowed": gate["fresh"],
+                    "reason": "available" if gate["fresh"] else "settings_stale",
+                },
+            },
+            "currency": "USD",
+            "daily_budget_micro": 100_000_000,
+            "daily_budget_usd": 100.0,
+        }
+
+    monkeypatch.setattr(module, "_selected_account", selected)
+    monkeypatch.setattr(module, "resolve_financial_management_settings", settings)
+    monkeypatch.setenv(module.MUTATIONS_ENABLED_ENV, "true")
+    preview = await module.create_snapchat_management_proposal(
+        db,
+        "owner-1",
+        "owner-1",
+        module.SnapchatManagementProposalInput(
+            action="campaign.update",
+            account_id="account-1",
+            target_id="unified-campaign",
+            provider_target_id="provider-campaign",
+            payload={"daily_budget_micro": 90_000_000},
+            reason="اختبار إعادة بوابة الإعدادات قبل التنفيذ",
+            idempotency_key="stale-execute-blocked",
+        ),
+        provider=provider,
+    )
+    await module.approve_snapchat_management_proposal(
+        db,
+        "owner-1",
+        "owner-1",
+        preview["proposal_id"],
+        module.SnapchatManagementApprovalInput(
+            confirm_token=preview["confirm_token"],
+            expected_revision=preview["revision"],
+        ),
+    )
+    provider.reads.clear()
+    gate["fresh"] = False
+
+    with pytest.raises(HTTPException) as raised:
+        await module.execute_snapchat_management_proposal(
+            db,
+            "owner-1",
+            "owner-1",
+            preview["proposal_id"],
+            provider=provider,
+        )
+
+    assert raised.value.detail["code"] == (
+        "snapchat_management_financial_settings_unavailable"
+    )
+    assert provider.reads == []
+    assert provider.executions == []
+
+
+@pytest.mark.asyncio
+async def test_entity_settings_get_is_database_only_and_never_writes_provider(
+    monkeypatch,
+):
+    db = DB()
+    router = APIRouter()
+    provider = Provider()
+    settings_read_calls = 0
+
+    async def current_user():
+        return {"id": "owner-1"}
+
+    def require_owner(user):
+        return user
+
+    async def list_settings(
+        db,
+        user_id,
+        entity_type=None,
+        unified_entity_id=None,
+        *,
+        now=None,
+        limit=500,
+    ):
+        nonlocal settings_read_calls
+        settings_read_calls += 1
+        return {
+            "provider": module.SNAPCHAT_PROVIDER_ID,
+            "provider_write_calls": 0,
+            "items": [
+                {
+                    "entity_type": entity_type,
+                    "unified_entity_id": unified_entity_id,
+                    "provider_entity_id": "provider-campaign",
+                    "mapping_status": "verified",
+                    "mapping_verified": True,
+                    "quality": {
+                        "settings_status": "complete",
+                        "financial_controls_allowed": True,
+                    },
+                }
+            ],
+        }
+
+    monkeypatch.setattr(
+        settings_module, "list_financial_management_settings", list_settings
+    )
+    module.attach_snapchat_campaign_management_routes(
+        router, db, current_user, require_owner
+    )
+    endpoint = next(
+        route.endpoint
+        for route in router.routes
+        if route.path == f"/{module.SNAPCHAT_PROVIDER_ID}/management/entity-settings"
+        and "GET" in route.methods
+    )
+    result = await endpoint(
+        entity_type="campaign",
+        unified_entity_id="unified-campaign",
+        limit=500,
+        user={"id": "owner-1"},
+    )
+
+    assert settings_read_calls == 1
+    assert result["items"][0]["provider_entity_id"] == "provider-campaign"
+    assert len(provider.executions) == 0
+    assert len(provider.reads) == 0
