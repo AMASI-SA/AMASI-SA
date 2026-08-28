@@ -18,8 +18,18 @@ jest.mock("../../services/snapchatCampaignManagement", () => ({
     resumeSnapchatManagementProposal: jest.fn(),
     rollbackSnapchatManagementProposal: jest.fn(),
     snapchatBidLabel: (strategy) => strategy === "TARGET_COST" ? "Target Cost" : strategy === "LOWEST_COST_WITH_MAX_BID" ? "Max Bid" : "Bid",
+    snapchatFinancialFieldReady: (settings, field) => Boolean(
+        settings?.mapping_verified
+        && settings?.account_currency === "USD"
+        && settings?.quality?.settings_status === "settings_complete"
+        && (
+            settings?.quality?.financial_field_controls?.[field] === true
+            || settings?.quality?.financial_field_controls?.[field]?.allowed === true
+        )
+    ),
     snapchatFinancialSettingsReady: (settings) => Boolean(
         settings?.mapping_verified
+        && settings?.account_currency === "USD"
         && settings?.quality?.settings_status === "settings_complete"
         && settings?.quality?.financial_controls_allowed,
     ),
@@ -1153,6 +1163,11 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
                 freshness_seconds: 120,
                 reason: "provider_snapshot_complete",
                 financial_controls_allowed: true,
+                financial_field_controls: {
+                    daily_budget_micro: { allowed: true },
+                    bid_micro: { allowed: true },
+                    bid_strategy: { allowed: true },
+                },
             },
         };
         await act(async () => {
