@@ -149,6 +149,9 @@ async def heartbeat_sync_run(
         query,
         {"$set": {"heartbeat_at": current, "updated_at": current}},
     )
+    matched_count = getattr(result, "matched_count", None)
+    if matched_count is not None:
+        return int(matched_count or 0) == 1
     return int(getattr(result, "modified_count", 0) or 0) == 1
 
 
