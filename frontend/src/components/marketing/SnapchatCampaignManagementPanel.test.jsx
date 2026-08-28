@@ -17,6 +17,12 @@ jest.mock("../../services/snapchatCampaignManagement", () => ({
     reconcileSnapchatManagementProposal: jest.fn(),
     resumeSnapchatManagementProposal: jest.fn(),
     rollbackSnapchatManagementProposal: jest.fn(),
+    snapchatBidLabel: (strategy) => strategy === "TARGET_COST" ? "Target Cost" : strategy === "LOWEST_COST_WITH_MAX_BID" ? "Max Bid" : "Bid",
+    snapchatFinancialSettingsReady: (settings) => Boolean(
+        settings?.mapping_verified
+        && ["settings_complete", "complete"].includes(settings?.quality?.settings_status)
+        && settings?.quality?.financial_controls_allowed,
+    ),
 }));
 
 jest.mock("../../context/AuthContext", () => ({
@@ -56,13 +62,18 @@ function change(element, value) {
 test("prefills governed update identities selected from the V2 hierarchy", () => {
     expect(initialForm({
         action: "campaign.update",
-        selectedCampaign: { campaign_id: "campaign-1" },
-    }).targetId).toBe("campaign-1");
+        selectedCampaign: { campaign_id: "campaign-1", provider_campaign_id: "provider-campaign-1" },
+    })).toMatchObject({ targetId: "campaign-1", providerTargetId: "provider-campaign-1" });
     expect(initialForm({
         action: "ad_squad.update",
-        selectedCampaign: { campaign_id: "campaign-1" },
-        selectedAdSquad: { ad_squad_id: "squad-1" },
-    })).toMatchObject({ targetId: "squad-1", parentId: "campaign-1" });
+        selectedCampaign: { campaign_id: "campaign-1", provider_campaign_id: "provider-campaign-1" },
+        selectedAdSquad: { ad_squad_id: "squad-1", provider_ad_squad_id: "provider-squad-1" },
+    })).toMatchObject({
+        targetId: "squad-1",
+        providerTargetId: "provider-squad-1",
+        parentId: "campaign-1",
+        providerParentId: "provider-campaign-1",
+    });
     expect(initialForm({
         action: "ad.update",
         selectedAd: { ad_id: "ad-1", ad_squad_id: "squad-1" },
@@ -844,17 +855,19 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
         expect(executeSnapchatManagementProposal).not.toHaveBeenCalled();
     });
 
-    test("reopening coalesces the saved resume and never approves or executes automatically", async () => {
+    test("opening is GET-only and resumes a saved preview only after an explicit click", async () => {
         getSnapchatManagementPreviewResume.mockReturnValue({
             owner_id: "owner-1",
             idempotency_key: "resume-panel-001",
             preview_job_id: "job-panel-1",
         });
-        let finishResume;
-        const sharedResume = new Promise((resolve) => {
-            finishResume = resolve;
+        resumeSnapchatManagementProposal.mockResolvedValue({
+            proposal_id: "proposal-panel-1",
+            action: "campaign.create",
+            status: "previewed",
+            confirm_token: "current-token",
+            preview: {},
         });
-        resumeSnapchatManagementProposal.mockReturnValue(sharedResume);
         await act(async () => {
             root.render(<SnapchatCampaignManagementPanel accountId="account-1" />);
         });
@@ -865,28 +878,22 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
         await act(async () => {
             toggle.click();
             await Promise.resolve();
+            await Promise.resolve();
+        });
+        expect(resumeSnapchatManagementProposal).not.toHaveBeenCalled();
+        expect(createSnapchatManagementProposal).not.toHaveBeenCalled();
+        expect(executeSnapchatManagementProposal).not.toHaveBeenCalled();
+
+        const resumeButton = container.querySelector(
+            '[data-testid="snapchat-management-resume-preview"]',
+        );
+        expect(resumeButton).not.toBeNull();
+        await act(async () => {
+            resumeButton.click();
+            await Promise.resolve();
+            await Promise.resolve();
         });
         expect(resumeSnapchatManagementProposal).toHaveBeenCalledTimes(1);
-        await act(async () => {
-            toggle.click();
-            await Promise.resolve();
-        });
-        await act(async () => {
-            toggle.click();
-            await Promise.resolve();
-        });
-        expect(resumeSnapchatManagementProposal).toHaveBeenCalledTimes(2);
-
-        await act(async () => {
-            finishResume({
-                proposal_id: "proposal-panel-1",
-                action: "campaign.create",
-                status: "previewed",
-                confirm_token: "current-token",
-                preview: {},
-            });
-            await sharedResume;
-        });
         expect(container.querySelector(
             '[data-testid="snapchat-management-approve"]',
         )).not.toBeNull();
@@ -982,6 +989,12 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
         );
         await act(async () => {
             toggle.click();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        expect(resumeSnapchatManagementProposal).not.toHaveBeenCalled();
+        await act(async () => {
+            container.querySelector('[data-testid="snapchat-management-resume-preview"]').click();
             await Promise.resolve();
             await Promise.resolve();
         });
@@ -1117,6 +1130,188 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
         expect(executeSnapchatManagementProposal).toHaveBeenCalledTimes(1);
     });
 
+    test("shows current provider settings separately and submits only optional new financial values with provider IDs", async () => {
+        const currentSettings = {
+            unified_entity_id: "unified-squad-1",
+            provider_entity_id: "provider-squad-9",
+            provider_parent_id: "provider-campaign-8",
+            mapping_verified: true,
+            account_currency: "USD",
+            daily_budget_micro: 50_000_000,
+            daily_budget_usd: 50,
+            bid_micro: 7_500_000,
+            bid_usd: 7.5,
+            bid_strategy: "LOWEST_COST_WITH_MAX_BID",
+            optimization_goal: "PIXEL_PURCHASE",
+            billing_event: "IMPRESSION",
+            conversion_window: "SWIPE_7DAY",
+            status: "ACTIVE",
+            settings_synced_at: "2026-08-28T10:00:00Z",
+            provider_updated_at: "2026-08-28T09:55:00Z",
+            quality: {
+                settings_status: "settings_complete",
+                freshness_seconds: 120,
+                reason: "provider_snapshot_complete",
+                financial_controls_allowed: true,
+            },
+        };
+        await act(async () => {
+            root.render(
+                <SnapchatCampaignManagementPanel
+                    accountId="account-1"
+                    entityLevel="ad_squads"
+                    initialAction="ad_squad.update"
+                    selectedCampaign={{
+                        campaign_id: "unified-campaign-1",
+                        provider_campaign_id: "provider-campaign-8",
+                    }}
+                    selectedAdSquad={{
+                        ad_squad_id: "unified-squad-1",
+                        provider_ad_squad_id: "provider-squad-9",
+                    }}
+                    currentSettings={currentSettings}
+                />,
+            );
+        });
+        await act(async () => {
+            container.querySelector('[data-testid="snapchat-campaign-management-panel"] > button').click();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+
+        expect(container.querySelector('[data-testid="snapchat-management-current-settings"]').textContent)
+            .toContain("50.00 USD");
+        expect(container.querySelector('[data-testid="snapchat-management-current-bid-label"]').textContent)
+            .toContain("Max Bid");
+        expect(container.querySelector('[data-testid="snapchat-management-new-daily-budget"]').value).toBe("");
+        expect(container.querySelector('[data-testid="snapchat-management-new-bid"]').value).toBe("");
+        expect(container.querySelector('[data-testid="snapchat-management-provider-target-id"]').value)
+            .toBe("provider-squad-9");
+
+        await act(async () => {
+            change(container.querySelector('[data-testid="snapchat-management-new-daily-budget"]'), "60");
+            change(container.querySelector('[data-testid="snapchat-management-new-bid"]'), "8");
+            change(container.querySelector('[data-testid="snapchat-management-new-bid-strategy"]'), "LOWEST_COST_WITH_MAX_BID");
+        });
+        await act(async () => {
+            container.querySelector('[data-testid="snapchat-management-form"]')
+                .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+
+        expect(createSnapchatManagementProposal).toHaveBeenCalledWith(
+            expect.objectContaining({
+                target_id: "unified-squad-1",
+                provider_target_id: "provider-squad-9",
+                parent_id: "unified-campaign-1",
+                provider_parent_id: "provider-campaign-8",
+                settings_proof: expect.objectContaining({
+                    unified_entity_id: "unified-squad-1",
+                    provider_entity_id: "provider-squad-9",
+                    settings_status: "settings_complete",
+                }),
+                payload: expect.objectContaining({
+                    daily_budget_micro: 60_000_000,
+                    bid_micro: 8_000_000,
+                    bid_strategy: "LOWEST_COST_WITH_MAX_BID",
+                }),
+            }),
+            { ownerId: "owner-1" },
+        );
+    });
+
+    test("blocks a financial preview when provider settings are stale", async () => {
+        const staleSettings = {
+            unified_entity_id: "unified-campaign-1",
+            provider_entity_id: "provider-campaign-1",
+            mapping_verified: true,
+            account_currency: "USD",
+            daily_budget_micro: 40_000_000,
+            daily_budget_usd: 40,
+            quality: {
+                settings_status: "settings_stale",
+                freshness_seconds: 7200,
+                reason: "older_than_freshness_limit",
+                financial_controls_allowed: false,
+            },
+        };
+        await act(async () => {
+            root.render(
+                <SnapchatCampaignManagementPanel
+                    accountId="account-1"
+                    entityLevel="campaigns"
+                    initialAction="campaign.update"
+                    selectedCampaign={{
+                        campaign_id: "unified-campaign-1",
+                        provider_campaign_id: "provider-campaign-1",
+                    }}
+                    currentSettings={staleSettings}
+                />,
+            );
+        });
+        await act(async () => {
+            container.querySelector('[data-testid="snapchat-campaign-management-panel"] > button').click();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        await act(async () => {
+            change(container.querySelector('[data-testid="snapchat-management-new-daily-budget"]'), "45");
+        });
+        expect(container.querySelector('[data-testid="snapchat-management-financial-settings-blocked"]')).not.toBeNull();
+        expect(container.querySelector('[data-testid="snapchat-management-create-preview"]').disabled).toBe(true);
+        expect(createSnapchatManagementProposal).not.toHaveBeenCalled();
+        expect(executeSnapchatManagementProposal).not.toHaveBeenCalled();
+    });
+
+    test("renders structured before/after audit values and verified provider readback", async () => {
+        listSnapchatManagementProposals.mockResolvedValue([{
+            proposal_id: "proposal-audit-1",
+            action: "ad_squad.update",
+            status: "completed",
+            created_at: "2026-08-28T10:00:00Z",
+            executed_at: "2026-08-28T10:01:00Z",
+            actor_id: "owner-1",
+            provider_entity_id: "provider-squad-9",
+            verification: { verified: true, entity_id: "provider-squad-9" },
+            field_changes: [{
+                field: "daily_budget_micro",
+                before: 50_000_000,
+                after: 60_000_000,
+                before_usd: 50,
+                after_usd: 60,
+            }, {
+                field: "bid_strategy",
+                before: "TARGET_COST",
+                after: "LOWEST_COST_WITH_MAX_BID",
+            }],
+            preview: { changed_fields: ["daily_budget_micro", "bid_strategy"] },
+        }]);
+        await act(async () => {
+            root.render(<SnapchatCampaignManagementPanel accountId="account-1" />);
+        });
+        await act(async () => {
+            container.querySelector('[data-testid="snapchat-campaign-management-panel"] > button').click();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        const logButton = Array.from(container.querySelectorAll("button"))
+            .find((button) => button.textContent.includes("proposal-audit-1".slice(0, 8)));
+        await act(async () => {
+            logButton.click();
+            await Promise.resolve();
+        });
+        const changes = container.querySelector('[data-testid="snapchat-management-field-changes"]');
+        expect(changes.textContent).toContain("50,000,000 micro");
+        expect(changes.textContent).toContain("60 USD");
+        expect(changes.textContent).toContain("TARGET_COST");
+        expect(changes.textContent).toContain("LOWEST_COST_WITH_MAX_BID");
+        expect(container.querySelector('[data-testid="snapchat-management-audit-metadata"]').textContent)
+            .toContain("provider-squad-9");
+        expect(container.querySelector('[data-testid="snapchat-management-audit-metadata"]').textContent)
+            .toContain("مطابقة مؤكدة");
+    });
+
     test("keeps a GET-only resume control after the preview polling timeout", async () => {
         getSnapchatManagementPreviewResume.mockReturnValue({
             owner_id: "owner-1",
@@ -1150,7 +1345,7 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
             await Promise.resolve();
             await Promise.resolve();
         });
-        expect(resumeSnapchatManagementProposal).toHaveBeenCalledTimes(2);
+        expect(resumeSnapchatManagementProposal).toHaveBeenCalledTimes(1);
         expect(createSnapchatManagementProposal).not.toHaveBeenCalled();
     });
 });
