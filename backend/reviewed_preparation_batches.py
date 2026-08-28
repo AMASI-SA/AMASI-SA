@@ -128,6 +128,28 @@ def _unit_quantity(value: Any) -> int:
     return rounded
 
 
+def _order_document(order: Any) -> dict[str, Any]:
+    """Normalize canonical orders without assuming one concrete DTO class."""
+    if isinstance(order, dict):
+        document = dict(order)
+    elif hasattr(order, "model_dump"):
+        document = dict(order.model_dump(mode="json"))
+    else:
+        document = dict(vars(order)) if hasattr(order, "__dict__") else {}
+
+    raw_items = document.get("items") or getattr(order, "items", None) or []
+    items: list[dict[str, Any]] = []
+    for item in raw_items:
+        if isinstance(item, dict):
+            items.append(dict(item))
+        elif hasattr(item, "model_dump"):
+            items.append(dict(item.model_dump(mode="json")))
+        elif hasattr(item, "__dict__"):
+            items.append(dict(vars(item)))
+    document["items"] = items
+    return document
+
+
 def _review_snapshot_identity(
     order: Any,
     workflow: dict[str, Any],
@@ -1154,11 +1176,7 @@ async def _reconcile_order_stage(
         if item_id and unit_index > 0:
             allocated_by_item[item_id].add(unit_index)
 
-    order_document = (
-        order.model_dump(mode="json")
-        if hasattr(order, "model_dump")
-        else dict(order) if isinstance(order, dict) else {}
-    )
+    order_document = _order_document(order)
     required = allocated = 0
     for item in order_items_with_review_snapshot(order_document, workflow):
         item_id = _text(item.get("order_item_id"))
