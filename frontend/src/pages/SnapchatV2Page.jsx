@@ -119,6 +119,7 @@ export default function SnapchatV2Page() {
     const [error, setError] = useState("");
     const [clockNow, setClockNow] = useState(() => Date.now());
     const readinessRequestId = useRef(0);
+    const settingsRequestIds = useRef({});
 
     const account = status?.selected_account || null;
     const accountId = account?.ad_account_id || "";
@@ -133,6 +134,9 @@ export default function SnapchatV2Page() {
     }) => {
         const governedRows = rows.filter((row) => ["campaign", "ad_group"].includes(row?.entity?.level));
         if (!governedRows.length) return;
+        const requestKey = `${entityType}:${parentUnifiedId || "root"}`;
+        const requestId = (settingsRequestIds.current[requestKey] || 0) + 1;
+        settingsRequestIds.current[requestKey] = requestId;
         setSettingsLoading(true);
         try {
             const items = await getSnapchatEntitySettings({
@@ -161,6 +165,7 @@ export default function SnapchatV2Page() {
                     };
                 }
             });
+            if (settingsRequestIds.current[requestKey] !== requestId) return;
             setSettingsByEntityId((current) => ({ ...current, ...next }));
         } catch (_requestError) {
             const failed = Object.fromEntries(governedRows.map((row) => {
@@ -177,9 +182,12 @@ export default function SnapchatV2Page() {
                     },
                 }];
             }).filter(([id]) => id));
+            if (settingsRequestIds.current[requestKey] !== requestId) return;
             setSettingsByEntityId((current) => ({ ...current, ...failed }));
         } finally {
-            setSettingsLoading(false);
+            if (settingsRequestIds.current[requestKey] === requestId) {
+                setSettingsLoading(false);
+            }
         }
     }, []);
 
@@ -301,10 +309,7 @@ export default function SnapchatV2Page() {
     }
 
     function manageEntity(row) {
-        setManagementTarget({
-            ...row,
-            current_settings: settingsByEntityId[row?.entity?.id] || null,
-        });
+        setManagementTarget(row);
         window.setTimeout(() => {
             document.querySelector('[data-testid="snapchat-campaign-management-panel"]')
                 ?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -374,8 +379,8 @@ export default function SnapchatV2Page() {
     const managementAction = managementTarget
         ? `${managementTarget.entity.provider_level}.update`
         : null;
-    const managementSettings = managementTarget?.current_settings
-        || settingsByEntityId[managementTarget?.entity?.id]
+    const managementSettings = settingsByEntityId[managementTarget?.entity?.id]
+        || managementTarget?.current_settings
         || null;
 
     return (
@@ -431,12 +436,16 @@ export default function SnapchatV2Page() {
                 initialAction={managementAction}
                 selectedCampaign={managementCampaign ? {
                     campaign_id: managementCampaign.entity.id,
-                    provider_campaign_id: settingsByEntityId[managementCampaign.entity.id]?.provider_entity_id || null,
+                    provider_campaign_id: managementTarget?.entity?.level === "ad_group"
+                        ? managementSettings?.provider_parent_id || null
+                        : managementSettings?.provider_entity_id
+                            || settingsByEntityId[managementCampaign.entity.id]?.provider_entity_id
+                            || null,
                     campaign_name: managementCampaign.entity.name,
                 } : null}
                 selectedAdSquad={managementAdGroup ? {
                     ad_squad_id: managementAdGroup.entity.id,
-                    provider_ad_squad_id: settingsByEntityId[managementAdGroup.entity.id]?.provider_entity_id || null,
+                    provider_ad_squad_id: managementSettings?.provider_entity_id || null,
                     ad_squad_name: managementAdGroup.entity.name,
                 } : null}
                 selectedAd={managementTarget?.entity?.level === "ad" ? { ad_id: managementTarget.entity.id, ad_name: managementTarget.entity.name, ad_squad_id: managementTarget.entity.ad_group_id } : null}
