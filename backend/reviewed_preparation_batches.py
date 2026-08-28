@@ -62,6 +62,7 @@ from reviewed_products_catalog import (
     MAX_REVIEWED_ORDERS,
     PREPARATION_UNIT_ALLOCATIONS,
     load_reviewed_product_context,
+    order_items_with_review_snapshot,
 )
 from tz_utils import riyadh_now_aware
 
@@ -1153,13 +1154,20 @@ async def _reconcile_order_stage(
         if item_id and unit_index > 0:
             allocated_by_item[item_id].add(unit_index)
 
+    order_document = (
+        order.model_dump(mode="json")
+        if hasattr(order, "model_dump")
+        else dict(order) if isinstance(order, dict) else {}
+    )
     required = allocated = 0
-    for item in getattr(order, "items", None) or []:
-        item_id = _text(getattr(item, "order_item_id", None))
+    for item in order_items_with_review_snapshot(order_document, workflow):
+        item_id = _text(item.get("order_item_id"))
         state = states.get(item_id, {})
+        if item.get("_review_snapshot_state"):
+            state = {**item, **state}
         if state.get("supplier_export") is False:
             continue
-        quantity = _unit_quantity(getattr(item, "quantity", 0))
+        quantity = _unit_quantity(item.get("quantity"))
         required += quantity
         allocated += min(quantity, len(allocated_by_item.get(item_id, set())))
     remaining = max(0, required - allocated)

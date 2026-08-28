@@ -1,6 +1,6 @@
-"""Aggregated product catalogue for the reviewed fulfillment stage.
+"""Physical-piece catalogue for the reviewed fulfillment stage.
 
-The reviewed screen is product-first, not order-first. It reads durable Mezan
+The reviewed screen is piece-first, not quantity-first. It reads durable Mezan
 order/review/product snapshots and the immutable preparation allocation ledger.
 It never mutates Salla or Qoyod.
 """
@@ -13,7 +13,7 @@ from typing import Any, Callable
 from fastapi import APIRouter, Depends, Query
 
 from order_engine.repository import MongoOrderRepository
-from order_engine.service import OrderNotFoundError, get_order
+from order_engine.service import get_orders
 from order_review_routes import WORKFLOWS, _merchant_user_id, _require_reviewer, _text
 from product_category_variant_support import _build_category_catalog, _flatten_categories
 from reviewed_preparation_v3 import (
@@ -89,7 +89,7 @@ def _review_state_map(workflow: dict[str, Any]) -> dict[str, dict[str, Any]]:
     }
 
 
-def _order_items_with_review_snapshot(
+def order_items_with_review_snapshot(
     order: dict[str, Any],
     workflow: dict[str, Any],
 ) -> list[dict[str, Any]]:
@@ -275,7 +275,7 @@ def aggregate_reviewed_products(
         if order_number:
             reviewed_order_numbers.add(order_number)
         states = _review_state_map(workflow)
-        order_items = _order_items_with_review_snapshot(order, workflow)
+        order_items = order_items_with_review_snapshot(order, workflow)
         total_products_in_order = sum(
             _unit_quantity(item.get("quantity")) for item in order_items
         ) or 1
@@ -628,24 +628,13 @@ def apply_preparation_allocations(
 
 
 def expand_reviewed_ready_units(catalog: dict[str, Any]) -> dict[str, Any]:
-    """Expose each normal reviewed piece as its own selectable card.
-
-    Recovery lines deliberately remain on their existing aggregated snapshot
-    path. Normal lines receive a deterministic unit identity based on the
-    reviewed order line and physical unit index, so the UI and file builder
-    select the exact same piece rather than re-resolving an aggregate quantity.
-    """
+    """Expose every available reviewed piece as its own selectable card."""
     products: list[dict[str, Any]] = []
     category_counts: dict[str, set[str]] = defaultdict(set)
 
     for product in catalog.get("products") or []:
-        recovery_lines: list[dict[str, Any]] = []
         for source in product.get("source_lines") or []:
             line = dict(source)
-            if _text(line.get("identity_source")) != "reviewed_ready":
-                recovery_lines.append(line)
-                continue
-
             quantity = _unit_quantity(line.get("quantity"))
             available_indices = sorted({
                 int(value)
@@ -683,38 +672,6 @@ def expand_reviewed_ready_units(catalog: dict[str, Any]) -> dict[str, Any]:
                 row["revision"] = stable_reviewed_product_revision(row)
                 products.append(row)
 
-        if recovery_lines:
-            remaining_quantity = sum(
-                _unit_quantity(
-                    line.get("remaining_quantity")
-                    if line.get("remaining_quantity") is not None
-                    else line.get("quantity")
-                )
-                for line in recovery_lines
-            )
-            order_numbers = sorted({
-                _text(line.get("order_number"))
-                for line in recovery_lines
-                if _text(line.get("order_number"))
-            })
-            recovery_row = {
-                **product,
-                "quantity": remaining_quantity,
-                "total_quantity": sum(
-                    _unit_quantity(line.get("quantity")) for line in recovery_lines
-                ),
-                "allocated_quantity": sum(
-                    _unit_quantity(line.get("allocated_quantity")) for line in recovery_lines
-                ),
-                "remaining_quantity": remaining_quantity,
-                "source_lines": recovery_lines,
-                "source_order_numbers": order_numbers,
-                "source_order_count": len(order_numbers),
-                "source_line_count": len(recovery_lines),
-            }
-            recovery_row["revision"] = stable_reviewed_product_revision(recovery_row)
-            products.append(recovery_row)
-
     products.sort(key=lambda row: (
         _normalized(row.get("name")),
         _text((row.get("source_order_numbers") or [""])[0]),
@@ -739,6 +696,13 @@ def expand_reviewed_ready_units(catalog: dict[str, Any]) -> dict[str, Any]:
             _unit_quantity(row.get("remaining_quantity")) for row in products
         ),
     }
+    if any(
+        not row.get("piece_level")
+        or _unit_quantity(row.get("quantity")) != 1
+        or len(row.get("source_lines") or []) != 1
+        for row in products
+    ):
+        raise RuntimeError("reviewed_piece_catalog_invariant_failed")
     return {
         **catalog,
         "products": products,
@@ -788,6 +752,17 @@ async def load_reviewed_product_context(
     truncated = len(workflows) > limit
     workflows = workflows[:limit]
 
+    workflow_order_numbers = list(dict.fromkeys(
+        _text(workflow.get("order_number"))
+        for workflow in workflows
+        if _text(workflow.get("order_number"))
+    ))
+    orders_by_number = await get_orders(
+        repository,
+        user_id=user_id,
+        order_numbers=workflow_order_numbers,
+    )
+
     pairs: list[tuple[Any, dict[str, Any]]] = []
     product_ids: set[str] = set()
     skus: set[str] = set()
@@ -797,13 +772,8 @@ async def load_reviewed_product_context(
         order_number = _text(workflow.get("order_number"))
         if not order_number:
             continue
-        try:
-            order = await get_order(
-                repository,
-                user_id=user_id,
-                order_number=order_number,
-            )
-        except OrderNotFoundError:
+        order = orders_by_number.get(order_number)
+        if order is None:
             continue
         order_number = _text(workflow.get("order_number"))
         pairs.append((order, workflow))
@@ -909,4 +879,5 @@ __all__ = [
     "expand_reviewed_ready_units",
     "load_reviewed_product_context",
     "make_reviewed_products_catalog_router",
+    "order_items_with_review_snapshot",
 ]

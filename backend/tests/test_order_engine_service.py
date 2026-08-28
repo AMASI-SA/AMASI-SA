@@ -11,6 +11,7 @@ from order_engine.service import (
     _decode_cursor,
     _encode_cursor,
     get_order,
+    get_orders,
     list_orders,
 )
 
@@ -54,6 +55,8 @@ class FakeOrderRepository:
         limit,
         before_order_date=None,
         before_order_number=None,
+        status_group=None,
+        status_exact=None,
     ):
         self.calls.append({
             "method": "list",
@@ -61,6 +64,8 @@ class FakeOrderRepository:
             "limit": limit,
             "before_order_date": before_order_date,
             "before_order_number": before_order_number,
+            "status_group": status_group,
+            "status_exact": status_exact,
         })
 
         rows = [
@@ -116,6 +121,23 @@ class FakeOrderRepository:
                 )
 
         return None
+
+    async def get_salla_orders(self, *, user_id, order_numbers):
+        self.calls.append({
+            "method": "get_many",
+            "user_id": user_id,
+            "order_numbers": list(order_numbers),
+        })
+        requested = set(order_numbers)
+        return [
+            OrderDiscoveryRow(
+                order_number=row["order_number"],
+                order_date=row["order_date"],
+                salla_raw=deepcopy(row["salla_raw"]),
+            )
+            for row in self.rows
+            if row["user_id"] == user_id and row["order_number"] in requested
+        ]
 
 
 @pytest.fixture
@@ -210,6 +232,21 @@ async def test_get_order_returns_exact_tenant_order(rows):
 
     assert order.order_number == "200"
     assert order.source.provider == "salla"
+
+
+@pytest.mark.asyncio
+async def test_get_orders_bulk_maps_exact_tenant_orders(rows):
+    repository = FakeOrderRepository(rows)
+
+    orders = await get_orders(
+        repository,
+        user_id="u1",
+        order_numbers=["300", "200", "300", "999"],
+    )
+
+    assert set(orders) == {"300", "200"}
+    assert [call["method"] for call in repository.calls] == ["get_many"]
+    assert repository.calls[0]["order_numbers"] == ["300", "200", "999"]
 
 
 @pytest.mark.asyncio

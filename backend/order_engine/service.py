@@ -323,3 +323,33 @@ async def get_order(repository: OrderRepository, *, user_id: str, order_number: 
         return _map_row(row.salla_raw, current_status=row.current_status)
     except OrderMappingError as exc:
         raise OrderNotFoundError(f"order payload invalid: {normalized_order_number}") from exc
+
+
+async def get_orders(
+    repository: OrderRepository,
+    *,
+    user_id: str,
+    order_numbers: list[str],
+) -> dict[str, OrderDTO]:
+    """Return exact orders by number without an N+1 database read path."""
+    normalized = list(dict.fromkeys(
+        str(value or "").strip()
+        for value in order_numbers
+        if str(value or "").strip()
+    ))
+    if not normalized:
+        return {}
+    rows = await repository.get_salla_orders(
+        user_id=str(user_id),
+        order_numbers=normalized,
+    )
+    result: dict[str, OrderDTO] = {}
+    for row in rows:
+        try:
+            result[row.order_number] = _map_row(
+                row.salla_raw,
+                current_status=row.current_status,
+            )
+        except OrderMappingError:
+            continue
+    return result

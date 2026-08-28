@@ -43,6 +43,13 @@ class OrderRepository(Protocol):
         order_number: str,
     ) -> Optional[OrderDiscoveryRow]: ...
 
+    async def get_salla_orders(
+        self,
+        *,
+        user_id: str,
+        order_numbers: list[str],
+    ) -> list[OrderDiscoveryRow]: ...
+
 
 _STATUS_PATTERNS: dict[str, str] = {
     "under_review": r"^(under[_ ]?review|waiting[_ ]?review|pending[_ ]?review|بإنتظار المراجعة|بانتظار المراجعة|انتظار المراجعة)$",
@@ -420,6 +427,42 @@ class MongoOrderRepository:
             },
         )
         return self._to_discovery_row(row)
+
+    async def get_salla_orders(
+        self,
+        *,
+        user_id: str,
+        order_numbers: list[str],
+    ) -> list[OrderDiscoveryRow]:
+        """Load an exact tenant-scoped order set with one Mongo query."""
+        normalized = list(dict.fromkeys(
+            str(value or "").strip()
+            for value in order_numbers
+            if str(value or "").strip()
+        ))
+        if not normalized:
+            return []
+        cursor = self._collection.find(
+            {
+                "user_id": str(user_id),
+                "order_number": {"$in": normalized},
+                "raw_by_source.salla_direct": {"$exists": True},
+            },
+            {
+                "_id": 0,
+                "order_number": 1,
+                "order_date": 1,
+                "order_status": 1,
+                "raw_by_source.salla_direct": 1,
+                **{field: 1 for field in _V2_CANONICAL_ROOT_FIELDS},
+            },
+        )
+        rows: list[OrderDiscoveryRow] = []
+        async for row in cursor:
+            mapped = self._to_discovery_row(row)
+            if mapped is not None:
+                rows.append(mapped)
+        return rows
 
     @staticmethod
     def _to_discovery_row(row: Optional[dict[str, Any]]) -> Optional[OrderDiscoveryRow]:
