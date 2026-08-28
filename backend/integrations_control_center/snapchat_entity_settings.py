@@ -568,13 +568,83 @@ def _account_by_provider_id(
     return output
 
 
+def _ad_squad_catalog_coverage(
+    latest_run: dict[str, Any] | None,
+    campaign_item: dict[str, Any],
+) -> dict[str, Any]:
+    run_status = str((latest_run or {}).get("status") or "").lower()
+    base = {
+        "complete": False,
+        "reason": "child_catalog_proof_missing",
+        "latest_sync_run_id": (latest_run or {}).get("run_id"),
+        "latest_sync_run_status": (latest_run or {}).get("status"),
+        "provider_account_ad_squad_count": None,
+    }
+    if run_status != "complete":
+        if run_status == "partial":
+            base["reason"] = "child_catalog_sync_partial"
+        elif run_status == "failed":
+            base["reason"] = "child_catalog_sync_failed"
+        elif run_status:
+            base["reason"] = "child_catalog_sync_not_complete"
+        return base
+
+    started = _as_utc((latest_run or {}).get("started_at"))
+    finished = _as_utc((latest_run or {}).get("finished_at"))
+    observed = _as_utc(campaign_item.get("settings_synced_at"))
+    if (
+        started is None
+        or finished is None
+        or observed is None
+        or observed < started
+        or observed > finished
+    ):
+        base["reason"] = "child_catalog_entity_proof_missing"
+        return base
+
+    summary = (latest_run or {}).get("summary")
+    summary = summary if isinstance(summary, dict) else {}
+    counts_by_account = summary.get("entity_counts")
+    counts_by_account = (
+        counts_by_account if isinstance(counts_by_account, dict) else {}
+    )
+    account_id = _safe_id(campaign_item.get("ad_account_id"))
+    account_counts = counts_by_account.get(account_id)
+    account_counts = (
+        account_counts if isinstance(account_counts, dict) else {}
+    )
+    raw_count = account_counts.get("ad_squad")
+    if isinstance(raw_count, bool):
+        base["reason"] = "child_catalog_count_invalid"
+        return base
+    try:
+        provider_count = int(raw_count)
+    except (TypeError, ValueError, OverflowError):
+        base["reason"] = "child_catalog_count_missing"
+        return base
+    if provider_count < 0:
+        base["reason"] = "child_catalog_count_invalid"
+        return base
+
+    base.update(
+        {
+            "complete": True,
+            "reason": "available",
+            "provider_account_ad_squad_count": provider_count,
+        }
+    )
+    return base
+
+
 def _attach_campaign_aggregate(
     campaign_item: dict[str, Any],
     children: list[dict[str, Any]],
     *,
     truncated: bool,
+    catalog_coverage: dict[str, Any],
 ) -> None:
-    total = len(children)
+    loaded_total = len(children)
+    catalog_complete = catalog_coverage.get("complete") is True
     all_settings_complete = all(
         child["quality"]["settings_status"] == _COMPLETE
         and child["mapping_status"] == "verified"
@@ -584,47 +654,90 @@ def _attach_campaign_aggregate(
         child["daily_budget_availability"] == "available"
         for child in children
     )
+    all_statuses_available = all(
+        _safe_id(child.get("status")) is not None for child in children
+    )
+    all_bid_strategies_available = all(
+        _safe_id(child.get("bid_strategy")) is not None
+        for child in children
+    )
     currency = campaign_item.get("account_currency")
     same_currency = all(
         child.get("account_currency") == currency for child in children
     )
-    aggregate_complete = bool(
-        not truncated
+
+    budget_complete = bool(
+        catalog_complete
+        and not truncated
         and all_settings_complete
         and all_budgets_available
         and same_currency
     )
+    active_count_complete = bool(
+        catalog_complete
+        and not truncated
+        and all_settings_complete
+        and all_statuses_available
+    )
+    bid_strategy_complete = bool(
+        catalog_complete
+        and not truncated
+        and all_settings_complete
+        and all_bid_strategies_available
+    )
 
-    if aggregate_complete:
+    def unavailable_reason(field_reason: str) -> str:
+        if truncated:
+            return "child_catalog_truncated"
+        if not catalog_complete:
+            return str(
+                catalog_coverage.get("reason")
+                or "child_catalog_proof_missing"
+            )
+        if not all_settings_complete:
+            return "child_settings_incomplete"
+        return field_reason
+
+    if budget_complete:
         sum_micro = sum(
             _micro_integer(child.get("daily_budget_micro")) or 0
             for child in children
         )
+        budget_availability = "available"
+    else:
+        sum_micro = None
+        budget_availability = unavailable_reason(
+            "child_budget_field_missing"
+            if not all_budgets_available
+            else "child_currency_mismatch"
+        )
+
+    if active_count_complete:
         active_count = sum(
             1
             for child in children
             if str(child.get("status") or "").upper() == "ACTIVE"
         )
+        active_count_availability = "available"
+    else:
+        active_count = None
+        active_count_availability = unavailable_reason(
+            "child_status_field_missing"
+        )
+
+    if bid_strategy_complete:
         strategies = sorted(
             {
                 str(child.get("bid_strategy")).upper()
                 for child in children
-                if child.get("bid_strategy")
             }
         )
-        availability = "available"
+        bid_strategies_availability = "available"
     else:
-        sum_micro = None
-        active_count = None
         strategies = []
-        if truncated:
-            availability = "child_catalog_truncated"
-        elif not all_settings_complete:
-            availability = "child_settings_incomplete"
-        elif not all_budgets_available:
-            availability = "child_budget_field_missing"
-        else:
-            availability = "child_currency_mismatch"
+        bid_strategies_availability = unavailable_reason(
+            "child_bid_strategy_field_missing"
+        )
 
     shared = None
     row_shared = campaign_item.pop("_shared_properties", None)
@@ -632,7 +745,10 @@ def _attach_campaign_aggregate(
         shared = row_shared.get("shared_ad_squad_bid_strategy")
 
     aggregate = {
-        "ad_squad_count": total,
+        "ad_squad_count": (
+            loaded_total if catalog_complete and not truncated else None
+        ),
+        "loaded_ad_squad_count": loaded_total,
         "active_ad_squad_count": active_count,
         "daily_budget_sum_micro": sum_micro,
         "daily_budget_sum_account_currency": (
@@ -643,28 +759,52 @@ def _attach_campaign_aggregate(
         "daily_budget_sum_usd": (
             micro_to_usd(sum_micro, currency) if sum_micro is not None else None
         ),
-        "daily_budget_sum_availability": availability,
+        "daily_budget_sum_availability": budget_availability,
+        "catalog_coverage": deepcopy(catalog_coverage),
         "budget_coverage": {
-            "complete": aggregate_complete,
-            "loaded_count": (
-                total
-                if aggregate_complete
-                else sum(
-                    1
-                    for child in children
-                    if child["daily_budget_availability"] == "available"
-                )
+            "complete": budget_complete,
+            "loaded_count": sum(
+                1
+                for child in children
+                if child["daily_budget_availability"] == "available"
             ),
-            "total_count": total,
+            "total_count": loaded_total,
             "truncated": truncated,
+            "catalog_complete": catalog_complete,
         },
-        "active_count_availability": availability,
+        "active_count_availability": active_count_availability,
+        "status_coverage": {
+            "complete": active_count_complete,
+            "loaded_count": sum(
+                1
+                for child in children
+                if _safe_id(child.get("status")) is not None
+            ),
+            "total_count": loaded_total,
+            "truncated": truncated,
+            "catalog_complete": catalog_complete,
+        },
         "ad_squad_bid_strategies": strategies,
+        "bid_strategies_availability": bid_strategies_availability,
+        "bid_strategy_coverage": {
+            "complete": bid_strategy_complete,
+            "loaded_count": sum(
+                1
+                for child in children
+                if _safe_id(child.get("bid_strategy")) is not None
+            ),
+            "total_count": loaded_total,
+            "truncated": truncated,
+            "catalog_complete": catalog_complete,
+        },
         "shared_ad_squad_bid_strategy": shared,
     }
     campaign_item["campaign_aggregate"] = aggregate
     campaign_item["ad_squad_count"] = aggregate["ad_squad_count"]
     campaign_item["active_ad_squad_count"] = aggregate["active_ad_squad_count"]
+    campaign_item["active_ad_squads_availability"] = aggregate[
+        "active_count_availability"
+    ]
     campaign_item["ad_squad_daily_budget_sum_micro"] = aggregate[
         "daily_budget_sum_micro"
     ]
@@ -676,6 +816,9 @@ def _attach_campaign_aggregate(
     ]
     campaign_item["ad_squad_bid_strategies"] = aggregate[
         "ad_squad_bid_strategies"
+    ]
+    campaign_item["ad_squad_bid_strategies_availability"] = aggregate[
+        "bid_strategies_availability"
     ]
     # Stable aliases used by the Snapchat V2 page contract.
     campaign_item["ad_squads_daily_budget_micro"] = aggregate[
@@ -821,6 +964,10 @@ async def list_financial_management_settings(
                 campaign,
                 children_by_campaign.get(campaign_id, []),
                 truncated=children_truncated,
+                catalog_coverage=_ad_squad_catalog_coverage(
+                    latest_run,
+                    campaign,
+                ),
             )
 
     if requested_id and not items:
