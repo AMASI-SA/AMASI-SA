@@ -29,6 +29,8 @@ import {
     reconcileSnapchatManagementProposal,
     resumeSnapchatManagementProposal,
     rollbackSnapchatManagementProposal,
+    snapchatBidLabel,
+    snapchatFinancialSettingsReady,
 } from "../../services/snapchatCampaignManagement";
 import { listProductsV2 } from "../../services/mezanProductsV2";
 import { useOptionalAuth } from "../../context/AuthContext";
@@ -100,18 +102,29 @@ export function initialForm({ action = "campaign.create", selectedCampaign, sele
             : action === "ad.update"
                 ? selectedAd?.ad_id || ""
                 : "";
+    const providerTargetId = action === "campaign.update"
+        ? selectedCampaign?.provider_campaign_id || ""
+        : action === "ad_squad.update"
+            ? selectedAdSquad?.provider_ad_squad_id || ""
+            : "";
     return {
         action,
         accountId: "",
         targetId,
+        providerTargetId,
         parentId: action.startsWith("ad.")
             ? selectedAdSquad?.ad_squad_id || selectedAd?.ad_squad_id || ""
             : action.startsWith("ad_squad.")
                 ? selectedCampaign?.campaign_id || ""
                 : "",
+        providerParentId: action.startsWith("ad_squad.")
+            ? selectedCampaign?.provider_campaign_id || ""
+            : "",
         name: "",
         startTime: localStartTime(),
         dailyBudget: action.endsWith(".update") ? "" : "50",
+        bidAmount: "",
+        bidStrategy: "",
         objective: "SALES",
         country: "sa",
         optimizationGoal: "PIXEL_PURCHASE",
@@ -143,7 +156,7 @@ function inputClass() {
     return "mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none focus:border-amber-400";
 }
 
-function TextField({ label, value, onChange, type = "text", required = false, placeholder = "", dir = "rtl", testId }) {
+function TextField({ label, value, onChange, type = "text", required = false, placeholder = "", dir = "rtl", testId, readOnly = false, disabled = false }) {
     return (
         <label className="block text-xs font-black text-slate-600">
             {label}
@@ -154,8 +167,10 @@ function TextField({ label, value, onChange, type = "text", required = false, pl
                 placeholder={placeholder}
                 dir={dir}
                 data-testid={testId}
+                readOnly={readOnly}
+                disabled={disabled}
                 onChange={(event) => onChange(event.target.value)}
-                className={inputClass()}
+                className={`${inputClass()} disabled:cursor-not-allowed disabled:bg-slate-100 read-only:bg-slate-100`}
             />
         </label>
     );
@@ -179,12 +194,148 @@ function SelectField({ label, value, onChange, children, disabled = false, requi
     );
 }
 
-function mergeAdvanced(payload, source) {
+function mergeAdvanced(payload, source, protectedFields = []) {
     const parsed = JSON.parse(source || "{}");
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
         throw new Error("الحقول الإضافية يجب أن تكون كائن JSON.");
     }
+    const protectedOverride = protectedFields.find((field) => Object.prototype.hasOwnProperty.call(parsed, field));
+    if (protectedOverride) {
+        throw new Error(`استخدم الحقل المنفصل لـ ${protectedOverride}؛ لا يمكن تمريره من JSON الإضافي.`);
+    }
     return { ...payload, ...parsed };
+}
+
+function timestamp(value) {
+    if (!value) return "—";
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toLocaleString("ar-SA");
+}
+
+function currentMicro(settings, field, usdField) {
+    const rawValue = settings?.[field];
+    if (rawValue === null || rawValue === undefined || rawValue === "") {
+        return { raw: "غير متاح — فشل جلب الإعدادات", converted: "غير متاح — فشل جلب الإعدادات" };
+    }
+    const raw = Number(rawValue);
+    if (!Number.isFinite(raw)) {
+        return { raw: "غير متاح — فشل جلب الإعدادات", converted: "غير متاح — فشل جلب الإعدادات" };
+    }
+    const currency = String(settings?.account_currency || "").toUpperCase();
+    if (currency === "USD") {
+        const providedUsd = settings?.[usdField];
+        const usd = providedUsd === null || providedUsd === undefined || providedUsd === ""
+            ? raw / 1_000_000
+            : Number(providedUsd);
+        return {
+            raw: `${raw.toLocaleString("en-US")} micro`,
+            converted: Number.isFinite(usd) ? `${usd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })} USD` : "غير متاح — فشل جلب الإعدادات",
+        };
+    }
+    return {
+        raw: `${raw.toLocaleString("en-US")} micro`,
+        converted: currency
+            ? `${(raw / 1_000_000).toLocaleString("en-US", { maximumFractionDigits: 6 })} ${currency} · USD غير متاح`
+            : "عملة الحساب غير متاحة · USD غير متاح",
+    };
+}
+
+function proposalHasFinancialChanges(proposal) {
+    const fields = new Set([
+        ...(proposal?.preview?.changed_fields || []),
+        ...(proposal?.field_changes || []).map((item) => item?.field),
+    ]);
+    return ["daily_budget_micro", "bid_micro", "bid_strategy"].some((field) => fields.has(field));
+}
+
+function changeSide(change, side) {
+    const direct = change?.[side];
+    if (direct !== undefined) return direct;
+    return change?.[`${side}_raw`]
+        ?? change?.[`${side}_micro`]
+        ?? change?.[`${side}_value`]
+        ?? null;
+}
+
+function formatAuditValue(change, side) {
+    const value = changeSide(change, side);
+    if (value === null || value === undefined || value === "") return "غير متاح";
+    const field = String(change?.field || "");
+    if (["daily_budget_micro", "bid_micro"].includes(field)) {
+        const raw = Number(value);
+        const usd = change?.[`${side}_usd`];
+        const rawText = Number.isFinite(raw) ? `${raw.toLocaleString("en-US")} micro` : String(value);
+        return usd === null || usd === undefined || usd === ""
+            ? rawText
+            : `${rawText} · ${Number(usd).toLocaleString("en-US", { maximumFractionDigits: 6 })} USD`;
+    }
+    return typeof value === "object" ? JSON.stringify(value) : String(value);
+}
+
+function CurrentSettingsCard({ action, settings }) {
+    if (!action.endsWith(".update") || !["campaign.update", "ad_squad.update"].includes(action)) return null;
+    const quality = settings?.quality || {};
+    const settingsReady = snapchatFinancialSettingsReady(settings);
+    const budgetUnsupported = action === "campaign.update" && (
+        settings?.campaign_daily_budget_supported === false
+        || settings?.daily_budget_availability === "unsupported"
+    );
+    const campaignBudgetUnavailable = settings?.daily_budget_unavailable_message_ar
+        || "غير متاح — Snapchat لا يوفّر ميزانية يومية على مستوى الحملة";
+    const budget = budgetUnsupported
+        ? {
+            raw: campaignBudgetUnavailable,
+            converted: campaignBudgetUnavailable,
+        }
+        : currentMicro(settings, "daily_budget_micro", "daily_budget_usd");
+    const bid = currentMicro(settings, "bid_micro", "bid_usd");
+    const childBudget = currentMicro(settings, "ad_squads_daily_budget_micro", "ad_squads_daily_budget_usd");
+    const campaignStrategies = Array.isArray(settings?.ad_squad_bid_strategies)
+        ? settings.ad_squad_bid_strategies.join("، ")
+        : settings?.campaign_bid_strategy || settings?.bid_strategy || "—";
+    return (
+        <section className={`rounded-2xl border p-4 ${settingsReady ? "border-emerald-200 bg-emerald-50" : "border-rose-200 bg-rose-50"}`} data-testid="snapchat-management-current-settings">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                    <h3 className="text-sm font-black">الإعدادات الحالية المقروءة من Snapchat</h3>
+                    <p className="mt-1 text-[11px] font-bold text-slate-600">فتح الشاشة قراءة فقط؛ لا ينشئ proposal ولا preview ولا كتابة provider.</p>
+                </div>
+                <span className="rounded-full bg-white px-3 py-1 text-[10px] font-black">{quality.settings_status || "settings_not_loaded"}</span>
+            </div>
+            <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                <div><span className="block text-slate-500">Unified ID</span><code dir="ltr">{settings?.unified_entity_id || "—"}</code></div>
+                <div><span className="block text-slate-500">Snapchat provider ID</span><code dir="ltr">{settings?.provider_entity_id || "غير متاح — فشل جلب الإعدادات"}</code></div>
+                <div><span className="block text-slate-500">عملة الحساب</span><strong>{settings?.account_currency || "غير متاحة"}</strong></div>
+                <div><span className="block text-slate-500">mapping_status</span><strong>{settings?.mapping_status || (settings?.mapping_verified ? "verified" : "غير متاح")}</strong></div>
+                <div><span className="block text-slate-500">الحالة الحالية</span><strong>{settings?.status || "—"}</strong></div>
+                <div><span className="block text-slate-500">الميزانية اليومية الخام</span><strong dir="ltr">{budget.raw}</strong></div>
+                <div><span className="block text-slate-500">الميزانية اليومية</span><strong dir="ltr">{budget.converted}</strong></div>
+                {action === "campaign.update" && (
+                    <>
+                        <div><span className="block text-slate-500">مجموع ميزانيات Ad Squads الخام</span><strong dir="ltr">{childBudget.raw}</strong></div>
+                        <div><span className="block text-slate-500">مجموع ميزانيات Ad Squads</span><strong dir="ltr">{childBudget.converted}</strong></div>
+                        <div><span className="block text-slate-500">Ad Squads النشطة</span><strong>{settings?.active_ad_squads ?? "—"}</strong></div>
+                        <div><span className="block text-slate-500">استراتيجيات المزايدة المتاحة</span><strong>{campaignStrategies}</strong></div>
+                    </>
+                )}
+                {action === "ad_squad.update" && (
+                    <>
+                        <div><span className="block text-slate-500">{snapchatBidLabel(settings?.bid_strategy)} الخام</span><strong dir="ltr">{bid.raw}</strong></div>
+                        <div data-testid="snapchat-management-current-bid-label"><span className="block text-slate-500">{snapchatBidLabel(settings?.bid_strategy)}</span><strong dir="ltr">{bid.converted}</strong></div>
+                        <div><span className="block text-slate-500">bid_strategy</span><strong>{settings?.bid_strategy || "—"}</strong></div>
+                        <div><span className="block text-slate-500">optimization_goal</span><strong>{settings?.optimization_goal || "—"}</strong></div>
+                        <div><span className="block text-slate-500">billing_event</span><strong>{settings?.billing_event || "—"}</strong></div>
+                        <div><span className="block text-slate-500">conversion_window</span><strong>{settings?.conversion_window || "—"}</strong></div>
+                    </>
+                )}
+                <div><span className="block text-slate-500">freshness</span><strong dir="ltr">{quality.freshness_seconds == null ? "غير متاح" : `${Number(quality.freshness_seconds).toLocaleString("en-US")} ثانية`}</strong></div>
+                <div><span className="block text-slate-500">freshness threshold</span><strong dir="ltr">{quality.freshness_threshold_seconds == null ? "غير متاح" : `${Number(quality.freshness_threshold_seconds).toLocaleString("en-US")} ثانية`}</strong></div>
+                <div><span className="block text-slate-500">سبب الجودة</span><strong>{quality.reason || (settingsReady ? "قراءة حديثة من Snapchat" : "غير متاح — فشل جلب الإعدادات")}</strong></div>
+                <div><span className="block text-slate-500">settings_synced_at</span><strong>{timestamp(settings?.settings_synced_at)}</strong></div>
+                <div><span className="block text-slate-500">provider_updated_at</span><strong>{timestamp(settings?.provider_updated_at)}</strong></div>
+            </div>
+        </section>
+    );
 }
 
 function retainedDecisionContext(form) {
@@ -265,6 +416,19 @@ function buildProposal(form) {
         account_id: form.accountId,
         target_id: form.targetId || null,
         parent_id: form.parentId || null,
+        provider_target_id: form.providerTargetId || null,
+        provider_parent_id: form.providerParentId || null,
+        settings_proof: form.currentSettings ? {
+            unified_entity_id: form.currentSettings.unified_entity_id || null,
+            provider_entity_id: form.currentSettings.provider_entity_id || null,
+            settings_status: form.currentSettings.quality?.settings_status || null,
+            settings_synced_at: form.currentSettings.settings_synced_at || null,
+            provider_updated_at: form.currentSettings.provider_updated_at || null,
+            freshness_seconds: form.currentSettings.quality?.freshness_seconds ?? null,
+            freshness_threshold_seconds: form.currentSettings.quality?.freshness_threshold_seconds ?? null,
+            mapping_status: form.currentSettings.mapping_status || null,
+            mapping_verified: form.currentSettings.mapping_verified === true,
+        } : {},
         reason: form.reason,
         idempotency_key: `snap-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
         activation_acknowledged: form.activationAcknowledged,
@@ -322,6 +486,8 @@ function buildProposal(form) {
     } else if (form.action === "ad_squad.update") {
         if (form.name) payload.name = form.name;
         if (form.dailyBudget) payload.daily_budget_micro = nativeAmountToMicro(form.dailyBudget);
+        if (form.bidAmount) payload.bid_micro = nativeAmountToMicro(form.bidAmount);
+        if (form.bidStrategy) payload.bid_strategy = form.bidStrategy;
         if (form.status) payload.status = form.status;
     } else if (form.action === "creative.create") {
         payload = {
@@ -355,7 +521,10 @@ function buildProposal(form) {
         if (form.name) payload.name = form.name;
         if (form.status) payload.status = form.status;
     }
-    const mergedPayload = mergeAdvanced(payload, form.advancedJson);
+    const protectedFields = ["campaign.create", "campaign.update", "ad_squad.create", "ad_squad.update"].includes(form.action)
+        ? ["daily_budget_micro", "bid_micro", "bid_strategy"]
+        : [];
+    const mergedPayload = mergeAdvanced(payload, form.advancedJson, protectedFields);
     if (
         pixelOptimization
         && mergedPayload.pixel_id
@@ -375,7 +544,7 @@ function buildProposal(form) {
     return { ...common, payload: mergedPayload };
 }
 
-function ProposalPreview({ proposal, readiness, busy, onApprove, onExecute, onRollback, onReconcile, onContinue }) {
+function ProposalPreview({ proposal, readiness, busy, financialSettingsReady, onApprove, onExecute, onRollback, onReconcile, onContinue }) {
     if (!proposal?.proposal_id) return null;
     const preview = proposal.preview || {};
     const verifiedEntityId = proposal.verified_entity_id || "";
@@ -384,8 +553,11 @@ function ProposalPreview({ proposal, readiness, busy, onApprove, onExecute, onRo
     const continuationBlocked = proposal.status === "completed"
         && continuation
         && !continuationContext;
+    const financialProposal = proposal?.action?.endsWith(".update") && proposalHasFinancialChanges(proposal);
     const canApprove = proposal.status === "previewed" && proposal.confirm_token;
-    const canExecute = proposal.status === "approved" && readiness?.execution_enabled;
+    const canExecute = proposal.status === "approved"
+        && readiness?.execution_enabled
+        && (!financialProposal || financialSettingsReady);
     const canRollback = readiness?.execution_enabled && (
         proposal.status === "completed"
         || (proposal.status === "failed" && proposal.provider_write_reached)
@@ -407,9 +579,34 @@ function ProposalPreview({ proposal, readiness, busy, onApprove, onExecute, onRo
             <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
                 <div className="rounded-xl bg-white p-3"><span className="block text-slate-400">الاسم</span><strong>{preview.name || "—"}</strong></div>
                 <div className="rounded-xl bg-white p-3"><span className="block text-slate-400">الحالة</span><strong>{preview.status || "بدون تغيير"}</strong></div>
-                <div className="rounded-xl bg-white p-3"><span className="block text-slate-400">الميزانية اليومية</span><strong>{preview.daily_budget_micro ? `${microToNativeAmount(preview.daily_budget_micro).toLocaleString("en-US")} وحدة` : "—"}</strong></div>
+                <div className="rounded-xl bg-white p-3"><span className="block text-slate-400">الميزانية اليومية</span><strong>{preview.daily_budget_micro !== null && preview.daily_budget_micro !== undefined ? `${Number(preview.daily_budget_micro).toLocaleString("en-US")} micro · ${microToNativeAmount(preview.daily_budget_micro).toLocaleString("en-US")} ${proposal.account_currency || "عملة الحساب"}` : "بدون تغيير"}</strong></div>
                 <div className="rounded-xl bg-white p-3"><span className="block text-slate-400">الحقول</span><strong>{(preview.changed_fields || []).join("، ") || "—"}</strong></div>
             </div>
+            <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4" data-testid="snapchat-management-audit-metadata">
+                <div className="rounded-xl bg-white p-3"><span className="block text-slate-400">وقت العملية</span><strong>{timestamp(proposal.executed_at || proposal.created_at)}</strong></div>
+                <div className="rounded-xl bg-white p-3"><span className="block text-slate-400">المنفذ</span><strong>{proposal.actor_name || proposal.actor_id || "—"}</strong></div>
+                <div className="rounded-xl bg-white p-3"><span className="block text-slate-400">provider entity ID</span><code dir="ltr">{proposal.provider_entity_id || proposal.provider_target_id || "—"}</code></div>
+                <div className="rounded-xl bg-white p-3"><span className="block text-slate-400">إعادة القراءة</span><strong>{proposal.verification?.verified === true ? "مطابقة مؤكدة من Snapchat" : "غير مكتملة"}</strong></div>
+            </div>
+            {(proposal.field_changes || []).length > 0 && (
+                <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white" data-testid="snapchat-management-field-changes">
+                    <table className="w-full text-right text-xs">
+                        <thead className="bg-slate-50"><tr><th className="px-3 py-2">الحقل</th><th className="px-3 py-2">قبل</th><th className="px-3 py-2">بعد</th></tr></thead>
+                        <tbody>{proposal.field_changes.map((change, index) => (
+                            <tr key={`${change.field || "field"}:${index}`} className="border-t border-slate-100">
+                                <td className="px-3 py-2 font-mono">{change.field || "—"}</td>
+                                <td className="px-3 py-2 font-mono" dir="ltr">{formatAuditValue(change, "before")}</td>
+                                <td className="px-3 py-2 font-mono" dir="ltr">{formatAuditValue(change, "after")}</td>
+                            </tr>
+                        ))}</tbody>
+                    </table>
+                </div>
+            )}
+            {financialProposal && !financialSettingsReady && (
+                <div className="mt-3 flex items-center gap-2 rounded-xl bg-rose-100 p-3 text-xs font-black text-rose-900" data-testid="snapchat-management-financial-execute-blocked">
+                    <WarningCircle size={20} weight="fill" /> الإعدادات الحالية غير حديثة؛ التنفيذ المالي ممنوع حتى تكتمل إعادة القراءة.
+                </div>
+            )}
             {verifiedEntityId && (
                 <div className="mt-3 rounded-xl border border-emerald-200 bg-white p-3 text-xs" data-testid="snapchat-management-verified-entity">
                     <span className="block font-black text-emerald-800">معرّف Snapchat الموثق</span>
@@ -503,6 +700,7 @@ export default function SnapchatCampaignManagementPanel({
     selectedCampaign = null,
     selectedAdSquad = null,
     selectedAd = null,
+    currentSettings = null,
     initialAction = null,
     onChanged,
 }) {
@@ -520,7 +718,10 @@ export default function SnapchatCampaignManagementPanel({
     const [expanded, setExpanded] = useState(false);
     const [readiness, setReadiness] = useState(null);
     const [proposals, setProposals] = useState([]);
-    const [form, setForm] = useState(() => initialForm({ action: preferredAction, selectedCampaign, selectedAdSquad, selectedAd }));
+    const [form, setForm] = useState(() => ({
+        ...initialForm({ action: preferredAction, selectedCampaign, selectedAdSquad, selectedAd }),
+        currentSettings,
+    }));
     const [productQuery, setProductQuery] = useState("");
     const [catalogProducts, setCatalogProducts] = useState([]);
     const [selectedCatalogProduct, setSelectedCatalogProduct] = useState(null);
@@ -532,11 +733,9 @@ export default function SnapchatCampaignManagementPanel({
     const [operationBusy, setOperationBusy] = useState(false);
     const [resumeBusy, setResumeBusy] = useState(false);
     const [previewPending, setPreviewPending] = useState(false);
-    const [resumeVersion, setResumeVersion] = useState(0);
     const [pixelDiscoveryBusy, setPixelDiscoveryBusy] = useState(false);
     const [error, setError] = useState("");
     const [notice, setNotice] = useState("");
-    const resumeAttempted = useRef(false);
     const operationBusyRef = useRef(false);
 
     function beginOperation() {
@@ -613,58 +812,13 @@ export default function SnapchatCampaignManagementPanel({
     }, [expanded, productsLoaded, productsLoading, loadProducts]);
 
     useEffect(() => {
-        if (
-            !expanded
-            || !ownerId
-            || resumeAttempted.current
-        ) return undefined;
-        resumeAttempted.current = true;
-        if (operationBusyRef.current) return undefined;
-        if (!getSnapchatManagementPreviewResume(ownerId)) return undefined;
-        let cancelled = false;
-        setResumeBusy(true);
-        setPreviewPending(true);
-        setError("");
-        setNotice("يستأنف ميزان متابعة المعاينة السابقة دون إنشاء طلب جديد.");
-        resumeSnapchatManagementProposal({ ownerId })
-            .then((proposal) => {
-                if (cancelled || !proposal) return;
-                setActiveProposal(proposal);
-                setProposals((current) => [
-                    proposal,
-                    ...current.filter((row) => row.proposal_id !== proposal.proposal_id),
-                ].slice(0, 12));
-                setPreviewPending(false);
-                setNotice("اكتملت المعاينة السابقة. راجعها ثم اعتمدها قبل التنفيذ.");
-            })
-            .catch((resumeError) => {
-                if (cancelled) return;
-                const remainsPending = Boolean(
-                    getSnapchatManagementPreviewResume(ownerId),
-                );
-                setPreviewPending(remainsPending);
-                if (resumeError?.code === "snapchat_management_preview_poll_timeout") {
-                    setError("");
-                    setNotice(resumeError.message);
-                } else {
-                    setNotice("");
-                    setError(managementError(
-                        resumeError,
-                        "تعذّر استئناف متابعة معاينة Snapchat.",
-                    ));
-                }
-            })
-            .finally(() => {
-                if (!cancelled) setResumeBusy(false);
-            });
-        return () => {
-            cancelled = true;
-        };
-    }, [expanded, ownerId, resumeVersion]);
+        if (!expanded || !ownerId || operationBusyRef.current) return;
+        setPreviewPending(Boolean(getSnapchatManagementPreviewResume(ownerId)));
+    }, [expanded, ownerId]);
+
 
     useEffect(() => {
         if (!expanded) {
-            resumeAttempted.current = false;
             setResumeBusy(false);
         }
     }, [expanded]);
@@ -676,13 +830,14 @@ export default function SnapchatCampaignManagementPanel({
             return {
                 ...next,
                 ...retainedDecisionContext(current),
+                currentSettings,
                 accountId: current.accountId || accountId || "",
                 pixelId: preferredAction === "ad_squad.create"
                     ? solePixelId(readiness, current.accountId || accountId || "")
                     : next.pixelId,
             };
         });
-    }, [preferredAction, selectedCampaign, selectedAdSquad, selectedAd, accountId, readiness]);
+    }, [preferredAction, selectedCampaign, selectedAdSquad, selectedAd, currentSettings, accountId, readiness]);
 
     const selectedAccount = useMemo(
         () => readiness?.accounts?.find((item) => item.account_id === form.accountId) || null,
@@ -710,6 +865,7 @@ export default function SnapchatCampaignManagementPanel({
             return {
                 ...next,
                 ...retainedDecisionContext(current),
+                currentSettings: action.endsWith(".update") ? currentSettings : null,
                 accountId: current.accountId,
                 pixelId: action === "ad_squad.create"
                     ? solePixelId(readiness, current.accountId)
@@ -741,6 +897,7 @@ export default function SnapchatCampaignManagementPanel({
         setSelectedCatalogProduct(matchedProduct);
         setForm(() => ({
             ...initialForm({ action: nextAction, selectedCampaign, selectedAdSquad, selectedAd }),
+            currentSettings: null,
             accountId: verifiedAccountId,
             pixelId: nextAction === "ad_squad.create"
                 ? solePixelId(readiness, verifiedAccountId)
@@ -772,8 +929,49 @@ export default function SnapchatCampaignManagementPanel({
         }));
     }
 
+    async function resumePreview() {
+        if (!ownerId || operationBusyRef.current) return;
+        beginOperation();
+        setResumeBusy(true);
+        setError("");
+        setNotice("يستأنف ميزان متابعة المعاينة السابقة بطلب صريح؛ لن ينفّذ أو يعتمد تلقائيًا.");
+        try {
+            const proposal = await resumeSnapchatManagementProposal({ ownerId });
+            if (!proposal) {
+                setPreviewPending(false);
+                setNotice("");
+                return;
+            }
+            setActiveProposal(proposal);
+            setProposals((current) => [
+                proposal,
+                ...current.filter((row) => row.proposal_id !== proposal.proposal_id),
+            ].slice(0, 12));
+            setPreviewPending(false);
+            setNotice("اكتملت المعاينة السابقة. راجعها ثم اعتمدها قبل التنفيذ.");
+        } catch (resumeError) {
+            const remainsPending = Boolean(getSnapchatManagementPreviewResume(ownerId));
+            setPreviewPending(remainsPending);
+            if (resumeError?.code === "snapchat_management_preview_poll_timeout") {
+                setError("");
+                setNotice(resumeError.message);
+            } else {
+                setNotice("");
+                setError(managementError(resumeError, "تعذّر استئناف متابعة معاينة Snapchat."));
+            }
+        } finally {
+            setResumeBusy(false);
+            finishOperation();
+        }
+    }
+
     async function preview(event) {
         event.preventDefault();
+        if (financialPreviewBlocked) {
+            setNotice("");
+            setError("لا يمكن إنشاء معاينة مالية: إعدادات Snapchat غير حديثة أو تغطيتها غير مكتملة.");
+            return;
+        }
         beginOperation();
         setError("");
         setPreviewPending(true);
@@ -824,6 +1022,11 @@ export default function SnapchatCampaignManagementPanel({
     }
 
     async function execute() {
+        if (activeProposal?.action?.endsWith(".update") && proposalHasFinancialChanges(activeProposal) && !financialSettingsReady) {
+            setNotice("");
+            setError("لا يمكن التنفيذ المالي: إعدادات Snapchat غير حديثة أو تغطيتها غير مكتملة.");
+            return;
+        }
         const proposalId = activeProposal.proposal_id;
         beginOperation();
         setError("");
@@ -949,6 +1152,11 @@ export default function SnapchatCampaignManagementPanel({
     const pixelOptimization = form.action === "ad_squad.create"
         && String(form.optimizationGoal || "").startsWith("PIXEL_");
     const pixelSelectionMissing = pixelOptimization && !form.pixelId;
+    const financialChangeRequested = isUpdate && Boolean(
+        form.dailyBudget || form.bidAmount || form.bidStrategy,
+    );
+    const financialSettingsReady = snapchatFinancialSettingsReady(currentSettings);
+    const financialPreviewBlocked = financialChangeRequested && !financialSettingsReady;
 
     return (
         <section className="mb-4 overflow-hidden rounded-2xl border border-slate-800 bg-slate-950 text-white shadow-lg" data-testid="snapchat-campaign-management-panel">
@@ -993,6 +1201,8 @@ export default function SnapchatCampaignManagementPanel({
 
                             {error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-black text-rose-800"><WarningCircle size={18} weight="fill" className="ml-2 inline" />{error}</div>}
                             {notice && <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-black text-emerald-800"><CheckCircle size={18} weight="fill" className="ml-2 inline" />{notice}</div>}
+
+                            <CurrentSettingsCard action={form.action} settings={currentSettings} />
 
                             <form onSubmit={preview} className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4" data-testid="snapchat-management-form">
                                 <div className="grid gap-3 md:grid-cols-2">
@@ -1094,13 +1304,17 @@ export default function SnapchatCampaignManagementPanel({
                                 </section>
 
                                 <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-                                    {isUpdate && <TextField label="معرّف الكيان المطلوب تعديله" value={form.targetId} onChange={(value) => field("targetId", value)} required dir="ltr" />}
-                                    {showsParent && <TextField label={form.action.startsWith("ad_squad.") ? "معرّف الحملة الأب" : "معرّف المجموعة الأب"} value={form.parentId} onChange={(value) => field("parentId", value)} required dir="ltr" testId="snapchat-management-parent-id" />}
+                                    {isUpdate && <TextField label="Unified ID للكيان المطلوب تعديله" value={form.targetId} onChange={() => {}} required readOnly dir="ltr" testId="snapchat-management-unified-target-id" />}
+                                    {isUpdate && ["campaign.update", "ad_squad.update"].includes(form.action) && <TextField label="Snapchat provider ID الموثق" value={form.providerTargetId} onChange={() => {}} required readOnly dir="ltr" testId="snapchat-management-provider-target-id" />}
+                                    {showsParent && <TextField label={form.action.startsWith("ad_squad.") ? "Unified ID للحملة الأب" : "معرّف المجموعة الأب"} value={form.parentId} onChange={(value) => field("parentId", value)} required readOnly={isUpdate} dir="ltr" testId="snapchat-management-parent-id" />}
+                                    {isUpdate && form.action === "ad_squad.update" && <TextField label="Snapchat provider ID للحملة الأب" value={form.providerParentId} onChange={() => {}} required readOnly dir="ltr" testId="snapchat-management-provider-parent-id" />}
                                     {!isUpdate && <TextField label="الاسم" value={form.name} onChange={(value) => field("name", value)} required />}
                                     {isUpdate && <TextField label="اسم جديد (اختياري)" value={form.name} onChange={(value) => field("name", value)} />}
                                     {form.action === "campaign.create" && <TextField label="بداية الحملة" value={form.startTime} onChange={(value) => field("startTime", value)} type="datetime-local" required dir="ltr" />}
                                     {form.action === "campaign.create" && <SelectField label="الهدف" value={form.objective} onChange={(value) => field("objective", value)}><option value="SALES">المبيعات</option><option value="TRAFFIC">الزيارات</option><option value="LEADS">العملاء المحتملون</option><option value="AWARENESS_AND_ENGAGEMENT">الوعي والتفاعل</option><option value="APP_PROMOTION">التطبيق</option></SelectField>}
-                                    {showsBudget && <TextField label={`الميزانية اليومية (${selectedAccount?.currency || "عملة الحساب"})${isUpdate ? " · اتركها فارغة دون تغيير" : ""}`} value={form.dailyBudget} onChange={(value) => field("dailyBudget", value)} type="number" required={!isUpdate} dir="ltr" />}
+                                    {showsBudget && <TextField label={isUpdate ? `قيمة ميزانية يومية جديدة (${selectedAccount?.currency || "عملة الحساب"}) · اختياري` : `الميزانية اليومية (${selectedAccount?.currency || "عملة الحساب"})`} value={form.dailyBudget} onChange={(value) => field("dailyBudget", value)} type="number" required={!isUpdate} dir="ltr" testId="snapchat-management-new-daily-budget" />}
+                                    {form.action === "ad_squad.update" && <TextField label={`قيمة ${snapchatBidLabel(currentSettings?.bid_strategy)} جديدة (${selectedAccount?.currency || "عملة الحساب"}) · اختياري`} value={form.bidAmount} onChange={(value) => field("bidAmount", value)} type="number" dir="ltr" testId="snapchat-management-new-bid" />}
+                                    {form.action === "ad_squad.update" && <SelectField label="استراتيجية مزايدة جديدة · اختيارية" value={form.bidStrategy} onChange={(value) => field("bidStrategy", value)} testId="snapchat-management-new-bid-strategy"><option value="">بدون تغيير</option><option value="AUTO_BID">AUTO_BID</option><option value="TARGET_COST">TARGET_COST</option><option value="LOWEST_COST_WITH_MAX_BID">LOWEST_COST_WITH_MAX_BID</option></SelectField>}
                                     {form.action === "ad_squad.create" && <TextField label="رمز الدولة" value={form.country} onChange={(value) => field("country", value)} required dir="ltr" />}
                                     {form.action === "ad_squad.create" && <SelectField label="هدف التحسين" value={form.optimizationGoal} onChange={(value) => field("optimizationGoal", value)} testId="snapchat-management-optimization-goal"><option value="PIXEL_PURCHASE">الشراء · PIXEL_PURCHASE</option><option value="SWIPES">السحب/النقر · SWIPES</option><option value="LANDING_PAGE_VIEW">زيارة صفحة الهبوط · LANDING_PAGE_VIEW</option><option value="IMPRESSIONS">الظهور · IMPRESSIONS</option></SelectField>}
                                     {pixelOptimization && (
@@ -1154,6 +1368,12 @@ export default function SnapchatCampaignManagementPanel({
                                     </div>
                                 )}
 
+                                {financialPreviewBlocked && (
+                                    <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-black text-rose-900" data-testid="snapchat-management-financial-settings-blocked">
+                                        غير متاح — فشل جلب الإعدادات. لا يمكن إنشاء معاينة أو تنفيذ مالي حتى تكتمل قراءة حديثة من Snapchat.
+                                    </div>
+                                )}
+
                                 {activeRequested && (
                                     <label className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-black text-rose-900">
                                         <input type="checkbox" checked={form.activationAcknowledged} onChange={(event) => field("activationAcknowledged", event.target.checked)} className="mt-0.5" required />
@@ -1202,24 +1422,21 @@ export default function SnapchatCampaignManagementPanel({
                                         {previewPending && !busy && (
                                             <button
                                                 type="button"
-                                                onClick={() => {
-                                                    resumeAttempted.current = false;
-                                                    setResumeVersion((value) => value + 1);
-                                                }}
+                                                onClick={resumePreview}
                                                 className="min-h-11 rounded-xl border border-amber-300 bg-white px-4 text-xs font-black text-amber-800"
                                                 data-testid="snapchat-management-resume-preview"
                                             >
                                                 استئناف متابعة المعاينة
                                             </button>
                                         )}
-                                        <button type="submit" disabled={busy || previewPending || !form.accountId || !actionAllowed || (requiresProduct && !form.productId) || pixelSelectionMissing} className="min-h-11 rounded-xl bg-amber-300 px-5 text-sm font-black text-slate-950 hover:bg-amber-200 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400" data-testid="snapchat-management-create-preview">
+                                        <button type="submit" disabled={busy || previewPending || !form.accountId || !actionAllowed || (requiresProduct && !form.productId) || pixelSelectionMissing || financialPreviewBlocked} className="min-h-11 rounded-xl bg-amber-300 px-5 text-sm font-black text-slate-950 hover:bg-amber-200 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400" data-testid="snapchat-management-create-preview">
                                             إنشاء معاينة آمنة
                                         </button>
                                     </div>
                                 </div>
                             </form>
 
-                            <ProposalPreview proposal={activeProposal} readiness={readiness} busy={busy} onApprove={approve} onExecute={execute} onRollback={rollback} onReconcile={reconcile} onContinue={continueFromVerifiedProposal} />
+                            <ProposalPreview proposal={activeProposal} readiness={readiness} busy={busy} financialSettingsReady={financialSettingsReady} onApprove={approve} onExecute={execute} onRollback={rollback} onReconcile={reconcile} onContinue={continueFromVerifiedProposal} />
 
                             {proposals.length > 0 && (
                                 <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -1232,6 +1449,9 @@ export default function SnapchatCampaignManagementPanel({
                                             <button key={proposal.proposal_id} type="button" onClick={() => setActiveProposal(proposal)} className="flex w-full flex-wrap items-center gap-2 rounded-xl bg-slate-50 p-3 text-right text-xs hover:bg-slate-100">
                                                 <span className="font-black">{ACTION_LABELS[proposal.action] || proposal.action}</span>
                                                 <span className="text-slate-500">{STATUS_LABELS[proposal.status] || proposal.status}</span>
+                                                <span className="text-slate-500">{timestamp(proposal.executed_at || proposal.created_at)}</span>
+                                                <span className="text-slate-500">المنفذ: {proposal.actor_name || proposal.actor_id || "—"}</span>
+                                                <span className="font-mono text-[10px] text-slate-500" dir="ltr">Provider: {proposal.provider_entity_id || proposal.provider_target_id || "—"}</span>
                                                 <span className="mr-auto font-mono text-[10px] text-slate-400">{proposal.proposal_id.slice(0, 8)}</span>
                                             </button>
                                         ))}
