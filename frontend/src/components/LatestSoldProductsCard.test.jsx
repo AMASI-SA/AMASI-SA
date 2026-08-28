@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import LatestSoldProductsCard, {
     expandSoldProductRows,
+    mergeOrdersNewestFirst,
     sortOrdersNewestFirst,
 } from "./LatestSoldProductsCard";
 
@@ -55,4 +56,27 @@ test("shows products from the newest five orders initially without aggregation",
     expect(markup).not.toContain("منتج الطلب الأول");
     expect(markup).toContain("طلب #280000006");
     expect(markup).toContain("المزيد");
+    expect(markup).toContain("data-testid=\"latest-sold-products-scroll\"");
+    expect(markup).toContain("h-[520px]");
+    expect(markup).toContain("overflow-y-auto");
+});
+
+test("merges an automatically refreshed newest order at the top", () => {
+    const merged = mergeOrdersNewestFirst(
+        [
+            order("280000006", "نسخة قديمة"),
+            order("280000005", "الطلب السابق"),
+        ],
+        [
+            order("280000007", "الطلب الجديد"),
+            order("280000006", "نسخة محدثة"),
+        ],
+    );
+
+    expect(merged.map((item) => item.order_number)).toEqual([
+        "280000007",
+        "280000006",
+        "280000005",
+    ]);
+    expect(merged[1].items[0].name).toBe("نسخة محدثة");
 });
