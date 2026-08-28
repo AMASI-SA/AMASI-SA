@@ -20,11 +20,19 @@ export function filterReviewedProducts(products, selectedIds, search) {
   return (products || []).filter((product) => {
     if (!reviewedProductMatchesCategories(product, selectedIds)) return false;
     if (!query) return true;
+    const optionValues = (product?.source_lines || []).flatMap((line) => {
+      const options = line?.options_normalized;
+      if (!options || typeof options !== "object") return [];
+      return Array.isArray(options)
+        ? options.flatMap((row) => [row?.name, row?.label, row?.value])
+        : Object.entries(options).flatMap(([key, value]) => [key, value]);
+    });
     return [
       product?.name,
       product?.sku,
       product?.product_id,
       ...(product?.source_order_numbers || []),
+      ...optionValues,
     ]
       .some((value) => text(value).toLocaleLowerCase("ar").includes(query));
   });

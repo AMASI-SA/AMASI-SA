@@ -61,6 +61,7 @@ export async function listReviewedProductCatalog({ limit = 500, reviewedDate = "
             truncated: Boolean(data?.truncated),
             historical: Boolean(data?.historical),
             reviewedDate: data?.reviewed_date || "",
+            selectionGrain: data?.selection_grain || "",
         };
     } catch (error) { throw new Error(message(error, "تعذّر تحميل منتجات مرحلة تمت المراجعة.")); }
 }

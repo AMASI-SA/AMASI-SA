@@ -62,6 +62,7 @@ from reviewed_products_catalog import (
     MAX_REVIEWED_ORDERS,
     PREPARATION_UNIT_ALLOCATIONS,
     load_reviewed_product_context,
+    order_items_with_review_snapshot,
 )
 from tz_utils import riyadh_now_aware
 
@@ -125,6 +126,28 @@ def _unit_quantity(value: Any) -> int:
     if number <= 0 or abs(number - rounded) > 0.000001:
         return 0
     return rounded
+
+
+def _order_document(order: Any) -> dict[str, Any]:
+    """Normalize canonical orders without assuming one concrete DTO class."""
+    if isinstance(order, dict):
+        document = dict(order)
+    elif hasattr(order, "model_dump"):
+        document = dict(order.model_dump(mode="json"))
+    else:
+        document = dict(vars(order)) if hasattr(order, "__dict__") else {}
+
+    raw_items = document.get("items") or getattr(order, "items", None) or []
+    items: list[dict[str, Any]] = []
+    for item in raw_items:
+        if isinstance(item, dict):
+            items.append(dict(item))
+        elif hasattr(item, "model_dump"):
+            items.append(dict(item.model_dump(mode="json")))
+        elif hasattr(item, "__dict__"):
+            items.append(dict(vars(item)))
+    document["items"] = items
+    return document
 
 
 def _review_snapshot_identity(
@@ -1153,13 +1176,16 @@ async def _reconcile_order_stage(
         if item_id and unit_index > 0:
             allocated_by_item[item_id].add(unit_index)
 
+    order_document = _order_document(order)
     required = allocated = 0
-    for item in getattr(order, "items", None) or []:
-        item_id = _text(getattr(item, "order_item_id", None))
+    for item in order_items_with_review_snapshot(order_document, workflow):
+        item_id = _text(item.get("order_item_id"))
         state = states.get(item_id, {})
+        if item.get("_review_snapshot_state"):
+            state = {**item, **state}
         if state.get("supplier_export") is False:
             continue
-        quantity = _unit_quantity(getattr(item, "quantity", 0))
+        quantity = _unit_quantity(item.get("quantity"))
         required += quantity
         allocated += min(quantity, len(allocated_by_item.get(item_id, set())))
     remaining = max(0, required - allocated)

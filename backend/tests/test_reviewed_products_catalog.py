@@ -217,7 +217,7 @@ def test_normal_reviewed_quantity_becomes_one_card_per_available_piece():
         assert row["ready_unit_id"].startswith("ready-unit:")
 
 
-def test_recovered_snapshot_stays_on_existing_aggregated_path():
+def test_recovered_snapshot_also_becomes_one_card_per_piece():
     recovered = {
         "group_key": "product:recovered",
         "name": "منتج مستعاد",
@@ -240,12 +240,14 @@ def test_recovered_snapshot_stays_on_existing_aggregated_path():
         "summary": {"remaining_quantity": 2},
     })
 
-    assert len(result["products"]) == 1
-    product = result["products"][0]
-    assert product["group_key"] == "product:recovered"
-    assert product.get("piece_level") is not True
-    assert product["quantity"] == 2
-    assert product["source_lines"][0]["identity_source"] == "review_snapshot"
+    assert len(result["products"]) == 2
+    assert {row["unit_index"] for row in result["products"]} == {1, 2}
+    for product in result["products"]:
+        assert product["piece_level"] is True
+        assert product["quantity"] == 1
+        assert product["remaining_quantity"] == 1
+        assert product["source_lines"][0]["identity_source"] == "review_snapshot"
+        assert product["source_lines"][0]["ready_unit_id"] == product["group_key"]
 
 
 def test_fully_allocated_product_disappears_from_reviewed_catalog():
