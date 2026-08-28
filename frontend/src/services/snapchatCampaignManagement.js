@@ -71,13 +71,12 @@ export function normalizeSnapchatEntitySettings(payload = {}) {
         provider_parent_id: text(value.provider_parent_id || value.parent_provider_id) || null,
         account_currency: accountCurrency,
         daily_budget_micro: dailyBudgetMicro,
-        daily_budget_usd: usdAllowed ? number(value.daily_budget_usd) ?? microToNativeAmount(dailyBudgetMicro) : null,
+        daily_budget_usd: usdAllowed ? microToNativeAmount(dailyBudgetMicro) : null,
         bid_micro: bidMicro,
-        bid_usd: usdAllowed ? number(value.bid_usd) ?? microToNativeAmount(bidMicro) : null,
+        bid_usd: usdAllowed ? microToNativeAmount(bidMicro) : null,
         ad_squads_daily_budget_micro: childBudgetMicro,
         ad_squads_daily_budget_usd: usdAllowed
-            ? number(value.ad_squads_daily_budget_usd ?? value.ad_squad_daily_budget_sum_usd ?? campaignAggregate.daily_budget_sum_usd)
-                ?? microToNativeAmount(childBudgetMicro)
+            ? microToNativeAmount(childBudgetMicro)
             : null,
         active_ad_squads: number(
             value.active_ad_squads
