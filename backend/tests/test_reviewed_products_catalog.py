@@ -6,6 +6,7 @@ from reviewed_products_catalog import (
     apply_preparation_allocations,
     expand_reviewed_ready_units,
     make_reviewed_products_catalog_router,
+    reviewed_customer_spec_fields,
 )
 
 
@@ -120,6 +121,114 @@ def test_missing_sku_and_product_id_rejoin_unique_catalog_product_card():
     assert product["group_key"] == "product:p-13062"
     legacy = next(row for row in product["source_lines"] if row["order_number"] == "legacy")
     assert legacy["options_normalized"] == {"مقاس الطفل": "8 سنوات"}
+
+
+def test_empty_review_snapshot_falls_back_to_live_customer_options():
+    item = _item("line-options", "p-options")
+    item["options_normalized"] = {
+        "المقاس": "8 سنوات",
+        "اللون": "أخضر",
+    }
+
+    result = aggregate_reviewed_products(
+        [(
+            _order("options-order", [item]),
+            {"items": [{
+                "order_item_id": "line-options",
+                "quantity": 1,
+                "specifications_snapshot": {},
+            }]},
+        )],
+        [],
+    )
+
+    line = result["products"][0]["source_lines"][0]
+    assert line["options_normalized"] == {
+        "المقاس": "8 سنوات",
+        "اللون": "أخضر",
+    }
+    assert line["file_spec_fields"] == [
+        {
+            "spec_key": "size",
+            "name": "المقاس",
+            "value": "8 سنوات",
+            "text": "المقاس: 8 سنوات",
+        },
+        {
+            "spec_key": "color",
+            "name": "اللون",
+            "value": "أخضر",
+            "text": "اللون: أخضر",
+        },
+    ]
+    # Frozen identity remains untouched so display enrichment cannot change
+    # the revision between catalog load and file creation.
+    assert line["ready_item_identity"]["options"] == {}
+
+
+def test_live_customer_option_wins_and_snapshot_fills_missing_fields():
+    item = _item("line-options", "p-options")
+    item["options_normalized"] = {"المقاس": "10 سنوات"}
+
+    fields = reviewed_customer_spec_fields(item, {
+        "specifications_snapshot": {
+            "المقاس": "8 سنوات",
+            "اللون": "أخضر",
+        },
+    })
+
+    assert {row["name"]: row["value"] for row in fields} == {
+        "المقاس": "10 سنوات",
+        "اللون": "أخضر",
+    }
+
+
+def test_catalog_options_apply_reviewed_replacement_and_explicit_exclusion():
+    item = _item("line-options", "p-options")
+    item["options_normalized"] = {
+        "المقاس": "10 سنوات",
+        "اللون": "أخضر",
+    }
+
+    fields = reviewed_customer_spec_fields(item, {
+        "supplier_export_spec_replacement_overrides": [{
+            "spec_key": "size",
+            "replacement_name": "المقاس المطلوب",
+            "replacement_value": "10Y",
+        }],
+        "supplier_export_excluded_spec_keys": ["اللون"],
+    })
+
+    assert fields == [{
+        "spec_key": "size",
+        "name": "المقاس المطلوب",
+        "value": "10Y",
+        "text": "المقاس المطلوب: 10Y",
+    }]
+
+
+def test_live_option_enrichment_changes_display_but_not_frozen_line_revision():
+    workflow = {"items": [{
+        "order_item_id": "line-options",
+        "quantity": 1,
+        "specifications_snapshot": {},
+    }]}
+    sparse = _item("line-options", "p-options")
+    sparse["options_normalized"] = {}
+    enriched = {**sparse, "options_normalized": {"المقاس": "8 سنوات"}}
+
+    before = aggregate_reviewed_products(
+        [(_order("options-order", [sparse]), workflow)],
+        [],
+    )["products"][0]["source_lines"][0]
+    after = aggregate_reviewed_products(
+        [(_order("options-order", [enriched]), workflow)],
+        [],
+    )["products"][0]["source_lines"][0]
+
+    assert before["options_normalized"] == {}
+    assert after["options_normalized"] == {"المقاس": "8 سنوات"}
+    assert before["line_revision"] == after["line_revision"]
 
 
 def test_sparse_live_line_reuses_strong_identity_from_review_snapshot():
