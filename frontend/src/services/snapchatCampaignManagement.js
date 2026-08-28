@@ -119,15 +119,44 @@ export function normalizeSnapchatEntitySettings(payload = {}) {
     };
 }
 
-export function snapchatFinancialSettingsReady(settings) {
-    const value = normalizeSnapchatEntitySettings(settings);
+function baseFinancialSettingsReady(value) {
     return Boolean(
         value.unified_entity_id
         && value.provider_entity_id
         && value.mapping_verified === true
+        && value.account_currency === "USD"
         && FINANCIAL_SETTINGS_READY.has(value.quality.settings_status)
-        && value.quality.financial_controls_allowed === true,
     );
+}
+
+export function snapchatFinancialFieldReady(settings, field) {
+    const value = normalizeSnapchatEntitySettings(settings);
+    if (!baseFinancialSettingsReady(value)) return false;
+    const controls = object(value.quality.financial_field_controls);
+    const control = controls[field];
+    if (control === true) return true;
+    if (!control || typeof control !== "object") return false;
+    return control.allowed === true
+        || control.financial_controls_allowed === true
+        || control.preview_execute_allowed === true;
+}
+
+export function snapchatFinancialSettingsReady(settings) {
+    const value = normalizeSnapchatEntitySettings(settings);
+    if (!baseFinancialSettingsReady(value)) return false;
+    const controls = object(value.quality.financial_field_controls);
+    const values = Object.values(controls);
+    return values.length > 0
+        ? values.some((control) => control === true || (
+            control
+            && typeof control === "object"
+            && (
+                control.allowed === true
+                || control.financial_controls_allowed === true
+                || control.preview_execute_allowed === true
+            )
+        ))
+        : value.quality.financial_controls_allowed === true;
 }
 
 function settingsItems(payload = {}) {
@@ -327,6 +356,20 @@ export function verifiedSnapchatManagementEntityId(payload = {}) {
 
 export function normalizeSnapchatManagementProposal(payload = {}) {
     const value = object(payload?.data || payload);
+    const fieldChangesEnvelope = object(value.field_changes);
+    const fieldChangesFields = object(fieldChangesEnvelope.fields);
+    const fieldChanges = Array.isArray(value.field_changes)
+        ? value.field_changes
+        : Array.isArray(fieldChangesEnvelope.fields)
+            ? fieldChangesEnvelope.fields
+            : Object.keys(fieldChangesFields).length
+                ? Object.entries(fieldChangesFields).map(([field, change]) => ({
+                    field,
+                    ...object(change),
+                }))
+                : Object.entries(fieldChangesEnvelope)
+                    .filter(([field]) => !["fields", "actor_id", "actor_name", "occurred_at", "provider_entity_id", "reread"].includes(field))
+                    .map(([field, change]) => ({ field, ...object(change) }));
     const action = ACTIONS.has(value.action) ? value.action : null;
     const providerStatus = text(value.status, "unknown");
     const status = providerStatus.endsWith("_v2")
@@ -339,7 +382,7 @@ export function normalizeSnapchatManagementProposal(payload = {}) {
         revision: Math.max(1, Math.trunc(number(value.revision) || 1)),
         action,
         account_id: text(value.account_id),
-        account_currency: text(value.account_currency || value.currency) || null,
+        account_currency: text(value.account_currency) || null,
         target_id: text(value.target_id) || null,
         parent_id: text(value.parent_id) || null,
         provider_target_id: text(value.provider_target_id) || null,
@@ -359,20 +402,26 @@ export function normalizeSnapchatManagementProposal(payload = {}) {
         confirm_token: text(value.confirm_token) || null,
         confirmation_phrase: text(value.confirmation_phrase) || null,
         created_at: text(value.created_at) || null,
-        actor_id: text(value.actor_id || value.executed_by || value.created_by) || null,
-        actor_name: text(value.actor_name || value.executor_name) || null,
-        field_changes: Array.isArray(value.field_changes)
-            ? value.field_changes.map(object).filter((item) => Object.keys(item).length)
-            : Object.entries(object(value.field_changes)).map(([field, change]) => ({
-                field,
-                ...object(change),
-            })),
+        actor_id: text(value.actor_id || fieldChangesEnvelope.actor_id || value.executed_by || value.created_by) || null,
+        actor_name: text(value.actor_name || fieldChangesEnvelope.actor_name || value.executor_name) || null,
+        field_changes: fieldChanges.map(object).filter((item) => Object.keys(item).length),
+        field_changes_metadata: {
+            actor_id: text(fieldChangesEnvelope.actor_id) || null,
+            actor_name: text(fieldChangesEnvelope.actor_name) || null,
+            occurred_at: text(fieldChangesEnvelope.occurred_at) || null,
+            provider_entity_id: text(fieldChangesEnvelope.provider_entity_id) || null,
+            reread: object(fieldChangesEnvelope.reread),
+        },
         expires_at: text(value.expires_at) || null,
         approved_at: text(value.approved_at) || null,
         executed_at: text(value.executed_at) || null,
         failed_at: text(value.failed_at) || null,
         verification: object(value.verification),
-        provider_readback: object(value.provider_readback || value.verification?.provider_readback),
+        provider_readback: object(
+            value.provider_readback
+            || value.verification?.provider_readback
+            || value.verification?.provider_snapshot,
+        ),
         rollback: object(value.rollback),
         failure: object(value.failure),
         recovery_action: text(value.recovery_action) || null,
