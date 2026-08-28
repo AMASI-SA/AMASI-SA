@@ -51,6 +51,8 @@ describe("SnapchatEntitySettingsTable", () => {
                             mapping_verified: true,
                             account_currency: "USD",
                             campaign_daily_budget_supported: false,
+                            daily_budget_availability: "unsupported_at_provider_level",
+                            daily_budget_unavailable_message_ar: "غير متاح من Snapchat على هذا المستوى",
                             daily_budget_micro: null,
                             ad_squads_daily_budget_micro: 75_000_000,
                             ad_squads_daily_budget_usd: 75,
@@ -71,7 +73,8 @@ describe("SnapchatEntitySettingsTable", () => {
             );
         });
 
-        expect(container.textContent).toContain(SNAPCHAT_CAMPAIGN_BUDGET_UNSUPPORTED);
+        expect(SNAPCHAT_CAMPAIGN_BUDGET_UNSUPPORTED).toBe("غير متاح من Snapchat على هذا المستوى");
+        expect(container.textContent).toContain("غير متاح من Snapchat على هذا المستوى");
         expect(container.textContent).toContain("75.00 USD");
         expect(container.textContent).toContain("3");
         expect(container.textContent).toContain("AUTO_BID");
@@ -154,5 +157,8 @@ describe("SnapchatEntitySettingsTable", () => {
     test("separates performance completeness from settings state", () => {
         expect(snapchatPerformanceStatus(row("campaign", "one", "complete"))).toBe("performance_complete");
         expect(snapchatPerformanceStatus(row("campaign", "two", "missing"))).toBe("performance_no_facts");
+        expect(snapchatPerformanceStatus({
+            quality: { sync_status: "partial", source_fact_count: 4 },
+        })).toBe("performance_partial");
     });
 });
