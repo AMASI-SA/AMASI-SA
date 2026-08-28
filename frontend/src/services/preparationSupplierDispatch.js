@@ -57,7 +57,7 @@ export function normalizeSupplierDispatchPayload(payload = {}) {
 export async function getPreparationSupplierWorkspace({ limit = 100 } = {}) {
     try {
         return (await api.get("/supplier-dispatch-v1/workspace", {
-            params: { limit },
+            params: { limit, grain: "piece" },
         })).data;
     } catch (error) {
         throw dispatchError(error, "تعذّر تحميل ملفات الموظف وحسابات الموردين.");
