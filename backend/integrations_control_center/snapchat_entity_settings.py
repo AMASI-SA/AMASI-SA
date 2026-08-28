@@ -440,7 +440,7 @@ def _base_item(
         "daily_budget_micro": deepcopy(daily_raw) if daily_present else None,
         "daily_budget_account_currency": (
             micro_to_account_currency(daily_micro)
-            if daily_availability == "available"
+            if daily_availability == "available" and account_currency
             else None
         ),
         "daily_budget_usd": (
@@ -452,7 +452,7 @@ def _base_item(
         "bid_micro": deepcopy(bid_raw) if bid_present else None,
         "bid_account_currency": (
             micro_to_account_currency(bid_micro)
-            if bid_availability == "available"
+            if bid_availability == "available" and account_currency
             else None
         ),
         "bid_usd": (
@@ -631,7 +631,9 @@ def _attach_campaign_aggregate(
         "active_ad_squad_count": active_count,
         "daily_budget_sum_micro": sum_micro,
         "daily_budget_sum_account_currency": (
-            micro_to_account_currency(sum_micro) if sum_micro is not None else None
+            micro_to_account_currency(sum_micro)
+            if sum_micro is not None and currency
+            else None
         ),
         "daily_budget_sum_usd": (
             micro_to_usd(sum_micro, currency) if sum_micro is not None else None
