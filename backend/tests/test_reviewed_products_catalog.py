@@ -4,6 +4,7 @@ from reviewed_products_catalog import (
     UNCATEGORIZED_ID,
     aggregate_reviewed_products,
     apply_preparation_allocations,
+    expand_reviewed_ready_units,
     make_reviewed_products_catalog_router,
 )
 
@@ -182,6 +183,69 @@ def test_thirty_allocated_units_leave_twenty_available():
     source = result["products"][0]["source_lines"][0]
     assert source["remaining_quantity"] == 20
     assert source["available_unit_indices"] == list(range(31, 51))
+
+
+def test_normal_reviewed_quantity_becomes_one_card_per_available_piece():
+    base = aggregate_reviewed_products(
+        [(
+            _order("100", [_item("line-3", "p-name", quantity=3)]),
+            {"reviewed_at": "2026-08-28T02:00:00+00:00", "items": []},
+        )],
+        [],
+    )
+    available = apply_preparation_allocations(base, [{
+        "status": "committed",
+        "order_number": "100",
+        "order_item_id": "line-3",
+        "unit_index": 2,
+    }])
+
+    result = expand_reviewed_ready_units(available)
+
+    assert result["selection_grain"] == "physical_piece"
+    assert result["summary"]["piece_card_count"] == 2
+    assert result["summary"]["remaining_quantity"] == 2
+    assert len(result["products"]) == 2
+    assert {row["unit_index"] for row in result["products"]} == {1, 3}
+    assert len({row["group_key"] for row in result["products"]}) == 2
+    for row in result["products"]:
+        assert row["piece_level"] is True
+        assert row["quantity"] == 1
+        assert row["remaining_quantity"] == 1
+        assert row["source_order_numbers"] == ["100"]
+        assert row["source_lines"][0]["available_unit_indices"] == [row["unit_index"]]
+        assert row["ready_unit_id"].startswith("ready-unit:")
+
+
+def test_recovered_snapshot_stays_on_existing_aggregated_path():
+    recovered = {
+        "group_key": "product:recovered",
+        "name": "منتج مستعاد",
+        "quantity": 2,
+        "remaining_quantity": 2,
+        "category_ids": ["recovered"],
+        "source_lines": [{
+            "group_key": "product:recovered",
+            "identity_source": "review_snapshot",
+            "order_number": "200",
+            "order_item_id": "review-snapshot:200:0",
+            "quantity": 2,
+            "remaining_quantity": 2,
+            "available_unit_indices": [1, 2],
+        }],
+    }
+    result = expand_reviewed_ready_units({
+        "products": [recovered],
+        "categories": [{"id": "recovered", "name": "مستعاد"}],
+        "summary": {"remaining_quantity": 2},
+    })
+
+    assert len(result["products"]) == 1
+    product = result["products"][0]
+    assert product["group_key"] == "product:recovered"
+    assert product.get("piece_level") is not True
+    assert product["quantity"] == 2
+    assert product["source_lines"][0]["identity_source"] == "review_snapshot"
 
 
 def test_fully_allocated_product_disappears_from_reviewed_catalog():

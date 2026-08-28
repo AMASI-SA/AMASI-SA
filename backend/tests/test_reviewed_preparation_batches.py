@@ -27,7 +27,7 @@ from preparation_pdf_wrapped_text import (
     wrap_reference_text,
 )
 from reviewed_products_catalog import PREPARATION_UNIT_ALLOCATIONS
-from reviewed_preparation_v3 import stable_ready_item_id
+from reviewed_preparation_v3 import stable_ready_item_id, stable_ready_unit_id
 from reviewed_preparation_batches import (
     _batch_response,
     _card_field_projection,
@@ -159,6 +159,87 @@ def test_normal_reviewed_ready_identity_does_not_remap_live_salla_line():
     assert _reviewed_ready_identity(order, workflow, changed) is None
 
 
+def test_ready_piece_uses_frozen_identity_even_when_workflow_projection_differs():
+    order = SimpleNamespace(
+        order_id="order-201",
+        order_number="201",
+        created_at=datetime(2026, 8, 28, tzinfo=timezone.utc),
+        source=SimpleNamespace(source_order_id="salla-order-201"),
+    )
+    workflow = {"items": [{
+        "order_item_id": "line-201",
+        "product_id": "later-enrichment",
+        "sku": "LATER-SKU",
+        "quantity": 99,
+    }]}
+    line = {
+        "identity_source": "reviewed_ready",
+        "order_number": "201",
+        "order_item_id": "line-201",
+        "line_index": 0,
+        "quantity": 2,
+        "ready_item_identity": {
+            "order_item_id": "line-201",
+            "product_id": "frozen-product",
+            "sku": "FROZEN-SKU",
+            "quantity": 2,
+            "product_name": "المنتج وقت المراجعة",
+            "options": {"المقاس": "10"},
+        },
+    }
+    line["ready_item_id"] = stable_ready_item_id(line)
+    line["ready_unit_id"] = stable_ready_unit_id(line, 2)
+    allocation = {
+        "order_item_id": "line-201",
+        "ready_item_id": line["ready_item_id"],
+        "ready_unit_id": line["ready_unit_id"],
+        "quantity": 1,
+        "unit_indices": [2],
+        "line": line,
+    }
+
+    resolved = _reviewed_ready_identity(order, workflow, allocation)
+
+    assert resolved is not None
+    identity, state = resolved
+    assert identity.product_id == "frozen-product"
+    assert identity.sku == "FROZEN-SKU"
+    assert identity.quantity == 2
+    assert state == workflow["items"][0]
+
+
+def test_ready_piece_rejects_a_different_physical_unit_identity():
+    line = {
+        "identity_source": "reviewed_ready",
+        "order_number": "202",
+        "order_item_id": "line-202",
+        "line_index": 0,
+        "quantity": 2,
+        "ready_item_identity": {
+            "order_item_id": "line-202",
+            "quantity": 2,
+            "product_name": "منتج",
+        },
+    }
+    line["ready_item_id"] = stable_ready_item_id(line)
+    line["ready_unit_id"] = stable_ready_unit_id(line, 1)
+    order = SimpleNamespace(
+        order_id="order-202",
+        order_number="202",
+        created_at=datetime(2026, 8, 28, tzinfo=timezone.utc),
+        source=SimpleNamespace(source_order_id="salla-order-202"),
+    )
+
+    assert _reviewed_ready_identity(order, {"items": []}, {
+        "order_item_id": "line-202",
+        "ready_item_id": line["ready_item_id"],
+        "ready_unit_id": line["ready_unit_id"],
+        "quantity": 1,
+        "unit_indices": [2],
+        "line": line,
+    }) is None
+
+
 def test_full_selected_products_allocate_every_available_piece_into_one_plan():
     first = _product(
         "product:p-1",
@@ -191,6 +272,47 @@ def test_full_selected_products_allocate_every_available_piece_into_one_plan():
         ("line-b", 3, "ready-b"),
         ("line-c", 2, "ready-c"),
     ]
+
+
+def test_multiple_piece_cards_share_one_plan_with_exact_unit_ids():
+    first_line = {
+        **_line("100", "line-a", 3),
+        "available_unit_indices": [2],
+        "identity_source": "reviewed_ready",
+    }
+    first_line["ready_item_id"] = stable_ready_item_id(first_line)
+    first_line["ready_unit_id"] = stable_ready_unit_id(first_line, 2)
+    second_line = {
+        **_line("101", "line-b", 5),
+        "available_unit_indices": [4],
+        "identity_source": "reviewed_ready",
+    }
+    second_line["ready_item_id"] = stable_ready_item_id(second_line)
+    second_line["ready_unit_id"] = stable_ready_unit_id(second_line, 4)
+    products = [
+        {**_product(first_line["ready_unit_id"], 1, [first_line]), "piece_level": True},
+        {**_product(second_line["ready_unit_id"], 1, [second_line]), "piece_level": True},
+    ]
+
+    planned = plan_preparation_allocations(products, [
+        {"group_key": first_line["ready_unit_id"], "quantity": 1},
+        {"group_key": second_line["ready_unit_id"], "quantity": 1},
+    ])
+
+    assert len(planned) == 2
+    assert [row["unit_indices"] for row in planned] == [[2], [4]]
+    assert [row["ready_unit_id"] for row in planned] == [
+        first_line["ready_unit_id"],
+        second_line["ready_unit_id"],
+    ]
+
+
+def test_piece_card_cannot_request_more_than_one_piece():
+    with pytest.raises(ValueError, match="preparation_piece_quantity_must_be_one"):
+        plan_preparation_allocations(
+            [{**_product("ready-unit:one", 2, [_line("100", "line-a", 2)]), "piece_level": True}],
+            [{"group_key": "ready-unit:one", "quantity": 2}],
+        )
 
 
 def test_review_snapshot_recovery_identity_keeps_stale_guard_strict():

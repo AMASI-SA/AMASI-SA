@@ -12,6 +12,11 @@ const product = (key, quantity) => ({
     remaining_quantity: quantity,
 });
 
+const piece = (key) => ({
+    ...product(key, 1),
+    piece_level: true,
+});
+
 test("selecting a product defaults to its full remaining quantity", () => {
     expect(toggleReviewedPreparationProduct({}, product("p-1", 50)))
         .toEqual({ "p-1": 50 });
@@ -62,4 +67,18 @@ test("pressing a selected product removes it from the file", () => {
         { "p-1": 30 },
         product("p-1", 50),
     )).toEqual({});
+});
+
+test("a physical-piece card always contributes exactly one unit", () => {
+    expect(toggleReviewedPreparationProduct({}, piece("ready-unit:1")))
+        .toEqual({ "ready-unit:1": 1 });
+    expect(setReviewedPreparationQuantity(
+        { "ready-unit:1": 1 },
+        piece("ready-unit:1"),
+        50,
+    )).toEqual({ "ready-unit:1": 1 });
+    expect(reconcileReviewedPreparationSelection(
+        { "ready-unit:1": 9 },
+        [piece("ready-unit:1")],
+    )).toEqual({ "ready-unit:1": 1 });
 });
