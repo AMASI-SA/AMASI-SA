@@ -697,6 +697,16 @@ def _attach_campaign_aggregate(
     campaign_item["ad_squad_bid_strategies"] = aggregate[
         "ad_squad_bid_strategies"
     ]
+    # Stable aliases used by the Snapchat V2 page contract.
+    campaign_item["ad_squads_daily_budget_micro"] = aggregate[
+        "daily_budget_sum_micro"
+    ]
+    campaign_item["ad_squads_daily_budget_usd"] = aggregate[
+        "daily_budget_sum_usd"
+    ]
+    campaign_item["active_ad_squads"] = aggregate[
+        "active_ad_squad_count"
+    ]
     campaign_item["shared_ad_squad_bid_strategy"] = aggregate[
         "shared_ad_squad_bid_strategy"
     ]
