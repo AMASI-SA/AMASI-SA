@@ -95,7 +95,7 @@ function ProductImage({ item }) {
         {imageUrl
             ? <img
                 src={imageUrl}
-                alt={item?.name || ""}
+                alt=""
                 loading="lazy"
                 className="h-full w-full object-cover"
                 onError={() => setImageIndex((current) => current + 1)}
