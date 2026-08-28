@@ -9,10 +9,10 @@ import {
 } from "@phosphor-icons/react";
 
 import {
-    downloadReviewedPreparationBatchPdf,
     listPreparationFiles,
     recoverStalePreparationFiles,
     repairPreparationBatchCustomerOptions,
+    reviewedPreparationBatchPdfUrl,
 } from "../../services/orderReviewEngine";
 import { preparationFileRecordLabel } from "../../preparationFileRegistryUi";
 
@@ -31,7 +31,6 @@ export default function PreparationFilesRegistry() {
     const [files, setFiles] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
-    const [downloadingId, setDownloadingId] = useState("");
     const [recovering, setRecovering] = useState(false);
     const [repairingId, setRepairingId] = useState("");
     const [notice, setNotice] = useState("");
@@ -55,19 +54,6 @@ export default function PreparationFilesRegistry() {
         window.addEventListener("mezan:preparation-file-created", refresh);
         return () => window.removeEventListener("mezan:preparation-file-created", refresh);
     }, [load]);
-
-    const download = async (file) => {
-        if (!file?.batch_id || downloadingId) return;
-        setDownloadingId(file.batch_id);
-        setError("");
-        try {
-            await downloadReviewedPreparationBatchPdf(file.batch_id, file.file_name);
-        } catch (downloadError) {
-            setError(downloadError.message || "تعذّر تحميل ملف PDF.");
-        } finally {
-            setDownloadingId("");
-        }
-    };
 
     const recover = async () => {
         if (recovering) return;
@@ -186,7 +172,6 @@ export default function PreparationFilesRegistry() {
                     <div className="grid gap-3" data-testid="preparation-files-registry-list">
                         {files.map((file, index) => {
                             const key = file.file_number || file.batch_id || `${file.file_name || "file"}-${index}`;
-                            const downloading = downloadingId === file.batch_id;
                             return (
                                 <article
                                     key={key}
@@ -215,18 +200,27 @@ export default function PreparationFilesRegistry() {
                                                 : <Wrench size={19} weight="bold" />}
                                             {repairingId === file.batch_id ? "جاري الإصلاح…" : "إصلاح خيارات العميل"}
                                         </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => download(file)}
-                                            disabled={!file.batch_id || Boolean(downloadingId)}
-                                            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 text-sm font-extrabold text-white transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50"
-                                            data-testid="download-preparation-file-pdf"
-                                        >
-                                            {downloading
-                                                ? <SpinnerGap size={19} className="animate-spin" />
-                                                : <DownloadSimple size={19} weight="bold" />}
-                                            {downloading ? "جاري التحميل…" : "تحميل PDF"}
-                                        </button>
+                                        {file.batch_id ? (
+                                            <a
+                                                href={reviewedPreparationBatchPdfUrl(file.batch_id)}
+                                                download={file.file_name || `preparation-${file.batch_id}.pdf`}
+                                                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 text-sm font-extrabold text-white transition hover:bg-violet-800"
+                                                data-testid="download-preparation-file-pdf"
+                                            >
+                                                <DownloadSimple size={19} weight="bold" />
+                                                تحميل PDF
+                                            </a>
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                disabled
+                                                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 text-sm font-extrabold text-white opacity-50"
+                                                data-testid="download-preparation-file-pdf"
+                                            >
+                                                <DownloadSimple size={19} weight="bold" />
+                                                تحميل PDF
+                                            </button>
+                                        )}
                                     </div>
                                 </article>
                             );
