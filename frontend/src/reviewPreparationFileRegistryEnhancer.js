@@ -6,6 +6,7 @@ import {
 import {
     preparationFileMetadataPayload,
     preparationFileRecordLabel,
+    readSelectedProductCount,
     readSelectionMetric,
     riyadhDateParts,
 } from "./preparationFileRegistryUi";
@@ -173,7 +174,7 @@ async function captureCreate(event) {
 
     const bar = button.closest('[data-testid="reviewed-preparation-selection-bar"]');
     const quantity = readSelectionMetric(bar, "قطع هذا الملف");
-    const productCount = readSelectionMetric(bar, "المنتجات المحددة");
+    const productCount = readSelectedProductCount(bar);
     if (!quantity || !productCount) return;
     const metadata = await showMetadataModal({ quantity, productCount });
     if (!metadata) return;
