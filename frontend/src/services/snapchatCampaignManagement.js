@@ -1,6 +1,8 @@
 import api from "../lib/api";
 
 const BASE = "/integrations-v2/snapchat_ads/management";
+const FINANCIAL_SETTINGS_READY = new Set(["settings_complete", "complete"]);
+const TARGET_COST_STRATEGIES = new Set(["TARGET_COST"]);
 const ACTIONS = new Set([
     "campaign.create",
     "campaign.update",
@@ -33,6 +35,110 @@ function object(value) {
 
 function objectList(value) {
     return Array.isArray(value) ? value.map(object).filter((item) => Object.keys(item).length) : [];
+}
+
+export function snapchatBidLabel(strategy) {
+    const value = text(strategy).toUpperCase();
+    if (TARGET_COST_STRATEGIES.has(value)) return "Target Cost";
+    if (value === "LOWEST_COST_WITH_MAX_BID") return "Max Bid";
+    return "Bid";
+}
+
+export function normalizeSnapchatEntitySettings(payload = {}) {
+    const value = object(payload?.data || payload);
+    const quality = object(value.quality);
+    const campaignAggregate = object(value.campaign_aggregate);
+    const accountCurrency = text(value.account_currency || value.currency).toUpperCase() || null;
+    const settingsStatus = text(
+        quality.settings_status || value.settings_status,
+        "settings_not_loaded",
+    );
+    const dailyBudgetMicro = number(value.daily_budget_micro);
+    const bidMicro = number(value.bid_micro);
+    const childBudgetMicro = number(
+        value.ad_squads_daily_budget_micro
+        ?? value.child_daily_budget_micro
+        ?? value.ad_squad_daily_budget_sum_micro
+        ?? campaignAggregate.daily_budget_sum_micro,
+    );
+    const usdAllowed = accountCurrency === "USD";
+    return {
+        ...value,
+        entity_type: text(value.entity_type || value.provider_entity_type) || null,
+        unified_entity_id: text(value.unified_entity_id || value.entity_id) || null,
+        provider_entity_id: text(value.provider_entity_id || value.external_id) || null,
+        provider_parent_id: text(value.provider_parent_id || value.parent_provider_id) || null,
+        account_currency: accountCurrency,
+        daily_budget_micro: dailyBudgetMicro,
+        daily_budget_usd: usdAllowed ? number(value.daily_budget_usd) ?? microToNativeAmount(dailyBudgetMicro) : null,
+        bid_micro: bidMicro,
+        bid_usd: usdAllowed ? number(value.bid_usd) ?? microToNativeAmount(bidMicro) : null,
+        ad_squads_daily_budget_micro: childBudgetMicro,
+        ad_squads_daily_budget_usd: usdAllowed
+            ? number(value.ad_squads_daily_budget_usd ?? value.ad_squad_daily_budget_sum_usd ?? campaignAggregate.daily_budget_sum_usd)
+                ?? microToNativeAmount(childBudgetMicro)
+            : null,
+        active_ad_squads: number(
+            value.active_ad_squads
+            ?? value.active_ad_squad_count
+            ?? campaignAggregate.active_ad_squad_count,
+        ),
+        ad_squad_bid_strategies: Array.isArray(value.ad_squad_bid_strategies)
+            ? value.ad_squad_bid_strategies
+            : Array.isArray(campaignAggregate.ad_squad_bid_strategies)
+                ? campaignAggregate.ad_squad_bid_strategies
+                : [],
+        campaign_bid_strategy: text(
+            value.campaign_bid_strategy
+            || campaignAggregate.shared_ad_squad_bid_strategy,
+        ) || null,
+        bid_strategy: text(value.bid_strategy) || null,
+        optimization_goal: text(value.optimization_goal) || null,
+        billing_event: text(value.billing_event) || null,
+        conversion_window: text(value.conversion_window) || null,
+        status: text(value.status) || null,
+        settings_synced_at: text(value.settings_synced_at || value.last_observed_at) || null,
+        provider_updated_at: text(value.provider_updated_at || value.updated_at_provider) || null,
+        mapping_status: text(value.mapping_status || quality.mapping_status) || null,
+        mapping_verified: value.mapping_verified === true
+            || value.mapping_status === "verified"
+            || quality.mapping_status === "verified",
+        quality: {
+            ...quality,
+            settings_status: settingsStatus,
+            freshness_seconds: number(quality.freshness_seconds ?? value.freshness_seconds),
+            freshness_threshold_seconds: number(
+                quality.freshness_threshold_seconds ?? value.freshness_threshold_seconds,
+            ),
+            reason: text(quality.reason || value.settings_reason) || null,
+            financial_controls_allowed: quality.financial_controls_allowed === true
+                || value.financial_controls_allowed === true,
+        },
+    };
+}
+
+export function snapchatFinancialSettingsReady(settings) {
+    const value = normalizeSnapchatEntitySettings(settings);
+    return Boolean(
+        value.unified_entity_id
+        && value.provider_entity_id
+        && value.mapping_verified === true
+        && FINANCIAL_SETTINGS_READY.has(value.quality.settings_status)
+        && value.quality.financial_controls_allowed === true,
+    );
+}
+
+function settingsItems(payload = {}) {
+    const value = object(payload?.data || payload);
+    const rows = Array.isArray(value.items)
+        ? value.items
+        : Array.isArray(value.settings)
+            ? value.settings
+            : Array.isArray(value.entities)
+                ? value.entities
+                : Object.keys(value).length ? [value] : [];
+    return rows.map(normalizeSnapchatEntitySettings)
+        .filter((item) => item.unified_entity_id || item.provider_entity_id);
 }
 
 function previewSessionStorage() {
@@ -113,6 +219,9 @@ function proposalRequest(input = {}) {
         account_id: text(input.account_id),
         target_id: text(input.target_id) || null,
         parent_id: text(input.parent_id) || null,
+        provider_target_id: text(input.provider_target_id) || null,
+        provider_parent_id: text(input.provider_parent_id) || null,
+        settings_proof: object(input.settings_proof),
         payload: object(input.payload),
         reason: text(input.reason),
         idempotency_key: text(input.idempotency_key),
@@ -228,8 +337,12 @@ export function normalizeSnapchatManagementProposal(payload = {}) {
         revision: Math.max(1, Math.trunc(number(value.revision) || 1)),
         action,
         account_id: text(value.account_id),
+        account_currency: text(value.account_currency || value.currency) || null,
         target_id: text(value.target_id) || null,
         parent_id: text(value.parent_id) || null,
+        provider_target_id: text(value.provider_target_id) || null,
+        provider_parent_id: text(value.provider_parent_id) || null,
+        settings_proof: object(value.settings_proof),
         reason: text(value.reason),
         expected_outcome: value.expected_outcome === null
             || value.expected_outcome === undefined
@@ -244,11 +357,20 @@ export function normalizeSnapchatManagementProposal(payload = {}) {
         confirm_token: text(value.confirm_token) || null,
         confirmation_phrase: text(value.confirmation_phrase) || null,
         created_at: text(value.created_at) || null,
+        actor_id: text(value.actor_id || value.executed_by || value.created_by) || null,
+        actor_name: text(value.actor_name || value.executor_name) || null,
+        field_changes: Array.isArray(value.field_changes)
+            ? value.field_changes.map(object).filter((item) => Object.keys(item).length)
+            : Object.entries(object(value.field_changes)).map(([field, change]) => ({
+                field,
+                ...object(change),
+            })),
         expires_at: text(value.expires_at) || null,
         approved_at: text(value.approved_at) || null,
         executed_at: text(value.executed_at) || null,
         failed_at: text(value.failed_at) || null,
         verification: object(value.verification),
+        provider_readback: object(value.provider_readback || value.verification?.provider_readback),
         rollback: object(value.rollback),
         failure: object(value.failure),
         recovery_action: text(value.recovery_action) || null,
@@ -296,6 +418,27 @@ export function normalizeSnapchatManagementPreviewJob(payload = {}) {
 export async function getSnapchatManagementReadiness() {
     const response = await api.get(`${BASE}/readiness`);
     return normalizeSnapchatManagementReadiness(response.data);
+}
+
+export async function getSnapchatEntitySettings({
+    entityType,
+    unifiedEntityId = "",
+    parentUnifiedId = "",
+    limit = 500,
+} = {}) {
+    const normalizedType = text(entityType);
+    if (!["campaign", "ad_squad"].includes(normalizedType)) {
+        throw new Error("invalid_snapchat_settings_entity_type");
+    }
+    const response = await api.get(`${BASE}/entity-settings`, {
+        params: {
+            entity_type: normalizedType,
+            unified_entity_id: text(unifiedEntityId) || undefined,
+            parent_unified_id: text(parentUnifiedId) || undefined,
+            limit: Math.min(1000, Math.max(1, Math.trunc(Number(limit) || 500))),
+        },
+    });
+    return settingsItems(response.data);
 }
 
 export async function diagnoseSnapchatManagementPixels({ days = 7 } = {}) {
@@ -615,12 +758,14 @@ export async function rollbackSnapchatManagementProposal(proposal, reason) {
 }
 
 export function nativeAmountToMicro(value) {
+    if (value === null || value === undefined || value === "") return null;
     const parsed = Number(value);
     if (!Number.isFinite(parsed) || parsed < 0) return null;
     return Math.round(parsed * 1_000_000);
 }
 
 export function microToNativeAmount(value) {
+    if (value === null || value === undefined || value === "") return null;
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed / 1_000_000 : null;
 }
