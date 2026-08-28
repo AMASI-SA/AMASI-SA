@@ -986,7 +986,11 @@ describe("snapchatCampaignManagement", () => {
             account_currency: "USD",
             settings_synced_at: "2026-08-28T10:00:00Z",
             daily_budget_micro: 20_000_000,
+            daily_budget_usd: 999,
             bid_micro: 5_000_000,
+            bid_usd: 999,
+            ad_squads_daily_budget_micro: 30_000_000,
+            ad_squads_daily_budget_usd: 999,
             quality: {
                 settings_status: "settings_complete",
                 freshness_seconds: 120,
@@ -1000,6 +1004,7 @@ describe("snapchatCampaignManagement", () => {
         });
         expect(usd.daily_budget_usd).toBe(20);
         expect(usd.bid_usd).toBe(5);
+        expect(usd.ad_squads_daily_budget_usd).toBe(30);
         expect(snapchatFinancialSettingsReady(usd, "account-1")).toBe(true);
         expect(snapchatFinancialFieldReady(usd, "daily_budget_micro", "account-1")).toBe(true);
         expect(snapchatFinancialFieldReady(usd, "bid_strategy", "account-1")).toBe(true);
