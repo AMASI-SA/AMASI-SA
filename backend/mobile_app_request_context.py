@@ -132,13 +132,19 @@ async def mobile_app_request_user(
     if not owner_id:
         raise HTTPException(
             status_code=409,
-            detail={"code": "employee_store_not_linked"},
+            detail={
+                "code": "employee_store_not_linked",
+                "message": "حساب الموظف غير مرتبط بمتجر ميزان.",
+            },
         )
     owner = await db.users.find_one({"id": owner_id}, {"_id": 0})
     if not owner:
         raise HTTPException(
             status_code=409,
-            detail={"code": "employee_store_owner_unavailable"},
+            detail={
+                "code": "employee_store_owner_unavailable",
+                "message": "تعذّر العثور على مالك المتجر المرتبط بهذا الموظف.",
+            },
         )
 
     principal = dict(owner)

@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, Query
 
 from order_engine.repository import MongoOrderRepository
 from order_engine.service import get_orders
+from order_review_spec_replacements import supplier_file_spec_fields
 from order_review_routes import WORKFLOWS, _merchant_user_id, _require_reviewer, _text
 from product_category_variant_support import _build_category_catalog, _flatten_categories
 from reviewed_preparation_v3 import (
@@ -87,6 +88,20 @@ def _review_state_map(workflow: dict[str, Any]) -> dict[str, dict[str, Any]]:
         for row in workflow.get("items") or []
         if isinstance(row, dict) and _text(row.get("order_item_id"))
     }
+
+
+def reviewed_customer_spec_fields(
+    item: dict[str, Any],
+    state: dict[str, Any],
+) -> list[dict[str, str]]:
+    """Project the exact options used by cards and preparation files.
+
+    The shared supplier-field contract is live-first and fills missing keys
+    from the review snapshot. It also applies reviewed replacements and
+    explicit exclusions. Therefore an empty legacy snapshot is not a tombstone
+    for customer choices that still exist on the durable order.
+    """
+    return supplier_file_spec_fields(item, state)
 
 
 def order_items_with_review_snapshot(
@@ -373,6 +388,7 @@ def aggregate_reviewed_products(
             group["direct_category_ids"].update(direct_category_ids)
             if not group.get("image_url") and image:
                 group["image_url"] = image
+            customer_spec_fields = reviewed_customer_spec_fields(item, state)
             source_line = {
                 "group_key": key,
                 "order_number": order_number,
@@ -392,13 +408,12 @@ def aggregate_reviewed_products(
                 "incident_recovery_id": _text(workflow.get("incident_recovery_id")) or None,
                 "shipping_company": _text(shipping.get("company")) or None,
                 "total_products_in_order": total_products_in_order,
-                # Prefer the frozen reviewed choice, including an empty mapping.
-                # Live OrderDTO enrichment may otherwise reorder these options.
-                "options_normalized": (
-                    state.get("specifications_snapshot")
-                    if state.get("specifications_snapshot") is not None
-                    else (item.get("options_normalized") or {})
-                ),
+                "options_normalized": {
+                    row["name"]: row["value"]
+                    for row in customer_spec_fields
+                    if _text(row.get("name")) and _text(row.get("value"))
+                },
+                "file_spec_fields": customer_spec_fields,
                 "selected_image_url": selected_image or None,
                 "preparation_note": _text(state.get("preparation_note")) or None,
                 "identity_source": "review_snapshot" if item.get("_review_snapshot_state") else "reviewed_ready",
@@ -880,4 +895,5 @@ __all__ = [
     "load_reviewed_product_context",
     "make_reviewed_products_catalog_router",
     "order_items_with_review_snapshot",
+    "reviewed_customer_spec_fields",
 ]
