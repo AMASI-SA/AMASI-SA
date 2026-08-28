@@ -227,6 +227,25 @@ function QuantitySelector({ product, value, onChange, onRemove }) {
     );
 }
 
+function PieceSelector({ product, onRemove }) {
+    return (
+        <div className="mt-3 flex items-center justify-between gap-2 rounded-2xl border border-violet-200 bg-violet-50 p-3" data-testid="reviewed-preparation-piece">
+            <div>
+                <div className="text-xs font-extrabold text-violet-900">قطعة واحدة محددة</div>
+                <div className="mt-0.5 text-[11px] text-violet-600">ستُضاف إلى ملف التجهيز الحالي</div>
+            </div>
+            <button
+                type="button"
+                onClick={onRemove}
+                className="rounded-lg p-2 text-rose-600 hover:bg-rose-50"
+                aria-label={`إلغاء تحديد ${product.name}`}
+            >
+                <X size={18} weight="bold" />
+            </button>
+        </div>
+    );
+}
+
 function BatchSuccess({ batch, onDownload, downloading }) {
     if (!batch) return null;
     return (
@@ -342,7 +361,7 @@ export default function ReviewedOrders() {
     const createBatch = async () => {
         if (selectionSummary.productCount === 0 || creatingBatch || catalog.truncated) return;
         const confirmed = window.confirm(
-            `إنشاء ملف تجهيز يحتوي ${selectionSummary.totalQuantity} قطعة من ${selectionSummary.productCount} منتج؟`,
+            `إنشاء ملف تجهيز واحد يحتوي ${selectionSummary.totalQuantity} قطعة من ${selectionSummary.productCount} بطاقة محددة؟`,
         );
         if (!confirmed) return;
 
@@ -404,12 +423,12 @@ export default function ReviewedOrders() {
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div>
-                        <h2 className="text-xl font-black text-slate-950 sm:text-2xl">{historical ? `المنتجات التي مرّت بالمراجعة بتاريخ ${reviewedDate}` : "منتجات تمت مراجعتها"}</h2>
-                        <p className="mt-1 text-sm text-slate-500">{historical ? "عرض تاريخي للكمية الأصلية وأرقام الطلبات، حتى لو انتقلت المنتجات لاحقًا إلى مرحلة أخرى." : "حدد المنتجات والكمية التي تريد إضافتها إلى ملف التجهيز الحالي."}</p>
+                        <h2 className="text-xl font-black text-slate-950 sm:text-2xl">{historical ? `المنتجات التي مرّت بالمراجعة بتاريخ ${reviewedDate}` : "قطع تمت مراجعتها"}</h2>
+                        <p className="mt-1 text-sm text-slate-500">{historical ? "عرض تاريخي للكمية الأصلية وأرقام الطلبات، حتى لو انتقلت المنتجات لاحقًا إلى مرحلة أخرى." : "كل بطاقة تمثل قطعة واحدة؛ حدد القطع المطلوبة ثم أنشئ لها ملف تجهيز واحدًا."}</p>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-center sm:flex sm:text-right">
                         <div className="rounded-xl bg-violet-50 px-3 py-2">
-                            <div className="text-[11px] font-bold text-violet-500">المنتجات المتاحة</div>
+                            <div className="text-[11px] font-bold text-violet-500">{historical ? "المنتجات المتاحة" : "البطاقات المتاحة"}</div>
                             <div className="mt-0.5 text-lg font-black text-violet-900">{filteredProducts.length}</div>
                         </div>
                         <div className="rounded-xl bg-emerald-50 px-3 py-2">
@@ -426,7 +445,7 @@ export default function ReviewedOrders() {
                             value={search}
                             onChange={(event) => setSearch(event.target.value)}
                             className="w-full rounded-xl border border-slate-200 py-3 pl-3 pr-10 text-sm outline-none focus:border-violet-500"
-                            placeholder="بحث باسم المنتج أو SKU"
+                            placeholder="بحث باسم المنتج أو SKU أو رقم الطلب"
                         />
                     </label>
                     <button
@@ -554,6 +573,12 @@ export default function ReviewedOrders() {
                                             {allocated > 0 && (
                                                 <div className="mt-2 text-[11px] font-bold text-amber-700">رُفع سابقًا: {displayReviewedQuantity(allocated)}</div>
                                             )}
+                                            {product.piece_level && (
+                                                <div className="mt-2 space-y-0.5 text-[11px] font-bold text-violet-700">
+                                                    <div dir="ltr">الطلب: {(product.source_order_numbers || [])[0] || "—"}</div>
+                                                    <div>القطعة {product.unit_index} من {product.unit_total}</div>
+                                                </div>
+                                            )}
                                         </div>
                                         <div className="mt-3 flex items-end justify-between gap-2">
                                             <div className="text-xs font-bold text-slate-400">
@@ -573,7 +598,12 @@ export default function ReviewedOrders() {
                                 </div>
 
                                 {!historical && <div className="border-t border-slate-100 px-3 pb-3 sm:px-4 sm:pb-4">
-                                    {selected ? (
+                                    {selected && product.piece_level ? (
+                                        <PieceSelector
+                                            product={product}
+                                            onRemove={() => setSelectedQuantities((current) => toggleReviewedPreparationProduct(current, product))}
+                                        />
+                                    ) : selected ? (
                                         <QuantitySelector
                                             product={product}
                                             value={selectedQuantity}
@@ -616,7 +646,7 @@ export default function ReviewedOrders() {
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div className="grid grid-cols-2 gap-2 text-center sm:flex sm:text-right">
                             <div className="rounded-xl bg-violet-50 px-3 py-2">
-                                <div className="text-[10px] font-bold text-violet-500">المنتجات المحددة</div>
+                                <div className="text-[10px] font-bold text-violet-500">البطاقات المحددة</div>
                                 <div className="text-lg font-black text-violet-950">{selectionSummary.productCount}</div>
                             </div>
                             <div className="rounded-xl bg-emerald-50 px-3 py-2">

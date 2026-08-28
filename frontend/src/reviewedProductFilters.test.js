@@ -12,6 +12,7 @@ const products = [
     name: "سلسال بالاسم",
     sku: "NAME-1",
     category_ids: ["accessories", "necklaces"],
+    source_order_numbers: ["279800001"],
   },
   {
     group_key: "product:2",
@@ -44,9 +45,10 @@ test("category selection toggles without duplicates", () => {
     .toEqual(["bags", "necklaces"]);
 });
 
-test("search works with product name sku and product id", () => {
+test("search works with product name sku product id and order number", () => {
   expect(filterReviewedProducts(products, [], "كوتش")).toEqual([products[1]]);
   expect(filterReviewedProducts(products, [], "NAME-1")).toEqual([products[0]]);
+  expect(filterReviewedProducts(products, [], "279800001")).toEqual([products[0]]);
 });
 
 test("quantity and selected labels stay phone friendly", () => {

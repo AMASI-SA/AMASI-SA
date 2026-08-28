@@ -52,7 +52,11 @@ from order_review_spec_replacements import (
 )
 from preparation_pdf import ProductLine, generate_preparation_pdf
 from preparation_piece_barcode import preparation_piece_barcode
-from reviewed_preparation_v3 import bounded_map_ordered, stable_ready_item_id
+from reviewed_preparation_v3 import (
+    bounded_map_ordered,
+    stable_ready_item_id,
+    stable_ready_unit_id,
+)
 from reviewed_products_catalog import (
     ACTIVE_PREPARATION_ALLOCATION_STATUSES,
     MAX_REVIEWED_ORDERS,
@@ -64,8 +68,8 @@ from tz_utils import riyadh_now_aware
 
 BATCHES = "mezan_preparation_batches_v2"
 BATCH_BUILD_TTL_MINUTES = 20
-MAX_BATCH_SELECTIONS = 200
 MAX_BATCH_UNITS = 1500
+MAX_BATCH_SELECTIONS = MAX_BATCH_UNITS
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
 
@@ -277,27 +281,24 @@ def _reviewed_ready_identity(
         if isinstance(row, dict) and _text(row.get("order_item_id"))
     }
     state = states.get(order_item_id, {})
-    if state:
-        for field in (
-            "source_item_id",
-            "product_id",
-            "parent_product_id",
-            "variant_id",
-            "sku",
-            "barcode",
-        ):
-            current = _text(frozen.get(field))
-            reviewed = _text(state.get(field))
-            if current and reviewed and current.casefold() != reviewed.casefold():
-                return None
-        reviewed_quantity = _unit_quantity(state.get("quantity"))
-        frozen_quantity = _unit_quantity(frozen.get("quantity"))
-        if reviewed_quantity and reviewed_quantity != frozen_quantity:
-            return None
-
     quantity = _unit_quantity(frozen.get("quantity"))
     if quantity <= 0 or _unit_quantity(allocation.get("quantity")) > quantity:
         return None
+    unit_indices = [
+        int(value)
+        for value in (allocation.get("unit_indices") or [])
+        if int(value) > 0
+    ]
+    if unit_indices and any(value > quantity for value in unit_indices):
+        return None
+    ready_unit_id = _text(allocation.get("ready_unit_id"))
+    if ready_unit_id:
+        if len(unit_indices) != 1:
+            return None
+        if ready_unit_id != stable_ready_unit_id(line, unit_indices[0]):
+            return None
+        if _text(line.get("ready_unit_id")) != ready_unit_id:
+            return None
     identity = OrderItemIdentityDTO(
         order_item_id=order_item_id,
         order_id=_text(getattr(order, "order_id", None))
@@ -314,13 +315,13 @@ def _reviewed_ready_identity(
             source_product_id=_text(frozen.get("product_id")) or None,
             source_variant_id=_text(frozen.get("variant_id")) or None,
         ),
-        product_id=_text(line.get("product_id") or frozen.get("product_id")) or None,
+        product_id=_text(frozen.get("product_id") or line.get("product_id")) or None,
         parent_product_id=_text(
-            line.get("parent_product_id") or frozen.get("parent_product_id")
+            frozen.get("parent_product_id") or line.get("parent_product_id")
         ) or None,
-        variant_id=_text(line.get("variant_id") or frozen.get("variant_id")) or None,
-        sku=_text(line.get("sku") or frozen.get("sku")) or None,
-        barcode=_text(line.get("barcode") or frozen.get("barcode")) or None,
+        variant_id=_text(frozen.get("variant_id") or line.get("variant_id")) or None,
+        sku=_text(frozen.get("sku") or line.get("sku")) or None,
+        barcode=_text(frozen.get("barcode") or line.get("barcode")) or None,
         name=_text(frozen.get("product_name") or line.get("product_name")) or "منتج",
         quantity=quantity,
         image_url=_text(
@@ -368,6 +369,25 @@ def plan_preparation_allocations(
         )
         if quantity > remaining:
             raise ValueError("preparation_quantity_exceeds_remaining")
+        if product.get("piece_level") and quantity != 1:
+            raise ValueError("preparation_piece_quantity_must_be_one")
+        if product.get("piece_level"):
+            piece_lines = product.get("source_lines") or []
+            if len(piece_lines) != 1:
+                raise ValueError("reviewed_selection_stale")
+            piece_line = piece_lines[0]
+            piece_indices = [
+                int(value)
+                for value in (piece_line.get("available_unit_indices") or [])
+                if int(value) > 0
+            ]
+            ready_unit_id = _text(piece_line.get("ready_unit_id"))
+            if (
+                len(piece_indices) != 1
+                or ready_unit_id != group_key
+                or ready_unit_id != stable_ready_unit_id(piece_line, piece_indices[0])
+            ):
+                raise ValueError("reviewed_selection_stale")
 
         pending = quantity
         for line in product.get("source_lines") or []:
@@ -398,6 +418,7 @@ def plan_preparation_allocations(
                 "order_number": _text(line.get("order_number")),
                 "order_item_id": _text(line.get("order_item_id")),
                 "ready_item_id": _text(line.get("ready_item_id")) or None,
+                "ready_unit_id": _text(line.get("ready_unit_id")) or None,
                 "quantity": take,
                 "unit_indices": available[:take],
                 "line": dict(line),
@@ -1015,6 +1036,7 @@ async def _build_batch_lines(
             "order_number": order_number,
             "order_item_id": order_item_id,
             "ready_item_id": _text(allocation.get("ready_item_id")) or None,
+            "ready_unit_id": _text(allocation.get("ready_unit_id")) or None,
             "unit_indices": list(allocation.get("unit_indices") or []),
             "quantity": int(allocation.get("quantity") or 0),
             "product_name": _text(getattr(identity, "name", None)) or _text(allocation.get("product_name")),
@@ -1357,6 +1379,7 @@ def make_reviewed_preparation_batches_router(
                     "تغيّرت الكمية أو هوية القطعة بعد فتح الصفحة. "
                     "تم تحديث القائمة؛ أعد تحديد الكمية."
                 ),
+                "preparation_piece_quantity_must_be_one": "يجب اختيار كل قطعة كبطاقة مستقلة.",
             }
             raise HTTPException(
                 status_code=409,
@@ -1427,6 +1450,7 @@ def make_reviewed_preparation_batches_router(
                     "order_number": allocation["order_number"],
                     "order_item_id": allocation["order_item_id"],
                     "ready_item_id": allocation.get("ready_item_id"),
+                    "ready_unit_id": allocation.get("ready_unit_id"),
                     "unit_index": int(unit_index),
                     "reserved_at": now,
                     "expires_at": reservation_expiry,

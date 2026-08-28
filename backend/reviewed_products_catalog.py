@@ -18,6 +18,7 @@ from order_review_routes import WORKFLOWS, _merchant_user_id, _require_reviewer,
 from product_category_variant_support import _build_category_catalog, _flatten_categories
 from reviewed_preparation_v3 import (
     stable_ready_item_id,
+    stable_ready_unit_id,
     stable_reviewed_line_revision,
     stable_reviewed_product_revision,
 )
@@ -626,6 +627,127 @@ def apply_preparation_allocations(
     }
 
 
+def expand_reviewed_ready_units(catalog: dict[str, Any]) -> dict[str, Any]:
+    """Expose each normal reviewed piece as its own selectable card.
+
+    Recovery lines deliberately remain on their existing aggregated snapshot
+    path. Normal lines receive a deterministic unit identity based on the
+    reviewed order line and physical unit index, so the UI and file builder
+    select the exact same piece rather than re-resolving an aggregate quantity.
+    """
+    products: list[dict[str, Any]] = []
+    category_counts: dict[str, set[str]] = defaultdict(set)
+
+    for product in catalog.get("products") or []:
+        recovery_lines: list[dict[str, Any]] = []
+        for source in product.get("source_lines") or []:
+            line = dict(source)
+            if _text(line.get("identity_source")) != "reviewed_ready":
+                recovery_lines.append(line)
+                continue
+
+            quantity = _unit_quantity(line.get("quantity"))
+            available_indices = sorted({
+                int(value)
+                for value in (line.get("available_unit_indices") or [])
+                if 0 < int(value) <= quantity
+            })
+            for unit_index in available_indices:
+                ready_unit_id = stable_ready_unit_id(line, unit_index)
+                unit_line = {
+                    **line,
+                    "group_key": ready_unit_id,
+                    "ready_unit_id": ready_unit_id,
+                    "unit_index": unit_index,
+                    "unit_total": quantity,
+                    "remaining_quantity": 1,
+                    "available_unit_indices": [unit_index],
+                }
+                row = {
+                    **product,
+                    "group_key": ready_unit_id,
+                    "base_product_group_key": _text(product.get("group_key")),
+                    "piece_level": True,
+                    "ready_unit_id": ready_unit_id,
+                    "unit_index": unit_index,
+                    "unit_total": quantity,
+                    "quantity": 1,
+                    "total_quantity": 1,
+                    "allocated_quantity": 0,
+                    "remaining_quantity": 1,
+                    "source_lines": [unit_line],
+                    "source_order_numbers": [_text(line.get("order_number"))],
+                    "source_order_count": 1,
+                    "source_line_count": 1,
+                }
+                row["revision"] = stable_reviewed_product_revision(row)
+                products.append(row)
+
+        if recovery_lines:
+            remaining_quantity = sum(
+                _unit_quantity(
+                    line.get("remaining_quantity")
+                    if line.get("remaining_quantity") is not None
+                    else line.get("quantity")
+                )
+                for line in recovery_lines
+            )
+            order_numbers = sorted({
+                _text(line.get("order_number"))
+                for line in recovery_lines
+                if _text(line.get("order_number"))
+            })
+            recovery_row = {
+                **product,
+                "quantity": remaining_quantity,
+                "total_quantity": sum(
+                    _unit_quantity(line.get("quantity")) for line in recovery_lines
+                ),
+                "allocated_quantity": sum(
+                    _unit_quantity(line.get("allocated_quantity")) for line in recovery_lines
+                ),
+                "remaining_quantity": remaining_quantity,
+                "source_lines": recovery_lines,
+                "source_order_numbers": order_numbers,
+                "source_order_count": len(order_numbers),
+                "source_line_count": len(recovery_lines),
+            }
+            recovery_row["revision"] = stable_reviewed_product_revision(recovery_row)
+            products.append(recovery_row)
+
+    products.sort(key=lambda row: (
+        _normalized(row.get("name")),
+        _text((row.get("source_order_numbers") or [""])[0]),
+        int(row.get("unit_index") or 0),
+        _text(row.get("group_key")),
+    ))
+    for row in products:
+        for category_id in row.get("category_ids") or []:
+            category_counts[_text(category_id)].add(_text(row.get("group_key")))
+
+    categories = [
+        {**row, "product_count": len(category_counts.get(_text(row.get("id")), set()))}
+        for row in catalog.get("categories") or []
+        if category_counts.get(_text(row.get("id")))
+    ]
+    summary = {
+        **(catalog.get("summary") or {}),
+        "selectable_card_count": len(products),
+        "piece_card_count": sum(1 for row in products if row.get("piece_level")),
+        "total_quantity": sum(_unit_quantity(row.get("quantity")) for row in products),
+        "remaining_quantity": sum(
+            _unit_quantity(row.get("remaining_quantity")) for row in products
+        ),
+    }
+    return {
+        **catalog,
+        "products": products,
+        "categories": categories,
+        "summary": summary,
+        "selection_grain": "physical_piece",
+    }
+
+
 async def load_reviewed_product_context(
     db: Any,
     *,
@@ -735,9 +857,8 @@ async def load_reviewed_product_context(
         ).to_list(100000)
 
     original_catalog = aggregate_reviewed_products(pairs, product_documents)
-    catalog = original_catalog if historical else apply_preparation_allocations(
-        original_catalog,
-        allocation_documents,
+    catalog = original_catalog if historical else expand_reviewed_ready_units(
+        apply_preparation_allocations(original_catalog, allocation_documents),
     )
     catalog.update({
         "ok": True,
@@ -785,6 +906,7 @@ __all__ = [
     "PRODUCTS",
     "aggregate_reviewed_products",
     "apply_preparation_allocations",
+    "expand_reviewed_ready_units",
     "load_reviewed_product_context",
     "make_reviewed_products_catalog_router",
 ]
