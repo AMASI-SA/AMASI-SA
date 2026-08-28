@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -8,7 +9,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import AdvancedDashboard from "./pages/AdvancedDashboard";
-import ChartDashboard from "./pages/ChartDashboard";
+const ChartDashboard = lazy(() => import("./pages/ChartDashboard"));
 import CampaignRecommendations from "./pages/CampaignRecommendations";
 import UploadExcel from "./pages/UploadExcel";
 import AnalysisResult from "./pages/AnalysisResult";
@@ -283,7 +284,11 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <OwnerOnlyRoute>
-              <Layout><ChartDashboard /></Layout>
+              <Layout>
+                <Suspense fallback={null}>
+                  <ChartDashboard />
+                </Suspense>
+              </Layout>
             </OwnerOnlyRoute>
           </ProtectedRoute>
         }
