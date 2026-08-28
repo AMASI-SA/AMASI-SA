@@ -4,8 +4,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from product_v2_routes import PRODUCTS
-
+PRODUCTS = "mezan_products_v2"
 IMAGE_PROFILES = "mezan_product_image_profiles_v2"
 logger = logging.getLogger(__name__)
 
