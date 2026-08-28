@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { ChevronDown, PackageOpen } from "lucide-react";
+import { ChevronDown, PackageOpen, RefreshCw } from "lucide-react";
 import {
     listLatestSoldProductOrders,
     ORDER_PAGE_SIZE,
@@ -164,11 +164,6 @@ export default function LatestSoldProductsCard({
         if (!usesDedicatedFeed) return undefined;
 
         void loadFirstPage(false);
-        const refresh = () => void loadFirstPage(true);
-        window.addEventListener("mezan:dashboard-refresh", refresh);
-        return () => {
-            window.removeEventListener("mezan:dashboard-refresh", refresh);
-        };
     }, [loadFirstPage, usesDedicatedFeed]);
 
     const loadMoreOrders = useCallback(async () => {
@@ -198,7 +193,7 @@ export default function LatestSoldProductsCard({
             setFeedHasMore(Boolean(result.nextCursor));
             loadedAdditionalPagesRef.current = true;
         } catch (error) {
-            setFeedError("تعذر تحميل أحدث المنتجات مؤقتًا. ستتم إعادة المحاولة تلقائيًا.");
+            setFeedError("تعذر تحميل أحدث المنتجات مؤقتًا. اضغط تحديث للمحاولة مجددًا.");
         } finally {
             requestInFlightRef.current = false;
             setFeedLoading(false);
@@ -226,7 +221,7 @@ export default function LatestSoldProductsCard({
     return <section data-testid="advanced-latest-sold-products" className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm">
         <div className="flex min-h-14 items-center justify-between gap-3 border-b border-emerald-800 bg-emerald-700 px-4 py-3 text-white">
             <h2 className="flex items-center gap-2 font-extrabold"><PackageOpen className="h-5 w-5" />أحدث المنتجات المباعة</h2>
-            <span className="shrink-0 rounded-full bg-white/15 px-2 py-1 text-[10px] font-bold">{visibleOrders.length} طلبات</span>
+            <div className="flex shrink-0 items-center gap-2"><button type="button" onClick={() => void loadFirstPage(false)} disabled={ordersLoading} aria-label="تحديث أحدث المنتجات المباعة" title="تحديث أحدث المنتجات المباعة" className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-1 text-[10px] font-extrabold text-white transition hover:bg-white/25 disabled:cursor-wait disabled:opacity-60"><RefreshCw className={"h-3.5 w-3.5" + (ordersLoading ? " animate-spin" : "")} />تحديث</button><span className="rounded-full bg-white/15 px-2 py-1 text-[10px] font-bold">{visibleOrders.length} طلبات</span></div>
         </div>
 
         <div
