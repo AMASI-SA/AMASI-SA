@@ -6,6 +6,10 @@ jest.mock("../lib/api", () => ({
     default: {
         get: jest.fn(),
         post: jest.fn(),
+        interceptors: {
+            request: { use: jest.fn() },
+            response: { use: jest.fn() },
+        },
     },
     formatApiErrorDetail: jest.fn(() => ""),
 }));
@@ -28,6 +32,7 @@ jest.mock("../services/snapchatCampaignManagement", () => ({
     resumeSnapchatManagementProposal: jest.fn(),
     rollbackSnapchatManagementProposal: jest.fn(),
     snapchatBidLabel: (strategy) => strategy === "TARGET_COST" ? "Target Cost" : strategy === "LOWEST_COST_WITH_MAX_BID" ? "Max Bid" : "Bid",
+    snapchatFinancialFieldReady: jest.fn(() => false),
     snapchatFinancialSettingsReady: jest.fn(() => false),
 }));
 
