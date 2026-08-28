@@ -75,12 +75,12 @@ def test_missing_image_is_recovered_from_v2_catalog_and_profile():
         items=[item()],
     ))
 
-    assert enriched[0].image_url == "https://cdn.example.com/default.jpg"
+    assert enriched[0].image_url == "https://cdn.example.com/variant.jpg"
     assert enriched[0].image_urls == [
+        "https://cdn.example.com/variant.jpg",
         "https://cdn.example.com/default.jpg",
         "https://cdn.example.com/main.jpg",
         "https://cdn.example.com/second.jpg",
-        "https://cdn.example.com/variant.jpg",
     ]
 
 
