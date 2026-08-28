@@ -524,6 +524,15 @@ def _safe_settings_proof(settings: dict[str, Any]) -> dict[str, Any]:
             or _quality_value(settings, "last_synced_at")
             or _quality_value(settings, "last_observed_at")
         ),
+        "freshness_seconds": _quality_value(settings, "freshness_seconds"),
+        "freshness_threshold_seconds": _quality_value(
+            settings, "freshness_threshold_seconds"
+        ),
+        "reason": _quality_value(settings, "reason"),
+        "provider_updated_at": (
+            _quality_value(settings, "provider_updated_at")
+            or _settings_value(settings, "provider_updated_at")
+        ),
         "currency": (
             _settings_value(settings, "currency")
             or _settings_value(settings, "account_currency")

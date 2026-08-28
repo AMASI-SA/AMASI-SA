@@ -1017,6 +1017,40 @@ def test_structured_field_changes_preserve_raw_micro_and_exact_usd():
     assert changes["provider_reread_verified"] is True
 
 
+def test_settings_proof_preserves_freshness_reason_and_provider_timestamp():
+    proof = module._safe_settings_proof(
+        {
+            "unified_entity_id": "unified-squad",
+            "provider_entity_id": "provider-squad",
+            "provider_parent_id": "provider-campaign",
+            "ad_account_id": "account-1",
+            "mapping_status": "verified",
+            "mapping_verified": True,
+            "account_currency": "USD",
+            "settings_synced_at": "2026-08-28T12:00:00+00:00",
+            "provider_updated_at": "2026-08-28T11:59:30+00:00",
+            "quality": {
+                "settings_status": "settings_complete",
+                "freshness_seconds": 120,
+                "freshness_threshold_seconds": 1800,
+                "reason": "complete",
+                "provider_updated_at": "2026-08-28T11:59:30+00:00",
+                "financial_controls_allowed": True,
+                "financial_field_controls": {
+                    "daily_budget": {"allowed": True, "reason": "available"},
+                    "bid": {"allowed": True, "reason": "available"},
+                },
+            },
+        }
+    )
+
+    assert proof["last_synced_at"] == "2026-08-28T12:00:00+00:00"
+    assert proof["freshness_seconds"] == 120
+    assert proof["freshness_threshold_seconds"] == 1800
+    assert proof["reason"] == "complete"
+    assert proof["provider_updated_at"] == "2026-08-28T11:59:30+00:00"
+
+
 @pytest.mark.asyncio
 async def test_financial_preview_and_execute_use_only_verified_provider_ids(
     monkeypatch,
