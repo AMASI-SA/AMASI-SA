@@ -8,7 +8,6 @@ const SETTINGS_STATUS_LABELS = {
     settings_sync_failed: "settings_sync_failed · فشلت المزامنة",
     settings_stale: "settings_stale · الإعدادات قديمة",
     settings_complete: "settings_complete · قراءة مكتملة",
-    complete: "settings_complete · قراءة مكتملة",
 };
 
 function number(value) {
@@ -21,6 +20,11 @@ function timestamp(value) {
     if (!value) return "—";
     const parsed = new Date(value);
     return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toLocaleString("ar-SA");
+}
+
+function providerValue(value) {
+    if (value === null || value === undefined || value === "") return "—";
+    return typeof value === "object" ? JSON.stringify(value) : String(value);
 }
 
 function freshness(value) {
@@ -79,7 +83,7 @@ function Metric({ label, children, testId, dir = "ltr" }) {
 function SettingsStatus({ row, settings, loading }) {
     const quality = settings?.quality || {};
     const status = String(quality.settings_status || "settings_not_loaded");
-    const complete = ["settings_complete", "complete"].includes(status);
+    const complete = status === "settings_complete";
     const performance = snapchatPerformanceStatus(row);
     return (
         <div className="space-y-1">
@@ -155,7 +159,7 @@ function SettingsDetails({ row, settings }) {
                             <Metric label="bid_strategy">{settings?.bid_strategy || "—"}</Metric>
                             <Metric label="optimization_goal">{settings?.optimization_goal || "—"}</Metric>
                             <Metric label="billing_event">{settings?.billing_event || "—"}</Metric>
-                            <Metric label="conversion_window">{settings?.conversion_window || "—"}</Metric>
+                            <Metric label="conversion_window">{providerValue(settings?.conversion_window)}</Metric>
                         </>
                     )}
                 </div>
