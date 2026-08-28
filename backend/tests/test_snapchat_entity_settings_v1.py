@@ -477,7 +477,7 @@ async def test_performance_only_partial_run_does_not_hide_fresh_settings():
         "ad_squad",
         AD_SQUAD_ID,
         campaign_id=CAMPAIGN_ID,
-        observed_at=(NOW - timedelta(minutes=10)).isoformat(),
+        observed_at=(NOW - timedelta(minutes=4)).isoformat(),
         snapshot={
             "daily_budget_micro": 25_000_000,
             "bid_strategy": "AUTO_BID",
@@ -490,13 +490,8 @@ async def test_performance_only_partial_run_does_not_hide_fresh_settings():
         "run_id": "performance-partial",
         "status": "partial",
         "started_at": (NOW - timedelta(minutes=5)).isoformat(),
-        "finished_at": (NOW - timedelta(minutes=4)).isoformat(),
-        "summary": {
-            "entity_counts": {
-                ACCOUNT_ID: {"campaign": 1, "ad_squad": 2}
-            },
-            "errors_count": 1,
-        },
+        "finished_at": (NOW - timedelta(minutes=3)).isoformat(),
+        "summary": {"errors_count": 1},
         "error": {"code": "snapchat_native_sync_partial"},
     }
     result = await module.list_financial_management_settings(
@@ -515,6 +510,53 @@ async def test_performance_only_partial_run_does_not_hide_fresh_settings():
     assert item["quality"]["settings_status"] == "settings_complete"
     assert item["quality"]["reason"] == "provider_snapshot_fresh"
     assert item["quality"]["latest_sync_run_status"] == "partial"
+
+
+@pytest.mark.asyncio
+async def test_entity_count_never_substitutes_entity_specific_sync_proof():
+    old_row = entity(
+        "ad_squad",
+        AD_SQUAD_ID,
+        campaign_id=CAMPAIGN_ID,
+        observed_at=(NOW - timedelta(minutes=10)).isoformat(),
+        snapshot={
+            "daily_budget_micro": 25_000_000,
+            "bid_strategy": "AUTO_BID",
+        },
+    )
+    later_partial = {
+        "user_id": USER_ID,
+        "provider": "snapchat_ads",
+        "run_type": "analytics_refresh",
+        "run_id": "later-partial",
+        "status": "partial",
+        "started_at": (NOW - timedelta(minutes=5)).isoformat(),
+        "finished_at": (NOW - timedelta(minutes=4)).isoformat(),
+        "summary": {
+            "entity_counts": {
+                ACCOUNT_ID: {"campaign": 50, "ad_squad": 500}
+            },
+            "errors_count": 1,
+        },
+    }
+    result = await module.list_financial_management_settings(
+        DB(
+            entities=[old_row],
+            accounts=[account()],
+            runs=[later_partial],
+        ),
+        USER_ID,
+        "ad_squad",
+        AD_SQUAD_ID,
+        now=NOW,
+    )
+    item = result["items"][0]
+
+    assert item["quality"]["settings_status"] == "settings_sync_failed"
+    assert item["quality"]["reason"] == (
+        "latest_native_sync_missing_entity_specific_proof"
+    )
+    assert item["quality"]["financial_controls_allowed"] is False
 
 
 @pytest.mark.asyncio
