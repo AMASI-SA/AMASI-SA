@@ -32,23 +32,27 @@ jobs:
         id: scope
         env:
           PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PULL_REQUEST_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         shell: bash
         run: |
           set -euo pipefail
 
-          if [[ -z "${PULL_REQUEST_BASE_SHA:-}" ]]; then
-            echo "::error::A pull-request base SHA is required for the fail-closed scope check."
+          if [[ -z "${PULL_REQUEST_BASE_SHA:-}" || -z "${PULL_REQUEST_HEAD_SHA:-}" ]]; then
+            echo "::error::Pull-request base and head SHAs are required for the fail-closed scope check."
             exit 1
           fi
 
           if ! git cat-file -e "${PULL_REQUEST_BASE_SHA}^{commit}" 2>/dev/null; then
             git fetch --no-tags origin "${PULL_REQUEST_BASE_SHA}"
           fi
+          if ! git cat-file -e "${PULL_REQUEST_HEAD_SHA}^{commit}" 2>/dev/null; then
+            git fetch --no-tags origin "${PULL_REQUEST_HEAD_SHA}"
+          fi
 
           changed_paths_nul="${RUNNER_TEMP}/snapchat-settings-changed-paths.nul"
           changed_paths_file="${RUNNER_TEMP}/snapchat-settings-changed-paths.txt"
           git diff --name-only -z --no-renames --diff-filter=ACDMRT \
-            "${PULL_REQUEST_BASE_SHA}...HEAD" > "${changed_paths_nul}"
+            "${PULL_REQUEST_BASE_SHA}...${PULL_REQUEST_HEAD_SHA}" > "${changed_paths_nul}"
           mapfile -d '' -t changed_paths < "${changed_paths_nul}"
           printf '%s\n' "${changed_paths[@]}" > "${changed_paths_file}"
 
@@ -127,7 +131,8 @@ jobs:
             echo "### git diff --stat"
             echo
             echo '```text'
-            git diff --stat --no-renames "${PULL_REQUEST_BASE_SHA}...HEAD"
+            git diff --stat --no-renames \
+              "${PULL_REQUEST_BASE_SHA}...${PULL_REQUEST_HEAD_SHA}"
             echo '```'
           } >> "${GITHUB_STEP_SUMMARY}"
 
