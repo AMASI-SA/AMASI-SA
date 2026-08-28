@@ -10,6 +10,7 @@ export function reviewedRemainingQuantity(product) {
 export function clampReviewedPreparationQuantity(product, value) {
     const remaining = reviewedRemainingQuantity(product);
     if (remaining <= 0) return 0;
+    if (product?.piece_level) return 1;
     const number = Number(value);
     if (!Number.isFinite(number)) return 1;
     return Math.min(remaining, Math.max(1, Math.floor(number)));
@@ -24,7 +25,7 @@ export function toggleReviewedPreparationProduct(current, product) {
         return next;
     }
     const remaining = reviewedRemainingQuantity(product);
-    if (remaining > 0) next[groupKey] = remaining;
+    if (remaining > 0) next[groupKey] = product?.piece_level ? 1 : remaining;
     return next;
 }
 

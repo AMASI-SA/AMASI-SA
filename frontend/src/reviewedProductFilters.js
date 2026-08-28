@@ -20,7 +20,12 @@ export function filterReviewedProducts(products, selectedIds, search) {
   return (products || []).filter((product) => {
     if (!reviewedProductMatchesCategories(product, selectedIds)) return false;
     if (!query) return true;
-    return [product?.name, product?.sku, product?.product_id]
+    return [
+      product?.name,
+      product?.sku,
+      product?.product_id,
+      ...(product?.source_order_numbers || []),
+    ]
       .some((value) => text(value).toLocaleLowerCase("ar").includes(query));
   });
 }

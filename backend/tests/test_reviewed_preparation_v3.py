@@ -6,6 +6,7 @@ import pytest
 
 from reviewed_preparation_v3 import (
     bounded_map_ordered,
+    stable_ready_unit_id,
     stable_reviewed_line_revision,
     stable_reviewed_product_revision,
 )
@@ -62,6 +63,15 @@ def test_product_revision_tracks_exact_available_units():
         }],
     })
     assert original != changed
+
+
+def test_ready_unit_id_is_stable_and_changes_only_with_piece_index():
+    line = _line(line_index=3)
+    first = stable_ready_unit_id(line, 1)
+
+    assert first == stable_ready_unit_id({**line, "name": "اسم عرض جديد"}, 1)
+    assert first != stable_ready_unit_id(line, 2)
+    assert first.startswith("ready-unit:")
 
 
 def test_plan_rejects_stale_selection_revision_fail_closed():

@@ -35,6 +35,24 @@ def stable_ready_item_id(line: dict[str, Any]) -> str:
     return f"ready-item:{hashlib.sha256(encoded).hexdigest()[:32]}"
 
 
+def stable_ready_unit_id(line: dict[str, Any], unit_index: int) -> str:
+    """Return the immutable identity of one physical reviewed piece."""
+    index = int(unit_index)
+    if index <= 0:
+        raise ValueError("invalid_ready_unit_index")
+    payload = {
+        "ready_item_id": stable_ready_item_id(line),
+        "unit_index": index,
+    }
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return f"ready-unit:{hashlib.sha256(encoded).hexdigest()[:32]}"
+
+
 def stable_reviewed_line_revision(line: dict[str, Any]) -> str:
     """Hash only frozen commercial/operational identity facts.
 
@@ -140,6 +158,7 @@ async def bounded_map_ordered(
 __all__ = [
     "bounded_map_ordered",
     "stable_ready_item_id",
+    "stable_ready_unit_id",
     "stable_reviewed_line_revision",
     "stable_reviewed_product_revision",
 ]
