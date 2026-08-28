@@ -47,6 +47,23 @@ test("dispatch selection clamps quantities to the employee available pieces", ()
 });
 
 
+test("piece-grain cards stay independent and always select one physical piece", () => {
+    expect(dispatchSelections(
+        [
+            { group_key: "piece:piece-1", piece_id: "piece-1", available_quantity: 1 },
+            { group_key: "piece:piece-2", piece_id: "piece-2", available_quantity: 1 },
+        ],
+        {
+            "piece:piece-1": 9,
+            "piece:piece-2": 1,
+        },
+    )).toEqual([
+        { group_key: "piece:piece-1", quantity: 1 },
+        { group_key: "piece:piece-2", quantity: 1 },
+    ]);
+});
+
+
 test("selecting a product starts with every available piece and toggles back to hidden", () => {
     const product = { product_name: "سلسال الاسم", available_quantity: 20 };
 
@@ -342,7 +359,7 @@ test("received card renders assigned received products even without a supplier a
 });
 
 
-test("waiting review renders two product cards per mobile row and mandatory return action", () => {
+test("waiting review renders one independent card per physical piece", () => {
     const markup = renderToStaticMarkup(<WaitingReviewView
         data={{
             summary: {},
@@ -353,13 +370,28 @@ test("waiting review renders two product cards per mobile row and mandatory retu
                 registered_at: "2026-08-08T08:00:00Z",
                 available_quantity: 2,
                 sent_quantity: 0,
-                products: [{
-                    group_key: "product:1",
-                    product_name: "سلسال الاسم",
-                    selected_image_url: "https://example.test/product.jpg",
-                    available_quantity: 2,
-                    services: [{ service_id: "engrave", service_name: "نحت", status: "pending" }],
-                }],
+                products: [
+                    {
+                        group_key: "piece:piece-1",
+                        piece_id: "piece-1",
+                        product_name: "سلسال الاسم",
+                        sku: "AMS13067",
+                        order_numbers: ["3001"],
+                        selected_image_url: "https://example.test/product.jpg",
+                        available_quantity: 1,
+                        services: [{ service_id: "engrave", service_name: "نحت", status: "pending" }],
+                    },
+                    {
+                        group_key: "piece:piece-2",
+                        piece_id: "piece-2",
+                        product_name: "سلسال الاسم",
+                        sku: "AMS13067",
+                        order_numbers: ["3002"],
+                        selected_image_url: "https://example.test/product.jpg",
+                        available_quantity: 1,
+                        services: [{ service_id: "engrave", service_name: "نحت", status: "pending" }],
+                    },
+                ],
             }],
         }}
         loading={false}
@@ -372,6 +404,12 @@ test("waiting review renders two product cards per mobile row and mandatory retu
     expect(markup).toContain("grid-cols-2");
     expect(markup).toContain("lg:grid-cols-4");
     expect(markup).toContain("سلسال الاسم");
+    expect(markup.match(/data-testid="dispatch-product-selector"/g)).toHaveLength(2);
+    expect(markup).toContain('data-piece-id="piece-1"');
+    expect(markup).toContain('data-piece-id="piece-2"');
+    expect(markup).toContain("قطعة واحدة");
+    expect(markup).toContain("طلب 3001");
+    expect(markup).toContain("طلب 3002");
     expect(markup).toContain("object-contain");
     expect(markup).toContain('data-testid="dispatch-product-selector"');
     expect(markup).toContain('data-selection-state="unselected"');

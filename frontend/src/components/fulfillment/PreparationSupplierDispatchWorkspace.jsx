@@ -10,9 +10,7 @@ import {
     Factory,
     FileText,
     MagnifyingGlass,
-    Minus,
     Package,
-    Plus,
     Printer,
     SpinnerGap,
     Storefront,
@@ -271,24 +269,6 @@ function ProductSelectionButton({ product, value, onChange }) {
     );
 }
 
-function QuantityControl({ product, value, onChange }) {
-    const available = Math.max(0, Number(product?.available_quantity || 0));
-    const current = Math.max(1, Math.min(available, Number(value || 1)));
-    const set = (next) => onChange(Math.max(1, Math.min(available, Number(next || 1))));
-    return (
-        <div className="rounded-xl border border-slate-200 bg-white p-1.5" data-testid="dispatch-quantity-control">
-            <div className="mb-1 text-center text-xs font-black tabular-nums text-slate-700" dir="ltr">
-                {current} / {available}
-            </div>
-            <div className="grid grid-cols-[32px_minmax(0,1fr)_32px] gap-1" dir="ltr">
-                <button type="button" onClick={() => set(current - 1)} disabled={current <= 1} className="flex h-9 items-center justify-center rounded-lg border border-slate-200 bg-white disabled:opacity-35" aria-label="إنقاص الكمية"><Minus size={14} /></button>
-                <input type="number" inputMode="numeric" min="1" max={available} value={current} onChange={(event) => set(event.target.value)} className="h-9 min-w-0 rounded-lg border border-slate-200 text-center text-sm font-black outline-none focus:border-violet-500" aria-label={`كمية ${product?.product_name || "المنتج"}`} />
-                <button type="button" onClick={() => set(current + 1)} disabled={current >= available} className="flex h-9 items-center justify-center rounded-lg border border-slate-200 bg-white disabled:opacity-35" aria-label="زيادة الكمية"><Plus size={14} /></button>
-            </div>
-        </div>
-    );
-}
-
 function SectionHeader({ title, description, onBack, onRefresh, loading }) {
     return (
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -457,7 +437,7 @@ export function WaitingReviewView({
     onDispatchSaved = () => {},
     onBack,
     title = "بانتظار المراجعة",
-    description = "المنتجات المسندة إليك ولم تُرسل إلى مورد بعد.",
+    description = "القطع المسندة إليك؛ كل بطاقة تمثل قطعة واحدة لم تُرسل إلى مورد بعد.",
 }) {
     const files = (data?.files || []).filter((file) => file.available_quantity > 0);
     const suppliers = Array.isArray(data?.suppliers) ? data.suppliers : [];
@@ -585,16 +565,20 @@ export function WaitingReviewView({
                                                 ? "border-amber-400 bg-amber-50/60 ring-2 ring-amber-100"
                                                 : "border-slate-200 bg-white";
                                         return (
-                                            <article key={product.group_key} className={`min-w-0 rounded-2xl border p-2.5 transition ${selectionTone}`} data-selection-state={selectionState}>
+                                            <article
+                                                key={product.group_key}
+                                                className={`min-w-0 rounded-2xl border p-2.5 transition ${selectionTone}`}
+                                                data-selection-state={selectionState}
+                                                data-piece-id={product.piece_id || undefined}
+                                            >
                                                 <div className="relative">
                                                     <ProductImage product={product} />
                                                     <ProductSelectionButton product={product} value={value} onChange={(quantity) => setQuantity(file.file_number, product.group_key, quantity)} />
                                                     <ProductOptionsMenu product={product} onReturn={() => { setReturnTarget({ file, product }); setReturnReason(""); }} />
                                                 </div>
-                                                <div className="mt-2 min-w-0"><div className="line-clamp-2 min-h-10 text-xs font-black leading-5 text-slate-900 sm:text-sm">{product.product_name}</div><div className="mt-1 truncate text-[10px] font-bold text-slate-500">{product.sku || "بدون SKU"} · {product.available_quantity} قطعة</div></div>
+                                                <div className="mt-2 min-w-0"><div className="line-clamp-2 min-h-10 text-xs font-black leading-5 text-slate-900 sm:text-sm">{product.product_name}</div><div className="mt-1 truncate text-[10px] font-bold text-slate-500">{product.sku || "بدون SKU"} · قطعة واحدة{product.order_numbers?.[0] ? ` · طلب ${product.order_numbers[0]}` : ""}</div></div>
                                                 <div className="mt-2 flex min-h-6 flex-wrap gap-1">{(product.services || []).filter((service) => service.status !== "completed").slice(0, 2).map((service) => <span key={service.service_id} className="rounded-full bg-amber-50 px-1.5 py-1 text-[9px] font-black text-amber-800">{service.service_name || "خدمة"}</span>)}</div>
                                                 <div className="mt-2"><CustomerServiceInstructionBanner instructions={product.customer_service_instructions || []} stage="supplier_dispatch" onUpdated={onChanged} /></div>
-                                                {selectionState !== "unselected" && <div className="mt-2"><QuantityControl product={product} value={value} onChange={(quantity) => setQuantity(file.file_number, product.group_key, quantity)} /></div>}
                                             </article>
                                         );
                                     })}

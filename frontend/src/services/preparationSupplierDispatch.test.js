@@ -1,4 +1,34 @@
-import { normalizeSupplierDispatchPayload } from "./preparationSupplierDispatch";
+import api from "../lib/api";
+import {
+    getPreparationSupplierWorkspace,
+    normalizeSupplierDispatchPayload,
+} from "./preparationSupplierDispatch";
+
+jest.mock("../lib/api", () => ({
+    __esModule: true,
+    default: {
+        get: jest.fn(),
+        post: jest.fn(),
+    },
+}));
+
+
+beforeEach(() => {
+    jest.clearAllMocks();
+});
+
+
+test("employee supplier workspace always requests one card per physical piece", async () => {
+    api.get.mockResolvedValue({ data: { ok: true, files: [] } });
+
+    await expect(getPreparationSupplierWorkspace({ limit: 200 })).resolves.toEqual({
+        ok: true,
+        files: [],
+    });
+    expect(api.get).toHaveBeenCalledWith("/supplier-dispatch-v1/workspace", {
+        params: { limit: 200, grain: "piece" },
+    });
+});
 
 
 test("single preparation file uses legacy stable dispatch payload", () => {
