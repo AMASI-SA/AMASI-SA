@@ -182,7 +182,7 @@ describe("SnapchatEntitySettingsTable", () => {
         expect(container.textContent).toContain("settings_stale");
         expect(container.textContent).toContain(SNAPCHAT_SETTINGS_UNAVAILABLE);
         expect(container.textContent).not.toContain("25.00 USD");
-        expect(container.textContent).not.toContain(">ACTIVE<");
+        expect(container.textContent).not.toContain("ACTIVE");
     });
 
     test("separates performance completeness from settings state", () => {
@@ -191,5 +191,11 @@ describe("SnapchatEntitySettingsTable", () => {
         expect(snapchatPerformanceStatus({
             quality: { sync_status: "partial", source_fact_count: 4 },
         })).toBe("performance_partial");
+        expect(snapchatPerformanceStatus({
+            quality: { sync_status: "failed", source_fact_count: 0 },
+        })).toBe("performance_sync_failed");
+        expect(snapchatPerformanceStatus({
+            quality: { performance_status: "performance_sync_failed" },
+        })).toBe("performance_sync_failed");
     });
 });
