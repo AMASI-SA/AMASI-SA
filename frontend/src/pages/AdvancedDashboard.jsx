@@ -744,34 +744,36 @@ export default function AdvancedDashboard() {
             if (background) backgroundRefreshInFlightRef.current = false;
         }
     }, []);
+  const refreshDashboard = useCallback(() => {
+    if (
+      (typeof document !== "undefined" && document.hidden)
+      || (typeof navigator !== "undefined" && !navigator.onLine)
+    ) return;
+    window.dispatchEvent(new Event("mezan:dashboard-refresh"));
+    void loadPeriod(filters, { background: true });
+  }, [filters, loadPeriod]);
     useEffect(() => { loadPeriod(filters); }, [filters, loadPeriod]);
     useEffect(() => { dashboardDataRef.current = data; }, [data]);
     useEffect(() => {
         const previousSignature = lastOrderSignatureRef.current;
         lastOrderSignatureRef.current = orderSignature;
         if (shouldRefreshDashboardForOrders(previousSignature, orderSignature, Boolean(dashboardDataRef.current))) {
-            loadPeriod(filters, { background: true });
+      refreshDashboard();
         }
-    }, [filters, loadPeriod, orderSignature]);
+  }, [orderSignature, refreshDashboard]);
     useEffect(() => {
-        const refresh = () => {
-            if (
-                (typeof document === "undefined" || !document.hidden)
-                && (typeof navigator === "undefined" || navigator.onLine)
-            ) loadPeriod(filters, { background: true });
-        };
-        const handleVisibilityChange = () => { if (!document.hidden) refresh(); };
-        const timer = window.setInterval(refresh, DASHBOARD_AUTO_REFRESH_MS);
-        window.addEventListener("focus", refresh);
-        window.addEventListener("online", refresh);
-        document.addEventListener("visibilitychange", handleVisibilityChange);
-        return () => {
-            window.clearInterval(timer);
-            window.removeEventListener("focus", refresh);
-            window.removeEventListener("online", refresh);
-            document.removeEventListener("visibilitychange", handleVisibilityChange);
-        };
-    }, [filters, loadPeriod]);
+    const handleVisibilityChange = () => { if (!document.hidden) refreshDashboard(); };
+    const timer = window.setInterval(refreshDashboard, DASHBOARD_AUTO_REFRESH_MS);
+    window.addEventListener("focus", refreshDashboard);
+    window.addEventListener("online", refreshDashboard);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refreshDashboard);
+      window.removeEventListener("online", refreshDashboard);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [refreshDashboard]);
     useEffect(() => {
         let active = true;
         let cartRequestInFlight = false;
