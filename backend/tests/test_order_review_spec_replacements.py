@@ -85,51 +85,6 @@ def test_live_option_wins_over_older_review_snapshot_value():
     assert fields[0]["value"] == "10 سنوات"
 
 
-def test_sparse_live_item_uses_all_line_specific_review_sources():
-    sparse = item(size=None)
-    state = {
-        "options_normalized": {
-            "هل تريد إضافة اسم": "نعم",
-            "الاسم": "ريم",
-        },
-        "options_raw": [{"label": "اللون", "selected": "أخضر"}],
-        "custom_fields": [{"question": "المقاس", "answer": "8 سنوات"}],
-    }
-
-    fields = supplier_file_spec_fields(sparse, state)
-    assert {row["name"]: row["value"] for row in fields} == {
-        "هل تريد إضافة اسم": "نعم",
-        "الاسم": "ريم",
-        "اللون": "أخضر",
-        "المقاس": "8 سنوات",
-    }
-
-
-def test_review_snapshot_precedes_legacy_state_sources_for_same_field():
-    sparse = item(size=None)
-    state = {
-        "specifications_snapshot": {"اللون": "أخضر"},
-        "options_normalized": {"اللون": "أحمر", "المقاس": "10 سنوات"},
-    }
-
-    fields = supplier_file_spec_fields(sparse, state)
-    assert {row["name"]: row["value"] for row in fields} == {
-        "اللون": "أخضر",
-        "المقاس": "10 سنوات",
-    }
-
-
-def test_customer_options_are_empty_only_when_every_line_source_is_empty():
-    sparse = item(size=None)
-    assert supplier_file_spec_fields(sparse, {
-        "specifications_snapshot": {},
-        "options": [],
-        "options_normalized": {},
-        "options_raw": [],
-        "custom_fields": [],
-    }) == []
-
-
 def test_name_and_value_can_be_replaced_independently_for_file_only():
     product = item()
     state = {

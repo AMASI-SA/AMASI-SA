@@ -162,63 +162,35 @@ def extract_item_specs(item: Any) -> list[dict[str, str]]:
 
 def _snapshot_spec_rows(state: Optional[dict[str, Any]]) -> list[dict[str, str]]:
     """Read immutable review options when the later live Salla line is sparse."""
-    state = state or {}
+    snapshot = (
+        (state or {}).get("specifications_snapshot")
+        or (state or {}).get("options")
+        or {}
+    )
     rows: list[dict[str, str]] = []
-    seen: set[str] = set()
 
     def add(name: Any, value: Any) -> None:
         display_name = _text(name).rstrip(":：").strip()
         display_value = _display_value(value)
         spec_key = canonical_spec_key(display_name)
-        if display_name and display_value and spec_key and spec_key not in seen:
-            seen.add(spec_key)
+        if display_name and display_value and spec_key:
             rows.append({
                 "spec_key": spec_key,
                 "name": display_name,
                 "value": display_value,
             })
 
-    def add_collection(value: Any) -> None:
-        if isinstance(value, dict):
-            for name, answer in value.items():
-                add(name, answer)
-            return
-        if not isinstance(value, list):
-            return
-        for row in value:
+    if isinstance(snapshot, dict):
+        for name, value in snapshot.items():
+            add(name, value)
+    elif isinstance(snapshot, list):
+        for row in snapshot:
             if not isinstance(row, dict):
                 continue
             add(
-                row.get("name")
-                or row.get("label")
-                or row.get("title")
-                or row.get("question")
-                or row.get("key")
-                or row.get("spec_key"),
-                row.get("value")
-                if row.get("value") not in (None, "")
-                else row.get("answer")
-                if row.get("answer") not in (None, "")
-                else row.get("selected")
-                if row.get("selected") not in (None, "")
-                else row.get("choice")
-                if row.get("choice") not in (None, "")
-                else row.get("text")
-                if row.get("text") not in (None, "")
-                else row.get("response"),
+                row.get("name") or row.get("label") or row.get("spec_key"),
+                row.get("value") if row.get("value") not in (None, "") else row.get("answer"),
             )
-
-    # The immutable review snapshot is authoritative. Older workflow rows used
-    # several field names, so merge only missing customer fields from each
-    # line-specific source. Product-catalog defaults are deliberately excluded.
-    add_collection(state.get("specifications_snapshot"))
-    add_collection(state.get("options"))
-    add_collection(state.get("options_normalized"))
-    add_collection(state.get("options_raw"))
-    add_collection(state.get("custom_fields"))
-    add("اللون", state.get("color"))
-    add("المقاس", state.get("size"))
-    add("الخامة", state.get("material"))
     return rows
 
 

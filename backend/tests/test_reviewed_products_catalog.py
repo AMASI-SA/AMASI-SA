@@ -183,41 +183,6 @@ def test_live_customer_option_wins_and_snapshot_fills_missing_fields():
     }
 
 
-def test_catalog_projects_legacy_review_sources_for_sparse_live_line():
-    item = _item("line-options", "p-options")
-    item["options_normalized"] = {}
-    workflow = {"items": [{
-        "order_item_id": "line-options",
-        "quantity": 1,
-        "options_raw": [{"name": "اللون", "value": "أخضر"}],
-        "custom_fields": [
-            {"label": "المقاس", "value": "8 سنوات"},
-            {"label": "هل تريد إضافة اسم", "value": "نعم"},
-            {"label": "الاسم", "value": "ريم"},
-        ],
-    }]}
-
-    before = aggregate_reviewed_products(
-        [(_order("options-order", [item]), {"items": [{
-            "order_item_id": "line-options",
-            "quantity": 1,
-        }]})], []
-    )["products"][0]["source_lines"][0]
-    line = aggregate_reviewed_products(
-        [(_order("options-order", [item]), workflow)], []
-    )["products"][0]["source_lines"][0]
-
-    assert line["order_item_id"] == "line-options"
-    assert line["group_key"] == before["group_key"]
-    assert line["line_revision"] == before["line_revision"]
-    assert line["options_normalized"] == {
-        "اللون": "أخضر",
-        "المقاس": "8 سنوات",
-        "هل تريد إضافة اسم": "نعم",
-        "الاسم": "ريم",
-    }
-
-
 def test_catalog_options_apply_reviewed_replacement_and_explicit_exclusion():
     item = _item("line-options", "p-options")
     item["options_normalized"] = {
