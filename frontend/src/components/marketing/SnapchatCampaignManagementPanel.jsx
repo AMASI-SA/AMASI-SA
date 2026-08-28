@@ -222,6 +222,12 @@ function timestamp(value) {
     return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toLocaleString("ar-SA");
 }
 
+function proofBoolean(value) {
+    if (value === true) return "true";
+    if (value === false) return "false";
+    return "غير متاح";
+}
+
 function currentMicro(settings, field) {
     if (settings?.quality?.settings_status !== "settings_complete") {
         return { raw: "غير متاح — فشل جلب الإعدادات", converted: "غير متاح — فشل جلب الإعدادات" };
@@ -341,10 +347,14 @@ function CurrentSettingsCard({ action, settings, accountId }) {
     const childBudget = currentMicro(settings, "ad_squads_daily_budget_micro", "ad_squads_daily_budget_usd");
     const effectiveCurrentBidStrategy = settingsComplete ? settings?.bid_strategy : null;
     const currentAutoBid = String(effectiveCurrentBidStrategy || "").toUpperCase() === "AUTO_BID";
-    const campaignStrategies = settingsComplete
+    const activeCountAvailable = settingsComplete
+        && settings?.active_ad_squads_availability === "available";
+    const strategiesAvailable = settingsComplete
+        && settings?.ad_squad_bid_strategies_availability === "available";
+    const campaignStrategies = strategiesAvailable
         ? Array.isArray(settings?.ad_squad_bid_strategies)
-            ? settings.ad_squad_bid_strategies.join("، ")
-            : settings?.campaign_bid_strategy || settings?.bid_strategy || "—"
+            ? settings.ad_squad_bid_strategies.join("، ") || "لا توجد (0 Ad Squads)"
+            : "لا توجد (0 Ad Squads)"
         : "غير متاح — فشل جلب الإعدادات";
     const currentProviderValue = (value) => settingsComplete
         ? providerValue(value)
@@ -364,6 +374,8 @@ function CurrentSettingsCard({ action, settings, accountId }) {
                 <div><span className="block text-slate-500">Snapchat Ad Account ID</span><code dir="ltr">{settings?.ad_account_id || "غير متاح — فشل جلب الإعدادات"}</code></div>
                 <div><span className="block text-slate-500">عملة الحساب</span><strong>{settings?.account_currency || "غير متاحة"}</strong></div>
                 <div><span className="block text-slate-500">mapping_status</span><strong>{settings?.mapping_status || (settings?.mapping_verified ? "verified" : "غير متاح")}</strong></div>
+                <div><span className="block text-slate-500">identity_contract</span><code dir="ltr">{settings?.identity_contract?.name || "غير متاح"}</code></div>
+                <div><span className="block text-slate-500">Unified ID == provider ID</span><strong>{proofBoolean(settings?.identity_contract?.ids_equal)}</strong></div>
                 <div><span className="block text-slate-500">الحالة الحالية</span><strong>{currentProviderValue(settings?.status)}</strong></div>
                 <div><span className="block text-slate-500">الميزانية اليومية الخام</span><strong dir="ltr">{budget.raw}</strong></div>
                 <div><span className="block text-slate-500">الميزانية اليومية</span><strong dir="ltr">{budget.converted}</strong></div>
@@ -371,7 +383,7 @@ function CurrentSettingsCard({ action, settings, accountId }) {
                     <>
                         <div><span className="block text-slate-500">مجموع ميزانيات Ad Squads الخام</span><strong dir="ltr">{childBudget.raw}</strong></div>
                         <div><span className="block text-slate-500">مجموع ميزانيات Ad Squads</span><strong dir="ltr">{childBudget.converted}</strong></div>
-                        <div><span className="block text-slate-500">Ad Squads النشطة</span><strong>{settingsComplete ? (settings?.active_ad_squads ?? "—") : "غير متاح — فشل جلب الإعدادات"}</strong></div>
+                        <div><span className="block text-slate-500">Ad Squads النشطة</span><strong>{activeCountAvailable ? (settings?.active_ad_squads ?? "—") : "غير متاح — فشل جلب الإعدادات"}</strong></div>
                         <div><span className="block text-slate-500">استراتيجيات المزايدة المتاحة</span><strong>{campaignStrategies}</strong></div>
                     </>
                 )}

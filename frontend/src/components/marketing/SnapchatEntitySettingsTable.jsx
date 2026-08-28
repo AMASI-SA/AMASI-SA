@@ -38,6 +38,12 @@ function freshness(value) {
     return Number.isFinite(seconds) ? `${seconds.toLocaleString("en-US")} ثانية` : "غير متاح";
 }
 
+function proofBoolean(value) {
+    if (value === true) return "true";
+    if (value === false) return "false";
+    return "غير متاح";
+}
+
 function microAmount(settings, microValue) {
     if (settings?.quality?.settings_status !== "settings_complete") {
         return { raw: SNAPCHAT_SETTINGS_UNAVAILABLE, converted: SNAPCHAT_SETTINGS_UNAVAILABLE };
@@ -114,6 +120,9 @@ function SettingsStatus({ row, settings, loading }) {
 function SettingsDetails({ row, settings }) {
     const type = row?.entity?.level === "ad_group" ? "ad_squad" : "campaign";
     const quality = settings?.quality || {};
+    const identityContract = settings?.identity_contract && typeof settings.identity_contract === "object"
+        ? settings.identity_contract
+        : {};
     const settingsComplete = settings?.quality?.settings_status === "settings_complete";
     const budgetUnsupported = type === "campaign"
         && settingsComplete
@@ -131,10 +140,14 @@ function SettingsDetails({ row, settings }) {
     const bid = microAmount(settings, settings?.bid_micro, settings?.bid_usd);
     const effectiveBidStrategy = settingsComplete ? settings?.bid_strategy : null;
     const autoBid = String(effectiveBidStrategy || "").toUpperCase() === "AUTO_BID";
-    const strategies = settingsComplete
+    const activeCountAvailable = settingsComplete
+        && settings?.active_ad_squads_availability === "available";
+    const strategiesAvailable = settingsComplete
+        && settings?.ad_squad_bid_strategies_availability === "available";
+    const strategies = strategiesAvailable
         ? Array.isArray(settings?.ad_squad_bid_strategies)
-            ? settings.ad_squad_bid_strategies.join("، ")
-            : settings?.campaign_bid_strategy || settings?.bid_strategy || "—"
+            ? settings.ad_squad_bid_strategies.join("، ") || "لا توجد (0 Ad Squads)"
+            : "لا توجد (0 Ad Squads)"
         : SNAPCHAT_SETTINGS_UNAVAILABLE;
     return (
         <>
@@ -152,6 +165,8 @@ function SettingsDetails({ row, settings }) {
                     <Metric label="Snapchat Ad Account ID">{settings?.ad_account_id || SNAPCHAT_SETTINGS_UNAVAILABLE}</Metric>
                     <Metric label="عملة الحساب">{settings?.account_currency || "غير متاحة"}</Metric>
                     <Metric label="mapping_status">{settings?.mapping_status || (settings?.mapping_verified ? "verified" : "غير متاح")}</Metric>
+                    <Metric label="identity_contract">{identityContract.name || "غير متاح"}</Metric>
+                    <Metric label="Unified ID == provider ID">{proofBoolean(identityContract.ids_equal)}</Metric>
                 </div>
             </td>
             <td className="px-4 py-4 align-top">
@@ -162,7 +177,7 @@ function SettingsDetails({ row, settings }) {
                         <>
                             <Metric label="مجموع ميزانيات Ad Squads الخام">{childBudget.raw}</Metric>
                             <Metric label="مجموع ميزانيات Ad Squads">{childBudget.converted}</Metric>
-                            <Metric label="Ad Squads النشطة">{settingsComplete ? number(settings?.active_ad_squads) : SNAPCHAT_SETTINGS_UNAVAILABLE}</Metric>
+                            <Metric label="Ad Squads النشطة" testId="snapchat-settings-active-ad-squads">{activeCountAvailable ? number(settings?.active_ad_squads) : SNAPCHAT_SETTINGS_UNAVAILABLE}</Metric>
                         </>
                     )}
                 </div>
@@ -170,7 +185,7 @@ function SettingsDetails({ row, settings }) {
             <td className="px-4 py-4 align-top">
                 <div className="w-[300px] grid grid-cols-2 gap-2 rounded-xl border border-slate-100 bg-slate-50 p-2">
                     {type === "campaign" ? (
-                        <Metric label="استراتيجيات المزايدة">{strategies}</Metric>
+                        <Metric label="استراتيجيات المزايدة" testId="snapchat-settings-ad-squad-bid-strategies">{strategies}</Metric>
                     ) : (
                         <>
                             {autoBid ? (

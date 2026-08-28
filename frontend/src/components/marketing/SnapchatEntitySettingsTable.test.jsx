@@ -58,7 +58,9 @@ describe("SnapchatEntitySettingsTable", () => {
                             ad_squads_daily_budget_micro: 75_000_000,
                             ad_squads_daily_budget_usd: 75,
                             active_ad_squads: 3,
+                            active_ad_squads_availability: "available",
                             ad_squad_bid_strategies: ["AUTO_BID", "TARGET_COST"],
+                            ad_squad_bid_strategies_availability: "available",
                             status: "ACTIVE",
                             settings_synced_at: "2026-08-28T10:00:00Z",
                             provider_updated_at: "2026-08-28T09:55:00Z",
@@ -87,6 +89,114 @@ describe("SnapchatEntitySettingsTable", () => {
         expect(container.textContent).toContain("unified-campaign-1");
         expect(container.textContent).toContain("provider-campaign-9");
         expect(container.textContent).toContain("account-1");
+    });
+
+    test("fails campaign aggregate counts and strategies closed without coverage proof", async () => {
+        const campaignId = "campaign-incomplete-catalog";
+        await act(async () => {
+            root.render(
+                <SnapchatEntitySettingsTable
+                    report={{ rows: [row("campaign", campaignId)] }}
+                    settingsByEntityId={{
+                        [campaignId]: {
+                            unified_entity_id: campaignId,
+                            provider_entity_id: campaignId,
+                            account_currency: "USD",
+                            daily_budget_availability: "unsupported_at_provider_level",
+                            active_ad_squads: 0,
+                            active_ad_squads_availability: "child_catalog_account_count_mismatch",
+                            ad_squad_bid_strategies: [],
+                            ad_squad_bid_strategies_availability: "child_catalog_account_count_mismatch",
+                            quality: { settings_status: "settings_complete" },
+                        },
+                    }}
+                />,
+            );
+        });
+
+        expect(container.querySelector('[data-testid="snapchat-settings-active-ad-squads"]').textContent)
+            .toContain(SNAPCHAT_SETTINGS_UNAVAILABLE);
+        expect(container.querySelector('[data-testid="snapchat-settings-ad-squad-bid-strategies"]').textContent)
+            .toContain(SNAPCHAT_SETTINGS_UNAVAILABLE);
+    });
+
+    test("preserves proven zero and empty strategies for a complete zero-child partition", async () => {
+        const campaignId = "campaign-complete-zero-children";
+        await act(async () => {
+            root.render(
+                <SnapchatEntitySettingsTable
+                    report={{ rows: [row("campaign", campaignId)] }}
+                    settingsByEntityId={{
+                        [campaignId]: {
+                            unified_entity_id: campaignId,
+                            provider_entity_id: campaignId,
+                            account_currency: "USD",
+                            daily_budget_availability: "unsupported_at_provider_level",
+                            active_ad_squads: 0,
+                            active_ad_squads_availability: "available",
+                            ad_squad_bid_strategies: [],
+                            ad_squad_bid_strategies_availability: "available",
+                            quality: { settings_status: "settings_complete" },
+                        },
+                    }}
+                />,
+            );
+        });
+
+        const active = container.querySelector('[data-testid="snapchat-settings-active-ad-squads"]');
+        const strategies = container.querySelector('[data-testid="snapchat-settings-ad-squad-bid-strategies"]');
+        expect(active.textContent).toContain("0");
+        expect(active.textContent).not.toContain(SNAPCHAT_SETTINGS_UNAVAILABLE);
+        expect(strategies.textContent).toContain("لا توجد (0 Ad Squads)");
+        expect(strategies.textContent).not.toContain(SNAPCHAT_SETTINGS_UNAVAILABLE);
+    });
+
+    test("documents the native Snapchat V2 identity contract while showing both equal IDs", async () => {
+        const providerId = "7c0f5bfa-3f59-437b-bb89-1c70b11d0526";
+        await act(async () => {
+            root.render(
+                <SnapchatEntitySettingsTable
+                    report={{ rows: [row("ad_group", providerId)] }}
+                    settingsByEntityId={{
+                        [providerId]: {
+                            unified_entity_id: providerId,
+                            provider_entity_id: providerId,
+                            ad_account_id: "account-1",
+                            mapping_status: "verified",
+                            mapping_verified: true,
+                            identity_contract: {
+                                name: "snapchat_v2_provider_id_is_unified_id_v1",
+                                requires_equal: true,
+                                ids_equal: true,
+                                unified_id_source: "mezan_snapchat_entities_v2.external_id",
+                                provider_id_source: "mezan_snapchat_entities_v2.provider_snapshot.id",
+                            },
+                            account_currency: "USD",
+                            daily_budget_micro: 50_000_000,
+                            bid_micro: 7_500_000,
+                            bid_strategy: "TARGET_COST",
+                            quality: {
+                                settings_status: "settings_complete",
+                                freshness_seconds: 120,
+                                freshness_threshold_seconds: 1800,
+                            },
+                        },
+                    }}
+                />,
+            );
+        });
+
+        const diagnostic = container.textContent;
+        expect(diagnostic).toContain("Unified ID");
+        expect(diagnostic).toContain("Snapchat provider ID");
+        const labels = Array.from(container.querySelectorAll("span"));
+        expect(labels.find((item) => item.textContent === "Unified ID")?.parentElement?.textContent)
+            .toContain(providerId);
+        expect(labels.find((item) => item.textContent === "Snapchat provider ID")?.parentElement?.textContent)
+            .toContain(providerId);
+        expect(diagnostic).toContain("snapchat_v2_provider_id_is_unified_id_v1");
+        expect(diagnostic).toContain("Unified ID == provider ID");
+        expect(diagnostic).toContain("true");
     });
 
     test("labels bid by strategy and never calls a max bid Target Cost", async () => {

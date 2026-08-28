@@ -33,6 +33,25 @@ _SYNC_FAILED = "settings_sync_failed"
 _STALE = "settings_stale"
 _UNAVAILABLE_AR = "غير متاح — فشل جلب الإعدادات"
 _UNSUPPORTED_CAMPAIGN_BUDGET_AR = "غير متاح من Snapchat على هذا المستوى"
+_IDENTITY_CONTRACT_NAME = "snapchat_v2_provider_id_is_unified_id_v1"
+
+
+def _identity_contract(
+    unified_entity_id: str,
+    provider_entity_id: str | None,
+) -> dict[str, Any]:
+    """Native settings sync and the Unified adapter both canonicalize Snapchat id."""
+    return {
+        "name": _IDENTITY_CONTRACT_NAME,
+        "requires_equal": True,
+        "ids_equal": (
+            None
+            if provider_entity_id is None
+            else unified_entity_id == provider_entity_id
+        ),
+        "unified_id_source": "mezan_snapchat_entities_v2.external_id",
+        "provider_id_source": "mezan_snapchat_entities_v2.provider_snapshot.id",
+    }
 
 
 def _utcnow() -> datetime:
@@ -329,11 +348,9 @@ def _base_item(
 ) -> dict[str, Any]:
     entity_type = str(row.get("entity_type") or "")
     snapshot = _provider_snapshot(row) or {}
-    provider_entity_id = _safe_id(row.get("external_id"))
+    provider_entity_id = _safe_id(snapshot.get("id"))
     provider_parent_id = (
-        _safe_id(snapshot.get("campaign_id") or row.get("campaign_id"))
-        if entity_type == "ad_squad"
-        else None
+        _safe_id(snapshot.get("campaign_id")) if entity_type == "ad_squad" else None
     )
     mapping_status = _mapping_status(
         row,
@@ -439,6 +456,10 @@ def _base_item(
         "unified_entity_id": unified_entity_id,
         "provider_entity_id": provider_entity_id,
         "provider_parent_id": provider_parent_id,
+        "identity_contract": _identity_contract(
+            unified_entity_id,
+            provider_entity_id,
+        ),
         "mapping_status": mapping_status,
         "mapping_verified": mapping_status == "verified",
         "mapping_source": (
@@ -526,6 +547,7 @@ def _missing_item(
         "unified_entity_id": unified_entity_id,
         "provider_entity_id": None,
         "provider_parent_id": None,
+        "identity_contract": _identity_contract(unified_entity_id, None),
         "requested_provider_entity_id": expected_provider_entity_id,
         "requested_parent_unified_id": expected_parent_unified_id,
         "mapping_status": "unverified",
@@ -575,6 +597,10 @@ def _account_by_provider_id(
 def _ad_squad_catalog_coverage(
     latest_run: dict[str, Any] | None,
     campaign_item: dict[str, Any],
+    account_id: str | None,
+    account_rows: list[dict[str, Any]],
+    *,
+    truncated: bool,
 ) -> dict[str, Any]:
     run_status = str((latest_run or {}).get("status") or "").lower()
     base = {
@@ -583,6 +609,11 @@ def _ad_squad_catalog_coverage(
         "latest_sync_run_id": (latest_run or {}).get("run_id"),
         "latest_sync_run_status": (latest_run or {}).get("status"),
         "provider_account_ad_squad_count": None,
+        "loaded_account_ad_squad_count": 0,
+        "unpartitioned_ad_squad_count": 0,
+        "invalid_parent_mapping_count": 0,
+        "account_catalog_truncated": truncated,
+        "proof_mode": None,
     }
     if run_status != "complete":
         if run_status == "partial":
@@ -595,44 +626,100 @@ def _ad_squad_catalog_coverage(
 
     started = _as_utc((latest_run or {}).get("started_at"))
     finished = _as_utc((latest_run or {}).get("finished_at"))
-    observed = _as_utc(campaign_item.get("settings_synced_at"))
+    if started is None or finished is None or finished < started:
+        base["reason"] = "child_catalog_run_window_invalid"
+        return base
+
+    campaign_observed = _as_utc(campaign_item.get("settings_synced_at"))
     if (
-        started is None
-        or finished is None
-        or observed is None
-        or observed < started
-        or observed > finished
+        campaign_observed is None
+        or campaign_observed < started
+        or campaign_observed > finished
     ):
-        base["reason"] = "child_catalog_entity_proof_missing"
+        base["reason"] = "child_catalog_campaign_observation_missing"
         return base
 
     summary = (latest_run or {}).get("summary")
     summary = summary if isinstance(summary, dict) else {}
-    counts_by_account = summary.get("entity_counts")
-    counts_by_account = counts_by_account if isinstance(counts_by_account, dict) else {}
-    account_id = _safe_id(campaign_item.get("ad_account_id"))
-    account_counts = counts_by_account.get(account_id)
-    account_counts = account_counts if isinstance(account_counts, dict) else {}
-    if "ad_squad" not in account_counts:
-        base["reason"] = "child_catalog_count_missing"
+    observed_rows = _rows_observed_in_latest_run(latest_run, account_rows)
+    unpartitioned_count = sum(
+        1 for row in observed_rows if _safe_id(row.get("campaign_id")) is None
+    )
+    invalid_parent_count = sum(
+        1
+        for row in observed_rows
+        if (
+            _safe_id(row.get("campaign_id")) is None
+            or _safe_id((_provider_snapshot(row) or {}).get("campaign_id")) is None
+            or _safe_id(row.get("campaign_id"))
+            != _safe_id((_provider_snapshot(row) or {}).get("campaign_id"))
+        )
+    )
+    base.update(
+        {
+            "loaded_account_ad_squad_count": len(observed_rows),
+            "unpartitioned_ad_squad_count": unpartitioned_count,
+            "invalid_parent_mapping_count": invalid_parent_count,
+        }
+    )
+    if truncated:
+        base["reason"] = "child_catalog_truncated"
         return base
-    raw_count = account_counts.get("ad_squad")
-    if isinstance(raw_count, bool):
-        base["reason"] = "child_catalog_count_invalid"
+    if invalid_parent_count:
+        base["reason"] = "child_catalog_parent_mapping_invalid"
         return base
-    provider_count = _micro_integer(raw_count)
-    if provider_count is None:
-        base["reason"] = "child_catalog_count_invalid"
-        return base
+
+    if "entity_counts" in summary:
+        counts_by_account = summary.get("entity_counts")
+        if not isinstance(counts_by_account, dict):
+            base["reason"] = "child_catalog_count_invalid"
+            return base
+        account_counts = counts_by_account.get(account_id)
+        if not isinstance(account_counts, dict) or "ad_squad" not in account_counts:
+            base["reason"] = "child_catalog_count_missing"
+            return base
+        raw_count = account_counts.get("ad_squad")
+        provider_count = (
+            None if isinstance(raw_count, bool) else _micro_integer(raw_count)
+        )
+        if provider_count is None:
+            base["reason"] = "child_catalog_count_invalid"
+            return base
+        base["provider_account_ad_squad_count"] = provider_count
+        base["proof_mode"] = "sync_run_count_verified"
+        if len(observed_rows) != provider_count:
+            base["reason"] = "child_catalog_account_count_mismatch"
+            return base
+    else:
+        # A complete native run means every entity endpoint paginated without
+        # errors. Its run window therefore proves the rows observed for this
+        # account even on scheduler summaries that omit entity_counts.
+        base["proof_mode"] = "complete_sync_run_window"
 
     base.update(
         {
             "complete": True,
             "reason": "available",
-            "provider_account_ad_squad_count": provider_count,
         }
     )
     return base
+
+
+def _rows_observed_in_latest_run(
+    latest_run: dict[str, Any] | None,
+    rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Keep only catalog rows proved present in the latest native sync run."""
+    started = _as_utc((latest_run or {}).get("started_at"))
+    finished = _as_utc((latest_run or {}).get("finished_at"))
+    if started is None or finished is None or finished < started:
+        return []
+    output: list[dict[str, Any]] = []
+    for row in rows:
+        observed = _as_utc(row.get("last_observed_at"))
+        if observed is not None and started <= observed <= finished:
+            output.append(row)
+    return output
 
 
 def _attach_campaign_aggregate(
@@ -644,27 +731,16 @@ def _attach_campaign_aggregate(
 ) -> None:
     loaded_total = len(children)
     account_catalog_complete = catalog_coverage.get("complete") is True
-    provider_account_count = _micro_integer(
-        catalog_coverage.get("provider_account_ad_squad_count")
-    )
-    # entity_counts proves the complete Ad Squad catalogue only at account
-    # scope. It can conservatively prove this campaign's loaded catalogue only
-    # when every account-level squad is among these children. A larger account
-    # count leaves the campaign partition unknown and must fail closed.
-    campaign_children_proven = bool(
-        provider_account_count is not None and provider_account_count == loaded_total
-    )
-    catalog_complete = bool(account_catalog_complete and campaign_children_proven)
+    # The caller partitions only rows observed in the latest complete account-
+    # wide catalog. Once that account catalog is proven, every campaign
+    # partition (including an empty one) is complete.
+    catalog_complete = account_catalog_complete
     if account_catalog_complete is False:
         catalog_reason = str(
             catalog_coverage.get("reason") or "child_catalog_proof_missing"
         )
-    elif catalog_complete:
-        catalog_reason = "available"
-    elif loaded_total == 0:
-        catalog_reason = "child_catalog_zero_not_proven"
     else:
-        catalog_reason = "child_catalog_campaign_scope_proof_missing"
+        catalog_reason = "available"
     all_settings_complete = all(
         child["quality"]["settings_status"] == _COMPLETE
         and child["mapping_status"] == "verified"
@@ -927,27 +1003,49 @@ async def list_financial_management_settings(
 
     children_truncated = False
     if rows_by_campaign:
+        campaign_account_ids = sorted(
+            {
+                account_id
+                for campaign in rows_by_campaign.values()
+                if (account_id := _safe_id(campaign.get("ad_account_id")))
+            }
+        )
         child_rows, children_truncated = await _find_rows(
             _collection(db, SNAPCHAT_ENTITY_COLLECTION),
             {
                 "user_id": str(user_id),
                 "provider": SNAPCHAT_PROVIDER_ID,
                 "entity_type": "ad_squad",
-                "campaign_id": {"$in": list(rows_by_campaign)},
+                "ad_account_id": {"$in": campaign_account_ids},
                 "deleted": {"$ne": True},
             },
             projection,
             limit=MAX_CAMPAIGN_CHILD_ROWS,
         )
-        children_by_campaign: dict[str, list[dict[str, Any]]] = {
-            campaign_id: [] for campaign_id in rows_by_campaign
+        account_rows: dict[str, list[dict[str, Any]]] = {
+            account_id: [] for account_id in campaign_account_ids
         }
         for row in child_rows:
+            account_id = _safe_id(row.get("ad_account_id"))
+            if account_id in account_rows:
+                account_rows[account_id].append(row)
+
+        observed_child_rows = _rows_observed_in_latest_run(latest_run, child_rows)
+        children_by_campaign: dict[tuple[str, str], list[dict[str, Any]]] = {
+            (
+                _safe_id(campaign.get("ad_account_id")) or "",
+                campaign_id,
+            ): []
+            for campaign_id, campaign in rows_by_campaign.items()
+        }
+        for row in observed_child_rows:
+            account_id = _safe_id(row.get("ad_account_id")) or ""
             campaign_id = _safe_id(row.get("campaign_id"))
             external_id = _safe_id(row.get("external_id"))
-            if campaign_id not in children_by_campaign or external_id is None:
+            partition_key = (account_id, campaign_id or "")
+            if partition_key not in children_by_campaign or external_id is None:
                 continue
-            children_by_campaign[campaign_id].append(
+            children_by_campaign[partition_key].append(
                 _base_item(
                     row,
                     unified_entity_id=external_id,
@@ -957,13 +1055,17 @@ async def list_financial_management_settings(
                 )
             )
         for campaign_id, campaign in rows_by_campaign.items():
+            account_id = _safe_id(campaign.get("ad_account_id"))
             _attach_campaign_aggregate(
                 campaign,
-                children_by_campaign.get(campaign_id, []),
+                children_by_campaign.get((account_id or "", campaign_id), []),
                 truncated=children_truncated,
                 catalog_coverage=_ad_squad_catalog_coverage(
                     latest_run,
                     campaign,
+                    account_id,
+                    account_rows.get(account_id or "", []),
+                    truncated=children_truncated,
                 ),
             )
 
