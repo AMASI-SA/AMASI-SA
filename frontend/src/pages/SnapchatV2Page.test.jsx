@@ -277,4 +277,36 @@ describe("SnapchatV2Page read-only load", () => {
         expect(createSnapchatManagementProposal).not.toHaveBeenCalled();
         expect(executeSnapchatManagementProposal).not.toHaveBeenCalled();
     });
+
+    test("fails closed when entity settings belong to another ad account", async () => {
+        getSnapchatEntitySettings.mockResolvedValueOnce([{
+            entity_type: "campaign",
+            unified_entity_id: "da5049b7-5417-4be9-a596-20a74f9fd54c",
+            provider_entity_id: "snap-provider-campaign-afrol",
+            mapping_status: "verified",
+            mapping_verified: true,
+            ad_account_id: "account-other",
+            account_currency: "USD",
+            daily_budget_micro: 99_000_000,
+            quality: {
+                settings_status: "settings_complete",
+                freshness_seconds: 10,
+                freshness_threshold_seconds: 1800,
+                financial_controls_allowed: true,
+            },
+        }]);
+        await act(async () => {
+            root.render(<SnapchatV2Page />);
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        expect(container.textContent).toContain("settings_sync_failed");
+        expect(container.textContent).toContain("فشل إثبات ارتباط إعدادات الكيان بالحساب الإعلاني المحدد");
+        expect(container.textContent).not.toContain("99.00 USD");
+        expect(api.post).not.toHaveBeenCalled();
+        expect(createSnapchatManagementProposal).not.toHaveBeenCalled();
+        expect(executeSnapchatManagementProposal).not.toHaveBeenCalled();
+    });
 });

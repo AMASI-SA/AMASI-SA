@@ -978,13 +978,14 @@ describe("snapchatCampaignManagement", () => {
     });
 
     test("only exposes USD conversion for USD accounts", () => {
+        const freshSettingsAt = new Date(Date.now() - 120_000).toISOString();
         const usd = normalizeSnapchatEntitySettings({
             unified_entity_id: "u-1",
             provider_entity_id: "p-1",
             mapping_verified: true,
             ad_account_id: "account-1",
             account_currency: "USD",
-            settings_synced_at: "2026-08-28T10:00:00Z",
+            settings_synced_at: freshSettingsAt,
             daily_budget_micro: 20_000_000,
             daily_budget_usd: 999,
             bid_micro: 5_000_000,
@@ -1053,6 +1054,38 @@ describe("snapchatCampaignManagement", () => {
         expect(snapchatFinancialFieldReady(sar, "daily_budget_micro", "account-1")).toBe(false);
     });
 
+    test("expires historical settings proof by timestamp and requires explicit mapping proof", () => {
+        const stale = normalizeSnapchatEntitySettings({
+            unified_entity_id: "unified-squad-1",
+            provider_entity_id: "provider-squad-1",
+            mapping_status: "verified",
+            mapping_verified: true,
+            ad_account_id: "account-1",
+            account_currency: "USD",
+            settings_synced_at: new Date(Date.now() - 3_600_000).toISOString(),
+            daily_budget_micro: 20_000_000,
+            quality: {
+                settings_status: "settings_complete",
+                freshness_seconds: 1,
+                freshness_threshold_seconds: 1800,
+                financial_field_controls: { daily_budget: { allowed: true } },
+            },
+        });
+        expect(snapchatFinancialFieldReady(stale, "daily_budget_micro", "account-1")).toBe(false);
+
+        const implicitMapping = normalizeSnapchatEntitySettings({
+            ...stale,
+            mapping_verified: false,
+            settings_synced_at: new Date(Date.now() - 60_000).toISOString(),
+        });
+        expect(implicitMapping.mapping_verified).toBe(false);
+        expect(snapchatFinancialFieldReady(
+            implicitMapping,
+            "daily_budget_micro",
+            "account-1",
+        )).toBe(false);
+    });
+
     test("reads settings with unified identifiers without issuing a provider write", async () => {
         api.get.mockResolvedValue({
             data: {
@@ -1094,37 +1127,55 @@ describe("snapchatCampaignManagement", () => {
     });
 
     test("normalizes structured audit data and provider mapping independently", () => {
+        const freshSettingsAt = new Date(Date.now() - 120_000).toISOString();
         const proposal = normalizeSnapchatManagementProposal({
             proposal_id: "proposal-1",
             action: "ad_squad.update",
             status: "completed",
-            account_currency: "USD",
             target_id: "unified-squad-1",
             provider_target_id: "provider-squad-9",
             provider_entity_id: "provider-squad-9",
             actor_id: "owner-1",
-            field_changes: {
-                fields: {
-                    daily_budget_micro: {
-                        before: 50_000_000,
-                        after: 60_000_000,
-                        before_usd: 50,
-                        after_usd: 60,
-                    },
-                    bid_micro: {
-                        before: 7_500_000,
-                        after: 8_000_000,
-                        before_usd: 7.5,
-                        after_usd: 8,
-                    },
-                    bid_strategy: {
-                        before: "TARGET_COST",
-                        after: "LOWEST_COST_WITH_MAX_BID",
-                    },
+            settings_proof: {
+                unified_entity_id: "unified-squad-1",
+                provider_entity_id: "provider-squad-9",
+                ad_account_id: "account-1",
+                mapping_status: "verified",
+                mapping_verified: true,
+                settings_status: "settings_complete",
+                financial_controls_allowed: true,
+                financial_field_controls: {
+                    daily_budget: { allowed: true },
+                    bid: { allowed: true },
                 },
+                last_synced_at: freshSettingsAt,
+                freshness_seconds: 120,
+                freshness_threshold_seconds: 1800,
+                currency: "USD",
+            },
+            field_changes: {
+                daily_budget_micro: {
+                    before_micro: 50_000_000,
+                    after_micro: 60_000_000,
+                    before_usd: 50,
+                    after_usd: 60,
+                },
+                bid_micro: {
+                    before_micro: 7_500_000,
+                    after_micro: 8_000_000,
+                    before_usd: 7.5,
+                    after_usd: 8,
+                },
+                bid_strategy: {
+                    before: "TARGET_COST",
+                    after: "LOWEST_COST_WITH_MAX_BID",
+                },
+            },
+            field_change_metadata: {
                 actor_id: "owner-envelope",
                 occurred_at: "2026-08-28T10:01:00Z",
                 provider_entity_id: "provider-squad-9",
+                provider_reread_verified: true,
             },
             verification: {
                 verified: true,
@@ -1145,21 +1196,42 @@ describe("snapchatCampaignManagement", () => {
         expect(proposal.target_id).toBe("unified-squad-1");
         expect(proposal.provider_target_id).toBe("provider-squad-9");
         expect(proposal.actor_id).toBe("owner-1");
+        expect(proposal.account_currency).toBe("USD");
+        expect(proposal.settings_proof).toMatchObject({
+            account_currency: "USD",
+            settings_synced_at: freshSettingsAt,
+            quality: {
+                settings_status: "settings_complete",
+                freshness_seconds: 120,
+                freshness_threshold_seconds: 1800,
+                financial_field_controls: {
+                    daily_budget: { allowed: true },
+                    bid: { allowed: true },
+                },
+            },
+        });
+        expect(snapchatFinancialFieldReady(
+            proposal.settings_proof,
+            "bid_micro",
+            "account-1",
+        )).toBe(true);
         expect(proposal.field_changes_metadata).toMatchObject({
             actor_id: "owner-envelope",
             occurred_at: "2026-08-28T10:01:00Z",
             provider_entity_id: "provider-squad-9",
+            provider_reread_verified: true,
         });
+        expect(proposal.field_changes_known).toBe(true);
         expect(proposal.field_changes).toEqual(expect.arrayContaining([
             expect.objectContaining({
                 field: "daily_budget_micro",
-                before: 50_000_000,
-                after: 60_000_000,
+                before_micro: 50_000_000,
+                after_micro: 60_000_000,
             }),
             expect.objectContaining({
                 field: "bid_micro",
-                before: 7_500_000,
-                after: 8_000_000,
+                before_micro: 7_500_000,
+                after_micro: 8_000_000,
             }),
             expect.objectContaining({
                 field: "bid_strategy",
@@ -1177,6 +1249,24 @@ describe("snapchatCampaignManagement", () => {
             source: "snapchat_provider_reread",
             verified_at: "2026-08-28T10:02:00Z",
         });
+
+        const mismatch = normalizeSnapchatManagementProposal({
+            proposal_id: "proposal-mismatch",
+            action: "ad_squad.update",
+            status: "failed",
+            failure: { mismatched_fields: ["bid_micro"] },
+            reconciliation_snapshot: { id: "provider-squad-9", bid_micro: 7_500_000 },
+            verification: { verification_source: "post_write_reread" },
+        });
+        expect(mismatch.verification).toMatchObject({
+            source: "post_write_reread",
+            mismatched_fields: ["bid_micro"],
+        });
+        expect(mismatch.provider_readback).toEqual({
+            id: "provider-squad-9",
+            bid_micro: 7_500_000,
+        });
+        expect(mismatch.provider_reread.mismatched_fields).toEqual(["bid_micro"]);
     });
 
 });

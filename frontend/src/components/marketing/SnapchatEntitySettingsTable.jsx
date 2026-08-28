@@ -130,6 +130,7 @@ function SettingsDetails({ row, settings }) {
     );
     const bid = microAmount(settings, settings?.bid_micro, settings?.bid_usd);
     const effectiveBidStrategy = settingsComplete ? settings?.bid_strategy : null;
+    const autoBid = String(effectiveBidStrategy || "").toUpperCase() === "AUTO_BID";
     const strategies = settingsComplete
         ? Array.isArray(settings?.ad_squad_bid_strategies)
             ? settings.ad_squad_bid_strategies.join("، ")
@@ -148,6 +149,7 @@ function SettingsDetails({ row, settings }) {
                 <div className="w-[280px] space-y-2 rounded-xl border border-slate-100 bg-slate-50 p-2">
                     <Metric label="Unified ID">{settings?.unified_entity_id || row?.entity?.id || "—"}</Metric>
                     <Metric label="Snapchat provider ID">{settings?.provider_entity_id || SNAPCHAT_SETTINGS_UNAVAILABLE}</Metric>
+                    <Metric label="Snapchat Ad Account ID">{settings?.ad_account_id || SNAPCHAT_SETTINGS_UNAVAILABLE}</Metric>
                     <Metric label="عملة الحساب">{settings?.account_currency || "غير متاحة"}</Metric>
                     <Metric label="mapping_status">{settings?.mapping_status || (settings?.mapping_verified ? "verified" : "غير متاح")}</Metric>
                 </div>
@@ -171,8 +173,14 @@ function SettingsDetails({ row, settings }) {
                         <Metric label="استراتيجيات المزايدة">{strategies}</Metric>
                     ) : (
                         <>
-                            <Metric label={`${snapchatBidLabel(effectiveBidStrategy)} الخام`} testId="snapchat-settings-bid-label">{bid.raw}</Metric>
-                            <Metric label={snapchatBidLabel(effectiveBidStrategy)}>{bid.converted}</Metric>
+                            {autoBid ? (
+                                <Metric label="bid_micro" testId="snapchat-settings-bid-label">غير مستخدم مع AUTO_BID</Metric>
+                            ) : (
+                                <>
+                                    <Metric label={`${snapchatBidLabel(effectiveBidStrategy)} الخام`} testId="snapchat-settings-bid-label">{bid.raw}</Metric>
+                                    <Metric label={snapchatBidLabel(effectiveBidStrategy)}>{bid.converted}</Metric>
+                                </>
+                            )}
                             <Metric label="bid_strategy">{providerSetting(settings, settings?.bid_strategy)}</Metric>
                             <Metric label="optimization_goal">{providerSetting(settings, settings?.optimization_goal)}</Metric>
                             <Metric label="billing_event">{providerSetting(settings, settings?.billing_event)}</Metric>

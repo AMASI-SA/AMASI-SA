@@ -48,6 +48,7 @@ describe("SnapchatEntitySettingsTable", () => {
                         "unified-campaign-1": {
                             unified_entity_id: "unified-campaign-1",
                             provider_entity_id: "provider-campaign-9",
+                            ad_account_id: "account-1",
                             mapping_verified: true,
                             account_currency: "USD",
                             campaign_daily_budget_supported: false,
@@ -85,6 +86,7 @@ describe("SnapchatEntitySettingsTable", () => {
         expect(container.textContent).toContain("provider_updated_at");
         expect(container.textContent).toContain("unified-campaign-1");
         expect(container.textContent).toContain("provider-campaign-9");
+        expect(container.textContent).toContain("account-1");
     });
 
     test("labels bid by strategy and never calls a max bid Target Cost", async () => {
@@ -197,5 +199,31 @@ describe("SnapchatEntitySettingsTable", () => {
         expect(snapchatPerformanceStatus({
             quality: { performance_status: "performance_sync_failed" },
         })).toBe("performance_sync_failed");
+    });
+
+    test("does not render bid_micro as an amount for AUTO_BID", async () => {
+        const adSquad = row("ad_group", "auto-bid-squad");
+        await act(async () => {
+            root.render(
+                <SnapchatEntitySettingsTable
+                    report={{ rows: [adSquad] }}
+                    settingsByEntityId={{
+                        "auto-bid-squad": {
+                            unified_entity_id: "auto-bid-squad",
+                            provider_entity_id: "provider-auto-bid-squad",
+                            ad_account_id: "account-1",
+                            account_currency: "USD",
+                            bid_micro: 99_000_000,
+                            bid_strategy: "AUTO_BID",
+                            quality: { settings_status: "settings_complete" },
+                        },
+                    }}
+                />,
+            );
+        });
+        const bid = container.querySelector('[data-testid="snapchat-settings-bid-label"]');
+        expect(bid.textContent).toContain("غير مستخدم مع AUTO_BID");
+        expect(container.textContent).not.toContain("99.00 USD");
+        expect(container.textContent).not.toContain("Target Cost");
     });
 });

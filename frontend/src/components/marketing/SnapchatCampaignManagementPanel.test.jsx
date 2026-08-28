@@ -21,14 +21,19 @@ jest.mock("../../services/snapchatCampaignManagement", () => ({
     snapchatFinancialFieldReady: (settings, field, accountId) => {
         const controlKey = field === "daily_budget_micro" ? "daily_budget" : ["bid_micro", "bid_strategy"].includes(field) ? "bid" : field;
         const control = settings?.quality?.financial_field_controls?.[controlKey];
+        const threshold = Number(settings?.quality?.freshness_threshold_seconds);
+        const syncedAt = Date.parse(settings?.settings_synced_at || "");
+        const clientAgeSeconds = (Date.now() - syncedAt) / 1000;
         return Boolean(
             settings?.mapping_verified
             && settings?.account_currency === "USD"
             && settings?.ad_account_id === accountId
             && settings?.quality?.settings_status === "settings_complete"
-            && Number(settings?.quality?.freshness_seconds) <= Number(settings?.quality?.freshness_threshold_seconds)
-            && Number(settings?.quality?.freshness_threshold_seconds) <= 1800
-            && settings?.settings_synced_at
+            && Number(settings?.quality?.freshness_seconds) <= threshold
+            && threshold <= 1800
+            && Number.isFinite(syncedAt)
+            && clientAgeSeconds >= 0
+            && clientAgeSeconds <= threshold
             && (control === true || control?.allowed === true)
         );
     },
@@ -63,7 +68,10 @@ import {
     resumeSnapchatManagementProposal,
 } from "../../services/snapchatCampaignManagement";
 import { listProductsV2 } from "../../services/mezanProductsV2";
-import SnapchatCampaignManagementPanel, { initialForm } from "./SnapchatCampaignManagementPanel";
+import SnapchatCampaignManagementPanel, {
+    initialForm,
+    proposalSettingsProofMatchesCurrent,
+} from "./SnapchatCampaignManagementPanel";
 
 function change(element, value) {
     const prototype = element instanceof HTMLSelectElement
@@ -95,6 +103,34 @@ test("prefills governed update identities selected from the V2 hierarchy", () =>
         action: "ad.update",
         selectedAd: { ad_id: "ad-1", ad_squad_id: "squad-1" },
     })).toMatchObject({ targetId: "ad-1", parentId: "squad-1" });
+});
+
+test("binds historical financial proof to the same target, provider, parent, and account", () => {
+    const settings = {
+        unified_entity_id: "unified-squad-1",
+        provider_entity_id: "provider-squad-1",
+        provider_parent_id: "provider-campaign-1",
+        ad_account_id: "account-1",
+    };
+    const proposal = {
+        target_id: "unified-squad-1",
+        provider_target_id: "provider-squad-1",
+        account_id: "account-1",
+        settings_proof: { ...settings },
+    };
+    expect(proposalSettingsProofMatchesCurrent(proposal, settings)).toBe(true);
+    expect(proposalSettingsProofMatchesCurrent({
+        ...proposal,
+        target_id: "unified-squad-other",
+    }, settings)).toBe(false);
+    expect(proposalSettingsProofMatchesCurrent({
+        ...proposal,
+        account_id: "account-other",
+    }, settings)).toBe(false);
+    expect(proposalSettingsProofMatchesCurrent({
+        ...proposal,
+        settings_proof: { ...proposal.settings_proof, provider_parent_id: "provider-campaign-other" },
+    }, settings)).toBe(false);
 });
 
 describe("SnapchatCampaignManagementPanel decision context", () => {
@@ -1164,7 +1200,7 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
             billing_event: "IMPRESSION",
             conversion_window: "SWIPE_7DAY",
             status: "ACTIVE",
-            settings_synced_at: "2026-08-28T10:00:00Z",
+            settings_synced_at: new Date(Date.now() - 120_000).toISOString(),
             provider_updated_at: "2026-08-28T09:55:00Z",
             quality: {
                 settings_status: "settings_complete",
@@ -1204,6 +1240,8 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
 
         expect(container.querySelector('[data-testid="snapchat-management-current-settings"]').textContent)
             .toContain("50.00 USD");
+        expect(container.querySelector('[data-testid="snapchat-management-current-settings"]').textContent)
+            .toContain("account-1");
         expect(container.querySelector('[data-testid="snapchat-management-current-bid-label"]').textContent)
             .toContain("Max Bid");
         expect(container.querySelector('[data-testid="snapchat-management-new-daily-budget"]').value).toBe("");
@@ -1218,13 +1256,15 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
             change(container.querySelector('[data-testid="snapchat-management-new-bid-strategy"]'), "AUTO_BID");
         });
         expect(container.querySelector('[data-testid="snapchat-management-new-bid"]').closest("label").textContent)
-            .toContain("Bid");
+            .toContain("غير مستخدم مع AUTO_BID");
+        expect(container.querySelector('[data-testid="snapchat-management-new-bid"]').disabled).toBe(true);
         expect(container.querySelector('[data-testid="snapchat-management-bid-strategy-blocked"]')).not.toBeNull();
         await act(async () => {
             change(container.querySelector('[data-testid="snapchat-management-new-bid-strategy"]'), "TARGET_COST");
         });
         expect(container.querySelector('[data-testid="snapchat-management-new-bid"]').closest("label").textContent)
             .toContain("Target Cost");
+        expect(container.querySelector('[data-testid="snapchat-management-new-bid"]').disabled).toBe(false);
         expect(container.querySelector('[data-testid="snapchat-management-bid-strategy-blocked"]')).toBeNull();
         await act(async () => {
             change(container.querySelector('[data-testid="snapchat-management-new-bid-strategy"]'), "LOWEST_COST_WITH_MAX_BID");
@@ -1323,7 +1363,7 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
             daily_budget_micro: null,
             daily_budget_availability: "unsupported_at_provider_level",
             daily_budget_unavailable_message_ar: "غير متاح من Snapchat على هذا المستوى",
-            settings_synced_at: "2026-08-28T10:00:00Z",
+            settings_synced_at: new Date(Date.now() - 120_000).toISOString(),
             quality: {
                 settings_status: "settings_complete",
                 freshness_seconds: 120,

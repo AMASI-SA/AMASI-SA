@@ -268,6 +268,36 @@ function proposalFinancialMetadataKnown(proposal) {
         || Array.isArray(proposal?.preview?.changed_fields);
 }
 
+export function proposalSettingsProofMatchesCurrent(proposal, settings) {
+    const proof = proposal?.settings_proof;
+    if (!proof || !settings) return false;
+    const proposalTargetId = String(proposal?.target_id || "").trim();
+    const proposalProviderId = String(
+        proposal?.provider_target_id || proposal?.provider_entity_id || "",
+    ).trim();
+    const proposalAccountId = String(proposal?.account_id || "").trim();
+    const proofUnifiedId = String(proof?.unified_entity_id || "").trim();
+    const proofProviderId = String(proof?.provider_entity_id || "").trim();
+    const proofAccountId = String(proof?.ad_account_id || "").trim();
+    const currentUnifiedId = String(settings?.unified_entity_id || "").trim();
+    const currentProviderId = String(settings?.provider_entity_id || "").trim();
+    const currentAccountId = String(settings?.ad_account_id || "").trim();
+    if (
+        !proposalTargetId
+        || !proposalProviderId
+        || !proposalAccountId
+        || proposalTargetId !== proofUnifiedId
+        || proposalTargetId !== currentUnifiedId
+        || proposalProviderId !== proofProviderId
+        || proposalProviderId !== currentProviderId
+        || proposalAccountId !== proofAccountId
+        || proposalAccountId !== currentAccountId
+    ) return false;
+    const proofParentId = String(proof?.provider_parent_id || "").trim();
+    const currentParentId = String(settings?.provider_parent_id || "").trim();
+    return !proofParentId || proofParentId === currentParentId;
+}
+
 function changeSide(change, side) {
     const direct = change?.[side];
     if (direct !== undefined) return direct;
@@ -309,6 +339,8 @@ function CurrentSettingsCard({ action, settings, accountId }) {
         : currentMicro(settings, "daily_budget_micro", "daily_budget_usd");
     const bid = currentMicro(settings, "bid_micro", "bid_usd");
     const childBudget = currentMicro(settings, "ad_squads_daily_budget_micro", "ad_squads_daily_budget_usd");
+    const effectiveCurrentBidStrategy = settingsComplete ? settings?.bid_strategy : null;
+    const currentAutoBid = String(effectiveCurrentBidStrategy || "").toUpperCase() === "AUTO_BID";
     const campaignStrategies = settingsComplete
         ? Array.isArray(settings?.ad_squad_bid_strategies)
             ? settings.ad_squad_bid_strategies.join("، ")
@@ -329,6 +361,7 @@ function CurrentSettingsCard({ action, settings, accountId }) {
             <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
                 <div><span className="block text-slate-500">Unified ID</span><code dir="ltr">{settings?.unified_entity_id || "—"}</code></div>
                 <div><span className="block text-slate-500">Snapchat provider ID</span><code dir="ltr">{settings?.provider_entity_id || "غير متاح — فشل جلب الإعدادات"}</code></div>
+                <div><span className="block text-slate-500">Snapchat Ad Account ID</span><code dir="ltr">{settings?.ad_account_id || "غير متاح — فشل جلب الإعدادات"}</code></div>
                 <div><span className="block text-slate-500">عملة الحساب</span><strong>{settings?.account_currency || "غير متاحة"}</strong></div>
                 <div><span className="block text-slate-500">mapping_status</span><strong>{settings?.mapping_status || (settings?.mapping_verified ? "verified" : "غير متاح")}</strong></div>
                 <div><span className="block text-slate-500">الحالة الحالية</span><strong>{currentProviderValue(settings?.status)}</strong></div>
@@ -344,8 +377,14 @@ function CurrentSettingsCard({ action, settings, accountId }) {
                 )}
                 {action === "ad_squad.update" && (
                     <>
-                        <div><span className="block text-slate-500">{snapchatBidLabel(settingsComplete ? settings?.bid_strategy : null)} الخام</span><strong dir="ltr">{bid.raw}</strong></div>
-                        <div data-testid="snapchat-management-current-bid-label"><span className="block text-slate-500">{snapchatBidLabel(settingsComplete ? settings?.bid_strategy : null)}</span><strong dir="ltr">{bid.converted}</strong></div>
+                        {currentAutoBid ? (
+                            <div data-testid="snapchat-management-current-bid-label"><span className="block text-slate-500">bid_micro</span><strong>غير مستخدم مع AUTO_BID</strong></div>
+                        ) : (
+                            <>
+                                <div><span className="block text-slate-500">{snapchatBidLabel(effectiveCurrentBidStrategy)} الخام</span><strong dir="ltr">{bid.raw}</strong></div>
+                                <div data-testid="snapchat-management-current-bid-label"><span className="block text-slate-500">{snapchatBidLabel(effectiveCurrentBidStrategy)}</span><strong dir="ltr">{bid.converted}</strong></div>
+                            </>
+                        )}
                         <div><span className="block text-slate-500">bid_strategy</span><strong>{currentProviderValue(settings?.bid_strategy)}</strong></div>
                         <div><span className="block text-slate-500">optimization_goal</span><strong>{currentProviderValue(settings?.optimization_goal)}</strong></div>
                         <div><span className="block text-slate-500">billing_event</span><strong>{currentProviderValue(settings?.billing_event)}</strong></div>
@@ -619,6 +658,14 @@ function ProposalPreview({ proposal, readiness, busy, financialSettingsReady, on
     const canReconcile = proposal.status === "failed"
         && proposal.provider_write_uncertain === true;
     const pixelEligibility = proposal.pixel_eligibility || {};
+    const rereadVerified = proposal.verification?.verified === true
+        || proposal.provider_reread?.verified === true
+        || proposal.field_changes_metadata?.provider_reread_verified === true;
+    const rereadMismatches = Array.isArray(proposal.verification?.mismatched_fields)
+        ? proposal.verification.mismatched_fields
+        : Array.isArray(proposal.provider_reread?.mismatched_fields)
+            ? proposal.provider_reread.mismatched_fields
+            : [];
     return (
         <article className="rounded-2xl border border-amber-300 bg-amber-50 p-4" data-testid="snapchat-management-preview">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -640,7 +687,7 @@ function ProposalPreview({ proposal, readiness, busy, financialSettingsReady, on
                 <div className="rounded-xl bg-white p-3"><span className="block text-slate-400">وقت العملية</span><strong>{timestamp(proposal.field_changes_metadata?.occurred_at || proposal.executed_at || proposal.created_at)}</strong></div>
                 <div className="rounded-xl bg-white p-3"><span className="block text-slate-400">المنفذ</span><strong>{proposal.actor_name || proposal.actor_id || proposal.field_changes_metadata?.actor_id || "—"}</strong></div>
                 <div className="rounded-xl bg-white p-3"><span className="block text-slate-400">provider entity ID</span><code dir="ltr">{proposal.provider_entity_id || proposal.provider_target_id || proposal.field_changes_metadata?.provider_entity_id || "—"}</code></div>
-                <div className="rounded-xl bg-white p-3"><span className="block text-slate-400">إعادة القراءة</span><strong>{proposal.verification?.verified === true ? "مطابقة مؤكدة من Snapchat" : "غير مكتملة"}</strong></div>
+                <div className="rounded-xl bg-white p-3"><span className="block text-slate-400">إعادة القراءة</span><strong>{rereadMismatches.length ? `غير مطابقة: ${rereadMismatches.join("، ")}` : rereadVerified ? "مطابقة مؤكدة من Snapchat" : "غير مكتملة"}</strong></div>
                 <div className="rounded-xl bg-white p-3"><span className="block text-slate-400">مصدر التحقق</span><strong>{proposal.verification?.source || "Snapchat provider re-read"}</strong></div>
                 <div className="rounded-xl bg-white p-3"><span className="block text-slate-400">وقت التحقق</span><strong>{timestamp(proposal.verification?.verified_at)}</strong></div>
             </div>
@@ -649,6 +696,11 @@ function ProposalPreview({ proposal, readiness, busy, financialSettingsReady, on
                     <summary className="cursor-pointer font-black text-sky-900">القيمة المعاد قراءتها من Snapchat</summary>
                     <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-all text-left font-mono text-[10px]" dir="ltr">{JSON.stringify(proposal.provider_readback, null, 2)}</pre>
                 </details>
+            )}
+            {rereadMismatches.length > 0 && (
+                <div className="mt-3 rounded-xl border border-rose-200 bg-rose-100 p-3 text-xs font-black text-rose-900" data-testid="snapchat-management-reread-mismatch">
+                    فشل تحقق إعادة القراءة من Snapchat: {rereadMismatches.join("، ")}
+                </div>
             )}
             {(proposal.field_changes || []).length > 0 && (
                 <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white" data-testid="snapchat-management-field-changes">
@@ -1242,6 +1294,8 @@ export default function SnapchatCampaignManagementPanel({
     const invalidBidAmount = form.action === "ad_squad.update"
         && Boolean(form.bidAmount)
         && !BID_AMOUNT_STRATEGIES.has(effectiveBidStrategy);
+    const bidAmountAllowed = form.action === "ad_squad.update"
+        && BID_AMOUNT_STRATEGIES.has(effectiveBidStrategy);
     const financialFieldsRequested = [
         form.dailyBudget ? "daily_budget_micro" : null,
         form.bidAmount ? "bid_micro" : null,
@@ -1254,13 +1308,24 @@ export default function SnapchatCampaignManagementPanel({
     const financialPreviewBlocked = (
         financialChangeRequested && !financialSettingsReady
     ) || invalidBidAmount || (campaignBudgetUnsupported && Boolean(form.dailyBudget));
-    const activeProposalFinancialSettingsReady = proposalFinancialFields(activeProposal).every(
-        (fieldName) => snapchatFinancialFieldReady(
-            activeProposal?.settings_proof,
-            fieldName,
-            activeProposal?.account_id,
-        ),
+    const activeProposalFinancialFields = proposalFinancialFields(activeProposal);
+    const activeProposalSettingsBound = proposalSettingsProofMatchesCurrent(
+        activeProposal,
+        currentSettings,
     );
+    const activeProposalFinancialSettingsReady = activeProposalSettingsBound
+        && activeProposalFinancialFields.every((fieldName) => (
+            snapchatFinancialFieldReady(
+                activeProposal?.settings_proof,
+                fieldName,
+                activeProposal?.account_id,
+            )
+            && snapchatFinancialFieldReady(
+                currentSettings,
+                fieldName,
+                activeProposal?.account_id,
+            )
+        ));
 
     return (
         <section className="mb-4 overflow-hidden rounded-2xl border border-slate-800 bg-slate-950 text-white shadow-lg" data-testid="snapchat-campaign-management-panel">
@@ -1417,7 +1482,7 @@ export default function SnapchatCampaignManagementPanel({
                                     {form.action === "campaign.create" && <TextField label="بداية الحملة" value={form.startTime} onChange={(value) => field("startTime", value)} type="datetime-local" required dir="ltr" />}
                                     {form.action === "campaign.create" && <SelectField label="الهدف" value={form.objective} onChange={(value) => field("objective", value)}><option value="SALES">المبيعات</option><option value="TRAFFIC">الزيارات</option><option value="LEADS">العملاء المحتملون</option><option value="AWARENESS_AND_ENGAGEMENT">الوعي والتفاعل</option><option value="APP_PROMOTION">التطبيق</option></SelectField>}
                                     {showsBudget && <TextField label={isUpdate ? `قيمة ميزانية يومية جديدة (${selectedAccount?.currency || "عملة الحساب"}) · اختياري` : `الميزانية اليومية (${selectedAccount?.currency || "عملة الحساب"})`} value={form.dailyBudget} onChange={(value) => field("dailyBudget", value)} type="number" required={!isUpdate} disabled={campaignBudgetUnsupported} dir="ltr" testId="snapchat-management-new-daily-budget" />}
-                                    {form.action === "ad_squad.update" && <TextField label={`قيمة ${snapchatBidLabel(effectiveBidStrategy)} جديدة (${selectedAccount?.currency || "عملة الحساب"}) · اختياري`} value={form.bidAmount} onChange={(value) => field("bidAmount", value)} type="number" dir="ltr" testId="snapchat-management-new-bid" />}
+                                    {form.action === "ad_squad.update" && <TextField label={bidAmountAllowed ? `قيمة ${snapchatBidLabel(effectiveBidStrategy)} جديدة (${selectedAccount?.currency || "عملة الحساب"}) · اختياري` : effectiveBidStrategy === "AUTO_BID" ? "bid_micro غير مستخدم مع AUTO_BID" : "Bid جديد غير متاح حتى تكتمل قراءة الاستراتيجية"} value={form.bidAmount} onChange={(value) => field("bidAmount", value)} type="number" disabled={!bidAmountAllowed} dir="ltr" testId="snapchat-management-new-bid" />}
                                     {form.action === "ad_squad.update" && <SelectField label="استراتيجية مزايدة جديدة · اختيارية" value={form.bidStrategy} onChange={(value) => field("bidStrategy", value)} testId="snapchat-management-new-bid-strategy"><option value="">بدون تغيير</option><option value="AUTO_BID">AUTO_BID</option><option value="TARGET_COST">TARGET_COST</option><option value="LOWEST_COST_WITH_MAX_BID">LOWEST_COST_WITH_MAX_BID</option></SelectField>}
                                     {form.action === "ad_squad.create" && <TextField label="رمز الدولة" value={form.country} onChange={(value) => field("country", value)} required dir="ltr" />}
                                     {form.action === "ad_squad.create" && <SelectField label="هدف التحسين" value={form.optimizationGoal} onChange={(value) => field("optimizationGoal", value)} testId="snapchat-management-optimization-goal"><option value="PIXEL_PURCHASE">الشراء · PIXEL_PURCHASE</option><option value="SWIPES">السحب/النقر · SWIPES</option><option value="LANDING_PAGE_VIEW">زيارة صفحة الهبوط · LANDING_PAGE_VIEW</option><option value="IMPRESSIONS">الظهور · IMPRESSIONS</option></SelectField>}
