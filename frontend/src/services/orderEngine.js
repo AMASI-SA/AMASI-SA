@@ -57,6 +57,27 @@ export async function listOrders({
     }
 }
 
+export async function listLatestSoldProductOrders({
+    limit = ORDER_PAGE_SIZE,
+    cursor = null,
+} = {}) {
+    if (isPreviewDemoEnvironment()) {
+        return listPreviewOrders({ limit, cursor });
+    }
+    try {
+        const params = { limit };
+        if (cursor) params.cursor = cursor;
+        const { data } = await api.get("/orders-v2/latest-sold-products", { params });
+        return {
+            items: Array.isArray(data?.items) ? data.items : [],
+            nextCursor: data?.next_cursor || null,
+            skippedInvalid: Number(data?.skipped_invalid || 0),
+        };
+    } catch (error) {
+        throw new Error(errorMessage(error, "تعذّر تحميل أحدث المنتجات المباعة."));
+    }
+}
+
 export async function getOrderFilterSummary() {
     if (isPreviewDemoEnvironment()) return getPreviewOrderSummary();
     try {
