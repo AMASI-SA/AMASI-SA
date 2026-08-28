@@ -23,15 +23,16 @@ from .snapchat_native_data_common import (
 
 SETTINGS_SYNC_RUN_COLLECTION = "mezan_integration_sync_runs_v2"
 INTEGRATION_ACCOUNTS_COLLECTION = "mezan_integration_accounts_v2"
-SETTINGS_FRESHNESS_MAX_AGE_SECONDS = 2 * 60 * 60
+SETTINGS_FRESHNESS_MAX_AGE_SECONDS = 30 * 60
 MAX_SETTINGS_ROWS = 500
 MAX_CAMPAIGN_CHILD_ROWS = 10_000
 SUPPORTED_ENTITY_TYPES = ("campaign", "ad_squad")
-_COMPLETE = "complete"
+_COMPLETE = "settings_complete"
 _NOT_LOADED = "settings_not_loaded"
 _SYNC_FAILED = "settings_sync_failed"
 _STALE = "settings_stale"
 _UNAVAILABLE_AR = "غير متاح — فشل جلب الإعدادات"
+_UNSUPPORTED_CAMPAIGN_BUDGET_AR = "غير متاح من Snapchat على هذا المستوى"
 
 
 def _utcnow() -> datetime:
@@ -403,6 +404,12 @@ def _base_item(
         mapping_status=mapping_status,
         required_financial_field_available=daily_availability == "available",
     )
+    if (
+        entity_type == "campaign"
+        and daily_availability == "unsupported_at_provider_level"
+        and quality["settings_status"] == _COMPLETE
+    ):
+        quality["reason"] = "unsupported_at_provider_level"
     bid_control_allowed = bool(
         quality["settings_status"] == _COMPLETE
         and mapping_status == "verified"
@@ -447,6 +454,7 @@ def _base_item(
         "provider_entity_id": provider_entity_id,
         "provider_parent_id": provider_parent_id,
         "mapping_status": mapping_status,
+        "mapping_verified": mapping_status == "verified",
         "mapping_source": (
             "mezan_snapchat_entities_v2.provider_snapshot.id"
             if mapping_status == "verified"
@@ -489,11 +497,24 @@ def _base_item(
         "settings_synced_at": row.get("last_observed_at"),
         "provider_updated_at": provider_updated_at,
         "quality": quality,
+        "daily_budget_unavailable_message_ar": (
+            _UNSUPPORTED_CAMPAIGN_BUDGET_AR
+            if daily_availability == "unsupported_at_provider_level"
+            else (
+                None
+                if daily_availability == "available"
+                else _UNAVAILABLE_AR
+            )
+        ),
         "unavailable_message_ar": (
             None
             if quality["settings_status"] == _COMPLETE
             and daily_availability == "available"
-            else _UNAVAILABLE_AR
+            else (
+                _UNSUPPORTED_CAMPAIGN_BUDGET_AR
+                if daily_availability == "unsupported_at_provider_level"
+                else _UNAVAILABLE_AR
+            )
         ),
     }
 
@@ -526,6 +547,7 @@ def _missing_item(
         "requested_provider_entity_id": expected_provider_entity_id,
         "requested_parent_unified_id": expected_parent_unified_id,
         "mapping_status": "unverified",
+        "mapping_verified": False,
         "mapping_source": None,
         "ad_account_id": None,
         "display_name": None,
@@ -548,6 +570,7 @@ def _missing_item(
         "settings_synced_at": None,
         "provider_updated_at": None,
         "quality": quality,
+        "daily_budget_unavailable_message_ar": _UNAVAILABLE_AR,
         "unavailable_message_ar": _UNAVAILABLE_AR,
     }
 
@@ -879,6 +902,7 @@ async def resolve_financial_management_settings(
     )
     if mapping_status != "verified":
         item["mapping_status"] = mapping_status
+        item["mapping_verified"] = False
         item["mapping_source"] = None
         item["quality"]["settings_status"] = _SYNC_FAILED
         item["quality"]["reason"] = (
