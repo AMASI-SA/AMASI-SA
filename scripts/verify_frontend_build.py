@@ -25,7 +25,8 @@ def main() -> int:
     args = parser.parse_args()
     try:
         identity = read_frontend_build_identity(
-            expected_git_sha=args.expected_git_sha.strip().lower()
+            expected_git_sha=args.expected_git_sha.strip().lower(),
+            require_git_source=True,
         )
     except FrontendBuildIdentityError as exc:
         print(f"FRONTEND_BUILD_REFUSED: {exc}", file=sys.stderr)

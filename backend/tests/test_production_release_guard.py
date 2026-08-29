@@ -5,6 +5,7 @@ import hashlib
 import tempfile
 import threading
 import unittest
+import urllib.parse
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -18,9 +19,11 @@ class _Headers(dict):
 
 
 class _Response:
-    def __init__(self, payload):
+    def __init__(self, payload, *, url, headers=None, status=200):
         self._payload = payload
-        self.headers = _Headers({"Content-Type": "application/json"})
+        self._url = url
+        self._status = status
+        self.headers = _Headers(headers or {"Content-Type": "application/json"})
 
     def __enter__(self):
         return self
@@ -29,37 +32,64 @@ class _Response:
         return False
 
     def read(self):
+        if isinstance(self._payload, bytes):
+            return self._payload
         return json.dumps(self._payload).encode("utf-8")
+
+    def getcode(self):
+        return self._status
+
+    def geturl(self):
+        return self._url
 
 
 class ProductionReleaseGuardTests(unittest.TestCase):
     @staticmethod
     def _frontend_build():
+        index = {
+            "path": "index.html",
+            "bytes": 5,
+            "sha256": hashlib.sha256(b"index").hexdigest(),
+        }
+        app = {
+            "path": "assets/app.js",
+            "bytes": 3,
+            "sha256": hashlib.sha256(b"app").hexdigest(),
+        }
         return {
             "schema_version": 1,
             "git_sha": "a" * 40,
             "source": {
-                "package.json": "1" * 64,
-                "yarn.lock": "2" * 64,
+                "scope": "git_head_frontend_tree_v1",
+                "git_tree_oid": "1" * 40,
+                "file_count": 671,
+                "tree_sha256": "2" * 64,
             },
             "toolchain": {
-                "node": "22.19.0",
+                "node": "22.23.2",
                 "yarn": "1.22.22",
                 "vite": "8.2.1",
             },
-            "index": {
-                "path": "index.html",
-                "bytes": 5,
-                "sha256": __import__("hashlib").sha256(b"index").hexdigest(),
+            "environment": {
+                "mode": "production",
+                "allowed_client_keys": ["REACT_APP_BACKEND_URL"],
+                "values": {
+                    "REACT_APP_BACKEND_URL": {
+                        "present": False,
+                        "sha256": None,
+                    }
+                },
             },
+            "index": index,
             "entrypoints": [],
-            "assets": [{
-                "path": "assets/app.js",
-                "bytes": 3,
-                "sha256": __import__("hashlib").sha256(b"app").hexdigest(),
-            }],
+            "assets": [app],
+            "public_files": [app, index],
             "artifact_tree_sha256": "3" * 64,
-            "build_meta_sha256": __import__("hashlib").sha256(b"meta").hexdigest(),
+            "build_meta": {
+                "path": "build-meta.json",
+                "bytes": 4,
+                "sha256": hashlib.sha256(b"meta").hexdigest(),
+            },
         }
 
     @staticmethod
@@ -116,11 +146,12 @@ class ProductionReleaseGuardTests(unittest.TestCase):
                     "artifact_tree_sha256": lease["frontend_build"][
                         "artifact_tree_sha256"
                     ],
-                    "checked_paths": [
+                    "checked_requests": [
                         "/build-meta.json",
                         "/index.html",
                         "/assets/app.js",
                     ],
+                    "shell_cache": [],
                 },
             ),
             patch.object(
@@ -135,17 +166,25 @@ class ProductionReleaseGuardTests(unittest.TestCase):
         return lease_dir, guard.verify("https://mezansalla.com/")
 
     def test_health_payload_uses_public_api_route_and_cloudflare_safe_user_agent(self):
-        response = _Response({"ok": True, "release": {"git_sha": "a" * 40}})
-        with patch.object(
-            guard.urllib.request,
-            "urlopen",
-            return_value=response,
-        ) as opened:
-            self.assertTrue(
-                guard._health_payload("https://mezansalla.com/")["ok"]
+        opened_requests = []
+
+        def open_response(request, timeout):
+            opened_requests.append((request, timeout))
+            return _Response(
+                {"ok": True, "release": {"git_sha": "a" * 40}},
+                url=request.full_url,
             )
 
-        request = opened.call_args.args[0]
+        with patch.object(
+            guard,
+            "_urlopen_no_redirect",
+            side_effect=open_response,
+        ):
+            self.assertTrue(
+                guard._health_payload(guard.PRODUCTION_ORIGIN)["ok"]
+            )
+
+        request = opened_requests[0][0]
         self.assertTrue(
             request.full_url.startswith("https://mezansalla.com/api/health?")
         )
@@ -153,9 +192,106 @@ class ProductionReleaseGuardTests(unittest.TestCase):
             request.get_header("User-agent", "").startswith("Mozilla/5.0")
         )
         self.assertEqual(request.get_header("Accept"), "application/json")
+        query = urllib.parse.urlsplit(request.full_url).query
+        self.assertEqual(
+            [name for name, _ in urllib.parse.parse_qsl(query)],
+            ["release_check"],
+        )
+
+    def test_canonical_frontend_probe_has_no_query_or_cache_bypass_header(self):
+        requests = []
+
+        def open_response(request, timeout):
+            requests.append((request, timeout))
+            return _Response(
+                b"index",
+                url=request.full_url,
+                headers={
+                    "Content-Type": "text/html",
+                    "Cache-Control": "no-cache, no-store, must-revalidate",
+                },
+            )
+
+        with patch.object(
+            guard, "_urlopen_no_redirect", side_effect=open_response
+        ):
+            response = guard._fetch_production(
+                guard.PRODUCTION_ORIGIN,
+                "/",
+                cache_bust=False,
+                accept="*/*",
+                timeout=30,
+            )
+
+        request = requests[0][0]
+        self.assertEqual(request.full_url, "https://mezansalla.com/")
+        self.assertIsNone(request.get_header("Cache-control"))
+        self.assertEqual(response["body"], b"index")
 
     def test_release_protocol_is_v3(self):
         self.assertEqual(guard.PROTOCOL_VERSION, 3)
+
+    def test_local_release_checks_require_clean_git_source_proof(self):
+        proof = self._frontend_build()
+        with patch.object(
+            guard,
+            "read_frontend_build_identity",
+            return_value=proof,
+        ) as reader:
+            self.assertEqual(guard._frontend_build_identity("a" * 40), proof)
+        reader.assert_called_once_with(
+            expected_git_sha="a" * 40,
+            require_git_source=True,
+        )
+
+    def test_verify_origin_is_pinned_and_release_check_is_never_duplicated(self):
+        for invalid in (
+            "http://mezansalla.com",
+            "https://evil.mezansalla.com",
+            "https://user@mezansalla.com",
+            "https://mezansalla.com:443",
+            "https://mezansalla.com/path",
+            "https://mezansalla.com?release_check=old",
+        ):
+            with self.subTest(invalid=invalid), self.assertRaisesRegex(
+                guard.ReleaseGuardError, "must be exactly"
+            ):
+                guard._validated_production_origin(invalid)
+
+        canonical = guard._release_check_url(
+            guard.PRODUCTION_ORIGIN, "/index.html", cache_bust=False
+        )
+        busted = guard._release_check_url(
+            guard.PRODUCTION_ORIGIN, "/index.html", cache_bust=True
+        )
+        self.assertEqual(canonical, "https://mezansalla.com/index.html")
+        self.assertEqual(busted.count("release_check="), 1)
+        with self.assertRaisesRegex(
+            guard.ReleaseGuardError, "path is invalid"
+        ):
+            guard._release_check_url(
+                guard.PRODUCTION_ORIGIN,
+                "/index.html?release_check=old",
+                cache_bust=True,
+            )
+
+    def test_wrong_origin_preserves_active_lease_without_network(self):
+        lease = self._lease_payload()
+        with tempfile.TemporaryDirectory() as tmp:
+            lease_dir = Path(tmp) / "release.lock"
+            lease_dir.mkdir()
+            lease_path = lease_dir / "lease.json"
+            lease_path.write_text(json.dumps(lease), encoding="utf-8")
+            with patch.object(guard, "LEASE_DIR", lease_dir), patch.object(
+                guard, "LEASE_PATH", lease_path
+            ), patch.object(
+                guard, "_health_payload"
+            ) as health, self.assertRaisesRegex(
+                guard.ReleaseGuardError, "must be exactly"
+            ):
+                guard.verify("https://evil.mezansalla.com")
+            health.assert_not_called()
+            self.assertTrue(lease_dir.exists())
 
     def test_operation_mutex_blocks_concurrent_prepare(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -312,7 +448,8 @@ class ProductionReleaseGuardTests(unittest.TestCase):
                     "artifact_tree_sha256": lease["frontend_build"][
                         "artifact_tree_sha256"
                     ],
-                    "checked_paths": ["/index.html", "/assets/app.js"],
+                    "checked_requests": ["/index.html", "/assets/app.js"],
+                    "shell_cache": [],
                 },
             ), patch.object(guard.time, "sleep"), patch.object(
                 guard,
@@ -363,47 +500,137 @@ class ProductionReleaseGuardTests(unittest.TestCase):
         ):
             self._verify_with(lease, [health])
 
-    def test_public_frontend_verifies_index_and_every_asset(self):
+    def test_public_frontend_verifies_canonical_busted_and_every_public_file(self):
         expected = self._frontend_build()
-        expected["assets"].append({
+        lazy = {
             "path": "assets/lazy.js",
             "bytes": 4,
             "sha256": hashlib.sha256(b"lazy").hexdigest(),
-        })
+        }
+        service_worker = {
+            "path": "sw.js",
+            "bytes": 2,
+            "sha256": hashlib.sha256(b"sw").hexdigest(),
+        }
+        expected["assets"].append(lazy)
+        expected["public_files"] = sorted(
+            [*expected["public_files"], lazy, service_worker],
+            key=lambda row: row["path"],
+        )
         payloads = {
             "/build-meta.json": b"meta",
             "/index.html": b"index",
             "/assets/app.js": b"app",
             "/assets/lazy.js": b"lazy",
+            "/sw.js": b"sw",
+            "/": b"index",
+            guard.SPA_SHELL_PATH: b"index",
         }
+        calls = []
+
+        def fetch(_origin, relative, *, cache_bust, accept, timeout):
+            calls.append((relative, cache_bust, accept, timeout))
+            return {
+                "body": payloads[relative],
+                "headers": {
+                    "content-type": "text/html; charset=utf-8",
+                    "cache-control": "no-cache, no-store, must-revalidate",
+                    "etag": '"fixture"',
+                    "age": "0",
+                    "cf-cache-status": "DYNAMIC",
+                },
+            }
+
         with patch.object(
             guard,
-            "_public_frontend_bytes",
-            side_effect=lambda _base, relative: payloads[relative],
+            "_fetch_production",
+            side_effect=fetch,
         ):
             result = guard._verify_public_frontend(
                 "https://mezansalla.com", expected
             )
 
+        self.assertEqual(len(result["checked_requests"]), len(payloads) * 2)
+        self.assertEqual(len(calls), len(payloads) * 2)
+        self.assertIn(("/sw.js", False, "*/*", 30), calls)
+        self.assertIn(("/sw.js", True, "*/*", 30), calls)
         self.assertEqual(
-            result["checked_paths"],
-            list(payloads),
+            [row["path"] for row in result["shell_cache"]],
+            ["/index.html", "/", guard.SPA_SHELL_PATH],
         )
 
-    def test_public_frontend_rejects_unsafe_asset_path(self):
+    def test_public_frontend_rejects_unsafe_or_duplicate_public_path(self):
         expected = self._frontend_build()
-        expected["assets"] = [{
+        expected["public_files"] = [{
             "path": "assets/../secret",
             "bytes": 1,
             "sha256": "a" * 64,
         }]
         with self.assertRaisesRegex(
             guard.ReleaseGuardError,
-            "asset path is invalid",
+            "public file path is invalid",
         ):
             guard._verify_public_frontend(
                 "https://mezansalla.com", expected
             )
+
+        expected = self._frontend_build()
+        expected["public_files"].append(expected["public_files"][0])
+        with self.assertRaisesRegex(
+            guard.ReleaseGuardError,
+            "sorted and unique",
+        ):
+            guard._verify_public_frontend(guard.PRODUCTION_ORIGIN, expected)
+
+    def test_queryless_stale_shell_or_unsafe_cache_policy_fails_closed(self):
+        expected = self._frontend_build()
+
+        def stale_shell(_origin, relative, *, cache_bust, **_kwargs):
+            body = b"stale" if relative == "/" and not cache_bust else {
+                "/": b"index",
+                "/index.html": b"index",
+                guard.SPA_SHELL_PATH: b"index",
+                "/assets/app.js": b"app",
+                "/build-meta.json": b"meta",
+            }[relative]
+            return {
+                "body": body,
+                "headers": {
+                    "content-type": "text/html",
+                    "cache-control": "no-cache, no-store, must-revalidate",
+                },
+            }
+
+        with patch.object(
+            guard, "_fetch_production", side_effect=stale_shell
+        ), self.assertRaisesRegex(
+            guard.ReleaseGuardError, "deployed frontend SHA mismatch"
+        ):
+            guard._verify_public_frontend(guard.PRODUCTION_ORIGIN, expected)
+
+        def cached_shell(_origin, relative, *, cache_bust, **_kwargs):
+            body = {
+                "/": b"index",
+                "/index.html": b"index",
+                guard.SPA_SHELL_PATH: b"index",
+                "/assets/app.js": b"app",
+                "/build-meta.json": b"meta",
+            }[relative]
+            return {
+                "body": body,
+                "headers": {
+                    "content-type": "text/html",
+                    "cache-control": "public, max-age=3600, immutable",
+                    "cf-cache-status": "HIT",
+                },
+            }
+
+        with patch.object(
+            guard, "_fetch_production", side_effect=cached_shell
+        ), self.assertRaisesRegex(
+            guard.ReleaseGuardError, "cache policy|immutable|cache age"
+        ):
+            guard._verify_public_frontend(guard.PRODUCTION_ORIGIN, expected)
 
     def test_public_frontend_mismatch_preserves_active_lease(self):
         lease = self._lease_payload()

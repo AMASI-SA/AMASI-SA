@@ -1,6 +1,7 @@
 import { defineConfig, loadEnv, transformWithOxc } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
+import buildContract from "./build-contract.cjs";
 
 const FRONTEND_NOINDEX_DIRECTIVES = "noindex, nofollow, noarchive, nosnippet, noimageindex";
 const FRONTEND_CSP = "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https: wss:; frame-src 'self' https:; form-action 'self' https:; upgrade-insecure-requests";
@@ -22,6 +23,7 @@ const EMERGENT_PREVIEW_ALLOWED_HOSTS = [
   ".preview.emergentcf.cloud",
   ".preview.emergent.host",
 ];
+const { clientEnvAllowlist: CLIENT_ENV_ALLOWLIST } = buildContract;
 
 function legacyJsxLoader() {
   return {
@@ -35,8 +37,14 @@ function legacyJsxLoader() {
 }
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), "");
+  const loadedEnv = loadEnv(mode, process.cwd(), CLIENT_ENV_ALLOWLIST);
+  const clientEnv = Object.fromEntries(
+    CLIENT_ENV_ALLOWLIST
+      .filter((name) => Object.prototype.hasOwnProperty.call(loadedEnv, name))
+      .map((name) => [name, loadedEnv[name]]),
+  );
   return {
+    envPrefix: [],
     plugins: [legacyJsxLoader(), react()],
     resolve: {
       alias: {
@@ -44,10 +52,15 @@ export default defineConfig(({ mode }) => {
       },
     },
     define: {
-      "process.env": JSON.stringify({
-        ...env,
-        NODE_ENV: mode === "production" ? "production" : "development",
-      }),
+      "process.env.NODE_ENV": JSON.stringify(
+        mode === "production" ? "production" : "development",
+      ),
+      "process.env.REACT_APP_BACKEND_URL": Object.prototype.hasOwnProperty.call(
+        clientEnv,
+        "REACT_APP_BACKEND_URL",
+      )
+        ? JSON.stringify(clientEnv.REACT_APP_BACKEND_URL)
+        : "undefined",
     },
     server: {
       host: "0.0.0.0",

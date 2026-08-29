@@ -45,7 +45,7 @@ class ReleaseIdentityTests(unittest.TestCase):
             with patch(
                 "release_identity.read_frontend_build_identity",
                 return_value=frontend_build,
-            ):
+            ) as frontend_reader:
                 result = read_release_identity(path)
 
         self.assertTrue(result["verified_identity_available"])
@@ -59,6 +59,7 @@ class ReleaseIdentityTests(unittest.TestCase):
         self.assertTrue(result["critical_file_hashes_match"])
         self.assertTrue(result["frontend_build_verified"])
         self.assertEqual(result["frontend_build"], frontend_build)
+        frontend_reader.assert_called_once_with(expected_git_sha="a" * 40)
 
     def test_frontend_identity_mismatch_is_exposed_fail_closed(self):
         frontend_build = self._frontend_build()

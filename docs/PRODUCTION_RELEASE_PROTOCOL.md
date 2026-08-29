@@ -5,8 +5,9 @@ prepare code, but only one may own an active production release.
 
 The current guard and embedded identity use protocol v3. A v3 release binds
 the backend SHA and critical files to the exact built frontend `index.html`,
-every public `assets/**` byte, the dependency lock, and the observed Node/Yarn
-toolchain. A lease prepared by an older guard must be aborted by its owner
+every meaningful public build file (including future service workers), the
+complete Git HEAD `frontend/**` source tree, the governed client environment,
+the dependency lock, and the exact Node/Yarn toolchain. A lease prepared by an older guard must be aborted by its owner
 with that original guard before `/app` is updated. Never reuse a v1/v2 lease
 or identity with the v3 guard.
 
@@ -18,6 +19,8 @@ repository's governed toolchain and frozen dependency graph:
 
 ```bash
 cd /app/frontend
+nvm install 22.23.2
+nvm use 22.23.2
 corepack enable
 corepack prepare yarn@1.22.22 --activate
 yarn install --frozen-lockfile --non-interactive
@@ -25,11 +28,15 @@ rm -rf build node_modules/.vite
 yarn build
 ```
 
-`yarn build` writes deterministic `frontend/build/build-meta.json` without a
-wall-clock timestamp. It records the exact Node 22.x patch observed at build
-time, Yarn 1.22.22, the source/lock hashes, `index.html`, and every build file.
-The major Node contract is 22.x because no authoritative production patch has
-yet been documented; the exact observed patch remains auditable per artifact.
+`yarn build` first proves that every tracked file below `frontend/` matches the
+exact Git HEAD tree, then repeats the source and governed-environment proof
+after Vite finishes. Any tracked, untracked non-ignored, mode, blob, or
+mid-build drift fails closed. It writes deterministic
+`frontend/build/build-meta.json` without a wall-clock timestamp and records
+Node 22.23.2, Yarn 1.22.22, the complete source-tree digest, hashed values for
+the allowlisted public client environment only, `index.html`, and every build
+file. `envPrefix: []` prevents implicit `VITE_*` exposure; the only currently
+allowlisted client value is `REACT_APP_BACKEND_URL`.
 
 Only after that build succeeds, run:
 
@@ -60,9 +67,13 @@ python scripts/production_release_guard.py verify --url https://mezansalla.com
 
 Only `"verified": true` after three consecutive checks proves that production
 restarted, is healthy, is running the prepared Git SHA and critical files,
-and publicly serves the exact prepared `build-meta.json`, `index.html`, and
-all `assets/**` bytes. Until then, no financial or other irreversible
-production action is allowed. Any frontend mismatch leaves the lease active.
+and publicly serves the exact prepared `build-meta.json`, canonical `/`,
+`/index.html`, the `/snapchat-accounts` SPA shell, and every meaningful public
+build file in both normal and cache-busted requests. Canonical HTML must carry
+the governed no-cache/no-store/must-revalidate policy. Verification is pinned
+to `https://mezansalla.com`; another origin is refused. Until then, no
+financial or other irreversible production action is allowed. Any frontend
+mismatch leaves the lease active.
 
 ## Failed release
 

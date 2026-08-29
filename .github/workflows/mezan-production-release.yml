@@ -27,6 +27,14 @@ jobs:
           python-version: "3.11"
       - name: Compile backend Python sources
         run: python -m compileall -q backend
+      - name: Run frontend identity and release guard unit suites
+        env:
+          PYTHONPATH: backend:.
+        run: >-
+          python -m unittest
+          backend.tests.test_frontend_build_identity
+          backend.tests.test_production_release_guard
+          backend.tests.test_release_identity
 
   frontend-build:
     name: Frontend build
@@ -38,7 +46,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "22.23.2"
           cache: yarn
           cache-dependency-path: frontend/yarn.lock
       - name: Enable Yarn Classic
@@ -47,6 +55,8 @@ jobs:
         run: node --version && yarn --version
       - name: Install frontend dependencies
         run: yarn install --frozen-lockfile --non-interactive
+      - name: Test governed frontend build contract
+        run: yarn node --test scripts/build-contract.test.cjs
       - name: Build production frontend
         env:
           CI: "false"
@@ -74,7 +84,7 @@ jobs:
 
           Mandatory production path from the shared `/app` workspace:
           1. Fast-forward `/app` to `origin/hotfix/prod-snap-meta-final`.
-          2. In `/app/frontend`, activate Yarn 1.22.22, run a frozen install, delete `build` and `node_modules/.vite`, then run `yarn build`.
+          2. In `/app/frontend`, activate Node 22.23.2 and Yarn 1.22.22, run a frozen install, delete `build` and `node_modules/.vite`, then run `yarn build`.
           3. Run `python scripts/production_release_guard.py prepare --actor "<conversation>"`.
           4. Run `python scripts/production_release_guard.py prepublish` immediately before publishing.
           5. In the same project choose **Manage Publishing → Re-publish changes** exactly once.

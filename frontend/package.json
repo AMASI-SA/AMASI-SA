@@ -67,12 +67,12 @@
   },
   "scripts": {
     "start": "vite --host 0.0.0.0",
-    "build": "vite build && node scripts/write-build-meta.cjs",
+    "build": "node scripts/build-frontend.cjs",
     "preview": "vite preview --host 0.0.0.0",
     "test": "react-scripts test"
   },
   "engines": {
-    "node": "22.x",
+    "node": "22.23.2",
     "yarn": "1.22.22"
   },
   "browserslist": {
