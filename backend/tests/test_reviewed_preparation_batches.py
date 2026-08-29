@@ -1035,6 +1035,183 @@ def test_old_batch_line_options_are_rebuilt_from_canonical_order_item():
     assert len(repaired[0]["file_spec_fields"]) == 2
 
 
+@pytest.mark.asyncio
+async def test_auto_option_repair_force_refreshes_missing_line_before_pdf(monkeypatch):
+    identity = SimpleNamespace(
+        order_item_id="line-a",
+        line_index=0,
+        sku="SKU-1",
+        options=[
+            SimpleNamespace(name="المقاس", value="كبير"),
+            SimpleNamespace(name="هل تريد إضافة الاسم؟", value="نعم"),
+            SimpleNamespace(name="الاسم", value="سلمان"),
+        ],
+        custom_fields=[],
+        color=None,
+        size=None,
+        material=None,
+    )
+    refresh_calls = []
+
+    async def refresh(_db, user_id, order_number, **kwargs):
+        refresh_calls.append((user_id, order_number, kwargs))
+        return {"ok": True, "found": True}
+
+    async def canonical_order(*_args, **_kwargs):
+        return SimpleNamespace(order_number="100")
+
+    monkeypatch.setattr(batch_module, "refresh_order_from_salla", refresh)
+    monkeypatch.setattr(batch_module, "MongoOrderRepository", lambda _db: object())
+    monkeypatch.setattr(batch_module, "get_order", canonical_order)
+    monkeypatch.setattr(
+        batch_module,
+        "map_order_item_identities",
+        lambda _order: [identity],
+    )
+
+    result = await batch_module.refresh_and_repair_batch_customer_options(
+        _DB(None, []),
+        user_id="owner-1",
+        lines=[{
+            "order_number": "100",
+            "order_item_id": "line-a",
+            "line_index": 0,
+            "sku": "SKU-1",
+            "file_spec_fields": [],
+            "product_options": {},
+        }],
+        refresh_only_missing=True,
+    )
+
+    assert refresh_calls == [(
+        "owner-1",
+        "100",
+        {
+            "force": True,
+            "minimum_fresh_seconds": 0,
+            "allow_auto_fulfillment": False,
+        },
+    )]
+    assert result["refresh_failures"] == []
+    assert result["unresolved"] == []
+    assert result["repaired_line_count"] == 1
+    assert result["lines"][0]["size"] == "كبير"
+    assert result["lines"][0]["customer_name"] == "سلمان"
+    assert result["lines"][0]["product_options"] == {
+        "هل تريد إضافة الاسم؟": "نعم",
+    }
+
+
+@pytest.mark.asyncio
+async def test_auto_option_repair_skips_salla_when_snapshot_is_complete(monkeypatch):
+    async def unexpected_refresh(*_args, **_kwargs):
+        raise AssertionError("complete option snapshots must not refresh Salla")
+
+    monkeypatch.setattr(
+        batch_module,
+        "refresh_order_from_salla",
+        unexpected_refresh,
+    )
+    original = {
+        "order_number": "100",
+        "order_item_id": "line-a",
+        "file_spec_fields": [
+            {"spec_key": "size", "name": "المقاس", "value": "كبير"},
+        ],
+        "size": "كبير",
+    }
+
+    result = await batch_module.refresh_and_repair_batch_customer_options(
+        object(),
+        user_id="owner-1",
+        lines=[original],
+        refresh_only_missing=True,
+    )
+
+    assert result["lines"] == [original]
+    assert result["refreshed_order_numbers"] == []
+    assert result["repaired_line_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_auto_option_repair_allows_canonical_line_with_no_real_options(monkeypatch):
+    identity = SimpleNamespace(
+        order_item_id="line-a",
+        line_index=0,
+        sku="SKU-1",
+        options=[],
+        custom_fields=[],
+        color=None,
+        size=None,
+        material=None,
+    )
+
+    async def refresh(*_args, **_kwargs):
+        return {"ok": True, "found": True}
+
+    async def canonical_order(*_args, **_kwargs):
+        return SimpleNamespace(order_number="100")
+
+    monkeypatch.setattr(batch_module, "refresh_order_from_salla", refresh)
+    monkeypatch.setattr(batch_module, "MongoOrderRepository", lambda _db: object())
+    monkeypatch.setattr(batch_module, "get_order", canonical_order)
+    monkeypatch.setattr(
+        batch_module,
+        "map_order_item_identities",
+        lambda _order: [identity],
+    )
+
+    result = await batch_module.refresh_and_repair_batch_customer_options(
+        _DB(None, []),
+        user_id="owner-1",
+        lines=[{
+            "order_number": "100",
+            "order_item_id": "line-a",
+            "line_index": 0,
+            "sku": "SKU-1",
+            "file_spec_fields": [],
+        }],
+        refresh_only_missing=True,
+    )
+
+    assert result["refresh_failures"] == []
+    assert result["unresolved"] == []
+    assert result["repaired_line_count"] == 0
+    assert result["lines"][0]["file_spec_fields"] == []
+
+
+@pytest.mark.asyncio
+async def test_auto_option_repair_reports_refresh_and_identity_failure(monkeypatch):
+    async def refresh(*_args, **_kwargs):
+        return {"ok": False, "found": False, "code": "salla_unavailable"}
+
+    async def canonical_order(*_args, **_kwargs):
+        return SimpleNamespace(order_number="100")
+
+    monkeypatch.setattr(batch_module, "refresh_order_from_salla", refresh)
+    monkeypatch.setattr(batch_module, "MongoOrderRepository", lambda _db: object())
+    monkeypatch.setattr(batch_module, "get_order", canonical_order)
+    monkeypatch.setattr(batch_module, "map_order_item_identities", lambda _order: [])
+
+    result = await batch_module.refresh_and_repair_batch_customer_options(
+        _DB(None, []),
+        user_id="owner-1",
+        lines=[{
+            "order_number": "100",
+            "order_item_id": "line-a",
+            "line_index": 0,
+            "file_spec_fields": [],
+        }],
+        refresh_only_missing=True,
+    )
+
+    assert result["refresh_failures"] == [{
+        "order_number": "100",
+        "code": "salla_unavailable",
+    }]
+    assert result["unresolved"] == ["100:line-a"]
+
+
 def test_forward_stages_freeze_review_mutations():
     previous = set(REVIEW_COMPLETED_STAGES)
     try:
