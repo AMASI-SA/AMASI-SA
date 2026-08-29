@@ -82,9 +82,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
       - name: Install frontend dependencies
-        run: yarn install --non-interactive
+        run: yarn install --frozen-lockfile --non-interactive
       - name: Audit production frontend dependencies
         run: |
           set +e
@@ -117,6 +121,7 @@ jobs:
           CI: "false"
         run: |
           yarn build
+          python ../scripts/verify_frontend_build.py --expected-git-sha "$GITHUB_SHA"
           grep -F 'http-equiv="Content-Security-Policy"' build/index.html
           grep -F "object-src 'none'" build/index.html
           grep -F 'name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex"' build/index.html

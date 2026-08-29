@@ -3,15 +3,35 @@
 Production is a shared Emergent workspace. Multiple conversations can safely
 prepare code, but only one may own an active production release.
 
-The current guard and embedded identity use protocol v2. If `status` shows a
-lease prepared by v1, its owner must abort it with the original v1 guard
-before `/app` is updated. After updating, run `prepare` again; a v1 lease or
-identity must never be reused by the v2 guard.
+The current guard and embedded identity use protocol v3. A v3 release binds
+the backend SHA and critical files to the exact built frontend `index.html`,
+every public `assets/**` byte, the dependency lock, and the observed Node/Yarn
+toolchain. A lease prepared by an older guard must be aborted by its owner
+with that original guard before `/app` is updated. Never reuse a v1/v2 lease
+or identity with the v3 guard.
 
 ## Prepare
 
 After all intended commits are on `origin/hotfix/prod-snap-meta-final`, update
-`/app` with a fast-forward pull and run:
+`/app` with a fast-forward pull. Then create a clean frontend build using the
+repository's governed toolchain and frozen dependency graph:
+
+```bash
+cd /app/frontend
+corepack enable
+corepack prepare yarn@1.22.22 --activate
+yarn install --frozen-lockfile --non-interactive
+rm -rf build node_modules/.vite
+yarn build
+```
+
+`yarn build` writes deterministic `frontend/build/build-meta.json` without a
+wall-clock timestamp. It records the exact Node 22.x patch observed at build
+time, Yarn 1.22.22, the source/lock hashes, `index.html`, and every build file.
+The major Node contract is 22.x because no authoritative production patch has
+yet been documented; the exact observed patch remains auditable per artifact.
+
+Only after that build succeeds, run:
 
 ```bash
 cd /app
@@ -39,9 +59,10 @@ python scripts/production_release_guard.py verify --url https://mezansalla.com
 ```
 
 Only `"verified": true` after three consecutive checks proves that production
-restarted, is healthy, and is running the prepared Git SHA with matching
-critical file hashes. Until then, no financial or other irreversible
-production action is allowed.
+restarted, is healthy, is running the prepared Git SHA and critical files,
+and publicly serves the exact prepared `build-meta.json`, `index.html`, and
+all `assets/**` bytes. Until then, no financial or other irreversible
+production action is allowed. Any frontend mismatch leaves the lease active.
 
 ## Failed release
 

@@ -9,8 +9,10 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+from frontend_build_identity import read_frontend_build_identity
 
-RELEASE_PROTOCOL_VERSION = 2
+
+RELEASE_PROTOCOL_VERSION = 3
 DEFAULT_RELEASE_IDENTITY_PATH = Path(__file__).with_name(
     "release_identity.json"
 )
@@ -51,6 +53,14 @@ def read_release_identity(path: Path | None = None) -> dict[str, Any]:
             expected_hashes.get(relative) == actual_hashes[relative]
             for relative in CRITICAL_FILES
         )
+        expected_frontend_build = payload.get("frontend_build")
+        actual_frontend_build = read_frontend_build_identity(
+            expected_git_sha=git_sha
+        )
+        frontend_build_verified = (
+            isinstance(expected_frontend_build, dict)
+            and expected_frontend_build == actual_frontend_build
+        )
         return {
             "verified_identity_available": True,
             "release_id": release_id,
@@ -60,6 +70,8 @@ def read_release_identity(path: Path | None = None) -> dict[str, Any]:
             "protocol_version": protocol_version,
             "critical_file_hashes_match": hashes_match,
             "critical_file_hashes": actual_hashes,
+            "frontend_build_verified": frontend_build_verified,
+            "frontend_build": actual_frontend_build,
         }
     except Exception:
         return {
@@ -71,6 +83,8 @@ def read_release_identity(path: Path | None = None) -> dict[str, Any]:
             "protocol_version": RELEASE_PROTOCOL_VERSION,
             "critical_file_hashes_match": False,
             "critical_file_hashes": {},
+            "frontend_build_verified": False,
+            "frontend_build": None,
         }
 
 

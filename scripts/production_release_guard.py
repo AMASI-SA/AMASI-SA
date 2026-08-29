@@ -23,10 +23,20 @@ from typing import Any
 from uuid import UUID, uuid4
 
 
-PRODUCTION_BRANCH = "hotfix/prod-snap-meta-final"
-PROTOCOL_VERSION = 2
-BOOT_CLOCK_SKEW = timedelta(minutes=5)
 REPO_ROOT = Path(__file__).resolve().parents[1]
+BACKEND_ROOT = REPO_ROOT / "backend"
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+from frontend_build_identity import (  # noqa: E402
+    FrontendBuildIdentityError,
+    read_frontend_build_identity,
+)
+
+
+PRODUCTION_BRANCH = "hotfix/prod-snap-meta-final"
+PROTOCOL_VERSION = 3
+BOOT_CLOCK_SKEW = timedelta(minutes=5)
 GIT_DIR = REPO_ROOT / ".git"
 LEASE_DIR = GIT_DIR / "mezan-production-release.lock"
 LEASE_PATH = LEASE_DIR / "lease.json"
@@ -74,6 +84,13 @@ def _critical_hashes() -> dict[str, str]:
         relative.removeprefix("backend/"): _sha256(REPO_ROOT / relative)
         for relative in CRITICAL_FILES
     }
+
+
+def _frontend_build_identity(expected_git_sha: str) -> dict[str, Any]:
+    try:
+        return read_frontend_build_identity(expected_git_sha=expected_git_sha)
+    except FrontendBuildIdentityError as exc:
+        raise ReleaseGuardError(f"frontend build proof failed: {exc}") from exc
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -157,6 +174,7 @@ def _prepare_locked(actor: str) -> dict[str, Any]:
             "prepared_at": _utc_now(),
             "protocol_version": PROTOCOL_VERSION,
             "critical_file_hashes": _critical_hashes(),
+            "frontend_build": _frontend_build_identity(local_sha),
         }
         _atomic_json(IDENTITY_PATH, payload)
         _atomic_json(LEASE_PATH, payload)
@@ -198,8 +216,15 @@ def _prepublish_locked() -> dict[str, Any]:
             f"lease={expected_sha} local={local_sha} remote={remote_sha}"
         )
     identity = _read_json(IDENTITY_PATH)
-    if identity != lease or identity.get("critical_file_hashes") != _critical_hashes():
-        raise ReleaseGuardError("release identity or critical files changed after prepare")
+    frontend_build = _frontend_build_identity(expected_sha)
+    if (
+        identity != lease
+        or identity.get("critical_file_hashes") != _critical_hashes()
+        or identity.get("frontend_build") != frontend_build
+    ):
+        raise ReleaseGuardError(
+            "release identity, critical files, or frontend build changed after prepare"
+        )
     _assert_active_lease_unchanged(lease)
     return {
         "ready_to_publish": True,
@@ -229,6 +254,87 @@ def _health_payload(base_url: str) -> dict[str, Any]:
         raise ReleaseGuardError(f"production health check failed: {exc}") from exc
 
 
+def _public_frontend_bytes(base_url: str, relative_path: str) -> bytes:
+    relative_path = "/" + str(relative_path or "").lstrip("/")
+    url = base_url.rstrip("/") + relative_path
+    url += "?" + urllib.parse.urlencode({
+        "release_check": secrets.token_hex(16),
+    })
+    request = urllib.request.Request(
+        url,
+        headers={
+            "Cache-Control": "no-cache",
+            "Accept": "*/*",
+            "Accept-Encoding": "identity",
+            "User-Agent": "Mozilla/5.0 (compatible; MezanReleaseGuard/1.0)",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return response.read()
+    except (urllib.error.URLError, TimeoutError) as exc:
+        raise ReleaseGuardError(
+            f"production frontend check failed for {relative_path}: {exc}"
+        ) from exc
+
+
+def _verify_public_frontend(
+    base_url: str,
+    expected: dict[str, Any],
+) -> dict[str, Any]:
+    if not isinstance(expected, dict):
+        raise ReleaseGuardError("prepared frontend build proof is missing")
+    checks = [
+        ("/build-meta.json", expected.get("build_meta_sha256"), None),
+    ]
+    index = expected.get("index")
+    if not isinstance(index, dict):
+        raise ReleaseGuardError("prepared frontend index proof is missing")
+    checks.append(("/index.html", index.get("sha256"), index.get("bytes")))
+    assets = expected.get("assets")
+    if not isinstance(assets, list) or not assets:
+        raise ReleaseGuardError("prepared frontend asset proof is missing")
+    for asset in assets:
+        if not isinstance(asset, dict):
+            raise ReleaseGuardError("prepared frontend asset proof is invalid")
+        relative = str(asset.get("path") or "")
+        if (
+            not relative.startswith("assets/")
+            or ".." in Path(relative).parts
+        ):
+            raise ReleaseGuardError(
+                f"prepared frontend asset path is invalid: {relative}"
+            )
+        checks.append(
+            ("/" + relative, asset.get("sha256"), asset.get("bytes"))
+        )
+
+    checked_paths = []
+    for relative, expected_sha256, expected_bytes in checks:
+        if not re.fullmatch(r"[0-9a-f]{64}", str(expected_sha256 or "")):
+            raise ReleaseGuardError(
+                f"prepared frontend SHA is invalid: {relative}"
+            )
+        content = _public_frontend_bytes(base_url, relative)
+        actual_sha256 = hashlib.sha256(content).hexdigest()
+        if actual_sha256 != expected_sha256:
+            raise ReleaseGuardError(
+                "deployed frontend SHA mismatch: "
+                f"path={relative} expected={expected_sha256} "
+                f"actual={actual_sha256}"
+            )
+        if expected_bytes is not None and len(content) != expected_bytes:
+            raise ReleaseGuardError(
+                "deployed frontend byte count mismatch: "
+                f"path={relative} expected={expected_bytes} actual={len(content)}"
+            )
+        checked_paths.append(relative)
+    return {
+        "artifact_tree_sha256": expected.get("artifact_tree_sha256"),
+        "checked_paths": checked_paths,
+    }
+
+
 def _aware_timestamp(value: Any, label: str) -> tuple[str, datetime]:
     if not isinstance(value, str) or not value.strip():
         raise ReleaseGuardError(f"{label} is missing")
@@ -256,7 +362,7 @@ def _uuid4(value: Any, label: str) -> str:
 
 
 def _validated_release_lease(lease: dict[str, Any]) -> tuple[str, str]:
-    """Validate the exact v2 lease identity before any release mutation."""
+    """Validate the exact v3 lease identity before any release mutation."""
     try:
         protocol_version = int(lease.get("protocol_version") or 0)
     except (TypeError, ValueError) as exc:
@@ -273,6 +379,8 @@ def _validated_release_lease(lease: dict[str, Any]) -> tuple[str, str]:
     expected_release_id = _uuid4(
         lease.get("release_id"), "prepared release id"
     )
+    if not isinstance(lease.get("frontend_build"), dict):
+        raise ReleaseGuardError("prepared frontend build proof is missing")
     return expected_sha, expected_release_id
 
 
@@ -325,6 +433,7 @@ def _verify_locked(base_url: str) -> dict[str, Any]:
         "prepared_at",
         "protocol_version",
         "critical_file_hashes",
+        "frontend_build",
     )
     expected_identity = {field: lease.get(field) for field in identity_fields}
     expected_identity["release_id"] = expected_release_id
@@ -346,6 +455,8 @@ def _verify_locked(base_url: str) -> dict[str, Any]:
             )
         if release.get("critical_file_hashes_match") is not True:
             raise ReleaseGuardError("production critical file hashes do not match")
+        if release.get("frontend_build_verified") is not True:
+            raise ReleaseGuardError("production frontend build proof does not match")
         identity_mismatches = [
             field
             for field, expected in expected_identity.items()
@@ -366,9 +477,14 @@ def _verify_locked(base_url: str) -> dict[str, Any]:
             )
         if boot_started_at_timestamp > now + BOOT_CLOCK_SKEW:
             raise ReleaseGuardError("production boot identity is in the future")
+        frontend_observation = _verify_public_frontend(
+            base_url,
+            expected_identity["frontend_build"],
+        )
         observations.append({
             "git_sha": actual_sha,
             "boot_started_at": boot_started_at,
+            "frontend": frontend_observation,
         })
         if attempt < 2:
             time.sleep(2)
@@ -385,6 +501,12 @@ def _verify_locked(base_url: str) -> dict[str, Any]:
         "checks": len(observations),
         "boot_started_at": observations[0]["boot_started_at"],
         "boot_started_at_observations": boot_started_at_observations,
+        "frontend_artifact_tree_sha256": expected_identity[
+            "frontend_build"
+        ]["artifact_tree_sha256"],
+        "frontend_checked_paths": observations[0]["frontend"][
+            "checked_paths"
+        ],
     }
 
 

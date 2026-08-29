@@ -39,14 +39,20 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
       - name: Enable Yarn Classic
         run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Record governed frontend toolchain
+        run: node --version && yarn --version
       - name: Install frontend dependencies
-        run: yarn install --non-interactive
+        run: yarn install --frozen-lockfile --non-interactive
       - name: Build production frontend
         env:
           CI: "false"
         run: yarn build
+      - name: Verify deterministic frontend artifact identity
+        run: python ../scripts/verify_frontend_build.py --expected-git-sha "$GITHUB_SHA"
 
   release-handoff:
     name: Emergent manual redeploy required
@@ -68,12 +74,13 @@ jobs:
 
           Mandatory production path from the shared `/app` workspace:
           1. Fast-forward `/app` to `origin/hotfix/prod-snap-meta-final`.
-          2. Run `python scripts/production_release_guard.py prepare --actor "<conversation>"`.
-          3. Run `python scripts/production_release_guard.py prepublish` immediately before publishing.
-          4. In the same project choose **Manage Publishing → Re-publish changes** exactly once.
-          5. Wait for an explicit newer `Deployment Succeeded`.
-          6. Run `python scripts/production_release_guard.py verify --url https://mezansalla.com`.
-          7. Do not perform financial or other irreversible writes until verification returns `verified: true`.
+          2. In `/app/frontend`, activate Yarn 1.22.22, run a frozen install, delete `build` and `node_modules/.vite`, then run `yarn build`.
+          3. Run `python scripts/production_release_guard.py prepare --actor "<conversation>"`.
+          4. Run `python scripts/production_release_guard.py prepublish` immediately before publishing.
+          5. In the same project choose **Manage Publishing → Re-publish changes** exactly once.
+          6. Wait for an explicit newer `Deployment Succeeded`.
+          7. Run `python scripts/production_release_guard.py verify --url https://mezansalla.com`.
+          8. Do not perform financial or other irreversible writes until verification returns `verified: true`.
 
           GitHub is the review/CI/audit source. Emergent Preview is the deployment source for this project.
           EOF
