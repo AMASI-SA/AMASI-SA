@@ -3,10 +3,12 @@ import { ArrowsClockwise, CheckCircle, Clock, Ghost, WarningCircle } from "@phos
 import { toast } from "sonner";
 
 import SnapchatCampaignManagementPanel from "../components/marketing/SnapchatCampaignManagementPanel";
+import SnapchatEntitySettingsTable from "../components/marketing/SnapchatEntitySettingsTable";
 import UnifiedMarketingEntityTable from "../components/marketing/UnifiedMarketingEntityTable";
 import UnifiedMarketingOrdersPanel from "../components/marketing/UnifiedMarketingOrdersPanel";
 import api, { formatApiErrorDetail } from "../lib/api";
 import { snapchatV2SpendDisplay } from "../lib/snapchatV2SpendDisplay";
+import { getSnapchatEntitySettings } from "../services/snapchatCampaignManagement";
 
 const ENTITY_TABS = [
     { id: "campaign", label: "الحملات" },
@@ -109,12 +111,16 @@ export default function SnapchatV2Page() {
     const [selectedCampaign, setSelectedCampaign] = useState(null);
     const [selectedAdGroup, setSelectedAdGroup] = useState(null);
     const [managementTarget, setManagementTarget] = useState(null);
+    const [settingsByEntityId, setSettingsByEntityId] = useState({});
+    const [settingsLoading, setSettingsLoading] = useState(false);
     const [loading, setLoading] = useState(true);
     const [entityLoading, setEntityLoading] = useState(false);
     const [syncing, setSyncing] = useState(false);
     const [error, setError] = useState("");
     const [clockNow, setClockNow] = useState(() => Date.now());
-    const readinessRequestId = useRef(0);
+    const loadEpochRef = useRef(0);
+    const viewEpochRef = useRef(0);
+    const settingsEpochRef = useRef(0);
 
     const account = status?.selected_account || null;
     const accountId = account?.ad_account_id || "";
@@ -122,15 +128,141 @@ export default function SnapchatV2Page() {
     const accountTimezone = account?.timezone || "America/Los_Angeles";
     const activeContract = entityLevel === "campaign" ? campaignContract : childContract;
 
+    const beginViewContext = useCallback(() => {
+        const nextEpoch = viewEpochRef.current + 1;
+        viewEpochRef.current = nextEpoch;
+        settingsEpochRef.current += 1;
+        setSettingsByEntityId({});
+        setSettingsLoading(false);
+        return nextEpoch;
+    }, []);
+
+    const loadEntitySettings = useCallback(async ({
+        entityType,
+        rows = [],
+        parentUnifiedId = "",
+        expectedAccountId = "",
+        viewEpoch,
+    }) => {
+        const expectedViewEpoch = Number(viewEpoch);
+        if (viewEpochRef.current !== expectedViewEpoch) return;
+        const settingsEpoch = settingsEpochRef.current + 1;
+        settingsEpochRef.current = settingsEpoch;
+        const requestIsCurrent = () => (
+            viewEpochRef.current === expectedViewEpoch
+            && settingsEpochRef.current === settingsEpoch
+        );
+        const governedRows = rows.filter((row) => ["campaign", "ad_group"].includes(row?.entity?.level));
+        if (!governedRows.length) {
+            if (requestIsCurrent()) {
+                setSettingsByEntityId({});
+                setSettingsLoading(false);
+            }
+            return;
+        }
+        setSettingsLoading(true);
+        const rowIds = new Set(governedRows.map(
+            (row) => String(row?.entity?.id || "").trim(),
+        ).filter(Boolean));
+        const unavailableForRow = (id, status = "settings_not_loaded", reason = "لم تُحمّل إعدادات الكيان من مزامنة Snapchat الأصلية.") => ({
+            entity_type: entityType,
+            unified_entity_id: id,
+            provider_entity_id: null,
+            ad_account_id: expectedAccountId || null,
+            quality: {
+                settings_status: status,
+                freshness_seconds: null,
+                freshness_threshold_seconds: 1800,
+                reason,
+                financial_controls_allowed: false,
+                financial_field_controls: {},
+            },
+        });
+        if (!requestIsCurrent()) return;
+        setSettingsByEntityId(Object.fromEntries(
+            [...rowIds].map((id) => [id, unavailableForRow(id)]),
+        ));
+        try {
+            const items = await getSnapchatEntitySettings({
+                entityType,
+                parentUnifiedId,
+                limit: Math.max(100, governedRows.length * 2),
+            });
+            const next = {};
+            items.forEach((item) => {
+                const key = String(item?.unified_entity_id || "").trim();
+                if (!key || !rowIds.has(key)) return;
+                const providerAccountId = String(item?.ad_account_id || "").trim();
+                const accountBound = Boolean(
+                    expectedAccountId
+                    && providerAccountId
+                    && providerAccountId === expectedAccountId,
+                );
+                next[key] = accountBound ? item : {
+                    ...item,
+                    quality: {
+                        ...(item?.quality || {}),
+                        settings_status: "settings_sync_failed",
+                        reason: providerAccountId
+                            ? "فشل إثبات ارتباط إعدادات الكيان بالحساب الإعلاني المحدد."
+                            : "لم تُحمّل هوية الحساب الإعلاني من إعدادات Snapchat.",
+                        financial_controls_allowed: false,
+                        financial_field_controls: {},
+                    },
+                };
+            });
+            governedRows.forEach((row) => {
+                const id = String(row?.entity?.id || "").trim();
+                if (id && !next[id]) {
+                    next[id] = unavailableForRow(id);
+                }
+            });
+            if (!requestIsCurrent()) return;
+            setSettingsByEntityId(next);
+        } catch (_requestError) {
+            const failed = Object.fromEntries(governedRows.map((row) => {
+                const id = String(row?.entity?.id || "").trim();
+                return [id, unavailableForRow(
+                    id,
+                    "settings_sync_failed",
+                    "فشل جلب إعدادات Snapchat.",
+                )];
+            }).filter(([id]) => id));
+            if (!requestIsCurrent()) return;
+            setSettingsByEntityId(failed);
+        } finally {
+            if (requestIsCurrent()) setSettingsLoading(false);
+        }
+    }, []);
+
     const load = useCallback(async (requestedRange = null) => {
-        const requestId = readinessRequestId.current + 1;
-        readinessRequestId.current = requestId;
+        const loadEpoch = loadEpochRef.current + 1;
+        loadEpochRef.current = loadEpoch;
+        const viewEpoch = beginViewContext();
+        const loadRequestIsCurrent = () => loadEpochRef.current === loadEpoch;
+        const viewRequestIsCurrent = () => viewEpochRef.current === viewEpoch;
+        const reportRequestIsCurrent = () => loadRequestIsCurrent() && viewRequestIsCurrent();
+        let readinessStarted = false;
         setLoading(true);
+        setEntityLoading(false);
         setReadinessLoading(true);
         setReadiness(null);
         setError("");
         try {
             const { data: statusData } = await api.get("/integrations-v2/snapchat-v2/status");
+            if (!loadRequestIsCurrent()) return;
+            readinessStarted = true;
+            api.get("/integrations-v2/snapchat-v2/unified-readiness")
+                .then(({ data }) => {
+                    if (loadRequestIsCurrent()) setReadiness(data || null);
+                })
+                .catch(() => {
+                    if (loadRequestIsCurrent()) setReadiness({ ready: false, reasons: ["readiness_request_failed"] });
+                })
+                .finally(() => {
+                    if (loadRequestIsCurrent()) setReadinessLoading(false);
+                });
+            if (!viewRequestIsCurrent()) return;
             setStatus(statusData);
             const timezone = statusData?.selected_account?.timezone || "America/Los_Angeles";
             const today = localDateInTimezone(timezone);
@@ -144,36 +276,38 @@ export default function SnapchatV2Page() {
                 api.get("/integrations-v2/snapchat-v2/hourly", { params: { ...common, report_date: range.dateTo } }),
                 api.get("/integrations-v2/snapchat-v2/campaigns", { params: { ...common, date_from: range.dateFrom, date_to: range.dateTo } }),
             ]);
+            if (!reportRequestIsCurrent()) return;
             setReport(reportResult.data);
             setHourly(hourlyResult.data);
-            setCampaignContract(campaignsResult.data?.unified || null);
+            const nextCampaignContract = campaignsResult.data?.unified || null;
+            setCampaignContract(nextCampaignContract);
             setSallaSummary(campaignsResult.data?.salla?.summary || {});
+            void loadEntitySettings({
+                entityType: "campaign",
+                rows: nextCampaignContract?.rows || [],
+                expectedAccountId: statusData?.selected_account?.ad_account_id || "",
+                viewEpoch,
+            });
             setChildContract(null);
             setSelectedCampaign(null);
             setSelectedAdGroup(null);
             setManagementTarget(null);
             setEntityLevel("campaign");
             setClockNow(Date.now());
-            api.get("/integrations-v2/snapchat-v2/unified-readiness")
-                .then(({ data }) => {
-                    if (readinessRequestId.current === requestId) setReadiness(data || null);
-                })
-                .catch(() => {
-                    if (readinessRequestId.current === requestId) setReadiness({ ready: false, reasons: ["readiness_request_failed"] });
-                })
-                .finally(() => {
-                    if (readinessRequestId.current === requestId) setReadinessLoading(false);
-                });
         } catch (requestError) {
+            if (!loadRequestIsCurrent()) return;
+            if (!readinessStarted) {
+                setReadiness({ ready: false, reasons: ["readiness_request_failed"] });
+                setReadinessLoading(false);
+            }
+            if (!viewRequestIsCurrent()) return;
             const message = formatApiErrorDetail(requestError.response?.data?.detail) || "تعذر تحميل بيانات Snapchat V2";
             setError(message);
-            setReadiness({ ready: false, reasons: ["readiness_request_failed"] });
-            setReadinessLoading(false);
             toast.error(message);
         } finally {
-            setLoading(false);
+            if (reportRequestIsCurrent()) setLoading(false);
         }
-    }, [appliedRange, dateFrom, dateTo]);
+    }, [appliedRange, beginViewContext, dateFrom, dateTo, loadEntitySettings]);
 
     useEffect(() => {
         load();
@@ -188,6 +322,9 @@ export default function SnapchatV2Page() {
 
     async function openChildren(row) {
         if (!appliedRange) return;
+        const viewEpoch = beginViewContext();
+        const requestIsCurrent = () => viewEpochRef.current === viewEpoch;
+        setLoading(false);
         setEntityLoading(true);
         setError("");
         try {
@@ -200,32 +337,61 @@ export default function SnapchatV2Page() {
             };
             if (row.entity.level === "campaign") {
                 const { data } = await api.get("/integrations-v2/snapchat-v2/ad-squads", { params: { ...common, campaign_id: row.entity.id } });
+                if (!requestIsCurrent()) return;
                 setSelectedCampaign(row);
                 setSelectedAdGroup(null);
                 setManagementTarget(null);
-                setChildContract(data?.unified || null);
+                const nextChildContract = data?.unified || null;
+                setChildContract(nextChildContract);
                 setEntityLevel("ad_group");
+                void loadEntitySettings({
+                    entityType: "ad_squad",
+                    rows: nextChildContract?.rows || [],
+                    parentUnifiedId: row.entity.id,
+                    expectedAccountId: accountId,
+                    viewEpoch,
+                });
             } else if (row.entity.level === "ad_group") {
                 const campaignId = row.entity.campaign_id || selectedCampaign?.entity?.id;
                 const { data } = await api.get("/integrations-v2/snapchat-v2/ads", {
                     params: { ...common, campaign_id: campaignId, ad_squad_id: row.entity.id },
                 });
+                if (!requestIsCurrent()) return;
                 setSelectedAdGroup(row);
                 setManagementTarget(null);
                 setChildContract(data?.unified || null);
                 setEntityLevel("ad");
             }
         } catch (requestError) {
+            if (!requestIsCurrent()) return;
             const message = formatApiErrorDetail(requestError.response?.data?.detail) || "تعذر تحميل المستوى التفصيلي من Snapchat V2";
             setError(message);
             toast.error(message);
         } finally {
-            setEntityLoading(false);
+            if (requestIsCurrent()) setEntityLoading(false);
         }
     }
 
     async function returnToAdGroups() {
         if (selectedCampaign) await openChildren(selectedCampaign);
+    }
+
+    function returnToCampaigns() {
+        const viewEpoch = beginViewContext();
+        setLoading(false);
+        setEntityLoading(false);
+        setEntityLevel("campaign");
+        setChildContract(null);
+        setSelectedCampaign(null);
+        setSelectedAdGroup(null);
+        setManagementTarget(null);
+        setClockNow(Date.now());
+        void loadEntitySettings({
+            entityType: "campaign",
+            rows: campaignContract?.rows || [],
+            expectedAccountId: accountId,
+            viewEpoch,
+        });
     }
 
     function manageEntity(row) {
@@ -299,6 +465,9 @@ export default function SnapchatV2Page() {
     const managementAction = managementTarget
         ? `${managementTarget.entity.provider_level}.update`
         : null;
+    const managementSettings = settingsByEntityId[managementTarget?.entity?.id]
+        || managementTarget?.current_settings
+        || null;
 
     return (
         <div className="space-y-5" dir="rtl" data-testid="snapchat-v2-page">
@@ -351,9 +520,22 @@ export default function SnapchatV2Page() {
                 accountId={accountId}
                 entityLevel={managementLevel(entityLevel)}
                 initialAction={managementAction}
-                selectedCampaign={managementCampaign ? { campaign_id: managementCampaign.entity.id, campaign_name: managementCampaign.entity.name } : null}
-                selectedAdSquad={managementAdGroup ? { ad_squad_id: managementAdGroup.entity.id, ad_squad_name: managementAdGroup.entity.name } : null}
+                selectedCampaign={managementCampaign ? {
+                    campaign_id: managementCampaign.entity.id,
+                    provider_campaign_id: managementTarget?.entity?.level === "ad_group"
+                        ? managementSettings?.provider_parent_id || null
+                        : managementSettings?.provider_entity_id
+                            || settingsByEntityId[managementCampaign.entity.id]?.provider_entity_id
+                            || null,
+                    campaign_name: managementCampaign.entity.name,
+                } : null}
+                selectedAdSquad={managementAdGroup ? {
+                    ad_squad_id: managementAdGroup.entity.id,
+                    provider_ad_squad_id: managementSettings?.provider_entity_id || null,
+                    ad_squad_name: managementAdGroup.entity.name,
+                } : null}
                 selectedAd={managementTarget?.entity?.level === "ad" ? { ad_id: managementTarget.entity.id, ad_name: managementTarget.entity.name, ad_squad_id: managementTarget.entity.ad_group_id } : null}
+                currentSettings={managementSettings}
                 onChanged={() => { toast.success("تم التحقق من تغيير Snapchat؛ سيظهر في V2 بعد تحديث كتالوج المزامنة."); load(appliedRange); }}
             />
 
@@ -361,12 +543,13 @@ export default function SnapchatV2Page() {
                 <nav className="flex min-h-14 items-end gap-6 overflow-x-auto rounded-t-2xl border border-b-0 border-slate-200 bg-white px-4">
                     {ENTITY_TABS.map((tab) => {
                         const enabled = tab.id === "campaign" || (tab.id === "ad_group" && selectedCampaign) || (tab.id === "ad" && selectedAdGroup);
-                        return <button key={tab.id} type="button" disabled={!enabled} onClick={() => { if (tab.id === "campaign") { setEntityLevel("campaign"); setChildContract(null); setSelectedCampaign(null); setSelectedAdGroup(null); setManagementTarget(null); } else if (tab.id === "ad_group") returnToAdGroups(); }} className={`relative shrink-0 px-1 pb-3 pt-4 text-sm font-black ${entityLevel === tab.id ? "text-slate-950" : enabled ? "text-slate-600" : "text-slate-300"}`}>{tab.label}{entityLevel === tab.id && <span className="absolute inset-x-0 bottom-0 h-0.5 bg-amber-400" />}</button>;
+                        return <button key={tab.id} type="button" disabled={!enabled} onClick={() => { if (tab.id === "campaign") returnToCampaigns(); else if (tab.id === "ad_group") returnToAdGroups(); }} className={`relative shrink-0 px-1 pb-3 pt-4 text-sm font-black ${entityLevel === tab.id ? "text-slate-950" : enabled ? "text-slate-600" : "text-slate-300"}`}>{tab.label}{entityLevel === tab.id && <span className="absolute inset-x-0 bottom-0 h-0.5 bg-amber-400" />}</button>;
                     })}
                     <span className="mr-auto pb-3 text-[11px] font-bold text-slate-400">قراءة V2 موحدة · إدارة Snapchat محكومة</span>
                 </nav>
-                {(selectedCampaign || selectedAdGroup) && <div className="flex flex-wrap items-center gap-2 border-x border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-bold text-slate-600"><button type="button" onClick={() => { setEntityLevel("campaign"); setChildContract(null); setSelectedCampaign(null); setSelectedAdGroup(null); setManagementTarget(null); }} className="rounded-lg bg-white px-3 py-1.5 text-emerald-700 shadow-sm">كل الحملات</button>{selectedCampaign && <><span>/</span><button type="button" onClick={returnToAdGroups} className="rounded-lg px-2 py-1.5 hover:bg-white">{selectedCampaign.entity.name}</button></>}{selectedAdGroup && <><span>/</span><span className="rounded-lg bg-violet-50 px-2 py-1.5 text-violet-700">{selectedAdGroup.entity.name}</span></>}</div>}
+                {(selectedCampaign || selectedAdGroup) && <div className="flex flex-wrap items-center gap-2 border-x border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-bold text-slate-600"><button type="button" onClick={returnToCampaigns} className="rounded-lg bg-white px-3 py-1.5 text-emerald-700 shadow-sm">كل الحملات</button>{selectedCampaign && <><span>/</span><button type="button" onClick={returnToAdGroups} className="rounded-lg px-2 py-1.5 hover:bg-white">{selectedCampaign.entity.name}</button></>}{selectedAdGroup && <><span>/</span><span className="rounded-lg bg-violet-50 px-2 py-1.5 text-violet-700">{selectedAdGroup.entity.name}</span></>}</div>}
                 <UnifiedMarketingEntityTable report={activeContract} loading={loading || entityLoading} onOpenChildren={openChildren} onManageEntity={manageEntity} />
+                <SnapchatEntitySettingsTable report={activeContract} settingsByEntityId={settingsByEntityId} loading={settingsLoading} />
             </section>
 
             <UnifiedMarketingOrdersPanel report={campaignContract} campaignId={selectedCampaign?.entity?.id || null} />
