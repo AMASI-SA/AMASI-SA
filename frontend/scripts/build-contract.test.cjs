@@ -11,11 +11,12 @@ const {
   createBuildChildEnvironment,
   governedEnvironment,
 } = require("./write-build-meta.cjs");
+const releaseBuildContract = require("../build-contract.cjs");
 
 const frontendRoot = path.resolve(__dirname, "..");
 const repositoryRoot = path.resolve(frontendRoot, "..");
 
-test("ordinary and governed release builds remain separate", () => {
+test("Emergent host compatibility does not relax governed releases", () => {
   const packageManifest = JSON.parse(
     fs.readFileSync(path.join(frontendRoot, "package.json"), "utf8"),
   );
@@ -24,8 +25,13 @@ test("ordinary and governed release builds remain separate", () => {
     packageManifest.scripts["build:release"],
     "node scripts/build-release-frontend.cjs",
   );
-  assert.equal(packageManifest.engines.node, ">=22.23.2 <23");
+  assert.equal(
+    packageManifest.engines.node,
+    ">=20.18.1 <21 || >=22.23.2 <23",
+  );
   assert.equal(packageManifest.engines.yarn, ">=1.22.22 <2");
+  assert.equal(releaseBuildContract.expectedNodeVersion, "22.23.2");
+  assert.equal(releaseBuildContract.expectedYarnVersion, "1.22.22");
   assert.match(packageManifest.packageManager, /^yarn@1\.22\.22(?:\+|$)/);
 
   const governedWorkflowPaths = [
