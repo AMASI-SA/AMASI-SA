@@ -13,6 +13,54 @@ from integrations_control_center.snapchat_adaptive_decision_ai import (
 )
 
 
+def _fresh_settings_timestamps() -> dict[str, object]:
+    observed = datetime.now(timezone.utc)
+    return {
+        "settings_synced_at": observed.isoformat(),
+        "provider_updated_at": (observed - timedelta(seconds=30)).isoformat(),
+        "freshness_seconds": 0,
+        "freshness_threshold_seconds": 1800,
+        "reason": "provider_snapshot_fresh",
+    }
+
+
+@pytest.fixture(autouse=True)
+def fresh_management_settings(monkeypatch):
+    async def settings(
+        db,
+        user_id,
+        entity_type,
+        unified_entity_id,
+        provider_entity_id=None,
+        parent_unified_id=None,
+        *,
+        now=None,
+    ):
+        return {
+            "unified_entity_id": unified_entity_id,
+            "provider_entity_id": provider_entity_id or unified_entity_id,
+            "provider_parent_id": parent_unified_id,
+            "ad_account_id": "account-1",
+            "mapping_status": "verified",
+            "mapping_verified": True,
+            "settings_status": "settings_complete",
+            "financial_controls_allowed": True,
+            "financial_field_controls": {
+                "daily_budget": {"allowed": True, "reason": "available"},
+                "bid": {"allowed": True, "reason": "available"},
+            },
+            **_fresh_settings_timestamps(),
+            "account_currency": "USD",
+            "daily_budget_micro": 60_000_000,
+            "daily_budget_usd": 60.0,
+            "bid_micro": 10_000_000,
+            "bid_usd": 10.0,
+            "bid_strategy": "TARGET_COST",
+        }
+
+    monkeypatch.setattr(management, "resolve_financial_management_settings", settings)
+
+
 class _Result:
     def __init__(self, matched_count: int = 1):
         self.matched_count = matched_count
@@ -155,13 +203,50 @@ def _blocked_inventory_baseline(product: dict) -> dict:
 
 def _prepare_management_dependencies(monkeypatch, baseline):
     async def selected(*args, **kwargs):
-        return {"ad_account_id": "account-1", "timezone": "Asia/Riyadh"}
+        return {
+            "ad_account_id": "account-1",
+            "timezone": "Asia/Riyadh",
+            "currency": "USD",
+        }
 
     async def capture(*args, **kwargs):
         return deepcopy(baseline)
 
+    async def settings(
+        db,
+        user_id,
+        entity_type,
+        unified_entity_id,
+        provider_entity_id=None,
+        parent_unified_id=None,
+        *,
+        now=None,
+    ):
+        return {
+            "unified_entity_id": unified_entity_id,
+            "provider_entity_id": provider_entity_id or unified_entity_id,
+            "provider_parent_id": parent_unified_id,
+            "ad_account_id": "account-1",
+            "mapping_status": "verified",
+            "mapping_verified": True,
+            "settings_status": "settings_complete",
+            "financial_controls_allowed": True,
+            "financial_field_controls": {
+                "daily_budget": {"allowed": True, "reason": "available"},
+                "bid": {"allowed": True, "reason": "available"},
+            },
+            **_fresh_settings_timestamps(),
+            "account_currency": "USD",
+            "daily_budget_micro": 60_000_000,
+            "daily_budget_usd": 60.0,
+            "bid_micro": 10_000_000,
+            "bid_usd": 10.0,
+            "bid_strategy": "TARGET_COST",
+        }
+
     monkeypatch.setattr(management, "_selected_account", selected)
     monkeypatch.setattr(management, "_capture_proposal_baseline", capture)
+    monkeypatch.setattr(management, "resolve_financial_management_settings", settings)
 
 
 async def _approve(db: _DB, preview: dict) -> None:
@@ -448,7 +533,7 @@ async def test_stale_selected_variant_inventory_blocks_delivery_increase(monkeyp
         ),
     ],
 )
-async def test_lifetime_budget_or_cap_increase_enters_inventory_gate(
+async def test_lifetime_budget_or_cap_update_is_blocked_without_settings_proof(
     monkeypatch,
     action,
     target_id,
@@ -504,9 +589,8 @@ async def test_lifetime_budget_or_cap_increase_enters_inventory_gate(
         )
 
     assert raised.value.status_code == 409
-    assert raised.value.detail["code"] == (
-        "snapchat_management_inventory_blocks_delivery_increase"
-    )
+    assert raised.value.detail["code"] == "snapchat_management_financial_field_unproven"
+    assert raised.value.detail["unsupported_fields"] == [budget_field]
     assert db[management.PROPOSAL_COLLECTION].rows == []
     assert provider.executions == []
 
