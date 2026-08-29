@@ -768,6 +768,109 @@ def repair_batch_line_customer_options(
     return repaired, repaired_count, unresolved
 
 
+async def refresh_and_repair_batch_customer_options(
+    db: Any,
+    *,
+    user_id: str,
+    lines: list[dict[str, Any]],
+    refresh_only_missing: bool,
+) -> dict[str, Any]:
+    """Refresh Salla reads and rebuild batch option snapshots before PDF use.
+
+    New files only refresh orders whose frozen lines do not yet contain
+    customer fields.  The historical repair action refreshes every order in
+    the file.  Both paths use the same identity reconciliation and never write
+    an order status back to Salla.
+    """
+    source_lines = [dict(row) for row in lines if isinstance(row, dict)]
+    order_numbers = sorted({
+        _text(row.get("order_number"))
+        for row in source_lines
+        if _text(row.get("order_number"))
+    })
+    missing_keys = {
+        f"{_text(row.get('order_number'))}:{_text(row.get('order_item_id'))}"
+        for row in source_lines
+        if not list(row.get("file_spec_fields") or [])
+    }
+    refresh_order_numbers = (
+        sorted({key.split(":", 1)[0] for key in missing_keys if key})
+        if refresh_only_missing
+        else order_numbers
+    )
+    if refresh_only_missing and not refresh_order_numbers:
+        return {
+            "lines": source_lines,
+            "repaired_line_count": 0,
+            "unresolved": [],
+            "refresh_failures": [],
+            "refreshed_order_numbers": [],
+        }
+
+    refresh_failures: list[dict[str, Any]] = []
+    refresh_limit = asyncio.Semaphore(8)
+
+    async def refresh_one(order_number: str) -> tuple[str, dict[str, Any]]:
+        async with refresh_limit:
+            try:
+                result = await refresh_order_from_salla(
+                    db,
+                    user_id,
+                    order_number,
+                    force=True,
+                    minimum_fresh_seconds=0,
+                    allow_auto_fulfillment=False,
+                )
+            except Exception as exc:  # The caller decides whether to fail closed.
+                result = {"ok": False, "found": False, "code": type(exc).__name__}
+            return order_number, result
+
+    refresh_results = await asyncio.gather(*(
+        refresh_one(order_number) for order_number in refresh_order_numbers
+    ))
+    for order_number, result in refresh_results:
+        if not result.get("ok") or not result.get("found"):
+            refresh_failures.append({
+                "order_number": order_number,
+                "code": _text(result.get("code")) or "salla_refresh_failed",
+            })
+
+    repository = MongoOrderRepository(db)
+    identities_by_order: dict[str, list[Any]] = {}
+    for order_number in order_numbers:
+        try:
+            order = await get_order(
+                repository,
+                user_id=user_id,
+                order_number=order_number,
+            )
+        except OrderNotFoundError:
+            continue
+        identities_by_order[order_number] = map_order_item_identities(order)
+
+    workflow_rows = await db[WORKFLOWS].find(
+        {"user_id": user_id, "order_number": {"$in": order_numbers}},
+        {"_id": 0},
+    ).to_list(len(order_numbers) or 1)
+    workflows_by_order = {
+        _text(row.get("order_number")): row for row in workflow_rows
+    }
+    repaired_lines, repaired_count, unresolved = repair_batch_line_customer_options(
+        source_lines,
+        identities_by_order=identities_by_order,
+        workflows_by_order=workflows_by_order,
+    )
+    if refresh_only_missing:
+        unresolved = [key for key in unresolved if key in missing_keys]
+    return {
+        "lines": repaired_lines,
+        "repaired_line_count": repaired_count,
+        "unresolved": unresolved,
+        "refresh_failures": refresh_failures,
+        "refreshed_order_numbers": refresh_order_numbers,
+    }
+
+
 def _batch_response(batch: dict[str, Any]) -> dict[str, Any]:
     return {
         "ok": batch.get("status") == "ready",
@@ -1514,6 +1617,26 @@ def make_reviewed_preparation_batches_router(
 
         try:
             batch_lines = await _build_batch_lines(context, planned)
+            option_repair = await refresh_and_repair_batch_customer_options(
+                db,
+                user_id=user_id,
+                lines=batch_lines,
+                refresh_only_missing=True,
+            )
+            if option_repair["refresh_failures"] or option_repair["unresolved"]:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "preparation_customer_options_verification_failed",
+                        "message": (
+                            "تعذّر التحقق من خيارات العميل في بعض القطع؛ "
+                            "لم يُعتمد الملف ولم تُخصم أي قطعة. أعد المحاولة."
+                        ),
+                        "refresh_failures": option_repair["refresh_failures"],
+                        "unresolved": option_repair["unresolved"],
+                    },
+                )
+            batch_lines = option_repair["lines"]
             pdf_bytes = generate_preparation_pdf(
                 [
                     _line_from_batch_storage(
@@ -1543,6 +1666,12 @@ def make_reviewed_preparation_batches_router(
                 "allocated_quantity": allocated_quantity,
                 "pdf_size_bytes": len(pdf_bytes),
                 "pdf_sha256": hashlib.sha256(pdf_bytes).hexdigest(),
+                "customer_options_auto_repaired_line_count": option_repair[
+                    "repaired_line_count"
+                ],
+                "customer_options_auto_refreshed_order_numbers": option_repair[
+                    "refreshed_order_numbers"
+                ],
             }
             await db[BATCHES].update_one(
                 {"user_id": user_id, "id": batch_id, "status": "building"},
@@ -1656,60 +1785,20 @@ def make_reviewed_preparation_batches_router(
                 status_code=404,
                 detail={"code": "preparation_batch_not_found"},
             )
-        order_numbers = sorted({
-            _text(row.get("order_number"))
-            for row in batch.get("lines") or []
-            if isinstance(row, dict) and _text(row.get("order_number"))
-        })
-        refresh_failures: list[dict[str, Any]] = []
-        refresh_limit = asyncio.Semaphore(8)
-
-        async def refresh_one(order_number: str) -> tuple[str, dict[str, Any]]:
-            async with refresh_limit:
-                result = await refresh_order_from_salla(
-                    db,
-                    user_id,
-                    order_number,
-                    force=True,
-                    minimum_fresh_seconds=0,
-                    allow_auto_fulfillment=False,
-                )
-                return order_number, result
-
-        refresh_results = await asyncio.gather(*(
-            refresh_one(order_number) for order_number in order_numbers
-        ))
-        for order_number, result in refresh_results:
-            if not result.get("ok") or not result.get("found"):
-                refresh_failures.append({
-                    "order_number": order_number,
-                    "code": _text(result.get("code")) or "salla_refresh_failed",
-                })
-
-        repository = MongoOrderRepository(db)
-        identities_by_order: dict[str, list[Any]] = {}
-        for order_number in order_numbers:
-            try:
-                order = await get_order(
-                    repository,
-                    user_id=user_id,
-                    order_number=order_number,
-                )
-            except OrderNotFoundError:
-                continue
-            identities_by_order[order_number] = map_order_item_identities(order)
-        workflow_rows = await db[WORKFLOWS].find(
-            {"user_id": user_id, "order_number": {"$in": order_numbers}},
-            {"_id": 0},
-        ).to_list(len(order_numbers) or 1)
-        workflows_by_order = {
-            _text(row.get("order_number")): row for row in workflow_rows
-        }
-        repaired_lines, repaired_count, unresolved = repair_batch_line_customer_options(
-            [dict(row) for row in batch.get("lines") or [] if isinstance(row, dict)],
-            identities_by_order=identities_by_order,
-            workflows_by_order=workflows_by_order,
+        repair_result = await refresh_and_repair_batch_customer_options(
+            db,
+            user_id=user_id,
+            lines=[
+                dict(row)
+                for row in batch.get("lines") or []
+                if isinstance(row, dict)
+            ],
+            refresh_only_missing=False,
         )
+        repaired_lines = repair_result["lines"]
+        repaired_count = repair_result["repaired_line_count"]
+        unresolved = repair_result["unresolved"]
+        refresh_failures = repair_result["refresh_failures"]
         repaired_batch = {**batch, "lines": repaired_lines}
         pdf_bytes = render_preparation_batch_pdf(repaired_batch)
         now = _now()
