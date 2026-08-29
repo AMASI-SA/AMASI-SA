@@ -12,7 +12,7 @@ const {
 
 const frontendRoot = path.resolve(__dirname, "..");
 
-async function main() {
+async function buildOnce() {
   fs.rmSync(path.join(frontendRoot, "build", "build-meta.json"), {
     force: true,
   });
@@ -38,7 +38,11 @@ async function main() {
   writeBuildMetadata(after);
 }
 
-main().catch((error) => {
-  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  buildOnce().catch((error) => {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { buildOnce };

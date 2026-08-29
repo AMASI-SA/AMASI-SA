@@ -9,10 +9,13 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from frontend_build_identity import read_frontend_build_identity
+from frontend_build_identity import (
+    read_frontend_build_identity,
+    validate_frontend_reproducibility_proof,
+)
 
 
-RELEASE_PROTOCOL_VERSION = 3
+RELEASE_PROTOCOL_VERSION = 4
 DEFAULT_RELEASE_IDENTITY_PATH = Path(__file__).with_name(
     "release_identity.json"
 )
@@ -57,6 +60,15 @@ def read_release_identity(path: Path | None = None) -> dict[str, Any]:
         actual_frontend_build = read_frontend_build_identity(
             expected_git_sha=git_sha
         )
+        expected_frontend_reproducibility = payload.get(
+            "frontend_reproducibility"
+        )
+        embedded_frontend_reproducibility = (
+            validate_frontend_reproducibility_proof(
+                frontend_build=expected_frontend_build,
+                proof=expected_frontend_reproducibility,
+            )
+        )
         frontend_build_verified = (
             isinstance(expected_frontend_build, dict)
             and expected_frontend_build == actual_frontend_build
@@ -72,6 +84,7 @@ def read_release_identity(path: Path | None = None) -> dict[str, Any]:
             "critical_file_hashes": actual_hashes,
             "frontend_build_verified": frontend_build_verified,
             "frontend_build": actual_frontend_build,
+            "frontend_reproducibility": embedded_frontend_reproducibility,
         }
     except Exception:
         return {
@@ -85,6 +98,7 @@ def read_release_identity(path: Path | None = None) -> dict[str, Any]:
             "critical_file_hashes": {},
             "frontend_build_verified": False,
             "frontend_build": None,
+            "frontend_reproducibility": None,
         }
 
 

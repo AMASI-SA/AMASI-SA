@@ -16,6 +16,7 @@ if str(BACKEND_ROOT) not in sys.path:
 from frontend_build_identity import (  # noqa: E402
     FrontendBuildIdentityError,
     read_frontend_build_identity,
+    read_frontend_reproducibility_proof,
 )
 
 
@@ -28,10 +29,16 @@ def main() -> int:
             expected_git_sha=args.expected_git_sha.strip().lower(),
             require_git_source=True,
         )
+        reproducibility = read_frontend_reproducibility_proof(
+            frontend_build=identity
+        )
     except FrontendBuildIdentityError as exc:
         print(f"FRONTEND_BUILD_REFUSED: {exc}", file=sys.stderr)
         return 2
-    print(json.dumps(identity, ensure_ascii=False, indent=2))
+    print(json.dumps({
+        "frontend_build": identity,
+        "frontend_reproducibility": reproducibility,
+    }, ensure_ascii=False, indent=2))
     return 0
 
 

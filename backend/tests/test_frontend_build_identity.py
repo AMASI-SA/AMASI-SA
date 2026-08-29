@@ -55,7 +55,11 @@ class FrontendBuildIdentityTests(unittest.TestCase):
         (assets / "app.js").write_text("console.log('app');\n", encoding="utf-8")
         (assets / "lazy.js").write_text("console.log('lazy');\n", encoding="utf-8")
         (assets / "style.css").write_text("body{}\n", encoding="utf-8")
-        (build_root / "sw.js").write_text("self.skipWaiting();\n", encoding="utf-8")
+        retirement_worker = (
+            identity.FRONTEND_ROOT / "public" / "sw.js"
+        ).read_bytes()
+        (build_root / "sw.js").write_bytes(retirement_worker)
+        (build_root / "service-worker.js").write_bytes(retirement_worker)
         (build_root / "favicon.svg").write_text("<svg/>\n", encoding="utf-8")
         (build_root / "manifest.webmanifest").write_text("{}\n", encoding="utf-8")
         (well_known / "security.txt").write_text("Contact: /\n", encoding="utf-8")
@@ -139,6 +143,7 @@ class FrontendBuildIdentityTests(unittest.TestCase):
         public_paths = [row["path"] for row in result["public_files"]]
         self.assertIn("assets/lazy.js", public_paths)
         self.assertIn("sw.js", public_paths)
+        self.assertIn("service-worker.js", public_paths)
         self.assertIn("favicon.svg", public_paths)
         self.assertIn("manifest.webmanifest", public_paths)
         self.assertIn(".well-known/security.txt", public_paths)
@@ -147,19 +152,96 @@ class FrontendBuildIdentityTests(unittest.TestCase):
         self.assertEqual(result["build_meta"]["path"], "build-meta.json")
 
     def test_dynamic_asset_and_service_worker_drift_fail_closed(self):
-        for relative in ("assets/lazy.js", "sw.js"):
+        for relative in ("assets/lazy.js", "sw.js", "service-worker.js"):
             with self.subTest(relative=relative), tempfile.TemporaryDirectory() as tmp:
                 frontend_root, build_root = self._fixture(Path(tmp))
                 (build_root / relative).write_text("changed\n", encoding="utf-8")
                 with self.assertRaisesRegex(
                     identity.FrontendBuildIdentityError,
-                    "metadata does not match",
+                    "metadata does not match|retirement service worker is missing or invalid",
                 ):
                     identity.read_frontend_build_identity(
                         frontend_root=frontend_root,
                         build_root=build_root,
                         expected_git_sha="a" * 40,
                     )
+
+    def test_reproducibility_proof_must_match_retained_build_b(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            frontend_root, build_root = self._fixture(Path(tmp))
+            frontend_build = identity.read_frontend_build_identity(
+                frontend_root=frontend_root,
+                build_root=build_root,
+                expected_git_sha="a" * 40,
+            )
+            proof_path = frontend_root / ".release" / "reproducible-build.json"
+            proof_path.parent.mkdir()
+            proof = {
+                "schema_version": 1,
+                "kind": "frontend_two_clean_builds_v1",
+                "git_sha": frontend_build["git_sha"],
+                "source": frontend_build["source"],
+                "toolchain": frontend_build["toolchain"],
+                "environment": frontend_build["environment"],
+                "passes": [
+                    {
+                        "ordinal": ordinal,
+                        "build_meta": frontend_build["build_meta"],
+                        "artifact_tree_sha256": frontend_build[
+                            "artifact_tree_sha256"
+                        ],
+                    }
+                    for ordinal in (1, 2)
+                ],
+                "retained_pass": 2,
+            }
+            proof_path.write_text(json.dumps(proof), encoding="utf-8")
+            result = identity.read_frontend_reproducibility_proof(
+                frontend_build=frontend_build,
+                proof_path=proof_path,
+            )
+            self.assertEqual(
+                result["passes"][1]["artifact_tree_sha256"],
+                frontend_build["artifact_tree_sha256"],
+            )
+            self.assertEqual(
+                result["proof_file"]["sha256"],
+                identity._sha256(proof_path),
+            )
+
+            proof["passes"][1]["artifact_tree_sha256"] = "0" * 64
+            proof_path.write_text(json.dumps(proof), encoding="utf-8")
+            with self.assertRaisesRegex(
+                identity.FrontendBuildIdentityError,
+                "does not match retained build",
+            ):
+                identity.read_frontend_reproducibility_proof(
+                    frontend_build=frontend_build,
+                    proof_path=proof_path,
+                )
+
+    def test_reproducibility_proof_symlink_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            frontend_root, build_root = self._fixture(Path(tmp))
+            frontend_build = identity.read_frontend_build_identity(
+                frontend_root=frontend_root,
+                build_root=build_root,
+                expected_git_sha="a" * 40,
+            )
+            proof_root = frontend_root / ".release"
+            proof_root.mkdir()
+            target = proof_root / "target.json"
+            target.write_text("{}\n", encoding="utf-8")
+            proof_path = proof_root / "reproducible-build.json"
+            proof_path.symlink_to(target)
+            with self.assertRaisesRegex(
+                identity.FrontendBuildIdentityError,
+                "cannot read frontend reproducibility proof",
+            ):
+                identity.read_frontend_reproducibility_proof(
+                    frontend_build=frontend_build,
+                    proof_path=proof_path,
+                )
 
     def test_external_stylesheet_is_ignored_but_external_script_is_rejected(self):
         self.assertIsNone(

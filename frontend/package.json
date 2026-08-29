@@ -67,7 +67,7 @@
   },
   "scripts": {
     "start": "vite --host 0.0.0.0",
-    "build": "node scripts/build-frontend.cjs",
+    "build": "node scripts/build-release-frontend.cjs",
     "preview": "vite preview --host 0.0.0.0",
     "test": "react-scripts test"
   },

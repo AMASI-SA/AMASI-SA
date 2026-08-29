@@ -56,25 +56,17 @@ jobs:
       - name: Install frontend dependencies
         run: yarn install --frozen-lockfile --non-interactive
       - name: Test governed frontend build contract
-        run: yarn node --test scripts/build-contract.test.cjs
-      - name: Build production frontend
+        run: >-
+          yarn node --test
+          scripts/build-contract.test.cjs
+          scripts/build-release-frontend.test.cjs
+          scripts/service-worker-retirement.test.cjs
+      - name: Build production frontend twice and retain verified build B
         env:
           CI: "false"
         run: yarn build
-      - name: Verify deterministic frontend artifact identity
+      - name: Verify retained frontend artifact and reproducibility proof
         run: python ../scripts/verify_frontend_build.py --expected-git-sha "$GITHUB_SHA"
-      - name: Preserve first frontend build identity
-        run: cp build/build-meta.json "$RUNNER_TEMP/frontend-build-meta-first.json"
-      - name: Rebuild from a clean frontend output
-        env:
-          CI: "false"
-        run: |
-          rm -rf build node_modules/.vite
-          yarn build
-      - name: Require byte-identical repeated frontend build identity
-        run: |
-          cmp "$RUNNER_TEMP/frontend-build-meta-first.json" build/build-meta.json
-          python ../scripts/verify_frontend_build.py --expected-git-sha "$GITHUB_SHA"
 
   release-handoff:
     name: Emergent manual redeploy required
@@ -96,7 +88,7 @@ jobs:
 
           Mandatory production path from the shared `/app` workspace:
           1. Fast-forward `/app` to `origin/hotfix/prod-snap-meta-final`.
-          2. In `/app/frontend`, activate Node 22.23.2 and Yarn 1.22.22, run a frozen install, delete `build` and `node_modules/.vite`, then run `yarn build`.
+          2. In `/app/frontend`, activate Node 22.23.2 and Yarn 1.22.22, run a frozen install, then run `yarn build`; it performs clean A/B builds, retains B, and writes the ignored reproducibility proof required by the guard.
           3. Run `python scripts/production_release_guard.py prepare --actor "<conversation>"`.
           4. Run `python scripts/production_release_guard.py prepublish` immediately before publishing.
           5. In the same project choose **Manage Publishing → Re-publish changes** exactly once.

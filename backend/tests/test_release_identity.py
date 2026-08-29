@@ -22,8 +22,38 @@ class ReleaseIdentityTests(unittest.TestCase):
             "artifact_tree_sha256": "f" * 64,
         }
 
+    @staticmethod
+    def _frontend_reproducibility(frontend_build):
+        build_pass = {
+            "build_meta": frontend_build.get("build_meta"),
+            "artifact_tree_sha256": frontend_build[
+                "artifact_tree_sha256"
+            ],
+        }
+        return {
+            "schema_version": 1,
+            "kind": "frontend_two_clean_builds_v1",
+            "git_sha": frontend_build["git_sha"],
+            "source": frontend_build.get("source"),
+            "toolchain": frontend_build.get("toolchain"),
+            "environment": frontend_build.get("environment"),
+            "passes": [
+                {"ordinal": 1, **build_pass},
+                {"ordinal": 2, **build_pass},
+            ],
+            "retained_pass": 2,
+            "proof_file": {
+                "path": "frontend/.release/reproducible-build.json",
+                "bytes": 100,
+                "sha256": "e" * 64,
+            },
+        }
+
     def test_valid_identity_is_public_and_exact(self):
         frontend_build = self._frontend_build()
+        frontend_reproducibility = self._frontend_reproducibility(
+            frontend_build
+        )
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "release_identity.json"
             path.write_text(json.dumps({
@@ -40,6 +70,7 @@ class ReleaseIdentityTests(unittest.TestCase):
                     for relative in CRITICAL_FILES
                 },
                 "frontend_build": frontend_build,
+                "frontend_reproducibility": frontend_reproducibility,
             }), encoding="utf-8")
 
             with patch(
@@ -59,10 +90,18 @@ class ReleaseIdentityTests(unittest.TestCase):
         self.assertTrue(result["critical_file_hashes_match"])
         self.assertTrue(result["frontend_build_verified"])
         self.assertEqual(result["frontend_build"], frontend_build)
+        self.assertEqual(
+            result["frontend_reproducibility"],
+            frontend_reproducibility,
+        )
         frontend_reader.assert_called_once_with(expected_git_sha="a" * 40)
 
     def test_frontend_identity_mismatch_is_exposed_fail_closed(self):
         frontend_build = self._frontend_build()
+        expected_frontend_build = {**frontend_build, "git_sha": "b" * 40}
+        frontend_reproducibility = self._frontend_reproducibility(
+            expected_frontend_build
+        )
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "release_identity.json"
             path.write_text(json.dumps({
@@ -77,7 +116,8 @@ class ReleaseIdentityTests(unittest.TestCase):
                     ).hexdigest()
                     for relative in CRITICAL_FILES
                 },
-                "frontend_build": {**frontend_build, "git_sha": "b" * 40},
+                "frontend_build": expected_frontend_build,
+                "frontend_reproducibility": frontend_reproducibility,
             }), encoding="utf-8")
 
             with patch(
@@ -109,7 +149,7 @@ class ReleaseIdentityTests(unittest.TestCase):
         self.assertFalse(invalid_release_id["verified_identity_available"])
         self.assertIsNone(invalid_release_id["release_id"])
 
-    def test_legacy_identity_is_rejected_after_v3_protocol_upgrade(self):
+    def test_legacy_identity_is_rejected_after_v4_protocol_upgrade(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "legacy-v1-release-identity.json"
             path.write_text(
@@ -128,7 +168,7 @@ class ReleaseIdentityTests(unittest.TestCase):
 
             result = read_release_identity(path)
 
-        self.assertEqual(RELEASE_PROTOCOL_VERSION, 3)
+        self.assertEqual(RELEASE_PROTOCOL_VERSION, 4)
         self.assertFalse(result["verified_identity_available"])
         self.assertIsNone(result["release_id"])
         self.assertEqual(result["protocol_version"], RELEASE_PROTOCOL_VERSION)

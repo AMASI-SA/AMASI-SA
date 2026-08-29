@@ -46,6 +46,15 @@ class _Response:
 
 
 class ProductionReleaseGuardTests(unittest.TestCase):
+    def setUp(self):
+        reproducibility = patch.object(
+            guard,
+            "_frontend_reproducibility_proof",
+            side_effect=self._frontend_reproducibility,
+        )
+        reproducibility.start()
+        self.addCleanup(reproducibility.stop)
+
     @staticmethod
     def _frontend_build():
         index = {
@@ -58,6 +67,17 @@ class ProductionReleaseGuardTests(unittest.TestCase):
             "bytes": 3,
             "sha256": hashlib.sha256(b"app").hexdigest(),
         }
+        retirement_bytes = (
+            guard.REPO_ROOT / "frontend" / "public" / "sw.js"
+        ).read_bytes()
+        retirement_workers = [
+            {
+                "path": path,
+                "bytes": len(retirement_bytes),
+                "sha256": hashlib.sha256(retirement_bytes).hexdigest(),
+            }
+            for path in ("service-worker.js", "sw.js")
+        ]
         return {
             "schema_version": 1,
             "git_sha": "a" * 40,
@@ -90,7 +110,10 @@ class ProductionReleaseGuardTests(unittest.TestCase):
             "index": index,
             "entrypoints": [],
             "assets": [app],
-            "public_files": [app, index],
+            "public_files": sorted(
+                [app, index, *retirement_workers],
+                key=lambda row: row["path"],
+            ),
             "artifact_tree_sha256": "3" * 64,
             "build_meta": {
                 "path": "build-meta.json",
@@ -101,6 +124,7 @@ class ProductionReleaseGuardTests(unittest.TestCase):
 
     @staticmethod
     def _lease_payload():
+        frontend_build = ProductionReleaseGuardTests._frontend_build()
         return {
             "release_id": "9d7a9a23-1f46-44a8-a0d0-851a71e15af6",
             "git_sha": "a" * 40,
@@ -113,7 +137,39 @@ class ProductionReleaseGuardTests(unittest.TestCase):
                 "integrations/qoyod_manual/routes.py": "c" * 64,
                 "integrations/qoyod_manual/send.py": "d" * 64,
             },
-            "frontend_build": ProductionReleaseGuardTests._frontend_build(),
+            "frontend_build": frontend_build,
+            "frontend_reproducibility": (
+                ProductionReleaseGuardTests._frontend_reproducibility(
+                    frontend_build
+                )
+            ),
+        }
+
+    @staticmethod
+    def _frontend_reproducibility(frontend_build):
+        build_pass = {
+            "build_meta": frontend_build["build_meta"],
+            "artifact_tree_sha256": frontend_build[
+                "artifact_tree_sha256"
+            ],
+        }
+        return {
+            "schema_version": 1,
+            "kind": "frontend_two_clean_builds_v1",
+            "git_sha": frontend_build["git_sha"],
+            "source": frontend_build["source"],
+            "toolchain": frontend_build["toolchain"],
+            "environment": frontend_build["environment"],
+            "passes": [
+                {"ordinal": 1, **build_pass},
+                {"ordinal": 2, **build_pass},
+            ],
+            "retained_pass": 2,
+            "proof_file": {
+                "path": "frontend/.release/reproducible-build.json",
+                "bytes": 100,
+                "sha256": "e" * 64,
+            },
         }
 
     @staticmethod
@@ -129,6 +185,9 @@ class ProductionReleaseGuardTests(unittest.TestCase):
             "critical_file_hashes": lease["critical_file_hashes"],
             "frontend_build_verified": True,
             "frontend_build": lease["frontend_build"],
+            "frontend_reproducibility": lease[
+                "frontend_reproducibility"
+            ],
             "boot_started_at": boot_started_at,
         }
         release.update(release_updates)
@@ -307,8 +366,8 @@ class ProductionReleaseGuardTests(unittest.TestCase):
             "script",
         )
 
-    def test_release_protocol_is_v3(self):
-        self.assertEqual(guard.PROTOCOL_VERSION, 3)
+    def test_release_protocol_is_v4(self):
+        self.assertEqual(guard.PROTOCOL_VERSION, 4)
 
     def test_local_release_checks_require_clean_git_source_proof(self):
         proof = self._frontend_build()
@@ -587,22 +646,21 @@ class ProductionReleaseGuardTests(unittest.TestCase):
             "bytes": 4,
             "sha256": hashlib.sha256(b"lazy").hexdigest(),
         }
-        service_worker = {
-            "path": "sw.js",
-            "bytes": 2,
-            "sha256": hashlib.sha256(b"sw").hexdigest(),
-        }
         expected["assets"].append(lazy)
         expected["public_files"] = sorted(
-            [*expected["public_files"], lazy, service_worker],
+            [*expected["public_files"], lazy],
             key=lambda row: row["path"],
         )
+        retirement = (
+            guard.REPO_ROOT / "frontend" / "public" / "sw.js"
+        ).read_bytes()
         payloads = {
             "/build-meta.json": b"meta",
             "/index.html": b"index",
             "/assets/app.js": b"app",
             "/assets/lazy.js": b"lazy",
-            "/sw.js": b"sw",
+            "/sw.js": retirement,
+            "/service-worker.js": retirement,
             "/": b"index",
             guard.SPA_SHELL_PATH: b"index",
         }
@@ -615,21 +673,16 @@ class ProductionReleaseGuardTests(unittest.TestCase):
             cache_bust,
             accept,
             timeout,
-            allowed_statuses=frozenset({200}),
             service_worker_script=False,
         ):
             calls.append((relative, cache_bust, accept, timeout))
-            if relative == "/service-worker.js":
-                self.assertIn(404, allowed_statuses)
-                self.assertTrue(service_worker_script)
-                return {"status": 404, "body": b"", "headers": {}}
             self.assertEqual(
                 service_worker_script,
-                relative == "/sw.js",
+                relative in guard.STANDARD_SERVICE_WORKER_PATHS,
             )
             content_type = (
                 "application/javascript"
-                if relative == "/sw.js"
+                if service_worker_script
                 else "text/html; charset=utf-8"
             )
             return {
@@ -637,10 +690,13 @@ class ProductionReleaseGuardTests(unittest.TestCase):
                 "body": payloads[relative],
                 "headers": {
                     "content-type": content_type,
-                    "cache-control": "no-cache, no-store, must-revalidate",
+                    "cache-control": (
+                        "no-cache, no-store, must-revalidate, max-age=0"
+                    ),
                     "etag": '"fixture"',
                     "age": "0",
                     "cf-cache-status": "DYNAMIC",
+                    "x-content-type-options": "nosniff",
                 },
             }
 
@@ -655,116 +711,76 @@ class ProductionReleaseGuardTests(unittest.TestCase):
 
         self.assertEqual(
             len(result["checked_requests"]),
-            len(payloads) * 2 + 2,
+            len(payloads) * 2,
         )
-        self.assertEqual(len(calls), len(payloads) * 2 + 2)
+        self.assertEqual(len(calls), len(payloads) * 2)
         self.assertIn(("/sw.js", False, "*/*", 30), calls)
         self.assertIn(("/sw.js", True, "*/*", 30), calls)
+        self.assertIn(("/service-worker.js", False, "*/*", 30), calls)
+        self.assertIn(("/service-worker.js", True, "*/*", 30), calls)
         self.assertEqual(
             [row["path"] for row in result["shell_cache"]],
             ["/index.html", "/", guard.SPA_SHELL_PATH],
         )
         self.assertEqual(
             [(row["path"], row["state"]) for row in result["service_workers"]],
-            [("/sw.js", "registered"), ("/service-worker.js", "not_found")],
+            [
+                ("/service-worker.js", "retirement_payload_present"),
+                ("/sw.js", "retirement_payload_present"),
+            ],
         )
 
-    def test_unregistered_orphan_service_worker_fails_closed(self):
+    def test_missing_or_modified_retirement_worker_fails_closed_before_fetch(self):
         expected = self._frontend_build()
-        payloads = {
-            "/build-meta.json": b"meta",
-            "/index.html": b"index",
-            "/assets/app.js": b"app",
-            "/": b"index",
-            guard.SPA_SHELL_PATH: b"index",
-        }
-
-        def fetch(
-            _origin,
-            relative,
-            *,
-            cache_bust,
-            allowed_statuses=frozenset({200}),
-            **_kwargs,
-        ):
-            if relative == "/sw.js":
-                self.assertIn(404, allowed_statuses)
-                self.assertTrue(_kwargs["service_worker_script"])
-                return {
-                    "status": 200,
-                    "body": b"old-worker",
-                    "headers": {
-                        "content-type": "application/javascript",
-                        "cache-control": "no-cache",
-                    },
-                }
-            if relative == "/service-worker.js":
-                self.assertTrue(_kwargs["service_worker_script"])
-                return {"status": 404, "body": b"", "headers": {}}
-            return {
-                "status": 200,
-                "body": payloads[relative],
-                "headers": {
-                    "content-type": "text/html",
-                    "cache-control": "no-cache, no-store, must-revalidate",
-                },
-            }
-
-        with patch.object(
-            guard, "_fetch_production", side_effect=fetch
-        ), self.assertRaisesRegex(
+        expected["public_files"] = [
+            row for row in expected["public_files"] if row["path"] != "sw.js"
+        ]
+        with patch.object(guard, "_fetch_production") as fetch, self.assertRaisesRegex(
             guard.ReleaseGuardError,
-            "deployed frontend SHA mismatch",
+            "retirement service worker is missing or invalid",
         ):
             guard._verify_public_frontend(guard.PRODUCTION_ORIGIN, expected)
+        fetch.assert_not_called()
 
-    def test_unregistered_service_worker_paths_accept_404_or_exact_spa_shell(self):
         expected = self._frontend_build()
-        payloads = {
-            "/build-meta.json": b"meta",
-            "/index.html": b"index",
-            "/assets/app.js": b"app",
-            "/": b"index",
-            guard.SPA_SHELL_PATH: b"index",
-        }
-
-        def fetch(
-            _origin,
-            relative,
-            *,
-            cache_bust,
-            allowed_statuses=frozenset({200}),
-            **_kwargs,
-        ):
-            if relative == "/sw.js":
-                self.assertIn(404, allowed_statuses)
-                self.assertTrue(_kwargs["service_worker_script"])
-                return {"status": 404, "body": b"", "headers": {}}
-            if relative == "/service-worker.js":
-                self.assertTrue(_kwargs["service_worker_script"])
-                body = b"index"
-            else:
-                body = payloads[relative]
-            return {
-                "status": 200,
-                "body": body,
-                "headers": {
-                    "content-type": "text/html; charset=utf-8",
-                    "cache-control": "no-cache, no-store, must-revalidate",
-                    "age": "0",
-                    "cf-cache-status": "DYNAMIC",
-                },
-            }
-
-        with patch.object(guard, "_fetch_production", side_effect=fetch):
-            result = guard._verify_public_frontend(
-                guard.PRODUCTION_ORIGIN, expected
-            )
-
-        self.assertEqual(
-            [(row["path"], row["state"]) for row in result["service_workers"]],
-            [("/sw.js", "not_found"), ("/service-worker.js", "spa_shell")],
+        worker = next(
+            row for row in expected["public_files"] if row["path"] == "sw.js"
         )
+        worker["sha256"] = "0" * 64
+        with patch.object(guard, "_fetch_production") as fetch, self.assertRaisesRegex(
+            guard.ReleaseGuardError,
+            "retirement service worker is missing or invalid",
+        ):
+            guard._verify_public_frontend(guard.PRODUCTION_ORIGIN, expected)
+        fetch.assert_not_called()
+
+    def test_retirement_worker_mime_and_cache_are_fail_closed(self):
+        safe = {
+            "headers": {
+                "content-type": "application/javascript; charset=utf-8",
+                "cache-control": "no-cache, no-store, must-revalidate, max-age=0",
+                "x-content-type-options": "nosniff",
+                "age": "0",
+                "cf-cache-status": "DYNAMIC",
+            }
+        }
+        result = guard._assert_service_worker_headers(safe, "/sw.js")
+        self.assertEqual(result["state"], "retirement_payload_present")
+
+        unsafe_headers = (
+            {**safe["headers"], "content-type": "text/html"},
+            {**safe["headers"], "x-content-type-options": ""},
+            {**safe["headers"], "cache-control": "no-cache, max-age=0"},
+            {**safe["headers"], "age": "10"},
+            {**safe["headers"], "cf-cache-status": "HIT"},
+        )
+        for headers in unsafe_headers:
+            with self.subTest(headers=headers), self.assertRaises(
+                guard.ReleaseGuardError
+            ):
+                guard._assert_service_worker_headers(
+                    {"headers": headers}, "/sw.js"
+                )
 
     def test_public_frontend_rejects_unsafe_or_duplicate_public_path(self):
         expected = self._frontend_build()
@@ -793,7 +809,7 @@ class ProductionReleaseGuardTests(unittest.TestCase):
         expected = self._frontend_build()
 
         def stale_shell(_origin, relative, *, cache_bust, **_kwargs):
-            body = b"stale" if relative == "/" and not cache_bust else {
+            body = b"stale" if relative == "/index.html" and not cache_bust else {
                 "/": b"index",
                 "/index.html": b"index",
                 guard.SPA_SHELL_PATH: b"index",
@@ -878,6 +894,23 @@ class ProductionReleaseGuardTests(unittest.TestCase):
         with self.assertRaisesRegex(
             guard.ReleaseGuardError,
             "prepared frontend build proof is missing",
+        ):
+            guard._validated_release_lease(lease)
+
+    def test_release_lease_without_reproducibility_proof_is_rejected(self):
+        lease = {**self._lease_payload(), "frontend_reproducibility": None}
+        with self.assertRaisesRegex(
+            guard.ReleaseGuardError,
+            "prepared frontend reproducibility proof is missing",
+        ):
+            guard._validated_release_lease(lease)
+
+    def test_release_lease_with_mismatched_reproducibility_proof_is_rejected(self):
+        lease = self._lease_payload()
+        lease["frontend_reproducibility"]["retained_pass"] = 1
+        with self.assertRaisesRegex(
+            guard.ReleaseGuardError,
+            "prepared frontend reproducibility proof is invalid",
         ):
             guard._validated_release_lease(lease)
 
@@ -1043,6 +1076,107 @@ class ProductionReleaseGuardTests(unittest.TestCase):
             self.assertEqual(
                 json.loads(lease_path.read_text(encoding="utf-8")),
                 lease,
+            )
+
+    def test_prepare_reproducibility_double_read_drift_removes_lease(self):
+        frontend = self._frontend_build()
+        first = self._frontend_reproducibility(frontend)
+        second = {
+            **first,
+            "proof_file": {**first["proof_file"], "sha256": "9" * 64},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            lease_dir = Path(tmp) / "release.lock"
+            lease_path = lease_dir / "lease.json"
+            identity_path = Path(tmp) / "release_identity.json"
+
+            def git_result(*args):
+                if args == ("branch", "--show-current"):
+                    return guard.PRODUCTION_BRANCH
+                if args == ("status", "--porcelain", "--untracked-files=no"):
+                    return ""
+                if args == ("fetch", "origin", guard.PRODUCTION_BRANCH):
+                    return ""
+                if args[0] == "rev-parse":
+                    return frontend["git_sha"]
+                raise AssertionError(f"unexpected git call: {args!r}")
+
+            with patch.object(guard, "LEASE_DIR", lease_dir), patch.object(
+                guard, "LEASE_PATH", lease_path
+            ), patch.object(
+                guard, "IDENTITY_PATH", identity_path
+            ), patch.object(
+                guard, "_run_git", side_effect=git_result
+            ), patch.object(
+                guard, "_critical_hashes",
+                return_value=self._lease_payload()["critical_file_hashes"],
+            ), patch.object(
+                guard, "_frontend_build_identity", return_value=frontend
+            ), patch.object(
+                guard,
+                "_frontend_reproducibility_proof",
+                side_effect=[first, second],
+            ), self.assertRaisesRegex(
+                guard.ReleaseGuardError,
+                "frontend source, critical files, or build changed while preparing",
+            ):
+                guard._prepare_locked("test")
+
+            self.assertFalse(lease_dir.exists())
+            self.assertFalse(identity_path.exists())
+
+    def test_prepublish_reproducibility_double_read_drift_preserves_lease(self):
+        lease = self._lease_payload()
+        first = lease["frontend_reproducibility"]
+        second = {
+            **first,
+            "proof_file": {**first["proof_file"], "sha256": "9" * 64},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            lease_dir = Path(tmp) / "release.lock"
+            lease_dir.mkdir()
+            lease_path = lease_dir / "lease.json"
+            identity_path = Path(tmp) / "release_identity.json"
+            lease_path.write_text(json.dumps(lease), encoding="utf-8")
+            identity_path.write_text(json.dumps(lease), encoding="utf-8")
+
+            def git_result(*args):
+                if args == ("branch", "--show-current"):
+                    return guard.PRODUCTION_BRANCH
+                if args == ("status", "--porcelain", "--untracked-files=no"):
+                    return ""
+                if args == ("fetch", "origin", guard.PRODUCTION_BRANCH):
+                    return ""
+                if args[0] == "rev-parse":
+                    return lease["git_sha"]
+                raise AssertionError(f"unexpected git call: {args!r}")
+
+            with patch.object(guard, "LEASE_DIR", lease_dir), patch.object(
+                guard, "LEASE_PATH", lease_path
+            ), patch.object(
+                guard, "IDENTITY_PATH", identity_path
+            ), patch.object(
+                guard, "_run_git", side_effect=git_result
+            ), patch.object(
+                guard, "_critical_hashes",
+                return_value=lease["critical_file_hashes"],
+            ), patch.object(
+                guard,
+                "_frontend_build_identity",
+                return_value=lease["frontend_build"],
+            ), patch.object(
+                guard,
+                "_frontend_reproducibility_proof",
+                side_effect=[first, second],
+            ), self.assertRaisesRegex(
+                guard.ReleaseGuardError,
+                "frontend source, critical files, or build changed during prepublish",
+            ):
+                guard.prepublish()
+
+            self.assertTrue(lease_dir.exists())
+            self.assertEqual(
+                json.loads(lease_path.read_text(encoding="utf-8")), lease
             )
 
     def test_prepare_critical_file_double_read_drift_removes_lease_without_identity(self):
@@ -1304,8 +1438,8 @@ class ProductionReleaseGuardTests(unittest.TestCase):
             )
             self.assertFalse(lease_dir.exists())
 
-    def test_abort_refuses_legacy_v1_lease_without_removing_it(self):
-        lease = {**self._lease_payload(), "protocol_version": 1}
+    def test_abort_refuses_v3_lease_and_requires_its_original_guard(self):
+        lease = {**self._lease_payload(), "protocol_version": 3}
         with tempfile.TemporaryDirectory() as tmp:
             lease_dir = Path(tmp) / "release.lock"
             lease_dir.mkdir()
@@ -1315,7 +1449,7 @@ class ProductionReleaseGuardTests(unittest.TestCase):
                 guard, "LEASE_PATH", lease_path
             ), self.assertRaisesRegex(
                 guard.ReleaseGuardError,
-                "abort the existing lease with its original guard",
+                "abort the existing lease with its original guard.*protocol v4",
             ):
                 guard.abort(lease["git_sha"], lease["release_id"])
 

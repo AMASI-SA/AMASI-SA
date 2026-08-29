@@ -3,13 +3,13 @@
 Production is a shared Emergent workspace. Multiple conversations can safely
 prepare code, but only one may own an active production release.
 
-The current guard and embedded identity use protocol v3. A v3 release binds
+The current guard and embedded identity use protocol v4. A v4 release binds
 the backend SHA and critical files to the exact built frontend `index.html`,
 every meaningful public build file (including future service workers), the
 complete Git HEAD `frontend/**` source tree, the governed client environment,
 the dependency lock, and the exact Node/Yarn toolchain. A lease prepared by an older guard must be aborted by its owner
-with that original guard before `/app` is updated. Never reuse a v1/v2 lease
-or identity with the v3 guard.
+with that original guard before `/app` is updated. Never reuse a v1/v2/v3 lease
+or identity with the v4 guard.
 
 ## Prepare
 
@@ -24,14 +24,22 @@ nvm use 22.23.2
 corepack enable
 corepack prepare yarn@1.22.22 --activate
 yarn install --frozen-lockfile --non-interactive
-rm -rf build node_modules/.vite
 yarn build
 ```
 
-`yarn build` first proves that every tracked file below `frontend/` matches the
-exact Git HEAD tree, then repeats the source and governed-environment proof
-after Vite finishes. Any tracked, untracked non-ignored, mode, blob, or
-mid-build drift fails closed. It writes deterministic
+`yarn build` is the release build. It removes only the previous governed proof,
+performs two clean builds (A, then B), requires the two complete
+`build-meta.json` files to be byte-identical, and leaves B in
+`frontend/build`. Each pass proves that every tracked file below `frontend/`
+matches the exact Git HEAD tree before and after Vite. Any tracked, untracked
+non-ignored, mode, blob, or mid-build drift fails closed. A mismatch or either
+failed pass removes the proof, so `prepare` and `prepublish` refuse the release.
+The successful build atomically writes the ignored, path-specific
+`frontend/.release/reproducible-build.json`; its normalized content and its own
+SHA256/byte count are bound into the release lease. Do not copy a proof from
+another checkout or build.
+
+Each retained B writes deterministic
 `frontend/build/build-meta.json` without a wall-clock timestamp and records
 Node 22.23.2, Yarn 1.22.22, the complete source-tree digest, hashed values for
 the allowlisted public client environment only, `index.html`, and every build
@@ -44,9 +52,11 @@ metadata stores only the allowlisted value's presence and SHA256, plus proof
 that the effective build environment was production and contained no
 `VITE_USER_NODE_ENV` or other `VITE_*` keys.
 
-The Mezan Release Readiness workflow performs the clean build twice from the
-same checkout, frozen lock, toolchain, and governed environment, then requires
-the two complete `build-meta.json` files to be byte-identical.
+The Mezan Release Readiness workflow runs this same two-pass release build,
+validates the external reproducibility proof against retained B, and validates
+the full public artifact tree. The runtime health endpoint never depends on
+`.git` or the ignored proof file: it revalidates the packaged `build-meta.json`
+and artifact bytes and exposes the proof copy embedded by the guard.
 
 Only after that build succeeds, run:
 
@@ -65,6 +75,16 @@ Run the final race check immediately before using Emergent:
 python scripts/production_release_guard.py prepublish
 ```
 
+`prepublish` re-reads the Git/source/artifact/proof pair and leaves the lease
+active on every mismatch. The current Emergent flow still requires a separate
+manual button after this command; the guard cannot lock or content-address that
+external button's workspace. Therefore an A→B→A mutation, or any mutation
+after the final `prepublish` read and before the platform snapshots the
+workspace, is an explicit residual TOCTOU limitation. Keep this release Draft
+until reviewed, publish immediately after a successful check, and treat
+post-deployment `verify` as the mandatory closure. Do not claim `prepublish`
+alone proves what Emergent deployed.
+
 ## Publish and verify
 
 Use Emergent's **Re-publish changes** once. Wait for a newer explicit
@@ -80,14 +100,17 @@ restarted, is healthy, is running the prepared Git SHA and critical files,
 and publicly serves the exact prepared `build-meta.json`, canonical `/`,
 `/index.html`, the `/snapchat-accounts` SPA shell, and every meaningful public
 build file in both normal and cache-busted requests. Canonical HTML must carry
-the governed no-cache/no-store/must-revalidate policy. Standard service-worker
-paths are also fenced: a registered worker must match the artifact with a safe
-JavaScript MIME/cache policy, while an unregistered path must be a 404 or the
-exact current HTML shell, never orphan JavaScript. These probes include the
-`Service-Worker: script` request header and prove current server/CDN behavior;
-they do not claim to evict an incumbent registration from a previously visited
-browser. Any legacy client-registration retirement is a separate controlled
-rollout. Verification is pinned
+the governed no-cache/no-store/must-revalidate policy. Both standard
+service-worker paths (`/sw.js` and `/service-worker.js`) are required public
+files with identical, exact retirement-worker bytes. The workers install,
+claim clients when possible, unregister themselves, install no `fetch` handler,
+and do not delete origin-wide caches. Both canonical and cache-busted probes
+must return the exact bytes with JavaScript MIME,
+`no-cache, no-store, must-revalidate, max-age=0`, zero/absent `Age`, and no
+unsafe Cloudflare cache state. The probes include the `Service-Worker: script`
+request header. This proves the retirement payload is publicly available; a
+previously visited browser completes retirement only when it next updates the
+registration. Verification is pinned
 to `https://mezansalla.com`; another origin is refused. Until then, no
 financial or other irreversible production action is allowed. Any frontend
 mismatch leaves the lease active.

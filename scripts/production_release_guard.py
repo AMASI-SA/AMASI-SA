@@ -30,7 +30,11 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from frontend_build_identity import (  # noqa: E402
     FrontendBuildIdentityError,
+    RETIREMENT_SERVICE_WORKER_BYTES,
+    RETIREMENT_SERVICE_WORKER_SHA256,
     read_frontend_build_identity,
+    read_frontend_reproducibility_proof,
+    validate_frontend_reproducibility_proof,
 )
 
 
@@ -38,7 +42,7 @@ PRODUCTION_BRANCH = "hotfix/prod-snap-meta-final"
 PRODUCTION_ORIGIN = "https://mezansalla.com"
 SPA_SHELL_PATH = "/snapchat-accounts"
 STANDARD_SERVICE_WORKER_PATHS = ("/sw.js", "/service-worker.js")
-PROTOCOL_VERSION = 3
+PROTOCOL_VERSION = 4
 BOOT_CLOCK_SKEW = timedelta(minutes=5)
 GIT_DIR = REPO_ROOT / ".git"
 LEASE_DIR = GIT_DIR / "mezan-production-release.lock"
@@ -97,6 +101,19 @@ def _frontend_build_identity(expected_git_sha: str) -> dict[str, Any]:
         )
     except FrontendBuildIdentityError as exc:
         raise ReleaseGuardError(f"frontend build proof failed: {exc}") from exc
+
+
+def _frontend_reproducibility_proof(
+    frontend_build: dict[str, Any],
+) -> dict[str, Any]:
+    try:
+        return read_frontend_reproducibility_proof(
+            frontend_build=frontend_build
+        )
+    except FrontendBuildIdentityError as exc:
+        raise ReleaseGuardError(
+            f"frontend reproducibility proof failed: {exc}"
+        ) from exc
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -173,6 +190,9 @@ def _prepare_locked(actor: str) -> dict[str, Any]:
                 f"local={local_sha} remote={remote_sha}"
             )
         frontend_build = _frontend_build_identity(local_sha)
+        frontend_reproducibility = _frontend_reproducibility_proof(
+            frontend_build
+        )
         critical_hashes = _critical_hashes()
         payload = {
             "release_id": str(uuid4()),
@@ -183,10 +203,13 @@ def _prepare_locked(actor: str) -> dict[str, Any]:
             "protocol_version": PROTOCOL_VERSION,
             "critical_file_hashes": critical_hashes,
             "frontend_build": frontend_build,
+            "frontend_reproducibility": frontend_reproducibility,
         }
         if (
             _run_git("rev-parse", "HEAD") != local_sha
             or _frontend_build_identity(local_sha) != frontend_build
+            or _frontend_reproducibility_proof(frontend_build)
+            != frontend_reproducibility
             or _critical_hashes() != critical_hashes
         ):
             raise ReleaseGuardError(
@@ -234,17 +257,24 @@ def _prepublish_locked() -> dict[str, Any]:
         )
     identity = _read_json(IDENTITY_PATH)
     frontend_build = _frontend_build_identity(expected_sha)
+    frontend_reproducibility = _frontend_reproducibility_proof(
+        frontend_build
+    )
     critical_hashes = _critical_hashes()
     if (
         identity != lease
         or identity.get("critical_file_hashes") != critical_hashes
         or identity.get("frontend_build") != frontend_build
+        or identity.get("frontend_reproducibility")
+        != frontend_reproducibility
     ):
         raise ReleaseGuardError(
             "release identity, critical files, or frontend build changed after prepare"
         )
     if (
         _frontend_build_identity(expected_sha) != frontend_build
+        or _frontend_reproducibility_proof(frontend_build)
+        != frontend_reproducibility
         or _critical_hashes() != critical_hashes
     ):
         raise ReleaseGuardError(
@@ -526,13 +556,21 @@ def _assert_service_worker_headers(
         raise ReleaseGuardError(
             f"production service worker MIME is invalid: {relative_path}"
         )
+    if headers.get("x-content-type-options", "").lower() != "nosniff":
+        raise ReleaseGuardError(
+            "production service worker must declare X-Content-Type-Options "
+            f"nosniff: {relative_path}"
+        )
     cache_control = headers.get("cache-control", "")
     directives = {
         part.strip().lower() for part in cache_control.split(",") if part.strip()
     }
-    if not ({"no-cache", "no-store"} & directives):
+    if not {"no-cache", "no-store", "must-revalidate"}.issubset(
+        directives
+    ):
         raise ReleaseGuardError(
-            f"production service worker must require revalidation: {relative_path}"
+            "production service worker cache policy must include no-cache, "
+            f"no-store, must-revalidate: {relative_path}"
         )
     if "immutable" in directives:
         raise ReleaseGuardError(
@@ -550,12 +588,33 @@ def _assert_service_worker_headers(
                 raise ReleaseGuardError(
                     f"production service worker cache age is positive: {relative_path}"
                 )
+    if "max-age=0" not in directives:
+        raise ReleaseGuardError(
+            f"production service worker must declare max-age=0: {relative_path}"
+        )
+    age = headers.get("age")
+    if age is not None:
+        try:
+            if int(age) != 0:
+                raise ReleaseGuardError(
+                    f"production service worker Age is non-zero: {relative_path}"
+                )
+        except ValueError as exc:
+            raise ReleaseGuardError(
+                f"production service worker Age is invalid: {relative_path}"
+            ) from exc
+    cf_cache_status = headers.get("cf-cache-status", "").upper()
+    if cf_cache_status in {"HIT", "STALE", "UPDATING"}:
+        raise ReleaseGuardError(
+            "production service worker was served from an unsafe Cloudflare "
+            f"cache state: {relative_path}={cf_cache_status}"
+        )
     return {
         "path": relative_path,
-        "state": "registered",
+        "state": "retirement_payload_present",
         "cache_control": cache_control,
         "etag": headers.get("etag"),
-        "age": headers.get("age"),
+        "age": age,
         "cf_cache_status": headers.get("cf-cache-status"),
         "content_type": headers.get("content-type"),
     }
@@ -598,6 +657,17 @@ def _verify_public_frontend(
         "/": index,
         SPA_SHELL_PATH: index,
     }
+    for relative_path in STANDARD_SERVICE_WORKER_PATHS:
+        record = records_by_request_path.get(relative_path)
+        if (
+            record is None
+            or record["bytes"] != RETIREMENT_SERVICE_WORKER_BYTES
+            or record["sha256"] != RETIREMENT_SERVICE_WORKER_SHA256
+        ):
+            raise ReleaseGuardError(
+                "prepared frontend retirement service worker is missing or "
+                f"invalid: {relative_path}"
+            )
     checked_requests = []
     shell_cache = []
     service_workers = []
@@ -631,50 +701,6 @@ def _verify_public_frontend(
                 if not cache_bust:
                     service_workers.append(service_worker)
 
-    registered_paths = set(records_by_request_path)
-    for relative_path in STANDARD_SERVICE_WORKER_PATHS:
-        if relative_path in registered_paths:
-            continue
-        observation = None
-        for cache_bust in (False, True):
-            response = _fetch_production(
-                origin,
-                relative_path,
-                cache_bust=cache_bust,
-                accept="*/*",
-                timeout=30,
-                allowed_statuses=frozenset({200, 404}),
-                service_worker_script=True,
-            )
-            label = relative_path + ("?release_check" if cache_bust else "")
-            checked_requests.append(label)
-            if response["status"] == 404:
-                current = {"path": relative_path, "state": "not_found"}
-            else:
-                _assert_public_bytes(response, expected=index, label=label)
-                content_type = response["headers"].get("content-type", "").lower()
-                if not content_type.startswith("text/html"):
-                    raise ReleaseGuardError(
-                        "unregistered production service worker path serves "
-                        f"non-HTML content: {relative_path}"
-                    )
-                current = {
-                    "path": relative_path,
-                    "state": "spa_shell",
-                    "content_type": response["headers"].get("content-type"),
-                }
-                if not cache_bust:
-                    current.update(
-                        _assert_html_shell_headers(response, relative_path)
-                    )
-            if observation is not None and observation["state"] != current["state"]:
-                raise ReleaseGuardError(
-                    "service worker absence differs between canonical and "
-                    f"cache-busted probes: {relative_path}"
-                )
-            if observation is None:
-                observation = current
-        service_workers.append(observation)
     return {
         "artifact_tree_sha256": expected.get("artifact_tree_sha256"),
         "checked_requests": checked_requests,
@@ -710,7 +736,7 @@ def _uuid4(value: Any, label: str) -> str:
 
 
 def _validated_release_lease(lease: dict[str, Any]) -> tuple[str, str]:
-    """Validate the exact v3 lease identity before any release mutation."""
+    """Validate the exact v4 lease identity before any release mutation."""
     try:
         protocol_version = int(lease.get("protocol_version") or 0)
     except (TypeError, ValueError) as exc:
@@ -729,6 +755,19 @@ def _validated_release_lease(lease: dict[str, Any]) -> tuple[str, str]:
     )
     if not isinstance(lease.get("frontend_build"), dict):
         raise ReleaseGuardError("prepared frontend build proof is missing")
+    if not isinstance(lease.get("frontend_reproducibility"), dict):
+        raise ReleaseGuardError(
+            "prepared frontend reproducibility proof is missing"
+        )
+    try:
+        validate_frontend_reproducibility_proof(
+            frontend_build=lease["frontend_build"],
+            proof=lease["frontend_reproducibility"],
+        )
+    except FrontendBuildIdentityError as exc:
+        raise ReleaseGuardError(
+            f"prepared frontend reproducibility proof is invalid: {exc}"
+        ) from exc
     return expected_sha, expected_release_id
 
 
@@ -783,6 +822,7 @@ def _verify_locked(base_url: str) -> dict[str, Any]:
         "protocol_version",
         "critical_file_hashes",
         "frontend_build",
+        "frontend_reproducibility",
     )
     expected_identity = {field: lease.get(field) for field in identity_fields}
     expected_identity["release_id"] = expected_release_id

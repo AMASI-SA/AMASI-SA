@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+import stat
 import subprocess
 from html.parser import HTMLParser
 from pathlib import Path, PurePosixPath
@@ -20,6 +22,14 @@ META_NAME = "build-meta.json"
 FRONTEND_ROOT = Path(__file__).resolve().parents[1] / "frontend"
 REPO_ROOT = FRONTEND_ROOT.parent
 DEFAULT_BUILD_ROOT = FRONTEND_ROOT / "build"
+DEFAULT_REPRODUCIBILITY_PROOF_PATH = (
+    FRONTEND_ROOT / ".release" / "reproducible-build.json"
+)
+RETIREMENT_SERVICE_WORKER_PATHS = ("service-worker.js", "sw.js")
+RETIREMENT_SERVICE_WORKER_BYTES = 574
+RETIREMENT_SERVICE_WORKER_SHA256 = (
+    "c81e48cc4257fc1af42c731588f47dfe3a784591bd60f1b603d46d3856f2cebd"
+)
 _FULL_GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
@@ -470,6 +480,105 @@ def _read_json(path: Path) -> dict[str, Any]:
     return payload
 
 
+def _expected_reproducibility_proof(
+    frontend_build: dict[str, Any],
+) -> dict[str, Any]:
+    build_meta = frontend_build.get("build_meta")
+    artifact_tree_sha256 = frontend_build.get("artifact_tree_sha256")
+    common_pass = {
+        "build_meta": build_meta,
+        "artifact_tree_sha256": artifact_tree_sha256,
+    }
+    return {
+        "schema_version": 1,
+        "kind": "frontend_two_clean_builds_v1",
+        "git_sha": frontend_build.get("git_sha"),
+        "source": frontend_build.get("source"),
+        "toolchain": frontend_build.get("toolchain"),
+        "environment": frontend_build.get("environment"),
+        "passes": [
+            {"ordinal": 1, **common_pass},
+            {"ordinal": 2, **common_pass},
+        ],
+        "retained_pass": 2,
+    }
+
+
+def validate_frontend_reproducibility_proof(
+    *,
+    frontend_build: dict[str, Any],
+    proof: Any,
+) -> dict[str, Any]:
+    """Validate an embedded two-build proof without filesystem or Git access."""
+    if not isinstance(frontend_build, dict):
+        raise FrontendBuildIdentityError(
+            "frontend build proof is invalid"
+        )
+    if not isinstance(proof, dict):
+        raise FrontendBuildIdentityError(
+            "frontend reproducibility proof is invalid"
+        )
+    proof_file = proof.get("proof_file")
+    records = _validated_build_records(
+        [proof_file], "frontend reproducibility proof file"
+    )
+    if records[0]["path"] != "frontend/.release/reproducible-build.json":
+        raise FrontendBuildIdentityError(
+            "frontend reproducibility proof file path is invalid"
+        )
+    if records[0]["bytes"] == 0:
+        raise FrontendBuildIdentityError(
+            "frontend reproducibility proof file is empty"
+        )
+    expected = {
+        **_expected_reproducibility_proof(frontend_build),
+        "proof_file": records[0],
+    }
+    if proof != expected:
+        raise FrontendBuildIdentityError(
+            "frontend reproducibility proof does not match retained build"
+        )
+    return expected
+
+
+def read_frontend_reproducibility_proof(
+    *,
+    frontend_build: dict[str, Any],
+    proof_path: Path = DEFAULT_REPRODUCIBILITY_PROOF_PATH,
+) -> dict[str, Any]:
+    """Validate the two-clean-build proof against the retained build B."""
+    try:
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(proof_path, flags)
+        with os.fdopen(descriptor, "rb") as proof_file:
+            file_status = os.fstat(proof_file.fileno())
+            if not stat.S_ISREG(file_status.st_mode):
+                raise OSError("proof must be a regular non-symlink file")
+            proof_bytes = proof_file.read()
+        payload = json.loads(proof_bytes.decode("utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise FrontendBuildIdentityError(
+            f"cannot read frontend reproducibility proof: {exc}"
+        ) from exc
+    expected = _expected_reproducibility_proof(frontend_build)
+    if payload != expected:
+        raise FrontendBuildIdentityError(
+            "frontend reproducibility proof does not match retained build"
+        )
+    embedded = {
+        **expected,
+        "proof_file": {
+            "path": "frontend/.release/reproducible-build.json",
+            "bytes": len(proof_bytes),
+            "sha256": _sha256_bytes(proof_bytes),
+        },
+    }
+    return validate_frontend_reproducibility_proof(
+        frontend_build=frontend_build,
+        proof=embedded,
+    )
+
+
 def read_frontend_build_identity(
     *,
     build_root: Path = DEFAULT_BUILD_ROOT,
@@ -546,6 +655,17 @@ def read_frontend_build_identity(
     public_files = [
         row for row in files if row["path"] not in NON_PUBLIC_BUILD_FILES
     ]
+    for worker_path in RETIREMENT_SERVICE_WORKER_PATHS:
+        worker = records_by_path.get(worker_path)
+        if (
+            worker is None
+            or worker["bytes"] != RETIREMENT_SERVICE_WORKER_BYTES
+            or worker["sha256"] != RETIREMENT_SERVICE_WORKER_SHA256
+        ):
+            raise FrontendBuildIdentityError(
+                "frontend retirement service worker is missing or invalid: "
+                f"{worker_path}"
+            )
     expected = {
         "schema_version": SCHEMA_VERSION,
         "git_sha": git_sha,
