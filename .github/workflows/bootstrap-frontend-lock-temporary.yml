@@ -8,7 +8,7 @@ on:
       - ".github/workflows/bootstrap-frontend-lock-temporary.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   lockfile:
@@ -18,6 +18,8 @@ jobs:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: \${{ github.event.pull_request.head.ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -25,9 +27,12 @@ jobs:
         run: corepack enable && corepack prepare yarn@1.22.22 --activate
       - name: Generate lockfile
         run: yarn install --non-interactive
-      - uses: actions/upload-artifact@v4
-        with:
-          name: frontend-yarn-lock
-          path: frontend/yarn.lock
-          if-no-files-found: error
-          retention-days: 1
+      - name: Commit generated lockfile
+        working-directory: .
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/yarn.lock
+          git diff --cached --quiet && exit 0
+          git commit -m "chore(frontend): add generated Yarn lockfile"
+          git push origin "HEAD:\${{ github.event.pull_request.head.ref }}"
