@@ -32,6 +32,7 @@ jobs:
           PYTHONPATH: backend:.
         run: >-
           python -m unittest
+          backend.tests.test_frontend_release_toolchain
           backend.tests.test_frontend_build_identity
           backend.tests.test_production_release_guard
           backend.tests.test_release_identity
@@ -67,6 +68,8 @@ jobs:
         run: yarn build:release
       - name: Verify retained frontend artifact and reproducibility proof
         run: python ../scripts/verify_frontend_build.py --expected-git-sha "$GITHUB_SHA"
+      - name: Prove install and build leave the worktree clean
+        run: test -z "$(git status --short)"
 
   release-handoff:
     name: Emergent manual redeploy required
@@ -87,15 +90,31 @@ jobs:
           A merge to `hotfix/prod-snap-meta-final` **does not update Preview or Production**.
 
           Mandatory production path from the shared `/app` workspace:
-          1. Fast-forward `/app` to `origin/hotfix/prod-snap-meta-final`.
-          2. In `/app/frontend`, activate Node 22.23.2 and Yarn 1.22.22, run a frozen install, then run `yarn build:release`; it performs clean A/B builds, retains B, and writes the ignored reproducibility proof required by the guard.
-          3. Run `python scripts/production_release_guard.py prepare --actor "<conversation>"`.
-          4. Run `python scripts/production_release_guard.py prepublish` immediately before publishing.
-          5. In the same project choose **Manage Publishing → Re-publish changes** exactly once.
-          6. Wait for an explicit newer `Deployment Succeeded`.
-          7. Run `python scripts/production_release_guard.py verify --url https://mezansalla.com`.
-          8. Do not perform financial or other irreversible writes until verification returns `verified: true`.
+          1. Run `python scripts/production_release_guard.py status` and continue only when `active` is `false`.
+          2. Fast-forward `/app` to `origin/hotfix/prod-snap-meta-final`.
+          3. Before creating a lease, run:
+
+             ```bash
+             python scripts/frontend_release_toolchain.py ensure
+
+             python scripts/frontend_release_toolchain.py exec -- \
+               bash -lc 'cd frontend && yarn install --frozen-lockfile --non-interactive'
+
+             python scripts/frontend_release_toolchain.py exec -- \
+               bash -lc 'cd frontend && yarn build:release'
+
+             python scripts/frontend_release_toolchain.py exec -- \
+               python scripts/verify_frontend_build.py \
+                 --expected-git-sha "$(git rev-parse HEAD)"
+             ```
+
+          4. Only after bootstrap, install, build, and verification succeed, run `python scripts/production_release_guard.py prepare --actor "<conversation>"`.
+          5. Run `python scripts/production_release_guard.py prepublish` immediately before publishing.
+          6. In the same project choose **Manage Publishing → Re-publish changes** exactly once.
+          7. Wait for an explicit newer `Deployment Succeeded`.
+          8. Run `python scripts/production_release_guard.py verify --url https://mezansalla.com`.
+          9. Do not perform financial or other irreversible writes until verification returns `verified: true` and `status` returns `active: false`.
 
           GitHub is the review/CI/audit source. Emergent Preview is the deployment source for this project.
           EOF
-          echo "::notice title=Guarded Emergent redeploy required::CI passed. Use production_release_guard.py prepare + prepublish, deploy once, then require verified=true before production writes."
+          echo "::notice title=Guarded Emergent redeploy required::CI passed. Bootstrap, install, build, and verify the frontend before prepare; deploy once, then require verified=true and active=false before production writes."

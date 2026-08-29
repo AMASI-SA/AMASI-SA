@@ -55,7 +55,12 @@ jobs:
             backend/browser_security.py \
             backend/email_otp_policy.py \
             backend/email_otp_security.py \
-            backend/excel_upload_security.py
+            backend/excel_upload_security.py \
+            scripts/frontend_release_toolchain.py
+      - name: Verify governed frontend toolchain bootstrap contracts
+        env:
+          PYTHONPATH: backend:.
+        run: python -m unittest backend.tests.test_frontend_release_toolchain
       - name: Run security contracts
         run: |
           python -m pytest -q \

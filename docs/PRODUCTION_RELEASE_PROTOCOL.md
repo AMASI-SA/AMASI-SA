@@ -7,9 +7,11 @@ The current guard and embedded identity use protocol v4. A v4 release binds
 the backend SHA and critical files to the exact built frontend `index.html`,
 every meaningful public build file (including future service workers), the
 complete Git HEAD `frontend/**` source tree, the governed client environment,
-the dependency lock, and the exact Node/Yarn toolchain. A lease prepared by an older guard must be aborted by its owner
-with that original guard before `/app` is updated. Never reuse a v1/v2/v3 lease
-or identity with the v4 guard.
+the dependency lock, and the exact Node/Yarn toolchain. Before updating `/app`,
+run `python scripts/production_release_guard.py status` and continue only when
+it reports `"active": false`. A lease prepared by an older guard must be
+closed by its owner with that original guard before `/app` is updated. Never
+reuse a v1/v2/v3 lease or identity with the v4 guard.
 
 ## Prepare
 
@@ -18,14 +20,38 @@ After all intended commits are on `origin/hotfix/prod-snap-meta-final`, update
 repository's governed toolchain and frozen dependency graph:
 
 ```bash
-cd /app/frontend
-nvm install 22.23.2
-nvm use 22.23.2
-corepack enable
-corepack prepare yarn@1.22.22 --activate
-yarn install --frozen-lockfile --non-interactive
-yarn build:release
+cd /app
+
+python scripts/frontend_release_toolchain.py ensure
+
+python scripts/frontend_release_toolchain.py exec -- \
+  bash -lc 'cd frontend && yarn install --frozen-lockfile --non-interactive'
+
+python scripts/frontend_release_toolchain.py exec -- \
+  bash -lc 'cd frontend && yarn build:release'
+
+python scripts/frontend_release_toolchain.py exec -- \
+  python scripts/verify_frontend_build.py \
+    --expected-git-sha "$(git rev-parse HEAD)"
 ```
+
+The bootstrap installs Node v22.23.2 and activates Yarn 1.22.22 only inside
+the user-owned release-toolchain cache. It does not replace the system Node or
+Yarn, modify shell profiles, or persistently change `PATH`. The potentially
+long bootstrap, frozen install, two-pass build, and artifact verification must
+all finish before `prepare`; do not create or hold a release lease during
+these steps.
+
+The cache lives under
+`${XDG_CACHE_HOME:-$HOME/.cache}/mezan-release-toolchains/`. The bootstrap
+accepts only the exact official Node v22.23.2 Linux archives pinned in the
+repository: `linux-x64` SHA256
+`d60acfe00a2932254bb0ad20e01b0d74397a0875595de719654b214f4b03f307`
+and `linux-arm64` SHA256
+`fff4078c5def658577f92c88db7db3bc0072924bfb93fe52c1e744a54e94abb8`.
+Unsupported platforms, checksum/version drift, or corrupt cache state fail
+closed before a release command runs; corrupt cache state is replaced through
+a verified atomic installation.
 
 `yarn build:release` is the governed release build. It removes only the previous governed proof,
 performs two clean builds (A, then B), requires the two complete
@@ -67,7 +93,8 @@ the full public artifact tree. The runtime health endpoint never depends on
 `.git` or the ignored proof file: it revalidates the packaged `build-meta.json`
 and artifact bytes and exposes the proof copy embedded by the guard.
 
-Only after that build succeeds, run:
+Only after the bootstrap, frozen install, governed build, and explicit
+`verify_frontend_build.py` check all succeed, run:
 
 ```bash
 cd /app
