@@ -1307,6 +1307,142 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
         );
     });
 
+    test("opens and reopens failed settings in diagnostic-only mode without creating a preview", async () => {
+        const failedSettings = {
+            unified_entity_id: "unified-campaign-1",
+            provider_entity_id: "provider-campaign-1",
+            mapping_status: "verified",
+            mapping_verified: true,
+            ad_account_id: "account-1",
+            account_currency: "USD",
+            quality: {
+                settings_status: "settings_sync_failed",
+                freshness_seconds: null,
+                freshness_threshold_seconds: 1800,
+                reason: "campaign_provider_snapshot_missing",
+                financial_controls_allowed: false,
+                financial_field_controls: {},
+            },
+        };
+        const renderPanel = async (openRequest) => {
+            await act(async () => {
+                root.render(
+                    <SnapchatCampaignManagementPanel
+                        accountId="account-1"
+                        entityLevel="campaigns"
+                        initialAction="campaign.update"
+                        selectedCampaign={{
+                            campaign_id: "unified-campaign-1",
+                            provider_campaign_id: "provider-campaign-1",
+                        }}
+                        currentSettings={failedSettings}
+                        openRequest={openRequest}
+                    />,
+                );
+                await Promise.resolve();
+                await Promise.resolve();
+            });
+        };
+
+        await renderPanel(1);
+        const toggle = container.querySelector(
+            '[data-testid="snapchat-campaign-management-panel"] > button',
+        );
+        expect(toggle.getAttribute("aria-expanded")).toBe("true");
+        expect(container.querySelector('[data-testid="snapchat-management-current-settings"]').textContent)
+            .toContain("campaign_provider_snapshot_missing");
+        expect(container.querySelector('[data-testid="snapchat-management-create-preview"]').disabled)
+            .toBe(true);
+
+        await act(async () => {
+            container.querySelector('[data-testid="snapchat-management-form"]')
+                .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+            await Promise.resolve();
+        });
+        expect(createSnapchatManagementProposal).not.toHaveBeenCalled();
+        expect(executeSnapchatManagementProposal).not.toHaveBeenCalled();
+
+        await act(async () => toggle.click());
+        expect(toggle.getAttribute("aria-expanded")).toBe("false");
+        await renderPanel(2);
+        expect(container.querySelector(
+            '[data-testid="snapchat-campaign-management-panel"] > button',
+        ).getAttribute("aria-expanded")).toBe("true");
+    });
+
+    test("blocks execution of an existing governed proposal while current settings are incomplete", async () => {
+        const failedSettings = {
+            unified_entity_id: "unified-campaign-1",
+            provider_entity_id: "provider-campaign-1",
+            mapping_verified: true,
+            ad_account_id: "account-1",
+            account_currency: "USD",
+            quality: {
+                settings_status: "settings_sync_failed",
+                reason: "campaign_provider_snapshot_missing",
+                financial_controls_allowed: false,
+            },
+        };
+        getSnapchatManagementReadiness.mockResolvedValueOnce({
+            proposal_enabled: true,
+            execution_enabled: true,
+            activation_enabled: false,
+            accounts: [{
+                account_id: "account-1",
+                display_name: "AMASI",
+                currency: "USD",
+                role: "general",
+                management_allowed: true,
+                creative_allowed: true,
+                creative_role: "creative",
+                pixels: [],
+            }],
+        });
+        listSnapchatManagementProposals.mockResolvedValueOnce([{
+            proposal_id: "approved-campaign-update",
+            action: "campaign.update",
+            status: "approved",
+            account_id: "account-1",
+            target_id: "unified-campaign-1",
+            provider_target_id: "provider-campaign-1",
+            preview: { changed_fields: [] },
+            preview_changed_fields_known: true,
+            field_changes_known: true,
+            settings_proof: {
+                unified_entity_id: "unified-campaign-1",
+                provider_entity_id: "provider-campaign-1",
+                ad_account_id: "account-1",
+            },
+        }]);
+        await act(async () => {
+            root.render(
+                <SnapchatCampaignManagementPanel
+                    accountId="account-1"
+                    entityLevel="campaigns"
+                    initialAction="campaign.update"
+                    selectedCampaign={{
+                        campaign_id: "unified-campaign-1",
+                        provider_campaign_id: "provider-campaign-1",
+                    }}
+                    currentSettings={failedSettings}
+                    openRequest={1}
+                />,
+            );
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+
+        const historyButton = Array.from(container.querySelectorAll("button"))
+            .find((button) => button.textContent.includes("معتمد بانتظار التنفيذ"));
+        await act(async () => historyButton.click());
+        const executeButton = container.querySelector('[data-testid="snapchat-management-execute"]');
+        expect(executeButton.disabled).toBe(true);
+        expect(container.querySelector('[data-testid="snapchat-management-governed-execute-blocked"]'))
+            .not.toBeNull();
+        expect(executeSnapchatManagementProposal).not.toHaveBeenCalled();
+    });
+
     test("blocks a financial preview when provider settings are stale", async () => {
         const staleSettings = {
             unified_entity_id: "unified-campaign-1",

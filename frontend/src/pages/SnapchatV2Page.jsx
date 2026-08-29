@@ -111,6 +111,7 @@ export default function SnapchatV2Page() {
     const [selectedCampaign, setSelectedCampaign] = useState(null);
     const [selectedAdGroup, setSelectedAdGroup] = useState(null);
     const [managementTarget, setManagementTarget] = useState(null);
+    const [managementOpenRequest, setManagementOpenRequest] = useState(0);
     const [settingsByEntityId, setSettingsByEntityId] = useState({});
     const [settingsLoading, setSettingsLoading] = useState(false);
     const [loading, setLoading] = useState(true);
@@ -396,6 +397,7 @@ export default function SnapchatV2Page() {
 
     function manageEntity(row) {
         setManagementTarget(row);
+        setManagementOpenRequest((current) => current + 1);
         window.setTimeout(() => {
             document.querySelector('[data-testid="snapchat-campaign-management-panel"]')
                 ?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -536,6 +538,7 @@ export default function SnapchatV2Page() {
                 } : null}
                 selectedAd={managementTarget?.entity?.level === "ad" ? { ad_id: managementTarget.entity.id, ad_name: managementTarget.entity.name, ad_squad_id: managementTarget.entity.ad_group_id } : null}
                 currentSettings={managementSettings}
+                openRequest={managementTarget ? managementOpenRequest : 0}
                 onChanged={() => { toast.success("تم التحقق من تغيير Snapchat؛ سيظهر في V2 بعد تحديث كتالوج المزامنة."); load(appliedRange); }}
             />
 

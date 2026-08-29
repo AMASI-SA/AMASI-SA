@@ -41,18 +41,26 @@ jest.mock("../services/mezanProductsV2", () => ({
 }));
 
 jest.mock("../components/marketing/UnifiedMarketingEntityTable", () => (
-    function MockUnifiedMarketingEntityTable({ report, onOpenChildren }) {
+    function MockUnifiedMarketingEntityTable({ report, onOpenChildren, onManageEntity }) {
         return (
             <div data-testid="mock-unified-table">
                 {(report?.rows || []).map((row) => (
-                    <button
-                        key={row.entity.id}
-                        type="button"
-                        data-testid={`open-${row.entity.id}`}
-                        onClick={() => onOpenChildren?.(row)}
-                    >
-                        {row.entity.name}
-                    </button>
+                    <div key={row.entity.id}>
+                        <button
+                            type="button"
+                            data-testid={`open-${row.entity.id}`}
+                            onClick={() => onOpenChildren?.(row)}
+                        >
+                            {row.entity.name}
+                        </button>
+                        <button
+                            type="button"
+                            data-testid={`manage-${row.entity.id}`}
+                            onClick={() => onManageEntity?.(row)}
+                        >
+                            تعديل / حالة
+                        </button>
+                    </div>
                 ))}
             </div>
         );
@@ -88,6 +96,7 @@ describe("SnapchatV2Page read-only load", () => {
         container = document.createElement("div");
         document.body.appendChild(container);
         root = createRoot(container);
+        Element.prototype.scrollIntoView = jest.fn();
         jest.clearAllMocks();
         getSnapchatEntitySettings.mockImplementation(({ entityType }) => Promise.resolve(
             entityType === "campaign"
@@ -283,6 +292,71 @@ describe("SnapchatV2Page read-only load", () => {
 
         expect(getSnapchatManagementReadiness).toHaveBeenCalledTimes(1);
         expect(listSnapchatManagementProposals).toHaveBeenCalledTimes(1);
+        expect(api.post).not.toHaveBeenCalled();
+        expect(createSnapchatManagementProposal).not.toHaveBeenCalled();
+        expect(executeSnapchatManagementProposal).not.toHaveBeenCalled();
+    });
+
+    test("opens failed entity settings in diagnostic-only mode without writes", async () => {
+        getSnapchatEntitySettings.mockResolvedValueOnce([{
+            entity_type: "campaign",
+            unified_entity_id: "da5049b7-5417-4be9-a596-20a74f9fd54c",
+            provider_entity_id: "snap-provider-campaign-afrol",
+            mapping_status: "verified",
+            mapping_verified: true,
+            ad_account_id: "account-1",
+            account_currency: "USD",
+            daily_budget_micro: null,
+            quality: {
+                settings_status: "settings_sync_failed",
+                freshness_seconds: null,
+                freshness_threshold_seconds: 1800,
+                reason: "campaign_provider_snapshot_missing",
+                financial_controls_allowed: false,
+                financial_field_controls: {},
+            },
+        }]);
+        await act(async () => {
+            root.render(<SnapchatV2Page />);
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+
+        const panelToggle = container.querySelector(
+            '[data-testid="snapchat-campaign-management-panel"] > button',
+        );
+        expect(panelToggle.getAttribute("aria-expanded")).toBe("false");
+
+        await act(async () => {
+            container.querySelector(
+                '[data-testid="manage-da5049b7-5417-4be9-a596-20a74f9fd54c"]',
+            ).click();
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+
+        expect(container.querySelector(
+            '[data-testid="snapchat-campaign-management-panel"] > button',
+        ).getAttribute("aria-expanded")).toBe("true");
+        const currentSettings = container.querySelector(
+            '[data-testid="snapchat-management-current-settings"]',
+        );
+        expect(currentSettings.textContent).toContain("settings_sync_failed");
+        expect(currentSettings.textContent).toContain("campaign_provider_snapshot_missing");
+        expect(currentSettings.textContent).toContain("snap-provider-campaign-afrol");
+        expect(container.querySelector(
+            '[data-testid="snapchat-management-create-preview"]',
+        ).disabled).toBe(true);
+
+        await act(async () => {
+            container.querySelector('[data-testid="snapchat-management-form"]')
+                .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+            await Promise.resolve();
+        });
+
         expect(api.post).not.toHaveBeenCalled();
         expect(createSnapchatManagementProposal).not.toHaveBeenCalled();
         expect(executeSnapchatManagementProposal).not.toHaveBeenCalled();

@@ -646,7 +646,7 @@ function buildProposal(form) {
     return { ...common, payload: mergedPayload };
 }
 
-function ProposalPreview({ proposal, readiness, busy, financialSettingsReady, onApprove, onExecute, onRollback, onReconcile, onContinue }) {
+function ProposalPreview({ proposal, readiness, busy, governedSettingsReady, financialSettingsReady, onApprove, onExecute, onRollback, onReconcile, onContinue }) {
     if (!proposal?.proposal_id) return null;
     const preview = proposal.preview || {};
     const verifiedEntityId = proposal.verified_entity_id || "";
@@ -661,6 +661,7 @@ function ProposalPreview({ proposal, readiness, busy, financialSettingsReady, on
     const canApprove = proposal.status === "previewed" && proposal.confirm_token;
     const canExecute = proposal.status === "approved"
         && readiness?.execution_enabled
+        && (!governedUpdate || governedSettingsReady)
         && !financialMetadataUnknown
         && (!financialProposal || financialSettingsReady);
     const canRollback = readiness?.execution_enabled && (
@@ -736,6 +737,11 @@ function ProposalPreview({ proposal, readiness, busy, financialSettingsReady, on
             {financialProposal && !financialSettingsReady && (
                 <div className="mt-3 flex items-center gap-2 rounded-xl bg-rose-100 p-3 text-xs font-black text-rose-900" data-testid="snapchat-management-financial-execute-blocked">
                     <WarningCircle size={20} weight="fill" /> الإعدادات الحالية غير حديثة؛ التنفيذ المالي ممنوع حتى تكتمل إعادة القراءة.
+                </div>
+            )}
+            {governedUpdate && !governedSettingsReady && (
+                <div className="mt-3 flex items-center gap-2 rounded-xl bg-rose-100 p-3 text-xs font-black text-rose-900" data-testid="snapchat-management-governed-execute-blocked">
+                    <WarningCircle size={20} weight="fill" /> إعدادات Snapchat غير مكتملة؛ التنفيذ محجوب حتى تكتمل قراءة الإعدادات.
                 </div>
             )}
             {verifiedEntityId && (
@@ -833,6 +839,7 @@ export default function SnapchatCampaignManagementPanel({
     selectedAd = null,
     currentSettings = null,
     initialAction = null,
+    openRequest = 0,
     onChanged,
 }) {
     // The application always supplies AuthProvider. Component tests and other
@@ -953,6 +960,10 @@ export default function SnapchatCampaignManagementPanel({
             setResumeBusy(false);
         }
     }, [expanded]);
+
+    useEffect(() => {
+        if (openRequest) setExpanded(true);
+    }, [openRequest]);
 
     useEffect(() => {
         setForm((current) => {
@@ -1098,9 +1109,11 @@ export default function SnapchatCampaignManagementPanel({
 
     async function preview(event) {
         event.preventDefault();
-        if (financialPreviewBlocked) {
+        if (governedSettingsDiagnosticOnly || financialPreviewBlocked) {
             setNotice("");
-            setError(campaignBudgetUnsupported
+            setError(governedSettingsDiagnosticOnly
+                ? "لا يمكن إنشاء معاينة: إعدادات Snapchat غير مكتملة."
+                : campaignBudgetUnsupported
                 ? "غير متاح من Snapchat على هذا المستوى"
                 : invalidBidAmount
                     ? "لا يقبل bid_micro مع استراتيجية المزايدة الحالية."
@@ -1157,6 +1170,14 @@ export default function SnapchatCampaignManagementPanel({
     }
 
     async function execute() {
+        if (
+            ["campaign.update", "ad_squad.update"].includes(activeProposal?.action)
+            && !activeProposalGovernedSettingsReady
+        ) {
+            setNotice("");
+            setError("لا يمكن التنفيذ: إعدادات Snapchat غير مكتملة أو لا تطابق الكيان المحدد.");
+            return;
+        }
         if (
             ["campaign.update", "ad_squad.update"].includes(activeProposal?.action)
             && !proposalFinancialMetadataKnown(activeProposal)
@@ -1314,6 +1335,8 @@ export default function SnapchatCampaignManagementPanel({
         form.bidStrategy ? "bid_strategy" : null,
     ].filter(Boolean);
     const financialChangeRequested = isUpdate && financialFieldsRequested.length > 0;
+    const governedSettingsDiagnosticOnly = ["campaign.update", "ad_squad.update"].includes(form.action)
+        && currentSettings?.quality?.settings_status !== "settings_complete";
     const financialSettingsReady = financialFieldsRequested.every(
         (fieldName) => snapchatFinancialFieldReady(currentSettings, fieldName, form.accountId),
     );
@@ -1325,6 +1348,11 @@ export default function SnapchatCampaignManagementPanel({
         activeProposal,
         currentSettings,
     );
+    const activeProposalGovernedSettingsReady = !["campaign.update", "ad_squad.update"].includes(activeProposal?.action)
+        || (
+            currentSettings?.quality?.settings_status === "settings_complete"
+            && activeProposalSettingsBound
+        );
     const activeProposalFinancialSettingsReady = activeProposalSettingsBound
         && activeProposalFinancialFields.every((fieldName) => (
             snapchatFinancialFieldReady(
@@ -1559,9 +1587,9 @@ export default function SnapchatCampaignManagementPanel({
                                         لا يقبل bid_micro مع استراتيجية المزايدة الحالية.
                                     </div>
                                 )}
-                                {financialPreviewBlocked && !campaignBudgetUnsupported && !invalidBidAmount && (
+                                {(governedSettingsDiagnosticOnly || financialPreviewBlocked) && !campaignBudgetUnsupported && !invalidBidAmount && (
                                     <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-black text-rose-900" data-testid="snapchat-management-financial-settings-blocked">
-                                        غير متاح — فشل جلب الإعدادات. لا يمكن إنشاء معاينة أو تنفيذ مالي حتى تكتمل قراءة حديثة من Snapchat.
+                                        غير متاح — فشل جلب الإعدادات. لا يمكن إنشاء معاينة أو تنفيذ حتى تكتمل قراءة حديثة من Snapchat.
                                     </div>
                                 )}
 
@@ -1620,14 +1648,14 @@ export default function SnapchatCampaignManagementPanel({
                                                 استئناف متابعة المعاينة
                                             </button>
                                         )}
-                                        <button type="submit" disabled={busy || previewPending || !form.accountId || !actionAllowed || (requiresProduct && !form.productId) || pixelSelectionMissing || financialPreviewBlocked} className="min-h-11 rounded-xl bg-amber-300 px-5 text-sm font-black text-slate-950 hover:bg-amber-200 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400" data-testid="snapchat-management-create-preview">
+                                        <button type="submit" disabled={busy || previewPending || !form.accountId || !actionAllowed || (requiresProduct && !form.productId) || pixelSelectionMissing || governedSettingsDiagnosticOnly || financialPreviewBlocked} className="min-h-11 rounded-xl bg-amber-300 px-5 text-sm font-black text-slate-950 hover:bg-amber-200 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400" data-testid="snapchat-management-create-preview">
                                             إنشاء معاينة آمنة
                                         </button>
                                     </div>
                                 </div>
                             </form>
 
-                            <ProposalPreview proposal={activeProposal} readiness={readiness} busy={busy} financialSettingsReady={activeProposalFinancialSettingsReady} onApprove={approve} onExecute={execute} onRollback={rollback} onReconcile={reconcile} onContinue={continueFromVerifiedProposal} />
+                            <ProposalPreview proposal={activeProposal} readiness={readiness} busy={busy} governedSettingsReady={activeProposalGovernedSettingsReady} financialSettingsReady={activeProposalFinancialSettingsReady} onApprove={approve} onExecute={execute} onRollback={rollback} onReconcile={reconcile} onContinue={continueFromVerifiedProposal} />
 
                             {proposals.length > 0 && (
                                 <div className="rounded-2xl border border-slate-200 bg-white p-4">
