@@ -183,21 +183,53 @@ function toolchain() {
   return { node, yarn, vite };
 }
 
-async function governedEnvironment() {
-  const { loadEnv } = await import("vite");
-  const loaded = loadEnv("production", frontendRoot, clientEnvAllowlist);
+function createBuildChildEnvironment(parentEnvironment = process.env) {
+  const childEnvironment = {
+    NODE_ENV: "production",
+  };
+  for (const name of clientEnvAllowlist) {
+    if (Object.prototype.hasOwnProperty.call(parentEnvironment, name)) {
+      childEnvironment[name] = String(parentEnvironment[name]);
+    }
+  }
+  if (process.platform === "win32") {
+    for (const name of ["COMSPEC", "PATHEXT", "SystemRoot", "TEMP", "TMP", "WINDIR"]) {
+      if (Object.prototype.hasOwnProperty.call(parentEnvironment, name)) {
+        childEnvironment[name] = String(parentEnvironment[name]);
+      }
+    }
+  }
+  return childEnvironment;
+}
+
+function governedEnvironment(parentEnvironment = process.env) {
+  const effectiveEnvironment = createBuildChildEnvironment(parentEnvironment);
+  const vitePrefixedKeys = Object.keys(effectiveEnvironment)
+    .filter((name) => name.startsWith("VITE_"))
+    .sort();
+  if (vitePrefixedKeys.length) {
+    throw new Error("Governed frontend build environment contains VITE-prefixed keys");
+  }
   const values = {};
   for (const name of clientEnvAllowlist) {
-    const present = Object.prototype.hasOwnProperty.call(loaded, name);
+    const present = Object.prototype.hasOwnProperty.call(effectiveEnvironment, name);
     values[name] = {
       present,
       sha256: present
-        ? sha256Bytes(Buffer.from(String(loaded[name]), "utf8"))
+        ? sha256Bytes(Buffer.from(effectiveEnvironment[name], "utf8"))
         : null,
     };
   }
   return {
     mode: "production",
+    effective: {
+      NODE_ENV: effectiveEnvironment.NODE_ENV,
+      VITE_USER_NODE_ENV_present: Object.prototype.hasOwnProperty.call(
+        effectiveEnvironment,
+        "VITE_USER_NODE_ENV",
+      ),
+      VITE_prefixed_keys: vitePrefixedKeys,
+    },
     allowed_client_keys: [...clientEnvAllowlist],
     values,
   };
@@ -212,7 +244,7 @@ async function captureBuildInputs() {
     git_sha: gitSha,
     source: collectTrackedFrontendSource(),
     toolchain: toolchain(),
-    environment: await governedEnvironment(),
+    environment: governedEnvironment(),
   };
 }
 
@@ -256,6 +288,7 @@ function writeBuildMetadata(inputs) {
 
 module.exports = {
   captureBuildInputs,
+  createBuildChildEnvironment,
   governedEnvironment,
   writeBuildMetadata,
 };

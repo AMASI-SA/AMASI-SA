@@ -441,6 +441,11 @@ def _governed_environment(value: Any) -> dict[str, Any]:
         values[name] = {"present": present, "sha256": digest}
     expected = {
         "mode": "production",
+        "effective": {
+            "NODE_ENV": "production",
+            "VITE_USER_NODE_ENV_present": False,
+            "VITE_prefixed_keys": [],
+        },
         "allowed_client_keys": list(CLIENT_ENV_ALLOWLIST),
         "values": values,
     }

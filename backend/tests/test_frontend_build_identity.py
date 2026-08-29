@@ -92,6 +92,11 @@ class FrontendBuildIdentityTests(unittest.TestCase):
             },
             "environment": {
                 "mode": "production",
+                "effective": {
+                    "NODE_ENV": "production",
+                    "VITE_USER_NODE_ENV_present": False,
+                    "VITE_prefixed_keys": [],
+                },
                 "allowed_client_keys": list(identity.CLIENT_ENV_ALLOWLIST),
                 "values": {
                     "REACT_APP_BACKEND_URL": {

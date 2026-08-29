@@ -1,4 +1,4 @@
-import { defineConfig, loadEnv, transformWithOxc } from "vite";
+import { defineConfig, transformWithOxc } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
 import buildContract from "./build-contract.cjs";
@@ -37,13 +37,14 @@ function legacyJsxLoader() {
 }
 
 export default defineConfig(({ mode }) => {
-  const loadedEnv = loadEnv(mode, process.cwd(), CLIENT_ENV_ALLOWLIST);
   const clientEnv = Object.fromEntries(
     CLIENT_ENV_ALLOWLIST
-      .filter((name) => Object.prototype.hasOwnProperty.call(loadedEnv, name))
-      .map((name) => [name, loadedEnv[name]]),
+      .filter((name) => Object.prototype.hasOwnProperty.call(process.env, name))
+      .map((name) => [name, process.env[name]]),
   );
+  const nodeEnv = process.env.NODE_ENV || (mode === "production" ? "production" : "development");
   return {
+    envDir: false,
     envPrefix: [],
     plugins: [legacyJsxLoader(), react()],
     resolve: {
@@ -52,9 +53,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     define: {
-      "process.env.NODE_ENV": JSON.stringify(
-        mode === "production" ? "production" : "development",
-      ),
+      "process.env.NODE_ENV": JSON.stringify(nodeEnv),
       "process.env.REACT_APP_BACKEND_URL": Object.prototype.hasOwnProperty.call(
         clientEnv,
         "REACT_APP_BACKEND_URL",

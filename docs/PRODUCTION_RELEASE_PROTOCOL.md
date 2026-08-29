@@ -35,8 +35,18 @@ mid-build drift fails closed. It writes deterministic
 `frontend/build/build-meta.json` without a wall-clock timestamp and records
 Node 22.23.2, Yarn 1.22.22, the complete source-tree digest, hashed values for
 the allowlisted public client environment only, `index.html`, and every build
-file. `envPrefix: []` prevents implicit `VITE_*` exposure; the only currently
-allowlisted client value is `REACT_APP_BACKEND_URL`.
+file. The build wrapper starts Vite with an explicit minimal child environment,
+forces `NODE_ENV=production`, strips parent `NODE_ENV`, `VITE_USER_NODE_ENV`,
+every `VITE_*` value, `NODE_OPTIONS`, and unrelated secrets, and passes only
+the allowlisted `REACT_APP_BACKEND_URL` value when present. `envDir: false` and
+`envPrefix: []` also disable `.env*` loading and implicit client exposure. The
+metadata stores only the allowlisted value's presence and SHA256, plus proof
+that the effective build environment was production and contained no
+`VITE_USER_NODE_ENV` or other `VITE_*` keys.
+
+The Mezan Release Readiness workflow performs the clean build twice from the
+same checkout, frozen lock, toolchain, and governed environment, then requires
+the two complete `build-meta.json` files to be byte-identical.
 
 Only after that build succeeds, run:
 
@@ -70,7 +80,14 @@ restarted, is healthy, is running the prepared Git SHA and critical files,
 and publicly serves the exact prepared `build-meta.json`, canonical `/`,
 `/index.html`, the `/snapchat-accounts` SPA shell, and every meaningful public
 build file in both normal and cache-busted requests. Canonical HTML must carry
-the governed no-cache/no-store/must-revalidate policy. Verification is pinned
+the governed no-cache/no-store/must-revalidate policy. Standard service-worker
+paths are also fenced: a registered worker must match the artifact with a safe
+JavaScript MIME/cache policy, while an unregistered path must be a 404 or the
+exact current HTML shell, never orphan JavaScript. These probes include the
+`Service-Worker: script` request header and prove current server/CDN behavior;
+they do not claim to evict an incumbent registration from a previously visited
+browser. Any legacy client-registration retirement is a separate controlled
+rollout. Verification is pinned
 to `https://mezansalla.com`; another origin is refused. Until then, no
 financial or other irreversible production action is allowed. Any frontend
 mismatch leaves the lease active.

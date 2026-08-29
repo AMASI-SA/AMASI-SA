@@ -37,6 +37,7 @@ from frontend_build_identity import (  # noqa: E402
 PRODUCTION_BRANCH = "hotfix/prod-snap-meta-final"
 PRODUCTION_ORIGIN = "https://mezansalla.com"
 SPA_SHELL_PATH = "/snapchat-accounts"
+STANDARD_SERVICE_WORKER_PATHS = ("/sw.js", "/service-worker.js")
 PROTOCOL_VERSION = 3
 BOOT_CLOCK_SKEW = timedelta(minutes=5)
 GIT_DIR = REPO_ROOT / ".git"
@@ -172,6 +173,7 @@ def _prepare_locked(actor: str) -> dict[str, Any]:
                 f"local={local_sha} remote={remote_sha}"
             )
         frontend_build = _frontend_build_identity(local_sha)
+        critical_hashes = _critical_hashes()
         payload = {
             "release_id": str(uuid4()),
             "git_sha": local_sha,
@@ -179,15 +181,17 @@ def _prepare_locked(actor: str) -> dict[str, Any]:
             "actor": actor,
             "prepared_at": _utc_now(),
             "protocol_version": PROTOCOL_VERSION,
-            "critical_file_hashes": _critical_hashes(),
+            "critical_file_hashes": critical_hashes,
             "frontend_build": frontend_build,
         }
         if (
             _run_git("rev-parse", "HEAD") != local_sha
             or _frontend_build_identity(local_sha) != frontend_build
+            or _critical_hashes() != critical_hashes
         ):
             raise ReleaseGuardError(
-                "frontend source or build changed while preparing release"
+                "frontend source, critical files, or build changed while "
+                "preparing release"
             )
         _atomic_json(IDENTITY_PATH, payload)
         _atomic_json(LEASE_PATH, payload)
@@ -230,17 +234,22 @@ def _prepublish_locked() -> dict[str, Any]:
         )
     identity = _read_json(IDENTITY_PATH)
     frontend_build = _frontend_build_identity(expected_sha)
+    critical_hashes = _critical_hashes()
     if (
         identity != lease
-        or identity.get("critical_file_hashes") != _critical_hashes()
+        or identity.get("critical_file_hashes") != critical_hashes
         or identity.get("frontend_build") != frontend_build
     ):
         raise ReleaseGuardError(
             "release identity, critical files, or frontend build changed after prepare"
         )
-    if _frontend_build_identity(expected_sha) != frontend_build:
+    if (
+        _frontend_build_identity(expected_sha) != frontend_build
+        or _critical_hashes() != critical_hashes
+    ):
         raise ReleaseGuardError(
-            "frontend source or build changed during prepublish verification"
+            "frontend source, critical files, or build changed during "
+            "prepublish verification"
         )
     _assert_active_lease_unchanged(lease)
     return {
@@ -338,6 +347,8 @@ def _fetch_production(
     cache_bust: bool,
     accept: str,
     timeout: int,
+    allowed_statuses: frozenset[int] = frozenset({200}),
+    service_worker_script: bool = False,
 ) -> dict[str, Any]:
     url = _release_check_url(
         origin, relative_path, cache_bust=cache_bust
@@ -349,6 +360,8 @@ def _fetch_production(
     }
     if cache_bust:
         headers["Cache-Control"] = "no-cache"
+    if service_worker_script:
+        headers["Service-Worker"] = "script"
     request = urllib.request.Request(url, headers=headers)
     try:
         with _urlopen_no_redirect(request, timeout=timeout) as response:
@@ -358,11 +371,16 @@ def _fetch_production(
             response_headers = _response_headers(response)
     except ReleaseGuardError:
         raise
-    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as exc:
+    except urllib.error.HTTPError as exc:
+        status = int(exc.code)
+        final_url = str(exc.geturl())
+        body = exc.read()
+        response_headers = _response_headers(exc)
+    except (urllib.error.URLError, TimeoutError) as exc:
         raise ReleaseGuardError(
             f"production check failed for {relative_path}: {exc}"
         ) from exc
-    if status != 200:
+    if status not in allowed_statuses:
         raise ReleaseGuardError(
             f"production check returned HTTP {status}: {relative_path}"
         )
@@ -372,6 +390,7 @@ def _fetch_production(
         )
     return {
         "url": url,
+        "status": status,
         "body": body,
         "headers": response_headers,
     }
@@ -494,6 +513,54 @@ def _assert_html_shell_headers(
     }
 
 
+def _assert_service_worker_headers(
+    response: dict[str, Any], relative_path: str
+) -> dict[str, Any]:
+    headers = response["headers"]
+    content_type = headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    if content_type not in {
+        "application/javascript",
+        "application/x-javascript",
+        "text/javascript",
+    }:
+        raise ReleaseGuardError(
+            f"production service worker MIME is invalid: {relative_path}"
+        )
+    cache_control = headers.get("cache-control", "")
+    directives = {
+        part.strip().lower() for part in cache_control.split(",") if part.strip()
+    }
+    if not ({"no-cache", "no-store"} & directives):
+        raise ReleaseGuardError(
+            f"production service worker must require revalidation: {relative_path}"
+        )
+    if "immutable" in directives:
+        raise ReleaseGuardError(
+            f"production service worker must not be immutable: {relative_path}"
+        )
+    for directive in directives:
+        if directive.startswith(("max-age=", "s-maxage=")):
+            try:
+                max_age = int(directive.split("=", 1)[1].strip('"'))
+            except ValueError as exc:
+                raise ReleaseGuardError(
+                    f"production service worker cache age is invalid: {relative_path}"
+                ) from exc
+            if max_age > 0:
+                raise ReleaseGuardError(
+                    f"production service worker cache age is positive: {relative_path}"
+                )
+    return {
+        "path": relative_path,
+        "state": "registered",
+        "cache_control": cache_control,
+        "etag": headers.get("etag"),
+        "age": headers.get("age"),
+        "cf_cache_status": headers.get("cf-cache-status"),
+        "content_type": headers.get("content-type"),
+    }
+
+
 def _verify_public_frontend(
     origin: str,
     expected: dict[str, Any],
@@ -533,6 +600,7 @@ def _verify_public_frontend(
     }
     checked_requests = []
     shell_cache = []
+    service_workers = []
     for relative_path, record in records_by_request_path.items():
         for cache_bust in (False, True):
             response = _fetch_production(
@@ -541,6 +609,9 @@ def _verify_public_frontend(
                 cache_bust=cache_bust,
                 accept="*/*",
                 timeout=30,
+                service_worker_script=(
+                    relative_path in STANDARD_SERVICE_WORKER_PATHS
+                ),
             )
             label = relative_path + ("?release_check" if cache_bust else "")
             _assert_public_bytes(response, expected=record, label=label)
@@ -553,10 +624,62 @@ def _verify_public_frontend(
                 shell_cache.append(
                     _assert_html_shell_headers(response, relative_path)
                 )
+            if relative_path in STANDARD_SERVICE_WORKER_PATHS:
+                service_worker = _assert_service_worker_headers(
+                    response, relative_path
+                )
+                if not cache_bust:
+                    service_workers.append(service_worker)
+
+    registered_paths = set(records_by_request_path)
+    for relative_path in STANDARD_SERVICE_WORKER_PATHS:
+        if relative_path in registered_paths:
+            continue
+        observation = None
+        for cache_bust in (False, True):
+            response = _fetch_production(
+                origin,
+                relative_path,
+                cache_bust=cache_bust,
+                accept="*/*",
+                timeout=30,
+                allowed_statuses=frozenset({200, 404}),
+                service_worker_script=True,
+            )
+            label = relative_path + ("?release_check" if cache_bust else "")
+            checked_requests.append(label)
+            if response["status"] == 404:
+                current = {"path": relative_path, "state": "not_found"}
+            else:
+                _assert_public_bytes(response, expected=index, label=label)
+                content_type = response["headers"].get("content-type", "").lower()
+                if not content_type.startswith("text/html"):
+                    raise ReleaseGuardError(
+                        "unregistered production service worker path serves "
+                        f"non-HTML content: {relative_path}"
+                    )
+                current = {
+                    "path": relative_path,
+                    "state": "spa_shell",
+                    "content_type": response["headers"].get("content-type"),
+                }
+                if not cache_bust:
+                    current.update(
+                        _assert_html_shell_headers(response, relative_path)
+                    )
+            if observation is not None and observation["state"] != current["state"]:
+                raise ReleaseGuardError(
+                    "service worker absence differs between canonical and "
+                    f"cache-busted probes: {relative_path}"
+                )
+            if observation is None:
+                observation = current
+        service_workers.append(observation)
     return {
         "artifact_tree_sha256": expected.get("artifact_tree_sha256"),
         "checked_requests": checked_requests,
         "shell_cache": shell_cache,
+        "service_workers": service_workers,
     }
 
 
@@ -734,6 +857,9 @@ def _verify_locked(base_url: str) -> dict[str, Any]:
             "checked_requests"
         ],
         "frontend_shell_cache": observations[0]["frontend"]["shell_cache"],
+        "frontend_service_workers": observations[0]["frontend"][
+            "service_workers"
+        ],
     }
 
 

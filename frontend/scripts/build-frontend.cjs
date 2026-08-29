@@ -6,6 +6,7 @@ const path = require("node:path");
 
 const {
   captureBuildInputs,
+  createBuildChildEnvironment,
   writeBuildMetadata,
 } = require("./write-build-meta.cjs");
 
@@ -17,14 +18,13 @@ async function main() {
   });
   const before = await captureBuildInputs();
   const viteBin = path.join(
-    frontendRoot,
-    "node_modules",
-    ".bin",
-    process.platform === "win32" ? "vite.cmd" : "vite",
+    path.dirname(require.resolve("vite/package.json")),
+    "bin",
+    "vite.js",
   );
-  const result = spawnSync(viteBin, ["build"], {
+  const result = spawnSync(process.execPath, [viteBin, "build", "--mode", "production"], {
     cwd: frontendRoot,
-    env: process.env,
+    env: createBuildChildEnvironment(),
     stdio: "inherit",
   });
   if (result.error) throw result.error;

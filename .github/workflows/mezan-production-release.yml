@@ -63,6 +63,18 @@ jobs:
         run: yarn build
       - name: Verify deterministic frontend artifact identity
         run: python ../scripts/verify_frontend_build.py --expected-git-sha "$GITHUB_SHA"
+      - name: Preserve first frontend build identity
+        run: cp build/build-meta.json "$RUNNER_TEMP/frontend-build-meta-first.json"
+      - name: Rebuild from a clean frontend output
+        env:
+          CI: "false"
+        run: |
+          rm -rf build node_modules/.vite
+          yarn build
+      - name: Require byte-identical repeated frontend build identity
+        run: |
+          cmp "$RUNNER_TEMP/frontend-build-meta-first.json" build/build-meta.json
+          python ../scripts/verify_frontend_build.py --expected-git-sha "$GITHUB_SHA"
 
   release-handoff:
     name: Emergent manual redeploy required
