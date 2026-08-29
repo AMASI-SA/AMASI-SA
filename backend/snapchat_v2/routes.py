@@ -22,6 +22,7 @@ from .projections import (
     list_daily_projections,
 )
 from .reconciliation import calculate_cost_components, list_reconciliation
+from .read_timing import gather_cancel_on_error, timed_awaitable, timed_call
 from .salla_outcomes import load_salla_campaign_outcomes
 from .status import snapchat_v2_status
 from .sync_pipeline import MAX_SYNC_DAYS, SnapchatV2SyncPipeline
@@ -529,33 +530,49 @@ def attach_snapchat_v2_routes(
     ) -> dict[str, Any]:
         _read_days(date_from, date_to)
         user_id = _user_id(user, require_owner)
-        account = await _selected_account_or_404(db, user_id)
+        account = await timed_awaitable(
+            "db-selected-account",
+            _selected_account_or_404(db, user_id),
+        )
         timezone_name = _projection_timezone(account, timezone)
-        rows = await list_daily_projections(
-            db,
-            user_id=user_id,
-            ad_account_id=str(account["ad_account_id"]),
-            date_from=date_from,
-            date_to=date_to,
-            projection_timezone=timezone_name,
-            action_report_time=action_report_time,
+        rows, reconciliation = await gather_cancel_on_error(
+            timed_awaitable(
+                "db-projection-lookup",
+                list_daily_projections(
+                    db,
+                    user_id=user_id,
+                    ad_account_id=str(account["ad_account_id"]),
+                    date_from=date_from,
+                    date_to=date_to,
+                    projection_timezone=timezone_name,
+                    action_report_time=action_report_time,
+                ),
+            ),
+            timed_awaitable(
+                "db-reconciliation-lookup",
+                list_reconciliation(
+                    db,
+                    user_id=user_id,
+                    ad_account_id=str(account["ad_account_id"]),
+                    date_from=date_from,
+                    date_to=date_to,
+                    action_report_time=action_report_time,
+                ),
+            ),
         )
-        reconciliation = await list_reconciliation(
-            db,
-            user_id=user_id,
-            ad_account_id=str(account["ad_account_id"]),
-            date_from=date_from,
-            date_to=date_to,
-            action_report_time=action_report_time,
-        )
-        headline = resolve_report_headline_spend(
-            projections=rows,
-            reconciliations=reconciliation,
-            open_report_date=(datetime.now(ZoneInfo(timezone_name)).date().isoformat()),
-            provider_scope=(
-                "account"
-                if timezone_name == str(account.get("timezone") or "")
-                else "dashboard"
+        headline = timed_call(
+            "headline-resolve",
+            lambda: resolve_report_headline_spend(
+                projections=rows,
+                reconciliations=reconciliation,
+                open_report_date=(
+                    datetime.now(ZoneInfo(timezone_name)).date().isoformat()
+                ),
+                provider_scope=(
+                    "account"
+                    if timezone_name == str(account.get("timezone") or "")
+                    else "dashboard"
+                ),
             ),
         )
         return {
@@ -607,16 +624,22 @@ def attach_snapchat_v2_routes(
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         user_id = _user_id(user, require_owner)
-        account = await _selected_account_or_404(db, user_id)
+        account = await timed_awaitable(
+            "db-selected-account",
+            _selected_account_or_404(db, user_id),
+        )
         timezone_name = _projection_timezone(account, timezone)
-        rows = await list_daily_projections(
-            db,
-            user_id=user_id,
-            ad_account_id=str(account["ad_account_id"]),
-            date_from=report_date,
-            date_to=report_date,
-            projection_timezone=timezone_name,
-            action_report_time=action_report_time,
+        rows = await timed_awaitable(
+            "db-projection-lookup",
+            list_daily_projections(
+                db,
+                user_id=user_id,
+                ad_account_id=str(account["ad_account_id"]),
+                date_from=report_date,
+                date_to=report_date,
+                projection_timezone=timezone_name,
+                action_report_time=action_report_time,
+            ),
         )
         projection = rows[0] if rows else None
         return {

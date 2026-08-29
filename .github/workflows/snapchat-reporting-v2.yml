@@ -15,6 +15,10 @@ on:
       - "backend/snapchat_v2_test_bootstrap.py"
       - "backend/integrations_control_center/snapchat_native_tracking_routes.py"
       - "backend/tests/test_snapchat_reporting_v2_*.py"
+      - "frontend/src/pages/SnapchatV2Page.jsx"
+      - "frontend/src/pages/SnapchatV2Page.test.jsx"
+      - "frontend/src/lib/snapchatV2SpendDisplay.js"
+      - "frontend/src/lib/snapchatV2SpendDisplay.test.js"
       - ".github/workflows/snapchat-reporting-v2.yml"
   workflow_dispatch:
 
@@ -61,3 +65,31 @@ jobs:
           tests/test_snapchat_reporting_v2_*.py
           -q
           --tb=short
+
+  snapchat-v2-page-tests:
+    name: Snapchat V2 independent reads
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Test independent Snapchat reads
+        env:
+          CI: "true"
+        run: >-
+          yarn test
+          --watchAll=false
+          --runInBand
+          --runTestsByPath
+          src/pages/SnapchatV2Page.test.jsx
+          src/lib/snapchatV2SpendDisplay.test.js
+      - name: Build frontend
+        env:
+          CI: "false"
+        run: yarn build
