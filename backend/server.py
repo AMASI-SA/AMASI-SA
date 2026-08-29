@@ -4470,6 +4470,11 @@ app.add_middleware(
     },
 )
 
+# Read-only Snapchat V2 timing is limited to status/report/hourly and records
+# fixed stage names plus durations only; no account IDs, query values, or data.
+from snapchat_v2.read_timing import SnapchatV2ReadTimingMiddleware
+app.add_middleware(SnapchatV2ReadTimingMiddleware)
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
@@ -4507,6 +4512,8 @@ async def on_startup():
     # Apps & Integrations V2 — isolated metadata, health, activity,
     # errors, and future campaign↔product identity links.
     await ensure_integrations_control_center_indexes(db)
+    from snapchat_v2.read_indexes import ensure_snapchat_v2_read_indexes
+    await ensure_snapchat_v2_read_indexes(db)
     await ensure_first_party_attribution_indexes(db)
     # Five-hour Snapchat + Meta campaign monitoring. The worker only refreshes
     # analytical facts and persists recommendations; provider changes remain
