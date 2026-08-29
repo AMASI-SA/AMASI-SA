@@ -334,6 +334,7 @@ function formatAuditValue(change, side, accountCurrency) {
 function CurrentSettingsCard({ action, settings, accountId }) {
     if (!action.endsWith(".update") || !["campaign.update", "ad_squad.update"].includes(action)) return null;
     const quality = settings?.quality || {};
+    const targetedLookupLoading = settings?.lookup_status === "loading";
     const settingsReady = snapchatFinancialSettingsReady(settings, accountId);
     const settingsComplete = quality.settings_status === "settings_complete";
     const budgetUnsupported = action === "campaign.update"
@@ -366,7 +367,7 @@ function CurrentSettingsCard({ action, settings, accountId }) {
     const currentProviderValue = (value) => settingsComplete
         ? providerValue(value)
         : "غير متاح — فشل جلب الإعدادات";
-    const diagnosticValuesAvailable = !settingsComplete && [
+    const diagnosticValuesAvailable = (!settingsComplete && [
         "daily_budget_micro",
         "bid_micro",
         "bid_strategy",
@@ -376,7 +377,7 @@ function CurrentSettingsCard({ action, settings, accountId }) {
         "status",
         "ad_squads_daily_budget_micro",
         "active_ad_squads",
-    ].some((field) => settings?.[field] !== null && settings?.[field] !== undefined && settings?.[field] !== "")
+    ].some((field) => settings?.[field] !== null && settings?.[field] !== undefined && settings?.[field] !== ""))
         || (!settingsComplete && Array.isArray(settings?.ad_squad_bid_strategies) && settings.ad_squad_bid_strategies.length > 0);
     return (
         <section className={`rounded-2xl border p-4 ${settingsReady ? "border-emerald-200 bg-emerald-50" : "border-rose-200 bg-rose-50"}`} data-testid="snapchat-management-current-settings">
@@ -385,8 +386,13 @@ function CurrentSettingsCard({ action, settings, accountId }) {
                     <h3 className="text-sm font-black">الإعدادات الحالية المقروءة من Snapchat</h3>
                     <p className="mt-1 text-[11px] font-bold text-slate-600">فتح الشاشة قراءة فقط؛ لا ينشئ proposal ولا preview ولا كتابة provider.</p>
                 </div>
-                <span className="rounded-full bg-white px-3 py-1 text-[10px] font-black">{quality.settings_status || "settings_not_loaded"}</span>
+                <span className="rounded-full bg-white px-3 py-1 text-[10px] font-black">{targetedLookupLoading ? "loading_read_only" : quality.settings_status || "settings_not_loaded"}</span>
             </div>
+            {targetedLookupLoading && (
+                <div className="mt-3 flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs font-black text-sky-900" data-testid="snapchat-management-targeted-settings-loading">
+                    <ArrowClockwise size={17} className="animate-spin" /> جاري جلب إعدادات هذا الكيان فقط — قراءة فقط.
+                </div>
+            )}
             <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
                 <div><span className="block text-slate-500">Unified ID</span><code dir="ltr">{settings?.unified_entity_id || "—"}</code></div>
                 <div><span className="block text-slate-500">Snapchat provider ID</span><code dir="ltr">{settings?.provider_entity_id || "غير متاح — فشل جلب الإعدادات"}</code></div>
@@ -431,7 +437,7 @@ function CurrentSettingsCard({ action, settings, accountId }) {
             {diagnosticValuesAvailable && (
                 <section className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3" data-testid="snapchat-management-diagnostic-values">
                     <h4 className="text-xs font-black text-amber-950">قيم موجودة في الاستجابة — للتشخيص فقط</h4>
-                    <p className="mt-1 text-[10px] font-bold text-amber-800">هذه القيم غير معتمدة للمعاينة أو التنفيذ حتى تصبح settings_complete.</p>
+                    <p className="mt-1 text-[10px] font-bold text-amber-800">هذه القيم غير معتمدة للمعاينة أو الاعتماد أو التنفيذ حتى تصبح settings_complete.</p>
                     <div className="mt-2 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
                         {settings?.daily_budget_micro !== null && settings?.daily_budget_micro !== undefined && (
                             <div><span className="block text-slate-500">الميزانية المتاحة</span><strong dir="ltr">{diagnosticBudget.raw} · {diagnosticBudget.converted}</strong></div>
@@ -705,7 +711,8 @@ function ProposalPreview({ proposal, readiness, busy, governedSettingsReady, fin
     const governedUpdate = ["campaign.update", "ad_squad.update"].includes(proposal?.action);
     const financialMetadataUnknown = governedUpdate && !proposalFinancialMetadataKnown(proposal);
     const financialProposal = governedUpdate && proposalHasFinancialChanges(proposal);
-    const canApprove = proposal.status === "previewed" && proposal.confirm_token;
+    const approvalAvailable = proposal.status === "previewed" && proposal.confirm_token;
+    const canApprove = approvalAvailable && (!governedUpdate || governedSettingsReady);
     const canExecute = proposal.status === "approved"
         && readiness?.execution_enabled
         && (!governedUpdate || governedSettingsReady)
@@ -842,8 +849,8 @@ function ProposalPreview({ proposal, readiness, busy, governedSettingsReady, fin
                 </div>
             )}
             <div className="mt-4 flex flex-wrap gap-2">
-                {canApprove && (
-                    <button type="button" disabled={busy} onClick={onApprove} className="min-h-10 rounded-xl bg-slate-950 px-4 text-xs font-black text-white disabled:opacity-50" data-testid="snapchat-management-approve">
+                {approvalAvailable && (
+                    <button type="button" disabled={busy || !canApprove} onClick={onApprove} className="min-h-10 rounded-xl bg-slate-950 px-4 text-xs font-black text-white disabled:cursor-not-allowed disabled:opacity-50" data-testid="snapchat-management-approve">
                         اعتماد المعاينة
                     </button>
                 )}
@@ -1198,6 +1205,14 @@ export default function SnapchatCampaignManagementPanel({
     }
 
     async function approve() {
+        if (
+            ["campaign.update", "ad_squad.update"].includes(activeProposal?.action)
+            && !activeProposalGovernedSettingsReady
+        ) {
+            setNotice("");
+            setError("لا يمكن اعتماد المعاينة: إعدادات Snapchat غير مكتملة أو لا تطابق الكيان المحدد.");
+            return;
+        }
         beginOperation();
         setError("");
         try {
@@ -1431,8 +1446,11 @@ export default function SnapchatCampaignManagementPanel({
             {expanded && (
                 <div className="space-y-4 border-t border-white/10 bg-slate-50 p-4 text-slate-900">
                     {loading && !readiness ? (
-                        <div className="flex items-center gap-2 rounded-xl bg-white p-4 text-sm font-black text-slate-600">
-                            <ArrowClockwise size={18} className="animate-spin" /> فحص الدور ومفاتيح الأمان…
+                        <div className="space-y-3">
+                            <div className="flex items-center gap-2 rounded-xl bg-white p-4 text-sm font-black text-slate-600">
+                                <ArrowClockwise size={18} className="animate-spin" /> فحص الدور ومفاتيح الأمان…
+                            </div>
+                            <CurrentSettingsCard action={form.action} settings={currentSettings} accountId={form.accountId} />
                         </div>
                     ) : (
                         <>
