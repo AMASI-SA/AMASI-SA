@@ -1,0 +1,33 @@
+name: Temporary Frontend Lock Bootstrap
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - ".github/workflows/bootstrap-frontend-lock-temporary.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  lockfile:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Generate lockfile
+        run: yarn install --non-interactive
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-yarn-lock
+          path: frontend/yarn.lock
+          if-no-files-found: error
+          retention-days: 1
