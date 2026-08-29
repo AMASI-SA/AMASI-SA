@@ -126,11 +126,17 @@ def _default_cache_root() -> Path:
             raise ToolchainError("XDG_CACHE_HOME must be an absolute path")
     else:
         home = os.environ.get("HOME", "").strip()
-        if not home:
-            raise ToolchainError("HOME is required when XDG_CACHE_HOME is unset")
-        home_path = Path(home).expanduser()
+        if home:
+            home_path = Path(home).expanduser()
+        else:
+            try:
+                home_path = Path.home()
+            except (OSError, RuntimeError) as exc:
+                raise ToolchainError(
+                    "cannot resolve the current user's home directory"
+                ) from exc
         if not home_path.is_absolute():
-            raise ToolchainError("HOME must be an absolute path")
+            raise ToolchainError("resolved user home must be an absolute path")
         base = home_path / ".cache"
     return base / CACHE_NAMESPACE
 

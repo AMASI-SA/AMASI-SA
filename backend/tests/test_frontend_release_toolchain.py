@@ -849,6 +849,23 @@ class FrontendReleaseToolchainTests(unittest.TestCase):
             )
             self.assertFalse(toolchain_dir.is_relative_to(toolchain.REPO_ROOT))
 
+    def test_default_cache_uses_account_home_when_environment_home_is_unset(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            account_home = Path(tmp) / "account-home"
+            environment = dict(os.environ)
+            environment.pop("HOME", None)
+            environment.pop("XDG_CACHE_HOME", None)
+            with (
+                patch.dict(os.environ, environment, clear=True),
+                patch.object(toolchain.Path, "home", return_value=account_home),
+            ):
+                cache_root = toolchain._default_cache_root()
+
+            self.assertEqual(
+                cache_root,
+                account_home / ".cache" / toolchain.CACHE_NAMESPACE,
+            )
+
     def test_bootstrap_does_not_change_system_node_path_or_git_status(self):
         before_path = os.environ.get("PATH")
         before_node_path = shutil.which("node")
