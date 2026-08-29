@@ -867,14 +867,26 @@ class FrontendReleaseToolchainTests(unittest.TestCase):
             )
 
     def test_bootstrap_does_not_change_system_node_path_or_git_status(self):
+        def stable_file_identity(path: str) -> tuple:
+            info = os.stat(path)
+            return (
+                info.st_dev,
+                info.st_ino,
+                info.st_mode,
+                info.st_nlink,
+                info.st_uid,
+                info.st_gid,
+                info.st_size,
+                info.st_mtime_ns,
+                info.st_ctime_ns,
+                toolchain._sha256_file(Path(path)),
+            )
+
         before_path = os.environ.get("PATH")
         before_node_path = shutil.which("node")
         before_node_identity = None
         if before_node_path:
-            before_node_identity = (
-                os.stat(before_node_path),
-                toolchain._sha256_file(Path(before_node_path)),
-            )
+            before_node_identity = stable_file_identity(before_node_path)
         before_node = subprocess.run(
             ["node", "--version"],
             check=False,
@@ -915,10 +927,7 @@ class FrontendReleaseToolchainTests(unittest.TestCase):
         self.assertEqual(os.environ.get("PATH"), before_path)
         self.assertEqual(shutil.which("node"), before_node_path)
         if before_node_path and before_node_identity:
-            after_identity = (
-                os.stat(before_node_path),
-                toolchain._sha256_file(Path(before_node_path)),
-            )
+            after_identity = stable_file_identity(before_node_path)
             self.assertEqual(after_identity, before_node_identity)
         self.assertEqual(after_node.returncode, before_node.returncode)
         self.assertEqual(after_node.stdout, before_node.stdout)
