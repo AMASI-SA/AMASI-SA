@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: \${{ github.event.pull_request.head.ref }}
+          ref: ${{ github.event.pull_request.head.ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -35,4 +35,4 @@ jobs:
           git add frontend/yarn.lock
           git diff --cached --quiet && exit 0
           git commit -m "chore(frontend): add generated Yarn lockfile"
-          git push origin "HEAD:\${{ github.event.pull_request.head.ref }}"
+          git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
