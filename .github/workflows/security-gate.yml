@@ -120,7 +120,7 @@ jobs:
         env:
           CI: "false"
         run: |
-          yarn build
+          yarn build:release
           python ../scripts/verify_frontend_build.py --expected-git-sha "$GITHUB_SHA"
           grep -F 'http-equiv="Content-Security-Policy"' build/index.html
           grep -F "object-src 'none'" build/index.html

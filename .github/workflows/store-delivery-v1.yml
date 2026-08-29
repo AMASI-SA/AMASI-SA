@@ -67,4 +67,4 @@ jobs:
       - name: Install frontend dependencies
         run: yarn install --frozen-lockfile --non-interactive
       - name: Build frontend
-        run: yarn build
+        run: yarn build:release

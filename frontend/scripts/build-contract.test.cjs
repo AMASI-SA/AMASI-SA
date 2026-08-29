@@ -13,6 +13,49 @@ const {
 } = require("./write-build-meta.cjs");
 
 const frontendRoot = path.resolve(__dirname, "..");
+const repositoryRoot = path.resolve(frontendRoot, "..");
+
+test("ordinary and governed release builds remain separate", () => {
+  const packageManifest = JSON.parse(
+    fs.readFileSync(path.join(frontendRoot, "package.json"), "utf8"),
+  );
+  assert.equal(packageManifest.scripts.build, "vite build");
+  assert.equal(
+    packageManifest.scripts["build:release"],
+    "node scripts/build-release-frontend.cjs",
+  );
+  assert.equal(packageManifest.engines.node, ">=22.23.2 <23");
+  assert.equal(packageManifest.engines.yarn, ">=1.22.22 <2");
+  assert.match(packageManifest.packageManager, /^yarn@1\.22\.22(?:\+|$)/);
+
+  const governedWorkflowPaths = [
+    ".github/workflows/emergent-preview-hosts.yml",
+    ".github/workflows/legal-pages-noindex.yml",
+    ".github/workflows/mezan-production-release.yml",
+    ".github/workflows/security-gate.yml",
+    ".github/workflows/store-delivery-v1.yml",
+  ];
+  const workflowsRoot = path.join(repositoryRoot, ".github", "workflows");
+  const releaseWorkflowPaths = fs.readdirSync(workflowsRoot)
+    .filter((name) => /\.ya?ml$/.test(name))
+    .filter((name) => fs.readFileSync(path.join(workflowsRoot, name), "utf8")
+      .includes("yarn build:release"))
+    .map((name) => `.github/workflows/${name}`)
+    .sort();
+  assert.deepEqual(releaseWorkflowPaths, [...governedWorkflowPaths].sort());
+
+  for (const relativePath of governedWorkflowPaths) {
+    const workflow = fs.readFileSync(
+      path.join(repositoryRoot, relativePath),
+      "utf8",
+    );
+    assert.match(workflow, /yarn build:release/);
+    assert.doesNotMatch(workflow, /yarn build(?:\s|$)/m);
+    assert.match(workflow, /node-version:\s*["']?22\.23\.2["']?/);
+    assert.match(workflow, /yarn@1\.22\.22/);
+    assert.match(workflow, /yarn install --frozen-lockfile --non-interactive/);
+  }
+});
 
 test("only the exact public client allowlist reaches the Vite child and build proof", async () => {
   const names = [

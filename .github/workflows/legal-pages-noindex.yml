@@ -47,7 +47,7 @@ jobs:
       - name: Install production runtime dependencies only
         run: yarn install --frozen-lockfile --non-interactive --production=true
       - name: Build with production dependencies only
-        run: yarn build
+        run: yarn build:release
       - name: Start the supervisor frontend command with production dependencies only
         run: |
           set -euo pipefail
@@ -80,7 +80,7 @@ jobs:
       - name: Validate Vite server configuration
         run: node --check vite.config.js
       - name: Build Production frontend
-        run: yarn build
+        run: yarn build:release
       - name: Verify built browser security contract
         run: |
           grep -q 'noindex, nofollow, noarchive, nosnippet, noimageindex' build/index.html

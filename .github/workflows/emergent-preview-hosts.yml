@@ -40,4 +40,4 @@ jobs:
         working-directory: frontend
         env:
           CI: "false"
-        run: yarn build
+        run: yarn build:release

@@ -24,10 +24,10 @@ nvm use 22.23.2
 corepack enable
 corepack prepare yarn@1.22.22 --activate
 yarn install --frozen-lockfile --non-interactive
-yarn build
+yarn build:release
 ```
 
-`yarn build` is the release build. It removes only the previous governed proof,
+`yarn build:release` is the governed release build. It removes only the previous governed proof,
 performs two clean builds (A, then B), requires the two complete
 `build-meta.json` files to be byte-identical, and leaves B in
 `frontend/build`. Each pass proves that every tracked file below `frontend/`
@@ -38,6 +38,15 @@ The successful build atomically writes the ignored, path-specific
 `frontend/.release/reproducible-build.json`; its normalized content and its own
 SHA256/byte count are bound into the release lease. Do not copy a proof from
 another checkout or build.
+
+`yarn build` remains the ordinary single-pass Vite build for feature workflows
+and local development. It deliberately does not create a reproducibility proof,
+so a normal build cannot be prepared or published by Release Guard. The five
+explicitly governed production/public-artifact workflows and the manual
+production path use `yarn build:release` with exact Node 22.23.2, Yarn 1.22.22,
+and the frozen lockfile. The package engine range keeps other Node 22 feature
+workflows compatible; the release wrapper and proof still enforce the exact
+release toolchain fail-closed.
 
 Each retained B writes deterministic
 `frontend/build/build-meta.json` without a wall-clock timestamp and records
