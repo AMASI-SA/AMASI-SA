@@ -249,6 +249,8 @@ frontend/node_modules/.cache/default-development/225.pack
 frontend/node_modules/.cache/default-development/226.pack
 frontend/node_modules/.cache/default-development/228.pack
 backend/release_identity.json
+/frontend/.release/reproducible-build.json
+/frontend/.release/reproducible-build.json.tmp
 frontend/node_modules/.cache/default-development/223.pack
 frontend/node_modules/.cache/default-development/5.pack
 frontend/node_modules/.cache/default-development/20.pack

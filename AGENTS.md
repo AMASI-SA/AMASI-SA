@@ -12,24 +12,53 @@ repository to the shared Emergent production project.
 
 ## Mandatory release gate
 
-Before clicking **Re-publish changes**, run from `/app`:
+The guard uses release protocol v4. Before updating `/app` or starting the
+potentially long frontend install and build, inspect the current lease:
+
+```bash
+cd /app
+python scripts/production_release_guard.py status
+```
+
+Continue only when it reports `"active": false`. A lease prepared by an older
+guard must be closed with that original guard before updating the workspace;
+never reuse a v1/v2/v3 lease or identity with v4.
+
+After fast-forwarding `/app` to the intended Production SHA, install the
+repository-owned local toolchain, perform the frozen install and governed
+build, and validate the retained artifact before creating a lease:
+
+```bash
+python scripts/frontend_release_toolchain.py ensure
+
+python scripts/frontend_release_toolchain.py exec -- \
+  bash -lc 'cd frontend && yarn install --frozen-lockfile --non-interactive'
+
+python scripts/frontend_release_toolchain.py exec -- \
+  bash -lc 'cd frontend && yarn build:release'
+
+python scripts/frontend_release_toolchain.py exec -- \
+  python scripts/verify_frontend_build.py \
+    --expected-git-sha "$(git rev-parse HEAD)"
+```
+
+Only after all four commands succeed, run:
 
 ```bash
 python scripts/production_release_guard.py prepare --actor "<conversation>"
 ```
 
-The guard uses release protocol v2. A lease prepared by an older guard must
-be aborted with that original guard **before** updating the workspace. After
-the update, run `prepare` again; never reuse a v1 lease or identity with v2.
-
-The command must exit successfully. It enforces all of the following:
+Do not hold a release lease during toolchain bootstrap, dependency install, or
+the reproducibility build. `prepare` must exit successfully. It enforces all
+of the following:
 
 1. only one production release lease exists across conversations;
 2. the checked-out branch is the production branch;
 3. tracked files are clean;
 4. local `HEAD` exactly matches `origin/hotfix/prod-snap-meta-final` after a
    fresh fetch;
-5. the exact Git SHA is embedded in the package for post-deploy proof.
+5. the exact Git SHA and governed frontend artifact are embedded in the
+   package for post-deploy proof.
 
 Immediately before clicking **Re-publish changes**, run this second gate. It
 refetches GitHub and refuses if another conversation pushed or changed files

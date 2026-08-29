@@ -74,13 +74,30 @@
 
 كل تغيير Runtime في P08 أو إصلاح بعد القطع يستخدم من `/app`:
 
-1. تحديث workspace إلى `origin/hotfix/prod-snap-meta-final` دون reset قسري.
-2. `production_release_guard.py prepare`.
-3. `production_release_guard.py prepublish` مباشرة قبل إعادة النشر.
-4. Re-publish مرة واحدة.
-5. انتظار `Deployment Succeeded` أحدث.
-6. `production_release_guard.py verify --url https://mezansalla.com`.
-7. عدم تنفيذ كتابة مالية حتى `verified: true` للـSHA نفسه.
+1. فحص `python scripts/production_release_guard.py status` وعدم المتابعة حتى تكون `active: false`.
+2. تحديث workspace إلى `origin/hotfix/prod-snap-meta-final` دون reset قسري.
+3. قبل إنشاء أي lease، تنفيذ bootstrap والتثبيت المجمد والبناء المحكوم والتحقق:
+
+   ```bash
+   python scripts/frontend_release_toolchain.py ensure
+
+   python scripts/frontend_release_toolchain.py exec -- \
+     bash -lc 'cd frontend && yarn install --frozen-lockfile --non-interactive'
+
+   python scripts/frontend_release_toolchain.py exec -- \
+     bash -lc 'cd frontend && yarn build:release'
+
+   python scripts/frontend_release_toolchain.py exec -- \
+     python scripts/verify_frontend_build.py \
+       --expected-git-sha "$(git rev-parse HEAD)"
+   ```
+
+4. بعد نجاح الخطوات السابقة فقط، تنفيذ `python scripts/production_release_guard.py prepare --actor "<actor>"`.
+5. تنفيذ `python scripts/production_release_guard.py prepublish` مباشرة قبل إعادة النشر.
+6. Re-publish مرة واحدة.
+7. انتظار `Deployment Succeeded` أحدث.
+8. تنفيذ `python scripts/production_release_guard.py verify --url https://mezansalla.com`.
+9. عدم تنفيذ كتابة مالية حتى `verified: true` للـSHA نفسه و`active: false`.
 
 ## معالجة الخطأ بعد القطع
 

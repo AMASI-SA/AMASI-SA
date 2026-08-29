@@ -23,10 +23,27 @@ from typing import Any
 from uuid import UUID, uuid4
 
 
-PRODUCTION_BRANCH = "hotfix/prod-snap-meta-final"
-PROTOCOL_VERSION = 2
-BOOT_CLOCK_SKEW = timedelta(minutes=5)
 REPO_ROOT = Path(__file__).resolve().parents[1]
+BACKEND_ROOT = REPO_ROOT / "backend"
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+from frontend_build_identity import (  # noqa: E402
+    FrontendBuildIdentityError,
+    RETIREMENT_SERVICE_WORKER_BYTES,
+    RETIREMENT_SERVICE_WORKER_SHA256,
+    read_frontend_build_identity,
+    read_frontend_reproducibility_proof,
+    validate_frontend_reproducibility_proof,
+)
+
+
+PRODUCTION_BRANCH = "hotfix/prod-snap-meta-final"
+PRODUCTION_ORIGIN = "https://mezansalla.com"
+SPA_SHELL_PATH = "/snapchat-accounts"
+STANDARD_SERVICE_WORKER_PATHS = ("/sw.js", "/service-worker.js")
+PROTOCOL_VERSION = 4
+BOOT_CLOCK_SKEW = timedelta(minutes=5)
 GIT_DIR = REPO_ROOT / ".git"
 LEASE_DIR = GIT_DIR / "mezan-production-release.lock"
 LEASE_PATH = LEASE_DIR / "lease.json"
@@ -74,6 +91,29 @@ def _critical_hashes() -> dict[str, str]:
         relative.removeprefix("backend/"): _sha256(REPO_ROOT / relative)
         for relative in CRITICAL_FILES
     }
+
+
+def _frontend_build_identity(expected_git_sha: str) -> dict[str, Any]:
+    try:
+        return read_frontend_build_identity(
+            expected_git_sha=expected_git_sha,
+            require_git_source=True,
+        )
+    except FrontendBuildIdentityError as exc:
+        raise ReleaseGuardError(f"frontend build proof failed: {exc}") from exc
+
+
+def _frontend_reproducibility_proof(
+    frontend_build: dict[str, Any],
+) -> dict[str, Any]:
+    try:
+        return read_frontend_reproducibility_proof(
+            frontend_build=frontend_build
+        )
+    except FrontendBuildIdentityError as exc:
+        raise ReleaseGuardError(
+            f"frontend reproducibility proof failed: {exc}"
+        ) from exc
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -149,6 +189,11 @@ def _prepare_locked(actor: str) -> dict[str, Any]:
                 "workspace does not match GitHub production branch: "
                 f"local={local_sha} remote={remote_sha}"
             )
+        frontend_build = _frontend_build_identity(local_sha)
+        frontend_reproducibility = _frontend_reproducibility_proof(
+            frontend_build
+        )
+        critical_hashes = _critical_hashes()
         payload = {
             "release_id": str(uuid4()),
             "git_sha": local_sha,
@@ -156,8 +201,21 @@ def _prepare_locked(actor: str) -> dict[str, Any]:
             "actor": actor,
             "prepared_at": _utc_now(),
             "protocol_version": PROTOCOL_VERSION,
-            "critical_file_hashes": _critical_hashes(),
+            "critical_file_hashes": critical_hashes,
+            "frontend_build": frontend_build,
+            "frontend_reproducibility": frontend_reproducibility,
         }
+        if (
+            _run_git("rev-parse", "HEAD") != local_sha
+            or _frontend_build_identity(local_sha) != frontend_build
+            or _frontend_reproducibility_proof(frontend_build)
+            != frontend_reproducibility
+            or _critical_hashes() != critical_hashes
+        ):
+            raise ReleaseGuardError(
+                "frontend source, critical files, or build changed while "
+                "preparing release"
+            )
         _atomic_json(IDENTITY_PATH, payload)
         _atomic_json(LEASE_PATH, payload)
         return payload
@@ -198,8 +256,31 @@ def _prepublish_locked() -> dict[str, Any]:
             f"lease={expected_sha} local={local_sha} remote={remote_sha}"
         )
     identity = _read_json(IDENTITY_PATH)
-    if identity != lease or identity.get("critical_file_hashes") != _critical_hashes():
-        raise ReleaseGuardError("release identity or critical files changed after prepare")
+    frontend_build = _frontend_build_identity(expected_sha)
+    frontend_reproducibility = _frontend_reproducibility_proof(
+        frontend_build
+    )
+    critical_hashes = _critical_hashes()
+    if (
+        identity != lease
+        or identity.get("critical_file_hashes") != critical_hashes
+        or identity.get("frontend_build") != frontend_build
+        or identity.get("frontend_reproducibility")
+        != frontend_reproducibility
+    ):
+        raise ReleaseGuardError(
+            "release identity, critical files, or frontend build changed after prepare"
+        )
+    if (
+        _frontend_build_identity(expected_sha) != frontend_build
+        or _frontend_reproducibility_proof(frontend_build)
+        != frontend_reproducibility
+        or _critical_hashes() != critical_hashes
+    ):
+        raise ReleaseGuardError(
+            "frontend source, critical files, or build changed during "
+            "prepublish verification"
+        )
     _assert_active_lease_unchanged(lease)
     return {
         "ready_to_publish": True,
@@ -209,24 +290,423 @@ def _prepublish_locked() -> dict[str, Any]:
     }
 
 
-def _health_payload(base_url: str) -> dict[str, Any]:
-    url = base_url.rstrip("/") + "/api/health"
-    url += "?" + urllib.parse.urlencode({
-        "release_check": secrets.token_hex(16),
-    })
-    request = urllib.request.Request(
-        url,
-        headers={
-            "Cache-Control": "no-cache",
-            "Accept": "application/json",
-            "User-Agent": "Mozilla/5.0 (compatible; MezanReleaseGuard/1.0)",
-        },
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise ReleaseGuardError(
+            f"production verification refused redirect: {req.full_url} -> {newurl}"
+        )
+
+
+def _urlopen_no_redirect(request: urllib.request.Request, timeout: int):
+    opener = urllib.request.build_opener(_NoRedirectHandler())
+    return opener.open(request, timeout=timeout)
+
+
+def _validated_production_origin(base_url: str) -> str:
+    raw = str(base_url or "").strip()
+    parsed = urllib.parse.urlsplit(raw)
+    if (
+        parsed.scheme != "https"
+        or parsed.netloc != "mezansalla.com"
+        or parsed.path not in {"", "/"}
+        or parsed.query
+        or parsed.fragment
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.port is not None
+    ):
+        raise ReleaseGuardError(
+            f"verify origin must be exactly {PRODUCTION_ORIGIN}"
+        )
+    return PRODUCTION_ORIGIN
+
+
+def _release_check_url(
+    origin: str,
+    relative_path: str,
+    *,
+    cache_bust: bool,
+) -> str:
+    if origin != PRODUCTION_ORIGIN:
+        raise ReleaseGuardError("production verification origin is not pinned")
+    relative_path = str(relative_path or "")
+    parsed_path = urllib.parse.urlsplit(relative_path)
+    path_parts = Path(parsed_path.path).parts
+    if (
+        not parsed_path.path.startswith("/")
+        or parsed_path.scheme
+        or parsed_path.netloc
+        or parsed_path.query
+        or parsed_path.fragment
+        or "\\" in relative_path
+        or ".." in path_parts
+    ):
+        raise ReleaseGuardError(
+            f"production verification path is invalid: {relative_path}"
+        )
+    query = ""
+    if cache_bust:
+        query = urllib.parse.urlencode([
+            ("release_check", secrets.token_hex(16)),
+        ])
+        if len(urllib.parse.parse_qsl(query, keep_blank_values=True)) != 1:
+            raise ReleaseGuardError("release check query is invalid")
+    url = urllib.parse.urlunsplit(("https", "mezansalla.com", parsed_path.path, query, ""))
+    parsed_url = urllib.parse.urlsplit(url)
+    release_keys = [
+        name for name, _value in urllib.parse.parse_qsl(
+            parsed_url.query, keep_blank_values=True
+        ) if name == "release_check"
+    ]
+    if len(release_keys) != (1 if cache_bust else 0):
+        raise ReleaseGuardError("release_check query must occur exactly once")
+    return url
+
+
+def _response_headers(response: Any) -> dict[str, str]:
+    return {
+        str(name).lower(): str(value).strip()
+        for name, value in response.headers.items()
+    }
+
+
+def _fetch_production(
+    origin: str,
+    relative_path: str,
+    *,
+    cache_bust: bool,
+    accept: str,
+    timeout: int,
+    allowed_statuses: frozenset[int] = frozenset({200}),
+    service_worker_script: bool = False,
+) -> dict[str, Any]:
+    url = _release_check_url(
+        origin, relative_path, cache_bust=cache_bust
     )
+    headers = {
+        "Accept": accept,
+        "Accept-Encoding": "identity",
+        "User-Agent": "Mozilla/5.0 (compatible; MezanReleaseGuard/1.0)",
+    }
+    if cache_bust:
+        headers["Cache-Control"] = "no-cache"
+    if service_worker_script:
+        headers["Service-Worker"] = "script"
+    request = urllib.request.Request(url, headers=headers)
     try:
-        with urllib.request.urlopen(request, timeout=20) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+        with _urlopen_no_redirect(request, timeout=timeout) as response:
+            status = int(response.getcode())
+            final_url = str(response.geturl())
+            body = response.read()
+            response_headers = _response_headers(response)
+    except ReleaseGuardError:
+        raise
+    except urllib.error.HTTPError as exc:
+        status = int(exc.code)
+        final_url = str(exc.geturl())
+        body = exc.read()
+        response_headers = _response_headers(exc)
+    except (urllib.error.URLError, TimeoutError) as exc:
+        raise ReleaseGuardError(
+            f"production check failed for {relative_path}: {exc}"
+        ) from exc
+    if status not in allowed_statuses:
+        raise ReleaseGuardError(
+            f"production check returned HTTP {status}: {relative_path}"
+        )
+    if final_url != url:
+        raise ReleaseGuardError(
+            f"production check changed URL: expected={url} actual={final_url}"
+        )
+    return {
+        "url": url,
+        "status": status,
+        "body": body,
+        "headers": response_headers,
+    }
+
+
+def _health_payload(origin: str) -> dict[str, Any]:
+    try:
+        response = _fetch_production(
+            origin,
+            "/api/health",
+            cache_bust=True,
+            accept="application/json",
+            timeout=20,
+        )
+        return json.loads(response["body"].decode("utf-8"))
+    except (UnicodeError, json.JSONDecodeError) as exc:
         raise ReleaseGuardError(f"production health check failed: {exc}") from exc
+
+
+def _validated_public_record(value: Any, label: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ReleaseGuardError(f"prepared {label} proof is invalid")
+    relative = str(value.get("path") or "")
+    pure = Path(relative)
+    size = value.get("bytes")
+    digest = str(value.get("sha256") or "")
+    if (
+        not relative
+        or relative.startswith("/")
+        or "\\" in relative
+        or ".." in pure.parts
+        or pure.as_posix() != relative
+    ):
+        raise ReleaseGuardError(f"prepared {label} path is invalid: {relative}")
+    if isinstance(size, bool) or not isinstance(size, int) or size < 0:
+        raise ReleaseGuardError(f"prepared {label} byte count is invalid: {relative}")
+    if not re.fullmatch(r"[0-9a-f]{64}", digest):
+        raise ReleaseGuardError(f"prepared {label} SHA is invalid: {relative}")
+    return {"path": relative, "bytes": size, "sha256": digest}
+
+
+def _assert_public_bytes(
+    response: dict[str, Any],
+    *,
+    expected: dict[str, Any],
+    label: str,
+) -> None:
+    content = response["body"]
+    actual_sha256 = hashlib.sha256(content).hexdigest()
+    if actual_sha256 != expected["sha256"]:
+        raise ReleaseGuardError(
+            "deployed frontend SHA mismatch: "
+            f"path={label} expected={expected['sha256']} actual={actual_sha256}"
+        )
+    if len(content) != expected["bytes"]:
+        raise ReleaseGuardError(
+            "deployed frontend byte count mismatch: "
+            f"path={label} expected={expected['bytes']} actual={len(content)}"
+        )
+
+
+def _assert_html_shell_headers(
+    response: dict[str, Any], relative_path: str
+) -> dict[str, Any]:
+    headers = response["headers"]
+    content_type = headers.get("content-type", "").lower()
+    if not content_type.startswith("text/html"):
+        raise ReleaseGuardError(
+            f"production SPA shell content type is invalid: {relative_path}"
+        )
+    cache_control = headers.get("cache-control", "")
+    directives = {
+        part.strip().lower() for part in cache_control.split(",") if part.strip()
+    }
+    if not {"no-cache", "no-store", "must-revalidate"}.issubset(directives):
+        raise ReleaseGuardError(
+            "production SPA shell cache policy must include "
+            f"no-cache, no-store, must-revalidate: {relative_path}"
+        )
+    if "immutable" in directives:
+        raise ReleaseGuardError(
+            f"production SPA shell must not be immutable: {relative_path}"
+        )
+    for directive in directives:
+        if directive.startswith(("max-age=", "s-maxage=")):
+            try:
+                max_age = int(directive.split("=", 1)[1].strip('"'))
+            except ValueError as exc:
+                raise ReleaseGuardError(
+                    f"production SPA shell cache age is invalid: {relative_path}"
+                ) from exc
+            if max_age > 0:
+                raise ReleaseGuardError(
+                    f"production SPA shell cache age is positive: {relative_path}"
+                )
+    age = headers.get("age")
+    if age is not None:
+        try:
+            if int(age) != 0:
+                raise ReleaseGuardError(
+                    f"production SPA shell Age is non-zero: {relative_path}"
+                )
+        except ValueError as exc:
+            raise ReleaseGuardError(
+                f"production SPA shell Age is invalid: {relative_path}"
+            ) from exc
+    cf_cache_status = headers.get("cf-cache-status", "").upper()
+    if cf_cache_status in {"HIT", "STALE", "UPDATING"}:
+        raise ReleaseGuardError(
+            "production SPA shell was served from an unsafe Cloudflare cache "
+            f"state: {relative_path}={cf_cache_status}"
+        )
+    return {
+        "path": relative_path,
+        "cache_control": cache_control,
+        "etag": headers.get("etag"),
+        "age": age,
+        "cf_cache_status": headers.get("cf-cache-status"),
+        "content_type": headers.get("content-type"),
+    }
+
+
+def _assert_service_worker_headers(
+    response: dict[str, Any], relative_path: str
+) -> dict[str, Any]:
+    headers = response["headers"]
+    content_type = headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    if content_type not in {
+        "application/javascript",
+        "application/x-javascript",
+        "text/javascript",
+    }:
+        raise ReleaseGuardError(
+            f"production service worker MIME is invalid: {relative_path}"
+        )
+    if headers.get("x-content-type-options", "").lower() != "nosniff":
+        raise ReleaseGuardError(
+            "production service worker must declare X-Content-Type-Options "
+            f"nosniff: {relative_path}"
+        )
+    cache_control = headers.get("cache-control", "")
+    directives = {
+        part.strip().lower() for part in cache_control.split(",") if part.strip()
+    }
+    if not {"no-cache", "no-store", "must-revalidate"}.issubset(
+        directives
+    ):
+        raise ReleaseGuardError(
+            "production service worker cache policy must include no-cache, "
+            f"no-store, must-revalidate: {relative_path}"
+        )
+    if "immutable" in directives:
+        raise ReleaseGuardError(
+            f"production service worker must not be immutable: {relative_path}"
+        )
+    for directive in directives:
+        if directive.startswith(("max-age=", "s-maxage=")):
+            try:
+                max_age = int(directive.split("=", 1)[1].strip('"'))
+            except ValueError as exc:
+                raise ReleaseGuardError(
+                    f"production service worker cache age is invalid: {relative_path}"
+                ) from exc
+            if max_age > 0:
+                raise ReleaseGuardError(
+                    f"production service worker cache age is positive: {relative_path}"
+                )
+    if "max-age=0" not in directives:
+        raise ReleaseGuardError(
+            f"production service worker must declare max-age=0: {relative_path}"
+        )
+    age = headers.get("age")
+    if age is not None:
+        try:
+            if int(age) != 0:
+                raise ReleaseGuardError(
+                    f"production service worker Age is non-zero: {relative_path}"
+                )
+        except ValueError as exc:
+            raise ReleaseGuardError(
+                f"production service worker Age is invalid: {relative_path}"
+            ) from exc
+    cf_cache_status = headers.get("cf-cache-status", "").upper()
+    if cf_cache_status in {"HIT", "STALE", "UPDATING"}:
+        raise ReleaseGuardError(
+            "production service worker was served from an unsafe Cloudflare "
+            f"cache state: {relative_path}={cf_cache_status}"
+        )
+    return {
+        "path": relative_path,
+        "state": "retirement_payload_present",
+        "cache_control": cache_control,
+        "etag": headers.get("etag"),
+        "age": age,
+        "cf_cache_status": headers.get("cf-cache-status"),
+        "content_type": headers.get("content-type"),
+    }
+
+
+def _verify_public_frontend(
+    origin: str,
+    expected: dict[str, Any],
+) -> dict[str, Any]:
+    if not isinstance(expected, dict):
+        raise ReleaseGuardError("prepared frontend build proof is missing")
+    index = _validated_public_record(expected.get("index"), "frontend index")
+    if index["path"] != "index.html":
+        raise ReleaseGuardError("prepared frontend index path is invalid")
+    build_meta = _validated_public_record(
+        expected.get("build_meta"), "frontend build metadata"
+    )
+    if build_meta["path"] != "build-meta.json":
+        raise ReleaseGuardError("prepared frontend build metadata path is invalid")
+    raw_public_files = expected.get("public_files")
+    if not isinstance(raw_public_files, list) or not raw_public_files:
+        raise ReleaseGuardError("prepared frontend public file proof is missing")
+    public_files = [
+        _validated_public_record(value, "frontend public file")
+        for value in raw_public_files
+    ]
+    paths = [record["path"] for record in public_files]
+    if paths != sorted(paths) or len(paths) != len(set(paths)):
+        raise ReleaseGuardError(
+            "prepared frontend public file paths must be sorted and unique"
+        )
+    if index not in public_files:
+        raise ReleaseGuardError(
+            "prepared frontend index is missing from public file proof"
+        )
+
+    records_by_request_path = {
+        "/build-meta.json": build_meta,
+        **{"/" + record["path"]: record for record in public_files},
+        "/": index,
+        SPA_SHELL_PATH: index,
+    }
+    for relative_path in STANDARD_SERVICE_WORKER_PATHS:
+        record = records_by_request_path.get(relative_path)
+        if (
+            record is None
+            or record["bytes"] != RETIREMENT_SERVICE_WORKER_BYTES
+            or record["sha256"] != RETIREMENT_SERVICE_WORKER_SHA256
+        ):
+            raise ReleaseGuardError(
+                "prepared frontend retirement service worker is missing or "
+                f"invalid: {relative_path}"
+            )
+    checked_requests = []
+    shell_cache = []
+    service_workers = []
+    for relative_path, record in records_by_request_path.items():
+        for cache_bust in (False, True):
+            response = _fetch_production(
+                origin,
+                relative_path,
+                cache_bust=cache_bust,
+                accept="*/*",
+                timeout=30,
+                service_worker_script=(
+                    relative_path in STANDARD_SERVICE_WORKER_PATHS
+                ),
+            )
+            label = relative_path + ("?release_check" if cache_bust else "")
+            _assert_public_bytes(response, expected=record, label=label)
+            checked_requests.append(label)
+            if not cache_bust and relative_path in {
+                "/",
+                "/index.html",
+                SPA_SHELL_PATH,
+            }:
+                shell_cache.append(
+                    _assert_html_shell_headers(response, relative_path)
+                )
+            if relative_path in STANDARD_SERVICE_WORKER_PATHS:
+                service_worker = _assert_service_worker_headers(
+                    response, relative_path
+                )
+                if not cache_bust:
+                    service_workers.append(service_worker)
+
+    return {
+        "artifact_tree_sha256": expected.get("artifact_tree_sha256"),
+        "checked_requests": checked_requests,
+        "shell_cache": shell_cache,
+        "service_workers": service_workers,
+    }
 
 
 def _aware_timestamp(value: Any, label: str) -> tuple[str, datetime]:
@@ -256,7 +736,7 @@ def _uuid4(value: Any, label: str) -> str:
 
 
 def _validated_release_lease(lease: dict[str, Any]) -> tuple[str, str]:
-    """Validate the exact v2 lease identity before any release mutation."""
+    """Validate the exact v4 lease identity before any release mutation."""
     try:
         protocol_version = int(lease.get("protocol_version") or 0)
     except (TypeError, ValueError) as exc:
@@ -273,6 +753,21 @@ def _validated_release_lease(lease: dict[str, Any]) -> tuple[str, str]:
     expected_release_id = _uuid4(
         lease.get("release_id"), "prepared release id"
     )
+    if not isinstance(lease.get("frontend_build"), dict):
+        raise ReleaseGuardError("prepared frontend build proof is missing")
+    if not isinstance(lease.get("frontend_reproducibility"), dict):
+        raise ReleaseGuardError(
+            "prepared frontend reproducibility proof is missing"
+        )
+    try:
+        validate_frontend_reproducibility_proof(
+            frontend_build=lease["frontend_build"],
+            proof=lease["frontend_reproducibility"],
+        )
+    except FrontendBuildIdentityError as exc:
+        raise ReleaseGuardError(
+            f"prepared frontend reproducibility proof is invalid: {exc}"
+        ) from exc
     return expected_sha, expected_release_id
 
 
@@ -317,6 +812,7 @@ def _verify_locked(base_url: str) -> dict[str, Any]:
     if not LEASE_PATH.exists():
         raise ReleaseGuardError("no prepared production release lease")
     lease = _read_json(LEASE_PATH)
+    origin = _validated_production_origin(base_url)
     expected_sha, expected_release_id = _validated_release_lease(lease)
     identity_fields = (
         "release_id",
@@ -325,6 +821,8 @@ def _verify_locked(base_url: str) -> dict[str, Any]:
         "prepared_at",
         "protocol_version",
         "critical_file_hashes",
+        "frontend_build",
+        "frontend_reproducibility",
     )
     expected_identity = {field: lease.get(field) for field in identity_fields}
     expected_identity["release_id"] = expected_release_id
@@ -333,7 +831,7 @@ def _verify_locked(base_url: str) -> dict[str, Any]:
     )
     observations = []
     for attempt in range(3):
-        health = _health_payload(base_url)
+        health = _health_payload(origin)
         release = health.get("release") or {}
         actual_sha = str(release.get("git_sha") or "")
         if health.get("ok") is not True:
@@ -346,6 +844,8 @@ def _verify_locked(base_url: str) -> dict[str, Any]:
             )
         if release.get("critical_file_hashes_match") is not True:
             raise ReleaseGuardError("production critical file hashes do not match")
+        if release.get("frontend_build_verified") is not True:
+            raise ReleaseGuardError("production frontend build proof does not match")
         identity_mismatches = [
             field
             for field, expected in expected_identity.items()
@@ -366,9 +866,14 @@ def _verify_locked(base_url: str) -> dict[str, Any]:
             )
         if boot_started_at_timestamp > now + BOOT_CLOCK_SKEW:
             raise ReleaseGuardError("production boot identity is in the future")
+        frontend_observation = _verify_public_frontend(
+            origin,
+            expected_identity["frontend_build"],
+        )
         observations.append({
             "git_sha": actual_sha,
             "boot_started_at": boot_started_at,
+            "frontend": frontend_observation,
         })
         if attempt < 2:
             time.sleep(2)
@@ -381,10 +886,20 @@ def _verify_locked(base_url: str) -> dict[str, Any]:
         "git_sha": actual_sha,
         "release_id": expected_release_id,
         "protocol_version": PROTOCOL_VERSION,
-        "url": base_url.rstrip("/"),
+        "url": origin,
         "checks": len(observations),
         "boot_started_at": observations[0]["boot_started_at"],
         "boot_started_at_observations": boot_started_at_observations,
+        "frontend_artifact_tree_sha256": expected_identity[
+            "frontend_build"
+        ]["artifact_tree_sha256"],
+        "frontend_checked_requests": observations[0]["frontend"][
+            "checked_requests"
+        ],
+        "frontend_shell_cache": observations[0]["frontend"]["shell_cache"],
+        "frontend_service_workers": observations[0]["frontend"][
+            "service_workers"
+        ],
     }
 
 
@@ -433,7 +948,7 @@ def main() -> int:
     sub.add_parser("status")
     sub.add_parser("prepublish")
     verify_parser = sub.add_parser("verify")
-    verify_parser.add_argument("--url", default="https://mezansalla.com")
+    verify_parser.add_argument("--url", default=PRODUCTION_ORIGIN)
     abort_parser = sub.add_parser("abort")
     abort_parser.add_argument("--expected-sha", required=True)
     abort_parser.add_argument("--expected-release-id", required=True)
