@@ -1315,6 +1315,8 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
             mapping_verified: true,
             ad_account_id: "account-1",
             account_currency: "USD",
+            daily_budget_micro: 40_000_000,
+            status: "ACTIVE",
             quality: {
                 settings_status: "settings_sync_failed",
                 freshness_seconds: null,
@@ -1351,6 +1353,12 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
         expect(toggle.getAttribute("aria-expanded")).toBe("true");
         expect(container.querySelector('[data-testid="snapchat-management-current-settings"]').textContent)
             .toContain("campaign_provider_snapshot_missing");
+        expect(container.querySelector('[data-testid="snapchat-management-current-daily-budget"]').textContent)
+            .toContain("غير متاح — فشل جلب الإعدادات");
+        expect(container.querySelector('[data-testid="snapchat-management-diagnostic-values"]').textContent)
+            .toContain("40.00 USD");
+        expect(container.querySelector('[data-testid="snapchat-management-diagnostic-values"]').textContent)
+            .toContain("ACTIVE");
         expect(container.querySelector('[data-testid="snapchat-management-create-preview"]').disabled)
             .toBe(true);
 
@@ -1481,8 +1489,10 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
             change(container.querySelector('[data-testid="snapchat-management-new-daily-budget"]'), "45");
         });
         expect(container.querySelector('[data-testid="snapchat-management-financial-settings-blocked"]')).not.toBeNull();
-        expect(container.querySelector('[data-testid="snapchat-management-current-settings"]').textContent)
-            .not.toContain("40.00 USD");
+        expect(container.querySelector('[data-testid="snapchat-management-current-daily-budget"]').textContent)
+            .toContain("غير متاح — فشل جلب الإعدادات");
+        expect(container.querySelector('[data-testid="snapchat-management-diagnostic-values"]').textContent)
+            .toContain("40.00 USD");
         expect(container.querySelector('[data-testid="snapchat-management-create-preview"]').disabled).toBe(true);
         expect(createSnapchatManagementProposal).not.toHaveBeenCalled();
         expect(executeSnapchatManagementProposal).not.toHaveBeenCalled();

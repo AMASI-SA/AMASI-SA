@@ -306,7 +306,8 @@ describe("SnapchatV2Page read-only load", () => {
             mapping_verified: true,
             ad_account_id: "account-1",
             account_currency: "USD",
-            daily_budget_micro: null,
+            daily_budget_micro: 40_000_000,
+            status: "ACTIVE",
             quality: {
                 settings_status: "settings_sync_failed",
                 freshness_seconds: null,
@@ -347,6 +348,10 @@ describe("SnapchatV2Page read-only load", () => {
         expect(currentSettings.textContent).toContain("settings_sync_failed");
         expect(currentSettings.textContent).toContain("campaign_provider_snapshot_missing");
         expect(currentSettings.textContent).toContain("snap-provider-campaign-afrol");
+        expect(container.querySelector('[data-testid="snapchat-management-current-daily-budget"]').textContent)
+            .toContain("غير متاح — فشل جلب الإعدادات");
+        expect(container.querySelector('[data-testid="snapchat-management-diagnostic-values"]').textContent)
+            .toContain("40.00 USD");
         expect(container.querySelector(
             '[data-testid="snapchat-management-create-preview"]',
         ).disabled).toBe(true);

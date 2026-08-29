@@ -228,10 +228,7 @@ function proofBoolean(value) {
     return "غير متاح";
 }
 
-function currentMicro(settings, field) {
-    if (settings?.quality?.settings_status !== "settings_complete") {
-        return { raw: "غير متاح — فشل جلب الإعدادات", converted: "غير متاح — فشل جلب الإعدادات" };
-    }
+function availableMicro(settings, field) {
     const rawValue = settings?.[field];
     if (rawValue === null || rawValue === undefined || rawValue === "") {
         return { raw: "غير متاح — فشل جلب الإعدادات", converted: "غير متاح — فشل جلب الإعدادات" };
@@ -254,6 +251,13 @@ function currentMicro(settings, field) {
             ? `${(raw / 1_000_000).toLocaleString("en-US", { maximumFractionDigits: 6 })} ${currency} · USD غير متاح`
             : "عملة الحساب غير متاحة · USD غير متاح",
     };
+}
+
+function currentMicro(settings, field) {
+    if (settings?.quality?.settings_status !== "settings_complete") {
+        return { raw: "غير متاح — فشل جلب الإعدادات", converted: "غير متاح — فشل جلب الإعدادات" };
+    }
+    return availableMicro(settings, field);
 }
 
 function proposalFinancialFields(proposal) {
@@ -345,6 +349,9 @@ function CurrentSettingsCard({ action, settings, accountId }) {
         : currentMicro(settings, "daily_budget_micro", "daily_budget_usd");
     const bid = currentMicro(settings, "bid_micro", "bid_usd");
     const childBudget = currentMicro(settings, "ad_squads_daily_budget_micro", "ad_squads_daily_budget_usd");
+    const diagnosticBudget = availableMicro(settings, "daily_budget_micro");
+    const diagnosticBid = availableMicro(settings, "bid_micro");
+    const diagnosticChildBudget = availableMicro(settings, "ad_squads_daily_budget_micro");
     const effectiveCurrentBidStrategy = settingsComplete ? settings?.bid_strategy : null;
     const currentAutoBid = String(effectiveCurrentBidStrategy || "").toUpperCase() === "AUTO_BID";
     const activeCountAvailable = settingsComplete
@@ -359,6 +366,18 @@ function CurrentSettingsCard({ action, settings, accountId }) {
     const currentProviderValue = (value) => settingsComplete
         ? providerValue(value)
         : "غير متاح — فشل جلب الإعدادات";
+    const diagnosticValuesAvailable = !settingsComplete && [
+        "daily_budget_micro",
+        "bid_micro",
+        "bid_strategy",
+        "optimization_goal",
+        "billing_event",
+        "conversion_window",
+        "status",
+        "ad_squads_daily_budget_micro",
+        "active_ad_squads",
+    ].some((field) => settings?.[field] !== null && settings?.[field] !== undefined && settings?.[field] !== "")
+        || (!settingsComplete && Array.isArray(settings?.ad_squad_bid_strategies) && settings.ad_squad_bid_strategies.length > 0);
     return (
         <section className={`rounded-2xl border p-4 ${settingsReady ? "border-emerald-200 bg-emerald-50" : "border-rose-200 bg-rose-50"}`} data-testid="snapchat-management-current-settings">
             <div className="flex flex-wrap items-start justify-between gap-2">
@@ -378,7 +397,7 @@ function CurrentSettingsCard({ action, settings, accountId }) {
                 <div><span className="block text-slate-500">Unified ID == provider ID</span><strong>{proofBoolean(settings?.identity_contract?.ids_equal)}</strong></div>
                 <div><span className="block text-slate-500">الحالة الحالية</span><strong>{currentProviderValue(settings?.status)}</strong></div>
                 <div><span className="block text-slate-500">الميزانية اليومية الخام</span><strong dir="ltr">{budget.raw}</strong></div>
-                <div><span className="block text-slate-500">الميزانية اليومية</span><strong dir="ltr">{budget.converted}</strong></div>
+                <div data-testid="snapchat-management-current-daily-budget"><span className="block text-slate-500">الميزانية اليومية</span><strong dir="ltr">{budget.converted}</strong></div>
                 {action === "campaign.update" && (
                     <>
                         <div><span className="block text-slate-500">مجموع ميزانيات Ad Squads الخام</span><strong dir="ltr">{childBudget.raw}</strong></div>
@@ -409,6 +428,34 @@ function CurrentSettingsCard({ action, settings, accountId }) {
                 <div><span className="block text-slate-500">settings_synced_at</span><strong>{timestamp(settings?.settings_synced_at)}</strong></div>
                 <div><span className="block text-slate-500">provider_updated_at</span><strong>{timestamp(settings?.provider_updated_at)}</strong></div>
             </div>
+            {diagnosticValuesAvailable && (
+                <section className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3" data-testid="snapchat-management-diagnostic-values">
+                    <h4 className="text-xs font-black text-amber-950">قيم موجودة في الاستجابة — للتشخيص فقط</h4>
+                    <p className="mt-1 text-[10px] font-bold text-amber-800">هذه القيم غير معتمدة للمعاينة أو التنفيذ حتى تصبح settings_complete.</p>
+                    <div className="mt-2 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                        {settings?.daily_budget_micro !== null && settings?.daily_budget_micro !== undefined && (
+                            <div><span className="block text-slate-500">الميزانية المتاحة</span><strong dir="ltr">{diagnosticBudget.raw} · {diagnosticBudget.converted}</strong></div>
+                        )}
+                        {action === "campaign.update" && settings?.ad_squads_daily_budget_micro !== null && settings?.ad_squads_daily_budget_micro !== undefined && (
+                            <div><span className="block text-slate-500">مجموع ميزانيات Ad Squads المتاح</span><strong dir="ltr">{diagnosticChildBudget.raw} · {diagnosticChildBudget.converted}</strong></div>
+                        )}
+                        {action === "campaign.update" && settings?.active_ad_squads !== null && settings?.active_ad_squads !== undefined && (
+                            <div><span className="block text-slate-500">Ad Squads النشطة المتاحة</span><strong>{providerValue(settings.active_ad_squads)}</strong></div>
+                        )}
+                        {action === "campaign.update" && Array.isArray(settings?.ad_squad_bid_strategies) && settings.ad_squad_bid_strategies.length > 0 && (
+                            <div><span className="block text-slate-500">استراتيجيات المزايدة المتاحة</span><strong>{settings.ad_squad_bid_strategies.join("، ")}</strong></div>
+                        )}
+                        {action === "ad_squad.update" && settings?.bid_micro !== null && settings?.bid_micro !== undefined && (
+                            <div><span className="block text-slate-500">{snapchatBidLabel(settings?.bid_strategy)} المتاح</span><strong dir="ltr">{diagnosticBid.raw} · {diagnosticBid.converted}</strong></div>
+                        )}
+                        {["status", "bid_strategy", "optimization_goal", "billing_event", "conversion_window"].map((field) => (
+                            settings?.[field] !== null && settings?.[field] !== undefined && settings?.[field] !== ""
+                                ? <div key={field}><span className="block text-slate-500">{field}</span><strong>{providerValue(settings[field])}</strong></div>
+                                : null
+                        ))}
+                    </div>
+                </section>
+            )}
         </section>
     );
 }
