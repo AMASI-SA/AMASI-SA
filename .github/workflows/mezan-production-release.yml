@@ -132,7 +132,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      XDG_CACHE_HOME: ${{ runner.temp }}/mezan-release-v5-toolchain-cache
       REACT_APP_BACKEND_URL: https://mezansalla.com
     steps:
       - uses: actions/checkout@v4
@@ -145,6 +144,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20.20.2"
+      - name: Select an isolated release toolchain cache
+        shell: bash
+        run: echo "XDG_CACHE_HOME=$RUNNER_TEMP/mezan-release-v5-toolchain-cache" >> "$GITHUB_ENV"
       - name: Enable the runtime-observed Host Yarn version
         run: corepack enable && corepack prepare yarn@1.22.22 --activate
       - name: Create a clean tracked-source clone
