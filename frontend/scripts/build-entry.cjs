@@ -33,7 +33,8 @@ function githubCurrentHead({
   if (environment.GITHUB_ACTIONS !== "true") {
     throw new Error("GITHUB_ACTIONS must be exactly true when GitHub markers are present");
   }
-  let expected = fullGitSha(environment.GITHUB_SHA, "GITHUB_SHA");
+  const workflowSha = fullGitSha(environment.GITHUB_SHA, "GITHUB_SHA");
+  const expected = [workflowSha];
   if (environment.GITHUB_EVENT_NAME === "pull_request") {
     const eventPath = environment.GITHUB_EVENT_PATH;
     if (typeof eventPath !== "string" || !eventPath) {
@@ -45,12 +46,13 @@ function githubCurrentHead({
     } catch (error) {
       throw new Error(`cannot read GitHub pull_request event: ${error.message}`);
     }
-    expected = fullGitSha(
+    const headSha = fullGitSha(
       payload && payload.pull_request && payload.pull_request.head
         ? payload.pull_request.head.sha
         : undefined,
       "pull_request head SHA",
     );
+    if (!expected.includes(headSha)) expected.push(headSha);
   }
   const workspace = environment.GITHUB_WORKSPACE;
   if (
@@ -60,9 +62,9 @@ function githubCurrentHead({
     throw new Error("GITHUB_WORKSPACE does not match the repository root");
   }
   const actual = fullGitSha(gitHead(), "Git HEAD");
-  if (actual !== expected) {
+  if (!expected.includes(actual)) {
     throw new Error(
-      `GitHub checkout differs from GITHUB_SHA: head=${actual} expected=${expected}`,
+      `GitHub checkout differs from trusted event SHAs: head=${actual} expected=${expected.join(",")}`,
     );
   }
   return actual;

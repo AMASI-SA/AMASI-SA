@@ -54,6 +54,26 @@ test("pull request builds use the reviewed head SHA instead of the merge SHA", (
   assert.equal(invocation.command, "/governed/github-node");
 });
 
+test("pull request integration builds may use the trusted merge SHA", () => {
+  const mergeSha = "b".repeat(40);
+  const invocation = buildInvocation({
+    environment: {
+      CI: "false",
+      GITHUB_ACTIONS: "true",
+      GITHUB_SHA: mergeSha,
+      GITHUB_WORKSPACE: root,
+      GITHUB_EVENT_NAME: "pull_request",
+      GITHUB_EVENT_PATH: "/runner/event.json",
+    },
+    repositoryRoot: root,
+    frontendDirectory: frontend,
+    gitHead: () => mergeSha,
+    readEvent: () => ({ pull_request: { head: { sha } } }),
+    viteBin: () => "/repo/node_modules/vite/bin/vite.js",
+  });
+  assert.equal(invocation.mode, "github_current_head");
+});
+
 test("non-GitHub host always enters the Emergent deployment adapter", () => {
   const invocation = buildInvocation({
     environment: {},
