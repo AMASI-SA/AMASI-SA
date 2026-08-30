@@ -34,6 +34,9 @@ permissions:
 jobs:
   production-runtime:
     runs-on: ubuntu-24.04
+    env:
+      CI: "false"
+      REACT_APP_BACKEND_URL: https://mezansalla.com
     defaults:
       run:
         working-directory: frontend
@@ -65,6 +68,9 @@ jobs:
 
   frontend-build:
     runs-on: ubuntu-24.04
+    env:
+      CI: "false"
+      REACT_APP_BACKEND_URL: https://mezansalla.com
     defaults:
       run:
         working-directory: frontend

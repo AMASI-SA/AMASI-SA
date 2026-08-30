@@ -2,6 +2,7 @@ import { defineConfig, transformWithOxc } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
 import buildContract from "./build-contract.cjs";
+import governedPreview from "./scripts/governed-preview.cjs";
 
 const FRONTEND_NOINDEX_DIRECTIVES = "noindex, nofollow, noarchive, nosnippet, noimageindex";
 const FRONTEND_CSP = "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https: wss:; frame-src 'self' https:; form-action 'self' https:; upgrade-insecure-requests";
@@ -15,11 +16,14 @@ const FRONTEND_SECURITY_HEADERS = Object.freeze({
   "Permissions-Policy": "camera=(self), microphone=(), geolocation=(), payment=(), usb=()",
   "X-Robots-Tag": FRONTEND_NOINDEX_DIRECTIVES,
 });
+const { governedPreviewCacheHeaders } = governedPreview;
 
 // Emergent Preview hostnames are generated per cluster and can change between
-// sessions. Allow only the two Preview suffixes controlled by Emergent rather
-// than hard-coding one cluster hostname or disabling Vite's host validation.
+// sessions. Allow the production host plus the two Preview suffixes controlled
+// by Emergent rather than disabling Vite's host validation.
 const EMERGENT_PREVIEW_ALLOWED_HOSTS = [
+  "mezansalla.com",
+  ".preview.emergentagent.com",
   ".preview.emergentcf.cloud",
   ".preview.emergent.host",
 ];
@@ -46,7 +50,7 @@ export default defineConfig(({ mode }) => {
   return {
     envDir: false,
     envPrefix: [],
-    plugins: [legacyJsxLoader(), react()],
+    plugins: [legacyJsxLoader(), governedPreviewCacheHeaders(), react()],
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "src"),

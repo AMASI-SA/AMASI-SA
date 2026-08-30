@@ -74,6 +74,10 @@ function reproducibilityProof(first, second) {
 function writeProof(proof, targetPath = proofPath) {
   const temporary = `${targetPath}.tmp`;
   fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+  const parent = fs.lstatSync(path.dirname(targetPath));
+  if (parent.isSymbolicLink() || !parent.isDirectory()) {
+    throw new Error("Frontend release proof parent must be a real directory");
+  }
   fs.writeFileSync(
     temporary,
     `${JSON.stringify(proof, null, 2)}\n`,
@@ -83,6 +87,19 @@ function writeProof(proof, targetPath = proofPath) {
 }
 
 function removeProofFiles(targetPath = proofPath) {
+  if (path.resolve(targetPath) === path.resolve(proofPath)) {
+    fs.rmSync(proofRoot, { force: true, recursive: true });
+    return;
+  }
+  try {
+    const parent = fs.lstatSync(path.dirname(targetPath));
+    if (parent.isSymbolicLink() || !parent.isDirectory()) {
+      throw new Error("Frontend release proof parent must be a real directory");
+    }
+  } catch (error) {
+    if (error && error.code === "ENOENT") return;
+    throw error;
+  }
   fs.rmSync(targetPath, { force: true });
   fs.rmSync(`${targetPath}.tmp`, { force: true });
 }

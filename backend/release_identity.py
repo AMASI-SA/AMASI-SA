@@ -1,111 +1,142 @@
-"""Read-only identity embedded into an Emergent production package."""
+"""Read-only deterministic identity embedded in the backend package."""
 from __future__ import annotations
 
 import json
-import hashlib
-import re
+import os
+import stat
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from uuid import UUID
 
-from frontend_build_identity import (
-    read_frontend_build_identity,
-    validate_frontend_reproducibility_proof,
-)
+try:  # Support both production flat imports and package-style test imports.
+    from .release_protocol_v5 import (
+        CRITICAL_FILES,
+        RELEASE_IDENTITY_KIND,
+        RELEASE_IDENTITY_SCHEMA_VERSION,
+        RELEASE_PROTOCOL_VERSION,
+        validate_runtime_release_identity,
+    )
+except ImportError:  # pragma: no cover - production imports from backend cwd
+    from release_protocol_v5 import (
+        CRITICAL_FILES,
+        RELEASE_IDENTITY_KIND,
+        RELEASE_IDENTITY_SCHEMA_VERSION,
+        RELEASE_PROTOCOL_VERSION,
+        validate_runtime_release_identity,
+    )
 
 
-RELEASE_PROTOCOL_VERSION = 4
 DEFAULT_RELEASE_IDENTITY_PATH = Path(__file__).with_name(
     "release_identity.json"
 )
-_FULL_GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 BACKEND_ROOT = Path(__file__).resolve().parent
-CRITICAL_FILES = (
-    "server.py",
-    "integrations/qoyod_manual/routes.py",
-    "integrations/qoyod_manual/send.py",
-)
 
 
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+def _read_identity_json(path: Path) -> Any:
+    if path.is_symlink():
+        raise OSError("release identity must not be a symlink")
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags)
+    with os.fdopen(descriptor, "rb") as stream:
+        file_status = os.fstat(stream.fileno())
+        if not stat.S_ISREG(file_status.st_mode):
+            raise OSError("release identity must be a regular file")
+        raw = stream.read()
+    return json.loads(raw.decode("utf-8"))
 
 
-def read_release_identity(path: Path | None = None) -> dict[str, Any]:
-    """Return a safe public identity; never raise during a health probe."""
+def _unavailable_identity() -> dict[str, Any]:
+    return {
+        "verified_identity_available": False,
+        "release_id": None,
+        "git_sha": None,
+        "source_git_sha": None,
+        "branch": None,
+        # Operational timestamps belong to the lease in v5. Keep this null
+        # compatibility field for older health consumers.
+        "prepared_at": None,
+        "protocol_version": RELEASE_PROTOCOL_VERSION,
+        "identity_kind": RELEASE_IDENTITY_KIND,
+        "identity_schema_version": RELEASE_IDENTITY_SCHEMA_VERSION,
+        "critical_file_hashes_match": False,
+        "critical_file_hashes": {},
+        "frontend_build_verified": False,
+        "frontend_build": None,
+        "frontend_reproducibility": None,
+    }
+
+
+def read_release_identity(
+    path: Path | None = None,
+    *,
+    backend_root: Path | None = None,
+) -> dict[str, Any]:
+    """Return a safe public identity; never raise during a health probe.
+
+    Runtime validation uses only the identity JSON and allowlisted bytes inside
+    the backend package. It does not require ``.git`` or a sibling frontend
+    directory, so separately packaged Emergent runtimes fail closed rather
+    than silently depending on files that Cloud Build does not transfer.
+    """
     identity_path = path or DEFAULT_RELEASE_IDENTITY_PATH
+    package_root = backend_root or BACKEND_ROOT
     try:
-        payload = json.loads(identity_path.read_text(encoding="utf-8"))
-        git_sha = str(payload.get("git_sha") or "").strip().lower()
-        if not _FULL_GIT_SHA.fullmatch(git_sha):
-            raise ValueError("invalid git_sha")
-        release_id = str(payload.get("release_id") or "").strip()
-        release_id_value = UUID(release_id)
-        if release_id_value.version != 4 or str(release_id_value) != release_id:
-            raise ValueError("invalid release_id")
-        protocol_version = int(payload.get("protocol_version") or 0)
-        if protocol_version != RELEASE_PROTOCOL_VERSION:
-            raise ValueError("unsupported protocol_version")
-        expected_hashes = payload.get("critical_file_hashes") or {}
-        actual_hashes = {
-            relative: _sha256(BACKEND_ROOT / relative)
-            for relative in CRITICAL_FILES
-        }
-        hashes_match = all(
-            expected_hashes.get(relative) == actual_hashes[relative]
-            for relative in CRITICAL_FILES
+        payload = _read_identity_json(identity_path)
+        identity = validate_runtime_release_identity(
+            payload,
+            backend_root=package_root,
+            critical_files=CRITICAL_FILES,
         )
-        expected_frontend_build = payload.get("frontend_build")
-        actual_frontend_build = read_frontend_build_identity(
-            expected_git_sha=git_sha
-        )
-        expected_frontend_reproducibility = payload.get(
-            "frontend_reproducibility"
-        )
-        embedded_frontend_reproducibility = (
-            validate_frontend_reproducibility_proof(
-                frontend_build=expected_frontend_build,
-                proof=expected_frontend_reproducibility,
-            )
-        )
-        frontend_build_verified = (
-            isinstance(expected_frontend_build, dict)
-            and expected_frontend_build == actual_frontend_build
-        )
+        source_git_sha = identity["source_git_sha"]
         return {
             "verified_identity_available": True,
-            "release_id": release_id,
-            "git_sha": git_sha,
-            "branch": str(payload.get("branch") or ""),
-            "prepared_at": str(payload.get("prepared_at") or ""),
-            "protocol_version": protocol_version,
-            "critical_file_hashes_match": hashes_match,
-            "critical_file_hashes": actual_hashes,
-            "frontend_build_verified": frontend_build_verified,
-            "frontend_build": actual_frontend_build,
-            "frontend_reproducibility": embedded_frontend_reproducibility,
-        }
-    except Exception:
-        return {
-            "verified_identity_available": False,
-            "release_id": None,
-            "git_sha": None,
-            "branch": None,
+            "release_id": identity["release_id"],
+            # ``git_sha`` remains for v1-v4 health consumers. In protocol v5
+            # its exact contract is the governed source commit SHA.
+            "git_sha": source_git_sha,
+            "source_git_sha": source_git_sha,
+            "branch": identity["branch"],
             "prepared_at": None,
             "protocol_version": RELEASE_PROTOCOL_VERSION,
-            "critical_file_hashes_match": False,
-            "critical_file_hashes": {},
-            "frontend_build_verified": False,
-            "frontend_build": None,
-            "frontend_reproducibility": None,
+            "identity_kind": RELEASE_IDENTITY_KIND,
+            "identity_schema_version": RELEASE_IDENTITY_SCHEMA_VERSION,
+            "critical_file_hashes_match": True,
+            "critical_file_hashes": identity["critical_file_hashes"],
+            "frontend_build_verified": True,
+            "frontend_build": identity["frontend_build"],
+            "frontend_reproducibility": identity[
+                "frontend_reproducibility"
+            ],
         }
+    except Exception:
+        return _unavailable_identity()
 
 
-# Captured exactly once while the backend process imports this module. A git
-# pull that does not restart the process cannot change the public identity.
+# Captured exactly once while the backend process imports this module. A source
+# checkout update without a process restart cannot change the public identity.
 BOOT_STARTED_AT = datetime.now(timezone.utc).isoformat()
 BOOT_RELEASE_IDENTITY = {
     **read_release_identity(),
     "boot_started_at": BOOT_STARTED_AT,
 }
+
+
+def release_health_payload() -> dict[str, Any]:
+    """Return the complete read-only health body without I/O or providers."""
+    return {
+        "ok": True,
+        "service": "backend",
+        "release": BOOT_RELEASE_IDENTITY,
+    }
+
+
+__all__ = (
+    "BACKEND_ROOT",
+    "BOOT_RELEASE_IDENTITY",
+    "BOOT_STARTED_AT",
+    "CRITICAL_FILES",
+    "DEFAULT_RELEASE_IDENTITY_PATH",
+    "RELEASE_PROTOCOL_VERSION",
+    "read_release_identity",
+    "release_health_payload",
+)

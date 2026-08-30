@@ -10,6 +10,12 @@ const {
   expectedNodeVersion,
   expectedYarnVersion,
 } = require("../build-contract.cjs");
+const {
+  canonicalSourceTreeSha256,
+  gitBlobOid,
+  loadReviewedReleaseIntent,
+} = require("./release-intent.cjs");
+const { githubCurrentHead } = require("./build-entry.cjs");
 
 const SCHEMA_VERSION = 1;
 const NON_PUBLIC_BUILD_FILES = new Set(["_headers", "_headers.json"]);
@@ -18,6 +24,7 @@ const META_NAME = "build-meta.json";
 const frontendRoot = path.resolve(__dirname, "..");
 const repoRoot = path.resolve(frontendRoot, "..");
 const buildRoot = path.join(frontendRoot, "build");
+const releaseIntentPath = path.join(repoRoot, "release", "release-intent-v5.json");
 
 function sha256Bytes(value) {
   return crypto.createHash("sha256").update(value).digest("hex");
@@ -27,11 +34,6 @@ function sha256File(filePath) {
   return sha256Bytes(fs.readFileSync(filePath));
 }
 
-function gitBlobOid(value) {
-  const header = Buffer.from(`blob ${value.length}\0`, "utf8");
-  return crypto.createHash("sha1").update(header).update(value).digest("hex");
-}
-
 function relativePosix(filePath) {
   return path.relative(buildRoot, filePath).split(path.sep).join("/");
 }
@@ -39,16 +41,6 @@ function relativePosix(filePath) {
 function canonicalBuildTreeSha256(records) {
   const input = records
     .map((record) => `${record.sha256}\0${record.bytes}\0${record.path}\n`)
-    .join("");
-  return sha256Bytes(Buffer.from(input, "utf8"));
-}
-
-function canonicalSourceTreeSha256(records) {
-  const input = records
-    .map(
-      (record) =>
-        `${record.git_blob}\0${record.mode}\0${record.sha256}\0${record.bytes}\0${record.path}\n`,
-    )
     .join("");
   return sha256Bytes(Buffer.from(input, "utf8"));
 }
@@ -235,16 +227,79 @@ function governedEnvironment(parentEnvironment = process.env) {
   };
 }
 
-async function captureBuildInputs() {
-  const gitSha = runGit(["rev-parse", "HEAD"], {
-    encoding: "utf8",
-  }).trim().toLowerCase();
-  if (!/^[0-9a-f]{40}$/.test(gitSha)) throw new Error("Git HEAD is not a full SHA");
+function bootstrapIntentEnabled(environment) {
+  const value = environment.MEZAN_RELEASE_BOOTSTRAP_INTENT;
+  if (value === undefined || value === "") return false;
+  if (value !== "1") {
+    throw new Error("MEZAN_RELEASE_BOOTSTRAP_INTENT must be exactly 1 when enabled");
+  }
+  return true;
+}
+
+function reviewedIntentEnabled(environment) {
+  const value = environment.MEZAN_RELEASE_USE_REVIEWED_INTENT;
+  if (value === undefined || value === "") return false;
+  if (value !== "1") {
+    throw new Error("MEZAN_RELEASE_USE_REVIEWED_INTENT must be exactly 1 when enabled");
+  }
+  return true;
+}
+
+function captureSourceIdentity({
+  environment = process.env,
+  intentPath = releaseIntentPath,
+  sourceRoot = frontendRoot,
+} = {}) {
+  const bootstrap = bootstrapIntentEnabled(environment);
+  const useReviewedIntent = reviewedIntentEnabled(environment);
+  if (bootstrap && useReviewedIntent) {
+    throw new Error("release build cannot bootstrap and consume reviewed intent together");
+  }
+  if (useReviewedIntent) {
+    const reviewed = loadReviewedReleaseIntent({
+      intentPath,
+      frontendRoot: sourceRoot,
+    });
+    return {
+      git_sha: reviewed.source_git_sha,
+      source: reviewed.frontend_source,
+    };
+  }
+  const githubHead = githubCurrentHead({
+    environment,
+    repositoryRoot: repoRoot,
+    gitHead: () => runGit(["rev-parse", "HEAD"], {
+      encoding: "utf8",
+    }).trim().toLowerCase(),
+  });
+  if (bootstrap || githubHead) {
+    const gitSha = githubHead || runGit(["rev-parse", "HEAD"], {
+      encoding: "utf8",
+    }).trim().toLowerCase();
+    if (!/^[0-9a-f]{40}$/.test(gitSha)) throw new Error("Git HEAD is not a full SHA");
+    return { git_sha: gitSha, source: collectTrackedFrontendSource() };
+  }
+  const reviewed = loadReviewedReleaseIntent({
+    intentPath,
+    frontendRoot: sourceRoot,
+  });
   return {
-    git_sha: gitSha,
-    source: collectTrackedFrontendSource(),
+    git_sha: reviewed.source_git_sha,
+    source: reviewed.frontend_source,
+  };
+}
+
+async function captureBuildInputs(options = {}) {
+  const environment = options.environment || process.env;
+  const sourceIdentity = captureSourceIdentity({
+    environment,
+    intentPath: options.intentPath || releaseIntentPath,
+    sourceRoot: options.sourceRoot || frontendRoot,
+  });
+  return {
+    ...sourceIdentity,
     toolchain: toolchain(),
-    environment: governedEnvironment(),
+    environment: governedEnvironment(environment),
   };
 }
 
@@ -287,8 +342,13 @@ function writeBuildMetadata(inputs) {
 }
 
 module.exports = {
+  bootstrapIntentEnabled,
   captureBuildInputs,
+  captureSourceIdentity,
+  collectTrackedFrontendSource,
   createBuildChildEnvironment,
   governedEnvironment,
+  reviewedIntentEnabled,
+  releaseIntentPath,
   writeBuildMetadata,
 };

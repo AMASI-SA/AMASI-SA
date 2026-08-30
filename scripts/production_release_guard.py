@@ -10,6 +10,7 @@ import os
 import re
 import secrets
 import shutil
+import stat
 import subprocess
 import sys
 import time
@@ -20,7 +21,6 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
-from uuid import UUID, uuid4
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -29,6 +29,7 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from frontend_build_identity import (  # noqa: E402
+    CLIENT_ENV_ALLOWLIST,
     FrontendBuildIdentityError,
     RETIREMENT_SERVICE_WORKER_BYTES,
     RETIREMENT_SERVICE_WORKER_SHA256,
@@ -37,23 +38,56 @@ from frontend_build_identity import (  # noqa: E402
     validate_frontend_reproducibility_proof,
 )
 
+try:  # noqa: E402 - backend is intentionally added to sys.path above.
+    from release_protocol_v5 import (
+        CRITICAL_FILES as RUNTIME_CRITICAL_FILES,
+        exact_json_equal,
+        validate_runtime_release_identity,
+    )
+except ImportError:  # The v5 module may be absent on an older checked-out guard.
+    validate_runtime_release_identity = None
+    exact_json_equal = None
+    RUNTIME_CRITICAL_FILES = (
+        "server.py",
+        "integrations/qoyod_manual/routes.py",
+        "integrations/qoyod_manual/send.py",
+    )
+
 
 PRODUCTION_BRANCH = "hotfix/prod-snap-meta-final"
 PRODUCTION_ORIGIN = "https://mezansalla.com"
 SPA_SHELL_PATH = "/snapchat-accounts"
 STANDARD_SERVICE_WORKER_PATHS = ("/sw.js", "/service-worker.js")
-PROTOCOL_VERSION = 4
+PROTOCOL_VERSION = 5
 BOOT_CLOCK_SKEW = timedelta(minutes=5)
 GIT_DIR = REPO_ROOT / ".git"
 LEASE_DIR = GIT_DIR / "mezan-production-release.lock"
 LEASE_PATH = LEASE_DIR / "lease.json"
 IDENTITY_PATH = REPO_ROOT / "backend" / "release_identity.json"
-CRITICAL_FILES = (
-    "backend/server.py",
-    "backend/integrations/qoyod_manual/routes.py",
-    "backend/integrations/qoyod_manual/send.py",
+RELEASE_INTENT_RELATIVE_PATH = "release/release-intent-v5.json"
+RELEASE_INTENT_PATH = REPO_ROOT / RELEASE_INTENT_RELATIVE_PATH
+FRONTEND_BUILD_META_PATH = REPO_ROOT / "frontend" / "build" / "build-meta.json"
+CRITICAL_FILES = tuple(
+    f"backend/{relative}" for relative in RUNTIME_CRITICAL_FILES
 )
 _FULL_GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
+_RELEASE_ID_V5 = re.compile(r"^rg5-[0-9a-f]{64}$")
+EXPECTED_CLIENT_ENVIRONMENT = {
+    "REACT_APP_BACKEND_URL": "https://mezansalla.com",
+}
+_RELEASE_INTENT_KEYS = frozenset({
+    "schema_version",
+    "kind",
+    "protocol_version",
+    "source_git_sha",
+    "branch",
+    "frontend_source",
+    "client_environment",
+    "frontend_build",
+    "frontend_reproducibility",
+    "critical_file_hashes",
+    "runtime_identity",
+})
 
 
 class ReleaseGuardError(RuntimeError):
@@ -123,6 +157,255 @@ def _read_json(path: Path) -> dict[str, Any]:
         raise ReleaseGuardError(f"cannot read {path}: {exc}") from exc
 
 
+def _validated_runtime_identity(payload: Any) -> dict[str, Any]:
+    """Validate the deterministic identity materialized by the build adapter."""
+    if validate_runtime_release_identity is None:
+        raise ReleaseGuardError(
+            "release protocol v5 validator is unavailable; update the workspace"
+        )
+    if not isinstance(payload, dict):
+        raise ReleaseGuardError("runtime release identity is not a JSON object")
+    try:
+        normalized = validate_runtime_release_identity(
+            payload,
+            backend_root=BACKEND_ROOT,
+        )
+    except Exception as exc:
+        raise ReleaseGuardError(
+            f"runtime release identity validation failed: {exc}"
+        ) from exc
+    if not isinstance(normalized, dict):
+        raise ReleaseGuardError(
+            "runtime release identity validator returned an invalid payload"
+        )
+    return normalized
+
+
+def _read_runtime_identity() -> dict[str, Any]:
+    return _validated_runtime_identity(_read_json(IDENTITY_PATH))
+
+
+def _read_reviewed_runtime_identity() -> dict[str, Any]:
+    intent = _read_json(RELEASE_INTENT_PATH)
+    if set(intent) != _RELEASE_INTENT_KEYS:
+        raise ReleaseGuardError("reviewed release intent fields are invalid")
+    if (
+        type(intent.get("schema_version")) is not int
+        or intent.get("schema_version") != 1
+        or intent.get("kind") != "mezan_emergent_release_intent_v1"
+        or type(intent.get("protocol_version")) is not int
+        or intent.get("protocol_version") != PROTOCOL_VERSION
+    ):
+        raise ReleaseGuardError("reviewed release intent contract is invalid")
+    identity = _validated_runtime_identity(intent.get("runtime_identity"))
+    client_environment = _validated_reviewed_client_environment(
+        intent.get("client_environment")
+    )
+    mirrored = {
+        "source_git_sha": identity["source_git_sha"],
+        "branch": identity["branch"],
+        "frontend_build": identity["frontend_build"],
+        "frontend_reproducibility": identity["frontend_reproducibility"],
+        "critical_file_hashes": identity["critical_file_hashes"],
+    }
+    mismatches = [
+        field for field, expected in mirrored.items()
+        if not exact_json_equal(intent.get(field), expected)
+    ]
+    if mismatches:
+        raise ReleaseGuardError(
+            "reviewed release intent does not match runtime identity: "
+            + ", ".join(mismatches)
+        )
+    proof_values = (
+        (identity.get("frontend_build") or {})
+        .get("environment", {})
+        .get("values")
+    )
+    expected_proof_values = {
+        name: {
+            "present": record["present"],
+            "sha256": (
+                hashlib.sha256(record["value"].encode("utf-8")).hexdigest()
+                if record["present"]
+                else None
+            ),
+        }
+        for name, record in client_environment.items()
+    }
+    if not exact_json_equal(proof_values, expected_proof_values):
+        raise ReleaseGuardError(
+            "reviewed client environment does not match frontend build proof"
+        )
+    retained_metadata = _read_json(FRONTEND_BUILD_META_PATH)
+    if not exact_json_equal(
+        retained_metadata.get("source"),
+        intent.get("frontend_source"),
+    ):
+        raise ReleaseGuardError(
+            "reviewed frontend source does not match retained build metadata"
+        )
+    return identity
+
+
+def _validated_reviewed_client_environment(
+    value: Any,
+) -> dict[str, dict[str, Any]]:
+    if not isinstance(value, dict) or set(value) != set(CLIENT_ENV_ALLOWLIST):
+        raise ReleaseGuardError(
+            "reviewed client environment does not match the allowlist"
+        )
+    result: dict[str, dict[str, Any]] = {}
+    for name in CLIENT_ENV_ALLOWLIST:
+        record = value.get(name)
+        if not isinstance(record, dict) or set(record) != {"present", "value"}:
+            raise ReleaseGuardError(
+                f"reviewed client environment record is invalid: {name}"
+            )
+        present = record.get("present")
+        raw = record.get("value")
+        if not isinstance(present, bool):
+            raise ReleaseGuardError(
+                f"reviewed client environment presence is invalid: {name}"
+            )
+        if not present:
+            raise ReleaseGuardError(
+                f"required reviewed client environment is absent: {name}"
+            )
+        if not isinstance(raw, str) or not raw or len(raw) > 2048:
+            raise ReleaseGuardError(
+                f"reviewed client environment value is invalid: {name}"
+            )
+        if raw != EXPECTED_CLIENT_ENVIRONMENT[name]:
+            raise ReleaseGuardError(
+                f"reviewed client environment value is not approved: {name}"
+            )
+        parsed = urllib.parse.urlsplit(raw)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.netloc
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ReleaseGuardError(
+                f"reviewed client environment must be a public HTTP origin: {name}"
+            )
+        result[name] = {"present": True, "value": raw}
+    return result
+
+
+def _runtime_identity_from_lease(lease: dict[str, Any]) -> dict[str, Any]:
+    identity = lease.get("runtime_identity")
+    if not isinstance(identity, dict):
+        raise ReleaseGuardError("prepared runtime release identity is missing")
+    normalized = _validated_runtime_identity(identity)
+    expected_aliases = {
+        "release_id": normalized["release_id"],
+        "source_git_sha": normalized["source_git_sha"],
+        "git_sha": normalized["source_git_sha"],
+        "branch": normalized["branch"],
+        "protocol_version": normalized["protocol_version"],
+        "critical_file_hashes": normalized["critical_file_hashes"],
+        "frontend_build": normalized["frontend_build"],
+        "frontend_reproducibility": normalized[
+            "frontend_reproducibility"
+        ],
+    }
+    mismatches = [
+        key for key, value in expected_aliases.items()
+        if not exact_json_equal(lease.get(key), value)
+    ]
+    if mismatches:
+        raise ReleaseGuardError(
+            "prepared lease does not match runtime release identity: "
+            + ", ".join(mismatches)
+        )
+    return normalized
+
+
+def _assert_local_identity_binding(
+    identity: dict[str, Any],
+    *,
+    expected_git_sha: str,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, str]]:
+    if identity.get("source_git_sha") != expected_git_sha:
+        raise ReleaseGuardError(
+            "runtime release identity source SHA does not match reviewed "
+            f"HEAD: identity={identity.get('source_git_sha')} "
+            f"head={expected_git_sha}"
+        )
+    frontend_build = _frontend_build_identity(expected_git_sha)
+    frontend_reproducibility = _frontend_reproducibility_proof(
+        frontend_build
+    )
+    critical_hashes = _critical_hashes()
+    if not all((
+        exact_json_equal(identity.get("frontend_build"), frontend_build),
+        exact_json_equal(
+            identity.get("frontend_reproducibility"),
+            frontend_reproducibility,
+        ),
+        exact_json_equal(identity.get("critical_file_hashes"), critical_hashes),
+    )):
+        raise ReleaseGuardError(
+            "runtime release identity, critical files, or frontend build "
+            "does not match the local governed package"
+        )
+    return frontend_build, frontend_reproducibility, critical_hashes
+
+
+def _assert_reviewed_source_relation(
+    *,
+    source_git_sha: str,
+    deployment_git_sha: str,
+) -> None:
+    """Allow the deployment commit to differ only by the reviewed v5 intent."""
+    if source_git_sha == deployment_git_sha:
+        raise ReleaseGuardError(
+            "protocol v5 requires a separate tracked intent-only deployment commit"
+        )
+    try:
+        _run_git(
+            "merge-base",
+            "--is-ancestor",
+            source_git_sha,
+            deployment_git_sha,
+        )
+    except ReleaseGuardError as exc:
+        raise ReleaseGuardError(
+            "runtime identity source SHA is not an ancestor of deployment HEAD"
+        ) from exc
+    changed = {
+        row.strip()
+        for row in _run_git(
+            "diff", "--name-only", source_git_sha, deployment_git_sha
+        ).splitlines()
+        if row.strip()
+    }
+    expected_change = {RELEASE_INTENT_RELATIVE_PATH}
+    if changed != expected_change:
+        raise ReleaseGuardError(
+            "deployment HEAD must differ from runtime identity source by the "
+            "reviewed release intent only; found: "
+            + (", ".join(sorted(changed)) or "no tracked change")
+        )
+    tracked = _run_git(
+        "ls-files", "--error-unmatch", "--", RELEASE_INTENT_RELATIVE_PATH
+    )
+    if tracked.strip() != RELEASE_INTENT_RELATIVE_PATH:
+        raise ReleaseGuardError("reviewed release intent is not tracked")
+    deployment_blob = _run_git(
+        "rev-parse", f"{deployment_git_sha}:{RELEASE_INTENT_RELATIVE_PATH}"
+    )
+    local_blob = _run_git("hash-object", RELEASE_INTENT_RELATIVE_PATH)
+    if deployment_blob != local_blob:
+        raise ReleaseGuardError(
+            "reviewed release intent bytes differ from deployment commit"
+        )
+
+
 def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(
@@ -157,15 +440,47 @@ def prepare(actor: str) -> dict[str, Any]:
         return _prepare_locked(actor)
 
 
-def _prepare_locked(actor: str) -> dict[str, Any]:
+def _create_or_recover_lease_dir() -> None:
+    """Create the lease dir or recover only an interrupted pre-lease write."""
     try:
         LEASE_DIR.mkdir(mode=0o700)
-    except FileExistsError as exc:
-        lease = _read_json(LEASE_PATH) if LEASE_PATH.exists() else {}
+        return
+    except FileExistsError:
+        pass
+    try:
+        info = LEASE_DIR.lstat()
+    except OSError as exc:
+        raise ReleaseGuardError(
+            f"cannot inspect existing production release lease directory: {exc}"
+        ) from exc
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+        raise ReleaseGuardError(
+            "production release lease path is not a real directory"
+        )
+    if LEASE_PATH.exists():
+        lease = _read_json(LEASE_PATH)
         raise ReleaseGuardError(
             "another production release is active: "
             + json.dumps(lease, ensure_ascii=False)
-        ) from exc
+        )
+    allowed = {LEASE_PATH.name + ".tmp"}
+    entries = list(LEASE_DIR.iterdir())
+    if any(
+        entry.name not in allowed
+        or entry.is_symlink()
+        or not entry.is_file()
+        for entry in entries
+    ):
+        raise ReleaseGuardError(
+            "incomplete production release lease directory contains "
+            "unexpected entries"
+        )
+    shutil.rmtree(LEASE_DIR)
+    LEASE_DIR.mkdir(mode=0o700)
+
+
+def _prepare_locked(actor: str) -> dict[str, Any]:
+    _create_or_recover_lease_dir()
 
     try:
         branch = _run_git("branch", "--show-current")
@@ -189,14 +504,32 @@ def _prepare_locked(actor: str) -> dict[str, Any]:
                 "workspace does not match GitHub production branch: "
                 f"local={local_sha} remote={remote_sha}"
             )
-        frontend_build = _frontend_build_identity(local_sha)
-        frontend_reproducibility = _frontend_reproducibility_proof(
-            frontend_build
+        runtime_identity = _read_runtime_identity()
+        reviewed_identity = _read_reviewed_runtime_identity()
+        if not exact_json_equal(runtime_identity, reviewed_identity):
+            raise ReleaseGuardError(
+                "materialized runtime identity does not match reviewed release intent"
+            )
+        if runtime_identity.get("branch") != branch:
+            raise ReleaseGuardError(
+                "runtime release identity branch does not match production branch"
+            )
+        source_git_sha = runtime_identity["source_git_sha"]
+        _assert_reviewed_source_relation(
+            source_git_sha=source_git_sha,
+            deployment_git_sha=local_sha,
         )
-        critical_hashes = _critical_hashes()
+        frontend_build, frontend_reproducibility, critical_hashes = (
+            _assert_local_identity_binding(
+                runtime_identity,
+                expected_git_sha=source_git_sha,
+            )
+        )
         payload = {
-            "release_id": str(uuid4()),
-            "git_sha": local_sha,
+            "release_id": runtime_identity["release_id"],
+            "source_git_sha": source_git_sha,
+            "git_sha": source_git_sha,
+            "deployment_git_sha": local_sha,
             "branch": branch,
             "actor": actor,
             "prepared_at": _utc_now(),
@@ -204,19 +537,29 @@ def _prepare_locked(actor: str) -> dict[str, Any]:
             "critical_file_hashes": critical_hashes,
             "frontend_build": frontend_build,
             "frontend_reproducibility": frontend_reproducibility,
+            "runtime_identity": runtime_identity,
         }
         if (
             _run_git("rev-parse", "HEAD") != local_sha
-            or _frontend_build_identity(local_sha) != frontend_build
-            or _frontend_reproducibility_proof(frontend_build)
-            != frontend_reproducibility
-            or _critical_hashes() != critical_hashes
+            or not exact_json_equal(_read_runtime_identity(), runtime_identity)
+            or not exact_json_equal(
+                _read_reviewed_runtime_identity(),
+                reviewed_identity,
+            )
+            or not exact_json_equal(
+                _frontend_build_identity(source_git_sha),
+                frontend_build,
+            )
+            or not exact_json_equal(
+                _frontend_reproducibility_proof(frontend_build),
+                frontend_reproducibility,
+            )
+            or not exact_json_equal(_critical_hashes(), critical_hashes)
         ):
             raise ReleaseGuardError(
                 "frontend source, critical files, or build changed while "
                 "preparing release"
             )
-        _atomic_json(IDENTITY_PATH, payload)
         _atomic_json(LEASE_PATH, payload)
         return payload
     except Exception:
@@ -227,7 +570,15 @@ def _prepare_locked(actor: str) -> dict[str, Any]:
 def status() -> dict[str, Any]:
     with _release_operation_lock():
         if not LEASE_PATH.exists():
-            return {"active": False}
+            incomplete = LEASE_DIR.exists()
+            return {
+                "active": False,
+                **(
+                    {"incomplete_lease_directory": True}
+                    if incomplete
+                    else {}
+                ),
+            }
         return {"active": True, **_read_json(LEASE_PATH)}
 
 
@@ -240,7 +591,9 @@ def _prepublish_locked() -> dict[str, Any]:
     if not LEASE_PATH.exists():
         raise ReleaseGuardError("no prepared production release lease")
     lease = _read_json(LEASE_PATH)
-    expected_sha, expected_release_id = _validated_release_lease(lease)
+    expected_source_sha, expected_deployment_sha, expected_release_id = (
+        _validated_release_lease(lease)
+    )
     branch = _run_git("branch", "--show-current")
     if branch != PRODUCTION_BRANCH:
         raise ReleaseGuardError(f"wrong branch {branch!r}")
@@ -250,33 +603,44 @@ def _prepublish_locked() -> dict[str, Any]:
     _run_git("fetch", "origin", PRODUCTION_BRANCH)
     local_sha = _run_git("rev-parse", "HEAD")
     remote_sha = _run_git("rev-parse", f"origin/{PRODUCTION_BRANCH}")
-    if not (local_sha == remote_sha == expected_sha):
+    if not (local_sha == remote_sha == expected_deployment_sha):
         raise ReleaseGuardError(
             "release SHA changed after prepare: "
-            f"lease={expected_sha} local={local_sha} remote={remote_sha}"
+            f"lease={expected_deployment_sha} local={local_sha} remote={remote_sha}"
         )
-    identity = _read_json(IDENTITY_PATH)
-    frontend_build = _frontend_build_identity(expected_sha)
-    frontend_reproducibility = _frontend_reproducibility_proof(
-        frontend_build
+    _assert_reviewed_source_relation(
+        source_git_sha=expected_source_sha,
+        deployment_git_sha=expected_deployment_sha,
     )
-    critical_hashes = _critical_hashes()
-    if (
-        identity != lease
-        or identity.get("critical_file_hashes") != critical_hashes
-        or identity.get("frontend_build") != frontend_build
-        or identity.get("frontend_reproducibility")
-        != frontend_reproducibility
+    prepared_identity = _runtime_identity_from_lease(lease)
+    runtime_identity = _read_runtime_identity()
+    reviewed_identity = _read_reviewed_runtime_identity()
+    frontend_build, frontend_reproducibility, critical_hashes = (
+        _assert_local_identity_binding(
+            runtime_identity,
+            expected_git_sha=expected_source_sha,
+        )
+    )
+    if not (
+        exact_json_equal(runtime_identity, prepared_identity)
+        and exact_json_equal(reviewed_identity, prepared_identity)
     ):
         raise ReleaseGuardError(
-            "release identity, critical files, or frontend build changed after prepare"
+            "runtime release identity or reviewed intent changed after prepare"
         )
-    if (
-        _frontend_build_identity(expected_sha) != frontend_build
-        or _frontend_reproducibility_proof(frontend_build)
-        != frontend_reproducibility
-        or _critical_hashes() != critical_hashes
-    ):
+    if not all((
+        exact_json_equal(_read_runtime_identity(), runtime_identity),
+        exact_json_equal(_read_reviewed_runtime_identity(), reviewed_identity),
+        exact_json_equal(
+            _frontend_build_identity(expected_source_sha),
+            frontend_build,
+        ),
+        exact_json_equal(
+            _frontend_reproducibility_proof(frontend_build),
+            frontend_reproducibility,
+        ),
+        exact_json_equal(_critical_hashes(), critical_hashes),
+    )):
         raise ReleaseGuardError(
             "frontend source, critical files, or build changed during "
             "prepublish verification"
@@ -284,7 +648,9 @@ def _prepublish_locked() -> dict[str, Any]:
     _assert_active_lease_unchanged(lease)
     return {
         "ready_to_publish": True,
-        "git_sha": expected_sha,
+        "source_git_sha": expected_source_sha,
+        "git_sha": expected_source_sha,
+        "deployment_git_sha": expected_deployment_sha,
         "release_id": expected_release_id,
         "protocol_version": PROTOCOL_VERSION,
     }
@@ -351,7 +717,9 @@ def _release_check_url(
         ])
         if len(urllib.parse.parse_qsl(query, keep_blank_values=True)) != 1:
             raise ReleaseGuardError("release check query is invalid")
-    url = urllib.parse.urlunsplit(("https", "mezansalla.com", parsed_path.path, query, ""))
+    url = urllib.parse.urlunsplit(
+        ("https", "mezansalla.com", parsed_path.path, query, "")
+    )
     parsed_url = urllib.parse.urlsplit(url)
     release_keys = [
         name for name, _value in urllib.parse.parse_qsl(
@@ -392,7 +760,7 @@ def _fetch_production(
         headers["Cache-Control"] = "no-cache"
     if service_worker_script:
         headers["Service-Worker"] = "script"
-    request = urllib.request.Request(url, headers=headers)
+    request = urllib.request.Request(url, headers=headers, method="GET")
     try:
         with _urlopen_no_redirect(request, timeout=timeout) as response:
             status = int(response.getcode())
@@ -479,6 +847,36 @@ def _assert_public_bytes(
         raise ReleaseGuardError(
             "deployed frontend byte count mismatch: "
             f"path={label} expected={expected['bytes']} actual={len(content)}"
+        )
+
+
+def _assert_build_meta_response(
+    response: dict[str, Any],
+    *,
+    label: str,
+) -> None:
+    if response.get("status") != 200:
+        raise ReleaseGuardError(
+            f"production frontend build metadata returned non-200: {label}"
+        )
+    content_type = str(
+        (response.get("headers") or {}).get("content-type") or ""
+    ).lower()
+    media_type = content_type.split(";", 1)[0].strip()
+    if media_type != "application/json":
+        raise ReleaseGuardError(
+            "production frontend build metadata MIME is invalid: "
+            f"{label}={content_type or 'missing'}"
+        )
+    try:
+        parsed = json.loads(response["body"].decode("utf-8"))
+    except (UnicodeError, json.JSONDecodeError) as exc:
+        raise ReleaseGuardError(
+            f"production frontend build metadata is invalid JSON: {label}"
+        ) from exc
+    if not isinstance(parsed, dict):
+        raise ReleaseGuardError(
+            f"production frontend build metadata is not a JSON object: {label}"
         )
 
 
@@ -672,34 +1070,48 @@ def _verify_public_frontend(
     shell_cache = []
     service_workers = []
     for relative_path, record in records_by_request_path.items():
-        for cache_bust in (False, True):
-            response = _fetch_production(
-                origin,
-                relative_path,
-                cache_bust=cache_bust,
-                accept="*/*",
-                timeout=30,
-                service_worker_script=(
-                    relative_path in STANDARD_SERVICE_WORKER_PATHS
-                ),
-            )
-            label = relative_path + ("?release_check" if cache_bust else "")
-            _assert_public_bytes(response, expected=record, label=label)
-            checked_requests.append(label)
-            if not cache_bust and relative_path in {
-                "/",
-                "/index.html",
-                SPA_SHELL_PATH,
-            }:
-                shell_cache.append(
-                    _assert_html_shell_headers(response, relative_path)
+        accept_values = (
+            ("application/json", "*/*")
+            if relative_path == "/build-meta.json"
+            else ("*/*",)
+        )
+        for accept in accept_values:
+            for cache_bust in (False, True):
+                response = _fetch_production(
+                    origin,
+                    relative_path,
+                    cache_bust=cache_bust,
+                    accept=accept,
+                    timeout=30,
+                    service_worker_script=(
+                        relative_path in STANDARD_SERVICE_WORKER_PATHS
+                    ),
                 )
-            if relative_path in STANDARD_SERVICE_WORKER_PATHS:
-                service_worker = _assert_service_worker_headers(
-                    response, relative_path
+                label = relative_path + (
+                    "?release_check" if cache_bust else ""
                 )
-                if not cache_bust:
-                    service_workers.append(service_worker)
+                if relative_path == "/build-meta.json":
+                    label += f" [accept={accept}]"
+                    _assert_build_meta_response(
+                        response,
+                        label=label,
+                    )
+                _assert_public_bytes(response, expected=record, label=label)
+                checked_requests.append(label)
+                if not cache_bust and relative_path in {
+                    "/",
+                    "/index.html",
+                    SPA_SHELL_PATH,
+                }:
+                    shell_cache.append(
+                        _assert_html_shell_headers(response, relative_path)
+                    )
+                if relative_path in STANDARD_SERVICE_WORKER_PATHS:
+                    service_worker = _assert_service_worker_headers(
+                        response, relative_path
+                    )
+                    if not cache_bust:
+                        service_workers.append(service_worker)
 
     return {
         "artifact_tree_sha256": expected.get("artifact_tree_sha256"),
@@ -722,35 +1134,43 @@ def _aware_timestamp(value: Any, label: str) -> tuple[str, datetime]:
     return raw, parsed
 
 
-def _uuid4(value: Any, label: str) -> str:
+def _release_id_v5(value: Any, label: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ReleaseGuardError(f"{label} is invalid")
     raw = value.strip()
-    try:
-        parsed = UUID(raw)
-    except (ValueError, TypeError, AttributeError) as exc:
-        raise ReleaseGuardError(f"{label} is invalid") from exc
-    if parsed.version != 4 or str(parsed) != raw:
+    if not _RELEASE_ID_V5.fullmatch(raw):
         raise ReleaseGuardError(f"{label} is invalid")
     return raw
 
 
-def _validated_release_lease(lease: dict[str, Any]) -> tuple[str, str]:
-    """Validate the exact v4 lease identity before any release mutation."""
-    try:
-        protocol_version = int(lease.get("protocol_version") or 0)
-    except (TypeError, ValueError) as exc:
-        raise ReleaseGuardError("prepared release protocol is invalid") from exc
+def _validated_release_lease(
+    lease: dict[str, Any],
+) -> tuple[str, str, str]:
+    """Validate the exact v5 lease identity before any release mutation."""
+    protocol_version = lease.get("protocol_version")
+    if type(protocol_version) is not int:
+        raise ReleaseGuardError("prepared release protocol is invalid")
     if protocol_version != PROTOCOL_VERSION:
         raise ReleaseGuardError(
             "prepared release protocol is unsupported; abort the existing "
             "lease with its original guard, update the workspace, then "
             f"prepare again with protocol v{PROTOCOL_VERSION}"
         )
-    expected_sha = str(lease.get("git_sha") or "").strip().lower()
-    if not _FULL_GIT_SHA.fullmatch(expected_sha):
+    expected_sha = lease.get("source_git_sha")
+    if not isinstance(expected_sha, str) or not _FULL_GIT_SHA.fullmatch(
+        expected_sha
+    ):
         raise ReleaseGuardError("prepared release SHA is invalid")
-    expected_release_id = _uuid4(
+    if lease.get("git_sha") != expected_sha:
+        raise ReleaseGuardError(
+            "prepared release git_sha alias does not match source_git_sha"
+        )
+    deployment_sha = lease.get("deployment_git_sha")
+    if not isinstance(deployment_sha, str) or not _FULL_GIT_SHA.fullmatch(
+        deployment_sha
+    ):
+        raise ReleaseGuardError("prepared deployment SHA is invalid")
+    expected_release_id = _release_id_v5(
         lease.get("release_id"), "prepared release id"
     )
     if not isinstance(lease.get("frontend_build"), dict):
@@ -758,6 +1178,14 @@ def _validated_release_lease(lease: dict[str, Any]) -> tuple[str, str]:
     if not isinstance(lease.get("frontend_reproducibility"), dict):
         raise ReleaseGuardError(
             "prepared frontend reproducibility proof is missing"
+        )
+    runtime_identity = _runtime_identity_from_lease(lease)
+    if (
+        runtime_identity["source_git_sha"] != expected_sha
+        or runtime_identity["release_id"] != expected_release_id
+    ):
+        raise ReleaseGuardError(
+            "prepared lease source or release id does not match runtime identity"
         )
     try:
         validate_frontend_reproducibility_proof(
@@ -768,39 +1196,46 @@ def _validated_release_lease(lease: dict[str, Any]) -> tuple[str, str]:
         raise ReleaseGuardError(
             f"prepared frontend reproducibility proof is invalid: {exc}"
         ) from exc
-    return expected_sha, expected_release_id
+    return expected_sha, deployment_sha, expected_release_id
 
 
 def _assert_active_lease_unchanged(
     expected_lease: dict[str, Any],
-) -> tuple[str, str]:
+) -> tuple[str, str, str]:
     """Re-read and fence the active lease immediately before final action."""
     if not LEASE_PATH.exists():
         raise ReleaseGuardError("production release lease disappeared")
     active_lease = _read_json(LEASE_PATH)
-    expected_sha, expected_release_id = _validated_release_lease(
-        expected_lease
+    (
+        expected_source_sha,
+        expected_deployment_sha,
+        expected_release_id,
+    ) = _validated_release_lease(expected_lease)
+    active_source_sha, active_deployment_sha, active_release_id = (
+        _validated_release_lease(active_lease)
     )
-    active_sha, active_release_id = _validated_release_lease(active_lease)
     if (
-        active_sha != expected_sha
+        active_source_sha != expected_source_sha
+        or active_deployment_sha != expected_deployment_sha
         or active_release_id != expected_release_id
-        or active_lease != expected_lease
+        or not exact_json_equal(active_lease, expected_lease)
     ):
         raise ReleaseGuardError(
             "active production release lease changed during operation: "
             f"expected={expected_release_id} active={active_release_id}"
         )
-    return active_sha, active_release_id
+    return active_source_sha, active_deployment_sha, active_release_id
 
 
-def _remove_active_lease(expected_lease: dict[str, Any]) -> tuple[str, str]:
+def _remove_active_lease(
+    expected_lease: dict[str, Any],
+) -> tuple[str, str, str]:
     """Delete only the exact lease observed under the operation mutex."""
-    active_sha, active_release_id = _assert_active_lease_unchanged(
-        expected_lease
+    active_source_sha, active_deployment_sha, active_release_id = (
+        _assert_active_lease_unchanged(expected_lease)
     )
     shutil.rmtree(LEASE_DIR)
-    return active_sha, active_release_id
+    return active_source_sha, active_deployment_sha, active_release_id
 
 
 def verify(base_url: str) -> dict[str, Any]:
@@ -813,34 +1248,47 @@ def _verify_locked(base_url: str) -> dict[str, Any]:
         raise ReleaseGuardError("no prepared production release lease")
     lease = _read_json(LEASE_PATH)
     origin = _validated_production_origin(base_url)
-    expected_sha, expected_release_id = _validated_release_lease(lease)
-    identity_fields = (
-        "release_id",
-        "git_sha",
-        "branch",
-        "prepared_at",
-        "protocol_version",
-        "critical_file_hashes",
-        "frontend_build",
-        "frontend_reproducibility",
+    expected_sha, expected_deployment_sha, expected_release_id = (
+        _validated_release_lease(lease)
     )
-    expected_identity = {field: lease.get(field) for field in identity_fields}
-    expected_identity["release_id"] = expected_release_id
+    expected_runtime_identity = _runtime_identity_from_lease(lease)
+    expected_health_identity = {
+        "identity_kind": expected_runtime_identity["kind"],
+        "identity_schema_version": expected_runtime_identity[
+            "schema_version"
+        ],
+        **{
+            field: expected_runtime_identity[field]
+            for field in (
+                "release_id",
+                "source_git_sha",
+                "branch",
+                "protocol_version",
+                "critical_file_hashes",
+                "frontend_build",
+                "frontend_reproducibility",
+            )
+        },
+    }
     _, prepared_at = _aware_timestamp(
-        expected_identity["prepared_at"], "prepared release timestamp"
+        lease.get("prepared_at"), "prepared release timestamp"
     )
     observations = []
     for attempt in range(3):
         health = _health_payload(origin)
         release = health.get("release") or {}
-        actual_sha = str(release.get("git_sha") or "")
+        actual_sha = release.get("source_git_sha")
         if health.get("ok") is not True:
             raise ReleaseGuardError("production health is not ok")
-        if not release.get("verified_identity_available"):
+        if release.get("verified_identity_available") is not True:
             raise ReleaseGuardError("production has no verified release identity")
-        if actual_sha != expected_sha:
+        if not isinstance(actual_sha, str) or actual_sha != expected_sha:
             raise ReleaseGuardError(
                 f"deployed SHA mismatch: expected={expected_sha} actual={actual_sha}"
+            )
+        if release.get("git_sha") != expected_sha:
+            raise ReleaseGuardError(
+                "deployed git_sha alias does not match source_git_sha"
             )
         if release.get("critical_file_hashes_match") is not True:
             raise ReleaseGuardError("production critical file hashes do not match")
@@ -848,8 +1296,8 @@ def _verify_locked(base_url: str) -> dict[str, Any]:
             raise ReleaseGuardError("production frontend build proof does not match")
         identity_mismatches = [
             field
-            for field, expected in expected_identity.items()
-            if release.get(field) != expected
+            for field, expected in expected_health_identity.items()
+            if not exact_json_equal(release.get(field), expected)
         ]
         if identity_mismatches:
             raise ReleaseGuardError(
@@ -868,7 +1316,7 @@ def _verify_locked(base_url: str) -> dict[str, Any]:
             raise ReleaseGuardError("production boot identity is in the future")
         frontend_observation = _verify_public_frontend(
             origin,
-            expected_identity["frontend_build"],
+            expected_runtime_identity["frontend_build"],
         )
         observations.append({
             "git_sha": actual_sha,
@@ -883,14 +1331,16 @@ def _verify_locked(base_url: str) -> dict[str, Any]:
     _remove_active_lease(lease)
     return {
         "verified": True,
+        "source_git_sha": actual_sha,
         "git_sha": actual_sha,
+        "deployment_git_sha": expected_deployment_sha,
         "release_id": expected_release_id,
         "protocol_version": PROTOCOL_VERSION,
         "url": origin,
         "checks": len(observations),
         "boot_started_at": observations[0]["boot_started_at"],
         "boot_started_at_observations": boot_started_at_observations,
-        "frontend_artifact_tree_sha256": expected_identity[
+        "frontend_artifact_tree_sha256": expected_runtime_identity[
             "frontend_build"
         ]["artifact_tree_sha256"],
         "frontend_checked_requests": observations[0]["frontend"][
@@ -914,15 +1364,17 @@ def _abort_locked(
     if not LEASE_PATH.exists():
         raise ReleaseGuardError("no active production release lease")
     lease = _read_json(LEASE_PATH)
-    actual_sha, actual_release_id = _validated_release_lease(lease)
+    actual_source_sha, actual_deployment_sha, actual_release_id = (
+        _validated_release_lease(lease)
+    )
     expected_sha = str(expected_sha or "").strip().lower()
-    expected_release_id = _uuid4(
+    expected_release_id = _release_id_v5(
         expected_release_id, "expected release id"
     )
-    if expected_sha != actual_sha:
+    if expected_sha != actual_deployment_sha:
         raise ReleaseGuardError(
             "lease SHA mismatch: "
-            f"expected argument={expected_sha} active={actual_sha}"
+            f"expected argument={expected_sha} active={actual_deployment_sha}"
         )
     if expected_release_id != actual_release_id:
         raise ReleaseGuardError(
@@ -932,7 +1384,9 @@ def _abort_locked(
     _remove_active_lease(lease)
     return {
         "aborted": True,
-        "git_sha": actual_sha,
+        "source_git_sha": actual_source_sha,
+        "git_sha": actual_source_sha,
+        "deployment_git_sha": actual_deployment_sha,
         "release_id": actual_release_id,
         "protocol_version": PROTOCOL_VERSION,
     }

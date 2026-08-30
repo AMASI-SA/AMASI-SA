@@ -20,7 +20,15 @@ test("Emergent host compatibility does not relax governed releases", () => {
   const packageManifest = JSON.parse(
     fs.readFileSync(path.join(frontendRoot, "package.json"), "utf8"),
   );
-  assert.equal(packageManifest.scripts.build, "vite build");
+  assert.equal(
+    packageManifest.scripts.start,
+    "node scripts/start-governed-runtime.cjs",
+  );
+  assert.equal(packageManifest.scripts["start:dev"], "vite --host 0.0.0.0");
+  assert.equal(
+    packageManifest.scripts.build,
+    "node scripts/build-entry.cjs",
+  );
   assert.equal(
     packageManifest.scripts["build:release"],
     "node scripts/build-release-frontend.cjs",
@@ -56,7 +64,18 @@ test("Emergent host compatibility does not relax governed releases", () => {
       "utf8",
     );
     assert.match(workflow, /yarn build:release/);
-    assert.doesNotMatch(workflow, /yarn build(?:\s|$)/m);
+    if (relativePath === ".github/workflows/mezan-production-release.yml") {
+      const hostAdapterInvocations = workflow.match(
+        /^\s*env -u GITHUB_ACTIONS -u GITHUB_SHA -u GITHUB_WORKSPACE \\\n\s*yarn build \| tee /gm,
+      ) || [];
+      assert.equal(hostAdapterInvocations.length, 1);
+      assert.match(workflow, /node-version:\s*["']?20\.20\.2["']?/);
+      assert.match(workflow, /Emergent Host Node 20 clean-clone adapter rehearsal/);
+      assert.match(workflow, /MEZAN_RELEASE_USE_REVIEWED_INTENT:\s*["']?1["']?/);
+    } else {
+      assert.doesNotMatch(workflow, /yarn build(?:\s|$)/m);
+      assert.doesNotMatch(workflow, /MEZAN_RELEASE_USE_REVIEWED_INTENT/);
+    }
     assert.match(workflow, /node-version:\s*["']?22\.23\.2["']?/);
     assert.match(workflow, /yarn@1\.22\.22/);
     assert.match(workflow, /yarn install --frozen-lockfile --non-interactive/);

@@ -108,3 +108,22 @@ test("proof file replacement is atomic and cleanup is path-specific", () => {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("proof cleanup never follows a symlinked parent", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "mezan-proof-link-"));
+  const outside = path.join(root, "outside");
+  const linked = path.join(root, "linked");
+  fs.mkdirSync(outside);
+  fs.writeFileSync(path.join(outside, "reproducible-build.json"), "survive\n");
+  fs.symlinkSync(outside, linked, "dir");
+  const target = path.join(linked, "reproducible-build.json");
+  try {
+    assert.throws(() => removeProofFiles(target), /parent must be a real directory/);
+    assert.equal(
+      fs.readFileSync(path.join(outside, "reproducible-build.json"), "utf8"),
+      "survive\n",
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

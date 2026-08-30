@@ -32,6 +32,7 @@ jobs:
           PYTHONPATH: backend:.
         run: >-
           python -m unittest
+          backend.tests.test_emergent_deployment_adapter_v5
           backend.tests.test_frontend_release_toolchain
           backend.tests.test_frontend_build_identity
           backend.tests.test_production_release_guard
@@ -40,11 +41,17 @@ jobs:
   frontend-build:
     name: Frontend build
     runs-on: ubuntu-latest
+    env:
+      MEZAN_RELEASE_USE_REVIEWED_INTENT: "1"
+      REACT_APP_BACKEND_URL: https://mezansalla.com
     defaults:
       run:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: "22.23.2"
@@ -59,23 +66,314 @@ jobs:
       - name: Test governed frontend build contract
         run: >-
           yarn node --test
+          scripts/build-entry.test.cjs
           scripts/build-contract.test.cjs
           scripts/build-release-frontend.test.cjs
+          scripts/release-intent.test.cjs
           scripts/service-worker-retirement.test.cjs
+          scripts/start-governed-runtime.test.cjs
+      - name: Read reviewed source identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_git_sha="$(node -p 'require("../release/release-intent-v5.json").source_git_sha')"
+          [[ "$source_git_sha" =~ ^[0-9a-f]{40}$ ]]
+          echo "SOURCE_GIT_SHA=$source_git_sha" >> "$GITHUB_ENV"
       - name: Build production frontend twice and retain verified build B
         env:
           CI: "false"
         run: yarn build:release
       - name: Verify retained frontend artifact and reproducibility proof
-        run: python ../scripts/verify_frontend_build.py --expected-git-sha "$GITHUB_SHA"
+        run: >-
+          python ../scripts/verify_frontend_build.py
+          --expected-git-sha "$SOURCE_GIT_SHA"
       - name: Prove install and build leave the worktree clean
-        run: test -z "$(git status --short)"
+        shell: bash
+        run: |
+          set -euo pipefail
+          worktree_status="$(git status --short)"
+          test -z "$worktree_status"
+
+  emergent-node20-rehearsal:
+    name: Emergent Host Node 20 clean-clone adapter rehearsal
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      XDG_CACHE_HOME: ${{ runner.temp }}/mezan-release-v5-toolchain-cache
+      REACT_APP_BACKEND_URL: https://mezansalla.com
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.20.2"
+      - name: Enable the runtime-observed Host Yarn version
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Create a clean tracked-source clone
+        shell: bash
+        run: |
+          set -euo pipefail
+          deployment_git_sha="$(git rev-parse HEAD)"
+          source_git_sha="$(node -p 'require("./release/release-intent-v5.json").source_git_sha')"
+          [[ "$source_git_sha" =~ ^[0-9a-f]{40}$ ]]
+          git cat-file -e "${source_git_sha}^{commit}"
+          git merge-base --is-ancestor "$source_git_sha" "$deployment_git_sha"
+          mapfile -t changed_paths < <(
+            git diff --name-only "$source_git_sha" "$deployment_git_sha"
+          )
+          test "${#changed_paths[@]}" -eq 1
+          test "${changed_paths[0]}" = "release/release-intent-v5.json"
+          rehearsal_root="$(mktemp -d)"
+          git clone --local --no-hardlinks "$GITHUB_WORKSPACE" "$rehearsal_root/repo"
+          git -C "$rehearsal_root/repo" checkout --detach "$deployment_git_sha"
+          {
+            echo "REHEARSAL_REPO=$rehearsal_root/repo"
+            echo "INTENT_SOURCE_SHA=$source_git_sha"
+            echo "DEPLOYMENT_GIT_SHA=$deployment_git_sha"
+          } >> "$GITHUB_ENV"
+      - name: Prove generated release inputs are absent
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(node --version)" = "v20.20.2"
+          test "$(yarn --version)" = "1.22.22"
+          test -f "$REHEARSAL_REPO/release/release-intent-v5.json"
+          test ! -e "$REHEARSAL_REPO/backend/release_identity.json"
+          test ! -e "$REHEARSAL_REPO/frontend/build"
+          test ! -e "$REHEARSAL_REPO/frontend/.release/reproducible-build.json"
+          test ! -e "$REHEARSAL_REPO/frontend/node_modules"
+          worktree_status="$(git -C "$REHEARSAL_REPO" status --short)"
+          test -z "$worktree_status"
+      - name: Record sanitized Host-20 adapter evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$REHEARSAL_REPO/frontend"
+          pwd
+          node --version
+          yarn --version
+          python ../scripts/emergent_deployment_adapter.py evidence | tee "$RUNNER_TEMP/mezan-adapter-environment-v5.json"
+      - name: Rehearse a conservative outer Host-20 frozen install
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$REHEARSAL_REPO/frontend"
+          yarn install --frozen-lockfile --non-interactive
+          printf '%s\n' host-node20-install-must-not-be-reused > node_modules/.host-node20-sentinel
+      - name: Emulate a Cloud Build checkout without Git metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d "$REHEARSAL_REPO/.git"
+          mv "$REHEARSAL_REPO/.git" "$RUNNER_TEMP/mezan-rehearsal-v5.git"
+          test ! -e "$REHEARSAL_REPO/.git"
+      - name: Invoke the Emergent package adapter under Host Node 20
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$REHEARSAL_REPO/frontend"
+          env -u GITHUB_ACTIONS -u GITHUB_SHA -u GITHUB_WORKSPACE \
+            yarn build | tee "$RUNNER_TEMP/mezan-adapter-build-v5.log"
+      - name: Verify artifact, proof, identity, and package boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$REHEARSAL_REPO/frontend/build/index.html"
+          test -s "$REHEARSAL_REPO/frontend/build/build-meta.json"
+          test -s "$REHEARSAL_REPO/frontend/.release/reproducible-build.json"
+          test -s "$REHEARSAL_REPO/backend/release_identity.json"
+          test ! -e "$REHEARSAL_REPO/frontend/node_modules/.host-node20-sentinel"
+          cd "$REHEARSAL_REPO"
+          python scripts/verify_frontend_build.py \
+            --expected-git-sha "$INTENT_SOURCE_SHA" \
+            --reviewed-intent-v5
+          python scripts/emergent_deployment_adapter.py verify-packages | tee "$RUNNER_TEMP/mezan-package-boundary-v5.json"
+          PYTHONPATH=backend:. python - <<'PY'
+          import json
+          from pathlib import Path
+
+          from frontend_build_identity import (
+              read_frontend_build_identity,
+              read_frontend_reproducibility_proof,
+          )
+          from release_identity import read_release_identity
+          from release_identity import release_health_payload
+
+          root = Path.cwd()
+          intent = json.loads(
+              (root / "release" / "release-intent-v5.json").read_text(encoding="utf-8")
+          )
+          metadata = json.loads(
+              (root / "frontend" / "build" / "build-meta.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          identity = json.loads(
+              (root / "backend" / "release_identity.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          frontend_build = read_frontend_build_identity(
+              expected_git_sha=intent["source_git_sha"],
+              require_git_source=False,
+          )
+          proof = read_frontend_reproducibility_proof(
+              frontend_build=frontend_build,
+          )
+          health = read_release_identity()
+          health_payload = release_health_payload()
+          assert isinstance(metadata, dict)
+          assert frontend_build == intent["frontend_build"]
+          assert proof == intent["frontend_reproducibility"]
+          assert identity == intent["runtime_identity"]
+          assert identity["source_git_sha"] == intent["source_git_sha"]
+          assert identity["release_id"].startswith("rg5-")
+          assert identity["frontend_build"]["artifact_tree_sha256"] == intent["frontend_build"]["artifact_tree_sha256"]
+          assert identity["critical_file_hashes"] == intent["critical_file_hashes"]
+          assert frontend_build["toolchain"]["node"] == "22.23.2"
+          assert frontend_build["toolchain"]["yarn"] == "1.22.22"
+          assert health["verified_identity_available"] is True
+          assert health["critical_file_hashes_match"] is True
+          assert health["frontend_build_verified"] is True
+          assert health["release_id"] == identity["release_id"]
+          assert health["source_git_sha"] == intent["source_git_sha"]
+          assert health_payload == {
+              "ok": True,
+              "service": "backend",
+              "release": health,
+          }
+          PY
+          mv "$RUNNER_TEMP/mezan-rehearsal-v5.git" .git
+          worktree_status="$(git status --short)"
+          tracked_generated="$(git ls-files -- backend/release_identity.json frontend/build frontend/.release)"
+          test -z "$worktree_status"
+          test -z "$tracked_generated"
+      - name: Prove the governed runtime returns build metadata as JSON
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$REHEARSAL_REPO/frontend"
+          timeout --signal=TERM 60s yarn start > "$RUNNER_TEMP/mezan-governed-runtime.log" 2>&1 &
+          runtime_pid=$!
+          cleanup_runtime() {
+            kill "$runtime_pid" 2>/dev/null || true
+            wait "$runtime_pid" 2>/dev/null || true
+          }
+          trap cleanup_runtime EXIT
+          python - <<'PY'
+          import json
+          import os
+          import time
+          from pathlib import Path
+          from urllib.error import URLError
+          from urllib.request import Request, urlopen
+
+          expected = Path("build/build-meta.json").read_bytes()
+          urls = (
+              "http://127.0.0.1:3000/build-meta.json",
+              "http://127.0.0.1:3000/build-meta.json?release_check="
+              + os.environ["INTENT_SOURCE_SHA"],
+          )
+          for url in urls:
+            for accept in ("application/json", "*/*"):
+                last_error = None
+                for _ in range(40):
+                    try:
+                        request = Request(url, headers={"Accept": accept})
+                        with urlopen(request, timeout=2) as response:
+                            body = response.read()
+                            content_type = response.headers.get(
+                                "Content-Type", ""
+                            ).lower()
+                        media_type = content_type.split(";", 1)[0].strip()
+                        assert media_type == "application/json", content_type
+                        assert body == expected
+                        assert isinstance(json.loads(body), dict)
+                        assert body != Path("build/index.html").read_bytes()
+                        break
+                    except (AssertionError, OSError, URLError) as error:
+                        last_error = error
+                        time.sleep(0.5)
+                else:
+                    raise AssertionError(
+                        "governed runtime did not serve exact JSON metadata "
+                        f"for {url} accept={accept}: {last_error}"
+                    )
+          production_request = Request(
+              "http://127.0.0.1:3000/build-meta.json",
+              headers={"Accept": "application/json", "Host": "mezansalla.com"},
+          )
+          with urlopen(production_request, timeout=2) as response:
+              production_body = response.read()
+              production_type = response.headers.get("Content-Type", "").lower()
+          assert production_type.split(";", 1)[0].strip() == "application/json"
+          assert production_body == expected
+
+          preview_request = Request(
+              "http://127.0.0.1:3000/build-meta.json",
+              headers={
+                  "Accept": "application/json",
+                  "Host": "salla-analytics.preview.emergentagent.com",
+              },
+          )
+          with urlopen(preview_request, timeout=2) as response:
+              preview_body = response.read()
+              preview_type = response.headers.get("Content-Type", "").lower()
+          assert preview_type.split(";", 1)[0].strip() == "application/json"
+          assert preview_body == expected
+
+          metadata = json.loads(expected)
+          hashed_asset = next(
+              record["path"]
+              for record in metadata["public_files"]
+              if record["path"].startswith("assets/")
+          )
+          asset_request = Request(
+              "http://127.0.0.1:3000/" + hashed_asset,
+              headers={"Host": "mezansalla.com"},
+          )
+          with urlopen(asset_request, timeout=2) as response:
+              response.read()
+              asset_cache = response.headers.get("Cache-Control", "").lower()
+          assert "immutable" in asset_cache
+          assert "max-age=31536000" in asset_cache
+
+          shell_request = Request(
+              "http://127.0.0.1:3000/snapchat-accounts",
+              headers={"Host": "mezansalla.com"},
+          )
+          with urlopen(shell_request, timeout=2) as response:
+              shell_body = response.read()
+              shell_type = response.headers.get("Content-Type", "").lower()
+              shell_cache = response.headers.get("Cache-Control", "").lower()
+          assert shell_type.startswith("text/html")
+          assert shell_body == Path("build/index.html").read_bytes()
+          assert "no-store" in shell_cache
+          PY
+      - name: Retain sanitized rehearsal evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-v5-clean-clone-evidence
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/mezan-adapter-environment-v5.json
+            ${{ runner.temp }}/mezan-adapter-build-v5.log
+            ${{ runner.temp }}/mezan-package-boundary-v5.json
+            ${{ runner.temp }}/mezan-governed-runtime.log
 
   release-handoff:
     name: Emergent manual redeploy required
     if: github.event_name == 'push'
     needs:
       - backend-preflight
+      - emergent-node20-rehearsal
       - frontend-build
     runs-on: ubuntu-latest
     steps:
@@ -85,36 +383,21 @@ jobs:
           cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
           ## Mezan release is CI-ready, not deployed
 
-          Emergent does not pull, sync, webhook, or auto-redeploy this existing project from GitHub.
+          This workflow does not create a lease or update Preview or Production.
+          A merge is review/CI evidence only, not a deployment or Production acceptance.
 
-          A merge to `hotfix/prod-snap-meta-final` **does not update Preview or Production**.
-
-          Mandatory production path from the shared `/app` workspace:
+          Mandatory protocol-v5 production path from the shared `/app` workspace:
           1. Run `python scripts/production_release_guard.py status` and continue only when `active` is `false`.
-          2. Fast-forward `/app` to `origin/hotfix/prod-snap-meta-final`.
-          3. Before creating a lease, run:
-
-             ```bash
-             python scripts/frontend_release_toolchain.py ensure
-
-             python scripts/frontend_release_toolchain.py exec -- \
-               bash -lc 'cd frontend && yarn install --frozen-lockfile --non-interactive'
-
-             python scripts/frontend_release_toolchain.py exec -- \
-               bash -lc 'cd frontend && yarn build:release'
-
-             python scripts/frontend_release_toolchain.py exec -- \
-               python scripts/verify_frontend_build.py \
-                 --expected-git-sha "$(git rev-parse HEAD)"
-             ```
-
-          4. Only after bootstrap, install, build, and verification succeed, run `python scripts/production_release_guard.py prepare --actor "<conversation>"`.
+          2. Fast-forward `/app` to the reviewed v5 intent/deployment commit on `origin/hotfix/prod-snap-meta-final`.
+          3. Before creating a lease, run the same package adapter rehearsal used by CI with `cd frontend && yarn build`; it must match the tracked `release/release-intent-v5.json` and pass package-boundary verification.
+          4. Only after the adapter succeeds, run `python scripts/production_release_guard.py prepare --actor "<conversation>"`.
           5. Run `python scripts/production_release_guard.py prepublish` immediately before publishing.
           6. In the same project choose **Manage Publishing → Re-publish changes** exactly once.
-          7. Wait for an explicit newer `Deployment Succeeded`.
+          7. Preserve the adapter's sanitized Cloud Build evidence and wait for an explicit newer `Deployment Succeeded`.
           8. Run `python scripts/production_release_guard.py verify --url https://mezansalla.com`.
-          9. Do not perform financial or other irreversible writes until verification returns `verified: true` and `status` returns `active: false`.
+          9. Require exact v5 identity/critical/artifact checks and real JSON MIME at `/build-meta.json` before accepting the release.
+          10. Do not perform financial or other irreversible writes until verification returns `verified: true` and `status` returns `active: false`.
 
-          GitHub is the review/CI/audit source. Emergent Preview is the deployment source for this project.
+          GitHub is the review/CI/audit source. A future Emergent deployment requires separate authorization and its own Cloud/runtime evidence.
           EOF
-          echo "::notice title=Guarded Emergent redeploy required::CI passed. Bootstrap, install, build, and verify the frontend before prepare; deploy once, then require verified=true and active=false before production writes."
+          echo "::notice title=Guarded Emergent redeploy required::CI passed the v5 clean-clone adapter rehearsal. Do not deploy from v4 or local ignored artifacts; require verified=true, JSON build metadata, and active=false before production writes."

@@ -38,6 +38,22 @@ class FrontendBuildIdentityError(ValueError):
     """Raised when a frontend build cannot prove its exact identity."""
 
 
+def _exact_json_equal(value: Any, expected: Any) -> bool:
+    """Compare canonical JSON without Python's bool/int/float coercion."""
+    if type(value) is not type(expected):
+        return False
+    if isinstance(expected, dict):
+        return set(value) == set(expected) and all(
+            _exact_json_equal(value[key], expected[key]) for key in expected
+        )
+    if isinstance(expected, list):
+        return len(value) == len(expected) and all(
+            _exact_json_equal(left, right)
+            for left, right in zip(value, expected)
+        )
+    return value == expected
+
+
 def _sha256_bytes(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
 
@@ -77,7 +93,9 @@ def _canonical_source_tree_sha256(records: list[dict[str, Any]]) -> str:
 
 
 def _validated_relative_path(value: Any, label: str) -> str:
-    relative = str(value or "")
+    if not isinstance(value, str):
+        raise FrontendBuildIdentityError(f"{label} path is invalid")
+    relative = value
     pure = PurePosixPath(relative)
     if (
         not relative
@@ -132,15 +150,15 @@ def _validated_source_records(value: Any) -> list[dict[str, Any]]:
         relative = _validated_relative_path(
             item.get("path"), "frontend tracked source"
         )
-        mode = str(item.get("mode") or "")
-        git_blob = str(item.get("git_blob") or "")
+        mode = item.get("mode")
+        git_blob = item.get("git_blob")
         size = item.get("bytes")
-        digest = str(item.get("sha256") or "")
-        if mode not in {"100644", "100755"}:
+        digest = item.get("sha256")
+        if not isinstance(mode, str) or mode not in {"100644", "100755"}:
             raise FrontendBuildIdentityError(
                 f"frontend tracked source mode is invalid: {relative}"
             )
-        if not _FULL_GIT_SHA.fullmatch(git_blob):
+        if not isinstance(git_blob, str) or not _FULL_GIT_SHA.fullmatch(git_blob):
             raise FrontendBuildIdentityError(
                 f"frontend tracked source blob is invalid: {relative}"
             )
@@ -148,7 +166,7 @@ def _validated_source_records(value: Any) -> list[dict[str, Any]]:
             raise FrontendBuildIdentityError(
                 f"frontend tracked source byte count is invalid: {relative}"
             )
-        if not _SHA256.fullmatch(digest):
+        if not isinstance(digest, str) or not _SHA256.fullmatch(digest):
             raise FrontendBuildIdentityError(
                 f"frontend tracked source SHA is invalid: {relative}"
             )
@@ -177,16 +195,18 @@ def _source_proof(value: Any) -> dict[str, Any]:
     files = _validated_source_records(value.get("files"))
     expected = {
         "scope": "git_head_frontend_tree_v1",
-        "git_tree_oid": str(value.get("git_tree_oid") or ""),
+        "git_tree_oid": value.get("git_tree_oid"),
         "file_count": len(files),
         "files": files,
         "tree_sha256": _canonical_source_tree_sha256(files),
     }
-    if not _FULL_GIT_SHA.fullmatch(expected["git_tree_oid"]):
+    if not isinstance(expected["git_tree_oid"], str) or not _FULL_GIT_SHA.fullmatch(
+        expected["git_tree_oid"]
+    ):
         raise FrontendBuildIdentityError(
             "frontend tracked source Git tree is invalid"
         )
-    if value != expected:
+    if not _exact_json_equal(value, expected):
         raise FrontendBuildIdentityError("frontend tracked source proof is invalid")
     return expected
 
@@ -459,7 +479,7 @@ def _governed_environment(value: Any) -> dict[str, Any]:
         "allowed_client_keys": list(CLIENT_ENV_ALLOWLIST),
         "values": values,
     }
-    if value != expected:
+    if not _exact_json_equal(value, expected):
         raise FrontendBuildIdentityError(
             "frontend governed environment proof is invalid"
         )
@@ -518,6 +538,45 @@ def validate_frontend_reproducibility_proof(
         raise FrontendBuildIdentityError(
             "frontend reproducibility proof is invalid"
         )
+    if set(proof) != {
+        "schema_version",
+        "kind",
+        "git_sha",
+        "source",
+        "toolchain",
+        "environment",
+        "passes",
+        "retained_pass",
+        "proof_file",
+    }:
+        raise FrontendBuildIdentityError(
+            "frontend reproducibility proof fields are invalid"
+        )
+    if type(proof.get("schema_version")) is not int:
+        raise FrontendBuildIdentityError(
+            "frontend reproducibility proof schema is invalid"
+        )
+    passes = proof.get("passes")
+    if not isinstance(passes, list) or len(passes) != 2:
+        raise FrontendBuildIdentityError(
+            "frontend reproducibility passes are invalid"
+        )
+    for expected_ordinal, build_pass in enumerate(passes, start=1):
+        if (
+            not isinstance(build_pass, dict)
+            or set(build_pass) != {
+                "ordinal", "build_meta", "artifact_tree_sha256"
+            }
+            or type(build_pass.get("ordinal")) is not int
+            or build_pass.get("ordinal") != expected_ordinal
+        ):
+            raise FrontendBuildIdentityError(
+                "frontend reproducibility pass ordinal is invalid"
+            )
+    if type(proof.get("retained_pass")) is not int:
+        raise FrontendBuildIdentityError(
+            "frontend reproducibility retained pass is invalid"
+        )
     proof_file = proof.get("proof_file")
     records = _validated_build_records(
         [proof_file], "frontend reproducibility proof file"
@@ -534,7 +593,7 @@ def validate_frontend_reproducibility_proof(
         **_expected_reproducibility_proof(frontend_build),
         "proof_file": records[0],
     }
-    if proof != expected:
+    if not _exact_json_equal(proof, expected):
         raise FrontendBuildIdentityError(
             "frontend reproducibility proof does not match retained build"
         )
@@ -591,8 +650,8 @@ def read_frontend_build_identity(
     meta_path = build_root / META_NAME
     metadata = _read_json(meta_path)
 
-    git_sha = str(metadata.get("git_sha") or "").strip().lower()
-    if not _FULL_GIT_SHA.fullmatch(git_sha):
+    git_sha = metadata.get("git_sha")
+    if not isinstance(git_sha, str) or not _FULL_GIT_SHA.fullmatch(git_sha):
         raise FrontendBuildIdentityError("frontend build git SHA is invalid")
     if expected_git_sha is not None and git_sha != expected_git_sha:
         raise FrontendBuildIdentityError(
@@ -603,13 +662,13 @@ def read_frontend_build_identity(
     toolchain = metadata.get("toolchain")
     if not isinstance(toolchain, dict):
         raise FrontendBuildIdentityError("frontend toolchain proof is missing")
-    node = str(toolchain.get("node") or "")
+    node = toolchain.get("node")
     if node != EXPECTED_NODE_VERSION:
         raise FrontendBuildIdentityError(
             f"frontend build requires Node {EXPECTED_NODE_VERSION}; "
             f"found {node or 'unknown'}"
         )
-    yarn = str(toolchain.get("yarn") or "")
+    yarn = toolchain.get("yarn")
     if yarn != EXPECTED_YARN_VERSION:
         raise FrontendBuildIdentityError(
             f"frontend build requires Yarn {EXPECTED_YARN_VERSION}; "
@@ -624,7 +683,7 @@ def read_frontend_build_identity(
         raise FrontendBuildIdentityError(
             f"cannot establish the declared Vite version: {exc}"
         ) from exc
-    if str(toolchain.get("vite") or "") != vite:
+    if toolchain.get("vite") != vite:
         raise FrontendBuildIdentityError(
             "frontend Vite version does not match package.json"
         )
@@ -683,7 +742,7 @@ def read_frontend_build_identity(
         "files": files,
         "artifact_tree_sha256": _canonical_build_tree_sha256(files),
     }
-    if metadata != expected:
+    if not _exact_json_equal(metadata, expected):
         raise FrontendBuildIdentityError(
             "frontend build metadata does not match current source/artifact bytes"
         )
