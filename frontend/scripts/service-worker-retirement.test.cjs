@@ -91,3 +91,32 @@ test("retirement paths have exact edge MIME and no-cache policy before wildcard"
     assert.ok(index >= 0 && index < wildcardTextIndex);
   }
 });
+
+test("build-meta is reserved as JSON before the SPA wildcard", () => {
+  const expectedHeaders = {
+    "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+    "Content-Type": "application/json; charset=utf-8",
+    "X-Content-Type-Options": "nosniff",
+  };
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(frontendRoot, "public", "_headers.json"), "utf8"),
+  );
+  const metadataIndex = manifest.rules.findIndex(
+    (rule) => rule.path === "/build-meta.json",
+  );
+  const wildcardIndex = manifest.rules.findIndex((rule) => rule.path === "/*");
+  assert.ok(metadataIndex >= 0 && metadataIndex < wildcardIndex);
+  assert.deepEqual(manifest.rules[metadataIndex].headers, expectedHeaders);
+
+  const textHeaders = fs.readFileSync(
+    path.join(frontendRoot, "public", "_headers"),
+    "utf8",
+  );
+  const block = [
+    "/build-meta.json",
+    "  Cache-Control: no-cache, no-store, must-revalidate, max-age=0",
+    "  Content-Type: application/json; charset=utf-8",
+    "  X-Content-Type-Options: nosniff",
+  ].join("\n");
+  assert.ok(textHeaders.indexOf(block) < textHeaders.indexOf("\n/*\n"));
+});

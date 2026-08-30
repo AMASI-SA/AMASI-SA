@@ -60,7 +60,7 @@ from auth import (
 from excel_parser import parse_salla_excel, match_settings
 from excel_upload_security import read_safe_xlsx_upload
 from exports import export_report_excel, export_report_pdf
-from release_identity import BOOT_RELEASE_IDENTITY
+from release_identity import release_health_payload
 from report_builder import build_report as _build_report
 from meta_routes import attach_meta_routes
 from shipping_accounts import attach_shipping_accounts_routes
@@ -178,11 +178,7 @@ api = APIRouter(prefix="/api")
 async def health_check(response: Response):
     """Deployment health probe; no database or external API calls."""
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
-    return {
-        "ok": True,
-        "service": "backend",
-        "release": BOOT_RELEASE_IDENTITY,
-    }
+    return release_health_payload()
 
 
 # ── Dependencies ──────────────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ const configPath = path.join(__dirname, "..", "vite.config.js");
 const source = fs.readFileSync(configPath, "utf8");
 
 const requiredSuffixes = [
+  ".preview.emergentagent.com",
   ".preview.emergentcf.cloud",
   ".preview.emergent.host",
 ];

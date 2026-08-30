@@ -66,8 +66,9 @@
     "react-is": "^19.0.0"
   },
   "scripts": {
-    "start": "vite --host 0.0.0.0",
-    "build": "vite build",
+    "start": "node scripts/start-governed-runtime.cjs",
+    "start:dev": "vite --host 0.0.0.0",
+    "build": "node scripts/build-entry.cjs",
     "build:release": "node scripts/build-release-frontend.cjs",
     "preview": "vite preview --host 0.0.0.0",
     "test": "react-scripts test"

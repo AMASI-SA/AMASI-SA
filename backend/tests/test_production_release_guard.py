@@ -47,6 +47,25 @@ class _Response:
 
 class ProductionReleaseGuardTests(unittest.TestCase):
     def setUp(self):
+        runtime_validator = patch.object(
+            guard,
+            "validate_runtime_release_identity",
+            side_effect=lambda payload, **_kwargs: payload,
+        )
+        runtime_validator.start()
+        self.addCleanup(runtime_validator.stop)
+        # Source/deployment ancestry has a dedicated contract test below.
+        # Other guard tests isolate lease, drift, and HTTP behavior.
+        if self._testMethodName != (
+            "test_reviewed_source_relation_allows_only_release_intent_delta"
+        ):
+            relation = patch.object(
+                guard,
+                "_assert_reviewed_source_relation",
+                return_value=None,
+            )
+            relation.start()
+            self.addCleanup(relation.stop)
         reproducibility = patch.object(
             guard,
             "_frontend_reproducibility_proof",
@@ -54,6 +73,25 @@ class ProductionReleaseGuardTests(unittest.TestCase):
         )
         reproducibility.start()
         self.addCleanup(reproducibility.stop)
+        runtime_identity = self._lease_payload()["runtime_identity"]
+        runtime_reader = patch.object(
+            guard,
+            "_read_runtime_identity",
+            return_value=runtime_identity,
+        )
+        intent_reader = patch.object(
+            guard,
+            "_read_reviewed_runtime_identity",
+            return_value=runtime_identity,
+        )
+        runtime_reader.start()
+        intent_reader.start()
+        self.addCleanup(runtime_reader.stop)
+        self.addCleanup(intent_reader.stop)
+
+    @staticmethod
+    def _build_meta_bytes():
+        return b'{"schema_version":1}\n'
 
     @staticmethod
     def _frontend_build():
@@ -117,32 +155,49 @@ class ProductionReleaseGuardTests(unittest.TestCase):
             "artifact_tree_sha256": "3" * 64,
             "build_meta": {
                 "path": "build-meta.json",
-                "bytes": 4,
-                "sha256": hashlib.sha256(b"meta").hexdigest(),
+                "bytes": len(ProductionReleaseGuardTests._build_meta_bytes()),
+                "sha256": hashlib.sha256(
+                    ProductionReleaseGuardTests._build_meta_bytes()
+                ).hexdigest(),
             },
         }
 
     @staticmethod
     def _lease_payload():
         frontend_build = ProductionReleaseGuardTests._frontend_build()
+        critical_file_hashes = {
+            relative.removeprefix("backend/"): f"{index:x}"[-1] * 64
+            for index, relative in enumerate(guard.CRITICAL_FILES, start=11)
+        }
+        frontend_reproducibility = (
+            ProductionReleaseGuardTests._frontend_reproducibility(
+                frontend_build
+            )
+        )
+        runtime_identity = {
+            "kind": "mezan_runtime_release_identity_v5",
+            "schema_version": 1,
+            "protocol_version": guard.PROTOCOL_VERSION,
+            "release_id": "rg5-" + "9" * 64,
+            "source_git_sha": "a" * 40,
+            "branch": guard.PRODUCTION_BRANCH,
+            "critical_file_hashes": critical_file_hashes,
+            "frontend_build": frontend_build,
+            "frontend_reproducibility": frontend_reproducibility,
+        }
         return {
-            "release_id": "9d7a9a23-1f46-44a8-a0d0-851a71e15af6",
+            "release_id": runtime_identity["release_id"],
+            "source_git_sha": "a" * 40,
             "git_sha": "a" * 40,
+            "deployment_git_sha": "b" * 40,
             "branch": guard.PRODUCTION_BRANCH,
             "actor": "test",
             "prepared_at": "2026-08-13T10:00:00+00:00",
             "protocol_version": guard.PROTOCOL_VERSION,
-            "critical_file_hashes": {
-                "server.py": "b" * 64,
-                "integrations/qoyod_manual/routes.py": "c" * 64,
-                "integrations/qoyod_manual/send.py": "d" * 64,
-            },
+            "critical_file_hashes": critical_file_hashes,
             "frontend_build": frontend_build,
-            "frontend_reproducibility": (
-                ProductionReleaseGuardTests._frontend_reproducibility(
-                    frontend_build
-                )
-            ),
+            "frontend_reproducibility": frontend_reproducibility,
+            "runtime_identity": runtime_identity,
         }
 
     @staticmethod
@@ -173,21 +228,38 @@ class ProductionReleaseGuardTests(unittest.TestCase):
         }
 
     @staticmethod
+    def _lease_with_release_id(lease, release_id):
+        return {
+            **lease,
+            "release_id": release_id,
+            "runtime_identity": {
+                **lease["runtime_identity"],
+                "release_id": release_id,
+            },
+        }
+
+    @staticmethod
     def _health_payload_for(lease, boot_started_at, **release_updates):
+        runtime_identity = lease["runtime_identity"]
         release = {
             "verified_identity_available": True,
-            "release_id": lease["release_id"],
+            "identity_kind": runtime_identity["kind"],
+            "identity_schema_version": runtime_identity["schema_version"],
+            **{
+                field: runtime_identity[field]
+                for field in (
+                    "release_id",
+                    "source_git_sha",
+                    "branch",
+                    "protocol_version",
+                    "critical_file_hashes",
+                    "frontend_build",
+                    "frontend_reproducibility",
+                )
+            },
             "git_sha": lease["git_sha"],
-            "branch": lease["branch"],
-            "prepared_at": lease["prepared_at"],
-            "protocol_version": lease["protocol_version"],
             "critical_file_hashes_match": True,
-            "critical_file_hashes": lease["critical_file_hashes"],
             "frontend_build_verified": True,
-            "frontend_build": lease["frontend_build"],
-            "frontend_reproducibility": lease[
-                "frontend_reproducibility"
-            ],
             "boot_started_at": boot_started_at,
         }
         release.update(release_updates)
@@ -252,6 +324,8 @@ class ProductionReleaseGuardTests(unittest.TestCase):
             )
 
         request = opened_requests[0][0]
+        self.assertEqual(request.get_method(), "GET")
+        self.assertIsNone(request.data)
         self.assertTrue(
             request.full_url.startswith("https://mezansalla.com/api/health?")
         )
@@ -291,6 +365,8 @@ class ProductionReleaseGuardTests(unittest.TestCase):
             )
 
         request = requests[0][0]
+        self.assertEqual(request.get_method(), "GET")
+        self.assertIsNone(request.data)
         self.assertEqual(request.full_url, "https://mezansalla.com/")
         self.assertIsNone(request.get_header("Cache-control"))
         self.assertEqual(response["body"], b"index")
@@ -366,8 +442,44 @@ class ProductionReleaseGuardTests(unittest.TestCase):
             "script",
         )
 
-    def test_release_protocol_is_v4(self):
-        self.assertEqual(guard.PROTOCOL_VERSION, 4)
+    def test_release_protocol_is_v5(self):
+        self.assertEqual(guard.PROTOCOL_VERSION, 5)
+
+    def test_reviewed_client_origin_is_required_and_exact(self):
+        approved = {
+            "REACT_APP_BACKEND_URL": {
+                "present": True,
+                "value": "https://mezansalla.com",
+            }
+        }
+        self.assertEqual(
+            guard._validated_reviewed_client_environment(approved),
+            approved,
+        )
+        for rejected in (
+            {
+                "REACT_APP_BACKEND_URL": {
+                    "present": False,
+                    "value": None,
+                }
+            },
+            {
+                "REACT_APP_BACKEND_URL": {
+                    "present": True,
+                    "value": "http://mezansalla.com",
+                }
+            },
+            {
+                "REACT_APP_BACKEND_URL": {
+                    "present": True,
+                    "value": "https://evil.example.test",
+                }
+            },
+        ):
+            with self.subTest(rejected=rejected), self.assertRaises(
+                guard.ReleaseGuardError
+            ):
+                guard._validated_reviewed_client_environment(rejected)
 
     def test_local_release_checks_require_clean_git_source_proof(self):
         proof = self._frontend_build()
@@ -481,6 +593,261 @@ class ProductionReleaseGuardTests(unittest.TestCase):
             self.assertTrue(prepare_finished.is_set())
             prepare_locked.assert_called_once_with("second-owner")
 
+    def test_incomplete_lease_directory_is_reported_and_safely_recovered(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            git_dir = Path(tmp) / ".git"
+            git_dir.mkdir()
+            lease_dir = git_dir / "release.lock"
+            lease_dir.mkdir()
+            lease_path = lease_dir / "lease.json"
+            (lease_dir / "lease.json.tmp").write_text(
+                "partial\n", encoding="utf-8"
+            )
+            with (
+                patch.object(guard, "LEASE_DIR", lease_dir),
+                patch.object(guard, "LEASE_PATH", lease_path),
+            ):
+                self.assertEqual(
+                    guard.status(),
+                    {
+                        "active": False,
+                        "incomplete_lease_directory": True,
+                    },
+                )
+                guard._create_or_recover_lease_dir()
+
+            self.assertTrue(lease_dir.is_dir())
+            self.assertEqual(list(lease_dir.iterdir()), [])
+
+    def test_incomplete_lease_recovery_rejects_symlink_or_unknown_entry(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for kind in ("symlink", "unknown"):
+                with self.subTest(kind=kind):
+                    lease_dir = root / f"{kind}.lock"
+                    lease_path = lease_dir / "lease.json"
+                    if kind == "symlink":
+                        outside = root / "outside"
+                        outside.mkdir(exist_ok=True)
+                        lease_dir.symlink_to(outside, target_is_directory=True)
+                    else:
+                        lease_dir.mkdir()
+                        (lease_dir / "unexpected").write_text(
+                            "keep\n", encoding="utf-8"
+                        )
+                    with (
+                        patch.object(guard, "LEASE_DIR", lease_dir),
+                        patch.object(guard, "LEASE_PATH", lease_path),
+                        self.assertRaises(guard.ReleaseGuardError),
+                    ):
+                        guard._create_or_recover_lease_dir()
+                    if kind == "symlink":
+                        self.assertTrue(lease_dir.is_symlink())
+                    else:
+                        self.assertTrue((lease_dir / "unexpected").exists())
+
+    def test_prepare_reads_deterministic_identity_and_never_writes_it(self):
+        lease = self._lease_payload()
+        runtime_identity = lease["runtime_identity"]
+        identity_bytes = b'{"sentinel":"adapter-owned"}\n'
+        with tempfile.TemporaryDirectory() as tmp:
+            git_dir = Path(tmp) / ".git"
+            git_dir.mkdir()
+            lease_dir = git_dir / "release.lock"
+            lease_path = lease_dir / "lease.json"
+            identity_path = Path(tmp) / "release_identity.json"
+            identity_path.write_bytes(identity_bytes)
+
+            def git_result(*args):
+                if args == ("branch", "--show-current"):
+                    return guard.PRODUCTION_BRANCH
+                if args == ("status", "--porcelain", "--untracked-files=no"):
+                    return ""
+                if args == ("fetch", "origin", guard.PRODUCTION_BRANCH):
+                    return ""
+                if args[0] == "rev-parse":
+                    return lease["deployment_git_sha"]
+                raise AssertionError(f"unexpected git call: {args!r}")
+
+            with patch.object(guard, "LEASE_DIR", lease_dir), patch.object(
+                guard, "LEASE_PATH", lease_path
+            ), patch.object(
+                guard, "IDENTITY_PATH", identity_path
+            ), patch.object(
+                guard, "_run_git", side_effect=git_result
+            ), patch.object(
+                guard, "_read_runtime_identity", return_value=runtime_identity
+            ), patch.object(
+                guard,
+                "_read_reviewed_runtime_identity",
+                return_value=runtime_identity,
+            ), patch.object(
+                guard, "_frontend_build_identity", return_value=lease["frontend_build"]
+            ), patch.object(
+                guard, "_critical_hashes", return_value=lease["critical_file_hashes"]
+            ):
+                prepared = guard._prepare_locked("actor-one")
+
+            self.assertEqual(identity_path.read_bytes(), identity_bytes)
+            self.assertEqual(prepared["release_id"], runtime_identity["release_id"])
+            self.assertRegex(prepared["release_id"], r"^rg5-[0-9a-f]{64}$")
+            self.assertNotIn("actor", prepared["runtime_identity"])
+            self.assertNotIn("prepared_at", prepared["runtime_identity"])
+            self.assertEqual(
+                json.loads(lease_path.read_text(encoding="utf-8"))["release_id"],
+                runtime_identity["release_id"],
+            )
+
+    def test_lease_mirror_rejects_boolean_integer_type_coercion(self):
+        lease = self._lease_payload()
+        lease["frontend_build"] = json.loads(json.dumps(lease["frontend_build"]))
+        lease["frontend_build"]["environment"]["effective"][
+            "VITE_USER_NODE_ENV_present"
+        ] = 0
+        with self.assertRaisesRegex(
+            guard.ReleaseGuardError,
+            "prepared lease does not match runtime release identity",
+        ):
+            guard._runtime_identity_from_lease(lease)
+
+    def test_local_identity_binding_rejects_integer_float_type_coercion(self):
+        lease = self._lease_payload()
+        identity = json.loads(json.dumps(lease["runtime_identity"]))
+        identity["frontend_build"]["source"]["file_count"] = 671.0
+        with (
+            patch.object(
+                guard,
+                "_frontend_build_identity",
+                return_value=lease["frontend_build"],
+            ),
+            patch.object(
+                guard,
+                "_critical_hashes",
+                return_value=lease["critical_file_hashes"],
+            ),
+            self.assertRaisesRegex(
+                guard.ReleaseGuardError,
+                "does not match the local governed package",
+            ),
+        ):
+            guard._assert_local_identity_binding(
+                identity,
+                expected_git_sha=lease["source_git_sha"],
+            )
+
+    def test_prepare_rejects_identity_that_differs_from_reviewed_intent(self):
+        lease = self._lease_payload()
+        runtime_identity = lease["runtime_identity"]
+        reviewed_identity = {
+            **runtime_identity,
+            "release_id": "rg5-" + "b" * 64,
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            lease_dir = Path(tmp) / "release.lock"
+            lease_path = lease_dir / "lease.json"
+
+            def git_result(*args):
+                if args == ("branch", "--show-current"):
+                    return guard.PRODUCTION_BRANCH
+                if args == ("status", "--porcelain", "--untracked-files=no"):
+                    return ""
+                if args == ("fetch", "origin", guard.PRODUCTION_BRANCH):
+                    return ""
+                if args[0] == "rev-parse":
+                    return lease["deployment_git_sha"]
+                raise AssertionError(f"unexpected git call: {args!r}")
+
+            with patch.object(guard, "LEASE_DIR", lease_dir), patch.object(
+                guard, "LEASE_PATH", lease_path
+            ), patch.object(
+                guard, "_run_git", side_effect=git_result
+            ), patch.object(
+                guard, "_read_runtime_identity", return_value=runtime_identity
+            ), patch.object(
+                guard,
+                "_read_reviewed_runtime_identity",
+                return_value=reviewed_identity,
+            ), self.assertRaisesRegex(
+                guard.ReleaseGuardError,
+                "does not match reviewed release intent",
+            ):
+                guard._prepare_locked("actor-one")
+
+            self.assertFalse(lease_dir.exists())
+            self.assertFalse(lease_path.exists())
+
+    def test_reviewed_source_relation_allows_only_release_intent_delta(self):
+        source = "a" * 40
+        deployment = "b" * 40
+        intent_blob = "c" * 40
+
+        def allowed(*args):
+            if args[:2] == ("merge-base", "--is-ancestor"):
+                return ""
+            if args[:2] == ("diff", "--name-only"):
+                return guard.RELEASE_INTENT_RELATIVE_PATH
+            if args[:2] == ("ls-files", "--error-unmatch"):
+                return guard.RELEASE_INTENT_RELATIVE_PATH
+            if args == (
+                "rev-parse",
+                f"{deployment}:{guard.RELEASE_INTENT_RELATIVE_PATH}",
+            ):
+                return intent_blob
+            if args == ("hash-object", guard.RELEASE_INTENT_RELATIVE_PATH):
+                return intent_blob
+            raise AssertionError(args)
+
+        with patch.object(guard, "_run_git", side_effect=allowed):
+            guard._assert_reviewed_source_relation(
+                source_git_sha=source,
+                deployment_git_sha=deployment,
+            )
+
+        def forbidden(*args):
+            if args[:2] == ("merge-base", "--is-ancestor"):
+                return ""
+            if args[:2] == ("diff", "--name-only"):
+                return guard.RELEASE_INTENT_RELATIVE_PATH + "\nbackend/server.py"
+            raise AssertionError(args)
+
+        with patch.object(
+            guard, "_run_git", side_effect=forbidden
+        ), self.assertRaisesRegex(
+            guard.ReleaseGuardError, "reviewed release intent only"
+        ):
+            guard._assert_reviewed_source_relation(
+                source_git_sha=source,
+                deployment_git_sha=deployment,
+            )
+
+        for changed, message in (
+            ("", "no tracked change"),
+            ("backend/server.py", "reviewed release intent only"),
+        ):
+            def incomplete(*args):
+                if args[:2] == ("merge-base", "--is-ancestor"):
+                    return ""
+                if args[:2] == ("diff", "--name-only"):
+                    return changed
+                raise AssertionError(args)
+
+            with self.subTest(changed=changed), patch.object(
+                guard, "_run_git", side_effect=incomplete
+            ), self.assertRaisesRegex(guard.ReleaseGuardError, message):
+                guard._assert_reviewed_source_relation(
+                    source_git_sha=source,
+                    deployment_git_sha=deployment,
+                )
+
+        with self.assertRaisesRegex(
+            guard.ReleaseGuardError,
+            "separate tracked intent-only deployment commit",
+        ):
+            guard._assert_reviewed_source_relation(
+                source_git_sha=source,
+                deployment_git_sha=source,
+            )
+
     def test_verify_accepts_multiple_boots_for_same_prepared_identity(self):
         lease = self._lease_payload()
         boot_times = [
@@ -506,9 +873,9 @@ class ProductionReleaseGuardTests(unittest.TestCase):
     def test_verify_rejects_identity_drift_even_when_sha_and_hash_check_match(self):
         lease = self._lease_payload()
         mismatches = {
-            "release_id": "b6ab746b-8998-46dd-9685-2a7deecfbc8a",
+            "release_id": "rg5-" + "b" * 64,
             "branch": "main",
-            "prepared_at": "2026-08-13T09:00:00+00:00",
+            "identity_kind": "unexpected_runtime_identity_kind",
             "protocol_version": guard.PROTOCOL_VERSION + 1,
         }
         for field, value in mismatches.items():
@@ -525,12 +892,40 @@ class ProductionReleaseGuardTests(unittest.TestCase):
                     )],
                 )
 
+    def test_verify_rejects_health_boolean_integer_type_coercion(self):
+        lease = self._lease_payload()
+        frontend_build = json.loads(json.dumps(lease["frontend_build"]))
+        frontend_build["environment"]["effective"][
+            "VITE_USER_NODE_ENV_present"
+        ] = 0
+        health = self._health_payload_for(
+            lease,
+            "2026-08-13T10:01:00+00:00",
+            frontend_build=frontend_build,
+        )
+        with self.assertRaisesRegex(
+            guard.ReleaseGuardError,
+            "release identity does not match prepared lease: frontend_build",
+        ):
+            self._verify_with(lease, [health])
+
+        integer_identity = self._health_payload_for(
+            lease,
+            "2026-08-13T10:01:00+00:00",
+            verified_identity_available=1,
+        )
+        with self.assertRaisesRegex(
+            guard.ReleaseGuardError,
+            "no verified release identity",
+        ):
+            self._verify_with(lease, [integer_identity])
+
     def test_verify_wrong_release_id_same_sha_preserves_active_lease(self):
         lease = self._lease_payload()
         health = self._health_payload_for(
             lease,
             "2026-08-13T10:01:00+00:00",
-            release_id="b6ab746b-8998-46dd-9685-2a7deecfbc8a",
+            release_id="rg5-" + "b" * 64,
         )
         with tempfile.TemporaryDirectory() as tmp:
             lease_dir = Path(tmp) / "release.lock"
@@ -552,8 +947,7 @@ class ProductionReleaseGuardTests(unittest.TestCase):
     def test_verify_does_not_delete_replacement_lease_created_during_checks(self):
         lease = self._lease_payload()
         replacement = {
-            **lease,
-            "release_id": "b6ab746b-8998-46dd-9685-2a7deecfbc8a",
+            **self._lease_with_release_id(lease, "rg5-" + "b" * 64),
             "actor": "replacement-owner",
         }
         health = self._health_payload_for(
@@ -655,7 +1049,7 @@ class ProductionReleaseGuardTests(unittest.TestCase):
             guard.REPO_ROOT / "frontend" / "public" / "sw.js"
         ).read_bytes()
         payloads = {
-            "/build-meta.json": b"meta",
+            "/build-meta.json": self._build_meta_bytes(),
             "/index.html": b"index",
             "/assets/app.js": b"app",
             "/assets/lazy.js": b"lazy",
@@ -680,11 +1074,12 @@ class ProductionReleaseGuardTests(unittest.TestCase):
                 service_worker_script,
                 relative in guard.STANDARD_SERVICE_WORKER_PATHS,
             )
-            content_type = (
-                "application/javascript"
-                if service_worker_script
-                else "text/html; charset=utf-8"
-            )
+            if relative == "/build-meta.json":
+                content_type = "application/json; charset=utf-8"
+            elif service_worker_script:
+                content_type = "application/javascript"
+            else:
+                content_type = "text/html; charset=utf-8"
             return {
                 "status": 200,
                 "body": payloads[relative],
@@ -711,9 +1106,12 @@ class ProductionReleaseGuardTests(unittest.TestCase):
 
         self.assertEqual(
             len(result["checked_requests"]),
-            len(payloads) * 2,
+            len(payloads) * 2 + 2,
         )
-        self.assertEqual(len(calls), len(payloads) * 2)
+        self.assertEqual(len(calls), len(payloads) * 2 + 2)
+        for accept in ("application/json", "*/*"):
+            self.assertIn(("/build-meta.json", False, accept, 30), calls)
+            self.assertIn(("/build-meta.json", True, accept, 30), calls)
         self.assertIn(("/sw.js", False, "*/*", 30), calls)
         self.assertIn(("/sw.js", True, "*/*", 30), calls)
         self.assertIn(("/service-worker.js", False, "*/*", 30), calls)
@@ -729,6 +1127,96 @@ class ProductionReleaseGuardTests(unittest.TestCase):
                 ("/sw.js", "retirement_payload_present"),
             ],
         )
+
+    def test_build_meta_requires_json_mime_and_json_object(self):
+        valid = {
+            "status": 200,
+            "body": self._build_meta_bytes(),
+            "headers": {"content-type": "application/json; charset=utf-8"},
+        }
+        guard._assert_build_meta_response(valid, label="/build-meta.json")
+
+        invalid_responses = (
+            (
+                {
+                    **valid,
+                    "headers": {"content-type": "text/html; charset=utf-8"},
+                    "body": b"<html>SPA shell</html>",
+                },
+                "MIME is invalid",
+            ),
+            (
+                {**valid, "body": b"<html>SPA shell</html>"},
+                "invalid JSON",
+            ),
+            (
+                {**valid, "body": b"[]"},
+                "not a JSON object",
+            ),
+            (
+                {**valid, "status": 404},
+                "non-200",
+            ),
+            (
+                {**valid, "headers": {"content-type": "application/jsonp"}},
+                "MIME is invalid",
+            ),
+            (
+                {
+                    **valid,
+                    "headers": {
+                        "content-type": "application/json, text/html"
+                    },
+                },
+                "MIME is invalid",
+            ),
+        )
+        for response, error in invalid_responses:
+            with self.subTest(error=error), self.assertRaisesRegex(
+                guard.ReleaseGuardError, error
+            ):
+                guard._assert_build_meta_response(
+                    response,
+                    label="/build-meta.json",
+                )
+
+    def test_build_meta_spa_fallback_preserves_active_lease(self):
+        lease = self._lease_payload()
+        health = self._health_payload_for(
+            lease, "2026-08-13T10:01:00+00:00"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            lease_dir = Path(tmp) / "release.lock"
+            lease_dir.mkdir()
+            lease_path = lease_dir / "lease.json"
+            lease_path.write_text(json.dumps(lease), encoding="utf-8")
+            with patch.object(guard, "LEASE_DIR", lease_dir), patch.object(
+                guard, "LEASE_PATH", lease_path
+            ), patch.object(
+                guard, "_health_payload", return_value=health
+            ), patch.object(
+                guard,
+                "_verify_public_frontend",
+                side_effect=guard.ReleaseGuardError(
+                    "production frontend build metadata MIME is invalid: "
+                    "/build-meta.json=text/html"
+                ),
+            ), patch.object(guard.time, "sleep"), patch.object(
+                guard,
+                "_utc_datetime",
+                return_value=datetime(
+                    2026, 8, 13, 10, 5, tzinfo=timezone.utc
+                ),
+            ), self.assertRaisesRegex(
+                guard.ReleaseGuardError,
+                "build metadata MIME is invalid",
+            ):
+                guard.verify(guard.PRODUCTION_ORIGIN)
+
+            self.assertTrue(lease_dir.exists())
+            self.assertEqual(
+                json.loads(lease_path.read_text(encoding="utf-8")), lease
+            )
 
     def test_missing_or_modified_retirement_worker_fails_closed_before_fetch(self):
         expected = self._frontend_build()
@@ -814,12 +1302,17 @@ class ProductionReleaseGuardTests(unittest.TestCase):
                 "/index.html": b"index",
                 guard.SPA_SHELL_PATH: b"index",
                 "/assets/app.js": b"app",
-                "/build-meta.json": b"meta",
+                "/build-meta.json": self._build_meta_bytes(),
             }[relative]
             return {
+                "status": 200,
                 "body": body,
                 "headers": {
-                    "content-type": "text/html",
+                    "content-type": (
+                        "application/json"
+                        if relative == "/build-meta.json"
+                        else "text/html"
+                    ),
                     "cache-control": "no-cache, no-store, must-revalidate",
                 },
             }
@@ -837,12 +1330,17 @@ class ProductionReleaseGuardTests(unittest.TestCase):
                 "/index.html": b"index",
                 guard.SPA_SHELL_PATH: b"index",
                 "/assets/app.js": b"app",
-                "/build-meta.json": b"meta",
+                "/build-meta.json": self._build_meta_bytes(),
             }[relative]
             return {
+                "status": 200,
                 "body": body,
                 "headers": {
-                    "content-type": "text/html",
+                    "content-type": (
+                        "application/json"
+                        if relative == "/build-meta.json"
+                        else "text/html"
+                    ),
                     "cache-control": "public, max-age=3600, immutable",
                     "cf-cache-status": "HIT",
                 },
@@ -974,14 +1472,42 @@ class ProductionReleaseGuardTests(unittest.TestCase):
                 )],
             )
 
-    def test_verify_rejects_v1_lease_and_requires_reprepare(self):
-        lease = {**self._lease_payload(), "protocol_version": 1}
+    def test_verify_rejects_v4_lease_and_requires_reprepare(self):
+        lease = {**self._lease_payload(), "protocol_version": 4}
 
         with self.assertRaisesRegex(
             guard.ReleaseGuardError,
             "abort the existing lease with its original guard.*prepare again",
         ):
             self._verify_with(lease, [])
+
+    def test_lease_rejects_protocol_and_sha_type_coercion(self):
+        base = self._lease_payload()
+        for invalid in (True, 5.0, "5"):
+            with self.subTest(protocol=invalid), self.assertRaisesRegex(
+                guard.ReleaseGuardError,
+                "prepared release protocol is invalid",
+            ):
+                guard._validated_release_lease({
+                    **base,
+                    "protocol_version": invalid,
+                })
+        with self.assertRaisesRegex(
+            guard.ReleaseGuardError,
+            "prepared release SHA is invalid",
+        ):
+            guard._validated_release_lease({
+                **base,
+                "source_git_sha": int("1" * 40),
+            })
+        with self.assertRaisesRegex(
+            guard.ReleaseGuardError,
+            "prepared deployment SHA is invalid",
+        ):
+            guard._validated_release_lease({
+                **base,
+                "deployment_git_sha": int("1" * 40),
+            })
 
     def test_prepare_frontend_double_read_drift_removes_lease_without_identity(self):
         first = self._frontend_build()
@@ -1048,7 +1574,7 @@ class ProductionReleaseGuardTests(unittest.TestCase):
                 if args == ("fetch", "origin", guard.PRODUCTION_BRANCH):
                     return ""
                 if args[0] == "rev-parse":
-                    return lease["git_sha"]
+                    return lease["deployment_git_sha"]
                 raise AssertionError(f"unexpected git call: {args!r}")
 
             with patch.object(guard, "LEASE_DIR", lease_dir), patch.object(
@@ -1148,7 +1674,7 @@ class ProductionReleaseGuardTests(unittest.TestCase):
                 if args == ("fetch", "origin", guard.PRODUCTION_BRANCH):
                     return ""
                 if args[0] == "rev-parse":
-                    return lease["git_sha"]
+                    return lease["deployment_git_sha"]
                 raise AssertionError(f"unexpected git call: {args!r}")
 
             with patch.object(guard, "LEASE_DIR", lease_dir), patch.object(
@@ -1179,7 +1705,7 @@ class ProductionReleaseGuardTests(unittest.TestCase):
                 json.loads(lease_path.read_text(encoding="utf-8")), lease
             )
 
-    def test_prepare_critical_file_double_read_drift_removes_lease_without_identity(self):
+    def test_prepare_critical_drift_removes_lease_without_identity(self):
         frontend = self._frontend_build()
         first_hashes = self._lease_payload()["critical_file_hashes"]
         drifted_hashes = {**first_hashes, "server.py": "9" * 64}
@@ -1245,7 +1771,7 @@ class ProductionReleaseGuardTests(unittest.TestCase):
                 if args == ("fetch", "origin", guard.PRODUCTION_BRANCH):
                     return ""
                 if args[0] == "rev-parse":
-                    return lease["git_sha"]
+                    return lease["deployment_git_sha"]
                 raise AssertionError(f"unexpected git call: {args!r}")
 
             with patch.object(guard, "LEASE_DIR", lease_dir), patch.object(
@@ -1275,8 +1801,8 @@ class ProductionReleaseGuardTests(unittest.TestCase):
                 lease,
             )
 
-    def test_prepublish_rejects_v1_lease_before_any_git_action(self):
-        lease = {**self._lease_payload(), "protocol_version": 1}
+    def test_prepublish_rejects_v4_lease_before_any_git_action(self):
+        lease = {**self._lease_payload(), "protocol_version": 4}
         with tempfile.TemporaryDirectory() as tmp:
             lease_dir = Path(tmp) / "release.lock"
             lease_dir.mkdir()
@@ -1295,8 +1821,7 @@ class ProductionReleaseGuardTests(unittest.TestCase):
     def test_prepublish_revalidates_lease_after_fetch_race(self):
         lease = self._lease_payload()
         replacement = {
-            **lease,
-            "release_id": "b6ab746b-8998-46dd-9685-2a7deecfbc8a",
+            **self._lease_with_release_id(lease, "rg5-" + "b" * 64),
             "actor": "replacement-owner",
         }
         with tempfile.TemporaryDirectory() as tmp:
@@ -1318,7 +1843,7 @@ class ProductionReleaseGuardTests(unittest.TestCase):
                     )
                     return ""
                 if args[0] == "rev-parse":
-                    return lease["git_sha"]
+                    return lease["deployment_git_sha"]
                 raise AssertionError(f"unexpected git call: {args!r}")
 
             with patch.object(guard, "LEASE_DIR", lease_dir), patch.object(
@@ -1369,7 +1894,7 @@ class ProductionReleaseGuardTests(unittest.TestCase):
                 if args == ("fetch", "origin", guard.PRODUCTION_BRANCH):
                     return ""
                 if args[0] == "rev-parse":
-                    return lease["git_sha"]
+                    return lease["deployment_git_sha"]
                 raise AssertionError(f"unexpected git call: {args!r}")
 
             with patch.object(guard, "LEASE_DIR", lease_dir), patch.object(
@@ -1388,7 +1913,7 @@ class ProductionReleaseGuardTests(unittest.TestCase):
                 return_value=drifted_frontend,
             ), self.assertRaisesRegex(
                 guard.ReleaseGuardError,
-                "release identity, critical files, or frontend build changed",
+                "runtime release identity, critical files, or frontend build",
             ):
                 guard.prepublish()
 
@@ -1396,7 +1921,7 @@ class ProductionReleaseGuardTests(unittest.TestCase):
 
     def test_abort_requires_exact_sha_and_release_id(self):
         lease = self._lease_payload()
-        other_release_id = "b6ab746b-8998-46dd-9685-2a7deecfbc8a"
+        other_release_id = "rg5-" + "b" * 64
         with tempfile.TemporaryDirectory() as tmp:
             lease_dir = Path(tmp) / "release.lock"
             lease_dir.mkdir()
@@ -1408,38 +1933,40 @@ class ProductionReleaseGuardTests(unittest.TestCase):
                 with self.assertRaisesRegex(
                     guard.ReleaseGuardError, "lease SHA mismatch"
                 ):
-                    guard.abort("b" * 40, lease["release_id"])
+                    guard.abort("c" * 40, lease["release_id"])
                 self.assertTrue(lease_dir.exists())
 
                 with self.assertRaisesRegex(
                     guard.ReleaseGuardError, "lease release id mismatch"
                 ):
-                    guard.abort(lease["git_sha"], other_release_id)
+                    guard.abort(lease["deployment_git_sha"], other_release_id)
                 self.assertTrue(lease_dir.exists())
 
                 with self.assertRaisesRegex(
                     guard.ReleaseGuardError, "expected release id is invalid"
                 ):
-                    guard.abort(lease["git_sha"], "not-a-release-uuid")
+                    guard.abort(lease["deployment_git_sha"], "not-a-release-id")
                 self.assertTrue(lease_dir.exists())
 
                 result = guard.abort(
-                    lease["git_sha"], lease["release_id"]
+                    lease["deployment_git_sha"], lease["release_id"]
                 )
 
             self.assertEqual(
                 result,
                 {
                     "aborted": True,
+                    "source_git_sha": lease["source_git_sha"],
                     "git_sha": lease["git_sha"],
+                    "deployment_git_sha": lease["deployment_git_sha"],
                     "release_id": lease["release_id"],
                     "protocol_version": guard.PROTOCOL_VERSION,
                 },
             )
             self.assertFalse(lease_dir.exists())
 
-    def test_abort_refuses_v3_lease_and_requires_its_original_guard(self):
-        lease = {**self._lease_payload(), "protocol_version": 3}
+    def test_abort_refuses_v4_lease_and_requires_its_original_guard(self):
+        lease = {**self._lease_payload(), "protocol_version": 4}
         with tempfile.TemporaryDirectory() as tmp:
             lease_dir = Path(tmp) / "release.lock"
             lease_dir.mkdir()
@@ -1449,17 +1976,16 @@ class ProductionReleaseGuardTests(unittest.TestCase):
                 guard, "LEASE_PATH", lease_path
             ), self.assertRaisesRegex(
                 guard.ReleaseGuardError,
-                "abort the existing lease with its original guard.*protocol v4",
+                "abort the existing lease with its original guard.*protocol v5",
             ):
-                guard.abort(lease["git_sha"], lease["release_id"])
+                guard.abort(lease["deployment_git_sha"], lease["release_id"])
 
             self.assertTrue(lease_dir.exists())
 
     def test_abort_does_not_delete_replacement_lease_before_removal(self):
         lease = self._lease_payload()
         replacement = {
-            **lease,
-            "release_id": "b6ab746b-8998-46dd-9685-2a7deecfbc8a",
+            **self._lease_with_release_id(lease, "rg5-" + "b" * 64),
             "actor": "replacement-owner",
         }
         with tempfile.TemporaryDirectory() as tmp:
@@ -1485,7 +2011,7 @@ class ProductionReleaseGuardTests(unittest.TestCase):
                 guard.ReleaseGuardError,
                 "active production release lease changed during operation",
             ):
-                guard.abort(lease["git_sha"], lease["release_id"])
+                guard.abort(lease["deployment_git_sha"], lease["release_id"])
 
             self.assertTrue(lease_dir.exists())
             self.assertEqual(
