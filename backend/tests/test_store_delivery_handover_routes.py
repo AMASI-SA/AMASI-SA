@@ -1,3 +1,8 @@
+from datetime import datetime, timezone
+
+import pytest
+from fastapi import HTTPException
+
 # CI synchronization marker: run Store Delivery checks on the current Production base.
 from store_delivery_handover_routes import (
     ORDERS,
@@ -11,6 +16,7 @@ from store_delivery_reassignment_routes import (
     _assignment_status_filter,
     _delivery_duration_report,
 )
+from store_delivery_driver_app_routes import _delay_timing
 from store_delivery_domain import assignment_snapshot, StoreDeliveryRuleError
 from store_courier_domain import store_courier_assignment_blocker
 
@@ -140,3 +146,25 @@ def test_delivery_duration_report_uses_assignment_to_delivered_timestamp():
         "fastest_delivery_seconds": 3600.0,
         "longest_delivery_seconds": 10800.0,
     }
+
+
+def test_customer_delay_reminder_is_two_hours_before_requested_time():
+    now = datetime(2026, 8, 22, 12, 0, tzinfo=timezone.utc)
+    deferred, reminder = _delay_timing("2026-08-22T15:00:00Z", now=now)
+    assert deferred == "2026-08-22T15:00:00+00:00"
+    assert reminder == "2026-08-22T13:00:00+00:00"
+
+
+def test_customer_delay_inside_two_hours_is_immediately_due():
+    now = datetime(2026, 8, 22, 12, 0, tzinfo=timezone.utc)
+    deferred, reminder = _delay_timing("2026-08-22T13:00:00Z", now=now)
+    assert deferred == "2026-08-22T13:00:00+00:00"
+    assert reminder == "2026-08-22T12:00:00+00:00"
+
+
+def test_customer_delay_rejects_past_time():
+    now = datetime(2026, 8, 22, 12, 0, tzinfo=timezone.utc)
+    with pytest.raises(HTTPException) as caught:
+        _delay_timing("2026-08-22T11:59:59Z", now=now)
+    assert caught.value.status_code == 422
+    assert caught.value.detail == {"code": "driver_delivery_defer_until_must_be_future"}

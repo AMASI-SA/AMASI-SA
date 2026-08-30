@@ -1,14 +1,14 @@
 """Restricted API surface for the standalone Amasi Delivery driver app.
 
-A ``store_driver`` sees only assignments linked to their own driver profile and
-can only transition assigned -> out_for_delivery -> delivered. Customer COD is
-always read from the canonical unified order at the moment of delivery; a driver
-can never type or override the amount owed.
+A ``store_driver`` sees only assignments linked to their own driver profile.
+Normal delivery status transitions remain assigned -> out_for_delivery -> delivered.
+Customer delivery exceptions (delay, refusal, unreachable) are recorded as
+operational timeline events without closing the assignment or changing Salla state.
 """
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -33,9 +33,11 @@ from store_courier_domain import (
     WORKFLOWS,
 )
 from store_delivery_payment_evidence_routes import (
+    CUSTOMER_CONVERSATION_EVIDENCE,
     RECEIPTS,
     authoritative_outstanding_amount,
     canonical_order_for_assignment,
+    validate_customer_conversation_reference,
     validate_receipt_reference,
 )
 from store_delivery_accounting import financial_cutover_is_active, post_delivery_journal
@@ -44,6 +46,16 @@ DRIVER_EARNINGS = "store_delivery_driver_earnings"
 DRIVER_COLLECTIONS = "store_delivery_collections"
 DRIVER_PAYMENT_REVIEWS = "store_delivery_payment_reviews"
 DRIVER_SETTLEMENTS = "store_delivery_driver_settlements"
+
+DELIVERY_EXCEPTION_CUSTOMER_REQUESTED_DELAY = "customer_requested_delay"
+DELIVERY_EXCEPTION_CUSTOMER_REFUSED = "customer_refused_delivery"
+DELIVERY_EXCEPTION_CUSTOMER_UNREACHABLE = "customer_unreachable"
+DELIVERY_EXCEPTION_CODES = frozenset({
+    DELIVERY_EXCEPTION_CUSTOMER_REQUESTED_DELAY,
+    DELIVERY_EXCEPTION_CUSTOMER_REFUSED,
+    DELIVERY_EXCEPTION_CUSTOMER_UNREACHABLE,
+})
+DELIVERY_REMINDER_LEAD = timedelta(hours=2)
 
 
 def _now() -> str:
@@ -86,6 +98,30 @@ def _barcode_match(value: str) -> list[dict[str, Any]]:
     ]
 
 
+def _parse_delivery_datetime(value: str | None, *, code: str) -> datetime:
+    text = normalize_text(value)
+    if not text:
+        raise HTTPException(status_code=422, detail={"code": code})
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail={"code": "driver_delivery_defer_until_invalid"}) from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _delay_timing(defer_until: str | None, *, now: datetime | None = None) -> tuple[str, str]:
+    now_utc = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    deferred = _parse_delivery_datetime(defer_until, code="driver_delivery_defer_until_required")
+    if deferred <= now_utc:
+        raise HTTPException(status_code=422, detail={"code": "driver_delivery_defer_until_must_be_future"})
+    reminder = deferred - DELIVERY_REMINDER_LEAD
+    if reminder < now_utc:
+        reminder = now_utc
+    return deferred.isoformat(), reminder.isoformat()
+
+
 class DriverStatusUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     barcode: str = Field(min_length=1, max_length=180)
@@ -97,10 +133,20 @@ class DriverStatusUpdate(BaseModel):
     bank_account_id: str | None = Field(default=None, max_length=120)
 
 
+class DriverDeliveryException(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    barcode: str = Field(min_length=1, max_length=180)
+    exception_code: str = Field(min_length=1, max_length=80)
+    note: str = Field(min_length=3, max_length=2000)
+    defer_until: str | None = Field(default=None, max_length=80)
+    evidence_reference: str | None = Field(default=None, max_length=500)
+
+
 async def ensure_store_delivery_driver_app_indexes(db: Any) -> None:
     await db[DRIVER_EARNINGS].create_index([("user_id", 1), ("assignment_id", 1)], unique=True)
     await db[DRIVER_COLLECTIONS].create_index([("user_id", 1), ("assignment_id", 1)], unique=True)
     await db[DRIVER_PAYMENT_REVIEWS].create_index([("user_id", 1), ("assignment_id", 1)], unique=True)
+    await db[EVENTS].create_index([("user_id", 1), ("assignment_id", 1), ("occurred_at", -1)])
 
 
 async def _enrich_assignments_with_order_state(db: Any, user_id: str, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -204,6 +250,213 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         ).sort("assigned_at", -1).to_list(length=1000)
         items = await _enrich_assignments_with_order_state(db, merchant_id, items)
         return {"items": items, "total": len(items)}
+
+    @router.post("/deliveries/exception")
+    async def report_delivery_exception(
+        payload: DriverDeliveryException,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        actor = _require_store_driver(user)
+        driver = await _driver_for_user(db, actor)
+        merchant_id = _merchant_id(driver)
+        assignment = await db[ASSIGNMENTS].find_one(
+            {
+                "user_id": merchant_id,
+                "driver_id": driver["id"],
+                "active": True,
+                "status": {"$in": [DELIVERY_STATUS_ASSIGNED, DELIVERY_STATUS_OUT_FOR_DELIVERY]},
+                "$or": _barcode_match(payload.barcode),
+            },
+            {"_id": 0},
+        )
+        if not assignment:
+            raise HTTPException(status_code=404, detail={"code": "driver_assignment_not_found"})
+
+        exception_code = normalize_text(payload.exception_code)
+        note = normalize_text(payload.note)
+        if exception_code not in DELIVERY_EXCEPTION_CODES:
+            raise HTTPException(status_code=422, detail={"code": "driver_delivery_exception_invalid"})
+        if len(note) < 3:
+            raise HTTPException(status_code=422, detail={"code": "driver_delivery_exception_note_required"})
+
+        now_dt = datetime.now(timezone.utc)
+        now = now_dt.isoformat()
+        deferred_until: str | None = None
+        reminder_due_at: str | None = None
+        evidence_reference = normalize_text(payload.evidence_reference)
+        evidence_row = None
+        if exception_code == DELIVERY_EXCEPTION_CUSTOMER_REQUESTED_DELAY:
+            deferred_until, reminder_due_at = _delay_timing(payload.defer_until, now=now_dt)
+            if not evidence_reference:
+                raise HTTPException(status_code=422, detail={"code": "driver_delivery_delay_evidence_required"})
+        if evidence_reference:
+            evidence_row = await validate_customer_conversation_reference(
+                db,
+                user_id=merchant_id,
+                driver_id=driver["id"],
+                assignment_id=assignment["id"],
+                evidence_reference=evidence_reference,
+            )
+
+        evidence_url = (
+            f"/api/store-delivery/evidence/customer-conversation/{evidence_reference}"
+            if evidence_reference else None
+        )
+        assignment_patch = {
+            "delivery_exception_code": exception_code,
+            "delivery_exception_note": note,
+            "delivery_exception_at": now,
+            "delivery_exception_by_driver_id": driver["id"],
+            "delivery_exception_evidence_reference": evidence_reference or None,
+            "delivery_exception_evidence_url": evidence_url,
+            "delivery_deferred_until": deferred_until,
+            "delivery_reminder_due_at": reminder_due_at,
+            "updated_at": now,
+        }
+        result = await db[ASSIGNMENTS].find_one_and_update(
+            {
+                "user_id": merchant_id,
+                "id": assignment["id"],
+                "active": True,
+                "status": assignment.get("status"),
+            },
+            {"$set": assignment_patch},
+            return_document=True,
+            projection={"_id": 0, "user_id": 0},
+        )
+        if not result:
+            raise HTTPException(status_code=409, detail={"code": "driver_delivery_exception_conflict"})
+
+        order_filter = {
+            "user_id": merchant_id,
+            "$or": [
+                {"order_id": assignment.get("order_id")},
+                {"order_number": assignment.get("order_number")},
+            ],
+        }
+        await db[ORDERS].update_one(
+            order_filter,
+            {"$set": {
+                "store_delivery_exception_code": exception_code,
+                "store_delivery_exception_note": note,
+                "store_delivery_exception_at": now,
+                "store_delivery_exception_driver_id": driver["id"],
+                "store_delivery_exception_evidence_reference": evidence_reference or None,
+                "store_delivery_exception_evidence_url": evidence_url,
+                "store_delivery_deferred_until": deferred_until,
+                "store_delivery_reminder_due_at": reminder_due_at,
+                "store_delivery_customer_service_attention_required": True,
+                "store_delivery_updated_at": now,
+            }},
+        )
+        await db[WORKFLOWS].update_one(
+            {
+                "user_id": merchant_id,
+                "order_number": assignment.get("order_number"),
+                "store_delivery_assignment_id": assignment["id"],
+            },
+            {"$set": {
+                "store_courier_exception_code": exception_code,
+                "store_courier_exception_note": note,
+                "store_courier_exception_at": now,
+                "store_courier_exception_driver_id": driver["id"],
+                "store_courier_exception_evidence_reference": evidence_reference or None,
+                "store_courier_exception_evidence_url": evidence_url,
+                "store_courier_deferred_until": deferred_until,
+                "store_courier_reminder_due_at": reminder_due_at,
+                "customer_service_attention_required": True,
+                "updated_at": now,
+            }},
+        )
+        event = {
+            "id": str(uuid.uuid4()),
+            "user_id": merchant_id,
+            "event_type": f"store_delivery_{exception_code}",
+            "assignment_id": assignment["id"],
+            "driver_id": driver["id"],
+            "driver_name_snapshot": assignment.get("driver_name_snapshot") or driver.get("name"),
+            "order_id": assignment.get("order_id"),
+            "order_number": assignment.get("order_number"),
+            "exception_code": exception_code,
+            "note": note,
+            "deferred_until": deferred_until,
+            "reminder_due_at": reminder_due_at,
+            "evidence_reference": evidence_reference or None,
+            "evidence_url": evidence_url,
+            "customer_service_visible": True,
+            "occurred_at": now,
+            "actor_account_user_id": normalize_text(actor.get("id")),
+        }
+        await db[EVENTS].insert_one(event)
+        if evidence_row:
+            await db[CUSTOMER_CONVERSATION_EVIDENCE].update_one(
+                {"user_id": merchant_id, "token": evidence_reference, "status": "uploaded"},
+                {"$set": {"status": "bound", "bound_at": now, "bound_event_id": event["id"]}},
+            )
+        event.pop("_id", None)
+        event.pop("user_id", None)
+        return {
+            "ok": True,
+            "assignment": result,
+            "event": event,
+            "reminder_lead_seconds": int(DELIVERY_REMINDER_LEAD.total_seconds()),
+        }
+
+    @router.get("/deliveries/reminders")
+    async def delivery_reminders(user: dict = Depends(current_user)) -> dict[str, Any]:
+        actor = _require_store_driver(user)
+        driver = await _driver_for_user(db, actor)
+        merchant_id = _merchant_id(driver)
+        now_dt = datetime.now(timezone.utc)
+        rows = await db[ASSIGNMENTS].find(
+            {
+                "user_id": merchant_id,
+                "driver_id": driver["id"],
+                "active": True,
+                "status": {"$in": [DELIVERY_STATUS_ASSIGNED, DELIVERY_STATUS_OUT_FOR_DELIVERY]},
+                "delivery_exception_code": DELIVERY_EXCEPTION_CUSTOMER_REQUESTED_DELAY,
+            },
+            {"_id": 0, "user_id": 0},
+        ).sort("delivery_deferred_until", 1).to_list(length=1000)
+        items = []
+        for row in rows:
+            deferred_text = normalize_text(row.get("delivery_deferred_until"))
+            if not deferred_text:
+                continue
+            try:
+                deferred = datetime.fromisoformat(deferred_text.replace("Z", "+00:00"))
+                if deferred.tzinfo is None:
+                    deferred = deferred.replace(tzinfo=timezone.utc)
+                deferred = deferred.astimezone(timezone.utc)
+            except ValueError:
+                continue
+            if deferred <= now_dt:
+                continue
+            reminder_text = normalize_text(row.get("delivery_reminder_due_at"))
+            try:
+                reminder = datetime.fromisoformat(reminder_text.replace("Z", "+00:00")) if reminder_text else now_dt
+                if reminder.tzinfo is None:
+                    reminder = reminder.replace(tzinfo=timezone.utc)
+                reminder = reminder.astimezone(timezone.utc)
+            except ValueError:
+                reminder = now_dt
+            items.append({
+                "assignment_id": row.get("id"),
+                "order_id": row.get("order_id"),
+                "order_number": row.get("order_number"),
+                "status": row.get("status"),
+                "note": row.get("delivery_exception_note"),
+                "deferred_until": deferred.isoformat(),
+                "reminder_due_at": reminder.isoformat(),
+                "notification_due": reminder <= now_dt,
+                "evidence_url": row.get("delivery_exception_evidence_url"),
+            })
+        return {
+            "items": items,
+            "total": len(items),
+            "reminder_lead_seconds": int(DELIVERY_REMINDER_LEAD.total_seconds()),
+            "server_now": now_dt.isoformat(),
+        }
 
     @router.post("/deliveries/status")
     async def update_status(payload: DriverStatusUpdate, user: dict = Depends(current_user)) -> dict[str, Any]:
@@ -554,4 +807,8 @@ __all__ = [
     "DRIVER_EARNINGS",
     "DRIVER_COLLECTIONS",
     "DRIVER_PAYMENT_REVIEWS",
+    "DELIVERY_EXCEPTION_CUSTOMER_REQUESTED_DELAY",
+    "DELIVERY_EXCEPTION_CUSTOMER_REFUSED",
+    "DELIVERY_EXCEPTION_CUSTOMER_UNREACHABLE",
+    "_delay_timing",
 ]
