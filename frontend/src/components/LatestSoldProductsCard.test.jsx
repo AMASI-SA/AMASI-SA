@@ -80,3 +80,25 @@ test("merges an automatically refreshed newest order at the top", () => {
     ]);
     expect(merged[1].items[0].name).toBe("نسخة محدثة");
 });
+
+test("excludes a payment-pending order before selecting the newest five sold orders", () => {
+    const pendingOrder = {
+        ...order("280000007", "منتج غير مدفوع"),
+        status: "payment_pending",
+        status_native: "بانتظار الدفع",
+    };
+    const markup = renderToStaticMarkup(<LatestSoldProductsCard orders={[
+        pendingOrder,
+        order("280000006", "منتج مدفوع 6"),
+        order("280000005", "منتج مدفوع 5"),
+        order("280000004", "منتج مدفوع 4"),
+        order("280000003", "منتج مدفوع 3"),
+        order("280000002", "منتج مدفوع 2"),
+        order("280000001", "منتج مدفوع 1"),
+    ]} />);
+
+    expect(markup).toContain("5 طلبات");
+    expect(markup).not.toContain("منتج غير مدفوع");
+    expect(markup).toContain("منتج مدفوع 2");
+    expect(markup).not.toContain("منتج مدفوع 1");
+});

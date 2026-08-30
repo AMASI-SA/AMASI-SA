@@ -17,6 +17,7 @@ import { useOrders } from "../hooks/useOrders";
 import { mergeDashboardWithPlatformSpend } from "../lib/dashboardPlatformSpendMerge";
 import { getDashboardAdsSpend } from "../services/dashboardAdsSpend";
 import { buildMezanProductCostHref, buildMissingMezanCostHref } from "../lib/mezanV2CostLinks";
+import { orderStatusDotClass } from "../lib/orderStatusVisual";
 import {
     DASHBOARD_AUTO_REFRESH_MS,
     dashboardOrdersSignature,
@@ -596,6 +597,9 @@ const ORDER_STATUS_AR = {
     canceled: "ملغي",
     cancelled: "ملغي",
     refunded: "مسترجع",
+    payment_pending: "بانتظار الدفع",
+    pending_payment: "بانتظار الدفع",
+    awaiting_payment: "بانتظار الدفع",
 };
 
 function orderStatusLabel(order) {
@@ -646,7 +650,7 @@ export function LatestOrders({ orders, totals = {} }) {
                     <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-400 sm:text-xs">
                         <span className="whitespace-nowrap">#{id}</span><span>•</span>
                         <span className="whitespace-nowrap">{orderCity(order)}</span><span>•</span>
-                        <span className="inline-flex items-center gap-1 whitespace-nowrap"><span className="h-2 w-2 shrink-0 rounded-full bg-slate-800" />{status}</span><span>•</span>
+                        <span className="inline-flex items-center gap-1 whitespace-nowrap"><span className={`h-2 w-2 shrink-0 rounded-full ${orderStatusDotClass(status)}`} />{status}</span><span>•</span>
                         <span className="whitespace-nowrap">{itemCount} قطعة</span><span>•</span>
                         <span className="whitespace-nowrap">{payment}</span>
                     </div>

@@ -92,6 +92,70 @@ def _require_owner(user: Any) -> dict:
     return user
 
 
+def _normalized_order_status(value: Any) -> str:
+    return " ".join(
+        str(value or "").replace("_", " ").strip().casefold().split()
+    )
+
+
+def _is_waiting_for_payment_order(order: OrderDTO) -> bool:
+    for raw_status in (
+        order.status_native,
+        order.status,
+        order.payment.status,
+    ):
+        value = _normalized_order_status(raw_status)
+        if not value:
+            continue
+        if "الدفع" in value and ("انتظار" in value or "بإنتظار" in value):
+            return True
+        if "payment" in value and any(
+            marker in value for marker in ("pending", "awaiting", "waiting")
+        ):
+            return True
+    return False
+
+
+async def _latest_sold_product_order_page(
+    repository: OrderRepository,
+    *,
+    user_id: str,
+    limit: int,
+    cursor: Optional[str],
+) -> tuple[list[OrderDTO], Optional[str], int]:
+    """Fill one feed page while consuming, but never returning, payment-pending orders."""
+    items: list[OrderDTO] = []
+    next_cursor = cursor
+    skipped_invalid = 0
+    seen_cursors: set[str] = set()
+
+    while len(items) < limit:
+        page = await list_orders(
+            repository,
+            user_id=user_id,
+            limit=limit - len(items),
+            cursor=next_cursor,
+        )
+        skipped_invalid += page.skipped_invalid
+        items.extend(
+            order
+            for order in page.items
+            if not _is_waiting_for_payment_order(order)
+        )
+
+        page_cursor = page.next_cursor
+        if not page_cursor:
+            next_cursor = None
+            break
+        if page_cursor == next_cursor or page_cursor in seen_cursors:
+            next_cursor = None
+            break
+        seen_cursors.add(page_cursor)
+        next_cursor = page_cursor
+
+    return items, next_cursor, skipped_invalid
+
+
 def make_order_engine_router(
     db: Any,
     current_user: Callable,
@@ -173,7 +237,7 @@ def make_order_engine_router(
         owner = _require_owner(user)
         owner_id = str(owner["id"])
         try:
-            page = await list_orders(
+            items, next_cursor, skipped_invalid = await _latest_sold_product_order_page(
                 repository(),
                 user_id=owner_id,
                 limit=limit,
@@ -190,7 +254,7 @@ def make_order_engine_router(
 
         flat_items = [
             item
-            for order in page.items
+            for order in items
             for item in order.items
         ]
         enriched_flat_items = await enrich_order_item_images(
@@ -200,7 +264,7 @@ def make_order_engine_router(
         )
         enriched_orders: list[OrderDTO] = []
         item_offset = 0
-        for order in page.items:
+        for order in items:
             item_count = len(order.items)
             enriched_orders.append(
                 order.model_copy(
@@ -215,9 +279,9 @@ def make_order_engine_router(
 
         return OrderListResponse(
             items=enriched_orders,
-            next_cursor=page.next_cursor,
+            next_cursor=next_cursor,
             limit=limit,
-            skipped_invalid=page.skipped_invalid,
+            skipped_invalid=skipped_invalid,
         )
 
     @router.get(

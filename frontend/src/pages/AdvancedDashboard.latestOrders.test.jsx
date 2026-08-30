@@ -79,6 +79,34 @@ test("latest orders mirrors the Orders V2 information row", () => {
     expect(markup).toContain("168.67 ر.س");
 });
 
+test("latest orders uses the same status dot colors as Orders V2", () => {
+    const statuses = [
+        ["بانتظار الدفع", "bg-rose-500"],
+        ["قيد التنفيذ", "bg-sky-500"],
+        ["تم التنفيذ", "bg-emerald-400"],
+        ["جاري التوصيل", "bg-amber-400"],
+    ];
+    const markup = renderToStaticMarkup(
+        <MemoryRouter>
+            <LatestOrders totals={{ total_orders: statuses.length }} orders={statuses.map(([status], index) => ({
+                order_number: String(278106100 - index),
+                created_at: new Date().toISOString(),
+                status_native: status,
+                customer: { name: `عميل ${index + 1}` },
+                shipping: { address: { city: "Riyadh" } },
+                items: [{}],
+                payment: { method_native: "credit_card" },
+                totals: { total: 100 },
+            }))} />
+        </MemoryRouter>
+    );
+
+    statuses.forEach(([status, dotClass]) => {
+        expect(markup).toContain(status);
+        expect(markup).toContain(dotClass);
+    });
+});
+
 test("summary strip includes current month order and sales cards", () => {
     const markup = renderToStaticMarkup(
         <MemoryRouter>

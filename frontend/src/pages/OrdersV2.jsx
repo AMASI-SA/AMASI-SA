@@ -23,6 +23,11 @@ import {
 } from "@phosphor-icons/react";
 
 import { useOrders } from "../hooks/useOrders";
+import {
+    normalizeOrderStatus as normalizedStatus,
+    orderStatusKind,
+    orderStatusVisualClasses,
+} from "../lib/orderStatusVisual";
 import { getOrderFilterSummary } from "../services/orderEngine";
 
 const STATUS_PRIORITY = [
@@ -47,10 +52,6 @@ const STATUS_PRIORITY = [
     ["طلب عرض سعر", "quote"],
 ];
 
-function normalizedStatus(status) {
-    return String(status || "").replaceAll("_", " ").trim().toLowerCase();
-}
-
 function statusPriority(status) {
     const value = normalizedStatus(status);
     const index = STATUS_PRIORITY.findIndex((aliases) =>
@@ -60,19 +61,22 @@ function statusPriority(status) {
 }
 
 function statusVisual(status) {
-    const value = normalizedStatus(status);
-    if (value.includes("بإنتظار المراجعة") || value.includes("بانتظار المراجعة") || value === "under review") return { Icon: Clock, dot: "bg-slate-800", iconBox: "bg-slate-100 text-slate-700", active: "border-slate-700 bg-slate-50 ring-2 ring-slate-200" };
-    if (value.includes("تم المراجعة") || value.includes("تمت المراجعة") || value === "reviewed") return { Icon: UserCheck, dot: "bg-slate-800", iconBox: "bg-slate-100 text-slate-700", active: "border-slate-700 bg-slate-50 ring-2 ring-slate-200" };
-    if (value.includes("قيد التنفيذ") || value.includes("جاري التنفيذ") || value.includes("processing") || value.includes("مدمج")) return { Icon: Gear, dot: "bg-sky-500", iconBox: "bg-sky-50 text-sky-600", active: "border-sky-500 bg-sky-50 ring-2 ring-sky-100" };
-    if (value === "تم التنفيذ" || value === "completed") return { Icon: CheckCircle, dot: "bg-emerald-400", iconBox: "bg-emerald-50 text-emerald-600", active: "border-emerald-500 bg-emerald-50 ring-2 ring-emerald-100" };
-    if (value.includes("جاري التوصيل") || value.includes("delivering") || value.includes("out for delivery")) return { Icon: Truck, dot: "bg-amber-400", iconBox: "bg-amber-50 text-amber-600", active: "border-amber-500 bg-amber-50 ring-2 ring-amber-100" };
-    if (value === "تم التوصيل" || value === "delivered") return { Icon: Package, dot: "bg-emerald-400", iconBox: "bg-emerald-50 text-emerald-600", active: "border-emerald-500 bg-emerald-50 ring-2 ring-emerald-100" };
-    if (value.includes("الدفع") || value.includes("payment")) return { Icon: CreditCard, dot: "bg-rose-500", iconBox: "bg-rose-50 text-rose-600", active: "border-rose-500 bg-rose-50 ring-2 ring-rose-100" };
-    if (value.includes("التجهيز") || value.includes("الشحن") || value.includes("مندوب")) return { Icon: Package, dot: "bg-teal-400", iconBox: "bg-teal-50 text-teal-600", active: "border-teal-500 bg-teal-50 ring-2 ring-teal-100" };
-    if (value.includes("مراجعة") || value.includes("تأكيد العميل") || value.includes("الملاحظات")) return { Icon: NotePencil, dot: "bg-slate-800", iconBox: "bg-slate-100 text-slate-700", active: "border-slate-700 bg-slate-50 ring-2 ring-slate-200" };
-    if (value.includes("ملغ") || value.includes("محذوف") || value.includes("cancel") || value.includes("deleted")) return { Icon: XCircle, dot: "bg-rose-500", iconBox: "bg-rose-50 text-rose-600", active: "border-rose-500 bg-rose-50 ring-2 ring-rose-100" };
-    if (value.includes("مسترج") || value.includes("استرجاع") || value.includes("refund") || value.includes("return")) return { Icon: ArrowCounterClockwise, dot: "bg-rose-500", iconBox: "bg-rose-50 text-rose-600", active: "border-rose-500 bg-rose-50 ring-2 ring-rose-100" };
-    return { Icon: Package, dot: "bg-violet-500", iconBox: "bg-violet-50 text-violet-600", active: "border-violet-500 bg-violet-50 ring-2 ring-violet-100" };
+    const kind = orderStatusKind(status);
+    const icons = {
+        under_review: Clock,
+        reviewed: UserCheck,
+        processing: Gear,
+        completed: CheckCircle,
+        delivering: Truck,
+        delivered: Package,
+        payment: CreditCard,
+        fulfillment: Package,
+        review: NotePencil,
+        cancelled: XCircle,
+        refunded: ArrowCounterClockwise,
+        default: Package,
+    };
+    return { Icon: icons[kind] || Package, ...orderStatusVisualClasses(status) };
 }
 
 function formatMoney(value) {

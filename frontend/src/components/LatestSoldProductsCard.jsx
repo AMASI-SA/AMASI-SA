@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ChevronDown, PackageOpen, RefreshCw } from "lucide-react";
+import { isWaitingForPaymentOrder } from "../lib/orderStatusVisual";
 import {
     listLatestSoldProductOrders,
     ORDER_PAGE_SIZE,
@@ -121,7 +122,10 @@ export default function LatestSoldProductsCard({
     const orders = usesDedicatedFeed ? feedOrders : suppliedOrders;
     const hasMoreOrders = usesDedicatedFeed ? feedHasMore : suppliedHasMoreOrders;
     const ordersLoading = usesDedicatedFeed ? feedLoading : suppliedOrdersLoading;
-    const sortedOrders = useMemo(() => sortOrdersNewestFirst(orders), [orders]);
+    const sortedOrders = useMemo(
+        () => sortOrdersNewestFirst(orders).filter((order) => !isWaitingForPaymentOrder(order)),
+        [orders],
+    );
     const visibleOrders = sortedOrders.slice(0, visibleOrderCount);
     const rows = useMemo(() => expandSoldProductRows(visibleOrders), [visibleOrders]);
     const canShowMore = visibleOrderCount < sortedOrders.length || hasMoreOrders;
