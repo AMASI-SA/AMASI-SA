@@ -37,6 +37,7 @@ export async function listOrders({
     cursor = null,
     statusGroup = null,
     statusExact = null,
+    filters = null,
 } = {}) {
     if (isPreviewDemoEnvironment()) {
         return listPreviewOrders({ limit, cursor, statusExact: statusExact || statusGroup });
@@ -46,11 +47,15 @@ export async function listOrders({
         if (cursor) params.cursor = cursor;
         if (statusExact) params.status_exact = statusExact;
         else if (statusGroup) params.status_group = statusGroup;
+        Object.entries(filters || {}).forEach(([key, value]) => {
+            if (value !== null && value !== undefined && String(value).trim()) params[key] = value;
+        });
         const { data } = await api.get("/orders-v2", { params });
         return {
             items: Array.isArray(data?.items) ? data.items : [],
             nextCursor: data?.next_cursor || null,
             skippedInvalid: Number(data?.skipped_invalid || 0),
+            resultSummary: data?.result_summary || null,
         };
     } catch (error) {
         throw new Error(errorMessage(error, "تعذّر تحميل الطلبات."));

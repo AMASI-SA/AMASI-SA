@@ -38,6 +38,7 @@ from .service import (
     get_order,
     list_orders,
 )
+from .search import search_orders
 
 
 class OrderListResponse(BaseModel):
@@ -46,6 +47,7 @@ class OrderListResponse(BaseModel):
     next_cursor: Optional[str] = None
     limit: int
     skipped_invalid: int = 0
+    result_summary: Optional[dict[str, Any]] = None
 
 
 class CustomerHistoryResponse(BaseModel):
@@ -110,10 +112,40 @@ def make_order_engine_router(
         cursor: Optional[str] = Query(default=None),
         status_group: Optional[str] = Query(default=None),
         status_exact: Optional[str] = Query(default=None),
+        q: Optional[str] = Query(default=None, max_length=200),
+        product: Optional[str] = Query(default=None, max_length=200),
+        sku: Optional[str] = Query(default=None, max_length=120),
+        payment_status: Optional[str] = Query(default=None, max_length=80),
+        provider: Optional[str] = Query(default=None, max_length=40),
+        campaign: Optional[str] = Query(default=None, max_length=300),
+        campaign_id: Optional[str] = Query(default=None, max_length=160),
+        ad_squad: Optional[str] = Query(default=None, max_length=300),
+        ad_squad_id: Optional[str] = Query(default=None, max_length=160),
+        ad: Optional[str] = Query(default=None, max_length=300),
+        ad_id: Optional[str] = Query(default=None, max_length=160),
+        utm: Optional[str] = Query(default=None, max_length=300),
+        attribution_status: Optional[str] = Query(default=None, pattern="^(matched|unattributed|conflicted)$"),
+        created_from: Optional[str] = Query(default=None),
+        created_to: Optional[str] = Query(default=None),
+        baseline_cutoff_at: Optional[str] = Query(default=None),
         user: dict = Depends(current_user),
     ) -> OrderListResponse:
         owner = _require_owner(user)
         owner_id = str(owner["id"])
+
+        combined_filters = {
+            "q": q, "product": product, "sku": sku, "status": status_exact,
+            "payment_status": payment_status, "provider": provider, "campaign": campaign,
+            "campaign_id": campaign_id, "ad_squad": ad_squad, "ad_squad_id": ad_squad_id,
+            "ad": ad, "ad_id": ad_id, "utm": utm, "attribution_status": attribution_status,
+            "created_from": created_from, "created_to": created_to,
+            "baseline_cutoff_at": baseline_cutoff_at,
+        }
+        advanced = any(value for key, value in combined_filters.items() if key != "status")
+        if advanced:
+            result = await search_orders(repository(), user_id=owner_id, filters=combined_filters)
+            enriched_items = await enrich_order_campaigns(db, user_id=owner_id, orders=result.items[:limit])
+            return OrderListResponse(items=enriched_items, next_cursor=None, limit=limit, result_summary=result.summary)
 
         try:
             page = await list_orders(
