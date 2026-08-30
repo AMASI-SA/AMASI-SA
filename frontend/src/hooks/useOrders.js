@@ -30,6 +30,7 @@ export function useOrders({ statusGroup = null, statusExact = null } = {}) {
     const [initialLoading, setInitialLoading] = useState(true);
     const [error, setError] = useState("");
     const [searchMode, setSearchMode] = useState(false);
+    const [resultSummary, setResultSummary] = useState(null);
 
     useEffect(() => { ordersRef.current = orders; }, [orders]);
     useEffect(() => { searchModeRef.current = searchMode; }, [searchMode]);
@@ -47,6 +48,7 @@ export function useOrders({ statusGroup = null, statusExact = null } = {}) {
             setLoading(true);
             setError("");
             setSearchMode(false);
+            setResultSummary(null);
         }
 
         try {
@@ -150,6 +152,34 @@ export function useOrders({ statusGroup = null, statusExact = null } = {}) {
         }
     }, [loadFirstPage]);
 
+    const searchCombined = useCallback(async (filters) => {
+        const requestId = ++requestIdRef.current;
+        refreshInFlightRef.current = true;
+        setInitialLoading(true);
+        setLoading(true);
+        setError("");
+        setSearchMode(true);
+        try {
+            const result = await listOrders({ limit: 50, filters });
+            if (requestId !== requestIdRef.current) return;
+            setOrders(uniqueOrders(result.items));
+            setResultSummary(result.resultSummary);
+            setNextCursor(null);
+            setHasMore(false);
+        } catch (searchError) {
+            if (requestId !== requestIdRef.current) return;
+            setOrders([]);
+            setResultSummary(null);
+            setError(searchError.message);
+        } finally {
+            if (requestId === requestIdRef.current) {
+                setLoading(false);
+                setInitialLoading(false);
+                refreshInFlightRef.current = false;
+            }
+        }
+    }, []);
+
     const refreshVisibleOrders = useCallback(async () => {
         if (
             refreshInFlightRef.current ||
@@ -200,6 +230,8 @@ export function useOrders({ statusGroup = null, statusExact = null } = {}) {
         reload: () => loadFirstPage(),
         refresh: refreshVisibleOrders,
         searchExactOrder,
+        searchCombined,
+        resultSummary,
     };
 }
 

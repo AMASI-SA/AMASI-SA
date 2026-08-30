@@ -50,8 +50,26 @@ class OrderSourceDTO(CanonicalDTO):
     utm_source: Optional[str] = None
     utm_medium: Optional[str] = None
     utm_campaign: Optional[str] = None
+    utm_content: Optional[str] = None
+    utm_term: Optional[str] = None
+    utm_raw: dict[str, Optional[str]] = Field(default_factory=dict)
+    utm_normalized: dict[str, Optional[str]] = Field(default_factory=dict)
+    click_ids: dict[str, str] = Field(default_factory=dict)
     campaign_id: Optional[str] = None
     campaign_name: Optional[str] = None
+    ad_squad_id: Optional[str] = None
+    ad_squad_name: Optional[str] = None
+    ad_id: Optional[str] = None
+    ad_name: Optional[str] = None
+    match_status: Literal["matched", "unattributed", "conflicted"] = "unattributed"
+    match_method: Optional[str] = None
+    match_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    unmatched_reason: Optional[str] = None
+    attribution_window: Optional[str] = None
+    order_created_at_riyadh: Optional[datetime] = None
+    order_created_at_account: Optional[datetime] = None
+    account_timezone: Optional[str] = None
+    entity_url: Optional[str] = None
     device: Optional[str] = None
 
 

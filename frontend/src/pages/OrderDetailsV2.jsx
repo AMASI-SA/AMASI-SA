@@ -792,11 +792,31 @@ function AdvancedOrderInfo({ order }) {
     const device = firstPresent(order.device_name, order.device, order.client_device, sourceObject.device, sourceObject.device_type, attribution.device);
     const assignments = firstPresent(order.assignments, order.responsibilities, order.staff) || {};
     const operations = firstPresent(order.fulfillment, order.operations, order.tracking) || {};
+    const rawUtm = sourceObject.utm_raw || {};
+    const attributionIncomplete = sourceObject.match_status !== "matched";
 
     return (
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" data-testid="order-v2-advanced-info">
             <div className="mb-5"><h2 className="text-xl font-extrabold text-slate-950">معلومات الطلب المتقدمة</h2><p className="mt-1 text-sm text-slate-500">المصدر، المسؤوليات، ومتابعة دورة تنفيذ الطلب.</p></div>
             <div className="grid gap-5 lg:grid-cols-3">
+                <div className={`rounded-2xl border p-4 ${attributionIncomplete ? "border-amber-300 bg-amber-50" : "border-emerald-200 bg-emerald-50"}`} data-testid="order-v2-ad-attribution">
+                    <div className="mb-3 flex items-center gap-2"><Megaphone size={21} className="text-violet-700" weight="fill" /><h3 className="font-extrabold">الإسناد الإعلاني</h3></div>
+                    {attributionIncomplete && <div className="mb-3 rounded-xl border border-amber-300 bg-white p-3 text-sm font-bold text-amber-900">غير محسوم — إسناد الطلبات غير مكتمل: {sourceObject.unmatched_reason || "لم تصل هوية الحملة كاملة"}</div>}
+                    <InfoRow label="المصدر" value={sourceObject.source || sourceObject.platform} />
+                    <InfoRow label="Campaign" value={sourceObject.campaign_name} />
+                    <InfoRow label="Campaign ID" value={sourceObject.campaign_id} />
+                    <InfoRow label="Ad Squad / Ad Set" value={sourceObject.ad_squad_name} />
+                    <InfoRow label="Ad Squad ID" value={sourceObject.ad_squad_id} />
+                    <InfoRow label="Ad" value={sourceObject.ad_name} />
+                    <InfoRow label="Ad ID" value={sourceObject.ad_id} />
+                    <InfoRow label="UTM الخام" value={Object.entries(rawUtm).filter(([, value]) => value).map(([key, value]) => `${key}=${value}`).join(" · ")} />
+                    <InfoRow label="طريقة المطابقة" value={sourceObject.match_method} />
+                    <InfoRow label="الثقة" value={`${Math.round(Number(sourceObject.match_confidence || 0) * 100)}%`} />
+                    <InfoRow label="نافذة الإسناد" value={sourceObject.attribution_window} />
+                    <InfoRow label="توقيت الرياض" value={sourceObject.order_created_at_riyadh} />
+                    <InfoRow label="توقيت حساب المنصة" value={sourceObject.order_created_at_account} />
+                    {sourceObject.entity_url && <Link to={sourceObject.entity_url} className="mt-3 inline-flex rounded-lg bg-violet-700 px-3 py-2 text-sm font-bold text-white">فتح الكيان في صفحة الحملات</Link>}
+                </div>
                 <div className="rounded-2xl border border-slate-200 p-4">
                     <div className="mb-3 flex items-center gap-2"><Megaphone size={21} className="text-violet-700" weight="fill" /><h3 className="font-extrabold">مصدر الطلب</h3></div>
                     <InfoRow label="المصدر" value={source} />

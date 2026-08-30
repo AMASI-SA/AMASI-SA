@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
     ArrowCounterClockwise,
     CaretLeft,
@@ -191,13 +191,23 @@ function isRiskyTransition(fromStatus, toStatus) {
 
 export default function OrdersV2() {
     const navigate = useNavigate();
+    const [urlParams] = useSearchParams();
     const loadMoreRef = useRef(null);
+    const initialUrlSearchRef = useRef(false);
     const [activeStatus, setActiveStatus] = useState(null);
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [draftStatus, setDraftStatus] = useState(null);
     const [summary, setSummary] = useState({ total: 0, statusCards: [], statusCounts: {} });
     const [summaryError, setSummaryError] = useState("");
     const [searchDraft, setSearchDraft] = useState("");
+    const [filters, setFilters] = useState(() => ({
+        provider: urlParams.get("provider") || "", campaign: urlParams.get("campaign") || "",
+        campaign_id: urlParams.get("campaign_id") || "", ad_squad: urlParams.get("ad_squad") || "",
+        ad_squad_id: urlParams.get("ad_squad_id") || "", ad: urlParams.get("ad") || "",
+        ad_id: urlParams.get("ad_id") || "", product: "", sku: "", payment_status: "",
+        utm: "", attribution_status: "", created_from: urlParams.get("created_from") || "",
+        created_to: urlParams.get("created_to") || "", baseline_cutoff_at: urlParams.get("baseline_cutoff_at") || "",
+    }));
     const [selected, setSelected] = useState(() => new Set());
     const [allMatchingSelected, setAllMatchingSelected] = useState(false);
     const [quickEditOpen, setQuickEditOpen] = useState(false);
@@ -205,7 +215,15 @@ export default function OrdersV2() {
     const [previewOpen, setPreviewOpen] = useState(false);
     const [nowMs, setNowMs] = useState(() => Date.now());
 
-    const { orders, hasMore, loading, initialLoading, error, searchMode, loadMore, reload, searchExactOrder } = useOrders({ statusExact: activeStatus });
+    const { orders, hasMore, loading, initialLoading, error, searchMode, loadMore, reload, searchCombined, resultSummary } = useOrders({ statusExact: activeStatus });
+
+    useEffect(() => {
+        if (initialUrlSearchRef.current) return;
+        initialUrlSearchRef.current = true;
+        if (Object.values(filters).some((value) => String(value || "").trim())) {
+            searchCombined(filters);
+        }
+    }, [filters, searchCombined]);
 
     useEffect(() => {
         const timer = window.setInterval(() => setNowMs(Date.now()), 15_000);
@@ -277,7 +295,7 @@ export default function OrdersV2() {
         setTargetStatus("");
     }
 
-    function submitSearch(event) { event.preventDefault(); searchExactOrder(searchDraft); }
+    function submitSearch(event) { event.preventDefault(); searchCombined({ ...filters, q: searchDraft, status_exact: activeStatus || "" }); }
     async function clearSearch() { setSearchDraft(""); await reload(); }
 
     return (
@@ -289,8 +307,19 @@ export default function OrdersV2() {
                 </div>
                 <div className="mt-5 flex gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">{statusCards.map((card) => <CountCard key={card.key || "all"} label={card.label} count={card.count} isAll={card.isAll} active={activeStatus === card.key} onClick={() => setActiveStatus(card.key)} />)}</div>
                 {summaryError && <div className="mt-2 text-xs text-rose-600">{summaryError}</div>}
-                <form onSubmit={submitSearch} className="mt-5 flex flex-wrap gap-2 sm:flex-nowrap"><div className="relative min-w-0 flex-1 basis-full sm:basis-auto"><MagnifyingGlass size={20} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={searchDraft} onChange={(event) => setSearchDraft(event.target.value)} placeholder="ابحث برقم الطلب الدقيق…" className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pr-11 pl-4 outline-none focus:border-violet-400" /></div><button type="button" onClick={() => { setDraftStatus(activeStatus); setDrawerOpen(true); }} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold"><Funnel size={18} /> تصفية</button><button type="submit" disabled={loading} className="rounded-xl bg-violet-700 px-5 py-3 text-sm font-bold text-white disabled:opacity-60">بحث</button>{searchMode && <button type="button" onClick={clearSearch} className="rounded-xl border px-4 py-3 text-sm font-bold"><X size={17} /> مسح</button>}</form>
+                <form onSubmit={submitSearch} className="mt-5 space-y-3">
+                    <div className="flex flex-wrap gap-2 sm:flex-nowrap"><div className="relative min-w-0 flex-1 basis-full sm:basis-auto"><MagnifyingGlass size={20} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={searchDraft} onChange={(event) => setSearchDraft(event.target.value)} placeholder="رقم الطلب أو أي نص إسناد" className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pr-11 pl-4 outline-none focus:border-violet-400" /></div><button type="button" onClick={() => { setDraftStatus(activeStatus); setDrawerOpen(true); }} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold"><Funnel size={18} /> الحالة</button><button type="submit" disabled={loading} className="rounded-xl bg-violet-700 px-5 py-3 text-sm font-bold text-white disabled:opacity-60">بحث مركب</button>{searchMode && <button type="button" onClick={clearSearch} className="rounded-xl border px-4 py-3 text-sm font-bold"><X size={17} /> مسح</button>}</div>
+                    <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-5">
+                        {[["product","اسم المنتج"],["sku","SKU"],["provider","المصدر الإعلاني"],["campaign","Campaign"],["campaign_id","Campaign ID"],["ad_squad","Ad Squad / Ad Set"],["ad_squad_id","Ad Squad ID"],["ad","Ad"],["ad_id","Ad ID"],["utm","UTM الخام"]].map(([key,label]) => <input key={key} value={filters[key]} onChange={(event) => setFilters((current) => ({ ...current, [key]: event.target.value }))} placeholder={label} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" />)}
+                        <select value={filters.payment_status} onChange={(event) => setFilters((current) => ({ ...current, payment_status: event.target.value }))} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"><option value="">كل حالات الدفع</option><option value="paid">مدفوع</option><option value="unpaid">بانتظار الدفع</option><option value="partial">مدفوع جزئيًا</option></select>
+                        <select value={filters.attribution_status} onChange={(event) => setFilters((current) => ({ ...current, attribution_status: event.target.value }))} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"><option value="">كل حالات الإسناد</option><option value="matched">مطابق</option><option value="unattributed">غير منسوب</option><option value="conflicted">متعارض</option></select>
+                        <input type="datetime-local" value={filters.created_from} onChange={(event) => setFilters((current) => ({ ...current, created_from: event.target.value }))} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" title="من تاريخ الإنشاء الأصلي" />
+                        <input type="datetime-local" value={filters.created_to} onChange={(event) => setFilters((current) => ({ ...current, created_to: event.target.value }))} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" title="إلى تاريخ الإنشاء الأصلي" />
+                    </div>
+                </form>
             </section>
+
+            {resultSummary && <section className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2 xl:grid-cols-5" data-testid="orders-v2-result-summary">{[["الطلبات",resultSummary.orders],["المدفوعة",resultSummary.paid_orders],["بانتظار الدفع",resultSummary.pending_payment_orders],["ملغاة/مسترجعة",Number(resultSummary.cancelled_orders || 0)+Number(resultSummary.refunded_orders || 0)],["المبيعات المدفوعة",formatMoney(resultSummary.paid_sales)],["متوسط السلة",formatMoney(resultSummary.average_basket)],["المنتجات / القطع",`${resultSummary.product_lines || 0} / ${resultSummary.units || 0}`],["غير منسوبة أو متعارضة",resultSummary.unattributed_or_conflicted],["قبل وقت القطع",resultSummary.orders_at_or_before_cutoff],["بعد وقت القطع",resultSummary.orders_after_cutoff]].map(([label,value]) => <div key={label} className="rounded-xl bg-slate-50 p-3"><div className="text-xs font-bold text-slate-500">{label}</div><div className="num mt-1 text-xl font-extrabold">{value ?? "—"}</div></div>)}</section>}
 
             <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-4 sm:px-5"><div className="flex min-w-0 items-center gap-3"><SelectionBox checked={allVisibleSelected} disabled={!canSelectVisible} onChange={toggleVisible} label={canSelectVisible ? "تحديد الطلبات الظاهرة" : "تحديد الكل متاح داخل حالة موحدة فقط"} /><h2 className="truncate font-extrabold text-slate-900">{searchMode ? "نتيجة البحث" : activeStatusLabel ? `طلبات: ${activeStatusLabel}` : "أحدث الطلبات حسب تاريخ الإنشاء"}</h2></div>{selectedCount > 0 && <div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-teal-100 px-3 py-2 text-sm font-bold text-teal-900">تم تحديد {selectedCount.toLocaleString("en-US")} طلب</span><button type="button" onClick={() => setQuickEditOpen(true)} className="rounded-xl border border-teal-500 bg-white px-4 py-2 text-sm font-bold text-teal-800">تحرير سريع</button><button type="button" onClick={clearSelection} className="rounded-xl border px-3 py-2 text-sm">إلغاء التحديد</button></div>}</div>

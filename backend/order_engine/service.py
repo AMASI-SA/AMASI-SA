@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 from salla_marketing_attribution import canonical_order_source
+from .attribution import build_attribution_projection
 
 from .mapper import OrderMappingError, map_salla_order
 from .models import OrderDTO
@@ -249,7 +250,15 @@ def _provider_marketing_source(raw: dict[str, Any]) -> dict[str, Optional[str]]:
 def _map_row(raw: dict[str, Any], *, current_status: Optional[str] = None) -> OrderDTO:
     dto = map_salla_order(raw)
     customer = dto.customer.model_copy(update={"avatar_url": _customer_avatar(raw), "gender": _customer_gender(raw)})
-    source = dto.source.model_copy(update=_provider_marketing_source(raw))
+    marketing = _provider_marketing_source(raw)
+    marketing.update(build_attribution_projection(
+        raw,
+        created_at=dto.created_at,
+        provider=marketing.get("source"),
+        campaign_id=marketing.get("campaign_id"),
+        campaign_name=marketing.get("campaign_name"),
+    ))
+    source = dto.source.model_copy(update=marketing)
     return dto.model_copy(
         update={
             "status_native": _provider_status_native(raw, current_status=current_status) or dto.status_native,

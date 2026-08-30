@@ -35,6 +35,13 @@ async def _lookup_campaign_name(db: Any, *, user_id: str, campaign_id: str) -> s
 
     lookups = (
         (
+            "mezan_snapchat_entity_facts_v2",
+            {"user_id": user_id, "entity_type": "campaign", "external_id": campaign_id},
+            {"name": 1, "updated_at": 1},
+            "name",
+            [("updated_at", -1)],
+        ),
+        (
             "mezan_meta_campaign_performance_daily_v2",
             {"user_id": user_id, "campaign_id": campaign_id},
             {"campaign_name": 1, "updated_at": 1, "date": 1},
@@ -95,6 +102,20 @@ async def _lookup_campaign_name(db: Any, *, user_id: str, campaign_id: str) -> s
     return None
 
 
+async def _lookup_snapchat_entity_name(
+    db: Any, *, user_id: str, entity_type: str, entity_id: str,
+) -> str | None:
+    try:
+        row = await db["mezan_snapchat_entity_facts_v2"].find_one(
+            {"user_id": str(user_id), "entity_type": entity_type, "external_id": entity_id},
+            {"name": 1, "updated_at": 1}, sort=[("updated_at", -1)],
+        )
+    except Exception:
+        return None
+    name = _text((row or {}).get("name"))
+    return name if name and name != entity_id else None
+
+
 async def enrich_order_campaigns(
     db: Any,
     *,
@@ -108,6 +129,7 @@ async def enrich_order_campaigns(
     """
 
     cache: dict[str, str | None] = {}
+    entity_cache: dict[tuple[str, str], str | None] = {}
     enriched: list[OrderDTO] = []
 
     for order in orders:
@@ -137,6 +159,23 @@ async def enrich_order_campaigns(
                 )
             campaign_name = cache[campaign_id] or campaign_id
 
+        squad_name = source.ad_squad_name
+        if source.ad_squad_id and not squad_name:
+            key = ("ad_squad", source.ad_squad_id)
+            if key not in entity_cache:
+                entity_cache[key] = await _lookup_snapchat_entity_name(
+                    db, user_id=str(user_id), entity_type=key[0], entity_id=key[1],
+                )
+            squad_name = entity_cache[key] or source.ad_squad_id
+        ad_name = source.ad_name
+        if source.ad_id and not ad_name:
+            key = ("ad", source.ad_id)
+            if key not in entity_cache:
+                entity_cache[key] = await _lookup_snapchat_entity_name(
+                    db, user_id=str(user_id), entity_type=key[0], entity_id=key[1],
+                )
+            ad_name = entity_cache[key] or source.ad_id
+
         enriched.append(
             order.model_copy(
                 update={
@@ -144,6 +183,8 @@ async def enrich_order_campaigns(
                         update={
                             "campaign_id": campaign_id,
                             "campaign_name": campaign_name,
+                            "ad_squad_name": squad_name,
+                            "ad_name": ad_name,
                         }
                     )
                 }
