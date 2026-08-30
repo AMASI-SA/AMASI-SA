@@ -85,10 +85,16 @@ async def loop() -> None:
 
 
 def attach_advertising_product_watch_scheduler(router: Any) -> None:
+    from boot_runtime import wait_for_local_readiness
+
     if getattr(router, "_advertising_product_watch_v3_attached", False):
         return
     setattr(router, "_advertising_product_watch_v3_attached", True)
     state: dict[str, asyncio.Task | None] = {"task": None}
+
+    async def _ready_loop() -> None:
+        await wait_for_local_readiness()
+        await loop()
 
     @router.on_event("startup")
     async def _start() -> None:
@@ -97,7 +103,9 @@ def attach_advertising_product_watch_scheduler(router: Any) -> None:
         task = state.get("task")
         if task is not None and not task.done():
             return
-        state["task"] = asyncio.create_task(loop(), name="advertising-product-watch-v3")
+        state["task"] = asyncio.create_task(
+            _ready_loop(), name="advertising-product-watch-v3"
+        )
         logger.info("Advertising product watch scheduler started")
 
     @router.on_event("shutdown")

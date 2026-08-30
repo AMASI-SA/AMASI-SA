@@ -39,6 +39,7 @@ from fastapi.responses import StreamingResponse
 from starlette.middleware.cors import CORSMiddleware
 from browser_security import BrowserSecurityMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from mongo_observability import mongo_metrics
 from pydantic import BaseModel, EmailStr, Field, validator, root_validator
 
 from auth import (
@@ -61,6 +62,16 @@ from excel_parser import parse_salla_excel, match_settings
 from excel_upload_security import read_safe_xlsx_upload
 from exports import export_report_excel, export_report_pdf
 from release_identity import release_health_payload
+from resource_governor import StageMetric, governor, memory_snapshot
+from runtime_diagnostics import start_lag_monitor
+from runtime_diagnostics_routes import attach_diagnostics_routes
+from boot_runtime import (
+    cancel_deferred_task, is_ready, process_local_readiness_event,
+    readiness_traffic_gate, start_deferred_task,
+)
+from startup_guard import (
+    new_owner_id, replica_jitter, run_release_startup, verified_release_key,
+)
 from report_builder import build_report as _build_report
 from meta_routes import attach_meta_routes
 from shipping_accounts import attach_shipping_accounts_routes
@@ -164,21 +175,56 @@ def _parse_date_or(s: Optional[str], fallback):
 
 # ── Database ──────────────────────────────────────────────────────────────────
 mongo_url = os.environ["MONGO_URL"]
-client = AsyncIOMotorClient(mongo_url)
+client = AsyncIOMotorClient(mongo_url, event_listeners=[mongo_metrics])
 db = client[os.environ["DB_NAME"]]
 
 
 # ── App / Router ──────────────────────────────────────────────────────────────
 app = FastAPI(title="Hesab — Salla Accounting API")
 api = APIRouter(prefix="/api")
+app.state.readiness = "starting"
+app.state.startup_phase = "import_complete"
+attach_diagnostics_routes(
+    app,
+    mongo_client=client,
+    state=lambda: {
+        "readiness": getattr(app.state, "readiness", "starting"),
+        "startup_phase": getattr(app.state, "startup_phase", "unknown"),
+    },
+)
+
+
+app.middleware("http")(readiness_traffic_gate)
 
 
 @app.get("/health", include_in_schema=False)
 @api.get("/health", include_in_schema=False)
 async def health_check(response: Response):
     """Deployment health probe; no database or external API calls."""
+    response.status_code = 200 if is_ready(app) else 503
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     return release_health_payload()
+
+
+@app.get("/live", include_in_schema=False)
+@api.get("/live", include_in_schema=False)
+async def liveness_check(response: Response):
+    """ASGI process liveness only; never touches Mongo, providers or locks."""
+    response.headers["Cache-Control"] = "no-store"
+    return {"live": True, "service": "backend"}
+
+
+@app.get("/ready", include_in_schema=False)
+@api.get("/ready", include_in_schema=False)
+async def readiness_check(response: Response):
+    """Readiness is local state only: no Mongo, provider, or heavy-lock wait."""
+    ready = is_ready(app)
+    response.status_code = 200 if ready else 503
+    response.headers["Cache-Control"] = "no-store"
+    return {
+        "ready": ready,
+        "phase": getattr(app.state, "startup_phase", "unknown"),
+    }
 
 
 # ── Dependencies ──────────────────────────────────────────────────────────────
@@ -4470,8 +4516,14 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 
-@app.on_event("startup")
-async def on_startup():
+async def _global_startup() -> None:
+    """Run release-keyed indexes, migrations and cleanup exactly once."""
+    app.state.startup_phase = "required_initialization"
+    before = memory_snapshot()
+    logger.info(
+        "startup_phase required_initialization memory_current=%s memory_max=%s rss=%s",
+        before.current_bytes, before.max_bytes, before.process_rss_bytes,
+    )
     await db.users.create_index("email", unique=True)
     await db.settings.create_index("user_id", unique=True)
     await db.daily_costs.create_index([("user_id", 1), ("date", 1)], unique=True)
@@ -4896,30 +4948,6 @@ async def on_startup():
         "production stability: Tamara startup sweep disabled in web process"
     )
 
-    # iter-262 — Qoyod Pipeline Worker. Auto-advances `integration_inbox`
-    # rows from NORMALIZED → CUSTOMER_RESOLVED → INVOICE_CREATED →
-    # RECEIPT_CREATED. Without this, the webhook handler stops at
-    # NORMALIZED and nothing reaches Qoyod.
-    try:
-        from integrations.qoyod.worker import start_worker as _qoyod_worker_start
-        _qoyod_worker_start(db, interval_sec=5.0, batch_limit=25)
-        logger.info("iter-262: qoyod pipeline worker started")
-    except Exception as e:
-        logger.exception("iter-262: qoyod pipeline worker failed to start: %s", e)
-
-    # Validated Plan-B automatic sender. Starting the task on every deploy is
-    # safe: it is a no-op until the existing Qoyod settings switches arm it
-    # after the closed canary succeeds.
-    try:
-        from integrations.qoyod_manual.auto_send import (
-            start_worker as _qoyod_plan_b_auto_start,
-        )
-        _qoyod_plan_b_auto_start(db, interval_sec=15.0, batch_limit=5)
-        logger.info("Plan-B Qoyod automatic sender started")
-    except Exception as e:
-        logger.exception(
-            "Plan-B Qoyod automatic sender failed to start: %s", e)
-
     await ensure_settlements_indexes(db)
     _bf = await backfill_settlement_provenance(db)
     if _bf:
@@ -4968,14 +4996,6 @@ async def on_startup():
     # Indexes for the "تجهيز المنتجات" feature (iteration 34).
     await ensure_preparation_indexes(db)
     await ensure_salla_indexes(db)
-    # OAuth access tokens last 14 days and Salla refresh tokens rotate on
-    # every use.  Refresh connected stores one day early in a background
-    # loop; the Mongo lease in salla_integration.service makes this safe even
-    # when the deployment runs multiple backend workers.
-    from salla_integration.service import salla_token_maintenance_loop
-    app.state.salla_token_maintenance_task = _asyncio.create_task(
-        salla_token_maintenance_loop(db)
-    )
     await ensure_payment_settlements_indexes(db)
     # Backfill: older salaries created before the country column existed are
     # treated as Saudi by default (most common merchant home country).
@@ -5145,11 +5165,101 @@ async def on_startup():
         logger.info(f"Tagged {tt_legacy.modified_count} legacy tiktok_ads_daily rows with campaign_id='_default'.")
 
     await seed_admin(db)
+
+
+async def _local_startup() -> None:
+    """Finish process-local readiness after global release work completes."""
+    try:
+        from integrations.qoyod.worker import start_worker as _qoyod_worker_start
+        _qoyod_worker_start(db, interval_sec=5.0, batch_limit=25)
+        logger.info("iter-262: qoyod pipeline worker started")
+    except Exception as exc:
+        logger.exception("iter-262: qoyod pipeline worker failed to start: %s", exc)
+    try:
+        from integrations.qoyod_manual.auto_send import (
+            start_worker as _qoyod_plan_b_auto_start,
+        )
+        _qoyod_plan_b_auto_start(db, interval_sec=15.0, batch_limit=5)
+        logger.info("Plan-B Qoyod automatic sender started")
+    except Exception as exc:
+        logger.exception("Plan-B Qoyod automatic sender failed to start: %s", exc)
+    from salla_integration.service import salla_token_maintenance_loop
+    app.state.salla_token_maintenance_task = _asyncio.create_task(
+        salla_token_maintenance_loop(db)
+    )
+    app.state.startup_phase = "ready"
+    app.state.readiness = "ready"
+    process_local_readiness_event.set()
+    after = memory_snapshot()
+    logger.info(
+        "startup_phase ready memory_current=%s memory_max=%s peak=%s rss=%s",
+        after.current_bytes, after.max_bytes, after.peak_bytes,
+        after.process_rss_bytes,
+    )
     logger.info("Hesab backend started successfully.")
+
+
+@app.on_event("startup")
+async def on_startup():
+    """Return promptly so liveness is served before deferred initialization."""
+    app.state.readiness = "starting"
+    app.state.startup_phase = "post_liveness_delay"
+    process_local_readiness_event.clear()
+    app.state.event_loop_lag_task = start_lag_monitor()
+
+    async def delayed() -> None:
+        # Fixed delay plus per-replica jitter prevents a synchronized boot wave.
+        delay = max(0.0, float(os.environ.get("BACKEND_STARTUP_DELAY_SECONDS", "5")))
+        jitter_max = max(0.0, float(os.environ.get("BACKEND_STARTUP_JITTER_SECONDS", "15")))
+        jitter = replica_jitter(jitter_max)
+        await _asyncio.sleep(delay + jitter)
+        owner_id = new_owner_id()
+        app.state.startup_phase = "waiting_for_release_startup"
+        try:
+            release_key = verified_release_key(release_health_payload())
+            metric = StageMetric("deferred_startup", concurrency=1)
+            try:
+                role = await run_release_startup(
+                    db,
+                    release_key=release_key,
+                    owner_id=owner_id,
+                    governor=governor,
+                    global_initialization=_global_startup,
+                    local_initialization=_local_startup,
+                    wait_timeout=float(
+                        os.environ.get("BACKEND_STARTUP_WAIT_TIMEOUT_SECONDS", "180")
+                    ),
+                    ttl_seconds=int(
+                        os.environ.get("BACKEND_STARTUP_LEASE_TTL_SECONDS", "30")
+                    ),
+                )
+            except BaseException as exc:
+                metric.finish(status="failed", reason=type(exc).__name__)
+                raise
+            else:
+                metric.finish(status="complete", role=role)
+        except _asyncio.CancelledError:
+            raise
+        except Exception:
+            app.state.readiness = "failed"
+            app.state.startup_phase = "initialization_failed"
+            logger.exception("deferred backend initialization failed")
+
+    start_deferred_task(app, delayed)
 
 
 @app.on_event("shutdown")
 async def on_shutdown():
+    process_local_readiness_event.clear()
+    await cancel_deferred_task(app)
+    for task_name in ("event_loop_lag_task",):
+        task = getattr(app.state, task_name, None)
+        if task is not None:
+            task.cancel()
+            try:
+                await task
+            except _asyncio.CancelledError:
+                pass
     campaign_ai_monitor_task = getattr(
         app.state, "campaign_ai_monitor_task", None
     )

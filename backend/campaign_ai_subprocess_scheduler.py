@@ -196,7 +196,13 @@ def attach_campaign_ai_subprocess_scheduler(router: Any) -> None:
         return
     setattr(router, "_campaign_ai_subprocess_scheduler_attached", True)
 
+    from boot_runtime import wait_for_local_readiness
+
     state: dict[str, asyncio.Task | None] = {"task": None}
+
+    async def _ready_loop() -> None:
+        await wait_for_local_readiness()
+        await scheduler_loop()
 
     @router.on_event("startup")
     async def _start_campaign_ai_subprocess_scheduler() -> None:
@@ -207,7 +213,7 @@ def attach_campaign_ai_subprocess_scheduler(router: Any) -> None:
         if task is not None and not task.done():
             return
         state["task"] = asyncio.create_task(
-            scheduler_loop(),
+            _ready_loop(),
             name="campaign-ai-subprocess-scheduler",
         )
         logger.info(

@@ -28,7 +28,12 @@ MIN_INTERVAL_SECONDS = 300
 MAX_INTERVAL_SECONDS = 3600
 DEFAULT_STARTUP_DELAY_SECONDS = 45
 MAX_SCHEDULER_ACCOUNTS = 50
-MAX_PARALLEL_ACCOUNTS = 2
+MAX_PARALLEL_ACCOUNTS = 1
+
+
+def max_parallel_accounts() -> int:
+    """Snapchat is fixed at one account until staged streaming lands in PR 3."""
+    return MAX_PARALLEL_ACCOUNTS
 
 
 def _utcnow() -> datetime:
@@ -151,11 +156,15 @@ async def _run_one(
 async def run_shadow_cycle(db: Any, *, now: Callable[[], datetime] = _utcnow) -> dict[str, Any]:
     started_at = now().astimezone(timezone.utc)
     accounts = await _selected_accounts(db)
-    semaphore = asyncio.Semaphore(MAX_PARALLEL_ACCOUNTS)
-    results = await asyncio.gather(
-        *(_run_one(db, identity, semaphore) for identity in accounts),
-        return_exceptions=True,
-    )
+    semaphore = asyncio.Semaphore(max_parallel_accounts())
+    # Do not allocate one coroutine/task per account.  The account query is
+    # bounded, and each result is released before the next account starts.
+    results: list[Any] = []
+    for identity in accounts:
+        try:
+            results.append(await _run_one(db, identity, semaphore))
+        except Exception as exc:  # preserve existing per-account semantics
+            results.append(exc)
     safe_results: list[dict[str, Any]] = []
     for identity, result in zip(accounts, results):
         if isinstance(result, BaseException):
@@ -253,16 +262,22 @@ async def shadow_scheduler_loop(db: Any) -> None:
 
 
 def attach_shadow_scheduler(router: Any, db: Any) -> None:
+    from boot_runtime import wait_for_local_readiness
+
     if getattr(router, "_snapchat_v2_shadow_scheduler_attached", False):
         return
     setattr(router, "_snapchat_v2_shadow_scheduler_attached", True)
     task: asyncio.Task | None = None
 
+    async def ready_loop() -> None:
+        await wait_for_local_readiness()
+        await shadow_scheduler_loop(db)
+
     async def start() -> None:
         nonlocal task
         if shadow_scheduler_enabled() and (task is None or task.done()):
             task = asyncio.create_task(
-                shadow_scheduler_loop(db),
+                ready_loop(),
                 name="snapchat-reporting-v2-shadow-5m",
             )
 

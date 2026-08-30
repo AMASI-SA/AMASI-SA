@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable
 from zoneinfo import ZoneInfo
@@ -18,6 +19,9 @@ from .lease import (
     heartbeat_lease,
     recover_expired_leases,
     release_lease,
+)
+from resource_governor import (
+    CooperativeCancellation, ResourcePressure, StageMetric, governor,
 )
 from .projections import (
     RIYADH_TIMEZONE,
@@ -41,6 +45,29 @@ from .total_facts import upsert_total_facts
 
 MAX_SYNC_DAYS = 62
 HEARTBEAT_SECONDS = 20.0
+logger = logging.getLogger(__name__)
+
+
+async def _release_lease_then_admission(
+    db: Any,
+    *,
+    user_id: str,
+    account_id: str,
+    owner_id: str,
+    outcome: str,
+    now: Callable[[], datetime],
+    admission_token: Any,
+) -> None:
+    """Best-effort Mongo lease cleanup with unconditional token release."""
+    try:
+        await release_lease(
+            db, user_id, account_id, owner_id, outcome=outcome, now=now,
+        )
+    except BaseException as exc:  # preserve the run result/original exception
+        if isinstance(exc, Exception):
+            logger.exception("Snapchat account lease cleanup failed")
+    finally:
+        await asyncio.shield(governor.release(admission_token))
 
 
 def _utcnow() -> datetime:
@@ -405,15 +432,34 @@ class SnapchatV2SyncPipeline:
             account_timezone=str(account.get("timezone") or ""),
             now=current,
         )
+        try:
+            admission_token, _ = await governor.acquire(
+                "snapchat", task_name=f"snapchat:{run_type}"
+            )
+        except ResourcePressure:
+            # Admission refusal is pre-publish: do not acquire an account
+            # lease and do not create a visible sync run.
+            return {
+                "status": "skipped",
+                "reason": "resource_pressure",
+                "retryable": True,
+                "ad_account_id": account_id,
+            }
+
         owner_id = build_owner_id()
-        acquired = await acquire_lease(
-            self.db,
-            str(user_id),
-            account_id,
-            owner_id,
-            now=self.now,
-        )
+        try:
+            acquired = await acquire_lease(
+                self.db,
+                str(user_id),
+                account_id,
+                owner_id,
+                now=self.now,
+            )
+        except BaseException:
+            await governor.release(admission_token)
+            raise
         if not acquired:
+            await governor.release(admission_token)
             return {
                 "status": "skipped",
                 "reason": "lease_unavailable",
@@ -434,9 +480,20 @@ class SnapchatV2SyncPipeline:
             },
             now=current,
         )
-        await create_sync_run(self.db, run)
+        try:
+            await create_sync_run(self.db, run)
+        except BaseException:
+            await _release_lease_then_admission(
+                self.db,
+                user_id=str(user_id), account_id=account_id, owner_id=owner_id,
+                outcome="failed", now=self.now, admission_token=admission_token,
+            )
+            raise
         sync_run_id = run["sync_run_id"]
         heartbeat_lock = asyncio.Lock()
+        run_metric = StageMetric(
+            "snapchat_account_run", run_type=run_type, concurrency=1,
+        )
         heartbeat_task = asyncio.create_task(
             self._heartbeat(
                 user_id=str(user_id),
@@ -475,6 +532,10 @@ class SnapchatV2SyncPipeline:
         financial_committed = False
         identity_summary: dict[str, Any] = {}
         try:
+            # Admission happened before the lease in the shared entry-point
+            # governor. This checkpoint is still safe: no provider page or
+            # fact write has started yet.
+            governor.safe_checkpoint()
             await update_sync_stage(
                 self.db,
                 sync_run_id,
@@ -504,6 +565,11 @@ class SnapchatV2SyncPipeline:
                     retryable=True,
                     coverage=hourly.get("coverage") or {},
                 )
+
+            # Last cancellation fence before the first authoritative write.
+            # After upsert_hourly_facts begins, this run completes its coherent
+            # publish unit until staging/commit gates arrive in PR 3.
+            governor.safe_checkpoint()
 
             await update_sync_stage(
                 self.db,
@@ -602,6 +668,9 @@ class SnapchatV2SyncPipeline:
                 breakdown_summary[entity_type] = level_summary
                 if level_error:
                     warnings.append(level_error)
+                # Once authoritative publishing begins, finish the coherent
+                # run unit. Page/entity cancellation requires staging and is
+                # intentionally deferred until that commit gate exists.
 
             await update_sync_stage(
                 self.db,
@@ -682,6 +751,8 @@ class SnapchatV2SyncPipeline:
                             "retryable": bool(getattr(exc, "retryable", False)),
                         }
                     )
+                # Do not cancel between authoritative daily writes without a
+                # staging/commit gate; pressure remains observable in metrics.
 
             summary = {
                 "date_from": report_dates[0].isoformat(),
@@ -738,6 +809,25 @@ class SnapchatV2SyncPipeline:
                 "status": outcome,
                 "sync_run_id": sync_run_id,
                 "summary": summary,
+            }
+        except CooperativeCancellation:
+            outcome = "skipped"
+            now = self.now().astimezone(timezone.utc)
+            await self.db["mezan_snapchat_sync_runs_v2"].update_one(
+                {"sync_run_id": sync_run_id},
+                {"$set": {
+                    "status": "skipped",
+                    "reason": "resource_pressure",
+                    "retryable": True,
+                    "finished_at": now,
+                    "updated_at": now,
+                }},
+            )
+            return {
+                "status": "skipped",
+                "reason": "resource_pressure",
+                "retryable": True,
+                "sync_run_id": sync_run_id,
             }
         except Exception as exc:  # noqa: BLE001
             if not financial_committed:
@@ -796,14 +886,12 @@ class SnapchatV2SyncPipeline:
                 pass
             except Exception:  # noqa: BLE001
                 pass
-            await release_lease(
+            await _release_lease_then_admission(
                 self.db,
-                str(user_id),
-                account_id,
-                owner_id,
-                outcome=outcome,
-                now=self.now,
+                user_id=str(user_id), account_id=account_id, owner_id=owner_id,
+                outcome=outcome, now=self.now, admission_token=admission_token,
             )
+            run_metric.finish(status=outcome)
 
 
 __all__ = ["MAX_SYNC_DAYS", "SnapchatV2SyncPipeline"]

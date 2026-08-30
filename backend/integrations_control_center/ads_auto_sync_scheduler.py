@@ -20,6 +20,7 @@ import httpx
 from fastapi import APIRouter, Depends
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
+from resource_governor import ResourcePressure, StageMetric, governor
 
 from .meta_native_reporting import (
     META_REPORTING_SOURCE_MODE,
@@ -1956,59 +1957,110 @@ async def run_auto_sync_cycle(
     started = now().astimezone(timezone.utc)
     start_date, end_date = riyadh_date_range(started, rolling_days())
     targets = await _targets(db)
-    semaphore = asyncio.Semaphore(3)
+    try:
+        configured_concurrency = max(
+            1, min(4, int(os.environ.get("HEAVY_ADS_CONCURRENCY", "2")))
+        )
+    except (TypeError, ValueError):
+        configured_concurrency = 2
+    semaphore = asyncio.Semaphore(configured_concurrency)
 
     async def execute(user_id: str, provider: str) -> dict[str, Any]:
         async with semaphore:
-            # Meta/Snap Campaign AI uses an inclusive three-day decision
-            # window.  Extend only those two analytical refreshes so every
-            # decision day has current provider proof; TikTok/Google and the
-            # scheduler's existing global cadence remain unchanged.
-            provider_start_date = (
-                min(
-                    start_date,
-                    end_date
-                    - timedelta(days=CAMPAIGN_AI_EXECUTION_PROOF_DAYS - 1),
+            try:
+                admission = governor.heavy(
+                    "snapchat" if provider == SNAPCHAT_PROVIDER_ID else "ads",
+                    task_name=f"ads_auto_sync:{provider}",
                 )
-                if provider in {META_PROVIDER_ID, SNAPCHAT_PROVIDER_ID}
-                else start_date
+                async with admission:
+                    return await _execute_admitted(user_id, provider)
+            except ResourcePressure:
+                return {
+                    "provider": provider,
+                    "status": "partial",
+                    "reason": "resource_pressure",
+                    "retryable": True,
+                }
+
+    async def _execute_admitted(user_id: str, provider: str) -> dict[str, Any]:
+        metric = StageMetric(
+            "ads_auto_sync_provider", provider=provider,
+            concurrency=configured_concurrency,
+        )
+        try:
+            result = await _execute_provider(user_id, provider)
+        except BaseException as exc:
+            metric.finish(status="failed", reason=type(exc).__name__)
+            raise
+        metric.finish(status=str(result.get("status") or "complete"))
+        return result
+
+    async def _execute_provider(user_id: str, provider: str) -> dict[str, Any]:
+        # Meta/Snap Campaign AI uses an inclusive three-day decision
+        # window. Extend only those two analytical refreshes so every
+        # decision day has current provider proof.
+        provider_start_date = (
+            min(
+                start_date,
+                end_date - timedelta(days=CAMPAIGN_AI_EXECUTION_PROOF_DAYS - 1),
             )
-            if provider == META_PROVIDER_ID:
-                return await _refresh_meta(
-                    db,
-                    user_id=user_id,
-                    start_date=provider_start_date,
-                    end_date=end_date,
-                    now=started,
-                )
-            if provider == TIKTOK_PROVIDER_ID:
-                return await _refresh_tiktok(
-                    db,
-                    user_id=user_id,
-                    start_date=start_date,
-                    end_date=end_date,
-                    now=started,
-                )
-            if provider == GOOGLE_ADS_PROVIDER_ID:
-                return await _refresh_google(
-                    db,
-                    user_id=user_id,
-                    start_date=start_date,
-                    end_date=end_date,
-                    now=started,
-                )
-            return await _refresh_snapchat(
+            if provider in {META_PROVIDER_ID, SNAPCHAT_PROVIDER_ID}
+            else start_date
+        )
+        if provider == META_PROVIDER_ID:
+            return await _refresh_meta(
                 db,
                 user_id=user_id,
                 start_date=provider_start_date,
                 end_date=end_date,
                 now=started,
             )
+        if provider == TIKTOK_PROVIDER_ID:
+            return await _refresh_tiktok(
+                db, user_id=user_id, start_date=start_date,
+                end_date=end_date, now=started,
+            )
+        if provider == GOOGLE_ADS_PROVIDER_ID:
+            return await _refresh_google(
+                db, user_id=user_id, start_date=start_date,
+                end_date=end_date, now=started,
+            )
+        return await _refresh_snapchat(
+            db, user_id=user_id, start_date=provider_start_date,
+            end_date=end_date, now=started,
+        )
 
-    raw = await asyncio.gather(
-        *(execute(user_id, provider) for user_id, provider in targets),
-        return_exceptions=True,
+    # Fixed worker count and bounded queue: no coroutine is allocated per target.
+    queue: asyncio.Queue[tuple[int, str, str] | None] = asyncio.Queue(
+        maxsize=max(1, configured_concurrency * 2)
     )
+    raw: list[Any] = [None] * len(targets)
+
+    async def worker() -> None:
+        while True:
+            item = await queue.get()
+            try:
+                if item is None:
+                    return
+                index, user_id, provider = item
+                try:
+                    raw[index] = await execute(user_id, provider)
+                except Exception as exc:  # retain target/result alignment
+                    raw[index] = exc
+            finally:
+                queue.task_done()
+
+    workers = [
+        asyncio.create_task(worker(), name=f"ads-auto-sync-worker-{index}")
+        for index in range(configured_concurrency)
+    ]
+    for index, (user_id, provider) in enumerate(targets):
+        await queue.put((index, user_id, provider))
+    for _ in workers:
+        await queue.put(None)
+    await queue.join()
+    for task in workers:
+        await task
     results: list[dict[str, Any]] = []
     for (user_id, provider), item in zip(targets, raw):
         if isinstance(item, Exception):
@@ -2435,7 +2487,13 @@ def attach_ads_auto_sync_scheduler(
     current_user: Callable,
     require_owner: Callable[[Any], dict],
 ) -> None:
+    from boot_runtime import wait_for_local_readiness
+
     task: asyncio.Task | None = None
+
+    async def ready_loop() -> None:
+        await wait_for_local_readiness()
+        await auto_sync_loop(db)
 
     @router.get("/ads-auto-sync/status")
     async def read_status(
@@ -2448,7 +2506,7 @@ def attach_ads_auto_sync_scheduler(
         nonlocal task
         if auto_sync_enabled() and (task is None or task.done()):
             task = asyncio.create_task(
-                auto_sync_loop(db),
+                ready_loop(),
                 name="mezan-v2-ads-auto-sync-5min",
             )
 

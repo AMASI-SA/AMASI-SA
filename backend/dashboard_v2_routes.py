@@ -10,6 +10,7 @@ payment fee formulae stay inherited from the legacy dashboard response.
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 import re
 import unicodedata
@@ -46,6 +47,7 @@ from product_catalog_cost_resolution import (
 from product_v2_details_routes import COST_PROFILES
 from product_v2_routes import PRODUCTS, _number
 from recurring_obligations_routes import compute_recurring_obligations_for_range
+from resource_governor import ResourcePressure, StageMetric, governor
 from salla_marketing_attribution import (
     SALLA_RAW_ATTRIBUTION_PROJECTION,
     attach_projected_salla_attribution,
@@ -73,6 +75,34 @@ PROVIDER_IDS = {
     "tiktok": TIKTOK_PROVIDER_ID,
 }
 log = logging.getLogger("mezan.dashboard_v2")
+
+
+def _heavy_dashboard_stage(stage: str):
+    """Bound dashboard admission without changing any financial calculation."""
+    def decorate(func):
+        @functools.wraps(func)
+        async def wrapped(*args, **kwargs):
+            metric = StageMetric(stage, concurrency=1)
+            try:
+                async with governor.heavy("dashboard", task_name=stage):
+                    result = await func(*args, **kwargs)
+            except ResourcePressure:
+                metric.finish(status="blocked", reason="resource_pressure")
+                raise HTTPException(
+                    status_code=503,
+                    detail={
+                        "code": "resource_pressure",
+                        "retryable": True,
+                        "data_complete": False,
+                    },
+                )
+            except BaseException as exc:
+                metric.finish(status="failed", reason=type(exc).__name__)
+                raise
+            metric.finish(status="complete")
+            return result
+        return wrapped
+    return decorate
 
 PRODUCT_COST_CATALOG_PROJECTION = {
     "_id": 0,
@@ -1322,6 +1352,7 @@ def make_dashboard_v2_router(
         }
 
     @router.get("/dashboard-v2")
+    @_heavy_dashboard_stage("dashboard_v2_summary")
     async def dashboard_v2(
         from_date: str | None = None,
         to_date: str | None = None,
@@ -1591,6 +1622,7 @@ def make_dashboard_v2_router(
         )
 
     @router.get("/dashboard-v2/abandoned-carts/recent")
+    @_heavy_dashboard_stage("abandoned_carts_reconciliation_list")
     async def recent_abandoned_carts(
         from_date: str | None = None,
         to_date: str | None = None,
@@ -1739,6 +1771,7 @@ def make_dashboard_v2_router(
         }
 
     @router.get("/dashboard-v2/product-cost-summary")
+    @_heavy_dashboard_stage("product_cost_summary")
     async def product_cost_summary(user: dict = Depends(current_user)) -> dict[str, Any]:
         current = owner(user)
         user_id = str(current["id"])

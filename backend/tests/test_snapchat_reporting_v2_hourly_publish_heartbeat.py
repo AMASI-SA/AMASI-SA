@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+from resource_governor import CooperativeCancellation
 from snapchat_v2 import sync_pipeline as pipeline_module
 from snapchat_v2.facts import (
     HOURLY_FACT_WRITE_BATCH_SIZE,
@@ -89,6 +90,13 @@ class SyncRunCollection:
         if run and run["sync_run_id"] == query.get("sync_run_id"):
             return deepcopy(run)
         return None
+
+    async def update_one(self, query, update):
+        run = self.state.get("run")
+        if run and run["sync_run_id"] == query.get("sync_run_id"):
+            run.update(deepcopy(update.get("$set") or {}))
+            return SimpleNamespace(matched_count=1, modified_count=1)
+        return SimpleNamespace(matched_count=0, modified_count=0)
 
 
 class ConnectionCollection:
@@ -331,6 +339,56 @@ def _state() -> dict[str, Any]:
         "run_heartbeats": 0,
         "heartbeats_during_bulk": 0,
     }
+
+
+@pytest.mark.asyncio
+async def test_memory_rise_during_fetch_stops_before_first_authoritative_write(
+    monkeypatch,
+):
+    state = _state()
+    db = FakeDB(state)
+    _install_pipeline_fakes(monkeypatch, db, state)
+    checkpoints = 0
+    releases = 0
+
+    class Governor:
+        async def acquire(self, *args, **kwargs):
+            return object(), None
+        async def release(self, token):
+            nonlocal releases
+            releases += 1
+        def safe_checkpoint(self):
+            nonlocal checkpoints
+            checkpoints += 1
+            if checkpoints == 2:
+                raise CooperativeCancellation("resource_pressure")
+
+    async def forbidden_downstream(*args, **kwargs):
+        raise AssertionError("projection/reconciliation must not start")
+
+    monkeypatch.setattr(pipeline_module, "governor", Governor())
+    monkeypatch.setattr(
+        pipeline_module, "build_and_persist_daily_projections", forbidden_downstream
+    )
+    monkeypatch.setattr(
+        SnapchatV2SyncPipeline, "_sync_breakdown_performance", forbidden_downstream
+    )
+    monkeypatch.setattr(pipeline_module, "reconcile_day", forbidden_downstream)
+    pipeline = SnapchatV2SyncPipeline(
+        db, now=lambda: NOW, connection_manager=ConnectionManager(),
+        client_factory=lambda *_args: Client(10),
+    )
+    result = await pipeline.run(
+        USER_ID, ACCOUNT_ID,
+        date_from=date(2026, 8, 28), date_to=date(2026, 8, 28),
+    )
+    assert result["status"] == "skipped"
+    assert result["reason"] == "resource_pressure"
+    assert result["retryable"] is True
+    assert checkpoints == 2
+    assert db.facts.rows == []
+    assert db.facts.bulk_calls == []
+    assert releases == 1
 
 
 @pytest.mark.asyncio
