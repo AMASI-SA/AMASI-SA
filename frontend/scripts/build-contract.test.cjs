@@ -71,7 +71,9 @@ test("Emergent host compatibility does not relax governed releases", () => {
       assert.equal(hostAdapterInvocations.length, 1);
       assert.match(workflow, /node-version:\s*["']?20\.20\.2["']?/);
       assert.match(workflow, /Emergent Host Node 20 clean-clone adapter rehearsal/);
-      assert.match(workflow, /MEZAN_RELEASE_USE_REVIEWED_INTENT:\s*["']?1["']?/);
+      assert.match(workflow, /MEZAN_RELEASE_USE_REVIEWED_INTENT=1/);
+      assert.match(workflow, /MEZAN_RELEASE_BOOTSTRAP_INTENT=1/);
+      assert.match(workflow, /release-v5-reviewed-intent-candidate/);
     } else {
       assert.doesNotMatch(workflow, /yarn build(?:\s|$)/m);
       assert.doesNotMatch(workflow, /MEZAN_RELEASE_USE_REVIEWED_INTENT/);

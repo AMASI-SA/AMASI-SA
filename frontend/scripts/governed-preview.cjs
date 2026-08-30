@@ -34,6 +34,17 @@ function sendJson(response, status, bytes, method) {
   else response.end(bytes);
 }
 
+function lockCacheHeader(response, value) {
+  const setHeader = response.setHeader.bind(response);
+  setHeader("Cache-Control", value);
+  response.setHeader = (name, content) => {
+    if (String(name).toLowerCase() === "cache-control") {
+      return setHeader(name, value);
+    }
+    return setHeader(name, content);
+  };
+}
+
 function governedPreviewCacheHeaders({
   artifactRoot = path.resolve(__dirname, "..", "build"),
 } = {}) {
@@ -57,7 +68,7 @@ function governedPreviewCacheHeaders({
           return;
         }
         if (pathname.startsWith("/assets/")) {
-          response.setHeader("Cache-Control", HASHED_ASSET_CACHE_HEADER);
+          lockCacheHeader(response, HASHED_ASSET_CACHE_HEADER);
         } else if (
           pathname === "/sw.js"
           || pathname === "/service-worker.js"
@@ -65,7 +76,7 @@ function governedPreviewCacheHeaders({
           || pathname === "/index.html"
           || path.posix.extname(pathname) === ""
         ) {
-          response.setHeader("Cache-Control", RELEASE_REVALIDATION_HEADER);
+          lockCacheHeader(response, RELEASE_REVALIDATION_HEADER);
         }
         next();
       });
