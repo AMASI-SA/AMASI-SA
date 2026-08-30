@@ -1716,8 +1716,14 @@ def make_product_google_taxonomy_ai_pilot_router(db: Any, current_user: Callable
     async def start_resumable_run_loop() -> None:
         nonlocal resume_task
         if resume_task is None or resume_task.done():
+            from boot_runtime import wait_for_local_readiness
+
+            async def ready_loop() -> None:
+                await wait_for_local_readiness()
+                await _resumable_run_loop(db, worker_tasks)
+
             resume_task = asyncio.create_task(
-                _resumable_run_loop(db, worker_tasks)
+                ready_loop()
             )
 
     @router.on_event("shutdown")

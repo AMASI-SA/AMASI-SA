@@ -66,9 +66,12 @@ from resource_governor import StageMetric, governor, memory_snapshot
 from runtime_diagnostics import start_lag_monitor
 from runtime_diagnostics_routes import attach_diagnostics_routes
 from boot_runtime import (
-    cancel_deferred_task, readiness_traffic_gate, start_deferred_task,
+    cancel_deferred_task, is_ready, process_local_readiness_event,
+    readiness_traffic_gate, start_deferred_task,
 )
-from startup_guard import new_owner_id, replica_jitter, run_release_startup
+from startup_guard import (
+    new_owner_id, replica_jitter, run_release_startup, verified_release_key,
+)
 from report_builder import build_report as _build_report
 from meta_routes import attach_meta_routes
 from shipping_accounts import attach_shipping_accounts_routes
@@ -198,15 +201,24 @@ app.middleware("http")(readiness_traffic_gate)
 @api.get("/health", include_in_schema=False)
 async def health_check(response: Response):
     """Deployment health probe; no database or external API calls."""
+    response.status_code = 200 if is_ready(app) else 503
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     return release_health_payload()
+
+
+@app.get("/live", include_in_schema=False)
+@api.get("/live", include_in_schema=False)
+async def liveness_check(response: Response):
+    """ASGI process liveness only; never touches Mongo, providers or locks."""
+    response.headers["Cache-Control"] = "no-store"
+    return {"live": True, "service": "backend"}
 
 
 @app.get("/ready", include_in_schema=False)
 @api.get("/ready", include_in_schema=False)
 async def readiness_check(response: Response):
     """Readiness is local state only: no Mongo, provider, or heavy-lock wait."""
-    ready = getattr(app.state, "readiness", "starting") == "ready"
+    ready = is_ready(app)
     response.status_code = 200 if ready else 503
     response.headers["Cache-Control"] = "no-store"
     return {
@@ -5177,6 +5189,7 @@ async def _local_startup() -> None:
     )
     app.state.startup_phase = "ready"
     app.state.readiness = "ready"
+    process_local_readiness_event.set()
     after = memory_snapshot()
     logger.info(
         "startup_phase ready memory_current=%s memory_max=%s peak=%s rss=%s",
@@ -5191,6 +5204,7 @@ async def on_startup():
     """Return promptly so liveness is served before deferred initialization."""
     app.state.readiness = "starting"
     app.state.startup_phase = "post_liveness_delay"
+    process_local_readiness_event.clear()
     app.state.event_loop_lag_task = start_lag_monitor()
 
     async def delayed() -> None:
@@ -5200,13 +5214,9 @@ async def on_startup():
         jitter = replica_jitter(jitter_max)
         await _asyncio.sleep(delay + jitter)
         owner_id = new_owner_id()
-        release_key = str(
-            release_health_payload().get("release", {}).get("source_git_sha")
-            or os.environ.get("SOURCE_GIT_SHA")
-            or "unverified-source"
-        )
         app.state.startup_phase = "waiting_for_release_startup"
         try:
+            release_key = verified_release_key(release_health_payload())
             metric = StageMetric("deferred_startup", concurrency=1)
             try:
                 role = await run_release_startup(
@@ -5240,6 +5250,7 @@ async def on_startup():
 
 @app.on_event("shutdown")
 async def on_shutdown():
+    process_local_readiness_event.clear()
     await cancel_deferred_task(app)
     for task_name in ("event_loop_lag_task",):
         task = getattr(app.state, task_name, None)

@@ -2,7 +2,9 @@ import asyncio
 from datetime import date, datetime, timezone
 
 import pytest
+from pymongo.errors import AutoReconnect
 
+import resource_governor
 from resource_governor import ResourcePressure
 import snapchat_v2.sync_pipeline as pipeline_module
 from snapchat_v2.sync_pipeline import SnapchatV2SyncPipeline
@@ -198,3 +200,34 @@ async def test_resource_refusal_before_publish_writes_no_authoritative_data(monk
     }
     assert lease_calls == 0
     assert db.authoritative_writes == 0
+
+
+@pytest.mark.asyncio
+async def test_mongo_lease_cleanup_failure_never_leaks_governor_token(monkeypatch):
+    monkeypatch.setenv("HEAVY_GLOBAL_CAPACITY", "1")
+    monkeypatch.setenv("HEAVY_SNAPCHAT_WEIGHT", "1")
+    monkeypatch.setenv("HEAVY_DASHBOARD_WEIGHT", "1")
+    monkeypatch.setenv("HEAVY_STARTUP_WEIGHT", "1")
+    real_governor = resource_governor.ResourceGovernor()
+    monkeypatch.setattr(
+        resource_governor, "memory_snapshot",
+        lambda: resource_governor.MemorySnapshot(10, 100, 10, {}, 1, None, 1, 0.1),
+    )
+    token, _ = await real_governor.acquire("snapchat", task_name="first")
+
+    async def failing_release(*args, **kwargs):
+        raise AutoReconnect("mongo unavailable during cleanup")
+
+    monkeypatch.setattr(pipeline_module, "governor", real_governor)
+    monkeypatch.setattr(pipeline_module, "release_lease", failing_release)
+    await pipeline_module._release_lease_then_admission(
+        object(), user_id="user-1", account_id="acct-1", owner_id="owner-1",
+        outcome="failed", now=lambda: NOW, admission_token=token,
+    )
+    diagnostics = real_governor.diagnostics()
+    assert diagnostics["global_heavy_in_use"] == 0
+    assert diagnostics["active_heavy_tasks"].get("snapchat", 0) == 0
+    next_token, _ = await asyncio.wait_for(
+        real_governor.acquire("snapchat", task_name="next"), 1
+    )
+    await real_governor.release(next_token)

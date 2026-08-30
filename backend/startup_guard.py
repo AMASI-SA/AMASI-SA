@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import os
+import re
 import secrets
 import socket
 import uuid
@@ -17,6 +18,7 @@ COLLECTION = "backend_startup_leases_v1"
 LEASE_ID = "backend-heavy-initialization"
 MIN_LEASE_SECONDS = 5
 MAX_LEASE_SECONDS = 300
+FULL_GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 
 
 @dataclass(frozen=True)
@@ -39,6 +41,27 @@ def replica_jitter(max_seconds: float) -> float:
 
 def new_owner_id() -> str:
     return f"{socket.gethostname()}:{uuid.uuid4()}"
+
+
+def verified_release_key(
+    release_payload: dict[str, Any], *, environment: dict[str, str] | None = None
+) -> str:
+    """Return a verified source SHA or an explicitly configured dev/test key."""
+    release = release_payload.get("release") or {}
+    source_sha = str(release.get("source_git_sha") or "").lower()
+    verified = (
+        release.get("verified_identity_available") is True
+        and release.get("critical_file_hashes_match") is True
+        and release.get("frontend_build_verified") is True
+    )
+    if verified and FULL_GIT_SHA.fullmatch(source_sha):
+        return source_sha
+    env = environment if environment is not None else os.environ
+    mode = str(env.get("APP_ENV") or env.get("ENVIRONMENT") or "production").lower()
+    explicit = str(env.get("TEST_RELEASE_STARTUP_KEY") or "")
+    if mode in {"test", "development"} and explicit.startswith(("test:", "dev:")):
+        return explicit
+    raise ValueError("verified release source_git_sha is required for startup")
 
 
 def _lease_seconds(value: int) -> int:
@@ -212,5 +235,5 @@ async def run_release_startup(
 __all__ = [
     "COLLECTION", "LEASE_ID", "StartupClaim", "claim_startup_lease",
     "complete_startup_lease", "heartbeat_startup_lease", "new_owner_id",
-    "replica_jitter", "run_release_startup",
+    "replica_jitter", "run_release_startup", "verified_release_key",
 ]

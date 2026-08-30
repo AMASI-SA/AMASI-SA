@@ -124,3 +124,15 @@ collection names; filters, values and returned documents are never retained.
   skip completed global work, then execute process-local initialization.
 - PyMongo command telemetry implements the official `started`, `succeeded`
   and `failed` callbacks; pool-listener callbacks remain separate.
+- `/live` and `/api/live` are process-only liveness endpoints. `/health` and
+  `/api/health` always return release identity but use HTTP 503 until local
+  readiness succeeds, matching the candidate-probe contract.
+- Ads, Snapchat, advertising-product-watch, campaign subprocess and taxonomy
+  recovery schedulers wait on the shared process-local readiness event before
+  their first Mongo/provider cycle; failed initialization never sets it.
+- Snapchat performs its final cancellation checkpoint after complete hourly
+  coverage and immediately before the first authoritative fact write. Mongo
+  lease cleanup failure cannot prevent unconditional admission-token release.
+- Production startup rejects missing, malformed or unverified release identity
+  before migrations. Non-SHA keys require an explicit test/development mode
+  plus `TEST_RELEASE_STARTUP_KEY`; there is no automatic fallback key.

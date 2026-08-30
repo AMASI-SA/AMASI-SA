@@ -262,16 +262,22 @@ async def shadow_scheduler_loop(db: Any) -> None:
 
 
 def attach_shadow_scheduler(router: Any, db: Any) -> None:
+    from boot_runtime import wait_for_local_readiness
+
     if getattr(router, "_snapchat_v2_shadow_scheduler_attached", False):
         return
     setattr(router, "_snapchat_v2_shadow_scheduler_attached", True)
     task: asyncio.Task | None = None
 
+    async def ready_loop() -> None:
+        await wait_for_local_readiness()
+        await shadow_scheduler_loop(db)
+
     async def start() -> None:
         nonlocal task
         if shadow_scheduler_enabled() and (task is None or task.done()):
             task = asyncio.create_task(
-                shadow_scheduler_loop(db),
+                ready_loop(),
                 name="snapchat-reporting-v2-shadow-5m",
             )
 

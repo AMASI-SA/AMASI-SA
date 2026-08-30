@@ -113,6 +113,49 @@ async def test_global_initialization_runs_once_and_followers_run_local():
 
 
 @pytest.mark.asyncio
+async def test_follower_replica_provider_scheduler_waits_for_local_completion():
+    db = DB()
+    governor = NoPressureGovernor()
+    global_entered = asyncio.Event()
+    finish_global = asyncio.Event()
+    replica_b_ready = asyncio.Event()
+    provider_called = asyncio.Event()
+
+    async def global_init():
+        global_entered.set()
+        await finish_global.wait()
+
+    async def scheduler_b():
+        await replica_b_ready.wait()
+        provider_called.set()
+
+    scheduler = asyncio.create_task(scheduler_b())
+    leader = asyncio.create_task(startup_guard.run_release_startup(
+        db, release_key="sha-a", owner_id="replica-a", governor=governor,
+        global_initialization=global_init,
+        local_initialization=lambda: asyncio.sleep(0),
+        poll_interval=0.001, wait_timeout=1, ttl_seconds=5,
+    ))
+    await global_entered.wait()
+
+    async def local_b():
+        replica_b_ready.set()
+
+    follower = asyncio.create_task(startup_guard.run_release_startup(
+        db, release_key="sha-a", owner_id="replica-b", governor=governor,
+        global_initialization=global_init, local_initialization=local_b,
+        poll_interval=0.001, wait_timeout=1, ttl_seconds=5,
+    ))
+    await asyncio.sleep(0.01)
+    assert not replica_b_ready.is_set()
+    assert not provider_called.is_set()
+    finish_global.set()
+    await asyncio.wait_for(asyncio.gather(leader, follower, scheduler), 1)
+    assert replica_b_ready.is_set()
+    assert provider_called.is_set()
+
+
+@pytest.mark.asyncio
 async def test_crashed_owner_expires_and_stale_fence_cannot_heartbeat():
     db = DB()
     now = datetime(2026, 8, 30, tzinfo=timezone.utc)
@@ -218,3 +261,36 @@ def test_jitter_uses_replica_identity_and_secure_random(monkeypatch):
     assert 0 <= first <= 20
     assert 0 <= second <= 20
     assert first != second
+
+
+def test_verified_release_identity_is_required_in_production():
+    with pytest.raises(ValueError, match="verified release source_git_sha"):
+        startup_guard.verified_release_key(
+            {"release": {"source_git_sha": None}},
+            environment={"APP_ENV": "production"},
+        )
+    assert startup_guard.verified_release_key(
+        {"release": {
+            "source_git_sha": "a" * 40,
+            "verified_identity_available": True,
+            "critical_file_hashes_match": True,
+            "frontend_build_verified": True,
+        }},
+        environment={"APP_ENV": "production"},
+    ) == "a" * 40
+    with pytest.raises(ValueError):
+        startup_guard.verified_release_key(
+            {"release": {"source_git_sha": "a" * 40}},
+            environment={"APP_ENV": "production"},
+        )
+
+
+def test_unverified_key_requires_explicit_test_or_development_configuration():
+    assert startup_guard.verified_release_key(
+        {"release": {}},
+        environment={"APP_ENV": "test", "TEST_RELEASE_STARTUP_KEY": "test:unit"},
+    ) == "test:unit"
+    with pytest.raises(ValueError):
+        startup_guard.verified_release_key(
+            {"release": {}}, environment={"APP_ENV": "test"}
+        )

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable
 from zoneinfo import ZoneInfo
@@ -44,6 +45,29 @@ from .total_facts import upsert_total_facts
 
 MAX_SYNC_DAYS = 62
 HEARTBEAT_SECONDS = 20.0
+logger = logging.getLogger(__name__)
+
+
+async def _release_lease_then_admission(
+    db: Any,
+    *,
+    user_id: str,
+    account_id: str,
+    owner_id: str,
+    outcome: str,
+    now: Callable[[], datetime],
+    admission_token: Any,
+) -> None:
+    """Best-effort Mongo lease cleanup with unconditional token release."""
+    try:
+        await release_lease(
+            db, user_id, account_id, owner_id, outcome=outcome, now=now,
+        )
+    except BaseException as exc:  # preserve the run result/original exception
+        if isinstance(exc, Exception):
+            logger.exception("Snapchat account lease cleanup failed")
+    finally:
+        await asyncio.shield(governor.release(admission_token))
 
 
 def _utcnow() -> datetime:
@@ -459,11 +483,11 @@ class SnapchatV2SyncPipeline:
         try:
             await create_sync_run(self.db, run)
         except BaseException:
-            await release_lease(
-                self.db, str(user_id), account_id, owner_id,
-                outcome="failed", now=self.now,
+            await _release_lease_then_admission(
+                self.db,
+                user_id=str(user_id), account_id=account_id, owner_id=owner_id,
+                outcome="failed", now=self.now, admission_token=admission_token,
             )
-            await governor.release(admission_token)
             raise
         sync_run_id = run["sync_run_id"]
         heartbeat_lock = asyncio.Lock()
@@ -541,6 +565,11 @@ class SnapchatV2SyncPipeline:
                     retryable=True,
                     coverage=hourly.get("coverage") or {},
                 )
+
+            # Last cancellation fence before the first authoritative write.
+            # After upsert_hourly_facts begins, this run completes its coherent
+            # publish unit until staging/commit gates arrive in PR 3.
+            governor.safe_checkpoint()
 
             await update_sync_stage(
                 self.db,
@@ -782,12 +811,12 @@ class SnapchatV2SyncPipeline:
                 "summary": summary,
             }
         except CooperativeCancellation:
-            outcome = "partial"
+            outcome = "skipped"
             now = self.now().astimezone(timezone.utc)
             await self.db["mezan_snapchat_sync_runs_v2"].update_one(
                 {"sync_run_id": sync_run_id},
                 {"$set": {
-                    "status": "partial",
+                    "status": "skipped",
                     "reason": "resource_pressure",
                     "retryable": True,
                     "finished_at": now,
@@ -795,7 +824,7 @@ class SnapchatV2SyncPipeline:
                 }},
             )
             return {
-                "status": "partial",
+                "status": "skipped",
                 "reason": "resource_pressure",
                 "retryable": True,
                 "sync_run_id": sync_run_id,
@@ -857,15 +886,11 @@ class SnapchatV2SyncPipeline:
                 pass
             except Exception:  # noqa: BLE001
                 pass
-            await release_lease(
+            await _release_lease_then_admission(
                 self.db,
-                str(user_id),
-                account_id,
-                owner_id,
-                outcome=outcome,
-                now=self.now,
+                user_id=str(user_id), account_id=account_id, owner_id=owner_id,
+                outcome=outcome, now=self.now, admission_token=admission_token,
             )
-            await governor.release(admission_token)
             run_metric.finish(status=outcome)
 
 

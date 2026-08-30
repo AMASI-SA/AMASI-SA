@@ -2487,7 +2487,13 @@ def attach_ads_auto_sync_scheduler(
     current_user: Callable,
     require_owner: Callable[[Any], dict],
 ) -> None:
+    from boot_runtime import wait_for_local_readiness
+
     task: asyncio.Task | None = None
+
+    async def ready_loop() -> None:
+        await wait_for_local_readiness()
+        await auto_sync_loop(db)
 
     @router.get("/ads-auto-sync/status")
     async def read_status(
@@ -2500,7 +2506,7 @@ def attach_ads_auto_sync_scheduler(
         nonlocal task
         if auto_sync_enabled() and (task is None or task.done()):
             task = asyncio.create_task(
-                auto_sync_loop(db),
+                ready_loop(),
                 name="mezan-v2-ads-auto-sync-5min",
             )
 
