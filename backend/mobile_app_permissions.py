@@ -39,6 +39,7 @@ MOBILE_APP_PERMISSION_GROUPS = [
             {"key": "app.page.pending_review", "label": "انتظار المراجعة", "kind": "page"},
             {"key": "app.page.reviewed_preparation", "label": "تمت المراجعة", "kind": "page"},
             {"key": "app.page.my_products", "label": "إدارة منتجاتي", "kind": "page"},
+            {"key": "app.page.preparation_supervision", "label": "إشراف التجهيز", "kind": "page"},
             {"key": "app.page.preparation_receiving", "label": "الاستلام من الموظف", "kind": "page"},
             {"key": "app.page.assembly_shipping", "label": "التجميع والعنونة", "kind": "page"},
             {"key": "app.page.carrier_handoff", "label": "استلام موظف التسليم", "kind": "page"},
