@@ -129,8 +129,8 @@ ROWS = [
 ]
 
 
-def build_client(user):
-    repository = FakeRepository(ROWS)
+def build_client(user, rows=ROWS):
+    repository = FakeRepository(rows)
 
     async def current_user():
         return deepcopy(user)
@@ -180,6 +180,26 @@ def test_latest_sold_products_feed_returns_orders_without_enrichment():
     assert payload["limit"] == 2
     assert [row["order_number"] for row in payload["items"]] == ["300", "200"]
     assert payload["items"][0]["items"][0]["name"] == "منتج"
+    assert repository.write_calls == 0
+
+
+def test_latest_sold_products_excludes_payment_pending_and_fills_the_page():
+    rows = deepcopy(ROWS)
+    rows[0]["raw"]["status"] = {
+        "slug": "payment_pending",
+        "name": "بانتظار الدفع",
+    }
+    client, repository = build_client({
+        "id": "owner-1",
+        "role": "owner",
+    }, rows=rows)
+
+    response = client.get("/api/orders-v2/latest-sold-products?limit=2")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert [row["order_number"] for row in payload["items"]] == ["200", "100"]
+    assert all(row["status_native"] != "بانتظار الدفع" for row in payload["items"])
     assert repository.write_calls == 0
 
 
