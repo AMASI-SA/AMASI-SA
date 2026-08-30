@@ -114,3 +114,13 @@ collection names; filters, values and returned documents are never retained.
   a stage-local peak.
 - Mongo checkout failures are separated into timeout, pool-closed,
   connection-error and other counts.
+- Weighted global capacity is reserved atomically and FIFO; a weight-2 job
+  never holds one of two permits while waiting for the other.
+- Snapchat admission now precedes the account lease and sync-run creation.
+  Cooperative cancellation is limited to the pre-authoritative-write fence
+  until a later staging/commit gate exists.
+- Release-keyed startup completion is durable. The elected owner heartbeats a
+  bounded lease with an owner fence; followers wait with a bounded timeout,
+  skip completed global work, then execute process-local initialization.
+- PyMongo command telemetry implements the official `started`, `succeeded`
+  and `failed` callbacks; pool-listener callbacks remain separate.

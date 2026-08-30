@@ -1,15 +1,18 @@
 from types import SimpleNamespace
 
+from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import monitoring
+
 from mongo_observability import MongoMetrics
 
 
 def test_command_metrics_keep_shape_but_not_filter_values():
     metrics = MongoMetrics()
-    metrics.command_started(SimpleNamespace(
+    metrics.started(SimpleNamespace(
         command_name="find",
         command={"find": "unified_orders", "filter": {"phone": "+966-secret"}},
     ))
-    metrics.command_succeeded(SimpleNamespace(duration_micros=12_000))
+    metrics.succeeded(SimpleNamespace(duration_micros=12_000))
 
     snapshot = metrics.snapshot()
     assert snapshot["recent_query_shapes"] == ["find:unified_orders"]
@@ -44,3 +47,18 @@ def test_checkout_failures_are_classified_not_all_timeouts(monkeypatch):
     assert snapshot["checkout_failures"] == {
         "timeout": 1, "pool_closed": 1, "connection_error": 1, "other": 1,
     }
+
+
+def test_command_listener_uses_pymongo_contract_and_is_motor_compatible():
+    metrics = MongoMetrics()
+    assert isinstance(metrics, monitoring.CommandListener)
+    client = AsyncIOMotorClient(
+        "mongodb://127.0.0.1:27017", connect=False, event_listeners=[metrics]
+    )
+    assert client.delegate._event_listeners.enabled_for_commands
+    metrics.started(SimpleNamespace(command_name="ping", command={"ping": 1}))
+    metrics.failed(SimpleNamespace(duration_micros=2_000, failure="timeout"))
+    snapshot = metrics.snapshot()
+    assert snapshot["recent_query_shapes"] == ["ping:1"]
+    assert snapshot["operation_timeouts"] == 1
+    client.close()

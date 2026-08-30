@@ -408,15 +408,34 @@ class SnapchatV2SyncPipeline:
             account_timezone=str(account.get("timezone") or ""),
             now=current,
         )
+        try:
+            admission_token, _ = await governor.acquire(
+                "snapchat", task_name=f"snapchat:{run_type}"
+            )
+        except ResourcePressure:
+            # Admission refusal is pre-publish: do not acquire an account
+            # lease and do not create a visible sync run.
+            return {
+                "status": "skipped",
+                "reason": "resource_pressure",
+                "retryable": True,
+                "ad_account_id": account_id,
+            }
+
         owner_id = build_owner_id()
-        acquired = await acquire_lease(
-            self.db,
-            str(user_id),
-            account_id,
-            owner_id,
-            now=self.now,
-        )
+        try:
+            acquired = await acquire_lease(
+                self.db,
+                str(user_id),
+                account_id,
+                owner_id,
+                now=self.now,
+            )
+        except BaseException:
+            await governor.release(admission_token)
+            raise
         if not acquired:
+            await governor.release(admission_token)
             return {
                 "status": "skipped",
                 "reason": "lease_unavailable",
@@ -437,29 +456,16 @@ class SnapchatV2SyncPipeline:
             },
             now=current,
         )
-        await create_sync_run(self.db, run)
-        sync_run_id = run["sync_run_id"]
         try:
-            admission_token, _ = await governor.acquire(
-                "snapchat", task_name=f"snapchat:{run_type}"
-            )
-        except ResourcePressure:
-            now = self.now().astimezone(timezone.utc)
-            await self.db["mezan_snapchat_sync_runs_v2"].update_one(
-                {"sync_run_id": sync_run_id},
-                {"$set": {
-                    "status": "partial", "reason": "resource_pressure",
-                    "retryable": True, "finished_at": now, "updated_at": now,
-                }},
-            )
+            await create_sync_run(self.db, run)
+        except BaseException:
             await release_lease(
                 self.db, str(user_id), account_id, owner_id,
-                outcome="partial", now=self.now,
+                outcome="failed", now=self.now,
             )
-            return {
-                "status": "partial", "reason": "resource_pressure",
-                "retryable": True, "sync_run_id": sync_run_id,
-            }
+            await governor.release(admission_token)
+            raise
+        sync_run_id = run["sync_run_id"]
         heartbeat_lock = asyncio.Lock()
         run_metric = StageMetric(
             "snapchat_account_run", run_type=run_type, concurrency=1,
@@ -633,8 +639,9 @@ class SnapchatV2SyncPipeline:
                 breakdown_summary[entity_type] = level_summary
                 if level_error:
                     warnings.append(level_error)
-                # Entity-level writes are complete and idempotent here.
-                governor.safe_checkpoint()
+                # Once authoritative publishing begins, finish the coherent
+                # run unit. Page/entity cancellation requires staging and is
+                # intentionally deferred until that commit gate exists.
 
             await update_sync_stage(
                 self.db,
@@ -715,8 +722,8 @@ class SnapchatV2SyncPipeline:
                             "retryable": bool(getattr(exc, "retryable", False)),
                         }
                     )
-                # Reconciliation is committed one whole day at a time.
-                governor.safe_checkpoint()
+                # Do not cancel between authoritative daily writes without a
+                # staging/commit gate; pressure remains observable in metrics.
 
             summary = {
                 "date_from": report_dates[0].isoformat(),
@@ -858,7 +865,7 @@ class SnapchatV2SyncPipeline:
                 outcome=outcome,
                 now=self.now,
             )
-            governor.release(admission_token)
+            await governor.release(admission_token)
             run_metric.finish(status=outcome)
 
 

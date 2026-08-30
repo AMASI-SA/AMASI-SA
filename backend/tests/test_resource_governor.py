@@ -152,3 +152,87 @@ async def test_global_gate_bounds_cross_kind_concurrency(monkeypatch):
     assert governor.diagnostics()["global_heavy_in_use"] == 2
     release.set()
     await asyncio.gather(*tasks)
+
+
+@pytest.mark.asyncio
+async def test_default_dashboard_weight_is_reserved_atomically(monkeypatch):
+    monkeypatch.setenv("HEAVY_GLOBAL_CAPACITY", "2")
+    monkeypatch.setenv("HEAVY_DASHBOARD_WEIGHT", "2")
+    governor = resources.ResourceGovernor()
+    monkeypatch.setattr(
+        resources, "memory_snapshot",
+        lambda: resources.MemorySnapshot(10, 100, 10, {}, 1, None, 1, 0.1),
+    )
+    first_entered = asyncio.Event()
+    release_first = asyncio.Event()
+    order = []
+
+    async def run(name):
+        async with governor.heavy("dashboard", task_name=name):
+            order.append(name)
+            if name == "first":
+                first_entered.set()
+                await release_first.wait()
+
+    first = asyncio.create_task(run("first"))
+    await first_entered.wait()
+    second = asyncio.create_task(run("second"))
+    await asyncio.sleep(0)
+    assert order == ["first"]
+    diagnostics = governor.diagnostics()
+    assert diagnostics["global_heavy_in_use"] == 2
+    assert diagnostics["global_heavy_reserved"] == 2
+    assert diagnostics["global_heavy_available"] == 0
+    release_first.set()
+    await asyncio.wait_for(asyncio.gather(first, second), 1)
+    assert order == ["first", "second"]
+    assert governor.diagnostics()["global_heavy_in_use"] == 0
+
+
+@pytest.mark.asyncio
+async def test_weighted_waiter_cancellation_does_not_leak_capacity():
+    gate = resources.WeightedSemaphore(2)
+    await gate.acquire(2)
+    waiter = asyncio.create_task(gate.acquire(2))
+    await asyncio.sleep(0)
+    waiter.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await waiter
+    assert gate.in_use == 2
+    assert gate.pending == 0
+    await gate.release(2)
+    await asyncio.wait_for(gate.acquire(2), 1)
+    assert gate.in_use == 2
+    await gate.release(2)
+
+
+@pytest.mark.asyncio
+async def test_weighted_gate_preserves_cross_kind_fifo_order(monkeypatch):
+    monkeypatch.setenv("HEAVY_GLOBAL_CAPACITY", "2")
+    monkeypatch.setenv("HEAVY_DASHBOARD_WEIGHT", "2")
+    governor = resources.ResourceGovernor()
+    monkeypatch.setattr(
+        resources, "memory_snapshot",
+        lambda: resources.MemorySnapshot(10, 100, 10, {}, 1, None, 1, 0.1),
+    )
+    order = []
+    release = asyncio.Event()
+
+    async def hold_dashboard():
+        async with governor.heavy("dashboard", task_name="dashboard"):
+            order.append("dashboard")
+            await release.wait()
+
+    async def enter(kind):
+        async with governor.heavy(kind, task_name=kind):
+            order.append(kind)
+
+    holder = asyncio.create_task(hold_dashboard())
+    while order != ["dashboard"]:
+        await asyncio.sleep(0)
+    ads = asyncio.create_task(enter("ads"))
+    snapchat = asyncio.create_task(enter("snapchat"))
+    await asyncio.sleep(0)
+    release.set()
+    await asyncio.wait_for(asyncio.gather(holder, ads, snapchat), 1)
+    assert order == ["dashboard", "ads", "snapchat"]

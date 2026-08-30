@@ -2,8 +2,8 @@
 
 The governor is deliberately independent from FastAPI and MongoDB so every
 entry point (HTTP, scheduler, repair and backfill) can share the same policy.
-It never cancels a task asynchronously; callers stop only at explicit safe
-checkpoints after a provider page/day/entity/bulk batch.
+It never cancels a task asynchronously. Until staging/commit gates exist,
+authoritative publishers may stop only before their first authoritative write.
 """
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ import time
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from collections import deque
 from typing import Any, AsyncIterator
 
 try:  # Unix containers expose ru_maxrss; local Windows tests do not.
@@ -58,6 +59,62 @@ class AdmissionToken:
     kind: str
     kind_semaphore: asyncio.Semaphore
     weight: int
+
+
+class WeightedSemaphore:
+    """FIFO weighted capacity gate with atomic reservations.
+
+    A waiter either reserves its full weight or no capacity at all.  This
+    avoids the classic deadlock where two weight-2 jobs each hold one permit
+    from a capacity-2 semaphore while waiting for their second permit.
+    """
+
+    def __init__(self, capacity: int) -> None:
+        if capacity < 1:
+            raise ValueError("weighted semaphore capacity must be positive")
+        self.capacity = capacity
+        self.available = capacity
+        self._condition = asyncio.Condition()
+        self._waiters: deque[object] = deque()
+
+    @property
+    def in_use(self) -> int:
+        return self.capacity - self.available
+
+    @property
+    def pending(self) -> int:
+        return len(self._waiters)
+
+    async def acquire(self, weight: int) -> None:
+        if not 1 <= weight <= self.capacity:
+            raise ValueError("weight must be between 1 and capacity")
+        ticket = object()
+        async with self._condition:
+            self._waiters.append(ticket)
+            try:
+                await self._condition.wait_for(
+                    lambda: self._waiters[0] is ticket
+                    and self.available >= weight
+                )
+                self.available -= weight
+                self._waiters.popleft()
+                self._condition.notify_all()
+            except BaseException:
+                try:
+                    self._waiters.remove(ticket)
+                except ValueError:
+                    pass
+                self._condition.notify_all()
+                raise
+
+    async def release(self, weight: int) -> None:
+        if weight < 1:
+            raise ValueError("weight must be positive")
+        async with self._condition:
+            if self.available + weight > self.capacity:
+                raise ValueError("weighted semaphore released too many permits")
+            self.available += weight
+            self._condition.notify_all()
 
 
 def _read_text(path: Path) -> str | None:
@@ -172,7 +229,7 @@ class ResourceGovernor:
             "startup": asyncio.Semaphore(_env_int("HEAVY_STARTUP_CONCURRENCY", 1)),
         }
         self._global_capacity = _env_int("HEAVY_GLOBAL_CAPACITY", 2)
-        self._global = asyncio.Semaphore(self._global_capacity)
+        self._global = WeightedSemaphore(self._global_capacity)
         self._weights = {
             "snapchat": _env_int("HEAVY_SNAPCHAT_WEIGHT", 1),
             "ads": _env_int("HEAVY_ADS_WEIGHT", 1),
@@ -227,7 +284,7 @@ class ResourceGovernor:
         try:
             yield before
         finally:
-            self.release(token)
+            await self.release(token)
 
     async def acquire(
         self, kind: str, *, task_name: str
@@ -238,19 +295,18 @@ class ResourceGovernor:
         semaphore = self._limits.get(kind, self._limits["startup"])
         weight = self._weights.get(kind, self._weights["startup"])
         self._pending[kind] = self._pending.get(kind, 0) + 1
-        global_acquired = 0
+        global_acquired = False
         kind_acquired = False
         try:
             # Per-kind first prevents same-kind waiters from reserving global
             # capacity while queued behind (for example) Snapchat's limit 1.
             await semaphore.acquire()
             kind_acquired = True
-            for _ in range(weight):
-                await self._global.acquire()
-                global_acquired += 1
+            await self._global.acquire(weight)
+            global_acquired = True
         except BaseException:
-            for _ in range(global_acquired):
-                self._global.release()
+            if global_acquired:
+                await self._global.release(weight)
             if kind_acquired:
                 semaphore.release()
             raise
@@ -259,18 +315,16 @@ class ResourceGovernor:
         decision, before = self.decision()
         if decision in {"blocked", "cancel"}:
             semaphore.release()
-            for _ in range(weight):
-                self._global.release()
+            await self._global.release(weight)
             raise ResourcePressure("resource_pressure")
         self._active[kind] = self._active.get(kind, 0) + 1
         return AdmissionToken(kind, semaphore, weight), before
 
-    def release(self, token: AdmissionToken) -> None:
+    async def release(self, token: AdmissionToken) -> None:
         if self._active.get(token.kind, 0):
             self._active[token.kind] -= 1
         token.kind_semaphore.release()
-        for _ in range(token.weight):
-            self._global.release()
+        await self._global.release(token.weight)
 
     def diagnostics(self) -> dict[str, Any]:
         decision, snapshot = self.peek()
@@ -280,10 +334,10 @@ class ResourceGovernor:
             "active_heavy_tasks": dict(self._active),
             "pending_heavy_tasks": dict(self._pending),
             "global_heavy_capacity": self._global_capacity,
-            "global_heavy_in_use": sum(
-                self._active.get(kind, 0) * self._weights.get(kind, 1)
-                for kind in self._active
-            ),
+            "global_heavy_in_use": self._global.in_use,
+            "global_heavy_reserved": self._global.in_use,
+            "global_heavy_available": self._global.available,
+            "global_heavy_waiters": self._global.pending,
             "thresholds": {
                 "warning": self.warning_ratio,
                 "block": self.block_ratio,
@@ -330,4 +384,5 @@ class StageMetric:
 __all__ = [
     "AdmissionToken", "CooperativeCancellation", "MemorySnapshot", "ResourceGovernor",
     "ResourcePressure", "StageMetric", "governor", "memory_snapshot",
+    "WeightedSemaphore",
 ]

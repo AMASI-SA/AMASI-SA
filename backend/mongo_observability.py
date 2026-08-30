@@ -73,13 +73,13 @@ class MongoMetrics(monitoring.ConnectionPoolListener, monitoring.CommandListener
         with self._lock:
             self.checked_out_connections = max(0, self.checked_out_connections - 1)
 
-    def command_started(self, event):
+    def started(self, event):
         # Shape is command + collection only. Never retain filters or values.
         collection = str(event.command.get(event.command_name) or "")[:64]
         with self._lock: self.query_shapes.append(f"{event.command_name}:{collection}")
-    def command_succeeded(self, event):
+    def succeeded(self, event):
         with self._lock: self.operation_ms.append(event.duration_micros / 1000)
-    def command_failed(self, event):
+    def failed(self, event):
         message = str(getattr(event, "failure", "")).lower()
         with self._lock:
             self.operation_ms.append(event.duration_micros / 1000)

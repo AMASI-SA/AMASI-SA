@@ -62,15 +62,13 @@ from excel_parser import parse_salla_excel, match_settings
 from excel_upload_security import read_safe_xlsx_upload
 from exports import export_report_excel, export_report_pdf
 from release_identity import release_health_payload
-from resource_governor import StageMetric, memory_snapshot
+from resource_governor import StageMetric, governor, memory_snapshot
 from runtime_diagnostics import start_lag_monitor
 from runtime_diagnostics_routes import attach_diagnostics_routes
 from boot_runtime import (
     cancel_deferred_task, readiness_traffic_gate, start_deferred_task,
 )
-from startup_guard import (
-    acquire_startup_lease, new_owner_id, release_startup_lease, replica_jitter,
-)
+from startup_guard import new_owner_id, replica_jitter, run_release_startup
 from report_builder import build_report as _build_report
 from meta_routes import attach_meta_routes
 from shipping_accounts import attach_shipping_accounts_routes
@@ -4506,8 +4504,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 
-async def _deferred_startup() -> None:
-    """Initialize indexes/migrations after ASGI liveness becomes available."""
+async def _global_startup() -> None:
+    """Run release-keyed indexes, migrations and cleanup exactly once."""
     app.state.startup_phase = "required_initialization"
     before = memory_snapshot()
     logger.info(
@@ -4938,30 +4936,6 @@ async def _deferred_startup() -> None:
         "production stability: Tamara startup sweep disabled in web process"
     )
 
-    # iter-262 — Qoyod Pipeline Worker. Auto-advances `integration_inbox`
-    # rows from NORMALIZED → CUSTOMER_RESOLVED → INVOICE_CREATED →
-    # RECEIPT_CREATED. Without this, the webhook handler stops at
-    # NORMALIZED and nothing reaches Qoyod.
-    try:
-        from integrations.qoyod.worker import start_worker as _qoyod_worker_start
-        _qoyod_worker_start(db, interval_sec=5.0, batch_limit=25)
-        logger.info("iter-262: qoyod pipeline worker started")
-    except Exception as e:
-        logger.exception("iter-262: qoyod pipeline worker failed to start: %s", e)
-
-    # Validated Plan-B automatic sender. Starting the task on every deploy is
-    # safe: it is a no-op until the existing Qoyod settings switches arm it
-    # after the closed canary succeeds.
-    try:
-        from integrations.qoyod_manual.auto_send import (
-            start_worker as _qoyod_plan_b_auto_start,
-        )
-        _qoyod_plan_b_auto_start(db, interval_sec=15.0, batch_limit=5)
-        logger.info("Plan-B Qoyod automatic sender started")
-    except Exception as e:
-        logger.exception(
-            "Plan-B Qoyod automatic sender failed to start: %s", e)
-
     await ensure_settlements_indexes(db)
     _bf = await backfill_settlement_provenance(db)
     if _bf:
@@ -5010,14 +4984,6 @@ async def _deferred_startup() -> None:
     # Indexes for the "تجهيز المنتجات" feature (iteration 34).
     await ensure_preparation_indexes(db)
     await ensure_salla_indexes(db)
-    # OAuth access tokens last 14 days and Salla refresh tokens rotate on
-    # every use.  Refresh connected stores one day early in a background
-    # loop; the Mongo lease in salla_integration.service makes this safe even
-    # when the deployment runs multiple backend workers.
-    from salla_integration.service import salla_token_maintenance_loop
-    app.state.salla_token_maintenance_task = _asyncio.create_task(
-        salla_token_maintenance_loop(db)
-    )
     await ensure_payment_settlements_indexes(db)
     # Backfill: older salaries created before the country column existed are
     # treated as Saudi by default (most common merchant home country).
@@ -5187,6 +5153,28 @@ async def _deferred_startup() -> None:
         logger.info(f"Tagged {tt_legacy.modified_count} legacy tiktok_ads_daily rows with campaign_id='_default'.")
 
     await seed_admin(db)
+
+
+async def _local_startup() -> None:
+    """Finish process-local readiness after global release work completes."""
+    try:
+        from integrations.qoyod.worker import start_worker as _qoyod_worker_start
+        _qoyod_worker_start(db, interval_sec=5.0, batch_limit=25)
+        logger.info("iter-262: qoyod pipeline worker started")
+    except Exception as exc:
+        logger.exception("iter-262: qoyod pipeline worker failed to start: %s", exc)
+    try:
+        from integrations.qoyod_manual.auto_send import (
+            start_worker as _qoyod_plan_b_auto_start,
+        )
+        _qoyod_plan_b_auto_start(db, interval_sec=15.0, batch_limit=5)
+        logger.info("Plan-B Qoyod automatic sender started")
+    except Exception as exc:
+        logger.exception("Plan-B Qoyod automatic sender failed to start: %s", exc)
+    from salla_integration.service import salla_token_maintenance_loop
+    app.state.salla_token_maintenance_task = _asyncio.create_task(
+        salla_token_maintenance_loop(db)
+    )
     app.state.startup_phase = "ready"
     app.state.readiness = "ready"
     after = memory_snapshot()
@@ -5212,21 +5200,34 @@ async def on_startup():
         jitter = replica_jitter(jitter_max)
         await _asyncio.sleep(delay + jitter)
         owner_id = new_owner_id()
-        app.state.startup_phase = "waiting_for_distributed_startup_lease"
+        release_key = str(
+            release_health_payload().get("release", {}).get("source_git_sha")
+            or os.environ.get("SOURCE_GIT_SHA")
+            or "unverified-source"
+        )
+        app.state.startup_phase = "waiting_for_release_startup"
         try:
-            while not await acquire_startup_lease(db, owner_id):
-                await _asyncio.sleep(2)
-            app.state.startup_phase = "distributed_startup_lease_acquired"
             metric = StageMetric("deferred_startup", concurrency=1)
             try:
-                await _deferred_startup()
+                role = await run_release_startup(
+                    db,
+                    release_key=release_key,
+                    owner_id=owner_id,
+                    governor=governor,
+                    global_initialization=_global_startup,
+                    local_initialization=_local_startup,
+                    wait_timeout=float(
+                        os.environ.get("BACKEND_STARTUP_WAIT_TIMEOUT_SECONDS", "180")
+                    ),
+                    ttl_seconds=int(
+                        os.environ.get("BACKEND_STARTUP_LEASE_TTL_SECONDS", "30")
+                    ),
+                )
             except BaseException as exc:
                 metric.finish(status="failed", reason=type(exc).__name__)
                 raise
             else:
-                metric.finish(status="complete")
-            finally:
-                await release_startup_lease(db, owner_id)
+                metric.finish(status="complete", role=role)
         except _asyncio.CancelledError:
             raise
         except Exception:
