@@ -33,6 +33,27 @@ test("GitHub Actions builds the exact checked-out HEAD with Vite only", () => {
   assert.doesNotMatch(JSON.stringify(invocation), /deployment_adapter|build:release/);
 });
 
+test("pull request builds use the reviewed head SHA instead of the merge SHA", () => {
+  const invocation = buildInvocation({
+    environment: {
+      CI: "false",
+      GITHUB_ACTIONS: "true",
+      GITHUB_SHA: "b".repeat(40),
+      GITHUB_WORKSPACE: root,
+      GITHUB_EVENT_NAME: "pull_request",
+      GITHUB_EVENT_PATH: "/runner/event.json",
+    },
+    repositoryRoot: root,
+    frontendDirectory: frontend,
+    nodeBin: "/governed/github-node",
+    gitHead: () => sha,
+    readEvent: () => ({ pull_request: { head: { sha } } }),
+    viteBin: () => "/repo/node_modules/vite/bin/vite.js",
+  });
+  assert.equal(invocation.mode, "github_current_head");
+  assert.equal(invocation.command, "/governed/github-node");
+});
+
 test("non-GitHub host always enters the Emergent deployment adapter", () => {
   const invocation = buildInvocation({
     environment: {},
@@ -83,4 +104,20 @@ test("GitHub dispatcher fails closed on partial or mismatched identity", () => {
       name,
     );
   }
+
+  assert.throws(
+    () => buildInvocation({
+      environment: {
+        ...valid,
+        GITHUB_EVENT_NAME: "pull_request",
+        GITHUB_EVENT_PATH: "/runner/event.json",
+      },
+      repositoryRoot: root,
+      frontendDirectory: frontend,
+      gitHead: () => sha,
+      readEvent: () => ({ pull_request: { head: {} } }),
+      viteBin: () => "/vite.js",
+    }),
+    /pull_request head SHA.*full lowercase/,
+  );
 });

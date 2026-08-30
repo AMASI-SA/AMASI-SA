@@ -1,5 +1,6 @@
 "use strict";
 
+const fs = require("node:fs");
 const path = require("node:path");
 const { execFileSync, spawnSync } = require("node:child_process");
 
@@ -16,6 +17,7 @@ function fullGitSha(value, label) {
 function githubCurrentHead({
   environment = process.env,
   repositoryRoot = repoRoot,
+  readEvent = (eventPath) => JSON.parse(fs.readFileSync(eventPath, "utf8")),
   gitHead = () => execFileSync(
     "git",
     ["-C", repositoryRoot, "rev-parse", "HEAD"],
@@ -31,7 +33,25 @@ function githubCurrentHead({
   if (environment.GITHUB_ACTIONS !== "true") {
     throw new Error("GITHUB_ACTIONS must be exactly true when GitHub markers are present");
   }
-  const expected = fullGitSha(environment.GITHUB_SHA, "GITHUB_SHA");
+  let expected = fullGitSha(environment.GITHUB_SHA, "GITHUB_SHA");
+  if (environment.GITHUB_EVENT_NAME === "pull_request") {
+    const eventPath = environment.GITHUB_EVENT_PATH;
+    if (typeof eventPath !== "string" || !eventPath) {
+      throw new Error("GITHUB_EVENT_PATH is required for pull_request builds");
+    }
+    let payload;
+    try {
+      payload = readEvent(eventPath);
+    } catch (error) {
+      throw new Error(`cannot read GitHub pull_request event: ${error.message}`);
+    }
+    expected = fullGitSha(
+      payload && payload.pull_request && payload.pull_request.head
+        ? payload.pull_request.head.sha
+        : undefined,
+      "pull_request head SHA",
+    );
+  }
   const workspace = environment.GITHUB_WORKSPACE;
   if (
     typeof workspace !== "string"
@@ -54,6 +74,7 @@ function buildInvocation({
   frontendDirectory = frontendRoot,
   nodeBin = process.execPath,
   pythonBin = "python",
+  readEvent,
   gitHead = () => execFileSync(
     "git",
     ["-C", repositoryRoot, "rev-parse", "HEAD"],
@@ -69,6 +90,7 @@ function buildInvocation({
   const githubHead = githubCurrentHead({
     environment,
     repositoryRoot,
+    readEvent,
     gitHead,
   });
   if (githubHead) {

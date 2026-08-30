@@ -76,6 +76,8 @@ jobs:
       - name: Select reviewed identity or bootstrap a candidate
         id: intent
         shell: bash
+        env:
+          REVIEWED_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
           if test -f ../release/release-intent-v5.json; then
@@ -83,7 +85,7 @@ jobs:
             echo "reviewed=true" >> "$GITHUB_OUTPUT"
             echo "MEZAN_RELEASE_USE_REVIEWED_INTENT=1" >> "$GITHUB_ENV"
           else
-            source_git_sha="$GITHUB_SHA"
+            source_git_sha="$REVIEWED_HEAD_SHA"
             echo "reviewed=false" >> "$GITHUB_OUTPUT"
             echo "MEZAN_RELEASE_BOOTSTRAP_INTENT=1" >> "$GITHUB_ENV"
           fi
