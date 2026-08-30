@@ -23,6 +23,12 @@ class MongoMetrics(monitoring.ConnectionPoolListener, monitoring.CommandListener
         self.active_connections = 0
         self.checked_out_connections = 0
         self.checkout_timeouts = 0
+        self.checkout_failures = {
+            "timeout": 0,
+            "pool_closed": 0,
+            "connection_error": 0,
+            "other": 0,
+        }
         self.operation_timeouts = 0
         self.checkout_wait_ms: deque[float] = deque(maxlen=1024)
         self.operation_ms: deque[float] = deque(maxlen=1024)
@@ -46,7 +52,17 @@ class MongoMetrics(monitoring.ConnectionPoolListener, monitoring.CommandListener
             started = self._checkout_started.pop(threading.get_ident(), None)
             if started is not None:
                 self.checkout_wait_ms.append((time.monotonic() - started) * 1000)
-            self.checkout_timeouts += 1
+            reason = str(getattr(event, "reason", "")).lower()
+            if "timeout" in reason:
+                kind = "timeout"
+                self.checkout_timeouts += 1
+            elif "poolclosed" in reason or "pool_closed" in reason or "closed" in reason:
+                kind = "pool_closed"
+            elif "connection" in reason:
+                kind = "connection_error"
+            else:
+                kind = "other"
+            self.checkout_failures[kind] += 1
     def connection_checked_out(self, event):
         with self._lock:
             started = self._checkout_started.pop(threading.get_ident(), None)
@@ -81,6 +97,7 @@ class MongoMetrics(monitoring.ConnectionPoolListener, monitoring.CommandListener
                     "p99": _percentile(self.checkout_wait_ms, 0.99),
                 },
                 "checkout_timeouts": self.checkout_timeouts,
+                "checkout_failures": dict(self.checkout_failures),
                 "operation_duration_ms": {
                     "p50": _percentile(self.operation_ms, 0.50),
                     "p95": _percentile(self.operation_ms, 0.95),

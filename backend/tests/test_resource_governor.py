@@ -80,3 +80,75 @@ def test_critical_pressure_requests_checkpoint_cancellation(monkeypatch):
     )
     with pytest.raises(resources.CooperativeCancellation, match="resource_pressure"):
         governor.safe_checkpoint()
+
+
+def test_blocked_then_cancel_transition_has_cancel_priority(monkeypatch):
+    governor = resources.ResourceGovernor()
+    values = iter([0.81, 0.86])
+    monkeypatch.setattr(
+        resources, "memory_snapshot",
+        lambda: resources.MemorySnapshot(1, 1, 1, {}, 1, None, 1, next(values)),
+    )
+    assert governor.decision()[0] == "blocked"
+    with pytest.raises(resources.CooperativeCancellation):
+        governor.safe_checkpoint()
+
+
+def test_cancel_hysteresis_stays_blocked_then_resumes(monkeypatch):
+    governor = resources.ResourceGovernor()
+    values = iter([0.86, 0.75, 0.69])
+    monkeypatch.setattr(
+        resources, "memory_snapshot",
+        lambda: resources.MemorySnapshot(1, 1, 1, {}, 1, None, 1, next(values)),
+    )
+    assert governor.decision()[0] == "cancel"
+    assert governor.decision()[0] == "blocked"
+    assert governor.decision()[0] == "normal"
+
+
+def test_diagnostics_peek_does_not_mutate_blocked_state(monkeypatch):
+    governor = resources.ResourceGovernor()
+    values = iter([0.81, 0.69, 0.75])
+    monkeypatch.setattr(
+        resources, "memory_snapshot",
+        lambda: resources.MemorySnapshot(1, 1, 1, {}, 1, None, 1, next(values)),
+    )
+    assert governor.decision()[0] == "blocked"
+    assert governor.diagnostics()["admission"] == "normal"
+    assert governor.decision()[0] == "blocked"
+
+
+def test_invalid_threshold_configuration_fails_fast(monkeypatch):
+    monkeypatch.setenv("HEAVY_MEMORY_WARNING_RATIO", "0.9")
+    monkeypatch.setenv("HEAVY_MEMORY_BLOCK_RATIO", "0.8")
+    with pytest.raises(ValueError, match="invalid heavy-memory thresholds"):
+        resources.ResourceGovernor()
+
+
+@pytest.mark.asyncio
+async def test_global_gate_bounds_cross_kind_concurrency(monkeypatch):
+    monkeypatch.setenv("HEAVY_GLOBAL_CAPACITY", "2")
+    monkeypatch.setenv("HEAVY_DASHBOARD_WEIGHT", "1")
+    governor = resources.ResourceGovernor()
+    monkeypatch.setattr(
+        resources, "memory_snapshot",
+        lambda: resources.MemorySnapshot(10, 100, 10, {}, 1, None, 1, 0.1),
+    )
+    entered = 0
+    peak = 0
+    release = asyncio.Event()
+
+    async def run(kind):
+        nonlocal entered, peak
+        async with governor.heavy(kind, task_name=kind):
+            entered += 1
+            peak = max(peak, entered)
+            await release.wait()
+            entered -= 1
+
+    tasks = [asyncio.create_task(run(kind)) for kind in ("snapchat", "ads", "dashboard")]
+    await asyncio.sleep(0.05)
+    assert peak == 2
+    assert governor.diagnostics()["global_heavy_in_use"] == 2
+    release.set()
+    await asyncio.gather(*tasks)

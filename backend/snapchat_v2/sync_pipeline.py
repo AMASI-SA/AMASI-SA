@@ -19,7 +19,9 @@ from .lease import (
     recover_expired_leases,
     release_lease,
 )
-from resource_governor import CooperativeCancellation, ResourcePressure, governor
+from resource_governor import (
+    CooperativeCancellation, ResourcePressure, StageMetric, governor,
+)
 from .projections import (
     RIYADH_TIMEZONE,
     build_and_persist_daily_projections,
@@ -438,7 +440,7 @@ class SnapchatV2SyncPipeline:
         await create_sync_run(self.db, run)
         sync_run_id = run["sync_run_id"]
         try:
-            admission_semaphore, _ = await governor.acquire(
+            admission_token, _ = await governor.acquire(
                 "snapchat", task_name=f"snapchat:{run_type}"
             )
         except ResourcePressure:
@@ -459,6 +461,9 @@ class SnapchatV2SyncPipeline:
                 "retryable": True, "sync_run_id": sync_run_id,
             }
         heartbeat_lock = asyncio.Lock()
+        run_metric = StageMetric(
+            "snapchat_account_run", run_type=run_type, concurrency=1,
+        )
         heartbeat_task = asyncio.create_task(
             self._heartbeat(
                 user_id=str(user_id),
@@ -853,7 +858,8 @@ class SnapchatV2SyncPipeline:
                 outcome=outcome,
                 now=self.now,
             )
-            governor.release("snapchat", admission_semaphore)
+            governor.release(admission_token)
+            run_metric.finish(status=outcome)
 
 
 __all__ = ["MAX_SYNC_DAYS", "SnapchatV2SyncPipeline"]

@@ -92,3 +92,25 @@ The driver now has a bounded pool/command listener for active and checked-out
 connections, checkout wait P50/P95/P99, checkout failures, operation duration
 P50/P95/P99, and timeout counts. Query evidence retains only command and
 collection names; filters, values and returned documents are never retained.
+
+## Independent review hardening
+
+- Cancel evaluation has priority over the blocked hysteresis latch, including
+  the tested `81% -> 86%` transition. Diagnostics call the pure `peek()` path
+  and cannot change the latch.
+- `/health/diagnostics` and `/api/health/diagnostics` require the independent
+  `INTERNAL_DIAGNOSTICS_TOKEN`; public `/health` and `/ready` remain minimal.
+- A weighted global capacity gate bounds different heavy work classes together,
+  in addition to per-kind limits. Dashboard V2, product-cost summary, abandoned
+  carts, provider auto-sync, Snapchat runs and deferred startup emit stage logs.
+- Normal API traffic receives a retryable 503 until readiness; liveness,
+  readiness and authenticated diagnostics remain reachable. ASGI lifecycle
+  tests cover success, failure and shutdown cancellation.
+- Startup jitter combines a hostname/replica hash with secure randomness, and
+  a Mongo lease serializes heavy initialization across replicas.
+- Ads auto-sync uses two fixed workers with a bounded queue; Snapchat remains
+  fixed at one. Results retain target ordering.
+- `memory.peak` is reported explicitly as `cgroup_lifetime_peak_bytes`, not as
+  a stage-local peak.
+- Mongo checkout failures are separated into timeout, pool-closed,
+  connection-error and other counts.

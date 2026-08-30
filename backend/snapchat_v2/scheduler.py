@@ -32,11 +32,8 @@ MAX_PARALLEL_ACCOUNTS = 1
 
 
 def max_parallel_accounts() -> int:
-    """One by default; configurable but still bounded by the global governor."""
-    try:
-        return max(1, min(4, int(os.environ.get("HEAVY_SNAPCHAT_CONCURRENCY", "1"))))
-    except (TypeError, ValueError):
-        return MAX_PARALLEL_ACCOUNTS
+    """Snapchat is fixed at one account until staged streaming lands in PR 3."""
+    return MAX_PARALLEL_ACCOUNTS
 
 
 def _utcnow() -> datetime:

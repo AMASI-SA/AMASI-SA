@@ -20,7 +20,7 @@ import httpx
 from fastapi import APIRouter, Depends
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
-from resource_governor import ResourcePressure, governor
+from resource_governor import ResourcePressure, StageMetric, governor
 
 from .meta_native_reporting import (
     META_REPORTING_SOURCE_MODE,
@@ -1983,6 +1983,19 @@ async def run_auto_sync_cycle(
                 }
 
     async def _execute_admitted(user_id: str, provider: str) -> dict[str, Any]:
+        metric = StageMetric(
+            "ads_auto_sync_provider", provider=provider,
+            concurrency=configured_concurrency,
+        )
+        try:
+            result = await _execute_provider(user_id, provider)
+        except BaseException as exc:
+            metric.finish(status="failed", reason=type(exc).__name__)
+            raise
+        metric.finish(status=str(result.get("status") or "complete"))
+        return result
+
+    async def _execute_provider(user_id: str, provider: str) -> dict[str, Any]:
         # Meta/Snap Campaign AI uses an inclusive three-day decision
         # window. Extend only those two analytical refreshes so every
         # decision day has current provider proof.
@@ -2017,14 +2030,37 @@ async def run_auto_sync_cycle(
             end_date=end_date, now=started,
         )
 
-    # Keep task allocation bounded too; a semaphore around an unbounded gather
-    # still retains every coroutine and its captured state in memory.
-    raw: list[Any] = []
-    for user_id, provider in targets:
-        try:
-            raw.append(await execute(user_id, provider))
-        except Exception as exc:
-            raw.append(exc)
+    # Fixed worker count and bounded queue: no coroutine is allocated per target.
+    queue: asyncio.Queue[tuple[int, str, str] | None] = asyncio.Queue(
+        maxsize=max(1, configured_concurrency * 2)
+    )
+    raw: list[Any] = [None] * len(targets)
+
+    async def worker() -> None:
+        while True:
+            item = await queue.get()
+            try:
+                if item is None:
+                    return
+                index, user_id, provider = item
+                try:
+                    raw[index] = await execute(user_id, provider)
+                except Exception as exc:  # retain target/result alignment
+                    raw[index] = exc
+            finally:
+                queue.task_done()
+
+    workers = [
+        asyncio.create_task(worker(), name=f"ads-auto-sync-worker-{index}")
+        for index in range(configured_concurrency)
+    ]
+    for index, (user_id, provider) in enumerate(targets):
+        await queue.put((index, user_id, provider))
+    for _ in workers:
+        await queue.put(None)
+    await queue.join()
+    for task in workers:
+        await task
     results: list[dict[str, Any]] = []
     for (user_id, provider), item in zip(targets, raw):
         if isinstance(item, Exception):

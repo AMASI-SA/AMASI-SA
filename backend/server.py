@@ -62,8 +62,15 @@ from excel_parser import parse_salla_excel, match_settings
 from excel_upload_security import read_safe_xlsx_upload
 from exports import export_report_excel, export_report_pdf
 from release_identity import release_health_payload
-from resource_governor import memory_snapshot
-from runtime_diagnostics import diagnostics as runtime_diagnostics, start_lag_monitor
+from resource_governor import StageMetric, memory_snapshot
+from runtime_diagnostics import start_lag_monitor
+from runtime_diagnostics_routes import attach_diagnostics_routes
+from boot_runtime import (
+    cancel_deferred_task, readiness_traffic_gate, start_deferred_task,
+)
+from startup_guard import (
+    acquire_startup_lease, new_owner_id, release_startup_lease, replica_jitter,
+)
 from report_builder import build_report as _build_report
 from meta_routes import attach_meta_routes
 from shipping_accounts import attach_shipping_accounts_routes
@@ -176,6 +183,17 @@ app = FastAPI(title="Hesab — Salla Accounting API")
 api = APIRouter(prefix="/api")
 app.state.readiness = "starting"
 app.state.startup_phase = "import_complete"
+attach_diagnostics_routes(
+    app,
+    mongo_client=client,
+    state=lambda: {
+        "readiness": getattr(app.state, "readiness", "starting"),
+        "startup_phase": getattr(app.state, "startup_phase", "unknown"),
+    },
+)
+
+
+app.middleware("http")(readiness_traffic_gate)
 
 
 @app.get("/health", include_in_schema=False)
@@ -196,18 +214,6 @@ async def readiness_check(response: Response):
     return {
         "ready": ready,
         "phase": getattr(app.state, "startup_phase", "unknown"),
-    }
-
-
-@app.get("/health/diagnostics", include_in_schema=False)
-@api.get("/health/diagnostics", include_in_schema=False)
-async def detailed_health_check(response: Response):
-    """Bounded local diagnostics; deliberately performs no Mongo operation."""
-    response.headers["Cache-Control"] = "no-store"
-    return {
-        "readiness": getattr(app.state, "readiness", "starting"),
-        "startup_phase": getattr(app.state, "startup_phase", "unknown"),
-        **runtime_diagnostics(mongo_client=client),
     }
 
 
@@ -5203,10 +5209,24 @@ async def on_startup():
         # Fixed delay plus per-replica jitter prevents a synchronized boot wave.
         delay = max(0.0, float(os.environ.get("BACKEND_STARTUP_DELAY_SECONDS", "5")))
         jitter_max = max(0.0, float(os.environ.get("BACKEND_STARTUP_JITTER_SECONDS", "15")))
-        jitter = (os.getpid() % 997) / 997 * jitter_max
+        jitter = replica_jitter(jitter_max)
         await _asyncio.sleep(delay + jitter)
+        owner_id = new_owner_id()
+        app.state.startup_phase = "waiting_for_distributed_startup_lease"
         try:
-            await _deferred_startup()
+            while not await acquire_startup_lease(db, owner_id):
+                await _asyncio.sleep(2)
+            app.state.startup_phase = "distributed_startup_lease_acquired"
+            metric = StageMetric("deferred_startup", concurrency=1)
+            try:
+                await _deferred_startup()
+            except BaseException as exc:
+                metric.finish(status="failed", reason=type(exc).__name__)
+                raise
+            else:
+                metric.finish(status="complete")
+            finally:
+                await release_startup_lease(db, owner_id)
         except _asyncio.CancelledError:
             raise
         except Exception:
@@ -5214,14 +5234,13 @@ async def on_startup():
             app.state.startup_phase = "initialization_failed"
             logger.exception("deferred backend initialization failed")
 
-    app.state.deferred_startup_task = _asyncio.create_task(
-        delayed(), name="deferred-backend-initialization"
-    )
+    start_deferred_task(app, delayed)
 
 
 @app.on_event("shutdown")
 async def on_shutdown():
-    for task_name in ("deferred_startup_task", "event_loop_lag_task"):
+    await cancel_deferred_task(app)
+    for task_name in ("event_loop_lag_task",):
         task = getattr(app.state, task_name, None)
         if task is not None:
             task.cancel()

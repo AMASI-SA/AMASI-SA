@@ -53,6 +53,13 @@ class MemorySnapshot:
     usage_ratio: float | None
 
 
+@dataclass(frozen=True)
+class AdmissionToken:
+    kind: str
+    kind_semaphore: asyncio.Semaphore
+    weight: int
+
+
 def _read_text(path: Path) -> str | None:
     try:
         return path.read_text(encoding="ascii").strip()
@@ -147,6 +154,14 @@ class ResourceGovernor:
         self.block_ratio = _env_float("HEAVY_MEMORY_BLOCK_RATIO", 0.80)
         self.cancel_ratio = _env_float("HEAVY_MEMORY_CANCEL_RATIO", 0.85)
         self.resume_ratio = _env_float("HEAVY_MEMORY_RESUME_RATIO", 0.70)
+        if not (
+            0 <= self.resume_ratio <= self.warning_ratio
+            < self.block_ratio < self.cancel_ratio <= 1
+        ):
+            raise ValueError(
+                "invalid heavy-memory thresholds: require "
+                "0 <= resume <= warning < block < cancel <= 1"
+            )
         self._blocked = False
         self._active: dict[str, int] = {}
         self._pending: dict[str, int] = {}
@@ -156,23 +171,49 @@ class ResourceGovernor:
             "dashboard": asyncio.Semaphore(_env_int("HEAVY_DASHBOARD_CONCURRENCY", 2)),
             "startup": asyncio.Semaphore(_env_int("HEAVY_STARTUP_CONCURRENCY", 1)),
         }
+        self._global_capacity = _env_int("HEAVY_GLOBAL_CAPACITY", 2)
+        self._global = asyncio.Semaphore(self._global_capacity)
+        self._weights = {
+            "snapchat": _env_int("HEAVY_SNAPCHAT_WEIGHT", 1),
+            "ads": _env_int("HEAVY_ADS_WEIGHT", 1),
+            "dashboard": _env_int("HEAVY_DASHBOARD_WEIGHT", 2),
+            "startup": _env_int("HEAVY_STARTUP_WEIGHT", 2),
+        }
+        if any(weight > self._global_capacity for weight in self._weights.values()):
+            raise ValueError("heavy task weight cannot exceed global capacity")
 
     def decision(self) -> tuple[str, MemorySnapshot]:
         snapshot = memory_snapshot()
         ratio = snapshot.usage_ratio
         if ratio is None:  # fail open only when the container exposes no limit
             return "normal", snapshot
-        if self._blocked and ratio >= self.resume_ratio:
-            return "blocked", snapshot
         if ratio >= self.cancel_ratio:
             self._blocked = True
             return "cancel", snapshot
+        if self._blocked and ratio >= self.resume_ratio:
+            return "blocked", snapshot
         if ratio >= self.block_ratio:
             self._blocked = True
             return "blocked", snapshot
         if ratio >= self.warning_ratio:
             return "warning", snapshot
         self._blocked = False
+        return "normal", snapshot
+
+    def peek(self) -> tuple[str, MemorySnapshot]:
+        """Return the current policy result without mutating hysteresis state."""
+        snapshot = memory_snapshot()
+        ratio = snapshot.usage_ratio
+        if ratio is None:
+            return "normal", snapshot
+        if ratio >= self.cancel_ratio:
+            return "cancel", snapshot
+        if self._blocked and ratio >= self.resume_ratio:
+            return "blocked", snapshot
+        if ratio >= self.block_ratio:
+            return "blocked", snapshot
+        if ratio >= self.warning_ratio:
+            return "warning", snapshot
         return "normal", snapshot
 
     def safe_checkpoint(self) -> None:
@@ -182,43 +223,67 @@ class ResourceGovernor:
 
     @asynccontextmanager
     async def heavy(self, kind: str, *, task_name: str) -> AsyncIterator[MemorySnapshot]:
-        semaphore, before = await self.acquire(kind, task_name=task_name)
+        token, before = await self.acquire(kind, task_name=task_name)
         try:
             yield before
         finally:
-            self.release(kind, semaphore)
+            self.release(token)
 
     async def acquire(
         self, kind: str, *, task_name: str
-    ) -> tuple[asyncio.Semaphore, MemorySnapshot]:
+    ) -> tuple[AdmissionToken, MemorySnapshot]:
         decision, before = self.decision()
         if decision in {"blocked", "cancel"}:
             raise ResourcePressure("resource_pressure")
         semaphore = self._limits.get(kind, self._limits["startup"])
+        weight = self._weights.get(kind, self._weights["startup"])
         self._pending[kind] = self._pending.get(kind, 0) + 1
+        global_acquired = 0
+        kind_acquired = False
         try:
+            # Per-kind first prevents same-kind waiters from reserving global
+            # capacity while queued behind (for example) Snapchat's limit 1.
             await semaphore.acquire()
+            kind_acquired = True
+            for _ in range(weight):
+                await self._global.acquire()
+                global_acquired += 1
+        except BaseException:
+            for _ in range(global_acquired):
+                self._global.release()
+            if kind_acquired:
+                semaphore.release()
+            raise
         finally:
             self._pending[kind] = max(0, self._pending.get(kind, 1) - 1)
         decision, before = self.decision()
         if decision in {"blocked", "cancel"}:
             semaphore.release()
+            for _ in range(weight):
+                self._global.release()
             raise ResourcePressure("resource_pressure")
         self._active[kind] = self._active.get(kind, 0) + 1
-        return semaphore, before
+        return AdmissionToken(kind, semaphore, weight), before
 
-    def release(self, kind: str, semaphore: asyncio.Semaphore) -> None:
-        if self._active.get(kind, 0):
-            self._active[kind] -= 1
-        semaphore.release()
+    def release(self, token: AdmissionToken) -> None:
+        if self._active.get(token.kind, 0):
+            self._active[token.kind] -= 1
+        token.kind_semaphore.release()
+        for _ in range(token.weight):
+            self._global.release()
 
     def diagnostics(self) -> dict[str, Any]:
-        decision, snapshot = self.decision()
+        decision, snapshot = self.peek()
         return {
             "memory": asdict(snapshot),
             "admission": decision,
             "active_heavy_tasks": dict(self._active),
             "pending_heavy_tasks": dict(self._pending),
+            "global_heavy_capacity": self._global_capacity,
+            "global_heavy_in_use": sum(
+                self._active.get(kind, 0) * self._weights.get(kind, 1)
+                for kind in self._active
+            ),
             "thresholds": {
                 "warning": self.warning_ratio,
                 "block": self.block_ratio,
@@ -251,7 +316,7 @@ class StageMetric:
             "duration_ms": round((time.monotonic() - self.started_mono) * 1000, 2),
             "cgroup_memory_before": self.before.current_bytes,
             "cgroup_memory_after": after.current_bytes,
-            "cgroup_memory_peak": after.peak_bytes,
+            "cgroup_lifetime_peak_bytes": after.peak_bytes,
             "process_rss_before": self.before.process_rss_bytes,
             "process_rss_after": after.process_rss_bytes,
             "status": status,
@@ -263,6 +328,6 @@ class StageMetric:
 
 
 __all__ = [
-    "CooperativeCancellation", "MemorySnapshot", "ResourceGovernor",
+    "AdmissionToken", "CooperativeCancellation", "MemorySnapshot", "ResourceGovernor",
     "ResourcePressure", "StageMetric", "governor", "memory_snapshot",
 ]
