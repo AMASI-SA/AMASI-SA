@@ -39,6 +39,7 @@ from fastapi.responses import StreamingResponse
 from starlette.middleware.cors import CORSMiddleware
 from browser_security import BrowserSecurityMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from mongo_observability import mongo_metrics
 from pydantic import BaseModel, EmailStr, Field, validator, root_validator
 
 from auth import (
@@ -61,6 +62,8 @@ from excel_parser import parse_salla_excel, match_settings
 from excel_upload_security import read_safe_xlsx_upload
 from exports import export_report_excel, export_report_pdf
 from release_identity import release_health_payload
+from resource_governor import memory_snapshot
+from runtime_diagnostics import diagnostics as runtime_diagnostics, start_lag_monitor
 from report_builder import build_report as _build_report
 from meta_routes import attach_meta_routes
 from shipping_accounts import attach_shipping_accounts_routes
@@ -164,13 +167,15 @@ def _parse_date_or(s: Optional[str], fallback):
 
 # ── Database ──────────────────────────────────────────────────────────────────
 mongo_url = os.environ["MONGO_URL"]
-client = AsyncIOMotorClient(mongo_url)
+client = AsyncIOMotorClient(mongo_url, event_listeners=[mongo_metrics])
 db = client[os.environ["DB_NAME"]]
 
 
 # ── App / Router ──────────────────────────────────────────────────────────────
 app = FastAPI(title="Hesab — Salla Accounting API")
 api = APIRouter(prefix="/api")
+app.state.readiness = "starting"
+app.state.startup_phase = "import_complete"
 
 
 @app.get("/health", include_in_schema=False)
@@ -179,6 +184,31 @@ async def health_check(response: Response):
     """Deployment health probe; no database or external API calls."""
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     return release_health_payload()
+
+
+@app.get("/ready", include_in_schema=False)
+@api.get("/ready", include_in_schema=False)
+async def readiness_check(response: Response):
+    """Readiness is local state only: no Mongo, provider, or heavy-lock wait."""
+    ready = getattr(app.state, "readiness", "starting") == "ready"
+    response.status_code = 200 if ready else 503
+    response.headers["Cache-Control"] = "no-store"
+    return {
+        "ready": ready,
+        "phase": getattr(app.state, "startup_phase", "unknown"),
+    }
+
+
+@app.get("/health/diagnostics", include_in_schema=False)
+@api.get("/health/diagnostics", include_in_schema=False)
+async def detailed_health_check(response: Response):
+    """Bounded local diagnostics; deliberately performs no Mongo operation."""
+    response.headers["Cache-Control"] = "no-store"
+    return {
+        "readiness": getattr(app.state, "readiness", "starting"),
+        "startup_phase": getattr(app.state, "startup_phase", "unknown"),
+        **runtime_diagnostics(mongo_client=client),
+    }
 
 
 # ── Dependencies ──────────────────────────────────────────────────────────────
@@ -4470,8 +4500,14 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 
-@app.on_event("startup")
-async def on_startup():
+async def _deferred_startup() -> None:
+    """Initialize indexes/migrations after ASGI liveness becomes available."""
+    app.state.startup_phase = "required_initialization"
+    before = memory_snapshot()
+    logger.info(
+        "startup_phase required_initialization memory_current=%s memory_max=%s rss=%s",
+        before.current_bytes, before.max_bytes, before.process_rss_bytes,
+    )
     await db.users.create_index("email", unique=True)
     await db.settings.create_index("user_id", unique=True)
     await db.daily_costs.create_index([("user_id", 1), ("date", 1)], unique=True)
@@ -5145,11 +5181,54 @@ async def on_startup():
         logger.info(f"Tagged {tt_legacy.modified_count} legacy tiktok_ads_daily rows with campaign_id='_default'.")
 
     await seed_admin(db)
+    app.state.startup_phase = "ready"
+    app.state.readiness = "ready"
+    after = memory_snapshot()
+    logger.info(
+        "startup_phase ready memory_current=%s memory_max=%s peak=%s rss=%s",
+        after.current_bytes, after.max_bytes, after.peak_bytes,
+        after.process_rss_bytes,
+    )
     logger.info("Hesab backend started successfully.")
+
+
+@app.on_event("startup")
+async def on_startup():
+    """Return promptly so liveness is served before deferred initialization."""
+    app.state.readiness = "starting"
+    app.state.startup_phase = "post_liveness_delay"
+    app.state.event_loop_lag_task = start_lag_monitor()
+
+    async def delayed() -> None:
+        # Fixed delay plus per-replica jitter prevents a synchronized boot wave.
+        delay = max(0.0, float(os.environ.get("BACKEND_STARTUP_DELAY_SECONDS", "5")))
+        jitter_max = max(0.0, float(os.environ.get("BACKEND_STARTUP_JITTER_SECONDS", "15")))
+        jitter = (os.getpid() % 997) / 997 * jitter_max
+        await _asyncio.sleep(delay + jitter)
+        try:
+            await _deferred_startup()
+        except _asyncio.CancelledError:
+            raise
+        except Exception:
+            app.state.readiness = "failed"
+            app.state.startup_phase = "initialization_failed"
+            logger.exception("deferred backend initialization failed")
+
+    app.state.deferred_startup_task = _asyncio.create_task(
+        delayed(), name="deferred-backend-initialization"
+    )
 
 
 @app.on_event("shutdown")
 async def on_shutdown():
+    for task_name in ("deferred_startup_task", "event_loop_lag_task"):
+        task = getattr(app.state, task_name, None)
+        if task is not None:
+            task.cancel()
+            try:
+                await task
+            except _asyncio.CancelledError:
+                pass
     campaign_ai_monitor_task = getattr(
         app.state, "campaign_ai_monitor_task", None
     )

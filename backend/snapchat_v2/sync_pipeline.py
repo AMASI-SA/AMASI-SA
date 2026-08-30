@@ -19,6 +19,7 @@ from .lease import (
     recover_expired_leases,
     release_lease,
 )
+from resource_governor import CooperativeCancellation, ResourcePressure, governor
 from .projections import (
     RIYADH_TIMEZONE,
     build_and_persist_daily_projections,
@@ -436,6 +437,27 @@ class SnapchatV2SyncPipeline:
         )
         await create_sync_run(self.db, run)
         sync_run_id = run["sync_run_id"]
+        try:
+            admission_semaphore, _ = await governor.acquire(
+                "snapchat", task_name=f"snapchat:{run_type}"
+            )
+        except ResourcePressure:
+            now = self.now().astimezone(timezone.utc)
+            await self.db["mezan_snapchat_sync_runs_v2"].update_one(
+                {"sync_run_id": sync_run_id},
+                {"$set": {
+                    "status": "partial", "reason": "resource_pressure",
+                    "retryable": True, "finished_at": now, "updated_at": now,
+                }},
+            )
+            await release_lease(
+                self.db, str(user_id), account_id, owner_id,
+                outcome="partial", now=self.now,
+            )
+            return {
+                "status": "partial", "reason": "resource_pressure",
+                "retryable": True, "sync_run_id": sync_run_id,
+            }
         heartbeat_lock = asyncio.Lock()
         heartbeat_task = asyncio.create_task(
             self._heartbeat(
@@ -475,6 +497,10 @@ class SnapchatV2SyncPipeline:
         financial_committed = False
         identity_summary: dict[str, Any] = {}
         try:
+            # Admission happened before the lease in the shared entry-point
+            # governor. This checkpoint is still safe: no provider page or
+            # fact write has started yet.
+            governor.safe_checkpoint()
             await update_sync_stage(
                 self.db,
                 sync_run_id,
@@ -602,6 +628,8 @@ class SnapchatV2SyncPipeline:
                 breakdown_summary[entity_type] = level_summary
                 if level_error:
                     warnings.append(level_error)
+                # Entity-level writes are complete and idempotent here.
+                governor.safe_checkpoint()
 
             await update_sync_stage(
                 self.db,
@@ -682,6 +710,8 @@ class SnapchatV2SyncPipeline:
                             "retryable": bool(getattr(exc, "retryable", False)),
                         }
                     )
+                # Reconciliation is committed one whole day at a time.
+                governor.safe_checkpoint()
 
             summary = {
                 "date_from": report_dates[0].isoformat(),
@@ -738,6 +768,25 @@ class SnapchatV2SyncPipeline:
                 "status": outcome,
                 "sync_run_id": sync_run_id,
                 "summary": summary,
+            }
+        except CooperativeCancellation:
+            outcome = "partial"
+            now = self.now().astimezone(timezone.utc)
+            await self.db["mezan_snapchat_sync_runs_v2"].update_one(
+                {"sync_run_id": sync_run_id},
+                {"$set": {
+                    "status": "partial",
+                    "reason": "resource_pressure",
+                    "retryable": True,
+                    "finished_at": now,
+                    "updated_at": now,
+                }},
+            )
+            return {
+                "status": "partial",
+                "reason": "resource_pressure",
+                "retryable": True,
+                "sync_run_id": sync_run_id,
             }
         except Exception as exc:  # noqa: BLE001
             if not financial_committed:
@@ -804,6 +853,7 @@ class SnapchatV2SyncPipeline:
                 outcome=outcome,
                 now=self.now,
             )
+            governor.release("snapchat", admission_semaphore)
 
 
 __all__ = ["MAX_SYNC_DAYS", "SnapchatV2SyncPipeline"]

@@ -28,7 +28,15 @@ MIN_INTERVAL_SECONDS = 300
 MAX_INTERVAL_SECONDS = 3600
 DEFAULT_STARTUP_DELAY_SECONDS = 45
 MAX_SCHEDULER_ACCOUNTS = 50
-MAX_PARALLEL_ACCOUNTS = 2
+MAX_PARALLEL_ACCOUNTS = 1
+
+
+def max_parallel_accounts() -> int:
+    """One by default; configurable but still bounded by the global governor."""
+    try:
+        return max(1, min(4, int(os.environ.get("HEAVY_SNAPCHAT_CONCURRENCY", "1"))))
+    except (TypeError, ValueError):
+        return MAX_PARALLEL_ACCOUNTS
 
 
 def _utcnow() -> datetime:
@@ -151,11 +159,15 @@ async def _run_one(
 async def run_shadow_cycle(db: Any, *, now: Callable[[], datetime] = _utcnow) -> dict[str, Any]:
     started_at = now().astimezone(timezone.utc)
     accounts = await _selected_accounts(db)
-    semaphore = asyncio.Semaphore(MAX_PARALLEL_ACCOUNTS)
-    results = await asyncio.gather(
-        *(_run_one(db, identity, semaphore) for identity in accounts),
-        return_exceptions=True,
-    )
+    semaphore = asyncio.Semaphore(max_parallel_accounts())
+    # Do not allocate one coroutine/task per account.  The account query is
+    # bounded, and each result is released before the next account starts.
+    results: list[Any] = []
+    for identity in accounts:
+        try:
+            results.append(await _run_one(db, identity, semaphore))
+        except Exception as exc:  # preserve existing per-account semantics
+            results.append(exc)
     safe_results: list[dict[str, Any]] = []
     for identity, result in zip(accounts, results):
         if isinstance(result, BaseException):
