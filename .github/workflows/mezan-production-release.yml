@@ -240,6 +240,9 @@ jobs:
           )
           from release_identity import read_release_identity
           from release_identity import release_health_payload
+          from scripts.emergent_deployment_adapter import (
+              _assert_isolated_backend_health,
+          )
 
           root = Path.cwd()
           intent = json.loads(
@@ -279,11 +282,7 @@ jobs:
           assert health["frontend_build_verified"] is True
           assert health["release_id"] == identity["release_id"]
           assert health["source_git_sha"] == intent["source_git_sha"]
-          assert health_payload == {
-              "ok": True,
-              "service": "backend",
-              "release": health,
-          }
+          _assert_isolated_backend_health(health, health_payload)
           PY
           mv "$RUNNER_TEMP/mezan-rehearsal-v5.git" .git
           worktree_status="$(git status --short)"

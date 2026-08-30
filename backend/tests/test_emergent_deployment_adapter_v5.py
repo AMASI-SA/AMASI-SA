@@ -724,6 +724,10 @@ class EmergentDeploymentAdapterV5Tests(unittest.TestCase):
                     "release": {**health["release"], "extra": True},
                 },
             ),
+            (
+                "unexpected top-level field",
+                {**health, "extra": True},
+            ),
         ):
             with self.subTest(label=label), self.assertRaisesRegex(
                 adapter.DeploymentAdapterError,

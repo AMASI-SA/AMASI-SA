@@ -811,12 +811,15 @@ def _assert_isolated_backend_health(
         **isolated,
         "boot_started_at": boot_started_at,
     }
+    expected_health = {
+        "ok": True,
+        "service": "backend",
+        "release": expected_release,
+    }
     if (
-        isolated_health.get("ok") is not True
-        or isolated_health.get("service") != "backend"
-        or not isinstance(boot_started_at, str)
+        not isinstance(boot_started_at, str)
         or not boot_started_at.strip()
-        or not exact_json_equal(health_release, expected_release)
+        or not exact_json_equal(isolated_health, expected_health)
     ):
         raise DeploymentAdapterError(
             "isolated Backend health payload differs from verified identity"
