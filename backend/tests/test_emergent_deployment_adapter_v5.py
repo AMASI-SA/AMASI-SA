@@ -685,6 +685,52 @@ class EmergentDeploymentAdapterV5Tests(unittest.TestCase):
                 ):
                     adapter.verify_package_boundaries(intent)
 
+    def test_isolated_backend_health_allows_only_boot_timestamp_enrichment(self):
+        isolated = {
+            "verified_identity_available": True,
+            "release_id": "rg5-" + "a" * 64,
+            "source_git_sha": "b" * 40,
+            "critical_file_hashes_match": True,
+        }
+        health = {
+            "ok": True,
+            "service": "backend",
+            "release": {
+                **isolated,
+                "boot_started_at": "2026-08-30T03:29:14+00:00",
+            },
+        }
+        adapter._assert_isolated_backend_health(isolated, health)
+
+        for label, drifted in (
+            (
+                "missing timestamp",
+                {**health, "release": dict(isolated)},
+            ),
+            (
+                "identity drift",
+                {
+                    **health,
+                    "release": {
+                        **health["release"],
+                        "release_id": "rg5-" + "c" * 64,
+                    },
+                },
+            ),
+            (
+                "unexpected field",
+                {
+                    **health,
+                    "release": {**health["release"], "extra": True},
+                },
+            ),
+        ):
+            with self.subTest(label=label), self.assertRaisesRegex(
+                adapter.DeploymentAdapterError,
+                "health payload differs",
+            ):
+                adapter._assert_isolated_backend_health(isolated, drifted)
+
 
 if __name__ == "__main__":
     unittest.main()

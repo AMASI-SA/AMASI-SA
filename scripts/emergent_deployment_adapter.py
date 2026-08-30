@@ -759,14 +759,7 @@ def verify_package_boundaries(intent: dict[str, Any]) -> dict[str, Any]:
             )
         if isolated.get("release_id") != identity["release_id"]:
             raise DeploymentAdapterError("isolated Backend package release ID drifted")
-        if (
-            isolated_health.get("ok") is not True
-            or isolated_health.get("service") != "backend"
-            or isolated_health.get("release") != isolated
-        ):
-            raise DeploymentAdapterError(
-                "isolated Backend health payload differs from verified identity"
-            )
+        _assert_isolated_backend_health(isolated, isolated_health)
         if (
             (backend_package.parent / ".git").exists()
             or (backend_package.parent / "frontend").exists()
@@ -802,6 +795,32 @@ def verify_package_boundaries(intent: dict[str, Any]) -> dict[str, Any]:
                 "git_directory_present": False,
             },
         }
+
+
+def _assert_isolated_backend_health(
+    isolated: dict[str, Any],
+    isolated_health: dict[str, Any],
+) -> None:
+    health_release = isolated_health.get("release")
+    boot_started_at = (
+        health_release.get("boot_started_at")
+        if isinstance(health_release, dict)
+        else None
+    )
+    expected_release = {
+        **isolated,
+        "boot_started_at": boot_started_at,
+    }
+    if (
+        isolated_health.get("ok") is not True
+        or isolated_health.get("service") != "backend"
+        or not isinstance(boot_started_at, str)
+        or not boot_started_at.strip()
+        or not exact_json_equal(health_release, expected_release)
+    ):
+        raise DeploymentAdapterError(
+            "isolated Backend health payload differs from verified identity"
+        )
 
 
 def build_cloud_release() -> dict[str, Any]:
