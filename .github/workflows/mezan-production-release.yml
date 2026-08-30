@@ -41,8 +41,9 @@ jobs:
   frontend-build:
     name: Frontend build
     runs-on: ubuntu-latest
+    outputs:
+      reviewed_intent: ${{ steps.intent.outputs.reviewed }}
     env:
-      MEZAN_RELEASE_USE_REVIEWED_INTENT: "1"
       REACT_APP_BACKEND_URL: https://mezansalla.com
     defaults:
       run:
@@ -72,11 +73,20 @@ jobs:
           scripts/release-intent.test.cjs
           scripts/service-worker-retirement.test.cjs
           scripts/start-governed-runtime.test.cjs
-      - name: Read reviewed source identity
+      - name: Select reviewed identity or bootstrap a candidate
+        id: intent
         shell: bash
         run: |
           set -euo pipefail
-          source_git_sha="$(node -p 'require("../release/release-intent-v5.json").source_git_sha')"
+          if test -f ../release/release-intent-v5.json; then
+            source_git_sha="$(node -p 'require("../release/release-intent-v5.json").source_git_sha')"
+            echo "reviewed=true" >> "$GITHUB_OUTPUT"
+            echo "MEZAN_RELEASE_USE_REVIEWED_INTENT=1" >> "$GITHUB_ENV"
+          else
+            source_git_sha="$GITHUB_SHA"
+            echo "reviewed=false" >> "$GITHUB_OUTPUT"
+            echo "MEZAN_RELEASE_BOOTSTRAP_INTENT=1" >> "$GITHUB_ENV"
+          fi
           [[ "$source_git_sha" =~ ^[0-9a-f]{40}$ ]]
           echo "SOURCE_GIT_SHA=$source_git_sha" >> "$GITHUB_ENV"
       - name: Build production frontend twice and retain verified build B
@@ -87,6 +97,27 @@ jobs:
         run: >-
           python ../scripts/verify_frontend_build.py
           --expected-git-sha "$SOURCE_GIT_SHA"
+      - name: Freeze a candidate reviewed intent from the source commit
+        if: steps.intent.outputs.reviewed == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="$RUNNER_TEMP/release-intent-v5.json"
+          python ../scripts/emergent_deployment_adapter.py freeze-intent \
+            --source-git-sha "$SOURCE_GIT_SHA" \
+            --branch hotfix/prod-snap-meta-final \
+            > "$RUNNER_TEMP/release-intent-v5.freeze.log"
+          cp ../release/release-intent-v5.json "$candidate"
+          rm ../release/release-intent-v5.json
+          python -m json.tool "$candidate" >/dev/null
+      - name: Retain the candidate reviewed intent
+        if: steps.intent.outputs.reviewed == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-v5-reviewed-intent-candidate
+          retention-days: 2
+          if-no-files-found: error
+          path: ${{ runner.temp }}/release-intent-v5.json
       - name: Prove install and build leave the worktree clean
         shell: bash
         run: |
@@ -96,6 +127,8 @@ jobs:
 
   emergent-node20-rehearsal:
     name: Emergent Host Node 20 clean-clone adapter rehearsal
+    needs: frontend-build
+    if: needs.frontend-build.outputs.reviewed_intent == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
