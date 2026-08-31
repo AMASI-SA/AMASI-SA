@@ -180,6 +180,8 @@ frontend/node_modules/.cache/default-development/139.pack
 .env
 .env.*
 *.env
+# Required non-secret marker for Emergent build-context preparation.
+!/frontend/.env
 credentials.json
 *.key
 .credentials

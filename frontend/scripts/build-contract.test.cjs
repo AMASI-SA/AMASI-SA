@@ -16,6 +16,41 @@ const releaseBuildContract = require("../build-contract.cjs");
 const frontendRoot = path.resolve(__dirname, "..");
 const repositoryRoot = path.resolve(frontendRoot, "..");
 
+const requiredFrontendEnvMarker = [
+  "# Required by Emergent build-context preparation.",
+  "# Runtime values are supplied through Production Secrets.",
+  "",
+].join("\n");
+
+test("tracked frontend env marker is exact, non-secret, and inert", () => {
+  const envPath = path.join(frontendRoot, ".env");
+  const envStat = fs.lstatSync(envPath);
+  assert.equal(envStat.isFile(), true);
+  assert.equal(envStat.isSymbolicLink(), false);
+
+  const envMarker = fs.readFileSync(envPath, "utf8");
+  assert.equal(envMarker, requiredFrontendEnvMarker);
+  assert.doesNotMatch(envMarker, /^[A-Za-z_][A-Za-z0-9_]*\s*=/m);
+
+  const gitignore = fs.readFileSync(
+    path.join(repositoryRoot, ".gitignore"),
+    "utf8",
+  );
+  assert.match(gitignore, /^!\/frontend\/\.env$/m);
+
+  const viteConfigSource = fs.readFileSync(
+    path.join(frontendRoot, "vite.config.js"),
+    "utf8",
+  );
+  assert.match(viteConfigSource, /envDir:\s*false/);
+
+  const serializedProof = JSON.stringify(governedEnvironment({}));
+  for (const markerLine of requiredFrontendEnvMarker.trimEnd().split("\n")) {
+    assert.equal(viteConfigSource.includes(markerLine), false);
+    assert.equal(serializedProof.includes(markerLine), false);
+  }
+});
+
 test("Emergent host compatibility does not relax governed releases", () => {
   const packageManifest = JSON.parse(
     fs.readFileSync(path.join(frontendRoot, "package.json"), "utf8"),
