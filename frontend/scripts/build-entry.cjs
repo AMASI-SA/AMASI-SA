@@ -75,7 +75,7 @@ function buildInvocation({
   repositoryRoot = repoRoot,
   frontendDirectory = frontendRoot,
   nodeBin = process.execPath,
-  pythonBin = "python",
+  pythonBin = "python3",
   readEvent,
   gitHead = () => execFileSync(
     "git",
