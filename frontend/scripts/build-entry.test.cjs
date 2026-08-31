@@ -79,11 +79,10 @@ test("non-GitHub host always enters the Emergent deployment adapter", () => {
     environment: {},
     repositoryRoot: root,
     frontendDirectory: frontend,
-    pythonBin: "/usr/bin/python",
   });
   assert.deepEqual(invocation, {
     mode: "emergent_cloud_adapter",
-    command: "/usr/bin/python",
+    command: "python3",
     args: [
       path.join(root, "scripts", "emergent_deployment_adapter.py"),
       "build",
