@@ -64,7 +64,9 @@ from exports import export_report_excel, export_report_pdf
 from release_identity import release_health_payload
 from resource_governor import StageMetric, governor, memory_snapshot
 from runtime_diagnostics import start_lag_monitor
-from runtime_diagnostics_routes import attach_diagnostics_routes
+from runtime_diagnostics_routes import (
+    attach_diagnostics_routes as attach_runtime_diagnostics_routes,
+)
 from boot_runtime import (
     cancel_deferred_task, is_ready, process_local_readiness_event,
     readiness_traffic_gate, start_deferred_task,
@@ -135,7 +137,9 @@ from bnpl import attach_bnpl_routes, ensure_bnpl_indexes, attach_bnpl_webhook_ro
 from bnpl.auto_sync_service import run_tamara_attribution_sweep
 from transfers_routes import attach_transfers_routes, ensure_transfers_indexes
 from reconciliation_routes import attach_reconciliation_routes
-from diagnostics_routes import attach_diagnostics_routes
+from diagnostics_routes import (
+    attach_diagnostics_routes as attach_order_diagnostics_routes,
+)
 from orders_db import upsert_order, orders_to_parsed
 from import_jobs import (
     attach_import_jobs_routes,
@@ -184,7 +188,7 @@ app = FastAPI(title="Hesab — Salla Accounting API")
 api = APIRouter(prefix="/api")
 app.state.readiness = "starting"
 app.state.startup_phase = "import_complete"
-attach_diagnostics_routes(
+attach_runtime_diagnostics_routes(
     app,
     mongo_client=client,
     state=lambda: {
@@ -4107,7 +4111,7 @@ attach_settlements_routes(api, db)
 attach_accounts_routes(api, db)
 attach_transfers_routes(api, db)
 attach_reconciliation_routes(api, db)
-attach_diagnostics_routes(api, db)
+attach_order_diagnostics_routes(api, db)
 attach_import_jobs_routes(api, db)
 attach_product_costs_routes(api, db, current_user)
 attach_preparation_routes(api, db)
