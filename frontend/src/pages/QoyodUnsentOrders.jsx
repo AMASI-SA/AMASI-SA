@@ -1,5 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import api from "../lib/api";
+import {
+  isQoyodRequestAbort,
+  loadQoyodUnsentOrders,
+} from "../lib/qoyodUnsentOrdersClient";
 
 const QOYOD_BASE = "/integrations/qoyod";
 const PAYMENT_RECHECK_CHUNK_SIZE = 10;
@@ -164,7 +168,7 @@ export default function QoyodUnsentOrders() {
     }
 
     setRecoveryRunning(false);
-    await fetchAll(days, sallaStatus, search);
+    await fetchAll(days, sallaStatus, search, { force: true });
   };
 
   const retryFailedOrder = async (orderNumber) => {
@@ -183,7 +187,7 @@ export default function QoyodUnsentOrders() {
           : `تم فحص الطلب ${orderNumber} من سلة وإرساله إلى قيود بنجاح.`,
       });
       setRetryConfirmOrder(null);
-      await fetchAll(days, sallaStatus, search);
+      await fetchAll(days, sallaStatus, search, { force: true });
     } catch (requestError) {
       const detail = requestError?.response?.data?.detail;
       const message = typeof detail === "string"
@@ -195,22 +199,47 @@ export default function QoyodUnsentOrders() {
     }
   };
 
-  const fetchAll = async (d = days, ss = sallaStatus, q = search) => {
+  const fetchControllerRef = useRef(null);
+  const fetchAll = useCallback(async (
+    d,
+    ss,
+    q,
+    { force = false } = {},
+  ) => {
+    fetchControllerRef.current?.abort();
+    const controller = new AbortController();
+    fetchControllerRef.current = controller;
     setLoading(true);
     try {
       const params = { days: d, limit: 1000 };
       if (ss) params.salla_status = ss;
       if (q && q.trim()) params.search = q.trim();
-      const res = await api.get(`${QOYOD_BASE}/unsent-orders`, { params });
-      setData(res.data);
+      const result = await loadQoyodUnsentOrders(
+        params,
+        { signal: controller.signal, force },
+      );
+      if (controller.signal.aborted) return;
+      setData(result);
       setError(null);
-    } catch (e) {
-      setError(e?.response?.data?.detail || "تعذر تحميل البيانات");
+    } catch (requestError) {
+      if (isQoyodRequestAbort(requestError)) return;
+      setError(
+        requestError?.response?.data?.detail || "تعذر تحميل البيانات",
+      );
     } finally {
-      setLoading(false);
+      if (fetchControllerRef.current === controller) {
+        fetchControllerRef.current = null;
+        setLoading(false);
+      }
     }
-  };
-  useEffect(() => { fetchAll(); /* eslint-disable-next-line */ }, [days, sallaStatus]);
+  }, []);
+
+  useEffect(() => {
+    fetchAll(days, sallaStatus, search);
+    return () => fetchControllerRef.current?.abort();
+    // Search is submitted explicitly; changing days/status refreshes immediately.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [days, sallaStatus, fetchAll]);
 
   const orders = (data?.orders || []).filter(
     (o) => tab === "الكل" || o.status === tab);
@@ -246,7 +275,7 @@ export default function QoyodUnsentOrders() {
         <div className="flex items-center gap-2 flex-wrap">
           <input value={search} dir="ltr"
             onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") fetchAll(days, sallaStatus, search); }}
+            onKeyDown={(e) => { if (e.key === "Enter") fetchAll(days, sallaStatus, search, { force: true }); }}
             placeholder="بحث برقم الطلب…"
             data-testid="unsent-search-input"
             className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm w-40" />
@@ -271,7 +300,7 @@ export default function QoyodUnsentOrders() {
             <option value={30}>آخر 30 يوم</option>
             <option value={90}>آخر 90 يوم</option>
           </select>
-          <button onClick={() => fetchAll()} data-testid="unsent-refresh-btn"
+          <button onClick={() => fetchAll(days, sallaStatus, search, { force: true })} data-testid="unsent-refresh-btn"
             className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700">
             تحديث
           </button>
