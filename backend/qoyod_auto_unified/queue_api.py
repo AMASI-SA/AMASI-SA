@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-import copy
 import time
 import weakref
 from datetime import date, datetime
@@ -229,7 +228,7 @@ async def _list_unsent_orders_with_queue_counts(
     state = _loop_state()
     cached = state["cache"].get(key)
     if cached is not None and cached[0] > time.monotonic():
-        return copy.deepcopy(cached[1])
+        return cached[1]
 
     task = state["inflight"].get(key)
     if task is None:
@@ -250,12 +249,12 @@ async def _list_unsent_orders_with_queue_counts(
                 return
             state["cache"][key] = (
                 time.monotonic() + QOYOD_DASHBOARD_CACHE_TTL_SECONDS,
-                copy.deepcopy(value),
+                value,
             )
 
         task.add_done_callback(completed)
 
-    return copy.deepcopy(await asyncio.shield(task))
+    return await asyncio.shield(task)
 
 
 def _reset_query_coordinator_for_tests() -> None:
