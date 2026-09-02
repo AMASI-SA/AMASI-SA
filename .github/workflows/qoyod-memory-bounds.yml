@@ -37,7 +37,8 @@ jobs:
           cache-dependency-path: backend/requirements.txt
       - name: Install backend and test dependencies
         run: |
-          python -m pip install -q -r requirements.txt
+          sed '/^emergentintegrations==/d' requirements.txt > /tmp/qoyod-memory-requirements.txt
+          python -m pip install -q -r /tmp/qoyod-memory-requirements.txt
           python -m pip install -q pytest pytest-asyncio mongomock-motor
       - name: Run prior and Qoyod memory regressions together
         shell: bash
