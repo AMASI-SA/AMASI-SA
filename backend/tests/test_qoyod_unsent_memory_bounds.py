@@ -9,7 +9,7 @@ from integrations.qoyod.candidate_orders import (
     CandidateAuditScanLimitExceeded,
     CandidateDateRange,
 )
-from qoyod_auto_unified import queue_api
+from qoyod_auto_unified import queue_api, queue_counts
 
 
 class FakeCursor:
@@ -232,7 +232,6 @@ async def test_queue_counts_reuse_the_original_candidate_audit(monkeypatch):
     }
     failures = {}
     original_calls = 0
-    queue_calls = 0
 
     async def original(db, **kwargs):
         nonlocal original_calls
@@ -245,25 +244,23 @@ async def test_queue_counts_reuse_the_original_candidate_audit(monkeypatch):
             "_manual_failures": failures,
         }
 
-    async def queue_audit(db, **kwargs):
-        nonlocal queue_calls
-        queue_calls += 1
-        assert kwargs["audit"] is audit
-        assert kwargs["failures"] is failures
-        return audit, failures, {
-            "ready_to_send": 0,
-            "quarantined": 0,
-            "needs_payment_verification": 0,
-            "in_qoyod": 0,
-            "retryable_sync": 0,
-        }
+    async def forbidden_duplicate_audit(*args, **kwargs):
+        raise AssertionError("candidate audit must not be built twice")
 
-    monkeypatch.setattr(queue_api, "_queue_audit", queue_audit)
+    monkeypatch.setattr(
+        queue_counts, "build_candidate_audit", forbidden_duplicate_audit
+    )
     result = await queue_api._execute_list(
         original, object(), user_id="tenant-a"
     )
     assert original_calls == 1
-    assert queue_calls == 1
+    assert result["queue_counts"] == {
+        "ready_to_send": 0,
+        "quarantined": 0,
+        "needs_payment_verification": 0,
+        "in_qoyod": 0,
+        "retryable_sync": 0,
+    }
     assert "_candidate_audit" not in result
     assert "_manual_failures" not in result
 
