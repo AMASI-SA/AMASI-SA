@@ -8,6 +8,7 @@ export const DASHBOARD_ADS_PROVIDERS = Object.freeze([
     "tiktok",
     "google",
 ]);
+export const DASHBOARD_ADS_READ_MAX_AGE_MS = 45_000;
 
 function nonnegative(value) {
     if (value === null || value === undefined || value === "") return null;
@@ -57,6 +58,23 @@ function normalizeProvider(provider, value = {}) {
         data_quality: row.data_quality ? String(row.data_quality) : null,
         last_sync_at: row.last_sync_at ? String(row.last_sync_at) : null,
         data_delay_minutes: nonnegative(row.data_delay_minutes),
+        amount_complete: row.amount_complete === true,
+        amount_available: row.amount_available === true,
+        provisional: row.provisional === true,
+        requested_days: Math.max(0, Math.trunc(nonnegative(row.requested_days) || 0)),
+        complete_days: Math.max(0, Math.trunc(nonnegative(row.complete_days) || 0)),
+        missing_dates: Array.isArray(row.missing_dates)
+            ? row.missing_dates.map(safeDate).filter(Boolean)
+            : [],
+        daily_coverage: Array.isArray(row.daily_coverage)
+            ? row.daily_coverage.filter((item) => item && typeof item === "object")
+            : [],
+        provisional_subtotal_sar: nonnegative(row.provisional_subtotal_sar),
+        last_mezan_check_at: row.last_mezan_check_at ? String(row.last_mezan_check_at) : null,
+        last_provider_success_at: row.last_provider_success_at ? String(row.last_provider_success_at) : null,
+        last_provider_value_changed_at: row.last_provider_value_changed_at
+            ? String(row.last_provider_value_changed_at)
+            : null,
     };
 }
 
@@ -94,7 +112,11 @@ export function normalizeDashboardAdsSpend(payload = {}) {
         hourly_spend: hourly,
         providers,
         provider_totals_sar: totals,
-        total_sar: nonnegative(value.total_sar) ?? 0,
+        total_sar: nonnegative(value.total_sar),
+        known_total_sar: nonnegative(value.known_total_sar),
+        spend_quality: value.spend_quality && typeof value.spend_quality === "object"
+            ? value.spend_quality
+            : null,
         refresh: value.refresh && typeof value.refresh === "object"
             ? value.refresh
             : null,
@@ -163,7 +185,7 @@ export async function getDashboardAdsSpend({
             dateFrom: safeFrom,
             dateTo: safeTo,
             refresh: false,
-            maxAgeMs: 0,
+            maxAgeMs: DASHBOARD_ADS_READ_MAX_AGE_MS,
         });
     }
 

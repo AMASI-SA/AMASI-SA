@@ -131,3 +131,43 @@ test("does not double-adjust profit when dashboard already uses the same ad tota
     expect(result.totals.net_sales).toBe(700);
     expect(result.totals.total_ads_cost).toBe(200);
 });
+
+test("does not present 29 of 30 Snapchat days as a final zero or profit", () => {
+    const result = mergeDashboardWithPlatformSpend(
+        {
+            totals: {
+                total_sales: 1000,
+                total_orders: 10,
+                total_product_cost: 100,
+                total_ads_cost: 200,
+                daily_ads_total: 200,
+                daily_costs_total: 300,
+                net_profit: 500,
+                net_sales: 700,
+            },
+            net_sales_config: { deduct_ads: true },
+        },
+        {
+            date_from: "2026-07-07",
+            date_to: "2026-08-05",
+            provider_totals_sar: {
+                snapchat: null,
+                meta: 20,
+                tiktok: 5,
+                google: 7.5,
+            },
+            total_sar: null,
+            spend_quality: { amount_complete: false, status: "incomplete" },
+        },
+    );
+
+    expect(result.totals.total_ads_cost).toBeNull();
+    expect(result.totals.daily_ads_total).toBeNull();
+    expect(result.totals.daily_costs_total).toBeNull();
+    expect(result.totals.overall_roas).toBeNull();
+    expect(result.totals.avg_cost_per_order).toBeNull();
+    expect(result.totals.net_profit).toBeNull();
+    expect(result.totals.net_sales).toBeNull();
+    expect(result.ads_v2.total).toBeNull();
+    expect(result.ads_v2.providers.snapchat.spend).toBeNull();
+});
