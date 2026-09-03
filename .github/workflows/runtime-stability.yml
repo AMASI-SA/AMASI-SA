@@ -44,7 +44,7 @@ jobs:
           QOYOD_TOKEN_ENC_KEY: MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=
           QOYOD_API_BASE: https://qoyod.invalid
         run: >-
-          PYTHONPATH=backend python -m pytest -q --tb=short
+          PYTHONPATH=backend python -m pytest --noconftest -q --tb=short
           backend/tests/test_runtime_stability_mongo_auth.py
           backend/tests/test_auth_session_revocation_v1.py
           backend/tests/test_mobile_app_manager_role.py
