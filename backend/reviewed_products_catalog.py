@@ -6,6 +6,8 @@ It never mutates Salla or Qoyod.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
@@ -14,7 +16,7 @@ from fastapi import APIRouter, Depends, Query
 
 from order_engine.repository import MongoOrderRepository
 from order_engine.service import get_orders
-from order_review_spec_replacements import supplier_file_spec_fields
+from order_review_spec_replacements import extract_item_specs, supplier_file_spec_fields
 from order_review_routes import WORKFLOWS, _merchant_user_id, _require_reviewer, _text
 from product_category_variant_support import _build_category_catalog, _flatten_categories
 from reviewed_preparation_v3 import (
@@ -104,95 +106,371 @@ def reviewed_customer_spec_fields(
     return supplier_file_spec_fields(item, state)
 
 
+def _canonical_commercial_signature(
+    item: dict[str, Any],
+) -> tuple[str, str, str, str, tuple[tuple[str, str], ...]] | None:
+    """Return a strict commercial signature suitable only for safe 1:1 aliasing."""
+    frozen_key = _text(item.get("product_key"))
+    frozen_kind, _, frozen_value = frozen_key.partition(":")
+    product_id = _text(
+        item.get("product_id")
+        or (frozen_value if frozen_kind == "product" else "")
+    )
+    parent_product_id = _text(
+        item.get("parent_product_id")
+        or (frozen_value if frozen_kind == "parent" else "")
+    )
+    variant_id = _text(item.get("variant_id"))
+    sku = _text(
+        item.get("sku")
+        or (frozen_value if frozen_kind == "sku" else "")
+    ).upper()
+    if not any((product_id, parent_product_id, variant_id, sku)):
+        return None
+
+    spec_source = dict(item)
+    if item.get("specifications_snapshot") is not None:
+        # Once review freezes customer specifications, do not mix in a later
+        # live/options projection.  That would make a safe alias depend on
+        # whichever duplicate representation extract_item_specs sees first.
+        spec_source["options"] = []
+        spec_source["options_raw"] = []
+        spec_source["custom_fields"] = []
+        spec_source["color"] = None
+        spec_source["size"] = None
+        spec_source["material"] = None
+        spec_source["options_normalized"] = item.get("specifications_snapshot") or {}
+    specifications = tuple(sorted({
+        (
+            _text(row.get("spec_key")),
+            _normalized(row.get("value")),
+        )
+        for row in extract_item_specs(spec_source)
+        if _text(row.get("spec_key")) and _text(row.get("value"))
+    }))
+    return product_id, parent_product_id, variant_id, sku, specifications
+
+
+def _commercial_fingerprint(item: dict[str, Any]) -> str:
+    signature = _canonical_commercial_signature(item)
+    if signature is None:
+        return ""
+    encoded = json.dumps(
+        signature,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _weak_commercial_fingerprint(item: dict[str, Any]) -> str:
+    """Identify a possible sparse collision without authorising a merge.
+
+    Old records can lack every product/source identifier while retaining a
+    name and customer specifications.  Those facts are insufficient to prove
+    that two rows are aliases, but sufficient to make silently preparing both
+    unsafe.  The weak fingerprint is therefore used only to mark ambiguity.
+    """
+    name = _normalized(item.get("product_name") or item.get("name"))
+    spec_source = dict(item)
+    if item.get("specifications_snapshot") is not None:
+        spec_source["options"] = []
+        spec_source["options_raw"] = []
+        spec_source["custom_fields"] = []
+        spec_source["color"] = None
+        spec_source["size"] = None
+        spec_source["material"] = None
+        spec_source["options_normalized"] = item.get("specifications_snapshot") or {}
+    specifications = tuple(sorted({
+        (
+            _text(row.get("spec_key")),
+            _normalized(row.get("value")),
+        )
+        for row in extract_item_specs(spec_source)
+        if _text(row.get("spec_key")) and _text(row.get("value"))
+    }))
+    if not name:
+        return ""
+    encoded = json.dumps(
+        (name, specifications),
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _authoritative_line_key(
+    order_number: str,
+    item: dict[str, Any],
+    *,
+    anchor_order_item_id: str,
+) -> str:
+    source_item_id = _text(item.get("source_item_id"))
+    payload = (
+        {
+            "order_number": order_number,
+            "source_item_id": source_item_id,
+        }
+        if source_item_id
+        else {
+            "order_number": order_number,
+            "commercial_fingerprint": _commercial_fingerprint(item),
+            # The frozen snapshot id preserves true identical provider rows.
+            # It is an anchor, not a substitute for 1:1 reconciliation.
+            "anchor_order_item_id": anchor_order_item_id,
+        }
+    )
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return f"authoritative-line:{hashlib.sha256(encoded).hexdigest()}"
+
+
+def _annotate_authoritative_line(
+    item: dict[str, Any],
+    *,
+    order_number: str,
+    snapshot: dict[str, Any] | None = None,
+    snapshot_index: int | None = None,
+) -> None:
+    frozen = snapshot or item
+    aliases = sorted({
+        value
+        for value in (
+            _text(item.get("order_item_id")),
+            _text((snapshot or {}).get("order_item_id")),
+        )
+        if value
+    })
+    anchor = (
+        _text((snapshot or {}).get("order_item_id"))
+        or _text(item.get("order_item_id"))
+        or f"review-snapshot:{order_number}:{int(snapshot_index or 0)}"
+    )
+    current_quantity = _unit_quantity(item.get("quantity"))
+    frozen_quantity = _unit_quantity(frozen.get("quantity"))
+    recovered_snapshot = bool(item.get("_review_snapshot_state"))
+    if recovered_snapshot:
+        item["_authoritative_quantity"] = frozen_quantity
+        item["_authoritative_quantity_source"] = "review_snapshot_recovery"
+    elif current_quantity > 0:
+        # The canonical stored order line is the authoritative ingestion line.
+        # The review row is an identity/specification witness, not a second
+        # quantity that can add physical units.
+        item["_authoritative_quantity"] = current_quantity
+        item["_authoritative_quantity_source"] = "current_ingestion"
+    else:
+        item["_authoritative_quantity"] = frozen_quantity
+        item["_authoritative_quantity_source"] = "review_snapshot_fallback"
+    item["_order_item_aliases"] = aliases
+    item["_commercial_identity_fingerprint"] = (
+        _commercial_fingerprint(frozen) or _commercial_fingerprint(item)
+    )
+    key_source = dict(frozen)
+    if not _text(key_source.get("source_item_id")):
+        key_source["source_item_id"] = item.get("source_item_id")
+    item["_authoritative_commercial_line_key"] = _authoritative_line_key(
+        order_number,
+        key_source,
+        anchor_order_item_id=anchor,
+    )
+    if snapshot is not None:
+        item["_review_snapshot_match"] = dict(snapshot)
+        item["_review_snapshot_index"] = snapshot_index
+
+
+def _merge_review_snapshot_into_live(
+    live: dict[str, Any],
+    snapshot: dict[str, Any],
+    *,
+    order_number: str,
+    snapshot_index: int,
+) -> None:
+    live_quantity = _unit_quantity(live.get("quantity"))
+    snapshot_quantity = _unit_quantity(snapshot.get("quantity"))
+    if live_quantity and snapshot_quantity and live_quantity != snapshot_quantity:
+        live["_identity_reconciliation_ambiguous"] = True
+    for field in (
+        "product_id",
+        "parent_product_id",
+        "variant_id",
+        "source_item_id",
+        "sku",
+        "barcode",
+    ):
+        if not _text(live.get(field)) and _text(snapshot.get(field)):
+            live[field] = snapshot.get(field)
+    _annotate_authoritative_line(
+        live,
+        order_number=order_number,
+        snapshot=snapshot,
+        snapshot_index=snapshot_index,
+    )
+
+
 def order_items_with_review_snapshot(
     order: dict[str, Any],
     workflow: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    """Keep reviewed lines visible when Salla later omits live order items.
+    """Reconcile live and reviewed rows without inventing physical units.
 
-    Review completion freezes the operational identity, quantity, SKU and
-    customer specifications for every line.  The live Salla order remains the
-    preferred source, while missing identities are appended from that durable
-    snapshot.  Matching by order-item identity prevents double counting when
-    Salla still returns a line normally.
+    Exact order-item identity wins, then a unique stable source identity, then
+    a strict one-to-one commercial fingerprint.  Any multiplicity collision
+    or weak sparse collision remains distinct and is marked ambiguous so the
+    preparation allocator fails closed.
     """
     live_items = [
         _dict(value) for value in (order.get("items") or []) if _dict(value)
     ]
-    live_ids = {
-        _text(item.get("order_item_id"))
-        for item in live_items
-        if _text(item.get("order_item_id"))
-    }
-    live_by_id = {
-        _text(item.get("order_item_id")): item
-        for item in live_items
-        if _text(item.get("order_item_id"))
-    }
-
-    def product_signature(item: dict[str, Any]) -> tuple[str, str, str, str]:
-        return (
-            _text(item.get("product_id")),
-            _text(item.get("parent_product_id")),
-            _text(item.get("variant_id")),
-            _text(item.get("sku")).upper(),
-        )
-
-    # Old review snapshots can predate preservation of Salla's order-item id.
-    # Track live quantity by product identity so those anonymous rows can be
-    # reconciled without duplicating a line that Salla still returns.
-    unmatched_live_quantity: dict[tuple[str, str, str, str], int] = defaultdict(int)
-    for item in live_items:
-        unmatched_live_quantity[product_signature(item)] += _unit_quantity(item.get("quantity"))
-
     order_number = _text(order.get("order_number") or workflow.get("order_number"))
-    for snapshot_index, row in enumerate(workflow.get("items") or []):
-        snapshot = _dict(row)
-        order_item_id = _text(snapshot.get("order_item_id"))
-        quantity = _unit_quantity(snapshot.get("quantity"))
-        if quantity <= 0:
-            continue
+    snapshots = [
+        (snapshot_index, _dict(row))
+        for snapshot_index, row in enumerate(workflow.get("items") or [])
+        if _unit_quantity(_dict(row).get("quantity")) > 0
+    ]
+    matched_live: set[int] = set()
+    matched_snapshots: set[int] = set()
+    blocked_live: set[int] = set()
+    blocked_snapshots: set[int] = set()
 
-        signature = product_signature(snapshot)
-        if order_item_id and order_item_id in live_ids:
-            live = live_by_id[order_item_id]
-            # The review snapshot is the durable identity captured before
-            # Salla later returned a sparse in-progress order.  Restore only
-            # missing facts; never replace a current non-empty value.
-            for field in (
-                "product_id",
-                "parent_product_id",
-                "variant_id",
-                "source_item_id",
-                "sku",
-                "barcode",
-            ):
-                if not _text(live.get(field)) and _text(snapshot.get(field)):
-                    live[field] = snapshot.get(field)
-            unmatched_live_quantity[signature] = max(
-                0, unmatched_live_quantity[signature] - quantity
-            )
-            continue
-
-        if not order_item_id:
-            represented = min(quantity, unmatched_live_quantity[signature])
-            unmatched_live_quantity[signature] -= represented
-            quantity -= represented
-            if quantity <= 0:
+    def group_live(key: Callable[[dict[str, Any]], str]) -> dict[str, list[int]]:
+        grouped: dict[str, list[int]] = defaultdict(list)
+        for index, item in enumerate(live_items):
+            if index in matched_live or index in blocked_live:
                 continue
-            order_item_id = f"review-snapshot:{order_number}:{snapshot_index}"
+            value = key(item)
+            if value:
+                grouped[value].append(index)
+        return grouped
 
-        live_items.append({
+    def group_snapshots(key: Callable[[dict[str, Any]], str]) -> dict[str, list[int]]:
+        grouped: dict[str, list[int]] = defaultdict(list)
+        for position, (_snapshot_index, snapshot) in enumerate(snapshots):
+            if position in matched_snapshots or position in blocked_snapshots:
+                continue
+            value = key(snapshot)
+            if value:
+                grouped[value].append(position)
+        return grouped
+
+    def reconcile_unique_groups(
+        live_groups: dict[str, list[int]],
+        snapshot_groups: dict[str, list[int]],
+    ) -> None:
+        for value in sorted(set(live_groups) & set(snapshot_groups)):
+            live_candidates = live_groups[value]
+            snapshot_candidates = snapshot_groups[value]
+            if len(live_candidates) == len(snapshot_candidates) == 1:
+                live_index = live_candidates[0]
+                snapshot_position = snapshot_candidates[0]
+                snapshot_index, snapshot = snapshots[snapshot_position]
+                _merge_review_snapshot_into_live(
+                    live_items[live_index],
+                    snapshot,
+                    order_number=order_number,
+                    snapshot_index=snapshot_index,
+                )
+                matched_live.add(live_index)
+                matched_snapshots.add(snapshot_position)
+                continue
+            for live_index in live_candidates:
+                live_items[live_index]["_identity_reconciliation_ambiguous"] = True
+            for snapshot_position in snapshot_candidates:
+                snapshots[snapshot_position][1]["_identity_reconciliation_ambiguous"] = True
+            blocked_live.update(live_candidates)
+            blocked_snapshots.update(snapshot_candidates)
+
+    def block_non_unique_stable_key(
+        key: Callable[[dict[str, Any]], str],
+    ) -> None:
+        live_groups = group_live(key)
+        snapshot_groups = group_snapshots(key)
+        for value in sorted(set(live_groups) | set(snapshot_groups)):
+            live_candidates = live_groups.get(value, [])
+            snapshot_candidates = snapshot_groups.get(value, [])
+            if len(live_candidates) <= 1 and len(snapshot_candidates) <= 1:
+                continue
+            for live_index in live_candidates:
+                live_items[live_index]["_identity_reconciliation_ambiguous"] = True
+            for snapshot_position in snapshot_candidates:
+                snapshots[snapshot_position][1]["_identity_reconciliation_ambiguous"] = True
+            blocked_live.update(live_candidates)
+            blocked_snapshots.update(snapshot_candidates)
+
+    def block_overlapping_groups(
+        key: Callable[[dict[str, Any]], str],
+    ) -> None:
+        """Mark possible sparse aliases without ever reconciling them."""
+        live_groups = group_live(key)
+        snapshot_groups = group_snapshots(key)
+        for value in sorted(set(live_groups) & set(snapshot_groups)):
+            live_candidates = live_groups[value]
+            snapshot_candidates = snapshot_groups[value]
+            for live_index in live_candidates:
+                live_items[live_index]["_identity_reconciliation_ambiguous"] = True
+            for snapshot_position in snapshot_candidates:
+                snapshots[snapshot_position][1]["_identity_reconciliation_ambiguous"] = True
+            blocked_live.update(live_candidates)
+            blocked_snapshots.update(snapshot_candidates)
+
+    # Strongest identity first.  At each tier, duplicate supposedly-stable ids
+    # are conflicts only among the rows not already reconciled by a stronger
+    # tier.  Thus exact line ids can safely disambiguate repeated source ids.
+    block_non_unique_stable_key(lambda item: _text(item.get("order_item_id")))
+    reconcile_unique_groups(
+        group_live(lambda item: _text(item.get("order_item_id"))),
+        group_snapshots(lambda item: _text(item.get("order_item_id"))),
+    )
+    block_non_unique_stable_key(lambda item: _text(item.get("source_item_id")))
+    reconcile_unique_groups(
+        group_live(lambda item: _text(item.get("source_item_id"))),
+        group_snapshots(lambda item: _text(item.get("source_item_id"))),
+    )
+    # A fallback alias is accepted only for a strict, unambiguous 1:1 match.
+    reconcile_unique_groups(
+        group_live(_commercial_fingerprint),
+        group_snapshots(_commercial_fingerprint),
+    )
+    # Name/specification-only evidence cannot prove an alias.  It can, however,
+    # prove that exposing both sparse representations for preparation is unsafe.
+    block_overlapping_groups(_weak_commercial_fingerprint)
+
+    for live_index, item in enumerate(live_items):
+        if not item.get("_authoritative_commercial_line_key"):
+            _annotate_authoritative_line(item, order_number=order_number)
+        if live_index in blocked_live:
+            item["_identity_reconciliation_ambiguous"] = True
+
+    for snapshot_position, (snapshot_index, snapshot) in enumerate(snapshots):
+        if snapshot_position in matched_snapshots:
+            continue
+        order_item_id = _text(snapshot.get("order_item_id")) or (
+            f"review-snapshot:{order_number}:{snapshot_index}"
+        )
+        recovered = {
             **snapshot,
             "order_item_id": order_item_id,
-            "quantity": quantity,
+            "quantity": _unit_quantity(snapshot.get("quantity")),
             "name": _text(snapshot.get("product_name")) or "منتج بدون اسم",
             "image_url": _text(snapshot.get("selected_image_url")) or None,
             "options_normalized": snapshot.get("specifications_snapshot") or {},
             "_review_snapshot_state": True,
             "_review_snapshot_index": snapshot_index,
-        })
-        live_ids.add(order_item_id)
+            "_identity_reconciliation_ambiguous": (
+                snapshot_position in blocked_snapshots
+                or bool(snapshot.get("_identity_reconciliation_ambiguous"))
+            ),
+        }
+        _annotate_authoritative_line(
+            recovered,
+            order_number=order_number,
+            snapshot=snapshot,
+            snapshot_index=snapshot_index,
+        )
+        live_items.append(recovered)
     return live_items
 
 
@@ -292,12 +570,20 @@ def aggregate_reviewed_products(
         states = _review_state_map(workflow)
         order_items = order_items_with_review_snapshot(order, workflow)
         total_products_in_order = sum(
-            _unit_quantity(item.get("quantity")) for item in order_items
+            _unit_quantity(
+                item.get("_authoritative_quantity")
+                if item.get("_authoritative_quantity") is not None
+                else item.get("quantity")
+            )
+            for item in order_items
         ) or 1
         shipping = _dict(order.get("shipping"))
 
         for line_index, item in enumerate(order_items):
-            state = states.get(_text(item.get("order_item_id")), {})
+            state = _dict(item.get("_review_snapshot_match")) or states.get(
+                _text(item.get("order_item_id")),
+                {},
+            )
             if item.get("_review_snapshot_state"):
                 state = {**item, **state}
             # A reviewer may deliberately exclude a line from supplier files or
@@ -306,7 +592,11 @@ def aggregate_reviewed_products(
             if state.get("supplier_export") is False:
                 continue
 
-            quantity_units = _unit_quantity(item.get("quantity"))
+            quantity_units = _unit_quantity(
+                item.get("_authoritative_quantity")
+                if item.get("_authoritative_quantity") is not None
+                else item.get("quantity")
+            )
             if quantity_units <= 0:
                 continue
             total_source_lines += 1
@@ -399,6 +689,23 @@ def aggregate_reviewed_products(
                 "parent_product_id": _text(canonical_item.get("parent_product_id")) or None,
                 "barcode": _text(item.get("barcode") or state.get("barcode")) or None,
                 "source_item_id": _text(item.get("source_item_id") or state.get("source_item_id")) or None,
+                "order_item_aliases": list(
+                    item.get("_order_item_aliases")
+                    or [_text(item.get("order_item_id"))]
+                ),
+                "authoritative_commercial_line_key": _text(
+                    item.get("_authoritative_commercial_line_key")
+                ),
+                "commercial_identity_fingerprint": _text(
+                    item.get("_commercial_identity_fingerprint")
+                ) or None,
+                "authoritative_quantity": quantity_units,
+                "authoritative_quantity_source": _text(
+                    item.get("_authoritative_quantity_source")
+                ) or "current_ingestion",
+                "identity_reconciliation_ambiguous": bool(
+                    item.get("_identity_reconciliation_ambiguous")
+                ),
                 "product_id": product_id or None,
                 "product_name": product_name,
                 "sku": sku or None,
@@ -540,6 +847,7 @@ def apply_preparation_allocations(
 ) -> dict[str, Any]:
     """Subtract active unit allocations and expose only quantities still free."""
     used_units: dict[tuple[str, str], set[int]] = defaultdict(set)
+    used_authoritative_units: dict[tuple[str, str], set[int]] = defaultdict(set)
     for row in allocation_documents:
         if _text(row.get("status")) not in ACTIVE_PREPARATION_ALLOCATION_STATUSES:
             continue
@@ -550,6 +858,9 @@ def apply_preparation_allocations(
             continue
         if key[0] and key[1] and unit_index > 0:
             used_units[key].add(unit_index)
+        authoritative_key = _text(row.get("authoritative_commercial_line_key"))
+        if key[0] and authoritative_key and unit_index > 0:
+            used_authoritative_units[(key[0], authoritative_key)].add(unit_index)
 
     remaining_products: list[dict[str, Any]] = []
     category_counts: dict[str, set[str]] = defaultdict(set)
@@ -564,9 +875,27 @@ def apply_preparation_allocations(
             quantity = _unit_quantity(line.get("quantity"))
             if quantity <= 0:
                 continue
-            key = (_text(line.get("order_number")), _text(line.get("order_item_id")))
+            order_number = _text(line.get("order_number"))
+            aliases = {
+                _text(value)
+                for value in (
+                    list(line.get("order_item_aliases") or [])
+                    + [line.get("order_item_id")]
+                )
+                if _text(value)
+            }
+            authoritative_key = _text(
+                line.get("authoritative_commercial_line_key")
+            )
+            used_for_line = set(
+                used_authoritative_units.get((order_number, authoritative_key), set())
+                if authoritative_key
+                else set()
+            )
+            for alias in aliases:
+                used_for_line.update(used_units.get((order_number, alias), set()))
             allocated_indices = sorted(
-                index for index in used_units.get(key, set()) if index <= quantity
+                index for index in used_for_line if index <= quantity
             )
             allocated = len(allocated_indices)
             remaining = max(0, quantity - allocated)
