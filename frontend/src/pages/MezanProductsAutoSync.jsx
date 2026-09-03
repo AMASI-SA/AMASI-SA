@@ -4,15 +4,17 @@ import ProductGoogleTaxonomyPilotPanel from "../components/products/ProductGoogl
 import { syncRecentProductsV2 } from "../services/mezanProductsV2";
 import MezanProductsWorkspace from "./MezanProductsWorkspace";
 
-const AUTO_SYNC_INTERVAL_MS = 60_000;
+const AUTO_SYNC_INTERVAL_MS = 5 * 60_000;
 
 export default function MezanProductsAutoSync() {
     useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get("product") || params.get("focus")) return undefined;
         let active = true;
         async function refreshRecent() {
             if (document.visibilityState === "hidden") return;
             try {
-                const result = await syncRecentProductsV2({ force: true });
+                const result = await syncRecentProductsV2({ force: false });
                 if (!active) return;
                 if ((result?.created || 0) > 0 || (result?.updated || 0) > 0) {
                     window.dispatchEvent(new CustomEvent("mezan:products-recent-sync", { detail: result }));
