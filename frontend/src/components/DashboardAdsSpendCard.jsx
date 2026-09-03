@@ -74,6 +74,9 @@ function providerValue(data, provider) {
         return money(total);
     }
     if (!state.connected) return "غير مربوط";
+    if (provider === "snapchat" && state.requested_days > 0) {
+        return `${state.complete_days}/${state.requested_days} يوم مكتمل`;
+    }
     return "لا بيانات";
 }
 
@@ -91,7 +94,12 @@ export function DashboardAdsSpendCardContent({
         () => chartPoints(data, singleDay),
         [data, singleDay],
     );
-    const total = Number(data?.total_sar || 0);
+    const amountComplete = data?.spend_quality?.amount_complete !== false
+        && data?.total_sar !== null
+        && data?.total_sar !== undefined;
+    const total = amountComplete ? Number(data.total_sar) : null;
+    const snapchatState = data?.providers?.snapchat || {};
+    const missingSnapchatDate = snapchatState.missing_dates?.[0] || null;
     const displayError = error || data?.refresh_error || "";
     const xKey = singleDay ? "hour" : "date";
     const availableSeries = useMemo(
@@ -158,10 +166,31 @@ export function DashboardAdsSpendCardContent({
                             {singleDay ? "عرض ساعي" : "عرض يومي"}
                         </div>
                         <div className="rounded-full border border-yellow-200 bg-yellow-50 px-3 py-1 text-[11px] font-extrabold text-yellow-900">
-                            إجمالي المنصات: {money(total)}
+                            إجمالي المنصات: {amountComplete ? money(total) : "غير مكتمل"}
                         </div>
                     </div>
                 </div>
+
+                {!amountComplete && snapchatState.connected && (
+                    <div
+                        className="mb-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-950"
+                        data-testid="dashboard-ads-spend-incomplete"
+                    >
+                        <div>الإجمالي الإعلاني غير مكتمل ولا يدخل في صافي الربح.</div>
+                        {snapchatState.requested_days > 0 && (
+                            <div className="mt-1">
+                                سناب شات: {snapchatState.complete_days}/{snapchatState.requested_days} يوم مكتمل
+                                {missingSnapchatDate ? ` · اليوم الناقص: ${missingSnapchatDate}` : ""}
+                            </div>
+                        )}
+                        {snapchatState.provisional_subtotal_sar !== null
+                            && snapchatState.provisional_subtotal_sar !== undefined && (
+                            <div className="mt-1" data-testid="dashboard-ads-spend-provisional-subtotal">
+                                المجموع المرصود غير النهائي: {money(snapchatState.provisional_subtotal_sar)}
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4" data-testid="dashboard-ads-provider-totals">
                     {DASHBOARD_ADS_PROVIDERS.map((provider) => {
@@ -295,12 +324,19 @@ export function DashboardAdsSpendCardContent({
     );
 }
 
-export default function DashboardAdsSpendCard({ fromDate, toDate }) {
+export default function DashboardAdsSpendCard({
+    fromDate,
+    toDate,
+    data: suppliedData,
+    loading: suppliedLoading = false,
+    onRefresh: suppliedRefresh,
+}) {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState("");
     const requestId = useRef(0);
+    const controlled = suppliedData !== undefined;
 
     const load = useCallback(async ({ silent = false, refresh = !silent } = {}) => {
         const currentRequest = requestId.current + 1;
@@ -333,10 +369,13 @@ export default function DashboardAdsSpendCard({ fromDate, toDate }) {
     }, [data, fromDate, toDate]);
 
     useEffect(() => {
+        if (controlled) return undefined;
         load({ refresh: true });
-    }, [fromDate, toDate]); // eslint-disable-line react-hooks/exhaustive-deps
+        return undefined;
+    }, [fromDate, toDate, controlled]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
+        if (controlled) return undefined;
         const timer = window.setInterval(() => {
             if (document.visibilityState === "visible") {
                 load({ silent: true, refresh: false });
@@ -352,17 +391,19 @@ export default function DashboardAdsSpendCard({ fromDate, toDate }) {
             window.clearInterval(timer);
             document.removeEventListener("visibilitychange", onVisible);
         };
-    }, [load]);
+    }, [controlled, load]);
 
     return (
         <DashboardAdsSpendCardContent
-            data={data}
+            data={controlled ? suppliedData : data}
             fromDate={fromDate}
             toDate={toDate}
-            loading={loading}
+            loading={controlled ? suppliedLoading : loading}
             refreshing={refreshing}
             error={error}
-            onRefresh={() => load({ refresh: true })}
+            onRefresh={controlled
+                ? () => suppliedRefresh?.()
+                : () => load({ refresh: true })}
         />
     );
 }

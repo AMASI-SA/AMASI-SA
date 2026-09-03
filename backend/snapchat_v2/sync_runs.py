@@ -197,9 +197,13 @@ async def complete_sync_run(
     ) or {}
     level_values = [str(row.get(field) or "pending") for field in LEVEL_STATUS_FIELDS.values()]
     financial_complete = row.get("financial_sync_status") == "complete"
+    summary_value = dict(summary or {})
+    has_coverage_warning = bool(summary_value.get("warnings"))
     overall = (
         "complete"
-        if all(value == "complete" for value in level_values)
+        if financial_complete
+        and all(value in {"complete", "not_requested"} for value in level_values)
+        and not has_coverage_warning
         else "partial"
         if financial_complete
         else "failed"
@@ -211,7 +215,7 @@ async def complete_sync_run(
                 "status": overall,
                 "stage": "completed",
                 "stage_status": overall,
-                "summary": dict(summary or {}),
+                "summary": summary_value,
                 "finished_at": current,
                 "heartbeat_at": current,
                 "updated_at": current,

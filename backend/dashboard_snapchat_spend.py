@@ -582,6 +582,31 @@ def _empty_result(days: list[date], *, state: str, connected: bool, reason: str 
             "complete": numeric,
             "connected": connected,
             "reason_codes": [reason] if reason else [],
+            "requested_days": len(days),
+            "complete_days": len(days) if numeric else 0,
+            "missing_dates": [] if numeric else [day.isoformat() for day in days],
+            "daily_coverage": [
+                {
+                    "date": day.isoformat(),
+                    "daily_sar": 0.0 if numeric else None,
+                    "daily_state": state,
+                    "usable": numeric,
+                    "run_id": None,
+                    "proof_status": "not_required" if numeric else "missing",
+                    "source_mode": None,
+                    "selected_account_ids": [],
+                    "participating_account_ids": [],
+                    "fact_count": 0,
+                    "reason": reason,
+                    "reasons": [reason] if reason else [],
+                    "provider_checked_at": None,
+                    "provider_value_changed_at": None,
+                    "last_fact_updated_at": None,
+                }
+                for day in days
+            ],
+            "provisional_subtotal_sar": None,
+            "provisional_subtotal_non_final": False,
             "timezone": "Asia/Riyadh",
             "source_collection": SNAPCHAT_PERFORMANCE_COLLECTION,
             "amount_field": "spend_native",
@@ -1067,6 +1092,62 @@ async def load_snapchat_dashboard_spend(
     bank_commissions = None
     if amount_complete:
         bank_commissions = {key: value for key, value in costed.items() if key != "platform_rows"}
+    complete_days = sum(
+        item in {"confirmed_data", "confirmed_zero"}
+        for item in daily_state.values()
+    )
+    missing_dates = [
+        day_text
+        for day_text, day_state in daily_state.items()
+        if day_state not in {"confirmed_data", "confirmed_zero"}
+    ]
+    provisional_subtotal = (
+        round(sum(float(value) for value in daily_sar.values() if value is not None), 2)
+        if missing_dates and any(value is not None for value in daily_sar.values())
+        else None
+    )
+    daily_coverage = []
+    for report_date in days:
+        day_text = report_date.isoformat()
+        proof = proofs.get(day_text) or {}
+        day_rows = [
+            row for (account_id, fact_date), row in valid_native.items()
+            if fact_date == day_text and account_id in account_by_id
+        ]
+        day_reason = None
+        if proof.get("usable") is not True:
+            day_reason = "run_proof_missing_or_ambiguous"
+        elif not set(account_by_id).issubset(proof.get("participants", set())):
+            day_reason = "selected_account_not_in_run"
+        elif daily_state.get(day_text) == "unknown_incomplete":
+            day_reason = (
+                "current_coverage_conflict"
+                if report_date == today
+                else "account_day_fact_missing"
+            )
+        daily_coverage.append({
+            "date": day_text,
+            "daily_sar": daily_sar.get(day_text),
+            "daily_state": daily_state.get(day_text),
+            "usable": daily_state.get(day_text) in {"confirmed_data", "confirmed_zero"},
+            "run_id": proof.get("run_id") or None,
+            "proof_status": "complete" if proof.get("usable") is True else "missing_or_ambiguous",
+            "source_mode": expected_source,
+            "selected_account_ids": sorted(account_by_id),
+            "participating_account_ids": sorted(proof.get("participants", set())),
+            "fact_count": len(day_rows),
+            "reason": day_reason,
+            "reasons": [day_reason] if day_reason else [],
+            "provider_checked_at": proof.get("finished_at").isoformat() if isinstance(proof.get("finished_at"), datetime) else None,
+            "provider_value_changed_at": max(
+                (row.get("provider_value_changed_at") for row in day_rows if row.get("provider_value_changed_at")),
+                default=None,
+            ),
+            "last_fact_updated_at": max(
+                (row.get("updated_at") for row in day_rows if row.get("updated_at")),
+                default=None,
+            ),
+        })
     return {
         "rows": list(adjusted_by_key.values()) if amount_complete else [],
         "daily_sar": daily_sar,
@@ -1081,6 +1162,12 @@ async def load_snapchat_dashboard_spend(
             "complete": amount_complete,
             "connected": True,
             "reason_codes": sorted(reasons),
+            "requested_days": len(days),
+            "complete_days": complete_days,
+            "missing_dates": missing_dates,
+            "daily_coverage": daily_coverage,
+            "provisional_subtotal_sar": provisional_subtotal,
+            "provisional_subtotal_non_final": provisional_subtotal is not None,
             "selected_account_count": len(account_by_id),
             "timezone": "Asia/Riyadh",
             "source_collection": SNAPCHAT_PERFORMANCE_COLLECTION,

@@ -6,7 +6,11 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
-from snapchat_v2.client import SnapchatV2Client, split_hour_windows
+from snapchat_v2.client import (
+    SnapchatClientError,
+    SnapchatV2Client,
+    split_hour_windows,
+)
 from snapchat_v2.facts import (
     hourly_fact_identity,
     load_hourly_facts,
@@ -15,7 +19,11 @@ from snapchat_v2.facts import (
 )
 from snapchat_v2.lease import acquire_lease
 from snapchat_v2.models import SNAPCHAT_PROVIDER
-from snapchat_v2.projections import build_daily_projection, business_day_window
+from snapchat_v2.projections import (
+    build_daily_projection,
+    business_day_window,
+    persist_daily_projection,
+)
 from snapchat_v2.reconciliation import calculate_cost_components
 from snapchat_v2.sync_runs import complete_sync_run, new_sync_run
 
@@ -151,6 +159,16 @@ def test_business_day_windows_preserve_los_angeles_dst():
     assert fall_end - fall_start == timedelta(hours=25)
 
 
+def test_riyadh_business_day_maps_once_across_los_angeles_account_boundary():
+    start_utc, end_utc = business_day_window(
+        date(2026, 8, 23),
+        "Asia/Riyadh",
+    )
+    assert start_utc == datetime(2026, 8, 22, 21, tzinfo=timezone.utc)
+    assert end_utc == datetime(2026, 8, 23, 21, tzinfo=timezone.utc)
+    assert end_utc - start_utc == timedelta(hours=24)
+
+
 def test_hourly_fact_is_utc_idempotent_and_scrubs_secrets():
     normalized = normalize_hourly_fact(_fact())
     assert normalized["provider"] == SNAPCHAT_PROVIDER
@@ -274,6 +292,29 @@ async def test_client_retries_429_and_completes_multi_page_entity_discovery(monk
     assert [row["external_id"] for row in result["rows"]] == ["c1", "c2"]
     assert result["coverage"]["completed_requests"] == 2
     assert client.provider_calls == 3
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_retry_is_bounded_and_never_storms(monkeypatch):
+    monkeypatch.setattr("snapchat_v2.client.asyncio.sleep", lambda *_args: _noop())
+    factory = FakeHTTPFactory([
+        FakeResponse(429, {}, headers={"Retry-After": "999"})
+        for _ in range(4)
+    ])
+    client = SnapchatV2Client(
+        object(),
+        "u1",
+        token_store=FakeTokenStore(),
+        client_factory=factory,
+    )
+
+    with pytest.raises(SnapchatClientError) as exc:
+        await client.fetch_entities("a1", "campaign")
+
+    assert exc.value.code == "snapchat_provider_http_429"
+    assert exc.value.retryable is True
+    assert client.provider_calls == 4
+    assert len(factory.clients[0].calls) == 4
 
 
 async def _noop():
@@ -447,3 +488,154 @@ async def test_financial_success_is_partial_not_failed_when_ad_level_is_partial(
 
     await complete_sync_run(DB(), run["sync_run_id"])
     assert collection.update["$set"]["status"] == "partial"
+
+
+@pytest.mark.asyncio
+async def test_run_with_daily_coverage_warning_cannot_report_silent_success():
+    run = new_sync_run("u1", "a1")
+    run.update({
+        "financial_sync_status": "complete",
+        "campaign_sync_status": "not_requested",
+        "ad_squad_sync_status": "not_requested",
+        "ad_sync_status": "not_requested",
+        "identity_sync_status": "not_requested",
+    })
+
+    class Collection:
+        async def find_one(self, *_args, **_kwargs):
+            return run
+
+        async def update_one(self, _query, update):
+            self.update = update
+            return SimpleNamespace(modified_count=1)
+
+    collection = Collection()
+
+    class DB:
+        def __getitem__(self, _name):
+            return collection
+
+    await complete_sync_run(
+        DB(),
+        run["sync_run_id"],
+        summary={
+            "warnings": [{"level": "reconciliation", "date": "2026-08-22"}],
+            "daily_completion": [{
+                "date": "2026-08-22",
+                "amount_complete": False,
+                "reconciled": False,
+            }],
+        },
+    )
+    assert collection.update["$set"]["status"] == "partial"
+    assert collection.update["$set"]["summary"]["daily_completion"][0][
+        "reconciled"
+    ] is False
+
+
+@pytest.mark.asyncio
+async def test_projection_freshness_separates_check_success_and_value_change():
+    first = datetime(2026, 8, 22, 10, tzinfo=timezone.utc)
+    second = datetime(2026, 8, 22, 10, 5, tzinfo=timezone.utc)
+    third = datetime(2026, 8, 22, 10, 10, tzinfo=timezone.utc)
+
+    class Collection:
+        def __init__(self):
+            self.row = None
+
+        async def create_index(self, *_args, **_kwargs):
+            return None
+
+        async def find_one(self, *_args, **_kwargs):
+            return dict(self.row or {})
+
+        async def update_one(self, identity, update, *, upsert=False):
+            self.row = {**(self.row or {}), **identity, **update.get("$set", {})}
+            return SimpleNamespace(matched_count=1, modified_count=1)
+
+    collection = Collection()
+
+    class DB:
+        def __getitem__(self, _name):
+            return collection
+
+    base = {
+        "user_id": "u1",
+        "ad_account_id": "a1",
+        "report_date": "2026-08-22",
+        "projection_timezone": "Asia/Riyadh",
+        "action_report_time": "conversion",
+        "amount_complete": True,
+        "base_spend_native": 10.0,
+    }
+    initial = await persist_daily_projection(DB(), {**base, "generated_at": first})
+    unchanged = await persist_daily_projection(DB(), {**base, "generated_at": second})
+    changed = await persist_daily_projection(
+        DB(),
+        {**base, "base_spend_native": 11.0, "generated_at": third},
+    )
+
+    assert initial["last_provider_value_changed_at"] == first
+    assert unchanged["last_mezan_check_at"] == second
+    assert unchanged["last_provider_success_at"] == second
+    assert unchanged["last_provider_value_changed_at"] == first
+    assert changed["last_mezan_check_at"] == third
+    assert changed["last_provider_value_changed_at"] == third
+
+
+@pytest.mark.asyncio
+async def test_incomplete_retry_does_not_overwrite_a_complete_day():
+    first = datetime(2026, 8, 22, 10, tzinfo=timezone.utc)
+    retry = datetime(2026, 8, 22, 10, 5, tzinfo=timezone.utc)
+
+    class Collection:
+        def __init__(self):
+            self.row = None
+
+        async def create_index(self, *_args, **_kwargs):
+            return None
+
+        async def find_one(self, *_args, **_kwargs):
+            return dict(self.row or {})
+
+        async def update_one(self, identity, update, *, upsert=False):
+            self.row = {**(self.row or {}), **identity, **update.get("$set", {})}
+            return SimpleNamespace(matched_count=1, modified_count=1)
+
+    collection = Collection()
+
+    class DB:
+        def __getitem__(self, _name):
+            return collection
+
+    identity = {
+        "user_id": "u1",
+        "ad_account_id": "a1",
+        "report_date": "2026-08-22",
+        "projection_timezone": "Asia/Riyadh",
+        "action_report_time": "conversion",
+    }
+    await persist_daily_projection(
+        DB(),
+        {
+            **identity,
+            "amount_complete": True,
+            "base_spend_native": 25.0,
+            "generated_at": first,
+        },
+    )
+    result = await persist_daily_projection(
+        DB(),
+        {
+            **identity,
+            "amount_complete": False,
+            "base_spend_native": 0.0,
+            "generated_at": retry,
+        },
+    )
+
+    assert result["preserved_complete_projection"] is True
+    assert result["amount_complete"] is True
+    assert result["base_spend_native"] == 25.0
+    assert result["last_incomplete_attempt_at"] == retry
+    assert collection.row["amount_complete"] is True

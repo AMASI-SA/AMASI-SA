@@ -285,35 +285,35 @@ async def test_async_job_returns_queued_then_records_child_result(
     assert accepted["selected_accounts"] == 2
     assert accepted["accounts_attempted"] == 0
 
-    async def fake_execute(
-        db_value,
-        user_id,
-        payload,
-        *,
-        now,
-        parent_run_id,
-    ):
-        assert db_value is db
-        assert user_id == "owner-1"
-        assert payload.days == 2
-        assert parent_run_id == accepted["run_id"]
-        return {
-            "run_id": "child-run-1",
-            "provider": "snapchat_ads",
-            "status": "complete",
-            "accounts_attempted": 2,
-            "accounts_complete": 2,
-            "rows_saved": 15604,
-            "errors_count": 0,
-            "source_only": True,
-            "accounting_write_reached": False,
-            "qoyod_write_reached": False,
-        }
+    calls = []
+
+    class FakePipeline:
+        def __init__(self, db_value, *, now):
+            assert db_value is db
+            assert now is fixed_now
+
+        async def run(self, user_id, account_id, **kwargs):
+            assert user_id == "owner-1"
+            assert kwargs["date_from"] == kwargs["date_to"]
+            assert kwargs["date_from"].isoformat() in {
+                "2026-07-29",
+                "2026-07-30",
+            }
+            assert kwargs["run_type"] == "manual"
+            assert kwargs["financial_only"] is True
+            calls.append((kwargs["date_from"].isoformat(), account_id))
+            return {
+                "sync_run_id": (
+                    f"child-{kwargs['date_from'].isoformat()}-{account_id}"
+                ),
+                "status": "complete",
+                "summary": {"rows_saved": 3901},
+            }
 
     monkeypatch.setattr(
         async_routes,
-        "execute_snapchat_native_sync",
-        fake_execute,
+        "_snapchat_v2_pipeline",
+        lambda db_value, *, now: FakePipeline(db_value, now=now),
     )
     await async_routes.execute_snapchat_native_sync_job(
         db,
@@ -333,7 +333,22 @@ async def test_async_job_returns_queued_then_records_child_result(
     assert final["accounts_attempted"] == 2
     assert final["accounts_complete"] == 2
     assert final["rows_saved"] == 15604
-    assert final["child_run_id"] == "child-run-1"
+    assert final["child_run_id"] is None
+    assert final["child_run_ids"] == [
+        "child-2026-07-29-sar-second",
+        "child-2026-07-29-usd-main",
+        "child-2026-07-30-sar-second",
+        "child-2026-07-30-usd-main",
+    ]
+    assert calls == [
+        ("2026-07-29", "sar-second"),
+        ("2026-07-29", "usd-main"),
+        ("2026-07-30", "sar-second"),
+        ("2026-07-30", "usd-main"),
+    ]
+    assert final["days_requested"] == 2
+    assert final["day_attempts"] == 4
+    assert final["day_attempts_complete"] == 4
     assert final["error"] is None
     parent = next(
         row
@@ -341,6 +356,7 @@ async def test_async_job_returns_queued_then_records_child_result(
         if row["run_id"] == accepted["run_id"]
     )
     assert parent["worker_heartbeat_at"] == "2026-07-30T18:00:00+00:00"
+    assert parent["summary"]["child_contract"] == "snapchat_v2_sync_run_id"
 
 
 @pytest.mark.asyncio
