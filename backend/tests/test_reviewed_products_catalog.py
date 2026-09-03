@@ -629,7 +629,10 @@ def test_anonymous_review_snapshot_line_is_restored_without_order_item_id():
 def test_anonymous_review_snapshot_does_not_duplicate_matching_live_quantity():
     result = aggregate_reviewed_products(
         [(
-            _order("279773618", [_item("live-dress", "p-dress", quantity=2, sku="AMS11353")]),
+            _order("279773618", [{
+                **_item("live-dress", "p-dress", quantity=2, sku="AMS11353"),
+                "options_normalized": {},
+            }]),
             {
                 "order_number": "279773618",
                 "incident_recovery_id": "recovery-11",
@@ -646,3 +649,274 @@ def test_anonymous_review_snapshot_does_not_duplicate_matching_live_quantity():
 
     assert result["summary"]["total_quantity"] == 2
     assert result["products"][0]["source_line_count"] == 1
+
+
+def _snapshot(
+    line_id,
+    product_id="p-item",
+    *,
+    source_item_id=None,
+    quantity=1,
+    sku="SKU-1",
+    options=None,
+):
+    return {
+        "order_item_id": line_id,
+        "source_item_id": source_item_id,
+        "product_id": product_id,
+        "parent_product_id": None,
+        "variant_id": None,
+        "sku": sku,
+        "product_name": "منتج مخصص",
+        "quantity": quantity,
+        "specifications_snapshot": options or {},
+    }
+
+
+def _catalog_for_identity_case(order, snapshots):
+    return aggregate_reviewed_products(
+        [(order, {"order_number": order["order_number"], "items": snapshots})],
+        [],
+    )
+
+
+def test_gift_quantity_one_with_distinct_sender_receiver_remains_one_unit():
+    item = {
+        **_item("gift-line", "p-gift"),
+        "source_item_id": "salla-gift-line",
+    }
+    order = {
+        **_order("gift-1", [item]),
+        "buy_as_gift": True,
+        "customer": {"phone": "sender"},
+        "recipient": {"phone": "receiver"},
+    }
+    result = _catalog_for_identity_case(
+        order,
+        [_snapshot("gift-line", "p-gift", source_item_id="salla-gift-line")],
+    )
+
+    assert result["summary"]["total_quantity"] == 1
+    assert result["products"][0]["source_line_count"] == 1
+
+
+def test_gift_quantity_one_with_same_sender_receiver_remains_one_unit():
+    item = {
+        **_item("gift-line", "p-gift"),
+        "source_item_id": "salla-gift-line",
+    }
+    order = {
+        **_order("gift-2", [item]),
+        "buy_as_gift": True,
+        "customer": {"phone": "same"},
+        "recipient": {"phone": "same"},
+    }
+    result = _catalog_for_identity_case(
+        order,
+        [_snapshot("gift-line", "p-gift", source_item_id="salla-gift-line")],
+    )
+
+    assert result["summary"]["total_quantity"] == 1
+
+
+def test_normal_quantity_one_remains_one_unit():
+    result = _catalog_for_identity_case(
+        _order("normal-1", [_item("line-1", "p-item")]),
+        [_snapshot("line-1")],
+    )
+
+    assert result["summary"]["total_quantity"] == 1
+
+
+def test_real_quantity_two_remains_two_units():
+    result = _catalog_for_identity_case(
+        _order("normal-2", [_item("line-2", "p-item", quantity=2)]),
+        [_snapshot("line-2", quantity=2)],
+    )
+
+    assert result["summary"]["total_quantity"] == 2
+    assert result["products"][0]["source_line_count"] == 1
+
+
+def test_same_sku_with_different_options_remains_separate():
+    first = {**_item("line-a", "p-item"), "options_normalized": {"size": "S"}}
+    second = {**_item("line-b", "p-item"), "options_normalized": {"size": "M"}}
+    result = _catalog_for_identity_case(
+        _order("options-1", [first, second]),
+        [
+            _snapshot("line-a", options={"size": "S"}),
+            _snapshot("line-b", options={"size": "M"}),
+        ],
+    )
+
+    assert result["summary"]["total_quantity"] == 2
+    assert result["products"][0]["source_line_count"] == 2
+
+
+def test_same_sku_with_different_personalization_remains_separate():
+    first = {**_item("line-a", "p-item"), "options_normalized": {"name": "سارة"}}
+    second = {**_item("line-b", "p-item"), "options_normalized": {"name": "ليان"}}
+    result = _catalog_for_identity_case(
+        _order("names-1", [first, second]),
+        [
+            _snapshot("line-a", options={"name": "سارة"}),
+            _snapshot("line-b", options={"name": "ليان"}),
+        ],
+    )
+
+    assert result["summary"]["total_quantity"] == 2
+    assert result["products"][0]["source_line_count"] == 2
+
+
+def test_different_nonempty_ids_with_same_source_item_merge_to_one_line():
+    live = {
+        **_item("current-id", "p-item"),
+        "source_item_id": "salla-line-1",
+        "options_normalized": {"name": "سارة"},
+    }
+    result = _catalog_for_identity_case(
+        _order("alias-source", [live]),
+        [_snapshot(
+            "snapshot-id",
+            source_item_id="salla-line-1",
+            options={"name": "سارة"},
+        )],
+    )
+
+    line = result["products"][0]["source_lines"][0]
+    assert result["summary"]["total_quantity"] == 1
+    assert line["order_item_id"] == "current-id"
+    assert line["order_item_aliases"] == ["current-id", "snapshot-id"]
+    assert line["authoritative_quantity"] == 1
+    assert line["authoritative_quantity_source"] == "current_ingestion"
+
+
+def test_reconciled_quantity_conflict_is_one_line_but_fails_closed():
+    live = {
+        **_item("current-id", "p-item", quantity=1),
+        "source_item_id": "salla-line-1",
+    }
+    result = _catalog_for_identity_case(
+        _order("quantity-conflict", [live]),
+        [_snapshot(
+            "snapshot-id",
+            source_item_id="salla-line-1",
+            quantity=2,
+        )],
+    )
+
+    line = result["products"][0]["source_lines"][0]
+    assert result["summary"]["total_quantity"] == 1
+    assert line["authoritative_quantity"] == 1
+    assert line["authoritative_quantity_source"] == "current_ingestion"
+    assert line["identity_reconciliation_ambiguous"] is True
+
+
+def test_existing_allocation_under_snapshot_alias_consumes_current_line():
+    live = {
+        **_item("current-id", "p-item"),
+        "source_item_id": "salla-line-1",
+    }
+    catalog = _catalog_for_identity_case(
+        _order("alias-allocation", [live]),
+        [_snapshot(
+            "snapshot-id",
+            source_item_id="salla-line-1",
+        )],
+    )
+    result = apply_preparation_allocations(catalog, [{
+        "status": "committed",
+        "order_number": "alias-allocation",
+        "order_item_id": "snapshot-id",
+        "unit_index": 1,
+    }])
+
+    assert result["summary"]["remaining_quantity"] == 0
+    assert result["products"] == []
+
+
+def test_unambiguous_commercial_identity_merges_different_fallback_ids():
+    live = {
+        **_item("generated-current", "p-item"),
+        "options_normalized": {"name": "سارة", "size": "S"},
+    }
+    result = _catalog_for_identity_case(
+        _order("alias-fallback", [live]),
+        [_snapshot(
+            "generated-snapshot",
+            sku="NAME-1",
+            options={"name": "سارة", "size": "S"},
+        )],
+    )
+
+    line = result["products"][0]["source_lines"][0]
+    assert result["summary"]["total_quantity"] == 1
+    assert line["order_item_aliases"] == ["generated-current", "generated-snapshot"]
+
+
+def test_two_real_identical_provider_rows_are_not_collapsed():
+    first = _item("provider-line-a", "p-item")
+    second = _item("provider-line-b", "p-item")
+    result = _catalog_for_identity_case(
+        _order("provider-two", [first, second]),
+        [_snapshot("provider-line-a"), _snapshot("provider-line-b")],
+    )
+
+    assert result["summary"]["total_quantity"] == 2
+    assert result["products"][0]["source_line_count"] == 2
+
+
+def test_exact_ids_disambiguate_repeated_source_item_ids():
+    first = {**_item("provider-line-a", "p-item"), "source_item_id": "shared"}
+    second = {**_item("provider-line-b", "p-item"), "source_item_id": "shared"}
+    result = _catalog_for_identity_case(
+        _order("provider-source-two", [first, second]),
+        [
+            _snapshot("provider-line-a", source_item_id="shared"),
+            _snapshot("provider-line-b", source_item_id="shared"),
+        ],
+    )
+
+    lines = result["products"][0]["source_lines"]
+    assert result["summary"]["total_quantity"] == 2
+    assert len(lines) == 2
+    assert not any(line["identity_reconciliation_ambiguous"] for line in lines)
+
+
+def test_sparse_name_only_collision_is_distinct_but_fails_closed():
+    live = {
+        **_item("generated-current", "", name="منتج مخصص"),
+        "sku": None,
+        "options_normalized": {"name": "سارة"},
+    }
+    result = _catalog_for_identity_case(
+        _order("sparse-collision", [live]),
+        [_snapshot(
+            "generated-snapshot",
+            product_id="",
+            sku="",
+            options={"name": "سارة"},
+        )],
+    )
+
+    lines = result["products"][0]["source_lines"]
+    assert result["summary"]["total_quantity"] == 2
+    assert len(lines) == 2
+    assert all(line["identity_reconciliation_ambiguous"] for line in lines)
+
+
+def test_ambiguous_two_current_lines_vs_one_snapshot_fails_closed():
+    first = _item("current-a", "p-item")
+    second = _item("current-b", "p-item")
+    result = _catalog_for_identity_case(
+        _order("ambiguous", [first, second]),
+        [_snapshot(
+            "snapshot-other",
+            sku="NAME-1",
+            options={"engraving": "اسم مختلف لكل عميل"},
+        )],
+    )
+
+    lines = result["products"][0]["source_lines"]
+    assert len(lines) == 3
+    assert all(line["identity_reconciliation_ambiguous"] for line in lines)
