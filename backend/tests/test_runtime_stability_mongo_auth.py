@@ -122,6 +122,36 @@ async def test_mongo_unavailable_is_503_not_fake_logout(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_refresh_mongo_failure_keeps_session_cookies(monkeypatch):
+    monkeypatch.setattr(auth.jwt, "decode", lambda *_args, **_kwargs: {
+        "type": "refresh",
+        "sub": "owner-1",
+        "mfa": True,
+    })
+    users = _Users(error=WaitQueueTimeoutError("pool exhausted"))
+
+    class _RefreshRequest:
+        cookies = {"refresh_token": "opaque"}
+
+    class _Response:
+        deleted = []
+
+        def delete_cookie(self, **kwargs):
+            self.deleted.append(kwargs)
+
+    response = _Response()
+    with pytest.raises(HTTPException) as caught:
+        await auth.refresh_browser_session(
+            _RefreshRequest(),
+            response,
+            _AuthDb(users),
+        )
+
+    assert caught.value.status_code == 503
+    assert response.deleted == []
+
+
+@pytest.mark.asyncio
 async def test_missing_disabled_and_revoked_sessions_remain_401(monkeypatch):
     monkeypatch.setattr(auth.jwt, "decode", lambda *_args, **_kwargs: {
         "type": "access",

@@ -53,7 +53,9 @@ async def bounded_readiness(client: Any, *, timeout_seconds: float = MONGO_READI
             timeout=max(0.001, float(timeout_seconds)),
         )
         return True
-    except (asyncio.TimeoutError, *TRANSIENT_MONGO_ERRORS):
+    except asyncio.TimeoutError:
+        return False
+    except TRANSIENT_MONGO_ERRORS:
         return False
     except Exception:
         # Readiness is deliberately fail-closed without leaking driver details.
