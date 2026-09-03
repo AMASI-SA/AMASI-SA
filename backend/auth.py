@@ -8,6 +8,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from fastapi import Request, HTTPException
+from runtime_mongo import TRANSIENT_MONGO_ERRORS
 
 JWT_ALGORITHM = "HS256"
 PRIVILEGED_MFA_ROLES = {"owner", "admin"}
@@ -17,6 +18,16 @@ REFRESH_TOKEN_TTL = timedelta(days=30)
 ACCESS_COOKIE_MAX_AGE_SECONDS = int(ACCESS_TOKEN_TTL.total_seconds())
 REFRESH_COOKIE_MAX_AGE_SECONDS = int(REFRESH_TOKEN_TTL.total_seconds())
 logger = logging.getLogger(__name__)
+
+
+def raise_auth_dependency_unavailable(exc: BaseException) -> None:
+    """Map transient Mongo pressure to 503 without invalidating the session."""
+    logger.warning("authentication dependency unavailable type=%s", type(exc).__name__)
+    raise HTTPException(
+        status_code=503,
+        detail={"code": "auth_dependency_unavailable", "retryable": True},
+        headers={"Retry-After": "2"},
+    ) from exc
 
 from meta_reviewer_access import (
     is_meta_reviewer,
@@ -233,6 +244,10 @@ async def refresh_browser_session(request: Request, response, db) -> dict:
     except HTTPException:
         clear_auth_cookies(response)
         raise
+    except TRANSIENT_MONGO_ERRORS as exc:
+        # Availability is not an authentication verdict. Keep both cookies so
+        # the browser can retry the same valid session after Mongo recovers.
+        raise_auth_dependency_unavailable(exc)
 
 
 async def get_current_user_from_db(request: Request, db) -> dict:
@@ -293,6 +308,8 @@ async def get_current_user_from_db(request: Request, db) -> dict:
         raise HTTPException(status_code=401, detail="Token expired")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
+    except TRANSIENT_MONGO_ERRORS as exc:
+        raise_auth_dependency_unavailable(exc)
 
 
 async def _install_login_security_for_loaded_app(db) -> None:
@@ -470,3 +487,4 @@ async def ensure_user_settings(db, user_id: str) -> dict:
             settings.update(update_fields)
     settings.pop("_id", None)
     return settings
+
