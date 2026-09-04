@@ -4,7 +4,10 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
-from .evidence_adapter import load_decision_evidence
+from .evidence_adapter import (
+    load_decision_evidence,
+    load_decision_evidence_for_latest_closed_day,
+)
 
 PHASE5_VERSION = "decision-intelligence-phase5-v1"
 
@@ -181,11 +184,14 @@ def run_phase5_shadow_from_evidence(
         "phase": PHASE5_VERSION,
         "mode": "recommendation_shadow",
         "contract_version": evidence.get("contract_version"),
+        "provider": evidence.get("provider"),
         "source": evidence.get("source"),
         "account": evidence.get("account"),
         "period": evidence.get("period"),
+        "evidence_timestamp": evidence.get("evaluated_at"),
         "gates": evidence.get("gates"),
         "lineage": _lineage(evidence),
+        "candidate_selection": evidence.get("candidate_selection"),
         "decision_ready": bool(evidence.get("decision_ready")),
         "decisions": decisions,
         "summary": {
@@ -234,6 +240,31 @@ async def run_phase5_shadow(
         date_to=date_to,
         now=now,
         max_freshness_hours=max_freshness_hours,
+        max_candidates=max_candidates,
+    )
+    return run_phase5_shadow_from_evidence(
+        evidence,
+        max_candidates=max_candidates,
+    )
+
+
+async def run_phase5_shadow_for_latest_closed_day(
+    db: Any,
+    user_id: str,
+    *,
+    provider: str,
+    now: datetime | None = None,
+    max_freshness_hours: float = 36.0,
+    max_candidates: int = 25,
+) -> dict[str, Any]:
+    """Run the shadow chain for the provider account's latest closed day."""
+    evidence = await load_decision_evidence_for_latest_closed_day(
+        db,
+        str(user_id),
+        provider=provider,
+        now=now,
+        max_freshness_hours=max_freshness_hours,
+        max_candidates=max_candidates,
     )
     return run_phase5_shadow_from_evidence(
         evidence,
@@ -244,5 +275,6 @@ async def run_phase5_shadow(
 __all__ = [
     "PHASE5_VERSION",
     "run_phase5_shadow",
+    "run_phase5_shadow_for_latest_closed_day",
     "run_phase5_shadow_from_evidence",
 ]
