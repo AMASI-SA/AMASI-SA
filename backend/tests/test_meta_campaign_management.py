@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -161,3 +162,78 @@ async def test_ad_pause_preview_never_reads_or_mutates_daily_budget(monkeypatch)
     assert result["field"] == "status"
     assert result["planned"] == {"status": "PAUSED"}
     assert "daily_budget" not in result["before"]
+
+
+@pytest.mark.asyncio
+async def test_execute_blocks_provider_state_drift_before_meta_write(monkeypatch):
+    class DriftClient(Client):
+        reads = 0
+        posts = []
+
+        async def get(self, url, **kwargs):
+            type(self).reads += 1
+            budget = "10000" if type(self).reads == 1 else "12000"
+            return Response({
+                "id": "campaign-1",
+                "name": "Campaign",
+                "account_id": "799",
+                "status": "ACTIVE",
+                "effective_status": "ACTIVE",
+                "daily_budget": budget,
+                "lifetime_budget": None,
+            })
+
+        async def post(self, url, **kwargs):
+            type(self).posts.append((url, kwargs))
+            return Response({"success": True})
+
+    async def readiness(*_args):
+        return {"accounts": [{"account_id": "act_799", "ready": True}]}
+
+    db = DB()
+    monkeypatch.setattr(management, "_credential", _credential)
+    monkeypatch.setattr(management, "get_meta_account_selection", _selection)
+    monkeypatch.setattr(management, "inspect_meta_management_readiness", readiness)
+    monkeypatch.setattr(management.httpx, "AsyncClient", DriftClient)
+    monkeypatch.setattr(management, "meta_appsecret_proof", lambda token: "proof")
+    monkeypatch.setattr(management, "meta_graph_base", lambda: "https://graph.test")
+
+    preview = await management.preview_meta_mutation(
+        db,
+        "owner-1",
+        management.MetaMutationPreviewInput(
+            account_id="act_799",
+            entity_type="campaign",
+            entity_id="campaign-1",
+            action="update_budget",
+            amount_native=105.0,
+            idempotency_key="phase5-budget-campaign-1",
+        ),
+    )
+    assert preview["expires_at"] > datetime.now(timezone.utc)
+
+    with pytest.raises(management.HTTPException) as caught:
+        await management.execute_meta_proposal(db, "owner-1", preview["proposal_id"])
+
+    assert caught.value.detail == {
+        "code": "meta_proposal_provider_state_changed",
+        "changed_fields": ["daily_budget"],
+    }
+    assert DriftClient.posts == []
+    assert db[management.COLLECTION].rows[0]["status"] == "previewed"
+
+
+@pytest.mark.asyncio
+async def test_execute_blocks_expired_meta_preview_without_provider_call(monkeypatch):
+    db = DB()
+    db[management.COLLECTION].rows.append({
+        "proposal_id": "expired-1",
+        "user_id": "owner-1",
+        "status": "previewed",
+        "expires_at": datetime.now(timezone.utc) - timedelta(seconds=1),
+    })
+
+    with pytest.raises(management.HTTPException) as caught:
+        await management.execute_meta_proposal(db, "owner-1", "expired-1")
+
+    assert caught.value.detail["code"] == "meta_proposal_expired"
