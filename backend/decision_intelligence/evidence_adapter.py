@@ -8,7 +8,8 @@ fails closed when the Unified Marketing contract is not decision-grade.
 from __future__ import annotations
 
 import asyncio
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
+import heapq
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -189,6 +190,34 @@ def _candidate_evidence(
     }
 
 
+def _bounded_campaign_rows(
+    report: dict[str, Any],
+    *,
+    max_candidates: int | None,
+) -> tuple[list[dict[str, Any]], int, bool]:
+    """Select the highest-spend campaign rows without an unbounded sort copy."""
+    source_rows = _mapping(report).get("rows") or []
+    rows = source_rows if isinstance(source_rows, list) else list(source_rows)
+    source_count = len(rows)
+    if max_candidates is None:
+        sorted_rows = list(rows)
+        sorted_rows.sort(
+            key=lambda row: _money_amount(_mapping(row.get("delivery")).get("spend_sar"))
+            or 0.0,
+            reverse=True,
+        )
+        return sorted_rows, source_count, False
+
+    limit = max(1, int(max_candidates))
+    selected = heapq.nlargest(
+        limit,
+        rows,
+        key=lambda row: _money_amount(_mapping(row.get("delivery")).get("spend_sar"))
+        or 0.0,
+    )
+    return selected, source_count, source_count > limit
+
+
 def evaluate_decision_evidence(
     *,
     account_identity: dict[str, Any],
@@ -200,6 +229,7 @@ def evaluate_decision_evidence(
     max_freshness_hours: float = 36.0,
     loader_errors: dict[str, str] | None = None,
     shadow_acceptance: dict[str, Any] | None = None,
+    max_candidates: int | None = None,
 ) -> dict[str, Any]:
     """Validate gateway reports and create a fail-closed evidence bundle."""
     timezone_name = str(account_identity.get("timezone") or "").strip()
@@ -351,11 +381,11 @@ def evaluate_decision_evidence(
     ]
     if provider == "meta_ads" and not gates["shadow_acceptance"]["passed"]:
         global_blockers.append("shadow_acceptance")
-    campaign_rows = list(_mapping(reports.get("campaign")).get("rows") or [])
-    campaign_rows.sort(
-        key=lambda row: _money_amount(_mapping(row.get("delivery")).get("spend_sar"))
-        or 0.0,
-        reverse=True,
+    campaign_rows, campaign_source_rows, candidate_limit_reached = (
+        _bounded_campaign_rows(
+            _mapping(reports.get("campaign")),
+            max_candidates=max_candidates,
+        )
     )
     candidates = [
         _candidate_evidence(row, global_blockers=global_blockers)
@@ -394,6 +424,13 @@ def evaluate_decision_evidence(
             for level in ENTITY_LEVELS
         },
         "candidates": candidates,
+        "candidate_selection": {
+            "strategy": "highest_spend_sar",
+            "source_rows": campaign_source_rows,
+            "selected_rows": len(candidates),
+            "max_candidates": max_candidates,
+            "limit_reached": candidate_limit_reached,
+        },
         "source": {
             "reader": "unified_marketing.gateway",
             "contract_only": True,
@@ -416,6 +453,7 @@ async def load_decision_evidence(
     date_to: date,
     now: datetime | None = None,
     max_freshness_hours: float = 36.0,
+    max_candidates: int | None = None,
 ) -> dict[str, Any]:
     """Load and validate one evidence window exclusively through the gateway."""
     if date_to < date_from:
@@ -427,6 +465,73 @@ async def load_decision_evidence(
     )
     if not identity:
         raise ValueError("unified_marketing_account_missing")
+    return await _load_decision_evidence_with_identity(
+        db,
+        str(user_id),
+        provider=provider,
+        account_identity=identity,
+        date_from=date_from,
+        date_to=date_to,
+        now=now,
+        max_freshness_hours=max_freshness_hours,
+        max_candidates=max_candidates,
+    )
+
+
+async def load_decision_evidence_for_latest_closed_day(
+    db: Any,
+    user_id: str,
+    *,
+    provider: str,
+    now: datetime | None = None,
+    max_freshness_hours: float = 36.0,
+    max_candidates: int | None = None,
+) -> dict[str, Any]:
+    """Load one account-local closed day while reading identity exactly once."""
+    identity = await unified_gateway.load_unified_marketing_account_identity(
+        db,
+        str(user_id),
+        provider=provider,
+    )
+    if not identity:
+        raise ValueError("unified_marketing_account_missing")
+    timezone_name = str(identity.get("timezone") or "").strip()
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    try:
+        closed_day = current.astimezone(ZoneInfo(timezone_name)).date() - timedelta(
+            days=1
+        )
+    except Exception as exc:  # noqa: BLE001 - invalid identity must fail closed
+        raise ValueError("unified_marketing_account_timezone_invalid") from exc
+    return await _load_decision_evidence_with_identity(
+        db,
+        str(user_id),
+        provider=provider,
+        account_identity=identity,
+        date_from=closed_day,
+        date_to=closed_day,
+        now=current,
+        max_freshness_hours=max_freshness_hours,
+        max_candidates=max_candidates,
+    )
+
+
+async def _load_decision_evidence_with_identity(
+    db: Any,
+    user_id: str,
+    *,
+    provider: str,
+    account_identity: dict[str, Any],
+    date_from: date,
+    date_to: date,
+    now: datetime | None,
+    max_freshness_hours: float,
+    max_candidates: int | None,
+) -> dict[str, Any]:
+    """Load the four Unified reports for an already gateway-sourced identity."""
+    identity = account_identity
     timezone_name = str(identity.get("timezone") or "").strip()
     calls = {
         "account": unified_gateway.load_unified_marketing_account_report(
@@ -480,6 +585,7 @@ async def load_decision_evidence(
         max_freshness_hours=max_freshness_hours,
         loader_errors=loader_errors,
         shadow_acceptance=shadow_acceptance,
+        max_candidates=max_candidates,
     )
 
 
@@ -488,4 +594,5 @@ __all__ = [
     "REQUIRED_DECISION_GATES",
     "evaluate_decision_evidence",
     "load_decision_evidence",
+    "load_decision_evidence_for_latest_closed_day",
 ]
