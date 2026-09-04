@@ -42,6 +42,9 @@ def make_ads_manager_router(db: Any, current_user: Callable):
     from decision_intelligence.scheduler import (
         attach_phase5_shadow_scheduler,
     )
+    from decision_intelligence.proposal_bridge import (
+        attach_phase5_proposal_bridge_routes,
+    )
 
     router = _make_overview_router(db, current_user)
     attach_account_cost_settings_routes(
@@ -65,6 +68,12 @@ def make_ads_manager_router(db: Any, current_user: Callable):
         _require_owner,
     )
     attach_decision_intelligence_phase5_routes(
+        router,
+        db,
+        current_user,
+        _require_owner,
+    )
+    attach_phase5_proposal_bridge_routes(
         router,
         db,
         current_user,

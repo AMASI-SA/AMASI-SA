@@ -2,8 +2,8 @@
 
 The scheduler discovers only explicitly selected connected tenants.  Marketing
 evidence is still loaded exclusively by the Unified Marketing gateway through
-``run_phase5_shadow_for_latest_closed_day``.  This module performs no provider
-sync, provider call, database mutation, approval, or execution action.
+``run_phase5_shadow_for_latest_closed_day``.  It may persist idempotent Phase 5
+proposals, but performs no provider sync/call, approval, or execution action.
 """
 from __future__ import annotations
 
@@ -18,8 +18,10 @@ import os
 import re
 import time
 from typing import Any, Awaitable, Callable
+import uuid
 
 from .phase5 import run_phase5_shadow_for_latest_closed_day
+from .proposal_bridge import persist_phase5_proposals
 
 
 logger = logging.getLogger(__name__)
@@ -60,6 +62,7 @@ _ACTIVE_PROVIDER_RUNS: set[tuple[int, str, str]] = set()
 
 Phase5Runner = Callable[..., Awaitable[dict[str, Any]]]
 TenantLoader = Callable[..., Awaitable[tuple[list[dict[str, Any]], bool]]]
+ProposalPersister = Callable[..., Awaitable[dict[str, Any]]]
 
 
 @dataclass(frozen=True)
@@ -308,11 +311,13 @@ class Phase5ShadowScheduler:
         config: Phase5SchedulerConfig,
         phase5_runner: Phase5Runner = run_phase5_shadow_for_latest_closed_day,
         tenant_loader: TenantLoader = load_scheduled_tenants,
+        proposal_persister: ProposalPersister = persist_phase5_proposals,
     ) -> None:
         self.db = db
         self.config = config
         self._phase5_runner = phase5_runner
         self._tenant_loader = tenant_loader
+        self._proposal_persister = proposal_persister
         self._provider_slots = asyncio.Semaphore(config.max_provider_concurrency)
         self._telemetry: deque[dict[str, Any]] = deque(maxlen=TELEMETRY_LIMIT)
         self._cycle_active = False
@@ -364,6 +369,12 @@ class Phase5ShadowScheduler:
         started_wall = datetime.now(timezone.utc)
         started_mono = time.monotonic()
         result: dict[str, Any] = {}
+        run_id = f"di-p5-run-{uuid.uuid4().hex}"
+        proposal_outcome: dict[str, Any] = {
+            "created": 0,
+            "deduplicated": 0,
+            "non_executable_recommendations": [],
+        }
         status = "failed"
         readiness: bool | None = None
         reason: str | None = None
@@ -389,6 +400,12 @@ class Phase5ShadowScheduler:
             else:
                 readiness = bool(result.get("decision_ready"))
                 if readiness:
+                    proposal_outcome = await self._proposal_persister(
+                        self.db,
+                        str(user_id),
+                        result,
+                        source_run_id=run_id,
+                    )
                     status = "success"
                 else:
                     status = "skipped"
@@ -411,6 +428,7 @@ class Phase5ShadowScheduler:
             finished_wall = datetime.now(timezone.utc)
             event = {
                 "provider": provider,
+                "run_id": run_id,
                 "tenant": _tenant_fingerprint(str(user_id)),
                 "run_started": started_wall.isoformat(),
                 "run_finished": finished_wall.isoformat(),
@@ -424,6 +442,22 @@ class Phase5ShadowScheduler:
                     if status == "success"
                     else 0
                 ),
+                "proposals_created": (
+                    int(proposal_outcome.get("created") or 0)
+                    if status == "success"
+                    else 0
+                ),
+                "proposals_deduplicated": (
+                    int(proposal_outcome.get("deduplicated") or 0)
+                    if status == "success"
+                    else 0
+                ),
+                "non_executable_recommendations": (
+                    len(proposal_outcome.get("non_executable_recommendations") or [])
+                    if status == "success"
+                    else 0
+                ),
+                "automatic_execution": False,
                 "highest_confidence": (
                     _maximum_recommendation_value(result, "confidence")
                     if status == "success"

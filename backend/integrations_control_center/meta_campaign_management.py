@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import uuid
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Literal
 
 import httpx
@@ -30,10 +30,24 @@ ENTITY_FIELDS = {
     "ad": "id,name,account_id,campaign_id,adset_id,status,effective_status",
 }
 SUPPORTED_BID_STRATEGIES = frozenset({"COST_CAP", "LOWEST_COST_WITH_BID_CAP"})
+PROPOSAL_TTL = timedelta(minutes=30)
 
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _expired(value: Any) -> bool:
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        try:
+            parsed = datetime.fromisoformat(str(value or "").replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            return True
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc) <= _now()
 
 
 def _public_proposal(row: dict[str, Any]) -> dict[str, Any]:
@@ -200,6 +214,7 @@ async def preview_meta_mutation(
         "status": "previewed",
         "idempotency_key": payload.idempotency_key,
         "created_at": now,
+        "expires_at": now + PROPOSAL_TTL,
         "updated_at": now,
         "provider_write_reached": False,
         "provider_write_state": "not_attempted",
@@ -227,6 +242,8 @@ async def execute_meta_proposal(db: Any, user_id: str, proposal_id: str) -> dict
         return _public_proposal(proposal)
     if proposal.get("status") != "previewed":
         raise HTTPException(status_code=409, detail={"code": "meta_proposal_not_executable"})
+    if _expired(proposal.get("expires_at")):
+        raise HTTPException(status_code=409, detail={"code": "meta_proposal_expired"})
 
     readiness = await inspect_meta_management_readiness(db, user_id)
     ready_accounts = {
@@ -243,6 +260,37 @@ async def execute_meta_proposal(db: Any, user_id: str, proposal_id: str) -> dict
             },
         )
 
+    # Re-read before claiming the write.  A preview is an immutable approval
+    # baseline, not permission to act after the entity's status, budget, bid,
+    # identity, or account has changed.
+    access_token = await _credential(db, user_id, _now())
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        current = await _read_entity(
+            client,
+            access_token,
+            proposal["entity_type"],
+            proposal["entity_id"],
+        )
+    before = proposal.get("before") if isinstance(proposal.get("before"), dict) else {}
+    compared_fields = {"id", "account_id", "status", "effective_status", proposal["field"]}
+    if proposal.get("action") == "update_bid":
+        compared_fields.add("bid_strategy")
+    changed_fields = sorted(
+        field
+        for field in compared_fields
+        if str(before.get(field) or "") != str(current.get(field) or "")
+    )
+    if changed_fields:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "meta_proposal_provider_state_changed",
+                "changed_fields": changed_fields,
+            },
+        )
+    if _expired(proposal.get("expires_at")):
+        raise HTTPException(status_code=409, detail={"code": "meta_proposal_expired"})
+
     claimed = await db[COLLECTION].update_one(
         {"user_id": user_id, "proposal_id": proposal_id, "status": "previewed"},
         {"$set": {
@@ -256,7 +304,6 @@ async def execute_meta_proposal(db: Any, user_id: str, proposal_id: str) -> dict
     if int(getattr(claimed, "modified_count", 0) or 0) != 1:
         raise HTTPException(status_code=409, detail={"code": "meta_proposal_already_claimed"})
 
-    access_token = await _credential(db, user_id, _now())
     try:
         async with httpx.AsyncClient(timeout=25.0) as client:
             if proposal["action"] == "clone_campaign":

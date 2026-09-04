@@ -144,6 +144,7 @@ def _candidate_evidence(
     row: dict[str, Any],
     *,
     global_blockers: list[str],
+    management_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     entity = _mapping(row.get("entity"))
     delivery = _mapping(row.get("delivery"))
@@ -167,7 +168,13 @@ def _candidate_evidence(
             "name": entity.get("name"),
             "status": entity.get("status"),
             "active": entity.get("active"),
+            "campaign_id": entity.get("campaign_id"),
+            "ad_group_id": entity.get("ad_group_id"),
         },
+        # Provider-neutral management evidence is carried beside analytical
+        # metrics.  It is never a write authority: the provider Action Gate
+        # must still capture and revalidate its own fresh preview.
+        "current_state_snapshot": _mapping(management_context),
         "metrics": {
             "spend_sar": _money_amount(delivery.get("spend_sar")),
             "impressions": delivery.get("impressions"),
@@ -388,7 +395,13 @@ def evaluate_decision_evidence(
         )
     )
     candidates = [
-        _candidate_evidence(row, global_blockers=global_blockers)
+        _candidate_evidence(
+            row,
+            global_blockers=global_blockers,
+            management_context=_mapping(
+                _mapping(reports.get("campaign")).get("management_context")
+            ).get(str(_mapping(row.get("entity")).get("id") or "")),
+        )
         for row in campaign_rows
     ]
     return {

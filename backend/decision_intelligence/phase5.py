@@ -163,6 +163,14 @@ def run_phase5_shadow_from_evidence(
             "recommendation": recommendation,
             "simulation": simulation,
             "impact_prediction": prediction,
+            "evidence": {
+                "metrics": candidate.get("metrics") or {},
+                "quality": candidate.get("quality") or {},
+                "lineage": candidate.get("lineage") or {},
+                "current_state_snapshot": (
+                    candidate.get("current_state_snapshot") or {}
+                ),
+            },
             "approval": approval,
             "execution_allowed": False,
         })

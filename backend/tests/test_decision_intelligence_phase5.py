@@ -154,6 +154,14 @@ def _report(level: str) -> dict:
             "truncated": False,
             "reason": None,
         },
+        "management_context": {
+            row_id: {
+                "status": "ACTIVE",
+                "active": True,
+                "daily_budget_native": 100.0 if level != "ad" else None,
+                "currency_scope": "account_native",
+            }
+        },
         "decision_eligibility": {
             "eligible": False,
             "reason": "recommendation_shadow_only",
@@ -210,6 +218,12 @@ def test_closed_reconciled_day_builds_shadow_recommendation_chain():
     assert decision["recommendation"]["confidence"] is None
     assert decision["recommendation"]["expected_profit_delta_sar"] is None
     assert decision["simulation"]["scenario"] == "bounded_budget_increase_5pct_shadow"
+    assert decision["evidence"]["current_state_snapshot"] == {
+        "status": "ACTIVE",
+        "active": True,
+        "daily_budget_native": 100.0,
+        "currency_scope": "account_native",
+    }
     assert decision["simulation"]["forecast_used"] is False
     assert decision["impact_prediction"] == {
         "status": "unknown",
