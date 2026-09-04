@@ -59,6 +59,16 @@ match. If V1 itself is incomplete, the response records the explicit
 `provider_reconciliation_fallback` basis instead of fabricating a V1 amount.
 Open periods can never pass through this fallback.
 
+Meta V2 follows the same boundary without calling Graph from Unified
+Marketing. Native ingestion persists account and campaign daily facts plus
+dedicated hierarchy/settings snapshots, ad-set/ad daily facts, and per-level
+coverage manifests. The Meta reader requires exactly one selected connected
+account, the account timezone, every requested local date, a complete
+campaign → ad set → ad hierarchy, settings evidence, SAR amounts, and totals
+that reconcile at every level. Missing projections remain partial and fail
+closed; provider reads and analytical projection writes stay in native
+ingestion only.
+
 After Production acceptance, both Dashboard read paths obtain Snapchat daily,
 hourly, KPI, FX, commission, and quality fields through
 `load_unified_marketing_dashboard_spend`. The gateway maps the V2 projection
@@ -119,3 +129,11 @@ campaign/ad-group/ad reports, a complete non-truncated Salla comparison, and an
 explicit Decision Intelligence isolation guard. A passing proof makes the
 contract data ready to consume; it does not connect or enable Decision
 Intelligence.
+
+Meta reports use `meta_shadow_not_accepted` until their native-versus-Unified
+comparison passes for the same closed account-local window. The comparison
+also requires exact Salla campaign attribution, complete profitability,
+freshness after the local period end, and Decision Intelligence isolation.
+Passing adds recommendation-only evidence to Phase 5; it never grants approval
+execution, schedules automatic execution, or performs a provider/database
+write from the decision path.
