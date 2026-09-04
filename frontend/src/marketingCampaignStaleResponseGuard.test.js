@@ -4,7 +4,7 @@ import {
 } from "./marketingCampaignStaleResponseGuard";
 
 describe("Campaign stale response guard", () => {
-  test("keeps the newest successful payload when an older response arrives later", () => {
+  test("marks an older response without replacing its body", () => {
     const newest = chooseCampaignResponseData({
       sequence: 8,
       data: { date_from: "2026-08-01", date_to: "2026-08-04" },
@@ -19,7 +19,7 @@ describe("Campaign stale response guard", () => {
     expect(newest.stale).toBe(false);
     expect(stale.stale).toBe(true);
     expect(stale.data).toEqual({
-      date_from: "2026-08-01",
+      date_from: "2026-08-04",
       date_to: "2026-08-04",
     });
     expect(stale.state.latestSequence).toBe(8);
@@ -43,7 +43,7 @@ describe("Campaign stale response guard", () => {
   test("declares a read-only replacement policy", () => {
     expect(CAMPAIGN_STALE_RESPONSE_POLICY).toEqual({
       older_responses_cannot_replace_newer_range: true,
-      replacement_uses_latest_successful_payload: true,
+      replacement_uses_latest_successful_payload: false,
       provider_writes_allowed: false,
     });
   });

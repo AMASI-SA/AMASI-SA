@@ -282,10 +282,7 @@ def test_scheduler_resolves_installed_snapchat_refresh_at_runtime():
         "from . import snapchat_account_hourly_refresh as snapchat_hourly"
         in source
     )
-    assert (
-        "await snapchat_hourly.refresh_snapchat_account_hours("
-        in source
-    )
+    assert "snapchat_hourly.refresh_snapchat_account_hours(" in source
 
 
 def test_platform_total_v15_uses_complete_campaign_day_total():
@@ -393,12 +390,13 @@ def test_audit_prefers_direct_account_total_and_keeps_campaign_sum_separate():
     assert source == "campaign_breakdown_all_ads_snapshot"
 
 
-def test_fixed_created_order_semantics_is_gated_to_salla_source():
+def test_fixed_created_order_semantics_preserves_platform_and_attaches_salla():
     source = Path(
         "integrations_control_center/snapchat_campaign_created_order_semantics.py"
     ).read_text(encoding="utf-8")
-    assert 'if result_source != "salla":' in source
-    assert '"provider_metrics_preserved_for_platform_source": True' in source
+    assert 'salla_view = result_source == "salla"' in source
+    assert 'campaign["salla_profitability"] = by_campaign[key]' in source
+    assert '"provider_metrics_preserved_for_platform_source": not salla_view' in source
 
 
 def test_created_order_dependencies_are_lazy_and_local():
@@ -663,5 +661,5 @@ def test_ads_manager_defaults_to_conversion_and_supports_impression_comparison()
     assert 'kwargs.get("action_report_time")' in hourly_chart
     assert '"action_report_time": normalize_ads_manager_action_report_time(action_report_time)' in adsquad
     assert '"action_report_time": normalize_ads_manager_action_report_time(action_report_time)' in ads
-    assert 'if not account_rows or not campaign_rows:' in platform
+    assert 'if (not account_rows or not campaign_rows) and platform_view:' in platform
     assert 'legacy_hour_conversions_hidden_while_pending' in platform

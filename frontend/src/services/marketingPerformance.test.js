@@ -44,6 +44,7 @@ test("Snapchat report normalization preserves verified performance and blocks wr
                     swipes: 70,
                     roas: 3.33,
                     cpa_sar: 30,
+                    data_status: "outside_date_range",
                     budget: { currency: "SAR", daily_native: 700 },
                 },
             ],
@@ -60,6 +61,15 @@ test("Snapchat report normalization preserves verified performance and blocks wr
                 platform_action_report_time: "impression",
                 account_spend_source: "direct_ad_account_total",
                 account_commercial_totals_source: "complete_campaign_breakdown_sum",
+                requested_campaign_diagnostic: {
+                    campaign_id: "missing-campaign",
+                    reason: "provider_missing",
+                    selected_account_id: "account-1",
+                },
+                campaign_exclusions: [{
+                    campaign_id: "inactive-campaign",
+                    reason: "inactive",
+                }],
             },
             ai_readiness: {
                 report_ready: true,
@@ -92,10 +102,10 @@ test("Snapchat report normalization preserves verified performance and blocks wr
     });
     expect(result.totals).toMatchObject({
         spend_sar: 150,
-        sales_sar: 500,
-        orders: 5,
-        roas: 3.33,
-        cpa_sar: 30,
+        sales_sar: null,
+        orders: null,
+        roas: null,
+        cpa_sar: null,
         view_content: 80,
         add_to_cart: 20,
         start_checkout: 10,
@@ -108,8 +118,9 @@ test("Snapchat report normalization preserves verified performance and blocks wr
         campaign_id: "campaign-1",
         campaign_name: "حملة أغسطس",
         spend_sar: 150,
-        sales_sar: 500,
-        orders: 5,
+        sales_sar: null,
+        orders: null,
+        data_status: "outside_date_range",
     });
     expect(result.source).toMatchObject({
         platform_total_snapshot_ready: true,
@@ -117,6 +128,16 @@ test("Snapchat report normalization preserves verified performance and blocks wr
         platform_action_report_time: "impression",
         account_spend_source: "direct_ad_account_total",
         account_commercial_totals_source: "complete_campaign_breakdown_sum",
+        requested_campaign_diagnostic: {
+            campaign_id: "missing-campaign",
+            reason: "provider_missing",
+            selected_account_id: "account-1",
+            evidence_account_id: null,
+        },
+        campaign_exclusions: [{
+            campaign_id: "inactive-campaign",
+            reason: "inactive",
+        }],
     });
     expect(result.ai_readiness.ai_analysis_ready).toBe(true);
     expect(result.ai_readiness.funnel_ready).toBe(true);

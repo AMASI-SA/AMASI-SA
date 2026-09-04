@@ -51,6 +51,9 @@ from .snapchat_account_timezone_retention import (
 from .snapchat_platform_source_integrity import (
     install_snapchat_platform_source_integrity,
 )
+from .snapchat_campaign_truth_contract import (
+    install_snapchat_campaign_truth_contract,
+)
 from .snapchat_ad_performance import (
     attach_snapchat_ad_routes,
     install_snapchat_ad_performance_refresh,
@@ -145,7 +148,6 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
     install_snapchat_campaign_profitability()
     install_current_catalog_salla_cost_resolution()
     install_exact_salla_profitability_reuse()
-    install_fixed_created_order_semantics()
     # Install before importing the scheduler below. The scheduler then receives
     # the account-local wrapper while all Dashboard/accounting readers retain
     # the original Riyadh-day collection and semantics. Hourly rows are captured
@@ -162,6 +164,11 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
     install_snapchat_account_timezone_retention()
     install_snapchat_account_timezone_scheduler()
     install_snapchat_platform_source_integrity()
+    # Wrap the final provider TOTAL projection so Salla profitability is
+    # attached to the same visible campaign generation regardless of the
+    # legacy result_source toggle, without rewriting provider metrics.
+    install_fixed_created_order_semantics()
+    install_snapchat_campaign_truth_contract()
     install_snapchat_account_hourly_chart()
     install_snapchat_campaign_catalog_refresh()
     install_snapchat_adsquad_performance_refresh()

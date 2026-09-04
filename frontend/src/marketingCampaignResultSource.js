@@ -354,13 +354,10 @@ api.interceptors.request.use((config) => {
     if (returnRange.account_id) params.account_id = returnRange.account_id;
     manualRangeSelected = true;
     forceAccountToday = false;
-  } else if (forceAccountToday && !manualRangeSelected) {
-    delete params.from_date;
-    delete params.to_date;
-    forceAccountToday = false;
   }
 
   const requestSequence = ++campaignRequestSequence;
+  snapshots.delete("snapchat");
   return {
     ...config,
     params,

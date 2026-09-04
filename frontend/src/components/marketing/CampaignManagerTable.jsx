@@ -51,6 +51,9 @@ export const CAMPAIGN_MANAGER_DEFAULT_COLUMNS = Object.freeze([
     "roas",
     "spend",
     "sales",
+    "snapchat_purchases",
+    "snapchat_value",
+    "snapchat_roas",
     "product_cost",
     "profit",
     "profit_margin",
@@ -75,11 +78,14 @@ const COLUMN_DEFINITIONS = Object.freeze([
     { id: "name", label: "اسم الحملة", width: NAME_WIDTH, sortable: true },
     { id: "status", label: "الحالة", width: STATUS_WIDTH, sortable: true },
     { id: "delivery", label: "حالة التسليم", width: 190, sortable: true },
-    { id: "orders", label: "النتائج", sublabel: "المشتريات", width: 125, sortable: true },
-    { id: "cpa", label: "تكلفة النتيجة", sublabel: "تكلفة الشراء", width: 145, sortable: true },
-    { id: "roas", label: "ROAS الشراء", width: 130, sortable: true },
-    { id: "spend", label: "المبلغ المصروف", width: 145, sortable: true },
+    { id: "orders", label: "طلبات سلة", sublabel: "UTM ID حرفي", width: 125, sortable: true },
+    { id: "cpa", label: "CPA سلة", sublabel: "يتطلب تصالح المصدرين", width: 145, sortable: true },
+    { id: "roas", label: "ROAS سلة", sublabel: "مبيعات سلة ÷ صرف سناب", width: 140, sortable: true },
+    { id: "spend", label: "صرف Snapchat", width: 145, sortable: true },
     { id: "sales", label: "مبيعات سلة", width: 145, sortable: true },
+    { id: "snapchat_purchases", label: "مشتريات Snapchat", width: 145, sortable: true },
+    { id: "snapchat_value", label: "قيمة شراء Snapchat", width: 165, sortable: true },
+    { id: "snapchat_roas", label: "ROAS Snapchat", width: 145, sortable: true },
     { id: "product_cost", label: "تكلفة المنتجات", sublabel: "محرك تكلفة ميزان", width: 160, sortable: true },
     { id: "profit", label: "ربح الحملة", sublabel: "بعد المنتج والإعلان", width: 175, sortable: true },
     { id: "profit_margin", label: "هامش الربح", sublabel: "قبل رسوم الدفع والشحن", width: 150, sortable: true },
@@ -207,14 +213,17 @@ function valueForColumn(campaign, columnId) {
         case "name": return String(campaign.campaign_name || campaign.campaign_id || "");
         case "status": return normalizeStatus(campaign.status);
         case "delivery": return deliveryLabel(campaign);
-        case "orders": return finiteNumber(campaign.orders);
-        case "cpa": return finiteNumber(campaign.cpa_sar);
-        case "roas": return finiteNumber(campaign.roas);
-        case "spend": return finiteNumber(campaign.spend_sar);
-        case "sales": return finiteNumber(campaign.sales_sar);
-        case "product_cost": return finiteNumber(campaign.profitability?.product_cost_sar);
-        case "profit": return finiteNumber(campaign.profitability?.contribution_profit_sar);
-        case "profit_margin": return finiteNumber(campaign.profitability?.profit_margin_pct);
+        case "orders": return finiteNumber(campaign.salla_orders);
+        case "cpa": return finiteNumber(campaign.salla_cpa_sar);
+        case "roas": return finiteNumber(campaign.salla_roas);
+        case "spend": return finiteNumber(campaign.snapchat_spend_sar);
+        case "sales": return finiteNumber(campaign.salla_sales_sar);
+        case "snapchat_purchases": return finiteNumber(campaign.snapchat_purchases);
+        case "snapchat_value": return finiteNumber(campaign.snapchat_purchase_value_sar);
+        case "snapchat_roas": return finiteNumber(campaign.snapchat_roas);
+        case "product_cost": return finiteNumber(campaign.salla_profitability?.product_cost_sar);
+        case "profit": return finiteNumber(campaign.salla_profitability?.contribution_profit_sar);
+        case "profit_margin": return finiteNumber(campaign.salla_profitability?.profit_margin_pct);
         case "impressions": return finiteNumber(campaign.impressions);
         case "paid_reach": return finiteNumber(campaign.paid_reach);
         case "paid_frequency": return finiteNumber(campaign.paid_frequency);
@@ -254,14 +263,17 @@ export function sortCampaignRows(rows, sort) {
 
 export function campaignTotalsForColumn(totals, columnId) {
     const value = totals || {};
-    const profitability = value.profitability || {};
+    const profitability = value.salla_profitability || {};
     switch (columnId) {
         case "name": return "إجمالي الفترة";
-        case "orders": return formatNumber(value.orders);
-        case "cpa": return formatMoney(value.cpa_sar);
-        case "roas": return formatRatio(value.roas, "×");
-        case "spend": return formatMoney(value.spend_sar);
-        case "sales": return formatMoney(value.sales_sar);
+        case "orders": return formatNumber(value.salla_matched_orders);
+        case "cpa": return formatMoney(value.salla_cpa_sar);
+        case "roas": return formatRatio(value.salla_roas, "×");
+        case "spend": return formatMoney(value.snapchat_spend_sar);
+        case "sales": return formatMoney(value.salla_sales_sar);
+        case "snapchat_purchases": return formatNumber(value.snapchat_purchases);
+        case "snapchat_value": return formatMoney(value.snapchat_purchase_value_sar);
+        case "snapchat_roas": return formatRatio(value.snapchat_roas, "×");
         case "product_cost": return formatMoney(profitability.product_cost_sar);
         case "profit": return formatMoney(profitability.contribution_profit_sar);
         case "profit_margin": return formatRatio(profitability.profit_margin_pct, "%");
@@ -290,11 +302,10 @@ function MetricValue({ primary, secondary = "" }) {
 }
 
 function ProfitMetric({ campaign, onOpen }) {
-    const profitability = campaign.profitability || {};
+    const profitability = campaign.salla_profitability || {};
     const profit = finiteNumber(profitability.contribution_profit_sar);
-    const attributedOrders = Number(profitability.orders || 0);
     const missing = Number(profitability.missing_cost_orders || 0);
-    if (!attributedOrders) {
+    if (!Number(campaign.salla_orders || 0)) {
         return <MetricValue primary="—" secondary="لا توجد طلبات سلة مطابقة" />;
     }
     if (profit === null) {
@@ -318,11 +329,11 @@ function ProfitMetric({ campaign, onOpen }) {
 }
 
 function ProductCostMetric({ campaign }) {
-    const profitability = campaign.profitability || {};
+    const profitability = campaign.salla_profitability || {};
     const cost = finiteNumber(profitability.product_cost_sar);
     const known = finiteNumber(profitability.known_product_cost_sar);
-    if (!Number(profitability.orders || 0)) {
-        return <MetricValue primary="—" secondary="لا توجد طلبات مطابقة" />;
+    if (!Number(campaign.salla_orders || 0)) {
+        return <MetricValue primary="—" secondary="لا توجد طلبات سلة مطابقة" />;
     }
     if (cost === null) {
         return <MetricValue primary="غير مكتملة" secondary={`المعروف ${formatMoney(known)}`} />;
@@ -341,6 +352,11 @@ function cellValue(campaign, columnId, onOpenProfit, onOpenAdSquads) {
                     <div className="max-w-[270px] truncate font-extrabold text-slate-950" title={campaign.campaign_name}>
                         {campaign.campaign_name || campaign.campaign_id}
                     </div>
+                    {campaign.data_status === "outside_date_range" && (
+                        <div className="mt-1 text-[10px] font-bold text-amber-700">
+                            لا توجد بيانات Snapchat داخل الفترة
+                        </div>
+                    )}
                     <div className="mt-1 max-w-[270px] truncate font-mono text-[10px] text-slate-400">
                         {campaign.campaign_id}
                     </div>
@@ -386,15 +402,18 @@ function cellValue(campaign, columnId, onOpenProfit, onOpenAdSquads) {
                 </div>
             );
         }
-        case "orders": return <MetricValue primary={formatNumber(campaign.orders)} secondary="مشتريات" />;
-        case "cpa": return <MetricValue primary={formatMoney(campaign.cpa_sar)} secondary="لكل عملية شراء" />;
-        case "roas": return <MetricValue primary={formatRatio(campaign.roas, "×")} />;
-        case "spend": return <MetricValue primary={formatMoney(campaign.spend_sar)} />;
-        case "sales": return <MetricValue primary={formatMoney(campaign.sales_sar)} />;
+        case "orders": return <MetricValue primary={formatNumber(campaign.salla_orders)} secondary="سلة · UTM ID" />;
+        case "cpa": return <MetricValue primary={formatMoney(campaign.salla_cpa_sar)} secondary="سلة ÷ سناب" />;
+        case "roas": return <MetricValue primary={formatRatio(campaign.salla_roas, "×")} secondary="سلة" />;
+        case "spend": return <MetricValue primary={formatMoney(campaign.snapchat_spend_sar)} secondary="Snapchat" />;
+        case "sales": return <MetricValue primary={formatMoney(campaign.salla_sales_sar)} secondary="سلة" />;
+        case "snapchat_purchases": return <MetricValue primary={formatNumber(campaign.snapchat_purchases)} secondary="Snapchat" />;
+        case "snapchat_value": return <MetricValue primary={formatMoney(campaign.snapchat_purchase_value_sar)} secondary="Snapchat" />;
+        case "snapchat_roas": return <MetricValue primary={formatRatio(campaign.snapchat_roas, "×")} secondary="Snapchat" />;
         case "product_cost": return <ProductCostMetric campaign={campaign} />;
         case "profit": return <ProfitMetric campaign={campaign} onOpen={onOpenProfit} />;
         case "profit_margin": {
-            const profitability = campaign.profitability || {};
+            const profitability = campaign.salla_profitability || {};
             const margin = finiteNumber(profitability.profit_margin_pct);
             return (
                 <MetricValue
@@ -449,7 +468,7 @@ function productNavigation(product) {
 
 function ProfitabilityDialog({ campaign, onClose }) {
     if (!campaign) return null;
-    const profitability = campaign.profitability || {};
+    const profitability = campaign.salla_profitability || {};
     const products = profitability.products || [];
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/55 p-4" role="dialog" aria-modal="true" data-testid="campaign-profitability-dialog">
@@ -564,7 +583,8 @@ function csvEscape(value) {
 function campaignCsv(rows) {
     const headers = [
         "اسم الحملة", "معرف الحملة", "الحالة", "حالة التسليم", "الحساب",
-        "الصرف بالريال", "المشتريات", "المبيعات بالريال", "ROAS", "CPA",
+        "صرف Snapchat", "طلبات سلة", "مبيعات سلة", "ROAS سلة", "CPA سلة",
+        "مشتريات Snapchat", "قيمة شراء Snapchat", "ROAS Snapchat", "CPA Snapchat",
         "تكلفة المنتجات", "ربح الحملة بعد الإعلان", "هامش الربح",
         "الظهور", "الوصول المدفوع", "التكرار المدفوع", "النقرات", "CTR", "eCPC", "eCPM",
         "عرض المحتوى", "إضافة للسلة", "بدء الدفع", "بيانات الدفع",
@@ -576,14 +596,18 @@ function campaignCsv(rows) {
         statusLabel(campaign.status),
         deliveryLabel(campaign),
         campaign.account_name,
-        campaign.spend_sar,
-        campaign.orders,
-        campaign.sales_sar,
-        campaign.roas,
-        campaign.cpa_sar,
-        campaign.profitability?.product_cost_sar,
-        campaign.profitability?.contribution_profit_sar,
-        campaign.profitability?.profit_margin_pct,
+        campaign.snapchat_spend_sar,
+        campaign.salla_orders,
+        campaign.salla_sales_sar,
+        campaign.salla_roas,
+        campaign.salla_cpa_sar,
+        campaign.snapchat_purchases,
+        campaign.snapchat_purchase_value_sar,
+        campaign.snapchat_roas,
+        campaign.snapchat_cpa_sar,
+        campaign.salla_profitability?.product_cost_sar,
+        campaign.salla_profitability?.contribution_profit_sar,
+        campaign.salla_profitability?.profit_margin_pct,
         campaign.impressions,
         campaign.paid_reach,
         campaign.paid_frequency,

@@ -158,7 +158,7 @@ test("uses fixed Salla created orders and financial sales for period totals", ()
   }));
 });
 
-test("finalizes both the response replaced by the stale guard and the raw snapshot", () => {
+test("does not mutate either a completed response or a prior snapshot", () => {
   const payload = platformPayload();
   const snapshot = platformPayload();
   const response = {
@@ -172,11 +172,11 @@ test("finalizes both the response replaced by the stale guard and the raw snapsh
   const finalized = finalizeSelectedCampaignSource(response, "salla", snapshot);
 
   expect(finalized).toBe(response);
-  expect(finalized.config._mezanSallaSourceFinalized).toBe(true);
-  expect(payload.campaigns[0]).toMatchObject({ orders: 3, sales_sar: 250 });
-  expect(snapshot.campaigns[0]).toMatchObject({ orders: 3, sales_sar: 250 });
-  expect(payload.result_source).toBe("salla");
-  expect(snapshot.result_source).toBe("salla");
+  expect(finalized.config._mezanSallaSourceFinalized).toBeUndefined();
+  expect(payload.campaigns[0]).toMatchObject({ orders: 7, sales_sar: 900 });
+  expect(snapshot.campaigns[0]).toMatchObject({ orders: 7, sales_sar: 900 });
+  expect(payload.result_source).toBe("platform");
+  expect(snapshot.result_source).toBe("platform");
 });
 
 test("leaves platform mode unchanged", () => {
@@ -204,12 +204,12 @@ test("does not fabricate campaign values when explicit Salla results are absent"
 
 test("declares the final-stage read-only source contract", () => {
   expect(SELECTED_SOURCE_GUARD_POLICY).toEqual({
-    salla_orders_field: "salla_results.created_orders",
-    salla_sales_field: "salla_results.sales_sar",
-    spend_source: "snapchat",
+    salla_orders_field: "salla_orders",
+    salla_sales_field: "salla_sales_sar",
+    spend_source: "snapchat_spend_sar",
     retries_stale_platform_response_once: true,
     runs_after_stale_response_guard: true,
-    hydrates_raw_snapshot_after_final_response: true,
+    hydrates_raw_snapshot_after_final_response: false,
     provider_writes_allowed: false,
     accounting_writes_allowed: false,
   });

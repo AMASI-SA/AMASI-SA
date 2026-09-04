@@ -32,7 +32,7 @@ export function chooseCampaignResponseData({
     };
   }
   return {
-    data: nextState.latestData ?? data,
+    data,
     state: nextState,
     stale: true,
   };
@@ -50,16 +50,15 @@ api.interceptors.response.use((response) => {
   if (!selected.stale) return response;
   return {
     ...response,
-    data: selected.data,
     config: {
       ...(response.config || {}),
-      _mezanStaleCampaignResponseReplaced: true,
+      _mezanStaleCampaignResponseIgnoredByConsumer: true,
     },
   };
 });
 
 export const CAMPAIGN_STALE_RESPONSE_POLICY = Object.freeze({
   older_responses_cannot_replace_newer_range: true,
-  replacement_uses_latest_successful_payload: true,
+  replacement_uses_latest_successful_payload: false,
   provider_writes_allowed: false,
 });

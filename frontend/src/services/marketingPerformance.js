@@ -107,6 +107,17 @@ function normalizeTotals(value = {}) {
         last_observed_at: nullableText(value.last_observed_at),
         last_observed_date: nullableText(value.last_observed_date),
         data_complete: value.data_complete === true,
+        salla_total_orders: number(value.salla_total_orders, { min: 0, integer: true }),
+        salla_matched_orders: number(value.salla_matched_orders, { min: 0, integer: true }),
+        salla_unmatched_orders: number(value.salla_unmatched_orders, { min: 0, integer: true }),
+        salla_sales_sar: number(value.salla_sales_sar, { min: 0 }),
+        snapchat_purchases: number(value.snapchat_purchases, { min: 0, integer: true }),
+        snapchat_purchase_value_sar: number(value.snapchat_purchase_value_sar, { min: 0 }),
+        snapchat_spend_sar: number(value.snapchat_spend_sar, { min: 0 }),
+        salla_roas: number(value.salla_roas, { min: 0 }),
+        snapchat_roas: number(value.snapchat_roas, { min: 0 }),
+        salla_cpa_sar: number(value.salla_cpa_sar, { min: 0 }),
+        snapchat_cpa_sar: number(value.snapchat_cpa_sar, { min: 0 }),
     };
 }
 
@@ -138,6 +149,7 @@ function normalizeCampaign(value = {}) {
         campaign_id: campaignId,
         campaign_name: text(value.campaign_name, campaignId),
         status: text(value.status, "unknown"),
+        data_status: nullableText(value.data_status),
         campaign_active: value.campaign_active === true,
         delivery_status: nullableText(value.delivery_status),
         objective: nullableText(value.objective),
@@ -156,7 +168,23 @@ function normalizeCampaign(value = {}) {
     if (value.profitability && typeof value.profitability === "object") {
         campaign.profitability = value.profitability;
     }
+    if (value.salla_profitability && typeof value.salla_profitability === "object") {
+        campaign.salla_profitability = value.salla_profitability;
+    } else if (campaign.profitability) {
+        campaign.salla_profitability = campaign.profitability;
+    }
+    campaign.cost_status = nullableText(value.cost_status);
     return campaign;
+}
+
+function withoutSnapchatCommercialAliases(value = {}) {
+    return {
+        ...value,
+        orders: null,
+        sales_sar: null,
+        roas: null,
+        cpa_sar: null,
+    };
 }
 
 function normalizeAccount(value = {}) {
@@ -209,6 +237,24 @@ export function normalizeSnapchatMarketingWorkspace(payload = {}, integration = 
         platform: "snapchat",
         label: MARKETING_PLATFORM_CONFIG.snapchat.label,
         result_source: text(value.result_source, "salla"),
+        request_id: nullableText(value.request_id),
+        selected_account_id: nullableText(value.selected_account_id),
+        selected_account_name: nullableText(value.selected_account_name),
+        salla_as_of: nullableText(value.salla_as_of),
+        snapchat_as_of: nullableText(value.snapchat_as_of),
+        salla_status: text(value.salla_status, "failed"),
+        snapchat_status: text(value.snapchat_status, "failed"),
+        matching_status: text(value.matching_status, "failed"),
+        reconciliation_status: text(value.reconciliation_status, "unreconciled"),
+        reconciliation_reasons: Array.isArray(value.reconciliation_reasons)
+            ? value.reconciliation_reasons.filter((item) => typeof item === "string")
+            : [],
+        reconciliation: value.reconciliation && typeof value.reconciliation === "object"
+            ? value.reconciliation
+            : null,
+        coverage_reasons: value.coverage_reasons && typeof value.coverage_reasons === "object"
+            ? value.coverage_reasons
+            : {},
         action_report_time: text(value.action_report_time, "conversion"),
         supported_action_report_times: Array.isArray(value.supported_action_report_times)
             ? value.supported_action_report_times.filter((item) => ["conversion", "impression"].includes(item))
@@ -221,27 +267,37 @@ export function normalizeSnapchatMarketingWorkspace(payload = {}, integration = 
                 ? value.date_to
                 : null,
             timezone: text(value.business_timezone, "Asia/Riyadh"),
+            effective_timezone: text(value.effective_timezone, "Asia/Riyadh"),
+            snapchat_account_timezone: nullableText(value.account_timezone),
+            salla_attribution_timezone: text(value.salla_attribution_timezone, "Asia/Riyadh"),
         },
         connection: connectionFromIntegration(integration),
-        totals: {
+        totals: withoutSnapchatCommercialAliases({
             ...normalizeTotals(value.totals),
-            ...(value.totals?.profitability && typeof value.totals.profitability === "object"
-                ? { profitability: value.totals.profitability }
+            ...(value.totals?.salla_profitability && typeof value.totals.salla_profitability === "object"
+                ? { salla_profitability: value.totals.salla_profitability }
+                : value.totals?.profitability && typeof value.totals.profitability === "object"
+                    ? { salla_profitability: value.totals.profitability }
                 : {}),
-        },
+        }),
         daily: Array.isArray(value.daily)
             ? value.daily
                 .filter((row) => ISO_DATE_RE.test(row?.date || ""))
-                .map((row) => ({ date: row.date, ...normalizeTotals(row) }))
+                .map((row) => withoutSnapchatCommercialAliases({
+                    date: row.date,
+                    ...normalizeTotals(row),
+                }))
             : [],
         hourly: Array.isArray(value.hourly)
             ? value.hourly.map(normalizeHourly).sort((left, right) => left.hour_index - right.hour_index)
             : [],
         accounts: Array.isArray(value.accounts)
             ? value.accounts.map(normalizeAccount).filter(Boolean)
+                .map(withoutSnapchatCommercialAliases)
             : [],
         campaigns: Array.isArray(value.campaigns)
             ? value.campaigns.map(normalizeCampaign).filter(Boolean)
+                .map(withoutSnapchatCommercialAliases)
             : [],
         campaign_pagination: {
             page: number(value.campaign_pagination?.page, { min: 1, integer: true }) || 1,
@@ -272,6 +328,25 @@ export function normalizeSnapchatMarketingWorkspace(payload = {}, integration = 
             account_commercial_totals_source: nullableText(
                 value.source?.account_commercial_totals_source,
             ),
+            requested_campaign_diagnostic: (
+                value.source?.requested_campaign_diagnostic
+                && typeof value.source.requested_campaign_diagnostic === "object"
+            ) ? {
+                campaign_id: nullableText(value.source.requested_campaign_diagnostic.campaign_id),
+                reason: nullableText(value.source.requested_campaign_diagnostic.reason),
+                selected_account_id: nullableText(
+                    value.source.requested_campaign_diagnostic.selected_account_id,
+                ),
+                evidence_account_id: nullableText(
+                    value.source.requested_campaign_diagnostic.evidence_account_id,
+                ),
+            } : null,
+            campaign_exclusions: Array.isArray(value.source?.campaign_exclusions)
+                ? value.source.campaign_exclusions.slice(0, 500).map((item) => ({
+                    campaign_id: nullableText(item?.campaign_id),
+                    reason: nullableText(item?.reason),
+                })).filter((item) => item.campaign_id && item.reason)
+                : [],
         },
         ai_readiness: {
             report_ready: value.ai_readiness?.report_ready === true,
@@ -435,27 +510,23 @@ export async function getMarketingPerformance({
     activeCampaignsOnly = true,
     actionReportTime = "conversion",
     resultSource = "salla",
+    requestId,
 } = {}) {
     if (!isMarketingPerformanceProvider(platform)) {
         throw new Error("invalid_marketing_platform");
     }
     if (platform === "snapchat") {
-        // Snapchat validates report dates in each ad account's timezone. Resolve
-        // the earliest local day first so Riyadh's next calendar day is never
-        // sent to an account that is still on the previous day.
         const integrations = await retryAdsRead(() => getIntegrationsOverview());
         const integration = integrations.providers.find(
             (row) => row.provider === "snapchat_ads",
         ) || {};
         const accountLocalToday = snapchatAccountLocalToday(integration);
-        const requestRange = clampSnapchatRangeToAccountToday(
-            { dateFrom, dateTo },
-            accountLocalToday,
-        );
+        const requestRange = { dateFrom, dateTo };
         const reportResponse = await retryAdsRead(() => api.get(
             "/integrations-v2/snapchat_ads/campaign-report",
             {
                 params: {
+                    request_id: String(requestId || "").trim().slice(0, 120) || undefined,
                     from_date: ISO_DATE_RE.test(requestRange.dateFrom || "")
                         ? requestRange.dateFrom
                         : undefined,

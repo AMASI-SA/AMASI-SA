@@ -63,6 +63,17 @@ const CONNECTION_LABELS = {
     unknown: "غير محسوم",
 };
 
+const CAMPAIGN_DIAGNOSTIC_LABELS = {
+    inactive: "الحملة غير نشطة",
+    deleted: "الحملة محذوفة أو مؤرشفة لدى المزود",
+    outside_account: "الحملة تتبع حسابًا إعلانيًا آخر",
+    outside_date_range: "لا توجد لها بيانات Snapchat داخل الفترة",
+    filtered: "الحملة خارج الفلتر الحالي",
+    pagination_truncated: "الحملة موجودة في صفحة أخرى",
+    provider_missing: "الحملة غير موجودة في كتالوج Snapchat المتاح",
+    source_failed: "تعذر التحقق من مصدر Snapchat",
+};
+
 const TAB_IDS = new Set(TABS.map((tab) => tab.id));
 
 function workspaceUrlState() {
@@ -168,11 +179,13 @@ function InsightPanel({ insights = [] }) {
 
 function AccountSummaries({
     accounts = [],
+    platform = "snapchat",
     decisionSummaries = [],
     selectedAccountId,
     onSelect,
     decisionHistoryEnabled = false,
 }) {
+    const snapchat = platform === "snapchat";
     const summaries = new Map(decisionSummaries.map((summary) => [summary.account_id, summary]));
     return (
         <section className="grid gap-4 lg:grid-cols-2" data-testid="marketing-account-summaries">
@@ -203,20 +216,20 @@ function AccountSummaries({
                     </div>
                     <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
                         <div className="rounded-xl bg-slate-50 p-3">
-                            <div className="text-[10px] font-black text-slate-500">الصرف</div>
-                            <div className="mt-1 font-mono font-black">{money(account.spend_sar)}</div>
+                            <div className="text-[10px] font-black text-slate-500">{snapchat ? "صرف Snapchat" : "الصرف"}</div>
+                            <div className="mt-1 font-mono font-black">{money(snapchat ? account.snapchat_spend_sar : account.spend_sar)}</div>
                         </div>
                         <div className="rounded-xl bg-slate-50 p-3">
-                            <div className="text-[10px] font-black text-slate-500">الطلبات</div>
-                            <div className="mt-1 font-mono font-black">{numeric(account.orders)}</div>
+                            <div className="text-[10px] font-black text-slate-500">{snapchat ? "طلبات سلة المطابقة" : "الطلبات"}</div>
+                            <div className="mt-1 font-mono font-black">{numeric(snapchat ? account.salla_matched_orders : account.orders)}</div>
                         </div>
                         <div className="rounded-xl bg-slate-50 p-3">
-                            <div className="text-[10px] font-black text-slate-500">المبيعات</div>
-                            <div className="mt-1 font-mono font-black">{money(account.sales_sar)}</div>
+                            <div className="text-[10px] font-black text-slate-500">{snapchat ? "مبيعات سلة" : "المبيعات"}</div>
+                            <div className="mt-1 font-mono font-black">{money(snapchat ? account.salla_sales_sar : account.sales_sar)}</div>
                         </div>
                         <div className="rounded-xl bg-slate-50 p-3">
-                            <div className="text-[10px] font-black text-slate-500">ROAS</div>
-                            <div className="mt-1 font-mono font-black">{ratio(account.roas, "×")}</div>
+                            <div className="text-[10px] font-black text-slate-500">{snapchat ? "ROAS سلة" : "ROAS"}</div>
+                            <div className="mt-1 font-mono font-black">{ratio(snapchat ? account.salla_roas : account.roas, "×")}</div>
                         </div>
                     </div>
                     {decisionHistoryEnabled && (
@@ -292,10 +305,14 @@ export default function MarketingPlatformWorkspace({ provider }) {
     }, [navigate]);
 
     const load = useCallback(async ({ silent = false } = {}) => {
-        const requestId = ++loadSequenceRef.current;
-        const requestPage = page;
+        const requestSequence = ++loadSequenceRef.current;
+        const requestId = `snap-report-${Date.now()}-${requestSequence}`;
         if (silent) setRefreshing(true);
         else setLoading(true);
+        // A prior response never represents the newly requested account/range.
+        // Clear it before dispatch so a failed request cannot leave old values
+        // looking current.
+        setData(null);
         setError("");
         try {
             const result = await getMarketingPerformance({
@@ -308,8 +325,12 @@ export default function MarketingPlatformWorkspace({ provider }) {
                 activeCampaignsOnly,
                 actionReportTime,
                 resultSource,
+                requestId,
             });
-            if (requestId !== loadSequenceRef.current) return;
+            if (requestSequence !== loadSequenceRef.current) return;
+            if (platform === "snapchat" && result.request_id !== requestId) {
+                throw new Error("campaign_report_request_id_mismatch");
+            }
             if (platform === "snapchat") {
                 const resolvedRange = {
                     dateFrom: result.range?.date_from,
@@ -329,26 +350,11 @@ export default function MarketingPlatformWorkspace({ provider }) {
                     ));
                 }
             }
-            setData((current) => {
-                if (platform !== "snapchat" || requestPage <= 1 || !current) {
-                    return result;
-                }
-                return {
-                    ...result,
-                    campaigns: mergePaginatedRows(
-                        current.campaigns,
-                        result.campaigns,
-                        (campaign) => `${campaign?.account_id || "unknown"}:${campaign?.campaign_id || "unknown"}`,
-                    ),
-                    campaign_pagination: {
-                        ...result.campaign_pagination,
-                        page: requestPage,
-                    },
-                };
-            });
+            setData(result);
             setError("");
         } catch (loadError) {
-            if (requestId !== loadSequenceRef.current) return;
+            if (requestSequence !== loadSequenceRef.current) return;
+            setData(null);
             const detail = loadError?.response?.data?.detail;
             setError(
                 typeof detail === "string"
@@ -356,7 +362,7 @@ export default function MarketingPlatformWorkspace({ provider }) {
                     : detail?.message || "تعذر تحميل تقرير المنصة الإعلانية.",
             );
         } finally {
-            if (requestId === loadSequenceRef.current) {
+            if (requestSequence === loadSequenceRef.current) {
                 setLoading(false);
                 setRefreshing(false);
             }
@@ -492,6 +498,7 @@ export default function MarketingPlatformWorkspace({ provider }) {
 
     const totals = data?.totals || {};
     const connection = data?.connection || {};
+    const requestedCampaignDiagnostic = data?.source?.requested_campaign_diagnostic;
     const platformSnapshotPending = isSnapchatPlatformSnapshotPending(
         platform,
         data,
@@ -722,6 +729,39 @@ export default function MarketingPlatformWorkspace({ provider }) {
                 </div>
             )}
 
+            {platform === "snapchat" && data && data.reconciliation_status !== "reconciled" && (
+                <div
+                    className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-bold leading-6 text-amber-950"
+                    data-testid="snapchat-source-reconciliation-warning"
+                >
+                    <WarningCircle size={20} weight="fill" className="ml-2 inline" />
+                    التقرير غير متصالح بين المصدرين: سلة {data.salla_status}، سناب {data.snapchat_status}.
+                    أُخفيت ROAS وCPA الحالية حتى تكتمل النافذتان. آخر سلة {dateTime(data.salla_as_of)}، وآخر سناب {dateTime(data.snapchat_as_of)}.
+                </div>
+            )}
+
+            {platform === "snapchat" && data && (
+                <div className="grid gap-3 sm:grid-cols-2" data-testid="snapchat-source-as-of">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm">
+                        <div className="font-black text-slate-900">سلة · {data.salla_status}</div>
+                        <div className="mt-1 font-semibold text-slate-500">طلبات ومبيعات وتكلفة وربح · حتى {dateTime(data.salla_as_of)}</div>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm">
+                        <div className="font-black text-slate-900">Snapchat · {data.snapchat_status}</div>
+                        <div className="mt-1 font-semibold text-slate-500">صرف ومشتريات وقيمة شراء وظهور ونقرات · حتى {dateTime(data.snapchat_as_of)}</div>
+                    </div>
+                </div>
+            )}
+
+            {platform === "snapchat" && requestedCampaignDiagnostic?.campaign_id && (
+                <div
+                    className="rounded-2xl border border-slate-300 bg-slate-50 p-4 text-sm font-bold leading-6 text-slate-800"
+                    data-testid="snapchat-requested-campaign-diagnostic"
+                >
+                    الحملة <span className="font-mono">{requestedCampaignDiagnostic.campaign_id}</span>: {CAMPAIGN_DIAGNOSTIC_LABELS[requestedCampaignDiagnostic.reason] || requestedCampaignDiagnostic.reason}.
+                </div>
+            )}
+
             <AdsPerformanceExplorer
                 totals={totals}
                 daily={data?.daily || []}
@@ -816,6 +856,7 @@ export default function MarketingPlatformWorkspace({ provider }) {
                 <div className="space-y-4">
                     <AccountSummaries
                         accounts={data?.accounts || []}
+                        platform={platform}
                         decisionSummaries={decisionAccountSummaries}
                         selectedAccountId={selectedHistoryAccountId}
                         onSelect={selectHistoryAccount}
@@ -848,9 +889,9 @@ export default function MarketingPlatformWorkspace({ provider }) {
                         <div className="mt-5 grid gap-3 sm:grid-cols-2">
                             <ReadinessItem label="بيانات التقرير" ready={data?.ai_readiness?.report_ready} detail="وجود صفوف أداء كاملة دون تجاوز حد القراءة." />
                             <ReadinessItem label="هوية الحملات" ready={data?.ai_readiness?.campaign_identity_ready} detail="مطابقة معرف الحملة مع الاسم والحالة والميزانية." />
-                            <ReadinessItem label="الصرف" ready={data?.ai_readiness?.spend_ready} detail="توفر صرف موثق بالريال ضمن الفترة." />
-                            <ReadinessItem label="الطلبات" ready={data?.ai_readiness?.orders_ready} detail="توفر عدد مشتريات منسوب بواسطة المنصة." />
-                            <ReadinessItem label="المبيعات" ready={data?.ai_readiness?.sales_ready} detail="توفر قيمة مشتريات منسوبة بواسطة المنصة." />
+                            <ReadinessItem label={platform === "snapchat" ? "صرف Snapchat" : "الصرف"} ready={data?.ai_readiness?.spend_ready} detail="توفر صرف موثق بالريال ضمن الفترة." />
+                            <ReadinessItem label={platform === "snapchat" ? "طلبات سلة المطابقة" : "الطلبات"} ready={data?.ai_readiness?.orders_ready} detail={platform === "snapchat" ? "مطابقة حرفية عبر UTM Campaign ID." : "توفر عدد مشتريات منسوب بواسطة المنصة."} />
+                            <ReadinessItem label={platform === "snapchat" ? "مبيعات سلة" : "المبيعات"} ready={data?.ai_readiness?.sales_ready} detail={platform === "snapchat" ? "مبيعات سلة من نفس مجموعة الطلبات المطابقة." : "توفر قيمة مشتريات منسوبة بواسطة المنصة."} />
                             <ReadinessItem label="التحليل والمقارنة" ready={data?.ai_readiness?.ratios_ready} detail="إمكانية حساب ROAS وCPA دون خلط فترات ناقصة." />
                         </div>
                     </section>
