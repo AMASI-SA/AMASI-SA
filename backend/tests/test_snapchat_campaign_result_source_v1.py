@@ -9,9 +9,9 @@ from integrations_control_center.snapchat_campaign_result_source_routes import (
 )
 
 
-def test_campaign_id_match_does_not_require_source_label():
+def test_literal_utm_campaign_id_match_does_not_require_source_label():
     key, kind = _match_order_campaign(
-        {"utm_campaign": "campaign-123", "source": ""},
+        {"utm_campaign_id": "campaign-123", "source": ""},
         id_lookup={"campaign-123": ("account-1", "campaign-123")},
         name_lookup={},
     )
@@ -19,14 +19,14 @@ def test_campaign_id_match_does_not_require_source_label():
     assert kind == "campaign_id"
 
 
-def test_campaign_name_match_requires_snapchat_source():
+def test_campaign_name_never_substitutes_for_literal_utm_id():
     key, kind = _match_order_campaign(
         {"utm_campaign": "حملة الأقحوان", "source": "snapchat"},
         id_lookup={},
         name_lookup={"حملة الأقحوان": ("account-1", "campaign-1")},
     )
-    assert key == ("account-1", "campaign-1")
-    assert kind == "campaign_name"
+    assert key is None
+    assert kind == "unmatched"
 
     missing, missing_kind = _match_order_campaign(
         {"utm_campaign": "حملة الأقحوان", "source": "meta"},
@@ -47,7 +47,7 @@ async def test_salla_headline_totals_include_unattributed_snapchat_orders(monkey
                 "order_number": "1",
                 "order_date": "2026-08-03",
                 "source": "",
-                "utm_campaign": "campaign-1",
+                "utm_campaign_id": "campaign-1",
                 "total_amount": 100.0,
             },
             {

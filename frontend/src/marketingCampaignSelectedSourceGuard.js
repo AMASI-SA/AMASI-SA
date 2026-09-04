@@ -171,19 +171,8 @@ export function finalizeSelectedCampaignSource(
   selectedSource = campaignResultsSource("snapchat"),
   snapshot = getCampaignReportSnapshot("snapchat"),
 ) {
-  if (!isSnapchatCampaignReportResponse(response) || selectedSource !== "salla") {
-    return response;
-  }
-
-  const payload = responsePayload(response);
-  applySelectedSallaCampaignMetrics(payload);
-  if (snapshot && snapshot !== payload && typeof snapshot === "object") {
-    applySelectedSallaCampaignMetrics(snapshot);
-  }
-  response.config = {
-    ...(response.config || {}),
-    _mezanSallaSourceFinalized: true,
-  };
+  // Source-specific fields are finalized by the backend. Mutating a completed
+  // response here could combine different account/range generations.
   return response;
 }
 
@@ -207,12 +196,12 @@ api.interceptors.response.use(async (response) => {
 });
 
 export const SELECTED_SOURCE_GUARD_POLICY = Object.freeze({
-  salla_orders_field: "salla_results.created_orders",
-  salla_sales_field: "salla_results.sales_sar",
-  spend_source: "snapchat",
+  salla_orders_field: "salla_orders",
+  salla_sales_field: "salla_sales_sar",
+  spend_source: "snapchat_spend_sar",
   retries_stale_platform_response_once: true,
   runs_after_stale_response_guard: true,
-  hydrates_raw_snapshot_after_final_response: true,
+  hydrates_raw_snapshot_after_final_response: false,
   provider_writes_allowed: false,
   accounting_writes_allowed: false,
 });

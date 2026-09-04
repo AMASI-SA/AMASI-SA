@@ -14,11 +14,11 @@ const campaigns = [
         campaign_id: "c1",
         campaign_name: "حملة أقل صرف",
         status: "ACTIVE",
-        spend_sar: 10,
-        orders: 0,
-        sales_sar: 0,
-        roas: 0,
-        profitability: {
+        snapchat_spend_sar: 10,
+        salla_orders: 0,
+        salla_sales_sar: 0,
+        salla_roas: 0,
+        salla_profitability: {
             orders: 0,
             product_cost_sar: 0,
             contribution_profit_sar: -10,
@@ -31,11 +31,11 @@ const campaigns = [
         campaign_id: "c2",
         campaign_name: "حملة أعلى صرف",
         status: "PAUSED",
-        spend_sar: 90,
-        orders: 3,
-        sales_sar: 270,
-        roas: 3,
-        profitability: {
+        snapchat_spend_sar: 90,
+        salla_orders: 3,
+        salla_sales_sar: 270,
+        salla_roas: 3,
+        salla_profitability: {
             orders: 3,
             sales_sar: 270,
             product_cost_sar: 100,
@@ -93,6 +93,9 @@ test("campaign manager owns the canonical Mezan 2 column order", () => {
         "roas",
         "spend",
         "sales",
+        "snapchat_purchases",
+        "snapchat_value",
+        "snapchat_roas",
         "product_cost",
         "profit",
         "profit_margin",
@@ -126,16 +129,16 @@ test("campaign rows sort by contribution profit without dropping zeros", () => {
     expect(sortCampaignRows(campaigns, { key: "profit", direction: "desc" })
         .map((row) => row.campaign_id)).toEqual(["c2", "c1"]);
     expect(sortCampaignRows(campaigns, { key: "orders", direction: "asc" })
-        .map((row) => row.orders)).toEqual([0, 3]);
+        .map((row) => row.salla_orders)).toEqual([0, 3]);
 });
 
 test("period totals include campaign profitability", () => {
     const totals = {
-        spend_sar: 100,
-        orders: 3,
-        sales_sar: 270,
-        roas: 2.7,
-        cpa_sar: 33.333,
+        snapchat_spend_sar: 100,
+        salla_matched_orders: 3,
+        salla_sales_sar: 270,
+        salla_roas: 2.7,
+        salla_cpa_sar: 33.333,
         impressions: 1000,
         paid_reach: 800,
         paid_frequency: 1.25,
@@ -147,7 +150,7 @@ test("period totals include campaign profitability", () => {
         ctr_pct: 5,
         cpc_sar: 2,
         cpm_sar: 100,
-        profitability: {
+        salla_profitability: {
             product_cost_sar: 100,
             contribution_profit_sar: 70,
             profit_margin_pct: 25.93,
@@ -178,7 +181,7 @@ test("renders native sticky name and status and separate spend and Salla sales c
                 platform="snapchat"
                 platformLabel="سناب شات"
                 campaigns={[campaigns[1]]}
-                totals={{ spend_sar: 90, sales_sar: 270, profitability: {} }}
+                totals={{ snapchat_spend_sar: 90, salla_sales_sar: 270, salla_profitability: {} }}
                 pagination={{ page: 1, pages: 1, total: 1 }}
             />,
         );
@@ -216,11 +219,11 @@ test("platform source hides Salla profitability and labels provider purchase val
                 resultSource="platform"
                 campaigns={[{
                     ...campaigns[1],
-                    orders: 21,
-                    sales_sar: 3042.64,
-                    profitability: undefined,
+                    snapchat_purchases: 21,
+                    snapchat_purchase_value_sar: 3042.64,
+                    salla_profitability: undefined,
                 }]}
-                totals={{ orders: 21, sales_sar: 3042.64 }}
+                totals={{ snapchat_purchases: 21, snapchat_purchase_value_sar: 3042.64 }}
                 pagination={{ page: 1, pages: 1, total: 1 }}
             />,
         );
@@ -251,7 +254,7 @@ test("opens product profitability details with official product cost links", asy
                 platform="snapchat"
                 platformLabel="سناب شات"
                 campaigns={[campaigns[1]]}
-                totals={{ profitability: {} }}
+                totals={{ salla_profitability: {} }}
                 pagination={{ page: 1, pages: 1, total: 1 }}
             />,
         );

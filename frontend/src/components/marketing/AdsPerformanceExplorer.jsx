@@ -11,7 +11,6 @@ import {
     XAxis,
     YAxis,
 } from "recharts";
-import { getCampaignReportSnapshot } from "../../marketingCampaignResultSource";
 
 const SERIES = Object.freeze([
     {
@@ -51,6 +50,13 @@ const SERIES = Object.freeze([
         hint: "إجمالي الصرف",
     },
 ]);
+
+const SNAPCHAT_SERIES_TEXT = Object.freeze({
+    orders: { label: "طلبات سلة المطابقة", hint: "سلة · UTM Campaign ID حرفي" },
+    sales: { label: "مبيعات سلة", hint: "سلة · الطلبات المطابقة" },
+    roas: { label: "ROAS سلة", hint: "مبيعات سلة ÷ صرف Snapchat" },
+    spend: { label: "صرف Snapchat", hint: "Snapchat Ads API" },
+});
 
 function finite(value) {
     if (value === null || value === undefined || value === "") return null;
@@ -107,11 +113,22 @@ export function buildAdsHourlyChartInput(snapshot = {}) {
         }));
 }
 
-export function buildAdsChartRows(daily = []) {
+function sourceSpecificValue(row, series, snapchat) {
+    if (!snapchat) return row?.[series.valueKey];
+    const keys = {
+        orders: "salla_matched_orders",
+        sales: "salla_sales_sar",
+        roas: "salla_roas",
+        spend: "snapchat_spend_sar",
+    };
+    return row?.[keys[series.id]];
+}
+
+export function buildAdsChartRows(daily = [], { snapchat = false } = {}) {
     const source = Array.isArray(daily) ? daily : [];
     const maximums = Object.fromEntries(SERIES.map((series) => [
         series.id,
-        Math.max(0, ...source.map((row) => finite(row?.[series.valueKey]) || 0)),
+        Math.max(0, ...source.map((row) => finite(sourceSpecificValue(row, series, snapchat)) || 0)),
     ]));
     return source.map((row) => {
         const output = {
@@ -121,7 +138,7 @@ export function buildAdsChartRows(daily = []) {
             is_future: row?.is_future === true,
         };
         SERIES.forEach((series) => {
-            const raw = finite(row?.[series.valueKey]);
+            const raw = finite(sourceSpecificValue(row, series, snapchat));
             output[`${series.id}_raw`] = raw;
             output[series.id] = raw === null || maximums[series.id] <= 0
                 ? null
@@ -138,7 +155,7 @@ export function toggleMetricVisibility(current, metricId) {
     return next;
 }
 
-function ChartTooltip({ active, label, payload, granularity = "day" }) {
+function ChartTooltip({ active, label, payload, granularity = "day", seriesList = SERIES }) {
     if (!active || !Array.isArray(payload) || !payload.length) return null;
     return (
         <div className="min-w-56 rounded-2xl border border-slate-200 bg-white p-4 text-right shadow-xl" dir="rtl">
@@ -147,7 +164,7 @@ function ChartTooltip({ active, label, payload, granularity = "day" }) {
             </div>
             <div className="space-y-2">
                 {payload.map((entry) => {
-                    const series = SERIES.find((item) => item.id === entry.dataKey);
+                    const series = seriesList.find((item) => item.id === entry.dataKey);
                     if (!series) return null;
                     return (
                         <div key={series.id} className="flex items-center justify-between gap-4 text-sm">
@@ -259,14 +276,21 @@ export default function AdsPerformanceExplorer({ totals = {}, daily = [], platfo
     const [visibleMetrics, setVisibleMetrics] = useState(
         () => new Set(SERIES.map((series) => series.id)),
     );
-    const hourlyInput = useMemo(() => {
-        if (platformLabel !== "سناب شات") return [];
-        return buildAdsHourlyChartInput(getCampaignReportSnapshot("snapchat") || {});
-    }, [daily, platformLabel]);
+    const snapchat = platformLabel === "سناب شات";
+    const seriesList = useMemo(
+        () => SERIES.map((series) => (
+            snapchat ? { ...series, ...SNAPCHAT_SERIES_TEXT[series.id] } : series
+        )),
+        [snapchat],
+    );
+    const hourlyInput = [];
     const chartInput = hourlyInput.length ? hourlyInput : daily;
-    const chartRows = useMemo(() => buildAdsChartRows(chartInput), [chartInput]);
+    const chartRows = useMemo(
+        () => buildAdsChartRows(chartInput, { snapchat }),
+        [chartInput, snapchat],
+    );
     const hourlyMode = hourlyInput.length > 0;
-    const visibleSeries = SERIES.filter((series) => visibleMetrics.has(series.id));
+    const visibleSeries = seriesList.filter((series) => visibleMetrics.has(series.id));
 
     function toggleMetric(metricId) {
         setVisibleMetrics((current) => toggleMetricVisibility(current, metricId));
@@ -280,11 +304,11 @@ export default function AdsPerformanceExplorer({ totals = {}, daily = [], platfo
             aria-label={`الرسم البياني لأداء ${platformLabel}`}
         >
             <div className="grid sm:grid-cols-2 xl:grid-cols-4" role="group" aria-label="اختيار خطوط الرسم البياني">
-                {SERIES.map((series) => (
+                {seriesList.map((series) => (
                     <MetricToggle
                         key={series.id}
                         series={series}
-                        value={totals?.[series.valueKey]}
+                        value={sourceSpecificValue(totals, series, snapchat)}
                         active={visibleMetrics.has(series.id)}
                         onToggle={() => toggleMetric(series.id)}
                     />
@@ -304,7 +328,7 @@ export default function AdsPerformanceExplorer({ totals = {}, daily = [], platfo
                         </p>
                     </div>
                     <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-black text-slate-700">
-                        {visibleSeries.length} من {SERIES.length} مؤشرات ظاهرة
+                        {visibleSeries.length} من {seriesList.length} مؤشرات ظاهرة
                     </div>
                 </div>
 
@@ -322,7 +346,7 @@ export default function AdsPerformanceExplorer({ totals = {}, daily = [], platfo
                                     tick={{ fontSize: 14, fontWeight: 800 }}
                                 />
                                 <YAxis domain={[0, 100]} hide />
-                                <Tooltip content={<ChartTooltip granularity={hourlyMode ? "hour" : "day"} />} />
+                                <Tooltip content={<ChartTooltip granularity={hourlyMode ? "hour" : "day"} seriesList={seriesList} />} />
                                 {visibleSeries.map((series) => (
                                     <Line
                                         key={series.id}

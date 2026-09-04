@@ -4,7 +4,6 @@ import AdSquadSortControls from "./AdSquadSortControls";
 import AdManagerTable from "./AdManagerTable";
 import SnapchatCampaignManagementPanel from "./SnapchatCampaignManagementPanel";
 import SnapchatOrderSourceAudit from "./SnapchatOrderSourceAudit";
-import { hydrateCampaignProfitability } from "../../marketingCampaignProfitabilityHydration";
 
 function EntityTabs({ platformLabel, entityLevel, onChange, adSquadsEnabled, adsEnabled, managementEnabled }) {
     const items = [
@@ -99,9 +98,7 @@ export default function AdsEntityLevelWorkspace({
 }) {
     const adSquadsEnabled = platform === "snapchat";
     const adsEnabled = platform === "snapchat";
-    const campaignReport = platform === "snapchat" && resultSource === "salla"
-        ? hydrateCampaignProfitability(campaigns, campaignTotals)
-        : { campaigns, totals: campaignTotals };
+    const campaignReport = { campaigns, totals: campaignTotals };
     const auditAccountId = campaignReport.campaigns?.[0]?.account_id || campaigns?.[0]?.account_id || null;
     const auditDateFrom = nativeAppliedDate("from");
     const auditDateTo = nativeAppliedDate("to");

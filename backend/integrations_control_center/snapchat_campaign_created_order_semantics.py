@@ -15,6 +15,7 @@ from collections import defaultdict
 from contextvars import ContextVar
 from copy import deepcopy
 from datetime import date, datetime, timedelta, timezone
+from hashlib import sha256
 from typing import Any
 
 from salla_marketing_attribution import (
@@ -104,6 +105,14 @@ def _status_text(order: dict[str, Any]) -> str:
     return " ".join(_text(value).casefold().replace("_", " ").split())
 
 
+def _order_identity(order: dict[str, Any]) -> str:
+    for field in ("id", "order_id", "salla_order_id", "order_number", "reference_id"):
+        value = _text(order.get(field))
+        if value:
+            return f"{field}:{value}"
+    return "fallback:" + sha256(repr(sorted(order.items())).encode("utf-8")).hexdigest()
+
+
 def is_cancelled_order(order: dict[str, Any]) -> bool:
     status = _status_text(order)
     return bool(status) and any(token in status for token in _CANCELLED_TOKENS)
@@ -136,7 +145,14 @@ async def _all_orders_in_padded_window(
     if hide_inferred:
         query["order_date_inferred"] = {"$ne": True}
     cursor = db.unified_orders.find(query, {"_id": 0, "raw_by_source": 0})
-    orders = await manager._to_list(cursor, 100_000)
+    orders = await manager._to_list(cursor, 100_001)
+    if len(orders) > 100_000:
+        raise manager.SnapchatNativeSyncError(
+            "salla_order_window_truncated",
+            "Salla attribution window exceeded the bounded report limit.",
+            status_code=422,
+            retryable=False,
+        )
     if not orders:
         return orders
 
@@ -144,7 +160,14 @@ async def _all_orders_in_padded_window(
         query,
         SALLA_RAW_ATTRIBUTION_PROJECTION,
     )
-    attribution_rows = await manager._to_list(attribution_cursor, 100_000)
+    attribution_rows = await manager._to_list(attribution_cursor, 100_001)
+    if len(attribution_rows) > 100_000:
+        raise manager.SnapchatNativeSyncError(
+            "salla_attribution_window_truncated",
+            "Salla attribution projection exceeded the bounded report limit.",
+            status_code=422,
+            retryable=False,
+        )
     return attach_projected_salla_attribution(orders, attribution_rows)
 
 
@@ -165,6 +188,7 @@ async def build_created_and_financial_outcomes(
     """Build fixed acquisition counts and current financial outcomes together."""
     from auth import ensure_user_settings
 
+    timezone_name = manager.BUSINESS_TIMEZONE
     settings = await ensure_user_settings(db, user_id)
     included_statuses = settings.get("report_included_statuses") or []
     orders = await _all_orders_in_padded_window(
@@ -175,7 +199,6 @@ async def build_created_and_financial_outcomes(
         hide_inferred=bool(settings.get("hide_inferred_date_orders")),
     )
     id_lookup = manager._unique_lookup(identities, "campaign_id")
-    name_lookup = manager._unique_lookup(identities, "campaign_name")
     zone = manager._timezone(timezone_name)
 
     by_campaign: dict[tuple[str, str], dict[str, Any]] = defaultdict(
@@ -208,8 +231,19 @@ async def build_created_and_financial_outcomes(
     unattributed = 0
     localized = 0
     fallback_dates = 0
+    orders_in_selected_window = 0
+    newest_order_update: datetime | None = None
+    duplicate_orders = 0
+    seen_order_ids: set[str] = set()
+    matched_order_ids: list[str] = []
+    financial_order_ids: list[str] = []
 
     for order in orders:
+        order_identity = _order_identity(order)
+        if order_identity in seen_order_ids:
+            duplicate_orders += 1
+            continue
+        seen_order_ids.add(order_identity)
         timestamp = manager._order_timestamp(order)
         if timestamp is not None:
             local_date = timestamp.astimezone(zone).date().isoformat()
@@ -219,11 +253,19 @@ async def build_created_and_financial_outcomes(
             fallback_dates += 1
         if not local_date or local_date < date_from or local_date > date_to:
             continue
+        orders_in_selected_window += 1
+        for field in ("updated_at", "synced_at", "source_updated_at"):
+            candidate = manager._parse_datetime(order.get(field))
+            if candidate is not None:
+                if candidate.tzinfo is None:
+                    candidate = candidate.replace(tzinfo=timezone.utc)
+                newest_order_update = max(newest_order_update or candidate, candidate)
+                break
 
         key, kind = manager._match_order_campaign(
             order,
             id_lookup=id_lookup,
-            name_lookup=name_lookup,
+            name_lookup={},
         )
         if key is None:
             if kind.startswith("ambiguous"):
@@ -238,6 +280,7 @@ async def build_created_and_financial_outcomes(
             matched_by_name += 1
 
         campaign_row = by_campaign[key]
+        matched_order_ids.append(order_identity)
         date_row = by_date[local_date]
         for row in (campaign_row, date_row):
             row["orders"] += 1
@@ -257,6 +300,7 @@ async def build_created_and_financial_outcomes(
             campaign_row["sales_sar"] += amount
             date_row["sales_sar"] += amount
             financial_matched[key].append(order)
+            financial_order_ids.append(order_identity)
         else:
             campaign_row["excluded_orders"] += 1
             date_row["excluded_orders"] += 1
@@ -284,10 +328,33 @@ async def build_created_and_financial_outcomes(
         "unattributed_orders_excluded_from_campaigns": unattributed,
         "timestamp_localized_orders": localized,
         "fallback_order_date_orders": fallback_dates,
+        "salla_total_orders": orders_in_selected_window,
+        "salla_matched_orders": created_total,
+        "salla_unmatched_orders": max(orders_in_selected_window - created_total, 0),
+        "salla_as_of": (
+            newest_order_update.astimezone(timezone.utc).isoformat()
+            if newest_order_update is not None else None
+        ),
+        "order_window_truncated": False,
+        "duplicate_orders_excluded": duplicate_orders,
+        "matched_order_ids_sha256": sha256(
+            "\n".join(sorted(matched_order_ids)).encode("utf-8")
+        ).hexdigest(),
+        "financial_order_ids_sha256": sha256(
+            "\n".join(sorted(financial_order_ids)).encode("utf-8")
+        ).hexdigest(),
         "order_count_semantics": "created_orders_all_statuses_fixed_by_creation_time",
         "sales_semantics": "current_financially_included_orders_only",
         "profitability_semantics": "current_financially_included_orders_only",
         "date_timezone": timezone_name,
+        "matching_status": (
+            "complete" if created_total <= orders_in_selected_window else "failed"
+        ),
+        "matching_reason": (
+            "literal_utm_campaign_id_only"
+            if created_total <= orders_in_selected_window
+            else "matched_orders_exceed_salla_total"
+        ),
         "campaign_rows_exact_match_only": True,
         "read_only": True,
     }
@@ -307,34 +374,16 @@ async def calculate_financial_profitability(
 ) -> tuple[dict[tuple[str, str], dict[str, Any]], dict[str, Any]]:
     from . import snapchat_campaign_profitability as profitability
 
-    cost_revision = await get_product_cost_revision(db, user_id)
-    spend_signature = tuple(sorted(
-        (
-            _text(key[0]),
-            _text(key[1]),
-            round(_float(value), 6),
-        )
-        for key, value in campaign_spend.items()
-    ))
+    # Profitability is intentionally not cached.  The order/attribution
+    # evidence can change without a cost revision or spend change, which made
+    # the former key capable of serving a historical Salla result alongside a
+    # current Snapchat snapshot.
+    await get_product_cost_revision(db, user_id)
     report_total_spend = (
         round(_float(total_spend_sar), 2)
         if total_spend_sar is not None
         else profitability._total_campaign_spend(campaign_spend)
     )
-    cache_key = (
-        user_id,
-        account_id,
-        date_from,
-        date_to,
-        cost_revision,
-        spend_signature,
-        report_total_spend,
-    )
-    now = datetime.now(timezone.utc)
-    cached = _PROFIT_CACHE.get(cache_key)
-    if cached and now - cached[0] < timedelta(seconds=PROFIT_CACHE_TTL_SECONDS):
-        return deepcopy(cached[1]), deepcopy(cached[2])
-
     cost_context = await profitability._load_cost_context(db, user_id)
     by_campaign: dict[tuple[str, str], dict[str, Any]] = {}
     for key, orders in financial_matched.items():
@@ -381,11 +430,10 @@ async def calculate_financial_profitability(
             int(row.get("cost_status") == "missing")
             for row in by_campaign.values()
         ),
+        "cache_status": "disabled_for_source_coherence",
+        "cache_hits": 0,
+        "cache_misses": 0,
     }
-    _PROFIT_CACHE[cache_key] = (now, deepcopy(by_campaign), deepcopy(totals))
-    if len(_PROFIT_CACHE) > 32:
-        oldest = min(_PROFIT_CACHE, key=lambda key: _PROFIT_CACHE[key][0])
-        _PROFIT_CACHE.pop(oldest, None)
     return by_campaign, totals
 
 
@@ -430,12 +478,7 @@ def install_fixed_created_order_semantics() -> None:
             result_source = _text(
                 result.get("result_source") or kwargs.get("result_source")
             ).lower()
-            if result_source != "salla":
-                result.setdefault("policy", {}).update({
-                    "salla_order_semantics_applied": False,
-                    "provider_metrics_preserved_for_platform_source": True,
-                })
-                return result
+            salla_view = result_source == "salla"
 
             financial_matched = _FINANCIAL_MATCHED.get()
             campaigns = result.get("campaigns") or []
@@ -448,7 +491,8 @@ def install_fixed_created_order_semantics() -> None:
                 cancelled = int(salla.get("cancelled_orders") or 0)
                 excluded = int(salla.get("excluded_orders") or max(created - financial, 0))
                 campaign.update({
-                    "orders": created,
+                    "salla_orders": created,
+                    "salla_sales_sar": _float(salla.get("sales_sar")),
                     "created_orders": created,
                     "financial_orders": financial,
                     "cancelled_orders": cancelled,
@@ -459,10 +503,14 @@ def install_fixed_created_order_semantics() -> None:
                     "order_count_source": "salla_created_orders_all_statuses",
                 })
                 spend = manager._number(campaign.get("spend_sar"))
-                campaign["cpa_sar"] = (
-                    round(float(spend) / created, 6)
-                    if spend is not None and created > 0 else None
-                )
+                if salla_view:
+                    campaign.update({
+                        "orders": created,
+                        "cpa_sar": (
+                            round(float(spend) / created, 6)
+                            if spend is not None and created > 0 else None
+                        ),
+                    })
             totals = result.setdefault("totals", {})
             source = result.setdefault("source", {})
             attribution = source.setdefault("salla_attribution", {})
@@ -471,6 +519,7 @@ def install_fixed_created_order_semantics() -> None:
             # rows: retain the exact, pre-pagination Salla coverage instead.
             created_total = _first_int(
                 attribution.get("created_orders_matched"),
+                totals.get("salla_matched_orders"),
                 totals.get("created_orders"),
                 totals.get("orders"),
             )
@@ -488,18 +537,26 @@ def install_fixed_created_order_semantics() -> None:
                 max(created_total - financial_total, 0),
             )
             totals.update({
-                "orders": created_total,
+                "salla_matched_orders": created_total,
                 "created_orders": created_total,
                 "financial_orders": financial_total,
                 "cancelled_orders": cancelled_total,
                 "excluded_orders": excluded_total,
                 "order_count_source": "salla_created_orders_all_statuses",
             })
-            spend_total = manager._number(totals.get("spend_sar"))
-            totals["cpa_sar"] = (
-                round(float(spend_total) / created_total, 6)
-                if spend_total is not None and created_total > 0 else None
+            spend_total = manager._number(
+                totals.get("snapchat_spend_sar")
+                if totals.get("snapchat_spend_sar") is not None
+                else totals.get("spend_sar")
             )
+            if salla_view:
+                totals.update({
+                    "orders": created_total,
+                    "cpa_sar": (
+                        round(float(spend_total) / created_total, 6)
+                        if spend_total is not None and created_total > 0 else None
+                    ),
+                })
 
             db = args[0] if args else kwargs.get("db")
             user_id = args[1] if len(args) > 1 else kwargs.get("user_id")
@@ -532,8 +589,12 @@ def install_fixed_created_order_semantics() -> None:
                         _text(campaign.get("campaign_id")),
                     )
                     if key in by_campaign:
-                        campaign["profitability"] = by_campaign[key]
-                totals["profitability"] = profit_totals
+                        campaign["salla_profitability"] = by_campaign[key]
+                        if salla_view:
+                            campaign["profitability"] = by_campaign[key]
+                totals["salla_profitability"] = profit_totals
+                if salla_view:
+                    totals["profitability"] = profit_totals
 
             attribution.update({
                 "source_mode": SOURCE_MODE,
@@ -558,7 +619,7 @@ def install_fixed_created_order_semantics() -> None:
                 "accounting_write_reached": False,
                 "qoyod_write_reached": False,
                 "salla_order_semantics_applied": True,
-                "provider_metrics_preserved_for_platform_source": False,
+                "provider_metrics_preserved_for_platform_source": not salla_view,
             })
             return result
         finally:

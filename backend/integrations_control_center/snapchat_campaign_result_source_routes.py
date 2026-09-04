@@ -16,8 +16,7 @@ from typing import Any, Callable
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from salla_marketing_attribution import (
-    campaign_id_candidates,
-    campaign_name_candidates,
+    attribution_containers,
     canonical_ad_platform,
 )
 
@@ -53,6 +52,7 @@ def _text(value: Any) -> str:
 
 
 def _norm(value: Any) -> str:
+    """Legacy display/search normalizer; never used for attribution joins."""
     return " ".join(_text(value).casefold().replace("_", " ").split())
 
 
@@ -79,13 +79,22 @@ def _ratio(numerator: float | None, denominator: float | None, multiplier: float
 
 
 def _source_is_snapchat(order: dict[str, Any]) -> bool:
+    """Legacy source classifier retained for non-attribution consumers."""
     return canonical_ad_platform(order) == "snapchat"
 
 
 def _unique_lookup(rows: list[dict[str, Any]], field: str) -> dict[str, tuple[str, str] | None]:
+    """Build a literal identity lookup.
+
+    Campaign attribution is an identifier join, not a search feature.  Case,
+    underscores and whitespace are therefore significant and may not be
+    normalized into a match.
+    """
     grouped: dict[str, set[tuple[str, str]]] = defaultdict(set)
     for row in rows:
-        value = _norm(row.get(field))
+        value = row.get(field)
+        if not isinstance(value, str) or not value:
+            continue
         key = (_text(row.get("account_id")), _text(row.get("campaign_id")))
         if value and all(key):
             grouped[value].add(key)
@@ -101,18 +110,20 @@ def _match_order_campaign(
     id_lookup: dict[str, tuple[str, str] | None],
     name_lookup: dict[str, tuple[str, str] | None],
 ) -> tuple[tuple[str, str] | None, str]:
-    for candidate in campaign_id_candidates(order):
-        normalized = _norm(candidate)
-        if normalized and normalized in id_lookup:
-            key = id_lookup[normalized]
+    # SNAP-REPORT-1 deliberately recognizes only the literal Salla UTM
+    # Campaign ID.  Names, promoted aliases and normalized strings are not
+    # authoritative identifiers and can silently attribute an order to the
+    # wrong Snapchat campaign.
+    del name_lookup
+    candidates: list[str] = []
+    for container in attribution_containers(order):
+        candidate = container.get("utm_campaign_id")
+        if isinstance(candidate, str) and candidate and candidate not in candidates:
+            candidates.append(candidate)
+    for literal in candidates:
+        if literal in id_lookup:
+            key = id_lookup[literal]
             return (key, "campaign_id") if key else (None, "ambiguous_id")
-
-    if _source_is_snapchat(order):
-        for candidate in campaign_name_candidates(order):
-            normalized = _norm(candidate)
-            if normalized and normalized in name_lookup:
-                key = name_lookup[normalized]
-                return (key, "campaign_name") if key else (None, "ambiguous_name")
     return None, "unmatched"
 
 

@@ -7,10 +7,11 @@ test("ignores stale report success, error and completion state", () => {
         "utf8",
     );
     expect(source).toContain("const loadSequenceRef = useRef(0);");
-    expect(source).toContain("const requestId = ++loadSequenceRef.current;");
-    expect(source.match(/requestId !== loadSequenceRef\.current/g)?.length).toBeGreaterThanOrEqual(2);
-    expect(source).toContain("if (requestId === loadSequenceRef.current)");
-    expect(source).toContain("setData((current) => {");
-    expect(source).toContain("mergePaginatedRows(");
+    expect(source).toContain("const requestSequence = ++loadSequenceRef.current;");
+    expect(source).toContain("const requestId = `snap-report-${Date.now()}-${requestSequence}`;");
+    expect(source.match(/requestSequence !== loadSequenceRef\.current/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(source).toContain("if (requestSequence === loadSequenceRef.current)");
+    expect(source).toContain("setData(null);");
+    expect(source).toContain("result.request_id !== requestId");
     expect(source).toContain("setError(\"\");");
 });

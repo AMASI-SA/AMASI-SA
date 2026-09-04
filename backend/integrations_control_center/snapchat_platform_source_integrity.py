@@ -964,7 +964,14 @@ async def load_platform_total_rows(
         },
         {"_id": 0},
     )
-    return await _to_list(cursor, MAX_TOTAL_ROWS)
+    rows = await _to_list(cursor, MAX_TOTAL_ROWS + 1)
+    if len(rows) > MAX_TOTAL_ROWS:
+        raise SnapchatNativeSyncError(
+            "snapchat_platform_total_row_limit",
+            "بلغت قراءة TOTAL الحد الآمن؛ قلّص الفترة وأعد المحاولة.",
+            status_code=409,
+        )
+    return rows
 
 
 def _campaign_key(row: dict[str, Any]) -> str:
@@ -984,6 +991,7 @@ def _restore_platform_campaign(
     metrics: dict[str, Any],
 ) -> dict[str, Any]:
     restored = dict(campaign)
+    salla_profitability = restored.get("profitability")
     restored.pop("profitability", None)
     spend_sar = _number(metrics.get("spend_sar"))
     spend_native = _number(metrics.get("spend_native"))
@@ -998,6 +1006,10 @@ def _restore_platform_campaign(
         "cpa_native": _ratio(spend_native, orders),
         "result_source": RESULT_SOURCE_PLATFORM,
         "platform_results": _platform_result_from_metrics(metrics),
+        "snapchat_purchases": orders,
+        "snapchat_purchase_value_sar": round(sales_sar, 2),
+        "snapchat_spend_sar": spend_sar,
+        "salla_profitability": salla_profitability,
         "commercial_metrics_source": "snapchat_ads_api",
         "profitability": None,
     })
@@ -1125,9 +1137,10 @@ async def apply_platform_snapshot_to_report(
     page: int,
     limit: int,
 ) -> dict[str, Any]:
-    """Replace only the platform view with authoritative TOTAL facts."""
-    if _text(result.get("result_source")).lower() != RESULT_SOURCE_PLATFORM:
-        return result
+    """Attach authoritative TOTAL facts, replacing only the platform view."""
+    platform_view = (
+        _text(result.get("result_source")).lower() == RESULT_SOURCE_PLATFORM
+    )
 
     account_id = _text(result.get("selected_account_id"))
     date_from = _text(result.get("date_from"))
@@ -1138,18 +1151,47 @@ async def apply_platform_snapshot_to_report(
     )
     if not all((account_id, date_from, date_to, timezone_name)):
         return result
-    rows = await load_platform_total_rows(
-        db,
-        user_id,
-        account_id=account_id,
-        date_from=date_from,
-        date_to=date_to,
-        timezone_name=timezone_name,
-        action_report_time=action_report_time,
-    )
+    try:
+        rows = await load_platform_total_rows(
+            db,
+            user_id,
+            account_id=account_id,
+            date_from=date_from,
+            date_to=date_to,
+            timezone_name=timezone_name,
+            action_report_time=action_report_time,
+        )
+    except Exception:
+        result.setdefault("source", {}).update({
+            "platform_total_snapshot_ready": False,
+            "platform_direct_account_total_ready": False,
+            "platform_source_status": "failed",
+            "platform_source_reason": "snapchat_total_read_failed",
+        })
+        if not platform_view:
+            return result
+        return _mask_pending_platform_commercial_metrics(
+            result,
+            action_report_time=action_report_time,
+        )
     account_rows = [row for row in rows if row.get("entity_type") == "ad_account"]
     campaign_rows = [row for row in rows if row.get("entity_type") == "campaign"]
-    if not account_rows or not campaign_rows:
+    base_snapchat_status = _text(result.get("snapchat_status")).lower()
+    if base_snapchat_status not in {"complete", "partial", "stale", "failed"}:
+        base_snapchat_status = "partial"
+    platform_source_status = base_snapchat_status
+    platform_source_reason = _text(
+        (result.get("coverage_reasons") or {}).get("snapchat")
+    ) or "provider_window_not_complete"
+    if account_rows and campaign_rows and base_snapchat_status == "complete":
+        platform_source_status = "complete"
+        platform_source_reason = "selected_account_total_complete"
+    elif not account_rows or not campaign_rows:
+        platform_source_status = (
+            "failed" if base_snapchat_status == "failed" else "partial"
+        )
+        platform_source_reason = "account_or_campaign_total_missing"
+    if (not account_rows or not campaign_rows) and platform_view:
         result.setdefault("insights", []).append({
             "code": "snapchat_platform_total_snapshot_pending",
             "severity": "warning",
@@ -1187,6 +1229,44 @@ async def apply_platform_snapshot_to_report(
         campaign_rows,
         requested_days=requested_days,
     )
+    if not platform_view:
+        account_total = (
+            manager._aggregate_rows(account_rows, requested_days=requested_days)
+            if account_rows else {}
+        )
+        for campaign in result.get("campaigns") or []:
+            campaign_id = _campaign_key(campaign)
+            metrics = metrics_by_campaign.get(campaign_id)
+            campaign.update({
+                "snapchat_purchases": (
+                    metrics.get("orders") if metrics is not None else None
+                ),
+                "snapchat_purchase_value_sar": (
+                    metrics.get("sales_sar") if metrics is not None else None
+                ),
+                "snapchat_spend_sar": (
+                    metrics.get("spend_sar") if metrics is not None else None
+                ),
+            })
+        result.setdefault("totals", {}).update({
+            "snapchat_purchases": account_total.get("orders"),
+            "snapchat_purchase_value_sar": account_total.get("sales_sar"),
+            "snapchat_spend_sar": account_total.get("spend_sar"),
+        })
+        result["snapchat_as_of"] = account_total.get("last_observed_at")
+        result.setdefault("source", {}).update({
+            "platform_total_collection": SNAPCHAT_ACCOUNT_TOTAL_COLLECTION,
+            "platform_total_snapshot_ready": bool(account_rows and campaign_rows),
+            "platform_direct_account_total_ready": bool(account_rows),
+            "platform_source_status": (
+                platform_source_status
+            ),
+            "platform_source_reason": platform_source_reason,
+            "account_spend_source": "direct_ad_account_total",
+            "platform_source_isolated": True,
+            "salla_metrics_applied_to_platform": False,
+        })
+        return result
     existing = {
         _campaign_key(row): row
         for row in result.get("campaigns") or []
@@ -1198,7 +1278,6 @@ async def apply_platform_snapshot_to_report(
             "provider": SNAPCHAT_PROVIDER_ID,
             "ad_account_id": account_id,
             "entity_type": "campaign",
-            "external_id": {"$in": list(metrics_by_campaign)},
         },
         {"_id": 0},
     )
@@ -1218,7 +1297,10 @@ async def apply_platform_snapshot_to_report(
         or (result.get("accounts") or [{}])[0].get("currency")
     ) or None
     rebuilt: list[dict[str, Any]] = []
-    for campaign_id, metrics in metrics_by_campaign.items():
+    for campaign_id in sorted(set(metrics_by_campaign) | set(entities)):
+        metrics = metrics_by_campaign.get(campaign_id) or manager._aggregate_rows(
+            [], requested_days=requested_days
+        )
         base = dict(existing.get(campaign_id) or {})
         entity = entities.get(campaign_id, {})
         status = entity.get("status") or base.get("status") or "unknown"
@@ -1272,6 +1354,15 @@ async def apply_platform_snapshot_to_report(
     else:
         totals = _aggregate_visible_campaigns(scoped, requested_days=requested_days)
         totals_scope = "filtered_campaign_sum"
+    previous_totals = dict(result.get("totals") or {})
+    totals["salla_total_orders"] = previous_totals.get("salla_total_orders")
+    totals["salla_matched_orders"] = previous_totals.get("salla_matched_orders")
+    totals["salla_unmatched_orders"] = previous_totals.get("salla_unmatched_orders")
+    totals["salla_sales_sar"] = previous_totals.get("salla_sales_sar")
+    totals["salla_profitability"] = previous_totals.get("profitability")
+    totals["snapchat_purchases"] = totals.get("orders")
+    totals["snapchat_purchase_value_sar"] = totals.get("sales_sar")
+    totals["snapchat_spend_sar"] = totals.get("spend_sar")
     totals.pop("profitability", None)
     totals["result_source"] = RESULT_SOURCE_PLATFORM
 
@@ -1325,6 +1416,8 @@ async def apply_platform_snapshot_to_report(
         ),
         "platform_total_snapshot_ready": bool(account_rows and campaign_rows),
         "platform_direct_account_total_ready": bool(account_rows),
+        "platform_source_status": platform_source_status,
+        "platform_source_reason": platform_source_reason,
         "platform_source_isolated": True,
         "platform_action_report_time": action_report_time,
         "account_spend_source": "direct_ad_account_total",
@@ -1334,6 +1427,8 @@ async def apply_platform_snapshot_to_report(
         "platform_campaign_orders": campaign_sum.get("orders"),
         "platform_account_sales_sar": account_total.get("sales_sar"),
         "platform_campaign_sales_sar": campaign_sum.get("sales_sar"),
+        "platform_account_spend_sar": account_total.get("spend_sar"),
+        "platform_campaign_spend_sar": campaign_sum.get("spend_sar"),
         "salla_metrics_applied_to_platform": False,
     })
     result.setdefault("ai_readiness", {}).update({

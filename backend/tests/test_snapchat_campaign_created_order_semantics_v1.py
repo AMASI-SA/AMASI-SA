@@ -66,7 +66,7 @@ async def test_created_orders_remain_counted_when_cancelled(monkeypatch):
             "id": "order-1",
             "order_date": "2026-08-04",
             "created_at": "2026-08-04T01:00:00+03:00",
-            "campaign_id": "campaign-1",
+            "utm_campaign_id": "campaign-1",
             "order_status": "completed",
             "total_amount": 100.0,
         },
@@ -75,7 +75,7 @@ async def test_created_orders_remain_counted_when_cancelled(monkeypatch):
             "id": "order-2",
             "order_date": "2026-08-04",
             "created_at": "2026-08-04T02:00:00+03:00",
-            "campaign_id": "campaign-1",
+            "utm_campaign_id": "campaign-1",
             "order_status": "delivered",
             "total_amount": 50.0,
         },
@@ -84,7 +84,7 @@ async def test_created_orders_remain_counted_when_cancelled(monkeypatch):
             "id": "order-3",
             "order_date": "2026-08-04",
             "created_at": "2026-08-04T03:00:00+03:00",
-            "campaign_id": "campaign-1",
+            "utm_campaign_id": "campaign-1",
             "order_status": "cancelled",
             "total_amount": 75.0,
         },
@@ -127,7 +127,7 @@ async def test_created_orders_remain_counted_when_cancelled(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_account_timezone_controls_the_created_order_day(monkeypatch):
+async def test_riyadh_business_timezone_controls_salla_order_day(monkeypatch):
     async def settings(db, user_id):
         return {
             "report_included_statuses": ["completed"],
@@ -141,7 +141,7 @@ async def test_account_timezone_controls_the_created_order_day(monkeypatch):
             "id": "order-la",
             "order_date": "2026-08-04",
             "created_at": "2026-08-04T06:30:00+00:00",
-            "campaign_id": "campaign-1",
+            "utm_campaign_id": "campaign-1",
             "order_status": "completed",
             "total_amount": 100.0,
         },
@@ -155,14 +155,14 @@ async def test_account_timezone_controls_the_created_order_day(monkeypatch):
     by_campaign, by_date, _, _ = await module.build_created_and_financial_outcomes(
         db,
         "owner-1",
-        date_from="2026-08-03",
-        date_to="2026-08-03",
+        date_from="2026-08-04",
+        date_to="2026-08-04",
         timezone_name="America/Los_Angeles",
         identities=identities,
     )
 
     assert by_campaign[("account-1", "campaign-1")]["orders"] == 1
-    assert by_date["2026-08-03"]["orders"] == 1
+    assert by_date["2026-08-04"]["orders"] == 1
 
 
 @pytest.mark.asyncio
@@ -225,3 +225,77 @@ def test_cancelled_status_detection_handles_arabic_and_english():
     assert module.is_cancelled_order({"order_status": "cancelled"}) is True
     assert module.is_cancelled_order({"order_status_native": "ملغي"}) is True
     assert module.is_cancelled_order({"order_status": "completed"}) is False
+
+
+@pytest.mark.asyncio
+async def test_duplicate_order_ids_are_counted_once(monkeypatch):
+    async def settings(db, user_id):
+        return {
+            "report_included_statuses": ["completed"],
+            "hide_inferred_date_orders": False,
+        }
+
+    monkeypatch.setattr(auth, "ensure_user_settings", settings)
+    order = {
+        "user_id": "owner-1",
+        "id": "duplicate-order",
+        "order_date": "2026-09-03",
+        "created_at": "2026-09-03T10:00:00+03:00",
+        "utm_campaign_id": "campaign-1",
+        "order_status": "completed",
+        "total_amount": 50.0,
+    }
+    by_campaign, _, coverage, financial = (
+        await module.build_created_and_financial_outcomes(
+            FakeDB([order, deepcopy(order)]),
+            "owner-1",
+            date_from="2026-09-03",
+            date_to="2026-09-03",
+            timezone_name="America/Los_Angeles",
+            identities=[{
+                "account_id": "account-1",
+                "campaign_id": "campaign-1",
+                "campaign_name": "Campaign 1",
+            }],
+        )
+    )
+    assert by_campaign[("account-1", "campaign-1")]["orders"] == 1
+    assert len(financial[("account-1", "campaign-1")]) == 1
+    assert coverage["duplicate_orders_excluded"] == 1
+
+
+@pytest.mark.asyncio
+async def test_september_four_salla_order_does_not_enter_september_three(monkeypatch):
+    async def settings(db, user_id):
+        return {
+            "report_included_statuses": ["completed"],
+            "hide_inferred_date_orders": False,
+        }
+
+    monkeypatch.setattr(auth, "ensure_user_settings", settings)
+    order = {
+        "user_id": "owner-1",
+        "id": "riyadh-september-four",
+        "order_date": "2026-09-04",
+        "created_at": "2026-09-04T00:15:00+03:00",
+        "utm_campaign_id": "campaign-1",
+        "order_status": "completed",
+        "total_amount": 50.0,
+    }
+    by_campaign, by_date, coverage, _ = (
+        await module.build_created_and_financial_outcomes(
+            FakeDB([order]),
+            "owner-1",
+            date_from="2026-09-03",
+            date_to="2026-09-03",
+            timezone_name="America/Los_Angeles",
+            identities=[{
+                "account_id": "account-1",
+                "campaign_id": "campaign-1",
+                "campaign_name": "Campaign 1",
+            }],
+        )
+    )
+    assert by_campaign == {}
+    assert by_date == {}
+    assert coverage["salla_total_orders"] == 0

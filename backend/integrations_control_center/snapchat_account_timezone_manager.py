@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
+import re
 from typing import Any, Callable
 
 import httpx
@@ -69,6 +70,11 @@ from .snapchat_native_performance_sync import (
 
 SNAPCHAT_ACCOUNT_LOCAL_PERFORMANCE_COLLECTION = (
     "mezan_snapchat_performance_account_day_v3"
+)
+
+_UUID_CAMPAIGN_ID = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    re.IGNORECASE,
 )
 
 
@@ -837,7 +843,6 @@ def _order_timestamp(order: dict[str, Any]) -> datetime | None:
         "order_created_at",
         "created_at_utc",
         "source_created_at",
-        "updated_at",
     ):
         parsed = _parse_datetime(order.get(field))
         if parsed is None or parsed.tzinfo is None:
@@ -873,7 +878,6 @@ async def _salla_account_outcomes(
         include_marketing_attribution=True,
     )
     id_lookup = _unique_lookup(identities, "campaign_id")
-    name_lookup = _unique_lookup(identities, "campaign_name")
     by_campaign: dict[tuple[str, str], dict[str, Any]] = defaultdict(
         lambda: {"orders": 0, "sales_sar": 0.0}
     )
@@ -900,7 +904,7 @@ async def _salla_account_outcomes(
         key, kind = _match_order_campaign(
             order,
             id_lookup=id_lookup,
-            name_lookup=name_lookup,
+            name_lookup={},
         )
         if key is None:
             if kind.startswith("ambiguous"):
@@ -949,9 +953,13 @@ async def build_account_timezone_campaign_report(
     result_source: str,
     action_report_time: str = ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME,
     active_campaigns_only: bool = False,
+    request_id: str | None = None,
     now: Callable[[], datetime] = _utcnow,
 ) -> dict[str, Any]:
     current = _aware_now(now())
+    effective_request_id = _text(request_id)[:120] or (
+        f"snap-report-{int(current.timestamp() * 1_000_000)}"
+    )
     action_report_time = normalize_ads_manager_action_report_time(action_report_time)
     selected_accounts = await _load_selected_accounts(db, user_id)
     if not selected_accounts:
@@ -985,47 +993,104 @@ async def build_account_timezone_campaign_report(
     dates = resolve_account_report_dates(
         from_date,
         to_date,
-        timezone_name=timezone_name,
+        timezone_name=BUSINESS_TIMEZONE,
         now=current,
     )
     date_query = {"$gte": dates[0].isoformat(), "$lte": dates[-1].isoformat()}
-    performance_cursor = _collection(
-        db, SNAPCHAT_ACCOUNT_LOCAL_PERFORMANCE_COLLECTION
-    ).find(
-        {
-            "user_id": user_id,
-            "provider": SNAPCHAT_PROVIDER_ID,
-            "ad_account_id": selected_id,
-            "entity_type": {"$in": ["ad_account", "campaign"]},
-            "date": date_query,
-            "date_timezone": timezone_name,
-            "source_mode": account_local_source_mode(action_report_time),
-            "action_report_time": action_report_time,
-        },
-        {"_id": 0},
-    )
-    performance_rows = await _to_list(performance_cursor, MAX_REPORT_ROWS)
-    row_limit_reached = len(performance_rows) >= MAX_REPORT_ROWS
+    snapchat_error: str | None = None
+    try:
+        performance_cursor = _collection(
+            db, SNAPCHAT_ACCOUNT_LOCAL_PERFORMANCE_COLLECTION
+        ).find(
+            {
+                "user_id": user_id,
+                "provider": SNAPCHAT_PROVIDER_ID,
+                "ad_account_id": selected_id,
+                "entity_type": {"$in": ["ad_account", "campaign"]},
+                "date": date_query,
+                "date_timezone": timezone_name,
+                "source_mode": account_local_source_mode(action_report_time),
+                "action_report_time": action_report_time,
+            },
+            {"_id": 0},
+        )
+        performance_rows = await _to_list(performance_cursor, MAX_REPORT_ROWS + 1)
+    except Exception:
+        performance_rows = []
+        snapchat_error = "snapchat_performance_read_failed"
+    row_limit_reached = len(performance_rows) > MAX_REPORT_ROWS
+    performance_rows = performance_rows[:MAX_REPORT_ROWS]
     account_rows = [row for row in performance_rows if row.get("entity_type") == "ad_account"]
     campaign_rows = [row for row in performance_rows if row.get("entity_type") == "campaign"]
     summary_rows = account_rows or campaign_rows
 
-    entity_cursor = _collection(db, SNAPCHAT_ENTITY_COLLECTION).find(
-        {
-            "user_id": user_id,
-            "provider": SNAPCHAT_PROVIDER_ID,
-            "ad_account_id": selected_id,
-            "entity_type": "campaign",
-        },
-        {"_id": 0},
-    )
-    entity_rows = await _to_list(entity_cursor, MAX_ENTITY_ROWS)
-    entity_limit_reached = len(entity_rows) >= MAX_ENTITY_ROWS
+    try:
+        entity_cursor = _collection(db, SNAPCHAT_ENTITY_COLLECTION).find(
+            {
+                "user_id": user_id,
+                "provider": SNAPCHAT_PROVIDER_ID,
+                "ad_account_id": selected_id,
+                "entity_type": "campaign",
+            },
+            {"_id": 0},
+        )
+        entity_rows = await _to_list(entity_cursor, MAX_ENTITY_ROWS + 1)
+    except Exception:
+        entity_rows = []
+        snapchat_error = snapchat_error or "snapchat_entity_read_failed"
+    entity_limit_reached = len(entity_rows) > MAX_ENTITY_ROWS
+    entity_rows = entity_rows[:MAX_ENTITY_ROWS]
     entity_by_id = {
         _text(row.get("external_id")): row
         for row in entity_rows
         if _text(row.get("external_id"))
     }
+
+    requested_campaign_id = _text(campaign_query)
+    requested_campaign_diagnostic: dict[str, Any] | None = None
+    if (
+        _UUID_CAMPAIGN_ID.fullmatch(requested_campaign_id)
+        and requested_campaign_id not in entity_by_id
+        and not any(
+            _text(row.get("campaign_id") or row.get("external_id"))
+            == requested_campaign_id
+            for row in campaign_rows
+        )
+    ):
+        reason = "provider_missing"
+        evidence_account_id: str | None = None
+        if snapchat_error or entity_limit_reached:
+            reason = "source_failed"
+        else:
+            try:
+                diagnostic_cursor = _collection(db, SNAPCHAT_ENTITY_COLLECTION).find(
+                    {
+                        "user_id": user_id,
+                        "provider": SNAPCHAT_PROVIDER_ID,
+                        "entity_type": "campaign",
+                        "external_id": requested_campaign_id,
+                    },
+                    {"_id": 0, "external_id": 1, "ad_account_id": 1, "status": 1},
+                )
+                diagnostic_rows = await _to_list(diagnostic_cursor, 2)
+                if diagnostic_rows:
+                    diagnostic = diagnostic_rows[0]
+                    evidence_account_id = _text(diagnostic.get("ad_account_id")) or None
+                    status_text = _text(diagnostic.get("status")).casefold()
+                    if evidence_account_id != selected_id:
+                        reason = "outside_account"
+                    elif "deleted" in status_text or "archived" in status_text:
+                        reason = "deleted"
+                    else:
+                        reason = "provider_missing"
+            except Exception:
+                reason = "source_failed"
+        requested_campaign_diagnostic = {
+            "campaign_id": requested_campaign_id,
+            "reason": reason,
+            "selected_account_id": selected_id,
+            "evidence_account_id": evidence_account_id,
+        }
 
     requested_days = len(dates)
     platform_totals = _aggregate_rows(summary_rows, requested_days=requested_days)
@@ -1051,7 +1116,9 @@ async def build_account_timezone_campaign_report(
     campaigns: list[dict[str, Any]] = []
     identities: list[dict[str, Any]] = []
     identity_matches = 0
-    for campaign_id_value, rows in campaign_groups.items():
+    campaign_ids = sorted(set(campaign_groups) | set(entity_by_id))
+    for campaign_id_value in campaign_ids:
+        rows = campaign_groups.get(campaign_id_value, [])
         entity = entity_by_id.get(campaign_id_value, {})
         if entity:
             identity_matches += 1
@@ -1097,14 +1164,28 @@ async def build_account_timezone_campaign_report(
         None,
     )
     currency, rate = _effective_currency(selected, setting)
-    salla_by_campaign, salla_by_date, coverage = await _salla_account_outcomes(
-        db,
-        user_id,
-        date_from=dates[0].isoformat(),
-        date_to=dates[-1].isoformat(),
-        timezone_name=timezone_name,
-        identities=identities,
-    )
+    salla_error: str | None = None
+    try:
+        salla_by_campaign, salla_by_date, coverage = await _salla_account_outcomes(
+            db,
+            user_id,
+            date_from=dates[0].isoformat(),
+            date_to=dates[-1].isoformat(),
+            timezone_name=BUSINESS_TIMEZONE,
+            identities=identities,
+        )
+    except Exception:
+        salla_by_campaign, salla_by_date, coverage = {}, {}, {
+            "date_timezone": BUSINESS_TIMEZONE,
+            "matching_status": "failed",
+            "matching_reason": "salla_source_failed",
+            "salla_total_orders": None,
+            "salla_matched_orders": None,
+            "salla_unmatched_orders": None,
+            "salla_as_of": None,
+            "read_only": True,
+        }
+        salla_error = "salla_source_failed"
 
     def select_metrics(
         platform_value: dict[str, Any],
@@ -1144,14 +1225,38 @@ async def build_account_timezone_campaign_report(
                 "sales_native": platform_value.get("sales_native"),
             },
             "salla_results": salla_value,
+            "salla_orders": int(salla_value.get("orders") or 0) if not salla_error else None,
+            "salla_sales_sar": (
+                round(float(salla_value.get("sales_sar") or 0), 2)
+                if not salla_error else None
+            ),
+            "snapchat_purchases": platform_value.get("orders"),
+            "snapchat_purchase_value_sar": platform_value.get("sales_sar"),
+            "snapchat_spend_sar": platform_value.get("spend_sar"),
         })
 
     for row in daily:
+        platform_daily = dict(row)
+        salla_daily = salla_by_date.get(
+            row["date"], {"orders": 0, "sales_sar": 0.0}
+        )
         if result_source == RESULT_SOURCE_SALLA:
             row.update(select_metrics(
                 row,
-                salla_by_date.get(row["date"], {"orders": 0, "sales_sar": 0.0}),
+                salla_daily,
             ))
+        row.update({
+            "salla_matched_orders": (
+                int(salla_daily.get("orders") or 0) if not salla_error else None
+            ),
+            "salla_sales_sar": (
+                round(float(salla_daily.get("sales_sar") or 0), 2)
+                if not salla_error else None
+            ),
+            "snapchat_purchases": platform_daily.get("orders"),
+            "snapchat_purchase_value_sar": platform_daily.get("sales_sar"),
+            "snapchat_spend_sar": platform_daily.get("spend_sar"),
+        })
         row["result_source"] = result_source
 
     exact_salla_total = {
@@ -1161,14 +1266,56 @@ async def build_account_timezone_campaign_report(
     totals = dict(platform_totals)
     totals.update(select_metrics(platform_totals, exact_salla_total))
     totals["result_source"] = result_source
+    totals.update({
+        "salla_total_orders": coverage.get("salla_total_orders"),
+        "salla_matched_orders": coverage.get(
+            "salla_matched_orders", exact_salla_total.get("orders")
+        ),
+        "salla_unmatched_orders": coverage.get("salla_unmatched_orders"),
+        "salla_sales_sar": (
+            exact_salla_total.get("sales_sar") if not salla_error else None
+        ),
+        "snapchat_purchases": platform_totals.get("orders"),
+        "snapchat_purchase_value_sar": platform_totals.get("sales_sar"),
+        "snapchat_spend_sar": platform_totals.get("spend_sar"),
+    })
 
+    report_wide_campaign_spend_sar = round(sum(
+        float(row.get("snapchat_spend_sar") or 0) for row in campaigns
+    ), 6)
+
+    campaign_exclusions: list[dict[str, str]] = []
     for campaign in campaigns:
         campaign["campaign_active"] = is_active_provider_status(campaign.get("status"))
+        campaign["data_status"] = (
+            "complete"
+            if campaign["campaign_id"] in campaign_groups
+            else "outside_date_range"
+        )
     if active_campaigns_only:
+        campaign_exclusions.extend({
+            "campaign_id": campaign["campaign_id"],
+            "reason": (
+                "deleted"
+                if any(
+                    marker in _text(campaign.get("status")).casefold()
+                    for marker in ("deleted", "archived")
+                )
+                else "inactive"
+            ),
+        } for campaign in campaigns if campaign.get("campaign_active") is not True)
         campaigns = [campaign for campaign in campaigns if campaign.get("campaign_active") is True]
 
     campaigns_query = _text(campaign_query).casefold()[:120]
     if campaigns_query:
+        campaign_exclusions.extend({
+            "campaign_id": item["campaign_id"],
+            "reason": "filtered",
+        } for item in campaigns if campaigns_query not in " ".join([
+            _text(item.get("campaign_name")),
+            _text(item.get("campaign_id")),
+            _text(item.get("account_name")),
+        ]).casefold())
         campaigns = [
             item for item in campaigns
             if campaigns_query in " ".join([
@@ -1184,6 +1331,37 @@ async def build_account_timezone_campaign_report(
     total_campaigns = len(campaigns)
     pages = (total_campaigns + limit - 1) // limit if total_campaigns else 0
     offset = (page - 1) * limit
+    campaign_exclusions.extend({
+        "campaign_id": item["campaign_id"],
+        "reason": "pagination_truncated",
+    } for index, item in enumerate(campaigns) if not (offset <= index < offset + limit))
+    if (
+        requested_campaign_diagnostic is None
+        and _UUID_CAMPAIGN_ID.fullmatch(requested_campaign_id)
+    ):
+        exact_exclusion = next(
+            (
+                item for item in campaign_exclusions
+                if item.get("campaign_id") == requested_campaign_id
+            ),
+            None,
+        )
+        if exact_exclusion is not None:
+            requested_campaign_diagnostic = {
+                "campaign_id": requested_campaign_id,
+                "reason": exact_exclusion["reason"],
+                "selected_account_id": selected_id,
+                "evidence_account_id": selected_id,
+            }
+    if requested_campaign_diagnostic is not None and not any(
+        item.get("campaign_id") == requested_campaign_id
+        and item.get("reason") == requested_campaign_diagnostic["reason"]
+        for item in campaign_exclusions
+    ):
+        campaign_exclusions.append({
+            "campaign_id": requested_campaign_id,
+            "reason": requested_campaign_diagnostic["reason"],
+        })
     campaigns = campaigns[offset:offset + limit]
 
     account_output = {
@@ -1227,13 +1405,44 @@ async def build_account_timezone_campaign_report(
             "detail": "قلّص الفترة ثم أعد تحميل التقرير.",
         })
 
+    snapchat_as_of = platform_totals.get("last_observed_at")
+    snapchat_status = "complete"
+    snapchat_reason = "selected_account_window_complete"
+    if snapchat_error:
+        snapchat_status, snapchat_reason = "failed", snapchat_error
+    elif row_limit_reached or entity_limit_reached:
+        snapchat_status, snapchat_reason = "partial", "bounded_read_limit_reached"
+    elif not summary_rows:
+        snapchat_status, snapchat_reason = "partial", "provider_rows_missing"
+    elif int(platform_totals.get("observed_days") or 0) < requested_days:
+        snapchat_status, snapchat_reason = "partial", "provider_dates_incomplete"
+    elif dates[-1] == account_local_today(timezone_name, now=current):
+        parsed_as_of = _parse_datetime(snapchat_as_of)
+        if parsed_as_of is not None:
+            if parsed_as_of.tzinfo is None:
+                parsed_as_of = parsed_as_of.replace(tzinfo=timezone.utc)
+            if current - parsed_as_of.astimezone(timezone.utc) > timedelta(hours=2):
+                snapchat_status, snapchat_reason = "stale", "provider_snapshot_older_than_two_hours"
+
+    matching_status = _text(coverage.get("matching_status")) or (
+        "failed" if salla_error else "complete"
+    )
+    salla_status = "failed" if salla_error or matching_status == "failed" else "complete"
+    salla_reason = _text(coverage.get("matching_reason")) or (
+        salla_error or "literal_utm_campaign_id_only"
+    )
+
     return {
+        "request_id": effective_request_id,
         "provider": SNAPCHAT_PROVIDER_ID,
         "date_from": dates[0].isoformat(),
         "date_to": dates[-1].isoformat(),
-        "business_timezone": timezone_name,
+        "business_timezone": BUSINESS_TIMEZONE,
+        "effective_timezone": BUSINESS_TIMEZONE,
         "account_timezone": timezone_name,
+        "salla_attribution_timezone": BUSINESS_TIMEZONE,
         "selected_account_id": selected_id,
+        "selected_account_name": selected_meta["account_name"],
         "selected_account": selected_meta,
         "available_accounts": public_accounts,
         "result_source": result_source,
@@ -1251,6 +1460,21 @@ async def build_account_timezone_campaign_report(
             "total": total_campaigns,
             "pages": pages,
         },
+        "salla_as_of": coverage.get("salla_as_of"),
+        "snapchat_as_of": snapchat_as_of,
+        "salla_status": salla_status,
+        "snapchat_status": snapchat_status,
+        "matching_status": matching_status,
+        "reconciliation_status": (
+            "reconciled"
+            if salla_status == "complete" and snapchat_status == "complete"
+            else "unreconciled"
+        ),
+        "coverage_reasons": {
+            "salla": salla_reason,
+            "snapchat": snapchat_reason,
+            "matching": _text(coverage.get("matching_reason")) or salla_reason,
+        },
         "source": {
             "performance_collection": SNAPCHAT_ACCOUNT_LOCAL_PERFORMANCE_COLLECTION,
             "riyadh_performance_collection": SNAPCHAT_PERFORMANCE_COLLECTION,
@@ -1261,6 +1485,7 @@ async def build_account_timezone_campaign_report(
             "performance_rows": len(performance_rows),
             "account_rows": len(account_rows),
             "campaign_rows": len(campaign_rows),
+            "entity_rows": len(entity_rows),
             "identity_matches": identity_matches,
             "identity_coverage_pct": (
                 round(identity_matches / len(campaign_groups) * 100, 2)
@@ -1277,6 +1502,12 @@ async def build_account_timezone_campaign_report(
             ),
             "account_local_action_report_time": action_report_time,
             "salla_attribution": coverage,
+            "salla_campaign_matched_orders": exact_salla_total.get("orders"),
+            "salla_campaign_sales_sar": exact_salla_total.get("sales_sar"),
+            "snapchat_campaign_spend_sar": report_wide_campaign_spend_sar,
+            "requested_campaign_diagnostic": requested_campaign_diagnostic,
+            "campaign_exclusions": campaign_exclusions[:500],
+            "campaign_exclusions_truncated": len(campaign_exclusions) > 500,
         },
         "ai_readiness": {
             "report_ready": report_ready,
@@ -1330,6 +1561,7 @@ def attach_snapchat_account_timezone_campaign_routes(
         name="get_snapchat_campaign_report",
     )
     async def campaign_report(
+        request_id: str | None = Query(default=None, max_length=120),
         account_id: str | None = Query(default=None, max_length=120),
         from_date: str | None = Query(default=None),
         to_date: str | None = Query(default=None),
@@ -1355,6 +1587,7 @@ def attach_snapchat_account_timezone_campaign_routes(
                 result_source=result_source,
                 action_report_time=action_report_time,
                 active_campaigns_only=active_campaigns_only,
+                request_id=request_id,
             )
         except SnapchatNativeSyncError as exc:
             raise HTTPException(

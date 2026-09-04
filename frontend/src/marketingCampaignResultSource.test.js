@@ -37,7 +37,7 @@ describe("campaign result source transport", () => {
     expect(campaignResultsSource("snapchat")).toBe("platform");
   });
 
-  test("first Snapchat request lets backend resolve today in account timezone", async () => {
+  test("first Snapchat request preserves the selected business date", async () => {
     api.defaults.adapter = async (config) => ({
       data: {
         result_source: "salla",
@@ -68,8 +68,8 @@ describe("campaign result source transport", () => {
       },
     });
 
-    expect(response.config.params.from_date).toBeUndefined();
-    expect(response.config.params.to_date).toBeUndefined();
+    expect(response.config.params.from_date).toBe("2026-08-01");
+    expect(response.config.params.to_date).toBe("2026-08-04");
     expect(response.config.params.result_source).toBe("salla");
     expect(snapchatSelectedAccountId()).toBe("riyadh-account");
     expect(snapchatAvailableAccounts()[0].timezone).toBe("Asia/Riyadh");

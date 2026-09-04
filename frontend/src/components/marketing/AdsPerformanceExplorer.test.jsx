@@ -86,8 +86,8 @@ describe("AdsPerformanceExplorer", () => {
         await act(async () => {
             root.render(
                 <AdsPerformanceExplorer
-                    totals={{ orders: 4, sales_sar: 100, roas: 2, spend_sar: 50 }}
-                    daily={[{ date: "2026-08-04", orders: 4, sales_sar: 100, roas: 2, spend_sar: 50 }]}
+                    totals={{ salla_matched_orders: 4, salla_sales_sar: 100, salla_roas: 2, snapchat_spend_sar: 50 }}
+                    daily={[{ date: "2026-08-04", salla_matched_orders: 4, salla_sales_sar: 100, salla_roas: 2, snapchat_spend_sar: 50 }]}
                     platformLabel="سناب شات"
                 />,
             );
@@ -95,12 +95,15 @@ describe("AdsPerformanceExplorer", () => {
 
         expect(container.querySelector('[data-testid="ads-performance-single-day-chart"]')).not.toBeNull();
         expect(container.textContent).toContain("بيانات الساعات قيد أول مزامنة");
+        expect(container.textContent).toContain("طلبات سلة المطابقة");
+        expect(container.textContent).toContain("صرف Snapchat");
+        expect(container.textContent).not.toContain("عمليات الشراء/البيع");
 
         await act(async () => root.unmount());
         container.remove();
     });
 
-    test("renders a single selected day as an hourly line chart", async () => {
+    test("does not reuse an hourly snapshot from a previous request", async () => {
         global.IS_REACT_ACT_ENVIRONMENT = true;
         mockGetCampaignReportSnapshot.mockReturnValue({
             date_from: "2026-08-04",
@@ -125,18 +128,17 @@ describe("AdsPerformanceExplorer", () => {
         await act(async () => {
             root.render(
                 <AdsPerformanceExplorer
-                    totals={{ orders: 2, sales_sar: 100, roas: 5.56, spend_sar: 126 }}
-                    daily={[{ date: "2026-08-04", orders: 2, sales_sar: 100, roas: 5.56, spend_sar: 126 }]}
+                    totals={{ salla_matched_orders: 2, salla_sales_sar: 100, salla_roas: 5.56, snapchat_spend_sar: 126 }}
+                    daily={[{ date: "2026-08-04", salla_matched_orders: 2, salla_sales_sar: 100, salla_roas: 5.56, snapchat_spend_sar: 126 }]}
                     platformLabel="سناب شات"
                 />,
             );
         });
 
-        expect(container.querySelector('[data-testid="ads-performance-hourly-chart"]')).not.toBeNull();
-        expect(container.querySelector('[data-testid="ads-performance-single-day-chart"]')).toBeNull();
-        expect(container.querySelector('[data-testid="ads-performance-explorer"]').dataset.chartGranularity).toBe("hour");
-        expect(container.textContent).toContain("اتجاه الأداء بالساعة");
-        expect(container.textContent).toContain("12 صباحًا إلى 11 مساءً");
+        expect(container.querySelector('[data-testid="ads-performance-hourly-chart"]')).toBeNull();
+        expect(container.querySelector('[data-testid="ads-performance-single-day-chart"]')).not.toBeNull();
+        expect(container.querySelector('[data-testid="ads-performance-explorer"]').dataset.chartGranularity).toBe("day");
+        expect(container.textContent).toContain("اتجاه الأداء اليومي");
 
         await act(async () => root.unmount());
         container.remove();
