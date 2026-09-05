@@ -122,6 +122,11 @@ def main():
     print('Installed PDF versions:', json.dumps({n: importlib.metadata.version(n) for n in ['reportlab', 'pillow', 'PyMuPDF', 'qrcode', 'fonttools', 'python-bidi']}))
     print('Application loaded module count:', len(sys.modules))
     assert not any(n.startswith('emergentintegrations') for n in sys.modules)
+    from exports import _register_font
+    assert _register_font() == 'DejaVuSans', 'generic Arabic export font missing'
+    from fontTools.ttLib import TTFont
+    with TTFont(str(ROOT / 'fonts/Cairo-Bold.ttf')) as font:
+        assert 0x0627 in font.getBestCmap(), 'bundled font lacks Arabic alef'
     os.environ['PYTEST_DISABLE_PLUGIN_AUTOLOAD'] = '1'
     import pytest
     code = pytest.main(['--noconftest', '-p', 'no:cacheprovider', '-q', str(ROOT/'tests/test_preparation_pdf_media_text_gap.py'), str(ROOT/'tests/test_preparation_pdf_card_file_number.py')])
