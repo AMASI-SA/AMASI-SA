@@ -206,7 +206,7 @@ full HTTP response exists, so response bytes are `null` rather than a fabricated
 comparison. A separate before probe records the old broad cost-context
 materialization on the same dataset.
 
-Green CI evidence: [Snapchat Settings Management V2 run #76](https://github.com/AMASI-SA/AMASI-SA/actions/runs/33993481014).
+Green CI evidence: [Snapchat Settings Management V2 run #78](https://github.com/AMASI-SA/AMASI-SA/actions/runs/33995936815).
 
 | Full Campaign request metric | Before: reviewed nested facet | After: production route |
 | --- | ---: | ---: |
@@ -214,17 +214,17 @@ Green CI evidence: [Snapchat Settings Management V2 run #76](https://github.com/
 | Mongo read commands | 1 aggregate | 26 (3 aggregate, 23 find) |
 | Campaign rows returned to Python | 0 | 25 of 5,000 |
 | Settings rows returned | 0 | 25 exact visible IDs |
-| Full response bytes | `null` (no response existed) | 303,729 B |
-| Campaign response bytes | `null` | 215,272 B |
+| Full response bytes | `null` (no response existed) | 304,023 B |
+| Campaign response bytes | `null` | 215,566 B |
 | Settings response bytes | `null` | 88,457 B |
-| Wall time | 1.930 ms to rejection | 1,486.505 ms complete |
-| Python peak traced memory | 21,787 B to rejection | 2,643,987 B complete |
+| Wall time | 1.801 ms to rejection | 1,443.745 ms complete |
+| Python peak traced memory | 21,787 B to rejection | 2,647,207 B complete |
 
 The invalid before pipeline cannot supply a valid latency, byte, or memory
 baseline for a completed request. Reporting its tiny rejection cost as an
 improvement baseline would be misleading. The separate old broad-cost probe
 did complete: 7 read commands (6 find + 1 getMore), 5,000 product documents,
-247.782 ms, and 9,040,600 B peak traced memory. In the completed after request,
+250.358 ms, and 9,040,600 B peak traced memory. In the completed after request,
 both row detail and report summary independently restricted the current-cost
 context to the 25 product IDs/SKUs referenced by the 25 orders; neither loaded
 the remaining catalogue.
@@ -243,11 +243,11 @@ SAR 126 contribution profit. Each order used SAR 10 base, SAR 10 components,
 SAR 4 service, and SAR 3 selected option (SAR 27 total); one missing and one
 stale stored cost
 were diagnostics only, with `stored_total_product_cost_used=false`. The
-targeted run recorded 133 unit/regression tests passed, 4 real-Mongo tests
+targeted run recorded 166 unit/regression tests passed, 5 real-Mongo tests
 passed, 92 frontend tests across 6 suites passed, and a successful frontend
 build.
 
-The acceptance follow-up adds an HTTP/Mongo parity case with three Campaigns
+The acceptance follow-up's fifth HTTP/Mongo case uses three Campaigns
 and six Salla orders: one literal exact ID, one unique name only, one shared
 name, one case-mismatched ID, one whitespace-mismatched ID, and one source-only
 order. Only the exact-ID order contributes to Campaign row/summary orders,
