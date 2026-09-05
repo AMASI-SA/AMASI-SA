@@ -594,3 +594,38 @@ async def test_real_mongo_row_and_summary_share_exact_cost_profit_scope(mongo_db
     assert summary["cost_read_diagnostics"]["product_bindings_materialized"] == 2
     assert summary["cost_read_diagnostics"]["option_bindings_materialized"] == 1
     assert summary["cost_read_diagnostics"]["resources_materialized"] == 2
+    print(
+        "SNAP_V2_COST_PARITY="
+        + json.dumps(
+            {
+                "environment": "isolated_ci_mongodb",
+                "row": {
+                    "orders": row_profit["orders"],
+                    "sales_sar": row_profit["sales_sar"],
+                    "product_cost_sar": row_profit["product_cost_sar"],
+                    "contribution_profit_sar": row_profit[
+                        "contribution_profit_sar"
+                    ],
+                },
+                "summary": {
+                    "orders": summary_profit["orders"],
+                    "sales_sar": summary_profit["sales_sar"],
+                    "product_cost_sar": summary_profit["product_cost_sar"],
+                    "contribution_profit_sar": summary_profit[
+                        "contribution_profit_sar"
+                    ],
+                    "stored_cost_missing_orders": summary_profit[
+                        "stored_cost_missing_orders"
+                    ],
+                    "stored_cost_mismatch_orders": summary_profit[
+                        "stored_cost_mismatch_orders"
+                    ],
+                    "stored_total_product_cost_used": summary_profit[
+                        "stored_total_product_cost_used"
+                    ],
+                },
+                "cost_read_diagnostics": summary["cost_read_diagnostics"],
+            },
+            sort_keys=True,
+        )
+    )
