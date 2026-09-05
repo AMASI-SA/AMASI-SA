@@ -15,7 +15,8 @@ concurrency:
 jobs:
   baseline:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    # First attempt only: reserve the rest of the shared 45-minute task budget.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -55,8 +56,16 @@ jobs:
           set -euo pipefail
           sha256sum -c "$RUNNER_TEMP/exit2a-intent-before.sha256"
           test -z "$(git status --porcelain)"
-      - name: Retain sanitized build evidence only
+      - name: Bound evidence storage
         if: always()
+        id: evidence
+        shell: bash
+        run: |
+          if test -f "$RUNNER_TEMP/exit2a-baseline-build.log" && test "$(stat -c%s "$RUNNER_TEMP/exit2a-baseline-build.log")" -le 1048576; then
+            echo "bounded=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Retain sanitized build evidence only
+        if: always() && steps.evidence.outputs.bounded == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: exit2a-baseline-evidence

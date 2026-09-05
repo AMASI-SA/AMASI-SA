@@ -10,8 +10,14 @@ Do not invoke the application, freeze-intent, prepare, or prepublish. Preserve
 the existing GitHub environment: the adapter directly invokes the governed
 toolchain, so no dispatcher marker spoofing or removal is necessary.
 
-Before this runs, CI quota must be established. No Linux runtime, Docker or WSL
-was installed on the user's Windows computer. No Actions run has started yet.
+GitHub Billing Overview / Actions for personal account AMASI-SA was read on
+2026-09-06: 0/2,000 minutes used, 0/0.5 GB storage used, $0 billable after
+discounts. The owner limits the entire task to 45 aggregate runner minutes
+across all jobs/attempts, standard Ubuntu only, no automatic retries or paid
+overage. The first baseline attempt is capped at 20 minutes; charge its actual
+duration against the aggregate before any further job. Evidence upload is
+limited to a log at most 1 MiB and one checksum file, retained for two days.
+Recheck usage before another run. No Docker/WSL installation on the user's PC.
 
 ## Source audit and exclusions
 
@@ -59,7 +65,11 @@ environment-enforced egress denial; Auth/orders/PDF; restart/shutdown; candidate
 CI and Draft PR. Modified source will invalidate the existing release intent:
 report the candidate SHA and request a separate intent decision, never waive it.
 
-Production database mapping/provider/owner/backup authority, backup and storage
-metadata, and domain/DNS ownership remain unknown. The browser inventory showed
-no tabs; no platform UI has been inspected. No Production data, provider calls,
+Emergent UI is now accessible. Home shows Salla Analytics as Published; View Info
+shows salla-analytics, job ab0374e5-2a04-4e34-b24c-447b0238a858, live link
+https://salla-analytics.emergent.host and custom domain mezansalla.com. Machine
+type Large is workspace metadata, not verified Production resource sizing.
+The displayed most recent GitHub export branch is not live SHA evidence.
+Production database mapping/provider/owner/backup authority, backup/storage
+metadata and domain/DNS ownership remain unknown. No Production data, provider calls,
 release lease, intent change, deployment, DNS or paid resources are authorized.
