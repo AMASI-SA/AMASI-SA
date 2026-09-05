@@ -1,0 +1,66 @@
+name: EXIT-2A unmodified Linux baseline
+
+on:
+  push:
+    branches: [codex/exit-2a-portable-linux-package]
+    paths: [.github/workflows/exit2a-baseline.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: exit2a-baseline
+  cancel-in-progress: false
+
+jobs:
+  baseline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 1de6118484ac4fe1d0981e230618dbb573d8c58c
+          fetch-depth: 0
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /*
+            !/AUDIT/
+            !/reports/
+            !/test_reports/
+            !/memory/
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Prove exact unmodified baseline and complete build source scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 1de6118484ac4fe1d0981e230618dbb573d8c58c
+          test -z "$(git status --porcelain)"
+          git ls-files -z -- backend frontend scripts release | python -c 'import os,sys; paths=sys.stdin.buffer.read().split(b"\0"); missing=[p for p in paths if p and not os.path.lexists(p)]; assert not missing, "missing build source/assets"; print("Build scope tracked members present:",len(paths)-1)'
+          python -c 'import hashlib,json,pathlib; root=pathlib.Path("frontend"); rows=json.loads(pathlib.Path("release/release-intent-v5.json").read_text())["frontend_source"]["files"]; assert all(hashlib.sha256((root/r["path"]).read_bytes()).hexdigest()==r["sha256"] for r in rows); print("All frontend intent members match:",len(rows))'
+          sha256sum release/release-intent-v5.json > "$RUNNER_TEMP/exit2a-intent-before.sha256"
+      - name: Build with baseline reviewed intent and pinned repository toolchain
+        shell: bash
+        env:
+          XDG_CACHE_HOME: ${{ runner.temp }}/exit2a-toolchain
+        run: |
+          set -euo pipefail
+          python scripts/emergent_deployment_adapter.py build | tee "$RUNNER_TEMP/exit2a-baseline-build.log"
+      - name: Verify intent and tracked source were not changed
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum -c "$RUNNER_TEMP/exit2a-intent-before.sha256"
+          test -z "$(git status --porcelain)"
+      - name: Retain sanitized build evidence only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exit2a-baseline-evidence
+          retention-days: 2
+          path: |
+            ${{ runner.temp }}/exit2a-baseline-build.log
+            ${{ runner.temp }}/exit2a-intent-before.sha256
