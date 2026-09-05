@@ -451,6 +451,164 @@ async def test_http_routes_are_parent_scoped_and_preserve_page_completeness(
 
 
 @pytest.mark.asyncio
+async def test_http_campaign_rows_and_summary_share_literal_id_financial_scope(
+    mongo_db,
+    monkeypatch,
+):
+    campaigns = [
+        _entity("campaign", "Campaign-A", "ACTIVE"),
+        _entity("campaign", "Campaign-B", "ACTIVE"),
+        _entity("campaign", "Campaign-C", "ACTIVE"),
+    ]
+    campaigns[0]["name"] = "Unique Name"
+    campaigns[1]["name"] = campaigns[2]["name"] = "Shared Name"
+    await mongo_db[SNAPCHAT_ENTITY_FACTS_COLLECTION].insert_many(campaigns)
+    await mongo_db[SNAPCHAT_HOURLY_FACTS_COLLECTION].insert_many(
+        [
+            _fact("campaign", "Campaign-A", 20),
+            _fact("campaign", "Campaign-B", 0),
+            _fact("campaign", "Campaign-C", 0),
+        ]
+    )
+    await mongo_db[SNAPCHAT_ACCOUNTS_COLLECTION].insert_one(
+        {
+            "user_id": USER_ID,
+            "provider": "snapchat_ads",
+            "ad_account_id": ACCOUNT_ID,
+            "display_name": "Literal ID account",
+            "currency": "SAR",
+            "timezone": "Asia/Riyadh",
+            "selected": True,
+            "active": True,
+        }
+    )
+    await mongo_db["mezan_snapchat_sync_runs_v2"].insert_one(
+        {
+            "user_id": USER_ID,
+            "ad_account_id": ACCOUNT_ID,
+            "campaign_sync_status": "complete",
+            "ad_squad_sync_status": "complete",
+            "ad_sync_status": "complete",
+            "started_at": START_UTC,
+        }
+    )
+    await mongo_db.settings.insert_one(
+        {
+            "user_id": USER_ID,
+            "report_included_statuses": ["DELIVERED"],
+            "hide_inferred_date_orders": False,
+        }
+    )
+
+    def _order(number, amount, **attribution):
+        return {
+            "user_id": USER_ID,
+            "order_number": number,
+            "created_at": datetime(2026, 9, 1, 7, tzinfo=timezone.utc),
+            "order_date": "2026-09-01",
+            "order_status": "DELIVERED",
+            "total_amount": amount,
+            "products": (
+                [{"product_id": "literal-product", "quantity": 1, "total": amount}]
+                if number == "exact"
+                else []
+            ),
+            "raw_by_source": {
+                "salla_direct": {
+                    "ad_platform_source": "snapchat",
+                    **attribution,
+                }
+            },
+        }
+
+    await mongo_db.unified_orders.insert_many(
+        [
+            _order("exact", 100, campaign_id="Campaign-A"),
+            _order("unique-name-only", 200, campaign_name="Unique Name"),
+            _order("shared-name", 300, campaign_name="Shared Name"),
+            _order("case-mismatch", 400, campaign_id="campaign-a"),
+            _order("whitespace-mismatch", 500, campaign_id=" Campaign-A "),
+            _order("source-only", 600),
+        ]
+    )
+    await mongo_db.mezan_products_v2.insert_one(
+        {
+            "user_id": USER_ID,
+            "id": "literal-product",
+            "salla_product_id": "literal-product",
+            "cost_price_from_salla": 40,
+            "variants": [],
+        }
+    )
+
+    async def _sar(_db, *, rows, totals, **_kwargs):
+        for row in rows:
+            row["spend_sar"] = row.get("spend_native")
+        totals["spend_sar"] = totals.get("spend_native")
+        return 1.0, {"status": "complete"}
+
+    async def _carts(*_args, **_kwargs):
+        return {"by_campaign": {}, "coverage": {"status": "complete"}}
+
+    monkeypatch.setattr("snapchat_v2.routes._add_sar_spend", _sar)
+    monkeypatch.setattr("snapchat_v2.routes.load_abandoned_cart_outcomes", _carts)
+
+    async def current_user():
+        return {"id": USER_ID}
+
+    router = APIRouter(prefix="/api/integrations-v2")
+    attach_snapchat_v2_routes(router, mongo_db, current_user, lambda user: user)
+    app = FastAPI()
+    app.include_router(router)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(
+            "/api/integrations-v2/snapchat-v2/campaigns"
+            "?date_from=2026-09-01&date_to=2026-09-01&timezone=account&page_size=25"
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    rows = {row["campaign_id"]: row for row in body["campaigns"]}
+    exact = rows["Campaign-A"]["salla_results"]
+    assert exact["orders"] == 1
+    assert exact["sales_sar"] == 100
+    assert exact["roas"] == 5
+    assert exact["profitability"]["orders"] == 1
+    assert exact["profitability"]["sales_sar"] == 100
+    assert exact["profitability"]["product_cost_sar"] == 40
+    assert exact["profitability"]["contribution_profit_sar"] == 40
+    assert rows["Campaign-B"]["salla_results"]["orders"] == 0
+    assert rows["Campaign-C"]["salla_results"]["orders"] == 0
+
+    summary = body["salla"]["summary"]
+    assert summary["campaign_matched_orders"] == sum(
+        row["salla_results"]["orders"] for row in rows.values()
+    ) == 1
+    assert summary["campaign_matched_financial_sales_sar"] == sum(
+        row["salla_results"]["sales_sar"] for row in rows.values()
+    ) == 100
+    assert summary["campaign_matched_financial_orders"] == 1
+    assert summary["source_only_orders"] == 5
+    assert summary["source_only_financial_orders"] == 5
+    assert summary["source_only_financial_sales_sar"] == 2_000
+    assert summary["profitability"]["orders"] == exact["profitability"]["orders"]
+    assert summary["profitability"]["sales_sar"] == exact["profitability"]["sales_sar"]
+    assert summary["profitability"]["product_cost_sar"] == exact["profitability"][
+        "product_cost_sar"
+    ]
+    assert summary["profitability"]["contribution_profit_sar"] == exact[
+        "profitability"
+    ]["contribution_profit_sar"]
+    route_totals = body["totals"]["salla_results"]
+    assert route_totals["matched_orders"] == 1
+    assert route_totals["matched_sales_sar"] == 100
+    assert route_totals["source_only_orders"] == 5
+    assert route_totals["source_only_financial_orders"] == 5
+    assert route_totals["source_only_financial_sales_sar"] == 2_000
+
+
+@pytest.mark.asyncio
 async def test_real_mongo_row_and_summary_share_exact_cost_profit_scope(mongo_db):
     await mongo_db[SNAPCHAT_ENTITY_FACTS_COLLECTION].insert_one(
         _entity("campaign", "campaign-cost", "ACTIVE")

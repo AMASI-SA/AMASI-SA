@@ -24,7 +24,7 @@ from .total_facts import SNAPCHAT_TOTAL_FACTS_COLLECTION
 
 from salla_marketing_attribution import (
     SALLA_RAW_ATTRIBUTION_PROJECTION,
-    campaign_id_candidates,
+    attribution_containers,
     campaign_name_candidates,
     canonical_ad_platform,
     meaningful_source_label,
@@ -194,6 +194,49 @@ def _unique_lookup(
     }
 
 
+def _literal_scalar(value: Any) -> str:
+    if value is None or isinstance(value, (bool, dict, list, tuple, set)):
+        return ""
+    return str(value)
+
+
+def _literal_campaign_id_candidates(order: dict[str, Any]) -> list[str]:
+    """Return campaign-ID evidence without trimming or case normalization."""
+    result: list[str] = []
+    for container in attribution_containers(order):
+        for field in (
+            "campaign_id",
+            "source_campaign_id",
+            "utm_campaign_id",
+            "ad_campaign_id",
+        ):
+            value = _literal_scalar(container.get(field))
+            if value and value not in result:
+                result.append(value)
+        campaign = container.get("campaign")
+        if isinstance(campaign, dict):
+            for field in ("id", "external_id"):
+                value = _literal_scalar(campaign.get(field))
+                if value and value not in result:
+                    result.append(value)
+    return result
+
+
+def _literal_id_lookup(
+    identities: list[dict[str, Any]],
+) -> dict[str, tuple[str, str] | None]:
+    grouped: dict[str, set[tuple[str, str]]] = defaultdict(set)
+    for row in identities:
+        campaign_id = _literal_scalar(row.get("campaign_id"))
+        key = (_text(row.get("account_id")), campaign_id)
+        if campaign_id and all(key):
+            grouped[campaign_id].add(key)
+    return {
+        value: next(iter(keys)) if len(keys) == 1 else None
+        for value, keys in grouped.items()
+    }
+
+
 def _match_order_campaign(
     order: dict[str, Any],
     *,
@@ -204,17 +247,20 @@ def _match_order_campaign(
     platform = canonical_ad_platform(order)
     if platform and platform != provider_key:
         return None, "foreign_platform"
-    for candidate in campaign_id_candidates(order):
-        normalized = _norm(candidate)
-        if normalized and normalized in id_lookup:
-            key = id_lookup[normalized]
+    id_candidates = _literal_campaign_id_candidates(order)
+    for candidate in id_candidates:
+        if candidate in id_lookup:
+            key = id_lookup[candidate]
             return (key, "campaign_id") if key else (None, "ambiguous_id")
     if platform == provider_key:
         for candidate in campaign_name_candidates(order):
             normalized = _norm(candidate)
             if normalized and normalized in name_lookup:
                 key = name_lookup[normalized]
-                return (key, "campaign_name") if key else (None, "ambiguous_name")
+                return (None, "campaign_name_only") if key else (None, "ambiguous_name")
+        if id_candidates:
+            return None, "campaign_id_not_exact"
+        return None, "source_only"
     return None, "unmatched"
 
 
@@ -319,10 +365,10 @@ async def load_salla_campaign_outcomes(
     if len(orders) > MAX_ORDER_ROWS:
         raise ValueError("Salla order audit exceeded the safe row limit")
 
-    id_lookup = _unique_lookup(identities, "campaign_id")
+    id_lookup = _literal_id_lookup(identities)
     name_lookup = _unique_lookup(identities, "campaign_name")
     identity_by_key = {
-        (_text(row.get("account_id")), _text(row.get("campaign_id"))): row
+        (_text(row.get("account_id")), _literal_scalar(row.get("campaign_id"))): row
         for row in identities
     }
     zone = ZoneInfo(timezone_name)
@@ -346,17 +392,35 @@ async def load_salla_campaign_outcomes(
         )
 
         profitability_raw = defaultdict(_new_campaign_bucket)
+        exact_financial_orders = []
+        for order in orders:
+            local_date, _, _ = _localized_order_period_date(order, zone=zone)
+            key, _ = _match_order_campaign(
+                order,
+                id_lookup=id_lookup,
+                name_lookup=name_lookup,
+                provider_key=provider_key,
+            )
+            if (
+                key is not None
+                and local_date
+                and from_value <= local_date <= to_value
+                and _matches_any(order.get("order_status"), included_statuses)
+            ):
+                exact_financial_orders.append(order)
         cost_context = await _load_cost_context(
             db,
             str(user_id),
-            orders=orders,
+            orders=exact_financial_orders,
         )
     audit_rows: list[dict[str, Any]] = []
     total_financial_sales = 0.0
     snapchat_attributed_sales = 0.0
     snapchat_attributed_financial_sales = 0.0
+    source_only_financial_sales = 0.0
     account_timezone_snapchat_attributed_sales = 0.0
     account_timezone_snapchat_attributed_financial_sales = 0.0
+    account_timezone_source_only_financial_sales = 0.0
 
     for order in orders:
         local_date, local_created_at, date_source = _localized_order_period_date(
@@ -376,6 +440,7 @@ async def load_salla_campaign_outcomes(
         )
         reported_snapchat_source = source_platform == provider_key
         snapchat_attributed = reported_snapchat_source or key is not None
+        source_only = reported_snapchat_source and key is None
 
         legacy_account_period_included = bool(
             legacy_account_date
@@ -392,6 +457,11 @@ async def load_salla_campaign_outcomes(
                 if financial:
                     counters["snapchat_attributed_financial_orders"] += 1
                     snapchat_attributed_financial_sales += amount
+            if source_only:
+                counters["source_only_orders"] += 1
+                if financial:
+                    counters["source_only_financial_orders"] += 1
+                    source_only_financial_sales += amount
 
         account_timezone_period_included = bool(
             local_date and from_value <= local_date <= to_value
@@ -407,6 +477,11 @@ async def load_salla_campaign_outcomes(
                 if financial:
                     counters["snapchat_attributed_financial_orders_account_timezone"] += 1
                     account_timezone_snapchat_attributed_financial_sales += amount
+            if source_only:
+                counters["source_only_orders_account_timezone"] += 1
+                if financial:
+                    counters["source_only_financial_orders_account_timezone"] += 1
+                    account_timezone_source_only_financial_sales += amount
 
         if not account_timezone_period_included:
             continue
@@ -427,7 +502,7 @@ async def load_salla_campaign_outcomes(
             if financial:
                 counters["campaign_matched_financial_orders"] += 1
                 by_campaign[key]["sales_sar"] += amount
-                if cost_context is not None and match_method == "campaign_id":
+                if cost_context is not None:
                     _add_order_to_campaign(
                         profitability_raw[key],
                         _order_cost_and_products(order, cost_context),
@@ -543,6 +618,25 @@ async def load_salla_campaign_outcomes(
         if comparison_mode
         else "salla_order_date"
     )
+    selected_source_only_orders = int(
+        counters[
+            "source_only_orders_account_timezone"
+            if comparison_mode
+            else "source_only_orders"
+        ]
+    )
+    selected_source_only_financial_orders = int(
+        counters[
+            "source_only_financial_orders_account_timezone"
+            if comparison_mode
+            else "source_only_financial_orders"
+        ]
+    )
+    selected_source_only_financial_sales = (
+        account_timezone_source_only_financial_sales
+        if comparison_mode
+        else source_only_financial_sales
+    )
     spend_by_campaign = dict(campaign_spend_sar or {})
     profitability_by_campaign = (
         {
@@ -581,6 +675,12 @@ async def load_salla_campaign_outcomes(
             "campaign_matched_orders": int(counters["campaign_matched_orders"]),
             "campaign_matched_financial_orders": matched_financial_orders,
             "campaign_matched_financial_sales_sar": matched_financial_sales,
+            "source_only_orders": selected_source_only_orders,
+            "source_only_financial_orders": selected_source_only_financial_orders,
+            "source_only_financial_sales_sar": round(
+                selected_source_only_financial_sales,
+                2,
+            ),
             "salla_reported_snapchat_orders": (
                 int(counters["salla_reported_snapchat_orders_account_timezone"])
                 if comparison_mode
@@ -644,9 +744,7 @@ async def load_salla_campaign_outcomes(
             "platform_minus_confirmed_campaign_orders": int(platform_purchases or 0)
             - matched_financial_orders,
             "date_timezone": timezone_name,
-            "campaign_attribution_policy": (
-                f"exact_campaign_id_or_unique_{provider_key}_campaign_name"
-            ),
+            "campaign_attribution_policy": "exact_campaign_id_literal_equality_only",
             "account_attribution_policy": (
                 f"salla_reported_{provider_key}_source_or_exact_campaign_match"
             ),
@@ -701,9 +799,9 @@ async def load_salla_report_summary_aggregate(
 ) -> dict[str, Any]:
     """Aggregate report-wide Salla outcomes without Python order materialization.
 
-    Attribution is source-labelled Snapchat evidence or an exact promoted
-    campaign-ID match.  Name-only matching stays a row-detail capability and
-    is intentionally not claimed by this bounded account summary.
+    Account totals include source-labelled Snapchat evidence or an exact
+    promoted campaign-ID match.  Campaign financial totals use literal ID
+    equality only; name-only evidence remains diagnostic and source-only.
     """
     settings = await _load_report_settings(db, str(user_id))
     included_statuses = [
@@ -953,6 +1051,78 @@ async def load_salla_report_summary_aggregate(
                 "financial_sales_sar": {"$sum": {"$cond": ["$_financial", "$_amount", 0]}},
                 "source_labelled_orders": {"$sum": {"$cond": ["$_snapchat_source", 1, 0]}},
                 "exact_campaign_id_orders": {"$sum": {"$cond": [{"$gt": [{"$size": "$_campaign_match"}, 0]}, 1, 0]}},
+                "exact_campaign_id_financial_orders": {
+                    "$sum": {
+                        "$cond": [
+                            {
+                                "$and": [
+                                    "$_financial",
+                                    {"$gt": [{"$size": "$_campaign_match"}, 0]},
+                                ]
+                            },
+                            1,
+                            0,
+                        ]
+                    }
+                },
+                "exact_campaign_id_financial_sales_sar": {
+                    "$sum": {
+                        "$cond": [
+                            {
+                                "$and": [
+                                    "$_financial",
+                                    {"$gt": [{"$size": "$_campaign_match"}, 0]},
+                                ]
+                            },
+                            "$_amount",
+                            0,
+                        ]
+                    }
+                },
+                "source_only_orders": {
+                    "$sum": {
+                        "$cond": [
+                            {
+                                "$and": [
+                                    "$_snapchat_source",
+                                    {"$eq": [{"$size": "$_campaign_match"}, 0]},
+                                ]
+                            },
+                            1,
+                            0,
+                        ]
+                    }
+                },
+                "source_only_financial_orders": {
+                    "$sum": {
+                        "$cond": [
+                            {
+                                "$and": [
+                                    "$_snapchat_source",
+                                    "$_financial",
+                                    {"$eq": [{"$size": "$_campaign_match"}, 0]},
+                                ]
+                            },
+                            1,
+                            0,
+                        ]
+                    }
+                },
+                "source_only_financial_sales_sar": {
+                    "$sum": {
+                        "$cond": [
+                            {
+                                "$and": [
+                                    "$_snapchat_source",
+                                    "$_financial",
+                                    {"$eq": [{"$size": "$_campaign_match"}, 0]},
+                                ]
+                            },
+                            "$_amount",
+                            0,
+                        ]
+                    }
+                },
             }
         },
     ]
@@ -1038,6 +1208,11 @@ async def load_salla_report_summary_aggregate(
     sales = round(_number(row.get("sales_sar")), 2)
     financial_orders = int(row.get("financial_orders") or 0)
     financial_sales = round(_number(row.get("financial_sales_sar")), 2)
+    exact_financial_orders = int(row.get("exact_campaign_id_financial_orders") or 0)
+    exact_financial_sales = round(
+        _number(row.get("exact_campaign_id_financial_sales_sar")),
+        2,
+    )
     contribution = (
         round(canonical_sales - canonical_known_cost - float(spend_sar or 0), 2)
         if cost_complete and spend_sar is not None
@@ -1056,7 +1231,15 @@ async def load_salla_report_summary_aggregate(
         "snapchat_attributed_financial_orders": financial_orders,
         "snapchat_attributed_financial_sales_sar": financial_sales,
         "campaign_matched_orders": int(row.get("exact_campaign_id_orders") or 0),
+        "campaign_matched_financial_orders": exact_financial_orders,
+        "campaign_matched_financial_sales_sar": exact_financial_sales,
         "account_period_campaign_matched_orders": int(row.get("exact_campaign_id_orders") or 0),
+        "source_only_orders": int(row.get("source_only_orders") or 0),
+        "source_only_financial_orders": int(row.get("source_only_financial_orders") or 0),
+        "source_only_financial_sales_sar": round(
+            _number(row.get("source_only_financial_sales_sar")),
+            2,
+        ),
         "salla_reported_snapchat_orders": int(row.get("source_labelled_orders") or 0),
         "campaign_match_coverage_pct": (
             round(int(row.get("exact_campaign_id_orders") or 0) / orders * 100, 2)
@@ -1064,7 +1247,8 @@ async def load_salla_report_summary_aggregate(
         ),
         "snapchat_attribution_gap_orders": max(0, orders - int(row.get("exact_campaign_id_orders") or 0)),
         "platform_attributed_purchases": int(platform_purchases or 0),
-        "platform_minus_confirmed_campaign_orders": int(platform_purchases or 0) - financial_orders,
+        "platform_minus_confirmed_campaign_orders": int(platform_purchases or 0)
+        - exact_financial_orders,
         "date_timezone": timezone_name,
         "account_date_scope": "created_at_localized_to_ad_account_timezone_or_order_date_fallback",
         "account_attribution_policy": (
@@ -1072,7 +1256,7 @@ async def load_salla_report_summary_aggregate(
             if filtered_entity_scope
             else "snapchat_source_label_or_exact_promoted_campaign_id"
         ),
-        "campaign_attribution_policy": "exact_promoted_campaign_id_only",
+        "campaign_attribution_policy": "exact_campaign_id_literal_equality_only",
         "name_match_in_account_summary": False,
         "filters": {
             "search": normalized_search,

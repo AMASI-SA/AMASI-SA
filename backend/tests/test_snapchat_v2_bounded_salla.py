@@ -115,10 +115,115 @@ def test_salla_campaign_match_remains_provider_neutral():
         name_lookup={"launch campaign": ("meta-account", "meta-campaign")},
         provider_key="meta",
     )
+    exact_meta = _match_order_campaign(
+        {"source": "Meta Ads", "campaign_id": "meta-campaign"},
+        id_lookup={"meta-campaign": ("meta-account", "meta-campaign")},
+        name_lookup={},
+        provider_key="meta",
+    )
+    exact_snapchat = _match_order_campaign(
+        {"source": "Snapchat Ads", "campaign_id": "snap-campaign"},
+        id_lookup={"snap-campaign": ("snap-account", "snap-campaign")},
+        name_lookup={},
+    )
 
-    assert meta == (("meta-account", "meta-campaign"), "campaign_name")
-    assert snapchat == (("snap-account", "snap-campaign"), "campaign_name")
+    assert meta == (None, "campaign_name_only")
+    assert snapchat == (None, "campaign_name_only")
     assert foreign == (None, "foreign_platform")
+    assert exact_meta == (("meta-account", "meta-campaign"), "campaign_id")
+    assert exact_snapchat == (("snap-account", "snap-campaign"), "campaign_id")
+
+
+@pytest.mark.asyncio
+async def test_campaign_financial_metrics_require_literal_campaign_id_equality():
+    def order(number, amount, **attribution):
+        return {
+            "order_number": number,
+            "created_at": "2026-09-01T10:00:00+03:00",
+            "order_date": "2026-09-01",
+            "order_status": "delivered",
+            "total_amount": amount,
+            "products": (
+                [{"product_id": "product-exact", "quantity": 1, "total": amount}]
+                if number == "exact"
+                else []
+            ),
+            "raw_by_source": {
+                "salla_direct": {
+                    "ad_platform_source": "snapchat",
+                    **attribution,
+                }
+            },
+        }
+
+    db = DB(
+        orders=[
+            order("exact", 100, campaign_id="Campaign-A"),
+            order("unique-name-only", 200, campaign_name="Unique Name"),
+            order("shared-name", 300, campaign_name="Shared Name"),
+            order("case-mismatch", 400, campaign_id="campaign-a"),
+            order("whitespace-mismatch", 500, campaign_id=" Campaign-A "),
+            order("source-only", 600),
+        ],
+        products=[{
+            "id": "product-exact",
+            "salla_product_id": "product-exact",
+            "cost_price_from_salla": 40,
+            "variants": [],
+        }],
+    )
+    result = await load_salla_campaign_outcomes(
+        db,
+        "owner-1",
+        account_id="account-1",
+        date_from=date(2026, 9, 1),
+        date_to=date(2026, 9, 1),
+        timezone_name="Asia/Riyadh",
+        identities=[
+            {
+                "account_id": "account-1",
+                "campaign_id": "Campaign-A",
+                "campaign_name": "Unique Name",
+            },
+            {
+                "account_id": "account-1",
+                "campaign_id": "Campaign-B",
+                "campaign_name": "Shared Name",
+            },
+            {
+                "account_id": "account-1",
+                "campaign_id": "Campaign-C",
+                "campaign_name": "Shared Name",
+            },
+        ],
+        campaign_spend_sar={"Campaign-A": 20},
+    )
+
+    assert set(result["by_campaign"]) == {"Campaign-A"}
+    exact = result["by_campaign"]["Campaign-A"]
+    assert exact["orders"] == 1
+    assert exact["sales_sar"] == 100
+    assert exact["profitability"]["orders"] == 1
+    assert exact["profitability"]["sales_sar"] == 100
+    assert exact["profitability"]["product_cost_sar"] == 40
+    assert exact["profitability"]["contribution_profit_sar"] == 40
+    assert result["summary"]["campaign_matched_orders"] == 1
+    assert result["summary"]["campaign_matched_financial_orders"] == 1
+    assert result["summary"]["campaign_matched_financial_sales_sar"] == 100
+    assert result["summary"]["source_only_orders"] == 5
+    assert result["summary"]["source_only_financial_orders"] == 5
+    assert result["summary"]["source_only_financial_sales_sar"] == 2_000
+    assert result["summary"]["campaign_attribution_policy"] == (
+        "exact_campaign_id_literal_equality_only"
+    )
+
+    audit = {row["order_number"]: row for row in result["orders"]}
+    assert audit["exact"]["match_method"] == "campaign_id"
+    assert audit["unique-name-only"]["match_method"] == "campaign_name_only"
+    assert audit["shared-name"]["match_method"] == "ambiguous_name"
+    assert audit["case-mismatch"]["match_method"] == "campaign_id_not_exact"
+    assert audit["whitespace-mismatch"]["match_method"] == "campaign_id_not_exact"
+    assert audit["source-only"]["match_method"] == "source_only"
 
 
 @pytest.mark.asyncio

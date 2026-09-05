@@ -960,6 +960,21 @@ def attach_snapchat_v2_routes(
                         if salla_summary_available
                         else None
                     ),
+                    "source_only_orders": (
+                        salla_summary.get("source_only_orders")
+                        if salla_summary_available
+                        else None
+                    ),
+                    "source_only_financial_orders": (
+                        salla_summary.get("source_only_financial_orders")
+                        if salla_summary_available
+                        else None
+                    ),
+                    "source_only_financial_sales_sar": (
+                        salla_summary.get("source_only_financial_sales_sar")
+                        if salla_summary_available
+                        else None
+                    ),
                     "attribution_gap_orders": (
                         salla_summary.get("snapchat_attribution_gap_orders")
                         if salla_summary_available

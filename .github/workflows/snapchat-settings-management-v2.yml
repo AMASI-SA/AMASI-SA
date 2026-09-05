@@ -126,6 +126,7 @@ jobs:
               backend/integrations_control_center/snapchat_campaign_profitability.py|\
               backend/scripts/benchmark_snapchat_v2_full_request.py|\
               backend/scripts/benchmark_snapchat_v2_pagination.py|\
+              backend/decision_intelligence/evidence_adapter.py|\
               backend/snapchat_v2/entity_pagination.py|\
               backend/snapchat_v2/entities.py|\
               backend/snapchat_v2/read_indexes.py|\
@@ -135,7 +136,9 @@ jobs:
               backend/snapchat_v2/status.py|\
               backend/unified_marketing/commerce_carts.py|\
               backend/unified_marketing/readers/snapchat_v2.py|\
+              backend/tests/test_decision_intelligence_phase5.py|\
               backend/tests/test_snapchat_entity_settings_bounded_page.py|\
+              backend/tests/test_snapchat_reporting_v2_entity_performance.py|\
               backend/tests/test_snapchat_v2_bounded_salla.py|\
               backend/tests/test_snapchat_v2_mongo_integration.py|\
               backend/tests/test_snapchat_v2_read_performance_contract.py|\
@@ -158,7 +161,7 @@ jobs:
           done
 
           if [[ "${rejected}" -ne 0 ]]; then
-            echo "Forbidden scope includes unrelated reporting/hourly facts, scheduler, reconciliation, Provider TOTAL, Dashboard spend, OAuth, timezone, other Salla/Unified Marketing paths, and Decision Intelligence."
+            echo "Forbidden scope includes unrelated reporting/hourly facts, scheduler, reconciliation, Provider TOTAL, Dashboard spend, OAuth, timezone, other Salla/Unified Marketing paths, and other Decision Intelligence paths."
             exit 1
           fi
 
@@ -229,6 +232,7 @@ jobs:
           python -m py_compile \
             integrations_control_center/snapchat_entity_settings.py \
             integrations_control_center/snapchat_campaign_management.py \
+            decision_intelligence/evidence_adapter.py \
             snapchat_v2/entity_pagination.py \
             snapchat_v2/entities.py \
             snapchat_v2/read_indexes.py \
@@ -237,7 +241,9 @@ jobs:
             tests/test_snapchat_entity_settings_v1.py \
             tests/test_snapchat_entity_settings_bounded_page.py \
             tests/test_snapchat_campaign_management_v1.py \
+            tests/test_decision_intelligence_phase5.py \
             tests/test_snapchat_management_safety_regressions_v1.py \
+            tests/test_snapchat_reporting_v2_entity_performance.py \
             tests/test_snapchat_v2_bounded_salla.py \
             tests/test_snapchat_v2_mongo_integration.py \
             tests/test_snapchat_v2_read_performance_contract.py \
@@ -249,6 +255,8 @@ jobs:
           tests/test_snapchat_entity_settings_bounded_page.py
           tests/test_snapchat_campaign_management_v1.py
           tests/test_snapchat_management_safety_regressions_v1.py
+          tests/test_decision_intelligence_phase5.py
+          tests/test_snapchat_reporting_v2_entity_performance.py
           tests/test_snapchat_v2_bounded_salla.py
           tests/test_snapchat_v2_read_performance_contract.py
           tests/test_snapchat_v2_server_pagination.py

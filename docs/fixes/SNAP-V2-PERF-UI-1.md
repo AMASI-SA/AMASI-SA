@@ -131,7 +131,8 @@ large management panel is mounted only in an on-demand drawer.
 | #1003 runtime/server | `backend/server.py` | main Mongo client options, `/ready`, `/auth/me` availability | `SnapchatV2ReadTimingMiddleware` registration and `_global_startup` read-index hook | Disjoint hunks. The acceptance patch does not edit `server.py`; bounded startup readiness remains a train-assembly requirement. |
 | #1004 Snapchat reliability | `backend/snapchat_v2/routes.py` | `SnapchatV2SyncInput`, `_daily_retry_dates`, `/snapchat-v2/sync` | `_entity_performance_report`, Campaign/Ad Squad/Ad GETs | Sync/retry and Provider TOTAL/hourly selection are unchanged. Child GETs now require their parents. |
 | #1004 Snapchat reliability | `backend/unified_marketing/readers/snapchat_v2.py` | `_projection_financial_run_statuses`, `load_snapchat_v2_dashboard_spend` | `_page_management_identities`, `load_snapchat_v2_entity_report` | Dashboard/range proof is untouched; paginated entity reports explicitly fail account-completeness eligibility. |
-| #1009 Meta adapter | `backend/snapchat_v2/salla_outcomes.py` | `_match_order_campaign`, `load_salla_campaign_outcomes(provider=...)` | targeted canonical cost context and exact-ID row/summary profit | `snapchat_ads` remains the default and `meta_ads` remains supported; foreign-provider orders fail closed. Name matching is not promoted to financial identity. |
+| #1009 Meta adapter | `backend/snapchat_v2/salla_outcomes.py` | `_match_order_campaign`, `load_salla_campaign_outcomes(provider=...)` | targeted canonical cost context and exact-ID row/summary profit | `snapchat_ads` remains the default and `meta_ads` remains supported; foreign-provider orders fail closed. Both providers now require literal Campaign ID equality for financial attribution; name evidence is diagnostic only. |
+| #1011 Decision Intelligence | `backend/decision_intelligence/evidence_adapter.py` | `_report_coverage_complete`, coverage gate, `decision_ready`, candidate blockers | explicit entity-collection completeness check inside `_report_coverage_complete` | The small consumer-side hunk composes with #1011's existing quality checks. Explicit partial-page markers block coverage; older/provider reports without those markers preserve their prior behavior. No #1011 branch or unrelated #1011 function was changed. |
 
 ## Acceptance findings
 
@@ -139,9 +140,9 @@ large management panel is mounted only in an on-demand drawer.
 | --- | --- | --- |
 | A — nested `$facet` | Confirmed, fixed | `build_entity_page_pipeline` now uses one top-level `$facet` with sibling page/count/summary branches. `test_real_mongo_reproduces_legacy_nested_facet_rejection` reproduces Mongo's rejection and `test_real_mongo_runs_production_pipeline_for_all_levels_and_explain` executes the real Campaign/Ad Squad/Ad pipeline. |
 | B — full cost catalogue hydration | Confirmed, fixed | `_load_cost_context(..., orders=...)` restricts products by actual product/parent/variant/SKU identities and then restricts profiles/bindings/resources. Its no-`orders` default preserves existing shared consumers. The 25-row unit contract and the real full-request benchmark assert targeted materialization. |
-| C — row/summary cost drift | Confirmed, fixed | `load_salla_report_summary_aggregate` reuses `_order_cost_and_products` and the same status/refund policy. Stored `total_product_cost` is diagnostic only. Missing canonical cost yields partial coverage and `null` profit, never a synthetic zero. Real-Mongo and unit tests cover missing/stale stored cost plus base, component, service, selected-option, cancellation, refund, and partial-refund semantics. |
+| C — row/summary cost and attribution drift | Confirmed, fixed | `load_salla_campaign_outcomes` and `load_salla_report_summary_aggregate` now use the same literal Campaign ID financial universe for orders, sales, cost, profit, and campaign ROAS. Campaign-name, shared-name, case-mismatched, whitespace-mismatched, and source-only orders remain outside campaign financials and are reported separately. Both paths reuse `_order_cost_and_products` and the same status/refund policy. |
 | D — catalogue presence treated as active | Confirmed, fixed | `normalize_entity` exposes observation separately from normalized status/effective status. `_operationally_active_expression` drives filtering and the public `active` field. Real-normalizer tests cover ACTIVE, PAUSED, effective ACTIVE, missing-from-latest-sync, and unknown status. |
-| E — API/history/consumer completeness | Confirmed, fixed | Child routes require parent IDs; the identity pipeline unions period facts so historical fact-only rows survive; pagination carries `rows_are_page`, `collection_complete`, and `identity_scope`; Unified/Decision consumers mark a partial page ineligible. Real route tests assert HTTP 422 without parents and bounded success with exact parents. |
+| E — API/history/consumer completeness | Confirmed, fixed | Child routes require parent IDs; the identity pipeline unions period facts so historical fact-only rows survive; pagination carries `rows_are_page`, `collection_complete`, and `identity_scope`. The actual `evaluate_decision_evidence` path now consumes those markers in `_report_coverage_complete`: a 25-of-5,000 Campaign page blocks coverage and produces zero recommendations, while a genuinely complete 25-of-25 report remains decision-ready. Real route tests assert HTTP 422 without parents and bounded success with exact parents. |
 
 `active` in the public entity row now means operationally active. Persisted
 catalogue `active` remains an observation-compatibility field;
@@ -246,6 +247,15 @@ targeted run recorded 133 unit/regression tests passed, 4 real-Mongo tests
 passed, 92 frontend tests across 6 suites passed, and a successful frontend
 build.
 
+The acceptance follow-up adds an HTTP/Mongo parity case with three Campaigns
+and six Salla orders: one literal exact ID, one unique name only, one shared
+name, one case-mismatched ID, one whitespace-mismatched ID, and one source-only
+order. Only the exact-ID order contributes to Campaign row/summary orders,
+sales, cost, profit, and ROAS. The other five are exposed as source-only totals,
+never as campaign-matched totals. This small correctness fixture does not
+change the benchmark workload: 5,000 Campaigns, 10,000 Ad Squads, 20,000 Ads,
+5,000 products, and 25 Salla orders.
+
 ## Verification inventory
 
 Automated coverage includes 5,000-row page 1/page 2 boundaries, stable
@@ -256,7 +266,9 @@ privacy-safe timing, request coalescing, real-Mongo route/pipeline execution,
 lazy child reads, targeted settings
 exactly once after ID 500, stale bulk/selection protection, fail-closed
 identity checks, financial column order, expandable metrics, budget/bid labels,
-on-demand drawer behavior, and zero page-load writes/proposals.
+on-demand drawer behavior, actual Decision Intelligence partial/complete
+collection behavior, literal Campaign ID financial attribution parity, separate
+source-only totals, and zero page-load writes/proposals.
 
 ## Remaining limitations
 
