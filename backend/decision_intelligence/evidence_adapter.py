@@ -97,8 +97,19 @@ def _report_contract_valid(
 
 def _report_coverage_complete(report: dict[str, Any]) -> bool:
     quality = _report_quality(report)
+    pagination = _mapping(report.get("pagination"))
+    decision_eligibility = _mapping(report.get("decision_eligibility"))
+    entity_collection_complete = report.get("entity_collection_complete")
+    pagination_collection_complete = pagination.get("collection_complete")
+    collection_is_explicitly_partial = bool(
+        entity_collection_complete is False
+        or pagination_collection_complete is False
+        or decision_eligibility.get("reason")
+        == "paginated_entity_sample_not_account_complete"
+    )
     return bool(
-        quality.get("sync_status") == "complete"
+        not collection_is_explicitly_partial
+        and quality.get("sync_status") == "complete"
         and quality.get("coverage_status") == "complete"
         and int(quality.get("source_fact_count") or 0) > 0
     )

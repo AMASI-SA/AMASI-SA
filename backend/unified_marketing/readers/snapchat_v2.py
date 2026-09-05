@@ -6,7 +6,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from snapchat_v2.accounts import get_selected_account
-from snapchat_v2.entities import list_entities
+from snapchat_v2.entities import SNAPCHAT_ENTITY_FACTS_COLLECTION, list_entities
 from snapchat_v2.models import (
     DEFAULT_SWIPE_ATTRIBUTION_WINDOW,
     DEFAULT_VIEW_ATTRIBUTION_WINDOW,
@@ -464,6 +464,40 @@ def _management_context(
     return output
 
 
+async def _page_management_identities(
+    db: Any,
+    *,
+    user_id: str,
+    account_id: str,
+    entity_type: str,
+    rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Load management metadata only for the bounded analytical page."""
+    entity_ids = sorted(
+        {
+            str(row.get("external_id") or "").strip()
+            for row in rows
+            if str(row.get("external_id") or "").strip()
+        }
+    )
+    if not entity_ids:
+        return []
+    cursor = db[SNAPCHAT_ENTITY_FACTS_COLLECTION].find(
+        {
+            "user_id": str(user_id),
+            "provider": "snapchat_ads",
+            "ad_account_id": str(account_id),
+            "entity_type": entity_type,
+            "external_id": {"$in": entity_ids},
+        },
+        {"_id": 0},
+    )
+    try:
+        return list(await cursor.to_list(length=len(entity_ids)))
+    except TypeError:
+        return list(await cursor.to_list(len(entity_ids)))
+
+
 async def load_snapchat_v2_entity_report(
     db: Any,
     user_id: str,
@@ -512,13 +546,12 @@ async def load_snapchat_v2_entity_report(
         rows=rows,
         totals=totals,
     )
-    identities = await list_entities(
+    identities = await _page_management_identities(
         db,
         user_id=str(user_id),
-        ad_account_id=account_id,
+        account_id=account_id,
         entity_type=provider_type,
-        active_only=False,
-        limit=20_000,
+        rows=rows,
     )
 
     orders: list[dict[str, Any]] = []
@@ -644,9 +677,18 @@ async def load_snapchat_v2_entity_report(
     )
     report["management_context"] = _management_context(identities)
     report["cost_coverage"] = cost_coverage
+    pagination = dict(performance.get("pagination") or {})
+    report["pagination"] = pagination
+    report["entity_collection_complete"] = bool(
+        pagination.get("collection_complete")
+    )
     report["decision_eligibility"] = {
         "eligible": False,
-        "reason": "ai_shadow_not_accepted",
+        "reason": (
+            "ai_shadow_not_accepted"
+            if pagination.get("collection_complete")
+            else "paginated_entity_sample_not_account_complete"
+        ),
     }
     return report
 
