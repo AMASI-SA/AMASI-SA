@@ -67,6 +67,12 @@ async def smoke(db):
             token = login.json()['access_token']
             c.headers['Authorization'] = 'Bearer ' + token
             me = await c.get('/api/auth/me')
+            assert me.status_code == 401, 'password-only session must still require OTP'
+            # Synthetic verified-session fixture, not an OTP delivery test or
+            # policy override. Sign with the real helper and disposable key.
+            from auth import create_access_token
+            c.headers['Authorization'] = 'Bearer ' + create_access_token('exit2a-user', 'exit2a@example.com', mfa_verified=True)
+            me = await c.get('/api/auth/me')
             assert me.status_code == 200 and me.json()['id'] == 'exit2a-user'
             orders = await c.get('/api/orders', params={'limit': 10})
             assert orders.status_code == 200
@@ -76,7 +82,7 @@ async def smoke(db):
     assert app.state.readiness == 'stopped'
     assert asyncio.all_tasks() == tasks_before, 'shutdown leaked a task'
     assert db.qoyod_settings.find_one({'user_id': 'exit2a-user'})['auto_send'] is True
-    print('PASS: real import; zero import/startup Mongo writes and tasks; health/readiness; synthetic Auth/orders; shutdown')
+    print('PASS: real import; zero import/startup Mongo writes and tasks; health/readiness; password-only OTP denial; verified synthetic session/orders; shutdown')
 
 
 def main():
