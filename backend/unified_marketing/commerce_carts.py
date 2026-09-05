@@ -99,6 +99,7 @@ async def load_abandoned_cart_outcomes(
     campaign_ids: list[str],
     date_from: date,
     date_to: date,
+    campaign_scope_only: bool = False,
 ) -> dict[str, Any]:
     projection = {
         "_id": 0,
@@ -110,7 +111,11 @@ async def load_abandoned_cart_outcomes(
         "cart_created_at": 1,
         "cart_updated_at": 1,
     }
-    cursor = db[ABANDONED_CART_COLLECTION].find({"user_id": str(user_id)}, projection).limit(MAX_CARTS + 1)
+    expected = {_text(value, 160) for value in campaign_ids if _text(value, 160)}
+    query: dict[str, Any] = {"user_id": str(user_id)}
+    if campaign_scope_only:
+        query["attribution.campaign_id"] = {"$in": sorted(expected)}
+    cursor = db[ABANDONED_CART_COLLECTION].find(query, projection).limit(MAX_CARTS + 1)
     carts = await cursor.to_list(length=MAX_CARTS + 1)
     if len(carts) > MAX_CARTS:
         carts = carts[:MAX_CARTS]
@@ -120,7 +125,6 @@ async def load_abandoned_cart_outcomes(
     start = date_from.isoformat()
     end = date_to.isoformat()
     carts = [cart for cart in carts if start <= _day(cart) <= end]
-    expected = {_text(value, 160) for value in campaign_ids if _text(value, 160)}
     by_campaign: dict[str, list[dict[str, Any]]] = defaultdict(list)
     unattributed: list[dict[str, Any]] = []
     foreign: Counter[str] = Counter()

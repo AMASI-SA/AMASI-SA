@@ -1,7 +1,9 @@
 """Versioned read-only APIs for the Snapchat Integration V2 shadow plane."""
 from __future__ import annotations
 
+import asyncio
 import os
+import uuid
 from datetime import date, datetime, timedelta
 from typing import Any, Callable, Literal
 from zoneinfo import ZoneInfo
@@ -13,6 +15,13 @@ from unified_marketing.commerce_carts import load_abandoned_cart_outcomes
 
 from .accounts import get_selected_account, list_accounts
 from .entities import list_entities
+from .entity_pagination import (
+    DEFAULT_PAGE_SIZE,
+    MAX_PAGE_SIZE,
+    EntityPageSpec,
+    read_entity_page,
+    resolve_fact_source,
+)
 from .facts import load_hourly_facts
 from .headline import resolve_report_headline_spend
 from .models import clean_text
@@ -22,7 +31,10 @@ from .projections import (
     list_daily_projections,
 )
 from .reconciliation import calculate_cost_components, list_reconciliation
-from .salla_outcomes import load_salla_campaign_outcomes
+from .salla_outcomes import (
+    load_salla_campaign_outcomes,
+    load_salla_report_summary_aggregate,
+)
 from .status import snapchat_v2_status
 from .sync_pipeline import MAX_SYNC_DAYS, SnapchatV2SyncPipeline
 from .total_facts import (
@@ -240,7 +252,7 @@ def _total_fact_date_coverage_complete(
     return bool(expected) and expected.issubset(observed)
 
 
-async def _entity_performance_report(
+async def _legacy_entity_performance_report(
     db: Any,
     *,
     user_id: str,
@@ -304,7 +316,7 @@ async def _entity_performance_report(
         ad_account_id=account_id,
         entity_type=entity_type,
         active_only=not include_stale,
-        limit=20_000,
+        limit=MAX_PAGE_SIZE,
     )
     campaigns = await list_entities(
         db,
@@ -312,7 +324,7 @@ async def _entity_performance_report(
         ad_account_id=account_id,
         entity_type="campaign",
         active_only=False,
-        limit=20_000,
+        limit=MAX_PAGE_SIZE,
     )
     campaign_by_id = {
         str(row.get("external_id")): row for row in campaigns
@@ -326,7 +338,7 @@ async def _entity_performance_report(
             ad_account_id=account_id,
             entity_type="ad_squad",
             active_only=False,
-            limit=20_000,
+            limit=MAX_PAGE_SIZE,
         )
         ad_squad_by_id = {
             str(row.get("external_id")): row for row in ad_squads
@@ -415,6 +427,97 @@ async def _entity_performance_report(
         "performance_sync_status": level_status,
         "source_collection": source_collection,
     }
+
+
+async def _entity_performance_report(
+    db: Any,
+    *,
+    user_id: str,
+    account: dict[str, Any],
+    date_from: date,
+    date_to: date,
+    timezone_name: str,
+    action_report_time: str,
+    entity_type: Literal["campaign", "ad_squad", "ad"],
+    campaign_id: str | None = None,
+    ad_squad_id: str | None = None,
+    include_stale: bool = True,
+    page: int = 1,
+    page_size: int = DEFAULT_PAGE_SIZE,
+    search: str = "",
+    active_only: bool | None = None,
+    sort_by: Literal["default", "spend", "name"] = "default",
+    sort_direction: Literal["asc", "desc"] = "desc",
+) -> dict[str, Any]:
+    """Use the bounded Mongo path, retaining legacy fakes for older unit tests."""
+    try:
+        collection = db["mezan_snapchat_entity_facts_v2"]
+    except (AttributeError, TypeError):
+        collection = None
+    if not callable(getattr(collection, "aggregate", None)):
+        return await _legacy_entity_performance_report(
+            db,
+            user_id=user_id,
+            account=account,
+            date_from=date_from,
+            date_to=date_to,
+            timezone_name=timezone_name,
+            action_report_time=action_report_time,
+            entity_type=entity_type,
+            campaign_id=campaign_id,
+            ad_squad_id=ad_squad_id,
+            include_stale=include_stale,
+        )
+
+    start_utc, _ = business_day_window(date_from, timezone_name)
+    _, end_utc = business_day_window(date_to, timezone_name)
+    account_id = str(account["ad_account_id"])
+    level_status = await _latest_level_status(
+        db,
+        user_id=user_id,
+        ad_account_id=account_id,
+        entity_type=entity_type,
+    )
+    source_collection, source_coverage = await resolve_fact_source(
+        db,
+        user_id=user_id,
+        ad_account_id=account_id,
+        entity_type=entity_type,
+        date_from=date_from,
+        date_to=date_to,
+        timezone_name=timezone_name,
+        account_timezone=str(account.get("timezone") or ""),
+        action_report_time=action_report_time,
+        level_status=level_status,
+    )
+    spec = EntityPageSpec(
+        page=page,
+        page_size=page_size,
+        search=search,
+        active_only=(not include_stale if active_only is None else active_only),
+        sort_by=sort_by,
+        sort_direction=sort_direction,
+    )
+    result = await read_entity_page(
+        db,
+        user_id=user_id,
+        ad_account_id=account_id,
+        entity_type=entity_type,
+        source_collection=source_collection,
+        date_from=date_from,
+        date_to=date_to,
+        start_utc=start_utc,
+        end_utc=end_utc,
+        timezone_name=timezone_name,
+        action_report_time=action_report_time,
+        level_status=level_status,
+        spec=spec,
+        campaign_id=campaign_id,
+        ad_squad_id=ad_squad_id,
+    )
+    result["source_coverage"] = source_coverage
+    result["read_diagnostics"]["mongo_commands"] += 1
+    return result
 
 
 async def _add_sar_spend(
@@ -531,22 +634,24 @@ def attach_snapchat_v2_routes(
         user_id = _user_id(user, require_owner)
         account = await _selected_account_or_404(db, user_id)
         timezone_name = _projection_timezone(account, timezone)
-        rows = await list_daily_projections(
-            db,
-            user_id=user_id,
-            ad_account_id=str(account["ad_account_id"]),
-            date_from=date_from,
-            date_to=date_to,
-            projection_timezone=timezone_name,
-            action_report_time=action_report_time,
-        )
-        reconciliation = await list_reconciliation(
-            db,
-            user_id=user_id,
-            ad_account_id=str(account["ad_account_id"]),
-            date_from=date_from,
-            date_to=date_to,
-            action_report_time=action_report_time,
+        rows, reconciliation = await asyncio.gather(
+            list_daily_projections(
+                db,
+                user_id=user_id,
+                ad_account_id=str(account["ad_account_id"]),
+                date_from=date_from,
+                date_to=date_to,
+                projection_timezone=timezone_name,
+                action_report_time=action_report_time,
+            ),
+            list_reconciliation(
+                db,
+                user_id=user_id,
+                ad_account_id=str(account["ad_account_id"]),
+                date_from=date_from,
+                date_to=date_to,
+                action_report_time=action_report_time,
+            ),
         )
         headline = resolve_report_headline_spend(
             projections=rows,
@@ -643,8 +748,15 @@ def attach_snapchat_v2_routes(
         action_report_time: Literal["conversion", "impression"] = Query(
             default="conversion"
         ),
+        page: int = Query(default=1, ge=1),
+        page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+        search: str = Query(default="", max_length=100),
+        active_only: bool = Query(default=False),
+        sort_by: Literal["default", "spend", "name"] = Query(default="default"),
+        sort_direction: Literal["asc", "desc"] = Query(default="desc"),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
+        request_id = uuid.uuid4().hex
         _read_days(date_from, date_to)
         user_id = _user_id(user, require_owner)
         account = await _selected_account_or_404(db, user_id)
@@ -659,6 +771,12 @@ def attach_snapchat_v2_routes(
             action_report_time=action_report_time,
             entity_type="campaign",
             include_stale=True,
+            page=page,
+            page_size=page_size,
+            search=search,
+            active_only=active_only,
+            sort_by=sort_by,
+            sort_direction=sort_direction,
         )
         rows = performance["rows"]
         totals = dict(performance["totals"])
@@ -697,6 +815,7 @@ def attach_snapchat_v2_routes(
                     for row in rows
                     if row.get("campaign_id")
                 },
+                restrict_to_identities=True,
             )
             salla_available = True
         except Exception as exc:  # noqa: BLE001
@@ -720,6 +839,38 @@ def attach_snapchat_v2_routes(
                 "source_only": True,
             }
         try:
+            if not callable(getattr(db.unified_orders, "aggregate", None)):
+                raise AttributeError("aggregate unavailable")
+            report_salla_summary = await load_salla_report_summary_aggregate(
+                db,
+                user_id,
+                account_id=account_id,
+                date_from=date_from,
+                date_to=date_to,
+                timezone_name=timezone_name,
+                platform_purchases=int(performance["totals"].get("purchases") or 0),
+                spend_sar=totals.get("spend_sar"),
+                search=search,
+                active_only=active_only,
+            )
+            salla_summary_available = True
+        except (AttributeError, TypeError):
+            # Older unit fakes do not expose aggregate. Production always uses
+            # the bounded report-wide path above.
+            report_salla_summary = dict(salla.get("summary") or {})
+            salla_summary_available = salla_available
+        except Exception as exc:  # noqa: BLE001
+            report_salla_summary = {
+                "coverage_status": "partial",
+                "reason": str(type(exc).__name__)[:96],
+                "platform_attributed_purchases": int(
+                    performance["totals"].get("purchases") or 0
+                ),
+                "python_order_rows_materialized": 0,
+            }
+            salla_summary_available = False
+        salla["summary"] = report_salla_summary
+        try:
             carts = await load_abandoned_cart_outcomes(
                 db,
                 user_id,
@@ -727,6 +878,7 @@ def attach_snapchat_v2_routes(
                 campaign_ids=[row["campaign_id"] for row in identities],
                 date_from=date_from,
                 date_to=date_to,
+                campaign_scope_only=True,
             )
         except Exception as exc:  # noqa: BLE001
             carts = {
@@ -787,35 +939,35 @@ def attach_snapchat_v2_routes(
                     "roas": totals.get("roas"),
                 },
                 "salla_results": {
-                    "status": "complete" if salla_available else "partial",
+                    "status": "complete" if salla_summary_available else "partial",
                     "orders": (
                         salla_summary.get("snapchat_attributed_orders")
-                        if salla_available
+                        if salla_summary_available
                         else None
                     ),
                     "sales_sar": (
                         salla_summary.get("snapchat_attributed_sales_sar")
-                        if salla_available
+                        if salla_summary_available
                         else None
                     ),
                     "matched_orders": (
                         salla_summary.get("campaign_matched_orders")
-                        if salla_available
+                        if salla_summary_available
                         else None
                     ),
                     "matched_sales_sar": (
                         salla_summary.get("campaign_matched_financial_sales_sar")
-                        if salla_available
+                        if salla_summary_available
                         else None
                     ),
                     "attribution_gap_orders": (
                         salla_summary.get("snapchat_attribution_gap_orders")
-                        if salla_available
+                        if salla_summary_available
                         else None
                     ),
                     "campaign_match_coverage_pct": (
                         salla_summary.get("campaign_match_coverage_pct")
-                        if salla_available
+                        if salla_summary_available
                         else None
                     ),
                     "attribution_scope": (
@@ -829,9 +981,14 @@ def attach_snapchat_v2_routes(
                             / totals_spend_sar,
                             6,
                         )
-                        if salla_available
+                        if salla_summary_available
                         and totals_spend_sar
                         and totals_spend_sar > 0
+                        else None
+                    ),
+                    "profitability": (
+                        salla_summary.get("profitability")
+                        if salla_summary_available
                         else None
                     ),
                 },
@@ -857,7 +1014,10 @@ def attach_snapchat_v2_routes(
                 "truncated": salla["truncated"],
             },
         )
+        unified.update(performance.get("pagination") or {})
+        unified["request_id"] = request_id
         return {
+            "request_id": request_id,
             "provider": "snapchat_ads",
             "ad_account_id": account_id,
             "projection_timezone": timezone_name,
@@ -871,6 +1031,9 @@ def attach_snapchat_v2_routes(
             "cost_coverage": cost_coverage,
             "performance_sync_status": performance["performance_sync_status"],
             "source_collection": performance["source_collection"],
+            "source_coverage": performance.get("source_coverage") or {},
+            "pagination": performance.get("pagination") or {},
+            "read_diagnostics": performance.get("read_diagnostics") or {},
             "unified": unified,
         }
 
@@ -884,8 +1047,15 @@ def attach_snapchat_v2_routes(
         ),
         campaign_id: str | None = Query(default=None, max_length=128),
         include_stale: bool = Query(default=False),
+        page: int = Query(default=1, ge=1),
+        page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+        search: str = Query(default="", max_length=100),
+        active_only: bool | None = Query(default=None),
+        sort_by: Literal["default", "spend", "name"] = Query(default="default"),
+        sort_direction: Literal["asc", "desc"] = Query(default="desc"),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
+        request_id = uuid.uuid4().hex
         user_id = _user_id(user, require_owner)
         account = await _selected_account_or_404(db, user_id)
         start, end = _resolved_range(account, date_from, date_to)
@@ -901,6 +1071,12 @@ def attach_snapchat_v2_routes(
             entity_type="ad_squad",
             campaign_id=campaign_id,
             include_stale=include_stale,
+            page=page,
+            page_size=page_size,
+            search=search,
+            active_only=(not include_stale if active_only is None else active_only),
+            sort_by=sort_by,
+            sort_direction=sort_direction,
         )
         rows = performance["rows"]
         totals = dict(performance["totals"])
@@ -924,7 +1100,10 @@ def attach_snapchat_v2_routes(
             totals=totals,
             sync_status=performance["performance_sync_status"],
         )
+        unified.update(performance.get("pagination") or {})
+        unified["request_id"] = request_id
         return {
+            "request_id": request_id,
             "provider": "snapchat_ads",
             "ad_account_id": account["ad_account_id"],
             "projection_timezone": timezone_name,
@@ -937,6 +1116,9 @@ def attach_snapchat_v2_routes(
             "performance_sync_status": performance["performance_sync_status"],
             "cost_coverage": cost_coverage,
             "source_collection": performance["source_collection"],
+            "source_coverage": performance.get("source_coverage") or {},
+            "pagination": performance.get("pagination") or {},
+            "read_diagnostics": performance.get("read_diagnostics") or {},
             "unified": unified,
         }
 
@@ -951,8 +1133,15 @@ def attach_snapchat_v2_routes(
         campaign_id: str | None = Query(default=None, max_length=128),
         ad_squad_id: str | None = Query(default=None, max_length=128),
         include_stale: bool = Query(default=False),
+        page: int = Query(default=1, ge=1),
+        page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+        search: str = Query(default="", max_length=100),
+        active_only: bool | None = Query(default=None),
+        sort_by: Literal["default", "spend", "name"] = Query(default="default"),
+        sort_direction: Literal["asc", "desc"] = Query(default="desc"),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
+        request_id = uuid.uuid4().hex
         user_id = _user_id(user, require_owner)
         account = await _selected_account_or_404(db, user_id)
         start, end = _resolved_range(account, date_from, date_to)
@@ -969,6 +1158,12 @@ def attach_snapchat_v2_routes(
             campaign_id=campaign_id,
             ad_squad_id=ad_squad_id,
             include_stale=include_stale,
+            page=page,
+            page_size=page_size,
+            search=search,
+            active_only=(not include_stale if active_only is None else active_only),
+            sort_by=sort_by,
+            sort_direction=sort_direction,
         )
         rows = performance["rows"]
         totals = dict(performance["totals"])
@@ -992,7 +1187,10 @@ def attach_snapchat_v2_routes(
             totals=totals,
             sync_status=performance["performance_sync_status"],
         )
+        unified.update(performance.get("pagination") or {})
+        unified["request_id"] = request_id
         return {
+            "request_id": request_id,
             "provider": "snapchat_ads",
             "ad_account_id": account["ad_account_id"],
             "projection_timezone": timezone_name,
@@ -1006,6 +1204,9 @@ def attach_snapchat_v2_routes(
             "performance_sync_status": performance["performance_sync_status"],
             "cost_coverage": cost_coverage,
             "source_collection": performance["source_collection"],
+            "source_coverage": performance.get("source_coverage") or {},
+            "pagination": performance.get("pagination") or {},
+            "read_diagnostics": performance.get("read_diagnostics") or {},
             "unified": unified,
         }
 

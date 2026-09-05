@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   scope-guard:
-    name: Fail-closed settings-only scope guard
+    name: Fail-closed settings/perf-UI scope guard
     runs-on: ubuntu-latest
     outputs:
       run_tests: ${{ steps.scope.outputs.run_tests }}
@@ -89,6 +89,19 @@ jobs:
             exit 0
           fi
 
+          perf_ui_mode=true
+          for required_path in \
+            docs/fixes/SNAP-V2-PERF-UI-1.md \
+            backend/snapchat_v2/entity_pagination.py \
+            backend/tests/test_snapchat_v2_server_pagination.py \
+            frontend/src/components/marketing/SnapchatFinancialEntityTable.jsx \
+            frontend/src/components/marketing/SnapchatFinancialEntityTable.test.jsx
+          do
+            if ! grep -Fqx "${required_path}" "${changed_paths_file}"; then
+              perf_ui_mode=false
+            fi
+          done
+
           rejected=0
           for changed_path in "${changed_paths[@]}"; do
             case "${changed_path}" in
@@ -107,6 +120,29 @@ jobs:
               frontend/src/services/snapchatCampaignManagement.test.js|\
               .github/workflows/snapchat-settings-management-v2.yml)
                 ;;
+              backend/server.py|\
+              backend/scripts/benchmark_snapchat_v2_pagination.py|\
+              backend/snapchat_v2/entity_pagination.py|\
+              backend/snapchat_v2/read_indexes.py|\
+              backend/snapchat_v2/read_timing.py|\
+              backend/snapchat_v2/routes.py|\
+              backend/snapchat_v2/salla_outcomes.py|\
+              backend/snapchat_v2/status.py|\
+              backend/unified_marketing/commerce_carts.py|\
+              backend/tests/test_snapchat_entity_settings_bounded_page.py|\
+              backend/tests/test_snapchat_v2_bounded_salla.py|\
+              backend/tests/test_snapchat_v2_read_performance_contract.py|\
+              backend/tests/test_snapchat_v2_server_pagination.py|\
+              docs/fixes/SNAP-V2-PERF-UI-1.md|\
+              frontend/src/components/marketing/SnapchatFinancialEntityTable.jsx|\
+              frontend/src/components/marketing/SnapchatFinancialEntityTable.test.jsx|\
+              frontend/src/services/snapchatV2EntityReads.js|\
+              frontend/src/services/snapchatV2EntityReads.test.js)
+                if [[ "${perf_ui_mode}" != "true" ]]; then
+                  echo "::error file=${changed_path}::Expanded path requires the complete SNAP-V2-PERF-UI-1 contract and regression set."
+                  rejected=1
+                fi
+                ;;
               *)
                 echo "::error file=${changed_path}::Path is outside the approved Snapchat settings-management allowlist."
                 rejected=1
@@ -123,6 +159,8 @@ jobs:
 
           {
             echo "### Snapchat settings-management diff scope"
+            echo
+            echo "SNAP-V2-PERF-UI-1 expanded mode: ${perf_ui_mode}"
             echo
             echo '```text'
             cat "${changed_paths_file}"
@@ -171,15 +209,26 @@ jobs:
           python -m py_compile \
             integrations_control_center/snapchat_entity_settings.py \
             integrations_control_center/snapchat_campaign_management.py \
+            snapchat_v2/entity_pagination.py \
+            snapchat_v2/read_indexes.py \
+            snapchat_v2/read_timing.py \
             tests/test_snapchat_entity_settings_v1.py \
+            tests/test_snapchat_entity_settings_bounded_page.py \
             tests/test_snapchat_campaign_management_v1.py \
-            tests/test_snapchat_management_safety_regressions_v1.py
+            tests/test_snapchat_management_safety_regressions_v1.py \
+            tests/test_snapchat_v2_bounded_salla.py \
+            tests/test_snapchat_v2_read_performance_contract.py \
+            tests/test_snapchat_v2_server_pagination.py
       - name: Run settings, mapping, freshness, audit, and no-write tests
         run: >-
           python -m pytest
           tests/test_snapchat_entity_settings_v1.py
+          tests/test_snapchat_entity_settings_bounded_page.py
           tests/test_snapchat_campaign_management_v1.py
           tests/test_snapchat_management_safety_regressions_v1.py
+          tests/test_snapchat_v2_bounded_salla.py
+          tests/test_snapchat_v2_read_performance_contract.py
+          tests/test_snapchat_v2_server_pagination.py
           -q
           --tb=short
 
@@ -208,6 +257,8 @@ jobs:
           src/services/snapchatCampaignManagement.test.js
           src/components/marketing/SnapchatEntitySettingsTable.test.jsx
           src/components/marketing/SnapchatCampaignManagementPanel.test.jsx
+          src/components/marketing/SnapchatFinancialEntityTable.test.jsx
           src/pages/SnapchatV2Page.test.jsx
+          src/services/snapchatV2EntityReads.test.js
       - name: Build frontend
         run: CI=false yarn build
