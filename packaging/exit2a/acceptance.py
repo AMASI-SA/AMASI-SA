@@ -29,7 +29,18 @@ async def smoke(db):
     marker = datetime.now(timezone.utc)
     tasks_before = asyncio.all_tasks()
     app = create_app()
-    assert snapshot(db) == before, 'import changed fixture state'
+    after_import = snapshot(db)
+    if after_import != before:
+        print('Import collection delta:', json.dumps({
+            'added': sorted(set(after_import) - set(before)),
+            'removed': sorted(set(before) - set(after_import)),
+            'changed': sorted(n for n in set(before) & set(after_import) if before[n] != after_import[n]),
+        }))
+        print('Import operation metadata:', json.dumps([
+            {'op': r.get('op'), 'ns': r.get('ns'), 'command_names': sorted(r.get('command', {}))}
+            for r in db['system.profile'].find({'ts': {'$gte': marker}})
+        ]))
+    assert after_import == before, 'import changed fixture state'
     assert_no_writes(db, marker)
     import httpx
     async with app.router.lifespan_context(app):
