@@ -131,3 +131,6 @@ respx==0.23.1
 PyMuPDF==1.28.2
 qrcode==8.2
 fonttools==4.64.0
+# Transitive packages resolved by the first successful clean Linux install.
+cbor2==6.1.4
+pyOpenSSL==26.4.0

@@ -1,4 +1,4 @@
-FROM python:3.11.16-slim-bookworm
+FROM python:3.11.16-slim-bookworm@sha256:528257d48c1da0dcecc2e725d1ae34498d60c965f1241e39cd6a85a8859bdf84
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /opt/mezan
 RUN apt-get update && apt-get install -y --no-install-recommends fonts-dejavu-core \

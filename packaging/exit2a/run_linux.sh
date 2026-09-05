@@ -15,6 +15,7 @@ for attempt in $(seq 1 30); do
 done
 docker exec "$mongo_name" mongosh --quiet --eval 'quit(db.adminCommand({ping:1}).ok ? 0 : 1)'
 runtime=(--network "container:$mongo_name" --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges --pids-limit 256 --memory 3g --cpus 2)
+docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2a:rehearsal /opt/rehearsal/test_boundary.py
 docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2a:rehearsal /opt/rehearsal/acceptance.py
 for role in worker migration; do
   if docker run --rm "${runtime[@]}" mezan-exit2a:rehearsal "$role"; then
