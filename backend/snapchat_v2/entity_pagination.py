@@ -26,6 +26,8 @@ EntityType = Literal["campaign", "ad_squad", "ad"]
 SortBy = Literal["default", "spend", "name"]
 SortDirection = Literal["asc", "desc"]
 
+ACTIVE_OPERATIONAL_STATUSES = ("ACTIVE", "ENABLED", "DELIVERING")
+
 DEFAULT_PAGE_SIZE = 25
 MAX_PAGE_SIZE = 100
 MAX_SEARCH_LENGTH = 100
@@ -155,24 +157,81 @@ def _summary_group() -> dict[str, Any]:
     return group
 
 
+def _operational_status_expression() -> dict[str, Any]:
+    """Resolve delivery status without treating catalogue presence as active."""
+    return {
+        "$let": {
+            "vars": {
+                "effective": {
+                    "$trim": {
+                        "input": {
+                            "$convert": {
+                                "input": "$effective_status",
+                                "to": "string",
+                                "onError": "",
+                                "onNull": "",
+                            }
+                        }
+                    }
+                },
+                "status": {
+                    "$trim": {
+                        "input": {
+                            "$convert": {
+                                "input": "$status",
+                                "to": "string",
+                                "onError": "",
+                                "onNull": "",
+                            }
+                        }
+                    }
+                },
+            },
+            "in": {
+                "$toUpper": {
+                    "$cond": [
+                        {"$ne": ["$$effective", ""]},
+                        "$$effective",
+                        "$$status",
+                    ]
+                }
+            }
+        }
+    }
+
+
+def _operationally_active_expression() -> dict[str, Any]:
+    return {
+        "$and": [
+            {"$ne": ["$missing_from_latest_sync", True]},
+            {
+                "$in": [
+                    _operational_status_expression(),
+                    list(ACTIVE_OPERATIONAL_STATUSES),
+                ]
+            },
+        ]
+    }
+
+
 def _sort_spec(spec: EntityPageSpec) -> dict[str, int]:
     if spec.sort_by == "name":
         direction = 1 if spec.sort_direction == "asc" else -1
         return {
-            "active": -1,
+            "operationally_active": -1,
             "sort_name": direction,
             "external_id": direction,
         }
     if spec.sort_by == "spend":
         direction = 1 if spec.sort_direction == "asc" else -1
         return {
-            "active": -1,
+            "operationally_active": -1,
             "performance.spend_native": direction,
             "sort_name": 1,
             "external_id": 1,
         }
     return {
-        "active": -1,
+        "operationally_active": -1,
         "performance.spend_native": -1,
         "sort_name": 1,
         "external_id": 1,
@@ -197,9 +256,10 @@ def build_entity_page_pipeline(
 ) -> list[dict[str, Any]]:
     """Build a stable page + filtered-summary pipeline.
 
-    Parent constraints live in the first match, before lookup, sort, facet,
-    skip, and limit.  Search and active filters are also applied before the
-    inner page facet.
+    Parent constraints live in both identity-source matches before lookup,
+    sort, skip, and limit. Historical fact-only identities remain visible but
+    never pretend to have a known active status. Page, count, and summary are
+    sibling branches because MongoDB forbids a nested ``$facet``.
     """
     base_match: dict[str, Any] = {
         "user_id": str(user_id),
@@ -224,10 +284,14 @@ def build_entity_page_pipeline(
         timezone_name=timezone_name,
         action_report_time=action_report_time,
     )
-    filtered_pipeline: list[dict[str, Any]] = []
+    if campaign_id:
+        fact_match["campaign_id"] = str(campaign_id)
+    if ad_squad_id:
+        fact_match["ad_squad_id"] = str(ad_squad_id)
+
     filters: list[dict[str, Any]] = []
     if spec.active_only:
-        filters.append({"active": True})
+        filters.append({"operationally_active": True})
     needle = spec.search.strip()
     if needle:
         safe = re.escape(needle)
@@ -239,24 +303,87 @@ def build_entity_page_pipeline(
                 ]
             }
         )
-    if filters:
-        filtered_pipeline.append({"$match": {"$and": filters}})
-    filtered_pipeline.append(
-        {
-            "$facet": {
-                "items": [
-                    {"$sort": _sort_spec(spec)},
-                    {"$skip": (spec.page - 1) * spec.page_size},
-                    {"$limit": spec.page_size},
-                    {"$project": {"performance_rows": 0, "sort_name": 0}},
-                ],
-                "count": [{"$count": "value"}],
-                "summary": [{"$group": _summary_group()}],
-            }
-        }
-    )
+    filter_stages = [{"$match": {"$and": filters}}] if filters else []
     return [
         {"$match": base_match},
+        {"$set": {"catalogue_present": True}},
+        {
+            "$unionWith": {
+                "coll": source_collection,
+                "pipeline": [
+                    {"$match": fact_match},
+                    {
+                        "$group": {
+                            "_id": "$external_id",
+                            "campaign_id": {"$first": "$campaign_id"},
+                            "ad_squad_id": {"$first": "$ad_squad_id"},
+                        }
+                    },
+                    {
+                        "$project": {
+                            "_id": 0,
+                            "external_id": "$_id",
+                            "name": "$_id",
+                            "status": {"$literal": None},
+                            "effective_status": {"$literal": None},
+                            "campaign_id": "$campaign_id",
+                            "ad_squad_id": "$ad_squad_id",
+                            "missing_from_latest_sync": {"$literal": True},
+                            "catalogue_present": {"$literal": False},
+                        }
+                    },
+                ],
+            }
+        },
+        {
+            "$group": {
+                "_id": "$external_id",
+                "catalogue_present": {
+                    "$max": {"$cond": ["$catalogue_present", 1, 0]}
+                },
+                "catalogue_name": {
+                    "$max": {"$cond": ["$catalogue_present", "$name", None]}
+                },
+                "status": {
+                    "$max": {"$cond": ["$catalogue_present", "$status", None]}
+                },
+                "effective_status": {
+                    "$max": {
+                        "$cond": ["$catalogue_present", "$effective_status", None]
+                    }
+                },
+                "missing_from_latest_sync": {
+                    "$max": {
+                        "$cond": [
+                            "$catalogue_present",
+                            "$missing_from_latest_sync",
+                            None,
+                        ]
+                    }
+                },
+                "campaign_id": {"$max": "$campaign_id"},
+                "ad_squad_id": {"$max": "$ad_squad_id"},
+            }
+        },
+        {
+            "$project": {
+                "_id": 0,
+                "external_id": "$_id",
+                "name": {"$ifNull": ["$catalogue_name", "$_id"]},
+                "status": "$status",
+                "effective_status": "$effective_status",
+                "campaign_id": "$campaign_id",
+                "ad_squad_id": "$ad_squad_id",
+                "missing_from_latest_sync": {
+                    "$cond": [
+                        {"$eq": ["$catalogue_present", 1]},
+                        {"$ifNull": ["$missing_from_latest_sync", False]},
+                        True,
+                    ]
+                },
+                "catalogue_present": {"$eq": ["$catalogue_present", 1]},
+            }
+        },
         _performance_lookup(
             fact_collection=source_collection,
             fact_match=fact_match,
@@ -273,12 +400,25 @@ def build_entity_page_pipeline(
                     ]
                 },
                 "sort_name": {"$toLower": {"$ifNull": ["$name", ""]}},
+                "operational_status": _operational_status_expression(),
+                "operationally_active": _operationally_active_expression(),
             }
         },
         {
             "$facet": {
-                "catalog_count": [{"$count": "value"}],
-                "filtered": filtered_pipeline,
+                "identity_count": [{"$count": "value"}],
+                "items": [
+                    *filter_stages,
+                    {"$sort": _sort_spec(spec)},
+                    {"$skip": (spec.page - 1) * spec.page_size},
+                    {"$limit": spec.page_size},
+                    {"$project": {"performance_rows": 0, "sort_name": 0}},
+                ],
+                "filtered_count": [*filter_stages, {"$count": "value"}],
+                "filtered_summary": [
+                    *filter_stages,
+                    {"$group": _summary_group()},
+                ],
             }
         },
     ]
@@ -449,7 +589,16 @@ def _entity_row(
         "external_id": external_id,
         "name": display_name,
         "status": document.get("status"),
-        "active": document.get("active") is True,
+        # ``active`` is the public operational flag. Catalogue presence is
+        # exposed separately so callers cannot confuse observation with
+        # delivery state.
+        "active": document.get("operationally_active") is True,
+        "operational_status": document.get("operational_status") or None,
+        "catalogue_present": document.get("catalogue_present") is True,
+        "observed_in_latest_sync": bool(
+            document.get("catalogue_present") is True
+            and document.get("missing_from_latest_sync") is not True
+        ),
         "campaign_id": campaign_id or None,
         "campaign_name": (
             display_name
@@ -523,12 +672,10 @@ async def read_entity_page(
         length=1,
     )
     root = roots[0] if roots else {}
-    catalog_count = list(root.get("catalog_count") or [])
-    filtered_root = list(root.get("filtered") or [])
-    filtered = filtered_root[0] if filtered_root else {}
-    count_rows = list(filtered.get("count") or [])
-    summary_rows = list(filtered.get("summary") or [])
-    total = int((catalog_count[0] if catalog_count else {}).get("value") or 0)
+    identity_count = list(root.get("identity_count") or [])
+    count_rows = list(root.get("filtered_count") or [])
+    summary_rows = list(root.get("filtered_summary") or [])
+    total = int((identity_count[0] if identity_count else {}).get("value") or 0)
     filtered_total = int((count_rows[0] if count_rows else {}).get("value") or 0)
     summary = dict(summary_rows[0] if summary_rows else {})
     summary.pop("_id", None)
@@ -540,7 +687,7 @@ async def read_entity_page(
             source_collection=source_collection,
             level_status=level_status,
         )
-        for document in list(filtered.get("items") or [])[: spec.page_size]
+        for document in list(root.get("items") or [])[: spec.page_size]
     ]
     totals = {
         **_metrics(summary),
@@ -560,6 +707,14 @@ async def read_entity_page(
             "filtered_total": filtered_total,
             "pages": pages,
             "has_more": spec.page < pages,
+            "rows_are_page": True,
+            "collection_complete": bool(
+                spec.page == 1
+                and not spec.search.strip()
+                and not spec.active_only
+                and total <= spec.page_size
+            ),
+            "identity_scope": "catalogue_union_historical_facts",
             "sort": {
                 "by": spec.sort_by,
                 "direction": spec.sort_direction,

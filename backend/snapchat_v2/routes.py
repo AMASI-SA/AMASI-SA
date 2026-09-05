@@ -1015,6 +1015,10 @@ def attach_snapchat_v2_routes(
             },
         )
         unified.update(performance.get("pagination") or {})
+        unified["pagination"] = performance.get("pagination") or {}
+        unified["entity_collection_complete"] = bool(
+            (performance.get("pagination") or {}).get("collection_complete")
+        )
         unified["request_id"] = request_id
         return {
             "request_id": request_id,
@@ -1045,7 +1049,7 @@ def attach_snapchat_v2_routes(
         action_report_time: Literal["conversion", "impression"] = Query(
             default="conversion"
         ),
-        campaign_id: str | None = Query(default=None, max_length=128),
+        campaign_id: str = Query(..., min_length=1, max_length=128),
         include_stale: bool = Query(default=False),
         page: int = Query(default=1, ge=1),
         page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
@@ -1101,6 +1105,10 @@ def attach_snapchat_v2_routes(
             sync_status=performance["performance_sync_status"],
         )
         unified.update(performance.get("pagination") or {})
+        unified["pagination"] = performance.get("pagination") or {}
+        unified["entity_collection_complete"] = bool(
+            (performance.get("pagination") or {}).get("collection_complete")
+        )
         unified["request_id"] = request_id
         return {
             "request_id": request_id,
@@ -1130,8 +1138,8 @@ def attach_snapchat_v2_routes(
         action_report_time: Literal["conversion", "impression"] = Query(
             default="conversion"
         ),
-        campaign_id: str | None = Query(default=None, max_length=128),
-        ad_squad_id: str | None = Query(default=None, max_length=128),
+        campaign_id: str = Query(..., min_length=1, max_length=128),
+        ad_squad_id: str = Query(..., min_length=1, max_length=128),
         include_stale: bool = Query(default=False),
         page: int = Query(default=1, ge=1),
         page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
@@ -1188,6 +1196,10 @@ def attach_snapchat_v2_routes(
             sync_status=performance["performance_sync_status"],
         )
         unified.update(performance.get("pagination") or {})
+        unified["pagination"] = performance.get("pagination") or {}
+        unified["entity_collection_complete"] = bool(
+            (performance.get("pagination") or {}).get("collection_complete")
+        )
         unified["request_id"] = request_id
         return {
             "request_id": request_id,

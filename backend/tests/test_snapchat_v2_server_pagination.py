@@ -10,7 +10,7 @@ from snapchat_v2.entity_pagination import (
     build_entity_page_pipeline,
     read_entity_page,
 )
-from snapchat_v2.entities import SNAPCHAT_ENTITY_FACTS_COLLECTION
+from snapchat_v2.entities import SNAPCHAT_ENTITY_FACTS_COLLECTION, normalize_entity
 from snapchat_v2.facts import SNAPCHAT_HOURLY_FACTS_COLLECTION
 
 
@@ -54,15 +54,23 @@ class FakeEntityCollection:
         for row in rows:
             row.setdefault("performance", {})
             row["sort_name"] = str(row.get("name") or "").lower()
-        filtered_pipeline = pipeline[-1]["$facet"]["filtered"]
-        if filtered_pipeline and "$match" in filtered_pipeline[0]:
+            row["operational_status"] = str(
+                row.get("effective_status") or row.get("status") or ""
+            ).upper()
+            row["operationally_active"] = bool(
+                row.get("missing_from_latest_sync") is not True
+                and row["operational_status"] in {"ACTIVE", "ENABLED", "DELIVERING"}
+            )
+            row["catalogue_present"] = True
+        facet = pipeline[-1]["$facet"]
+        item_stages = facet["items"]
+        if item_stages and "$match" in item_stages[0]:
             rows = [
                 row
                 for row in rows
-                if _matches(row, filtered_pipeline[0]["$match"])
+                if _matches(row, item_stages[0]["$match"])
             ]
-        inner = filtered_pipeline[-1]["$facet"]
-        item_stages = inner["items"]
+            item_stages = item_stages[1:]
         sort = item_stages[0]["$sort"]
         # Stable multi-key sorting, applying the lowest-priority key first.
         for field, direction in reversed(list(sort.items())):
@@ -101,12 +109,10 @@ class FakeEntityCollection:
                 float(row["performance"].get(field) or 0) for row in rows
             )
         root = {
-            "catalog_count": [{"value": len([row for row in self.rows if _matches(row, base)])}],
-            "filtered": [{
-                "items": items,
-                "count": [{"value": len(rows)}],
-                "summary": [summary] if rows else [],
-            }],
+            "identity_count": [{"value": len([row for row in self.rows if _matches(row, base)])}],
+            "items": items,
+            "filtered_count": [{"value": len(rows)}],
+            "filtered_summary": [summary] if rows else [],
         }
         return FakeCursor([root])
 
@@ -174,6 +180,9 @@ async def test_five_thousand_campaigns_materialize_only_first_twenty_five():
         "filtered_total": 5_000,
         "pages": 200,
         "has_more": True,
+        "rows_are_page": True,
+        "collection_complete": False,
+        "identity_scope": "catalogue_union_historical_facts",
         "sort": {
             "by": "default",
             "direction": "desc",
@@ -222,12 +231,65 @@ async def test_active_search_and_sort_apply_before_pagination():
     )
 
     assert result["pagination"]["filtered_total"] == 50
+    assert result["pagination"]["collection_complete"] is False
     assert len(result["rows"]) == 25
     assert all(row["active"] is True for row in result["rows"])
     assert all("campaign-049" in row["external_id"] for row in result["rows"])
     assert [row["external_id"] for row in result["rows"]] == sorted(
         row["external_id"] for row in result["rows"]
     )
+
+
+@pytest.mark.asyncio
+async def test_collection_complete_requires_the_full_unfiltered_identity_scope():
+    result = await _read(FakeDB(_campaigns(5)), EntityPageSpec())
+
+    assert result["pagination"]["total"] == 5
+    assert result["pagination"]["collection_complete"] is True
+
+
+@pytest.mark.asyncio
+async def test_active_only_uses_normalized_operational_status_not_catalogue_presence():
+    source_rows = [
+        ("campaign-active", {"status": "ACTIVE"}),
+        ("campaign-paused", {"status": "PAUSED"}),
+        ("campaign-effective", {"status": "PAUSED", "effective_status": "ACTIVE"}),
+        ("campaign-unknown", {"status": None}),
+        ("campaign-missing", {"status": "ACTIVE"}),
+    ]
+    rows = [
+        normalize_entity(
+            "owner-1",
+            "account-1",
+            "campaign",
+            {"id": entity_id, "name": entity_id, **status_fields},
+            sync_run_id="run-1",
+        )
+        for entity_id, status_fields in source_rows
+    ]
+    for row in rows:
+        row["performance"] = {"source_fact_count": 1, "spend_native": 1}
+        row["missing_from_latest_sync"] = False
+    rows[-1].update(
+        {
+            "active": False,
+            "missing_from_latest_sync": True,
+            "observed_in_latest_sync": False,
+            "operationally_active": False,
+        }
+    )
+
+    result = await _read(
+        FakeDB(rows),
+        EntityPageSpec(active_only=True),
+    )
+
+    assert [row["external_id"] for row in result["rows"]] == [
+        "campaign-active",
+        "campaign-effective",
+    ]
+    assert result["rows"][0]["operational_status"] == "ACTIVE"
+    assert result["rows"][0]["observed_in_latest_sync"] is True
 
 
 @pytest.mark.asyncio
@@ -262,14 +324,141 @@ def test_parent_filters_are_in_first_match_before_lookup_and_page_limit():
 
     assert pipeline[0]["$match"]["campaign_id"] == "campaign-1"
     assert pipeline[0]["$match"]["ad_squad_id"] == "squad-1"
-    item_pipeline = pipeline[-1]["$facet"]["filtered"][-1]["$facet"]["items"]
+    fact_match = pipeline[2]["$unionWith"]["pipeline"][0]["$match"]
+    assert fact_match["campaign_id"] == "campaign-1"
+    assert fact_match["ad_squad_id"] == "squad-1"
+    item_pipeline = pipeline[-1]["$facet"]["items"]
     assert item_pipeline[1:] == [
         {"$skip": 50},
         {"$limit": 25},
         {"$project": {"performance_rows": 0, "sort_name": 0}},
     ]
+    assert not any(
+        "$facet" in nested_stage
+        for branches in pipeline[-1]["$facet"].values()
+        for nested_stage in branches
+    )
 
 
 def test_salla_dependent_sorts_fail_closed_instead_of_claiming_support():
     with pytest.raises(ValueError, match="unsupported Snapchat entity sort"):
         EntityPageSpec(sort_by="salla_sales")
+
+
+@pytest.mark.asyncio
+async def test_unified_reader_marks_first_page_incomplete_and_bounds_management_context(
+    monkeypatch,
+):
+    from unified_marketing.readers import snapchat_v2 as reader
+
+    class IdentityCursor:
+        def __init__(self, rows):
+            self.rows = rows
+
+        async def to_list(self, length=None):
+            return list(self.rows[:length])
+
+    class IdentityCollection:
+        def __init__(self, rows):
+            self.rows = rows
+            self.queries = []
+
+        def find(self, query, _projection):
+            self.queries.append(query)
+            requested = set(query["external_id"]["$in"])
+            return IdentityCursor(
+                [row for row in self.rows if row["external_id"] in requested]
+            )
+
+    rows = [
+        {
+            "external_id": f"campaign-{index:05d}",
+            "campaign_id": f"campaign-{index:05d}",
+            "campaign_name": f"Campaign {index:05d}",
+            "name": f"Campaign {index:05d}",
+            "status": "ACTIVE",
+            "active": True,
+            "spend_native": 1,
+            "source_fact_count": 1,
+            "performance_sync_status": "complete",
+        }
+        for index in range(25)
+    ]
+    identities = IdentityCollection(
+        [{**row, "raw": {"daily_budget_micro": 1_000_000}} for row in rows]
+    )
+
+    class ReaderDB:
+        def __getitem__(self, _name):
+            return identities
+
+    async def account(*_args, **_kwargs):
+        return {
+            "ad_account_id": "account-1",
+            "display_name": "Account",
+            "currency": "SAR",
+            "timezone": "Asia/Riyadh",
+            "active": True,
+        }
+
+    async def performance(*_args, **_kwargs):
+        return {
+            "rows": deepcopy(rows),
+            "totals": {"spend_native": 25, "source_fact_count": 25},
+            "performance_sync_status": "complete",
+            "pagination": {
+                "page": 1,
+                "page_size": 25,
+                "total": 5_000,
+                "filtered_total": 5_000,
+                "pages": 200,
+                "has_more": True,
+                "rows_are_page": True,
+                "collection_complete": False,
+            },
+        }
+
+    async def sar(_db, *, rows, totals, **_kwargs):
+        for row in rows:
+            row["spend_sar"] = row["spend_native"]
+        totals["spend_sar"] = totals["spend_native"]
+        return 1.0, {"status": "complete"}
+
+    async def salla(*_args, **_kwargs):
+        return {
+            "by_campaign": {},
+            "orders": [],
+            "orders_total": 0,
+            "orders_returned": 0,
+            "truncated": False,
+            "summary": {"coverage_status": "complete"},
+        }
+
+    async def carts(*_args, **_kwargs):
+        return {"by_campaign": {}, "coverage": {"status": "complete"}}
+
+    monkeypatch.setattr(reader, "get_selected_account", account)
+    monkeypatch.setattr(reader, "_entity_performance_report", performance)
+    monkeypatch.setattr(reader, "_add_sar_spend", sar)
+    monkeypatch.setattr(reader, "load_salla_campaign_outcomes", salla)
+    monkeypatch.setattr(reader, "load_abandoned_cart_outcomes", carts)
+
+    report = await reader.load_snapchat_v2_entity_report(
+        ReaderDB(),
+        "owner-1",
+        entity_level="campaign",
+        date_from=date(2026, 9, 1),
+        date_to=date(2026, 9, 1),
+        timezone_name="Asia/Riyadh",
+    )
+
+    assert report["entity_collection_complete"] is False
+    assert report["pagination"]["filtered_total"] == 5_000
+    assert report["decision_eligibility"] == {
+        "eligible": False,
+        "reason": "paginated_entity_sample_not_account_complete",
+    }
+    assert len(report["management_context"]) == 25
+    assert identities.queries[0]["external_id"]["$in"] == [
+        f"campaign-{index:05d}" for index in range(25)
+    ]

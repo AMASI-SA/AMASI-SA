@@ -19,6 +19,8 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from .entities import SNAPCHAT_ENTITY_FACTS_COLLECTION
+from .facts import SNAPCHAT_HOURLY_FACTS_COLLECTION
+from .total_facts import SNAPCHAT_TOTAL_FACTS_COLLECTION
 
 from salla_marketing_attribution import (
     SALLA_RAW_ATTRIBUTION_PROJECTION,
@@ -30,6 +32,7 @@ from salla_marketing_attribution import (
 
 MAX_AUDIT_ROWS = 500
 MAX_ORDER_ROWS = 100_000
+MAX_REPORT_COST_ORDERS = 10_000
 
 ORDER_PROJECTION = {
     **SALLA_RAW_ATTRIBUTION_PROJECTION,
@@ -50,6 +53,9 @@ ORDER_PROJECTION = {
     "status": 1,
     "total_amount": 1,
     "total": 1,
+    "total_product_cost": 1,
+    "actual_refund_amount": 1,
+    "actual_partial_refund_amount": 1,
     "source_native": 1,
     "source": 1,
     "order_source": 1,
@@ -193,16 +199,17 @@ def _match_order_campaign(
     *,
     id_lookup: dict[str, tuple[str, str] | None],
     name_lookup: dict[str, tuple[str, str] | None],
+    provider_key: str = "snapchat",
 ) -> tuple[tuple[str, str] | None, str]:
     platform = canonical_ad_platform(order)
-    if platform and platform != "snapchat":
+    if platform and platform != provider_key:
         return None, "foreign_platform"
     for candidate in campaign_id_candidates(order):
         normalized = _norm(candidate)
         if normalized and normalized in id_lookup:
             key = id_lookup[normalized]
             return (key, "campaign_id") if key else (None, "ambiguous_id")
-    if platform == "snapchat":
+    if platform == provider_key:
         for candidate in campaign_name_candidates(order):
             normalized = _norm(candidate)
             if normalized and normalized in name_lookup:
@@ -256,7 +263,14 @@ async def load_salla_campaign_outcomes(
     platform_purchases: int = 0,
     campaign_spend_sar: dict[str, float] | None = None,
     restrict_to_identities: bool = False,
+    provider: str = "snapchat_ads",
 ) -> dict[str, Any]:
+    provider_key = {
+        "snapchat_ads": "snapchat",
+        "meta_ads": "meta",
+    }.get(str(provider or "").strip().lower())
+    if provider_key is None:
+        raise ValueError(f"unsupported_salla_marketing_provider:{provider}")
     settings = await _load_report_settings(db, str(user_id))
     query: dict[str, Any] = {
         "user_id": str(user_id),
@@ -332,7 +346,11 @@ async def load_salla_campaign_outcomes(
         )
 
         profitability_raw = defaultdict(_new_campaign_bucket)
-        cost_context = await _load_cost_context(db, str(user_id))
+        cost_context = await _load_cost_context(
+            db,
+            str(user_id),
+            orders=orders,
+        )
     audit_rows: list[dict[str, Any]] = []
     total_financial_sales = 0.0
     snapchat_attributed_sales = 0.0
@@ -354,8 +372,9 @@ async def load_salla_campaign_outcomes(
             order,
             id_lookup=id_lookup,
             name_lookup=name_lookup,
+            provider_key=provider_key,
         )
-        reported_snapchat_source = source_platform == "snapchat"
+        reported_snapchat_source = source_platform == provider_key
         snapchat_attributed = reported_snapchat_source or key is not None
 
         legacy_account_period_included = bool(
@@ -408,7 +427,7 @@ async def load_salla_campaign_outcomes(
             if financial:
                 counters["campaign_matched_financial_orders"] += 1
                 by_campaign[key]["sales_sar"] += amount
-                if cost_context is not None:
+                if cost_context is not None and match_method == "campaign_id":
                     _add_order_to_campaign(
                         profitability_raw[key],
                         _order_cost_and_products(order, cost_context),
@@ -544,7 +563,7 @@ async def load_salla_campaign_outcomes(
         if profitability is not None:
             value["profitability"] = profitability
     return {
-        "provider": "snapchat_ads",
+        "provider": str(provider),
         "account_id": account_id,
         "date_from": from_value,
         "date_to": to_value,
@@ -626,10 +645,10 @@ async def load_salla_campaign_outcomes(
             - matched_financial_orders,
             "date_timezone": timezone_name,
             "campaign_attribution_policy": (
-                "exact_campaign_id_or_unique_snapchat_campaign_name"
+                f"exact_campaign_id_or_unique_{provider_key}_campaign_name"
             ),
             "account_attribution_policy": (
-                "salla_reported_snapchat_source_or_exact_campaign_match"
+                f"salla_reported_{provider_key}_source_or_exact_campaign_match"
             ),
             "account_order_scope": "all_orders_created_in_period",
             "account_sales_scope": "gross_order_total_all_statuses",
@@ -648,6 +667,11 @@ async def load_salla_campaign_outcomes(
         "truncated": len(audit_rows) > MAX_AUDIT_ROWS,
         "source_collection": "unified_orders",
         "source_only": True,
+        "cost_read_diagnostics": (
+            dict(cost_context.get("read_diagnostics") or {})
+            if cost_context is not None
+            else {"restricted_to_order_identities": True}
+        ),
     }
 
 
@@ -715,21 +739,89 @@ async def load_salla_report_summary_aggregate(
     amount_input: Any = {"$ifNull": ["$total_amount", "$total"]}
     normalized_search = str(search or "").strip()
     filtered_entity_scope = bool(normalized_search or active_only)
+    operational_status = {
+        "$let": {
+            "vars": {
+                "effective": {
+                    "$trim": {
+                        "input": {
+                            "$convert": {
+                                "input": "$effective_status",
+                                "to": "string",
+                                "onError": "",
+                                "onNull": "",
+                            }
+                        }
+                    }
+                },
+                "status": {
+                    "$trim": {
+                        "input": {
+                            "$convert": {
+                                "input": "$status",
+                                "to": "string",
+                                "onError": "",
+                                "onNull": "",
+                            }
+                        }
+                    }
+                },
+            },
+            "in": {
+                "$toUpper": {
+                    "$cond": [
+                        {"$ne": ["$$effective", ""]},
+                        "$$effective",
+                        "$$status",
+                    ]
+                }
+            }
+        }
+    }
+    catalogue_expr: list[dict[str, Any]] = [
+        {"$eq": ["$external_id", "$$campaign_id"]}
+    ]
+    if active_only:
+        catalogue_expr.extend(
+            [
+                {"$ne": ["$missing_from_latest_sync", True]},
+                {
+                    "$in": [
+                        operational_status,
+                        ["ACTIVE", "ENABLED", "DELIVERING"],
+                    ]
+                },
+            ]
+        )
     campaign_catalog_match: dict[str, Any] = {
         "user_id": str(user_id),
         "provider": "snapchat_ads",
         "ad_account_id": str(account_id),
         "entity_type": "campaign",
-        "$expr": {"$eq": ["$external_id", "$$campaign_id"]},
+        "$expr": {"$and": catalogue_expr},
     }
-    if active_only:
-        campaign_catalog_match["active"] = True
     if normalized_search:
         safe_search = re.escape(normalized_search)
         campaign_catalog_match["$or"] = [
             {"name": {"$regex": safe_search, "$options": "i"}},
             {"external_id": {"$regex": safe_search, "$options": "i"}},
         ]
+    fact_identity_match: dict[str, Any] = {
+        "user_id": str(user_id),
+        "provider": "snapchat_ads",
+        "ad_account_id": str(account_id),
+        "entity_type": "campaign",
+        "$expr": (
+            False
+            if active_only
+            else {"$eq": ["$external_id", "$$campaign_id"]}
+        ),
+    }
+    if normalized_search:
+        fact_identity_match["external_id"] = {
+            "$regex": re.escape(normalized_search),
+            "$options": "i",
+        }
     pipeline: list[dict[str, Any]] = [
         {
             "$match": {
@@ -774,14 +866,6 @@ async def load_salla_report_summary_aggregate(
                         "onNull": 0.0,
                     }
                 },
-                "_product_cost": {
-                    "$convert": {
-                        "input": "$total_product_cost",
-                        "to": "double",
-                        "onError": None,
-                        "onNull": None,
-                    }
-                },
             }
         },
         {
@@ -814,6 +898,37 @@ async def load_salla_report_summary_aggregate(
                 "as": "_campaign_match",
             }
         },
+        *(
+            [
+                {
+                    "$lookup": {
+                        "from": collection_name,
+                        "let": {"campaign_id": "$_campaign_id"},
+                        "pipeline": [
+                            {"$match": fact_identity_match},
+                            {"$limit": 1},
+                            {"$project": {"_id": 1}},
+                        ],
+                        "as": output_name,
+                    }
+                }
+                for collection_name, output_name in (
+                    (SNAPCHAT_HOURLY_FACTS_COLLECTION, "_hourly_campaign_match"),
+                    (SNAPCHAT_TOTAL_FACTS_COLLECTION, "_total_campaign_match"),
+                )
+            ]
+        ),
+        {
+            "$set": {
+                "_campaign_match": {
+                    "$concatArrays": [
+                        "$_campaign_match",
+                        "$_hourly_campaign_match",
+                        "$_total_campaign_match",
+                    ]
+                }
+            }
+        },
         {
             "$set": {
                 "_attributed": (
@@ -836,8 +951,6 @@ async def load_salla_report_summary_aggregate(
                 "sales_sar": {"$sum": "$_amount"},
                 "financial_orders": {"$sum": {"$cond": ["$_financial", 1, 0]}},
                 "financial_sales_sar": {"$sum": {"$cond": ["$_financial", "$_amount", 0]}},
-                "known_product_cost_sar": {"$sum": {"$cond": ["$_financial", {"$ifNull": ["$_product_cost", 0]}, 0]}},
-                "missing_cost_orders": {"$sum": {"$cond": [{"$and": ["$_financial", {"$eq": ["$_product_cost", None]}]}, 1, 0]}},
                 "source_labelled_orders": {"$sum": {"$cond": ["$_snapchat_source", 1, 0]}},
                 "exact_campaign_id_orders": {"$sum": {"$cond": [{"$gt": [{"$size": "$_campaign_match"}, 0]}, 1, 0]}},
             }
@@ -850,24 +963,94 @@ async def load_salla_report_summary_aggregate(
         cursor = collection.aggregate(pipeline)
     rows = await _to_list(cursor, 1)
     row = dict(rows[0] if rows else {})
+    cost_pipeline = [
+        *pipeline[:-1],
+        {
+            "$match": {
+                "_financial": True,
+                "$expr": {"$gt": [{"$size": "$_campaign_match"}, 0]},
+            }
+        },
+        {
+            "$project": {
+                **ORDER_PROJECTION,
+                "_id": 0,
+                "_campaign_id": 1,
+            }
+        },
+        {"$limit": MAX_REPORT_COST_ORDERS + 1},
+    ]
+    try:
+        cost_cursor = collection.aggregate(
+            cost_pipeline,
+            allowDiskUse=False,
+            maxTimeMS=15_000,
+        )
+    except TypeError:
+        cost_cursor = collection.aggregate(cost_pipeline)
+    cost_orders = await _to_list(cost_cursor, MAX_REPORT_COST_ORDERS + 1)
+    cost_scope_truncated = len(cost_orders) > MAX_REPORT_COST_ORDERS
+    if cost_scope_truncated:
+        cost_orders = cost_orders[:MAX_REPORT_COST_ORDERS]
+
+    from integrations_control_center.snapchat_campaign_profitability import (
+        _load_cost_context,
+        _order_cost_and_products,
+    )
+
+    cost_context = await _load_cost_context(
+        db,
+        str(user_id),
+        orders=cost_orders,
+    )
+    canonical_results = [
+        _order_cost_and_products(order, cost_context)
+        for order in cost_orders
+    ]
+    canonical_sales = round(
+        sum(_number(result.get("order_sales_sar")) for result in canonical_results),
+        2,
+    )
+    canonical_known_cost = round(
+        sum(_number(result.get("product_cost_sar")) for result in canonical_results),
+        2,
+    )
+    missing_cost = sum(
+        int(result.get("missing_everywhere") is True)
+        for result in canonical_results
+    )
+    stored_cost_missing = 0
+    stored_cost_mismatch = 0
+    for order, result in zip(cost_orders, canonical_results):
+        stored = order.get("total_product_cost")
+        if stored is None:
+            stored_cost_missing += 1
+            continue
+        try:
+            stored_number = float(stored)
+        except (TypeError, ValueError, OverflowError):
+            stored_cost_mismatch += 1
+            continue
+        if abs(stored_number - _number(result.get("product_cost_sar"))) > 0.005:
+            stored_cost_mismatch += 1
+    cost_complete = not cost_scope_truncated and missing_cost == 0
     orders = int(row.get("orders") or 0)
     sales = round(_number(row.get("sales_sar")), 2)
     financial_orders = int(row.get("financial_orders") or 0)
     financial_sales = round(_number(row.get("financial_sales_sar")), 2)
-    known_cost = round(_number(row.get("known_product_cost_sar")), 2)
-    missing_cost = int(row.get("missing_cost_orders") or 0)
     contribution = (
-        round(financial_sales - known_cost - float(spend_sar or 0), 2)
-        if missing_cost == 0 and spend_sar is not None
+        round(canonical_sales - canonical_known_cost - float(spend_sar or 0), 2)
+        if cost_complete and spend_sar is not None
         else None
     )
     margin = (
-        round(contribution / financial_sales * 100, 2)
-        if contribution is not None and financial_sales > 0
+        round(contribution / canonical_sales * 100, 2)
+        if contribution is not None and canonical_sales > 0
         else None
     )
     return {
-        "coverage_status": "complete",
+        "coverage_status": "complete" if cost_complete else "partial",
+        "attribution_coverage_status": "complete",
         "snapchat_attributed_orders": orders,
         "snapchat_attributed_sales_sar": sales,
         "snapchat_attributed_financial_orders": financial_orders,
@@ -896,21 +1079,37 @@ async def load_salla_report_summary_aggregate(
             "active_only": bool(active_only),
             "source_only_orders_excluded": filtered_entity_scope,
         },
-        "python_order_rows_materialized": 0,
+        "python_order_rows_materialized": len(cost_orders),
         "mongo_summary_rows_materialized": 1 if row else 0,
+        "mongo_commands": 2,
         "profitability": {
-            "orders": financial_orders,
-            "sales_sar": financial_sales,
-            "product_cost_sar": known_cost if missing_cost == 0 else None,
-            "known_product_cost_sar": known_cost,
+            "orders": len(cost_orders),
+            "sales_sar": canonical_sales,
+            "product_cost_sar": canonical_known_cost if cost_complete else None,
+            "known_product_cost_sar": canonical_known_cost,
             "ad_spend_sar": spend_sar,
             "contribution_profit_sar": contribution,
             "profit_margin_pct": margin,
             "missing_cost_orders": missing_cost,
-            "cost_status": "complete" if missing_cost == 0 else "partial",
-            "profit_scope": "report_wide_source_label_or_exact_id",
+            "cost_status": "complete" if cost_complete else "partial",
+            "coverage_status": "complete" if cost_complete else "partial",
+            "coverage_reason": (
+                "cost_order_limit_exceeded"
+                if cost_scope_truncated
+                else "canonical_cost_missing"
+                if missing_cost
+                else "complete"
+            ),
+            "cost_engine": "mezan_v2_canonical_current_catalog",
+            "stored_total_product_cost_used": False,
+            "stored_cost_missing_orders": stored_cost_missing,
+            "stored_cost_mismatch_orders": stored_cost_mismatch,
+            "orders_materialized": len(cost_orders),
+            "orders_limit": MAX_REPORT_COST_ORDERS,
+            "profit_scope": "report_wide_exact_campaign_id_financial_orders",
             "products": [],
         },
+        "cost_read_diagnostics": dict(cost_context.get("read_diagnostics") or {}),
     }
 
 
