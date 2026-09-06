@@ -147,12 +147,6 @@ def create_web_app():
     return server.app
 
 
-SCHEDULER_MODULES = {
-    "advertising_product_watch_scheduler_v3", "campaign_ai_subprocess_scheduler",
-    "product_google_taxonomy_ai_pilot",
-}
-
-
 async def worker(server, stop: asyncio.Event) -> None:
     from startup_guard import (
         COLLECTION, LEASE_ID, claim_startup_lease, heartbeat_startup_lease, new_owner_id,
@@ -163,12 +157,17 @@ async def worker(server, stop: asyncio.Event) -> None:
         raise RuntimeError("migration is incomplete; worker refused")
     if os.environ.get("MEZAN_WORKER_ENABLED") != "1":
         raise RuntimeError("worker requires explicit arming")
+    from independent_callbacks import classify_callbacks
+    callbacks, stops = classify_callbacks(
+        [cb for cb in server.app.router.on_startup if cb is not server.on_startup],
+        [cb for cb in server.app.router.on_shutdown if cb is not server.on_shutdown],
+    )
+    print("classified worker callbacks:", ", ".join(cb.__module__ + "." + cb.__qualname__ for cb in callbacks), flush=True)
     # Stable across candidate SHAs: old and new workers may never coexist.
     claim = await claim_startup_lease(server.db, "independent-worker:singleton", new_owner_id(), ttl_seconds=15)
     if claim.state != "leader":
         raise RuntimeError("another worker holds the fenced claim")
     tasks = []
-    stops = [cb for cb in server.app.router.on_shutdown if cb.__module__ in SCHEDULER_MODULES]
 
     async def heartbeat():
         while True:
@@ -177,10 +176,7 @@ async def worker(server, stop: asyncio.Event) -> None:
                 raise RuntimeError("worker fence lost")
 
     async def initialize():
-        # Fail before starting any task if router event ownership is unclear.
-        callbacks = [cb for cb in server.app.router.on_startup if cb is not server.on_startup]
-        if any(cb.__module__ not in SCHEDULER_MODULES for cb in callbacks):
-            raise RuntimeError("unclassified scheduler startup callback")
+        # All lifecycle pairs were classified before claiming or starting tasks.
         await load_process_configuration(server)
         from integrations.qoyod.worker import start_worker as start_legacy
         from integrations.qoyod_manual.auto_send import start_worker as start_plan_b

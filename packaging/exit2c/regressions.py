@@ -16,7 +16,7 @@ import bcrypt
 assert jwt.__file__ and bcrypt.__file__
 import pytest
 names = [
-    "test_independent_security_install.py", "test_login_security_v1.py",
+    "test_independent_callbacks.py", "test_independent_security_install.py", "test_login_security_v1.py",
     "test_progressive_login_security_v1.py", "test_mfa_security_v1.py",
     "test_email_otp_security_v1.py", "test_passkey_security_v1.py",
     "test_mobile_session_security.py", "test_browser_security.py",
