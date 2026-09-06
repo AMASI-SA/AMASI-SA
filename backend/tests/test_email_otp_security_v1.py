@@ -152,7 +152,7 @@ def test_runtime_is_always_fail_closed(monkeypatch):
 
 def test_auth_middleware_order_and_frontend_contract():
     auth_source = Path("backend/auth.py").read_text(encoding="utf-8")
-    assert auth_source.index("await install_mfa_security(app, db)") < auth_source.index(
+    assert auth_source.index("await install_mfa_security(app, db,") < auth_source.index(
         "await install_email_otp_security(app, db)"
     )
 

@@ -4,6 +4,10 @@ import sys
 sys.path.insert(0, "/opt/mezan/backend")
 from independent_runtime import validate_before_import
 validate_before_import("web")
+# Public deterministic fixture from the inherited Qoyod test workflow.
+# Set only inside this network-isolated regression process, after boundary validation.
+os.environ["QOYOD_TOKEN_ENC_KEY"] = "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA="
+os.environ["QOYOD_API_BASE"] = "https://qoyod.invalid"
 # A historical test conditionally installs fake jwt/bcrypt when absent; load
 # genuine distributions first and assert they remain genuine after collection.
 import jwt
