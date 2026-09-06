@@ -269,6 +269,11 @@ def http():
         files={"file": ("synthetic.png", image.getvalue(), "image/png")})
     attached = request(1, "GET", "/api/preparation/image/exit2c-upload/0", cookie=owner)
     state["image_sha256"] = hashlib.sha256(attached.content).hexdigest()
+    request(0, "POST", "/api/preparation-work-v1/files/PF-EXIT2C-0001/start",
+        cookie=owner, expected=409, json={"note": "Incomplete allocation must block"})
+    db().order_review_workflows.update_one({"user_id": state["owner"], "order_number": "EXIT2C-ORDER"},
+        {"$set": {"preparation_assignment_status": "assigned", "preparation_progress": {
+            "required_quantity": 1, "allocated_quantity": 1, "remaining_quantity": 0}}})
     started = request(0, "POST", "/api/preparation-work-v1/files/PF-EXIT2C-0001/start",
         cookie=owner, json={"note": "Synthetic execution start"})
     assert started.json()["mezan_only"] and not started.json()["salla_updated"]

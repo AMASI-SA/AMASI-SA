@@ -10,6 +10,7 @@ os.environ["QOYOD_TOKEN_ENC_KEY"] = "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA
 os.environ["QOYOD_API_BASE"] = "https://qoyod.invalid"
 # A historical test conditionally installs fake jwt/bcrypt when absent; load
 # genuine distributions first and assert they remain genuine after collection.
+sys.path.insert(0, "/opt/rehearsal")
 import jwt
 import bcrypt
 assert jwt.__file__ and bcrypt.__file__
@@ -28,9 +29,9 @@ names = [
     "test_qoyod_reconciliation_v2.py", "test_preparation_pdf_media_text_gap.py",
     "test_preparation_pdf_card_file_number.py",
     "test_preparation_file_registry.py", "test_preparation_piece_operations.py",
-    "test_qoyod_state_machine.py",
+    "test_qoyod_state_machine.py", "test_preparation_piece_execution_guard.py",
 ]
-status = pytest.main(["--noconftest", "-p", "no:cacheprovider", "-q", "--tb=short", *[
+status = pytest.main(["--noconftest", "-p", "no:cacheprovider", "-q", "--tb=short", "/opt/rehearsal/test_boundary.py", *[
     "/opt/mezan/backend/tests/" + name for name in names
 ]])
 assert sys.modules["jwt"] is jwt and sys.modules["bcrypt"] is bcrypt

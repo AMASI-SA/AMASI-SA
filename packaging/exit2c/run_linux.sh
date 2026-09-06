@@ -11,6 +11,10 @@ web2="exit2c-web2-$suffix"
 probe="exit2c-probe-$suffix"
 worker="exit2c-worker-$suffix"
 cleanup() {
+  result=$?
+  if test "$result" != 0; then
+    for name in "$web1" "$web2" "$worker"; do docker logs "$name" 2>&1 | tail -n 45 || true; done
+  fi
   docker unpause "$mongo" >/dev/null 2>&1 || true
   docker rm -f "$web1" "$web2" "$probe" "$worker" "$mongo" >/dev/null 2>&1 || true
 }
