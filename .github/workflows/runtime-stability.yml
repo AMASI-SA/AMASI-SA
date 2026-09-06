@@ -1,0 +1,85 @@
+name: Runtime Stability
+
+on:
+  pull_request:
+    paths:
+      - "backend/runtime_mongo.py"
+      - "backend/auth.py"
+      - "backend/server.py"
+      - "backend/mobile_app_permissions.py"
+      - "backend/integrations/qoyod/worker.py"
+      - "backend/integrations/qoyod_manual/auto_send.py"
+      - "backend/tests/test_runtime_stability_mongo_auth.py"
+      - "backend/tests/runtime_stability_benchmark.py"
+      - "frontend/src/context/AuthContext.jsx"
+      - "frontend/src/context/AuthContext.test.jsx"
+      - "frontend/src/context/authBootstrap.js"
+      - "frontend/src/context/authBootstrap.test.js"
+      - "frontend/src/components/ProtectedRoute.jsx"
+      - "frontend/src/components/ProtectedRoute.test.jsx"
+      - ".github/workflows/runtime-stability.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  backend-runtime-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install backend runtime and test dependencies
+        run: |
+          grep -vE '^[[:space:]]*emergentintegrations==' backend/requirements.txt > /tmp/runtime-stability-requirements.txt
+          python -m pip install -q \
+            -r /tmp/runtime-stability-requirements.txt \
+            mongomock-motor \
+            pytest-asyncio \
+            PyMuPDF==1.28.2 \
+            qrcode==8.2
+      - name: Run runtime, auth and Qoyod safety contracts
+        env:
+          JWT_SECRET: ci-only-runtime-secret
+          QOYOD_TOKEN_ENC_KEY: MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=
+          QOYOD_API_BASE: https://qoyod.invalid
+        run: >-
+          PYTHONPATH=backend python -m pytest --noconftest -q --tb=short
+          backend/tests/test_runtime_stability_mongo_auth.py
+          backend/tests/test_auth_session_revocation_v1.py
+          backend/tests/test_mobile_app_manager_role.py
+          backend/tests/test_mobile_app_permission_owner_resolution.py
+          backend/tests/test_qoyod_manual_send_plan_b.py
+          backend/tests/test_qoyod_plan_b_auto_send.py
+          backend/tests/test_server_diagnostics_route_bindings.py
+      - name: Emit deterministic before-after benchmark
+        run: PYTHONPATH=backend python backend/tests/runtime_stability_benchmark.py
+
+  frontend-auth-recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --frozen-lockfile --non-interactive
+      - name: Run bounded auth and Snapchat gating tests
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/context/authBootstrap.test.js
+          src/context/AuthContext.test.jsx
+          src/components/ProtectedRoute.test.jsx
+
