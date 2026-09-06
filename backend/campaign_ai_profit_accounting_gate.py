@@ -6,27 +6,25 @@ from typing import Any
 
 from fastapi import HTTPException
 
-from mezan_profit_engine import build_mezan_profit_envelope
+from mezan_profit_engine import (
+    build_mezan_profit_envelope,
+    read_financial_cost_completeness,
+)
 
 RIYADH = timezone(timedelta(hours=3))
-
-
-def _count(value: Any) -> int | None:
-    if value is None or isinstance(value, bool):
-        return None
-    try:
-        parsed = int(value)
-    except (TypeError, ValueError, OverflowError):
-        return None
-    return parsed if parsed >= 0 else None
 
 
 def accounting_quality_from_totals(totals: dict[str, Any] | None) -> dict[str, Any]:
     """Compatibility parser for old snapshots; unknown stays unknown, never zero."""
     source = totals if isinstance(totals, dict) else {}
-    missing = _count(source.get("missing_product_cost_count"))
-    incomplete = _count(source.get("incomplete_profit_orders_count"))
-    known = missing is not None and incomplete is not None
+    counts = read_financial_cost_completeness(
+        source,
+        legacy_missing_key="missing_product_cost_count",
+        legacy_incomplete_key="incomplete_profit_orders_count",
+    )
+    missing = counts["financial_cost_missing_products_count"]
+    incomplete = counts["financially_incomplete_orders_count"]
+    known = counts["financial_cost_known"] is True
     complete = bool(known and missing == 0 and incomplete == 0)
     return {
         "known": known,
@@ -34,6 +32,7 @@ def accounting_quality_from_totals(totals: dict[str, Any] | None) -> dict[str, A
         "scale_safe": complete,
         "missing_product_cost_count": missing,
         "incomplete_profit_orders_count": incomplete,
+        **counts,
         "source": source.get("profit_source") or "mezan_profit_engine_v2_read_only",
         "unknown_is_zero": False,
     }
@@ -42,13 +41,32 @@ def accounting_quality_from_totals(totals: dict[str, Any] | None) -> dict[str, A
 def accounting_quality_from_envelope(envelope: dict[str, Any] | None) -> dict[str, Any]:
     source = envelope if isinstance(envelope, dict) else {}
     quality = source.get("quality") if isinstance(source.get("quality"), dict) else {}
-    known = quality.get("known") is True
-    complete = bool(known and quality.get("complete") is True and quality.get("scale_safe") is True)
+    counts = read_financial_cost_completeness(
+        quality,
+        legacy_missing_key="missing_product_cost_count",
+        legacy_incomplete_key="incomplete_profit_orders_count",
+    )
+    missing = counts["financial_cost_missing_products_count"]
+    incomplete = counts["financially_incomplete_orders_count"]
+    known = bool(
+        quality.get("known") is True
+        and counts["financial_cost_known"] is True
+    )
+    complete = bool(
+        known
+        and quality.get("complete") is True
+        and quality.get("scale_safe") is True
+        and missing == 0
+        and incomplete == 0
+    )
     return {
         **quality,
+        **counts,
         "known": known,
         "complete": complete,
         "scale_safe": complete,
+        "missing_product_cost_count": missing,
+        "incomplete_profit_orders_count": incomplete,
         "source": source.get("source") or "mezan_profit_engine_v2_read_only",
         "contract_version": source.get("contract_version"),
         "unknown_is_zero": False,
