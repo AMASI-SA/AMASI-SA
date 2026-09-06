@@ -122,6 +122,40 @@ def goal_row(target=100_000.0, updated_at="2026-09-01T00:00:00+00:00"):
     }
 
 
+def valid_snapshot_goal(
+    current_goal,
+    *,
+    calculated_at="2026-09-07T08:00:00+00:00",
+    evidence_end=date(2026, 9, 7),
+    net_profit=40_000.0,
+    data_through=None,
+):
+    return goal._derive_goal_progress(
+        goal=current_goal,
+        month_to_date={
+            "available": True,
+            "from": evidence_end.replace(day=1).isoformat(),
+            "to": evidence_end.isoformat(),
+            "timezone": "Asia/Riyadh",
+            "calculated_at": calculated_at,
+            "data_through": data_through,
+            "data_through_status": (
+                "source_watermark" if data_through else "source_watermark_unavailable"
+            ),
+            "net_profit": net_profit,
+            "profit_accounting": {
+                "known": True,
+                "complete": True,
+                "scale_safe": True,
+                "missing_product_cost_count": 0,
+                "incomplete_profit_orders_count": 0,
+                "issues": [],
+            },
+        },
+        end=evidence_end,
+    )
+
+
 def install_empty_monitor_sources(monkeypatch):
     async def empty(*_args, **_kwargs):
         return []
@@ -142,6 +176,9 @@ def install_empty_monitor_sources(monkeypatch):
 @pytest.mark.asyncio
 async def test_monthly_goal_is_in_initial_snapshot_and_latest_without_second_patch(monkeypatch):
     install_empty_monitor_sources(monkeypatch)
+    fixed_now = datetime(2026, 9, 6, 12, tzinfo=timezone.utc)
+    monkeypatch.setattr(goal, "_now", lambda: fixed_now.isoformat())
+    monkeypatch.setattr(monitor._legacy, "_utcnow", lambda: fixed_now)
     db = MemoryDB({goal.COLLECTION: MemoryCollection([goal_row()])})
     calls = []
 
@@ -152,7 +189,7 @@ async def test_monthly_goal_is_in_initial_snapshot_and_latest_without_second_pat
     result = await monitor.run_campaign_ai_monitor(
         db,
         "u1",
-        now=lambda: datetime(2026, 9, 6, 12, tzinfo=timezone.utc),
+        now=lambda: fixed_now,
         refresh_meta=False,
         business_context_loader=loader,
     )
@@ -187,7 +224,9 @@ async def test_monthly_goal_is_in_initial_snapshot_and_latest_without_second_pat
     monitor.attach_campaign_ai_routes(router, db, lambda: None, lambda user: user)
     latest = next(route.endpoint for route in router.routes if route.path == "/ai-monitor/latest")
     response = await latest(user={"id": "u1"})
-    assert response["monthly_profit_goal"] == inserted["monthly_profit_goal"]
+    assert response["monthly_profit_goal"]["evidence"]["valid"] is True
+    assert response["monthly_profit_goal"]["month_to_date"] == inserted["monthly_profit_goal"]["month_to_date"]
+    assert response["monthly_profit_goal"]["net_profit_to_date_sar"] == inserted["monthly_profit_goal"]["net_profit_to_date_sar"]
     assert db[goal.COLLECTION].index_calls == 1  # monitor load only; latest creates no index
     assert goal.current_goal_context() is None
 
@@ -341,14 +380,14 @@ def test_display_rederives_current_target_without_refreshing_profit_evidence():
         month_to_date={
             "available": True,
             "from": "2026-09-01",
-            "to": "2026-09-06",
+            "to": "2026-09-07",
             "timezone": "Asia/Riyadh",
-            "calculated_at": "2026-09-06T08:00:00+00:00",
+            "calculated_at": "2026-09-07T08:00:00+00:00",
             "data_through": "2026-09-05",
             "data_through_status": "source_watermark",
             "net_profit": 50_000.0,
         },
-        end=date(2026, 9, 6),
+        end=date(2026, 9, 7),
     )
     stored["provenance"] = {
         "run_id": "run-old",
@@ -360,13 +399,15 @@ def test_display_rederives_current_target_without_refreshing_profit_evidence():
         current_goal=current,
         snapshot_goal=json.loads(json.dumps(stored)),
         current_month=date(2026, 9, 7),
+        current_time=datetime(2026, 9, 7, 10, tzinfo=timezone.utc),
+        snapshot_next_run_at="2026-09-07T13:00:00+00:00",
     )
 
     assert display["minimum_net_profit_sar"] == 100_000.0
     assert display["net_profit_to_date_sar"] == 50_000.0
     assert display["remaining_to_target_sar"] == 50_000.0
     assert display["progress_state"] == "config_mismatch"
-    assert display["calculated_at"] == "2026-09-06T08:00:00+00:00"
+    assert display["calculated_at"] == "2026-09-07T08:00:00+00:00"
     assert display["data_through"] == "2026-09-05"
     assert display["provenance"]["snapshot_id"] == "snapshot-old"
     assert display["historical_recommendation_authority_renewed"] is False
@@ -410,23 +451,253 @@ def test_same_month_snapshot_past_next_run_is_explicitly_stale():
         "source": "owner_configured",
         "updated_at": "2026-09-01T00:00:00+00:00",
     })
-    snapshot = {
-        **current,
-        "month": "2026-09",
-        "progress_available": True,
-        "net_profit_to_date_sar": 50_000.0,
-        "calculated_at": "2026-09-06T08:00:00+00:00",
-    }
+    snapshot = valid_snapshot_goal(current)
     stale = goal.reconcile_goal_for_display(
         current_goal=current,
         snapshot_goal=snapshot,
         current_month=date(2026, 9, 7),
         current_time=datetime(2026, 9, 7, 12, tzinfo=timezone.utc),
-        snapshot_next_run_at="2026-09-06T13:00:00+00:00",
+        snapshot_next_run_at="2026-09-07T09:00:00+00:00",
     )
     assert stale["progress_state"] == "stale"
     assert stale["progress_unavailable_reason"] == "monthly_goal_snapshot_past_next_run_at"
     assert stale["net_profit_to_date_sar"] is None
+
+
+@pytest.mark.parametrize(
+    ("next_run_at", "reason"),
+    [
+        (None, "monthly_goal_snapshot_next_run_at_missing"),
+        ("not-a-timestamp", "monthly_goal_snapshot_next_run_at_invalid"),
+    ],
+)
+def test_same_config_never_treats_missing_or_invalid_next_run_as_fresh(
+    next_run_at,
+    reason,
+):
+    current = goal.with_goal_config_identity({
+        "minimum_net_profit_sar": 100_000.0,
+        "configured": True,
+        "source": "owner_configured",
+        "updated_at": "2026-09-01T00:00:00+00:00",
+    })
+    snapshot = valid_snapshot_goal(
+        current,
+        calculated_at="2026-09-01T08:00:00+00:00",
+        evidence_end=date(2026, 9, 1),
+        data_through=None,
+    )
+
+    display = goal.reconcile_goal_for_display(
+        current_goal=current,
+        snapshot_goal=snapshot,
+        current_month=date(2026, 9, 7),
+        current_time=datetime(2026, 9, 7, 12, tzinfo=timezone.utc),
+        snapshot_next_run_at=next_run_at,
+    )
+
+    assert display["progress_available"] is False
+    assert display["progress_state"] == "stale"
+    assert display["progress_unavailable_reason"] == reason
+    assert display["calculated_at"] == "2026-09-01T08:00:00+00:00"
+    assert display["data_through"] is None
+    assert display["data_through_status"] == "source_watermark_unavailable"
+    assert display["evidence"]["valid"] is False
+
+
+@pytest.mark.parametrize(
+    ("mutation", "reason"),
+    [
+        (
+            {"from": "2026-08-01", "to": "2026-08-31"},
+            "monthly_goal_snapshot_mtd_month_mismatch",
+        ),
+        (
+            {"from": "2026-09-02"},
+            "monthly_goal_snapshot_mtd_start_not_month_start",
+        ),
+        (
+            {"timezone": "UTC"},
+            "monthly_goal_snapshot_mtd_timezone_mismatch",
+        ),
+    ],
+)
+def test_fast_path_rejects_invalid_internal_calendar_mtd(mutation, reason):
+    current = goal.with_goal_config_identity({
+        "minimum_net_profit_sar": 100_000.0,
+        "configured": True,
+        "source": "owner_configured",
+        "updated_at": "2026-09-07T07:00:00+00:00",
+    })
+    snapshot = valid_snapshot_goal(current)
+    snapshot["month_to_date"].update(mutation)
+
+    display = goal.reconcile_goal_for_display(
+        current_goal=current,
+        snapshot_goal=snapshot,
+        current_month=date(2026, 9, 7),
+        current_time=datetime(2026, 9, 7, 10, tzinfo=timezone.utc),
+        snapshot_next_run_at="2026-09-07T13:00:00+00:00",
+    )
+
+    assert display["progress_available"] is False
+    assert display["progress_state"] == "stale"
+    assert display["progress_unavailable_reason"] == reason
+    assert display["evidence"]["valid"] is False
+
+
+@pytest.mark.parametrize("calculated_at", [None, "invalid", "2026-09-07T08:00:00"])
+def test_missing_invalid_or_naive_calculated_at_is_not_fresh(calculated_at):
+    current = goal.with_goal_config_identity({
+        "minimum_net_profit_sar": 100_000.0,
+        "configured": True,
+        "source": "owner_configured",
+        "updated_at": "2026-09-07T07:00:00+00:00",
+    })
+    snapshot = valid_snapshot_goal(current)
+    snapshot["calculated_at"] = calculated_at
+    snapshot["month_to_date"]["calculated_at"] = calculated_at
+    display = goal.reconcile_goal_for_display(
+        current_goal=current,
+        snapshot_goal=snapshot,
+        current_month=date(2026, 9, 7),
+        current_time=datetime(2026, 9, 7, 10, tzinfo=timezone.utc),
+        snapshot_next_run_at="2026-09-07T13:00:00+00:00",
+    )
+    assert display["progress_available"] is False
+    assert display["progress_unavailable_reason"] == (
+        "monthly_goal_snapshot_calculated_at_missing_or_invalid"
+    )
+    assert display["evidence"]["calculated_at"] == calculated_at
+
+
+@pytest.mark.parametrize(
+    ("mutation", "reason"),
+    [
+        (
+            {"mtd_to": "2026-09-06"},
+            "monthly_goal_snapshot_mtd_end_not_current_date",
+        ),
+        (
+            {"period_from": "2026-09-02"},
+            "monthly_goal_snapshot_period_contract_mismatch",
+        ),
+    ],
+)
+def test_requested_period_must_match_current_calendar_mtd(mutation, reason):
+    current = goal.with_goal_config_identity({
+        "minimum_net_profit_sar": 100_000.0,
+        "configured": True,
+        "source": "owner_configured",
+        "updated_at": "2026-09-07T07:00:00+00:00",
+    })
+    snapshot = valid_snapshot_goal(current)
+    if "mtd_to" in mutation:
+        snapshot["month_to_date"]["to"] = mutation["mtd_to"]
+        snapshot["period"]["to_requested"] = mutation["mtd_to"]
+    if "period_from" in mutation:
+        snapshot["period"]["from"] = mutation["period_from"]
+    display = goal.reconcile_goal_for_display(
+        current_goal=current,
+        snapshot_goal=snapshot,
+        current_month=date(2026, 9, 7),
+        current_time=datetime(2026, 9, 7, 10, tzinfo=timezone.utc),
+        snapshot_next_run_at="2026-09-07T13:00:00+00:00",
+    )
+    assert display["progress_available"] is False
+    assert display["progress_unavailable_reason"] == reason
+
+
+def test_calculated_at_age_is_bounded_independently_of_next_run():
+    current = goal.with_goal_config_identity({
+        "minimum_net_profit_sar": 100_000.0,
+        "configured": True,
+        "source": "owner_configured",
+        "updated_at": "2026-09-01T00:00:00+00:00",
+    })
+    snapshot = valid_snapshot_goal(
+        current,
+        calculated_at="2026-09-01T08:00:00+00:00",
+        evidence_end=date(2026, 9, 1),
+    )
+
+    display = goal.reconcile_goal_for_display(
+        current_goal=current,
+        snapshot_goal=snapshot,
+        current_month=date(2026, 9, 7),
+        current_time=datetime(2026, 9, 7, 12, tzinfo=timezone.utc),
+        snapshot_next_run_at="2026-09-08T12:00:00+00:00",
+    )
+
+    assert display["progress_available"] is False
+    assert display["progress_unavailable_reason"] == "monthly_goal_snapshot_calculated_at_too_old"
+    assert display["evidence"]["age_seconds"] == 6 * 24 * 60 * 60 + 4 * 60 * 60
+    assert display["evidence"]["max_age_seconds"] == goal.GOAL_EVIDENCE_MAX_AGE_SECONDS
+
+
+def test_valid_current_evidence_supports_fast_path_and_newer_goal_rederivation():
+    stored_config = goal.with_goal_config_identity({
+        "minimum_net_profit_sar": 80_000.0,
+        "configured": True,
+        "source": "owner_configured",
+        "updated_at": "2026-09-07T06:00:00+00:00",
+    })
+    snapshot = valid_snapshot_goal(stored_config, data_through=None)
+    original = deepcopy(snapshot)
+    common = {
+        "snapshot_goal": snapshot,
+        "current_month": date(2026, 9, 7),
+        "current_time": datetime(2026, 9, 7, 10, tzinfo=timezone.utc),
+        "snapshot_next_run_at": "2026-09-07T13:00:00+00:00",
+    }
+
+    direct = goal.reconcile_goal_for_display(current_goal=stored_config, **common)
+    newer_config = goal.with_goal_config_identity({
+        "minimum_net_profit_sar": 100_000.0,
+        "configured": True,
+        "source": "owner_configured",
+        "updated_at": "2026-09-07T09:00:00+00:00",
+    })
+    rederived = goal.reconcile_goal_for_display(current_goal=newer_config, **common)
+
+    assert direct["progress_available"] is True
+    assert direct["evidence"]["valid"] is True
+    assert direct["evidence"]["age_seconds"] == 2 * 60 * 60
+    assert direct["data_through"] is None
+    assert direct["data_through_status"] == "source_watermark_unavailable"
+    assert rederived["progress_available"] is True
+    assert rederived["progress_state"] == "config_mismatch"
+    assert rederived["minimum_net_profit_sar"] == 100_000.0
+    assert rederived["remaining_to_target_sar"] == 60_000.0
+    assert rederived["evidence"]["valid"] is True
+    assert snapshot == original
+
+
+def test_legacy_snapshot_without_evidence_metadata_is_not_upgraded_on_read():
+    current = goal.with_goal_config_identity({
+        "minimum_net_profit_sar": 100_000.0,
+        "configured": True,
+        "source": "owner_configured",
+        "updated_at": "2026-09-07T07:00:00+00:00",
+    })
+    legacy = {
+        **current,
+        "month": "2026-09",
+        "progress_available": True,
+        "net_profit_to_date_sar": 40_000.0,
+    }
+    display = goal.reconcile_goal_for_display(
+        current_goal=current,
+        snapshot_goal=legacy,
+        current_month=date(2026, 9, 7),
+        current_time=datetime(2026, 9, 7, 10, tzinfo=timezone.utc),
+        snapshot_next_run_at="2026-09-07T13:00:00+00:00",
+    )
+    assert display["progress_available"] is False
+    assert display["progress_state"] == "stale"
+    assert display["progress_unavailable_reason"] == "monthly_goal_snapshot_contract_missing_or_unsupported"
+    assert display["evidence"]["calculated_at"] is None
+    assert display["evidence"]["period"] is None
 
 
 @pytest.mark.asyncio
@@ -447,19 +718,20 @@ async def test_save_goal_rederives_from_snapshot_without_financial_recalculation
         month_to_date={
             "available": True,
             "from": "2026-09-01",
-            "to": "2026-09-06",
+            "to": "2026-09-07",
             "timezone": "Asia/Riyadh",
-            "calculated_at": "2026-09-06T08:00:00+00:00",
+            "calculated_at": "2026-09-07T08:00:00+00:00",
             "data_through": None,
             "data_through_status": "source_watermark_unavailable",
             "net_profit": 40_000.0,
         },
-        end=date(2026, 9, 6),
+        end=date(2026, 9, 7),
     )
     snapshot = {
         "user_id": "u1",
         "snapshot_id": "snapshot-old",
         "generated_at": "2026-09-06T08:01:00+00:00",
+        "next_run_at": "2026-09-07T13:00:00+00:00",
         "monthly_profit_goal": deepcopy(stored_goal),
     }
     db = MemoryDB({
@@ -477,9 +749,43 @@ async def test_save_goal_rederives_from_snapshot_without_financial_recalculation
     assert response["minimum_net_profit_sar"] == 100_000.0
     assert response["net_profit_to_date_sar"] == 40_000.0
     assert response["remaining_to_target_sar"] == 60_000.0
-    assert response["calculated_at"] == "2026-09-06T08:00:00+00:00"
+    assert response["calculated_at"] == "2026-09-07T08:00:00+00:00"
     assert response["progress_state"] == "config_mismatch"
     assert db[monitor.RECOMMENDATION_COLLECTION].rows[0] == snapshot
+
+
+@pytest.mark.asyncio
+async def test_successful_goal_save_is_reported_when_snapshot_read_fails(monkeypatch):
+    monkeypatch.setattr(
+        goal,
+        "_utcnow",
+        lambda: datetime(2026, 9, 7, 12, tzinfo=timezone.utc),
+    )
+    db = MemoryDB({
+        goal.COLLECTION: MemoryCollection(),
+        monitor.RECOMMENDATION_COLLECTION: FailingReadCollection(),
+    })
+    router = APIRouter()
+    goal.attach_monthly_profit_goal_routes(router, db, lambda: None, lambda user: user)
+    put = next(
+        route.endpoint for route in router.routes
+        if route.path == "/ai-monitor/monthly-profit-goal" and "PUT" in route.methods
+    )
+
+    response = await put(
+        goal.MonthlyProfitGoalInput(minimum_net_profit_sar=125_000.0),
+        user={"id": "u1"},
+    )
+
+    assert response["goal_config_saved"] is True
+    assert response["goal_config_save_status"] == "saved"
+    assert response["minimum_net_profit_sar"] == 125_000.0
+    assert response["progress_available"] is False
+    assert response["progress_state"] == "calculation_failed"
+    assert response["progress_unavailable_reason"] == (
+        "snapshot_read_failed_after_goal_save:RuntimeError"
+    )
+    assert db[goal.COLLECTION].rows[0]["minimum_net_profit_sar"] == 125_000.0
 
 
 @pytest.mark.asyncio
@@ -588,13 +894,48 @@ def test_zero_loss_reached_and_exceeded_remain_numeric(net_profit, status, remai
             "source": "owner_configured",
             "updated_at": "2026-09-01T00:00:00+00:00",
         }),
-        month_to_date={"available": True, "net_profit": net_profit},
+        month_to_date={
+            "available": True,
+            "net_profit": net_profit,
+            "profit_accounting": {
+                "known": True,
+                "complete": True,
+                "scale_safe": True,
+            },
+        },
         end=date(2026, 9, 7),
     )
     assert result["progress_available"] is True
     assert result["net_profit_to_date_sar"] == net_profit
     assert result["status"] == status
     assert result["remaining_to_target_sar"] == remaining
+
+
+def test_numeric_profit_with_incomplete_quality_is_visible_but_never_scale_safe():
+    result = goal._derive_goal_progress(
+        goal=goal.with_goal_config_identity({
+            "minimum_net_profit_sar": 100_000.0,
+            "configured": True,
+            "source": "owner_configured",
+            "updated_at": "2026-09-01T00:00:00+00:00",
+        }),
+        month_to_date={
+            "available": True,
+            "net_profit": -500.0,
+            "profit_accounting": {
+                "known": True,
+                "complete": False,
+                "scale_safe": False,
+                "issues": ["unknown_component:advertising"],
+            },
+        },
+        end=date(2026, 9, 7),
+    )
+    assert result["progress_available"] is True
+    assert result["net_profit_to_date_sar"] == -500.0
+    assert result["progress_state"] == "quality_incomplete"
+    assert result["status"] == "profit_accounting_incomplete"
+    assert result["scale_execution_allowed_by_profit_accounting"] is False
 
 
 def test_legacy_and_new_goal_contracts_survive_json_round_trip():
@@ -648,14 +989,14 @@ async def test_http_save_then_latest_rederives_without_mutating_stored_snapshot(
             month_to_date={
                 "available": True,
                 "from": "2026-09-01",
-                "to": "2026-09-06",
+                "to": "2026-09-07",
                 "timezone": "Asia/Riyadh",
-                "calculated_at": "2026-09-06T08:00:00+00:00",
+                "calculated_at": "2026-09-07T08:00:00+00:00",
                 "data_through": "2026-09-05",
                 "data_through_status": "source_watermark",
                 "net_profit": 40_000.0,
             },
-            end=date(2026, 9, 6),
+            end=date(2026, 9, 7),
         ),
         run_id="run-old",
         snapshot_id="snapshot-old",
@@ -665,7 +1006,7 @@ async def test_http_save_then_latest_rederives_without_mutating_stored_snapshot(
         "user_id": "u1",
         "snapshot_id": "snapshot-old",
         "generated_at": "2026-09-06T08:01:00+00:00",
-        "next_run_at": "2026-09-08T00:00:00+00:00",
+        "next_run_at": "2026-09-07T13:00:00+00:00",
         "monthly_profit_goal": stored_goal,
         "recommendations": [],
     }
@@ -699,5 +1040,5 @@ async def test_http_save_then_latest_rederives_without_mutating_stored_snapshot(
     assert saved.json()["minimum_net_profit_sar"] == 100_000.0
     assert latest.json()["monthly_profit_goal"]["net_profit_to_date_sar"] == 40_000.0
     assert latest.json()["monthly_profit_goal"]["minimum_net_profit_sar"] == 100_000.0
-    assert latest.json()["monthly_profit_goal"]["calculated_at"] == "2026-09-06T08:00:00+00:00"
+    assert latest.json()["monthly_profit_goal"]["calculated_at"] == "2026-09-07T08:00:00+00:00"
     assert db[monitor.RECOMMENDATION_COLLECTION].rows[0] == stored_snapshot

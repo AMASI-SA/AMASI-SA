@@ -134,6 +134,7 @@ const GOAL_STATUS = {
     behind_target: { label: "متأخر عن الهدف", tone: "border-red-200 bg-red-50 text-red-800" },
     on_track: { label: "على المسار المطلوب", tone: "border-amber-200 bg-amber-50 text-amber-800" },
     minimum_target_covered: { label: "الحد الأدنى مغطى", tone: "border-emerald-200 bg-emerald-50 text-emerald-800" },
+    profit_accounting_incomplete: { label: "الربح محسوب والجودة غير مكتملة", tone: "border-amber-200 bg-amber-50 text-amber-800" },
     profit_data_unavailable: { label: "بيانات الربح غير مكتملة", tone: "border-slate-200 bg-slate-50 text-slate-700" },
     goal_context_unavailable: { label: "تعذر حساب تقدم الهدف", tone: "border-slate-200 bg-slate-50 text-slate-700" },
 };
@@ -165,6 +166,18 @@ function dateTime(value) {
         minute: "2-digit",
         hour12: true,
     }).format(date);
+}
+
+function evidenceAge(seconds) {
+    const value = Number(seconds);
+    if (!Number.isFinite(value) || value < 0) return "غير معروف";
+    if (value < 60) return "أقل من دقيقة";
+    const minutes = Math.floor(value / 60);
+    if (minutes < 60) return minutes === 1 ? "دقيقة" : minutes === 2 ? "دقيقتان" : `${minutes} دقيقة`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return hours === 1 ? "ساعة" : hours === 2 ? "ساعتان" : `${hours} ساعات`;
+    const days = Math.floor(hours / 24);
+    return days === 1 ? "يوم" : days === 2 ? "يومان" : `${days} أيام`;
 }
 
 function actualAction(item) {
@@ -205,7 +218,7 @@ function MetricCard({ icon: Icon, label, value, tone }) {
     </div>;
 }
 
-export function GoalCard({ goal, goalInput, setGoalInput, saving, onSave }) {
+export function GoalCard({ goal, goalInput, setGoalInput, saving, onSave, saveNotice = "" }) {
     const status = GOAL_STATUS[goal?.status] || GOAL_STATUS.profit_data_unavailable;
     const hasProgress = goal?.progress_available === true;
     const rawTarget = goal?.minimum_net_profit_sar;
@@ -218,6 +231,19 @@ export function GoalCard({ goal, goalInput, setGoalInput, saving, onSave }) {
     )
         ? GOAL_PROGRESS_MESSAGES[goal.progress_state]
         : "لم تتوفر نتيجة تقدم موثوقة لهذا الشهر.";
+    const evidence = goal?.evidence;
+    const evidencePeriod = evidence?.period;
+    const periodLabel = evidencePeriod?.from && evidencePeriod?.to
+        ? `${evidencePeriod.from} → ${evidencePeriod.to}`
+        : "غير معروفة";
+    const watermarkLabel = evidence?.data_through
+        ? `حتى ${evidence.data_through}`
+        : "غير معروفة";
+    const accountingQuality = evidence?.accounting_quality === "complete"
+        ? "مكتملة"
+        : evidence?.accounting_quality === "incomplete"
+            ? "غير مكتملة"
+            : "غير معروفة";
     return <section className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm" data-testid="monthly-profit-goal-card">
         <div className="flex flex-wrap items-center justify-between gap-3 bg-emerald-700 px-5 py-4 text-white">
             <div>
@@ -236,12 +262,19 @@ export function GoalCard({ goal, goalInput, setGoalInput, saving, onSave }) {
                 <div className="rounded-xl bg-slate-50 p-3"><p className="text-[9px] font-black text-slate-500">المتوقع نهاية الشهر</p><p className="mt-1 text-lg font-black text-slate-900">{hasProgress ? `${money(goal.projected_month_end_net_profit_sar)} ر.س` : "—"}</p></div>
             </div>
             {progressMessage && <p className="mt-3 text-[10px] font-bold text-amber-700" data-testid="monthly-profit-goal-progress-state">{progressMessage}</p>}
+            <div className="mt-3 grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-[10px] font-bold text-slate-600 sm:grid-cols-2 lg:grid-cols-4" data-testid="monthly-profit-goal-evidence">
+                <p>فترة دليل الربح: <span dir="ltr">{periodLabel}</span>{evidencePeriod?.timezone ? ` (${evidencePeriod.timezone})` : ""}</p>
+                <p>حُسب الدليل: <span dir="ltr">{evidence?.calculated_at ? dateTime(evidence.calculated_at) : "غير معروف"}</span> · عمر الدليل: {evidenceAge(evidence?.age_seconds)}</p>
+                <p>تغطية المصدر: {watermarkLabel}</p>
+                <p>جودة المحاسبة: {accountingQuality}</p>
+            </div>
             <div className="mt-3 flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <label className="min-w-[220px] flex-1 text-[10px] font-black text-slate-600">تغيير الحد الأدنى الشهري
                     <input type="number" min="1000" step="1000" value={goalInput} onChange={(e) => setGoalInput(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-black text-slate-900" />
                 </label>
                 <button type="button" onClick={onSave} disabled={saving || !Number(goalInput)} className="rounded-xl bg-emerald-700 px-4 py-2 text-xs font-black text-white disabled:bg-slate-300">{saving ? "جارٍ الحفظ…" : "حفظ الهدف"}</button>
             </div>
+            {saveNotice && <p className="mt-2 text-[10px] font-bold text-emerald-700" data-testid="monthly-profit-goal-save-notice">{saveNotice}</p>}
         </div>
     </section>;
 }
@@ -318,6 +351,7 @@ export default function CampaignRecommendations() {
     const [goal, setGoal] = useState(null);
     const [goalInput, setGoalInput] = useState("");
     const [savingGoal, setSavingGoal] = useState(false);
+    const [goalSaveNotice, setGoalSaveNotice] = useState("");
     const loadRequestRef = useRef(0);
     const goalMutationVersionRef = useRef(0);
 
@@ -378,10 +412,16 @@ export default function CampaignRecommendations() {
         goalMutationVersionRef.current += 1;
         loadRequestRef.current += 1;
         setSavingGoal(true);
+        setGoalSaveNotice("");
         try {
             const { data } = await api.put("/ads-manager/ai-monitor/monthly-profit-goal", { minimum_net_profit_sar: value });
             setGoal(data);
             setGoalInput(String(data.minimum_net_profit_sar));
+            setGoalSaveNotice(
+                data?.goal_config_saved === true && data?.progress_available !== true
+                    ? "تم حفظ الهدف، لكن تعذر عرض التقدم الحالي. سيظهر عند توفر دليل صالح."
+                    : "تم حفظ الهدف.",
+            );
         } catch (requestError) {
             window.alert(requestError?.response?.data?.detail?.message || "تعذّر حفظ هدف صافي الربح.");
         } finally {
@@ -449,7 +489,7 @@ export default function CampaignRecommendations() {
                 <button type="button" onClick={load} disabled={loading} className="flex items-center gap-2 rounded-xl bg-violet-700 px-4 py-2 text-xs font-extrabold text-white disabled:bg-slate-300"><RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />تحديث</button>
             </div>
 
-            <GoalCard goal={goal} goalInput={goalInput} setGoalInput={setGoalInput} saving={savingGoal} onSave={saveGoal} />
+            <GoalCard goal={goal} goalInput={goalInput} setGoalInput={setGoalInput} saving={savingGoal} onSave={saveGoal} saveNotice={goalSaveNotice} />
 
             <section className="overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-violet-800 bg-violet-700 px-5 py-4 text-white">

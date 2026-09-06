@@ -87,3 +87,43 @@ test("does not invent a target or turn a failed read into zero", () => {
     expect(view.text).not.toContain("0.00 ر.س");
     view.cleanup();
 });
+
+test("shows the validated evidence period, age, watermark, and accounting quality", () => {
+    const view = renderGoal({
+        minimum_net_profit_sar: 100000,
+        progress_available: true,
+        progress_state: "quality_incomplete",
+        status: "profit_accounting_incomplete",
+        net_profit_to_date_sar: -500,
+        remaining_to_target_sar: 100500,
+        days_remaining: 23,
+        required_daily_net_profit_sar: 4369.57,
+        projected_month_end_net_profit_sar: -2214.29,
+        profit_accounting_quality_known: true,
+        profit_accounting_complete: false,
+        evidence: {
+            valid: true,
+            freshness_status: "fresh",
+            age_seconds: 7200,
+            max_age_seconds: 21600,
+            calculated_at: "2026-09-07T08:00:00+00:00",
+            next_run_at: "2026-09-07T13:00:00+00:00",
+            data_through: null,
+            data_through_status: "source_watermark_unavailable",
+            accounting_quality: "incomplete",
+            period: {
+                kind: "calendar_month_to_date",
+                from: "2026-09-01",
+                to: "2026-09-07",
+                timezone: "Asia/Riyadh",
+            },
+        },
+    });
+    expect(view.text).toContain("فترة دليل الربح");
+    expect(view.text).toContain("2026-09-01 → 2026-09-07");
+    expect(view.text).toContain("عمر الدليل: ساعتان");
+    expect(view.text).toContain("تغطية المصدر: غير معروفة");
+    expect(view.text).toContain("جودة المحاسبة: غير مكتملة");
+    expect(view.text).toContain("-500.00 ر.س");
+    view.cleanup();
+});

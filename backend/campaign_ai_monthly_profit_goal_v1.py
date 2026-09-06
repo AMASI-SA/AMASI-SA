@@ -26,6 +26,11 @@ DEFAULT_MONTHLY_NET_PROFIT_TARGET_SAR = 100_000.0
 CONTRACT_VERSION = "campaign_ai_monthly_profit_goal_v2"
 ACCOUNT_TIMEZONE = "Asia/Riyadh"
 DEFAULT_GOAL_CONFIG_VERSION = "default_owner_safety_floor_v1"
+# The scheduler's established cadence is five hours.  One hour of delivery
+# tolerance keeps a normally delayed run usable without making next_run_at the
+# sole proof that the underlying calculation is recent.
+GOAL_EVIDENCE_MAX_AGE_SECONDS = 6 * 60 * 60
+GOAL_EVIDENCE_FUTURE_SKEW_SECONDS = 5 * 60
 
 _CURRENT_GOAL_CONTEXT: ContextVar[dict[str, Any] | None] = ContextVar(
     "campaign_ai_monthly_profit_goal_context",
@@ -468,6 +473,7 @@ def _display_unavailable(
     state: str,
     reason: str,
     snapshot_goal: dict[str, Any] | None = None,
+    evidence: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     preserved = snapshot_goal if isinstance(snapshot_goal, dict) else {}
     return {
@@ -503,7 +509,151 @@ def _display_unavailable(
         "scale_execution_allowed_by_profit_accounting": False,
         "provenance": preserved.get("provenance"),
         "historical_recommendation_authority_renewed": False,
+        "evidence": evidence,
     }
+
+
+def _aware_timestamp(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str) and value.strip():
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    else:
+        return None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return None
+    return parsed.astimezone(timezone.utc)
+
+
+def _evidence_quality(snapshot_goal: dict[str, Any]) -> str:
+    if snapshot_goal.get("profit_accounting_quality_known") is not True:
+        return "unknown"
+    return (
+        "complete"
+        if snapshot_goal.get("profit_accounting_complete") is True
+        else "incomplete"
+    )
+
+
+def _goal_evidence_for_display(
+    *,
+    snapshot_goal: dict[str, Any],
+    current_month: date,
+    current_time: datetime,
+    snapshot_next_run_at: Any,
+) -> tuple[dict[str, Any], str | None]:
+    """Validate stored profit evidence without manufacturing legacy metadata."""
+    month_to_date = snapshot_goal.get("month_to_date")
+    raw_period = snapshot_goal.get("period")
+    evidence_period = None
+    if isinstance(month_to_date, dict):
+        evidence_period = {
+            "kind": raw_period.get("kind") if isinstance(raw_period, dict) else None,
+            "month": raw_period.get("month") if isinstance(raw_period, dict) else None,
+            "from": month_to_date.get("from"),
+            "to": month_to_date.get("to"),
+            "timezone": month_to_date.get("timezone"),
+        }
+    calculated_raw = snapshot_goal.get("calculated_at")
+    data_through = snapshot_goal.get("data_through")
+    data_through_status = snapshot_goal.get("data_through_status")
+    if not isinstance(data_through_status, str) or not data_through_status:
+        data_through_status = "source_watermark_unavailable"
+    base = {
+        "valid": False,
+        "freshness_status": "invalid",
+        "validation_reason": None,
+        "age_seconds": None,
+        "max_age_seconds": GOAL_EVIDENCE_MAX_AGE_SECONDS,
+        "calculated_at": calculated_raw,
+        "next_run_at": snapshot_next_run_at,
+        "data_through": data_through,
+        "data_through_status": data_through_status,
+        "period": evidence_period,
+        "accounting_quality": _evidence_quality(snapshot_goal),
+    }
+
+    def invalid(reason: str, freshness_status: str = "invalid"):
+        return {
+            **base,
+            "freshness_status": freshness_status,
+            "validation_reason": reason,
+        }, reason
+
+    if snapshot_next_run_at is None or (
+        isinstance(snapshot_next_run_at, str) and not snapshot_next_run_at.strip()
+    ):
+        return invalid("monthly_goal_snapshot_next_run_at_missing", "unknown")
+    next_run = _aware_timestamp(snapshot_next_run_at)
+    if next_run is None:
+        return invalid("monthly_goal_snapshot_next_run_at_invalid", "unknown")
+    base["next_run_at"] = next_run.isoformat()
+    if snapshot_goal.get("contract_version") != CONTRACT_VERSION:
+        return invalid("monthly_goal_snapshot_contract_missing_or_unsupported")
+    if not isinstance(month_to_date, dict) or not isinstance(raw_period, dict):
+        return invalid("monthly_goal_snapshot_mtd_metadata_missing")
+
+    calculated = _aware_timestamp(calculated_raw)
+    if calculated is None:
+        return invalid("monthly_goal_snapshot_calculated_at_missing_or_invalid", "unknown")
+    base["calculated_at"] = calculated.isoformat()
+    mtd_calculated = _aware_timestamp(month_to_date.get("calculated_at"))
+    if mtd_calculated is None or mtd_calculated != calculated:
+        return invalid("monthly_goal_snapshot_calculated_at_mismatch")
+
+    current_utc = (
+        current_time.replace(tzinfo=timezone.utc)
+        if current_time.tzinfo is None
+        else current_time.astimezone(timezone.utc)
+    )
+    age_seconds = int((current_utc - calculated).total_seconds())
+    base["age_seconds"] = age_seconds
+    if age_seconds < -GOAL_EVIDENCE_FUTURE_SKEW_SECONDS:
+        return invalid("monthly_goal_snapshot_calculated_at_in_future", "invalid")
+    if current_utc > next_run:
+        return invalid("monthly_goal_snapshot_past_next_run_at", "stale")
+    if next_run < calculated:
+        return invalid("monthly_goal_snapshot_next_run_before_calculation")
+    if age_seconds > GOAL_EVIDENCE_MAX_AGE_SECONDS:
+        return invalid("monthly_goal_snapshot_calculated_at_too_old", "stale")
+
+    try:
+        mtd_start = date.fromisoformat(str(month_to_date.get("from") or ""))
+        mtd_end = date.fromisoformat(str(month_to_date.get("to") or ""))
+    except ValueError:
+        return invalid("monthly_goal_snapshot_mtd_period_invalid")
+    expected_month = f"{current_month.year:04d}-{current_month.month:02d}"
+    if (mtd_start.year, mtd_start.month) != (
+        current_month.year,
+        current_month.month,
+    ) or (mtd_end.year, mtd_end.month) != (
+        current_month.year,
+        current_month.month,
+    ):
+        return invalid("monthly_goal_snapshot_mtd_month_mismatch")
+    if mtd_start != current_month.replace(day=1):
+        return invalid("monthly_goal_snapshot_mtd_start_not_month_start")
+    if month_to_date.get("timezone") != ACCOUNT_TIMEZONE:
+        return invalid("monthly_goal_snapshot_mtd_timezone_mismatch")
+    if mtd_end != current_month:
+        return invalid("monthly_goal_snapshot_mtd_end_not_current_date", "stale")
+    if (
+        raw_period.get("kind") != "calendar_month_to_date"
+        or raw_period.get("month") != expected_month
+        or raw_period.get("from") != mtd_start.isoformat()
+        or raw_period.get("to_requested") != mtd_end.isoformat()
+        or raw_period.get("timezone") != ACCOUNT_TIMEZONE
+    ):
+        return invalid("monthly_goal_snapshot_period_contract_mismatch")
+    return {
+        **base,
+        "valid": True,
+        "freshness_status": "fresh",
+        "validation_reason": None,
+    }, None
 
 
 def reconcile_goal_for_display(
@@ -537,31 +687,21 @@ def reconcile_goal_for_display(
             reason="monthly_goal_snapshot_month_mismatch",
             snapshot_goal=snapshot_goal,
         )
-    if current_time is not None and snapshot_next_run_at:
-        try:
-            next_run = datetime.fromisoformat(
-                str(snapshot_next_run_at).replace("Z", "+00:00")
-            )
-            current_utc = (
-                current_time.replace(tzinfo=timezone.utc)
-                if current_time.tzinfo is None
-                else current_time.astimezone(timezone.utc)
-            )
-            next_run_utc = (
-                next_run.replace(tzinfo=timezone.utc)
-                if next_run.tzinfo is None
-                else next_run.astimezone(timezone.utc)
-            )
-        except ValueError:
-            next_run_utc = None
-        if next_run_utc is not None and current_utc > next_run_utc:
-            return _display_unavailable(
-                current_goal=current,
-                current_month=current_month,
-                state="stale",
-                reason="monthly_goal_snapshot_past_next_run_at",
-                snapshot_goal=snapshot_goal,
-            )
+    evidence, invalid_reason = _goal_evidence_for_display(
+        snapshot_goal=snapshot_goal,
+        current_month=current_month,
+        current_time=current_time or _utcnow(),
+        snapshot_next_run_at=snapshot_next_run_at,
+    )
+    if invalid_reason is not None:
+        return _display_unavailable(
+            current_goal=current,
+            current_month=current_month,
+            state="stale",
+            reason=invalid_reason,
+            snapshot_goal=snapshot_goal,
+            evidence=evidence,
+        )
 
     config_matches = snapshot_goal.get("goal_config_id") == current.get("goal_config_id")
     if config_matches:
@@ -569,32 +709,13 @@ def reconcile_goal_for_display(
             **snapshot_goal,
             **current,
             "historical_recommendation_authority_renewed": False,
+            "evidence": evidence,
         }
 
     month_to_date = snapshot_goal.get("month_to_date")
-    if not isinstance(month_to_date, dict):
-        return _display_unavailable(
-            current_goal=current,
-            current_month=current_month,
-            state="config_mismatch",
-            reason="goal_config_mismatch_without_reusable_month_to_date",
-            snapshot_goal=snapshot_goal,
-        )
-    try:
-        evidence_end = date.fromisoformat(str(month_to_date.get("to") or ""))
-    except ValueError:
-        evidence_end = None
-    if evidence_end is None or (evidence_end.year, evidence_end.month) != (
-        current_month.year,
-        current_month.month,
-    ):
-        return _display_unavailable(
-            current_goal=current,
-            current_month=current_month,
-            state="config_mismatch",
-            reason="goal_config_mismatch_with_invalid_month_to_date_period",
-            snapshot_goal=snapshot_goal,
-        )
+    # The shared validation above proves this is the current Riyadh calendar
+    # MTD and that its timestamps are fresh before the stored fact is reused.
+    evidence_end = date.fromisoformat(str(month_to_date["to"]))
     derived = _derive_goal_progress(
         goal=current,
         month_to_date=dict(month_to_date),
@@ -607,6 +728,7 @@ def reconcile_goal_for_display(
         "display_derivation": "current_goal_from_stored_month_to_date",
         "provenance": snapshot_goal.get("provenance"),
         "historical_recommendation_authority_renewed": False,
+        "evidence": evidence,
     }
 
 
@@ -688,25 +810,41 @@ def attach_monthly_profit_goal_routes(
         owner = require_owner(user)
         user_id = str(owner["id"])
         saved = await save_goal(db, user_id, payload)
-        snapshot = await db[SNAPSHOT_COLLECTION].find_one(
-            {"user_id": user_id},
-            {"_id": 0, "monthly_profit_goal": 1, "next_run_at": 1},
-            sort=[("generated_at", -1)],
-        )
         current_time = _utcnow()
-        return reconcile_goal_for_display(
-            current_goal=saved,
-            snapshot_goal=(snapshot or {}).get("monthly_profit_goal"),
-            current_month=current_time.astimezone(ZoneInfo(ACCOUNT_TIMEZONE)).date(),
-            current_time=current_time,
-            snapshot_next_run_at=(snapshot or {}).get("next_run_at"),
-        )
+        current_month = current_time.astimezone(ZoneInfo(ACCOUNT_TIMEZONE)).date()
+        try:
+            snapshot = await db[SNAPSHOT_COLLECTION].find_one(
+                {"user_id": user_id},
+                {"_id": 0, "monthly_profit_goal": 1, "next_run_at": 1},
+                sort=[("generated_at", -1)],
+            )
+        except Exception as exc:
+            display = _display_unavailable(
+                current_goal=saved,
+                current_month=current_month,
+                state="calculation_failed",
+                reason=f"snapshot_read_failed_after_goal_save:{type(exc).__name__}",
+            )
+        else:
+            display = reconcile_goal_for_display(
+                current_goal=saved,
+                snapshot_goal=(snapshot or {}).get("monthly_profit_goal"),
+                current_month=current_month,
+                current_time=current_time,
+                snapshot_next_run_at=(snapshot or {}).get("next_run_at"),
+            )
+        return {
+            **display,
+            "goal_config_saved": True,
+            "goal_config_save_status": "saved",
+        }
 
 
 __all__ = [
     "COLLECTION",
     "CONTRACT_VERSION",
     "DEFAULT_MONTHLY_NET_PROFIT_TARGET_SAR",
+    "GOAL_EVIDENCE_MAX_AGE_SECONDS",
     "MonthlyProfitGoalInput",
     "attach_monthly_profit_goal_routes",
     "build_goal_context",

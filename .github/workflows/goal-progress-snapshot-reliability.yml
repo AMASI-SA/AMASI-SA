@@ -1,0 +1,142 @@
+name: Goal Progress Snapshot Reliability
+
+on:
+  pull_request:
+    branches:
+      - codex/profit-cost-financial-completeness
+    types: [opened, synchronize, reopened]
+    paths:
+      - "backend/campaign_ai_monthly_profit_goal_v1.py"
+      - "backend/campaign_ai_monitor.py"
+      - "backend/campaign_ai_monitor_legacy.py"
+      - "backend/tests/test_campaign_ai_monthly_goal_snapshot_reliability.py"
+      - "backend/tests/test_campaign_ai_monthly_goal_mongo_integration.py"
+      - "frontend/src/lib/monthlyProfitGoalView.js"
+      - "frontend/src/lib/monthlyProfitGoalView.test.js"
+      - "frontend/src/pages/CampaignRecommendations.jsx"
+      - "frontend/src/pages/CampaignRecommendations.goal.test.jsx"
+      - "frontend/src/pages/CampaignRecommendations.page.test.jsx"
+      - ".github/workflows/goal-progress-snapshot-reliability.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  backend-mongo-http:
+    name: Backend + temporary Mongo + HTTP
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      mongo:
+        image: mongo:7.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record tested source identities
+        working-directory: .
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          echo "pr_head_sha=$PR_HEAD_SHA"
+          echo "github_merge_sha=$GITHUB_SHA"
+          echo "tested_checkout_sha=$(git rev-parse HEAD)"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused test dependencies
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1
+          pydantic==2.13.4
+          pymongo==4.6.3
+          motor==3.3.2
+          httpx==0.28.1
+          openai==1.99.9
+          pytest==9.0.3
+          pytest-asyncio
+          openpyxl
+          cryptography
+          bcrypt
+          PyJWT
+          reportlab
+          python-multipart
+          python-dotenv
+          email-validator
+          pymupdf
+          pillow
+          qrcode
+          arabic-reshaper
+          python-bidi
+      - name: Compile goal contract and focused tests
+        run: >-
+          python -m py_compile
+          campaign_ai_monthly_profit_goal_v1.py
+          campaign_ai_monitor.py
+          campaign_ai_monitor_legacy.py
+          tests/test_campaign_ai_monthly_goal_snapshot_reliability.py
+          tests/test_campaign_ai_monthly_goal_mongo_integration.py
+      - name: Run goal, Mongo, HTTP, and accounting regressions
+        env:
+          GOAL_PROGRESS_TEST_MONGO_URL: mongodb://127.0.0.1:27017
+          REQUIRE_GOAL_PROGRESS_MONGO: "1"
+        run: >-
+          python -m pytest -q --tb=short
+          tests/test_campaign_ai_monthly_goal_snapshot_reliability.py
+          tests/test_campaign_ai_monthly_goal_mongo_integration.py
+          tests/test_campaign_ai_monthly_profit_goal_v1.py
+          tests/test_profit_cost_financial_completeness.py
+          tests/test_campaign_ai_profit_accounting_completeness_p1_1.py
+          tests/test_campaign_ai_consolidated_profit_envelope.py
+          tests/test_campaign_ai_store_opportunity_planner.py
+          tests/test_campaign_ai_monthly_causal_memory.py
+          tests/test_campaign_ai_mezan_profit_loader_p0_1.py
+
+  frontend-page:
+    name: Frontend page tests + governed CI compile
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record tested source identities
+        working-directory: .
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          echo "pr_head_sha=$PR_HEAD_SHA"
+          echo "github_merge_sha=$GITHUB_SHA"
+          echo "tested_checkout_sha=$(git rev-parse HEAD)"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.2
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+      - name: Use repository Yarn contract
+        run: npm install --global yarn@1.22.22
+      - name: Install frontend dependencies
+        run: yarn install --frozen-lockfile --non-interactive
+      - name: Run helper, GoalCard, and full-page tests
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/lib/monthlyProfitGoalView.test.js
+          src/pages/CampaignRecommendations.goal.test.jsx
+          src/pages/CampaignRecommendations.page.test.jsx
+      - name: Compile current GitHub checkout
+        env:
+          CI: "true"
+        run: yarn build
