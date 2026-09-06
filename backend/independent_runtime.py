@@ -206,12 +206,17 @@ async def worker(server, stop: asyncio.Event) -> None:
     finally:
         process_local_readiness_event.clear()
         init.cancel()
-        await asyncio.gather(init, return_exceptions=True)
-        # A broken stop callback cannot prevent cancellation of the other workers.
-        await asyncio.gather(*(cb() for cb in reversed(stops)), return_exceptions=True)
-        for task in [*tasks, pulse, halt]:
+        for task in tasks:
             task.cancel()
-        await asyncio.gather(*tasks, pulse, halt, return_exceptions=True)
+        from independent_callbacks import drain_worker_tasks
+        try:
+            # Include unfinished initialization in the same bounded drain.
+            await drain_worker_tasks([init, *tasks], reversed(stops))
+        finally:
+            # Heartbeat stays alive through normal draining; errors retain claim.
+            for task in [pulse, halt]:
+                task.cancel()
+            await asyncio.gather(pulse, halt, return_exceptions=True)
         await server.db[COLLECTION].delete_one({
             "_id": f"{LEASE_ID}:{claim.release_key}", "owner_id": claim.owner_id,
             "fence": claim.fence, "status": "running",

@@ -38,3 +38,24 @@ def classify_callbacks(starts, stops):
     if {allowed_starts[k] for k in start_ids} != set(stop_ids):
         raise RuntimeError("worker callback is missing its lifecycle pair")
     return starts, stops
+
+
+async def drain_worker_tasks(direct_tasks, stops, timeout_seconds=6):
+    """Withdraw direct work immediately; never release a claim on failed drain."""
+    import asyncio
+    for task in direct_tasks:
+        task.cancel()
+    hooks = [asyncio.create_task(cb()) for cb in stops]
+    all_tasks = [*direct_tasks, *hooks]
+    if not all_tasks:
+        return
+    done, pending = await asyncio.wait(all_tasks, timeout=timeout_seconds)
+    if pending:
+        for task in pending:
+            task.cancel()
+            task.add_done_callback(lambda t: None if t.cancelled() else t.exception())
+        # Caller retains the claim for expiry and process supervisor escalation.
+        raise RuntimeError("worker shutdown deadline exceeded; claim retained")
+    for task in done:
+        if not task.cancelled() and task.exception() is not None:
+            raise RuntimeError("worker shutdown failed; claim retained") from task.exception()

@@ -63,5 +63,37 @@ class CallbackClassificationTests(unittest.TestCase):
                 self.assertTrue(decorated or appended, (module, name, event))
                 self.assertFalse(any(isinstance(n, ast.Attribute) and n.attr in {"create_index", "create_indexes"} for n in ast.walk(fn)))
 
+class WorkerDrainTests(unittest.IsolatedAsyncioTestCase):
+    async def test_direct_worker_stops_while_scheduler_cleanup_is_stalled(self):
+        import asyncio
+        from independent_callbacks import drain_worker_tasks
+        stopped, entered, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+        async def direct():
+            try:
+                await asyncio.Event().wait()
+            finally:
+                stopped.set()
+        async def slow_stop():
+            entered.set()
+            await release.wait()
+        task = asyncio.create_task(direct())
+        await asyncio.sleep(0)
+        drain = asyncio.create_task(drain_worker_tasks([task], [slow_stop]))
+        try:
+            await asyncio.wait_for(entered.wait(), 0.3)
+            await asyncio.wait_for(stopped.wait(), 0.1)
+            self.assertFalse(drain.done())
+        finally:
+            release.set()
+            await drain
+
+    async def test_stalled_shutdown_times_out_instead_of_claiming_success(self):
+        import asyncio
+        from independent_callbacks import drain_worker_tasks
+        async def slow_stop():
+            await asyncio.Event().wait()
+        with self.assertRaisesRegex(RuntimeError, "shutdown"):
+            await asyncio.wait_for(drain_worker_tasks([], [slow_stop], timeout_seconds=0.02), 0.3)
+
 if __name__ == "__main__":
     unittest.main()
