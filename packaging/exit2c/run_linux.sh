@@ -125,4 +125,5 @@ docker stop --time 10 "$worker" >/dev/null
 test "$(docker inspect -f '{{.State.ExitCode}}' "$worker")" = 0
 life no-worker
 echo 'PASS worker explicit arming, singleton fencing, loss cancellation, restart and TERM'
+docker run --rm "${runtime[@]}" -e MEZAN_WORKER_ENABLED=1 --entrypoint python mezan-exit2c:candidate /opt/acceptance/worker_shutdown.py --linux
 echo 'PASS EXIT-2C scoped acceptance; temporary containers cleaned next'
