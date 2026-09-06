@@ -40,6 +40,21 @@ versions fail closed; they are never completed from legacy counters. If the new
 contract is entirely absent, old snapshots retain the conservative legacy
 interpretation.
 
+### Legacy quality round-trip follow-up
+
+The first compatibility implementation parsed a complete legacy payload
+correctly, but then exported all four names from the versioned contract with
+`None` values. After JSON serialization those names made the next reader treat
+the result as an explicitly supplied, invalid versioned contract.
+
+The reader now keeps resolved counters and their source as internal conversion
+state. Public quality output includes versioned contract fields only when those
+fields were actually present in the input. A legacy conversion therefore stays
+legacy across a JSON round-trip and does not invent a missing-lines count. An
+explicit partial, null, wrong-version, or otherwise invalid new contract keeps
+its supplied fields in the output and remains fail-closed; a payload-provided
+`financial_contract_present=false` cannot hide those fields.
+
 The compatibility aliases in the profit envelope
 `missing_product_cost_count` and `incomplete_profit_orders_count` now report the
 financial counters for decision consumers. Dashboard product alerts and filters
@@ -79,7 +94,15 @@ selected options, duplicate binding IDs, invalid/partial contracts, legacy
 payloads, incomplete advertising, another missing accounting component, and
 unchanged pause/reduce behavior.
 
-Fresh local result: 127 tests passed. Two existing Pydantic V1-style
+Red-before for the round-trip regression produced three expected failures: a
+complete legacy totals conversion, a complete legacy envelope conversion, and
+the legacy output of `_accounting_quality` all became incomplete on their
+second read. The six controls for incomplete legacy and valid/invalid new
+contracts passed. Green-after: all nine focused cases passed.
+
+Fresh local affected-suite result: 136 tests passed. This includes the connected
+Salla-only assertion that product cost remains SAR 60 and net profit remains SAR
+120, plus the advertising and other-component blockers. Two existing Pydantic V1-style
 `root_validator` deprecation warnings were emitted from
 `recurring_obligations_routes.py`; they are unrelated to this change.
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pytest
@@ -570,6 +571,140 @@ def test_complete_legacy_contract_keeps_conservative_compatibility():
     assert quality["known"] is True
     assert quality["complete"] is True
     assert quality["counter_source"] == "legacy_mezan_setup_conservative"
+
+
+def test_complete_legacy_totals_survive_quality_json_round_trip():
+    legacy = {
+        "missing_product_cost_count": 0,
+        "incomplete_profit_orders_count": 0,
+    }
+
+    first = gate.accounting_quality_from_totals(legacy)
+    second = gate.accounting_quality_from_envelope({
+        "quality": json.loads(json.dumps(first))
+    })
+
+    assert first["complete"] is True
+    assert second["complete"] is True
+    assert "financial_cost_contract_version" not in first
+    assert "financial_cost_missing_lines_count" not in first
+
+
+def test_complete_legacy_envelope_survives_quality_json_round_trip():
+    legacy_envelope = {
+        "quality": {
+            "known": True,
+            "complete": True,
+            "scale_safe": True,
+            "missing_product_cost_count": 0,
+            "incomplete_profit_orders_count": 0,
+        }
+    }
+
+    first = gate.accounting_quality_from_envelope(legacy_envelope)
+    second = gate.accounting_quality_from_envelope({
+        "quality": json.loads(json.dumps(first))
+    })
+
+    assert first["complete"] is True
+    assert second["complete"] is True
+
+
+def test_legacy_accounting_quality_output_survives_gate_round_trip():
+    legacy_quality = _quality_for({
+        "total": 0.0,
+        "missing_products_count": 0,
+        "incomplete_orders_count": 0,
+    })
+
+    reread = gate.accounting_quality_from_envelope({
+        "quality": json.loads(json.dumps(legacy_quality))
+    })
+
+    assert legacy_quality["complete"] is True
+    assert reread["complete"] is True
+    assert "financial_cost_contract_version" not in legacy_quality
+    assert "financial_cost_missing_lines_count" not in legacy_quality
+
+
+@pytest.mark.parametrize(
+    "legacy",
+    [
+        {},
+        {"missing_product_cost_count": 0},
+        {
+            "missing_product_cost_count": 1,
+            "incomplete_profit_orders_count": 1,
+        },
+    ],
+)
+def test_incomplete_or_unknown_legacy_does_not_become_complete(legacy):
+    first = gate.accounting_quality_from_totals(legacy)
+    second = gate.accounting_quality_from_envelope({
+        "quality": json.loads(json.dumps(first))
+    })
+
+    assert first["complete"] is False
+    assert second["complete"] is False
+
+
+def test_valid_financial_contract_survives_quality_json_round_trip():
+    totals = {
+        "financial_cost_contract_version": dashboard.FINANCIAL_COST_COMPLETENESS_VERSION,
+        "financial_cost_missing_products_count": 0,
+        "financial_cost_missing_lines_count": 0,
+        "financially_incomplete_orders_count": 0,
+    }
+
+    first = gate.accounting_quality_from_totals(totals)
+    second = gate.accounting_quality_from_envelope({
+        "quality": json.loads(json.dumps(first))
+    })
+
+    assert first["complete"] is True
+    assert second["complete"] is True
+    assert second["financial_cost_contract_version"] == (
+        dashboard.FINANCIAL_COST_COMPLETENESS_VERSION
+    )
+
+
+@pytest.mark.parametrize(
+    "invalid_contract",
+    [
+        {
+            "financial_cost_contract_version": None,
+            "financial_cost_missing_products_count": 0,
+            "financial_cost_missing_lines_count": 0,
+            "financially_incomplete_orders_count": 0,
+        },
+        {
+            "financial_cost_contract_version": dashboard.FINANCIAL_COST_COMPLETENESS_VERSION,
+            "financial_cost_missing_products_count": 0,
+            "financially_incomplete_orders_count": 0,
+        },
+    ],
+)
+def test_explicit_invalid_contract_cannot_claim_legacy_compatibility(invalid_contract):
+    payload = {
+        **invalid_contract,
+        "financial_contract_present": False,
+        "counter_source": "legacy_mezan_setup_conservative",
+        "missing_product_cost_count": 0,
+        "incomplete_profit_orders_count": 0,
+    }
+
+    first = gate.accounting_quality_from_totals(payload)
+    second = gate.accounting_quality_from_envelope({
+        "quality": json.loads(json.dumps({
+            **first,
+            "known": True,
+            "complete": True,
+            "scale_safe": True,
+        }))
+    })
+
+    assert first["complete"] is False
+    assert second["complete"] is False
 
 
 def test_gate_does_not_mix_partial_new_totals_or_envelope_with_legacy_zeros():

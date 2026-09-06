@@ -22,8 +22,8 @@ def accounting_quality_from_totals(totals: dict[str, Any] | None) -> dict[str, A
         legacy_missing_key="missing_product_cost_count",
         legacy_incomplete_key="incomplete_profit_orders_count",
     )
-    missing = counts["financial_cost_missing_products_count"]
-    incomplete = counts["financially_incomplete_orders_count"]
+    missing = counts["resolved_missing_products_count"]
+    incomplete = counts["resolved_incomplete_orders_count"]
     known = counts["financial_cost_known"] is True
     complete = bool(known and missing == 0 and incomplete == 0)
     return {
@@ -32,7 +32,10 @@ def accounting_quality_from_totals(totals: dict[str, Any] | None) -> dict[str, A
         "scale_safe": complete,
         "missing_product_cost_count": missing,
         "incomplete_profit_orders_count": incomplete,
-        **counts,
+        "financial_cost_known": counts["financial_cost_known"],
+        "financial_contract_present": counts["financial_contract_present"],
+        "counter_source": counts["counter_source"],
+        **counts["financial_contract_fields"],
         "source": source.get("profit_source") or "mezan_profit_engine_v2_read_only",
         "unknown_is_zero": False,
     }
@@ -46,8 +49,8 @@ def accounting_quality_from_envelope(envelope: dict[str, Any] | None) -> dict[st
         legacy_missing_key="missing_product_cost_count",
         legacy_incomplete_key="incomplete_profit_orders_count",
     )
-    missing = counts["financial_cost_missing_products_count"]
-    incomplete = counts["financially_incomplete_orders_count"]
+    missing = counts["resolved_missing_products_count"]
+    incomplete = counts["resolved_incomplete_orders_count"]
     known = bool(
         quality.get("known") is True
         and counts["financial_cost_known"] is True
@@ -61,7 +64,10 @@ def accounting_quality_from_envelope(envelope: dict[str, Any] | None) -> dict[st
     )
     return {
         **quality,
-        **counts,
+        "financial_cost_known": counts["financial_cost_known"],
+        "financial_contract_present": counts["financial_contract_present"],
+        "counter_source": counts["counter_source"],
+        **counts["financial_contract_fields"],
         "known": known,
         "complete": complete,
         "scale_safe": complete,
