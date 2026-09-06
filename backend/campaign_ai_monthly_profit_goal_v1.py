@@ -9,16 +9,23 @@ context.
 from __future__ import annotations
 
 import calendar
+import hashlib
+import json
 from contextvars import ContextVar
 from datetime import date, datetime, timezone
 from typing import Any, Awaitable, Callable
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict, Field
 
 
 COLLECTION = "mezan_campaign_ai_monthly_profit_goals_v1"
+SNAPSHOT_COLLECTION = "mezan_campaign_ai_recommendations_v1"
 DEFAULT_MONTHLY_NET_PROFIT_TARGET_SAR = 100_000.0
+CONTRACT_VERSION = "campaign_ai_monthly_profit_goal_v2"
+ACCOUNT_TIMEZONE = "Asia/Riyadh"
+DEFAULT_GOAL_CONFIG_VERSION = "default_owner_safety_floor_v1"
 
 _CURRENT_GOAL_CONTEXT: ContextVar[dict[str, Any] | None] = ContextVar(
     "campaign_ai_monthly_profit_goal_context",
@@ -36,6 +43,10 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 def _number(value: Any) -> float | None:
     if value is None or isinstance(value, bool):
         return None
@@ -46,6 +57,40 @@ def _number(value: Any) -> float | None:
     return parsed if parsed == parsed and abs(parsed) != float("inf") else None
 
 
+def with_goal_config_identity(goal: dict[str, Any]) -> dict[str, Any]:
+    """Attach a stable identity without adding a new storage schema."""
+    result = dict(goal)
+    target = _number(result.get("minimum_net_profit_sar"))
+    configured = result.get("configured")
+    updated_at = result.get("updated_at")
+    if target is None or configured not in {True, False}:
+        return {
+            **result,
+            "goal_config_version": None,
+            "goal_config_id": None,
+        }
+    version = (
+        str(updated_at)
+        if configured is True and updated_at
+        else DEFAULT_GOAL_CONFIG_VERSION
+    )
+    identity = {
+        "configured": configured,
+        "minimum_net_profit_sar": round(target, 2),
+        "source": result.get("source"),
+        "version": version,
+    }
+    fingerprint = hashlib.sha256(
+        json.dumps(identity, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return {
+        **result,
+        "minimum_net_profit_sar": round(target, 2),
+        "goal_config_version": version,
+        "goal_config_id": f"goal-config-{fingerprint}",
+    }
+
+
 async def ensure_indexes(db: Any) -> None:
     await db[COLLECTION].create_index(
         [("user_id", 1)],
@@ -54,24 +99,31 @@ async def ensure_indexes(db: Any) -> None:
     )
 
 
-async def load_goal(db: Any, user_id: str) -> dict[str, Any]:
-    await ensure_indexes(db)
+async def load_goal(
+    db: Any,
+    user_id: str,
+    *,
+    ensure_index: bool = True,
+) -> dict[str, Any]:
+    if ensure_index:
+        await ensure_indexes(db)
     row = await db[COLLECTION].find_one({"user_id": user_id}, {"_id": 0})
     if not row:
-        return {
+        return with_goal_config_identity({
             "minimum_net_profit_sar": DEFAULT_MONTHLY_NET_PROFIT_TARGET_SAR,
             "configured": False,
             "source": "default_owner_safety_floor",
             "updated_at": None,
-        }
-    return {
-        "minimum_net_profit_sar": float(
-            row.get("minimum_net_profit_sar") or DEFAULT_MONTHLY_NET_PROFIT_TARGET_SAR
-        ),
+        })
+    stored_target = _number(row.get("minimum_net_profit_sar"))
+    if stored_target is None:
+        raise RuntimeError("monthly_profit_goal_config_invalid")
+    return with_goal_config_identity({
+        "minimum_net_profit_sar": stored_target,
         "configured": True,
         "source": "owner_configured",
         "updated_at": row.get("updated_at"),
-    }
+    })
 
 
 async def save_goal(
@@ -86,17 +138,37 @@ async def save_goal(
         "minimum_net_profit_sar": round(float(payload.minimum_net_profit_sar), 2),
         "updated_at": now_iso,
     }
-    await db[COLLECTION].update_one(
+    write = await db[COLLECTION].update_one(
         {"user_id": user_id},
         {"$set": document, "$setOnInsert": {"created_at": now_iso}},
         upsert=True,
     )
-    return {
+    if (
+        getattr(write, "matched_count", 0) == 0
+        and getattr(write, "upserted_id", None) is None
+    ):
+        raise RuntimeError("monthly_profit_goal_save_not_persisted")
+    return with_goal_config_identity({
         "minimum_net_profit_sar": document["minimum_net_profit_sar"],
         "configured": True,
         "source": "owner_configured",
         "updated_at": now_iso,
-    }
+    })
+
+
+def _source_data_through(profit_envelope: dict[str, Any]) -> tuple[str | None, str]:
+    value = profit_envelope.get("data_through")
+    if not isinstance(value, str) or not value.strip():
+        return None, "source_watermark_unavailable"
+    candidate = value.strip()
+    try:
+        datetime.fromisoformat(candidate.replace("Z", "+00:00"))
+    except ValueError:
+        try:
+            date.fromisoformat(candidate)
+        except ValueError:
+            return None, "source_watermark_invalid"
+    return candidate, "source_watermark"
 
 
 async def _month_to_date_totals(
@@ -104,12 +176,18 @@ async def _month_to_date_totals(
     user_id: str,
     end: date,
 ) -> dict[str, Any]:
+    start = end.replace(day=1)
     if loader is None:
         return {
             "available": False,
             "reason": "dashboard_profit_loader_unavailable",
+            "from": start.isoformat(),
+            "to": end.isoformat(),
+            "timezone": ACCOUNT_TIMEZONE,
+            "calculated_at": None,
+            "data_through": None,
+            "data_through_status": "source_watermark_unavailable",
         }
-    start = end.replace(day=1)
     payload = await loader(
         user={"id": user_id},
         from_date=start.isoformat(),
@@ -121,10 +199,15 @@ async def _month_to_date_totals(
     )
     totals = (payload or {}).get("totals") or {}
     profit_envelope = (payload or {}).get("profit_envelope") or {}
+    data_through, data_through_status = _source_data_through(profit_envelope)
     return {
         "available": _number(totals.get("net_profit")) is not None,
         "from": start.isoformat(),
         "to": end.isoformat(),
+        "timezone": ACCOUNT_TIMEZONE,
+        "calculated_at": _now(),
+        "data_through": data_through,
+        "data_through_status": data_through_status,
         "net_profit": _number(totals.get("net_profit")),
         "total_sales": _number(totals.get("total_sales")),
         "total_orders": _number(totals.get("total_orders")),
@@ -153,8 +236,24 @@ def _derive_goal_progress(
     net_profit = _number(month_to_date.get("net_profit"))
     base = {
         **goal,
+        "contract_version": CONTRACT_VERSION,
         "month": f"{end.year:04d}-{end.month:02d}",
         "currency": "SAR",
+        "timezone": ACCOUNT_TIMEZONE,
+        "period": {
+            "kind": "calendar_month_to_date",
+            "month": f"{end.year:04d}-{end.month:02d}",
+            "from": month_to_date.get("from") or end.replace(day=1).isoformat(),
+            "to_requested": month_to_date.get("to") or end.isoformat(),
+            "timezone": ACCOUNT_TIMEZONE,
+        },
+        "calculated_at": month_to_date.get("calculated_at"),
+        "calculation_attempted_at": month_to_date.get("calculation_attempted_at"),
+        "data_through": month_to_date.get("data_through"),
+        "data_through_status": (
+            month_to_date.get("data_through_status")
+            or "source_watermark_unavailable"
+        ),
         "days_in_month": days_in_month,
         "days_elapsed": elapsed_days,
         "days_remaining": remaining_days,
@@ -201,15 +300,36 @@ def _derive_goal_progress(
         "profit_accounting_quality_known": accounting_quality_known,
         # Execution remains fail-closed when completeness is unknown.
         "scale_execution_allowed_by_profit_accounting": accounting_complete,
-        "profit_accounting_quality": {
-            "missing_product_cost_count": missing_costs,
-            "incomplete_profit_orders_count": incomplete_orders,
-        },
+        "profit_accounting_quality": (
+            dict(envelope_quality)
+            if isinstance(envelope_quality, dict)
+            else {
+                "missing_product_cost_count": missing_costs,
+                "incomplete_profit_orders_count": incomplete_orders,
+            }
+        ),
     }
     if net_profit is None:
+        reason = month_to_date.get("reason")
+        issues = (
+            envelope_quality.get("issues")
+            if isinstance(envelope_quality, dict)
+            else None
+        )
+        if not reason and issues:
+            reason = f"profit_accounting:{','.join(str(item) for item in issues)}"
+        progress_state = (
+            "calculation_failed"
+            if str(reason or "").startswith("month_to_date_profit_failed:")
+            else "quality_incomplete"
+            if isinstance(envelope_quality, dict) and not accounting_complete
+            else "missing"
+        )
         return {
             **base,
             "progress_available": False,
+            "progress_state": progress_state,
+            "progress_unavailable_reason": reason or "net_profit_unavailable",
             "status": "profit_data_unavailable",
             "phase": "protect_data_quality",
             "net_profit_to_date_sar": None,
@@ -240,6 +360,10 @@ def _derive_goal_progress(
     return {
         **base,
         "progress_available": True,
+        "progress_state": (
+            "quality_incomplete" if accounting_incomplete else "available"
+        ),
+        "progress_unavailable_reason": None,
         "status": status,
         "phase": phase,
         "net_profit_to_date_sar": round(net_profit, 2),
@@ -269,8 +393,221 @@ async def build_goal_context(
         month_to_date = {
             "available": False,
             "reason": f"month_to_date_profit_failed:{type(exc).__name__}",
+            "from": end.replace(day=1).isoformat(),
+            "to": end.isoformat(),
+            "timezone": ACCOUNT_TIMEZONE,
+            "calculated_at": None,
+            "calculation_attempted_at": _now(),
+            "data_through": None,
+            "data_through_status": "source_watermark_unavailable",
         }
     return _derive_goal_progress(goal=goal, month_to_date=month_to_date, end=end)
+
+
+def goal_context_unavailable(*, end: date, reason: str) -> dict[str, Any]:
+    return {
+        "contract_version": CONTRACT_VERSION,
+        "minimum_net_profit_sar": None,
+        "configured": None,
+        "source": "goal_config_unavailable",
+        "updated_at": None,
+        "goal_config_version": None,
+        "goal_config_id": None,
+        "month": f"{end.year:04d}-{end.month:02d}",
+        "currency": "SAR",
+        "timezone": ACCOUNT_TIMEZONE,
+        "period": {
+            "kind": "calendar_month_to_date",
+            "month": f"{end.year:04d}-{end.month:02d}",
+            "from": end.replace(day=1).isoformat(),
+            "to_requested": end.isoformat(),
+            "timezone": ACCOUNT_TIMEZONE,
+        },
+        "calculated_at": None,
+        "data_through": None,
+        "data_through_status": "source_watermark_unavailable",
+        "progress_available": False,
+        "progress_state": "calculation_failed",
+        "progress_unavailable_reason": reason,
+        "status": "goal_context_unavailable",
+        "phase": "protect_data_quality",
+        "net_profit_to_date_sar": None,
+        "remaining_to_target_sar": None,
+        "required_daily_net_profit_sar": None,
+        "projected_month_end_net_profit_sar": None,
+        "projected_gap_sar": None,
+        "target_coverage_pct": None,
+        "profit_accounting_complete": None,
+        "profit_accounting_quality_known": False,
+        "scale_execution_allowed_by_profit_accounting": False,
+    }
+
+
+def with_snapshot_provenance(
+    goal_context: dict[str, Any],
+    *,
+    run_id: str,
+    snapshot_id: str,
+    snapshot_generated_at: str,
+) -> dict[str, Any]:
+    return {
+        **goal_context,
+        "historical_recommendation_authority_renewed": False,
+        "provenance": {
+            "run_id": run_id,
+            "snapshot_id": snapshot_id,
+            "snapshot_generated_at": snapshot_generated_at,
+        },
+    }
+
+
+def _display_unavailable(
+    *,
+    current_goal: dict[str, Any],
+    current_month: date,
+    state: str,
+    reason: str,
+    snapshot_goal: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    preserved = snapshot_goal if isinstance(snapshot_goal, dict) else {}
+    return {
+        **current_goal,
+        "contract_version": CONTRACT_VERSION,
+        "month": f"{current_month.year:04d}-{current_month.month:02d}",
+        "currency": "SAR",
+        "timezone": ACCOUNT_TIMEZONE,
+        "period": {
+            "kind": "calendar_month_to_date",
+            "month": f"{current_month.year:04d}-{current_month.month:02d}",
+            "from": current_month.replace(day=1).isoformat(),
+            "to_requested": current_month.isoformat(),
+            "timezone": ACCOUNT_TIMEZONE,
+        },
+        "calculated_at": preserved.get("calculated_at"),
+        "data_through": preserved.get("data_through"),
+        "data_through_status": (
+            preserved.get("data_through_status")
+            or "source_watermark_unavailable"
+        ),
+        "progress_available": False,
+        "progress_state": state,
+        "progress_unavailable_reason": reason,
+        "status": "profit_data_unavailable",
+        "phase": "protect_data_quality",
+        "net_profit_to_date_sar": None,
+        "remaining_to_target_sar": None,
+        "required_daily_net_profit_sar": None,
+        "projected_month_end_net_profit_sar": None,
+        "projected_gap_sar": None,
+        "target_coverage_pct": None,
+        "scale_execution_allowed_by_profit_accounting": False,
+        "provenance": preserved.get("provenance"),
+        "historical_recommendation_authority_renewed": False,
+    }
+
+
+def reconcile_goal_for_display(
+    *,
+    current_goal: dict[str, Any],
+    snapshot_goal: dict[str, Any] | None,
+    current_month: date,
+    current_time: datetime | None = None,
+    snapshot_next_run_at: str | None = None,
+) -> dict[str, Any]:
+    """Build a current read view without mutating or refreshing snapshot facts."""
+    current = with_goal_config_identity(current_goal)
+    if current.get("goal_config_id") is None:
+        return goal_context_unavailable(
+            end=current_month,
+            reason="goal_config_read_failed",
+        )
+    if not isinstance(snapshot_goal, dict):
+        return _display_unavailable(
+            current_goal=current,
+            current_month=current_month,
+            state="missing",
+            reason="monthly_goal_snapshot_missing",
+        )
+    expected_month = f"{current_month.year:04d}-{current_month.month:02d}"
+    if snapshot_goal.get("month") != expected_month:
+        return _display_unavailable(
+            current_goal=current,
+            current_month=current_month,
+            state="stale",
+            reason="monthly_goal_snapshot_month_mismatch",
+            snapshot_goal=snapshot_goal,
+        )
+    if current_time is not None and snapshot_next_run_at:
+        try:
+            next_run = datetime.fromisoformat(
+                str(snapshot_next_run_at).replace("Z", "+00:00")
+            )
+            current_utc = (
+                current_time.replace(tzinfo=timezone.utc)
+                if current_time.tzinfo is None
+                else current_time.astimezone(timezone.utc)
+            )
+            next_run_utc = (
+                next_run.replace(tzinfo=timezone.utc)
+                if next_run.tzinfo is None
+                else next_run.astimezone(timezone.utc)
+            )
+        except ValueError:
+            next_run_utc = None
+        if next_run_utc is not None and current_utc > next_run_utc:
+            return _display_unavailable(
+                current_goal=current,
+                current_month=current_month,
+                state="stale",
+                reason="monthly_goal_snapshot_past_next_run_at",
+                snapshot_goal=snapshot_goal,
+            )
+
+    config_matches = snapshot_goal.get("goal_config_id") == current.get("goal_config_id")
+    if config_matches:
+        return {
+            **snapshot_goal,
+            **current,
+            "historical_recommendation_authority_renewed": False,
+        }
+
+    month_to_date = snapshot_goal.get("month_to_date")
+    if not isinstance(month_to_date, dict):
+        return _display_unavailable(
+            current_goal=current,
+            current_month=current_month,
+            state="config_mismatch",
+            reason="goal_config_mismatch_without_reusable_month_to_date",
+            snapshot_goal=snapshot_goal,
+        )
+    try:
+        evidence_end = date.fromisoformat(str(month_to_date.get("to") or ""))
+    except ValueError:
+        evidence_end = None
+    if evidence_end is None or (evidence_end.year, evidence_end.month) != (
+        current_month.year,
+        current_month.month,
+    ):
+        return _display_unavailable(
+            current_goal=current,
+            current_month=current_month,
+            state="config_mismatch",
+            reason="goal_config_mismatch_with_invalid_month_to_date_period",
+            snapshot_goal=snapshot_goal,
+        )
+    derived = _derive_goal_progress(
+        goal=current,
+        month_to_date=dict(month_to_date),
+        end=evidence_end,
+    )
+    return {
+        **derived,
+        "progress_state": "config_mismatch",
+        "underlying_progress_state": derived.get("progress_state"),
+        "display_derivation": "current_goal_from_stored_month_to_date",
+        "provenance": snapshot_goal.get("provenance"),
+        "historical_recommendation_authority_renewed": False,
+    }
 
 
 def wrap_business_profit_context(
@@ -282,27 +619,41 @@ def wrap_business_profit_context(
         user_id: str,
         end: date,
     ) -> dict[str, Any]:
-        business = await base(loader, user_id, end)
+        clear_goal_context()
         try:
-            runtime = get_runtime_context()
-            goal_context = await build_goal_context(
-                runtime.db,
-                user_id,
-                loader=loader,
-                end=end,
-            )
-        except Exception as exc:
-            goal_context = {
-                "minimum_net_profit_sar": DEFAULT_MONTHLY_NET_PROFIT_TARGET_SAR,
-                "progress_available": False,
-                "status": "goal_context_unavailable",
-                "reason": type(exc).__name__,
+            try:
+                runtime = get_runtime_context()
+                goal_context = await build_goal_context(
+                    runtime.db,
+                    user_id,
+                    loader=loader,
+                    end=end,
+                )
+            except Exception as exc:
+                goal_context = goal_context_unavailable(
+                    end=end,
+                    reason=f"goal_context_failed:{type(exc).__name__}",
+                )
+            _CURRENT_GOAL_CONTEXT.set(goal_context)
+            try:
+                business = await base(loader, user_id, end)
+            except Exception as exc:
+                return {
+                    "available": False,
+                    "reason": "business_profit_windows_failed",
+                    "analysis_status": "failed",
+                    "analysis_error_code": type(exc).__name__,
+                    "monthly_profit_goal": goal_context,
+                }
+            return {
+                **business,
+                "analysis_status": business.get("analysis_status") or (
+                    "complete" if business.get("available") is True else "unavailable"
+                ),
+                "monthly_profit_goal": goal_context,
             }
-        _CURRENT_GOAL_CONTEXT.set(goal_context)
-        return {
-            **business,
-            "monthly_profit_goal": goal_context,
-        }
+        finally:
+            clear_goal_context()
 
     return goal_aware_context
 
@@ -335,18 +686,37 @@ def attach_monthly_profit_goal_routes(
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         owner = require_owner(user)
-        return await save_goal(db, str(owner["id"]), payload)
+        user_id = str(owner["id"])
+        saved = await save_goal(db, user_id, payload)
+        snapshot = await db[SNAPSHOT_COLLECTION].find_one(
+            {"user_id": user_id},
+            {"_id": 0, "monthly_profit_goal": 1, "next_run_at": 1},
+            sort=[("generated_at", -1)],
+        )
+        current_time = _utcnow()
+        return reconcile_goal_for_display(
+            current_goal=saved,
+            snapshot_goal=(snapshot or {}).get("monthly_profit_goal"),
+            current_month=current_time.astimezone(ZoneInfo(ACCOUNT_TIMEZONE)).date(),
+            current_time=current_time,
+            snapshot_next_run_at=(snapshot or {}).get("next_run_at"),
+        )
 
 
 __all__ = [
     "COLLECTION",
+    "CONTRACT_VERSION",
     "DEFAULT_MONTHLY_NET_PROFIT_TARGET_SAR",
     "MonthlyProfitGoalInput",
     "attach_monthly_profit_goal_routes",
     "build_goal_context",
     "clear_goal_context",
     "current_goal_context",
+    "goal_context_unavailable",
     "load_goal",
+    "reconcile_goal_for_display",
     "save_goal",
     "wrap_business_profit_context",
+    "with_goal_config_identity",
+    "with_snapshot_provenance",
 ]

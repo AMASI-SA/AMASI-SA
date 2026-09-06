@@ -195,21 +195,12 @@ async def run_campaign_ai_monitor(
     token = _set_v3_context(db, user_id)
     _monthly_goal.clear_goal_context()
     try:
-        result = await _base_run_campaign_ai_monitor(
+        return await _base_run_campaign_ai_monitor(
             db,
             user_id,
             *args,
             **kwargs,
         )
-        goal_context = _monthly_goal.current_goal_context()
-        snapshot_id = result.get("snapshot_id") if isinstance(result, dict) else None
-        if goal_context and snapshot_id:
-            await db[RECOMMENDATION_COLLECTION].update_one(
-                {"user_id": user_id, "snapshot_id": snapshot_id},
-                {"$set": {"monthly_profit_goal": goal_context}},
-            )
-            result = {**result, "monthly_profit_goal": goal_context}
-        return result
     finally:
         _monthly_goal.clear_goal_context()
         _reset_v3_context(token)

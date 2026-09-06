@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
     AlertTriangle,
@@ -17,6 +17,11 @@ import {
 } from "lucide-react";
 
 import api from "../lib/api";
+import {
+    GOAL_PROGRESS_MESSAGES,
+    monthlyProfitGoalView,
+    shouldApplyGoalRead,
+} from "../lib/monthlyProfitGoalView";
 
 const LEGACY_ACTIONS = {
     pause: { label: "إيقاف مقترح", tone: "border-red-200 bg-red-50 text-red-700" },
@@ -200,26 +205,37 @@ function MetricCard({ icon: Icon, label, value, tone }) {
     </div>;
 }
 
-function GoalCard({ goal, goalInput, setGoalInput, saving, onSave }) {
+export function GoalCard({ goal, goalInput, setGoalInput, saving, onSave }) {
     const status = GOAL_STATUS[goal?.status] || GOAL_STATUS.profit_data_unavailable;
     const hasProgress = goal?.progress_available === true;
+    const rawTarget = goal?.minimum_net_profit_sar;
+    const target = rawTarget === null || rawTarget === undefined || rawTarget === ""
+        ? null
+        : Number(rawTarget);
+    const progressMessage = Object.prototype.hasOwnProperty.call(
+        GOAL_PROGRESS_MESSAGES,
+        goal?.progress_state,
+    )
+        ? GOAL_PROGRESS_MESSAGES[goal.progress_state]
+        : "لم تتوفر نتيجة تقدم موثوقة لهذا الشهر.";
     return <section className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm" data-testid="monthly-profit-goal-card">
         <div className="flex flex-wrap items-center justify-between gap-3 bg-emerald-700 px-5 py-4 text-white">
             <div>
                 <h2 className="flex items-center gap-2 text-base font-black"><TrendingUp className="h-5 w-5" />هدف صافي الربح لهذا الشهر</h2>
                 <p className="mt-1 text-[10px] font-bold text-emerald-100">هذا هو الهدف الذي يدير الذكاء الحملات من أجله. أرقام الإعلان وسائل للوصول إليه وليست الهدف نفسه.</p>
             </div>
-            <span className={`rounded-full border px-3 py-1 text-[10px] font-black ${status.tone}`}>{hasProgress ? status.label : "سيُحسب التقدم في دورة التحليل القادمة"}</span>
+            <span className={`rounded-full border px-3 py-1 text-[10px] font-black ${status.tone}`}>{hasProgress ? status.label : progressMessage}</span>
         </div>
         <div className="p-4">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-                <div className="rounded-xl bg-slate-50 p-3"><p className="text-[9px] font-black text-slate-500">الحد الأدنى المطلوب</p><p className="mt-1 text-lg font-black text-slate-900">{money(goal?.minimum_net_profit_sar || 100000)} ر.س</p></div>
+                <div className="rounded-xl bg-slate-50 p-3"><p className="text-[9px] font-black text-slate-500">الحد الأدنى المطلوب</p><p className="mt-1 text-lg font-black text-slate-900">{Number.isFinite(target) ? `${money(target)} ر.س` : "—"}</p></div>
                 <div className="rounded-xl bg-slate-50 p-3"><p className="text-[9px] font-black text-slate-500">صافي الربح حتى الآن</p><p className="mt-1 text-lg font-black text-slate-900">{hasProgress ? `${money(goal.net_profit_to_date_sar)} ر.س` : "بانتظار الحساب"}</p></div>
                 <div className="rounded-xl bg-slate-50 p-3"><p className="text-[9px] font-black text-slate-500">المتبقي للهدف</p><p className="mt-1 text-lg font-black text-slate-900">{hasProgress ? `${money(goal.remaining_to_target_sar)} ر.س` : "—"}</p></div>
                 <div className="rounded-xl bg-slate-50 p-3"><p className="text-[9px] font-black text-slate-500">الأيام المتبقية</p><p className="mt-1 text-lg font-black text-slate-900">{hasProgress ? goal.days_remaining : "—"}</p></div>
                 <div className="rounded-xl bg-slate-50 p-3"><p className="text-[9px] font-black text-slate-500">المطلوب يوميًا</p><p className="mt-1 text-lg font-black text-slate-900">{hasProgress ? `${money(goal.required_daily_net_profit_sar)} ر.س` : "—"}</p></div>
                 <div className="rounded-xl bg-slate-50 p-3"><p className="text-[9px] font-black text-slate-500">المتوقع نهاية الشهر</p><p className="mt-1 text-lg font-black text-slate-900">{hasProgress ? `${money(goal.projected_month_end_net_profit_sar)} ر.س` : "—"}</p></div>
             </div>
+            {progressMessage && <p className="mt-3 text-[10px] font-bold text-amber-700" data-testid="monthly-profit-goal-progress-state">{progressMessage}</p>}
             <div className="mt-3 flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <label className="min-w-[220px] flex-1 text-[10px] font-black text-slate-600">تغيير الحد الأدنى الشهري
                     <input type="number" min="1000" step="1000" value={goalInput} onChange={(e) => setGoalInput(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-black text-slate-900" />
@@ -300,29 +316,54 @@ export default function CampaignRecommendations() {
     const [actionType, setActionType] = useState("all");
     const [productAlerts, setProductAlerts] = useState(null);
     const [goal, setGoal] = useState(null);
-    const [goalInput, setGoalInput] = useState("100000");
+    const [goalInput, setGoalInput] = useState("");
     const [savingGoal, setSavingGoal] = useState(false);
+    const loadRequestRef = useRef(0);
+    const goalMutationVersionRef = useRef(0);
 
     const load = useCallback(async () => {
+        const requestId = ++loadRequestRef.current;
+        const mutationVersionAtStart = goalMutationVersionRef.current;
         setError("");
-        try {
-            const [latest, watch, goalConfig] = await Promise.all([
+        const [latestResult, watchResult, goalConfigResult] = await Promise.allSettled([
                 api.get("/ads-manager/ai-monitor/latest"),
-                api.get("/ads-manager/ai-monitor/product-watch/alerts?status=active&limit=20").catch(() => ({ data: null })),
-                api.get("/ads-manager/ai-monitor/monthly-profit-goal").catch(() => ({ data: { minimum_net_profit_sar: 100000, configured: false } })),
+                api.get("/ads-manager/ai-monitor/product-watch/alerts?status=active&limit=20"),
+                api.get("/ads-manager/ai-monitor/monthly-profit-goal"),
             ]);
-            setSnapshot(latest.data);
-            setProductAlerts(watch.data);
-            const mergedGoal = latest.data?.monthly_profit_goal
-                ? { ...goalConfig.data, ...latest.data.monthly_profit_goal }
-                : goalConfig.data;
-            setGoal(mergedGoal);
-            setGoalInput(String(mergedGoal?.minimum_net_profit_sar || 100000));
-        } catch {
+        if (requestId !== loadRequestRef.current) return;
+
+        const latestReadFailed = latestResult.status === "rejected";
+        const configReadFailed = goalConfigResult.status === "rejected";
+        const latest = latestReadFailed ? null : latestResult.value.data;
+        const goalConfig = configReadFailed ? null : goalConfigResult.value.data;
+        setSnapshot(latest);
+        setProductAlerts(watchResult.status === "fulfilled" ? watchResult.value.data : null);
+        if (latestReadFailed) {
             setError("تعذّر قراءة توصيات الحملات الآن. حاول التحديث بعد قليل.");
-        } finally {
-            setLoading(false);
         }
+        if (shouldApplyGoalRead({
+            requestId,
+            latestRequestId: loadRequestRef.current,
+            mutationVersionAtStart,
+            currentMutationVersion: goalMutationVersionRef.current,
+        })) {
+            const displayGoal = monthlyProfitGoalView({
+                goalConfig,
+                snapshotGoal: latest?.monthly_profit_goal,
+                latestReadFailed,
+                configReadFailed,
+            });
+            setGoal(displayGoal);
+            setGoalInput(
+                displayGoal?.minimum_net_profit_sar !== null
+                    && displayGoal?.minimum_net_profit_sar !== undefined
+                    && displayGoal?.minimum_net_profit_sar !== ""
+                    && Number.isFinite(Number(displayGoal.minimum_net_profit_sar))
+                    ? String(displayGoal.minimum_net_profit_sar)
+                    : "",
+            );
+        }
+        setLoading(false);
     }, []);
 
     useEffect(() => {
@@ -334,14 +375,18 @@ export default function CampaignRecommendations() {
     const saveGoal = async () => {
         const value = Number(goalInput);
         if (!Number.isFinite(value) || value < 1000) return;
+        goalMutationVersionRef.current += 1;
+        loadRequestRef.current += 1;
         setSavingGoal(true);
         try {
             const { data } = await api.put("/ads-manager/ai-monitor/monthly-profit-goal", { minimum_net_profit_sar: value });
-            setGoal((current) => ({ ...(current || {}), ...data, progress_available: false }));
+            setGoal(data);
             setGoalInput(String(data.minimum_net_profit_sar));
         } catch (requestError) {
             window.alert(requestError?.response?.data?.detail?.message || "تعذّر حفظ هدف صافي الربح.");
         } finally {
+            goalMutationVersionRef.current += 1;
+            loadRequestRef.current += 1;
             setSavingGoal(false);
         }
     };
