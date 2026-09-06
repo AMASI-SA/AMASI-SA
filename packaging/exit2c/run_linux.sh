@@ -16,7 +16,7 @@ cleanup() {
 }
 trap cleanup EXIT
 docker run -d --name "$mongo" --network none --tmpfs /data/db --tmpfs /data/configdb \
-  mongo:7.0.16 --bind_ip 127.0.0.1 --quiet
+  mongo:7.0.16@sha256:c630c59342c1493d50345136df2af14a76b9e827dd5316bfabee07a0880a5f3a --bind_ip 127.0.0.1 --quiet
 test "$(docker inspect -f '{{.HostConfig.NetworkMode}}' "$mongo")" = none
 for attempt in $(seq 1 30); do
   if docker exec "$mongo" mongosh --quiet --eval 'quit(db.adminCommand({ping:1}).ok?0:1)' >/dev/null 2>&1; then break; fi
@@ -31,6 +31,20 @@ life duplicate-fixture
 if docker run --rm "${runtime[@]}" mezan-exit2c:candidate migration; then
   echo 'FAIL duplicate fixture did not block migration'; exit 1
 fi
+# Partial migration must not announce readiness despite a healthy Mongo.
+life profile
+docker run -d --name "$web1" "${runtime[@]}" mezan-exit2c:candidate web --port 8001
+blocked=false
+for attempt in $(seq 1 30); do
+  if docker exec "$probe" python -c "import httpx; assert httpx.get('http://127.0.0.1:8001/api/ready',timeout=1).status_code==503" >/dev/null 2>&1; then blocked=true; break; fi
+  sleep 1
+done
+test "$blocked" = true
+life no-writes
+docker stop --time 10 "$web1" >/dev/null
+test "$(docker inspect -f '{{.State.ExitCode}}' "$web1")" = 0
+docker rm "$web1" >/dev/null
+echo 'PASS partial migration blocks web readiness without startup writes'
 life repair-fixture
 docker run --rm "${runtime[@]}" mezan-exit2c:candidate migration
 life completed

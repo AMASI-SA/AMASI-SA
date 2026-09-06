@@ -116,6 +116,8 @@ def setup():
     database.users.update_one({"id": owner["id"]}, {"$set": {
         "mfa_enabled": True, "mfa_totp_secret_enc": encrypt_totp_secret(TOTP),
     }, "$unset": {"mfa_last_totp_counter": "", "password_updated_at": ""}})
+    database.qoyod_settings.insert_one({"user_id": "main", "enabled": True,
+        "auto_send": True, "dry_run_mode": False, "legacy_pipeline_frozen": True})
     employee = "exit2c-employee"
     database.users.insert_one({"id": employee, "email": "employee@example.com",
         "name": "Synthetic employee", "password_hash": hash_password(EMPLOYEE_PASSWORD),
@@ -165,6 +167,12 @@ def owner_session():
         assert me.json()["role"] == "owner"
         assert me.headers["x-content-type-options"] == "nosniff"
     print("PASS password -> owner MFA across two processes; invalid/replay rejected")
+    refreshed = request(1, "POST", "/api/auth/refresh", cookie=result)
+    for name in ("access_token=", "refresh_token="):
+        header = next(h.lower() for h in refreshed.headers.get_list("set-cookie") if h.startswith(name))
+        assert "httponly" in header and "secure" in header and "samesite=none" in header
+    result = cookies(refreshed, result)
+    request(0, "GET", "/api/auth/me", cookie=result)
     return result
 
 
@@ -239,6 +247,13 @@ def http():
     for port in range(2):
         request(port, "GET", "/api/ready")
         request(port, "GET", "/api/auth/me", expected=401)
+        allowed = request(port, "OPTIONS", "/api/auth/me", headers={
+            "Access-Control-Request-Method": "GET"})
+        assert allowed.headers["access-control-allow-origin"] == ORIGIN
+        denied = request(port, "OPTIONS", "/api/auth/me", expected=400, headers={
+            "Origin": "https://evil.example.test", "Access-Control-Request-Method": "GET"})
+        assert "access-control-allow-origin" not in denied.headers
+    assert db().qoyod_settings.find_one({"user_id": "main"})["auto_send"] is True
     state["owner_cookie"] = owner_session()
     state["employee_cookie"] = employee_session(state)
     passkey_session(state)
@@ -295,6 +310,19 @@ def after_restart():
     assert database[REGISTRY].find_one({"file_number": "PF-EXIT2C-0001"})["execution_status"] == "in_progress"
     assert database[PIECES].find_one({"piece_id": "exit2c-piece"})["status"] == "in_progress"
     assert database[EVENTS].count_documents({"file_number": "PF-EXIT2C-0001"}) == 1
+    # Negative-only expired copies of real session payloads: never accepted
+    # tokens or fake guard success. Genuine JWT expiry is checked over HTTP.
+    import jwt
+    parsed = SimpleCookie()
+    parsed.load(state["employee_cookie"])
+    expired = []
+    for name in ("access_token", "refresh_token"):
+        payload = jwt.decode(parsed[name].value, JWT, algorithms=["HS256"])
+        payload["exp"] = int(time.time()) - 60
+        expired.append(f"{name}=" + jwt.encode(payload, JWT, algorithm="HS256"))
+    for port in range(2):
+        request(port, "GET", "/api/auth/me", cookie="; ".join(expired), expected=401)
+        request(port, "POST", "/api/auth/refresh", cookie="; ".join(expired), expected=401)
     # Password-update revocation is checked from shared DB by both web processes.
     database.users.update_one({"id": state["employee"]}, {"$set": {
         "password_updated_at": (now() + timedelta(seconds=2)).isoformat()}})

@@ -14,6 +14,7 @@ RUN test -s backend/fonts/Cairo-Bold.ttf && test -s backend/assets/amasi_qr_logo
 # Public synthetic fixture values. This image is for acceptance, not deployment.
 ENV APP_ENV=test TEST_RELEASE_STARTUP_KEY=test:exit2c-candidate \
     MEZAN_INDEPENDENT_RUNTIME=1 \
+    FRONTEND_URL=https://mezansalla.com WEBAUTHN_ORIGIN=https://mezansalla.com WEBAUTHN_RP_ID=mezansalla.com \
     MONGO_URL=mongodb://127.0.0.1:27017 DB_NAME=mezan_exit2c \
     JWT_SECRET=exit2c-public-synthetic-key-not-for-production \
     ADMIN_PASSWORD=Exit2C-synthetic-owner-password! \
