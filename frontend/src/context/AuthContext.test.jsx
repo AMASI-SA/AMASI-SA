@@ -197,4 +197,3 @@ describe("AuthProvider bootstrap", () => {
             .toBe("present");
     });
 });
-

@@ -224,4 +224,3 @@ def test_five_minute_poll_benchmark_contract():
     assert 300 // int(auto_send._next_poll_delay(
         {"status": "not_armed"}, interval_sec=15,
     )) == 1
-

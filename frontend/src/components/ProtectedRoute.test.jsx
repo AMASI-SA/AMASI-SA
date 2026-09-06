@@ -144,4 +144,3 @@ describe("ProtectedRoute auth bootstrap states", () => {
             .toBeNull();
     });
 });
-

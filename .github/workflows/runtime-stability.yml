@@ -82,4 +82,3 @@ jobs:
           src/context/authBootstrap.test.js
           src/context/AuthContext.test.jsx
           src/components/ProtectedRoute.test.jsx
-

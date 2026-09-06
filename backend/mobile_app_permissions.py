@@ -260,4 +260,3 @@ __all__ = [
     "mobile_app_permission_catalog",
     "validate_mobile_app_permissions",
 ]
-

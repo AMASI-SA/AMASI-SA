@@ -5300,4 +5300,3 @@ async def on_shutdown():
         except _asyncio.CancelledError:
             pass
     client.close()
-

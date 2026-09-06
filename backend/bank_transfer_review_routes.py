@@ -201,7 +201,10 @@ def make_bank_transfer_review_router(db, current_user):
     try:
         # Motor schedules this call even without await. The isolated EXIT-2A
         # entrypoint validates its environment/network before importing us.
-        if os.environ.get("MEZAN_EXIT2A_REHEARSAL") != "1":
+        if (
+            os.environ.get("MEZAN_EXIT2A_REHEARSAL") != "1"
+            and os.environ.get("MEZAN_INDEPENDENT_RUNTIME") != "1"
+        ):
             db.bank_transfer_reviews.create_index(
                 [("user_id", 1), ("source_type", 1),
                  ("source_id", 1), ("target_bank_id", 1)],

@@ -943,4 +943,3 @@ def liveness() -> dict[str, Any]:
         "last_round": _LAST_ROUND,
         "next_poll_delay_sec": _NEXT_POLL_DELAY_SEC,
     }
-
