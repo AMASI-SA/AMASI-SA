@@ -26,6 +26,7 @@ runtime=(--network "container:$mongo" --read-only --tmpfs /tmp --cap-drop ALL --
 docker run -d --name "$probe" "${runtime[@]}" --entrypoint python mezan-exit2c:candidate -c 'import time; time.sleep(1200)'
 life() { docker exec "$probe" python /opt/acceptance/lifecycle.py "$1"; }
 accept() { docker exec "$probe" python /opt/acceptance/acceptance.py "$1"; }
+docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2c:tests /opt/acceptance/regressions.py
 life duplicate-fixture
 if docker run --rm "${runtime[@]}" mezan-exit2c:candidate migration; then
   echo 'FAIL duplicate fixture did not block migration'; exit 1
@@ -106,5 +107,4 @@ docker stop --time 10 "$worker" >/dev/null
 test "$(docker inspect -f '{{.State.ExitCode}}' "$worker")" = 0
 life no-worker
 echo 'PASS worker explicit arming, singleton fencing, loss cancellation, restart and TERM'
-docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2c:tests /opt/acceptance/regressions.py
 echo 'PASS EXIT-2C scoped acceptance; temporary containers cleaned next'

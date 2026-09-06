@@ -78,7 +78,13 @@ def request(port, method, path, *, cookie="", expected=200, **kwargs):
     # Fresh transport every call; do not silently retain cookies across users.
     with httpx.Client(trust_env=False, timeout=12) as client:
         response = client.request(method, URLS[port] + path, headers=headers, **kwargs)
-    assert response.status_code == expected, (method, path, response.status_code, expected)
+    if response.status_code != expected:
+        try:
+            detail = response.json().get("detail")
+            hint = [{"loc": e.get("loc"), "type": e.get("type")} for e in detail] if isinstance(detail, list) else (detail.get("code") if isinstance(detail, dict) else None)
+        except Exception:
+            hint = None
+        raise AssertionError((method, path, response.status_code, expected, hint))
     return response
 
 
@@ -111,7 +117,7 @@ def setup():
         "mfa_enabled": True, "mfa_totp_secret_enc": encrypt_totp_secret(TOTP),
     }, "$unset": {"mfa_last_totp_counter": "", "password_updated_at": ""}})
     employee = "exit2c-employee"
-    database.users.insert_one({"id": employee, "email": "employee@example.test",
+    database.users.insert_one({"id": employee, "email": "employee@example.com",
         "name": "Synthetic employee", "password_hash": hash_password(EMPLOYEE_PASSWORD),
         "role": "viewer", "created_by": owner["id"], "is_active": True})
     line = {"order_number": "EXIT2C-ORDER", "order_date": "2026-09-06",
@@ -168,7 +174,7 @@ def employee_session(state):
     # function is patched. Password login still signs the challenge itself.
     seed_otp(database, state["employee"])
     response = request(0, "POST", "/api/auth/login", expected=202,
-        json={"email": "employee@example.test", "password": EMPLOYEE_PASSWORD})
+        json={"email": "employee@example.com", "password": EMPLOYEE_PASSWORD})
     token = response.json()["challenge_token"]
     device = cookies(response)
     request(0, "GET", "/api/auth/me", cookie=device, expected=401)
