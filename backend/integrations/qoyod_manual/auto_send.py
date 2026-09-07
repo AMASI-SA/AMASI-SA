@@ -55,6 +55,10 @@ _WORKER_TASK: Optional[asyncio.Task] = None
 _LAST_RUN_AT: Optional[datetime] = None
 _LAST_RUN_OK = True
 _LAST_ROUND: dict[str, Any] = {}
+_NEXT_POLL_DELAY_SEC: Optional[float] = None
+ACTIVE_POLL_INTERVAL_SEC = 15.0
+IDLE_POLL_INTERVAL_SEC = 60.0
+INACTIVE_POLL_INTERVAL_SEC = 300.0
 
 # Settings store the exact Salla slug selected by the operator.  Salla can
 # expose the in-delivery state under more than one equivalent slug, so map the
@@ -884,17 +888,38 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
 
 
 async def _loop(db, *, interval_sec: float, batch_limit: int) -> None:
+    global _NEXT_POLL_DELAY_SEC
     logger.info(
         "Plan-B Qoyod auto-send worker started interval=%ss batch=%s",
         interval_sec, batch_limit,
     )
     while True:
         try:
-            await run_once(db, batch_limit=batch_limit)
+            result = await run_once(db, batch_limit=batch_limit)
         except Exception:
             # run_once already isolates failures; this protects task liveness.
             logger.exception("Plan-B Qoyod auto-send worker tick escaped")
-        await asyncio.sleep(interval_sec)
+            result = {"status": "round_failed"}
+        _NEXT_POLL_DELAY_SEC = _next_poll_delay(
+            result,
+            interval_sec=interval_sec,
+        )
+        await asyncio.sleep(_NEXT_POLL_DELAY_SEC)
+
+
+def _next_poll_delay(result: dict[str, Any], *, interval_sec: float) -> float:
+    """Adapt scan cadence without changing any send or rollout safety gate."""
+    active_delay = max(0.1, float(interval_sec))
+    status = str(result.get("status") or "")
+    if status in {
+        "unified_auto_rollout_disabled",
+        "not_armed",
+        "disarmed",
+    }:
+        return max(active_delay, INACTIVE_POLL_INTERVAL_SEC)
+    if status == "idle":
+        return max(active_delay, IDLE_POLL_INTERVAL_SEC)
+    return active_delay
 
 
 def start_worker(
@@ -916,4 +941,5 @@ def liveness() -> dict[str, Any]:
         "last_run_at": _LAST_RUN_AT.isoformat() if _LAST_RUN_AT else None,
         "last_run_ok": _LAST_RUN_OK,
         "last_round": _LAST_ROUND,
+        "next_poll_delay_sec": _NEXT_POLL_DELAY_SEC,
     }

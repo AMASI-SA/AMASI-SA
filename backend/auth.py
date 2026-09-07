@@ -8,6 +8,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from fastapi import Request, HTTPException
+from runtime_mongo import TRANSIENT_MONGO_ERRORS
 
 JWT_ALGORITHM = "HS256"
 PRIVILEGED_MFA_ROLES = {"owner", "admin"}
@@ -17,6 +18,16 @@ REFRESH_TOKEN_TTL = timedelta(days=30)
 ACCESS_COOKIE_MAX_AGE_SECONDS = int(ACCESS_TOKEN_TTL.total_seconds())
 REFRESH_COOKIE_MAX_AGE_SECONDS = int(REFRESH_TOKEN_TTL.total_seconds())
 logger = logging.getLogger(__name__)
+
+
+def raise_auth_dependency_unavailable(exc: BaseException) -> None:
+    """Map transient Mongo pressure to 503 without invalidating the session."""
+    logger.warning("authentication dependency unavailable type=%s", type(exc).__name__)
+    raise HTTPException(
+        status_code=503,
+        detail={"code": "auth_dependency_unavailable", "retryable": True},
+        headers={"Retry-After": "2"},
+    ) from exc
 
 from meta_reviewer_access import (
     is_meta_reviewer,
@@ -233,6 +244,10 @@ async def refresh_browser_session(request: Request, response, db) -> dict:
     except HTTPException:
         clear_auth_cookies(response)
         raise
+    except TRANSIENT_MONGO_ERRORS as exc:
+        # Availability is not an authentication verdict. Keep both cookies so
+        # the browser can retry the same valid session after Mongo recovers.
+        raise_auth_dependency_unavailable(exc)
 
 
 async def get_current_user_from_db(request: Request, db) -> dict:
@@ -293,6 +308,8 @@ async def get_current_user_from_db(request: Request, db) -> dict:
         raise HTTPException(status_code=401, detail="Token expired")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
+    except TRANSIENT_MONGO_ERRORS as exc:
+        raise_auth_dependency_unavailable(exc)
 
 
 async def _install_login_security_for_loaded_app(db) -> None:
@@ -308,6 +325,20 @@ async def _install_login_security_for_loaded_app(db) -> None:
     if app is None:
         logger.warning("Mezan auth security hook skipped: FastAPI app is not loaded")
         return
+
+    await install_runtime_security(app, db, initialize_indexes=True)
+
+
+async def install_runtime_security(app, db, *, initialize_indexes: bool = False) -> None:
+    """Install the real protection chain on an explicit web-process app.
+
+    Independent web startup uses the default read-only installation path;
+    the separate migration role owns index preparation. Legacy startup opts
+    into index initialization. Configuration validation and middleware order
+    are identical in both paths, and installation errors propagate.
+    """
+    if app is None:
+        raise ValueError("An explicit FastAPI app is required for runtime security")
 
     # The merchant-approved five-attempt escalation is now owned by the
     # progressive account+device guard. Keep the older pair threshold out of
@@ -333,11 +364,11 @@ async def _install_login_security_for_loaded_app(db) -> None:
     # exact trusted device; MFA remains the Owner TOTP authority. Email OTP is
     # deliberately innermost so Admin/sensitive accounts return its 202 email
     # challenge to the outer MFA layer, while Owner still reaches MFA/TOTP.
-    await install_progressive_login_security(app, db)
-    await install_login_security(app, db)
-    await install_passkey_security(app, db)
-    await install_mfa_security(app, db)
-    await install_email_otp_security(app, db)
+    await install_progressive_login_security(app, db, initialize_indexes=initialize_indexes)
+    await install_login_security(app, db, initialize_indexes=initialize_indexes)
+    await install_passkey_security(app, db, initialize_indexes=initialize_indexes)
+    await install_mfa_security(app, db, initialize_indexes=initialize_indexes)
+    await install_email_otp_security(app, db, initialize_indexes=initialize_indexes)
 
 
 def _initial_owner_password() -> str:

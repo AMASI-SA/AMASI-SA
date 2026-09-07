@@ -804,14 +804,16 @@ class EmailOtpSecurityMiddleware:
         await response(scope, _replay_receive(messages), send)
 
 
-async def install_email_otp_security(app, db: Any) -> None:
+async def install_email_otp_security(app, db: Any, *, initialize_indexes: bool = True) -> None:
     """Install email OTP inside Owner MFA and prepare Mongo TTL indexes."""
     if getattr(app.state, "mezan_email_otp_security_installed", False):
         return
 
     validate_email_otp_runtime()
     store = EmailOtpChallengeStore(db)
-    await store.ensure_indexes()
+    # Independent web installation delegates index writes to the migration role.
+    if initialize_indexes:
+        await store.ensure_indexes()
     app.user_middleware.append(Middleware(EmailOtpSecurityMiddleware, db=db))
     app.middleware_stack = app.build_middleware_stack()
     app.state.mezan_email_otp_security_installed = True

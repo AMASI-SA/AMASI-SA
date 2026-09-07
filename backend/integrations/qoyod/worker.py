@@ -51,6 +51,8 @@ _WORKER_TASK: Optional[asyncio.Task] = None
 _LAST_RUN_AT: Optional[datetime] = None
 _LAST_RUN_OK: bool = True
 _LAST_ROUND: dict = {}
+_NEXT_POLL_DELAY_SEC: Optional[float] = None
+FROZEN_CONTROL_POLL_INTERVAL_SEC = 300.0
 
 
 def _now() -> datetime:
@@ -152,9 +154,16 @@ async def run_now(db, *, user_id: str = "main",
         _LAST_RUN_AT = _now()
 
 
+def _next_poll_delay(last_round: dict, *, interval_sec: float) -> float:
+    active_delay = max(0.1, float(interval_sec))
+    if last_round.get("status") == "legacy_pipeline_frozen":
+        return max(active_delay, FROZEN_CONTROL_POLL_INTERVAL_SEC)
+    return active_delay
+
+
 async def _loop(db, *, interval_sec: float, batch_limit: int) -> None:
     """Main poll loop. Runs forever; exceptions are logged not raised."""
-    global _LAST_RUN_AT, _LAST_RUN_OK, _LAST_ROUND
+    global _LAST_RUN_AT, _LAST_RUN_OK, _LAST_ROUND, _NEXT_POLL_DELAY_SEC
     logger.info("qoyod pipeline worker started (interval=%ss, batch=%s)",
                 interval_sec, batch_limit)
     while True:
@@ -166,7 +175,11 @@ async def _loop(db, *, interval_sec: float, batch_limit: int) -> None:
             _LAST_RUN_OK = False
             logger.exception("qoyod pipeline worker tick failed")
         _LAST_RUN_AT = _now()
-        await asyncio.sleep(interval_sec)
+        _NEXT_POLL_DELAY_SEC = _next_poll_delay(
+            _LAST_ROUND,
+            interval_sec=interval_sec,
+        )
+        await asyncio.sleep(_NEXT_POLL_DELAY_SEC)
 
 
 def start_worker(db, *, interval_sec: float = 5.0,
@@ -194,4 +207,5 @@ def liveness() -> dict:
         "last_run_at": _LAST_RUN_AT.isoformat() if _LAST_RUN_AT else None,
         "last_run_ok": _LAST_RUN_OK,
         "last_round":  _LAST_ROUND,
+        "next_poll_delay_sec": _NEXT_POLL_DELAY_SEC,
     }
