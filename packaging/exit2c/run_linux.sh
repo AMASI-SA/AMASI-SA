@@ -22,8 +22,9 @@ cleanup() {
   if test -n "${accept_out:-}"; then exec {accept_out}<&-; fi
 }
 trap cleanup EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
+accept_phase=controller
+trap 'printf "FAIL %s CANCELLED\n" "${accept_phase:-controller}"; exit 130' INT
+trap 'printf "FAIL %s CANCELLED\n" "${accept_phase:-controller}"; exit 143' TERM
 docker run -d --name "$mongo" --network none --tmpfs /data/db --tmpfs /data/configdb \
   mongo:7.0.16@sha256:c630c59342c1493d50345136df2af14a76b9e827dd5316bfabee07a0880a5f3a --bind_ip 127.0.0.1 --quiet
 test "$(docker inspect -f '{{.HostConfig.NetworkMode}}' "$mongo")" = none
@@ -42,14 +43,42 @@ start_acceptance() {
   exec {accept_out}<&"${ACCEPTANCE[0]}"
 }
 accept() {
-  local reply
-  printf '%s\n' "$1" >&"$accept_in"
-  if ! IFS= read -r -t 120 reply <&"$accept_out" || test "$reply" != "PASS $1"; then
-    echo 'FAIL acceptance controller: phase failed, timed out or disconnected'
+  local reply status reason
+  # Reject untrusted phase names without printing them.
+  case "$1" in
+    setup|http|mongo-down|after-restart|finish) accept_phase="$1" ;;
+    *) echo 'FAIL controller PHASE_ORDER'; return 1 ;;
+  esac
+  # Ignore SIGPIPE only for this write; report its status without shell noise.
+  if (trap '' PIPE; printf '%s\n' "$accept_phase" >&"$accept_in") 2>/dev/null; then
+    :
+  else
+    printf 'FAIL %s CHANNEL_CLOSED\n' "$accept_phase"
     return 1
   fi
-  printf 'PASS acceptance phase: %s\n' "$1"
+  if IFS= read -r -t 120 reply <&"$accept_out"; then
+    if test "$reply" = "PASS $accept_phase"; then
+      printf 'PASS acceptance phase: %s\n' "$accept_phase"
+      return 0
+    fi
+    for reason in TIMEOUT CHANNEL_CLOSED CANCELLED PHASE_ORDER ASSERTION_FAILED UNCLASSIFIED_FAILURE; do
+      if test "$reply" = "FAIL $accept_phase $reason"; then
+        printf 'FAIL %s %s\n' "$accept_phase" "$reason"
+        return 1
+      fi
+    done
+    reason=UNCLASSIFIED_FAILURE
+  else
+    status=$?
+    # Bash read returns 1 at EOF and >128 on timeout. INT/TERM traps exit.
+    if test "$status" -gt 128; then reason=TIMEOUT
+    elif test "$status" -eq 1; then reason=CHANNEL_CLOSED
+    else reason=UNCLASSIFIED_FAILURE; fi
+  fi
+  printf 'FAIL %s %s\n' "$accept_phase" "$reason"
+  return 1
 }
+
 docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2c:tests /opt/acceptance/regressions.py
 docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2c:candidate /opt/acceptance/test_acceptance_controller.py
 life duplicate-fixture

@@ -21,29 +21,44 @@ class Discard:
 
 def serve(phases, commands, replies):
     state = {}
+    name = "setup"
+    reason = "UNCLASSIFIED_FAILURE"
+    in_phase = False
     try:
-        for name in PHASES:
-            if commands.readline(64) != name + "\n":
-                raise RuntimeError("invalid phase order or closed control pipe")
-            # Dependencies and failed assertions must not echo session values.
-            # Only the fixed successful phase status crosses the output pipe.
-            with redirect_stdout(Discard()), redirect_stderr(Discard()):
-                phases[name](state)
+        for name in (*PHASES, "finish"):
+            command = commands.readline(64)
+            if command == "":
+                reason = "CHANNEL_CLOSED"
+                raise RuntimeError
+            if command != name + "\n":
+                reason = "PHASE_ORDER"
+                raise RuntimeError
+            if name == "finish":
+                state.clear()
+            else:
+                # Never format exception text/locals or echo phase output.
+                in_phase = True
+                with redirect_stdout(Discard()), redirect_stderr(Discard()):
+                    phases[name](state)
+                in_phase = False
             replies.write("PASS " + name + "\n")
             replies.flush()
-        if commands.readline(64) != "finish\n":
-            raise RuntimeError("missing completion acknowledgement")
-        state.clear()
-        replies.write("PASS finish\n")
-        replies.flush()
         return 0
-    except BaseException:
-        # Never format exception text/locals: either may contain session values.
+    except BaseException as error:
+        # Classify only observed types/context, never messages or external fields.
+        if isinstance(error, KeyboardInterrupt):
+            reason = "CANCELLED"
+        elif isinstance(error, TimeoutError):
+            reason = "TIMEOUT"
+        elif in_phase and isinstance(error, AssertionError):
+            reason = "ASSERTION_FAILED"
+        elif not in_phase and isinstance(error, (BrokenPipeError, EOFError)):
+            reason = "CHANNEL_CLOSED"
         try:
-            replies.write("FAIL acceptance controller\n")
+            replies.write("FAIL " + name + " " + reason + "\n")
             replies.flush()
         except BaseException:
-            pass  # A disconnected reader must not trigger a secret-bearing traceback.
+            pass  # Disconnected output cannot carry a diagnostic; still fail.
         return 1
     finally:
         state.clear()
