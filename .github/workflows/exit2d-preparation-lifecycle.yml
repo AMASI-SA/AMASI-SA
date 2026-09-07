@@ -1,0 +1,30 @@
+name: EXIT-2D preparation with simulated HTTP provider
+on:
+  push:
+    branches: [codex/exit-2d-preparation-lifecycle-acceptance]
+permissions:
+  contents: read
+concurrency:
+  group: exit2d-preparation-lifecycle
+  cancel-in-progress: false
+jobs:
+  preparation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Record exact source
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          git rev-parse HEAD
+      - name: Local harness contracts
+        run: |
+          python -B packaging/exit2c/test_salla_http_simulator.py
+          python -B packaging/exit2c/test_preparation_lifecycle_acceptance.py
+          python -B packaging/exit2c/test_acceptance_controller.py
+      - name: Complete isolated scenarios (current runtime guard blocks preflight)
+        run: bash packaging/exit2c/run_preparation_linux.sh

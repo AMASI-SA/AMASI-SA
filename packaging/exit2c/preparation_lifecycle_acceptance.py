@@ -1,10 +1,9 @@
 """EXIT-2D: real HTTP preparation lifecycle, memory-only controller state.
 
 Fixture writes are confined to seed_inputs, before the first HTTP phase.
-No ready batch, registry, allocation or physical piece is seeded. Source-contract
-barriers stop BEFORE endpoints known to require provider operations; those are
-failures, never simulated provider successes. Downstream phases remain unaccepted
-until the business-contract decision and real Linux execution.
+No ready batch, registry, allocation or physical piece is seeded. Provider HTTP is explicitly simulated in independent disposable instances.
+Runtime preflight remains blocked by the unchanged credential guard.
+All application phases remain unaccepted until real Linux execution.
 """
 from __future__ import annotations
 import ast
@@ -12,6 +11,8 @@ import base64
 import copy
 import hashlib
 import io
+import os
+from datetime import timedelta
 import time
 import unicodedata
 from pathlib import Path
@@ -74,11 +75,18 @@ def seed_inputs(database, state):
         require(database[name].count_documents({}) == 0)
     owner = database.users.find_one({"email": "admin@hesab.app"})
     require(owner is not None and owner["role"] == "owner")
+    scenario = os.environ.get("EXIT2D_SIM_MODE")
+    require(scenario in {"success", "deny", "unavailable"})
+    state["provider_scenario"] = scenario
     state.update(owner=owner["id"], employee="exit2d-employee", viewer="exit2d-viewer",
                  outsider="exit2d-other-owner", files=[], raw_expected={}, expected={}, images={})
     database.users.update_one({"id": state["owner"]}, {"$set": {
         "mfa_enabled": True, "mfa_totp_secret_enc": encrypt_totp_secret(a.TOTP)},
         "$unset": {"mfa_last_totp_counter": "", "password_updated_at": ""}})
+    from salla_integration.crypto import encrypt_token
+    database.salla_integrations.insert_one({"user_id": state["owner"], "status": "connected",
+        "access_token_encrypted": encrypt_token(os.environ["EXIT2D_SIM_TOKEN"]),
+        "expires_at": a.now() + timedelta(hours=1), "token_revision": 1})
     for actor, role in (("employee", "operations"), ("viewer", "viewer"), ("outsider", "owner")):
         database.users.insert_one({"id": state[actor], "email": actor + "@exit2d.example.test",
             "name": "\u0645\u0648\u0638\u0641 \u0627\u0635\u0637\u0646\u0627\u0639\u064a " + actor, "role": role, "is_active": True,
@@ -127,8 +135,8 @@ def seed_inputs(database, state):
             # Initial experiment guard only: never a reviewed/ready workflow.
             database[WORKFLOWS].insert_one({"user_id": tenant, "order_number": number,
                 "stage": "pending_review", "revision": 0, "items": [],
-                "experiment_mode": True, "salla_status_writes_allowed": False,
-                "experiment_run_id": "exit2d-local-input", "experiment_generation": 1})
+                "experiment_mode": scenario != "success", "salla_status_writes_allowed": scenario == "success",
+                **({"experiment_run_id": "exit2d-local-input", "experiment_generation": 1} if scenario != "success" else {})})
     require(all(database[n].count_documents({}) == 0 for n in GENERATED))
 
 
@@ -146,11 +154,22 @@ class Lifecycle:
         return list(self.database[collection].find({"user_id": self.state["owner"]}, {"_id": 0}))
 
     def invariant(self):
-        require(all(r.get("experiment_mode") is True and r.get("salla_status_writes_allowed") is False
+        require(all(r.get("experiment_mode") is (self.state["provider_scenario"] != "success") and r.get("salla_status_writes_allowed") is (self.state["provider_scenario"] == "success")
                     for r in self.rows(WORKFLOWS)))
         require(not self.database.backend_startup_leases_v1.find_one({
             "_id": "backend-heavy-initialization:independent-worker:singleton", "status": "running"}))
         require(self.database.salla_connections.count_documents({}) == 0)
+        require(self.database.salla_integrations.count_documents({}) == 1)
+        from salla_http_simulator import validate_addresses
+        validate_addresses(os.environ)
+
+    def provider_counts(self):
+        result = self.a.httpx.get("http://127.0.0.1:8093/__fixture__/counts", follow_redirects=False, trust_env=False, timeout=2)
+        require(result.status_code == 200)
+        counts = result.json()
+        require(counts["unexpected"] == 0)
+        self.state["simulated_provider_calls"] = counts["simulated_provider_calls"]
+        return counts
 
     def sessions(self):
         for actor in ("owner", "employee", "viewer", "outsider"):
@@ -214,10 +233,22 @@ class Lifecycle:
                 self.call("GET", image_url, actor="outsider", expected=404)
             self.call("POST", path + "/complete", actor="viewer", expected=403,
                       json={"expected_revision": detail["revision"]})
-            # Current source requires a Salla status confirmation here, even in
-            # experiment_mode. Fail before attempting it, never forge 'sent'.
-            provider_barrier("review")
-            self.call("POST", path + "/complete", json={"expected_revision": detail["revision"]})
+            # Actual application route and client. Successful provider replies
+            # are fixture-only; the denied fixtures never manufacture sent.
+            if self.state["provider_scenario"] != "success":
+                response = self.call("POST", path + "/complete", expected=502,
+                    json={"expected_revision": detail["revision"]}).json()
+                require(response["detail"]["code"] == "salla_review_status_sync_failed")
+                workflow = self.database[WORKFLOWS].find_one({"user_id": self.state["owner"], "order_number": number})
+                require(workflow["stage"] == "pending_review" and workflow.get("salla_sync_status") != "sent")
+                require(all(self.database[name].count_documents({}) == 0 for name in GENERATED))
+            else:
+                self.call("POST", path + "/complete", json={"expected_revision": detail["revision"]})
+        counts = self.provider_counts()
+        if self.state["provider_scenario"] != "success":
+            require(counts["status_writes"] == 0 and counts["denied"] >= len(ORDERS))
+        else:
+            require(counts["status_writes"] >= len(ORDERS))
         self.invariant()
 
     def catalog(self):
@@ -329,7 +360,7 @@ class Lifecycle:
         rejection = self.call("POST", "/api/reviewed-preparation-batches-v1/batches", expected=409,
                   json={"client_request_id": "exit2d-reallocate-0001", "selections": [self.state["old_selection"]]}).json()
         require(rejection["detail"]["code"] in {"reviewed_product_not_available", "reviewed_selection_stale", "preparation_quantity_exceeds_remaining"})
-        self.state["stale_revision_verified"] = rejection["detail"]["code"] == "reviewed_selection_stale"
+        self.state["allocated_unit_rejection"] = rejection["detail"]["code"]
         self.call("POST", "/api/preparation-file-safety-v1/requests/exit2d-reallocate-0001/release")
         require(self.identity() == allocated_before)
         fresh = self.catalog()
@@ -358,7 +389,11 @@ class Lifecycle:
 
     def finish(self):
         self.persistence()
-        require(self.state.get("stale_revision_verified") is True)
+        # Revision reachability remains a separate, explicitly unaccepted gate.
+        # Never turn an unavailable-unit rejection into a stale-revision claim.
+        counts = self.provider_counts()
+        require(counts["shipping_attempted"] == len(ORDERS))
+        require(counts["shipping_failed"] == len(ORDERS))
 
     def dispatch_receive(self):
         for file in self.state["files"]:
@@ -390,11 +425,16 @@ class Lifecycle:
         require(all(r["execution_status"] == "completed" for r in self.rows(REGISTRY)))
         for piece in self.rows(PIECES):
             self.call("GET", "/api/preparation-work-v1/assembly/search", params={"q": piece["order_number"]})
-            # Current HTTP route auto-issues a carrier label at final assembly.
-            # This is outside PREP-1, even if its provider failure is swallowed.
-            provider_barrier("assembly")
-            self.call("POST", "/api/preparation-work-v1/assembly/pieces/" + piece["piece_id"] + "/ready",
-                      json={"client_request_id": "assembly-" + piece["piece_id"]})
+            # The real route attempts a label. The simulator rejects its
+            # first authoritative order lookup; no shipment is fabricated.
+            result = self.call("POST", "/api/preparation-work-v1/assembly/pieces/" + piece["piece_id"] + "/ready",
+                      json={"client_request_id": "assembly-" + piece["piece_id"]}).json()
+            if result["progress"].get("order_completed"):
+                require(result["carrier_label"]["ready"] is False)
+                require(result["carrier_label"]["error_code"] == "salla_shipping_unavailable")
+        require(all(w.get("stage") == "completed" and w.get("assembly_status") == "completed" and w.get("carrier_label_ready") is False and w.get("carrier_label_status") == "failed"
+                    for w in self.rows(WORKFLOWS)))
+        self.provider_counts()
         self.invariant()
 
 

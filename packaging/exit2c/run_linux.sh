@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 mode="${1:-runtime}"
-case "$mode" in runtime|--preparation-only) ;; *) echo "FAIL controller PHASE_ORDER"; exit 2;; esac
+case "$mode" in runtime|--preparation-only|--preparation-denied) ;; *) echo "FAIL controller PHASE_ORDER"; exit 2;; esac
 accept_args=()
-if test "$mode" = --preparation-only; then accept_args=(--preparation-only); fi
+if test "$mode" != runtime; then accept_args=("$mode"); python packaging/exit2c/preparation_provider_preflight.py; fi
 # One standard Ubuntu job. Runtime cannot route outside the disposable namespace.
 docker build --no-cache -f packaging/exit2c/Dockerfile -t mezan-exit2c:candidate .
 docker build --no-cache -f packaging/exit2c/tests.Dockerfile -t mezan-exit2c:tests .
@@ -14,14 +14,15 @@ web1="exit2c-web1-$suffix"
 web2="exit2c-web2-$suffix"
 probe="exit2c-probe-$suffix"
 worker="exit2c-worker-$suffix"
+simulator="exit2d-simulator-$suffix"
 cleanup() {
   result=$?
-  if test "$result" != 0; then
+  if test "$result" != 0 && test "$mode" = runtime; then
     for name in "$web1" "$web2" "$worker"; do docker logs "$name" 2>&1 | tail -n 45 || true; done
   fi
   if test -n "${accept_in:-}"; then exec {accept_in}>&-; fi
   docker unpause "$mongo" >/dev/null 2>&1 || true
-  docker rm -f "$web1" "$web2" "$probe" "$worker" "$mongo" >/dev/null 2>&1 || true
+  docker rm -f "$web1" "$web2" "$probe" "$worker" "$simulator" "$mongo" >/dev/null 2>&1 || true
   if test -n "${accept_pid:-}"; then wait "$accept_pid" 2>/dev/null || true; fi
   if test -n "${accept_out:-}"; then exec {accept_out}<&-; fi
 }
@@ -37,6 +38,11 @@ for attempt in $(seq 1 30); do
   sleep 1
 done
 runtime=(--network "container:$mongo" --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges --pids-limit 256 --memory 3g --cpus 2)
+if test "$mode" != runtime; then
+  runtime+=(-e SALLA_API_BASE -e SALLA_AUTH_BASE -e SALLA_TOKEN_ENC_KEY -e EXIT2D_SIM_TOKEN -e EXIT2D_SIM_MODE)
+  docker run -d --name "$simulator" "${runtime[@]}" --entrypoint python mezan-exit2c:candidate /opt/acceptance/salla_http_simulator.py
+  docker exec "$simulator" python -c 'import time; time.sleep(0.2)'
+fi
 docker run -d --name "$probe" "${runtime[@]}" --entrypoint python mezan-exit2c:candidate -c 'import time; time.sleep(1200)'
 life() { docker exec "$probe" python /opt/acceptance/lifecycle.py "$1"; }
 # A single controller outlives web restarts. Pipes carry phase names/status only.
@@ -92,19 +98,19 @@ start_webs() {
       if docker exec "$probe" python -c "import urllib.request; assert urllib.request.urlopen('http://127.0.0.1:$port/api/ready',timeout=1).status==200" >/dev/null 2>&1; then ready=true; break; fi
       sleep 1
     done
-    if test "$ready" != true; then docker logs "$web1"; docker logs "$web2"; exit 1; fi
+    if test "$ready" != true; then echo "FAIL controller WEB_NOT_READY"; exit 1; fi
   done
 }
 stop_webs() {
   docker stop --time 10 "$web1" "$web2" >/dev/null
   for name in "$web1" "$web2"; do
     test "$(docker inspect -f '{{.State.ExitCode}}' "$name")" = 0
-    docker logs "$name" 2>&1 | tail -n 10
+    if test "$mode" = runtime; then docker logs "$name" 2>&1 | tail -n 10; fi
     docker rm "$name" >/dev/null
   done
 }
 
-if test "$mode" = --preparation-only; then
+if test "$mode" != runtime; then
   # No legacy ready-batch fixture and no armed worker/supervisor acceptance.
   docker run --rm "${runtime[@]}" mezan-exit2c:candidate migration
   docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2c:candidate /opt/acceptance/test_acceptance_controller.py
@@ -115,6 +121,7 @@ if test "$mode" = --preparation-only; then
   start_webs
   life no-writes
   accept prep-review
+  if test "$mode" = --preparation-only; then
   accept prep-create
   stop_webs
   start_webs
@@ -122,12 +129,18 @@ if test "$mode" = --preparation-only; then
   stop_webs
   start_webs
   accept prep-finish
+  fi
   accept finish
   exec {accept_in}>&-
   wait "$accept_pid"
   exec {accept_out}<&-
   unset accept_in accept_out accept_pid
-  echo 'PASS EXIT-2D preparation lifecycle; no worker or live provider acceptance'
+  docker exec "$probe" python /opt/acceptance/simulator_evidence.py
+  if test "$mode" = --preparation-only; then
+    echo 'PASS application lifecycle with simulated HTTP provider; stale revision remains unaccepted'
+  else
+    echo 'PASS review rejection without provider confirmation; NOT a complete lifecycle'
+  fi
   exit 0
 fi
 

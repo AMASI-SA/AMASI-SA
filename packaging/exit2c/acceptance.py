@@ -335,10 +335,10 @@ def mongo_down(state):
 
 if __name__ == "__main__":
     boundary()
-    if sys.argv[1:] == ["--preparation-only"]:
+    if sys.argv[1:] in (["--preparation-only"], ["--preparation-denied"]):
         from preparation_lifecycle_acceptance import phases
         from acceptance_controller import run
-        raise SystemExit(run(phases(), profile="preparation"))
+        raise SystemExit(run(phases(), profile="preparation-denied" if sys.argv[1] == "--preparation-denied" else "preparation"))
     if sys.argv[1:]:
         raise SystemExit(2)
     phases = {"setup": setup, "http": http, "after-restart": after_restart, "mongo-down": mongo_down}

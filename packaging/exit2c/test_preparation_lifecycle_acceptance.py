@@ -112,7 +112,7 @@ class PreparationContracts(unittest.TestCase):
 
     def test_preparation_shell_exits_before_any_legacy_fixture_or_worker(self):
         source = Path(__file__).with_name('run_linux.sh').read_text()
-        branch = source[source.index('if test "$mode" = --preparation-only; then\n  #'):source.index('\nfi\n\ndocker run --rm', source.index('if test "$mode" = --preparation-only; then\n  #'))]
+        branch = source[source.index('if test "$mode" != runtime; then\n  #'):source.index('\nfi\n\ndocker run --rm', source.index('if test "$mode" != runtime; then\n  #'))]
         self.assertNotIn('MEZAN_WORKER_ENABLED=1', branch)
         self.assertNotIn('worker_shutdown.py', branch)
         self.assertNotIn('accept setup', branch)

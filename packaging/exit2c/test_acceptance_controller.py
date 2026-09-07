@@ -158,7 +158,7 @@ class ControllerTests(unittest.TestCase):
         self.assertTrue(bash and Path(bash).is_file(), "Bash required for protocol test")
         script = Path(__file__).with_name("run_linux.sh").read_text()
         start = script.index("accept() {")
-        function = script[start:script.index("\ndocker run --rm", start)]
+        function = script[start:script.index("\nstart_webs() {", start)]
         # Shorten only this local test's wait; production keeps its 120s bound.
         function = function.replace("-t 120", "-t 0.02")
         fixtures = [

@@ -21,10 +21,10 @@ class Discard:
 
 
 def serve(phases, commands, replies, *, profile="runtime"):
-    if profile not in ("runtime", "preparation"):
+    if profile not in ("runtime", "preparation", "preparation-denied"):
         replies.write("FAIL controller PHASE_ORDER\n")
         return 1
-    ordered = PREPARATION_PHASES if profile == "preparation" else PHASES
+    ordered = PREPARATION_PHASES if profile == "preparation" else (PREPARATION_PHASES[:2] if profile == "preparation-denied" else PHASES)
     state = {}
     name = ordered[0]
     reason = "UNCLASSIFIED_FAILURE"
