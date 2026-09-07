@@ -2596,7 +2596,36 @@ def attach_campaign_ai_routes(
                 "summary": "سيظهر أول تحليل بعد اكتمال التشغيل الدوري.",
                 "recommendations": [], "next_run_at": None,
             }
-        return {"available": True, **document}
+        from campaign_ai_monthly_profit_goal_v1 import (
+            goal_context_unavailable,
+            load_goal,
+            reconcile_goal_for_display,
+        )
+        current_time = _utcnow()
+        current_month = current_time.astimezone(RIYADH_OFFSET).date()
+        try:
+            current_goal = await load_goal(
+                db,
+                user_id,
+                ensure_index=False,
+            )
+            display_goal = reconcile_goal_for_display(
+                current_goal=current_goal,
+                snapshot_goal=document.get("monthly_profit_goal"),
+                current_month=current_month,
+                current_time=current_time,
+                snapshot_next_run_at=document.get("next_run_at"),
+            )
+        except Exception as exc:
+            display_goal = goal_context_unavailable(
+                end=current_month,
+                reason=f"goal_config_read_failed:{type(exc).__name__}",
+            )
+        return {
+            "available": True,
+            **document,
+            "monthly_profit_goal": display_goal,
+        }
 
     @router.get("/ai-monitor/history")
     async def campaign_recommendation_history(

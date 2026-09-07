@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
     AlertTriangle,
@@ -17,6 +17,11 @@ import {
 } from "lucide-react";
 
 import api from "../lib/api";
+import {
+    GOAL_PROGRESS_MESSAGES,
+    monthlyProfitGoalView,
+    shouldApplyGoalRead,
+} from "../lib/monthlyProfitGoalView";
 
 const LEGACY_ACTIONS = {
     pause: { label: "إيقاف مقترح", tone: "border-red-200 bg-red-50 text-red-700" },
@@ -129,6 +134,7 @@ const GOAL_STATUS = {
     behind_target: { label: "متأخر عن الهدف", tone: "border-red-200 bg-red-50 text-red-800" },
     on_track: { label: "على المسار المطلوب", tone: "border-amber-200 bg-amber-50 text-amber-800" },
     minimum_target_covered: { label: "الحد الأدنى مغطى", tone: "border-emerald-200 bg-emerald-50 text-emerald-800" },
+    profit_accounting_incomplete: { label: "الربح محسوب والجودة غير مكتملة", tone: "border-amber-200 bg-amber-50 text-amber-800" },
     profit_data_unavailable: { label: "بيانات الربح غير مكتملة", tone: "border-slate-200 bg-slate-50 text-slate-700" },
     goal_context_unavailable: { label: "تعذر حساب تقدم الهدف", tone: "border-slate-200 bg-slate-50 text-slate-700" },
 };
@@ -160,6 +166,25 @@ function dateTime(value) {
         minute: "2-digit",
         hour12: true,
     }).format(date);
+}
+
+function evidenceAge(seconds) {
+    if (
+        seconds === null
+        || seconds === undefined
+        || typeof seconds === "boolean"
+        || (typeof seconds === "string" && seconds.trim() === "")
+        || (typeof seconds !== "number" && typeof seconds !== "string")
+    ) return "غير معروف";
+    const value = Number(seconds);
+    if (!Number.isFinite(value) || value < 0) return "غير معروف";
+    if (value < 60) return "أقل من دقيقة";
+    const minutes = Math.floor(value / 60);
+    if (minutes < 60) return minutes === 1 ? "دقيقة" : minutes === 2 ? "دقيقتان" : `${minutes} دقيقة`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return hours === 1 ? "ساعة" : hours === 2 ? "ساعتان" : `${hours} ساعات`;
+    const days = Math.floor(hours / 24);
+    return days === 1 ? "يوم" : days === 2 ? "يومان" : `${days} أيام`;
 }
 
 function actualAction(item) {
@@ -200,25 +225,70 @@ function MetricCard({ icon: Icon, label, value, tone }) {
     </div>;
 }
 
-function GoalCard({ goal, goalInput, setGoalInput, saving, onSave }) {
+export function GoalCard({ goal, goalInput, setGoalInput, saving, onSave, saveNotice = "" }) {
     const status = GOAL_STATUS[goal?.status] || GOAL_STATUS.profit_data_unavailable;
     const hasProgress = goal?.progress_available === true;
+    const rawTarget = goal?.minimum_net_profit_sar;
+    const target = rawTarget === null || rawTarget === undefined || rawTarget === ""
+        ? null
+        : Number(rawTarget);
+    const progressMessage = Object.prototype.hasOwnProperty.call(
+        GOAL_PROGRESS_MESSAGES,
+        goal?.progress_state,
+    )
+        ? GOAL_PROGRESS_MESSAGES[goal.progress_state]
+        : "لم تتوفر نتيجة تقدم موثوقة لهذا الشهر.";
+    const evidence = goal?.evidence;
+    const evidencePeriod = evidence?.period;
+    const periodLabel = evidencePeriod?.from && evidencePeriod?.to
+        ? `${evidencePeriod.from} → ${evidencePeriod.to}`
+        : "غير معروفة";
+    const watermarkLabel = evidence?.data_through
+        ? `حتى ${evidence.data_through}`
+        : "غير معروفة";
+    const accountingQuality = evidence?.accounting_quality === "complete"
+        ? "مكتملة"
+        : evidence?.accounting_quality === "incomplete"
+            ? "غير مكتملة"
+            : "غير معروفة";
+    const calculationFailed = goal?.progress_state === "calculation_failed"
+        && goal?.progress_available === false
+        && goal?.calculation_diagnostic?.state === "failed"
+        && /^month_to_date_profit_failed:[A-Za-z_][A-Za-z0-9_]{0,99}$/.test(
+            goal?.calculation_diagnostic?.reason || "",
+        );
+    const evidenceValidity = evidence?.valid === true
+        ? "صالحة وحديثة"
+        : evidence?.freshness_status === "stale"
+            ? "قديمة وغير صالحة"
+            : evidence?.freshness_status === "unknown"
+                ? "غير مكتملة"
+                : "غير صالحة";
     return <section className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm" data-testid="monthly-profit-goal-card">
         <div className="flex flex-wrap items-center justify-between gap-3 bg-emerald-700 px-5 py-4 text-white">
             <div>
                 <h2 className="flex items-center gap-2 text-base font-black"><TrendingUp className="h-5 w-5" />هدف صافي الربح لهذا الشهر</h2>
                 <p className="mt-1 text-[10px] font-bold text-emerald-100">هذا هو الهدف الذي يدير الذكاء الحملات من أجله. أرقام الإعلان وسائل للوصول إليه وليست الهدف نفسه.</p>
             </div>
-            <span className={`rounded-full border px-3 py-1 text-[10px] font-black ${status.tone}`}>{hasProgress ? status.label : "سيُحسب التقدم في دورة التحليل القادمة"}</span>
+            <span className={`rounded-full border px-3 py-1 text-[10px] font-black ${status.tone}`}>{hasProgress ? status.label : progressMessage}</span>
         </div>
         <div className="p-4">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-                <div className="rounded-xl bg-slate-50 p-3"><p className="text-[9px] font-black text-slate-500">الحد الأدنى المطلوب</p><p className="mt-1 text-lg font-black text-slate-900">{money(goal?.minimum_net_profit_sar || 100000)} ر.س</p></div>
+                <div className="rounded-xl bg-slate-50 p-3"><p className="text-[9px] font-black text-slate-500">الحد الأدنى المطلوب</p><p className="mt-1 text-lg font-black text-slate-900">{Number.isFinite(target) ? `${money(target)} ر.س` : "—"}</p></div>
                 <div className="rounded-xl bg-slate-50 p-3"><p className="text-[9px] font-black text-slate-500">صافي الربح حتى الآن</p><p className="mt-1 text-lg font-black text-slate-900">{hasProgress ? `${money(goal.net_profit_to_date_sar)} ر.س` : "بانتظار الحساب"}</p></div>
                 <div className="rounded-xl bg-slate-50 p-3"><p className="text-[9px] font-black text-slate-500">المتبقي للهدف</p><p className="mt-1 text-lg font-black text-slate-900">{hasProgress ? `${money(goal.remaining_to_target_sar)} ر.س` : "—"}</p></div>
                 <div className="rounded-xl bg-slate-50 p-3"><p className="text-[9px] font-black text-slate-500">الأيام المتبقية</p><p className="mt-1 text-lg font-black text-slate-900">{hasProgress ? goal.days_remaining : "—"}</p></div>
                 <div className="rounded-xl bg-slate-50 p-3"><p className="text-[9px] font-black text-slate-500">المطلوب يوميًا</p><p className="mt-1 text-lg font-black text-slate-900">{hasProgress ? `${money(goal.required_daily_net_profit_sar)} ر.س` : "—"}</p></div>
                 <div className="rounded-xl bg-slate-50 p-3"><p className="text-[9px] font-black text-slate-500">المتوقع نهاية الشهر</p><p className="mt-1 text-lg font-black text-slate-900">{hasProgress ? `${money(goal.projected_month_end_net_profit_sar)} ر.س` : "—"}</p></div>
+            </div>
+            {progressMessage && <p className="mt-3 text-[10px] font-bold text-amber-700" data-testid="monthly-profit-goal-progress-state">{progressMessage}</p>}
+            {calculationFailed && <p className="mt-2 text-[10px] font-bold text-red-700" data-testid="monthly-profit-goal-calculation-diagnostic">نتيجة الحساب: تعذر حساب ربح الشهر من المصدر المحاسبي.</p>}
+            <div className="mt-3 grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-[10px] font-bold text-slate-600 sm:grid-cols-2 lg:grid-cols-4" data-testid="monthly-profit-goal-evidence">
+                <p>فترة دليل الربح: <span dir="ltr">{periodLabel}</span>{evidencePeriod?.timezone ? ` (${evidencePeriod.timezone})` : ""}</p>
+                <p>حُسب الدليل: <span dir="ltr">{evidence?.calculated_at ? dateTime(evidence.calculated_at) : "غير معروف"}</span> · عمر الدليل: {evidenceAge(evidence?.age_seconds)}</p>
+                <p>تغطية المصدر: {watermarkLabel}</p>
+                <p>جودة المحاسبة: {accountingQuality}</p>
+                <p>صلاحية دليل التقدم: {evidenceValidity}</p>
             </div>
             <div className="mt-3 flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <label className="min-w-[220px] flex-1 text-[10px] font-black text-slate-600">تغيير الحد الأدنى الشهري
@@ -226,6 +296,7 @@ function GoalCard({ goal, goalInput, setGoalInput, saving, onSave }) {
                 </label>
                 <button type="button" onClick={onSave} disabled={saving || !Number(goalInput)} className="rounded-xl bg-emerald-700 px-4 py-2 text-xs font-black text-white disabled:bg-slate-300">{saving ? "جارٍ الحفظ…" : "حفظ الهدف"}</button>
             </div>
+            {saveNotice && <p className="mt-2 text-[10px] font-bold text-emerald-700" data-testid="monthly-profit-goal-save-notice">{saveNotice}</p>}
         </div>
     </section>;
 }
@@ -300,29 +371,55 @@ export default function CampaignRecommendations() {
     const [actionType, setActionType] = useState("all");
     const [productAlerts, setProductAlerts] = useState(null);
     const [goal, setGoal] = useState(null);
-    const [goalInput, setGoalInput] = useState("100000");
+    const [goalInput, setGoalInput] = useState("");
     const [savingGoal, setSavingGoal] = useState(false);
+    const [goalSaveNotice, setGoalSaveNotice] = useState("");
+    const loadRequestRef = useRef(0);
+    const goalMutationVersionRef = useRef(0);
 
     const load = useCallback(async () => {
+        const requestId = ++loadRequestRef.current;
+        const mutationVersionAtStart = goalMutationVersionRef.current;
         setError("");
-        try {
-            const [latest, watch, goalConfig] = await Promise.all([
+        const [latestResult, watchResult, goalConfigResult] = await Promise.allSettled([
                 api.get("/ads-manager/ai-monitor/latest"),
-                api.get("/ads-manager/ai-monitor/product-watch/alerts?status=active&limit=20").catch(() => ({ data: null })),
-                api.get("/ads-manager/ai-monitor/monthly-profit-goal").catch(() => ({ data: { minimum_net_profit_sar: 100000, configured: false } })),
+                api.get("/ads-manager/ai-monitor/product-watch/alerts?status=active&limit=20"),
+                api.get("/ads-manager/ai-monitor/monthly-profit-goal"),
             ]);
-            setSnapshot(latest.data);
-            setProductAlerts(watch.data);
-            const mergedGoal = latest.data?.monthly_profit_goal
-                ? { ...goalConfig.data, ...latest.data.monthly_profit_goal }
-                : goalConfig.data;
-            setGoal(mergedGoal);
-            setGoalInput(String(mergedGoal?.minimum_net_profit_sar || 100000));
-        } catch {
+        if (requestId !== loadRequestRef.current) return;
+
+        const latestReadFailed = latestResult.status === "rejected";
+        const configReadFailed = goalConfigResult.status === "rejected";
+        const latest = latestReadFailed ? null : latestResult.value.data;
+        const goalConfig = configReadFailed ? null : goalConfigResult.value.data;
+        setSnapshot(latest);
+        setProductAlerts(watchResult.status === "fulfilled" ? watchResult.value.data : null);
+        if (latestReadFailed) {
             setError("تعذّر قراءة توصيات الحملات الآن. حاول التحديث بعد قليل.");
-        } finally {
-            setLoading(false);
         }
+        if (shouldApplyGoalRead({
+            requestId,
+            latestRequestId: loadRequestRef.current,
+            mutationVersionAtStart,
+            currentMutationVersion: goalMutationVersionRef.current,
+        })) {
+            const displayGoal = monthlyProfitGoalView({
+                goalConfig,
+                snapshotGoal: latest?.monthly_profit_goal,
+                latestReadFailed,
+                configReadFailed,
+            });
+            setGoal(displayGoal);
+            setGoalInput(
+                displayGoal?.minimum_net_profit_sar !== null
+                    && displayGoal?.minimum_net_profit_sar !== undefined
+                    && displayGoal?.minimum_net_profit_sar !== ""
+                    && Number.isFinite(Number(displayGoal.minimum_net_profit_sar))
+                    ? String(displayGoal.minimum_net_profit_sar)
+                    : "",
+            );
+        }
+        setLoading(false);
     }, []);
 
     useEffect(() => {
@@ -334,14 +431,24 @@ export default function CampaignRecommendations() {
     const saveGoal = async () => {
         const value = Number(goalInput);
         if (!Number.isFinite(value) || value < 1000) return;
+        goalMutationVersionRef.current += 1;
+        loadRequestRef.current += 1;
         setSavingGoal(true);
+        setGoalSaveNotice("");
         try {
             const { data } = await api.put("/ads-manager/ai-monitor/monthly-profit-goal", { minimum_net_profit_sar: value });
-            setGoal((current) => ({ ...(current || {}), ...data, progress_available: false }));
+            setGoal(data);
             setGoalInput(String(data.minimum_net_profit_sar));
+            setGoalSaveNotice(
+                data?.goal_config_saved === true && data?.progress_available !== true
+                    ? "تم حفظ الهدف، لكن تعذر عرض التقدم الحالي. سيظهر عند توفر دليل صالح."
+                    : "تم حفظ الهدف.",
+            );
         } catch (requestError) {
             window.alert(requestError?.response?.data?.detail?.message || "تعذّر حفظ هدف صافي الربح.");
         } finally {
+            goalMutationVersionRef.current += 1;
+            loadRequestRef.current += 1;
             setSavingGoal(false);
         }
     };
@@ -404,7 +511,7 @@ export default function CampaignRecommendations() {
                 <button type="button" onClick={load} disabled={loading} className="flex items-center gap-2 rounded-xl bg-violet-700 px-4 py-2 text-xs font-extrabold text-white disabled:bg-slate-300"><RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />تحديث</button>
             </div>
 
-            <GoalCard goal={goal} goalInput={goalInput} setGoalInput={setGoalInput} saving={savingGoal} onSave={saveGoal} />
+            <GoalCard goal={goal} goalInput={goalInput} setGoalInput={setGoalInput} saving={savingGoal} onSave={saveGoal} saveNotice={goalSaveNotice} />
 
             <section className="overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-violet-800 bg-violet-700 px-5 py-4 text-white">

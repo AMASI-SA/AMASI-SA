@@ -23,6 +23,7 @@ from typing import Any, Callable
 
 import campaign_ai_monitor_legacy as _legacy
 import campaign_ai_execution_quality_gate as _execution_quality
+import campaign_ai_monthly_profit_goal_v1 as _monthly_goal
 from integrations_control_center.snapchat_account_timezone_manager import (
     ACCOUNT_LOCAL_SOURCE_MODE,
     SNAPCHAT_ACCOUNT_LOCAL_PERFORMANCE_COLLECTION,
@@ -1152,9 +1153,36 @@ async def run_campaign_ai_monitor(
             business_profit = {
                 "available": False,
                 "reason": "dashboard_profit_context_failed",
+                "analysis_status": "failed",
             }
-
-        if not candidates:
+        business_profit_context_status = str(
+            business_profit.get("analysis_status")
+            or ("complete" if business_profit.get("available") is True else "unavailable")
+        )
+        if business_profit_context_status == "failed" and not any(
+            item.get("source") == "mezan_business_profit" for item in errors
+        ):
+            errors.append({
+                "source": "mezan_business_profit",
+                "code": _legacy._text(
+                    business_profit.get("analysis_error_code") or "window_failed",
+                    limit=100,
+                ),
+            })
+        if business_profit_context_status == "failed":
+            recommendation_source = "analysis_incomplete"
+            result = RecommendationOutput(
+                summary=(
+                    "تعذر إكمال تحليل نوافذ ربح المتجر؛ حُفظ تقدم الهدف بصورة مستقلة "
+                    "ولم تُنشأ توصيات قابلة للتنفيذ من هذا التحليل الناقص."
+                ),
+                recommendations=[],
+                limitations=list(dict.fromkeys([
+                    "mezan_business_profit",
+                    *[item["source"] for item in errors],
+                ])),
+            )
+        elif not candidates:
             recommendation_source = "none"
             result = RecommendationOutput(
                 summary=(
@@ -1335,6 +1363,18 @@ async def run_campaign_ai_monitor(
                 execution_target["execution_quality"] = quality_evidence
                 execution_targets[item.recommendation_id] = execution_target
 
+        raw_goal_context = business_profit.get("monthly_profit_goal")
+        if not isinstance(raw_goal_context, dict):
+            raw_goal_context = _monthly_goal.goal_context_unavailable(
+                end=end,
+                reason="monthly_goal_context_missing",
+            )
+        snapshot_goal_context = _monthly_goal.with_snapshot_provenance(
+            raw_goal_context,
+            run_id=run_id,
+            snapshot_id=snapshot_id,
+            snapshot_generated_at=snapshot_generated_at,
+        )
         document = {
             "snapshot_id": snapshot_id,
             "run_id": run_id,
@@ -1363,6 +1403,8 @@ async def run_campaign_ai_monitor(
             "business_profit_context_available": bool(
                 business_profit.get("available")
             ),
+            "business_profit_context_status": business_profit_context_status,
+            "monthly_profit_goal": snapshot_goal_context,
             "experiment_context_count": len(experiments.get("experiments") or []),
             "source_contract": {
                 "snapchat_entity_metrics": SNAPCHAT_AI_PLATFORM_SOURCE,
