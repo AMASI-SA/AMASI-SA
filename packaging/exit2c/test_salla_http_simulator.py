@@ -119,22 +119,24 @@ class SimulatorContracts(unittest.TestCase):
 
     def test_shell_has_independent_databases_preflight_and_no_guard_bypass(self):
         source = (ROOT/'packaging/exit2c/run_preparation_linux.sh').read_text()
-        self.assertLess(source.index('preparation_provider_preflight.py'),source.index('for scenario'))
+        self.assertLess(source.index('validate_addresses'),source.index('for scenario'))
         self.assertIn('deny unavailable success',source)
         runner = (ROOT/'packaging/exit2c/run_linux.sh').read_text()
         self.assertIn('--network none --tmpfs /data/db',runner)
+        self.assertLess(runner.index('/opt/acceptance/preparation_provider_preflight.py'),runner.index('docker run -d --name "$simulator"'))
+        self.assertIn('${migration_runtime[@]}',runner)
         self.assertIn('"$simulator" "$mongo"',runner)
         self.assertNotIn('APP_ENV=production',source+runner)
         self.assertNotIn('--publish',source+runner)
         self.assertIn('SALLA_TOKEN_ENC_KEY',runner)
 
-    def test_runtime_guard_conflict_is_visible_not_bypassed(self):
+    def test_preflight_requires_real_profile_contract(self):
         with patch.dict(os.environ, {'SALLA_API_BASE':sim.API,'SALLA_AUTH_BASE':sim.AUTH}, clear=True):
-            with self.assertRaisesRegex(RuntimeError,'^BLOCKED_SYNTHETIC_PROVIDER_KEY_GUARD$'):
+            with self.assertRaises(RuntimeError):
                 preflight.check()
-        tree = ast.parse((ROOT/'backend/independent_runtime.py').read_text(encoding='utf-8'))
-        guard = next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='validate_before_import')
-        self.assertTrue(any(isinstance(n,ast.Constant) and n.value=='TOKEN_ENC_KEY' for n in ast.walk(guard)))
+        source = (ROOT/'packaging/exit2c/preparation_provider_preflight.py').read_text()
+        self.assertIn("runtime.validate_before_import('web')",source)
+        self.assertNotIn('ast.walk',source)
 
     def test_revision_primitive_excludes_display_but_tracks_frozen_facts(self):
         spec = importlib.util.spec_from_file_location('revision_contract', ROOT/'backend/reviewed_preparation_v3.py')

@@ -3,7 +3,7 @@ set -euo pipefail
 mode="${1:-runtime}"
 case "$mode" in runtime|--preparation-only|--preparation-denied) ;; *) echo "FAIL controller PHASE_ORDER"; exit 2;; esac
 accept_args=()
-if test "$mode" != runtime; then accept_args=("$mode"); python packaging/exit2c/preparation_provider_preflight.py; fi
+if test "$mode" != runtime; then accept_args=("$mode"); fi
 # One standard Ubuntu job. Runtime cannot route outside the disposable namespace.
 docker build --no-cache -f packaging/exit2c/Dockerfile -t mezan-exit2c:candidate .
 docker build --no-cache -f packaging/exit2c/tests.Dockerfile -t mezan-exit2c:tests .
@@ -38,8 +38,10 @@ for attempt in $(seq 1 30); do
   sleep 1
 done
 runtime=(--network "container:$mongo" --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges --pids-limit 256 --memory 3g --cpus 2)
+migration_runtime=("${runtime[@]}")
 if test "$mode" != runtime; then
-  runtime+=(-e SALLA_API_BASE -e SALLA_AUTH_BASE -e SALLA_TOKEN_ENC_KEY -e EXIT2D_SIM_TOKEN -e EXIT2D_SIM_MODE)
+  runtime+=(-e MEZAN_ACCEPTANCE_PROFILE -e SALLA_API_BASE -e SALLA_AUTH_BASE -e SALLA_TOKEN_ENC_KEY -e EXIT2D_SIM_TOKEN -e EXIT2D_SIM_MODE)
+  docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2c:candidate /opt/acceptance/preparation_provider_preflight.py
   docker run -d --name "$simulator" "${runtime[@]}" --entrypoint python mezan-exit2c:candidate /opt/acceptance/salla_http_simulator.py
   docker exec "$simulator" python -c 'import time; time.sleep(0.2)'
 fi
@@ -112,7 +114,7 @@ stop_webs() {
 
 if test "$mode" != runtime; then
   # No legacy ready-batch fixture and no armed worker/supervisor acceptance.
-  docker run --rm "${runtime[@]}" mezan-exit2c:candidate migration
+  docker run --rm "${migration_runtime[@]}" mezan-exit2c:candidate migration
   docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2c:candidate /opt/acceptance/test_acceptance_controller.py
   docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2c:candidate /opt/acceptance/test_preparation_lifecycle_acceptance.py
   start_acceptance

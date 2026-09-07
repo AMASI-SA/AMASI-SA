@@ -21,10 +21,13 @@ jobs:
         run: |
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
           git rev-parse HEAD
+      - name: Install local crypto test dependency
+        run: python -m pip install --disable-pip-version-check cryptography==50.0.0
       - name: Local harness contracts
         run: |
+          python -B packaging/exit2c/test_simulator_runtime_boundary.py
           python -B packaging/exit2c/test_salla_http_simulator.py
           python -B packaging/exit2c/test_preparation_lifecycle_acceptance.py
           python -B packaging/exit2c/test_acceptance_controller.py
-      - name: Complete isolated scenarios (current runtime guard blocks preflight)
+      - name: Complete isolated scenarios with real runtime preflight
         run: bash packaging/exit2c/run_preparation_linux.sh

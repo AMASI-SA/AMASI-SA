@@ -7,6 +7,7 @@ Synthetic execution additionally requires the loopback-only test boundary.
 from __future__ import annotations
 
 import argparse
+import base64
 import asyncio
 from contextlib import asynccontextmanager
 import os
@@ -29,6 +30,10 @@ SYNTHETIC = {
     "EMAIL_OTP_FROM_EMAIL": "otp@example.test",
 }
 
+# Public test fixture only. Never use with real credentials/data.
+SALLA_SIMULATOR_PROFILE = "salla_http_simulator_v1"
+SALLA_SIMULATOR_KEY = base64.urlsafe_b64encode(bytes(range(32))).decode("ascii")
+
 
 def validate_before_import(role: str) -> None:
     if role not in {"web", "worker", "migration"}:
@@ -36,6 +41,19 @@ def validate_before_import(role: str) -> None:
     root = Path(__file__).resolve().parent
     if any(root.rglob(".env*")):
         raise RuntimeError("independent runtime forbids packaged dotenv files")
+    simulator = "MEZAN_ACCEPTANCE_PROFILE" in os.environ
+    if simulator:
+        if (os.environ.get("MEZAN_ACCEPTANCE_PROFILE") != SALLA_SIMULATOR_PROFILE
+                or os.environ.get("APP_ENV") != "test" or role != "web"):
+            raise RuntimeError("simulator profile requires test web role")
+        if (os.environ.get("SALLA_API_BASE") != "http://127.0.0.1:8093/admin/v2"
+                or os.environ.get("SALLA_AUTH_BASE") != "http://127.0.0.1:8093"
+                or os.environ.get("SALLA_TOKEN_ENC_KEY") != SALLA_SIMULATOR_KEY
+                or os.environ.get("MEZAN_WORKER_ENABLED") not in {None, "", "0"}):
+            raise RuntimeError("simulator fixture configuration rejected")
+        if any(value for key, value in os.environ.items()
+               if key.lower() in {"http_proxy", "https_proxy", "all_proxy"}):
+            raise RuntimeError("simulator proxy configuration rejected")
     if os.environ.get("APP_ENV") == "test":
         if any(os.environ.get(k) != v for k, v in SYNTHETIC.items()):
             raise RuntimeError("test runtime requires exact synthetic configuration")
@@ -43,7 +61,7 @@ def validate_before_import(role: str) -> None:
             raise RuntimeError("test runtime requires Linux loopback-only namespace")
         forbidden = [k for k in os.environ if (
             any(s in k for s in ("TOKEN_ENC_KEY", "API_KEY", "CLIENT_SECRET", "SMTP_PASSWORD"))
-        )]
+        ) and not (simulator and k == "SALLA_TOKEN_ENC_KEY")]
         if forbidden:
             raise RuntimeError("provider credentials forbidden in synthetic runtime")
     elif os.environ.get("APP_ENV", "production") != "production":

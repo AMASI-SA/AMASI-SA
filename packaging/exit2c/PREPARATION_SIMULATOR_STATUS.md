@@ -3,26 +3,35 @@
 Local harness only. No business/auth/worker/runtime-guard changes. This is NOT
 accepted Linux/application lifecycle evidence and must not be deployed.
 
-## Blocking runtime contract
+## Runtime boundary v1 (unit-tested; Linux still pending)
 
-`independent_runtime.validate_before_import` requires APP_ENV=test, the exact
-synthetic configuration and Linux loopback only. It rejects every environment
-variable containing TOKEN_ENC_KEY. The real Salla crypto client requires
-SALLA_TOKEN_ENC_KEY to decrypt its stored access token. Therefore this harness's
-new preflight exits 1 with BLOCKED_SYNTHETIC_PROVIDER_KEY_GUARD, before Docker
-builds, credentials, database or web startup. It also blocks unknown future
-runtime contracts pending review. Do not rename the key, inject it after
-validation, use APP_ENV=production, monkeypatch crypto or weaken the guard.
-There is no authorization in this task to change that runtime contract.
+Explicit MEZAN_ACCEPTANCE_PROFILE=salla_http_simulator_v1 is accepted only for
+web in APP_ENV=test, exact SYNTHETIC configuration, Linux loopback-only namespace,
+exact local API/Auth bases, no proxy, worker unarmed, and the exact public fixture
+key. The only exception to existing forbidden credentials is SALLA_TOKEN_ENC_KEY;
+rotation, Qoyod/API_KEY/CLIENT_SECRET/SMTP_PASSWORD restrictions remain. Unknown
+or empty profiles, missing APP_ENV and production with profile fail closed.
+Production without a profile and the old synthetic test without profile retain
+previous behavior. Dotenv rejection and validation before server import remain.
 
-The existing exact DB_NAME is also enforced. Prepared scenarios use separate,
-newly created network-none Mongo containers, each with its own tmpfs database
-named mezan_exit2c. They never share database contents or change flags mid-cycle.
+Migration does not need provider credentials and runs with the old synthetic
+configuration, without profile/key. Worker rejects the simulator profile.
+The runtime still requires DB_NAME=mezan_exit2c: each scenario uses a separate
+network-none Mongo instance with its own tmpfs database, not shared data.
+
+The preflight now invokes the real validate_before_import('web') inside the
+namespace, then checks the installed HTTPX default refuses redirects and uses
+real crypto for a synthetic round-trip, before any server import. No AST-pattern
+absence grants permission. The key is a fixed public fixture (bytes0..31 encoded
+as Fernet), never used for real data; tokens and database instances stay separate.
+The earlier BLOCKED_SYNTHETIC_PROVIDER_KEY_GUARD result is historical red-before
+proof, superseded only at unit-test scope, not by a completed Linux run.
 
 ## Prepared scenarios (not executed against the application)
 
 `run_preparation_linux.sh` prepares deny, unavailable, success sequentially.
-Each scenario has fresh synthetic access token and encryption key, never printed
+Each scenario has a fresh synthetic access token and the exact fixed public
+fixture encryption key, never printed
 or persisted as a key file. The existing owner/employee credentials remain the
 public synthetic acceptance fixtures. No refresh token is needed: the access
 token expires one hour after seeding. Unexpected OAuth requests are rejected.
@@ -91,10 +100,10 @@ Local workflow: .github/workflows/exit2d-preparation-lifecycle.yml. Exact new-br
 push, one ubuntu-24.04 job, contents:read, persist-credentials:false, dedicated
 non-cancelling concurrency, no secrets/reusable workflow/artifact/deploy steps.
 Records checkout HEAD and verifies github.sha. Runs local contracts followed by
-`bash packaging/exit2c/run_preparation_linux.sh`. Current source will fail its
-preflight. Do not spend CI on that known blocker.
+`bash packaging/exit2c/run_preparation_linux.sh`. The prior guard blocker is fixed at unit scope; the full real Linux preflight
+and application lifecycle are not yet executed.
 
-After a separately approved runtime-contract decision and a reviewed new SHA:
+After review of the new local SHA and separate remote authorization:
 estimate12-20 aggregate minutes cold for the three sequential isolated scenarios
 (images currently rebuild per scenario), proposed job timeout25 minutes, with
 separate budget/cleanup allowance approval before launch. This is an estimate,

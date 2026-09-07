@@ -18,7 +18,7 @@ STATUS = {
 def validate_addresses(env):
     if env.get("SALLA_API_BASE") != API or env.get("SALLA_AUTH_BASE") != AUTH:
         raise ValueError("SIMULATOR_ADDRESS_REJECTED")
-    if any(env.get(k) for k in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy")):
+    if any(value for key, value in env.items() if key.lower() in {"http_proxy", "https_proxy", "all_proxy"}):
         raise ValueError("SIMULATOR_PROXY_REJECTED")
 
 
