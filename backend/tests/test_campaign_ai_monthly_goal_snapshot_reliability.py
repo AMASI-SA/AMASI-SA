@@ -232,6 +232,174 @@ async def test_monthly_goal_is_in_initial_snapshot_and_latest_without_second_pat
 
 
 @pytest.mark.asyncio
+async def test_calculation_failure_survives_snapshot_latest_and_put_without_exposing_raw_error(monkeypatch):
+    install_empty_monitor_sources(monkeypatch)
+    fixed_now = datetime(2026, 9, 7, 10, tzinfo=timezone.utc)
+    monkeypatch.setattr(goal, "_now", lambda: fixed_now.isoformat())
+    monkeypatch.setattr(goal, "_utcnow", lambda: fixed_now)
+    monkeypatch.setattr(monitor._legacy, "_utcnow", lambda: fixed_now)
+    db = MemoryDB({goal.COLLECTION: MemoryCollection([goal_row()])})
+
+    async def loader(**_kwargs):
+        raise RuntimeError("raw-provider-customer-detail-must-not-survive")
+
+    result = await monitor.run_campaign_ai_monitor(
+        db,
+        "u1",
+        now=lambda: fixed_now,
+        refresh_meta=False,
+        business_context_loader=loader,
+    )
+    snapshots = db[monitor.RECOMMENDATION_COLLECTION]
+    assert len(snapshots.insert_history) == 1
+    inserted = snapshots.insert_history[0]
+    stored_goal = inserted["monthly_profit_goal"]
+    expected_reason = "month_to_date_profit_failed:RuntimeError"
+    assert stored_goal["progress_state"] == "calculation_failed"
+    assert stored_goal["progress_unavailable_reason"] == expected_reason
+    assert stored_goal["calculated_at"] is None
+    assert stored_goal["calculation_diagnostic"] == {
+        "state": "failed",
+        "reason": expected_reason,
+        "attempted_at": fixed_now.isoformat(),
+    }
+    assert "raw-provider-customer-detail" not in json.dumps(inserted)
+    assert result["monthly_profit_goal"] == stored_goal
+
+    router = APIRouter()
+    goal.attach_monthly_profit_goal_routes(router, db, lambda: None, lambda user: user)
+    monitor.attach_campaign_ai_routes(router, db, lambda: None, lambda user: user)
+    latest = next(route.endpoint for route in router.routes if route.path == "/ai-monitor/latest")
+    put = next(
+        route.endpoint for route in router.routes
+        if route.path == "/ai-monitor/monthly-profit-goal" and "PUT" in route.methods
+    )
+
+    latest_goal = (await latest(user={"id": "u1"}))["monthly_profit_goal"]
+    saved_goal = await put(
+        goal.MonthlyProfitGoalInput(minimum_net_profit_sar=125_000.0),
+        user={"id": "u1"},
+    )
+    for display in (latest_goal, saved_goal):
+        assert display["progress_state"] == "calculation_failed"
+        assert display["progress_unavailable_reason"] == expected_reason
+        assert display["progress_available"] is False
+        assert display["net_profit_to_date_sar"] is None
+        assert display["remaining_to_target_sar"] is None
+        assert display["required_daily_net_profit_sar"] is None
+        assert display["projected_month_end_net_profit_sar"] is None
+        assert display["scale_execution_allowed_by_profit_accounting"] is False
+        assert display["calculation_diagnostic"]["reason"] == expected_reason
+        assert display["calculation_diagnostic"]["freshness_status"] == "fresh"
+        assert display["calculation_diagnostic"]["current_period"] is True
+        assert display["evidence"]["valid"] is False
+        assert display["evidence"]["validation_reason"] == (
+            "monthly_goal_snapshot_calculated_at_missing_or_invalid"
+        )
+    assert saved_goal["goal_config_saved"] is True
+    assert saved_goal["minimum_net_profit_sar"] == 125_000.0
+    assert snapshots.update_history == []
+
+
+def test_old_other_month_and_corrupt_failure_claims_remain_blocked_but_safe_diagnostic_survives():
+    current = goal.with_goal_config_identity({
+        "minimum_net_profit_sar": 100_000.0,
+        "configured": True,
+        "source": "owner_configured",
+        "updated_at": "2026-09-07T07:00:00+00:00",
+    })
+    failed = goal._derive_goal_progress(
+        goal=current,
+        month_to_date={
+            "available": False,
+            "reason": "month_to_date_profit_failed:RuntimeError",
+            "from": "2026-09-01",
+            "to": "2026-09-07",
+            "timezone": "Asia/Riyadh",
+            "calculated_at": None,
+            "calculation_attempted_at": "2026-09-06T00:00:00+00:00",
+            "data_through": None,
+            "data_through_status": "source_watermark_unavailable",
+        },
+        end=date(2026, 9, 7),
+    )
+    prior_output = deepcopy(failed)
+    prior_output.pop("calculation_diagnostic")
+    prior_output["calculation_attempted_at"] = "2026-09-07T10:00:00+00:00"
+    prior_output["month_to_date"]["calculation_attempted_at"] = (
+        "2026-09-07T10:00:00+00:00"
+    )
+    compatible = goal.reconcile_goal_for_display(
+        current_goal=current,
+        snapshot_goal=prior_output,
+        current_month=date(2026, 9, 7),
+        current_time=datetime(2026, 9, 7, 10, tzinfo=timezone.utc),
+        snapshot_next_run_at="2026-09-07T13:00:00+00:00",
+    )
+    assert compatible["progress_state"] == "calculation_failed"
+    assert compatible["progress_unavailable_reason"] == (
+        "month_to_date_profit_failed:RuntimeError"
+    )
+    assert compatible["calculation_diagnostic"]["attempted_at"] == (
+        "2026-09-07T10:00:00+00:00"
+    )
+    assert compatible["evidence"]["valid"] is False
+
+    old = goal.reconcile_goal_for_display(
+        current_goal=current,
+        snapshot_goal=failed,
+        current_month=date(2026, 9, 7),
+        current_time=datetime(2026, 9, 7, 10, tzinfo=timezone.utc),
+        snapshot_next_run_at="2026-09-08T13:00:00+00:00",
+    )
+    assert old["progress_available"] is False
+    assert old["progress_state"] == "stale"
+    assert old["calculation_diagnostic"]["reason"] == "month_to_date_profit_failed:RuntimeError"
+    assert old["calculation_diagnostic"]["freshness_status"] == "stale"
+
+    other_month = deepcopy(failed)
+    other_month["month_to_date"].update({"from": "2026-08-01", "to": "2026-08-31"})
+    other_month["period"].update({
+        "month": "2026-08",
+        "from": "2026-08-01",
+        "to_requested": "2026-08-31",
+    })
+    other = goal.reconcile_goal_for_display(
+        current_goal=current,
+        snapshot_goal=other_month,
+        current_month=date(2026, 9, 7),
+        current_time=datetime(2026, 9, 7, 10, tzinfo=timezone.utc),
+        snapshot_next_run_at="2026-09-08T13:00:00+00:00",
+    )
+    assert other["progress_available"] is False
+    assert other["progress_state"] == "stale"
+    assert other["calculation_diagnostic"]["reason"] == "month_to_date_profit_failed:RuntimeError"
+    assert other["calculation_diagnostic"]["current_period"] is False
+
+    corrupt = deepcopy(failed)
+    corrupt["progress_available"] = True
+    corrupt["net_profit_to_date_sar"] = 99_999.0
+    corrupt["scale_execution_allowed_by_profit_accounting"] = True
+    corrupt["calculation_diagnostic"] = {
+        "state": "failed",
+        "reason": "raw provider secret",
+        "attempted_at": "2026-09-07T10:00:00+00:00",
+    }
+    blocked = goal.reconcile_goal_for_display(
+        current_goal=current,
+        snapshot_goal=corrupt,
+        current_month=date(2026, 9, 7),
+        current_time=datetime(2026, 9, 7, 10, tzinfo=timezone.utc),
+        snapshot_next_run_at="2026-09-07T13:00:00+00:00",
+    )
+    assert blocked["progress_available"] is False
+    assert blocked["progress_state"] == "stale"
+    assert blocked["net_profit_to_date_sar"] is None
+    assert blocked["scale_execution_allowed_by_profit_accounting"] is False
+    assert blocked["calculation_diagnostic"] is None
+
+
+@pytest.mark.asyncio
 async def test_window_failure_keeps_mtd_goal_but_marks_analysis_failed(monkeypatch):
     install_empty_monitor_sources(monkeypatch)
     db = MemoryDB({goal.COLLECTION: MemoryCollection([goal_row()])})

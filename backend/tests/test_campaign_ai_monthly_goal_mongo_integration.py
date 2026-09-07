@@ -160,6 +160,77 @@ async def test_real_mongo_initial_snapshot_latest_and_rederive_are_single_write(
     assert snapshot_updates == []
 
 
+@pytest.mark.asyncio
+async def test_real_mongo_calculation_failure_reason_survives_insert_latest_and_put(
+    mongo_db,
+    monkeypatch,
+):
+    db, commands = mongo_db
+    fixed_now = datetime(2026, 9, 7, 10, tzinfo=timezone.utc)
+    monkeypatch.setattr(goal, "_now", lambda: fixed_now.isoformat())
+    monkeypatch.setattr(goal, "_utcnow", lambda: fixed_now)
+    monkeypatch.setattr(monitor._legacy, "_utcnow", lambda: fixed_now)
+    reliability.install_empty_monitor_sources(monkeypatch)
+    await db[goal.COLLECTION].insert_one({
+        "user_id": "u1",
+        "minimum_net_profit_sar": 80_000.0,
+        "updated_at": "2026-09-07T06:00:00+00:00",
+    })
+
+    async def loader(**_kwargs):
+        raise RuntimeError("raw-provider-customer-detail-must-not-survive")
+
+    await monitor.run_campaign_ai_monitor(
+        db,
+        "u1",
+        now=lambda: fixed_now,
+        refresh_meta=False,
+        business_context_loader=loader,
+    )
+    stored = await db[monitor.RECOMMENDATION_COLLECTION].find_one(
+        {"user_id": "u1"},
+        {"_id": 0},
+    )
+    expected_reason = "month_to_date_profit_failed:RuntimeError"
+    assert stored["monthly_profit_goal"]["calculation_diagnostic"] == {
+        "state": "failed",
+        "reason": expected_reason,
+        "attempted_at": fixed_now.isoformat(),
+    }
+    assert "raw-provider-customer-detail" not in json.dumps(stored)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app_for(db)),
+        base_url="http://isolated.test",
+    ) as client:
+        latest = await client.get("/ads-manager/ai-monitor/latest")
+        saved = await client.put(
+            "/ads-manager/ai-monitor/monthly-profit-goal",
+            json={"minimum_net_profit_sar": 100_000.0},
+        )
+
+    for response in (latest, saved):
+        assert response.status_code == 200
+    latest_goal = latest.json()["monthly_profit_goal"]
+    saved_goal = saved.json()
+    for display in (latest_goal, saved_goal):
+        assert display["progress_state"] == "calculation_failed"
+        assert display["progress_unavailable_reason"] == expected_reason
+        assert display["progress_available"] is False
+        assert display["net_profit_to_date_sar"] is None
+        assert display["scale_execution_allowed_by_profit_accounting"] is False
+        assert display["calculation_diagnostic"]["reason"] == expected_reason
+        assert display["calculation_diagnostic"]["freshness_status"] == "fresh"
+        assert display["evidence"]["valid"] is False
+    assert saved_goal["goal_config_saved"] is True
+    snapshot_updates = [
+        command
+        for name, command in commands.started_commands
+        if name == "update" and command.get("update") == monitor.RECOMMENDATION_COLLECTION
+    ]
+    assert snapshot_updates == []
+
+
 @pytest.mark.parametrize(
     ("case", "expected_reason"),
     [

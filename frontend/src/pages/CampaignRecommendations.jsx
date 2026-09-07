@@ -169,6 +169,13 @@ function dateTime(value) {
 }
 
 function evidenceAge(seconds) {
+    if (
+        seconds === null
+        || seconds === undefined
+        || typeof seconds === "boolean"
+        || (typeof seconds === "string" && seconds.trim() === "")
+        || (typeof seconds !== "number" && typeof seconds !== "string")
+    ) return "غير معروف";
     const value = Number(seconds);
     if (!Number.isFinite(value) || value < 0) return "غير معروف";
     if (value < 60) return "أقل من دقيقة";
@@ -244,6 +251,19 @@ export function GoalCard({ goal, goalInput, setGoalInput, saving, onSave, saveNo
         : evidence?.accounting_quality === "incomplete"
             ? "غير مكتملة"
             : "غير معروفة";
+    const calculationFailed = goal?.progress_state === "calculation_failed"
+        && goal?.progress_available === false
+        && goal?.calculation_diagnostic?.state === "failed"
+        && /^month_to_date_profit_failed:[A-Za-z_][A-Za-z0-9_]{0,99}$/.test(
+            goal?.calculation_diagnostic?.reason || "",
+        );
+    const evidenceValidity = evidence?.valid === true
+        ? "صالحة وحديثة"
+        : evidence?.freshness_status === "stale"
+            ? "قديمة وغير صالحة"
+            : evidence?.freshness_status === "unknown"
+                ? "غير مكتملة"
+                : "غير صالحة";
     return <section className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm" data-testid="monthly-profit-goal-card">
         <div className="flex flex-wrap items-center justify-between gap-3 bg-emerald-700 px-5 py-4 text-white">
             <div>
@@ -262,11 +282,13 @@ export function GoalCard({ goal, goalInput, setGoalInput, saving, onSave, saveNo
                 <div className="rounded-xl bg-slate-50 p-3"><p className="text-[9px] font-black text-slate-500">المتوقع نهاية الشهر</p><p className="mt-1 text-lg font-black text-slate-900">{hasProgress ? `${money(goal.projected_month_end_net_profit_sar)} ر.س` : "—"}</p></div>
             </div>
             {progressMessage && <p className="mt-3 text-[10px] font-bold text-amber-700" data-testid="monthly-profit-goal-progress-state">{progressMessage}</p>}
+            {calculationFailed && <p className="mt-2 text-[10px] font-bold text-red-700" data-testid="monthly-profit-goal-calculation-diagnostic">نتيجة الحساب: تعذر حساب ربح الشهر من المصدر المحاسبي.</p>}
             <div className="mt-3 grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-[10px] font-bold text-slate-600 sm:grid-cols-2 lg:grid-cols-4" data-testid="monthly-profit-goal-evidence">
                 <p>فترة دليل الربح: <span dir="ltr">{periodLabel}</span>{evidencePeriod?.timezone ? ` (${evidencePeriod.timezone})` : ""}</p>
                 <p>حُسب الدليل: <span dir="ltr">{evidence?.calculated_at ? dateTime(evidence.calculated_at) : "غير معروف"}</span> · عمر الدليل: {evidenceAge(evidence?.age_seconds)}</p>
                 <p>تغطية المصدر: {watermarkLabel}</p>
                 <p>جودة المحاسبة: {accountingQuality}</p>
+                <p>صلاحية دليل التقدم: {evidenceValidity}</p>
             </div>
             <div className="mt-3 flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <label className="min-w-[220px] flex-1 text-[10px] font-black text-slate-600">تغيير الحد الأدنى الشهري
