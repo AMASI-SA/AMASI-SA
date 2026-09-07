@@ -68,12 +68,8 @@ def request(port, method, path, *, cookie="", expected=200, **kwargs):
     with httpx.Client(trust_env=False, timeout=12) as client:
         response = client.request(method, URLS[port] + path, headers=headers, **kwargs)
     if response.status_code != expected:
-        try:
-            detail = response.json().get("detail")
-            hint = [{"loc": e.get("loc"), "type": e.get("type")} for e in detail] if isinstance(detail, list) else (detail.get("code") if isinstance(detail, dict) else None)
-        except Exception:
-            hint = None
-        raise AssertionError((method, path, response.status_code, expected, hint))
+        from acceptance_controller import HTTPStatusFailure
+        raise HTTPStatusFailure(expected, response.status_code)
     return response
 
 

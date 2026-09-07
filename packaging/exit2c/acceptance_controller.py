@@ -4,12 +4,77 @@ No state/metadata file, encryption key or serialized session crosses phases.
 EOF, phase failure and cancellation fail closed and release state references.
 Process teardown is the lifetime boundary, not a claim of memory zeroization.
 """
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 import signal
 import sys
 
 PHASES = ("setup", "http", "mongo-down", "after-restart")
 PREPARATION_PHASES = ("prep-setup", "prep-review", "prep-create", "prep-resume", "prep-finish")
+CHECK_IDS = (
+    "OWNER_LOGIN", "EMPLOYEE_LOGIN", "VIEWER_LOGIN", "OUTSIDER_LOGIN",
+    "OWNER_SESSION", "EMPLOYEE_SESSION", "VIEWER_SESSION", "OUTSIDER_SESSION",
+    "REVIEW_INVARIANTS", "TENANT_SNAPSHOT", "ORDER_READ", "PRODUCT_IDENTITIES",
+    "QUANTITIES_OPTIONS", "IMAGE_UPLOAD", "IMAGE_CHOICE", "ITEM_NOTE",
+    "IMAGE_TENANT_DENIAL", "REVIEW_ROLE_DENIAL", "REVIEW_COMPLETE",
+    "REVIEW_ERROR_CODE", "REVIEW_STORED_STATE", "NO_PREPARATION_ENTITIES",
+    "PROVIDER_COUNTERS",
+)
+FAILURE_TYPES = ("TIMEOUT", "CHANNEL_CLOSED", "CANCELLED", "PHASE_ORDER",
+                 "ASSERTION_FAILED", "HTTP_STATUS_MISMATCH", "UNCLASSIFIED_FAILURE")
+
+
+class HTTPStatusFailure(AssertionError):
+    def __init__(self, expected, actual):
+        super().__init__("HTTP_STATUS_MISMATCH")
+        self.expected, self.actual = expected, actual
+
+
+class CheckFailure(AssertionError):
+    def __init__(self, check_id, reason, expected=None, actual=None):
+        super().__init__("CHECK_FAILED")
+        self.check_id, self.reason = check_id, reason
+        self.expected, self.actual = expected, actual
+
+
+def failure_type(error):
+    if isinstance(error, KeyboardInterrupt):
+        return "CANCELLED"
+    if isinstance(error, TimeoutError):
+        return "TIMEOUT"
+    if isinstance(error, HTTPStatusFailure):
+        return "HTTP_STATUS_MISMATCH"
+    if isinstance(error, AssertionError):
+        return "ASSERTION_FAILED"
+    return "UNCLASSIFIED_FAILURE"
+
+
+@contextmanager
+def check(check_id):
+    # No untrusted identifier can reach a protocol message, even on failure.
+    if type(check_id) is not str or check_id not in CHECK_IDS:
+        raise CheckFailure(None, "UNCLASSIFIED_FAILURE")
+    try:
+        yield
+    except CheckFailure:
+        raise
+    except BaseException as error:
+        expected = error.expected if type(error) is HTTPStatusFailure else None
+        actual = error.actual if type(error) is HTTPStatusFailure else None
+        raise CheckFailure(check_id, failure_type(error), expected, actual) from None
+
+
+def check_diagnostic(error):
+    if (type(error.check_id) is not str or error.check_id not in CHECK_IDS
+            or type(error.reason) is not str or error.reason not in FAILURE_TYPES):
+        return None
+    suffix = error.reason + " " + error.check_id
+    if error.reason == "HTTP_STATUS_MISMATCH":
+        if not all(type(n) is int and 100 <= n <= 599 for n in (error.expected, error.actual)):
+            return None
+        suffix += " " + str(error.expected) + " " + str(error.actual)
+    elif error.expected is not None or error.actual is not None:
+        return None
+    return suffix
 
 
 class Discard:
@@ -59,6 +124,8 @@ def serve(phases, commands, replies, *, profile="runtime"):
             reason = "ASSERTION_FAILED"
         elif not in_phase and isinstance(error, (BrokenPipeError, EOFError)):
             reason = "CHANNEL_CLOSED"
+        if type(error) is CheckFailure:
+            reason = (check_diagnostic(error) if in_phase and name == "prep-review" else None) or "UNCLASSIFIED_FAILURE"
         try:
             replies.write("FAIL " + name + " " + reason + "\n")
             replies.flush()

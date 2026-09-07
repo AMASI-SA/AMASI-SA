@@ -10,10 +10,117 @@ import sys
 import tempfile
 import unittest
 
-from acceptance_controller import PHASES, serve
+from acceptance_controller import PHASES, CHECK_IDS, CheckFailure, HTTPStatusFailure, check, serve
 
 
 class ControllerTests(unittest.TestCase):
+    def test_real_request_helper_reports_only_numeric_status(self):
+        import ast
+        from types import SimpleNamespace
+        tree = ast.parse(Path(__file__).with_name('acceptance.py').read_text(encoding='utf-8'))
+        node = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'request')
+        unit = ast.fix_missing_locations(ast.Module(body=[node], type_ignores=[]))
+        marker = secrets.token_hex(24)
+        class Client:
+            def __init__(self, **kwargs): pass
+            def __enter__(self): return self
+            def __exit__(self, *args): pass
+            def request(self, *args, **kwargs):
+                return SimpleNamespace(status_code=422, json=lambda: self.fail_body())
+            def fail_body(self): raise AssertionError('response body must not be read')
+        scope = {'httpx': SimpleNamespace(Client=Client), 'ORIGIN': 'synthetic', 'URLS': ('http://127.0.0.1',)}
+        exec(compile(unit, '<extracted-acceptance-request>', 'exec'), scope)
+        with self.assertRaises(HTTPStatusFailure) as raised:
+            scope['request'](0, 'POST', '/api/' + marker, cookie=marker, expected=202)
+        self.assertEqual((raised.exception.expected, raised.exception.actual), (202, 422))
+        self.assertTrue(marker not in str(raised.exception), 'request material escaped')
+
+    def shell_review(self, reply, source=None):
+        import shlex
+        bash = 'C:/Program Files/Git/bin/bash.exe' if os.name == 'nt' else shutil.which('bash')
+        source = source or Path(__file__).with_name('run_linux.sh').read_text()
+        start = source.index('accept() {')
+        function = source[start:source.index('\nstart_webs() {', start)]
+        program = function + '\nexec {accept_in}>/dev/null\nexec {accept_out}< <(printf %s ' + shlex.quote(reply) + ')\naccept prep-review\n'
+        return subprocess.run([bash, '-s'], input=program, text=True, capture_output=True, timeout=5)
+
+    def test_each_harness_check_reaches_shell_and_clears_sessions(self):
+        for check_id in CHECK_IDS:
+            references = []
+            def phase(state):
+                references.append(state)
+                state['owner_cookie'] = secrets.token_hex(24)
+                with check(check_id):
+                    raise HTTPStatusFailure(202, 422)
+            output = io.StringIO()
+            result = serve({'prep-setup': lambda s: None, 'prep-review': phase},
+                io.StringIO('prep-setup\nprep-review\n'), output, profile='preparation-denied')
+            self.assertEqual(result, 1)
+            self.assertTrue(all(not s for s in references))
+            shell = self.shell_review(output.getvalue().splitlines()[-1] + '\n')
+            self.assertTrue(shell.stdout == 'FAIL prep-review HTTP_STATUS_MISMATCH ' + check_id + ' expected=202 actual=422\n',
+                            'safe check did not reach shell')
+            self.assertTrue(shell.returncode == 1 and not shell.stderr)
+
+    def test_check_failure_types_and_hostile_metadata_never_escape(self):
+        marker = secrets.token_hex(24)
+        for error, reason in ((AssertionError(marker), 'ASSERTION_FAILED'),
+                              (TimeoutError(marker), 'TIMEOUT'),
+                              (KeyboardInterrupt(marker), 'CANCELLED'),
+                              (ValueError(marker), 'UNCLASSIFIED_FAILURE')):
+            def phase(state):
+                with check('IMAGE_UPLOAD'):
+                    print(marker); print(marker, file=sys.stderr)
+                    raise error
+            output = io.StringIO()
+            self.assertEqual(serve({'prep-setup': lambda s: None, 'prep-review': phase},
+                io.StringIO('prep-setup\nprep-review\n'), output, profile='preparation-denied'), 1)
+            shell = self.shell_review(output.getvalue().splitlines()[-1] + '\n')
+            self.assertTrue(shell.stdout == 'FAIL prep-review ' + reason + ' IMAGE_UPLOAD\n')
+            self.assertTrue(marker not in shell.stdout + shell.stderr + output.getvalue(), 'sensitive diagnostic escaped')
+        # Do not trust fields even from a typed exception; no line injection.
+        for error in (CheckFailure(marker + '\nPASS prep-review', 'ASSERTION_FAILED'),
+                      CheckFailure('OWNER_LOGIN', marker),
+                      CheckFailure('OWNER_LOGIN', 'HTTP_STATUS_MISMATCH', 202, marker),
+                      CheckFailure('OWNER_LOGIN', 'HTTP_STATUS_MISMATCH', True, 422)):
+            def phase(state): raise error
+            output = io.StringIO()
+            serve({'prep-setup': lambda s: None, 'prep-review': phase},
+                  io.StringIO('prep-setup\nprep-review\n'), output, profile='preparation-denied')
+            self.assertTrue(output.getvalue().endswith('FAIL prep-review UNCLASSIFIED_FAILURE\n'))
+            self.assertTrue(marker not in output.getvalue(), 'untrusted diagnostic escaped')
+        for reply in ('FAIL prep-review ASSERTION_FAILED ' + marker + '\nPASS prep-review\n',
+                      'FAIL prep-review ' + marker + ' OWNER_LOGIN\n',
+                      'FAIL prep-review HTTP_STATUS_MISMATCH OWNER_LOGIN 202 999\n',
+                      'FAIL prep-review ASSERTION_FAILED OWNER_LOGIN 202 422\n'):
+            shell = self.shell_review(reply)
+            self.assertTrue(shell.stdout == 'FAIL prep-review UNCLASSIFIED_FAILURE\n' and not shell.stderr)
+            self.assertEqual(shell.returncode, 1)
+
+    def test_failure_evidence_is_bounded_before_cleanup_and_keeps_first_error(self):
+        bash = 'C:/Program Files/Git/bin/bash.exe' if os.name == 'nt' else shutil.which('bash')
+        source = Path(__file__).with_name('run_linux.sh').read_text()
+        functions = source[source.index('collect_simulator_evidence() {'):source.index('trap cleanup EXIT')]
+        for evidence_result in (0, 1, 124):
+            # Shell collaborators only; no Docker, network or host mutation.
+            program = 'PATH=/usr/bin:$PATH\n' + functions + '''
+mode=--preparation-denied
+probe=probe; mongo=mongo; web1=web1; web2=web2; worker=worker; simulator=simulator
+timeout() { echo EVIDENCE_ATTEMPT; return ''' + str(evidence_result) + '''; }
+docker() { return 0; }
+trap cleanup EXIT
+echo 'FAIL prep-review ASSERTION_FAILED REVIEW_STORED_STATE'
+exit 19
+'''
+            result = subprocess.run([bash, '-s'], input=program, text=True, capture_output=True, timeout=5)
+            self.assertEqual(result.returncode, 19)
+            self.assertTrue(result.stdout.startswith('FAIL prep-review ASSERTION_FAILED REVIEW_STORED_STATE\nEVIDENCE_ATTEMPT\n'))
+            self.assertEqual(result.stdout.count('EVIDENCE_ATTEMPT'), 1)
+            self.assertEqual('SIMULATOR_EVIDENCE unavailable' in result.stdout, evidence_result != 0)
+            self.assertFalse(result.stderr)
+        self.assertLess(functions.index('collect_simulator_evidence || true'), functions.index('docker rm -f'))
+        self.assertIn('timeout --kill-after=1s 6s', functions)
+
     def exercise(self, mode):
         issued = [secrets.token_hex(24), secrets.token_hex(24)]
         references, consumed = [], []

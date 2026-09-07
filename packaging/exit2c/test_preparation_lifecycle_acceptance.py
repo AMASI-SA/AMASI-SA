@@ -17,6 +17,55 @@ import preparation_lifecycle_acceptance as prep
 
 
 class PreparationContracts(unittest.TestCase):
+    def test_evidence_counts_are_measured_bounded_and_failure_is_unavailable(self):
+        import json
+        import simulator_evidence as evidence
+        valid = dict(simulated_provider_calls=3, unexpected=1, status_writes=0,
+                     denied=2, shipping_attempted=0, shipping_failed=0)
+        marker = secrets.token_hex(24)
+        for payload, good in ((valid, True), ({**valid, 'unexpected': 0}, True), ({**valid, marker: 1}, False),
+                              ({**valid, 'denied': marker}, False),
+                              ({**valid, 'denied': True}, False)):
+            closed, reads = [], []
+            response = SimpleNamespace(status=200, read=lambda size: reads.append(size) or json.dumps(payload).encode())
+            connection = SimpleNamespace(request=lambda *a: None, getresponse=lambda: response, close=lambda: closed.append(True))
+            output = io.StringIO()
+            with patch.object(evidence.socket, 'if_nameindex', return_value=[(1, 'lo')]), \
+                 patch.object(evidence.http.client, 'HTTPConnection', return_value=connection) as transport, \
+                 contextlib.redirect_stdout(output):
+                result = evidence.main()
+            transport.assert_called_once_with('127.0.0.1', 8093, timeout=2)
+            self.assertEqual(reads, [2048]); self.assertEqual(closed, [True])
+            self.assertEqual(result, (2 if payload['unexpected'] else 0) if good else 1)
+            self.assertTrue(marker not in output.getvalue(), 'evidence leaked response material')
+            if good:
+                parsed = json.loads(output.getvalue().splitlines()[0].removeprefix('SIMULATOR_EVIDENCE '))
+                self.assertEqual(parsed, {'live_provider_calls': 0, **payload})
+            else:
+                self.assertEqual(output.getvalue(), 'SIMULATOR_EVIDENCE unavailable\n')
+        output = io.StringIO()
+        with patch.object(evidence, 'evidence', side_effect=TimeoutError(marker)), contextlib.redirect_stdout(output):
+            self.assertEqual(evidence.main(), 1)
+        self.assertEqual(output.getvalue(), 'SIMULATOR_EVIDENCE unavailable\n')
+
+    def test_fixture_login_addresses_share_schema_compatible_definition(self):
+        source = Path(prep.__file__).read_text(encoding='utf-8')
+        tree = ast.parse(source)
+        targets = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name in ('seed_inputs', 'login_otp')]
+        self.assertEqual(len(targets), 2)
+        for node in targets:
+            self.assertTrue('@exit2d.example.test' not in ast.unparse(node), 'invalid login fixture domain')
+            self.assertTrue('login_email(actor)' in ast.unparse(node), 'fixture login address not shared')
+        self.assertTrue(all(prep.login_email(a).endswith('@example.com')
+                            for a in ('employee', 'viewer', 'outsider')))
+
+    def test_correct_sent_field_cannot_pass_rejection(self):
+        prep.verify_review_rejected({'stage': 'pending_review'})
+        for workflow in ({'stage': 'pending_review', 'salla_status_sync': 'sent'},
+                         {'stage': 'reviewed'}):
+            with self.assertRaises(AssertionError):
+                prep.verify_review_rejected(workflow)
+
     def test_fixture_arabic_text_is_not_mojibake(self):
         tree = ast.parse(Path(prep.__file__).read_text(encoding="utf-8"))
         values = [n.value for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, str)]

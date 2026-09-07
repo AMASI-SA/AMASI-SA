@@ -18,6 +18,8 @@ def check():
     if os.environ.get('MEZAN_ACCEPTANCE_PROFILE') != runtime.SALLA_SIMULATOR_PROFILE:
         raise RuntimeError('profile required')
     runtime.validate_before_import('web')
+    from preparation_lifecycle_acceptance import verify_login_fixture_schema
+    verify_login_fixture_schema()
     # The real Salla client uses the installed HTTPX default. Fail if a later
     # dependency changes it to following redirects. No network call is made.
     import httpx

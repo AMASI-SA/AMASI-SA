@@ -2,7 +2,7 @@
 
 Fixture writes are confined to seed_inputs, before the first HTTP phase.
 No ready batch, registry, allocation or physical piece is seeded. Provider HTTP is explicitly simulated in independent disposable instances.
-Runtime preflight remains blocked by the unchanged credential guard.
+Runtime preflight validates the explicit synthetic-only profile before server import.
 All application phases remain unaccepted until real Linux execution.
 """
 from __future__ import annotations
@@ -17,6 +17,7 @@ import time
 import unicodedata
 from pathlib import Path
 from urllib.parse import quote
+from acceptance_controller import check
 
 REGISTRY = "mezan_preparation_file_registry_v2"
 BATCHES = "mezan_preparation_batches_v2"
@@ -35,9 +36,46 @@ def require(condition):
         raise AssertionError("preparation acceptance invariant failed")
 
 
+def login_email(actor):
+    require(actor in ("employee", "viewer", "outsider"))
+    return "exit2d-" + actor + "@example.com"
+
+
+def verify_review_rejected(workflow):
+    # A failed sync need not materialize the field. Never manufacture it.
+    require(workflow["stage"] == "pending_review")
+    require(workflow.get("salla_status_sync") != "sent")
+
+
 def backend_root():
     installed = Path("/opt/mezan/backend")
     return installed if installed.is_dir() else Path(__file__).resolve().parents[2] / "backend"
+
+
+def verify_login_fixture_schema():
+    """Extract only the audited LoginIn class; never import/execute server."""
+    from importlib.metadata import version
+    from pydantic import BaseModel, EmailStr, ValidationError
+    require(version('pydantic') == '2.13.4' and version('email-validator') == '2.3.0')
+    tree = ast.parse((backend_root() / 'server.py').read_text(encoding='utf-8'))
+    classes = [n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'LoginIn']
+    require(len(classes) == 1)
+    node = classes[0]
+    # Fail if future schema code adds executable logic/dependencies to extraction.
+    expected = ast.parse('class LoginIn(BaseModel):\n    email: EmailStr\n    password: str\n').body[0]
+    require(ast.unparse(node) == ast.unparse(expected))
+    unit = ast.fix_missing_locations(ast.Module(body=[node], type_ignores=[]))
+    scope = {'BaseModel': BaseModel, 'EmailStr': EmailStr}
+    exec(compile(unit, '<extracted-LoginIn>', 'exec', dont_inherit=True), scope)
+    model = scope['LoginIn']
+    for actor in ('employee', 'viewer', 'outsider'):
+        try:
+            model(email=actor + '@exit2d.example.test', password='synthetic')
+        except ValidationError:
+            pass
+        else:
+            raise AssertionError('previous fixture unexpectedly accepted')
+        require(str(model(email=login_email(actor), password='synthetic').email) == login_email(actor))
 
 
 def provider_barrier(kind):
@@ -88,7 +126,7 @@ def seed_inputs(database, state):
         "access_token_encrypted": encrypt_token(os.environ["EXIT2D_SIM_TOKEN"]),
         "expires_at": a.now() + timedelta(hours=1), "token_revision": 1})
     for actor, role in (("employee", "operations"), ("viewer", "viewer"), ("outsider", "owner")):
-        database.users.insert_one({"id": state[actor], "email": actor + "@exit2d.example.test",
+        database.users.insert_one({"id": state[actor], "email": login_email(actor),
             "name": "\u0645\u0648\u0638\u0641 \u0627\u0635\u0637\u0646\u0627\u0639\u064a " + actor, "role": role, "is_active": True,
             "created_by": state["owner"] if actor != "outsider" else state[actor],
             "password_hash": hash_password(a.EMPLOYEE_PASSWORD),
@@ -173,15 +211,17 @@ class Lifecycle:
 
     def sessions(self):
         for actor in ("owner", "employee", "viewer", "outsider"):
-            response = self.call("GET", "/api/auth/me", actor=actor).json()
-            require(response["id"] == self.state[actor])
+            with check({"owner": "OWNER_SESSION", "employee": "EMPLOYEE_SESSION",
+                        "viewer": "VIEWER_SESSION", "outsider": "OUTSIDER_SESSION"}[actor]):
+                response = self.call("GET", "/api/auth/me", actor=actor).json()
+                require(response["id"] == self.state[actor])
 
     def login_otp(self, actor):
         a = self.a
         if actor == "outsider":
             from mfa_security import hotp
             response = a.request(0, "POST", "/api/auth/login", expected=202,
-                json={"email": actor + "@exit2d.example.test", "password": a.EMPLOYEE_PASSWORD, "force_totp": True})
+                json={"email": login_email(actor), "password": a.EMPLOYEE_PASSWORD, "force_totp": True})
             require(response.json().get("mfa_required") is True)
             device = a.cookies(response)
             verified = a.request(1, "POST", "/api/auth/mfa/verify", cookie=device,
@@ -191,65 +231,84 @@ class Lifecycle:
             return
         a.seed_otp(self.database, self.state[actor])
         response = a.request(0, "POST", "/api/auth/login", expected=202,
-            json={"email": actor + "@exit2d.example.test", "password": a.EMPLOYEE_PASSWORD})
+            json={"email": login_email(actor), "password": a.EMPLOYEE_PASSWORD})
         device = a.cookies(response)
         verified = a.request(1, "POST", "/api/auth/email-otp/verify", cookie=device,
             json={"challenge_token": response.json()["challenge_token"], "code": a.OTP})
         self.state[actor + "_cookie"] = a.cookies(verified, device)
 
     def review(self):
-        self.state["owner_cookie"] = self.a.owner_session()
+        with check("OWNER_LOGIN"):
+            self.state["owner_cookie"] = self.a.owner_session()
         for actor in ("employee", "viewer", "outsider"):
-            self.login_otp(actor)
+            with check({"employee": "EMPLOYEE_LOGIN", "viewer": "VIEWER_LOGIN", "outsider": "OUTSIDER_LOGIN"}[actor]):
+                self.login_otp(actor)
         self.sessions()
-        self.invariant()
-        self.state["other_workflows"] = list(self.database[WORKFLOWS].find({"user_id": self.state["outsider"]}, {"_id": 0}))
+        with check("REVIEW_INVARIANTS"):
+            self.invariant()
+        with check("TENANT_SNAPSHOT"):
+            self.state["other_workflows"] = list(self.database[WORKFLOWS].find({"user_id": self.state["outsider"]}, {"_id": 0}))
         for number in ORDERS:
             path = "/api/order-reviews-v1/" + number
-            detail = self.call("GET", path).json()
-            require(len(detail["items"]) == 2)
+            with check("ORDER_READ"):
+                detail = self.call("GET", path).json()
+                require(len(detail["items"]) == 2)
             for item in detail["items"]:
-                iid = item["order_item_id"]
-                source_id = item["source"]["source_order_item_id"]
-                require((number, source_id) in self.state["raw_expected"])
-                expected = self.state["raw_expected"][(number, source_id)]
-                require(item["quantity"] == expected["quantity"])
-                require({o["name"]: o["value"] for o in item["options"]} == expected["options"])
-                self.state["expected"][(number, iid)] = expected
-                image = png((40, 120, 60 if number == ORDERS[0] else 190))
-                updated = self.call("POST", path + "/items/" + quote(iid, safe="") + "/mezan-images",
-                    json={"filename": "local.png", "content_type": "image/png",
-                          "data_base64": base64.b64encode(image).decode()}).json()
-                gallery = next(i for i in updated["items"] if i["order_item_id"] == iid)["gallery"]
-                fresh = [u for u in gallery if u not in item["gallery"]]
-                require(len(fresh) == 1 and fresh[0].startswith("/api/order-reviews-v1/mezan-images/"))
-                image_url = fresh[0]
-                detail = self.call("POST", path + "/items/" + quote(iid, safe="") + "/image-choice",
-                    json={"expected_revision": updated["revision"], "selected_image_url": image_url,
-                          "mode": "order_only"}).json()
-                detail = self.call("PATCH", path + "/items/" + quote(iid, safe=""),
-                    json={"expected_revision": detail["revision"], "preparation_note": "\u0627\u062e\u062a\u0628\u0627\u0631 \u062a\u062c\u0647\u064a\u0632 \u0645\u062d\u0644\u064a"}).json()
+                with check("PRODUCT_IDENTITIES"):
+                    iid = item["order_item_id"]
+                    source_id = item["source"]["source_order_item_id"]
+                    require((number, source_id) in self.state["raw_expected"])
+                    expected = self.state["raw_expected"][(number, source_id)]
+                with check("QUANTITIES_OPTIONS"):
+                    require(item["quantity"] == expected["quantity"])
+                    require({o["name"]: o["value"] for o in item["options"]} == expected["options"])
+                    self.state["expected"][(number, iid)] = expected
+                with check("IMAGE_UPLOAD"):
+                    image = png((40, 120, 60 if number == ORDERS[0] else 190))
+                    updated = self.call("POST", path + "/items/" + quote(iid, safe="") + "/mezan-images",
+                        json={"filename": "local.png", "content_type": "image/png",
+                              "data_base64": base64.b64encode(image).decode()}).json()
+                    gallery = next(i for i in updated["items"] if i["order_item_id"] == iid)["gallery"]
+                    fresh = [u for u in gallery if u not in item["gallery"]]
+                    require(len(fresh) == 1 and fresh[0].startswith("/api/order-reviews-v1/mezan-images/"))
+                    image_url = fresh[0]
+                with check("IMAGE_CHOICE"):
+                    detail = self.call("POST", path + "/items/" + quote(iid, safe="") + "/image-choice",
+                        json={"expected_revision": updated["revision"], "selected_image_url": image_url,
+                              "mode": "order_only"}).json()
+                with check("ITEM_NOTE"):
+                    detail = self.call("PATCH", path + "/items/" + quote(iid, safe=""),
+                        json={"expected_revision": detail["revision"], "preparation_note": "\u0627\u062e\u062a\u0628\u0627\u0631 \u062a\u062c\u0647\u064a\u0632 \u0645\u062d\u0644\u064a"}).json()
                 self.state["images"][(number, iid)] = (image_url, hashlib.sha256(image).hexdigest())
-                self.call("GET", image_url, actor="outsider", expected=404)
-            self.call("POST", path + "/complete", actor="viewer", expected=403,
-                      json={"expected_revision": detail["revision"]})
+                with check("IMAGE_TENANT_DENIAL"):
+                    self.call("GET", image_url, actor="outsider", expected=404)
+            with check("REVIEW_ROLE_DENIAL"):
+                self.call("POST", path + "/complete", actor="viewer", expected=403,
+                          json={"expected_revision": detail["revision"]})
             # Actual application route and client. Successful provider replies
             # are fixture-only; the denied fixtures never manufacture sent.
             if self.state["provider_scenario"] != "success":
-                response = self.call("POST", path + "/complete", expected=502,
-                    json={"expected_revision": detail["revision"]}).json()
-                require(response["detail"]["code"] == "salla_review_status_sync_failed")
-                workflow = self.database[WORKFLOWS].find_one({"user_id": self.state["owner"], "order_number": number})
-                require(workflow["stage"] == "pending_review" and workflow.get("salla_sync_status") != "sent")
-                require(all(self.database[name].count_documents({}) == 0 for name in GENERATED))
+                with check("REVIEW_COMPLETE"):
+                    response = self.call("POST", path + "/complete", expected=502,
+                        json={"expected_revision": detail["revision"]}).json()
+                with check("REVIEW_ERROR_CODE"):
+                    require(response["detail"]["code"] == "salla_review_status_sync_failed")
+                with check("REVIEW_STORED_STATE"):
+                    workflow = self.database[WORKFLOWS].find_one({"user_id": self.state["owner"], "order_number": number})
+                    verify_review_rejected(workflow)
+                with check("NO_PREPARATION_ENTITIES"):
+                    require(all(self.database[name].count_documents({}) == 0 for name in GENERATED))
             else:
-                self.call("POST", path + "/complete", json={"expected_revision": detail["revision"]})
-        counts = self.provider_counts()
-        if self.state["provider_scenario"] != "success":
-            require(counts["status_writes"] == 0 and counts["denied"] >= len(ORDERS))
-        else:
-            require(counts["status_writes"] >= len(ORDERS))
-        self.invariant()
+                with check("REVIEW_COMPLETE"):
+                    self.call("POST", path + "/complete", json={"expected_revision": detail["revision"]})
+        with check("PROVIDER_COUNTERS"):
+            counts = self.provider_counts()
+            if self.state["provider_scenario"] != "success":
+                require(counts["status_writes"] == 0 and counts["denied"] >= len(ORDERS))
+            else:
+                require(counts["status_writes"] >= len(ORDERS))
+        with check("REVIEW_INVARIANTS"):
+            self.invariant()
 
     def catalog(self):
         data = self.call("GET", "/api/reviewed-products-v1/catalog").json()

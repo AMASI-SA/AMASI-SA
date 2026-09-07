@@ -15,8 +15,24 @@ web2="exit2c-web2-$suffix"
 probe="exit2c-probe-$suffix"
 worker="exit2c-worker-$suffix"
 simulator="exit2d-simulator-$suffix"
+collect_simulator_evidence() {
+  local evidence_status
+  evidence_collected=1
+  # Both transport and process have deadlines; never dump docker logs on error.
+  if timeout --kill-after=1s 6s docker exec "$probe" python /opt/acceptance/simulator_evidence.py 2>/dev/null; then
+    return 0
+  else
+    evidence_status=$?
+  fi
+  # Exit 2 already emitted measured counters and a fixed unexpected-request FAIL.
+  if test "$evidence_status" != 2; then echo 'SIMULATOR_EVIDENCE unavailable'; fi
+  return 1
+}
 cleanup() {
   result=$?
+  if test "$result" != 0 && test "$mode" != runtime && test "${evidence_collected:-0}" = 0; then
+    collect_simulator_evidence || true
+  fi
   if test "$result" != 0 && test "$mode" = runtime; then
     for name in "$web1" "$web2" "$worker"; do docker logs "$name" 2>&1 | tail -n 45 || true; done
   fi
@@ -55,7 +71,7 @@ start_acceptance() {
   exec {accept_out}<&"${ACCEPTANCE[0]}"
 }
 accept() {
-  local reply status reason
+  local reply status reason check_id expected actual
   # Reject untrusted phase names without printing them.
   case "$1" in
     setup|http|mongo-down|after-restart|prep-setup|prep-review|prep-create|prep-resume|prep-finish|finish) accept_phase="$1" ;;
@@ -79,6 +95,28 @@ accept() {
         return 1
       fi
     done
+    # Exact grammar and independent allowlists; never echo the received line.
+    if test "$accept_phase" = prep-review && [[ "$reply" =~ ^FAIL\ prep-review\ ([A-Z_]+)\ ([A-Z_]+)(\ ([1-5][0-9][0-9])\ ([1-5][0-9][0-9]))?$ ]]; then
+      reason="${BASH_REMATCH[1]}"; check_id="${BASH_REMATCH[2]}"
+      expected="${BASH_REMATCH[4]}"; actual="${BASH_REMATCH[5]}"
+      case "$check_id" in
+        OWNER_LOGIN|EMPLOYEE_LOGIN|VIEWER_LOGIN|OUTSIDER_LOGIN|OWNER_SESSION|EMPLOYEE_SESSION|VIEWER_SESSION|OUTSIDER_SESSION|REVIEW_INVARIANTS|TENANT_SNAPSHOT|ORDER_READ|PRODUCT_IDENTITIES|QUANTITIES_OPTIONS|IMAGE_UPLOAD|IMAGE_CHOICE|ITEM_NOTE|IMAGE_TENANT_DENIAL|REVIEW_ROLE_DENIAL|REVIEW_COMPLETE|REVIEW_ERROR_CODE|REVIEW_STORED_STATE|NO_PREPARATION_ENTITIES|PROVIDER_COUNTERS) ;;
+        *) reason=UNCLASSIFIED_FAILURE; check_id= ;;
+      esac
+      if test -n "$check_id"; then
+        if test "$reason" = HTTP_STATUS_MISMATCH && test -n "$expected" && test -n "$actual"; then
+          printf 'FAIL %s %s %s expected=%s actual=%s\n' "$accept_phase" "$reason" "$check_id" "$expected" "$actual"
+          return 1
+        fi
+        case "$reason" in
+          TIMEOUT|CHANNEL_CLOSED|CANCELLED|PHASE_ORDER|ASSERTION_FAILED|UNCLASSIFIED_FAILURE)
+            if test -z "$expected" && test -z "$actual"; then
+              printf 'FAIL %s %s %s\n' "$accept_phase" "$reason" "$check_id"
+              return 1
+            fi ;;
+        esac
+      fi
+    fi
     reason=UNCLASSIFIED_FAILURE
   else
     status=$?
@@ -137,7 +175,7 @@ if test "$mode" != runtime; then
   wait "$accept_pid"
   exec {accept_out}<&-
   unset accept_in accept_out accept_pid
-  docker exec "$probe" python /opt/acceptance/simulator_evidence.py
+  collect_simulator_evidence
   if test "$mode" = --preparation-only; then
     echo 'PASS application lifecycle with simulated HTTP provider; stale revision remains unaccepted'
   else

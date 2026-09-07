@@ -9,6 +9,7 @@ python -c 'import sys,os; sys.path.insert(0,"packaging/exit2c"); from salla_http
 # Each scenario gets a fresh network-none Mongo instance and fresh credentials;
 # DB_NAME stays mezan_exit2c because the immutable runtime requires that name.
 for scenario in deny unavailable success; do
+  printf 'SCENARIO %s\n' "$scenario"
   export EXIT2D_SIM_MODE="$scenario"
   export EXIT2D_SIM_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
   export MEZAN_ACCEPTANCE_PROFILE=salla_http_simulator_v1
