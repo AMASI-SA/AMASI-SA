@@ -1,7 +1,7 @@
 """Synthetic, real HTTP/Mongo acceptance; never imports the application server.
 
-Run setup after migration, http with both web processes, after-restart after
-restarting both, and mongo-down while the temporary Mongo is unavailable.
+One controller keeps sessions in memory across setup, HTTP, Mongo outage and
+web restart. Its stdin/stdout protocol contains only fixed phase names/status.
 No access token is fabricated: sessions come from the real password + second
 factor HTTP handlers. OTP transport and WebAuthn hardware are fixture boundaries.
 """
@@ -13,7 +13,6 @@ import hmac
 import io
 import json
 import os
-from pathlib import Path
 import socket
 import sys
 import time
@@ -32,7 +31,6 @@ TOTP = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
 OTP = "419263"
 ORIGIN = "https://mezansalla.com"  # Origin header only; all requests use loopback.
 URLS = ("http://127.0.0.1:8001", "http://127.0.0.1:8002")
-STATE = Path("/tmp/exit2c-http-state.json")
 REGISTRY = "mezan_preparation_file_registry_v2"
 BATCHES = "mezan_preparation_batches_v2"
 PIECES = "mezan_preparation_pieces_v1"
@@ -59,15 +57,6 @@ def db():
 
 def now():
     return datetime.now(timezone.utc)
-
-
-def save(state):
-    # Only synthetic fixture cookies, never actual credentials; tmpfs, not artifact.
-    STATE.write_text(json.dumps(state), encoding="utf-8")
-
-
-def load():
-    return json.loads(STATE.read_text(encoding="utf-8"))
 
 
 def request(port, method, path, *, cookie="", expected=200, **kwargs):
@@ -107,7 +96,7 @@ def seed_otp(database, employee):
     }, upsert=True)
 
 
-def setup():
+def setup(state):
     from auth import hash_password
     from mfa_security import encrypt_totp_secret
     database = db()
@@ -141,7 +130,7 @@ def setup():
         "order_item_id": "exit2c-item", "status": "assigned"})
     database.order_review_workflows.insert_one({"user_id": owner["id"],
         "order_number": "EXIT2C-ORDER", "stage": "reviewed", "revision": 1})
-    save({"owner": owner["id"], "employee": employee})
+    state.update({"owner": owner["id"], "employee": employee})
     print("PASS synthetic fixture setup after separate migration")
 
 
@@ -240,10 +229,9 @@ def passkey_session(state):
     print("PASS real WebAuthn cryptographic verifier; invalid signature, cross-process success, replay denial (synthetic authenticator)")
 
 
-def http():
+def http(state):
     from PIL import Image
     import fitz
-    state = load()
     for port in range(2):
         request(port, "GET", "/api/ready")
         request(port, "GET", "/api/auth/me", expected=401)
@@ -291,18 +279,17 @@ def http():
     with fitz.open(stream=batch_pdf.content, filetype="pdf") as document:
         state["batch_pdf_pages"] = document.page_count
         assert document.page_count >= 1
-    save(state)
     print("PASS CSRF, RBAC, user isolation, real attachment upload and PDF generation, preparation transition and idempotent start")
 
 
-def after_restart():
+def after_restart(state):
     import fitz
-    state = load()
     owner = state["owner_cookie"]
     database = db()
     for port in range(2):
         request(port, "GET", "/api/ready")
         request(port, "GET", "/api/auth/me", cookie=owner)
+        request(port, "GET", "/api/auth/me", cookie=state["employee_cookie"])
         attachment = request(port, "GET", "/api/preparation/image/exit2c-upload/0", cookie=owner)
         assert hashlib.sha256(attachment.content).hexdigest() == state["image_sha256"]
         preview = request(port, "GET", "/api/preparation/preview/exit2c-upload", cookie=owner)
@@ -337,8 +324,7 @@ def after_restart():
     print("PASS restart preserves sessions, attachment bytes, preparation state/history and export deduplication; shared session revocation")
 
 
-def mongo_down():
-    state = load()
+def mongo_down(state):
     for port in range(2):
         request(port, "GET", "/api/live")
         request(port, "GET", "/api/ready", expected=503)
@@ -350,5 +336,5 @@ def mongo_down():
 if __name__ == "__main__":
     boundary()
     phases = {"setup": setup, "http": http, "after-restart": after_restart, "mongo-down": mongo_down}
-    assert len(sys.argv) == 2 and sys.argv[1] in phases
-    phases[sys.argv[1]]()
+    from acceptance_controller import run
+    raise SystemExit(run(phases))

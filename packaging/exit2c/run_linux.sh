@@ -15,10 +15,15 @@ cleanup() {
   if test "$result" != 0; then
     for name in "$web1" "$web2" "$worker"; do docker logs "$name" 2>&1 | tail -n 45 || true; done
   fi
+  if test -n "${accept_in:-}"; then exec {accept_in}>&-; fi
   docker unpause "$mongo" >/dev/null 2>&1 || true
   docker rm -f "$web1" "$web2" "$probe" "$worker" "$mongo" >/dev/null 2>&1 || true
+  if test -n "${accept_pid:-}"; then wait "$accept_pid" 2>/dev/null || true; fi
+  if test -n "${accept_out:-}"; then exec {accept_out}<&-; fi
 }
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 docker run -d --name "$mongo" --network none --tmpfs /data/db --tmpfs /data/configdb \
   mongo:7.0.16@sha256:c630c59342c1493d50345136df2af14a76b9e827dd5316bfabee07a0880a5f3a --bind_ip 127.0.0.1 --quiet
 test "$(docker inspect -f '{{.HostConfig.NetworkMode}}' "$mongo")" = none
@@ -29,8 +34,24 @@ done
 runtime=(--network "container:$mongo" --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges --pids-limit 256 --memory 3g --cpus 2)
 docker run -d --name "$probe" "${runtime[@]}" --entrypoint python mezan-exit2c:candidate -c 'import time; time.sleep(1200)'
 life() { docker exec "$probe" python /opt/acceptance/lifecycle.py "$1"; }
-accept() { docker exec "$probe" python /opt/acceptance/acceptance.py "$1"; }
+# A single controller outlives web restarts. Pipes carry phase names/status only.
+start_acceptance() {
+  coproc ACCEPTANCE { docker exec -i "$probe" python /opt/acceptance/acceptance.py; }
+  accept_pid=$ACCEPTANCE_PID
+  exec {accept_in}>&"${ACCEPTANCE[1]}"
+  exec {accept_out}<&"${ACCEPTANCE[0]}"
+}
+accept() {
+  local reply
+  printf '%s\n' "$1" >&"$accept_in"
+  if ! IFS= read -r -t 120 reply <&"$accept_out" || test "$reply" != "PASS $1"; then
+    echo 'FAIL acceptance controller: phase failed, timed out or disconnected'
+    return 1
+  fi
+  printf 'PASS acceptance phase: %s\n' "$1"
+}
 docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2c:tests /opt/acceptance/regressions.py
+docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2c:candidate /opt/acceptance/test_acceptance_controller.py
 life duplicate-fixture
 if docker run --rm "${runtime[@]}" mezan-exit2c:candidate migration; then
   echo 'FAIL duplicate fixture did not block migration'; exit 1
@@ -55,6 +76,7 @@ life completed
 life profile
 docker run --rm "${runtime[@]}" mezan-exit2c:candidate migration
 life no-writes
+start_acceptance
 accept setup
 life profile
 start_webs() {
@@ -93,6 +115,11 @@ stop_webs
 start_webs
 life no-writes
 accept after-restart
+accept finish
+exec {accept_in}>&-
+wait "$accept_pid"
+exec {accept_out}<&-
+unset accept_in accept_out accept_pid
 life profile
 stop_webs
 life no-writes
