@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
+mode="${1:-runtime}"
+case "$mode" in runtime|--preparation-only) ;; *) echo "FAIL controller PHASE_ORDER"; exit 2;; esac
+accept_args=()
+if test "$mode" = --preparation-only; then accept_args=(--preparation-only); fi
 # One standard Ubuntu job. Runtime cannot route outside the disposable namespace.
 docker build --no-cache -f packaging/exit2c/Dockerfile -t mezan-exit2c:candidate .
 docker build --no-cache -f packaging/exit2c/tests.Dockerfile -t mezan-exit2c:tests .
@@ -37,7 +41,7 @@ docker run -d --name "$probe" "${runtime[@]}" --entrypoint python mezan-exit2c:c
 life() { docker exec "$probe" python /opt/acceptance/lifecycle.py "$1"; }
 # A single controller outlives web restarts. Pipes carry phase names/status only.
 start_acceptance() {
-  coproc ACCEPTANCE { docker exec -i "$probe" python /opt/acceptance/acceptance.py; }
+  coproc ACCEPTANCE { docker exec -i "$probe" python /opt/acceptance/acceptance.py "${accept_args[@]}"; }
   accept_pid=$ACCEPTANCE_PID
   exec {accept_in}>&"${ACCEPTANCE[1]}"
   exec {accept_out}<&"${ACCEPTANCE[0]}"
@@ -46,7 +50,7 @@ accept() {
   local reply status reason
   # Reject untrusted phase names without printing them.
   case "$1" in
-    setup|http|mongo-down|after-restart|finish) accept_phase="$1" ;;
+    setup|http|mongo-down|after-restart|prep-setup|prep-review|prep-create|prep-resume|prep-finish|finish) accept_phase="$1" ;;
     *) echo 'FAIL controller PHASE_ORDER'; return 1 ;;
   esac
   # Ignore SIGPIPE only for this write; report its status without shell noise.
@@ -79,6 +83,54 @@ accept() {
   return 1
 }
 
+start_webs() {
+  docker run -d --name "$web1" "${runtime[@]}" mezan-exit2c:candidate web --port 8001
+  docker run -d --name "$web2" "${runtime[@]}" mezan-exit2c:candidate web --port 8002
+  for port in 8001 8002; do
+    ready=false
+    for attempt in $(seq 1 40); do
+      if docker exec "$probe" python -c "import urllib.request; assert urllib.request.urlopen('http://127.0.0.1:$port/api/ready',timeout=1).status==200" >/dev/null 2>&1; then ready=true; break; fi
+      sleep 1
+    done
+    if test "$ready" != true; then docker logs "$web1"; docker logs "$web2"; exit 1; fi
+  done
+}
+stop_webs() {
+  docker stop --time 10 "$web1" "$web2" >/dev/null
+  for name in "$web1" "$web2"; do
+    test "$(docker inspect -f '{{.State.ExitCode}}' "$name")" = 0
+    docker logs "$name" 2>&1 | tail -n 10
+    docker rm "$name" >/dev/null
+  done
+}
+
+if test "$mode" = --preparation-only; then
+  # No legacy ready-batch fixture and no armed worker/supervisor acceptance.
+  docker run --rm "${runtime[@]}" mezan-exit2c:candidate migration
+  docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2c:candidate /opt/acceptance/test_acceptance_controller.py
+  docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2c:candidate /opt/acceptance/test_preparation_lifecycle_acceptance.py
+  start_acceptance
+  accept prep-setup
+  life profile
+  start_webs
+  life no-writes
+  accept prep-review
+  accept prep-create
+  stop_webs
+  start_webs
+  accept prep-resume
+  stop_webs
+  start_webs
+  accept prep-finish
+  accept finish
+  exec {accept_in}>&-
+  wait "$accept_pid"
+  exec {accept_out}<&-
+  unset accept_in accept_out accept_pid
+  echo 'PASS EXIT-2D preparation lifecycle; no worker or live provider acceptance'
+  exit 0
+fi
+
 docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2c:tests /opt/acceptance/regressions.py
 docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2c:candidate /opt/acceptance/test_acceptance_controller.py
 life duplicate-fixture
@@ -108,26 +160,7 @@ life no-writes
 start_acceptance
 accept setup
 life profile
-start_webs() {
-  docker run -d --name "$web1" "${runtime[@]}" mezan-exit2c:candidate web --port 8001
-  docker run -d --name "$web2" "${runtime[@]}" mezan-exit2c:candidate web --port 8002
-  for port in 8001 8002; do
-    ready=false
-    for attempt in $(seq 1 40); do
-      if docker exec "$probe" python -c "import urllib.request; assert urllib.request.urlopen('http://127.0.0.1:$port/api/ready',timeout=1).status==200" >/dev/null 2>&1; then ready=true; break; fi
-      sleep 1
-    done
-    if test "$ready" != true; then docker logs "$web1"; docker logs "$web2"; exit 1; fi
-  done
-}
-stop_webs() {
-  docker stop --time 10 "$web1" "$web2" >/dev/null
-  for name in "$web1" "$web2"; do
-    test "$(docker inspect -f '{{.State.ExitCode}}' "$name")" = 0
-    docker logs "$name" 2>&1 | tail -n 10
-    docker rm "$name" >/dev/null
-  done
-}
+
 start_webs
 life no-writes
 accept http

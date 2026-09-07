@@ -112,16 +112,16 @@ def setup(state):
         "name": "Synthetic employee", "password_hash": hash_password(EMPLOYEE_PASSWORD),
         "role": "viewer", "created_by": owner["id"], "is_active": True})
     line = {"order_number": "EXIT2C-ORDER", "order_date": "2026-09-06",
-        "product_name": "منتج اصطناعي", "customer_name": "عميل اصطناعي",
+        "product_name": "ظ…ظ†طھط¬ ط§طµط·ظ†ط§ط¹ظٹ", "customer_name": "ط¹ظ…ظٹظ„ ط§طµط·ظ†ط§ط¹ظٹ",
         "quantity": 1, "total_products_in_order": 1, "item_index": 0,
-        "sku": "EXIT2C-SKU", "product_id": "exit2c-product", "note": "اختبار محلي"}
+        "sku": "EXIT2C-SKU", "product_id": "exit2c-product", "note": "ط§ط®طھط¨ط§ط± ظ…ط­ظ„ظٹ"}
     database.preparation_uploads.insert_one({"user_id": owner["id"],
         "upload_id": "exit2c-upload", "filename": "synthetic.pdf", "lines": [line],
         "uploaded_at": now().isoformat()})
     database[REGISTRY].insert_one({"user_id": owner["id"], "id": "exit2c-registry",
         "client_request_id": "exit2c-request", "file_number": "PF-EXIT2C-0001",
         "batch_id": "exit2c-batch", "status": "ready", "execution_status": "assigned",
-        "responsible_employee_id": owner["id"], "file_title": "تجهيز اصطناعي",
+        "responsible_employee_id": owner["id"], "file_title": "طھط¬ظ‡ظٹط² ط§طµط·ظ†ط§ط¹ظٹ",
         "file_date": "2026-09-06", "allocated_quantity": 1})
     database[BATCHES].insert_one({"user_id": owner["id"], "id": "exit2c-batch",
         "execution_status": "assigned", "status": "ready", "lines": [line]})
@@ -335,6 +335,12 @@ def mongo_down(state):
 
 if __name__ == "__main__":
     boundary()
+    if sys.argv[1:] == ["--preparation-only"]:
+        from preparation_lifecycle_acceptance import phases
+        from acceptance_controller import run
+        raise SystemExit(run(phases(), profile="preparation"))
+    if sys.argv[1:]:
+        raise SystemExit(2)
     phases = {"setup": setup, "http": http, "after-restart": after_restart, "mongo-down": mongo_down}
     from acceptance_controller import run
     raise SystemExit(run(phases))

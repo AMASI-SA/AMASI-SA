@@ -9,6 +9,7 @@ import signal
 import sys
 
 PHASES = ("setup", "http", "mongo-down", "after-restart")
+PREPARATION_PHASES = ("prep-setup", "prep-review", "prep-create", "prep-resume", "prep-finish")
 
 
 class Discard:
@@ -19,13 +20,17 @@ class Discard:
         pass
 
 
-def serve(phases, commands, replies):
+def serve(phases, commands, replies, *, profile="runtime"):
+    if profile not in ("runtime", "preparation"):
+        replies.write("FAIL controller PHASE_ORDER\n")
+        return 1
+    ordered = PREPARATION_PHASES if profile == "preparation" else PHASES
     state = {}
-    name = "setup"
+    name = ordered[0]
     reason = "UNCLASSIFIED_FAILURE"
     in_phase = False
     try:
-        for name in (*PHASES, "finish"):
+        for name in (*ordered, "finish"):
             command = commands.readline(64)
             if command == "":
                 reason = "CHANNEL_CLOSED"
@@ -64,12 +69,12 @@ def serve(phases, commands, replies):
         state.clear()
 
 
-def run(phases):
+def run(phases, *, profile="runtime"):
     def cancelled(signum, frame):
         raise KeyboardInterrupt
 
     previous = signal.signal(signal.SIGTERM, cancelled)
     try:
-        return serve(phases, sys.stdin, sys.stdout)
+        return serve(phases, sys.stdin, sys.stdout, profile=profile)
     finally:
         signal.signal(signal.SIGTERM, previous)
