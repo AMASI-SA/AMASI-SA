@@ -12,7 +12,12 @@ from datetime import date
 from typing import Any
 
 from auth import DEFAULT_PAYMENT_METHODS, DEFAULT_SHIPPING_COMPANIES, ensure_user_settings
-from dashboard_v2_routes import _filtered_orders, build_mezan_v2_ads, build_mezan_v2_product_cost
+from dashboard_v2_routes import (
+    FINANCIAL_COST_COMPLETENESS_VERSION,
+    _filtered_orders,
+    build_mezan_v2_ads,
+    build_mezan_v2_product_cost,
+)
 from excel_parser import match_settings
 from expenses_routes import compute_operating_expenses_for_range
 from orders_db import orders_to_parsed
@@ -21,6 +26,12 @@ from shipping_cost_ssot import aggregate_breakdown, get_company_configs
 
 CONTRACT_VERSION = "mezan_profit_envelope_v1"
 SOURCE = "mezan_profit_engine_v2_read_only"
+_FINANCIAL_COST_CONTRACT_KEYS = (
+    "financial_cost_contract_version",
+    "financial_cost_missing_products_count",
+    "financial_cost_missing_lines_count",
+    "financially_incomplete_orders_count",
+)
 
 
 def _number(value: Any) -> float:
@@ -55,6 +66,61 @@ def _count(value: Any) -> int | None:
     return parsed if parsed >= 0 else None
 
 
+def _strict_count(value: Any) -> int | None:
+    """Parse a versioned counter without coercing null/bool/string to zero."""
+    return value if type(value) is int and value >= 0 else None
+
+
+def read_financial_cost_completeness(
+    source: dict[str, Any],
+    *,
+    legacy_missing_key: str,
+    legacy_incomplete_key: str,
+) -> dict[str, Any]:
+    """Read the additive financial contract or conservatively parse legacy data."""
+    financial_contract_fields = {
+        key: source[key]
+        for key in _FINANCIAL_COST_CONTRACT_KEYS
+        if key in source
+    }
+    financial_contract_present = bool(financial_contract_fields)
+    if financial_contract_present:
+        version = source.get("financial_cost_contract_version")
+        missing_products = _strict_count(
+            source.get("financial_cost_missing_products_count")
+        )
+        missing_lines = _strict_count(
+            source.get("financial_cost_missing_lines_count")
+        )
+        incomplete_orders = _strict_count(
+            source.get("financially_incomplete_orders_count")
+        )
+        known = bool(
+            version == FINANCIAL_COST_COMPLETENESS_VERSION
+            and missing_products is not None
+            and missing_lines is not None
+            and incomplete_orders is not None
+            and missing_products <= missing_lines
+            and (missing_lines == 0 or incomplete_orders > 0)
+        )
+        counter_source = "financial_cost_contract"
+    else:
+        missing_products = _count(source.get(legacy_missing_key))
+        missing_lines = None
+        incomplete_orders = _count(source.get(legacy_incomplete_key))
+        known = missing_products is not None and incomplete_orders is not None
+        counter_source = "legacy_mezan_setup_conservative"
+    return {
+        "financial_cost_known": known,
+        "financial_contract_present": financial_contract_present,
+        "resolved_missing_products_count": missing_products,
+        "resolved_missing_lines_count": missing_lines,
+        "resolved_incomplete_orders_count": incomplete_orders,
+        "financial_contract_fields": financial_contract_fields,
+        "counter_source": counter_source,
+    }
+
+
 def _advertising_known(ads: dict[str, Any]) -> bool:
     """Return True only when the dashboard's financial ad amount is complete.
 
@@ -80,14 +146,19 @@ def _accounting_quality(
     operating: dict[str, Any],
     recurring: dict[str, Any],
 ) -> dict[str, Any]:
-    missing = _count(product_cost.get("missing_products_count"))
-    incomplete = _count(product_cost.get("incomplete_orders_count"))
+    cost_completeness = read_financial_cost_completeness(
+        product_cost,
+        legacy_missing_key="missing_products_count",
+        legacy_incomplete_key="incomplete_orders_count",
+    )
+    missing = cost_completeness["resolved_missing_products_count"]
+    incomplete = cost_completeness["resolved_incomplete_orders_count"]
+    product_total = _optional_number(product_cost.get("total"))
     component_known = {
         "orders_sales": True,
         "product_cost": (
-            "total" in product_cost
-            and missing is not None
-            and incomplete is not None
+            product_total is not None
+            and cost_completeness["financial_cost_known"] is True
         ),
         "advertising": _advertising_known(ads),
         "payment_fees": "total_payment_fees" in matched,
@@ -105,12 +176,32 @@ def _accounting_quality(
         issues.append("missing_product_cost")
     if incomplete is not None and incomplete > 0:
         issues.append("incomplete_profit_orders")
+    if (
+        cost_completeness["financial_contract_present"]
+        and cost_completeness["financial_cost_known"] is not True
+    ):
+        issues.append("invalid_financial_cost_contract")
     return {
         "known": known,
         "complete": complete,
         "scale_safe": complete,
         "missing_product_cost_count": missing,
         "incomplete_profit_orders_count": incomplete,
+        "financial_cost_known": cost_completeness["financial_cost_known"],
+        "financial_contract_present": cost_completeness[
+            "financial_contract_present"
+        ],
+        "counter_source": cost_completeness["counter_source"],
+        **cost_completeness["financial_contract_fields"],
+        "mezan_setup_missing_products_count": _count(
+            product_cost.get("mezan_setup_missing_products_count")
+        ),
+        "mezan_setup_missing_lines_count": _count(
+            product_cost.get("mezan_setup_missing_lines_count")
+        ),
+        "mezan_setup_incomplete_orders_count": _count(
+            product_cost.get("mezan_setup_incomplete_orders_count")
+        ),
         "component_known": component_known,
         "issues": issues,
         "unknown_is_zero": False,
@@ -168,6 +259,11 @@ async def build_mezan_profit_envelope(
         operating=operating,
         recurring=recurring,
     )
+    financial_contract_fields = {
+        key: quality[key]
+        for key in _FINANCIAL_COST_CONTRACT_KEYS
+        if key in quality
+    }
     advertising_known = quality["component_known"]["advertising"] is True
 
     payment_fees = _number(matched.get("total_payment_fees"))
@@ -233,11 +329,21 @@ async def build_mezan_profit_envelope(
         ),
         "missing_product_cost_count": quality["missing_product_cost_count"],
         "incomplete_profit_orders_count": quality["incomplete_profit_orders_count"],
+        "mezan_setup_missing_products_count": quality[
+            "mezan_setup_missing_products_count"
+        ],
+        "mezan_setup_missing_lines_count": quality[
+            "mezan_setup_missing_lines_count"
+        ],
+        "mezan_setup_incomplete_orders_count": quality[
+            "mezan_setup_incomplete_orders_count"
+        ],
         "profit_accounting_complete": quality["complete"],
         "profit_accounting_quality_known": quality["known"],
         "profit_source": SOURCE,
         "profit_contract_version": CONTRACT_VERSION,
         "profit_source_contract": source_contract,
+        **financial_contract_fields,
     }
     return {
         "contract_version": CONTRACT_VERSION,
@@ -246,7 +352,19 @@ async def build_mezan_profit_envelope(
         "totals": totals,
         "components": {
             "sales": {"amount_sar": total_sales, "orders": total_orders},
-            "product_cost": {"amount_sar": round(product_total, 2)},
+            "product_cost": {
+                "amount_sar": round(product_total, 2),
+                "mezan_setup_missing_products_count": quality[
+                    "mezan_setup_missing_products_count"
+                ],
+                "mezan_setup_missing_lines_count": quality[
+                    "mezan_setup_missing_lines_count"
+                ],
+                "mezan_setup_incomplete_orders_count": quality[
+                    "mezan_setup_incomplete_orders_count"
+                ],
+                **financial_contract_fields,
+            },
             "advertising": {
                 "amount_sar": round(ad_spend, 2) if ad_spend is not None else None,
                 "known": advertising_known,
@@ -287,7 +405,9 @@ async def build_mezan_profit_totals(
 
 __all__ = [
     "CONTRACT_VERSION",
+    "FINANCIAL_COST_COMPLETENESS_VERSION",
     "SOURCE",
     "build_mezan_profit_envelope",
     "build_mezan_profit_totals",
+    "read_financial_cost_completeness",
 ]

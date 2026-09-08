@@ -1,0 +1,93 @@
+name: Profit Cost Financial Completeness
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "backend/dashboard_v2_routes.py"
+      - "backend/mezan_profit_engine.py"
+      - "backend/campaign_ai_profit_accounting_gate.py"
+      - "backend/tests/test_profit_cost_financial_completeness.py"
+      - "backend/tests/test_dashboard_v2_product_cost.py"
+      - "backend/tests/test_dashboard_snapchat_spend_issue_727.py"
+      - "backend/tests/test_order_option_cost_snapshots.py"
+      - "backend/tests/test_effective_product_cost_iter91.py"
+      - "backend/tests/test_snapchat_campaign_profitability_v1.py"
+      - "backend/tests/test_campaign_ai_consolidated_profit_envelope.py"
+      - "backend/tests/test_campaign_ai_profit_accounting_completeness_p1_1.py"
+      - "backend/tests/test_campaign_ai_monthly_profit_goal_v1.py"
+      - "backend/tests/test_campaign_ai_store_opportunity_planner.py"
+      - "backend/tests/test_campaign_ai_monthly_causal_memory.py"
+      - "backend/tests/test_mezan_profit_engine_ad_quality.py"
+      - "backend/tests/test_campaign_ai_mezan_profit_loader_p0_1.py"
+      - "docs/fixes/PROFIT-COST-1B.md"
+      - ".github/workflows/profit-cost-financial-completeness.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  backend-contract:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused dependencies
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1
+          pydantic==2.13.4
+          pymongo==4.6.3
+          httpx==0.28.1
+          openai==1.99.9
+          pytest==9.0.3
+          pytest-asyncio
+          openpyxl
+          cryptography
+          bcrypt
+          PyJWT
+          reportlab
+          python-multipart
+          python-dotenv
+          email-validator
+          pymupdf
+          pillow
+          qrcode
+          arabic-reshaper
+          python-bidi
+      - name: Compile financial completeness contract
+        run: >-
+          python -m py_compile
+          dashboard_v2_routes.py
+          mezan_profit_engine.py
+          campaign_ai_profit_accounting_gate.py
+          tests/test_profit_cost_financial_completeness.py
+      - name: Run connected contract and affected regressions
+        run: >-
+          python -m pytest -q --tb=short
+          tests/test_profit_cost_financial_completeness.py
+          tests/test_dashboard_v2_product_cost.py
+          tests/test_dashboard_snapchat_spend_issue_727.py
+          tests/test_order_option_cost_snapshots.py
+          tests/test_effective_product_cost_iter91.py
+          tests/test_snapchat_campaign_profitability_v1.py
+          tests/test_campaign_ai_consolidated_profit_envelope.py
+          tests/test_campaign_ai_profit_accounting_completeness_p1_1.py
+          tests/test_campaign_ai_monthly_profit_goal_v1.py
+          tests/test_campaign_ai_store_opportunity_planner.py
+          tests/test_campaign_ai_monthly_causal_memory.py
+          tests/test_mezan_profit_engine_ad_quality.py
+          tests/test_campaign_ai_mezan_profit_loader_p0_1.py
+      - name: Enforce no estimator and no live/write test surface
+        working-directory: .
+        run: |
+          TEST=backend/tests/test_profit_cost_financial_completeness.py
+          ! grep -Eq 'call_salla|httpx\.|requests\.|AsyncClient|TestClient' "$TEST"
+          ! grep -Eq 'CAMPAIGN_GROSS_MARGIN_RATE|min_margin_percent|estimated_35pct' backend/dashboard_v2_routes.py backend/mezan_profit_engine.py
+          grep -q 'unexpected accounting/provider write' "$TEST"
