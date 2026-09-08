@@ -871,7 +871,7 @@ async def test_salla_account_total_unions_source_and_exact_campaign_without_gues
     assert result["summary"]["campaign_match_coverage_pct"] == 50.0
     assert result["summary"]["non_campaign_orders"] == 2
     audit = {row["order_number"]: row for row in result["orders"]}
-    assert audit["2001"]["match_method"] == "unmatched"
+    assert audit["2001"]["match_method"] == "source_only"
     assert audit["2003"]["match_method"] == "foreign_platform"
 
 

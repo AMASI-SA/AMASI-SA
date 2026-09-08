@@ -605,6 +605,7 @@ export async function getSnapchatManagementReadiness() {
 export async function getSnapchatEntitySettings({
     entityType,
     unifiedEntityId = "",
+    unifiedEntityIds = [],
     parentUnifiedId = "",
     limit = 500,
 } = {}) {
@@ -612,12 +613,18 @@ export async function getSnapchatEntitySettings({
     if (!["campaign", "ad_squad"].includes(normalizedType)) {
         throw new Error("invalid_snapchat_settings_entity_type");
     }
+    const visibleIds = [...new Set((Array.isArray(unifiedEntityIds) ? unifiedEntityIds : [])
+        .map((value) => text(value))
+        .filter(Boolean))];
+    if (visibleIds.length > 100) throw new Error("snapchat_settings_visible_batch_too_large");
+    if (text(unifiedEntityId) && visibleIds.length) throw new Error("snapchat_settings_target_and_batch_conflict");
     const response = await api.get(`${BASE}/entity-settings`, {
         params: {
             entity_type: normalizedType,
             unified_entity_id: text(unifiedEntityId) || undefined,
+            unified_entity_ids: visibleIds.length ? visibleIds.join(",") : undefined,
             parent_unified_id: text(parentUnifiedId) || undefined,
-            limit: Math.min(500, Math.max(1, Math.trunc(Number(limit) || 500))),
+            limit: Math.min(visibleIds.length ? 100 : 500, Math.max(1, Math.trunc(Number(limit) || 500))),
         },
     });
     return settingsItems(response.data);

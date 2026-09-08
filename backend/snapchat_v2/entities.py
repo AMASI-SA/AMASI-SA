@@ -6,6 +6,8 @@ from typing import Any, Iterable
 
 from .models import SNAPCHAT_PROVIDER, clean_text
 
+ACTIVE_OPERATIONAL_STATUSES = frozenset({"ACTIVE", "ENABLED", "DELIVERING"})
+
 SNAPCHAT_ENTITY_FACTS_COLLECTION = "mezan_snapchat_entity_facts_v2"
 ENTITY_TYPES = {"campaign", "ad_squad", "ad"}
 MAX_ENTITY_ROWS = 20_000
@@ -48,6 +50,12 @@ def normalize_entity(
     raw = dict(row.get("raw") or {})
     for secret in ("access_token", "refresh_token", "authorization", "client_secret"):
         raw.pop(secret, None)
+    status = clean_text(row.get("status"), limit=64).upper() or None
+    effective_status = clean_text(
+        row.get("effective_status") or row.get("delivery_status"),
+        limit=64,
+    ).upper() or None
+    operational_status = effective_status or status
     return {
         "user_id": str(user_id),
         "provider": SNAPCHAT_PROVIDER,
@@ -55,13 +63,20 @@ def normalize_entity(
         "entity_type": entity_type,
         "external_id": external_id,
         "name": clean_text(row.get("name") or external_id, limit=300),
-        "status": clean_text(row.get("status"), limit=64) or None,
+        # ``active`` remains the catalogue-observation flag for persisted
+        # compatibility. Read APIs expose an operational flag derived from
+        # these status fields instead.
+        "status": status,
+        "effective_status": effective_status,
+        "operational_status": operational_status,
+        "operationally_active": operational_status in ACTIVE_OPERATIONAL_STATUSES,
         "campaign_id": clean_text(row.get("campaign_id"), limit=128) or None,
         "ad_squad_id": clean_text(row.get("ad_squad_id"), limit=128) or None,
         "creative_id": clean_text(row.get("creative_id"), limit=128) or None,
         "raw": raw,
         "sync_run_id": str(sync_run_id),
         "active": True,
+        "observed_in_latest_sync": True,
     }
 
 
@@ -107,6 +122,7 @@ async def sync_entities(
                 "$set": {
                     **normalized,
                     "missing_from_latest_sync": False,
+                    "observed_in_latest_sync": True,
                     "last_seen_at": current,
                     "updated_at": current,
                 },
@@ -129,6 +145,8 @@ async def sync_entities(
         {
             "$set": {
                 "active": False,
+                "observed_in_latest_sync": False,
+                "operationally_active": False,
                 "missing_from_latest_sync": True,
                 "stale_at": current,
                 "updated_at": current,

@@ -26,6 +26,7 @@ INTEGRATION_ACCOUNTS_COLLECTION = "mezan_integration_accounts_v2"
 SETTINGS_FRESHNESS_MAX_AGE_SECONDS = 30 * 60
 MAX_SETTINGS_ROWS = 500
 MAX_CAMPAIGN_CHILD_ROWS = 10_000
+MAX_VISIBLE_SETTINGS_ROWS = 100
 SUPPORTED_ENTITY_TYPES = ("campaign", "ad_squad")
 _COMPLETE = "settings_complete"
 _NOT_LOADED = "settings_not_loaded"
@@ -910,6 +911,236 @@ def _attach_campaign_aggregate(
     ]
 
 
+async def _aggregate_visible_campaign_children(
+    db: Any,
+    *,
+    user_id: str,
+    campaigns: dict[str, dict[str, Any]],
+    latest_run: dict[str, Any] | None,
+    now: datetime,
+) -> dict[tuple[str, str], dict[str, Any]]:
+    """Return one scalar Ad Squad aggregate per visible campaign.
+
+    No Ad Squad document leaves MongoDB.  A complete native run plus the run
+    observation window proves the visible campaign partitions; any missing or
+    malformed financial field makes its aggregate unavailable.
+    """
+    collection = _collection(db, SNAPCHAT_ENTITY_COLLECTION)
+    if not callable(getattr(collection, "aggregate", None)):
+        return {}
+    started = _as_utc((latest_run or {}).get("started_at"))
+    finished = _as_utc((latest_run or {}).get("finished_at"))
+    if started is None or finished is None or finished < started:
+        return {}
+    account_ids = sorted(
+        {
+            account_id
+            for campaign in campaigns.values()
+            if (account_id := _safe_id(campaign.get("ad_account_id")))
+        }
+    )
+    campaign_ids = sorted(campaigns)
+    budget_value = {
+        "$convert": {
+            "input": "$provider_snapshot.daily_budget_micro",
+            "to": "long",
+            "onError": None,
+            "onNull": None,
+        }
+    }
+    mapping_valid = {
+        "$and": [
+            {"$eq": ["$source_mode", SNAPCHAT_NATIVE_SYNC_SOURCE_MODE]},
+            {"$eq": ["$external_id", "$provider_snapshot.id"]},
+            {"$eq": ["$campaign_id", "$provider_snapshot.campaign_id"]},
+        ]
+    }
+    pipeline = [
+        {
+            "$match": {
+                "user_id": str(user_id),
+                "provider": SNAPCHAT_PROVIDER_ID,
+                "entity_type": "ad_squad",
+                "ad_account_id": {"$in": account_ids},
+                "campaign_id": {"$in": campaign_ids},
+                "deleted": {"$ne": True},
+                "last_observed_at": {"$gte": started, "$lte": finished},
+            }
+        },
+        {
+            "$set": {
+                "_budget_value": budget_value,
+                "_mapping_valid": mapping_valid,
+            }
+        },
+        {
+            "$group": {
+                "_id": {
+                    "account_id": "$ad_account_id",
+                    "campaign_id": "$campaign_id",
+                },
+                "ad_squad_count": {"$sum": 1},
+                "budget_count": {
+                    "$sum": {"$cond": [{"$gt": ["$_budget_value", 0]}, 1, 0]}
+                },
+                "daily_budget_sum_micro": {
+                    "$sum": {"$cond": [{"$gt": ["$_budget_value", 0]}, "$_budget_value", 0]}
+                },
+                "status_count": {
+                    "$sum": {
+                        "$cond": [
+                            {"$gt": [{"$strLenCP": {"$ifNull": ["$provider_snapshot.status", ""]}}, 0]},
+                            1,
+                            0,
+                        ]
+                    }
+                },
+                "active_count": {
+                    "$sum": {
+                        "$cond": [
+                            {"$eq": [{"$toUpper": {"$ifNull": ["$provider_snapshot.status", ""]}}, "ACTIVE"]},
+                            1,
+                            0,
+                        ]
+                    }
+                },
+                "strategy_count": {
+                    "$sum": {
+                        "$cond": [
+                            {"$gt": [{"$strLenCP": {"$ifNull": ["$provider_snapshot.bid_strategy", ""]}}, 0]},
+                            1,
+                            0,
+                        ]
+                    }
+                },
+                "strategies": {"$addToSet": "$provider_snapshot.bid_strategy"},
+                "mapping_valid_count": {
+                    "$sum": {"$cond": ["$_mapping_valid", 1, 0]}
+                },
+                "oldest_observed_at": {"$min": "$last_observed_at"},
+            }
+        },
+        {"$limit": MAX_VISIBLE_SETTINGS_ROWS},
+    ]
+    try:
+        cursor = collection.aggregate(pipeline, allowDiskUse=False, maxTimeMS=15_000)
+    except TypeError:
+        cursor = collection.aggregate(pipeline)
+    rows, _ = await _cursor_rows(cursor, limit=MAX_VISIBLE_SETTINGS_ROWS)
+    return {
+        (
+            _safe_id((row.get("_id") or {}).get("account_id")) or "",
+            _safe_id((row.get("_id") or {}).get("campaign_id")) or "",
+        ): row
+        for row in rows
+    }
+
+
+def _attach_scalar_campaign_aggregate(
+    campaign: dict[str, Any],
+    scalar: dict[str, Any] | None,
+    *,
+    latest_run: dict[str, Any] | None,
+    now: datetime,
+) -> None:
+    scalar = dict(scalar or {})
+    count = int(scalar.get("ad_squad_count") or 0)
+    started = _as_utc((latest_run or {}).get("started_at"))
+    finished = _as_utc((latest_run or {}).get("finished_at"))
+    campaign_observed = _as_utc(campaign.get("settings_synced_at"))
+    run_complete = bool(
+        str((latest_run or {}).get("status") or "").lower() == "complete"
+        and started is not None
+        and finished is not None
+        and finished >= started
+        and campaign_observed is not None
+        and started <= campaign_observed <= finished
+    )
+    oldest = _as_utc(scalar.get("oldest_observed_at"))
+    fresh = count == 0 or bool(
+        oldest is not None
+        and 0 <= (now - oldest).total_seconds() <= SETTINGS_FRESHNESS_MAX_AGE_SECONDS
+    )
+    mapping_complete = int(scalar.get("mapping_valid_count") or 0) == count
+    settings_complete = run_complete and fresh and mapping_complete
+    budget_complete = settings_complete and int(scalar.get("budget_count") or 0) == count
+    status_complete = settings_complete and int(scalar.get("status_count") or 0) == count
+    strategy_complete = settings_complete and int(scalar.get("strategy_count") or 0) == count
+    currency = campaign.get("account_currency")
+    budget_micro = int(scalar.get("daily_budget_sum_micro") or 0) if budget_complete else None
+    reason = (
+        "available"
+        if settings_complete
+        else "child_catalog_sync_not_complete"
+        if not run_complete
+        else "child_settings_stale"
+        if not fresh
+        else "child_identity_mapping_unverified"
+    )
+    strategies = sorted(
+        str(value).upper()
+        for value in list(scalar.get("strategies") or [])
+        if _safe_id(value)
+    ) if strategy_complete else []
+    aggregate = {
+        "ad_squad_count": count if run_complete else None,
+        "loaded_ad_squad_count": 0,
+        "active_ad_squad_count": int(scalar.get("active_count") or 0) if status_complete else None,
+        "daily_budget_sum_micro": budget_micro,
+        "daily_budget_sum_account_currency": (
+            micro_to_account_currency(budget_micro) if budget_micro is not None and currency else None
+        ),
+        "daily_budget_sum_usd": micro_to_usd(budget_micro, currency) if budget_micro is not None else None,
+        "daily_budget_sum_availability": "available" if budget_complete else reason,
+        "catalog_coverage": {
+            "complete": run_complete,
+            "reason": "available" if run_complete else reason,
+            "proof_mode": "complete_sync_run_visible_partition_aggregate",
+            "python_child_rows_materialized": 0,
+        },
+        "budget_coverage": {
+            "complete": budget_complete,
+            "loaded_count": int(scalar.get("budget_count") or 0),
+            "total_count": count,
+            "truncated": False,
+            "catalog_complete": run_complete,
+        },
+        "active_count_availability": "available" if status_complete else reason,
+        "status_coverage": {
+            "complete": status_complete,
+            "loaded_count": int(scalar.get("status_count") or 0),
+            "total_count": count,
+            "truncated": False,
+            "catalog_complete": run_complete,
+        },
+        "ad_squad_bid_strategies": strategies,
+        "bid_strategies_availability": "available" if strategy_complete else reason,
+        "bid_strategy_coverage": {
+            "complete": strategy_complete,
+            "loaded_count": int(scalar.get("strategy_count") or 0),
+            "total_count": count,
+            "truncated": False,
+            "catalog_complete": run_complete,
+        },
+        "shared_ad_squad_bid_strategy": campaign.pop("_shared_properties", None),
+    }
+    if isinstance(aggregate["shared_ad_squad_bid_strategy"], dict):
+        aggregate["shared_ad_squad_bid_strategy"] = aggregate["shared_ad_squad_bid_strategy"].get("shared_ad_squad_bid_strategy")
+    campaign["campaign_aggregate"] = aggregate
+    campaign["ad_squad_count"] = aggregate["ad_squad_count"]
+    campaign["active_ad_squad_count"] = aggregate["active_ad_squad_count"]
+    campaign["active_ad_squads_availability"] = aggregate["active_count_availability"]
+    campaign["ad_squad_daily_budget_sum_micro"] = budget_micro
+    campaign["ad_squad_daily_budget_sum_usd"] = aggregate["daily_budget_sum_usd"]
+    campaign["ad_squad_daily_budget_sum_availability"] = aggregate["daily_budget_sum_availability"]
+    campaign["ad_squad_bid_strategies"] = strategies
+    campaign["ad_squad_bid_strategies_availability"] = aggregate["bid_strategies_availability"]
+    campaign["ad_squads_daily_budget_micro"] = budget_micro
+    campaign["ad_squads_daily_budget_usd"] = aggregate["daily_budget_sum_usd"]
+    campaign["active_ad_squads"] = aggregate["active_ad_squad_count"]
+    campaign["shared_ad_squad_bid_strategy"] = aggregate["shared_ad_squad_bid_strategy"]
+
+
 async def list_financial_management_settings(
     db: Any,
     user_id: str,
@@ -917,6 +1148,7 @@ async def list_financial_management_settings(
     unified_entity_id: str | None = None,
     parent_unified_id: str | None = None,
     *,
+    unified_entity_ids: list[str] | None = None,
     now: datetime | Callable[[], datetime] | None = None,
     limit: int = MAX_SETTINGS_ROWS,
 ) -> dict[str, Any]:
@@ -925,6 +1157,15 @@ async def list_financial_management_settings(
         raise ValueError("entity_type must be campaign or ad_squad")
     bounded_limit = max(1, min(int(limit), MAX_SETTINGS_ROWS))
     requested_id = _safe_id(unified_entity_id)
+    requested_ids = list(dict.fromkeys(
+        value
+        for raw in list(unified_entity_ids or [])
+        if (value := _safe_id(raw)) is not None
+    ))
+    if len(requested_ids) > MAX_VISIBLE_SETTINGS_ROWS:
+        raise ValueError("visible settings batch cannot exceed 100 entity IDs")
+    if requested_id and requested_ids:
+        raise ValueError("use unified_entity_id or unified_entity_ids, not both")
     requested_parent_id = _safe_id(parent_unified_id)
     if requested_parent_id and entity_type != "ad_squad":
         raise ValueError("parent_unified_id is only valid for ad_squad settings")
@@ -937,6 +1178,8 @@ async def list_financial_management_settings(
     }
     if requested_id:
         query["external_id"] = requested_id
+    elif requested_ids:
+        query["external_id"] = {"$in": requested_ids}
     if requested_parent_id:
         # The unified Snapchat campaign ID is the provider campaign ID in the
         # existing native entity catalogue. Filtering before limit prevents
@@ -1002,7 +1245,25 @@ async def list_financial_management_settings(
         items.append(item)
 
     children_truncated = False
-    if rows_by_campaign:
+    collection = _collection(db, SNAPCHAT_ENTITY_COLLECTION)
+    scalar_aggregation = callable(getattr(collection, "aggregate", None))
+    if rows_by_campaign and scalar_aggregation:
+        child_scalars = await _aggregate_visible_campaign_children(
+            db,
+            user_id=str(user_id),
+            campaigns=rows_by_campaign,
+            latest_run=latest_run,
+            now=current,
+        )
+        for campaign_id, campaign in rows_by_campaign.items():
+            account_id = _safe_id(campaign.get("ad_account_id")) or ""
+            _attach_scalar_campaign_aggregate(
+                campaign,
+                child_scalars.get((account_id, campaign_id)),
+                latest_run=latest_run,
+                now=current,
+            )
+    elif rows_by_campaign:
         campaign_account_ids = sorted(
             {
                 account_id
@@ -1094,6 +1355,9 @@ async def list_financial_management_settings(
         "rows_truncated": rows_truncated,
         "children_truncated": children_truncated,
         "requested_parent_unified_id": requested_parent_id,
+        "requested_entity_ids": requested_ids,
+        "settings_rows_materialized": len(items),
+        "child_rows_materialized": 0 if scalar_aggregation else None,
         "items": items,
     }
 
@@ -1192,22 +1456,35 @@ def attach_snapchat_entity_settings_routes(
         parent_unified_id: str | None = Query(
             default=None, min_length=1, max_length=128
         ),
+        unified_entity_ids: str | None = Query(default=None, max_length=13_000),
         limit: int = Query(default=MAX_SETTINGS_ROWS, ge=1, le=MAX_SETTINGS_ROWS),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         owner = require_owner(user)
+        raw_requested_ids = unified_entity_ids if isinstance(unified_entity_ids, str) else ""
+        requested_ids = [
+            value.strip()
+            for value in raw_requested_ids.split(",")
+            if value.strip()
+        ]
+        if any(len(value) > 128 for value in requested_ids):
+            raise ValueError("unified entity ID cannot exceed 128 characters")
+        kwargs: dict[str, Any] = {"limit": limit}
+        if requested_ids:
+            kwargs["unified_entity_ids"] = requested_ids
         return await list_financial_management_settings(
             db,
             str(owner["id"]),
             entity_type,
             unified_entity_id,
             parent_unified_id,
-            limit=limit,
+            **kwargs,
         )
 
 
 __all__ = [
     "MAX_SETTINGS_ROWS",
+    "MAX_VISIBLE_SETTINGS_ROWS",
     "SETTINGS_FRESHNESS_MAX_AGE_SECONDS",
     "SUPPORTED_ENTITY_TYPES",
     "attach_snapchat_entity_settings_routes",
