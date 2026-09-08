@@ -19,6 +19,7 @@ from pathlib import Path
 from urllib.parse import quote
 from acceptance_controller import check
 from order_fixture import ORDERS, order_fixture
+from unit_contract import verify_units
 
 REGISTRY = "mezan_preparation_file_registry_v2"
 BATCHES = "mezan_preparation_batches_v2"
@@ -519,8 +520,8 @@ class Lifecycle:
             require(all(w["preparation_assignment_status"] == "assigned" for w in self.rows(WORKFLOWS)))
         with check('ASSIGNMENT_STATES'):
             require(all(w["preparation_progress"]["remaining_quantity"] == 0 for w in self.rows(WORKFLOWS)))
-        with check('UNIT_QUANTITIES_OPTIONS'):
-            verify_units(self.state["expected"], self.rows(ALLOCATIONS), self.rows(PIECES), self.state["employee"])
+        verify_units(self.state["expected"], self.rows(ALLOCATIONS), self.rows(PIECES), self.state["employee"],
+                     self.rows(BATCHES), self.rows(REGISTRY), self.state["files"], state=self.state)
         self.record_provider_counts('AFTER_SECOND_FILE')
         with check('EMPLOYEE_START'):
             first = self.state["files"][0]
@@ -614,18 +615,6 @@ def identity(allocations, pieces, registries):
     def units(rows):
         return sorted((r["order_number"], r["order_item_id"], r["unit_index"], r["batch_id"]) for r in rows)
     return (units(allocations), units(pieces), sorted((r["client_request_id"], r["file_number"], r.get("batch_id")) for r in registries))
-
-
-def verify_units(expected, allocations, pieces, employee):
-    wanted = {(number, item, unit) for (number, item), row in expected.items() for unit in range(1, row["quantity"] + 1)}
-    for rows in (allocations, pieces):
-        actual = [(r["order_number"], r["order_item_id"], r["unit_index"]) for r in rows]
-        require(len(actual) == len(set(actual)) and set(actual) == wanted)
-    require(all(r["status"] == "committed" for r in allocations))
-    require(all(r["responsible_employee_id"] == employee for r in pieces))
-    for piece in pieces:
-        options = expected[(piece["order_number"], piece["order_item_id"])]["options"]
-        require(all(piece["product_options_snapshot"].get(k) == v for k, v in options.items()))
 
 
 def phases():

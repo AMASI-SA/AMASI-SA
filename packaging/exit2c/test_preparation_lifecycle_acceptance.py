@@ -16,6 +16,8 @@ from acceptance_controller import PREPARATION_PHASES, serve
 import preparation_lifecycle_acceptance as prep
 from test_catalog_image_fixture import CatalogImageFixtureTests
 from test_snapshot_evidence import SnapshotEvidenceTests
+from test_unit_contract import UnitContractTests
+from test_unit_projection import UnitProjectionTests, synthetic_documents
 
 
 class PreparationContracts(unittest.TestCase):
@@ -158,17 +160,16 @@ class PreparationContracts(unittest.TestCase):
                              and n.func.attr in {'write_text', 'write_bytes', 'dump', 'dumps'} for n in ast.walk(tree)))
 
     def test_exact_units_detect_duplicate_missing_wrong_line_options_and_employee(self):
-        expected = {('o', 'i'): {'quantity': 2, 'options': {"\u0627\u0644\u0644\u0648\u0646": "\u0630\u0647\u0628\u064a"}}}
-        allocations = [{'order_number': 'o', 'order_item_id': 'i', 'unit_index': i, 'status': 'committed'} for i in (1, 2)]
-        pieces = [{**r, 'responsible_employee_id': 'e', 'product_options_snapshot': {"\u0627\u0644\u0644\u0648\u0646": "\u0630\u0647\u0628\u064a"}} for r in allocations]
-        prep.verify_units(expected, allocations, pieces, 'e')
-        invalid = []
+        data = synthetic_documents()
+        prep.verify_units(**data)
         for change in ({'unit_index': 1}, {'order_item_id': 'wrong'}, {'responsible_employee_id': 'wrong'},
-                       {'product_options_snapshot': {"\u0627\u0644\u0644\u0648\u0646": "\u0641\u0636\u064a"}}):
-            rows = copy.deepcopy(pieces); rows[1].update(change); invalid.append(rows)
-        invalid.append(pieces[:1])
-        for rows in invalid:
-            with self.assertRaises(AssertionError): prep.verify_units(expected, allocations, rows, 'e')
+                       {'product_options_snapshot': {'invalid': 'changed'}}):
+            altered = copy.deepcopy(data)
+            altered['pieces'][1].update(change)
+            with self.assertRaises(AssertionError): prep.verify_units(**altered)
+        altered = copy.deepcopy(data)
+        altered['pieces'] = altered['pieces'][:1]
+        with self.assertRaises(AssertionError): prep.verify_units(**altered)
 
     def test_guard_refuses_existing_provider_dependent_routes(self):
         for kind in ('review', 'assembly'):

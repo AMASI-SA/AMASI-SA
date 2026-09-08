@@ -33,7 +33,7 @@ CHECKS_BY_PHASE = {
                     'INCOMPLETE_RELEASE', 'COMPLETED_RELEASE_DENIAL', 'REALLOCATION_DRAFT',
                     'REALLOCATION_DENIAL', 'REALLOCATION_RELEASE', 'REMAINING_CATALOG',
                     'SAFE_DRAFT', 'FILE_CREATE', 'FINALIZE_FALLBACK', 'FILE_CREATE_REPEAT',
-                    'ASSIGNMENT_STATES', 'UNIT_QUANTITIES_OPTIONS', 'EMPLOYEE_START', 'START_REPEAT',
+                    'ASSIGNMENT_STATES', 'UNIT_ALLOCATION_IDENTITIES', 'UNIT_PIECE_IDENTITIES', 'UNIT_ALLOCATION_STATUS', 'UNIT_EMPLOYEE_ASSIGNMENT', 'UNIT_BATCH_LINK', 'UNIT_SPECIFICATIONS', 'UNIT_PROJECTED_OPTIONS', 'EMPLOYEE_START', 'START_REPEAT',
                     'SUPPLIER_WORKSPACE', 'SUPPLIER_DISPATCH', 'SUPPLIER_DISPATCH_REPEAT', 'SUPPLIER_READY',
                     'SUPPLIER_PIECE_IDENTITY', 'RECEIVING_SEARCH', 'PIECE_RECEIVE', 'RECEIVE_REPEAT',
                     'FILE_COMPLETED_STATE', 'ASSEMBLY_SEARCH', 'PIECE_ASSEMBLY', 'SIMULATED_LABEL_FAILURE',
@@ -120,6 +120,11 @@ class Discard:
 def emit_review_evidence(state, replies, phase):
     from simulator_evidence import protocol_lines, CHECKPOINTS_BY_PHASE
     from snapshot_evidence import validate_snapshot_line
+    from unit_contract import unit_lines
+    unit_records = state.pop('_unit_evidence', [])
+    if unit_records:
+        lines = unit_lines(unit_records) if phase == 'prep-resume' else ['UNITS unavailable']
+        for line in lines: replies.write(line + '\n')
     completed = state.pop('_completed_checks', [])
     if type(completed) is not list or len(completed) > 512:
         replies.write('EVIDENCE_UNAVAILABLE\n')
