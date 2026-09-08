@@ -5,12 +5,13 @@ EOF, phase failure and cancellation fail closed and release state references.
 Process teardown is the lifetime boundary, not a claim of memory zeroization.
 """
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
+from contextvars import ContextVar
 import signal
 import sys
 
 PHASES = ("setup", "http", "mongo-down", "after-restart")
 PREPARATION_PHASES = ("prep-setup", "prep-review", "prep-create", "prep-resume", "prep-finish")
-CHECK_IDS = (
+REVIEW_CHECK_IDS = (
     "OWNER_LOGIN", "EMPLOYEE_LOGIN", "VIEWER_LOGIN", "OUTSIDER_LOGIN",
     "OWNER_SESSION", "EMPLOYEE_SESSION", "VIEWER_SESSION", "OUTSIDER_SESSION",
     "REVIEW_INVARIANTS", "TENANT_SNAPSHOT", "ORDER_READ", "PRODUCT_IDENTITIES",
@@ -19,6 +20,31 @@ CHECK_IDS = (
     "REVIEW_ERROR_CODE", "REVIEW_STORED_STATE", "NO_PREPARATION_ENTITIES",
     "PROVIDER_COUNTERS",
 )
+CHECKS_BY_PHASE = {
+    'prep-review': REVIEW_CHECK_IDS,
+    'prep-create': ('EMPLOYEE_CATALOG', 'INITIAL_CATALOG', 'SAFE_DRAFT', 'FILE_CREATE',
+                    'FINALIZE_FALLBACK', 'FILE_CREATE_REPEAT', 'EARLY_START_DENIAL',
+                    'DRAFT_ROLE_DENIAL', 'IMAGE_PERSISTENCE', 'FILE_REGISTRY_READ',
+                    'PDF_HTTP', 'PDF_CONTENT', 'PDF_TENANT_DENIAL', 'INCOMPLETE_DRAFT',
+                    'INCOMPLETE_FINALIZE_DENIAL', 'CHECKPOINT_CAPTURE'),
+    'prep-resume': ('OWNER_SESSION', 'EMPLOYEE_SESSION', 'VIEWER_SESSION', 'OUTSIDER_SESSION',
+                    'RESUME_INVARIANTS', 'SNAPSHOT_IDENTITY', 'SNAPSHOT_MATCH', 'OTHER_TENANT_MATCH',
+                    'IMAGE_PERSISTENCE', 'FILE_REGISTRY_READ', 'PDF_HTTP', 'PDF_CONTENT', 'PDF_TENANT_DENIAL',
+                    'INCOMPLETE_RELEASE', 'COMPLETED_RELEASE_DENIAL', 'REALLOCATION_DRAFT',
+                    'REALLOCATION_DENIAL', 'REALLOCATION_RELEASE', 'REMAINING_CATALOG',
+                    'SAFE_DRAFT', 'FILE_CREATE', 'FINALIZE_FALLBACK', 'FILE_CREATE_REPEAT',
+                    'ASSIGNMENT_STATES', 'UNIT_QUANTITIES_OPTIONS', 'EMPLOYEE_START', 'START_REPEAT',
+                    'SUPPLIER_WORKSPACE', 'SUPPLIER_DISPATCH', 'SUPPLIER_DISPATCH_REPEAT', 'SUPPLIER_READY',
+                    'SUPPLIER_PIECE_IDENTITY', 'RECEIVING_SEARCH', 'PIECE_RECEIVE', 'RECEIVE_REPEAT',
+                    'FILE_COMPLETED_STATE', 'ASSEMBLY_SEARCH', 'PIECE_ASSEMBLY', 'SIMULATED_LABEL_FAILURE',
+                    'ASSEMBLY_STATES', 'RESUME_PROVIDER_COUNTERS', 'CHECKPOINT_CAPTURE'),
+    'prep-finish': ('OWNER_SESSION', 'EMPLOYEE_SESSION', 'VIEWER_SESSION', 'OUTSIDER_SESSION',
+                    'RESUME_INVARIANTS', 'SNAPSHOT_IDENTITY', 'SNAPSHOT_MATCH', 'OTHER_TENANT_MATCH',
+                    'IMAGE_PERSISTENCE', 'FILE_REGISTRY_READ', 'PDF_HTTP', 'PDF_CONTENT', 'PDF_TENANT_DENIAL',
+                    'FINAL_PROVIDER_COUNTERS', 'FINAL_LABEL_COUNTS'),
+}
+CHECK_IDS = tuple(dict.fromkeys(c for ids in CHECKS_BY_PHASE.values() for c in ids))
+_ACTIVE = ContextVar('acceptance_diagnostic_context', default=None)
 FAILURE_TYPES = ("TIMEOUT", "CHANNEL_CLOSED", "CANCELLED", "PHASE_ORDER",
                  "ASSERTION_FAILED", "HTTP_STATUS_MISMATCH", "UNCLASSIFIED_FAILURE")
 
@@ -53,6 +79,9 @@ def check(check_id):
     # No untrusted identifier can reach a protocol message, even on failure.
     if type(check_id) is not str or check_id not in CHECK_IDS:
         raise CheckFailure(None, "UNCLASSIFIED_FAILURE")
+    active = _ACTIVE.get()
+    if active is not None and check_id not in CHECKS_BY_PHASE.get(active[0], ()):
+        raise CheckFailure(None, "UNCLASSIFIED_FAILURE")
     try:
         yield
     except CheckFailure:
@@ -61,10 +90,13 @@ def check(check_id):
         expected = error.expected if type(error) is HTTPStatusFailure else None
         actual = error.actual if type(error) is HTTPStatusFailure else None
         raise CheckFailure(check_id, failure_type(error), expected, actual) from None
+    else:
+        if active is not None:
+            active[1].setdefault('_completed_checks', []).append(check_id)
 
 
-def check_diagnostic(error):
-    if (type(error.check_id) is not str or error.check_id not in CHECK_IDS
+def check_diagnostic(error, phase):
+    if (type(error.check_id) is not str or error.check_id not in CHECKS_BY_PHASE.get(phase, ())
             or type(error.reason) is not str or error.reason not in FAILURE_TYPES):
         return None
     suffix = error.reason + " " + error.check_id
@@ -85,12 +117,35 @@ class Discard:
         pass
 
 
-def emit_review_evidence(state, replies):
-    from simulator_evidence import protocol_lines
+def emit_review_evidence(state, replies, phase):
+    from simulator_evidence import protocol_lines, CHECKPOINTS_BY_PHASE
+    from snapshot_evidence import validate_snapshot_line
+    completed = state.pop('_completed_checks', [])
+    if type(completed) is not list or len(completed) > 512:
+        replies.write('EVIDENCE_UNAVAILABLE\n')
+        completed = []
+    for identifier in completed:
+        if type(identifier) is str and identifier in CHECKS_BY_PHASE.get(phase, ()):
+            replies.write('CHECK ' + phase + ' ' + identifier + ' PASS\n')
+    snapshots = state.pop('_snapshot_evidence', [])
+    if type(snapshots) is not list or len(snapshots) > 128:
+        snapshots = ['SNAPSHOT unavailable']
+    for line in snapshots:
+        if phase in ('prep-resume', 'prep-finish') and validate_snapshot_line(line):
+            replies.write(line + '\n')
+        else:
+            replies.write('SNAPSHOT unavailable\n')
     records = state.pop('_review_evidence', [])
     if type(records) is not list or len(records) > 16:
-        records = [('AFTER_REVIEW', None)]
-    for checkpoint, counters in records:
+        records = [None]
+    for record in records:
+        if type(record) not in (tuple, list) or len(record) != 2:
+            replies.write('EVIDENCE_UNAVAILABLE\n')
+            continue
+        checkpoint, counters = record
+        if type(checkpoint) is not str or checkpoint not in CHECKPOINTS_BY_PHASE.get(phase, ()):
+            replies.write('EVIDENCE_UNAVAILABLE\n')
+            continue
         for line in protocol_lines(checkpoint, counters):
             replies.write(line + '\n')
     replies.flush()
@@ -119,10 +174,14 @@ def serve(phases, commands, replies, *, profile="runtime"):
             else:
                 # Never format exception text/locals or echo phase output.
                 in_phase = True
-                with redirect_stdout(Discard()), redirect_stderr(Discard()):
-                    phases[name](state)
+                token = _ACTIVE.set((name, state))
+                try:
+                    with redirect_stdout(Discard()), redirect_stderr(Discard()):
+                        phases[name](state)
+                finally:
+                    _ACTIVE.reset(token)
                 in_phase = False
-                if name == "prep-review": emit_review_evidence(state, replies)
+                if name in CHECKS_BY_PHASE: emit_review_evidence(state, replies, name)
             replies.write("PASS " + name + "\n")
             replies.flush()
         return 0
@@ -137,9 +196,9 @@ def serve(phases, commands, replies, *, profile="runtime"):
         elif not in_phase and isinstance(error, (BrokenPipeError, EOFError)):
             reason = "CHANNEL_CLOSED"
         if type(error) is CheckFailure:
-            reason = (check_diagnostic(error) if in_phase and name == "prep-review" else None) or "UNCLASSIFIED_FAILURE"
+            reason = (check_diagnostic(error, name) if in_phase else None) or "UNCLASSIFIED_FAILURE"
         try:
-            if name == "prep-review": emit_review_evidence(state, replies)
+            if name in CHECKS_BY_PHASE: emit_review_evidence(state, replies, name)
         except BaseException:
             pass  # Evidence cannot replace the primary failure.
         try:

@@ -10,7 +10,8 @@ import sys
 import tempfile
 import unittest
 
-from acceptance_controller import PHASES, CHECK_IDS, CheckFailure, HTTPStatusFailure, check, serve
+from acceptance_controller import PHASES, REVIEW_CHECK_IDS as CHECK_IDS, CheckFailure, HTTPStatusFailure, check, serve
+from test_resume_diagnostics import ResumeDiagnosticTests
 
 
 class ControllerTests(unittest.TestCase):

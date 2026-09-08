@@ -15,6 +15,7 @@ from unittest.mock import patch
 from acceptance_controller import PREPARATION_PHASES, serve
 import preparation_lifecycle_acceptance as prep
 from test_catalog_image_fixture import CatalogImageFixtureTests
+from test_snapshot_evidence import SnapshotEvidenceTests
 
 
 class PreparationContracts(unittest.TestCase):

@@ -71,7 +71,17 @@ start_acceptance() {
   exec {accept_out}<&"${ACCEPTANCE[0]}"
 }
 accept() {
-  local reply status reason check_id expected actual checkpoint tail count category method frames=0
+  local reply status reason check_id expected actual checkpoint tail count category method group flag frames=0
+  allowed_check() {
+    case "$accept_phase:$1" in
+      prep-review:OWNER_LOGIN|prep-review:EMPLOYEE_LOGIN|prep-review:VIEWER_LOGIN|prep-review:OUTSIDER_LOGIN|prep-review:OWNER_SESSION|prep-review:EMPLOYEE_SESSION|prep-review:VIEWER_SESSION|prep-review:OUTSIDER_SESSION|prep-review:REVIEW_INVARIANTS|prep-review:TENANT_SNAPSHOT|prep-review:ORDER_READ|prep-review:PRODUCT_IDENTITIES|prep-review:QUANTITIES_OPTIONS|prep-review:IMAGE_UPLOAD|prep-review:IMAGE_CHOICE|prep-review:ITEM_NOTE|prep-review:IMAGE_GALLERY_LINK_SET|prep-review:IMAGE_RESOURCE_KNOWN|prep-review:IMAGE_HTTP_RESPONSE|prep-review:IMAGE_CONTENT_MATCH|prep-review:IMAGE_TENANT_DENIAL|prep-review:REVIEW_ROLE_DENIAL|prep-review:REVIEW_COMPLETE|prep-review:REVIEW_ERROR_CODE|prep-review:REVIEW_STORED_STATE|prep-review:NO_PREPARATION_ENTITIES|prep-review:PROVIDER_COUNTERS) return 0;;
+      prep-create:EMPLOYEE_CATALOG|prep-create:INITIAL_CATALOG|prep-create:SAFE_DRAFT|prep-create:FILE_CREATE|prep-create:FINALIZE_FALLBACK|prep-create:FILE_CREATE_REPEAT|prep-create:EARLY_START_DENIAL|prep-create:DRAFT_ROLE_DENIAL|prep-create:IMAGE_PERSISTENCE|prep-create:FILE_REGISTRY_READ|prep-create:PDF_HTTP|prep-create:PDF_CONTENT|prep-create:PDF_TENANT_DENIAL|prep-create:INCOMPLETE_DRAFT|prep-create:INCOMPLETE_FINALIZE_DENIAL|prep-create:CHECKPOINT_CAPTURE) return 0;;
+      prep-resume:OWNER_SESSION|prep-resume:EMPLOYEE_SESSION|prep-resume:VIEWER_SESSION|prep-resume:OUTSIDER_SESSION|prep-resume:RESUME_INVARIANTS|prep-resume:SNAPSHOT_IDENTITY|prep-resume:SNAPSHOT_MATCH|prep-resume:OTHER_TENANT_MATCH|prep-resume:IMAGE_PERSISTENCE|prep-resume:FILE_REGISTRY_READ|prep-resume:PDF_HTTP|prep-resume:PDF_CONTENT|prep-resume:PDF_TENANT_DENIAL|prep-resume:INCOMPLETE_RELEASE|prep-resume:COMPLETED_RELEASE_DENIAL|prep-resume:REALLOCATION_DRAFT|prep-resume:REALLOCATION_DENIAL|prep-resume:REALLOCATION_RELEASE|prep-resume:REMAINING_CATALOG|prep-resume:SAFE_DRAFT|prep-resume:FILE_CREATE|prep-resume:FINALIZE_FALLBACK|prep-resume:FILE_CREATE_REPEAT|prep-resume:ASSIGNMENT_STATES|prep-resume:UNIT_QUANTITIES_OPTIONS|prep-resume:EMPLOYEE_START|prep-resume:START_REPEAT|prep-resume:SUPPLIER_WORKSPACE|prep-resume:SUPPLIER_DISPATCH|prep-resume:SUPPLIER_DISPATCH_REPEAT|prep-resume:SUPPLIER_READY|prep-resume:SUPPLIER_PIECE_IDENTITY|prep-resume:RECEIVING_SEARCH|prep-resume:PIECE_RECEIVE|prep-resume:RECEIVE_REPEAT|prep-resume:FILE_COMPLETED_STATE|prep-resume:ASSEMBLY_SEARCH|prep-resume:PIECE_ASSEMBLY|prep-resume:SIMULATED_LABEL_FAILURE|prep-resume:ASSEMBLY_STATES|prep-resume:RESUME_PROVIDER_COUNTERS|prep-resume:CHECKPOINT_CAPTURE) return 0;;
+      prep-finish:OWNER_SESSION|prep-finish:EMPLOYEE_SESSION|prep-finish:VIEWER_SESSION|prep-finish:OUTSIDER_SESSION|prep-finish:RESUME_INVARIANTS|prep-finish:SNAPSHOT_IDENTITY|prep-finish:SNAPSHOT_MATCH|prep-finish:OTHER_TENANT_MATCH|prep-finish:IMAGE_PERSISTENCE|prep-finish:FILE_REGISTRY_READ|prep-finish:PDF_HTTP|prep-finish:PDF_CONTENT|prep-finish:PDF_TENANT_DENIAL|prep-finish:FINAL_PROVIDER_COUNTERS|prep-finish:FINAL_LABEL_COUNTS) return 0;;
+      *) return 1;;
+    esac
+  }
+
   # Reject untrusted phase names without printing them.
   case "$1" in
     setup|http|mongo-down|after-restart|prep-setup|prep-review|prep-create|prep-resume|prep-finish|finish) accept_phase="$1" ;;
@@ -89,9 +99,12 @@ accept() {
   if IFS= read -r -t 120 reply <&"$accept_out"; then
     if [[ "$reply" =~ ^EVIDENCE\ ([A-Z_]+)\ (.+)$ ]]; then
       checkpoint="${BASH_REMATCH[1]}"; tail="${BASH_REMATCH[2]}"
-      case "$checkpoint" in BEFORE_REVIEW|AFTER_LOGIN|BEFORE_IMAGES|AFTER_IMAGES|BEFORE_COMPLETE|AFTER_COMPLETE|AFTER_REVIEW) ;;
+      case "$accept_phase:$checkpoint" in
+        prep-review:BEFORE_REVIEW|prep-review:AFTER_LOGIN|prep-review:BEFORE_IMAGES|prep-review:AFTER_IMAGES|prep-review:BEFORE_COMPLETE|prep-review:AFTER_COMPLETE|prep-review:AFTER_REVIEW) ;;
+        prep-create:AFTER_CREATE) ;;
+        prep-resume:BEFORE_RESUME|prep-resume:AFTER_PERSISTENCE|prep-resume:AFTER_RECOVERY|prep-resume:AFTER_REALLOCATION|prep-resume:AFTER_SECOND_FILE|prep-resume:AFTER_START|prep-resume:AFTER_DISPATCH|prep-resume:AFTER_RECEIVE|prep-resume:AFTER_ASSEMBLY|prep-resume:AFTER_RESUME) ;;
+        prep-finish:BEFORE_FINISH|prep-finish:AFTER_FINAL_PERSISTENCE|prep-finish:AFTER_FINISH) ;;
         *) echo 'FAIL controller UNCLASSIFIED_FAILURE'; return 1;; esac
-      if test "$accept_phase" != prep-review; then echo 'FAIL controller UNCLASSIFIED_FAILURE'; return 1; fi
       if test "$tail" = unavailable; then
         printf 'EVIDENCE %s unavailable\n' "$checkpoint"; continue
       fi
@@ -112,6 +125,37 @@ accept() {
       fi
       echo 'FAIL controller UNCLASSIFIED_FAILURE'; return 1
     fi
+    if test "$reply" = EVIDENCE_UNAVAILABLE; then echo EVIDENCE_UNAVAILABLE; continue; fi
+    if [[ "$reply" =~ ^CHECK\ ([a-z-]+)\ ([A-Z_]+)\ PASS$ ]] && test "${BASH_REMATCH[1]}" = "$accept_phase"; then
+      check_id="${BASH_REMATCH[2]}"
+      if ! allowed_check "$check_id"; then echo 'FAIL controller UNCLASSIFIED_FAILURE'; return 1; fi
+      printf 'CHECK %s %s PASS\n' "$accept_phase" "$check_id"; continue
+    fi
+    if [[ "$reply" == SNAPSHOT* ]]; then
+      case "$accept_phase" in prep-resume|prep-finish) ;; *) echo 'FAIL controller UNCLASSIFIED_FAILURE'; return 1;; esac
+      if test "$reply" = 'SNAPSHOT unavailable'; then echo 'SNAPSHOT unavailable'; continue; fi
+      if [[ "$reply" =~ ^SNAPSHOT\ IDENTITY_CHANGED\ (true|false)$ ]]; then
+        printf 'SNAPSHOT IDENTITY_CHANGED %s\n' "${BASH_REMATCH[1]}"; continue
+      fi
+      if [[ "$reply" =~ ^SNAPSHOT\ ([A-Z]+)\ (.+)$ ]]; then
+        group="${BASH_REMATCH[1]}"; tail="${BASH_REMATCH[2]}"
+        case "$group" in REGISTRY|BATCHES|ALLOCATIONS|PIECES|EVENTS|WORKFLOWS) ;; *) echo 'FAIL controller UNCLASSIFIED_FAILURE'; return 1;; esac
+        if [[ "$tail" =~ ^COUNT\ (0|[1-9][0-9]{0,4})\ (0|[1-9][0-9]{0,4})$ ]]; then
+          expected="${BASH_REMATCH[1]}"; actual="${BASH_REMATCH[2]}"
+          if test "$expected" -gt 10000 || test "$actual" -gt 10000; then echo 'FAIL controller UNCLASSIFIED_FAILURE'; return 1; fi
+          printf 'SNAPSHOT %s COUNT %s %s\n' "$group" "$expected" "$actual"; continue
+        fi
+        if [[ "$tail" =~ ^(IDENTITIES_CHANGED|QUANTITIES_CHANGED|STATUSES_CHANGED|ORDER_CHANGED|UNKNOWN_FIELDS_CHANGED)\ (true|false)$ ]]; then
+          printf 'SNAPSHOT %s %s %s\n' "$group" "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"; continue
+        fi
+        if [[ "$tail" =~ ^FIELD\ ([a-z_]+)$ ]]; then
+          flag="${BASH_REMATCH[1]}"
+          case "$flag" in allocated_quantity|allocation_id|assembled_at|assembly_completed_at|assembly_ready_at|assembly_status|assembly_updated_at|assigned_at|batch_id|branch_handoff_at|branch_handoff_status|carrier_label|carrier_label_ready|carrier_label_status|claimed_at|client_request_id|completed_at|created_at|estimated_due_at|event_type|execution_status|expected_quantity|expires_at|file_date|file_number|finalized_at|history|id|image_url|images|in_progress_at|items|last_synced_at|lines|mezan_only|occurred_at|operational_items|order_count|order_item_id|order_number|piece_id|piece_registry_materialized_at|piece_registry_status|preparation_assignment_status|preparation_completed_at|preparation_employee_custody_status|preparation_fully_allocated_at|preparation_progress|preparation_receipt_status|preparation_receipt_updated_at|preparation_received_at|preparation_status|product_id|product_image_snapshot|product_options_snapshot|qoyod_updated|quantity|ready_to_ship_at|receipt_status|received_at|received_quantity|registered_at|registry_status|remaining_quantity|required_due_at|responsible_employee_id|review_status|reviewed_at|revision|salla_status_sync|salla_status_sync_state|salla_status_synced_at|salla_sync_status|salla_updated|schedule_updated_at|selected_product_count|service_plan_status|stage|started_at|status|supplier_id|total_quantity|unit_index|updated_at|user_id) ;; *) echo 'FAIL controller UNCLASSIFIED_FAILURE'; return 1;; esac
+          printf 'SNAPSHOT %s FIELD %s\n' "$group" "$flag"; continue
+        fi
+      fi
+      echo 'FAIL controller UNCLASSIFIED_FAILURE'; return 1
+    fi
     if test "$reply" = "PASS $accept_phase"; then
       printf 'PASS acceptance phase: %s\n' "$accept_phase"
       return 0
@@ -123,13 +167,10 @@ accept() {
       fi
     done
     # Exact grammar and independent allowlists; never echo the received line.
-    if test "$accept_phase" = prep-review && [[ "$reply" =~ ^FAIL\ prep-review\ ([A-Z_]+)\ ([A-Z_]+)(\ ([1-5][0-9][0-9])\ ([1-5][0-9][0-9]))?$ ]]; then
-      reason="${BASH_REMATCH[1]}"; check_id="${BASH_REMATCH[2]}"
-      expected="${BASH_REMATCH[4]}"; actual="${BASH_REMATCH[5]}"
-      case "$check_id" in
-        OWNER_LOGIN|EMPLOYEE_LOGIN|VIEWER_LOGIN|OUTSIDER_LOGIN|OWNER_SESSION|EMPLOYEE_SESSION|VIEWER_SESSION|OUTSIDER_SESSION|REVIEW_INVARIANTS|TENANT_SNAPSHOT|ORDER_READ|PRODUCT_IDENTITIES|QUANTITIES_OPTIONS|IMAGE_GALLERY_LINK_SET|IMAGE_RESOURCE_KNOWN|IMAGE_HTTP_RESPONSE|IMAGE_CONTENT_MATCH|IMAGE_UPLOAD|IMAGE_CHOICE|ITEM_NOTE|IMAGE_TENANT_DENIAL|REVIEW_ROLE_DENIAL|REVIEW_COMPLETE|REVIEW_ERROR_CODE|REVIEW_STORED_STATE|NO_PREPARATION_ENTITIES|PROVIDER_COUNTERS) ;;
-        *) reason=UNCLASSIFIED_FAILURE; check_id= ;;
-      esac
+    if [[ "$reply" =~ ^FAIL\ ([a-z-]+)\ ([A-Z_]+)\ ([A-Z_]+)(\ ([1-5][0-9][0-9])\ ([1-5][0-9][0-9]))?$ ]] && test "${BASH_REMATCH[1]}" = "$accept_phase"; then
+      reason="${BASH_REMATCH[2]}"; check_id="${BASH_REMATCH[3]}"
+      expected="${BASH_REMATCH[5]}"; actual="${BASH_REMATCH[6]}"
+      if ! allowed_check "$check_id"; then reason=UNCLASSIFIED_FAILURE; check_id=; fi
       if test -n "$check_id"; then
         if test "$reason" = HTTP_STATUS_MISMATCH && test -n "$expected" && test -n "$actual"; then
           printf 'FAIL %s %s %s expected=%s actual=%s\n' "$accept_phase" "$reason" "$check_id" "$expected" "$actual"

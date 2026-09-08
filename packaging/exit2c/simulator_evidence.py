@@ -5,8 +5,16 @@ import socket
 from salla_http_simulator import COUNTER_KEYS, CLASS_KEYS
 
 
-CHECKPOINTS = ('BEFORE_REVIEW', 'AFTER_LOGIN', 'BEFORE_IMAGES', 'AFTER_IMAGES',
-               'BEFORE_COMPLETE', 'AFTER_COMPLETE', 'AFTER_REVIEW')
+CHECKPOINTS_BY_PHASE = {
+    'prep-review': ('BEFORE_REVIEW', 'AFTER_LOGIN', 'BEFORE_IMAGES', 'AFTER_IMAGES',
+                   'BEFORE_COMPLETE', 'AFTER_COMPLETE', 'AFTER_REVIEW'),
+    'prep-create': ('AFTER_CREATE',),
+    'prep-resume': ('BEFORE_RESUME', 'AFTER_PERSISTENCE', 'AFTER_RECOVERY', 'AFTER_REALLOCATION',
+                    'AFTER_SECOND_FILE', 'AFTER_START', 'AFTER_DISPATCH', 'AFTER_RECEIVE',
+                    'AFTER_ASSEMBLY', 'AFTER_RESUME'),
+    'prep-finish': ('BEFORE_FINISH', 'AFTER_FINAL_PERSISTENCE', 'AFTER_FINISH'),
+}
+CHECKPOINTS = tuple(c for values in CHECKPOINTS_BY_PHASE.values() for c in values)
 
 
 def validate_counts(counters):

@@ -225,8 +225,8 @@ class Lifecycle:
         self.state.setdefault('_review_evidence', []).append((checkpoint, counts))
         return counts
 
-    def provider_counts(self):
-        counts = self.record_provider_counts('AFTER_REVIEW')
+    def provider_counts(self, checkpoint='AFTER_REVIEW'):
+        counts = self.record_provider_counts(checkpoint)
         require(counts is not None)
         require(counts["unexpected"] == 0 and counts['auth_rejected'] == 0)
         self.state["simulated_provider_calls"] = counts["simulated_provider_calls"]
@@ -369,20 +369,24 @@ class Lifecycle:
         return self.call("POST", "/api/preparation-file-safety-v1/drafts", json=payload).json()
 
     def build(self, request_id, selections):
-        self.draft(request_id, len(selections))
+        with check('SAFE_DRAFT'):
+            self.draft(request_id, len(selections))
         payload = {"client_request_id": request_id, "selections": selections}
-        response = self.call("POST", "/api/reviewed-preparation-batches-v1/batches", json=payload).json()
+        with check('FILE_CREATE'):
+            response = self.call("POST", "/api/reviewed-preparation-batches-v1/batches", json=payload).json()
         # Match the actual service fallback; never mandate finalize on success.
         if not (response.get("file_registered") is True and response.get("registry_status") == "ready"
                 and response.get("piece_registry_status") == "ready"):
-            response.update(self.call("POST", "/api/preparation-file-registry-v1/finalize/" + request_id).json())
-        require(response["file_number"] and response["batch_id"])
-        before = self.snapshot()
-        duplicate = self.call("POST", "/api/reviewed-preparation-batches-v1/batches", json=payload).json()
-        require(duplicate["batch_id"] == response["batch_id"])
-        # Stable materialized IDs and piece events may not duplicate on retry.
-        require(self.identity() == before["identity"])
-        require(self.rows(EVENTS) == before["documents"][EVENTS])
+            with check('FINALIZE_FALLBACK'):
+                response.update(self.call("POST", "/api/preparation-file-registry-v1/finalize/" + request_id).json())
+        with check('FILE_CREATE_REPEAT'):
+            require(response["file_number"] and response["batch_id"])
+            before = self.snapshot()
+            duplicate = self.call("POST", "/api/reviewed-preparation-batches-v1/batches", json=payload).json()
+            require(duplicate["batch_id"] == response["batch_id"])
+            # Stable materialized IDs and piece events may not duplicate on retry.
+            require(self.identity() == before["identity"])
+            require(self.rows(EVENTS) == before["documents"][EVENTS])
         self.state["files"].append({"request_id": request_id, **response})
         return response
 
@@ -395,149 +399,215 @@ class Lifecycle:
 
     def persistence(self):
         self.sessions()
-        self.invariant()
-        require(self.snapshot() == self.state["checkpoint"])
-        require(list(self.database[WORKFLOWS].find({"user_id": self.state["outsider"]}, {"_id": 0})) == self.state["other_workflows"])
+        with check('RESUME_INVARIANTS'):
+            self.invariant()
+        with check('SNAPSHOT_IDENTITY'):
+            current = self.snapshot()
+            from snapshot_evidence import snapshot_lines
+            try:
+                self.state['_snapshot_evidence'] = snapshot_lines(self.state['checkpoint'], current)
+            except Exception:
+                self.state['_snapshot_evidence'] = ['SNAPSHOT unavailable']
+            require(current['identity'] == self.state['checkpoint']['identity'])
+        with check('SNAPSHOT_MATCH'):
+            # Keep full document/list equality, including timestamps and order.
+            require(current == self.state["checkpoint"])
+        with check('OTHER_TENANT_MATCH'):
+            require(list(self.database[WORKFLOWS].find({"user_id": self.state["outsider"]}, {"_id": 0})) == self.state["other_workflows"])
         self.pdf_and_images()
 
     def pdf_and_images(self):
         import fitz
-        for url, digest in self.state["images"].values():
-            require(hashlib.sha256(self.call("GET", url).content).hexdigest() == digest)
-        files = self.call("GET", "/api/preparation-file-registry-v1/files").json()["items"]
+        with check('IMAGE_PERSISTENCE'):
+            for url, digest in self.state["images"].values():
+                require(hashlib.sha256(self.call("GET", url).content).hexdigest() == digest)
+        with check('FILE_REGISTRY_READ'):
+            files = self.call("GET", "/api/preparation-file-registry-v1/files").json()["items"]
         for file in self.state["files"]:
-            require(any(r["file_number"] == file["file_number"] and r["batch_id"] == file["batch_id"] for r in files))
-            pdf = self.call("GET", "/api/reviewed-preparation-batches-v1/batches/" + file["batch_id"] + "/pdf")
-            require(pdf.content.startswith(b"%PDF"))
-            with fitz.open(stream=pdf.content, filetype="pdf") as document:
-                require(document.page_count > 0)
-                text = "".join(page.get_text() for page in document)
-                require(file["file_number"] in text)
-                normalized = unicodedata.normalize("NFKC", text)
-                for piece in self.rows(PIECES):
-                    if piece["batch_id"] == file["batch_id"]:
-                        for value in self.state["expected"][(piece["order_number"], piece["order_item_id"])]["options"].values():
-                            require(value in normalized or value[::-1] in normalized)
-                require(any("\u0600" <= char <= "\u06ff" or "\ufb50" <= char <= "\ufeff" for char in text))
-                require(any(page.get_images() for page in document))
-            self.call("GET", "/api/reviewed-preparation-batches-v1/batches/" + file["batch_id"] + "/pdf",
-                      actor="outsider", expected=404)
+            with check('FILE_REGISTRY_READ'):
+                require(any(r["file_number"] == file["file_number"] and r["batch_id"] == file["batch_id"] for r in files))
+            with check('PDF_HTTP'):
+                pdf = self.call("GET", "/api/reviewed-preparation-batches-v1/batches/" + file["batch_id"] + "/pdf")
+            with check('PDF_CONTENT'):
+                require(pdf.content.startswith(b"%PDF"))
+                with fitz.open(stream=pdf.content, filetype="pdf") as document:
+                    require(document.page_count > 0)
+                    text = "".join(page.get_text() for page in document)
+                    require(file["file_number"] in text)
+                    normalized = unicodedata.normalize("NFKC", text)
+                    for piece in self.rows(PIECES):
+                        if piece["batch_id"] == file["batch_id"]:
+                            for value in self.state["expected"][(piece["order_number"], piece["order_item_id"])]["options"].values():
+                                require(value in normalized or value[::-1] in normalized)
+                    require(any("\u0600" <= char <= "\u06ff" or "\ufb50" <= char <= "\ufeff" for char in text))
+                    require(any(page.get_images() for page in document))
+            with check('PDF_TENANT_DENIAL'):
+                self.call("GET", "/api/reviewed-preparation-batches-v1/batches/" + file["batch_id"] + "/pdf",
+                          actor="outsider", expected=404)
 
     def create(self):
-        employees = self.call("GET", "/api/preparation-file-registry-v1/employees").json()["items"]
-        require(any(e["id"] == self.state["employee"] for e in employees))
-        catalog = self.catalog()
-        require(len(catalog) == 8)  # Four source lines, two physical units each.
-        selections = [{"group_key": p["group_key"], "revision": p["revision"], "quantity": 1} for p in catalog]
-        self.state["old_selection"] = selections[0]
+        with check('EMPLOYEE_CATALOG'):
+            employees = self.call("GET", "/api/preparation-file-registry-v1/employees").json()["items"]
+            require(any(e["id"] == self.state["employee"] for e in employees))
+        with check('INITIAL_CATALOG'):
+            catalog = self.catalog()
+            require(len(catalog) == 8)  # Four source lines, two physical units each.
+            selections = [{"group_key": p["group_key"], "revision": p["revision"], "quantity": 1} for p in catalog]
+            self.state["old_selection"] = selections[0]
         first = self.build("exit2d-partial-0001", selections[:1])
-        self.call("POST", "/api/preparation-work-v1/files/" + first["file_number"] + "/start",
-                  expected=409, json={})
-        self.call("POST", "/api/preparation-file-safety-v1/drafts", actor="viewer", expected=403,
-                  json={"client_request_id": "exit2d-denied-0001", "file_title": "\u0627\u062e\u062a\u0628\u0627\u0631",
-                        "responsible_employee_id": self.state["employee"], "expected_quantity": 1,
-                        "selected_product_count": 1})
+        with check('EARLY_START_DENIAL'):
+            self.call("POST", "/api/preparation-work-v1/files/" + first["file_number"] + "/start",
+                      expected=409, json={})
+        with check('DRAFT_ROLE_DENIAL'):
+            self.call("POST", "/api/preparation-file-safety-v1/drafts", actor="viewer", expected=403,
+                      json={"client_request_id": "exit2d-denied-0001", "file_title": "\u0627\u062e\u062a\u0628\u0627\u0631",
+                            "responsible_employee_id": self.state["employee"], "expected_quantity": 1,
+                            "selected_product_count": 1})
         self.pdf_and_images()
         # Incomplete draft/finalize is produced through HTTP before restart.
-        self.draft("exit2d-incomplete-0001", 1)
-        self.call("POST", "/api/preparation-file-registry-v1/finalize/exit2d-incomplete-0001", expected=409)
-        self.state["checkpoint"] = self.snapshot()
+        with check('INCOMPLETE_DRAFT'):
+            self.draft("exit2d-incomplete-0001", 1)
+        with check('INCOMPLETE_FINALIZE_DENIAL'):
+            self.call("POST", "/api/preparation-file-registry-v1/finalize/exit2d-incomplete-0001", expected=409)
+        with check('CHECKPOINT_CAPTURE'):
+            self.state["checkpoint"] = self.snapshot()
+        self.record_provider_counts('AFTER_CREATE')
 
     def recover(self):
         # Real draft + premature finalize, not a fabricated ready batch/failure.
-        released = self.call("POST", "/api/preparation-file-safety-v1/requests/exit2d-incomplete-0001/release").json()
-        require(released["released"] is True)
-        require(not any(r["client_request_id"] == "exit2d-incomplete-0001" for r in self.rows(REGISTRY)))
+        with check('INCOMPLETE_RELEASE'):
+            released = self.call("POST", "/api/preparation-file-safety-v1/requests/exit2d-incomplete-0001/release").json()
+            require(released["released"] is True)
+            require(not any(r["client_request_id"] == "exit2d-incomplete-0001" for r in self.rows(REGISTRY)))
         for file in self.state["files"]:
-            before = self.identity()
-            kept = self.call("POST", "/api/preparation-file-safety-v1/requests/" + file["request_id"] + "/release").json()
-            require(kept["released"] is False and self.identity() == before)
+            with check('COMPLETED_RELEASE_DENIAL'):
+                before = self.identity()
+                kept = self.call("POST", "/api/preparation-file-safety-v1/requests/" + file["request_id"] + "/release").json()
+                require(kept["released"] is False and self.identity() == before)
 
     def resume(self):
+        self.record_provider_counts('BEFORE_RESUME')
         self.persistence()
+        self.record_provider_counts('AFTER_PERSISTENCE')
         self.recover()
+        self.record_provider_counts('AFTER_RECOVERY')
         # Old selector must not reclaim its already allocated physical unit.
-        allocated_before = self.identity()
-        self.draft("exit2d-reallocate-0001", 1)
-        rejection = self.call("POST", "/api/reviewed-preparation-batches-v1/batches", expected=409,
-                  json={"client_request_id": "exit2d-reallocate-0001", "selections": [self.state["old_selection"]]}).json()
-        require(rejection["detail"]["code"] in {"reviewed_product_not_available", "reviewed_selection_stale", "preparation_quantity_exceeds_remaining"})
+        with check('REALLOCATION_DRAFT'):
+            allocated_before = self.identity()
+            self.draft("exit2d-reallocate-0001", 1)
+        with check('REALLOCATION_DENIAL'):
+            rejection = self.call("POST", "/api/reviewed-preparation-batches-v1/batches", expected=409,
+                      json={"client_request_id": "exit2d-reallocate-0001", "selections": [self.state["old_selection"]]}).json()
+            require(rejection["detail"]["code"] in {"reviewed_product_not_available", "reviewed_selection_stale", "preparation_quantity_exceeds_remaining"})
         self.state["allocated_unit_rejection"] = rejection["detail"]["code"]
-        self.call("POST", "/api/preparation-file-safety-v1/requests/exit2d-reallocate-0001/release")
-        require(self.identity() == allocated_before)
-        fresh = self.catalog()
-        require(sum(p["remaining_quantity"] for p in fresh) == 7)
-        selections = [{"group_key": p["group_key"], "revision": p["revision"], "quantity": 1}
-                      for p in fresh if p["remaining_quantity"]]
+        with check('REALLOCATION_RELEASE'):
+            self.call("POST", "/api/preparation-file-safety-v1/requests/exit2d-reallocate-0001/release")
+            require(self.identity() == allocated_before)
+        self.record_provider_counts('AFTER_REALLOCATION')
+        with check('REMAINING_CATALOG'):
+            fresh = self.catalog()
+            require(sum(p["remaining_quantity"] for p in fresh) == 7)
+            selections = [{"group_key": p["group_key"], "revision": p["revision"], "quantity": 1}
+                          for p in fresh if p["remaining_quantity"]]
         # The stale catalogue selection above is the original exact key/revision.
         # Its rejection proves unavailable-unit safety. It does NOT independently
         # prove the reviewed_selection_stale error for an available unit. Frozen
         # unit identity can keep its revision when other units are allocated;
         # do not substitute a different card's hash and call it an old revision.
         self.build("exit2d-remaining-0001", selections)
-        require(all(w["preparation_assignment_status"] == "assigned" for w in self.rows(WORKFLOWS)))
-        require(all(w["preparation_progress"]["remaining_quantity"] == 0 for w in self.rows(WORKFLOWS)))
-        verify_units(self.state["expected"], self.rows(ALLOCATIONS), self.rows(PIECES), self.state["employee"])
-        first = self.state["files"][0]
-        start_path = "/api/preparation-work-v1/files/" + first["file_number"] + "/start"
-        started = self.call("POST", start_path, actor="employee", json={}).json()
-        require(started["mezan_only"] is True and started["salla_updated"] is False)
-        events = self.rows(EVENTS)
-        self.call("POST", start_path, actor="employee", json={})
-        require(self.rows(EVENTS) == events)
+        with check('ASSIGNMENT_STATES'):
+            require(all(w["preparation_assignment_status"] == "assigned" for w in self.rows(WORKFLOWS)))
+        with check('ASSIGNMENT_STATES'):
+            require(all(w["preparation_progress"]["remaining_quantity"] == 0 for w in self.rows(WORKFLOWS)))
+        with check('UNIT_QUANTITIES_OPTIONS'):
+            verify_units(self.state["expected"], self.rows(ALLOCATIONS), self.rows(PIECES), self.state["employee"])
+        self.record_provider_counts('AFTER_SECOND_FILE')
+        with check('EMPLOYEE_START'):
+            first = self.state["files"][0]
+            start_path = "/api/preparation-work-v1/files/" + first["file_number"] + "/start"
+            started = self.call("POST", start_path, actor="employee", json={}).json()
+            require(started["mezan_only"] is True and started["salla_updated"] is False)
+        with check('START_REPEAT'):
+            events = self.rows(EVENTS)
+            self.call("POST", start_path, actor="employee", json={})
+            require(self.rows(EVENTS) == events)
+        self.record_provider_counts('AFTER_START')
         self.dispatch_receive()
         self.pdf_and_images()
-        self.state["checkpoint"] = self.snapshot()
+        with check('CHECKPOINT_CAPTURE'):
+            self.state["checkpoint"] = self.snapshot()
+        self.record_provider_counts('AFTER_RESUME')
 
     def finish(self):
+        self.record_provider_counts('BEFORE_FINISH')
         self.persistence()
+        self.record_provider_counts('AFTER_FINAL_PERSISTENCE')
         # Revision reachability remains a separate, explicitly unaccepted gate.
         # Never turn an unavailable-unit rejection into a stale-revision claim.
-        counts = self.provider_counts()
-        require(counts["shipping_attempted"] == len(ORDERS))
-        require(counts["shipping_failed"] == len(ORDERS))
+        with check('FINAL_PROVIDER_COUNTERS'):
+            counts = self.provider_counts('AFTER_FINISH')
+        with check('FINAL_LABEL_COUNTS'):
+            require(counts["shipping_attempted"] == len(ORDERS))
+            require(counts["shipping_failed"] == len(ORDERS))
 
     def dispatch_receive(self):
         for file in self.state["files"]:
-            workspace = self.call("GET", "/api/supplier-dispatch-v1/workspace", actor="employee",
-                                  params={"grain": "piece"}).json()
-            supplier = next(s for s in workspace["suppliers"] if s["id"] == "exit2d-supplier")
-            source = next(f for f in workspace["files"] if f["file_number"] == file["file_number"])
-            selections = [{"group_key": p["group_key"], "quantity": 1} for p in source["products"] if p["available_quantity"]]
-            payload = {"client_request_id": "dispatch-" + file["request_id"], "supplier_id": supplier["id"],
-                       "files": [{"file_number": file["file_number"], "selections": selections}]}
-            require({p["piece_id"] for p in source["products"]} ==
-                    {p["piece_id"] for p in self.rows(PIECES) if p["file_number"] == file["file_number"]})
-            result = self.call("POST", "/api/supplier-dispatch-v1/dispatches", actor="employee", expected=201, json=payload).json()
-            dispatch_id = result["dispatch"]["id"]
-            event_before = self.rows(EVENTS)
-            repeat = self.call("POST", "/api/supplier-dispatch-v1/dispatches", actor="employee", expected=201, json=payload).json()
-            require(repeat["dispatch"]["id"] == dispatch_id and self.rows(EVENTS) == event_before)
-            self.call("POST", "/api/supplier-dispatch-v1/dispatches/" + dispatch_id + "/ready", actor="employee", json={})
+            with check('SUPPLIER_WORKSPACE'):
+                workspace = self.call("GET", "/api/supplier-dispatch-v1/workspace", actor="employee",
+                                      params={"grain": "piece"}).json()
+                supplier = next(s for s in workspace["suppliers"] if s["id"] == "exit2d-supplier")
+                source = next(f for f in workspace["files"] if f["file_number"] == file["file_number"])
+                selections = [{"group_key": p["group_key"], "quantity": 1} for p in source["products"] if p["available_quantity"]]
+                payload = {"client_request_id": "dispatch-" + file["request_id"], "supplier_id": supplier["id"],
+                           "files": [{"file_number": file["file_number"], "selections": selections}]}
+                require({p["piece_id"] for p in source["products"]} ==
+                        {p["piece_id"] for p in self.rows(PIECES) if p["file_number"] == file["file_number"]})
+            with check('SUPPLIER_DISPATCH'):
+                result = self.call("POST", "/api/supplier-dispatch-v1/dispatches", actor="employee", expected=201, json=payload).json()
+                dispatch_id = result["dispatch"]["id"]
+            with check('SUPPLIER_DISPATCH_REPEAT'):
+                event_before = self.rows(EVENTS)
+                repeat = self.call("POST", "/api/supplier-dispatch-v1/dispatches", actor="employee", expected=201, json=payload).json()
+                require(repeat["dispatch"]["id"] == dispatch_id and self.rows(EVENTS) == event_before)
+            with check('SUPPLIER_READY'):
+                self.call("POST", "/api/supplier-dispatch-v1/dispatches/" + dispatch_id + "/ready", actor="employee", json={})
+        self.record_provider_counts('AFTER_DISPATCH')
         for piece in self.rows(PIECES):
-            require(piece["supplier_id"] == "exit2d-supplier")
-            require(piece["responsible_employee_id"] == self.state["employee"])
-            self.call("GET", "/api/preparation-work-v1/receiving/search", params={"q": piece["piece_id"]})
-            path = "/api/preparation-work-v1/receiving/pieces/" + piece["piece_id"] + "/receive"
-            payload = {"client_request_id": "receive-" + piece["piece_id"]}
-            self.call("POST", path, json=payload)
-            before, events = self.identity(), self.rows(EVENTS)
-            self.call("POST", path, json=payload)
-            require(self.identity() == before and self.rows(EVENTS) == events)
-        require(all(r["execution_status"] == "completed" for r in self.rows(REGISTRY)))
+            with check('SUPPLIER_PIECE_IDENTITY'):
+                require(piece["supplier_id"] == "exit2d-supplier")
+                require(piece["responsible_employee_id"] == self.state["employee"])
+            with check('RECEIVING_SEARCH'):
+                self.call("GET", "/api/preparation-work-v1/receiving/search", params={"q": piece["piece_id"]})
+            with check('PIECE_RECEIVE'):
+                path = "/api/preparation-work-v1/receiving/pieces/" + piece["piece_id"] + "/receive"
+                payload = {"client_request_id": "receive-" + piece["piece_id"]}
+                self.call("POST", path, json=payload)
+            with check('RECEIVE_REPEAT'):
+                before, events = self.identity(), self.rows(EVENTS)
+                self.call("POST", path, json=payload)
+                require(self.identity() == before and self.rows(EVENTS) == events)
+        self.record_provider_counts('AFTER_RECEIVE')
+        with check('FILE_COMPLETED_STATE'):
+            require(all(r["execution_status"] == "completed" for r in self.rows(REGISTRY)))
         for piece in self.rows(PIECES):
-            self.call("GET", "/api/preparation-work-v1/assembly/search", params={"q": piece["order_number"]})
+            with check('ASSEMBLY_SEARCH'):
+                self.call("GET", "/api/preparation-work-v1/assembly/search", params={"q": piece["order_number"]})
             # The real route attempts a label. The simulator rejects its
             # first authoritative order lookup; no shipment is fabricated.
-            result = self.call("POST", "/api/preparation-work-v1/assembly/pieces/" + piece["piece_id"] + "/ready",
-                      json={"client_request_id": "assembly-" + piece["piece_id"]}).json()
+            with check('PIECE_ASSEMBLY'):
+                result = self.call("POST", "/api/preparation-work-v1/assembly/pieces/" + piece["piece_id"] + "/ready",
+                          json={"client_request_id": "assembly-" + piece["piece_id"]}).json()
             if result["progress"].get("order_completed"):
-                require(result["carrier_label"]["ready"] is False)
-                require(result["carrier_label"]["error_code"] == "salla_shipping_unavailable")
-        require(all(w.get("stage") == "completed" and w.get("assembly_status") == "completed" and w.get("carrier_label_ready") is False and w.get("carrier_label_status") == "failed"
-                    for w in self.rows(WORKFLOWS)))
-        self.provider_counts()
-        self.invariant()
+                with check('SIMULATED_LABEL_FAILURE'):
+                    require(result["carrier_label"]["ready"] is False)
+                    require(result["carrier_label"]["error_code"] == "salla_shipping_unavailable")
+        with check('ASSEMBLY_STATES'):
+            require(all(w.get("stage") == "completed" and w.get("assembly_status") == "completed" and w.get("carrier_label_ready") is False and w.get("carrier_label_status") == "failed"
+                        for w in self.rows(WORKFLOWS)))
+        with check('RESUME_PROVIDER_COUNTERS'):
+            self.provider_counts('AFTER_ASSEMBLY')
+        with check('RESUME_INVARIANTS'):
+            self.invariant()
 
 
 def identity(allocations, pieces, registries):
