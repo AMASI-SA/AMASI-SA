@@ -19,7 +19,10 @@ test("the store header warns about eligible Qoyod orders that were not sent", ()
     expect(alert).toContain("limit: 5000");
     expect(alert).toContain('status: "لم يُرسل"');
     expect(alert).toContain("طلب مؤهل منذ 1 يوليو 2026 لم يُرسل إلى قيود");
-    expect(alert).toContain("15_000");
+    expect(alert).toContain("60_000");
+    expect(alert).toContain("loadQoyodUnsentOrders");
+    expect(alert).toContain("if (running) return;");
+    expect(alert).toContain("controller?.abort()");
     expect(alert).toContain('data-testid="qoyod-unsent-header-alert-count"');
     expect(alert).toContain('to="/integrations-v2/qoyod?tab=exceptions"');
 });

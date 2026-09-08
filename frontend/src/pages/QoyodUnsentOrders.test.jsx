@@ -7,6 +7,7 @@ jest.mock("../lib/api", () => ({
 }));
 
 import api from "../lib/api";
+import { __resetQoyodUnsentOrdersClientForTests } from "../lib/qoyodUnsentOrdersClient";
 import QoyodUnsentOrders from "./QoyodUnsentOrders";
 
 async function renderRecoveryPage(path = "/") {
@@ -29,6 +30,7 @@ async function cleanup(container, root) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  __resetQoyodUnsentOrdersClientForTests();
   api.get.mockResolvedValue({
     data: {
       counts: {},

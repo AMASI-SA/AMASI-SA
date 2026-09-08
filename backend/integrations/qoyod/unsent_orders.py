@@ -15,7 +15,11 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
-from integrations.qoyod.candidate_orders import build_candidate_audit
+from integrations.qoyod.candidate_orders import (
+    CANDIDATE_AUDIT_SCAN_LIMIT,
+    _bounded_cursor,
+    build_candidate_audit,
+)
 from integrations.qoyod.eligible_orders import QOYOD_SYNC_START_DATE
 
 SENT      = "أُرسل"
@@ -543,16 +547,35 @@ async def _list_unsent_orders_from_inbox_legacy(
 
 
 async def _manual_failure_evidence(
-    db: Any, *, markers_user_id: str,
+    db: Any,
+    *,
+    markers_user_id: str,
+    order_numbers: Any = None,
+    scan_limit: int = CANDIDATE_AUDIT_SCAN_LIMIT,
 ) -> dict[str, dict[str, Any]]:
-    """Load open local failures without expanding the candidate universe."""
+    """Load bounded open failures only for the current candidate universe."""
+    references = list(dict.fromkeys(
+        str(value).strip()
+        for value in (order_numbers or [])
+        if str(value).strip()
+    ))
+    if order_numbers is not None and not references:
+        return {}
+    scan_limit = max(1, int(scan_limit))
     failures: dict[str, dict[str, Any]] = {}
     quarantines = getattr(db, "qoyod_manual_auto_quarantines", None)
     if quarantines is not None:
+        quarantine_query: dict[str, Any] = {
+            "user_id": markers_user_id,
+            "status": "open",
+        }
+        if references:
+            quarantine_query["order_number"] = {"$in": references}
         cursor = quarantines.find(
-            {"user_id": markers_user_id, "status": "open"},
+            quarantine_query,
             {"_id": 0, "order_number": 1, "code": 1, "message": 1},
         )
+        cursor = _bounded_cursor(cursor, scan_limit=scan_limit)
         async for row in cursor:
             reference = str(row.get("order_number") or "").strip()
             if reference:
@@ -563,13 +586,17 @@ async def _manual_failure_evidence(
                 }
     locks = getattr(db, "qoyod_manual_send_locks", None)
     if locks is not None:
+        lock_query: dict[str, Any] = {
+            "user_id": markers_user_id,
+            "status": {"$in": ["failed", "partial_payment_failed"]},
+        }
+        if references:
+            lock_query["order_number"] = {"$in": references}
         cursor = locks.find(
-            {
-                "user_id": markers_user_id,
-                "status": {"$in": ["failed", "partial_payment_failed"]},
-            },
+            lock_query,
             {"_id": 0, "order_number": 1, "status": 1, "last_error": 1},
         )
+        cursor = _bounded_cursor(cursor, scan_limit=scan_limit)
         async for row in cursor:
             reference = str(row.get("order_number") or "").strip()
             if not reference or reference in failures:
@@ -592,6 +619,8 @@ async def list_unsent_orders(
     now: datetime | None = None,
     from_date: Any = None,
     to_date: Any = None,
+    scan_limit: int = CANDIDATE_AUDIT_SCAN_LIMIT,
+    _include_internal: bool = False,
 ) -> dict:
     """Map canonical unified candidates to the four read-only UI states."""
     effective_orders_user_id = str(orders_user_id or user_id)
@@ -606,9 +635,15 @@ async def list_unsent_orders(
         days=days,
         now=now,
         search=search,
+        scan_limit=scan_limit,
+        lightweight=True,
+        require_complete=False,
     )
     failures = await _manual_failure_evidence(
-        db, markers_user_id=str(user_id)
+        db,
+        markers_user_id=str(user_id),
+        order_numbers=audit["eligible_references"],
+        scan_limit=scan_limit,
     )
 
     entries: list[dict[str, Any]] = []
@@ -751,7 +786,7 @@ async def list_unsent_orders(
     ]
     matched_order_count = len(table)
     table = table[:limit]
-    return {
+    result = {
         "ok": True,
         "read_only": True,
         "source_authority": "unified_orders",
@@ -767,6 +802,9 @@ async def list_unsent_orders(
             "worker_candidate_status_display_counts"
         ],
         "reference_hashes": audit["reference_hashes"],
+        "scan_truncated": audit["scan_truncated"],
+        "scan_limit": audit["scan_limit"],
+        "scanned_rows": audit["scanned_rows"],
         "days": days,
         "from_date": audit["from_date"],
         "to_date": audit["to_date"],
@@ -794,3 +832,7 @@ async def list_unsent_orders(
         ],
         "orders": table,
     }
+    if _include_internal:
+        result["_candidate_audit"] = audit
+        result["_manual_failures"] = failures
+    return result

@@ -30,9 +30,10 @@ def test_billable_salla_statuses_remain_actionable_when_unsent():
         assert _include_in_daily_report(_entry(UNSENT, status)) is True
 
 
-def test_sent_and_failed_rows_remain_visible_for_audit():
+def test_sent_history_remains_visible_but_failed_retry_tracks_current_eligibility():
     assert _include_in_daily_report(_entry(SENT, "بانتظار المراجعة")) is True
-    assert _include_in_daily_report(_entry(FAILED, "ملغي")) is True
+    # A failed local attempt is not actionable after Salla marks it cancelled.
+    assert _include_in_daily_report(_entry(FAILED, "ملغي")) is False
 
 
 def test_unknown_legacy_status_is_not_silently_hidden():
