@@ -47,10 +47,12 @@ class DB:
         return self.collections.setdefault(name, Collection())
 
 
-def test_shadow_scheduler_is_disabled_by_default_and_clamps_interval(monkeypatch):
+def test_financial_scheduler_is_enabled_by_default_and_clamps_interval(monkeypatch):
     monkeypatch.delenv(scheduler.ENABLED_ENV, raising=False)
+    monkeypatch.delenv(scheduler.INTERVAL_ENV, raising=False)
+    assert scheduler.shadow_scheduler_enabled() is True
+    assert scheduler.shadow_interval_seconds() == 600
     monkeypatch.setenv(scheduler.INTERVAL_ENV, "1")
-    assert scheduler.shadow_scheduler_enabled() is False
     assert scheduler.shadow_interval_seconds() == 300
 
 
@@ -92,16 +94,22 @@ async def test_shadow_cycle_persists_source_only_result(monkeypatch):
         def __init__(self, _db):
             pass
 
-        async def run(self, user_id, ad_account_id, **_kwargs):
+        async def run(self, user_id, ad_account_id, **kwargs):
             assert (user_id, ad_account_id) == ("u1", "a1")
+            assert kwargs["date_from"].isoformat() == "2026-08-24"
+            assert kwargs["date_to"].isoformat() == "2026-08-24"
+            assert kwargs["run_type"] == "current_day_fast_lane"
+            assert kwargs["financial_only"] is True
             return {"status": "partial", "sync_run_id": "run-1"}
 
     monkeypatch.setattr(scheduler, "SnapchatV2SyncPipeline", Pipeline)
-    fixed = datetime(2026, 8, 23, 12, tzinfo=timezone.utc)
+    fixed = datetime(2026, 8, 23, 22, 30, tzinfo=timezone.utc)
     result = await scheduler.run_shadow_cycle(db, now=lambda: fixed)
     assert result["status"] == "complete"
     assert result["completed"] == 1
-    assert result["shadow_mode"] is True
-    assert result["ui_enabled"] is False
+    assert result["shadow_mode"] is False
+    assert result["ui_enabled"] is True
+    assert result["sync_lane"] == "current_riyadh_day_only"
+    assert result["writer_authority"] == "snapchat_v2_financial_pipeline"
     update = db["mezan_snapchat_shadow_scheduler_v2"].updates[0][1]
     assert update["$set"]["results"][0]["sync_run_id"] == "run-1"

@@ -362,7 +362,24 @@ async def build_daily_projection(
     }
 
 
-async def persist_daily_projection(db: Any, projection: dict[str, Any]) -> None:
+def _same_spend(left: Any, right: Any) -> bool:
+    try:
+        return abs(float(left or 0) - float(right or 0)) <= 0.000001
+    except (TypeError, ValueError, OverflowError):
+        return False
+
+
+async def persist_daily_projection(
+    db: Any,
+    projection: dict[str, Any],
+) -> dict[str, Any]:
+    """Persist one day without replacing a proven day with an incomplete retry.
+
+    ``last_mezan_check_at`` and ``last_provider_success_at`` describe transport
+    freshness. ``last_provider_value_changed_at`` advances only when the
+    provider-backed daily spend changes, so reporting lag is distinguishable
+    from a scheduler that has stopped checking.
+    """
     await ensure_projection_indexes(db)
     identity = {
         "user_id": projection["user_id"],
@@ -372,15 +389,52 @@ async def persist_daily_projection(db: Any, projection: dict[str, Any]) -> None:
         "projection_timezone": projection["projection_timezone"],
         "action_report_time": projection["action_report_time"],
     }
-    now = _utcnow()
-    await db[SNAPCHAT_DAILY_PROJECTIONS_COLLECTION].update_one(
+    now = ensure_aware_utc(
+        projection.get("generated_at") or _utcnow(),
+        field="generated_at",
+    )
+    collection = db[SNAPCHAT_DAILY_PROJECTIONS_COLLECTION]
+    existing = await collection.find_one(identity, {"_id": 0}) or {}
+    freshness = {
+        "last_mezan_check_at": now,
+        "last_provider_success_at": now,
+    }
+
+    # A partial retry must remain visible in the run diagnostics, but it must
+    # not erase an already-complete financial day. The next targeted retry can
+    # safely converge this same identity.
+    if existing.get("amount_complete") is True and projection.get("amount_complete") is not True:
+        await collection.update_one(
+            identity,
+            {"$set": {**freshness, "last_incomplete_attempt_at": now}},
+            upsert=False,
+        )
+        return {
+            **existing,
+            **freshness,
+            "last_incomplete_attempt_at": now,
+            "preserved_complete_projection": True,
+        }
+
+    changed_at = existing.get("last_provider_value_changed_at")
+    if not existing or not _same_spend(
+        existing.get("base_spend_native"), projection.get("base_spend_native")
+    ):
+        changed_at = now
+    persisted = {
+        **projection,
+        **freshness,
+        "last_provider_value_changed_at": changed_at or now,
+    }
+    await collection.update_one(
         identity,
         {
-            "$set": {**projection, "updated_at": now},
+            "$set": {**persisted, "updated_at": now},
             "$setOnInsert": {"created_at": now},
         },
         upsert=True,
     )
+    return {**persisted, "updated_at": now}
 
 
 async def build_and_persist_daily_projections(
@@ -409,8 +463,8 @@ async def build_and_persist_daily_projections(
                 sync_run_id=sync_run_id,
                 now=now,
             )
-            await persist_daily_projection(db, projection)
-            projections.append(projection)
+            persisted = await persist_daily_projection(db, projection)
+            projections.append(persisted)
     return projections
 
 

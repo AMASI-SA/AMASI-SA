@@ -51,6 +51,14 @@ def _today_in_timezone(timezone_name: str) -> date:
     return datetime.now(ZoneInfo(timezone_name)).date()
 
 
+def _utc_datetime(value: Any) -> datetime | None:
+    if not isinstance(value, datetime):
+        return None
+    if value.tzinfo is None or value.utcoffset() is None:
+        return value.replace(tzinfo=ZoneInfo("UTC"))
+    return value.astimezone(ZoneInfo("UTC"))
+
+
 def _open_day_has_source_evidence(projection: dict[str, Any]) -> bool:
     """Return whether the open-day projection contains provider observations.
 
@@ -182,13 +190,13 @@ def _sum(rows: list[dict[str, Any]], field: str) -> float:
     return round(sum(float(row.get(field) or 0) for row in rows), 6)
 
 
-async def _projection_financial_status(
+async def _projection_financial_run_statuses(
     db: Any,
     *,
     user_id: str,
     ad_account_id: str,
     projections: list[dict[str, Any]],
-) -> str:
+) -> dict[str, str]:
     """Prove the selected range from the runs that produced its facts.
 
     A newer rolling run can legitimately be partial while the current local
@@ -202,7 +210,7 @@ async def _projection_financial_status(
         if run_id
     })
     if not projections or not run_ids:
-        return "partial"
+        return {}
     cursor = db[SNAPCHAT_SYNC_RUNS_COLLECTION].find(
         {
             "user_id": str(user_id),
@@ -215,12 +223,39 @@ async def _projection_financial_status(
         rows = list(await cursor.to_list(length=len(run_ids)))
     except TypeError:
         rows = list(await cursor.to_list(len(run_ids)))
-    complete_ids = {
-        str(row.get("sync_run_id"))
+    return {
+        str(row.get("sync_run_id")): str(
+            row.get("financial_sync_status") or "pending"
+        )
         for row in rows
-        if row.get("financial_sync_status") == "complete"
+        if row.get("sync_run_id")
     }
-    return "complete" if set(run_ids).issubset(complete_ids) else "partial"
+
+
+async def _projection_financial_status(
+    db: Any,
+    *,
+    user_id: str,
+    ad_account_id: str,
+    projections: list[dict[str, Any]],
+) -> str:
+    run_ids = {
+        str(run_id)
+        for projection in projections
+        for run_id in list(projection.get("source_sync_run_ids") or [])
+        if run_id
+    }
+    statuses = await _projection_financial_run_statuses(
+        db,
+        user_id=user_id,
+        ad_account_id=ad_account_id,
+        projections=projections,
+    )
+    return (
+        "complete"
+        if run_ids and all(statuses.get(run_id) == "complete" for run_id in run_ids)
+        else "partial"
+    )
 
 
 def _reconciliation_status(
@@ -1026,6 +1061,31 @@ async def load_snapchat_v2_dashboard_spend(
                 "range_ends_on_open_day": False,
                 "connected": not disconnected,
                 "reason_codes": [] if disconnected else ["selected_account_missing"],
+                "requested_days": len(days),
+                "complete_days": len(days) if disconnected else 0,
+                "missing_dates": [] if disconnected else days,
+                "daily_coverage": [
+                    {
+                        "date": day,
+                        "daily_sar": 0.0 if disconnected else None,
+                        "daily_state": "not_connected" if disconnected else "unknown_incomplete",
+                        "usable": disconnected,
+                        "run_id": None,
+                        "proof_status": "not_required" if disconnected else "missing",
+                        "source_mode": None,
+                        "selected_account_ids": [],
+                        "participating_account_ids": [],
+                        "fact_count": 0,
+                        "reason": None if disconnected else "selected_account_missing",
+                        "reasons": [] if disconnected else ["selected_account_missing"],
+                        "provider_checked_at": None,
+                        "provider_value_changed_at": None,
+                        "last_fact_updated_at": None,
+                    }
+                    for day in days
+                ],
+                "provisional_subtotal_sar": None,
+                "provisional_subtotal_non_final": False,
                 "timezone": timezone_name,
                 "source_collection": SNAPCHAT_DAILY_PROJECTIONS_COLLECTION,
             },
@@ -1048,11 +1108,26 @@ async def load_snapchat_v2_dashboard_spend(
         action_report_time="conversion",
     )
     expected_days = (date_to - date_from).days + 1
-    financial_status = await _projection_financial_status(
+    financial_run_statuses = await _projection_financial_run_statuses(
         db,
         user_id=str(user_id),
         ad_account_id=account_id,
         projections=projections,
+    )
+    source_run_ids = {
+        str(run_id)
+        for projection in projections
+        for run_id in list(projection.get("source_sync_run_ids") or [])
+        if run_id
+    }
+    financial_status = (
+        "complete"
+        if source_run_ids
+        and all(
+            financial_run_statuses.get(run_id) == "complete"
+            for run_id in source_run_ids
+        )
+        else "partial"
     )
     reconciliations = await list_reconciliation(
         db,
@@ -1067,9 +1142,23 @@ async def load_snapchat_v2_dashboard_spend(
         date_from=date_from,
         date_to=date_to,
     )
+    reconciliation_by_date = {
+        str(row.get("report_date") or ""): row
+        for row in reconciliations
+        if row.get("report_date")
+    }
     projection_complete = (
         len(projections) == expected_days
         and all(row.get("amount_complete") is True for row in projections)
+    )
+    projection_participation_complete = bool(
+        projections
+        and all(
+            int(row.get("source_fact_count") or 0) > 0
+            or (row.get("coverage") or {}).get("data_state")
+            == "confirmed_no_data"
+            for row in projections
+        )
     )
     today = _today_in_timezone(timezone_name)
     contains_open_day = date_from <= today <= date_to
@@ -1105,6 +1194,7 @@ async def load_snapchat_v2_dashboard_spend(
         exchange_rate = None
     amount_complete = bool(
         projection_complete
+        and projection_participation_complete
         and financial_status == "complete"
         and reconciliation_status == "reconciled"
         and exchange_rate is not None
@@ -1113,6 +1203,7 @@ async def load_snapchat_v2_dashboard_spend(
         not amount_complete
         and range_ends_on_open_day
         and projection_complete
+        and projection_participation_complete
         and financial_status == "complete"
         and closed_reconciliation_status
         in {"reconciled", "not_required_open_day"}
@@ -1123,11 +1214,51 @@ async def load_snapchat_v2_dashboard_spend(
     amount_available = amount_complete or provisional_amount_available
 
     rows: list[dict[str, Any]] = []
-    daily_sar: dict[str, float | None] = {}
-    daily_state: dict[str, str] = {}
-    hourly_sar: dict[str, list[dict[str, Any]]] = {}
-    for projection in projections:
-        day = str(projection.get("report_date") or "")
+    requested_dates = [
+        date_from + timedelta(days=offset)
+        for offset in range(expected_days)
+    ]
+    requested_day_strings = [value.isoformat() for value in requested_dates]
+    projection_by_date = {
+        str(row.get("report_date") or ""): row
+        for row in projections
+        if row.get("report_date")
+    }
+    daily_sar: dict[str, float | None] = {
+        day: None for day in requested_day_strings
+    }
+    daily_state: dict[str, str] = {
+        day: "unknown_incomplete" for day in requested_day_strings
+    }
+    hourly_sar: dict[str, list[dict[str, Any]]] = {
+        day: [] for day in requested_day_strings
+    }
+    daily_coverage: list[dict[str, Any]] = []
+    complete_dates: list[str] = []
+    for day in requested_day_strings:
+        projection = projection_by_date.get(day)
+        if projection is None:
+            daily_coverage.append({
+                "date": day,
+                "daily_sar": None,
+                "daily_state": "unknown_incomplete",
+                "usable": False,
+                "run_id": None,
+                "proof_status": "missing",
+                "source_mode": "snapchat_v2_hourly_facts_v2",
+                "selected_account_ids": [account_id],
+                "participating_account_ids": [],
+                "fact_count": 0,
+                "reason": "account_day_fact_missing",
+                "reasons": ["account_day_fact_missing"],
+                "provider_checked_at": None,
+                "provider_value_changed_at": None,
+                "last_fact_updated_at": None,
+                "last_mezan_check_at": None,
+                "last_provider_success_at": None,
+                "source_delay_minutes": None,
+            })
+            continue
         spend_native = float(projection.get("base_spend_native") or 0)
         day_known = (
             projection.get("amount_complete") is True
@@ -1160,6 +1291,92 @@ async def load_snapchat_v2_dashboard_spend(
                 "status": hour.get("status"),
             })
         hourly_sar[day] = day_hours
+        run_ids = sorted({
+            str(value)
+            for value in list(projection.get("source_sync_run_ids") or [])
+            if value
+        })
+        proof_complete = bool(run_ids) and all(
+            financial_run_statuses.get(run_id) == "complete"
+            for run_id in run_ids
+        )
+        reconciliation = reconciliation_by_date.get(day) or {}
+        reconciliation_complete = reconciliation.get("reconciled") is True
+        day_reasons: list[str] = []
+        coverage = projection.get("coverage") or {}
+        participating = [account_id] if (
+            int(projection.get("source_fact_count") or 0) > 0
+            or coverage.get("data_state") == "confirmed_no_data"
+        ) else []
+        selected_account_participated = account_id in participating
+        day_usable = bool(
+            projection.get("amount_complete") is True
+            and proof_complete
+            and reconciliation_complete
+            and exchange_rate is not None
+            and selected_account_participated
+        )
+        if projection.get("amount_complete") is not True:
+            day_reasons.append(
+                "current_coverage_conflict"
+                if day == today.isoformat()
+                else "account_day_fact_missing"
+            )
+        if not proof_complete:
+            day_reasons.append("run_proof_missing_or_ambiguous")
+        if not reconciliation_complete:
+            day_reasons.append(
+                "current_coverage_conflict"
+                if day == today.isoformat()
+                else "daily_reconciliation_incomplete"
+            )
+        if exchange_rate is None:
+            day_reasons.append("mezan2_fx_unproven")
+        if not selected_account_participated:
+            day_reasons.append("selected_account_not_in_run")
+        provider_reason = str(coverage.get("reason") or "").strip().lower()
+        if "rate" in provider_reason or "429" in provider_reason:
+            day_reasons.append("provider_rate_limited")
+        elif any(
+            marker in provider_reason
+            for marker in ("unavailable", "timeout", "connection", "5xx")
+        ):
+            day_reasons.append("provider_unavailable")
+        day_reasons = list(dict.fromkeys(day_reasons))
+        if day_usable:
+            complete_dates.append(day)
+        checked_at = projection.get("last_mezan_check_at") or projection.get("generated_at")
+        provider_success_at = projection.get("last_provider_success_at") or checked_at
+        value_changed_at = projection.get("last_provider_value_changed_at")
+        checked_dt = _utc_datetime(checked_at)
+        changed_dt = _utc_datetime(value_changed_at)
+        source_delay_minutes = (
+            max(round((checked_dt - changed_dt).total_seconds() / 60, 1), 0.0)
+            if checked_dt is not None and changed_dt is not None
+            else None
+        )
+        daily_coverage.append({
+            "date": day,
+            "daily_sar": spend_sar,
+            "daily_state": state,
+            "usable": day_usable,
+            "run_id": run_ids[0] if len(run_ids) == 1 else None,
+            "proof_status": "complete" if proof_complete else "partial" if run_ids else "missing",
+            "source_mode": str(
+                coverage.get("source_mode") or "snapchat_v2_hourly_facts_v2"
+            ),
+            "selected_account_ids": [account_id],
+            "participating_account_ids": participating,
+            "fact_count": int(projection.get("source_fact_count") or 0),
+            "reason": day_reasons[0] if day_reasons else None,
+            "reasons": day_reasons,
+            "provider_checked_at": checked_at,
+            "provider_value_changed_at": value_changed_at,
+            "last_fact_updated_at": projection.get("source_latest_updated_at"),
+            "last_mezan_check_at": checked_at,
+            "last_provider_success_at": provider_success_at,
+            "source_delay_minutes": source_delay_minutes,
+        })
         rows.append({
             "provider": "snapchat_ads",
             "ad_account_id": account_id,
@@ -1212,6 +1429,24 @@ async def load_snapchat_v2_dashboard_spend(
         if provisional_amount_available
         else ["unified_projection_financial_reconciliation_or_fx_incomplete"]
     )
+    diagnostic_reasons = sorted({
+        reason
+        for item in daily_coverage
+        for reason in list(item.get("reasons") or [])
+    })
+    reasons = list(dict.fromkeys([*reasons, *diagnostic_reasons]))
+    missing_dates = [
+        item["date"] for item in daily_coverage if item.get("usable") is not True
+    ]
+    observed_subtotal = round(
+        sum(float(value) for value in daily_sar.values() if value is not None),
+        2,
+    )
+    provisional_subtotal = (
+        observed_subtotal
+        if missing_dates and any(value is not None for value in daily_sar.values())
+        else None
+    )
     return {
         "rows": rows if amount_available else [],
         "daily_sar": daily_sar,
@@ -1245,6 +1480,12 @@ async def load_snapchat_v2_dashboard_spend(
             "range_ends_on_open_day": range_ends_on_open_day,
             "connected": True,
             "reason_codes": reasons,
+            "requested_days": expected_days,
+            "complete_days": len(complete_dates),
+            "missing_dates": missing_dates,
+            "daily_coverage": daily_coverage,
+            "provisional_subtotal_sar": provisional_subtotal,
+            "provisional_subtotal_non_final": provisional_subtotal is not None,
             "timezone": timezone_name,
             "source_collection": SNAPCHAT_DAILY_PROJECTIONS_COLLECTION,
             "amount_field": "base_spend_native",

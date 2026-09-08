@@ -25,14 +25,20 @@ from .snapchat_native_data_common import (
     enumerate_native_sync_dates,
     snapchat_native_sync_enabled,
 )
-from .snapchat_native_data_sync import execute_snapchat_native_sync
-
 ASYNC_SYNC_RUN_TYPE = "analytics_refresh_async"
 ASYNC_SYNC_SOURCE_MODE = "snapchat_marketing_native_async_sync_v2"
 ACTIVE_SYNC_STATUSES = ("queued", "running")
 SCHEDULER_SYNC_RUN_TYPE = "analytics_refresh"
 SCHEDULER_ACTIVE_RUN_TTL = timedelta(minutes=25)
 RUN_CLOCK_SKEW_TOLERANCE = timedelta(minutes=5)
+
+
+def _snapchat_v2_pipeline(db: Any, *, now: Callable[[], datetime]) -> Any:
+    # Lazy import avoids the integrations_control_center package bootstrap
+    # cycle reached by snapchat_v2.connection during server startup.
+    from snapchat_v2.sync_pipeline import SnapchatV2SyncPipeline
+
+    return SnapchatV2SyncPipeline(db, now=now)
 
 
 def _safe_job(document: dict[str, Any]) -> dict[str, Any]:
@@ -58,7 +64,13 @@ def _safe_job(document: dict[str, Any]) -> dict[str, Any]:
         "accounts_complete": int(summary.get("accounts_complete") or 0),
         "rows_saved": int(summary.get("rows_saved") or 0),
         "errors_count": int(summary.get("errors_count") or 0),
+        "days_requested": int(summary.get("days_requested") or 0),
+        "day_attempts": int(summary.get("day_attempts") or 0),
+        "day_attempts_complete": int(
+            summary.get("day_attempts_complete") or 0
+        ),
         "child_run_id": summary.get("child_run_id"),
+        "child_run_ids": list(summary.get("child_run_ids") or []),
         "started_at": document.get("started_at"),
         "finished_at": document.get("finished_at"),
         "source_only": True,
@@ -330,13 +342,75 @@ async def execute_snapchat_native_sync_job(
     )
     try:
         try:
-            result = await execute_snapchat_native_sync(
-                db,
-                user_id,
+            dates = enumerate_native_sync_dates(
                 payload,
-                now=now,
-                parent_run_id=run_id,
+                today=now().astimezone(_timezone(BUSINESS_TIMEZONE)).date(),
             )
+            selected_accounts = await _load_selected_accounts(db, user_id)
+            child_results: list[dict[str, Any]] = []
+            for report_date in dates:
+                for account in selected_accounts:
+                    account_id = str(
+                        account.get("ad_account_id")
+                        or account.get("external_account_id")
+                        or ""
+                    ).strip()
+                    child_results.append({
+                        **await _snapchat_v2_pipeline(db, now=now).run(
+                            user_id,
+                            account_id,
+                            date_from=report_date,
+                            date_to=report_date,
+                            run_type="manual",
+                            financial_only=True,
+                        ),
+                        "report_date": report_date.isoformat(),
+                        "ad_account_id": account_id,
+                    })
+            child_run_ids = [
+                str(item.get("sync_run_id"))
+                for item in child_results
+                if item.get("sync_run_id")
+            ]
+            incomplete = [
+                item for item in child_results
+                if item.get("status") != "complete"
+            ]
+            failed = [
+                item for item in child_results
+                if item.get("status") not in {"complete", "partial"}
+            ]
+            complete_account_ids = {
+                account_id
+                for account_id in {
+                    str(item.get("ad_account_id") or "")
+                    for item in child_results
+                }
+                if account_id and all(
+                    item.get("status") == "complete"
+                    for item in child_results
+                    if item.get("ad_account_id") == account_id
+                )
+            }
+            result = {
+                "status": (
+                    "failed" if failed and len(failed) == len(child_results)
+                    else "partial" if incomplete
+                    else "complete"
+                ),
+                "accounts_attempted": len(selected_accounts),
+                "accounts_complete": len(complete_account_ids),
+                "days_requested": len(dates),
+                "day_attempts": len(child_results),
+                "day_attempts_complete": len(child_results) - len(incomplete),
+                "rows_saved": sum(
+                    int((item.get("summary") or {}).get("rows_saved") or 0)
+                    for item in child_results
+                ),
+                "errors_count": len(incomplete),
+                "run_id": child_run_ids[0] if len(child_run_ids) == 1 else None,
+                "child_run_ids": child_run_ids,
+            }
         finally:
             await _stop_sync_run_heartbeat(heartbeat)
     except SnapchatNativeSyncError as exc:
@@ -422,7 +496,18 @@ async def execute_snapchat_native_sync_job(
                 "summary.errors_count": int(
                     result.get("errors_count") or 0
                 ),
+                "summary.days_requested": int(
+                    result.get("days_requested") or 0
+                ),
+                "summary.day_attempts": int(
+                    result.get("day_attempts") or 0
+                ),
+                "summary.day_attempts_complete": int(
+                    result.get("day_attempts_complete") or 0
+                ),
                 "summary.child_run_id": result.get("run_id"),
+                "summary.child_run_ids": list(result.get("child_run_ids") or []),
+                "summary.child_contract": "snapchat_v2_sync_run_id",
                 "error": None,
             }
         },

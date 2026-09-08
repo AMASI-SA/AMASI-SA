@@ -1,6 +1,9 @@
 const PROVIDERS = Object.freeze(["snapchat", "meta", "tiktok", "google"]);
 
 function finiteNumber(value) {
+    if (value === null || value === undefined || value === "" || typeof value === "boolean") {
+        return null;
+    }
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : null;
 }
@@ -17,11 +20,23 @@ function roundMoney(value) {
 function providerTotals(platformSpend = {}) {
     const source = platformSpend?.provider_totals_sar || {};
     return Object.fromEntries(
-        PROVIDERS.map((provider) => [provider, roundMoney(source[provider])]),
+        PROVIDERS.map((provider) => {
+            const value = finiteNumber(source[provider]);
+            return [provider, value !== null && value >= 0 ? roundMoney(value) : null];
+        }),
     );
 }
 
 function mergeProviderMetrics(existing = {}, spend = 0) {
+    if (spend === null) {
+        return {
+            ...existing,
+            spend: null,
+            cpa: null,
+            cost_per_order: null,
+            roas: null,
+        };
+    }
     const orders = nonnegative(existing.orders);
     const revenue = nonnegative(existing.revenue);
     return {
@@ -35,7 +50,7 @@ function mergeProviderMetrics(existing = {}, spend = 0) {
     };
 }
 
-function mergeExecutiveBreakdown(existing = {}, spendByProvider = {}) {
+function mergeExecutiveBreakdown(existing = {}, spendByProvider = {}, amountComplete = true) {
     const currentProviders = existing?.providers || {};
     const providers = {};
     let totalSpend = 0;
@@ -46,7 +61,9 @@ function mergeExecutiveBreakdown(existing = {}, spendByProvider = {}) {
 
     PROVIDERS.forEach((provider) => {
         const current = currentProviders[provider] || {};
-        const spend = roundMoney(spendByProvider[provider]);
+        const spend = spendByProvider[provider] === null
+            ? null
+            : roundMoney(spendByProvider[provider]);
         const sallaOrders = Math.max(0, Math.trunc(nonnegative(current.salla_orders)));
         const sallaSales = roundMoney(current.salla_sales_sar);
         const reportedOrdersRaw = finiteNumber(current.platform_reported_orders);
@@ -56,11 +73,11 @@ function mergeExecutiveBreakdown(existing = {}, spendByProvider = {}) {
                 ? 0
                 : Math.max(0, Math.trunc(reportedOrdersRaw)));
 
-        if (provider === "google" && spend > 0) {
+        if (provider === "google" && spend !== null && spend > 0) {
             completePlatformDenominator = false;
         }
         if (reportedOrders !== null) totalPlatformOrders += reportedOrders;
-        totalSpend += spend;
+        if (spend !== null) totalSpend += spend;
         totalSallaOrders += sallaOrders;
         totalSallaSales += sallaSales;
 
@@ -72,17 +89,17 @@ function mergeExecutiveBreakdown(existing = {}, spendByProvider = {}) {
             salla_sales_sar: sallaSales,
             platform_reported_orders: reportedOrders,
             platform_cost_per_order_sar: (
-                reportedOrders !== null && reportedOrders > 0 && spend > 0
+                spend !== null && reportedOrders !== null && reportedOrders > 0 && spend > 0
                     ? roundMoney(spend / reportedOrders)
                     : null
             ),
-            actual_roas: spend > 0
+            actual_roas: spend !== null && spend > 0
                 ? Math.round((sallaSales / spend) * 100) / 100
                 : null,
         };
     });
 
-    totalSpend = roundMoney(totalSpend);
+    totalSpend = amountComplete ? roundMoney(totalSpend) : null;
     totalSallaSales = roundMoney(totalSallaSales);
     return {
         ...existing,
@@ -96,19 +113,21 @@ function mergeExecutiveBreakdown(existing = {}, spendByProvider = {}) {
                 ? totalPlatformOrders
                 : null,
             platform_cost_per_order_sar: (
+                amountComplete
+                &&
                 completePlatformDenominator
                 && totalSpend > 0
                 && totalPlatformOrders > 0
                     ? roundMoney(totalSpend / totalPlatformOrders)
                     : null
             ),
-            actual_roas: totalSpend > 0
+            actual_roas: amountComplete && totalSpend > 0
                 ? Math.round((totalSallaSales / totalSpend) * 100) / 100
                 : null,
         },
         coverage: {
             ...(existing?.coverage || {}),
-            platform_cpa_denominator_complete: completePlatformDenominator,
+            platform_cpa_denominator_complete: amountComplete && completePlatformDenominator,
         },
         source_contract: {
             ...(existing?.source_contract || {}),
@@ -125,28 +144,27 @@ export function mergeDashboardWithPlatformSpend(
         ? dashboardPayload.totals
         : {};
     const spendByProvider = providerTotals(platformSpend);
-    const summedSpend = roundMoney(
-        PROVIDERS.reduce((sum, provider) => sum + spendByProvider[provider], 0),
-    );
     const platformTotal = finiteNumber(platformSpend?.total_sar);
-    const newAdsTotal = platformTotal !== null
-        ? roundMoney(platformTotal)
-        : summedSpend;
-    const oldAdsTotal = roundMoney(totals.total_ads_cost);
-    const adsDelta = oldAdsTotal - newAdsTotal;
+    const amountComplete = platformSpend?.spend_quality?.amount_complete !== false
+        && platformTotal !== null;
+    const newAdsTotal = amountComplete ? roundMoney(platformTotal) : null;
+    const oldAdsTotal = finiteNumber(totals.total_ads_cost);
+    const adsDelta = amountComplete && oldAdsTotal !== null
+        ? roundMoney(oldAdsTotal) - newAdsTotal
+        : null;
     const sales = nonnegative(totals.total_sales);
     const orders = Math.max(0, Math.trunc(nonnegative(totals.total_orders)));
     const nextTotals = {
         ...totals,
         total_ads_cost: newAdsTotal,
         daily_ads_total: newAdsTotal,
-        daily_costs_total: roundMoney(
-            nonnegative(totals.total_product_cost) + newAdsTotal,
-        ),
-        overall_roas: newAdsTotal > 0
+        daily_costs_total: amountComplete
+            ? roundMoney(nonnegative(totals.total_product_cost) + newAdsTotal)
+            : null,
+        overall_roas: amountComplete && newAdsTotal > 0
             ? Math.round((sales / newAdsTotal) * 100) / 100
             : null,
-        avg_cost_per_order: newAdsTotal > 0 && orders > 0
+        avg_cost_per_order: amountComplete && newAdsTotal > 0 && orders > 0
             ? roundMoney(newAdsTotal / orders)
             : null,
         snapchat_spend: spendByProvider.snapchat,
@@ -155,20 +173,22 @@ export function mergeDashboardWithPlatformSpend(
         google_ads_spend: spendByProvider.google,
     };
 
-    if (finiteNumber(totals.net_profit) !== null) {
+    if (amountComplete && adsDelta !== null && finiteNumber(totals.net_profit) !== null) {
         nextTotals.net_profit = Math.round(
             (Number(totals.net_profit) + adsDelta) * 100,
         ) / 100;
-    }
+    } else if (!amountComplete) nextTotals.net_profit = null;
     const config = dashboardPayload?.net_sales_config || {};
     if (
-        config.deduct_ads !== false
+        amountComplete
+        && adsDelta !== null
+        && config.deduct_ads !== false
         && finiteNumber(totals.net_sales) !== null
     ) {
         nextTotals.net_sales = Math.round(
             (Number(totals.net_sales) + adsDelta) * 100,
         ) / 100;
-    }
+    } else if (!amountComplete && config.deduct_ads !== false) nextTotals.net_sales = null;
 
     const existingAds = dashboardPayload?.ads_v2
         && typeof dashboardPayload.ads_v2 === "object"
@@ -201,6 +221,7 @@ export function mergeDashboardWithPlatformSpend(
             executive_breakdown: mergeExecutiveBreakdown(
                 existingAds.executive_breakdown || {},
                 spendByProvider,
+                amountComplete,
             ),
             platform_spend_period: {
                 date_from: platformSpend?.date_from || null,

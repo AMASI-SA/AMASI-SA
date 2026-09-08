@@ -501,6 +501,35 @@ async def build_dashboard_platform_spend(
                 "amount_available": snap_amount_available,
                 "provisional": snap_quality.get("provisional") is True,
                 "reason_codes": list(snap_quality.get("reason_codes") or []),
+                "requested_days": int(snap_quality.get("requested_days") or 0),
+                "complete_days": int(snap_quality.get("complete_days") or 0),
+                "missing_dates": list(snap_quality.get("missing_dates") or []),
+                "daily_coverage": list(snap_quality.get("daily_coverage") or []),
+                "provisional_subtotal_sar": snap_quality.get("provisional_subtotal_sar"),
+                "last_mezan_check_at": next(
+                    (
+                        item.get("last_mezan_check_at")
+                        for item in reversed(list(snap_quality.get("daily_coverage") or []))
+                        if item.get("last_mezan_check_at")
+                    ),
+                    None,
+                ),
+                "last_provider_success_at": next(
+                    (
+                        item.get("last_provider_success_at")
+                        for item in reversed(list(snap_quality.get("daily_coverage") or []))
+                        if item.get("last_provider_success_at")
+                    ),
+                    None,
+                ),
+                "last_provider_value_changed_at": next(
+                    (
+                        item.get("provider_value_changed_at")
+                        for item in reversed(list(snap_quality.get("daily_coverage") or []))
+                        if item.get("provider_value_changed_at")
+                    ),
+                    None,
+                ),
                 "last_sync_at": state.get("last_sync_at"),
                 "data_delay_minutes": state.get("data_delay_minutes"),
             }

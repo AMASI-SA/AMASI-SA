@@ -229,3 +229,43 @@ test("uses Riyadh today and yesterday labels", () => {
     expect(selectedPeriodLabel("2026-08-01", "2026-08-04"))
         .toBe("من 2026-08-01 إلى 2026-08-04");
 });
+
+
+test("labels an incomplete 29 of 30 day range without presenting a final zero", () => {
+    const html = renderToStaticMarkup(
+        <DashboardAdsSpendCardContent
+            fromDate="2026-07-07"
+            toDate="2026-08-05"
+            data={{
+                total_sar: null,
+                spend_quality: { amount_complete: false, status: "incomplete" },
+                provider_totals_sar: {
+                    snapchat: null,
+                    meta: 20,
+                    tiktok: 5,
+                    google: 7.5,
+                },
+                providers: {
+                    ...providers({ hourly: false }),
+                    snapchat: {
+                        connected: true,
+                        daily_available: true,
+                        hourly_available: false,
+                        requested_days: 30,
+                        complete_days: 29,
+                        missing_dates: ["2026-07-19"],
+                        provisional_subtotal_sar: 912.34,
+                    },
+                },
+                daily_spend: [],
+            }}
+            onRefresh={() => {}}
+        />,
+    );
+
+    expect(html).toContain("إجمالي المنصات: غير مكتمل");
+    expect(html).toContain("29/30 يوم مكتمل");
+    expect(html).toContain("اليوم الناقص: 2026-07-19");
+    expect(html).toContain("المجموع المرصود غير النهائي: 912.34 ر.س");
+    expect(html).not.toContain("إجمالي المنصات: 0.00 ر.س");
+});

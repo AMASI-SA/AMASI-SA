@@ -25,6 +25,7 @@ from .reconciliation import calculate_cost_components, list_reconciliation
 from .salla_outcomes import load_salla_campaign_outcomes
 from .status import snapchat_v2_status
 from .sync_pipeline import MAX_SYNC_DAYS, SnapchatV2SyncPipeline
+from .sync_runs import SNAPCHAT_SYNC_RUNS_COLLECTION
 from .total_facts import (
     SNAPCHAT_TOTAL_FACTS_COLLECTION,
     load_total_facts,
@@ -41,6 +42,7 @@ class SnapchatV2SyncInput(BaseModel):
     run_type: Literal["rolling_refresh", "manual", "backfill", "reconciliation"] = (
         "manual"
     )
+    retry_missing_only: bool = False
 
     @model_validator(mode="after")
     def validate_range(self):
@@ -53,6 +55,8 @@ class SnapchatV2SyncInput(BaseModel):
                 raise ValueError(
                     f"Snapchat sync range cannot exceed {MAX_SYNC_DAYS} days"
                 )
+        if self.retry_missing_only and (self.date_from is None or self.date_to is None):
+            raise ValueError("retry_missing_only requires an explicit date range")
         return self
 
 
@@ -68,6 +72,81 @@ def _read_days(date_from: date, date_to: date) -> int:
     if count > MAX_SYNC_DAYS:
         raise HTTPException(status_code=422, detail="date_range_too_large")
     return count
+
+
+async def _daily_retry_dates(
+    db: Any,
+    *,
+    user_id: str,
+    ad_account_id: str,
+    date_from: date,
+    date_to: date,
+    projections: list[dict[str, Any]],
+    reconciliations: list[dict[str, Any]],
+) -> list[date]:
+    """Return only days that do not have the complete V2 proof chain."""
+    run_ids = sorted({
+        str(run_id)
+        for projection in projections
+        for run_id in list(projection.get("source_sync_run_ids") or [])
+        if run_id
+    })
+    statuses: dict[str, str] = {}
+    if run_ids:
+        cursor = db[SNAPCHAT_SYNC_RUNS_COLLECTION].find(
+            {
+                "user_id": str(user_id),
+                "ad_account_id": str(ad_account_id),
+                "sync_run_id": {"$in": run_ids},
+            },
+            {"_id": 0, "sync_run_id": 1, "financial_sync_status": 1},
+        )
+        try:
+            rows = list(await cursor.to_list(length=len(run_ids)))
+        except TypeError:
+            rows = list(await cursor.to_list(len(run_ids)))
+        statuses = {
+            str(row.get("sync_run_id")): str(
+                row.get("financial_sync_status") or "pending"
+            )
+            for row in rows
+            if row.get("sync_run_id")
+        }
+    projection_by_date = {
+        str(row.get("report_date") or ""): row
+        for row in projections
+        if row.get("report_date")
+    }
+    reconciled_dates = {
+        str(row.get("report_date") or "")
+        for row in reconciliations
+        if row.get("reconciled") is True
+    }
+    missing: list[date] = []
+    for offset in range((date_to - date_from).days + 1):
+        current = date_from + timedelta(days=offset)
+        day = current.isoformat()
+        projection = projection_by_date.get(day) or {}
+        projection_run_ids = {
+            str(run_id)
+            for run_id in list(projection.get("source_sync_run_ids") or [])
+            if run_id
+        }
+        coverage = projection.get("coverage") or {}
+        selected_account_participated = bool(
+            int(projection.get("source_fact_count") or 0) > 0
+            or coverage.get("data_state") == "confirmed_no_data"
+        )
+        usable = bool(
+            projection.get("amount_complete") is True
+            and selected_account_participated
+            and day in reconciled_dates
+            and projection_run_ids
+            and all(statuses.get(run_id) == "complete" for run_id in projection_run_ids)
+        )
+        if not usable:
+            missing.append(current)
+    return missing
 
 
 def _shadow_enabled() -> bool:
@@ -490,15 +569,73 @@ def attach_snapchat_v2_routes(
                 },
             )
         user_id = _user_id(user, require_owner)
+        date_from = payload.date_from
+        date_to = payload.date_to
+        targeted_recovery: dict[str, Any] | None = None
+        if payload.retry_missing_only:
+            account = await get_selected_account(db, user_id)
+            if not account:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={"code": "snapchat_v2_selected_account_missing"},
+                )
+            assert date_from is not None and date_to is not None
+            projections = await list_daily_projections(
+                db,
+                user_id=user_id,
+                ad_account_id=str(account["ad_account_id"]),
+                date_from=date_from,
+                date_to=date_to,
+                projection_timezone=RIYADH_TIMEZONE,
+                action_report_time=payload.action_report_time,
+            )
+            reconciliations = await list_reconciliation(
+                db,
+                user_id=user_id,
+                ad_account_id=str(account["ad_account_id"]),
+                date_from=date_from,
+                date_to=date_to,
+                action_report_time=payload.action_report_time,
+            )
+            missing_dates = await _daily_retry_dates(
+                db,
+                user_id=user_id,
+                ad_account_id=str(account["ad_account_id"]),
+                date_from=date_from,
+                date_to=date_to,
+                projections=projections,
+                reconciliations=reconciliations,
+            )
+            if not missing_dates:
+                return {
+                    "status": "skipped",
+                    "reason": "snapchat_range_already_complete",
+                    "retry_missing_only": True,
+                    "provider_calls": 0,
+                }
+            date_from = date_to = missing_dates[0]
+            targeted_recovery = {
+                "requested_range_from": payload.date_from,
+                "requested_range_to": payload.date_to,
+                "target_date": date_from,
+                "remaining_missing_dates_before_retry": [
+                    value.isoformat() for value in missing_dates
+                ],
+            }
         pipeline = SnapchatV2SyncPipeline(db)
-        return await pipeline.run(
+        result = await pipeline.run(
             user_id,
             payload.ad_account_id,
-            date_from=payload.date_from,
-            date_to=payload.date_to,
+            date_from=date_from,
+            date_to=date_to,
             action_report_time=payload.action_report_time,
-            run_type=payload.run_type,
+            run_type="reconciliation" if targeted_recovery else payload.run_type,
         )
+        return {
+            **result,
+            "retry_missing_only": payload.retry_missing_only,
+            "targeted_recovery": targeted_recovery,
+        }
 
     @router.get("/snapchat-v2/accounts")
     async def snapchat_v2_accounts_route(
