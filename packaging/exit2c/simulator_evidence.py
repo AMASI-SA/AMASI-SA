@@ -2,6 +2,37 @@
 import http.client
 import json
 import socket
+from salla_http_simulator import COUNTER_KEYS, CLASS_KEYS
+
+
+CHECKPOINTS = ('BEFORE_REVIEW', 'AFTER_LOGIN', 'BEFORE_IMAGES', 'AFTER_IMAGES',
+               'BEFORE_COMPLETE', 'AFTER_COMPLETE', 'AFTER_REVIEW')
+
+
+def validate_counts(counters):
+    if type(counters) is not dict or set(counters) != set(COUNTER_KEYS) | {'unexpected_by_class'}:
+        raise RuntimeError('EVIDENCE_SCHEMA_REJECTED')
+    if any(type(counters[k]) is not int or not 0 <= counters[k] <= 1000 for k in COUNTER_KEYS):
+        raise RuntimeError('EVIDENCE_SCHEMA_REJECTED')
+    classes = counters['unexpected_by_class']
+    if (type(classes) is not dict or not set(classes) <= CLASS_KEYS
+            or any(type(v) is not int or not 0 < v <= 1000 for v in classes.values())
+            or sum(classes.values()) != counters['unexpected']):
+        raise RuntimeError('EVIDENCE_SCHEMA_REJECTED')
+    return counters
+
+
+def protocol_lines(checkpoint, counters):
+    if checkpoint not in CHECKPOINTS:
+        return ['EVIDENCE AFTER_REVIEW unavailable']
+    try:
+        validate_counts(counters)
+    except Exception:
+        return ['EVIDENCE ' + checkpoint + ' unavailable']
+    lines = ['EVIDENCE ' + checkpoint + ' ' + k + ' ' + str(counters[k]) for k in COUNTER_KEYS]
+    lines.extend('EVIDENCE ' + checkpoint + ' ' + k.replace('|', ' ') + ' ' + str(v)
+                 for k, v in sorted(counters['unexpected_by_class'].items()))
+    return lines
 
 
 def evidence():
@@ -13,12 +44,10 @@ def evidence():
         response = connection.getresponse()
         if response.status != 200:
             raise RuntimeError('EVIDENCE_HTTP_REJECTED')
-        counters = json.loads(response.read(2048))
+        counters = json.loads(response.read(32768))
     finally:
         connection.close()
-    keys = {'simulated_provider_calls', 'unexpected', 'status_writes', 'denied', 'shipping_attempted', 'shipping_failed'}
-    if set(counters) != keys or any(type(v) is not int or not 0 <= v <= 1000 for v in counters.values()):
-        raise RuntimeError('EVIDENCE_SCHEMA_REJECTED')
+    validate_counts(counters)
     # Runtime container is independently required to share network=none Mongo's
     # namespace; no external interface or published port exists.
     return {'live_provider_calls': 0, **counters}

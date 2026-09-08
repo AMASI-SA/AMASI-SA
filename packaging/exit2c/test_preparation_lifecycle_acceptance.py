@@ -14,6 +14,7 @@ from unittest.mock import patch
 
 from acceptance_controller import PREPARATION_PHASES, serve
 import preparation_lifecycle_acceptance as prep
+from test_catalog_image_fixture import CatalogImageFixtureTests
 
 
 class PreparationContracts(unittest.TestCase):
@@ -21,9 +22,11 @@ class PreparationContracts(unittest.TestCase):
         import json
         import simulator_evidence as evidence
         valid = dict(simulated_provider_calls=3, unexpected=1, status_writes=0,
-                     denied=2, shipping_attempted=0, shipping_failed=0)
+                     denied=2, shipping_attempted=0, shipping_failed=0, status_write_denied=2,
+                     status_discovery_unavailable=0, auth_rejected=0,
+                     unexpected_by_class={"PRODUCT_DETAIL|GET|UNKNOWN_ROUTE": 1})
         marker = secrets.token_hex(24)
-        for payload, good in ((valid, True), ({**valid, 'unexpected': 0}, True), ({**valid, marker: 1}, False),
+        for payload, good in ((valid, True), ({**valid, 'unexpected': 0, 'unexpected_by_class': {}}, True), ({**valid, marker: 1}, False),
                               ({**valid, 'denied': marker}, False),
                               ({**valid, 'denied': True}, False)):
             closed, reads = [], []
@@ -35,7 +38,7 @@ class PreparationContracts(unittest.TestCase):
                  contextlib.redirect_stdout(output):
                 result = evidence.main()
             transport.assert_called_once_with('127.0.0.1', 8093, timeout=2)
-            self.assertEqual(reads, [2048]); self.assertEqual(closed, [True])
+            self.assertEqual(reads, [32768]); self.assertEqual(closed, [True])
             self.assertEqual(result, (2 if payload['unexpected'] else 0) if good else 1)
             self.assertTrue(marker not in output.getvalue(), 'evidence leaked response material')
             if good:

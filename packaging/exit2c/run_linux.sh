@@ -71,7 +71,7 @@ start_acceptance() {
   exec {accept_out}<&"${ACCEPTANCE[0]}"
 }
 accept() {
-  local reply status reason check_id expected actual
+  local reply status reason check_id expected actual checkpoint tail count category method frames=0
   # Reject untrusted phase names without printing them.
   case "$1" in
     setup|http|mongo-down|after-restart|prep-setup|prep-review|prep-create|prep-resume|prep-finish|finish) accept_phase="$1" ;;
@@ -84,7 +84,34 @@ accept() {
     printf 'FAIL %s CHANNEL_CLOSED\n' "$accept_phase"
     return 1
   fi
+  while test "$frames" -lt 4096; do
+  frames=$((frames + 1))
   if IFS= read -r -t 120 reply <&"$accept_out"; then
+    if [[ "$reply" =~ ^EVIDENCE\ ([A-Z_]+)\ (.+)$ ]]; then
+      checkpoint="${BASH_REMATCH[1]}"; tail="${BASH_REMATCH[2]}"
+      case "$checkpoint" in BEFORE_REVIEW|AFTER_LOGIN|BEFORE_IMAGES|AFTER_IMAGES|BEFORE_COMPLETE|AFTER_COMPLETE|AFTER_REVIEW) ;;
+        *) echo 'FAIL controller UNCLASSIFIED_FAILURE'; return 1;; esac
+      if test "$accept_phase" != prep-review; then echo 'FAIL controller UNCLASSIFIED_FAILURE'; return 1; fi
+      if test "$tail" = unavailable; then
+        printf 'EVIDENCE %s unavailable\n' "$checkpoint"; continue
+      fi
+      if [[ "$tail" =~ ^([a-z_]+)\ (0|[1-9][0-9]{0,3})$ ]]; then
+        category="${BASH_REMATCH[1]}"; count="${BASH_REMATCH[2]}"
+        case "$category" in simulated_provider_calls|unexpected|status_writes|denied|shipping_attempted|shipping_failed|status_write_denied|status_discovery_unavailable|auth_rejected) ;;
+          *) echo 'FAIL controller UNCLASSIFIED_FAILURE'; return 1;; esac
+        if test "$count" -gt 1000; then echo 'FAIL controller UNCLASSIFIED_FAILURE'; return 1; fi
+        printf 'EVIDENCE %s %s %s\n' "$checkpoint" "$category" "$count"; continue
+      fi
+      if [[ "$tail" =~ ^([A-Z_]+)\ ([A-Z_]+)\ ([A-Z_]+)\ ([1-9][0-9]{0,3})$ ]]; then
+        category="${BASH_REMATCH[1]}"; method="${BASH_REMATCH[2]}"; reason="${BASH_REMATCH[3]}"; count="${BASH_REMATCH[4]}"
+        case "$category" in PRODUCT_DETAIL|PRODUCT_SEARCH|ORDER_DETAIL|ORDER_STATUS_LIST|ORDER_STATUS_WRITE|OAUTH|OTHER) ;; *) echo 'FAIL controller UNCLASSIFIED_FAILURE'; return 1;; esac
+        case "$method" in GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD|OTHER) ;; *) echo 'FAIL controller UNCLASSIFIED_FAILURE'; return 1;; esac
+        case "$reason" in UNKNOWN_ROUTE|QUERY_SHAPE|BODY_SHAPE|ID_NOT_IN_FIXTURE|AUTH_REJECTED) ;; *) echo 'FAIL controller UNCLASSIFIED_FAILURE'; return 1;; esac
+        if test "$count" -gt 1000; then echo 'FAIL controller UNCLASSIFIED_FAILURE'; return 1; fi
+        printf 'EVIDENCE %s %s %s %s %s\n' "$checkpoint" "$category" "$method" "$reason" "$count"; continue
+      fi
+      echo 'FAIL controller UNCLASSIFIED_FAILURE'; return 1
+    fi
     if test "$reply" = "PASS $accept_phase"; then
       printf 'PASS acceptance phase: %s\n' "$accept_phase"
       return 0
@@ -100,7 +127,7 @@ accept() {
       reason="${BASH_REMATCH[1]}"; check_id="${BASH_REMATCH[2]}"
       expected="${BASH_REMATCH[4]}"; actual="${BASH_REMATCH[5]}"
       case "$check_id" in
-        OWNER_LOGIN|EMPLOYEE_LOGIN|VIEWER_LOGIN|OUTSIDER_LOGIN|OWNER_SESSION|EMPLOYEE_SESSION|VIEWER_SESSION|OUTSIDER_SESSION|REVIEW_INVARIANTS|TENANT_SNAPSHOT|ORDER_READ|PRODUCT_IDENTITIES|QUANTITIES_OPTIONS|IMAGE_UPLOAD|IMAGE_CHOICE|ITEM_NOTE|IMAGE_TENANT_DENIAL|REVIEW_ROLE_DENIAL|REVIEW_COMPLETE|REVIEW_ERROR_CODE|REVIEW_STORED_STATE|NO_PREPARATION_ENTITIES|PROVIDER_COUNTERS) ;;
+        OWNER_LOGIN|EMPLOYEE_LOGIN|VIEWER_LOGIN|OUTSIDER_LOGIN|OWNER_SESSION|EMPLOYEE_SESSION|VIEWER_SESSION|OUTSIDER_SESSION|REVIEW_INVARIANTS|TENANT_SNAPSHOT|ORDER_READ|PRODUCT_IDENTITIES|QUANTITIES_OPTIONS|IMAGE_CATALOG_READ|IMAGE_UPLOAD|IMAGE_CHOICE|ITEM_NOTE|IMAGE_TENANT_DENIAL|REVIEW_ROLE_DENIAL|REVIEW_COMPLETE|REVIEW_ERROR_CODE|REVIEW_STORED_STATE|NO_PREPARATION_ENTITIES|PROVIDER_COUNTERS) ;;
         *) reason=UNCLASSIFIED_FAILURE; check_id= ;;
       esac
       if test -n "$check_id"; then
@@ -127,6 +154,8 @@ accept() {
   fi
   printf 'FAIL %s %s\n' "$accept_phase" "$reason"
   return 1
+  done
+  echo 'FAIL controller UNCLASSIFIED_FAILURE'; return 1
 }
 
 start_webs() {

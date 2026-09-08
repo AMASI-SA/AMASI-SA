@@ -47,6 +47,18 @@ def verify_review_rejected(workflow):
     require(workflow.get("salla_status_sync") != "sent")
 
 
+def verify_provider_scenario(counts, scenario, order_count):
+    require(counts['unexpected'] == 0 and counts['auth_rejected'] == 0)
+    if scenario == 'deny':
+        require(counts['status_writes'] == 0 and counts['denied'] >= order_count)
+        require(counts['status_write_denied'] >= order_count and counts['status_discovery_unavailable'] == 0)
+    elif scenario == 'unavailable':
+        require(counts['status_writes'] == 0 and counts['denied'] >= order_count)
+        require(counts['status_discovery_unavailable'] >= order_count and counts['status_write_denied'] == 0)
+    else:
+        require(scenario == 'success' and counts['status_writes'] >= order_count)
+
+
 def backend_root():
     installed = Path("/opt/mezan/backend")
     return installed if installed.is_dir() else Path(__file__).resolve().parents[2] / "backend"
@@ -117,7 +129,7 @@ def seed_inputs(database, state):
     require(scenario in {"success", "deny", "unavailable"})
     state["provider_scenario"] = scenario
     state.update(owner=owner["id"], employee="exit2d-employee", viewer="exit2d-viewer",
-                 outsider="exit2d-other-owner", files=[], raw_expected={}, expected={}, images={})
+                 outsider="exit2d-other-owner", files=[], raw_expected={}, expected={}, images={}, catalog_images={})
     database.users.update_one({"id": state["owner"]}, {"$set": {
         "mfa_enabled": True, "mfa_totp_secret_enc": encrypt_totp_secret(a.TOTP)},
         "$unset": {"mfa_last_totp_counter": "", "password_updated_at": ""}})
@@ -148,7 +160,8 @@ def seed_inputs(database, state):
             for variant in ("a", "b"):
                 image_id = pid + "-" + variant
                 url = "/api/order-reviews-v1/mezan-images/" + image_id
-                image_urls.append(url)
+                image_urls.append("http://127.0.0.1:8001" + url)
+                state["catalog_images"][image_urls[-1]] = hashlib.sha256(image_bytes).hexdigest()
                 database[IMAGES].insert_one({"id": image_id, "user_id": state["owner"],
                     "product_key": "product:" + pid, "content_type": "image/png",
                     "data_base64": base64.b64encode(image_bytes).decode(),
@@ -161,7 +174,8 @@ def seed_inputs(database, state):
                             "main_image": image_urls[0], "images": [{"url": u} for u in image_urls]},
                 "options": [{"name": k, "value": v} for k, v in options.items()],
                 "amounts": {"price_without_tax": {"amount": 10, "currency": "SAR"}}})
-            state["raw_expected"][(number, iid)] = {"quantity": 2, "options": options, "product_id": pid}
+            state["raw_expected"][(number, iid)] = {"quantity": 2, "options": options, "product_id": pid,
+                                                     "catalog_images": tuple(image_urls)}
         raw = {"id": "raw-" + number, "reference_id": number, "date": "2026-09-07T00:00:00Z",
                "status": {"slug": "under_review", "name": "\u0628\u0627\u0646\u062a\u0638\u0627\u0631 \u0627\u0644\u0645\u0631\u0627\u062c\u0639\u0629"},
                "customer": {"full_name": "\u0639\u0645\u064a\u0644 \u0627\u062e\u062a\u0628\u0627\u0631", "email": "customer@example.test"},
@@ -201,11 +215,21 @@ class Lifecycle:
         from salla_http_simulator import validate_addresses
         validate_addresses(os.environ)
 
+    def record_provider_counts(self, checkpoint):
+        from simulator_evidence import validate_counts
+        try:
+            result = self.a.httpx.get("http://127.0.0.1:8093/__fixture__/counts", follow_redirects=False, trust_env=False, timeout=2)
+            require(result.status_code == 200)
+            counts = validate_counts(result.json())
+        except Exception:
+            counts = None
+        self.state.setdefault('_review_evidence', []).append((checkpoint, counts))
+        return counts
+
     def provider_counts(self):
-        result = self.a.httpx.get("http://127.0.0.1:8093/__fixture__/counts", follow_redirects=False, trust_env=False, timeout=2)
-        require(result.status_code == 200)
-        counts = result.json()
-        require(counts["unexpected"] == 0)
+        counts = self.record_provider_counts('AFTER_REVIEW')
+        require(counts is not None)
+        require(counts["unexpected"] == 0 and counts['auth_rejected'] == 0)
         self.state["simulated_provider_calls"] = counts["simulated_provider_calls"]
         return counts
 
@@ -238,18 +262,21 @@ class Lifecycle:
         self.state[actor + "_cookie"] = a.cookies(verified, device)
 
     def review(self):
+        self.record_provider_counts("BEFORE_REVIEW")
         with check("OWNER_LOGIN"):
             self.state["owner_cookie"] = self.a.owner_session()
         for actor in ("employee", "viewer", "outsider"):
             with check({"employee": "EMPLOYEE_LOGIN", "viewer": "VIEWER_LOGIN", "outsider": "OUTSIDER_LOGIN"}[actor]):
                 self.login_otp(actor)
         self.sessions()
+        self.record_provider_counts("AFTER_LOGIN")
         with check("REVIEW_INVARIANTS"):
             self.invariant()
         with check("TENANT_SNAPSHOT"):
             self.state["other_workflows"] = list(self.database[WORKFLOWS].find({"user_id": self.state["outsider"]}, {"_id": 0}))
         for number in ORDERS:
             path = "/api/order-reviews-v1/" + number
+            self.record_provider_counts("BEFORE_IMAGES")
             with check("ORDER_READ"):
                 detail = self.call("GET", path).json()
                 require(len(detail["items"]) == 2)
@@ -263,6 +290,12 @@ class Lifecycle:
                     require(item["quantity"] == expected["quantity"])
                     require({o["name"]: o["value"] for o in item["options"]} == expected["options"])
                     self.state["expected"][(number, iid)] = expected
+                with check("IMAGE_CATALOG_READ"):
+                    require(len(item['gallery']) == 2 and set(item['gallery']) == set(expected['catalog_images']))
+                    for url in item['gallery']:
+                        require(url in self.state['catalog_images'])
+                        response = self.call('GET', url.removeprefix('http://127.0.0.1:8001'))
+                        require(hashlib.sha256(response.content).hexdigest() == self.state['catalog_images'][url])
                 with check("IMAGE_UPLOAD"):
                     image = png((40, 120, 60 if number == ORDERS[0] else 190))
                     updated = self.call("POST", path + "/items/" + quote(iid, safe="") + "/mezan-images",
@@ -282,9 +315,11 @@ class Lifecycle:
                 self.state["images"][(number, iid)] = (image_url, hashlib.sha256(image).hexdigest())
                 with check("IMAGE_TENANT_DENIAL"):
                     self.call("GET", image_url, actor="outsider", expected=404)
+            self.record_provider_counts("AFTER_IMAGES")
             with check("REVIEW_ROLE_DENIAL"):
                 self.call("POST", path + "/complete", actor="viewer", expected=403,
                           json={"expected_revision": detail["revision"]})
+            self.record_provider_counts("BEFORE_COMPLETE")
             # Actual application route and client. Successful provider replies
             # are fixture-only; the denied fixtures never manufacture sent.
             if self.state["provider_scenario"] != "success":
@@ -301,12 +336,10 @@ class Lifecycle:
             else:
                 with check("REVIEW_COMPLETE"):
                     self.call("POST", path + "/complete", json={"expected_revision": detail["revision"]})
+            self.record_provider_counts("AFTER_COMPLETE")
         with check("PROVIDER_COUNTERS"):
             counts = self.provider_counts()
-            if self.state["provider_scenario"] != "success":
-                require(counts["status_writes"] == 0 and counts["denied"] >= len(ORDERS))
-            else:
-                require(counts["status_writes"] >= len(ORDERS))
+            verify_provider_scenario(counts, self.state['provider_scenario'], len(ORDERS))
         with check("REVIEW_INVARIANTS"):
             self.invariant()
 

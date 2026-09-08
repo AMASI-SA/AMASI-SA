@@ -15,7 +15,7 @@ CHECK_IDS = (
     "OWNER_SESSION", "EMPLOYEE_SESSION", "VIEWER_SESSION", "OUTSIDER_SESSION",
     "REVIEW_INVARIANTS", "TENANT_SNAPSHOT", "ORDER_READ", "PRODUCT_IDENTITIES",
     "QUANTITIES_OPTIONS", "IMAGE_UPLOAD", "IMAGE_CHOICE", "ITEM_NOTE",
-    "IMAGE_TENANT_DENIAL", "REVIEW_ROLE_DENIAL", "REVIEW_COMPLETE",
+    "IMAGE_CATALOG_READ", "IMAGE_TENANT_DENIAL", "REVIEW_ROLE_DENIAL", "REVIEW_COMPLETE",
     "REVIEW_ERROR_CODE", "REVIEW_STORED_STATE", "NO_PREPARATION_ENTITIES",
     "PROVIDER_COUNTERS",
 )
@@ -85,6 +85,17 @@ class Discard:
         pass
 
 
+def emit_review_evidence(state, replies):
+    from simulator_evidence import protocol_lines
+    records = state.pop('_review_evidence', [])
+    if type(records) is not list or len(records) > 16:
+        records = [('AFTER_REVIEW', None)]
+    for checkpoint, counters in records:
+        for line in protocol_lines(checkpoint, counters):
+            replies.write(line + '\n')
+    replies.flush()
+
+
 def serve(phases, commands, replies, *, profile="runtime"):
     if profile not in ("runtime", "preparation", "preparation-denied"):
         replies.write("FAIL controller PHASE_ORDER\n")
@@ -111,6 +122,7 @@ def serve(phases, commands, replies, *, profile="runtime"):
                 with redirect_stdout(Discard()), redirect_stderr(Discard()):
                     phases[name](state)
                 in_phase = False
+                if name == "prep-review": emit_review_evidence(state, replies)
             replies.write("PASS " + name + "\n")
             replies.flush()
         return 0
@@ -126,6 +138,10 @@ def serve(phases, commands, replies, *, profile="runtime"):
             reason = "CHANNEL_CLOSED"
         if type(error) is CheckFailure:
             reason = (check_diagnostic(error) if in_phase and name == "prep-review" else None) or "UNCLASSIFIED_FAILURE"
+        try:
+            if name == "prep-review": emit_review_evidence(state, replies)
+        except BaseException:
+            pass  # Evidence cannot replace the primary failure.
         try:
             replies.write("FAIL " + name + " " + reason + "\n")
             replies.flush()

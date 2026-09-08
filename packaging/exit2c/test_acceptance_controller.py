@@ -14,6 +14,37 @@ from acceptance_controller import PHASES, CHECK_IDS, CheckFailure, HTTPStatusFai
 
 
 class ControllerTests(unittest.TestCase):
+    def test_review_snapshots_reach_shell_before_failure_without_values(self):
+        from salla_http_simulator import COUNTER_KEYS
+        counts = {**dict.fromkeys(COUNTER_KEYS, 0), 'unexpected': 1, 'simulated_provider_calls': 1,
+                  'unexpected_by_class': {'PRODUCT_DETAIL|GET|UNKNOWN_ROUTE': 1}}
+        marker = secrets.token_hex(24)
+        references = []
+        def review(state):
+            references.append(state)
+            state['owner_cookie'] = marker
+            state['_review_evidence'] = [('BEFORE_REVIEW', None), ('AFTER_IMAGES', counts)]
+            with check('PROVIDER_COUNTERS'): raise AssertionError(marker)
+        output = io.StringIO()
+        self.assertEqual(serve({'prep-setup': lambda s: None, 'prep-review': review},
+            io.StringIO('prep-setup\nprep-review\n'), output, profile='preparation-denied'), 1)
+        reply = output.getvalue().removeprefix('PASS prep-setup\n')
+        shell = self.shell_review(reply)
+        self.assertEqual(shell.returncode, 1)
+        self.assertTrue('EVIDENCE BEFORE_REVIEW unavailable\n' in shell.stdout)
+        self.assertTrue('EVIDENCE AFTER_IMAGES PRODUCT_DETAIL GET UNKNOWN_ROUTE 1\n' in shell.stdout)
+        self.assertTrue(shell.stdout.endswith('FAIL prep-review ASSERTION_FAILED PROVIDER_COUNTERS\n'))
+        self.assertTrue(marker not in shell.stdout + shell.stderr + output.getvalue(), 'sensitive snapshot escaped')
+        self.assertTrue(all(not s for s in references))
+        for reply in ('EVIDENCE ' + marker + '\nPASS prep-review\n',
+                      'EVIDENCE AFTER_REVIEW ' + marker + '\n',
+                      'EVIDENCE AFTER_REVIEW OTHER GET ' + marker + ' 1\n',
+                      'EVIDENCE AFTER_REVIEW unexpected 1001\n'):
+            shell = self.shell_review(reply)
+            self.assertTrue(shell.returncode == 1 and marker not in shell.stdout + shell.stderr)
+            self.assertTrue(shell.stdout in ('FAIL controller UNCLASSIFIED_FAILURE\n',
+                                              'FAIL prep-review UNCLASSIFIED_FAILURE\n'))
+
     def test_real_request_helper_reports_only_numeric_status(self):
         import ast
         from types import SimpleNamespace

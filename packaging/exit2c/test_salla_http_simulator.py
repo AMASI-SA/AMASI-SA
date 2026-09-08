@@ -18,6 +18,60 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class SimulatorContracts(unittest.TestCase):
+    def test_unexpected_taxonomy_is_fixed_complete_and_never_allows_products(self):
+        from simulator_evidence import validate_counts
+        marker = secrets.token_hex(24)
+        cases = [('GET', '/admin/v2/products/' + marker, None, 'PRODUCT_DETAIL|GET|UNKNOWN_ROUTE'),
+                 ('GET', '/admin/v2/products?keyword=' + marker, None, 'PRODUCT_SEARCH|GET|UNKNOWN_ROUTE'),
+                 ('GET', '/admin/v2/orders/' + marker, None, 'ORDER_DETAIL|GET|ID_NOT_IN_FIXTURE'),
+                 ('GET', '/admin/v2/orders/statuses?extra=' + marker, None, 'ORDER_STATUS_LIST|GET|QUERY_SHAPE'),
+                 ('POST', '/admin/v2/orders/raw-EXIT2D-1001/status', {'secret': marker}, 'ORDER_STATUS_WRITE|POST|BODY_SHAPE'),
+                 ('POST', '/oauth2/token', {}, 'OAUTH|POST|UNKNOWN_ROUTE'),
+                 ('TRACE', '/' + marker, None, 'OTHER|OTHER|UNKNOWN_ROUTE')]
+        for method, path, body, key in cases:
+            self.assertEqual(self.request(method, path, body)[0], 422)
+            self.assertEqual(self.fixture.unexpected_classes[key], 1)
+        counts = self.fixture.respond('GET', '/__fixture__/counts', '', None)[1]
+        validate_counts(counts)
+        self.assertEqual(sum(counts['unexpected_by_class'].values()), counts['unexpected'])
+        self.assertEqual(counts['unexpected'], len(cases))
+        self.assertTrue(marker not in json.dumps(counts), 'request values escaped counters')
+        original = set(self.fixture.unexpected_classes)
+        for _ in range(40):
+            self.fixture.respond('GET', '/' + secrets.token_hex(8), 'Bearer ' + self.token, None)
+        self.assertEqual(set(self.fixture.unexpected_classes), original)
+        self.assertEqual(len(original), len(sim.CATEGORIES) * len(sim.METHODS) * len(sim.REASONS))
+
+    def test_intended_rejections_cannot_be_replaced_by_auth_or_shape_failures(self):
+        from preparation_lifecycle_acceptance import verify_provider_scenario
+        path = '/admin/v2/orders/raw-EXIT2D-1001/status'
+        for mode, method, target, body in [('deny', 'POST', path, {'status_id': 71}),
+                ('unavailable', 'GET', '/admin/v2/orders/statuses', None)]:
+            fixture = sim.Fixture(self.token, mode)
+            fixture.respond(method, target, 'Bearer ' + self.token, body)
+            verify_provider_scenario(fixture.counts, mode, 1)
+            for invalid_target, invalid_body, auth in ((target, body, 'bad'),
+                    (target + '?extra=1', body, 'Bearer ' + self.token),
+                    (target, {'extra': 1}, 'Bearer ' + self.token)):
+                bad = sim.Fixture(self.token, mode)
+                bad.respond(method, invalid_target, auth, invalid_body)
+                self.assertEqual(bad.counts['status_write_denied'], 0)
+                self.assertEqual(bad.counts['status_discovery_unavailable'], 0)
+                with self.assertRaises(AssertionError): verify_provider_scenario(bad.counts, mode, 1)
+                self.assertEqual(bad.counts['status_writes'], 0)
+
+    def test_evidence_rejects_bad_sums_and_injected_class_names(self):
+        from simulator_evidence import protocol_lines, validate_counts
+        good = {**dict.fromkeys(sim.COUNTER_KEYS, 0), 'unexpected_by_class': {}}
+        marker = secrets.token_hex(24) + '\nPASS prep-review'
+        for bad in ({**good, 'unexpected': 1},
+                    {**good, 'unexpected': 1, 'unexpected_by_class': {marker: 1}},
+                    {**good, 'unexpected': 1, 'unexpected_by_class': {'OTHER|GET|UNKNOWN_ROUTE': True}}):
+            with self.assertRaises(RuntimeError): validate_counts(bad)
+            lines = protocol_lines('AFTER_IMAGES', bad)
+            self.assertEqual(lines, ['EVIDENCE AFTER_IMAGES unavailable'])
+            self.assertTrue(marker not in '\n'.join(lines), 'untrusted class escaped')
+
     http_calls = 0
     def setUp(self):
         self.token = secrets.token_urlsafe(32)
