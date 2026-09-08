@@ -319,9 +319,10 @@ def make_mobile_reviewed_preparation_router(
             )
         selection_rows = [row.model_dump() for row in payload.selections]
         try:
-            planned = batch_module.plan_preparation_allocations(
+            planned = batch_module.plan_and_validate_preparation_allocations(
                 (context.get("catalog") or {}).get("products") or [],
                 selection_rows,
+                context.get("allocation_documents") or [],
             )
         except ValueError as exc:
             code = str(exc)
@@ -330,6 +331,9 @@ def make_mobile_reviewed_preparation_router(
                 "preparation_quantity_exceeds_remaining": "الكمية أكبر من المتبقي.",
                 "reviewed_product_allocation_incomplete": "تعذّر توزيع الكمية على الطلبات.",
                 "duplicate_product_group": "لا يمكن تكرار المنتج نفسه.",
+                "preparation_identity_ambiguous": (
+                    "تعارضت هويات القطعة؛ لم يتم إنشاء ملف حتى تُحسم الهوية المرجعية."
+                ),
             }
             raise HTTPException(
                 status_code=409,
@@ -434,6 +438,7 @@ def make_mobile_reviewed_preparation_router(
                     "group_key": allocation["group_key"],
                     "order_number": allocation["order_number"],
                     "order_item_id": allocation["order_item_id"],
+                    **batch_module.preparation_allocation_identity_fields(allocation),
                     "unit_index": int(unit_index),
                     "reserved_at": now,
                     "expires_at": reservation_expiry,
@@ -456,7 +461,12 @@ def make_mobile_reviewed_preparation_router(
             ) from exc
 
         try:
-            batch_lines = await batch_module._build_batch_lines(context, planned)
+            batch_lines = await batch_module.build_batch_lines_after_allocation_guard(
+                db,
+                user_id=user_id,
+                context=context,
+                planned=planned,
+            )
             pdf_bytes = generate_preparation_pdf(
                 [batch_module._line_from_batch_storage(row) for row in batch_lines],
                 serial_start=1,
