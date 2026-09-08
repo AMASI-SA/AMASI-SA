@@ -4560,6 +4560,19 @@ async def _global_startup() -> None:
     # errors, and future campaign↔product identity links.
     await ensure_integrations_control_center_indexes(db)
     await ensure_first_party_attribution_indexes(db)
+    # Salla Orders V3 remains an isolated observer until all three parity gates
+    # pass. The worker is disabled unless SALLA_ORDERS_V3_SHADOW_ENABLED=true.
+    from salla_orders_v3.worker import (
+        ensure_salla_orders_v3_indexes as _ensure_salla_orders_v3_indexes,
+        shadow_enabled as _salla_orders_v3_shadow_enabled,
+        start_salla_orders_v3_shadow_worker as _start_salla_orders_v3_shadow_worker,
+    )
+    app.state.salla_orders_v3_shadow_task = None
+    if _salla_orders_v3_shadow_enabled():
+        await _ensure_salla_orders_v3_indexes(db)
+        app.state.salla_orders_v3_shadow_task = (
+            _start_salla_orders_v3_shadow_worker(db)
+        )
     # Five-hour Snapchat + Meta campaign monitoring. The worker only refreshes
     # analytical facts and persists recommendations; provider changes remain
     # behind the separate owner-only approval endpoint.
