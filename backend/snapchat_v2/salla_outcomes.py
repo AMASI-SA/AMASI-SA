@@ -10,6 +10,7 @@ Two date scopes are kept deliberately separate:
 usable timestamp exists. Source-only orders are never distributed or guessed
 across campaigns.
 """
+
 from __future__ import annotations
 
 from collections import Counter, defaultdict
@@ -138,11 +139,7 @@ def _order_timestamp(order: dict[str, Any]) -> datetime | None:
         if parsed is not None:
             return parsed
     raw_by_source = order.get("raw_by_source")
-    raw = (
-        raw_by_source.get("salla_direct")
-        if isinstance(raw_by_source, dict)
-        else None
-    )
+    raw = raw_by_source.get("salla_direct") if isinstance(raw_by_source, dict) else None
     if isinstance(raw, dict):
         for value in (raw.get("created_at"), raw.get("date")):
             parsed = _parse_datetime(value)
@@ -190,16 +187,17 @@ def _match_order_campaign(
     *,
     id_lookup: dict[str, tuple[str, str] | None],
     name_lookup: dict[str, tuple[str, str] | None],
+    provider_key: str = "snapchat",
 ) -> tuple[tuple[str, str] | None, str]:
     platform = canonical_ad_platform(order)
-    if platform and platform != "snapchat":
+    if platform and platform != provider_key:
         return None, "foreign_platform"
     for candidate in campaign_id_candidates(order):
         normalized = _norm(candidate)
         if normalized and normalized in id_lookup:
             key = id_lookup[normalized]
             return (key, "campaign_id") if key else (None, "ambiguous_id")
-    if platform == "snapchat":
+    if platform == provider_key:
         for candidate in campaign_name_candidates(order):
             normalized = _norm(candidate)
             if normalized and normalized in name_lookup:
@@ -252,7 +250,14 @@ async def load_salla_campaign_outcomes(
     identities: list[dict[str, Any]],
     platform_purchases: int = 0,
     campaign_spend_sar: dict[str, float] | None = None,
+    provider: str = "snapchat_ads",
 ) -> dict[str, Any]:
+    provider_key = {
+        "snapchat_ads": "snapchat",
+        "meta_ads": "meta",
+    }.get(str(provider or "").strip().lower())
+    if provider_key is None:
+        raise ValueError(f"unsupported_salla_marketing_provider:{provider}")
     settings = await _load_report_settings(db, str(user_id))
     query: dict[str, Any] = {
         "user_id": str(user_id),
@@ -319,13 +324,13 @@ async def load_salla_campaign_outcomes(
             order,
             id_lookup=id_lookup,
             name_lookup=name_lookup,
+            provider_key=provider_key,
         )
-        reported_snapchat_source = source_platform == "snapchat"
+        reported_snapchat_source = source_platform == provider_key
         snapchat_attributed = reported_snapchat_source or key is not None
 
         legacy_account_period_included = bool(
-            legacy_account_date
-            and from_value <= legacy_account_date <= to_value
+            legacy_account_date and from_value <= legacy_account_date <= to_value
         )
         if legacy_account_period_included:
             if reported_snapchat_source:
@@ -349,9 +354,13 @@ async def load_salla_campaign_outcomes(
                 counters["snapchat_attributed_orders_account_timezone"] += 1
                 account_timezone_snapchat_attributed_sales += amount
                 if key is not None:
-                    counters["account_period_campaign_matched_orders_account_timezone"] += 1
+                    counters[
+                        "account_period_campaign_matched_orders_account_timezone"
+                    ] += 1
                 if financial:
-                    counters["snapchat_attributed_financial_orders_account_timezone"] += 1
+                    counters[
+                        "snapchat_attributed_financial_orders_account_timezone"
+                    ] += 1
                     account_timezone_snapchat_attributed_financial_sales += amount
 
         if not account_timezone_period_included:
@@ -429,9 +438,7 @@ async def load_salla_campaign_outcomes(
     )
     campaign_match_coverage_pct = (
         round(
-            account_period_campaign_matched_orders
-            / snapchat_attributed_orders
-            * 100,
+            account_period_campaign_matched_orders / snapchat_attributed_orders * 100,
             2,
         )
         if snapchat_attributed_orders > 0
@@ -509,7 +516,7 @@ async def load_salla_campaign_outcomes(
         if profitability is not None:
             value["profitability"] = profitability
     return {
-        "provider": "snapchat_ads",
+        "provider": str(provider),
         "account_id": account_id,
         "date_from": from_value,
         "date_to": to_value,
@@ -591,10 +598,10 @@ async def load_salla_campaign_outcomes(
             - matched_financial_orders,
             "date_timezone": timezone_name,
             "campaign_attribution_policy": (
-                "exact_campaign_id_or_unique_snapchat_campaign_name"
+                f"exact_campaign_id_or_unique_{provider_key}_campaign_name"
             ),
             "account_attribution_policy": (
-                "salla_reported_snapchat_source_or_exact_campaign_match"
+                f"salla_reported_{provider_key}_source_or_exact_campaign_match"
             ),
             "account_order_scope": "all_orders_created_in_period",
             "account_sales_scope": "gross_order_total_all_statuses",

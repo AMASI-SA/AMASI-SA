@@ -4,6 +4,7 @@ All marketing reads cross :mod:`unified_marketing.gateway`.  This module does
 not know provider storage names, cannot mutate a provider, and deliberately
 fails closed when the Unified Marketing contract is not decision-grade.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -12,6 +13,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import unified_marketing.gateway as unified_gateway
+from unified_marketing.meta_shadow import evaluate_meta_unified_readiness
 from unified_marketing.contract import CONTRACT_VERSION
 
 ENTITY_LEVELS = ("campaign", "ad_group", "ad")
@@ -197,6 +199,7 @@ def evaluate_decision_evidence(
     now: datetime | None = None,
     max_freshness_hours: float = 36.0,
     loader_errors: dict[str, str] | None = None,
+    shadow_acceptance: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Validate gateway reports and create a fail-closed evidence bundle."""
     timezone_name = str(account_identity.get("timezone") or "").strip()
@@ -250,11 +253,15 @@ def evaluate_decision_evidence(
         if last_sync_at is not None
         else None
     )
-    local_period_end = datetime.combine(
-        date_to,
-        time.max,
-        tzinfo=ZoneInfo(timezone_name),
-    ).astimezone(timezone.utc) if timezone_name and not errors.get("account_timezone") else None
+    local_period_end = (
+        datetime.combine(
+            date_to,
+            time.max,
+            tzinfo=ZoneInfo(timezone_name),
+        ).astimezone(timezone.utc)
+        if timezone_name and not errors.get("account_timezone")
+        else None
+    )
     freshness_passed = bool(
         last_sync_at is not None
         and freshness_hours is not None
@@ -301,7 +308,9 @@ def evaluate_decision_evidence(
             freshness_passed,
             "fresh" if freshness_passed else "freshness_failed",
             last_sync_at=last_sync_at.isoformat() if last_sync_at else None,
-            freshness_hours=round(freshness_hours, 3) if freshness_hours is not None else None,
+            freshness_hours=(
+                round(freshness_hours, 3) if freshness_hours is not None else None
+            ),
             max_freshness_hours=float(max_freshness_hours),
         ),
         "attribution": _gate(
@@ -313,20 +322,39 @@ def evaluate_decision_evidence(
         ),
         "financial_coverage": _gate(
             financial_passed,
-            "financial_coverage_complete" if financial_passed else "financial_coverage_incomplete",
+            (
+                "financial_coverage_complete"
+                if financial_passed
+                else "financial_coverage_incomplete"
+            ),
             amount_complete=account_quality.get("amount_complete"),
-            profitability_status=_mapping(account_totals.get("commerce_profitability")).get("status"),
+            profitability_status=_mapping(
+                account_totals.get("commerce_profitability")
+            ).get("status"),
             missing_cost_orders=int(
-                _mapping(account_totals.get("commerce_profitability")).get("missing_cost_orders") or 0
+                _mapping(account_totals.get("commerce_profitability")).get(
+                    "missing_cost_orders"
+                )
+                or 0
             ),
         ),
     }
+    if provider == "meta_ads":
+        accepted = bool(shadow_acceptance and shadow_acceptance.get("ready") is True)
+        gates["shadow_acceptance"] = _gate(
+            accepted,
+            "meta_shadow_accepted" if accepted else "meta_shadow_not_accepted",
+            acceptance_reasons=list((shadow_acceptance or {}).get("reasons") or []),
+        )
     global_blockers = [
         name for name in REQUIRED_DECISION_GATES if not gates[name]["passed"]
     ]
+    if provider == "meta_ads" and not gates["shadow_acceptance"]["passed"]:
+        global_blockers.append("shadow_acceptance")
     campaign_rows = list(_mapping(reports.get("campaign")).get("rows") or [])
     campaign_rows.sort(
-        key=lambda row: _money_amount(_mapping(row.get("delivery")).get("spend_sar")) or 0.0,
+        key=lambda row: _money_amount(_mapping(row.get("delivery")).get("spend_sar"))
+        or 0.0,
         reverse=True,
     )
     candidates = [
@@ -357,7 +385,10 @@ def evaluate_decision_evidence(
             level: {
                 "rows": len(_mapping(reports.get(level)).get("rows") or []),
                 "source_fact_count": int(
-                    _report_quality(_mapping(reports.get(level))).get("source_fact_count") or 0
+                    _report_quality(_mapping(reports.get(level))).get(
+                        "source_fact_count"
+                    )
+                    or 0
                 ),
             }
             for level in ENTITY_LEVELS
@@ -429,6 +460,16 @@ async def load_decision_evidence(
             loader_errors[name] = type(result).__name__
         else:
             reports[name] = result
+    shadow_acceptance = None
+    if str(provider or "").strip().lower() == "meta_ads" and not loader_errors:
+        shadow_acceptance = evaluate_meta_unified_readiness(
+            account_identity=identity,
+            reports=reports,
+            date_from=date_from,
+            date_to=date_to,
+            now=now,
+            max_freshness_hours=max_freshness_hours,
+        )
     return evaluate_decision_evidence(
         account_identity=identity,
         reports=reports,
@@ -438,6 +479,7 @@ async def load_decision_evidence(
         now=now,
         max_freshness_hours=max_freshness_hours,
         loader_errors=loader_errors,
+        shadow_acceptance=shadow_acceptance,
     )
 
 
