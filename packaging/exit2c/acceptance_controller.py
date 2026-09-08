@@ -34,7 +34,7 @@ CHECKS_BY_PHASE = {
                     'REALLOCATION_DENIAL', 'REALLOCATION_RELEASE', 'REMAINING_CATALOG',
                     'SAFE_DRAFT', 'FILE_CREATE', 'FINALIZE_FALLBACK', 'FILE_CREATE_REPEAT',
                     'ASSIGNMENT_STATES', 'UNIT_ALLOCATION_IDENTITIES', 'UNIT_PIECE_IDENTITIES', 'UNIT_ALLOCATION_STATUS', 'UNIT_EMPLOYEE_ASSIGNMENT', 'UNIT_BATCH_LINK', 'UNIT_SPECIFICATIONS', 'UNIT_PROJECTED_OPTIONS', 'EMPLOYEE_START', 'START_REPEAT',
-                    'SUPPLIER_WORKSPACE', 'SUPPLIER_DISPATCH', 'SUPPLIER_DISPATCH_REPEAT', 'SUPPLIER_READY',
+                    'SUPPLIER_HTTP', 'SUPPLIER_SCHEMA', 'SUPPLIER_PRESENT', 'SUPPLIER_FILE', 'SUPPLIER_PRODUCTS', 'SUPPLIER_SELECTIONS', 'SUPPLIER_IDENTITIES', 'SUPPLIER_DISPATCH', 'SUPPLIER_DISPATCH_REPEAT', 'SUPPLIER_READY',
                     'SUPPLIER_PIECE_IDENTITY', 'RECEIVING_SEARCH', 'PIECE_RECEIVE', 'RECEIVE_REPEAT',
                     'FILE_COMPLETED_STATE', 'ASSEMBLY_SEARCH', 'PIECE_ASSEMBLY', 'SIMULATED_LABEL_FAILURE',
                     'ASSEMBLY_STATES', 'RESUME_PROVIDER_COUNTERS', 'CHECKPOINT_CAPTURE'),
@@ -121,6 +121,11 @@ def emit_review_evidence(state, replies, phase):
     from simulator_evidence import protocol_lines, CHECKPOINTS_BY_PHASE
     from snapshot_evidence import validate_snapshot_line
     from unit_contract import unit_lines
+    from supplier_workspace_contract import evidence_lines
+    supplier_records = state.pop('_supplier_evidence', [])
+    if supplier_records:
+        lines = evidence_lines(supplier_records) if phase == 'prep-resume' else ['SUPPLIER unavailable']
+        for line in lines: replies.write(line + '\n')
     unit_records = state.pop('_unit_evidence', [])
     if unit_records:
         lines = unit_lines(unit_records) if phase == 'prep-resume' else ['UNITS unavailable']

@@ -549,16 +549,8 @@ class Lifecycle:
 
     def dispatch_receive(self):
         for file in self.state["files"]:
-            with check('SUPPLIER_WORKSPACE'):
-                workspace = self.call("GET", "/api/supplier-dispatch-v1/workspace", actor="employee",
-                                      params={"grain": "piece"}).json()
-                supplier = next(s for s in workspace["suppliers"] if s["id"] == "exit2d-supplier")
-                source = next(f for f in workspace["files"] if f["file_number"] == file["file_number"])
-                selections = [{"group_key": p["group_key"], "quantity": 1} for p in source["products"] if p["available_quantity"]]
-                payload = {"client_request_id": "dispatch-" + file["request_id"], "supplier_id": supplier["id"],
-                           "files": [{"file_number": file["file_number"], "selections": selections}]}
-                require({p["piece_id"] for p in source["products"]} ==
-                        {p["piece_id"] for p in self.rows(PIECES) if p["file_number"] == file["file_number"]})
+            from supplier_workspace_contract import workspace_payload
+            payload = workspace_payload(self.call, file, self.rows(PIECES), self.state['employee'], self.state)
             with check('SUPPLIER_DISPATCH'):
                 result = self.call("POST", "/api/supplier-dispatch-v1/dispatches", actor="employee", expected=201, json=payload).json()
                 dispatch_id = result["dispatch"]["id"]
