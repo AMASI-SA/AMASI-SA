@@ -20,6 +20,7 @@ from urllib.parse import quote
 from acceptance_controller import check
 from order_fixture import ORDERS, order_fixture
 from unit_contract import verify_units
+from source_paths import backend_root
 
 REGISTRY = "mezan_preparation_file_registry_v2"
 BATCHES = "mezan_preparation_batches_v2"
@@ -64,11 +65,6 @@ def verify_provider_scenario(counts, scenario, order_count):
         require(counts['status_discovery_unavailable'] >= order_count and counts['status_write_denied'] == 0)
     else:
         require(scenario == 'success' and counts['status_writes'] >= order_count)
-
-
-def backend_root():
-    installed = Path("/opt/mezan/backend")
-    return installed if installed.is_dir() else Path(__file__).resolve().parents[2] / "backend"
 
 
 def verify_login_fixture_schema():

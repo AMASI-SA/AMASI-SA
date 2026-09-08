@@ -17,7 +17,7 @@ import preparation_lifecycle_acceptance as prep
 from test_catalog_image_fixture import CatalogImageFixtureTests
 from test_snapshot_evidence import SnapshotEvidenceTests
 from test_unit_contract import UnitContractTests
-from test_unit_projection import UnitProjectionTests, synthetic_documents
+from test_unit_projection import UnitProjectionTests, SourceLayoutTests, synthetic_documents
 
 
 class PreparationContracts(unittest.TestCase):
