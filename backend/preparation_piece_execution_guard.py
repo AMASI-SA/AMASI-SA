@@ -43,6 +43,7 @@ async def _start_file_after_full_assignment(
     registry: dict[str, Any],
     actor: dict[str, Any],
     note: str | None,
+    permissions: set[str] | None = None,
 ) -> dict[str, Any]:
     import preparation_piece_operations as base
 
@@ -92,6 +93,7 @@ async def _start_file_after_full_assignment(
         registry=registry,
         actor=actor,
         note=note,
+        permissions=permissions,
     )
 
 

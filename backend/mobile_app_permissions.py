@@ -207,7 +207,10 @@ async def mobile_app_access_for_user(db: Any, user: dict[str, Any]) -> dict[str,
         else str(user.get("created_by") or "").strip()
     )
     user_id = str(user.get("id") or "").strip()
-    access = await find_mobile_app_access(
+    # Owner access is derived from the live permission catalogue. A stored row
+    # cannot narrow that super-admin contract, so reading it adds latency and a
+    # second Mongo failure point to every /auth/me bootstrap with no authority.
+    access = None if is_owner else await find_mobile_app_access(
         db,
         owner_user_id=owner_id,
         user_id=user_id,

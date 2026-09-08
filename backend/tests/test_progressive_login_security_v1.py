@@ -37,8 +37,8 @@ def test_negative_stage_is_first_stage():
 
 def test_auth_installs_progressive_guard_before_legacy_guard():
     source = open("backend/auth.py", encoding="utf-8").read()
-    progressive = source.index("await install_progressive_login_security(app, db)")
-    legacy = source.index("await install_login_security(app, db)")
+    progressive = source.index("await install_progressive_login_security(app, db,")
+    legacy = source.index("await install_login_security(app, db,")
     assert progressive < legacy
 
 

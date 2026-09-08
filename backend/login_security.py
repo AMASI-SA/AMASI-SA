@@ -472,7 +472,7 @@ class LoginSecurityMiddleware:
         await self.app(scope, _replay_receive(messages), guarded_send)
 
 
-async def install_login_security(app, db) -> None:
+async def install_login_security(app, db, *, initialize_indexes: bool = True) -> None:
     """Install the guard once and prepare its distributed MongoDB indexes.
 
     ``seed_admin`` calls this during FastAPI startup.  At that point Starlette
@@ -486,7 +486,9 @@ async def install_login_security(app, db) -> None:
         return
 
     store = MongoLoginSecurityStore(db)
-    await store.ensure_indexes()
+    # Independent web installation delegates index writes to the migration role.
+    if initialize_indexes:
+        await store.ensure_indexes()
 
     app.user_middleware.append(Middleware(LoginSecurityMiddleware, db=db))
     app.middleware_stack = app.build_middleware_stack()

@@ -437,12 +437,14 @@ class ProgressiveLoginSecurityMiddleware:
         await _send_messages(captured, send)
 
 
-async def install_progressive_login_security(app, db) -> None:
+async def install_progressive_login_security(app, db, *, initialize_indexes: bool = True) -> None:
     if getattr(app.state, "mezan_progressive_login_security_installed", False):
         return
 
     store = ProgressiveLoginStore(db)
-    await store.ensure_indexes()
+    # Independent web installation delegates index writes to the migration role.
+    if initialize_indexes:
+        await store.ensure_indexes()
     app.user_middleware.append(Middleware(ProgressiveLoginSecurityMiddleware, db=db))
     app.middleware_stack = app.build_middleware_stack()
     app.state.mezan_progressive_login_security_installed = True

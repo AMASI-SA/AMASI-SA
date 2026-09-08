@@ -142,6 +142,39 @@ describe("AuthProvider bootstrap", () => {
         expect(api.get).toHaveBeenCalledTimes(2);
     });
 
+    test("coalesces rapid retry clicks into one fresh auth probe", async () => {
+        const unavailable = Object.assign(new Error("temporarily unavailable"), {
+            response: {
+                status: 503,
+                headers: { "retry-after": "60" },
+            },
+        });
+        api.get.mockRejectedValueOnce(unavailable);
+        await renderProvider();
+
+        let resolveRetry;
+        api.get.mockImplementationOnce(() => new Promise((resolve) => {
+            resolveRetry = resolve;
+        }));
+        await act(async () => {
+            const retry = container.querySelector('[data-testid="retry"]');
+            retry.click();
+            retry.click();
+            await flushPromises();
+        });
+
+        expect(api.get).toHaveBeenCalledTimes(2);
+        expect(container.querySelector('[data-testid="status"]').textContent)
+            .toBe("checking");
+
+        await act(async () => {
+            resolveRetry({ data: { id: "owner-1", is_owner: true } });
+            await flushPromises();
+        });
+        expect(container.querySelector('[data-testid="status"]').textContent)
+            .toBe("authenticated");
+    });
+
     test("fails closed when a later user refresh is forbidden", async () => {
         api.get.mockResolvedValueOnce({
             data: { id: "owner-1", is_owner: true },

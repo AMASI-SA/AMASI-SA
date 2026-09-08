@@ -40,6 +40,11 @@ from starlette.middleware.cors import CORSMiddleware
 from browser_security import BrowserSecurityMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from mongo_observability import mongo_metrics
+from runtime_mongo import (
+    TRANSIENT_MONGO_ERRORS,
+    bounded_readiness,
+    main_client_options,
+)
 from pydantic import BaseModel, EmailStr, Field, validator, root_validator
 
 from auth import (
@@ -52,6 +57,7 @@ from auth import (
     set_auth_cookies,
     clear_auth_cookies,
     refresh_browser_session,
+    raise_auth_dependency_unavailable,
     get_current_user_from_db,
     seed_admin,
     ensure_user_settings,
@@ -179,7 +185,10 @@ def _parse_date_or(s: Optional[str], fallback):
 
 # ── Database ──────────────────────────────────────────────────────────────────
 mongo_url = os.environ["MONGO_URL"]
-client = AsyncIOMotorClient(mongo_url, event_listeners=[mongo_metrics])
+client = AsyncIOMotorClient(
+    mongo_url,
+    **main_client_options(event_listener=mongo_metrics),
+)
 db = client[os.environ["DB_NAME"]]
 
 
@@ -221,13 +230,16 @@ async def liveness_check(response: Response):
 @app.get("/ready", include_in_schema=False)
 @api.get("/ready", include_in_schema=False)
 async def readiness_check(response: Response):
-    """Readiness is local state only: no Mongo, provider, or heavy-lock wait."""
-    ready = is_ready(app)
+    """Bounded Mongo readiness; never calls Salla, Snapchat, Qoyod, or locks."""
+    process_ready = is_ready(app)
+    mongo_ready = process_ready and await bounded_readiness(client)
+    ready = bool(process_ready and mongo_ready)
     response.status_code = 200 if ready else 503
     response.headers["Cache-Control"] = "no-store"
     return {
         "ready": ready,
         "phase": getattr(app.state, "startup_phase", "unknown"),
+        "mongo": "ready" if mongo_ready else "unavailable",
     }
 
 
@@ -401,7 +413,7 @@ def _effective_perms(user_doc: dict) -> set[str]:
     Formula:  role_defaults ∪ extra_permissions  −  denied_permissions
     The owner ALWAYS has every permission and cannot be downgraded.
     """
-    role = (user_doc.get("role") or "").lower()
+    role = str(user_doc.get("role") or "").strip().casefold()
     if role == "owner":
         return set(PERMISSIONS_CATALOGUE.keys())
     # Unknown/missing roles fail closed. They must never inherit viewer access.
@@ -412,7 +424,7 @@ def _effective_perms(user_doc: dict) -> set[str]:
 
 
 def _is_owner(user_doc: dict) -> bool:
-    return (user_doc.get("role") or "").lower() == "owner"
+    return str(user_doc.get("role") or "").strip().casefold() == "owner"
 
 
 class PaymentMethod(BaseModel):
@@ -693,20 +705,18 @@ async def me(user: dict = Depends(current_user)):
     # inherit these capabilities merely from its broad legacy role.
     from ai_store_access_contract import merged_session_permissions
 
-    permissions = await merged_session_permissions(
-        db,
-        user,
-        _effective_perms(user),
-    )
-    # Native-app permissions remain a separate namespace and are never merged
-    # into Mezan's browser/operational ``permissions`` list. Return the
-    # authenticated account's own app-access snapshot on every profile refresh:
-    # the mobile client persists this response for navigation, and an auth
-    # middleware losing its client marker must not turn 13 saved pages into 0.
-    # Operational mobile routes still enforce their signed-session policy.
-    from mobile_app_permissions import mobile_app_access_for_user
-
-    mobile_app_access = await mobile_app_access_for_user(db, user)
+    try:
+        permissions = await merged_session_permissions(
+            db,
+            user,
+            _effective_perms(user),
+        )
+        # Native-app permissions remain a separate namespace and are never
+        # merged into Mezan's browser/operational ``permissions`` list.
+        from mobile_app_permissions import mobile_app_access_for_user
+        mobile_app_access = await mobile_app_access_for_user(db, user)
+    except TRANSIENT_MONGO_ERRORS as exc:
+        raise_auth_dependency_unavailable(exc)
     return {
         "id": user["id"], "name": user.get("name"), "email": user["email"],
         "role": user.get("role", "user"),

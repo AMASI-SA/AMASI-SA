@@ -1,0 +1,107 @@
+{
+  "baseline": "1de6118484ac4fe1d0981e230618dbb573d8c58c",
+  "assembly_commit": "4e022ee11c6f221cba625cd18367c9672da89ba5",
+  "sources": [
+    {
+      "pr": "1001",
+      "source_sha": "5c09aea70033ba6569dff68db07db31d7247105a",
+      "paths": [
+        ".github/workflows/qoyod-memory-bounds.yml",
+        "backend/integrations/qoyod/candidate_orders.py",
+        "backend/integrations/qoyod/unsent_orders.py",
+        "backend/qoyod_auto_unified/queue_api.py",
+        "backend/qoyod_auto_unified/queue_counts.py",
+        "backend/tests/qoyod_unsent_memory_benchmark.py",
+        "backend/tests/test_qoyod_unsent_memory_bounds.py",
+        "backend/tests/test_qoyod_unsent_report_eligibility.py",
+        "frontend/src/components/QoyodUnsentHeaderAlert.jsx",
+        "frontend/src/lib/qoyodUnsentOrdersClient.js",
+        "frontend/src/lib/qoyodUnsentOrdersClient.test.js",
+        "frontend/src/pages/QoyodUnsentOrders.jsx",
+        "frontend/src/pages/QoyodUnsentOrders.test.jsx",
+        "frontend/src/qoyodUnsentHeaderAlert.test.js"
+      ]
+    },
+    {
+      "pr": "1003",
+      "source_sha": "d68e5fb20837ae935aa7755df436c26368e784a3",
+      "paths": [
+        ".github/workflows/runtime-stability.yml",
+        "backend/auth.py",
+        "backend/integrations/qoyod/worker.py",
+        "backend/integrations/qoyod_manual/auto_send.py",
+        "backend/mobile_app_permissions.py",
+        "backend/runtime_mongo.py",
+        "backend/server.py",
+        "backend/tests/runtime_stability_benchmark.py",
+        "backend/tests/test_runtime_stability_mongo_auth.py",
+        "frontend/src/components/ProtectedRoute.test.jsx",
+        "frontend/src/context/AuthContext.jsx",
+        "frontend/src/context/AuthContext.test.jsx"
+      ]
+    },
+    {
+      "pr": "1014",
+      "source_sha": "457de8b94384f944000edc8f54045538f85ce22f",
+      "paths": [
+        ".github/workflows/exit2a-baseline.yml",
+        ".github/workflows/exit2a-runtime.yml",
+        "backend/bank_transfer_review_routes.py",
+        "packaging/exit2a/Dockerfile",
+        "packaging/exit2a/Dockerfile.dockerignore",
+        "packaging/exit2a/README.md",
+        "packaging/exit2a/RESULTS.md",
+        "packaging/exit2a/acceptance.py",
+        "packaging/exit2a/audit_source.py",
+        "packaging/exit2a/entrypoint.py",
+        "packaging/exit2a/rehearsal.py",
+        "packaging/exit2a/requirements.txt",
+        "packaging/exit2a/run_linux.sh",
+        "packaging/exit2a/test_boundary.py"
+      ]
+    }
+  ],
+  "intent_imported": false,
+  "note": "Changes copied by exact source path; later #1003 LF/EOF normalization and scoped role/security changes are separate. Existing branches untouched.",
+  "excluded": [
+    {
+      "sha": "4a77d53e2ed2bbd44c1316cb49697d27aea65e95",
+      "path": "release/release-intent-v5.json",
+      "reason": "Explicitly excluded by owner; only #1001 implementation source approved."
+    },
+    {
+      "pr": "1013",
+      "head_observed": "6aecb923f617979106b856fe6e55e718d5c52bd8",
+      "paths": "all",
+      "reason": "Not authorized for this candidate; cost/profit and other Train work excluded."
+    }
+  ],
+  "overlap": {
+    "between_imported_source_path_sets": [],
+    "with_pr_1013": [
+      "backend/server.py"
+    ],
+    "integration_modified_imported_paths": [
+      "backend/auth.py",
+      "backend/bank_transfer_review_routes.py"
+    ],
+    "normalization": "#1003 files: CRLF to UTF-8 LF and trailing blank EOF only, separate from selected source commit."
+  },
+  "integration_fixes": [
+    {
+      "path": "backend/auth.py",
+      "reason": "Extract explicit app security installation; independent web disables index initialization per process while existing entrypoint retains it."
+    },
+    {
+      "path": "backend/bank_transfer_review_routes.py",
+      "reason": "Independent role flag transfers import-time index ownership to explicit migration."
+    },
+    {
+      "path": "backend/preparation_piece_execution_guard.py",
+      "reason": "Real full-route HTTP test exposed caller permissions keyword absent in baseline guard; accept/forward unchanged permissions while retaining full-allocation gate."
+    }
+  ],
+  "candidate_source_sha": "c344008a097fdb778b8175ed300b4b556e1682b7",
+  "linux_tested_sha": "218d55a1f9142b5e1c422d362bdd1114dd5a9d95",
+  "local_only_delta": "Direct-worker-first bounded drain and stalled-hook tests; final-source Linux pending."
+}
