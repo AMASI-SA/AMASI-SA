@@ -2,9 +2,32 @@ import api from "../lib/api";
 
 let recentSyncPromise = null;
 let recentSyncAt = 0;
-const RECENT_SYNC_TTL_MS = 45_000;
+const RECENT_SYNC_TTL_MS = 5 * 60_000;
+const activeProductPublishes = new Set();
+const productPublishPromises = new Map();
+
+const ACTIVE_PUBLISH_STATUSES = new Set([
+    "preparing", "publishing", "verifying", "verification_pending",
+    "outcome_unknown", "rolling_back", "rollback_required",
+]);
+
+export function setProductPublishActivity(productId, active) {
+    const key = String(productId || "");
+    if (!key) return;
+    if (active) activeProductPublishes.add(key);
+    else activeProductPublishes.delete(key);
+}
+
+function trackPublishResponse(productId, payload) {
+    const status = payload?.attempt?.status || payload?.status;
+    if (!status) return;
+    setProductPublishActivity(productId, ACTIVE_PUBLISH_STATUSES.has(status));
+}
 
 export async function syncRecentProductsV2({ force = false } = {}) {
+    if (activeProductPublishes.size) {
+        return { skipped: true, reason: "active_product_publish" };
+    }
     const now = Date.now();
     if (!force && now - recentSyncAt < RECENT_SYNC_TTL_MS) return null;
     if (recentSyncPromise) return recentSyncPromise;
@@ -36,9 +59,6 @@ export async function listWorkspaceProducts({
     shippingCompanies = "",
     productIds = "",
 } = {}) {
-    if (page === 1 && sort === "newest" && !query.trim()) {
-        try { await syncRecentProductsV2(); } catch { /* keep local listing available */ }
-    }
     const params = {
         page,
         per_page: perPage,
@@ -61,7 +81,14 @@ export async function listWorkspaceProducts({
 }
 
 export async function getProductsV2Summary() { return (await api.get("/products-v2/summary")).data; }
-export async function syncProductsV2() { const response = await api.post("/products-v2/sync"); recentSyncAt = Date.now(); return response.data; }
+export async function syncProductsV2() {
+    if (activeProductPublishes.size) {
+        return { skipped: true, reason: "active_product_publish" };
+    }
+    const response = await api.post("/products-v2/sync");
+    recentSyncAt = Date.now();
+    return response.data;
+}
 export async function getProductV2(productId) { return (await api.get(`/products-v2/${encodeURIComponent(productId)}`)).data; }
 export async function refreshProductV2Details(productId) { return (await api.post(`/products-v2/${encodeURIComponent(productId)}/refresh-details`)).data; }
 export async function getProductV2Costs(productId) { return (await api.get(`/products-v2/${encodeURIComponent(productId)}/costs`)).data; }
@@ -96,7 +123,34 @@ export async function applyMissingSkus({ prefix = "AMS", width = 5, limit = 50, 
 export async function getProductControlCenter(productId) { return (await api.get(`/products-v2/${encodeURIComponent(productId)}/control-center`)).data; }
 export async function saveProductControlDraft(productId, payload) { return (await api.put(`/products-v2/${encodeURIComponent(productId)}/control-center/draft`, payload)).data; }
 export async function approveProductControlDraft(productId, draftId) { return (await api.post(`/products-v2/${encodeURIComponent(productId)}/control-center/draft/${encodeURIComponent(draftId)}/approve`)).data; }
-export async function publishProductControlDraft(productId, draftId) { return (await api.post(`/products-v2/${encodeURIComponent(productId)}/control-center/draft/${encodeURIComponent(draftId)}/publish`, { confirmation: "نشر التعديل إلى سلة" })).data; }
+export async function publishProductControlDraft(productId, draftId) {
+    const key = `${String(productId || "")}:${String(draftId || "")}`;
+    if (productPublishPromises.has(key)) return productPublishPromises.get(key);
+    setProductPublishActivity(productId, true);
+    const request = api.post(`/products-v2/${encodeURIComponent(productId)}/control-center/draft/${encodeURIComponent(draftId)}/publish`, { confirmation: "نشر التعديل إلى سلة" })
+        .then((response) => {
+            trackPublishResponse(productId, response.data);
+            return response.data;
+        })
+        .catch((error) => {
+            trackPublishResponse(productId, error?.response?.data);
+            throw error;
+        })
+        .finally(() => { productPublishPromises.delete(key); });
+    productPublishPromises.set(key, request);
+    return request;
+}
+export async function verifyProductControlPublishAttempt(productId, attemptId) {
+    setProductPublishActivity(productId, true);
+    try {
+        const payload = (await api.post(`/products-v2/${encodeURIComponent(productId)}/control-center/publish-attempt/${encodeURIComponent(attemptId)}/verify`)).data;
+        trackPublishResponse(productId, payload);
+        return payload;
+    } catch (error) {
+        trackPublishResponse(productId, error?.response?.data);
+        throw error;
+    }
+}
 export async function getProductControlHistory(productId) { return (await api.get(`/products-v2/${encodeURIComponent(productId)}/control-center/history`)).data; }
 export async function saveProductAiPolicy(payload) { return (await api.put("/products-v2/control-center/policy", payload)).data; }
 

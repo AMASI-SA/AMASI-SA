@@ -91,6 +91,7 @@ test("a fallback-cost product opens its Mezan editor with the sold-missing filte
     expect(href).toContain("missing_mezan_cost=1");
     expect(href).toContain("sold_only=1");
     expect(href).toContain("product=m-fallback");
+    expect(decodeURIComponent(href)).toContain("product_ids=p-fallback");
     expect(href).toContain("focus=cost");
     expect(href).toContain("from=2026-08-01");
     expect(href).toContain("to=2026-08-02");
