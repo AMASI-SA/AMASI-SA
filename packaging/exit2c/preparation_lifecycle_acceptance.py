@@ -18,6 +18,7 @@ import unicodedata
 from pathlib import Path
 from urllib.parse import quote
 from acceptance_controller import check
+from order_fixture import ORDERS, order_fixture
 
 REGISTRY = "mezan_preparation_file_registry_v2"
 BATCHES = "mezan_preparation_batches_v2"
@@ -28,12 +29,17 @@ WORKFLOWS = "order_review_workflows"
 IMAGES = "order_review_mezan_images"
 SUPPLIERS = "mezan_suppliers_v2"
 GENERATED = (REGISTRY, BATCHES, ALLOCATIONS, PIECES)
-ORDERS = ("EXIT2D-1001", "EXIT2D-1002")
 
 
 def require(condition):
     if not condition:
         raise AssertionError("preparation acceptance invariant failed")
+
+
+def verify_gallery_links(actual, expected):
+    # Exact declared aliases, with no normalization, extras, omissions or duplicates.
+    require(len(actual) == len(expected) and len(actual) == len(set(actual)))
+    require(set(actual) == set(expected))
 
 
 def login_email(actor):
@@ -150,36 +156,29 @@ def seed_inputs(database, state):
         "company_name": "\u0645\u0648\u0631\u062f \u0627\u062e\u062a\u0628\u0627\u0631 \u0645\u062d\u0644\u064a", "status": "active", "service_ids": ["synthetic-service"],
         "service_links": [{"service_id": "synthetic-service"}]})
     for number_index, number in enumerate(ORDERS):
-        raw_items = []
-        for item_index in range(2):
-            pid = f"exit2d-product-{number_index}-{item_index}"
-            iid = f"exit2d-item-{number_index}-{item_index}"
-            options = {"\u0627\u0644\u0644\u0648\u0646": ("\u0630\u0647\u0628\u064a", "\u0641\u0636\u064a")[item_index], "\u0627\u0644\u0646\u0642\u0634": ("\u0646\u0648\u0631", "\u0623\u0645\u0644")[number_index]}
+        raw = order_fixture("raw-" + number)
+        for item_index, raw_item in enumerate(raw['items']):
+            product = raw_item['product']
+            pid, iid = product['id'], raw_item['id']
+            options = {o['name']: o['value'] for o in raw_item['options']}
             image_bytes = png((30 + number_index * 80, 40 + item_index * 90, 170))
-            image_urls = []
-            for variant in ("a", "b"):
-                image_id = pid + "-" + variant
-                url = "/api/order-reviews-v1/mezan-images/" + image_id
-                image_urls.append("http://127.0.0.1:8001" + url)
-                state["catalog_images"][image_urls[-1]] = hashlib.sha256(image_bytes).hexdigest()
-                database[IMAGES].insert_one({"id": image_id, "user_id": state["owner"],
-                    "product_key": "product:" + pid, "content_type": "image/png",
-                    "data_base64": base64.b64encode(image_bytes).decode(),
-                    "sha256": hashlib.sha256(image_bytes).hexdigest(), "size": len(image_bytes)})
-            database.salla_products.insert_one({"user_id": state["owner"], "product_id": pid,
-                "sku": pid, "name": "\u0645\u0646\u062a\u062c \u0627\u0635\u0637\u0646\u0627\u0639\u064a " + pid, "main_image": image_urls[0],
-                "images": [{"url": u} for u in image_urls], "gallery_refreshed_at": a.now().isoformat()})
-            raw_items.append({"id": iid, "quantity": 2, "name": "\u0645\u0646\u062a\u062c \u0627\u0635\u0637\u0646\u0627\u0639\u064a " + pid,
-                "product": {"id": pid, "name": "\u0645\u0646\u062a\u062c \u0627\u0635\u0637\u0646\u0627\u0639\u064a " + pid, "sku": pid,
-                            "main_image": image_urls[0], "images": [{"url": u} for u in image_urls]},
-                "options": [{"name": k, "value": v} for k, v in options.items()],
-                "amounts": {"price_without_tax": {"amount": 10, "currency": "SAR"}}})
-            state["raw_expected"][(number, iid)] = {"quantity": 2, "options": options, "product_id": pid,
-                                                     "catalog_images": tuple(image_urls)}
-        raw = {"id": "raw-" + number, "reference_id": number, "date": "2026-09-07T00:00:00Z",
-               "status": {"slug": "under_review", "name": "\u0628\u0627\u0646\u062a\u0638\u0627\u0631 \u0627\u0644\u0645\u0631\u0627\u062c\u0639\u0629"},
-               "customer": {"full_name": "\u0639\u0645\u064a\u0644 \u0627\u062e\u062a\u0628\u0627\u0631", "email": "customer@example.test"},
-               "items": raw_items, "amounts": {"total": {"amount": 40, "currency": "SAR"}}}
+            image_urls = [image['url'] for image in product['images']]
+            for variant, image_url in zip(('a', 'b'), image_urls):
+                image_id = pid + '-' + variant
+                path = '/api/order-reviews-v1/mezan-images/' + image_id
+                require(image_url == 'http://127.0.0.1:8001' + path)
+                resource = {'path': path, 'sha256': hashlib.sha256(image_bytes).hexdigest()}
+                state['catalog_images'][image_url] = resource
+                state['catalog_images'][path] = resource
+                database[IMAGES].insert_one({'id': image_id, 'user_id': state['owner'],
+                    'product_key': 'product:' + pid, 'content_type': 'image/png',
+                    'data_base64': base64.b64encode(image_bytes).decode(),
+                    'sha256': resource['sha256'], 'size': len(image_bytes)})
+            database.salla_products.insert_one({'user_id': state['owner'], 'product_id': pid,
+                'sku': product['sku'], 'name': product['name'], 'main_image': product['main_image'],
+                'images': copy.deepcopy(product['images']), 'gallery_refreshed_at': a.now().isoformat()})
+            state['raw_expected'][(number, iid)] = {'quantity': raw_item['quantity'], 'options': options, 'product_id': pid,
+                'catalog_images': tuple(image_urls + [state['catalog_images'][u]['path'] for u in image_urls])}
         for tenant in (state["owner"], state["outsider"]):
             database.unified_orders.insert_one({"user_id": tenant, "order_number": number,
                 "order_date": raw["date"], "order_status": "\u0628\u0627\u0646\u062a\u0638\u0627\u0631 \u0627\u0644\u0645\u0631\u0627\u062c\u0639\u0629",
@@ -290,12 +289,18 @@ class Lifecycle:
                     require(item["quantity"] == expected["quantity"])
                     require({o["name"]: o["value"] for o in item["options"]} == expected["options"])
                     self.state["expected"][(number, iid)] = expected
-                with check("IMAGE_CATALOG_READ"):
-                    require(len(item['gallery']) == 2 and set(item['gallery']) == set(expected['catalog_images']))
-                    for url in item['gallery']:
+                with check("IMAGE_GALLERY_LINK_SET"):
+                    verify_gallery_links(item['gallery'], expected['catalog_images'])
+                for url in item['gallery']:
+                    with check("IMAGE_RESOURCE_KNOWN"):
                         require(url in self.state['catalog_images'])
-                        response = self.call('GET', url.removeprefix('http://127.0.0.1:8001'))
-                        require(hashlib.sha256(response.content).hexdigest() == self.state['catalog_images'][url])
+                        resource = self.state['catalog_images'][url]
+                    with check("IMAGE_HTTP_RESPONSE"):
+                        response = self.call('GET', resource['path'])
+                    with check("IMAGE_CONTENT_MATCH"):
+                        require(hashlib.sha256(response.content).hexdigest() == resource['sha256'])
+                    with check("IMAGE_TENANT_DENIAL"):
+                        self.call('GET', resource['path'], actor='outsider', expected=404)
                 with check("IMAGE_UPLOAD"):
                     image = png((40, 120, 60 if number == ORDERS[0] else 190))
                     updated = self.call("POST", path + "/items/" + quote(iid, safe="") + "/mezan-images",
@@ -305,6 +310,11 @@ class Lifecycle:
                     fresh = [u for u in gallery if u not in item["gallery"]]
                     require(len(fresh) == 1 and fresh[0].startswith("/api/order-reviews-v1/mezan-images/"))
                     image_url = fresh[0]
+                    verify_gallery_links(gallery, [*item['gallery'], image_url])
+                with check("IMAGE_HTTP_RESPONSE"):
+                    uploaded = self.call('GET', image_url)
+                with check("IMAGE_CONTENT_MATCH"):
+                    require(hashlib.sha256(uploaded.content).digest() == hashlib.sha256(image).digest())
                 with check("IMAGE_CHOICE"):
                     detail = self.call("POST", path + "/items/" + quote(iid, safe="") + "/image-choice",
                         json={"expected_revision": updated["revision"], "selected_image_url": image_url,

@@ -5,10 +5,11 @@ import os
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
+from order_fixture import ORDER_IDS, order_fixture
 
 API = "http://127.0.0.1:8093/admin/v2"
 AUTH = "http://127.0.0.1:8093"
-CATEGORIES = ('PRODUCT_DETAIL', 'PRODUCT_SEARCH', 'ORDER_DETAIL', 'ORDER_STATUS_LIST', 'ORDER_STATUS_WRITE', 'OAUTH', 'OTHER')
+CATEGORIES = ('PRODUCT_DETAIL', 'PRODUCT_SEARCH', 'ORDER_DETAIL', 'ORDER_ITEMS', 'ORDER_STATUS_LIST', 'ORDER_STATUS_WRITE', 'OAUTH', 'OTHER')
 METHODS = ('GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD', 'OTHER')
 REASONS = ('UNKNOWN_ROUTE', 'QUERY_SHAPE', 'BODY_SHAPE', 'ID_NOT_IN_FIXTURE', 'AUTH_REJECTED')
 COUNTER_KEYS = ('simulated_provider_calls', 'unexpected', 'status_writes', 'denied',
@@ -28,6 +29,7 @@ def classify(method, target):
     parts = parsed.path.split('/')
     if parsed.path == '/admin/v2/products': category = 'PRODUCT_SEARCH'
     elif len(parts) == 5 and parts[:4] == ['', 'admin', 'v2', 'products']: category = 'PRODUCT_DETAIL'
+    elif parsed.path == '/admin/v2/orders/items': category = 'ORDER_ITEMS'
     elif parsed.path == '/admin/v2/orders/statuses': category = 'ORDER_STATUS_LIST'
     elif len(parts) == 6 and parts[:4] == ['', 'admin', 'v2', 'orders'] and parts[-1] == 'status': category = 'ORDER_STATUS_WRITE'
     elif len(parts) == 5 and parts[:4] == ['', 'admin', 'v2', 'orders']: category = 'ORDER_DETAIL'
@@ -36,7 +38,7 @@ def classify(method, target):
     return category, method
 
 
-ORDER_IDS = {"raw-EXIT2D-1001", "raw-EXIT2D-1002"}
+
 STATUS = {
     71: {"id": 71, "name": "\u062a\u0645 \u0627\u0644\u0645\u0631\u0627\u062c\u0639\u0629", "slug": "reviewed"},
     72: {"id": 72, "name": "\u0642\u064a\u062f \u0627\u0644\u062a\u0646\u0641\u064a\u0630", "slug": "in_progress"},
@@ -87,11 +89,28 @@ class Fixture:
                 self.counts["status_discovery_unavailable"] += 1
                 return 503, {"error": {"code": "fixture_unavailable"}}
             return 200, {"data": list(STATUS.values())}
+        if path == "/admin/v2/orders/items":
+            if method != "GET":
+                return self.reject(method, target, "UNKNOWN_ROUTE")
+            if body is not None:
+                return self.reject(method, target, "BODY_SHAPE")
+            try:
+                query = parse_qs(parsed.query, keep_blank_values=True, strict_parsing=True)
+            except ValueError:
+                return self.reject(method, target, "QUERY_SHAPE")
+            if set(query) != {"order_id"} or len(query["order_id"]) != 1 or not query["order_id"][0]:
+                return self.reject(method, target, "QUERY_SHAPE")
+            internal_id = query["order_id"][0]
+            if internal_id not in ORDER_IDS:
+                return self.reject(method, target, "ID_NOT_IN_FIXTURE")
+            return 200, {"data": order_fixture(internal_id)["items"]}
         for internal_id in ORDER_IDS:
             order_path = "/admin/v2/orders/" + internal_id
             if method == "GET" and path == order_path and not parsed.query and not body:
                 status = STATUS.get(self.statuses[internal_id], {"slug": "under_review"})
-                return 200, {"data": {"id": internal_id, "reference_id": internal_id[4:], "status": status}}
+                order = order_fixture(internal_id)
+                order["status"] = status
+                return 200, {"data": order}
             if method == "POST" and path == order_path + "/status" and not parsed.query:
                 if not isinstance(body, dict) or set(body) != {"status_id"} or type(body["status_id"]) is not int:
                     return self.reject(method, target, "BODY_SHAPE")
@@ -120,7 +139,7 @@ class Fixture:
             reason = 'ID_NOT_IN_FIXTURE'
         elif category in {'ORDER_DETAIL', 'ORDER_STATUS_WRITE', 'ORDER_STATUS_LIST'} and parsed.query:
             reason = 'QUERY_SHAPE'
-        elif category in {'ORDER_DETAIL', 'ORDER_STATUS_LIST'} and body:
+        elif category in {'ORDER_DETAIL', 'ORDER_ITEMS', 'ORDER_STATUS_LIST'} and body:
             reason = 'BODY_SHAPE'
         elif path == '/admin/v2/orders' and method == 'GET':
             reason = 'QUERY_SHAPE' if not body else 'BODY_SHAPE'

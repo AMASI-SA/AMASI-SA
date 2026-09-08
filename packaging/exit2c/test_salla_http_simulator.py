@@ -108,6 +108,71 @@ class SimulatorContracts(unittest.TestCase):
         self.assertEqual(self.request('POST', path + '/status', {'status_id': 71})[0], 422)
         self.assertEqual(self.fixture.counts['simulated_provider_calls'], 6)
 
+    def test_order_detail_and_actual_items_fetch_preserve_both_declared_orders(self):
+        import asyncio
+        from urllib.parse import urlencode
+        tree = ast.parse((ROOT / 'backend/order_engine/salla_refresh.py').read_text(encoding='utf-8'))
+        function = next(n for n in tree.body if isinstance(n, ast.AsyncFunctionDef) and n.name == '_fetch_order_items')
+        observed = []
+        async def transport(db, user, method, path, params):
+            observed.append((method, path, dict(params)))
+            code, response = self.request(method, '/admin/v2' + path + '?' + urlencode(params))
+            if code != 200:
+                raise RuntimeError('SYNTHETIC_TRANSPORT_REJECTED')
+            return response
+        from typing import Any
+        namespace = {'call_salla': transport, 'Any': Any}
+        exec(compile(ast.Module(body=[function], type_ignores=[]), '<actual-items-fetch>', 'exec'), namespace)
+        for n, number in enumerate(('EXIT2D-1001', 'EXIT2D-1002')):
+            internal = 'raw-' + number
+            code, payload = self.request('GET', '/admin/v2/orders/' + internal)
+            self.assertEqual(code, 200)
+            detail = payload['data']
+            self.assertEqual(detail['id'], internal)
+            self.assertEqual(detail['reference_id'], number)
+            self.assertEqual(detail['amounts'], {'total': {'amount': 40, 'currency': 'SAR'}})
+            self.assertEqual(detail['date'], '2026-09-07T00:00:00Z')
+            items = asyncio.run(namespace['_fetch_order_items'](None, 'synthetic', detail['id']))
+            self.assertEqual(len(items), 2)
+            self.assertEqual(items, detail['items'])
+            for i, item in enumerate(items):
+                pid = f'exit2d-product-{n}-{i}'
+                self.assertEqual(item['id'], f'exit2d-item-{n}-{i}')
+                self.assertEqual(item['quantity'], 2)
+                self.assertEqual(item['product']['id'], pid)
+                self.assertEqual(item['product']['sku'], pid)
+                self.assertEqual(item['options'], [{'name': 'اللون', 'value': ('ذهبي', 'فضي')[i]}, {'name': 'النقش', 'value': ('نور', 'أمل')[n]}])
+                self.assertEqual(item['amounts'], {'price_without_tax': {'amount': 10, 'currency': 'SAR'}})
+                expected_images = ['http://127.0.0.1:8001/api/order-reviews-v1/mezan-images/' + pid + '-' + v for v in ('a', 'b')]
+                self.assertEqual(item['product']['main_image'], expected_images[0])
+                self.assertEqual(item['product']['images'], [{'url': u} for u in expected_images])
+        self.assertEqual(observed, [('GET', '/orders/items', {'order_id': 'raw-' + n}) for n in ('EXIT2D-1001', 'EXIT2D-1002')])
+        self.assertEqual(self.fixture.counts['unexpected'], 0)
+
+    def test_order_items_strict_query_method_body_and_identity(self):
+        base = '/admin/v2/orders/items'
+        cases = [('GET', base, None, 'QUERY_SHAPE'),
+                 ('GET', base + '?order_id=', None, 'QUERY_SHAPE'),
+                 ('GET', base + '?order_id=raw-EXIT2D-1001&order_id=raw-EXIT2D-1002', None, 'QUERY_SHAPE'),
+                 ('GET', base + '?order_id=raw-EXIT2D-1001&extra=1', None, 'QUERY_SHAPE'),
+                 ('GET', base + '?order_id=other', None, 'ID_NOT_IN_FIXTURE'),
+                 ('GET', base + '?order_id=raw-EXIT2D-1001', {}, 'BODY_SHAPE'),
+                 ('POST', base + '?order_id=raw-EXIT2D-1001', None, 'UNKNOWN_ROUTE')]
+        for method, path, body, reason in cases:
+            before = self.fixture.unexpected_classes['ORDER_ITEMS|' + method + '|' + reason]
+            self.assertEqual(self.request(method, path, body)[0], 422)
+            self.assertEqual(self.fixture.unexpected_classes['ORDER_ITEMS|' + method + '|' + reason], before + 1)
+        self.assertEqual(self.fixture.counts['unexpected'], len(cases))
+        self.assertEqual(sum(self.fixture.unexpected_classes.values()), len(cases))
+
+    def test_order_fixture_returns_fresh_bounded_data(self):
+        from order_fixture import order_fixture
+        first = order_fixture('raw-EXIT2D-1001')
+        first['items'][0]['quantity'] = 999
+        self.assertEqual(order_fixture('raw-EXIT2D-1001')['items'][0]['quantity'], 2)
+        with self.assertRaisesRegex(ValueError, '^ORDER_FIXTURE_ID_REJECTED$'):
+            order_fixture('unknown')
+
     def test_rejection_never_advances_provider_state(self):
         for mode, code in [('deny', 403), ('unavailable', 503)]:
             fixture = sim.Fixture(self.token, mode)

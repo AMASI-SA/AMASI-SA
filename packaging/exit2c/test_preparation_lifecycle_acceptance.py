@@ -18,6 +18,17 @@ from test_catalog_image_fixture import CatalogImageFixtureTests
 
 
 class PreparationContracts(unittest.TestCase):
+    def test_composite_gallery_requires_exact_aliases_and_upload_addition(self):
+        paths = ['/api/order-reviews-v1/mezan-images/fixture-a', '/api/order-reviews-v1/mezan-images/fixture-b']
+        expected = ['http://127.0.0.1:8001' + p for p in paths] + paths
+        prep.verify_gallery_links(expected, expected)
+        for bad in (expected[:2], expected + ['/unknown'], expected[:-1] + [expected[0]],
+                    ['https://external.example' + paths[0]] + expected[1:]):
+            with self.assertRaises(AssertionError): prep.verify_gallery_links(bad, expected)
+        new = '/api/order-reviews-v1/mezan-images/new-fixture'
+        prep.verify_gallery_links(expected + [new], expected + [new])
+        with self.assertRaises(AssertionError): prep.verify_gallery_links(expected[1:] + [new], expected + [new])
+
     def test_evidence_counts_are_measured_bounded_and_failure_is_unavailable(self):
         import json
         import simulator_evidence as evidence
@@ -70,7 +81,7 @@ class PreparationContracts(unittest.TestCase):
                 prep.verify_review_rejected(workflow)
 
     def test_fixture_arabic_text_is_not_mojibake(self):
-        tree = ast.parse(Path(prep.__file__).read_text(encoding="utf-8"))
+        tree = ast.parse(Path(prep.__file__).read_text(encoding="utf-8") + "\n" + Path(prep.__file__).with_name("order_fixture.py").read_text(encoding="utf-8"))
         values = [n.value for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, str)]
         for expected in ("\u0627\u0644\u0644\u0648\u0646", "\u0630\u0647\u0628\u064a", "\u0641\u0636\u064a", "\u0646\u0648\u0631", "\u0623\u0645\u0644"):
             self.assertTrue(expected in values, "Arabic fixture token missing")
