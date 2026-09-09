@@ -20,6 +20,7 @@ from test_unit_contract import UnitContractTests
 from test_unit_projection import UnitProjectionTests, SourceLayoutTests, synthetic_documents
 from test_supplier_workspace_contract import SupplierWorkspaceTests
 from test_supplier_file_visibility import RouteVisibilityTests
+from test_simulated_status_webhook import ConfirmedEventTests
 
 
 class PreparationContracts(unittest.TestCase):

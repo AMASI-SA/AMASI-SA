@@ -7,6 +7,15 @@ if test "$mode" != runtime; then accept_args=("$mode"); fi
 # One standard Ubuntu job. Runtime cannot route outside the disposable namespace.
 docker build --no-cache -f packaging/exit2c/Dockerfile -t mezan-exit2c:candidate .
 docker build --no-cache -f packaging/exit2c/tests.Dockerfile -t mezan-exit2c:tests .
+if test "$mode" = --preparation-only; then
+  # Once in the success scenario, on the same copied source and pinned image.
+  docker run --rm --network none --read-only --tmpfs /tmp --cap-drop ALL \
+    --security-opt no-new-privileges --pids-limit 256 --memory 3g --cpus 2 \
+    --entrypoint python mezan-exit2c:tests /opt/acceptance/webhook_asgi_acceptance.py --preflight-only
+  docker run --rm --network none --read-only --tmpfs /tmp --cap-drop ALL \
+    --security-opt no-new-privileges --pids-limit 256 --memory 3g --cpus 2 \
+    --entrypoint python mezan-exit2c:tests /opt/acceptance/webhook_asgi_acceptance.py
+fi
 docker pull mongo:7.0.16@sha256:c630c59342c1493d50345136df2af14a76b9e827dd5316bfabee07a0880a5f3a
 suffix="${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}"
 mongo="exit2c-mongo-$suffix"
@@ -56,7 +65,7 @@ done
 runtime=(--network "container:$mongo" --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges --pids-limit 256 --memory 3g --cpus 2)
 migration_runtime=("${runtime[@]}")
 if test "$mode" != runtime; then
-  runtime+=(-e MEZAN_ACCEPTANCE_PROFILE -e SALLA_API_BASE -e SALLA_AUTH_BASE -e SALLA_TOKEN_ENC_KEY -e EXIT2D_SIM_TOKEN -e EXIT2D_SIM_MODE)
+  runtime+=(-e MEZAN_ACCEPTANCE_PROFILE -e SALLA_API_BASE -e SALLA_AUTH_BASE -e SALLA_TOKEN_ENC_KEY -e EXIT2D_SIM_TOKEN -e EXIT2D_SIM_MODE -e SALLA_WEBHOOK_SECRET -e MEZAN_SNAPCHAT_CAPI_ENABLED)
   docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2c:candidate /opt/acceptance/preparation_provider_preflight.py
   docker run -d --name "$simulator" "${runtime[@]}" --entrypoint python mezan-exit2c:candidate /opt/acceptance/salla_http_simulator.py
   docker exec "$simulator" python -c 'import time; time.sleep(0.2)'
@@ -74,6 +83,7 @@ accept() {
   local reply status reason check_id expected actual checkpoint tail count category method group flag frames=0
   allowed_check() {
     case "$accept_phase:$1" in
+      prep-review:WEBHOOK_EVENT_SOURCE|prep-review:WEBHOOK_DELIVERY|prep-review:WEBHOOK_INGESTION|prep-review:WEBHOOK_INTERNAL_EFFECTS) return 0;;
       prep-review:OWNER_LOGIN|prep-review:EMPLOYEE_LOGIN|prep-review:VIEWER_LOGIN|prep-review:OUTSIDER_LOGIN|prep-review:OWNER_SESSION|prep-review:EMPLOYEE_SESSION|prep-review:VIEWER_SESSION|prep-review:OUTSIDER_SESSION|prep-review:REVIEW_INVARIANTS|prep-review:TENANT_SNAPSHOT|prep-review:ORDER_READ|prep-review:PRODUCT_IDENTITIES|prep-review:QUANTITIES_OPTIONS|prep-review:IMAGE_UPLOAD|prep-review:IMAGE_CHOICE|prep-review:ITEM_NOTE|prep-review:IMAGE_GALLERY_LINK_SET|prep-review:IMAGE_RESOURCE_KNOWN|prep-review:IMAGE_HTTP_RESPONSE|prep-review:IMAGE_CONTENT_MATCH|prep-review:IMAGE_TENANT_DENIAL|prep-review:REVIEW_ROLE_DENIAL|prep-review:REVIEW_COMPLETE|prep-review:REVIEW_ERROR_CODE|prep-review:REVIEW_STORED_STATE|prep-review:NO_PREPARATION_ENTITIES|prep-review:PROVIDER_COUNTERS) return 0;;
       prep-create:EMPLOYEE_CATALOG|prep-create:INITIAL_CATALOG|prep-create:SAFE_DRAFT|prep-create:FILE_CREATE|prep-create:FINALIZE_FALLBACK|prep-create:FILE_CREATE_REPEAT|prep-create:EARLY_START_DENIAL|prep-create:DRAFT_ROLE_DENIAL|prep-create:IMAGE_PERSISTENCE|prep-create:FILE_REGISTRY_READ|prep-create:PDF_HTTP|prep-create:PDF_CONTENT|prep-create:PDF_TENANT_DENIAL|prep-create:INCOMPLETE_DRAFT|prep-create:INCOMPLETE_FINALIZE_DENIAL|prep-create:CHECKPOINT_CAPTURE) return 0;;
       prep-resume:OWNER_SESSION|prep-resume:EMPLOYEE_SESSION|prep-resume:VIEWER_SESSION|prep-resume:OUTSIDER_SESSION|prep-resume:RESUME_INVARIANTS|prep-resume:SNAPSHOT_IDENTITY|prep-resume:SNAPSHOT_MATCH|prep-resume:OTHER_TENANT_MATCH|prep-resume:IMAGE_PERSISTENCE|prep-resume:FILE_REGISTRY_READ|prep-resume:PDF_HTTP|prep-resume:PDF_CONTENT|prep-resume:PDF_TENANT_DENIAL|prep-resume:INCOMPLETE_RELEASE|prep-resume:COMPLETED_RELEASE_DENIAL|prep-resume:REALLOCATION_DRAFT|prep-resume:REALLOCATION_DENIAL|prep-resume:REALLOCATION_RELEASE|prep-resume:REMAINING_CATALOG|prep-resume:SAFE_DRAFT|prep-resume:FILE_CREATE|prep-resume:FINALIZE_FALLBACK|prep-resume:FILE_CREATE_REPEAT|prep-resume:ASSIGNMENT_STATES|prep-resume:UNIT_ALLOCATION_IDENTITIES|prep-resume:UNIT_PIECE_IDENTITIES|prep-resume:UNIT_ALLOCATION_STATUS|prep-resume:UNIT_EMPLOYEE_ASSIGNMENT|prep-resume:UNIT_BATCH_LINK|prep-resume:UNIT_SPECIFICATIONS|prep-resume:UNIT_PROJECTED_OPTIONS|prep-resume:EMPLOYEE_START|prep-resume:START_REPEAT|prep-resume:SUPPLIER_HTTP|prep-resume:SUPPLIER_SCHEMA|prep-resume:SUPPLIER_PRESENT|prep-resume:SUPPLIER_FILE|prep-resume:SUPPLIER_PRODUCTS|prep-resume:SUPPLIER_SELECTIONS|prep-resume:SUPPLIER_IDENTITIES|prep-resume:SUPPLIER_DISPATCH|prep-resume:SUPPLIER_DISPATCH_REPEAT|prep-resume:SUPPLIER_READY|prep-resume:SUPPLIER_PIECE_IDENTITY|prep-resume:RECEIVING_SEARCH|prep-resume:PIECE_RECEIVE|prep-resume:RECEIVE_REPEAT|prep-resume:FILE_COMPLETED_STATE|prep-resume:ASSEMBLY_SEARCH|prep-resume:PIECE_ASSEMBLY|prep-resume:SIMULATED_LABEL_FAILURE|prep-resume:ASSEMBLY_STATES|prep-resume:RESUME_PROVIDER_COUNTERS|prep-resume:CHECKPOINT_CAPTURE) return 0;;
@@ -267,7 +277,7 @@ if test "$mode" != runtime; then
   unset accept_in accept_out accept_pid
   collect_simulator_evidence
   if test "$mode" = --preparation-only; then
-    echo 'PASS application lifecycle with simulated HTTP provider; stale revision remains unaccepted'
+    echo 'PASS preparation conditional on verified synthetic webhook delivery; stale revision remains unaccepted'
   else
     echo 'PASS review rejection without provider confirmation; NOT a complete lifecycle'
   fi

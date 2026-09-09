@@ -21,6 +21,7 @@ from acceptance_controller import check
 from order_fixture import ORDERS, order_fixture
 from unit_contract import verify_units
 from source_paths import backend_root
+from simulated_status_webhook import OWNER_MERCHANT, OTHER_MERCHANT, signed_body, require_ingestion
 
 REGISTRY = "mezan_preparation_file_registry_v2"
 BATCHES = "mezan_preparation_batches_v2"
@@ -137,9 +138,10 @@ def seed_inputs(database, state):
         "mfa_enabled": True, "mfa_totp_secret_enc": encrypt_totp_secret(a.TOTP)},
         "$unset": {"mfa_last_totp_counter": "", "password_updated_at": ""}})
     from salla_integration.crypto import encrypt_token
-    database.salla_integrations.insert_one({"user_id": state["owner"], "status": "connected",
+    database.salla_integrations.insert_one({"user_id": state["owner"], "store_id": OWNER_MERCHANT, "status": "connected",
         "access_token_encrypted": encrypt_token(os.environ["EXIT2D_SIM_TOKEN"]),
         "expires_at": a.now() + timedelta(hours=1), "token_revision": 1})
+    database.salla_integrations.insert_one({'user_id':state['outsider'],'store_id':OTHER_MERCHANT,'status':'connected'})
     for actor, role in (("employee", "operations"), ("viewer", "viewer"), ("outsider", "owner")):
         database.users.insert_one({"id": state[actor], "email": login_email(actor),
             "name": "\u0645\u0648\u0638\u0641 \u0627\u0635\u0637\u0646\u0627\u0639\u064a " + actor, "role": role, "is_active": True,
@@ -201,13 +203,42 @@ class Lifecycle:
     def rows(self, collection):
         return list(self.database[collection].find({"user_id": self.state["owner"]}, {"_id": 0}))
 
+    def deliver_status_event(self, number):
+        """Acceptance is conditional on delivery of this synthetic verified event."""
+        require(self.state['provider_scenario']=='success' and number in ORDERS)
+        other_before=list(self.database.unified_orders.find({'user_id':self.state['outsider']},{'_id':0}))
+        generated_before={name:self.database[name].count_documents({}) for name in GENERATED}
+        with check('WEBHOOK_EVENT_SOURCE'):
+            response=self.a.httpx.get('http://127.0.0.1:8093/__fixture__/status-event/raw-'+number,
+                headers={'Authorization':'Bearer '+os.environ['EXIT2D_SIM_TOKEN']},
+                follow_redirects=False,trust_env=False,timeout=3)
+            require(response.status_code==200)
+            event=response.json()
+            require(event.get('event')=='order.status.updated' and event.get('merchant')==OWNER_MERCHANT)
+            require(event['data']['reference_id']==number and str(event['data']['id'])=='raw-'+number)
+        with check('WEBHOOK_DELIVERY'):
+            body,headers=signed_body(event,os.environ.get('SALLA_WEBHOOK_SECRET',''))
+            result=self.call('POST','/api/salla/webhooks/app',content=body,headers=headers).json()
+            require_ingestion(result)
+        with check('WEBHOOK_INGESTION'):
+            stored=self.database.unified_orders.find_one({'user_id':self.state['owner'],'order_number':number})
+            require(stored is not None and stored.get('order_status')==event['data']['status']['name'])
+            require(stored['raw_by_source']['salla_direct']['status']==event['data']['status'])
+            require(list(self.database.unified_orders.find({'user_id':self.state['outsider']},{'_id':0}))==other_before)
+        with check('WEBHOOK_INTERNAL_EFFECTS'):
+            require(all(self.database[name].count_documents({})==count for name,count in generated_before.items()))
+            require(self.database.mezan_snapchat_capi_outbox_v1.count_documents({})==0)
+            require(self.database.mezan_snapchat_capi_scheduler_v1.count_documents({})==0)
+
     def invariant(self):
         require(all(r.get("experiment_mode") is (self.state["provider_scenario"] != "success") and r.get("salla_status_writes_allowed") is (self.state["provider_scenario"] == "success")
                     for r in self.rows(WORKFLOWS)))
         require(not self.database.backend_startup_leases_v1.find_one({
             "_id": "backend-heavy-initialization:independent-worker:singleton", "status": "running"}))
         require(self.database.salla_connections.count_documents({}) == 0)
-        require(self.database.salla_integrations.count_documents({}) == 1)
+        require(self.database.salla_integrations.count_documents({}) == 2)
+        require(self.database.salla_integrations.count_documents({'user_id':self.state['owner'],'store_id':OWNER_MERCHANT}) == 1)
+        require(self.database.salla_integrations.count_documents({'user_id':self.state['outsider'],'store_id':OTHER_MERCHANT}) == 1)
         from salla_http_simulator import validate_addresses
         validate_addresses(os.environ)
 
@@ -343,6 +374,7 @@ class Lifecycle:
             else:
                 with check("REVIEW_COMPLETE"):
                     self.call("POST", path + "/complete", json={"expected_revision": detail["revision"]})
+                self.deliver_status_event(number)
             self.record_provider_counts("AFTER_COMPLETE")
         with check("PROVIDER_COUNTERS"):
             counts = self.provider_counts()

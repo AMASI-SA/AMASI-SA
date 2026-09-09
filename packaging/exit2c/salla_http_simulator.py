@@ -63,6 +63,14 @@ class Fixture:
         self.lock = threading.Lock()
 
     def respond(self, method, target, authorization, body):
+        # Authenticated test-control read, not a simulated Merchant API call.
+        # It never accepts a requested status; the event comes from confirmed state.
+        prefix='/__fixture__/status-event/'
+        if (method=='GET' and body is None and target in {prefix+key for key in ORDER_IDS}
+                and hmac.compare_digest(authorization.encode(),('Bearer '+self.token).encode())):
+            from simulated_status_webhook import confirmed_event
+            try:return 200, confirmed_event(self,target[len(prefix):])
+            except ValueError:return 409, {'error':{'code':'fixture_event_not_confirmed'}}
         with self.lock:
             return self._respond(method, target, authorization, body)
 
