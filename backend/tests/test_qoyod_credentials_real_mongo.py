@@ -32,6 +32,12 @@ from integrations.qoyod.models import QoyodSettings
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 _PROCESS_LOG_LIMIT = 8192
 _READINESS_PATH = "/api/integrations/qoyod/settings"
+_DATABASE_CLEANUP_PREFIXES = (
+    "qoyod_credentials_restart_",
+    "qoyod_credentials_concurrency_",
+)
+_SAFE_DATABASE_NAME = re.compile(r"[a-z0-9_]+")
+_UUID_HEX = re.compile(r"[0-9a-f]{32}")
 
 
 def _mongo_url() -> str:
@@ -45,6 +51,28 @@ def _unused_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
         return int(sock.getsockname()[1])
+
+
+def _test_database_name(
+    prefix: str,
+    *,
+    unique_suffix: str | None = None,
+) -> str:
+    suffix = uuid4().hex if unique_suffix is None else unique_suffix
+    if _UUID_HEX.fullmatch(suffix) is None:
+        raise ValueError("test database suffix must be the full uuid4 hex value")
+    name = f"{prefix}{suffix}"
+    if not name:
+        raise ValueError("test database name must not be empty")
+    if len(name.encode("utf-8")) >= 64:
+        raise ValueError("test database name must use fewer than 64 UTF-8 bytes")
+    if _SAFE_DATABASE_NAME.fullmatch(name) is None:
+        raise ValueError("test database name contains unsafe characters")
+    if not any(name.startswith(item) for item in _DATABASE_CLEANUP_PREFIXES):
+        raise ValueError("test database name must match a cleanup prefix")
+    if not name.endswith(suffix):
+        raise ValueError("test database name must preserve its unique suffix")
+    return name
 
 
 def _finish_process(process: subprocess.Popen) -> str:
@@ -299,9 +327,41 @@ def _fingerprint(value: str) -> str:
     return f"{digest[:4]}…{digest[-4:]}"
 
 
+def test_qoyod_test_database_names_obey_mongo_and_cleanup_contract() -> None:
+    prefixes = (
+        "qoyod_credentials_restart_",
+        "qoyod_credentials_restart_e_",
+        "qoyod_credentials_concurrency_",
+    )
+    names = [_test_database_name(prefix) for prefix in prefixes]
+
+    assert len(set(names)) == len(names)
+    for prefix, name in zip(prefixes, names):
+        suffix = name.removeprefix(prefix)
+        assert name
+        assert len(name.encode("utf-8")) < 64
+        assert _SAFE_DATABASE_NAME.fullmatch(name) is not None
+        assert _UUID_HEX.fullmatch(suffix) is not None
+        assert name == f"{prefix}{suffix}"
+        assert any(name.startswith(item) for item in _DATABASE_CLEANUP_PREFIXES)
+
+    full_unique_suffix = uuid4().hex
+    with pytest.raises(ValueError, match="fewer than 64 UTF-8 bytes"):
+        _test_database_name(
+            "qoyod_credentials_restart_empty_",
+            unique_suffix=full_unique_suffix,
+        )
+
+    corrected = _test_database_name(
+        "qoyod_credentials_restart_e_",
+        unique_suffix=full_unique_suffix,
+    )
+    assert corrected == f"qoyod_credentials_restart_e_{full_unique_suffix}"
+
+
 def test_saved_credential_survives_real_process_restart_and_is_used() -> None:
     mongo_url = _mongo_url()
-    db_name = f"qoyod_credentials_restart_{uuid4().hex}"
+    db_name = _test_database_name("qoyod_credentials_restart_")
     synthetic_key = f"synthetic-qoyod-{secrets.token_hex(20)}"
     expected_fingerprint = _fingerprint(synthetic_key)
     env = os.environ.copy()
@@ -416,7 +476,7 @@ def test_saved_credential_survives_real_process_restart_and_is_used() -> None:
 def test_empty_settings_database_exposes_defaults_without_persisting_or_rotating(
 ) -> None:
     mongo_url = _mongo_url()
-    db_name = f"qoyod_credentials_restart_empty_{uuid4().hex}"
+    db_name = _test_database_name("qoyod_credentials_restart_e_")
     env = os.environ.copy()
     env.update(
         {
@@ -463,7 +523,7 @@ async def test_real_mongo_rejects_verification_after_concurrent_rotation(
     monkeypatch,
 ) -> None:
     mongo_url = _mongo_url()
-    db_name = f"qoyod_credentials_concurrency_{uuid4().hex}"
+    db_name = _test_database_name("qoyod_credentials_concurrency_")
     mongo = AsyncIOMotorClient(mongo_url, serverSelectionTimeoutMS=5000)
     db = mongo[db_name]
     request_started = asyncio.Event()
