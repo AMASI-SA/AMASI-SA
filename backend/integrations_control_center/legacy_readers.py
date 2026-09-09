@@ -375,6 +375,23 @@ async def _credential_present(
     return bool(doc)
 
 
+async def _qoyod_verification_state(db: Any, user_id: str) -> dict:
+    """Read internal rotation metadata without putting it in an API snapshot."""
+    collection = _collection(db, "qoyod_credentials")
+    doc = await collection.find_one(
+        {"user_id": user_id},
+        {
+            "_id": 0,
+            "credential_version": 1,
+            "last_verified_credential_version": 1,
+            "last_verified_at": 1,
+            "rotated_at": 1,
+            "updated_at": 1,
+        },
+    )
+    return dict(doc or {})
+
+
 async def _find_many(
     db: Any,
     collection_name: str,
@@ -1130,11 +1147,7 @@ async def _read_qoyod(db: Any, user_id: str, definition: ProviderDefinition) -> 
         )
         if credential_present:
             legacy_tenant = "main"
-    credential = await _find_one(
-        db,
-        "qoyod_credentials",
-        {"user_id": legacy_tenant},
-    )
+    credential = await _qoyod_verification_state(db, legacy_tenant)
     settings = await _find_one(
         db,
         "qoyod_settings",
@@ -1148,11 +1161,20 @@ async def _read_qoyod(db: Any, user_id: str, definition: ProviderDefinition) -> 
     )
     verified_at = _parse_datetime((credential or {}).get("last_verified_at"))
     rotated_at = _parse_datetime((credential or {}).get("rotated_at"))
-    credential_verified = bool(
-        credential_present
-        and verified_at
-        and (rotated_at is None or verified_at >= rotated_at)
-    )
+    credential_version = (credential or {}).get("credential_version")
+    if credential_version:
+        credential_verified = bool(
+            credential_present
+            and verified_at
+            and (credential or {}).get("last_verified_credential_version")
+            == credential_version
+        )
+    else:
+        credential_verified = bool(
+            credential_present
+            and verified_at
+            and (rotated_at is None or verified_at >= rotated_at)
+        )
     status = (
         "connected"
         if credential_verified

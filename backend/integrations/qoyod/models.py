@@ -259,7 +259,9 @@ class QoyodCredentials(BaseModel):
     user_id:        str = "main"
     api_key_enc:    bytes                          # opaque ciphertext
     fingerprint:    str                            # short hash for UI ("abc…123")
+    credential_version: Optional[str] = None
     last_verified_at: Optional[datetime] = None
+    last_verified_credential_version: Optional[str] = None
     rotated_at:     Optional[datetime] = None
     created_at:     datetime = Field(default_factory=_now)
     updated_at:     datetime = Field(default_factory=_now)

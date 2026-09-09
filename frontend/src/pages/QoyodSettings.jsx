@@ -19,7 +19,7 @@
  *  10. Setup Guide (expandable — where to find IDs in Qoyod)
  *  11. Sticky save bar
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 // Iter-290i — Searchable picker for قيود reference lists.
@@ -882,12 +882,15 @@ export default function QoyodSettings() {
   const [saving, setSaving]       = useState(false);
   const [settings, setSettings]   = useState(null);
   const [apiKey, setApiKey]       = useState("");
+  const [editingCredentials, setEditingCredentials] = useState(false);
+  const [savingCredentials, setSavingCredentials] = useState(false);
   const [branches, setBranches]   = useState([]);
   const [accounts, setAccounts]   = useState([]);
   const [taxes, setTaxes]         = useState([]);
   const [inventories, setInventories] = useState([]);
   const [testing, setTesting]     = useState(false);
   const [testResult, setTestResult] = useState(null);
+  const connectionRequestVersion = useRef(0);
 
   const [branchesMeta, setBranchesMeta] = useState({ unsupported: false });
   const [taxesMeta,    setTaxesMeta]    = useState({ unsupported: false });
@@ -1060,14 +1063,49 @@ export default function QoyodSettings() {
       capabilities: { ...(s?.capabilities || {}), ...changes } }));
 
   const saveCredentials = async () => {
-    if (!apiKey.trim()) { toast.error("أدخل مفتاح API الخاص بقيود"); return; }
+    const trimmedApiKey = apiKey.trim();
+    if (!trimmedApiKey) { toast.error("أدخل مفتاح API الخاص بقيود"); return; }
+    connectionRequestVersion.current += 1;
+    setTesting(false);
+    setTestResult(null);
+    setSavingCredentials(true);
     try {
-      await axios.post(`${API}/integrations/qoyod/credentials`,
-        { api_key: apiKey });
+      const { data } = await axios.post(
+        `${API}/integrations/qoyod/credentials`,
+        { api_key: trimmedApiKey },
+      );
+      if (!data?.ok || !data?.fingerprint) {
+        throw new Error("credential persistence was not confirmed");
+      }
+      setSettings((current) => ({
+        ...current,
+        credentials: {
+          configured: true,
+          fingerprint: data.fingerprint,
+        },
+      }));
       setApiKey("");
+      setEditingCredentials(false);
       toast.success("تم حفظ المفتاح بشكل آمن");
-      await loadAll();
-    } catch (_) { toast.error("فشل حفظ المفتاح"); }
+    } catch (_) {
+      toast.error("فشل حفظ المفتاح");
+    } finally {
+      setSavingCredentials(false);
+    }
+  };
+
+  const beginCredentialReplacement = () => {
+    connectionRequestVersion.current += 1;
+    setTesting(false);
+    setTestResult(null);
+    setApiKey("");
+    setEditingCredentials(true);
+  };
+
+  const cancelCredentialReplacement = () => {
+    connectionRequestVersion.current += 1;
+    setApiKey("");
+    setEditingCredentials(false);
   };
 
   const removeCredentials = async () => {
@@ -1081,19 +1119,28 @@ export default function QoyodSettings() {
   };
 
   const test = async () => {
+    const requestVersion = connectionRequestVersion.current + 1;
+    connectionRequestVersion.current = requestVersion;
+    const testedFingerprint = settings?.credentials?.fingerprint || null;
     setTesting(true); setTestResult(null);
     try {
       const { data } = await axios.post(`${API}/integrations/qoyod/test-connection`);
+      if (connectionRequestVersion.current !== requestVersion
+          || data?.fingerprint !== testedFingerprint) return;
       setTestResult(data);
       if (data.ok) {
         toast.success("الاتصال بقيود ناجح");
-        await loadCatalogs();
       } else {
         toast.error(data.error?.message || "فشل الاتصال");
       }
     } catch (e) {
+      if (connectionRequestVersion.current !== requestVersion) return;
       toast.error(e.response?.data?.detail || "فشل الاختبار");
-    } finally { setTesting(false); }
+    } finally {
+      if (connectionRequestVersion.current === requestVersion) {
+        setTesting(false);
+      }
+    }
   };
 
   const save = async () => {
@@ -1414,7 +1461,7 @@ export default function QoyodSettings() {
 
       {/* 2) API Key */}
       <Section title="مفتاح API الخاص بقيود">
-        {hasCreds ? (
+        {hasCreds && (
           <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-lg p-3">
             <div>
               <div className="text-sm font-bold text-emerald-800">
@@ -1425,29 +1472,47 @@ export default function QoyodSettings() {
               </div>
             </div>
             <div className="flex gap-2">
-              <button onClick={test} disabled={testing}
+              <button onClick={test} disabled={testing || editingCredentials || savingCredentials}
                 data-testid="btn-test-connection"
                 className="px-3 py-2 text-sm font-bold rounded-lg bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50">
                 {testing ? "جاري الاختبار…" : "اختبار الاتصال"}
               </button>
+              <button onClick={beginCredentialReplacement}
+                disabled={savingCredentials}
+                data-testid="btn-edit-credentials"
+                className="px-3 py-2 text-sm font-bold rounded-lg bg-amber-100 text-amber-800 hover:bg-amber-200 disabled:opacity-50">
+                استبدال المفتاح
+              </button>
               <button onClick={removeCredentials}
+                disabled={savingCredentials}
                 data-testid="btn-remove-credentials"
                 className="px-3 py-2 text-sm font-bold rounded-lg bg-rose-100 text-rose-700 hover:bg-rose-200">
                 حذف المفتاح
               </button>
             </div>
           </div>
-        ) : (
-          <div className="flex gap-2">
+        )}
+        {(!hasCreds || editingCredentials) && (
+          <div className="flex gap-2 mt-2">
             <input type="password" value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
+              disabled={savingCredentials}
               placeholder="الصق هنا مفتاح Qoyod API الخاص بك"
               dir="ltr" data-testid="input-api-key"
               className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono" />
-            <button onClick={saveCredentials} data-testid="btn-save-credentials"
+            <button onClick={saveCredentials} disabled={savingCredentials}
+              data-testid="btn-save-credentials"
               className="px-4 py-2 text-sm font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">
-              حفظ
+              {savingCredentials ? "جاري الحفظ…" : (hasCreds ? "حفظ البديل" : "حفظ")}
             </button>
+            {hasCreds && (
+              <button onClick={cancelCredentialReplacement}
+                disabled={savingCredentials}
+                data-testid="btn-cancel-credentials"
+                className="px-3 py-2 text-sm font-bold rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-50">
+                إلغاء
+              </button>
+            )}
           </div>
         )}
         {testResult && !testResult.ok && testResult.error && (

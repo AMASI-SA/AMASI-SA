@@ -989,6 +989,39 @@ async def test_stored_or_stale_credentials_do_not_claim_verified_connection():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("verified_version", "expected_status"),
+    [("version-a", "unknown"), ("version-b", "connected")],
+)
+async def test_qoyod_versioned_credentials_require_matching_verification_version(
+    verified_version,
+    expected_status,
+):
+    db = FakeDB(
+        {
+            "qoyod_credentials": [
+                {
+                    "user_id": "main",
+                    "api_key_enc": "encrypted-never-project",
+                    "credential_version": "version-b",
+                    "last_verified_credential_version": verified_version,
+                    # Deliberately newer than rotated_at: version identity,
+                    # not timestamp ordering, is authoritative once present.
+                    "last_verified_at": "2026-07-28T11:00:00+00:00",
+                    "rotated_at": "2026-07-28T10:00:00+00:00",
+                }
+            ],
+        }
+    )
+
+    overview = await _service(db).overview("owner-1")
+    by_provider = {card["provider"]: card for card in overview["providers"]}
+
+    assert by_provider["qoyod"]["connection_status"] == expected_status
+    assert by_provider["qoyod"]["connection_provenance"] == "legacy_integration"
+
+
+@pytest.mark.asyncio
 async def test_database_failure_is_not_misreported_as_disconnected():
     with pytest.raises(RuntimeError, match="mongo unavailable"):
         await IntegrationsControlCenterService(FailingDB(), now=lambda: NOW).overview(
