@@ -50,42 +50,49 @@ class IngestionCollection(MemoryCollection):
         return copy.deepcopy(rows[0]) if rows else None
     async def insert_one(self,row):self.rows.append(copy.deepcopy(row));return SimpleNamespace(inserted_id='offline')
 
+def ingestion_fixture():
+    data,base,route,db=environment()
+    for key,col in list(db.items()):db[key]=IngestionCollection(col.rows)
+    # Initial input only: old pending orders with a recent local snapshot.
+    now=datetime(2026,9,9,tzinfo=timezone.utc)
+    for row in db.unified_orders.rows:
+        row['order_id']='raw-'+row['order_number']
+        row['orders_v2_salla_refreshed_at']=now.isoformat()
+    warnings=[]
+    logger=SimpleNamespace(warning=lambda *a,**k:warnings.append('CATALOG_WARNING'))
+    attribution=load_source('salla_marketing_attribution.py')
+    orders=load_source('orders_db.py',{k:attribution[k] for k in ('canonical_marketing_source','preserve_salla_raw_attribution','promoted_salla_attribution')})
+    orders['logger']=logger
+    # Catalogue writes, if needed by the actual upsert, stay in synthetic memory.
+    db['products']=IngestionCollection([])
+    db['mezan_products']=IngestionCollection([])
+    sync=load_source('salla_integration/sync.py',{'promoted_salla_attribution':attribution['promoted_salla_attribution']})
+    token='offline-status-ingestion-token-000000000'
+    simulator=Fixture(token,'success')
+    async def transport(database,owner,method,path,**kwargs):
+        target='/admin/v2'+path
+        if kwargs.get('params'):target+='?'+urlencode(kwargs['params'])
+        status,result=simulator.respond(method,target,'Bearer '+token,kwargs.get('json'))
+        if status!=200:raise AssertionError('SIMULATOR_REQUEST_REJECTED')
+        return result
+    sync['call_salla']=transport
+    refresh=load_source('order_engine/salla_refresh.py',{'upsert_order':orders['upsert_order'],
+        '_enrich_order_receiving_bank':sync['_enrich_order_receiving_bank'],'_salla_order_to_doc':sync['_salla_order_to_doc'],
+        'call_salla':transport,'SallaError':RuntimeError})
+    class Clock(datetime):
+        current=None
+        @classmethod
+        def now(cls,tz=None):return cls.current
+    Clock.current=now
+    refresh['datetime']=Clock
+    return SimpleNamespace(**locals())
+
 class IngestionTransitionTests(unittest.TestCase):
     def test_confirm_fresh_skip_then_expired_snapshot_ingests_and_reveals_same_pieces(self):
-        data,base,route,db=environment()
-        for key,col in list(db.items()):db[key]=IngestionCollection(col.rows)
-        # Initial input only: old pending orders with a recent local snapshot.
-        now=datetime(2026,9,9,tzinfo=timezone.utc)
-        for row in db.unified_orders.rows:
-            row['order_id']='raw-'+row['order_number']
-            row['orders_v2_salla_refreshed_at']=now.isoformat()
-        warnings=[]
-        logger=SimpleNamespace(warning=lambda *a,**k:warnings.append('CATALOG_WARNING'))
-        attribution=load_source('salla_marketing_attribution.py')
-        orders=load_source('orders_db.py',{k:attribution[k] for k in ('canonical_marketing_source','preserve_salla_raw_attribution','promoted_salla_attribution')})
-        orders['logger']=logger
-        # Catalogue writes, if needed by the actual upsert, stay in synthetic memory.
-        db['products']=IngestionCollection([])
-        db['mezan_products']=IngestionCollection([])
-        sync=load_source('salla_integration/sync.py',{'promoted_salla_attribution':attribution['promoted_salla_attribution']})
-        token='offline-status-ingestion-token-000000000'
-        simulator=Fixture(token,'success')
-        async def transport(database,owner,method,path,**kwargs):
-            target='/admin/v2'+path
-            if kwargs.get('params'):target+='?'+urlencode(kwargs['params'])
-            status,result=simulator.respond(method,target,'Bearer '+token,kwargs.get('json'))
-            if status!=200:raise AssertionError('SIMULATOR_REQUEST_REJECTED')
-            return result
-        sync['call_salla']=transport
-        refresh=load_source('order_engine/salla_refresh.py',{'upsert_order':orders['upsert_order'],
-            '_enrich_order_receiving_bank':sync['_enrich_order_receiving_bank'],'_salla_order_to_doc':sync['_salla_order_to_doc'],
-            'call_salla':transport,'SallaError':RuntimeError})
-        class Clock(datetime):
-            current=None
-            @classmethod
-            def now(cls,tz=None):return cls.current
-        Clock.current=now
-        refresh['datetime']=Clock
+        fixture=ingestion_fixture()
+        data,base,route,db=fixture.data,fixture.base,fixture.route,fixture.db
+        now,Clock=fixture.now,fixture.Clock
+        simulator,transport,refresh,warnings=fixture.simulator,fixture.transport,fixture.refresh,fixture.warnings
         async def run():
             before_ids=[p['piece_id'] for p in db[route['PIECES']].rows]
             before_files={(f['batch_id'],f['file_number']) for f in data['files']}
