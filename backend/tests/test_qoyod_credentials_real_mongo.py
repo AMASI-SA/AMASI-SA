@@ -26,6 +26,8 @@ from httpx import ASGITransport, AsyncClient
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import MongoClient
 
+from integrations.qoyod.models import QoyodSettings
+
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 _PROCESS_LOG_LIMIT = 8192
@@ -316,19 +318,59 @@ def test_saved_credential_survives_real_process_restart_and_is_used() -> None:
     )
     mongo = MongoClient(mongo_url, serverSelectionTimeoutMS=5000)
     mongo.admin.command("ping")
+    settings_collection = mongo[db_name].qoyod_settings
+    baseline = QoyodSettings(
+        user_id="main",
+        enabled=False,
+        auto_send=False,
+    ).model_dump(mode="json")
+    settings_collection.insert_one(baseline.copy())
+    stored_baseline = settings_collection.find_one(
+        {"user_id": "main"},
+        {"_id": 0},
+    )
+    assert stored_baseline == baseline
     process = None
     try:
         first_port = _unused_port()
         process = _start_app(env, first_port)
         with httpx.Client(base_url=f"http://127.0.0.1:{first_port}") as client:
+            settings_before_save = client.get(
+                "/api/integrations/qoyod/settings"
+            )
             saved = client.post(
                 "/api/integrations/qoyod/credentials",
                 json={"api_key": f"  {synthetic_key}  "},
             )
+            settings_after_save = client.get(
+                "/api/integrations/qoyod/settings"
+            )
+        assert settings_before_save.status_code == 200
+        assert settings_before_save.headers["cache-control"] == "no-store"
+        assert settings_before_save.json()["enabled"] == baseline["enabled"]
+        assert settings_before_save.json()["auto_send"] == baseline["auto_send"]
+        assert synthetic_key not in settings_before_save.text
+        assert settings_collection.find_one(
+            {"user_id": "main"},
+            {"_id": 0},
+        ) == baseline
         assert saved.status_code == 200
         assert saved.headers["cache-control"] == "no-store"
         assert saved.json()["fingerprint"] == expected_fingerprint
         assert synthetic_key not in saved.text
+        assert settings_after_save.status_code == 200
+        assert settings_after_save.headers["cache-control"] == "no-store"
+        assert settings_after_save.json()["enabled"] == baseline["enabled"]
+        assert settings_after_save.json()["auto_send"] == baseline["auto_send"]
+        assert settings_after_save.json()["credentials"] == {
+            "configured": True,
+            "fingerprint": expected_fingerprint,
+        }
+        assert synthetic_key not in settings_after_save.text
+        assert settings_collection.find_one(
+            {"user_id": "main"},
+            {"_id": 0},
+        ) == baseline
         _stop_app(process)
         process = None
 
@@ -344,13 +386,19 @@ def test_saved_credential_survives_real_process_restart_and_is_used() -> None:
             "configured": True,
             "fingerprint": expected_fingerprint,
         }
-        assert settings.json()["enabled"] is False
-        assert settings.json()["auto_send"] is False
+        assert settings.json()["enabled"] == baseline["enabled"]
+        assert settings.json()["auto_send"] == baseline["auto_send"]
+        assert synthetic_key not in settings.text
         assert verified.status_code == 200
         assert verified.headers["cache-control"] == "no-store"
         assert verified.json()["ok"] is True
         assert verified.json()["fingerprint"] == expected_fingerprint
         assert synthetic_key not in verified.text
+
+        assert settings_collection.find_one(
+            {"user_id": "main"},
+            {"_id": 0},
+        ) == baseline
 
         stored = mongo[db_name].qoyod_credentials.find_one({"user_id": "main"})
         assert stored is not None
@@ -359,6 +407,51 @@ def test_saved_credential_survives_real_process_restart_and_is_used() -> None:
             "last_verified_credential_version"
         ]
         assert synthetic_key.encode("utf-8") not in stored["api_key_enc"]
+    finally:
+        _stop_app(process)
+        mongo.drop_database(db_name)
+        mongo.close()
+
+
+def test_empty_settings_database_exposes_defaults_without_persisting_or_rotating(
+) -> None:
+    mongo_url = _mongo_url()
+    db_name = f"qoyod_credentials_restart_empty_{uuid4().hex}"
+    env = os.environ.copy()
+    env.update(
+        {
+            "PYTHONPATH": str(BACKEND_ROOT),
+            "QOYOD_TEST_MONGO_URL": mongo_url,
+            "QOYOD_TEST_DB_NAME": db_name,
+            "QOYOD_TEST_EXPECTED_KEY_SHA256": hashlib.sha256(
+                b"unused-synthetic-qoyod-key"
+            ).hexdigest(),
+            "QOYOD_TOKEN_ENC_KEY": Fernet.generate_key().decode("ascii"),
+        }
+    )
+    mongo = MongoClient(mongo_url, serverSelectionTimeoutMS=5000)
+    mongo.admin.command("ping")
+    process = None
+    try:
+        port = _unused_port()
+        process = _start_app(env, port)
+        with httpx.Client(base_url=f"http://127.0.0.1:{port}") as client:
+            settings = client.get("/api/integrations/qoyod/settings")
+
+        assert settings.status_code == 200
+        assert settings.headers["cache-control"] == "no-store"
+        assert settings.json()["enabled"] is False
+        assert settings.json()["auto_send"] is True
+        assert settings.json()["credentials"] == {
+            "configured": False,
+            "fingerprint": None,
+        }
+        assert (
+            mongo[db_name].qoyod_settings.find_one({"user_id": "main"}) is None
+        )
+        assert (
+            mongo[db_name].qoyod_credentials.find_one({"user_id": "main"}) is None
+        )
     finally:
         _stop_app(process)
         mongo.drop_database(db_name)
