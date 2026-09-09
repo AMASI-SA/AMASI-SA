@@ -19,6 +19,7 @@ from test_snapshot_evidence import SnapshotEvidenceTests
 from test_unit_contract import UnitContractTests
 from test_unit_projection import UnitProjectionTests, SourceLayoutTests, synthetic_documents
 from test_supplier_workspace_contract import SupplierWorkspaceTests
+from test_supplier_file_visibility import RouteVisibilityTests
 
 
 class PreparationContracts(unittest.TestCase):

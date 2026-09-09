@@ -134,7 +134,7 @@ accept() {
     if [[ "$reply" == SUPPLIER* ]]; then
       if test "$accept_phase" != prep-resume; then echo 'FAIL controller UNCLASSIFIED_FAILURE'; return 1; fi
       if test "$reply" = 'SUPPLIER unavailable'; then echo 'SUPPLIER unavailable'; continue; fi
-      if [[ "$reply" =~ ^SUPPLIER\ (HTTP_STATUS|SUPPLIERS|SUPPLIER_MATCHES|FILES|FILE_MATCHES|PIECES|AVAILABLE|IDENTITY_MATCH)\ (0|[1-9][0-9]{0,4})$ ]]; then
+      if [[ "$reply" =~ ^SUPPLIER\ (HTTP_STATUS|SUPPLIERS|SUPPLIER_MATCHES|FILES|FILE_MATCHES|PIECES|AVAILABLE|IDENTITY_MATCH|ROUTE_ENFORCED|OUTSIDE_PIECES|ROUTE_UNAVAILABLE)\ (0|[1-9][0-9]{0,4})$ ]]; then
         category="${BASH_REMATCH[1]}"; count="${BASH_REMATCH[2]}"
         if test "$count" -gt 10000; then echo 'FAIL controller UNCLASSIFIED_FAILURE'; return 1; fi
         printf 'SUPPLIER %s %s\n' "$category" "$count"; continue

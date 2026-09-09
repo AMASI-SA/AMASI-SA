@@ -4,7 +4,7 @@ from acceptance_controller import check
 CHECKS = ('SUPPLIER_HTTP', 'SUPPLIER_SCHEMA', 'SUPPLIER_PRESENT', 'SUPPLIER_FILE',
           'SUPPLIER_PRODUCTS', 'SUPPLIER_SELECTIONS', 'SUPPLIER_IDENTITIES')
 METRICS = ('HTTP_STATUS', 'SUPPLIERS', 'SUPPLIER_MATCHES', 'FILES', 'FILE_MATCHES',
-           'PIECES', 'AVAILABLE', 'IDENTITY_MATCH')
+           'PIECES', 'AVAILABLE', 'IDENTITY_MATCH', 'ROUTE_ENFORCED', 'OUTSIDE_PIECES', 'ROUTE_UNAVAILABLE')
 
 def require(value):
     if not value:
@@ -32,6 +32,12 @@ def workspace_payload(call, file, pieces, employee, state):
         require(all(type(result.get(k)) is list for k in ('suppliers','files','supplier_accounts')))
         require(type(result.get('summary')) is dict)
         require(all(type(row) is dict for key in ('suppliers','files') for row in result[key]))
+        enforced=result.get('route_status_enforced')
+        outside=result.get('outside_preparation_piece_count')
+        if type(enforced) is bool and type(outside) is int and 0<=outside<=10000:
+            report('ROUTE_ENFORCED',int(enforced));report('OUTSIDE_PIECES',outside)
+        else:
+            report('ROUTE_UNAVAILABLE',1)
     with check('SUPPLIER_PRESENT'):
         matches=[s for s in result['suppliers'] if s.get('id')=='exit2d-supplier']
         report('SUPPLIERS',len(result['suppliers']));report('SUPPLIER_MATCHES',len(matches))
