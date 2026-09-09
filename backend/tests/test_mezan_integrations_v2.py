@@ -494,6 +494,7 @@ async def test_indexes_cover_v2_and_governed_ad_journal_unique_identities():
         "mezan_integration_sync_runs_v2",
         "mezan_integration_errors_v2",
         "mezan_campaign_product_links_v2",
+        "mezan_meta_management_proposals_v1",
         "mezan_snapchat_campaign_proposals_v1",
         "mezan_snapchat_campaign_audit_v1",
         "mezan_snapchat_campaign_entity_leases_v1",
@@ -513,6 +514,8 @@ async def test_indexes_cover_v2_and_governed_ad_journal_unique_identities():
         "mezan_integration_sync_runs_v2_one_running",
         "mezan_integration_errors_v2_error_unique",
         "mezan_campaign_product_links_v2_idempotency_unique",
+        "meta_management_proposal_unique",
+        "meta_management_idempotency_unique",
         "snap_management_proposal_unique",
         "snap_management_idempotency_unique",
         "snap_management_active_entity_lease_unique",
@@ -523,6 +526,25 @@ async def test_indexes_cover_v2_and_governed_ad_journal_unique_identities():
         "mezan_campaign_product_links_v2_event_unique",
         "mezan_campaign_product_links_v2_linear_history",
     }
+    meta_management_definitions = [
+        (keys, options)
+        for collection, keys, options in db.indexes
+        if collection == "mezan_meta_management_proposals_v1"
+    ]
+    assert meta_management_definitions == [
+        (
+            [("user_id", 1), ("proposal_id", 1)],
+            {"unique": True, "name": "meta_management_proposal_unique"},
+        ),
+        (
+            [("user_id", 1), ("idempotency_key", 1)],
+            {"unique": True, "name": "meta_management_idempotency_unique"},
+        ),
+        (
+            [("user_id", 1), ("status", 1), ("created_at", -1)],
+            {"name": "meta_management_status_latest"},
+        ),
+    ]
     # Define the deployed idempotency index exactly once. MongoDB rejects a
     # repeated index name when a later installer changes any option.
     idempotency_definitions = [
