@@ -7,7 +7,6 @@ Run in a disposable process; environment, networking and output are bounded.
 """
 import argparse
 import ast
-import base64
 import asyncio
 import contextlib
 import copy
@@ -96,7 +95,7 @@ async def exercise(report):
                  'salla_integration/routes.py','exec',flags=__future__.annotations.compiler_flag),scope)
     app=FastAPI()
     app.add_api_route('/api/salla/webhooks/app',scope['salla_app_webhook'],methods=['POST'])
-    secret=secrets.token_urlsafe(32);os.environ['SALLA_WEBHOOK_SECRET']=secret
+    secret=os.environ['SALLA_WEBHOOK_SECRET']
     fixture=Fixture(secrets.token_urlsafe(32),'success')
     before=(await compare(base,route,db))[0]
     require(before==(8,2,8,0,8,0),'PRE_EVENT_VISIBILITY')
@@ -244,10 +243,18 @@ def main():
     sys.path.insert(0,str(backend_root()))
     keep={k:v for k,v in os.environ.items() if k.upper() in
           ('SYSTEMROOT','WINDIR','SYSTEMDRIVE','TEMP','TMP','PATH')}
-    os.environ.clear();os.environ.update(keep);os.environ['APP_ENV']='test'
+    # The real guard and its stdlib-only dependencies are the only backend
+    # imports permitted before validation. Use its existing fixture contract.
+    import independent_runtime as runtime
+    os.environ.clear();os.environ.update(keep);os.environ.update(runtime.SYNTHETIC)
+    os.environ['MEZAN_ACCEPTANCE_PROFILE']=runtime.SALLA_SIMULATOR_PROFILE
+    os.environ['SALLA_API_BASE']='http://127.0.0.1:8093/admin/v2'
+    os.environ['SALLA_AUTH_BASE']='http://127.0.0.1:8093'
+    os.environ['MEZAN_WORKER_ENABLED']='0'
+    os.environ['SALLA_WEBHOOK_SECRET']=secrets.token_urlsafe(32)
     os.environ['MEZAN_SNAPCHAT_CAPI_ENABLED']='false'
     # Same public fixture already approved for the simulator profile; never live data.
-    os.environ['SALLA_TOKEN_ENC_KEY']=base64.urlsafe_b64encode(bytes(range(32))).decode('ascii')
+    os.environ['SALLA_TOKEN_ENC_KEY']=runtime.SALLA_SIMULATOR_KEY
     report={'scope':'original_webhook_gate_probe','network_attempts':0,'dotenv_attempts':0,
             'log_errors':0,'application_tasks_created':0,'complete':False}
     class SafeLogs(logging.Handler):
@@ -271,6 +278,11 @@ def main():
     output=io.StringIO()
     try:
         with contextlib.redirect_stdout(output),contextlib.redirect_stderr(output):
+            try:
+                runtime.validate_before_import('web')
+            except Exception:
+                raise AssertionError('ASGI_RUNTIME_GUARD_REJECTED') from None
+            report['runtime_guard_passed']=True
             if args.preflight_only:
                 failures={}
                 modules=('salla_integration.routes','salla_integration.webhook_order_sync',
@@ -299,6 +311,7 @@ def main():
                  'INVALID_SIGNATURE_MUTATED','INVALID_EVENT_MUTATED','COMPOSED_DISPATCH_NOT_INSTALLED',
                  'PRE_EVENT_VISIBILITY','WEBHOOK_SOURCE_AMBIGUOUS','WEBHOOK_ROUTE_CHANGED','PROVIDER_CONFIRMATION'}
         allowed.add('DEPENDENCY_PREFLIGHT')
+        allowed.add('ASGI_RUNTIME_GUARD_REJECTED')
         allowed.update(('CONFIRMED_STATUS_MISMATCH','PIECE_IDENTITY_CHANGED','FOREIGN_ORDER_CHANGED',
                         'DUPLICATE_ENTITIES','DUPLICATE_ROUTE_TRANSITION','DELIVERY_AUDIT_MISMATCH',
                         'INVALID_EVENT_SYNCED','REJECTION_CLASSIFICATION','HTTP200_FALSE_ACCEPTED',
