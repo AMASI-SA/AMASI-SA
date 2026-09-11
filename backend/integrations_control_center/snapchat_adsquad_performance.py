@@ -9,12 +9,14 @@ accounting eligible and no Snapchat mutation is performed.
 from __future__ import annotations
 
 import asyncio
+from bisect import insort
 from collections import defaultdict
 from datetime import date, datetime, timezone
 from typing import Any, Awaitable, Callable
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
+from resource_governor import StageMetric
 
 from . import snapchat_account_hourly_refresh as hourly
 from .snapchat_account_selection import _load_selected_accounts
@@ -27,6 +29,7 @@ from .snapchat_freshness_impl_v6 import (
     normalize_ads_manager_action_report_time,
 )
 from .snapchat_active_campaign_filtering import (
+    ACTIVE_PROVIDER_STATUSES,
     aggregate_entity_rows,
     is_active_provider_status,
     normalize_entity_sort,
@@ -215,6 +218,25 @@ async def _campaign_entities(
             "provider": SNAPCHAT_PROVIDER_ID,
             "ad_account_id": account_id,
             "entity_type": "campaign",
+            "$expr": {
+                "$in": [
+                    {
+                        "$toUpper": {
+                            "$trim": {
+                                "input": {
+                                    "$convert": {
+                                        "input": "$status",
+                                        "to": "string",
+                                        "onError": "",
+                                        "onNull": "",
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    sorted(ACTIVE_PROVIDER_STATUSES),
+                ]
+            },
         },
         {
             "_id": 0,
@@ -225,20 +247,26 @@ async def _campaign_entities(
             "last_observed_at": 1,
         },
     )
-    # Load the whole account catalog before applying the provider-active filter.
-    # Taking the first 250 Mongo rows first excluded current campaigns on mature
-    # accounts whose catalog contains thousands of historical campaigns.
-    rows = await _to_list(cursor, MAX_ENTITY_ROWS)
-    active_rows = [
-        row for row in rows
-        if is_active_provider_status(row.get("status"))
-    ]
-    active_rows.sort(key=lambda row: (
-        _text(row.get("display_name")).casefold(),
-        _text(row.get("external_id")),
-    ))
-    limited = len(active_rows) > MAX_CAMPAIGNS_PER_ACCOUNT
-    return active_rows[:MAX_CAMPAIGNS_PER_ACCOUNT], limited
+    # Mongo collations are not equivalent to Python casefold ordering, and the
+    # external-ID tie-break is deliberately raw/case-sensitive. Stream every
+    # database-filtered row while retaining only the exact smallest K entries.
+    # The sequence number preserves the old stable-sort behavior for equal keys.
+    keep = MAX_CAMPAIGNS_PER_ACCOUNT + 1
+    active_rows: list[tuple[tuple[str, str], int, dict[str, Any]]] = []
+    observed = 0
+    async for row in cursor:
+        key = (
+            _text(row.get("display_name")).casefold(),
+            _text(row.get("external_id")),
+        )
+        insort(active_rows, (key, observed, dict(row)))
+        observed += 1
+        if len(active_rows) > keep:
+            active_rows.pop()
+    return (
+        [row for _key, _sequence, row in active_rows[:MAX_CAMPAIGNS_PER_ACCOUNT]],
+        observed > MAX_CAMPAIGNS_PER_ACCOUNT,
+    )
 
 
 def extract_adsquad_total_rows(
@@ -497,64 +525,109 @@ async def _fetch_adsquad_window(
     request_end: datetime,
 ) -> list[dict[str, Any]]:
     """Fetch one report window with a small, bounded amount of concurrency."""
-    semaphore = asyncio.Semaphore(ADSQUAD_FETCH_CONCURRENCY)
+    metric = StageMetric(
+        "snapchat_adsquad_campaign_fetch",
+        concurrency=ADSQUAD_FETCH_CONCURRENCY,
+    )
 
     async def fetch_one(
         campaign_id: str,
         action_report_time: str,
     ) -> dict[str, Any]:
-        async with semaphore:
-            try:
-                rows, report_errors, breakdown_seen = (
-                    await _fetch_campaign_adsquad_totals(
-                        context,
-                        client,
-                        access_token,
-                        campaign_id=campaign_id,
-                        request_start=request_start,
-                        request_end=request_end,
-                        action_report_time=action_report_time,
-                    )
+        try:
+            rows, report_errors, breakdown_seen = (
+                await _fetch_campaign_adsquad_totals(
+                    context,
+                    client,
+                    access_token,
+                    campaign_id=campaign_id,
+                    request_start=request_start,
+                    request_end=request_end,
+                    action_report_time=action_report_time,
                 )
-                return {
+            )
+            return {
+                "campaign_id": campaign_id,
+                "action_report_time": action_report_time,
+                "rows": rows,
+                "errors": report_errors,
+                "breakdown_seen": breakdown_seen,
+                "data_state": _performance_data_state(
+                    rows,
+                    errors=report_errors,
+                    structure_seen=breakdown_seen,
+                ),
+            }
+        except SnapchatNativeSyncError as exc:
+            if exc.code == "snapchat_needs_reauth":
+                raise
+            return {
+                "campaign_id": campaign_id,
+                "action_report_time": action_report_time,
+                "rows": [],
+                "errors": [{
+                    "kind": "adsquad_total_stats",
                     "campaign_id": campaign_id,
-                    "action_report_time": action_report_time,
-                    "rows": rows,
-                    "errors": report_errors,
-                    "breakdown_seen": breakdown_seen,
-                    "data_state": _performance_data_state(
-                        rows,
-                        errors=report_errors,
-                        structure_seen=breakdown_seen,
-                    ),
-                }
-            except SnapchatNativeSyncError as exc:
-                if exc.code == "snapchat_needs_reauth":
-                    raise
-                return {
-                    "campaign_id": campaign_id,
-                    "action_report_time": action_report_time,
-                    "rows": [],
-                    "errors": [{
-                        "kind": "adsquad_total_stats",
-                        "campaign_id": campaign_id,
-                        "code": exc.code,
-                        "message": exc.message[:300],
-                        "retryable": bool(exc.retryable),
-                    }],
-                    "breakdown_seen": False,
-                    "data_state": DATA_STATE_UNKNOWN_INCOMPLETE,
-                }
+                    "code": exc.code,
+                    "message": exc.message[:300],
+                    "retryable": bool(exc.retryable),
+                }],
+                "breakdown_seen": False,
+                "data_state": DATA_STATE_UNKNOWN_INCOMPLETE,
+            }
 
-    tasks = [
-        fetch_one(campaign_id, action_report_time)
+    candidates = [
+        (campaign_id, action_report_time)
         for campaign in campaigns
         if (campaign_id := _text(campaign.get("external_id")))
         for action_report_time in ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES
     ]
-    if not tasks:
+    if not candidates:
+        metric.finish(status="complete", requested=0, completed=0, errors=0, rows=0)
         return []
-    return list(await asyncio.gather(*tasks))
+    queue: asyncio.Queue[tuple[int, str, str]] = asyncio.Queue()
+    for index, (campaign_id, action_report_time) in enumerate(candidates):
+        queue.put_nowait((index, campaign_id, action_report_time))
+    results: list[dict[str, Any] | None] = [None] * len(candidates)
+
+    async def worker() -> None:
+        while True:
+            try:
+                index, campaign_id, action_report_time = queue.get_nowait()
+            except asyncio.QueueEmpty:
+                return
+            results[index] = await fetch_one(campaign_id, action_report_time)
+
+    workers = [
+        asyncio.create_task(worker())
+        for _ in range(min(ADSQUAD_FETCH_CONCURRENCY, len(candidates)))
+    ]
+    try:
+        await asyncio.gather(*workers)
+    except asyncio.CancelledError:
+        metric.finish(
+            status="cancelled", requested=len(candidates),
+            completed=sum(result is not None for result in results),
+        )
+        raise
+    except BaseException as exc:
+        metric.finish(
+            status="failed", reason=type(exc).__name__, requested=len(candidates),
+            completed=sum(result is not None for result in results),
+        )
+        raise
+    finally:
+        for worker_task in workers:
+            if not worker_task.done():
+                worker_task.cancel()
+        await asyncio.gather(*workers, return_exceptions=True)
+    completed = [result for result in results if result is not None]
+    metric.finish(
+        status="complete", requested=len(candidates), completed=len(completed),
+        errors=sum(len(result.get("errors") or []) for result in completed),
+        rows=sum(len(result.get("rows") or []) for result in completed),
+    )
+    return completed
 
 
 def _day_buckets(

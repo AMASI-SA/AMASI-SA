@@ -14,6 +14,12 @@ from integrations_control_center.snapchat_native_data_common import (
 
 def _matches(row, query):
     for key, condition in query.items():
+        if key == "$expr":
+            if str(row.get("status") or "").strip().upper() not in {
+                "ACTIVE", "ENABLED", "DELIVERING",
+            }:
+                return False
+            continue
         value = row.get(key)
         if isinstance(condition, dict):
             for operator, expected in condition.items():
@@ -29,27 +35,68 @@ def _matches(row, query):
 
 
 class FakeCursor:
-    def __init__(self, rows):
+    def __init__(self, rows, tracker):
         self.rows = deepcopy(list(rows))
+        self.tracker = tracker
 
     async def to_list(self, length):
+        self.tracker["to_list_lengths"].append(length)
         return deepcopy(self.rows[:length])
+
+    def sort(self, fields):
+        self.tracker["sort_calls"].append(deepcopy(fields))
+        for field, direction in reversed(fields):
+            self.rows.sort(
+                key=lambda row: str(row.get(field) or "").casefold(),
+                reverse=direction < 0,
+            )
+        return self
+
+    def limit(self, length):
+        self.tracker["limit_calls"].append(length)
+        self.rows = self.rows[:length]
+        return self
+
+    def __aiter__(self):
+        self._index = 0
+        return self
+
+    async def __anext__(self):
+        if self._index >= len(self.rows):
+            raise StopAsyncIteration
+        row = deepcopy(self.rows[self._index])
+        self._index += 1
+        self.tracker["streamed_rows"] += 1
+        return row
 
 
 class FakeCollection:
-    def __init__(self, rows):
+    def __init__(self, rows, tracker):
         self.rows = rows
+        self.tracker = tracker
 
-    def find(self, query, projection=None):
-        return FakeCursor(row for row in self.rows if _matches(row, query))
+    def find(self, query, projection=None, **kwargs):
+        return FakeCursor(
+            (row for row in self.rows if _matches(row, query)),
+            self.tracker,
+        )
 
 
 class FakeDB:
     def __init__(self, collections):
         self.collections = deepcopy(collections)
+        self.cursor_tracker = {
+            "to_list_lengths": [],
+            "sort_calls": [],
+            "limit_calls": [],
+            "streamed_rows": 0,
+        }
 
     def __getitem__(self, name):
-        return FakeCollection(self.collections.setdefault(name, []))
+        return FakeCollection(
+            self.collections.setdefault(name, []),
+            self.cursor_tracker,
+        )
 
     def __getattr__(self, name):
         return self[name]
@@ -478,6 +525,93 @@ async def test_campaign_entities_selects_active_rows_before_legacy_limit():
 
 
 @pytest.mark.asyncio
+async def test_campaign_entities_normalizes_status_and_returns_stable_250():
+    eligible = [
+        {
+            "user_id": "owner-1",
+            "provider": "snapchat_ads",
+            "ad_account_id": "account-1",
+            "entity_type": "campaign",
+            "external_id": f"campaign-{index:03d}",
+            "display_name": f"Campaign {index:03d}",
+            "status": (" active " if index % 3 == 0 else
+                       "EnAbLeD\t" if index % 3 == 1 else " delivering"),
+        }
+        for index in reversed(range(module.MAX_CAMPAIGNS_PER_ACCOUNT + 1))
+    ]
+    ineligible = [{**eligible[0], "external_id": "paused", "status": " PAUSED "}]
+
+    db = FakeDB({SNAPCHAT_ENTITY_COLLECTION: [*ineligible, *eligible]})
+    campaigns, limited = await module._campaign_entities(
+        db,
+        "owner-1",
+        "account-1",
+    )
+
+    assert [row["external_id"] for row in campaigns] == [
+        f"campaign-{index:03d}" for index in range(250)
+    ]
+    assert limited is True
+    assert db.cursor_tracker == {
+        "to_list_lengths": [],
+        "sort_calls": [],
+        "limit_calls": [],
+        "streamed_rows": module.MAX_CAMPAIGNS_PER_ACCOUNT + 1,
+    }
+
+
+@pytest.mark.asyncio
+async def test_campaign_entities_uses_exact_legacy_key_at_adversarial_boundary():
+    # A case-insensitive Mongo collation groups each lower/upper ID pair and
+    # would pre-limit a different sample. The legacy raw second key puts every
+    # uppercase external ID before every lowercase external ID.
+    rows = [
+        {
+            "user_id": "owner-1",
+            "provider": "snapchat_ads",
+            "ad_account_id": "account-1",
+            "entity_type": "campaign",
+            "external_id": f"a{index:03d}",
+            "display_name": "STRASSE",
+            "status": "ACTIVE",
+        }
+        for index in range(130)
+    ] + [
+        {
+            "user_id": "owner-1",
+            "provider": "snapchat_ads",
+            "ad_account_id": "account-1",
+            "entity_type": "campaign",
+            "external_id": f"A{index:03d}",
+            "display_name": "straße",
+            "status": " enabled ",
+        }
+        for index in range(130)
+    ]
+    expected = sorted(
+        rows,
+        key=lambda row: (
+            str(row["display_name"]).strip().casefold(),
+            str(row["external_id"]).strip(),
+        ),
+    )[:module.MAX_CAMPAIGNS_PER_ACCOUNT]
+    db = FakeDB({SNAPCHAT_ENTITY_COLLECTION: rows})
+
+    campaigns, limited = await module._campaign_entities(
+        db, "owner-1", "account-1",
+    )
+
+    assert [row["external_id"] for row in campaigns] == [
+        row["external_id"] for row in expected
+    ]
+    assert limited is True
+    assert db.cursor_tracker["to_list_lengths"] == []
+    assert db.cursor_tracker["sort_calls"] == []
+    assert db.cursor_tracker["limit_calls"] == []
+    assert db.cursor_tracker["streamed_rows"] == len(rows)
+
+
+@pytest.mark.asyncio
 async def test_adsquad_window_fetch_is_parallel_and_bounded(monkeypatch):
     active = 0
     peak = 0
@@ -518,6 +652,78 @@ async def test_adsquad_window_fetch_is_parallel_and_bounded(monkeypatch):
         len(campaigns) * len(module.ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES)
     )
     assert 1 < peak <= module.ADSQUAD_FETCH_CONCURRENCY
+
+
+@pytest.mark.asyncio
+async def test_adsquad_window_creates_only_fixed_worker_tasks(monkeypatch):
+    created = 0
+    real_create_task = asyncio.create_task
+
+    def counted_create_task(coroutine):
+        nonlocal created
+        created += 1
+        return real_create_task(coroutine)
+
+    async def fake_fetch(*args, campaign_id, action_report_time, **kwargs):
+        await asyncio.sleep(0)
+        return ([{"campaign_id": campaign_id}], [], True)
+
+    monkeypatch.setattr(module.asyncio, "create_task", counted_create_task)
+    monkeypatch.setattr(module, "_fetch_campaign_adsquad_totals", fake_fetch)
+    campaigns = [{"external_id": f"campaign-{index}"} for index in range(2_000)]
+
+    results = await module._fetch_adsquad_window(
+        object(), object(), "token", campaigns=campaigns,
+        request_start=datetime(2026, 8, 8, tzinfo=timezone.utc),
+        request_end=datetime(2026, 8, 9, tzinfo=timezone.utc),
+    )
+
+    assert created == module.ADSQUAD_FETCH_CONCURRENCY
+    assert len(results) == len(campaigns) * len(
+        module.ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES
+    )
+
+
+@pytest.mark.asyncio
+async def test_adsquad_window_cancellation_emits_one_bounded_summary(monkeypatch):
+    started = asyncio.Event()
+    release = asyncio.Event()
+    summaries = []
+
+    class Metric:
+        def __init__(self, stage, **fields):
+            self.stage = stage
+            self.fields = fields
+
+        def finish(self, **fields):
+            summaries.append({"stage": self.stage, **self.fields, **fields})
+
+    async def blocked_fetch(*args, **kwargs):
+        started.set()
+        await release.wait()
+
+    monkeypatch.setattr(module, "StageMetric", Metric)
+    monkeypatch.setattr(module, "_fetch_campaign_adsquad_totals", blocked_fetch)
+    task = asyncio.create_task(module._fetch_adsquad_window(
+        object(), object(), "super-secret-token",
+        campaigns=[{"external_id": "private-campaign-id"}],
+        request_start=datetime(2026, 8, 8, tzinfo=timezone.utc),
+        request_end=datetime(2026, 8, 9, tzinfo=timezone.utc),
+    ))
+    await started.wait()
+    task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert len(summaries) == 1
+    assert summaries[0]["status"] == "cancelled"
+    assert set(summaries[0]) <= {
+        "stage", "concurrency", "status", "requested", "completed",
+    }
+    assert "private-campaign-id" not in repr(summaries)
+    assert "super-secret-token" not in repr(summaries)
+    assert "http" not in repr(summaries).lower()
     assert module.ADSQUAD_REFRESH_SOURCE_MODE.endswith(
         "ad_squad_active_bounded_total_v4"
     )
