@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from copy import deepcopy
 from datetime import date, datetime, timezone
 
@@ -10,6 +11,45 @@ from integrations_control_center import snapchat_native_entities_sync as native_
 from integrations_control_center.snapchat_native_data_common import (
     SNAPCHAT_ENTITY_COLLECTION,
 )
+
+
+@pytest.mark.asyncio
+async def test_ad_window_creates_fixed_workers_and_preserves_request_order(monkeypatch):
+    created = 0
+    calls = []
+    real_create_task = asyncio.create_task
+
+    def counted_create_task(coroutine):
+        nonlocal created
+        created += 1
+        return real_create_task(coroutine)
+
+    async def fake_fetch(*args, campaign_id, action_report_time, **kwargs):
+        calls.append((campaign_id, action_report_time))
+        await asyncio.sleep(0)
+        return ([{"campaign_id": campaign_id}], [], True)
+
+    monkeypatch.setattr(module.asyncio, "create_task", counted_create_task)
+    monkeypatch.setattr(module, "_fetch_campaign_ad_totals", fake_fetch)
+    campaigns = [{"external_id": f"campaign-{index}"} for index in range(2_000)]
+
+    results = await module._fetch_ad_window(
+        object(), object(), "token", campaigns=campaigns,
+        request_start=datetime(2026, 8, 8, tzinfo=timezone.utc),
+        request_end=datetime(2026, 8, 9, tzinfo=timezone.utc),
+    )
+    expected = [
+        (campaign["external_id"], action_report_time)
+        for campaign in campaigns
+        for action_report_time in module.ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES
+    ]
+
+    assert created == module.AD_FETCH_CONCURRENCY
+    assert len(calls) == len(expected)
+    assert [
+        (result["campaign_id"], result["action_report_time"])
+        for result in results
+    ] == expected
 
 
 def _matches(row, query):
