@@ -22,6 +22,23 @@ from order_review_routes import (
 
 WAITING_CUSTOMER_REVIEW_STAGE = "waiting_customer_review"
 PENDING_REVIEW_STAGE = "pending_review"
+CURRENT_REVIEW_STATUSES = {
+    "under review",
+    "waiting review",
+    "pending review",
+    "بإنتظار المراجعة",
+    "بانتظار المراجعة",
+    "انتظار المراجعة",
+}
+
+
+def _is_currently_pending_review(order: Any) -> bool:
+    """Keep the Mezan waiting queue subordinate to the real order status."""
+    for value in (getattr(order, "status", None), getattr(order, "status_native", None)):
+        normalized = " ".join(_text(value).casefold().replace("_", " ").split())
+        if normalized in CURRENT_REVIEW_STATUSES:
+            return True
+    return False
 
 
 class CustomerWaitingStageRequest(BaseModel):
@@ -144,10 +161,6 @@ def make_order_review_customer_waiting_router(
     ) -> dict[str, Any]:
         reviewer = _require_reviewer(user)
         user_id = _merchant_user_id(reviewer)
-        count = await db[WORKFLOWS].count_documents({
-            "user_id": user_id,
-            "stage": WAITING_CUSTOMER_REVIEW_STAGE,
-        })
         workflows = await db[WORKFLOWS].find(
             {
                 "user_id": user_id,
@@ -169,8 +182,10 @@ def make_order_review_customer_waiting_router(
                 )
             except OrderNotFoundError:
                 continue
+            if not _is_currently_pending_review(order):
+                continue
             items.append(customer_waiting_summary(order, workflow))
-        return {"count": count, "items": items}
+        return {"count": len(items), "items": items}
 
     @router.post("/{order_number}/wait")
     async def move_to_customer_waiting(
