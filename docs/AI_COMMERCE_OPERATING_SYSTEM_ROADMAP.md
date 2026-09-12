@@ -338,3 +338,70 @@ Gate: Proven reliability over an agreed observation period, with no bypass of fi
 This roadmap is binding but does not authorize premature implementation.
 
 The current implementation gate remains Order Engine and Order Item Engine completion. Marketing, customer-conversation, content-generation and autonomous campaign work must wait for their defined phases and acceptance gates.
+
+
+## 10. Explicit Growth Intelligence Objectives
+
+The following objectives refine existing engines without bypassing the phase gates above. Their detailed integration contract is documented in [MEZAN_GROWTH_INTELLIGENCE_EXTENSION.md](MEZAN_GROWTH_INTELLIGENCE_EXTENSION.md).
+
+### Lifecycle and Retention Intelligence
+
+Mezan must progress from calculating repeat-purchase probability and customer lifetime value to operating measurable lifecycle programs. It must:
+
+- Detect useful, consented lifecycle moments such as first-purchase follow-up, replenishment, win-back and high-value-customer recovery.
+- Recommend the next best product, offer, channel and contact time using profit, stock, delivery capacity and customer history.
+- Measure incremental repeat orders, contribution profit, opt-outs and complaint impact against control groups.
+- Apply frequency caps, consent rules and channel-specific policy before any message is prepared or sent.
+
+This extends the Customer Journey, Voice of Customer and Commerce Executive engines; it is not a separate source of customer truth.
+
+### Service-to-Revenue Intelligence
+
+Mezan must treat pre-sale and post-sale conversations as both service evidence and a controlled growth signal. It must:
+
+- Detect purchase intent, objections and unresolved questions.
+- Link conversations to customer, session, product, order and campaign when identity evidence permits.
+- Recommend factual replies, relevant products or recovery actions without inventing availability, delivery promises, discounts or policy.
+- Route sensitive, low-confidence, complaint, refund and exception cases to a human.
+- Measure response time, resolution quality, assisted conversion, repeat contact, complaints and net profit.
+
+This expands the existing Voice of Customer Engine from analysis into a governed support copilot.
+
+### AI Discovery and Answer-Engine Visibility
+
+Mezan must measure and improve whether products and store facts can be discovered and accurately represented by search engines and AI answer systems. It must:
+
+- Audit product, category, policy and merchant information for crawlability, structured data, factual consistency, source authority and answerability.
+- Track a versioned set of commercial queries and the observable citations, recommendations and errors returned by approved search or answer systems.
+- Propose content or structured-data experiments and measure qualified traffic, conversion and contribution profit.
+- Keep observed external answers separate from provider facts and Mezan recommendations.
+
+AEO/GEO is an acquisition experiment surface, not a replacement for SEO, paid acquisition or verified store facts.
+
+### External Commerce Knowledge Scout
+
+Mezan may ingest approved public research sources such as podcasts, platform documentation, industry reports and market observations into a quarantined evidence layer. It must:
+
+- Preserve source URL, publisher, publication date, retrieval time, excerpt or summary provenance and confidence.
+- Extract claims as unverified external hypotheses, never as operational facts.
+- Deduplicate ideas against the roadmap, experiment registry and prior decisions.
+- Score relevance to Amasi by expected profit impact, evidence strength, implementation cost, risk and dependency readiness.
+- Convert accepted ideas into draft experiments with owner approval, success metrics, rollback rules and an expiry/review date.
+- Record rejected and superseded ideas to prevent repeated recommendations.
+
+External content must never directly trigger campaign, pricing, customer-message or production changes.
+
+### Cross-Channel Portfolio Optimization Clarification
+
+The existing Campaign Control Engine must optimize the advertising portfolio across Snapchat, TikTok, Meta and Google Ads rather than optimizing each platform in isolation. Portfolio recommendations must use reconciled spend, attributable orders, contribution profit, marginal performance, inventory, fulfilment capacity and uncertainty. Cross-platform budget movement remains draft-only until the Phase 8 and Phase 9 controls are proven.
+
+## 11. Phase Placement
+
+- **Phase 4:** preserve search/answer visibility observations, external-research provenance and cross-channel identities as versioned facts.
+- **Phase 5:** ingest consent, conversation, lifecycle and assisted-conversion signals.
+- **Phase 6:** deliver retention scoring, service-to-revenue recommendations, AEO/GEO diagnostics, knowledge-scouter deduplication and portfolio simulations.
+- **Phase 7:** prepare reviewed lifecycle messages, support replies and answer-engine content drafts.
+- **Phase 8:** prepare approval-bound lifecycle actions, support actions and cross-channel budget proposals.
+- **Phase 9:** allow only bounded, reversible actions after incrementality, safety, privacy and reliability gates pass.
+
+None of these objectives changes the current implementation gate: Order Engine, Order Item Engine and financial truth remain prerequisites.
