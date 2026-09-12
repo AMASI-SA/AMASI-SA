@@ -14,6 +14,7 @@ from typing import Any, Callable, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 
+from accounting_clean_start_guard import require_accounting_safe_active
 from store_delivery_domain import money, normalize_text
 from store_delivery_accounting import (
     post_settlement_journal,
@@ -167,6 +168,10 @@ def make_store_delivery_settlement_router(db: Any, current_user: Callable[..., A
 
     async def _post(driver_id: str, settlement_type: SettlementType, payload: SettlementCreate, actor: dict[str, Any]) -> dict[str, Any]:
         user_id = _merchant_user_id(actor)
+        # Settlements are financial writes; block before index creation,
+        # balance lookups, GL posting, or settlement-row insertion.
+        await require_accounting_safe_active(db, user_id=user_id)
+
         driver = await _driver_or_404(db, user_id, driver_id)
         await ensure_store_delivery_settlement_indexes(db)
         totals = await _totals(db, user_id, driver_id)

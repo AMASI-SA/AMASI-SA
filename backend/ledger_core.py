@@ -486,6 +486,7 @@ async def reverse_entry(
 async def compute_balance(
     db, *, user_id: str, entity_type: str, entity_id: str,
     sub_account: Optional[str] = None,
+    operation_id: Optional[str] = None,
 ) -> dict:
     """Compute the live balance of an entity from POSTED entries only.
 
@@ -501,6 +502,9 @@ async def compute_balance(
     sub_account value are aggregated. This is critical for
     employee.{advance, custody, salary_payable} which all live under
     entity_type="employee" but represent distinct sub-ledgers.
+
+    `operation_id` is optional for legacy callers. Mezan 2 callers pass it
+    explicitly so historical ledger rows cannot affect the V2 balance.
     """
     match: dict = {
         "user_id": user_id,
@@ -520,6 +524,8 @@ async def compute_balance(
     }
     if sub_account is not None:
         match["sub_account"] = sub_account
+    if operation_id is not None:
+        match["metadata.operation_id"] = operation_id
     pipeline = [
         {"$match": match},
         {"$group": {

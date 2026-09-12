@@ -6,7 +6,6 @@ import {
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
-import { todaySA } from "../lib/dates";
 import UnifiedPaymentGatewaysCard from "../components/UnifiedPaymentGatewaysCard";
 import PendingOrdersCard from "../components/PendingOrdersCard";
 
@@ -268,14 +267,11 @@ function BankRoutingDialog({ open, onClose, onSaved }) {
 // ── Add/Edit modal ───────────────────────────────────────────────────────────
 function AccountFormModal({ initial, catalogue, banks, onClose, onSaved }) {
     const isEdit = !!initial;
-    const today = todaySA();
     const [form, setForm] = useState(() => ({
         account_type: initial?.account_type || "bank",
         name: initial?.name || "",
         provider_name: initial?.provider_name || "",
         currency: initial?.currency || "SAR",
-        opening_balance: initial?.opening_balance ?? "",
-        opening_balance_date: initial?.opening_balance_date || today,
         default_bank_account_id: initial?.default_bank_account_id || "",
         notes: initial?.notes || "",
     }));
@@ -305,8 +301,6 @@ function AccountFormModal({ initial, catalogue, banks, onClose, onSaved }) {
                     account_type: form.account_type,
                     provider_name: form.provider_name.trim() || null,
                     currency: form.currency,
-                    opening_balance: parseFloat(form.opening_balance) || 0,
-                    opening_balance_date: form.opening_balance_date,
                     notes: form.notes,
                 };
                 if (form.account_type === "payment_platform" && form.default_bank_account_id) {
@@ -385,16 +379,10 @@ function AccountFormModal({ initial, catalogue, banks, onClose, onSaved }) {
                             </select>
                         </div>
                         {!isEdit && (
-                            <>
-                                <div>
-                                    <label className="block text-sm font-semibold mb-1.5">الرصيد الافتتاحي</label>
-                                    <input type="number" step="0.01" value={form.opening_balance} onChange={(e) => set("opening_balance", e.target.value)} className={inputCls} placeholder="0.00 (يمكن أن يكون سالباً)" dir="ltr" style={{ textAlign: "right" }} data-testid="account-opening-balance-input" />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-semibold mb-1.5">تاريخ الرصيد الافتتاحي</label>
-                                    <input type="date" value={form.opening_balance_date} onChange={(e) => set("opening_balance_date", e.target.value)} className={inputCls} data-testid="account-opening-date-input" />
-                                </div>
-                            </>
+                            <div className="sm:col-span-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900" data-testid="account-opening-p07-notice">
+                                الأرصدة الافتتاحية لا تُدخل عند إنشاء الحساب. تُجمع وتُراجع وتُعتمد حصراً من
+                                {" "}<Link className="font-bold underline" to="/integrations-v2?workspace=financial&page=opening-balances">مسار P07 للأرصدة الافتتاحية</Link>.
+                            </div>
                         )}
                         {!isEdit && form.account_type === "payment_platform" && (
                             <div className="sm:col-span-2">

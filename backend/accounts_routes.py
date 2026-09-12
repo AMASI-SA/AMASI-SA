@@ -18,10 +18,10 @@ Design principles
   recompute the trail on edit/delete to keep `current_balance` honest.
 - `current_balance` lives on the account doc to avoid summing the whole
   ledger on every dashboard read.
-- Creating an account with a non-zero `opening_balance` auto-generates an
-  "opening_balance" transaction so the audit trail is complete from day 1.
-- Deletion is allowed only when the account has exactly ONE transaction
-  (the opening one) — anything richer must be hidden, not removed.
+- Account creation always starts at zero here. Opening figures belong to the
+  dedicated P07 clean-start workflow and are rejected on this legacy surface.
+- Existing opening transactions remain readable but cannot be edited or
+  deleted through these account routes.
 """
 
 from __future__ import annotations
@@ -33,6 +33,11 @@ from typing import List, Optional, Literal
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, validator
 
+from accounting_clean_start_guard import (
+    reject_accounting_v2_bypass,
+    reject_opening_balance_bypass,
+)
+from accounting_module_contract import OPERATION_ID
 from auth import get_current_user_from_db
 from payment_gateway_metrics import compute_metrics
 from reconciliation_routes import (
@@ -359,6 +364,10 @@ class AccountUpdate(BaseModel):
     status: Optional[str] = None
     default_bank_account_id: Optional[str] = None
     notes: Optional[str] = Field(None, max_length=500)
+    # Accepted only so legacy clients receive the explicit P07 denial rather
+    # than having these write-intent fields silently ignored by Pydantic.
+    opening_balance: Optional[float] = None
+    opening_balance_date: Optional[str] = None
     # Iter-111 — bank-transfer routing. List of payment_methods.py sub-keys
     # (e.g. ["bank_rajhi", "bank_ahli"]) whose order revenue this bank
     # account should receive directly instead of the generic
@@ -572,9 +581,10 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
 
     @router.post("")
     async def create_account(payload: AccountIn, user: dict = Depends(current_user)):
+        if {"opening_balance", "opening_balance_date"} & payload.model_fields_set:
+            reject_opening_balance_bypass()
+
         now = _now()
-        opening = round(float(payload.opening_balance), 2)
-        opening_date = payload.opening_balance_date or now[:10]
         account = {
             "id": str(uuid.uuid4()),
             "user_id": user["id"],
@@ -582,9 +592,9 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
             "account_type": payload.account_type,
             "provider_name": (payload.provider_name or "").strip() or None,
             "currency": payload.currency.upper(),
-            "opening_balance": opening,
-            "opening_balance_date": opening_date,
-            "current_balance": opening,  # will be re-validated by recompute
+            "opening_balance": 0.0,
+            "opening_balance_date": None,
+            "current_balance": 0.0,
             "default_bank_account_id": payload.default_bank_account_id,
             "status": "active",
             "notes": (payload.notes or "").strip(),
@@ -592,26 +602,6 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
             "updated_at": now,
         }
         await db.accounts.insert_one(account)
-
-        # Auto-create the opening balance transaction (only if non-zero).
-        if opening != 0:
-            await db.account_transactions.insert_one({
-                "id": str(uuid.uuid4()),
-                "user_id": user["id"],
-                "account_id": account["id"],
-                "transaction_type": "opening_balance",
-                "amount": abs(opening),
-                "direction": "in" if opening >= 0 else "out",
-                "description": "رصيد افتتاحي",
-                "transaction_date": opening_date,
-                "balance_after": opening,
-                "status": "posted",
-                "attachment_url": None,
-                "created_at": now,
-                "updated_at": now,
-            })
-            # Recompute (idempotent) so balance_after is canonical.
-            await _recompute_balance(db, user["id"], account["id"])
 
         return await _account_with_meta(db, user["id"], account)
 
@@ -765,6 +755,9 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
     async def update_account(
         account_id: str, payload: AccountUpdate, user: dict = Depends(current_user)
     ):
+        if {"opening_balance", "opening_balance_date"} & payload.model_fields_set:
+            reject_opening_balance_bypass()
+
         existing = await db.accounts.find_one(
             {"id": account_id, "user_id": user["id"]}
         )
@@ -833,7 +826,42 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
         )
         if not existing:
             raise HTTPException(404, "Account not found")
-        # Allow delete only if 0 or 1 (opening) transactions.
+        opening_ledger_row = await db.general_ledger.find_one(
+            {
+                "user_id": user["id"],
+                "entity_type": "bank",
+                "entity_id": account_id,
+                "entry_type": "opening_balance",
+            },
+            {"_id": 0, "id": 1},
+        )
+        if opening_ledger_row:
+            reject_opening_balance_bypass()
+        v2_ledger_row = await db.general_ledger.find_one(
+            {
+                "user_id": user["id"],
+                "entity_type": "bank",
+                "entity_id": account_id,
+                "metadata.operation_id": OPERATION_ID,
+            },
+            {"_id": 0, "id": 1},
+        )
+        if v2_ledger_row:
+            reject_accounting_v2_bypass()
+
+        opening_transaction = await db.account_transactions.find_one(
+            {
+                "user_id": user["id"],
+                "account_id": account_id,
+                "transaction_type": "opening_balance",
+            },
+            {"_id": 0, "id": 1},
+        )
+        if opening_transaction:
+            reject_opening_balance_bypass()
+
+        # Opening rows are protected above. Preserve the legacy deletion rule
+        # for non-opening transactions until the V2 account model replaces it.
         count = await db.account_transactions.count_documents(
             {"user_id": user["id"], "account_id": account_id}
         )
@@ -898,6 +926,9 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
     async def create_transaction(
         account_id: str, payload: TransactionIn, user: dict = Depends(current_user)
     ):
+        if payload.transaction_type == "opening_balance":
+            reject_opening_balance_bypass()
+
         acc = await db.accounts.find_one(
             {"id": account_id, "user_id": user["id"]}, {"_id": 0, "id": 1}
         )
@@ -931,6 +962,15 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
     async def delete_transaction(
         account_id: str, tx_id: str, user: dict = Depends(current_user)
     ):
+        existing = await db.account_transactions.find_one(
+            {"id": tx_id, "user_id": user["id"], "account_id": account_id},
+            {"_id": 0, "transaction_type": 1},
+        )
+        if not existing:
+            raise HTTPException(404, "Transaction not found")
+        if existing.get("transaction_type") == "opening_balance":
+            reject_opening_balance_bypass()
+
         res = await db.account_transactions.delete_one(
             {"id": tx_id, "user_id": user["id"], "account_id": account_id}
         )

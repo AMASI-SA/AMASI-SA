@@ -9,9 +9,9 @@ Cutoff-based migration of legacy balances to the new general_ledger:
   • Mark cutoff date in `migration_cutoffs` collection
   • IDEMPOTENT: re-running the same cutoff returns the existing snapshot
 
-Mode:
-  dry_run=True  → returns the comparison without writing opening entries
-  dry_run=False → writes opening_balance entries + cutoff marker
+Mode under the Mezan 2 clean-start policy:
+  dry_run=True  → returns the historical comparison without writing
+  dry_run=False → rejected; only P07 may create opening balances
 
 The legacy collections (liabilities, account_transactions, daily_costs,
 operating_salaries) are NEVER modified or deleted by this migration.
@@ -25,6 +25,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
+from accounting_clean_start_guard import reject_legacy_financial_migration
 from auth import get_current_user_from_db
 from ledger_core import (
     REASON_CODES,
@@ -544,17 +545,10 @@ def make_migration_router(db) -> APIRouter:
         user: dict = Depends(current_user),
     ):
         uid = user["id"]
-        # Block re-run if already completed (dry-run is always allowed)
+        # Clean-start policy: legacy figures may be inspected by dry-run, but
+        # they can never become Mezan 2 opening entries.  P07 owns that write.
         if not payload.dry_run:
-            cm = await db.migration_cutoffs.find_one(
-                {"user_id": uid, "status": "completed"}, {"_id": 0},
-            )
-            if cm:
-                raise HTTPException(
-                    400,
-                    f"الترحيل تم بالفعل بتاريخ {cm.get('cutoff_date')}. "
-                    "لا يمكن إعادته. لإعادة الترحيل اتصل بالدعم الفني.",
-                )
+            reject_legacy_financial_migration()
 
         # 1) BEFORE snapshot (legacy)
         before = {
@@ -1048,31 +1042,9 @@ def make_migration_router(db) -> APIRouter:
         Use case: the user reviewed the orphan list and confirmed the
         record is stale/insignificant and should not be migrated.
         """
-        uid = user["id"]
-        r = await db.liabilities.find_one(
-            {"user_id": uid, "id": liab_id, "kind": "supplier"},
-            {"_id": 0},
-        )
-        if not r:
-            raise HTTPException(404, "السجل غير موجود")
-        await db.liabilities.update_one(
-            {"user_id": uid, "id": liab_id},
-            {"$set": {
-                "expected_amount": 0.0,
-                "paid_amount": 0.0,
-                "status": "paid",
-                "updated_at": _now(),
-                "write_off_note": (
-                    "شطب يدوي قبل ترحيل المرحلة 4 — orphan supplier "
-                    "(غير مرتبط بأي مورد مُسجَّل)"),
-                "written_off_by": user.get("email"),
-                "written_off_at": _now(),
-            }},
-        )
-        return {"ok": True, "id": liab_id,
-                "amount_written_off": round(
-                    float(r.get("expected_amount") or 0)
-                    - float(r.get("paid_amount") or 0), 2)}
+        # This legacy recovery action mutates the source data.  Keep the
+        # diagnostic report readable, but preserve the historical row exactly.
+        reject_legacy_financial_migration()
 
     @router.get("/verify")
     async def verify_migration(user: dict = Depends(current_user)):

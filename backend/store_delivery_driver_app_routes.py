@@ -405,8 +405,9 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         accounting_patch = {
             "accounting_status": accounting_status,
             "ledger_txn_group_id": accounting.get("txn_group_id"),
-            "accounting_operation_id": "MZ2-FIN-CUTOVER-001",
         }
+        if accounting.get("txn_group_id"):
+            accounting_patch["accounting_operation_id"] = "MZ2-FIN-CUTOVER-001"
         await db[DRIVER_EARNINGS].update_one(
             {"user_id": merchant_id, "assignment_id": assignment["id"]},
             {"$set": accounting_patch},

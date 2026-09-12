@@ -13,6 +13,7 @@ from typing import Any
 
 from fastapi import HTTPException
 
+from accounting_clean_start_guard import require_accounting_safe_active
 from accounting_module_contract import OPERATION_ID
 from ledger_core import compute_balance, post_txn_group, write_audit
 
@@ -386,6 +387,7 @@ async def post_reviewed_settlement(
         raise HTTPException(409, "يجب مراجعة المسودة قبل الترحيل")
     if has_blocking_reasons(draft.get("review_reasons")):
         raise HTTPException(409, "لا يمكن ترحيل مسودة تحتوي أسباب مراجعة مفتوحة")
+    await require_accounting_safe_active(db, user_id=owner_id)
 
     provider = canonical_provider(draft.get("provider"))
     bank_id = str(draft.get("bank_account_id") or "").strip()
@@ -431,6 +433,7 @@ async def post_reviewed_settlement(
         entity_type="payment_gateway",
         entity_id=provider,
         sub_account="receivable",
+        operation_id=OPERATION_ID,
     )
     available = _money(max(float(balance.get("net_balance") or 0), 0))
     required = preview["amounts"]["provider_receivable_close"]

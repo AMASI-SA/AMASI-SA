@@ -9,6 +9,11 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from accounting_clean_start_guard import (
+    reject_accounting_v2_bypass,
+    reject_opening_balance_bypass,
+)
+from accounting_module_contract import OPERATION_ID
 from auth import get_current_user_from_db
 from fastapi import Request
 from ledger_core import (
@@ -29,6 +34,9 @@ def make_ledger_router(db) -> APIRouter:
     async def current_user(request: Request) -> dict:
         return await get_current_user_from_db(request, db)
 
+    def v2_scoped(metadata: dict | None) -> bool:
+        return str((metadata or {}).get("operation_id") or "") == OPERATION_ID
+
     # ── GET /reason-codes ───────────────────────────────────────────
     @router.get("/reason-codes")
     async def list_reason_codes(_user: dict = Depends(current_user)):
@@ -40,6 +48,11 @@ def make_ledger_router(db) -> APIRouter:
         payload: LedgerEntryIn,
         user: dict = Depends(current_user),
     ):
+        if payload.entry_type == "opening_balance":
+            reject_opening_balance_bypass()
+        if v2_scoped(payload.metadata):
+            reject_accounting_v2_bypass()
+
         status = "posted" if payload.auto_post else "draft"
         doc = await post_ledger_entry(
             db,
@@ -67,6 +80,10 @@ def make_ledger_router(db) -> APIRouter:
         )
         if not orig:
             raise HTTPException(404, "القيد غير موجود")
+        if orig.get("entry_type") == "opening_balance":
+            reject_opening_balance_bypass()
+        if v2_scoped(orig.get("metadata")):
+            reject_accounting_v2_bypass()
         if orig.get("status") != "draft":
             raise HTTPException(
                 400, "يمكن اعتماد القيود المسودة فقط (status=draft)",
@@ -96,6 +113,15 @@ def make_ledger_router(db) -> APIRouter:
         entry_id: str, payload: ReverseEntryIn,
         user: dict = Depends(current_user),
     ):
+        orig = await db.general_ledger.find_one(
+            {"id": entry_id, "user_id": user["id"]},
+            {"_id": 0, "entry_type": 1, "metadata": 1},
+        )
+        if orig and orig.get("entry_type") == "opening_balance":
+            reject_opening_balance_bypass()
+        if orig and v2_scoped(orig.get("metadata")):
+            reject_accounting_v2_bypass()
+
         rev = await reverse_entry(
             db, user_id=user["id"], actor_id=user["id"],
             actor_name=user.get("name") or user.get("email") or "",
@@ -122,10 +148,14 @@ def make_ledger_router(db) -> APIRouter:
         legs = await db.general_ledger.find(
             {"txn_group_id": group_id, "user_id": user["id"]},
             {"_id": 0, "id": 1, "status": 1,
-             "reversed_by_entry_id": 1, "entry_type": 1},
+             "reversed_by_entry_id": 1, "entry_type": 1, "metadata": 1},
         ).to_list(length=200)
         if not legs:
             raise HTTPException(404, "المجموعة غير موجودة")
+        if any(leg.get("entry_type") == "opening_balance" for leg in legs):
+            reject_opening_balance_bypass()
+        if any(v2_scoped(leg.get("metadata")) for leg in legs):
+            reject_accounting_v2_bypass()
         for leg in legs:
             if leg.get("status") != "posted":
                 raise HTTPException(
@@ -225,15 +255,14 @@ def make_ledger_router(db) -> APIRouter:
         if not groups:
             return {"ok": True, "reversed_count": 0,
                     "message": "no_backfilled_entries_found"}
-        reversed_groups: list = []
+        groups_to_reverse: list[tuple[dict, list[dict]]] = []
         for g in groups:
             gid = g["_id"]
-            # Reverse every leg atomically — same logic as
-            # /groups/{id}/reverse (kept inline to avoid recursion).
             legs = await db.general_ledger.find(
                 {"txn_group_id": gid, "user_id": user["id"]},
                 {"_id": 0, "id": 1, "status": 1,
-                 "reversed_by_entry_id": 1},
+                 "reversed_by_entry_id": 1, "entry_type": 1,
+                 "metadata": 1},
             ).to_list(length=20)
             if not legs:
                 continue
@@ -242,6 +271,29 @@ def make_ledger_router(db) -> APIRouter:
                 continue
             if any(leg.get("status") != "posted" for leg in legs):
                 continue
+            groups_to_reverse.append((g, legs))
+
+        # Validate the entire batch before the first reversal. A mixed legacy
+        # cleanup must not partially mutate data and only then discover an MZ2
+        # leg in a later group.
+        if any(
+            leg.get("entry_type") == "opening_balance"
+            for _group, legs in groups_to_reverse
+            for leg in legs
+        ):
+            reject_opening_balance_bypass()
+        if any(
+            v2_scoped(leg.get("metadata"))
+            for _group, legs in groups_to_reverse
+            for leg in legs
+        ):
+            reject_accounting_v2_bypass()
+
+        reversed_groups: list = []
+        for g, legs in groups_to_reverse:
+            gid = g["_id"]
+            # Reverse every leg atomically — same logic as
+            # /groups/{id}/reverse (kept inline to avoid recursion).
             for leg in legs:
                 await reverse_entry(
                     db, user_id=user["id"], actor_id=user["id"],
@@ -276,6 +328,9 @@ def make_ledger_router(db) -> APIRouter:
         payload: AdjustmentIn,
         user: dict = Depends(current_user),
     ):
+        if v2_scoped(payload.metadata):
+            reject_accounting_v2_bypass()
+
         # Map direction → ledger side:
         # reduce_debt   → debit  (acts like a payment / settlement / writeoff)
         # increase_debt → credit (acts like adding more obligation)

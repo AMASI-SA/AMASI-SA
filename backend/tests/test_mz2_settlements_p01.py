@@ -136,12 +136,15 @@ class _Collection:
         self.document = document
         self.inserted = []
         self.find_one_queries = []
+        self.aggregate_pipelines = []
 
     async def find_one(self, query, *_args, **_kwargs):
         self.find_one_queries.append(query)
         return self.document
 
-    def aggregate(self, _pipeline):
+    def aggregate(self, pipeline):
+        self.aggregate_pipelines.append(pipeline)
+
         async def rows():
             yield {"_id": "debit", "total": 900, "count": 1}
         return rows()
@@ -166,6 +169,11 @@ async def test_post_snapshots_bank_and_uses_one_balanced_group(monkeypatch):
     })
     captured = {}
     post_count = 0
+
+    async def allow_p07(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(service, "require_accounting_safe_active", allow_p07)
 
     async def fake_post(*_args, **kwargs):
         nonlocal post_count
@@ -216,6 +224,9 @@ async def test_post_snapshots_bank_and_uses_one_balanced_group(monkeypatch):
         "id": "bank-1",
         "account_type": {"$in": ["bank", "cash"]},
     }]
+    assert db.general_ledger.aggregate_pipelines[0][0]["$match"][
+        "metadata.operation_id"
+    ] == service.OPERATION_ID
     assert len(db.accounting_audit_log.inserted) == 1
     assert db.accounting_audit_log.inserted[0]["user_id"] == "owner-1"
     assert round(sum(
@@ -258,6 +269,11 @@ async def test_post_fails_closed_for_review_reasons_and_unbalanced_preview(monke
         "idempotency_key": "idem-1",
         "amounts": _salla_amounts(),
     }
+
+    async def allow_p07(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(service, "require_accounting_safe_active", allow_p07)
 
     with pytest.raises(HTTPException) as review_error:
         await service.post_reviewed_settlement(
@@ -360,6 +376,91 @@ async def test_authoritative_post_route_denies_employee_without_mutation():
 
 
 @pytest.mark.asyncio
+async def test_p01_post_is_locked_before_draft_claim_or_service_lookup():
+    class Tripwire:
+        def __init__(self):
+            self.calls = 0
+
+        def __getattr__(self, operation):
+            async def fail(*_args, **_kwargs):
+                self.calls += 1
+                raise AssertionError(f"unexpected P01 operation: {operation}")
+            return fail
+
+    class Users:
+        def __init__(self):
+            self.find_calls = 0
+
+        async def find_one(self, query, *_args, **_kwargs):
+            self.find_calls += 1
+            assert query == {"id": "owner-1"}
+            return {"id": "owner-1", "role": "owner", "name": "Owner"}
+
+    class Db:
+        def __init__(self):
+            self.users = Users()
+            self.accounting_settlements_v2 = Tripwire()
+            self.accounts = Tripwire()
+            self.general_ledger = Tripwire()
+            self.accounting_audit_log = Tripwire()
+
+    async def current_user():
+        return {"id": "owner-1", "role": "owner", "name": "Owner"}
+
+    db = Db()
+    app = FastAPI()
+    app.include_router(
+        make_financial_provider_apps_router(db, current_user), prefix="/api",
+    )
+    expected = {
+        "code": "accounting_cutover_not_safe_active",
+        "operation_id": service.OPERATION_ID,
+        "message": "الكتابة المحاسبية مقفلة حتى اكتمال P07 وتحقق safe_active",
+    }
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test",
+    ) as client:
+        for _ in range(2):
+            response = await client.post(
+                "/api/financial-provider-apps/accounting-module/settlements/"
+                "drafts/draft-1/post",
+                json={},
+            )
+            assert response.status_code == 409
+            assert response.json()["detail"] == expected
+
+    for collection in (
+        db.accounting_settlements_v2,
+        db.accounts,
+        db.general_ledger,
+        db.accounting_audit_log,
+    ):
+        assert collection.calls == 0
+
+    with pytest.raises(HTTPException) as exc:
+        await service.post_reviewed_settlement(
+            db,
+            owner_id="owner-1",
+            actor={"id": "accountant-1"},
+            draft={
+                "status": "reviewed",
+                "provider": "salla",
+                "bank_account_id": "bank-1",
+                "review_reasons": [],
+            },
+        )
+    assert exc.value.status_code == 409
+    assert exc.value.detail == expected
+    for collection in (
+        db.accounting_settlements_v2,
+        db.accounts,
+        db.general_ledger,
+        db.accounting_audit_log,
+    ):
+        assert collection.calls == 0
+
+
+@pytest.mark.asyncio
 async def test_post_rejects_insufficient_canonical_provider_receivable(monkeypatch):
     db = _Db(bank={
         "id": "bank-1",
@@ -367,10 +468,17 @@ async def test_post_rejects_insufficient_canonical_provider_receivable(monkeypat
         "account_type": "bank",
     })
 
-    async def fake_balance(*_args, **_kwargs):
+    balance_call = {}
+
+    async def fake_balance(*_args, **kwargs):
+        balance_call.update(kwargs)
         return {"net_balance": 100}
 
+    async def allow_p07(*_args, **_kwargs):
+        return None
+
     monkeypatch.setattr(service, "compute_balance", fake_balance)
+    monkeypatch.setattr(service, "require_accounting_safe_active", allow_p07)
 
     with pytest.raises(HTTPException) as error:
         await service.post_reviewed_settlement(
@@ -390,6 +498,7 @@ async def test_post_rejects_insufficient_canonical_provider_receivable(monkeypat
         )
     assert error.value.status_code == 409
     assert "ذمة سلة غير كافية" in str(error.value.detail)
+    assert balance_call["operation_id"] == service.OPERATION_ID
 
 
 def test_router_registers_full_p01_settlement_contract():

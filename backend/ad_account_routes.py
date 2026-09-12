@@ -43,6 +43,10 @@ from typing import Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from accounting_clean_start_guard import (
+    reject_legacy_financial_migration,
+    reject_opening_balance_bypass,
+)
 from auth import get_current_user_from_db
 from tz_utils import riyadh_today_iso
 
@@ -91,6 +95,11 @@ class CreateAdAccountIn(BaseModel):
     # spend by this exact ID so multi-account users get independent
     # debt per account.
     external_account_id: Optional[str] = Field(None, max_length=120)
+    # Legacy clients may still send these fields. Model them explicitly so the
+    # route can return the P07-only policy error before creating anything.
+    opening_balance: Optional[float] = None
+    opening_debt: Optional[float] = None
+    opening_start_date: Optional[str] = None
 
 
 class UpdateAdAccountIn(BaseModel):
@@ -99,6 +108,11 @@ class UpdateAdAccountIn(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=160)
     notes: Optional[str] = Field(None, max_length=2000)
     external_account_id: Optional[str] = Field(None, max_length=120)
+    # Explicitly model legacy bypass fields so attempts fail with the P07
+    # policy response instead of being silently ignored.
+    opening_balance: Optional[float] = None
+    opening_debt: Optional[float] = None
+    opening_start_date: Optional[str] = None
 
 
 class TopupEditIn(BaseModel):
@@ -138,13 +152,11 @@ class MigrationApplyIn(BaseModel):
 
 
 class OpeningIn(BaseModel):
-    """Manual opening figures for an ad account.
+    """Legacy opening payload retained for an explicit P07-only denial.
 
-    All fields are optional — pass only what you want to set. The
-    endpoint writes an `opening` ledger row + (if `opening_debt > 0`)
-    creates / refreshes a dedicated open liability tagged
-    source=ad_account_opening so it's auditable & non-conflicting with
-    the auto sync liabilities (source=ad_account_engine|ad_account_cron).
+    The endpoint rejects before account lookup or mutation. Keeping the schema
+    preserves a stable validated response for older clients while P07 owns all
+    new opening-balance writes.
     """
     opening_balance: Optional[float] = Field(None, ge=0)
     opening_debt: Optional[float] = Field(None, ge=0)
@@ -1552,6 +1564,11 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
         """Inline shortcut — creates a counterparty(kind=ad_account)
         + initialises balance=0 and debt_mode=auto. Re-uses the
         counterparties duplicate-guard helpers."""
+        if {
+            "opening_balance", "opening_debt", "opening_start_date",
+        } & payload.model_fields_set:
+            reject_opening_balance_bypass()
+
         from counterparties_routes import _norm, _fuzzy_match
 
         name = payload.name.strip()
@@ -1614,6 +1631,11 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
         cp_id: str, payload: UpdateAdAccountIn,
         user: dict = Depends(current_user),
     ):
+        if {
+            "opening_balance", "opening_debt", "opening_start_date",
+        } & payload.model_fields_set:
+            reject_opening_balance_bypass()
+
         await _get_account(db, user["id"], cp_id)
         upd = {"updated_at": _now()}
         if payload.name is not None:
@@ -2036,6 +2058,8 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
         Returns per-account: rows_posted, total_spend_applied, debt_created,
         balance_after, debt_after.
         """
+        reject_legacy_financial_migration()
+
         if not payload.account_ids:
             raise HTTPException(400, "يجب اختيار حساب واحد على الأقل")
         results: list[dict] = []
@@ -2335,6 +2359,8 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
         """
         params = dict(request.query_params)
         dry_run = (params.get("dry_run", "true").lower() != "false")
+        if not dry_run:
+            reject_legacy_financial_migration()
 
         scanned = 0
         ledger_removed = 0
@@ -2494,11 +2520,9 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
         cp_id: str, payload: OpeningIn,
         user: dict = Depends(current_user),
     ):
-        """Set / refresh the manual opening figures for an ad account.
+        """Reject the retired ad-account opening writer in favor of P07."""
+        reject_opening_balance_bypass()
 
-        Each fields is optional — only fields present in the payload are
-        applied. Writes a ledger entry of type=opening for full audit.
-        """
         cp = await _get_account(db, user["id"], cp_id)
         upd: dict = {"updated_at": _now()}
         ledger_changes: dict = {}
