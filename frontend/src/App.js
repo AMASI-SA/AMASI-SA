@@ -96,7 +96,6 @@ import SettlementsOverview from "./pages/SettlementsOverview";
 import AlertsPage from "./pages/AlertsPage";
 import UnifiedEntryScreen from "./pages/UnifiedEntryScreen";
 import LedgerTransactionsPage from "./pages/LedgerTransactionsPage";
-import MigrationWizard from "./pages/MigrationWizard";
 import LegacyRedirect from "./components/LegacyRedirect";
 import EmployeesLedger from "./pages/EmployeesLedger";
 import EmployeeCorrections from "./pages/EmployeeCorrections";
@@ -231,7 +230,7 @@ function AppRoutes() {
             <Route path="/alerts" element={<ProtectedRoute><Layout><AlertsPage /></Layout></ProtectedRoute>} />
             <Route path="/new-transaction" element={<ProtectedRoute><Layout><UnifiedEntryScreen /></Layout></ProtectedRoute>} />
             <Route path="/transactions" element={<ProtectedRoute><Layout><LedgerTransactionsPage /></Layout></ProtectedRoute>} />
-            <Route path="/accounting/migration" element={<ProtectedRoute><Layout><MigrationWizard /></Layout></ProtectedRoute>} />
+            <Route path="/accounting/migration" element={<ProtectedRoute><Navigate to="/integrations-v2?workspace=financial&page=opening-balances" replace /></ProtectedRoute>} />
             <Route path="/employees-ledger" element={<ProtectedRoute><Layout><EmployeesLedger /></Layout></ProtectedRoute>} />
             <Route path="/employee-corrections" element={<ProtectedRoute><Layout><EmployeeCorrections /></Layout></ProtectedRoute>} />
             <Route path="/salary-reversals" element={<ProtectedRoute><Layout><SalaryReversals /></Layout></ProtectedRoute>} />

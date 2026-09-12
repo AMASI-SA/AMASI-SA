@@ -557,7 +557,7 @@ function LedgerDialog({ row, open, onClose, onSaved }) {
 
 
 // ── Migration Preview + Apply dialog (Iter-110) ─────────────────────
-function MigrationDialog({ open, onClose, onSaved }) {
+function MigrationDialog({ open, onClose }) {
     const monthStart = () => monthStartSA();
     const [step, setStep] = useState(1);            // 1 = pick dates · 2 = review · 3 = done
     const [form, setForm] = useState({ from_date: monthStart(), to_date: todayIso() });
@@ -609,26 +609,8 @@ function MigrationDialog({ open, onClose, onSaved }) {
         setSelected(next);
     };
 
-    const apply = async () => {
-        const ids = Object.entries(selected).filter(([, v]) => v).map(([k]) => k);
-        if (ids.length === 0) { toast.error("اختر حساباً واحداً على الأقل"); return; }
-        if (!window.confirm(
-            `سيتم ترحيل ${ids.length} حساب بوضع ${mode === "daily" ? "يومي (سطر لكل يوم)" : "إجمالي مجمّع"}. ` +
-            `لا يمكن التراجع تلقائياً — راجع المعاينة جيداً. هل أنت متأكد؟`
-        )) return;
-        setBusy(true);
-        try {
-            const { data } = await api.post("/ad-accounts/migration/apply", {
-                from_date: form.from_date, to_date: form.to_date,
-                mode, account_ids: ids,
-            });
-            setResult(data);
-            setStep(3);
-            onSaved();
-            toast.success(`تم الترحيل لـ ${data.results.filter((r) => r.ok).length} حساب`);
-        } catch (e) {
-            toast.error(formatApiErrorDetail(e.response?.data?.detail) || "فشل الترحيل");
-        } finally { setBusy(false); }
+    const apply = () => {
+        toast.error("الترحيل التاريخي متوقف. تُدخل الأرصدة الافتتاحية لميزان 2 عبر مسار P07 فقط.");
     };
 
     const totalSelected = preview?.accounts
@@ -896,12 +878,12 @@ function MigrationDialog({ open, onClose, onSaved }) {
 
 
 // ── Opening Balance dialog (Iter-110) ───────────────────────────────
-function OpeningDialog({ row, open, onClose, onSaved }) {
+function OpeningDialog({ row, open, onClose }) {
     const [form, setForm] = useState({
         opening_balance: "", opening_debt: "",
         start_date: todayIso(), method: "auto", notes: "",
     });
-    const [busy, setBusy] = useState(false);
+    const [busy] = useState(false);
 
     useEffect(() => {
         if (!open || !row) return;
@@ -916,24 +898,9 @@ function OpeningDialog({ row, open, onClose, onSaved }) {
 
     if (!open || !row) return null;
 
-    const submit = async (e) => {
+    const submit = (e) => {
         e?.preventDefault?.();
-        const payload = {
-            opening_balance: form.opening_balance === "" ? null : Number(form.opening_balance),
-            opening_debt:    form.opening_debt === "" ? null : Number(form.opening_debt),
-            start_date:      form.start_date || null,
-            method:          form.method,
-            notes:           form.notes || null,
-        };
-        setBusy(true);
-        try {
-            await api.put(`/ad-accounts/${row.id}/opening`, payload);
-            toast.success("تم حفظ الرصيد الافتتاحي");
-            onSaved();
-            onClose();
-        } catch (e) {
-            toast.error(formatApiErrorDetail(e.response?.data?.detail) || "فشل الحفظ");
-        } finally { setBusy(false); }
+        toast.error("تعديل الرصيد الافتتاحي من الحساب الإعلاني متوقف. استخدم مسار P07.");
     };
 
     return (
@@ -1130,51 +1097,6 @@ export default function AdAccounts() {
                 <div className="flex flex-col sm:flex-row gap-2 self-start">
                     <button onClick={runDiagnose} disabled={diagBusy} className="px-4 py-2.5 rounded-lg bg-blue-100 text-blue-800 text-sm font-bold hover:bg-blue-200 flex items-center gap-2 disabled:opacity-50" data-testid="adacc-diagnose-btn">
                         🩺 {diagBusy ? "جاري التشخيص…" : "تشخيص المزامنة"}
-                    </button>
-                    <button onClick={() => setMigrationOpen(true)} className="px-4 py-2.5 rounded-lg bg-amber-100 text-amber-800 text-sm font-bold hover:bg-amber-200 flex items-center gap-2" data-testid="adacc-migration-btn">
-                        <ArrowsClockwise size={16} /> ترحيل المديونيات التاريخية
-                    </button>
-                    <button
-                        onClick={async () => {
-                            try {
-                                const { data: preview } = await api.post(
-                                    "/ad-accounts/migration/cleanup-duplicates?dry_run=true",
-                                );
-                                const s = preview.summary || {};
-                                if ((s.duplicate_ledger_rows_removed || 0) === 0
-                                    && (s.duplicate_liabilities_merged || 0) === 0) {
-                                    toast.success("لا توجد ترحيلات مكررة — حسابك نظيف ✨");
-                                    return;
-                                }
-                                const lines = [
-                                    `سيتم تنظيف الترحيلات المُكرّرة:`,
-                                    `• حسابات تم فحصها: ${s.counterparties_scanned}`,
-                                    `• سطور سيتم حذفها: ${s.duplicate_ledger_rows_removed}`,
-                                    `• مديونيات مكررة سيتم دمجها: ${s.duplicate_liabilities_merged}`,
-                                    `• رصيد سيُستعاد: ${(s.balance_restored || 0).toLocaleString()} ر.س`,
-                                    `• قيمة مديونية ستُخصم: ${(s.liability_amount_reduced || 0).toLocaleString()} ر.س`,
-                                    ``,
-                                    `هل تريد المتابعة؟ (لا يمكن التراجع)`,
-                                ].join("\n");
-                                if (!window.confirm(lines)) return;
-                                const { data: applied } = await api.post(
-                                    "/ad-accounts/migration/cleanup-duplicates?dry_run=false",
-                                );
-                                const a = applied.summary || {};
-                                toast.success(
-                                    `تم التنظيف · ${a.duplicate_ledger_rows_removed} سطر · `
-                                    + `${a.duplicate_liabilities_merged} مديونية مدموجة`
-                                );
-                                load();
-                            } catch (e) {
-                                toast.error(formatApiErrorDetail(e.response?.data?.detail) || "فشل التنظيف");
-                            }
-                        }}
-                        className="px-4 py-2.5 rounded-lg bg-rose-100 text-rose-800 text-sm font-bold hover:bg-rose-200 flex items-center gap-2"
-                        data-testid="adacc-cleanup-duplicates-btn"
-                        title="ينظّف الترحيلات المكررة من قبل إصلاح Iter-133"
-                    >
-                        🧹 تنظيف الترحيلات المُكرّرة
                     </button>
                     <button
                         onClick={async () => {
@@ -1407,9 +1329,6 @@ export default function AdAccounts() {
                                     </button>
                                     <button onClick={() => setLedgerFor(row)} className="px-3 py-2 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200 transition-colors" data-testid={`adacc-ledger-btn-${row.id}`}>
                                         <ListBullets size={12} className="inline ml-1" /> السجل
-                                    </button>
-                                    <button onClick={() => setOpeningFor(row)} className="px-3 py-2 rounded-lg bg-amber-100 text-amber-800 text-xs font-bold hover:bg-amber-200 transition-colors" data-testid={`adacc-opening-btn-${row.id}`} title="رصيد افتتاحي يدوي">
-                                        ⚙️ افتتاحي
                                     </button>
                                     <button
                                         onClick={async () => {
@@ -2014,4 +1933,3 @@ function AccountingActionsPanel({ row, onDone, fmt }) {
         </div>
     );
 }
-

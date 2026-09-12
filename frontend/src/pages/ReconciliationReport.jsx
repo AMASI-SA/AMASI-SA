@@ -1,33 +1,16 @@
-// Iter-164 — Reconciliation Report Page (clarity edition)
-//
-// Before this iteration, users were confused by the report:
-// "Why does Ledger show 0 for everyone? Why is match=21%?"
-// The answer was: the migration was NEVER executed; Dry Run only PLANS
-// opening balances, it doesn't post them. The report previously
-// compared legacy vs current-empty-ledger which always looked terrible
-// pre-migration.
-//
-// This redesign makes the migration state explicit and presents:
-//   • Migration status banner (executed / not executed)
-//   • Three columns: قديم / Ledger الحالي / المتوقّع بعد الترحيل
-//   • Per-employee dynamic-accrual breakdown
-//   • Orphan supplier liabilities surfaced separately
-//   • An «تنفيذ الترحيل النهائي» button right inside the report
+// Legacy reconciliation remains available as a read-only reference.
+// Mezan 2 is a clean start: opening balances are entered through P07 only.
 
 import React, { useState, useEffect } from "react";
 import api from "../lib/api";
 import { toast } from "sonner";
-import { todaySA } from "../lib/dates";
 
 const fmt = (n) => Number(n || 0).toLocaleString(
     "en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-const todayIso = todaySA;
-
 export default function ReconciliationReport() {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [migrating, setMigrating] = useState(false);
 
     const load = async () => {
         setLoading(true);
@@ -38,32 +21,6 @@ export default function ReconciliationReport() {
         finally { setLoading(false); }
     };
     useEffect(() => { load(); }, []);
-
-    const runMigration = async () => {
-        if (!data) return;
-        const cutoff = todayIso();
-        const ok = window.confirm(
-            "تأكيد تنفيذ الترحيل النهائي:\n\n" +
-            `• تاريخ القطع: ${cutoff}\n` +
-            `• إجمالي ما سيتم ترحيله: ${fmt(data.summary.will_post_after_migration)} ر.س\n` +
-            `• عدد الكيانات: ${data.summary.total_entities}\n\n` +
-            "بعد التنفيذ، ستظهر هذه الأرصدة كقيود افتتاحية في دفتر الأستاذ الموحّد، " +
-            "وسيُسجَّل تاريخ القطع. لا يمكن التراجع بنفسك.\n\nالمتابعة؟"
-        );
-        if (!ok) return;
-        setMigrating(true);
-        try {
-            const { data: r } = await api.post(
-                "/accounting/migration/run",
-                { cutoff_date: cutoff, dry_run: false });
-            toast.success(
-                `تم الترحيل بنجاح · ${r.applied_count} قيد افتتاحي`,
-                { duration: 8000 });
-            await load();
-        } catch (e) {
-            toast.error(e?.response?.data?.detail || "فشل الترحيل");
-        } finally { setMigrating(false); }
-    };
 
     if (loading || !data) {
         return <div className="p-8 text-center text-slate-400">جاري التحميل...</div>;
@@ -82,7 +39,7 @@ export default function ReconciliationReport() {
                             🔍 تقرير المطابقة (Reconciliation)
                         </h1>
                         <p className="text-xs text-slate-500 mt-1">
-                            مقارنة دقيقة بين النظام القديم ودفتر الأستاذ الموحّد، مع توضيح ما سيحدث بعد تنفيذ الترحيل.
+                            مرجع قراءة فقط لمقارنة بيانات النظام القديم بدفتر الأستاذ الموحّد؛ لا تُرحّل منه أي قيود.
                         </p>
                     </div>
                     <button onClick={load}
@@ -93,9 +50,7 @@ export default function ReconciliationReport() {
                 </div>
 
                 {/* Iter-164 — Migration state banner */}
-                <MigrationStateBanner
-                    ms={ms} s={s} migrating={migrating}
-                    onRun={runMigration} />
+                <MigrationStateBanner ms={ms} />
 
                 {/* Summary cards */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
@@ -104,11 +59,11 @@ export default function ReconciliationReport() {
                         label={ms.completed ? "مطابق ✓" : "مطابق حالياً ✓"}
                         value={s.matched} color="emerald" suffix="" />
                     <SumCard
-                        label={ms.completed ? "غير مطابق ✗" : "بانتظار الترحيل"}
+                        label={ms.completed ? "غير مطابق ✗" : "فرق مرجعي"}
                         value={s.mismatched}
                         color={ms.completed ? "rose" : "amber"} suffix="" />
                     <SumCard
-                        label={ms.completed ? "نسبة التطابق" : "نسبة التطابق المتوقّعة"}
+                        label={ms.completed ? "نسبة التطابق" : "نسبة المحاكاة القديمة"}
                         value={ms.completed ? s.match_percentage : s.projected_match_percentage}
                         color={
                             (ms.completed ? s.match_percentage : s.projected_match_percentage) >= 100
@@ -116,14 +71,14 @@ export default function ReconciliationReport() {
                         suffix="%" />
                 </div>
 
-                {/* Will-post-after-migration card (pre-migration only) */}
+                {/* Legacy projection card (read-only; never posted to Mezan 2) */}
                 {!ms.completed && (
                     <div className="bg-indigo-50 border border-indigo-300 rounded-lg p-3 mb-4">
                         <div className="text-sm font-bold text-indigo-900">
-                            💰 سيتم ترحيله كقيود افتتاحية: <span className="num">{fmt(s.will_post_after_migration)} ر.س</span>
+                            📚 إجمالي المحاكاة من النظام القديم: <span className="num">{fmt(s.will_post_after_migration)} ر.س</span>
                         </div>
                         <div className="text-xs text-indigo-700 mt-1">
-                            هذا هو إجمالي الأرصدة من النظام القديم (الرواتب المستحقة، السلف، الموردين، البنوك...) التي ستُسجَّل تلقائياً في دفتر الأستاذ عند تنفيذ الترحيل.
+                            قيمة مرجعية للقراءة فقط؛ لن تُنسخ أو تُسجَّل تلقائياً في دفتر ميزان 2.
                         </div>
                     </div>
                 )}
@@ -136,7 +91,7 @@ export default function ReconciliationReport() {
                         </div>
                         <div className="text-xs text-amber-800 mt-1">
                             هذه السجلات موجودة في النظام القديم لكنها غير مرتبطة بأي مورد مُسجَّل.
-                            <strong> لن تُرحَّل تلقائياً عند تنفيذ الترحيل.</strong>
+                            <strong> ستبقى مرجعاً تاريخياً ولن تُرحَّل إلى ميزان 2.</strong>
                         </div>
                         <details className="mt-2" open>
                             <summary className="cursor-pointer text-xs font-bold text-amber-900">عرض التفاصيل الكاملة</summary>
@@ -167,26 +122,6 @@ export default function ReconciliationReport() {
                                                 <span className="text-slate-700 font-bold">💡 التوصية:</span> {x.recommended_action}
                                             </div>
                                         </div>
-                                        <div className="flex gap-2 justify-end">
-                                            <button
-                                                onClick={async () => {
-                                                    if (!window.confirm(
-                                                        `سيتم شطب هذا السجل (تصفيره) وعدم ترحيله. ` +
-                                                        `قيمة: ${fmt(x.remaining)} ر.س.\nالمتابعة؟`)) return;
-                                                    try {
-                                                        await api.post(`/accounting/migration/orphan-suppliers/${x.id}/write-off`);
-                                                        toast.success(`تم شطب السجل (${fmt(x.remaining)} ر.س)`);
-                                                        load();
-                                                    } catch (e) {
-                                                        toast.error(e?.response?.data?.detail || "فشل");
-                                                    }
-                                                }}
-                                                className="px-2 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold"
-                                                data-testid={`orphan-writeoff-${x.id}`}
-                                                title="يصفر السجل ويحفظه في السجل التاريخي بدون ترحيله">
-                                                🗑 شطب وعدم ترحيل
-                                            </button>
-                                        </div>
                                     </li>
                                 ))}
                             </ul>
@@ -212,10 +147,10 @@ export default function ReconciliationReport() {
                         ? "text-emerald-900"
                         : ms.completed ? "text-rose-900" : "text-amber-900"}`}>
                         {safe
-                            ? "✅ آمن: نسبة التطابق 100% وتم تنفيذ الترحيل. يمكنك المضي قدماً لإغلاق المرحلة القديمة."
+                            ? "ℹ️ المرجع القديم متطابق؛ لا يمنح ذلك صلاحية نسخ الأرصدة إلى ميزان 2."
                             : ms.completed
-                                ? "❌ غير آمن: الترحيل نُفّذ لكن توجد فروقات يجب تفسيرها."
-                                : "⏳ بانتظار الترحيل: نسبة التطابق ستصبح 100% فور تنفيذ الترحيل (إذا كانت بيانات النظام القديم سليمة في عمود 'قديم')."}
+                                ? "⚠️ توجد فروقات في السجل التاريخي القديم وتبقى للمرجعية فقط."
+                                : "🔒 لا يوجد ترحيل: الأرقام المعروضة محاكاة تاريخية للقراءة فقط، والافتتاح يتم عبر P07."}
                     </div>
                 </div>
 
@@ -246,7 +181,7 @@ export default function ReconciliationReport() {
     );
 }
 
-function MigrationStateBanner({ ms, s, migrating, onRun }) {
+function MigrationStateBanner({ ms }) {
     if (ms.completed) {
         return (
             <div className="bg-emerald-50 border-2 border-emerald-300 rounded-lg p-4 mb-4"
@@ -254,7 +189,7 @@ function MigrationStateBanner({ ms, s, migrating, onRun }) {
                 <div className="flex items-center justify-between">
                     <div>
                         <div className="text-sm font-extrabold text-emerald-900 mb-1">
-                            ✅ تم تنفيذ الترحيل
+                            ℹ️ سجل تاريخي للترحيل القديم
                         </div>
                         <div className="text-xs text-emerald-700">
                             تاريخ القطع: <span className="num">{ms.cutoff_date}</span> ·
@@ -272,31 +207,22 @@ function MigrationStateBanner({ ms, s, migrating, onRun }) {
             <div className="flex items-start justify-between gap-3">
                 <div className="flex-1">
                     <div className="text-sm font-extrabold text-amber-900 mb-1">
-                        ⏳ الترحيل لم يُنفَّذ بعد
+                        🔒 الترحيل التاريخي متوقف
                     </div>
                     <div className="text-xs text-amber-800 leading-relaxed">
                         <p className="mb-1">
-                            <strong>لهذا السبب يظهر عمود «Ledger الحالي» بقيمة 0</strong> لمعظم الكيانات.
-                            هذه ليست مشكلة في المنطق — ببساطة الأرصدة الافتتاحية لم تُسجَّل بعد في دفتر الأستاذ.
+                            تعرض هذه الصفحة بيانات النظام القديم للمرجعية فقط، ولا تنشئ أو تعدّل أي قيد في ميزان 2.
                         </p>
                         <p className="mb-1">
-                            انظر عمود <strong>«المتوقَّع بعد الترحيل»</strong> — يُظهر القيم التي ستظهر في دفتر
-                            الأستاذ <strong>فور تنفيذ الترحيل</strong>. إذا كانت تطابق العمود القديم،
-                            فالمنطق سليم 100%.
+                            يبدأ ميزان 2 برصيد افتتاحي مستقل ومثبت عند تاريخ القطع، ويُدخل حصراً عبر مسار P07.
                         </p>
                         <p>
-                            عندما تكون أرقام عمود «قديم» صحيحة في نظرك، اضغط الزر التالي لتنفيذ الترحيل النهائي.
+                            <a className="font-bold underline" href="/integrations-v2?workspace=financial&page=opening-balances">
+                                فتح الأرصدة الافتتاحية P07
+                            </a>
                         </p>
                     </div>
                 </div>
-                <button
-                    onClick={onRun}
-                    disabled={migrating || s.total_entities === 0}
-                    className="px-4 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-sm font-extrabold whitespace-nowrap"
-                    data-testid="run-migration-btn"
-                    title="ينفّذ الترحيل النهائي ويسجّل جميع الأرصدة الافتتاحية في دفتر الأستاذ">
-                    {migrating ? "جاري التنفيذ..." : "▶ تنفيذ الترحيل النهائي"}
-                </button>
             </div>
         </div>
     );
@@ -342,7 +268,7 @@ function Section({ title, rows, columns, showBreakdown, showBankBreakdown, migra
                                     <th className="text-left py-2 px-1 font-bold">{col.label} (قديم)</th>
                                     <th className="text-left py-2 px-1 font-bold">{col.label} (Ledger الحالي)</th>
                                     {!migrationCompleted && (
-                                        <th className="text-left py-2 px-1 font-bold text-indigo-700">{col.label} (المتوقَّع)</th>
+                                        <th className="text-left py-2 px-1 font-bold text-indigo-700">{col.label} (محاكاة قديمة)</th>
                                     )}
                                     <th className="text-center py-2 px-1 font-bold">Δ</th>
                                 </React.Fragment>
@@ -378,7 +304,7 @@ function Section({ title, rows, columns, showBreakdown, showBankBreakdown, migra
                                             ? (r.all_match
                                                 ? <span className="text-emerald-700 font-extrabold">✓</span>
                                                 : <span className="text-rose-700 font-extrabold">✗</span>)
-                                            : <span className="text-amber-700 font-extrabold" title="بانتظار تنفيذ الترحيل">⏳</span>}
+                                            : <span className="text-amber-700 font-extrabold" title="محاكاة تاريخية للقراءة فقط">📚</span>}
                                     </td>
                                 </tr>
                                 {showBreakdown && r.breakdown && (

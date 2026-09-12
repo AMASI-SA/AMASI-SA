@@ -11,16 +11,35 @@ on:
       - ready_for_review
     paths:
       - "backend/accounting_module_*.py"
+      - "backend/accounting_clean_start_guard.py"
       - "backend/accounting_settlement_*.py"
       - "backend/accounting_courier_bank_routes.py"
+      - "backend/accounts_routes.py"
+      - "backend/ad_account_routes.py"
       - "backend/financial_provider_apps*.py"
+      - "backend/ledger_core.py"
+      - "backend/ledger_routes.py"
+      - "backend/migration_routes.py"
+      - "backend/store_delivery_accounting.py"
+      - "backend/store_delivery_driver_app_routes.py"
+      - "backend/store_delivery_settlement_routes.py"
+      - "backend/universal_accounting_routes.py"
       - "backend/tests/test_mz2_accounting_module.py"
+      - "backend/tests/test_mz2_clean_start_safety.py"
+      - "backend/tests/test_insufficient_funds_iter185.py"
       - "backend/tests/test_mz2_settlement*_p01.py"
+      - "backend/tests/test_store_delivery_accounting.py"
       - "backend/tests/test_mz2_courier_bank_bindings_p01.py"
       - "frontend/src/pages/accounting/**"
       - "frontend/src/pages/FinancialProviderApps*.jsx"
+      - "frontend/src/App.js"
+      - "frontend/src/components/Sidebar.jsx"
       - "frontend/src/components/MezanV2NavigationShell*.jsx"
       - "frontend/src/components/OwnerOnlyRoute*.jsx"
+      - "frontend/src/pages/Accounts.jsx"
+      - "frontend/src/pages/AdAccounts.jsx"
+      - "frontend/src/pages/MigrationWizard.jsx"
+      - "frontend/src/pages/ReconciliationReport.jsx"
       - "frontend/src/services/accountingModule.js"
       - ".github/workflows/mz2-accounting-module.yml"
   workflow_dispatch:
@@ -45,6 +64,8 @@ jobs:
           python -m pip install -q
           fastapi==0.140.0
           httpx==0.28.1
+          motor==3.3.1
+          mongomock-motor
           pydantic==2.13.4
           pymongo==4.6.3
           bcrypt==4.1.3
@@ -57,18 +78,33 @@ jobs:
         run: >-
           python -m py_compile
           accounting_module_*.py
+          accounting_clean_start_guard.py
           accounting_settlement_*.py
           accounting_courier_bank_routes.py
+          accounts_routes.py
+          ad_account_routes.py
           financial_provider_apps.py
           financial_provider_apps_legacy.py
+          ledger_core.py
+          ledger_routes.py
+          migration_routes.py
+          store_delivery_accounting.py
+          store_delivery_driver_app_routes.py
+          store_delivery_settlement_routes.py
+          universal_accounting_routes.py
           tests/test_mz2_accounting_module.py
+          tests/test_mz2_clean_start_safety.py
+          tests/test_insufficient_funds_iter185.py
           tests/test_mz2_settlement*_p01.py
+          tests/test_store_delivery_accounting.py
           tests/test_mz2_courier_bank_bindings_p01.py
       - name: Run accounting contract tests
         run: >-
           python -m pytest
           tests/test_mz2_accounting_module.py
+          tests/test_mz2_clean_start_safety.py
           tests/test_mz2_settlement*_p01.py
+          tests/test_store_delivery_accounting.py
           tests/test_mz2_courier_bank_bindings_p01.py
           -q --tb=short
 
@@ -93,6 +129,7 @@ jobs:
           --watchAll=false
           --runInBand
           src/pages/accounting/accountingPages.test.js
+          src/pages/accounting/LegacyOpeningEntrypoints.test.js
           src/pages/accounting/AccountingSettlements.test.jsx
           src/pages/accounting/AccountingSettlementRegister.test.jsx
           src/pages/accounting/AccountingCourierBankBindings.test.jsx
