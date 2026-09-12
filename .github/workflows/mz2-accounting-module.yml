@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - hotfix/prod-snap-meta-final
+      - codex/mz2-clean-start-safety
     types:
       - opened
       - synchronize
@@ -11,6 +12,7 @@ on:
       - ready_for_review
     paths:
       - "backend/accounting_module_*.py"
+      - "backend/accounting_ledger_v2.py"
       - "backend/accounting_clean_start_guard.py"
       - "backend/accounting_settlement_*.py"
       - "backend/accounting_courier_bank_routes.py"
@@ -30,6 +32,8 @@ on:
       - "backend/tests/test_mz2_settlement*_p01.py"
       - "backend/tests/test_store_delivery_accounting.py"
       - "backend/tests/test_mz2_courier_bank_bindings_p01.py"
+      - "backend/tests/test_accounting_ledger_v2.py"
+      - "backend/scripts/check_accounting_ledger_v2_access.py"
       - "frontend/src/pages/accounting/**"
       - "frontend/src/pages/FinancialProviderApps*.jsx"
       - "frontend/src/App.js"
@@ -79,6 +83,7 @@ jobs:
         run: >-
           python -m py_compile
           accounting_module_*.py
+          accounting_ledger_v2.py
           accounting_clean_start_guard.py
           accounting_settlement_*.py
           accounting_courier_bank_routes.py
@@ -99,6 +104,10 @@ jobs:
           tests/test_mz2_settlement*_p01.py
           tests/test_store_delivery_accounting.py
           tests/test_mz2_courier_bank_bindings_p01.py
+          tests/test_accounting_ledger_v2.py
+          scripts/check_accounting_ledger_v2_access.py
+      - name: Enforce Accounting V2 raw-access boundary
+        run: python scripts/check_accounting_ledger_v2_access.py
       - name: Run accounting contract tests
         run: >-
           python -m pytest
@@ -107,6 +116,7 @@ jobs:
           tests/test_mz2_settlement*_p01.py
           tests/test_store_delivery_accounting.py
           tests/test_mz2_courier_bank_bindings_p01.py
+          tests/test_accounting_ledger_v2.py
           -q --tb=short
 
   frontend-contract:
