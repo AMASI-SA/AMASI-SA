@@ -10,9 +10,11 @@ from fastapi import Depends
 
 from financial_provider_apps_legacy import *  # noqa: F401,F403
 from financial_provider_apps_legacy import (
+    ensure_financial_provider_app_indexes as _ensure_legacy_financial_provider_app_indexes,
     make_financial_provider_apps_router as _legacy_router,
 )
 
+from accounting_ledger_v2 import ensure_accounting_ledger_v2_indexes
 from accounting_courier_bank_routes import install_accounting_courier_bank_routes
 from accounting_module_contract import (  # noqa: F401
     ACCOUNTING_ACTIONS,
@@ -66,6 +68,12 @@ from accounting_settlement_service import (  # noqa: F401
     settlement_idempotency_key,
 )
 import settlements_import.routes as settlement_import_routes_module
+
+
+async def ensure_financial_provider_app_indexes(db) -> None:
+    """Preserve legacy startup indexes and fail if V2 indexes cannot install."""
+    await _ensure_legacy_financial_provider_app_indexes(db)
+    await ensure_accounting_ledger_v2_indexes(db)
 
 
 def make_financial_provider_apps_router(db, current_user):
