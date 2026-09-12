@@ -70,6 +70,9 @@ This operation ID is the stable handoff reference for every later session:
 
 Implementation order and operational acceptance are separate:
 
+- P00's prior `COMPLETE` evidence covers only the historical UI foundation
+  shipped by PR #851. Overall P00 is `IN_PROGRESS` because the physical V2
+  ledger foundation below is `OPEN / NOT_IMPLEMENTED`.
 - A later phase may enter implementation after the preceding implementation
   gate without marking the preceding phase `COMPLETE`.
 - `QUEUED` means work has not started; `IN_PROGRESS` means it has.
@@ -711,15 +714,17 @@ screen.
   payroll/advances/custody/tax/other obligations, and capital/equity
   reconciliation.
 - Every row requires an evidence reference and the same cutover instant.
-- The preview shows total debit, total credit, and difference. Approval stays
-  disabled until all required evidence is present and the batch balances.
+- The preview shows total debit, total credit, and difference. Completing
+  readiness items 1–11 enables approval only; it does not enable posting.
 - Historical sales, historical paid salaries, and the legacy financial
-  position are not re-entered; reviewed pre-cutover net history is represented
-  through opening equity/retained result.
-- Primary action: `اعتماد الرصيد الافتتاحي`, protected by owner/accountant
-  approval and one idempotent operation key.
+  position are not re-entered; the independently evidenced pre-cutover net
+  position is represented through opening equity/retained result.
+- Approval at `11/13` records item 12 without a ledger write. Posting is a
+  separate protected action enabled only at `12/13` for the approved preview.
 - Readiness is `0/13` through `13/13`: cutover time, signed sheet, eight
   evidence sections, balanced preview, approval, and verified opening group.
+  Successful post and independent verification create item 13 and only then
+  derive `safe_active=true`; item 13 is never a prerequisite for the post.
 - The screen is built before Publish but Production entry begins only after
   the dormant release is verified. Publish approval is not opening approval.
 
@@ -826,9 +831,13 @@ Primary files:
 2. Collect and archive the eight trusted evidence sections at that instant.
 3. Save and reopen each section as a draft; create a versioned balanced
    preview with source reference per row.
-4. Obtain separate explicit financial approval for the exact preview.
-5. Post one opening group, verify every leg and the trial balance, then and
-   only then derive `safe_active=true`.
+4. When items 1–11 are complete, obtain explicit approval for the exact
+   preview; that records item 12 without a ledger write.
+5. At `12/13`, obtain the required financial authorization and post one
+   opening group. Item 13 is the result, not a precondition, of successful
+   posting and independent verification.
+6. Only after item 13 is verified may the system display `13/13` and derive
+   `safe_active=true`.
 
 ### Gate 5 — post-activation runtime acceptance
 

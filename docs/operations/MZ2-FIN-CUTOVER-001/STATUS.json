@@ -6,11 +6,14 @@
   "production_source_sha_at_decision": "7db9c6496d1af48364cce684e0595d76885001ac",
   "foundation_pr": 851,
   "foundation_merge_sha": "c116d80fd375c0ddfd4acf0eb0ea7e8a8a0dd092",
+  "foundation_pr_scope": "LEGACY_UI_FOUNDATION_ONLY",
+  "v2_foundation_pr": null,
   "phase_lock_enabled": true,
   "phase_lock_mode": "IMPLEMENTATION_DEPENDENCY_SEPARATE_FROM_RUNTIME_ACCEPTANCE",
   "completion_requires_runtime_acceptance": true,
   "current_phase": "P01",
   "current_implementation_phase": "P01",
+  "parallel_foundation_phase": "P00_V2_OPEN_NOT_IMPLEMENTED",
   "current_phase_file": "PHASE-01-SETTLEMENTS.md",
   "current_phase_status": "IN_PROGRESS",
   "next_allowed_action": "complete_source_and_tests_then_freeze_A_build_A_create_intent_only_B_and_review_without_release_guard_prepare_publish_or_production_financial_writes",
@@ -113,9 +116,17 @@
   },
   "activation_gate": {
     "production_candidate_verified": false,
+    "opening_readiness_completed": 0,
+    "opening_readiness_total": 13,
+    "approval_requires_completed_items": 11,
+    "approval_records_item": 12,
+    "post_requires_completed_items": 12,
+    "successful_post_and_verification_records_item": 13,
+    "item_13_is_postcondition_not_post_precondition": true,
     "opening_txn_group_id": null,
     "opening_txn_group_verified": false,
     "safe_active": false,
+    "safe_active_requires_completed_items": 13,
     "normal_financial_writes_allowed": false,
     "opening_post_is_only_permitted_pre_activation_financial_write": true
   },
@@ -192,15 +203,27 @@
     {
       "id": "P00",
       "name": "الأساس والحوكمة",
-      "status": "COMPLETE",
-      "implementation_status": "MERGED",
-      "release_status": "PUBLISHED_VERIFIED",
-      "runtime_acceptance_status": "PASS",
+      "status": "IN_PROGRESS",
+      "implementation_status": "IN_PROGRESS",
+      "release_status": "UNPUBLISHED",
+      "runtime_acceptance_status": "NOT_ELIGIBLE",
       "file": "PHASE-00-FOUNDATION.md",
+      "scope": "V2_FOUNDATION",
+      "blocked_by": "FOUNDATION_V2_GATES_OPEN",
+      "exit_gate": "PHYSICAL_V2_LEDGER_BYPASS_ATOMIC_OPERATION_READ_AND_COMPLETE_ORDER_GATES_VERIFIED",
+      "historical_ui_foundation": {
+        "status": "COMPLETE",
+        "status_scope": "LEGACY_UI_FOUNDATION_ONLY",
+        "implementation_status": "MERGED",
+        "release_status": "PUBLISHED_VERIFIED",
+        "runtime_acceptance_status": "PASS",
+        "does_not_satisfy_v2_foundation": true
+      },
       "evidence": {
         "pr": 851,
         "merge_sha": "c116d80fd375c0ddfd4acf0eb0ea7e8a8a0dd092",
-        "production_ui_observed": true
+        "production_ui_observed": true,
+        "evidence_scope": "LEGACY_UI_FOUNDATION_ONLY"
       }
     },
     {
