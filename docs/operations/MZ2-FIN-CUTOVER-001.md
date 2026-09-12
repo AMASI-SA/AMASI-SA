@@ -60,6 +60,11 @@ This operation ID is the stable handoff reference for every later session:
 12. Approval does not transfer between boundaries: source-preparation
     authorization, Publish authorization, opening-balance authorization, and
     scenario-6 authorization are separate decisions.
+13. Legacy financial history, balances, journals, and evidence are always
+    prohibited. Only a non-financial definition or setting may be copied as an
+    unapproved draft with explicit provenance; owner review may turn it into
+    new Mezan 2 configuration, never into financial evidence or an opening
+    value.
 
 ## Delivery and state contract
 
@@ -83,6 +88,33 @@ before changing a draft, ledger, audit, or other financial state. The only
 pre-activation financial writer is the dedicated opening-balance post path,
 and it requires complete evidence, a current balanced preview, independent
 permission, and explicit same-session financial authorization.
+
+The final source commit A is fixed before the final Production merge. The
+governed build/freeze is produced from A, then an intent-only child commit B
+changes only `release/release-intent-v5.json` and points back to A. CI and
+review occur on A/B before the final merge. The merge must preserve both
+commits without squash or rebase, and the push must pass Release Readiness.
+`prepare` and `prepublish` are not source-preparation steps: they run only
+after explicit Publish authorization for the preserved A/B identity.
+
+Five foundation gates block A until fresh tests close them:
+
+- Mezan 2 uses physically separate
+  `accounting_journal_groups_v2`, `accounting_general_ledger_v2`,
+  `accounting_audit_log_v2`, and V2 sequences; `operation_id` is required
+  throughout, `general_ledger` is Legacy archive only, no union/migration/
+  backfill/fallback is permitted, and generic `/ledger` is not an MZ2 API;
+- every Legacy/import/backfill/replay/admin/bulk/manual or alternate writer is
+  denied before any mutation while `safe_active=false`, except the dedicated
+  opening post;
+- journal header, legs, idempotency state, and posted state commit in one
+  all-or-nothing transaction;
+- every financial read is tenant- and cutover-operation-scoped to the verified
+  opening group plus post-cutover journals, never `current_balance` or a
+  legacy summary;
+- every order event creates one complete balanced group containing every
+  applicable sales, VAT, receivable/cash, shipping/fee, COGS, and inventory
+  leg, or fails closed as `needs_review` without partial legs.
 
 ## Provider account model
 
@@ -175,6 +207,24 @@ matched tier. The official courier invoice/statement remains authoritative.
 Direct bank/cash transfers into Tamara or Tabby accounts are prohibited
 because they bypass the canonical BNPL settlement bridge. COD and generic
 bank-transfer labels are also not transferable wallets.
+
+## Complete post-cutover order journal
+
+At the canonical recognition event, one atomic order group must contain every
+applicable leg:
+
+- sales revenue and output VAT;
+- provider/courier/customer receivable, customer advance clearing, or cash;
+- shipping revenue plus shipping cost/fee and related VAT when applicable;
+- COGS and inventory reduction from the approved cost snapshot;
+- stable order/event reference, tenant, `operation_id`, and idempotency key.
+
+A later bank/provider/courier settlement remains its own canonical settlement
+group; it must not recreate the order revenue or COGS. If cost, tax treatment,
+account mapping, or another required leg is unavailable, the recognition event
+becomes `needs_review` and the whole order group fails before mutation. It is
+forbidden to post revenue now and append COGS or another missing leg later as a
+silent repair.
 
 ## Opening-balance rules
 
@@ -739,21 +789,26 @@ Primary files:
 3. Build P07's eight-section evidence wizard, preview, approval, idempotent
    opening post, and independent verification.
 4. Build P08 activation checks, monitoring, and runtime acceptance harness.
-5. Run focused and integrated Backend/Frontend/security/build checks. Keep
+5. Close the five foundation gates: physical V2 ledger isolation,
+   alternate/Legacy writer bypasses, atomic groups, operation-scoped reads
+   without `current_balance`, and the complete order journal.
+6. Run focused and integrated Backend/Frontend/security/build checks. Keep
    every unstarted phase `QUEUED` and every started incomplete phase
    `IN_PROGRESS`.
-6. Do not enter Production evidence or perform any financial write.
+7. Do not enter Production evidence or perform any financial write.
 
 ### Gate 2 — assemble the governed dormant candidate
 
-1. Review and merge the complete source according to repository policy.
-2. Freeze the final source commit A only after all governed changes are
-   present.
-3. Run the governed clean/reproducible build for A.
-4. Create intent commit B changing only
-   `release/release-intent-v5.json`; do not squash or rebase A/B afterward.
-5. Complete CI and local Release Guard preflight, then stop with a candidate
-   that awaits explicit Publish approval.
+1. Assemble and review all governed source changes without the Release Intent.
+2. Freeze the final source commit A before the final Production merge.
+3. Run the governed clean/reproducible build and freeze from A.
+4. Create commit B as A's direct child, changing only
+   `release/release-intent-v5.json` and recording A.
+5. Complete CI and review on A/B.
+6. Merge while preserving both A and B without squash or rebase, then push and
+   confirm Release Readiness.
+7. Stop with the preserved candidate awaiting explicit Publish approval. Do
+   not run `prepare`, create a lease, or run `prepublish` before approval.
 
 ### Gate 3 — one separately authorized dormant Publish
 
@@ -798,6 +853,13 @@ Primary files:
   or another financial write.
 - Do not permit an ordinary ledger writer before `safe_active=true`; the
   opening path is the only narrowly controlled pre-activation exception.
+- Do not freeze A while physical V2 ledger isolation, a legacy/alternate
+  writer bypass, partial journal transaction, cross-operation read,
+  `current_balance` dependency, or incomplete order journal remains open.
+- Do not copy Legacy financial history, balances, journals, or evidence.
+  A non-financial definition/setting may exist only as an unapproved
+  provenance-carrying draft until owner review makes it new Mezan 2
+  configuration.
 - Do not guess a cutover date or an opening balance.
 - Do not convert every provider movement into a generic transfer.
 - Do not let saving a tax invoice double-post a settlement.
@@ -822,7 +884,12 @@ Use this exact message:
 > Publish. Continue the next queued implementation item without Production
 > financial writes and never mark a phase COMPLETE from code/CI alone. Do not
 > import, migrate, recreate, repost, or backfill legacy Mezan financial
-> history. Do not guess the cutover timestamp or opening values. After a
+> history, balances, journals, or evidence. Close alternate writer bypasses,
+> atomic-group, operation-scoped read/no-current_balance, and complete-order-
+> journal gates before freezing source A. Build/freeze A, create intent-only B,
+> review both, and preserve them through the final merge; do not run prepare
+> before Publish approval. Do not guess the cutover timestamp or opening
+> values. After a
 > separately authorized and verified dormant Publish, the opening batch still
 > requires its own signed evidence sheet and explicit financial approval;
 > scenario 6 follows only after verified opening and `safe_active=true`.

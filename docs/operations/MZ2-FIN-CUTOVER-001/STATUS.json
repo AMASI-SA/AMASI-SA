@@ -13,8 +13,15 @@
   "current_implementation_phase": "P01",
   "current_phase_file": "PHASE-01-SETTLEMENTS.md",
   "current_phase_status": "IN_PROGRESS",
-  "next_allowed_action": "prepare_all_accounting_source_tests_and_governed_release_artifacts_without_publish_or_production_financial_writes",
-  "current_blocker": "P01_hardening_PR_1019_is_draft_unmerged_and_P02_to_P08_implementation_is_queued",
+  "next_allowed_action": "complete_source_and_tests_then_freeze_A_build_A_create_intent_only_B_and_review_without_release_guard_prepare_publish_or_production_financial_writes",
+  "current_blocker": "P01_hardening_and_foundation_safety_gates_are_open_while_P02_to_P08_implementation_is_queued",
+  "current_code_blockers": [
+    "implement_physically_separate_v2_journal_ledger_audit_and_sequences_without_legacy_union_or_generic_ledger_api",
+    "close_every_legacy_or_alternate_opening_and_pre_activation_write_bypass",
+    "make_every_journal_group_atomic_and_all_or_nothing",
+    "scope_financial_reads_by_tenant_and_cutover_operation_without_current_balance",
+    "produce_one_complete_order_journal_or_fail_closed_without_partial_legs"
+  ],
   "state_contract": {
     "phase_statuses": [
       "QUEUED",
@@ -51,6 +58,8 @@
     "source_preparation_authorized": true,
     "source_preparation_target": "GOVERNED_RELEASE_CANDIDATE_AWAITING_ONLY_PUBLISH_APPROVAL",
     "publish_authorized": false,
+    "release_guard_prepare_authorized": false,
+    "release_guard_prepublish_authorized": false,
     "publish_approval_may_authorize_financial_writes": false,
     "opening_balance_post_authorized": false,
     "scenario_6_authorized": false,
@@ -84,6 +93,20 @@
     "source_commit_a": null,
     "intent_commit_b": null,
     "release_intent_status": "DEFERRED_UNTIL_FINAL_SOURCE_A",
+    "candidate_sequence": [
+      "COMPLETE_AND_FREEZE_FINAL_SOURCE_COMMIT_A",
+      "BUILD_AND_VERIFY_FROM_A",
+      "CREATE_INTENT_ONLY_COMMIT_B_WITH_PARENT_A",
+      "RUN_CI_AND_REVIEW_B",
+      "MERGE_WITHOUT_SQUASH_OR_REBASE_AND_PRESERVE_A_B",
+      "PUSH_AND_CONFIRM_RELEASE_READINESS",
+      "WAIT_FOR_EXPLICIT_PUBLISH_AUTHORIZATION",
+      "RUN_PREPARE_PREPUBLISH_PUBLISH_AND_VERIFY"
+    ],
+    "a_b_preservation_required": true,
+    "final_merge_complete": false,
+    "push_readiness_complete": false,
+    "prepare_allowed_only_after_publish_authorization": true,
     "publish_authorized": false,
     "production_verified": false,
     "dormant_means_normal_financial_writers_fail_before_mutation": true
@@ -96,13 +119,50 @@
     "normal_financial_writes_allowed": false,
     "opening_post_is_only_permitted_pre_activation_financial_write": true
   },
+  "foundation_safety_gates": {
+    "status": "OPEN",
+    "blocks_final_source_a": true,
+    "physical_v2_ledger_isolation": {
+      "status": "NOT_IMPLEMENTED",
+      "collections": [
+        "accounting_journal_groups_v2",
+        "accounting_general_ledger_v2",
+        "accounting_audit_log_v2"
+      ],
+      "dedicated_sequences_required": true,
+      "operation_id_required": true,
+      "legacy_general_ledger_classification": "ARCHIVE_ONLY",
+      "legacy_union_migration_backfill_or_fallback_allowed": false,
+      "generic_ledger_is_mz2_interface": false
+    },
+    "legacy_and_alternate_writer_closure": {
+      "status": "OPEN_UNVERIFIED",
+      "requirement": "every_legacy_import_backfill_replay_admin_bulk_manual_and_alternate_writer_fails_before_draft_ledger_audit_or_other_financial_mutation_when_safe_active_is_false_except_the_dedicated_opening_post"
+    },
+    "atomic_journal_groups": {
+      "status": "OPEN_UNVERIFIED",
+      "requirement": "v2_group_header_legs_idempotency_sequence_binding_audit_and_post_state_commit_in_one_transaction_or_leave_no_partial_group_legs_audit_or_orphan_sequence_binding"
+    },
+    "operation_scoped_financial_reads": {
+      "status": "OPEN_UNVERIFIED",
+      "requirement": "tenant_and_cutover_operation_scope_reads_to_the_verified_opening_group_and_post_cutover_journals_and_never_use_current_balance_or_legacy_summaries"
+    },
+    "complete_order_journal": {
+      "status": "OPEN_UNVERIFIED",
+      "requirement": "each_order_event_posts_one_complete_balanced_group_with_every_applicable_revenue_vat_receivable_or_cash_shipping_fee_cogs_and_inventory_leg_or_fails_closed_as_needs_review"
+    }
+  },
   "legacy_mezan_policy": {
     "dynamic_financial_dependency_allowed": false,
-    "copy_reference_values_allowed": true,
-    "copied_value_status": "unverified_nonfinancial_draft",
+    "financial_history_balances_or_evidence_copy_allowed": false,
+    "nonfinancial_definition_or_setting_draft_copy_allowed": true,
+    "copied_definition_or_setting_status": "unverified_nonfinancial_draft_with_provenance",
     "copied_values_may_post_journals": false,
     "copied_values_may_create_opening_balances": false,
+    "copied_values_may_serve_as_financial_evidence": false,
     "owner_confirmation_required": true,
+    "owner_confirmation_creates_new_mezan2_configuration_only": true,
+    "owner_confirmation_does_not_convert_legacy_data_to_financial_evidence": true,
     "prohibited_copy_categories": [
       "bank_balances",
       "provider_balances",

@@ -179,10 +179,17 @@ P02 بعد بوابة تنفيذ P01 دون الادعاء بأن P01 `COMPLETE`
 - حالات: `draft`, `matched`, `reviewed`, `posted`, `reversed`, `needs_review`.
 - مفتاح idempotency مبني على المزود ومعرف الكشف/البصمة.
 - منع الترحيل إذا كان القيد غير متوازن أو المستند مكررًا.
-- ربط مجموعة القيد بالمستند والمستخدم والمحاسب.
+- ربط مجموعة القيد بالمستند والمستخدم والمحاسب والـcutover operation.
+- كتابة رأس المجموعة وأرجلها وحالة idempotency والترحيل داخل transaction
+  واحدة all-or-nothing؛ الخطأ لا يترك مجموعة أو أرجلًا جزئية.
+- تستخدم المجموعة `accounting_journal_groups_v2` والأرجل
+  `accounting_general_ledger_v2` والتدقيق `accounting_audit_log_v2`
+  وsequences V2 فقط؛ لا union أو fallback من `general_ledger`.
 - فصل estimate عن actual مع أولوية المستند الرسمي.
 - tenant scoping وصلاحية `accounting.settlements.post` للترحيل.
 - التحقق من العملة من ملف Excel الأصلي قبل المستورد التاريخي، وحفظ provenance العملة.
+- قراءات التسوية والأرصدة تقيد بالـtenant وبـoperation id ولا تستخدم
+  `current_balance` أو summary/ledger قديمًا.
 
 ## متطلبات Frontend
 
@@ -203,6 +210,10 @@ P02 بعد بوابة تنفيذ P01 دون الادعاء بأن P01 `COMPLETE`
 - كشف غير متوازن أو صافي غير مطابق يتوقف في `needs_review`.
 - الاسترداد والإلغاء لا يختفيان داخل الصافي.
 - المستخدم دون صلاحية لا يرى زر الترحيل ولا يستطيع استدعاء endpoint.
+- فشل رجل وسطية يترك صفر مجموعة جزئية وصفر أرجل جزئية، وإعادة الطلب
+  بالمفتاح نفسه تنشئ المجموعة مرة واحدة فقط.
+- مسارات Legacy/import/backfill/replay/admin/bulk/manual أو أي endpoint
+  بديل لا تتجاوز حاجز `safe_active`.
 - المستند الرسمي يتغلب على إعداد العمولة التقديري للفترة المغطاة.
 - رفض ملف بعملة صريحة غير `SAR` قبل أي كتابة.
 - Build كامل للواجهة.
@@ -244,13 +255,17 @@ P02؛ لا يحول P01 إلى `COMPLETE`.
 - [x] الصلاحيات مستقلة ومختبرة.
 - [x] اختبارات Backend ناجحة.
 - [x] اختبارات Frontend والبناء ناجحة.
-- [ ] Draft PR `#1019` مراجع ومدمج وفق الحوكمة.
+- [ ] Draft PR `#1019` مراجع ومضمّن في خط المصدر المحكوم وفق الحوكمة.
 - [ ] حاجز القطع المركزي يمنع الترحيل قبل `safe_active` دون أي mutation.
-- [ ] P01 مشمولة في source commit A النهائي للحزمة.
+- [ ] ذرية مجموعة التسوية والقراءات operation-scoped مثبتتان.
+- [ ] `implementation_status=VERIFIED` موثق؛ عندها يفتح **بناء** P02
+  دون Publish ودون انتظار قبول Runtime.
 
 ### بوابة الإصدار والقبول
 
+- [ ] P01 مشمولة في source commit A النهائي المبني/المجمد.
 - [ ] intent commit B يغير Release Intent فقط ويطابق source A.
+- [ ] A/B محفوظان عبر الدمج دون squash أو rebase وRelease Readiness ناجح.
 - [ ] الحزمة الموحدة منشورة مرة واحدة وهي خاملة ومتحقق منها عبر Release Guard.
 - [ ] السيناريو 5 مكتمل وموثق على Runtime المنشور.
 - [ ] القيد الافتتاحي مرحل ومتحقق و`safe_active=true`.
@@ -275,5 +290,5 @@ P02؛ لا يحول P01 إلى `COMPLETE`.
 - Browser-verified runtime SHA: `47d750b7cf2edbda4262f6d496a885bb1f30ccdc`
 - Browser acceptance Release ID: `aaa57d5d-8f27-4d46-8d85-4d8ee47f2e7c`
 - Journal posted: `false`
-- آخر مانع للبناء: `P01_hardening_PR_1019_draft_unmerged_and_cutover_guard_not_implemented`
+- آخر مانع للبناء: `P01_hardening_PR_1019_draft_unmerged_and_foundation_safety_gates_open`
 - آخر مانع للقبول: `single_dormant_publish_then_opening_verified_safe_active_then_P08_scenario_6`
