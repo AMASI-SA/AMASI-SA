@@ -13,6 +13,7 @@ from typing import Any, Literal, Optional
 from fastapi import Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
 
+from accounting_clean_start_guard import require_accounting_safe_active
 from accounting_module_contract import (
     OPERATION_ID,
     accounting_owner_id,
@@ -1020,6 +1021,8 @@ def install_accounting_settlement_routes(router, db, current_user):
         actor, owner_id = await _scope(
             db, user, "accounting.settlements.post"
         )
+        await require_accounting_safe_active(db, user_id=owner_id)
+
         current = await _draft_or_404(db, owner_id, draft_id)
         if current.get("status") != "reviewed":
             raise HTTPException(409, "يجب مراجعة التسوية قبل ترحيلها")

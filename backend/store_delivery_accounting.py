@@ -9,11 +9,14 @@ orders, earnings, collections, or settlements.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any, Literal
 
 from fastapi import HTTPException
 
+from accounting_clean_start_guard import (
+    accounting_safe_active,
+    require_accounting_safe_active,
+)
 from ledger_core import compute_balance, post_txn_group
 from store_delivery_domain import money, normalize_text
 
@@ -32,51 +35,15 @@ SettlementType = Literal[
 ]
 
 
-def _aware_timestamp(value: Any) -> datetime | None:
-    raw = normalize_text(value)
-    if not raw:
-        return None
-    try:
-        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        return None
-    return parsed.astimezone(timezone.utc)
-
-
 async def financial_cutover_is_active(
     db: Any,
     *,
     user_id: str,
     event_at: Any = None,
 ) -> bool:
-    """Fail closed until the signed Mezan 2 cutover is explicitly activated.
-
-    Expected tenant setting::
-
-        mezan2_financial_cutover = {
-            "operation_id": "MZ2-FIN-CUTOVER-001",
-            "status": "active",
-            "cutover_at": "<approved timezone-aware timestamp>"
-        }
-
-    The activation workflow is intentionally outside this change; no code here
-    invents a cutover date or mutates the setting.
-    """
-    settings = await db.settings.find_one(
-        {"user_id": user_id},
-        {"_id": 0, "mezan2_financial_cutover": 1},
-    )
-    cutover = (settings or {}).get("mezan2_financial_cutover") or {}
-    cutover_at = _aware_timestamp(cutover.get("cutover_at"))
-    event_time = _aware_timestamp(event_at) or datetime.now(timezone.utc)
-    return bool(
-        normalize_text(cutover.get("operation_id")) == OPERATION_ID
-        and normalize_text(cutover.get("status")).casefold() == "active"
-        and cutover_at
-        and event_time >= cutover_at
-    )
+    """Use the Phase-A authoritative guard; stored flags never unlock writes."""
+    del event_at
+    return await accounting_safe_active(db, user_id=user_id)
 
 
 def _amount(value: Any) -> float:
@@ -218,6 +185,7 @@ async def _posted_group(db: Any, user_id: str, idempotency_key: str) -> str | No
         {
             "user_id": user_id,
             "status": "posted",
+            "metadata.operation_id": OPERATION_ID,
             "metadata.idempotency_key": idempotency_key,
         },
         {"_id": 0, "txn_group_id": 1},
@@ -237,6 +205,8 @@ async def post_delivery_journal(
     delivery_fee: Any,
 ) -> dict[str, Any]:
     """Post one idempotent delivered-shipment journal for one driver."""
+    await require_accounting_safe_active(db, user_id=user_id)
+
     driver_id = normalize_text(driver.get("id"))
     assignment_id = normalize_text(assignment.get("id"))
     if not driver_id or not assignment_id:
@@ -286,6 +256,7 @@ async def store_driver_ledger_balances(db: Any, *, user_id: str, driver_id: str)
         entity_type=STORE_DRIVER_ENTITY_TYPE,
         entity_id=driver_id,
         sub_account=COD_RECEIVABLE,
+        operation_id=OPERATION_ID,
     )
     fee = await compute_balance(
         db,
@@ -293,6 +264,7 @@ async def store_driver_ledger_balances(db: Any, *, user_id: str, driver_id: str)
         entity_type=STORE_DRIVER_ENTITY_TYPE,
         entity_id=driver_id,
         sub_account=DELIVERY_FEE_PAYABLE,
+        operation_id=OPERATION_ID,
     )
     cod_receivable = max(round(float(cod.get("net_balance") or 0), 2), 0.0)
     fee_payable = max(round(-float(fee.get("net_balance") or 0), 2), 0.0)
@@ -321,6 +293,8 @@ async def post_settlement_journal(
     note: str = "",
 ) -> dict[str, Any]:
     """Post a driver remittance, fee payment, or explicit net settlement."""
+    await require_accounting_safe_active(db, user_id=user_id)
+
     driver_id = normalize_text(driver.get("id"))
     account_id = normalize_text(account.get("id"))
     idem = f"store_delivery:settlement:{normalize_text(settlement_id)}"

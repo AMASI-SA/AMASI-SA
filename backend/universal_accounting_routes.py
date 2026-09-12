@@ -464,18 +464,21 @@ async def _account_live_balance(
 async def _ensure_opening_balance_seeded(
     db, *, user_id: str, account_id: str,
 ) -> None:
-    """Iter-192 — lazy backfill so the ledger becomes the single source
-    of truth on the first universal-accounting touch of a non-migrated
-    account.
+    """Preserve legacy sufficient-funds behavior inside the legacy book.
 
-    If the account has any ledger entry already, we assume the ledger
-    is authoritative (no action). Otherwise we copy its stored
-    `current_balance` into a synthetic `opening_balance` debit so the
-    subsequent universal op produces a consistent net balance.
+    ``general_ledger`` remains the old system's ledger. Its lazy baseline is
+    required so later legacy GL credits reduce the live bank balance instead
+    of allowing repeated overspend. The seed is explicitly legacy-scoped and
+    never carries the Mezan 2 operation id; P07 writes only to the physically
+    separate V2 ledger collections.
     """
     has_any = await db.general_ledger.find_one(
-        {"user_id": user_id, "entity_type": "bank",
-         "entity_id": account_id, "status": "posted"},
+        {
+            "user_id": user_id,
+            "entity_type": "bank",
+            "entity_id": account_id,
+            "status": "posted",
+        },
         {"_id": 1},
     )
     if has_any:
@@ -486,23 +489,38 @@ async def _ensure_opening_balance_seeded(
     )
     if not acc:
         return
-    cur = float(acc.get("current_balance") or 0)
-    if abs(cur) < 0.005:
+    current = float(acc.get("current_balance") or 0)
+    if abs(current) < 0.005:
         return
-    from ledger_core import post_txn_group as _ptg
-    await _ptg(
-        db, user_id=user_id, actor_id=user_id, actor_name="auto-seed",
+
+    from ledger_core import post_txn_group as _post_legacy_group
+    await _post_legacy_group(
+        db,
+        user_id=user_id,
+        actor_id=user_id,
+        actor_name="auto-seed",
         txn_type="adjustment",
         notes=f"رصيد افتتاحي تلقائي عند أول قيد على «{acc.get('name')}»",
-        metadata={"source": "iter192_auto_seed"},
+        metadata={
+            "source": "iter192_auto_seed",
+            "book_scope": "legacy",
+        },
         entries=[
-            {"entity_type": "bank", "entity_id": account_id,
-             "sub_account": "main", "side": "debit",
-             "amount": round(cur, 2),
-             "entry_type": "opening_balance"},
-            {"entity_type": "equity", "entity_id": "opening_balance",
-             "side": "credit", "amount": round(cur, 2),
-             "entry_type": "opening_balance"},
+            {
+                "entity_type": "bank",
+                "entity_id": account_id,
+                "sub_account": "main",
+                "side": "debit",
+                "amount": round(current, 2),
+                "entry_type": "opening_balance",
+            },
+            {
+                "entity_type": "equity",
+                "entity_id": "opening_balance",
+                "side": "credit",
+                "amount": round(current, 2),
+                "entry_type": "opening_balance",
+            },
         ],
     )
 

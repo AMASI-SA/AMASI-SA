@@ -11,6 +11,7 @@ from typing import Any
 
 from fastapi import Depends, HTTPException
 
+from accounting_clean_start_guard import require_accounting_safe_active
 from accounting_module_contract import accounting_owner_id, require_accounting_permission
 from accounting_module_status_routes import fresh_accounting_user
 from accounting_settlement_bank_match_routes import bank_match_review_reasons
@@ -270,6 +271,8 @@ def install_accounting_settlement_lifecycle_routes(router, db, current_user):
         user: dict = Depends(current_user),
     ):
         actor, owner_id = await _scope(db, user, "accounting.settlements.post")
+        await require_accounting_safe_active(db, user_id=owner_id)
+
         current = await _draft_or_404(db, owner_id, draft_id)
         if current.get("status") != "reviewed":
             raise HTTPException(409, "يجب مراجعة التسوية قبل ترحيلها")

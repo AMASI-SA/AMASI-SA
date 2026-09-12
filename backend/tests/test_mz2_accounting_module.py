@@ -134,7 +134,7 @@ def test_approval_without_verified_opening_journal_keeps_balances_blocked():
     assert status["balance_visibility"]["banks"] is None
 
 
-def test_status_only_unlocks_after_verified_opening_and_ledger_summary():
+def test_status_stays_blocked_without_authoritative_p07_verification():
     status = build_accounting_module_status(
         _complete_cutover(),
         opening_posted_verified=True,
@@ -148,12 +148,14 @@ def test_status_only_unlocks_after_verified_opening_and_ledger_summary():
         },
     )
     assert status["cutover"]["ready_for_activation"] is True
-    assert status["cutover"]["safe_active"] is True
-    assert status["balance_visibility"]["status"] == "available"
-    assert status["balance_visibility"]["source"] == "general_ledger_operation_scoped"
-    assert status["balance_visibility"]["banks"] == 1000.25
-    assert status["balance_visibility"]["providers"] == 420.50
-    assert status["balance_visibility"]["couriers_cod"] == -75.0
+    assert status["cutover"]["authoritative_p07_verified"] is False
+    assert status["cutover"]["safe_active"] is False
+    assert status["cutover"]["unsafe_activation_detected"] is True
+    assert status["balance_visibility"]["status"] == "blocked"
+    assert status["balance_visibility"]["source"] is None
+    assert status["balance_visibility"]["banks"] is None
+    assert status["balance_visibility"]["providers"] is None
+    assert status["balance_visibility"]["couriers_cod"] is None
     assert status["tasks"] == []
 
 

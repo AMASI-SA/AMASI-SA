@@ -102,7 +102,11 @@ def build_accounting_module_status(
     ready = all(item["complete"] for item in checks)
     configured_status = str(state.get("status") or "not_configured").strip().lower()
     active = configured_status == "active" and operation_matches and bool(cutover_at)
-    safe_active = active and ready
+    # Phase A has no authoritative P07 verifier. Settings flags and even a
+    # balanced legacy opening group are insufficient to activate Mezan 2.
+    # P07 must replace this constant with its operation-scoped proof.
+    authoritative_p07_verified = False
+    safe_active = False
     incomplete = [item for item in checks if not item["complete"]]
     unverified_docs = int(provider.get("unverified_tax_invoices") or 0)
     ledger = ledger_balances if safe_active else None
@@ -138,7 +142,8 @@ def build_accounting_module_status(
             "ready_for_activation": ready,
             "active": active,
             "safe_active": safe_active,
-            "unsafe_activation_detected": bool(active and not ready),
+            "authoritative_p07_verified": authoritative_p07_verified,
+            "unsafe_activation_detected": bool(active and not safe_active),
         },
         "balance_visibility": {
             "status": "available" if balances_available else "blocked",
