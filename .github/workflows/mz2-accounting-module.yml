@@ -33,6 +33,7 @@ on:
       - "backend/tests/test_store_delivery_accounting.py"
       - "backend/tests/test_mz2_courier_bank_bindings_p01.py"
       - "backend/tests/test_accounting_ledger_v2.py"
+      - "backend/tests/mongo_replica/**"
       - "backend/scripts/check_accounting_ledger_v2_access.py"
       - "frontend/src/pages/accounting/**"
       - "frontend/src/pages/FinancialProviderApps*.jsx"
@@ -118,6 +119,89 @@ jobs:
           tests/test_mz2_courier_bank_bindings_p01.py
           tests/test_accounting_ledger_v2.py
           -q --tb=short
+
+  mongo-replica-contract:
+    name: Accounting Mongo replica transaction contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      MZ2_MONGO_REPLICA_URI: mongodb://127.0.0.1:27017/?replicaSet=rs0&directConnection=true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install replica contract dependencies
+        run: >-
+          python -m pip install -q
+          fastapi==0.140.0
+          motor==3.3.1
+          pydantic==2.13.4
+          pymongo==4.6.3
+          pytest==9.0.3
+          pytest-asyncio==1.4.0
+      - name: Smoke import sealed Accounting V2 core
+        run: python -c "import accounting_ledger_v2"
+      - name: Start pinned MongoDB 7 replica set on loopback
+        working-directory: .
+        run: |
+          docker run --detach \
+            --name accounting-mongo-rs \
+            --publish 127.0.0.1:27017:27017 \
+            mongo:7.0.32-jammy@sha256:777884dc3872279a2e4d2e0872c71e452cb86ffcb5c2364ae9643b5c36eb5e45 \
+            mongod \
+              --replSet rs0 \
+              --bind_ip_all \
+              --port 27017 \
+              --setParameter enableTestCommands=1
+
+          for attempt in {1..60}; do
+            if docker exec accounting-mongo-rs mongosh --quiet \
+              --eval 'quit(db.adminCommand({ping: 1}).ok === 1 ? 0 : 1)'; then
+              break
+            fi
+            if [ "$attempt" -eq 60 ]; then
+              docker logs accounting-mongo-rs
+              exit 1
+            fi
+            sleep 1
+          done
+
+          docker exec accounting-mongo-rs mongosh --quiet --eval '
+            const result = rs.initiate({
+              _id: "rs0",
+              members: [{_id: 0, host: "localhost:27017"}]
+            });
+            if (result.ok !== 1 && result.codeName !== "AlreadyInitialized") {
+              printjson(result);
+              quit(1);
+            }
+          '
+
+          for attempt in {1..60}; do
+            if docker exec accounting-mongo-rs mongosh --quiet \
+              --eval 'quit(db.hello().isWritablePrimary === true ? 0 : 1)'; then
+              break
+            fi
+            if [ "$attempt" -eq 60 ]; then
+              docker logs accounting-mongo-rs
+              exit 1
+            fi
+            sleep 1
+          done
+      - name: Run real Mongo transaction contracts serially
+        run: >-
+          python -m pytest
+          tests/mongo_replica/test_accounting_ledger_v2_mongo_replica.py
+          -m mongo_replica
+          -q --tb=short
+      - name: Capture MongoDB logs
+        if: always()
+        working-directory: .
+        run: docker logs accounting-mongo-rs
 
   frontend-contract:
     name: Accounting frontend contract
