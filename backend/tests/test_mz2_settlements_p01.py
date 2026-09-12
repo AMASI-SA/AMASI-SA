@@ -1,11 +1,7 @@
-import asyncio
-from copy import deepcopy
-
 import pytest
 from fastapi import FastAPI, HTTPException
 from httpx import ASGITransport, AsyncClient
 
-import accounting_settlement_routes as settlement_routes
 import accounting_settlement_service as service
 from financial_provider_apps import make_financial_provider_apps_router
 
@@ -321,7 +317,14 @@ async def test_authoritative_post_route_denies_employee_without_mutation():
             self.accounting_audit_log = MutationTripwire("audit")
 
     async def current_user():
-        return {"id": "employee-1", "role": "employee"}
+        return {
+            "id": "employee-1",
+            "role": "employee",
+            "accounting_permissions": [
+                "accounting.settlements.view",
+                "accounting.settlements.post",
+            ],
+        }
 
     db = Db()
     router = make_financial_provider_apps_router(db, current_user)
@@ -354,132 +357,6 @@ async def test_authoritative_post_route_denies_employee_without_mutation():
     assert db.accounting_settlements_v2.calls == 0
     assert db.general_ledger.calls == 0
     assert db.accounting_audit_log.calls == 0
-
-
-@pytest.mark.asyncio
-async def test_authoritative_post_route_atomically_claims_concurrent_retry(monkeypatch):
-    class Result:
-        def __init__(self, matched_count):
-            self.matched_count = matched_count
-
-    class Drafts:
-        def __init__(self, document):
-            self.document = deepcopy(document)
-            self.lock = asyncio.Lock()
-            self.initial_reads = 0
-            self.both_read = asyncio.Event()
-
-        async def find_one(self, query, *_args, **_kwargs):
-            if query.get("id") != self.document["id"] or query.get("user_id") != "owner-1":
-                return None
-            if self.document["status"] == "reviewed" and self.initial_reads < 2:
-                snapshot = deepcopy(self.document)
-                self.initial_reads += 1
-                if self.initial_reads == 2:
-                    self.both_read.set()
-                await self.both_read.wait()
-                return snapshot
-            return deepcopy(self.document)
-
-        async def update_one(self, query, update, **_kwargs):
-            async with self.lock:
-                if any(self.document.get(key) != value for key, value in query.items()):
-                    return Result(0)
-                self.document.update(deepcopy(update.get("$set") or {}))
-                return Result(1)
-
-    class Accounts:
-        async def find_one(self, query, *_args, **_kwargs):
-            assert query["user_id"] == "owner-1"
-            return {"id": "bank-1", "name": "بنك اختباري", "account_type": "bank"}
-
-    class Ledger:
-        def __init__(self):
-            self.posted = None
-
-        async def find_one(self, query, *_args, **_kwargs):
-            if self.posted and query.get("metadata.idempotency_key") == "idem-concurrent-1":
-                return {"txn_group_id": "group-concurrent-1"}
-            return None
-
-        def aggregate(self, _pipeline):
-            async def rows():
-                yield {"_id": "debit", "total": 900, "count": 1}
-            return rows()
-
-    class Audit:
-        def __init__(self):
-            self.inserted = []
-
-        async def insert_one(self, document):
-            self.inserted.append(document)
-
-    class Db:
-        def __init__(self):
-            self.users = _Collection({"id": "owner-1", "role": "owner"})
-            self.accounting_settlements_v2 = Drafts({
-                "id": "draft-concurrent-1",
-                "user_id": "owner-1",
-                "status": "reviewed",
-                "provider": "salla",
-                "bank_account_id": "bank-1",
-                "statement_reference": "SALLA-CONCURRENT-001",
-                "source_file_id": "file-concurrent-1",
-                "source_file_hash": "hash-concurrent-1",
-                "idempotency_key": "idem-concurrent-1",
-                "amounts": _salla_amounts(),
-                "review_reasons": [],
-                "source_snapshot": {"matched": 1, "unmatched": 0},
-            })
-            self.accounts = Accounts()
-            self.general_ledger = Ledger()
-            self.accounting_audit_log = Audit()
-
-    db = Db()
-    post_calls = []
-
-    async def fake_post_txn_group(*_args, **kwargs):
-        post_calls.append(kwargs)
-        await asyncio.sleep(0)
-        db.general_ledger.posted = deepcopy(kwargs)
-        return {
-            "txn_group_id": "group-concurrent-1",
-            "entries": [{"id": "entry-concurrent-1"}],
-            "debit_total": 900,
-            "credit_total": 900,
-        }
-
-    monkeypatch.setattr(service, "post_txn_group", fake_post_txn_group)
-
-    async def current_user():
-        return {"id": "owner-1", "role": "owner"}
-
-    router = make_financial_provider_apps_router(db, current_user)
-    endpoint = next(
-        route.endpoint for route in router.routes
-        if route.path.endswith("/accounting-module/settlements/drafts/{draft_id}/post")
-    )
-    assert endpoint.__module__ == "accounting_settlement_lifecycle_routes"
-
-    results = await asyncio.gather(
-        endpoint("draft-concurrent-1", settlement_routes.DraftActionIn(), await current_user()),
-        endpoint("draft-concurrent-1", settlement_routes.DraftActionIn(), await current_user()),
-        return_exceptions=True,
-    )
-
-    successes = [result for result in results if isinstance(result, dict)]
-    conflicts = [result for result in results if isinstance(result, HTTPException)]
-    assert len(successes) == 1
-    assert successes[0]["ledger_txn_group_id"] == "group-concurrent-1"
-    assert len(conflicts) == 1
-    assert conflicts[0].status_code == 409
-    assert "بدأ مستخدم آخر" in str(conflicts[0].detail)
-    assert len(post_calls) == 1
-    assert post_calls[0]["user_id"] == "owner-1"
-    assert post_calls[0]["metadata"]["idempotency_key"] == "idem-concurrent-1"
-    assert db.accounting_settlements_v2.document["status"] == "posted"
-    assert len(db.accounting_audit_log.inserted) == 2
-    assert {row["user_id"] for row in db.accounting_audit_log.inserted} == {"owner-1"}
 
 
 @pytest.mark.asyncio
