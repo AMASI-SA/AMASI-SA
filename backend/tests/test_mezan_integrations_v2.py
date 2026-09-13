@@ -494,6 +494,7 @@ async def test_indexes_cover_v2_and_governed_ad_journal_unique_identities():
         "mezan_integration_sync_runs_v2",
         "mezan_integration_errors_v2",
         "mezan_campaign_product_links_v2",
+        "mezan_meta_management_proposals_v1",
         "mezan_snapchat_campaign_proposals_v1",
         "mezan_snapchat_campaign_audit_v1",
         "mezan_snapchat_campaign_entity_leases_v1",
@@ -513,6 +514,8 @@ async def test_indexes_cover_v2_and_governed_ad_journal_unique_identities():
         "mezan_integration_sync_runs_v2_one_running",
         "mezan_integration_errors_v2_error_unique",
         "mezan_campaign_product_links_v2_idempotency_unique",
+        "meta_management_proposal_unique",
+        "meta_management_idempotency_unique",
         "snap_management_proposal_unique",
         "snap_management_idempotency_unique",
         "snap_management_active_entity_lease_unique",
@@ -523,6 +526,25 @@ async def test_indexes_cover_v2_and_governed_ad_journal_unique_identities():
         "mezan_campaign_product_links_v2_event_unique",
         "mezan_campaign_product_links_v2_linear_history",
     }
+    meta_management_definitions = [
+        (keys, options)
+        for collection, keys, options in db.indexes
+        if collection == "mezan_meta_management_proposals_v1"
+    ]
+    assert meta_management_definitions == [
+        (
+            [("user_id", 1), ("proposal_id", 1)],
+            {"unique": True, "name": "meta_management_proposal_unique"},
+        ),
+        (
+            [("user_id", 1), ("idempotency_key", 1)],
+            {"unique": True, "name": "meta_management_idempotency_unique"},
+        ),
+        (
+            [("user_id", 1), ("status", 1), ("created_at", -1)],
+            {"name": "meta_management_status_latest"},
+        ),
+    ]
     # Define the deployed idempotency index exactly once. MongoDB rejects a
     # repeated index name when a later installer changes any option.
     idempotency_definitions = [
@@ -985,6 +1007,39 @@ async def test_stored_or_stale_credentials_do_not_claim_verified_connection():
     assert by_provider["tiktok_ads"]["connection_status"] == "data_available"
     assert by_provider["tiktok_ads"]["connection_provenance"] == "data_feed"
     assert by_provider["qoyod"]["connection_status"] == "unknown"
+    assert by_provider["qoyod"]["connection_provenance"] == "legacy_integration"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("verified_version", "expected_status"),
+    [("version-a", "unknown"), ("version-b", "connected")],
+)
+async def test_qoyod_versioned_credentials_require_matching_verification_version(
+    verified_version,
+    expected_status,
+):
+    db = FakeDB(
+        {
+            "qoyod_credentials": [
+                {
+                    "user_id": "main",
+                    "api_key_enc": "encrypted-never-project",
+                    "credential_version": "version-b",
+                    "last_verified_credential_version": verified_version,
+                    # Deliberately newer than rotated_at: version identity,
+                    # not timestamp ordering, is authoritative once present.
+                    "last_verified_at": "2026-07-28T11:00:00+00:00",
+                    "rotated_at": "2026-07-28T10:00:00+00:00",
+                }
+            ],
+        }
+    )
+
+    overview = await _service(db).overview("owner-1")
+    by_provider = {card["provider"]: card for card in overview["providers"]}
+
+    assert by_provider["qoyod"]["connection_status"] == expected_status
     assert by_provider["qoyod"]["connection_provenance"] == "legacy_integration"
 
 
