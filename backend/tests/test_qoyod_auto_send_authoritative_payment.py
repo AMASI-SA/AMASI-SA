@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 from copy import deepcopy
+from unittest.mock import patch
 
 from qoyod_auto_payment_freshness import (
     _canonical_from_unified,
@@ -349,6 +350,90 @@ def test_worker_sort_key_is_oldest_first():
     assert [row["order_number"] for row in sorted(rows, key=_oldest_key)] == [
         "1", "2", "3",
     ]
+
+
+def test_manual_sender_prepares_unified_projection_before_qoyod_boundary():
+    from qoyod_auto_unified import installer
+
+    calls = []
+
+    async def project(db, **kwargs):
+        calls.append((db, kwargs))
+        return {"ok": True, "source_authority": "unified_orders"}
+
+    db = object()
+    with patch.object(
+        installer, "sync_authoritative_payment_to_inbox", project,
+    ):
+        result = asyncio.run(installer._prepare_sender_projection(
+            db,
+            user_id="main",
+            orders_user_id="owner-1",
+            order_number="279460595",
+            actor="manual-ui:operator",
+        ))
+
+    assert result["ok"] is True
+    assert calls == [(db, {
+        "orders_user_id": "owner-1",
+        "legacy_user_id": "main",
+        "order_number": "279460595",
+    })]
+
+
+def test_manual_sender_preserves_genuine_legacy_order_fallback():
+    from qoyod_auto_unified import installer
+
+    async def missing_unified(*args, **kwargs):
+        return {
+            "ok": False,
+            "code": "authoritative_order_missing_after_resync",
+        }
+
+    with patch.object(
+        installer, "sync_authoritative_payment_to_inbox", missing_unified,
+    ):
+        result = asyncio.run(installer._prepare_sender_projection(
+            object(),
+            user_id="main",
+            orders_user_id="owner-1",
+            order_number="legacy-1",
+            actor="manual-ui",
+        ))
+
+    assert result == {
+        "ok": True,
+        "skipped": True,
+        "reason": "legacy_order_without_unified_projection",
+    }
+
+
+def test_manual_sender_fails_closed_on_unified_payment_refusal():
+    from integrations.qoyod_manual.send import ManualSendRefused
+    from qoyod_auto_unified import installer
+
+    async def unpaid(*args, **kwargs):
+        return {
+            "ok": False,
+            "code": "authoritative_payment_not_eligible",
+            "order_number": "279460595",
+        }
+
+    with patch.object(
+        installer, "sync_authoritative_payment_to_inbox", unpaid,
+    ):
+        try:
+            asyncio.run(installer._prepare_sender_projection(
+                object(),
+                user_id="main",
+                orders_user_id="owner-1",
+                order_number="279460595",
+                actor="failed-retry-ui:operator",
+            ))
+        except ManualSendRefused as exc:
+            assert exc.code == "authoritative_payment_not_eligible"
+        else:
+            raise AssertionError("unpaid unified order crossed Qoyod boundary")
 
 
 def test_paid_exact_reference_overrides_stale_failure_classification():

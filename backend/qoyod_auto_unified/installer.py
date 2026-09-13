@@ -28,6 +28,77 @@ def _consume_historical_total_override(
     return True if automatic else requested
 
 
+def _uses_unified_sender_projection(actor: str) -> bool:
+    """Return whether this guarded sender path consumes unified orders."""
+    return str(actor or "").startswith((
+        "auto-plan-b:",
+        "manual-ui",
+        "failed-retry-ui",
+    ))
+
+
+async def _prepare_sender_projection(
+    db: Any,
+    *,
+    user_id: str,
+    orders_user_id: str,
+    order_number: str,
+    actor: str,
+) -> dict[str, Any]:
+    """Materialize the compatibility row before any guarded Qoyod send."""
+    from integrations.qoyod_manual.send import ManualSendRefused
+
+    automatic = str(actor or "").startswith("auto-plan-b:")
+    if not _uses_unified_sender_projection(actor):
+        return {"ok": True, "skipped": True, "reason": "legacy_sender"}
+    try:
+        freshness = await sync_authoritative_payment_to_inbox(
+            db,
+            orders_user_id=str(orders_user_id),
+            legacy_user_id=str(user_id),
+            order_number=str(order_number),
+        )
+    except Exception as exc:  # pre-Qoyod projection boundary
+        freshness = {
+            "ok": False,
+            "code": "authoritative_payment_refresh_failed",
+            "stage": "authoritative_sender_projection",
+            "exception_type": type(exc).__name__,
+            "order_number": str(order_number),
+        }
+
+    code = freshness.get("code")
+    if (
+        not automatic
+        and code == "authoritative_order_missing_after_resync"
+    ):
+        # Preserve the established legacy/manual sender for historical rows
+        # that genuinely predate unified_orders. Unified rows never take this
+        # fallback: every other projection failure remains fail-closed.
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "legacy_order_without_unified_projection",
+        }
+    if freshness.get("ok"):
+        return freshness
+
+    code = code or "authoritative_payment_refresh_failed"
+    message = (
+        "حالة الدفع الحالية غير مؤهلة للإرسال إلى قيود."
+        if code == "authoritative_payment_not_eligible"
+        else (
+            "يحتاج الطلب إلى تحقق دفع مباشر من سلة قبل الإرسال."
+            if code == "authoritative_payment_needs_verification"
+            else (
+                "تعذر تجهيز بيانات الطلب الموحدة قبل الإرسال؛ "
+                "لم يتم إرسال أي شيء إلى قيود."
+            )
+        )
+    )
+    raise ManualSendRefused(code, message, freshness)
+
+
 def install_auto_send_payment_freshness_patch() -> None:
     """Install the unified source, recovery, queue and reconciliation patch."""
     from integrations.qoyod import qoyod_invoices_sync, unsent_orders
@@ -65,40 +136,13 @@ def install_auto_send_payment_freshness_patch() -> None:
         historical_total_override = _consume_historical_total_override(
             kwargs, automatic=automatic
         )
-        if automatic:
-            try:
-                freshness = await sync_authoritative_payment_to_inbox(
-                    db,
-                    orders_user_id=effective_owner,
-                    legacy_user_id=str(user_id),
-                    order_number=str(order_number),
-                )
-            except Exception as exc:  # pre-Qoyod projection boundary
-                freshness = {
-                    "ok": False,
-                    "code": "authoritative_payment_refresh_failed",
-                    "stage": "authoritative_sender_projection",
-                    "exception_type": type(exc).__name__,
-                    "order_number": str(order_number),
-                }
-            if not freshness.get("ok"):
-                code = (
-                    freshness.get("code")
-                    or "authoritative_payment_refresh_failed"
-                )
-                message = (
-                    "حالة الدفع الحالية غير مؤهلة للإرسال إلى قيود."
-                    if code == "authoritative_payment_not_eligible"
-                    else (
-                        "يحتاج الطلب إلى تحقق دفع مباشر من سلة قبل الإرسال."
-                        if code == "authoritative_payment_needs_verification"
-                        else (
-                            "تعذر تجهيز بيانات الطلب الموحدة قبل الإرسال "
-                            "التلقائي؛ لم يتم إرسال أي شيء إلى قيود."
-                        )
-                    )
-                )
-                raise ManualSendRefused(code, message, freshness)
+        await _prepare_sender_projection(
+            db,
+            user_id=str(user_id),
+            orders_user_id=effective_owner,
+            order_number=str(order_number),
+            actor=actor,
+        )
 
         try:
             result = await original_send(
