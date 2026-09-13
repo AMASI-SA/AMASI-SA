@@ -82,6 +82,74 @@ async def test_batch_is_bounded_by_route_and_returns_ephemeral_counts():
     assert result["total"] == 2
     assert result["counts"] == {"ready": 2}
     assert result["invoice_sent_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_unified_only_order_defers_missing_legacy_preflight_to_guarded_sender():
+    async def missing_legacy_preflight(*args, **kwargs):
+        return {
+            "ok": False,
+            "code": "order_not_found",
+            "message": "legacy inbox row missing",
+        }
+
+    result = await recheck_payment_read_only(
+        _NoWriteDb(),
+        orders_user_id="orders-user",
+        qoyod_user_id="main",
+        order_number="278100005",
+        fetch_fn=_fetch({
+            "order_status_slug": "completed",
+            "order_status": "تم التنفيذ",
+            "payment_method": "mada",
+            "payment_status": "paid",
+            "payment_collection_status": "paid",
+            "paid_amount": 100,
+            "remaining_amount": 0,
+            "total_amount": 100,
+        }),
+        preflight_fn=missing_legacy_preflight,
+    )
+
+    assert result["outcome"] == "ready"
+    assert result["code"] == "qoyod_preflight_deferred_to_sender_projection"
+    assert result["qoyod_preflight_deferred"] is True
+    assert result["read_only"] is True
+    assert result["invoice_sent"] is False
+
+
+@pytest.mark.asyncio
+async def test_non_missing_preflight_failure_remains_blocked():
+    async def blocked_preflight(*args, **kwargs):
+        return {
+            "ok": True,
+            "diagnosis_status": "blocked",
+            "code": "totals_mismatch",
+            "message": "totals mismatch",
+            "salla_total": 100,
+        }
+
+    result = await recheck_payment_read_only(
+        _NoWriteDb(),
+        orders_user_id="orders-user",
+        qoyod_user_id="main",
+        order_number="278100006",
+        fetch_fn=_fetch({
+            "order_status_slug": "completed",
+            "order_status": "تم التنفيذ",
+            "payment_method": "mada",
+            "payment_status": "paid",
+            "payment_collection_status": "paid",
+            "paid_amount": 100,
+            "remaining_amount": 0,
+            "total_amount": 100,
+        }),
+        preflight_fn=blocked_preflight,
+    )
+
+    assert result["outcome"] == "review"
+    assert result["code"] == "totals_mismatch"
+    assert result.get("qoyod_preflight_deferred") is not True
     assert result["read_only"] is True
 
 

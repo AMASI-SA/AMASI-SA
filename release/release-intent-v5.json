@@ -41,7 +41,7 @@
     "build_meta": {
       "bytes": 194116,
       "path": "build-meta.json",
-      "sha256": "628fa373b08f6d7cc435ff51255030ddf39c5d3d621b180be2990e534554c037"
+      "sha256": "d1006bcdc9843ddf295b920282ffd95157e4fd68374806d9da7f1ce0e389b3df"
     },
     "entrypoints": [
       {
@@ -72,7 +72,7 @@
         }
       }
     },
-    "git_sha": "4201081f5738969d0d7e5337ca935c71556d7e05",
+    "git_sha": "3e6d1d66c75bf34c2bf0d434b24369ad4461a055",
     "index": {
       "bytes": 3253,
       "path": "index.html",
@@ -161,7 +161,7 @@
         }
       }
     },
-    "git_sha": "4201081f5738969d0d7e5337ca935c71556d7e05",
+    "git_sha": "3e6d1d66c75bf34c2bf0d434b24369ad4461a055",
     "kind": "frontend_two_clean_builds_v1",
     "passes": [
       {
@@ -169,7 +169,7 @@
         "build_meta": {
           "bytes": 194116,
           "path": "build-meta.json",
-          "sha256": "628fa373b08f6d7cc435ff51255030ddf39c5d3d621b180be2990e534554c037"
+          "sha256": "d1006bcdc9843ddf295b920282ffd95157e4fd68374806d9da7f1ce0e389b3df"
         },
         "ordinal": 1
       },
@@ -178,7 +178,7 @@
         "build_meta": {
           "bytes": 194116,
           "path": "build-meta.json",
-          "sha256": "628fa373b08f6d7cc435ff51255030ddf39c5d3d621b180be2990e534554c037"
+          "sha256": "d1006bcdc9843ddf295b920282ffd95157e4fd68374806d9da7f1ce0e389b3df"
         },
         "ordinal": 2
       }
@@ -186,7 +186,7 @@
     "proof_file": {
       "bytes": 1520,
       "path": "frontend/.release/reproducible-build.json",
-      "sha256": "a1a2840a19886aea29d894a590008a18e4bf1eef34ea7d1f61f01589b6a90f22"
+      "sha256": "f5c3519e618fa002b255092d004680be67e794fb5a48baaa0ef3f94846bac26c"
     },
     "retained_pass": 2,
     "schema_version": 1,
@@ -5079,7 +5079,7 @@
       "build_meta": {
         "bytes": 194116,
         "path": "build-meta.json",
-        "sha256": "628fa373b08f6d7cc435ff51255030ddf39c5d3d621b180be2990e534554c037"
+        "sha256": "d1006bcdc9843ddf295b920282ffd95157e4fd68374806d9da7f1ce0e389b3df"
       },
       "entrypoints": [
         {
@@ -5110,7 +5110,7 @@
           }
         }
       },
-      "git_sha": "4201081f5738969d0d7e5337ca935c71556d7e05",
+      "git_sha": "3e6d1d66c75bf34c2bf0d434b24369ad4461a055",
       "index": {
         "bytes": 3253,
         "path": "index.html",
@@ -5199,7 +5199,7 @@
           }
         }
       },
-      "git_sha": "4201081f5738969d0d7e5337ca935c71556d7e05",
+      "git_sha": "3e6d1d66c75bf34c2bf0d434b24369ad4461a055",
       "kind": "frontend_two_clean_builds_v1",
       "passes": [
         {
@@ -5207,7 +5207,7 @@
           "build_meta": {
             "bytes": 194116,
             "path": "build-meta.json",
-            "sha256": "628fa373b08f6d7cc435ff51255030ddf39c5d3d621b180be2990e534554c037"
+            "sha256": "d1006bcdc9843ddf295b920282ffd95157e4fd68374806d9da7f1ce0e389b3df"
           },
           "ordinal": 1
         },
@@ -5216,7 +5216,7 @@
           "build_meta": {
             "bytes": 194116,
             "path": "build-meta.json",
-            "sha256": "628fa373b08f6d7cc435ff51255030ddf39c5d3d621b180be2990e534554c037"
+            "sha256": "d1006bcdc9843ddf295b920282ffd95157e4fd68374806d9da7f1ce0e389b3df"
           },
           "ordinal": 2
         }
@@ -5224,7 +5224,7 @@
       "proof_file": {
         "bytes": 1520,
         "path": "frontend/.release/reproducible-build.json",
-        "sha256": "a1a2840a19886aea29d894a590008a18e4bf1eef34ea7d1f61f01589b6a90f22"
+        "sha256": "f5c3519e618fa002b255092d004680be67e794fb5a48baaa0ef3f94846bac26c"
       },
       "retained_pass": 2,
       "schema_version": 1,
@@ -5242,10 +5242,10 @@
     },
     "kind": "mezan_runtime_release_identity_v5",
     "protocol_version": 5,
-    "release_id": "rg5-283f3d3afa0019d900ad044b0efc479db108ec3a36ee080a7d7a2e781ed5d90d",
+    "release_id": "rg5-254ac2eea94b780608d4b71c452dc0bfa7d830181c5251622eb61e7e7f9b41d6",
     "schema_version": 1,
-    "source_git_sha": "4201081f5738969d0d7e5337ca935c71556d7e05"
+    "source_git_sha": "3e6d1d66c75bf34c2bf0d434b24369ad4461a055"
   },
   "schema_version": 1,
-  "source_git_sha": "4201081f5738969d0d7e5337ca935c71556d7e05"
+  "source_git_sha": "3e6d1d66c75bf34c2bf0d434b24369ad4461a055"
 }
