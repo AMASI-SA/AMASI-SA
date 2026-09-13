@@ -253,6 +253,100 @@ async def test_qoyod_live_preflight_skips_items_and_shipments(monkeypatch):
     assert "keyword" not in calls[0][2]
 
 
+class _StoredSallaOrderCollection:
+    async def find_one(self, selector, projection):
+        assert selector == {
+            "user_id": "orders-user",
+            "order_number": "273000003",
+        }
+        assert projection == {"_id": 0, "order_id": 1}
+        return {"order_id": "987654"}
+
+
+class _StoredSallaOrderDb:
+    unified_orders = _StoredSallaOrderCollection()
+
+
+@pytest.mark.asyncio
+async def test_live_preflight_uses_stored_salla_id_before_reference_search(
+    monkeypatch,
+):
+    """A freshly ingested order must not depend on list-filter semantics."""
+    from salla_integration import sync as salla_sync
+
+    calls = []
+
+    async def fake_call_salla(db, user_id, method, endpoint, params=None):
+        calls.append((method, endpoint, params))
+        if endpoint == "/orders/987654":
+            return {
+                "data": {
+                    "id": 987654,
+                    "reference_id": "273000003",
+                    "status": {
+                        "slug": "completed",
+                        "name": "تم التنفيذ",
+                    },
+                },
+            }
+        if endpoint == "/orders/items":
+            assert params == {"order_id": "987654"}
+            return {"data": []}
+        if endpoint == "/shipments":
+            assert params == {"order_id": "987654", "per_page": 50}
+            return {"data": []}
+        raise AssertionError(f"unexpected Salla endpoint: {endpoint}")
+
+    monkeypatch.setattr(salla_sync, "call_salla", fake_call_salla)
+
+    details = await salla_sync._fetch_salla_order_details(
+        _StoredSallaOrderDb(),
+        "orders-user",
+        "273000003",
+    )
+
+    assert details["reference_id"] == "273000003"
+    assert calls[0] == ("GET", "/orders/987654", None)
+    assert "/orders" not in [endpoint for _, endpoint, _ in calls]
+    assert {endpoint for _, endpoint, _ in calls[1:]} == {
+        "/orders/items",
+        "/shipments",
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("returned_reference", ["", "different-order"])
+async def test_stored_salla_id_requires_exact_reference_before_enrichment(
+    monkeypatch,
+    returned_reference,
+):
+    from salla_integration import sync as salla_sync
+
+    calls = []
+
+    async def fake_call_salla(db, user_id, method, endpoint, params=None):
+        calls.append(endpoint)
+        assert endpoint == "/orders/987654"
+        return {
+            "data": {
+                "id": 987654,
+                "reference_id": returned_reference,
+                "status": {"slug": "completed", "name": "تم التنفيذ"},
+            },
+        }
+
+    monkeypatch.setattr(salla_sync, "call_salla", fake_call_salla)
+
+    with pytest.raises(RuntimeError, match="reference mismatch"):
+        await salla_sync._fetch_salla_order_details(
+            _StoredSallaOrderDb(),
+            "orders-user",
+            "273000003",
+        )
+
+    assert calls == ["/orders/987654"]
+
+
 class _UpdateResult:
     modified_count = 1
 
@@ -852,7 +946,58 @@ async def test_salla_refresh_failure_retries_later_and_next_candidate_sends(
     assert result["results"][0]["outcome"] == "sent"
     assert result["results"][1]["outcome"] == "retry_later"
     assert result["results"][1]["order_number"] == "276776919"
-    assert db.qoyod_manual_auto_quarantines.rows == {}
+    retry = db.qoyod_manual_auto_quarantines.rows["main:276776919"]
+    assert retry["status"] == "open"
+    assert retry["code"] == "salla_status_refresh_failed"
+    assert retry["recovery_class"] == "sync_retryable"
+    assert retry["next_retry_at"] > retry["retry_scheduled_at"]
+
+
+@pytest.mark.asyncio
+async def test_salla_refresh_retry_delay_allows_next_order_in_later_round(
+    monkeypatch,
+):
+    sent = []
+
+    async def fake_send(
+        db, *, user_id, orders_user_id, order_number, actor,
+        allow_historical_positive_total,
+    ):
+        assert allow_historical_positive_total is True
+        sent.append(order_number)
+        return {"invoice_id": 901, "payment_id": 902}
+
+    await _prepare_run(
+        monkeypatch,
+        candidates=[_candidate("276776919"), _candidate("276776920")],
+        send_one=fake_send,
+    )
+
+    async def fake_refresh(db, *, orders_user_id, order_number):
+        if order_number == "276776919":
+            raise ManualSendRefused(
+                "salla_status_refresh_failed",
+                "تعذر التحقق من الحالة الحالية للطلب في سلة",
+                {"stage": "fetch_order_details", "needs_reauth": False},
+            )
+        return True, {
+            "ok": True,
+            "found": True,
+            "plan_b_status_snapshot": {"status_native": "تم التنفيذ"},
+        }
+
+    monkeypatch.setattr(
+        auto_send, "_refresh_and_verify_salla_status", fake_refresh
+    )
+
+    db = _RunDb()
+    first = await auto_send.run_once(db, batch_limit=1)
+    second = await auto_send.run_once(db, batch_limit=1)
+
+    assert first["retry_later_count"] == 1
+    assert first["sent_count"] == 0
+    assert second["sent_count"] == 1
+    assert sent == ["276776920"]
 
 
 @pytest.mark.asyncio

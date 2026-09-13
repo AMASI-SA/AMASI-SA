@@ -778,6 +778,15 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
                     })
                     continue
                 if exc.code == "salla_status_refresh_failed":
+                    # Persist the transient failure through the installed
+                    # bounded retry scheduler. Without this write the same
+                    # oldest row consumes every later worker batch forever.
+                    await _quarantine_order(
+                        db,
+                        order_number=order_number,
+                        exc=exc,
+                        run_id=run_id,
+                    )
                     results.append({
                         "order_number": order_number,
                         "outcome": "retry_later",
