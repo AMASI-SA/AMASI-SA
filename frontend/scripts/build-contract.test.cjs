@@ -152,6 +152,22 @@ test("release readiness binds schema-2 source ancestry and summary-only health",
   assert.match(classification, /verify_release_intent_git\(intent\)/);
   assert.match(
     classification,
+    /"\$source_base_git_sha" "\$PR_BASE_SHA"/,
+  );
+  assert.match(
+    classification,
+    /"\$PR_BASE_SHA" "\$source_git_sha"/,
+  );
+  assert.match(
+    classification,
+    /"\$source_base_git_sha" "\$PUSH_BEFORE_SHA"/,
+  );
+  assert.match(
+    classification,
+    /"\$PUSH_BEFORE_SHA" "\$source_git_sha"/,
+  );
+  assert.match(
+    classification,
     /git merge-base --is-ancestor \\\n\s+"\$candidate_base_sha" "\$candidate_source_sha"/,
   );
   assert.match(
