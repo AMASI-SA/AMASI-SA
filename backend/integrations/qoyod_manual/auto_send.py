@@ -188,6 +188,114 @@ def is_live_requested(settings: dict) -> bool:
     )
 
 
+def durable_auto_send_desired(settings: dict) -> bool:
+    """Return the merchant's durable intent independently of runtime health.
+
+    Older settings documents predate auto_send_desired. For those rows, the
+    visible master switches are the only trustworthy evidence of an explicit
+    opt-in. Once written, the durable field is authoritative so a temporary
+    credential pause cannot be mistaken for an operator opt-out.
+    """
+    explicit = settings.get("auto_send_desired")
+    if isinstance(explicit, bool):
+        return explicit
+    return bool(settings.get("enabled") and settings.get("auto_send"))
+
+
+_CREDENTIAL_PAUSE_REASONS = frozenset({
+    "credentials_removed",
+    "credentials_invalid_or_expired",
+    "credentials_unverified",
+})
+
+
+def credential_pause_patch(
+    settings: dict,
+    *,
+    reason: str,
+    now_iso: str,
+    error: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    """Build the fail-closed runtime pause without erasing operator intent."""
+    return {
+        "auto_send_desired": durable_auto_send_desired(settings),
+        "enabled": False,
+        "auto_send": False,
+        UNIFIED_CANDIDATE_AUTO_FLAG: False,
+        "plan_b_auto_send_armed_at": None,
+        "plan_b_auto_send_disabled_at": now_iso,
+        "plan_b_auto_send_disabled_reason": reason,
+        "plan_b_auto_send_last_error": error,
+        "updated_at": now_iso,
+    }
+
+
+def credential_recovery_plan(
+    settings: dict,
+    *,
+    readiness_issues: list[dict[str, str]],
+    orders_user_id: str,
+    actor: str,
+    canary_run_id: Optional[str],
+    now_iso: str,
+) -> dict[str, Any]:
+    """Plan a credential-triggered resume; never mutate or bypass readiness."""
+    desired = durable_auto_send_desired(settings)
+    if not desired:
+        return {
+            "requested": False,
+            "resumed": False,
+            "reason": "operator_intent_disabled",
+            "issues": [],
+            "settings_patch": {},
+        }
+
+    issues = list(readiness_issues)
+    if settings.get("dry_run_mode") is True:
+        issues.append({
+            "code": "dry_run_enabled",
+            "message": "يجب إيقاف الوضع التجريبي قبل استئناف الإرسال التلقائي",
+        })
+    if issues:
+        return {
+            "requested": True,
+            "resumed": False,
+            "reason": "readiness_failed",
+            "issues": issues,
+            "settings_patch": {},
+        }
+
+    patch = {
+        "auto_send_desired": True,
+        "enabled": True,
+        "auto_send": True,
+        "dry_run_mode": False,
+        UNIFIED_CANDIDATE_AUTO_FLAG: True,
+        "plan_b_auto_send_armed_at": now_iso,
+        "plan_b_auto_send_orders_user_id": str(orders_user_id),
+        "plan_b_auto_send_actor": str(actor),
+        "plan_b_auto_send_canary_run_id": canary_run_id,
+        "plan_b_auto_send_disabled_at": None,
+        "plan_b_auto_send_disabled_reason": None,
+        "plan_b_auto_send_last_error": None,
+        "plan_b_auto_send_last_recovery": {
+            "reason": "credentials_verified",
+            "recovered_at": now_iso,
+        },
+        "updated_at": now_iso,
+    }
+    candidate = {**settings, **patch}
+    if not is_live_requested(candidate):
+        raise ValueError("credential recovery produced a non-live state")
+    return {
+        "requested": True,
+        "resumed": True,
+        "reason": "credentials_verified",
+        "issues": [],
+        "settings_patch": patch,
+    }
+
+
 def is_armed(settings: dict) -> bool:
     """Cheap runtime gate. Full validation happens when settings are saved."""
     return bool(
@@ -202,9 +310,15 @@ def is_armed(settings: dict) -> bool:
 
 
 def status_snapshot(settings: dict) -> dict[str, Any]:
+    desired = durable_auto_send_desired(settings)
+    armed = is_armed(settings)
+    disabled_reason = settings.get("plan_b_auto_send_disabled_reason")
     return {
+        "desired": desired,
         "requested": is_live_requested(settings),
-        "armed": is_armed(settings),
+        "armed": armed,
+        "credential_paused": disabled_reason in _CREDENTIAL_PAUSE_REASONS,
+        "resume_pending": bool(desired and not armed),
         "armed_at": settings.get("plan_b_auto_send_armed_at"),
         "armed_by": settings.get("plan_b_auto_send_actor"),
         "last_error": settings.get("plan_b_auto_send_last_error"),
@@ -623,6 +737,80 @@ async def _load_candidate_rows(
     }
 
 
+def _qoyod_status_codes(value: Any) -> set[int]:
+    """Extract provider HTTP status codes from nested safe error details."""
+    result: set[int] = set()
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            if key == "status_code":
+                try:
+                    result.add(int(nested))
+                except (TypeError, ValueError):
+                    pass
+            else:
+                result.update(_qoyod_status_codes(nested))
+    elif isinstance(value, (list, tuple)):
+        for nested in value:
+            result.update(_qoyod_status_codes(nested))
+    return result
+
+
+def is_transient_qoyod_failure(exc: ManualSendRefused) -> bool:
+    """Return True only for network, throttle, or Qoyod 5xx failures."""
+    statuses = _qoyod_status_codes(exc.extra or {})
+    return any(
+        status_code == 0
+        or status_code == 429
+        or status_code >= 500
+        for status_code in statuses
+    )
+
+
+def is_credential_failure(exc: ManualSendRefused) -> bool:
+    """Classify only missing/unauthorized credentials as a global pause."""
+    if exc.code == "qoyod_credentials_missing":
+        return True
+    if exc.code != "qoyod_http_error":
+        return False
+    try:
+        status_code = int((exc.extra or {}).get("status_code") or 0)
+    except (TypeError, ValueError):
+        return False
+    return status_code in {401, 403}
+
+
+async def _pause_for_credential_failure(
+    db,
+    *,
+    settings: dict[str, Any],
+    exc: ManualSendRefused,
+    run_id: str,
+) -> None:
+    """Pause the runtime once; keep backlog rows eligible for later resume."""
+    now_iso = _now().isoformat()
+    status_code = (exc.extra or {}).get("status_code")
+    safe_error = {
+        "code": (
+            "qoyod_credentials_missing"
+            if exc.code == "qoyod_credentials_missing"
+            else "qoyod_credentials_invalid_or_expired"
+        ),
+        "status_code": status_code,
+        "run_id": run_id,
+        "at": now_iso,
+    }
+    await db.qoyod_settings.update_one(
+        {"user_id": _TENANT},
+        {"$set": credential_pause_patch(
+            settings,
+            reason="credentials_invalid_or_expired",
+            now_iso=now_iso,
+            error=safe_error,
+        )},
+        upsert=True,
+    )
+
+
 async def _quarantine_order(
     db, *, order_number: str, exc: ManualSendRefused, run_id: str,
 ) -> None:
@@ -763,6 +951,46 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
                     "payment_id": payload.get("payment_id"),
                 })
             except ManualSendRefused as exc:
+                if is_credential_failure(exc):
+                    await _pause_for_credential_failure(
+                        db,
+                        settings=settings,
+                        exc=exc,
+                        run_id=run_id,
+                    )
+                    results.append({
+                        "order_number": order_number,
+                        "outcome": "credentials_paused",
+                        "code": exc.code,
+                    })
+                    # A credential failure is global, not order-local. Stop
+                    # this bounded round without quarantining any backlog row.
+                    break
+                if is_transient_qoyod_failure(exc):
+                    status_codes = sorted(_qoyod_status_codes(exc.extra or {}))
+                    retryable = ManualSendRefused(
+                        "qoyod_transient_error",
+                        "تعذر تأكيد نتيجة قيود مؤقتاً؛ ستسبق أي محاولة "
+                        "لاحقة مصالحة المرجع لمنع التكرار.",
+                        {
+                            "source_code": exc.code,
+                            "status_codes": status_codes,
+                        },
+                    )
+                    await _quarantine_order(
+                        db,
+                        order_number=order_number,
+                        exc=retryable,
+                        run_id=run_id,
+                    )
+                    results.append({
+                        "order_number": order_number,
+                        "outcome": "retry_later",
+                        "code": retryable.code,
+                        "message": retryable.message,
+                        "detail": retryable.extra,
+                    })
+                    continue
                 if exc.code in SAFE_ALREADY_SENT_CODES:
                     results.append({
                         "order_number": order_number,
@@ -843,14 +1071,22 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
         retry_later_count = sum(
             r["outcome"] == "retry_later" for r in results
         )
+        credential_paused_count = sum(
+            r["outcome"] == "credentials_paused" for r in results
+        )
         result = {
             "ok": True,
-            "status": "succeeded",
+            "status": (
+                "credentials_paused"
+                if credential_paused_count
+                else "succeeded"
+            ),
             "run_id": run_id,
             "sent_count": sent_count,
             "already_sent_count": already_count,
             "manual_review_count": manual_review_count,
             "retry_later_count": retry_later_count,
+            "credential_paused_count": credential_paused_count,
             "candidate_count": candidate_counts[
                 "authoritative_backlog_count"
             ],

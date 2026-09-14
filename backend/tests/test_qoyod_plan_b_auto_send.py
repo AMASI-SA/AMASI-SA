@@ -857,7 +857,7 @@ async def test_more_than_prefetch_page_of_quarantines_cannot_starve_older_row(
 
 
 @pytest.mark.asyncio
-async def test_qoyod_http_error_is_quarantined_and_next_candidate_sends(
+async def test_qoyod_503_is_retryable_and_next_candidate_sends(
     monkeypatch,
 ):
     calls = []
@@ -889,9 +889,11 @@ async def test_qoyod_http_error_is_quarantined_and_next_candidate_sends(
     assert result["ok"] is True
     assert result["status"] == "succeeded"
     assert result["sent_count"] == 1
-    assert result["manual_review_count"] == 1
+    assert result["manual_review_count"] == 0
+    assert result["retry_later_count"] == 1
     quarantine = db.qoyod_manual_auto_quarantines.rows["main:273811870"]
-    assert quarantine["code"] == "qoyod_http_error"
+    assert quarantine["code"] == "qoyod_transient_error"
+    assert quarantine["detail"]["status_codes"] == [503]
 
 
 @pytest.mark.asyncio
@@ -1106,3 +1108,112 @@ async def test_live_unpaid_order_is_refused_by_unchanged_manual_sender(
     ]
     assert quarantine["code"] == "payment_not_completed"
     assert quarantine["detail"]["qoyod_write_performed"] is False
+
+
+
+class _CredentialPauseSettingsCollection:
+    def __init__(self):
+        self.calls = []
+
+    async def update_one(self, selector, update, upsert=False):
+        self.calls.append((selector, update, upsert))
+        return _UpdateResult()
+
+
+@pytest.mark.asyncio
+async def test_credential_failure_pauses_worker_without_quarantining_orders(
+    monkeypatch,
+):
+    calls = []
+
+    async def fake_send(
+        db, *, user_id, orders_user_id, order_number, actor,
+        allow_historical_positive_total,
+    ):
+        calls.append(order_number)
+        raise ManualSendRefused(
+            "qoyod_http_error",
+            "استجابة غير ناجحة من قيود (401)",
+            {
+                "status_code": 401,
+                "endpoint": "POST /invoices",
+            },
+        )
+
+    await _prepare_run(
+        monkeypatch,
+        candidates=[_candidate("283500001"), _candidate("283500002")],
+        send_one=fake_send,
+    )
+    db = _RunDb()
+    db.qoyod_settings = _CredentialPauseSettingsCollection()
+
+    result = await auto_send.run_once(db, batch_limit=5)
+
+    assert calls == ["283500001"]
+    assert result["ok"] is True
+    assert result["status"] == "credentials_paused"
+    assert result["sent_count"] == 0
+    assert result["credential_paused_count"] == 1
+    assert result["results"] == [{
+        "order_number": "283500001",
+        "outcome": "credentials_paused",
+        "code": "qoyod_http_error",
+    }]
+    assert db.qoyod_manual_auto_quarantines.rows == {}
+    selector, update, upsert = db.qoyod_settings.calls[0]
+    assert selector == {"user_id": "main"}
+    assert upsert is True
+    patch = update["$set"]
+    assert patch["auto_send_desired"] is True
+    assert patch["enabled"] is False
+    assert patch["auto_send"] is False
+    assert patch["plan_b_unified_auto_send_enabled"] is False
+    assert patch["plan_b_auto_send_disabled_reason"] == (
+        "credentials_invalid_or_expired"
+    )
+
+
+@pytest.mark.parametrize(
+    ("code", "extra", "expected"),
+    [
+        ("qoyod_credentials_missing", {}, True),
+        ("qoyod_http_error", {"status_code": 401}, True),
+        ("qoyod_http_error", {"status_code": 403}, True),
+        ("qoyod_http_error", {"status_code": 429}, False),
+        ("qoyod_preflight_total_mismatch", {"difference": 0.02}, False),
+    ],
+)
+def test_credential_failure_classifier_is_closed(code, extra, expected):
+    exc = ManualSendRefused(code, "safe", extra)
+    assert auto_send.is_credential_failure(exc) is expected
+
+
+
+@pytest.mark.parametrize(
+    ("code", "extra", "expected"),
+    [
+        ("qoyod_http_error", {"status_code": 0}, True),
+        ("qoyod_http_error", {"status_code": 429}, True),
+        ("qoyod_http_error", {"status_code": 500}, True),
+        (
+            "product_create_failed",
+            {"response": {"status_code": 503}},
+            True,
+        ),
+        (
+            "product_create_failed",
+            {"primary_attempt": {"response": {"status_code": 422}}},
+            False,
+        ),
+        ("qoyod_http_error", {"status_code": 422}, False),
+        ("totals_mismatch", {"difference": 0.02}, False),
+    ],
+)
+def test_transient_qoyod_failure_classifier_is_status_aware(
+    code,
+    extra,
+    expected,
+):
+    exc = ManualSendRefused(code, "safe", extra)
+    assert auto_send.is_transient_qoyod_failure(exc) is expected

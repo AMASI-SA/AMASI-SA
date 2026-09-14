@@ -823,3 +823,246 @@ async def test_rotation_invalidates_current_verification_but_preserves_audit_his
     assert after_rotation["last_verified_at"] == before_rotation["last_verified_at"]
     assert db.qoyod_settings.rows[0]["enabled"] is False
     assert db.qoyod_settings.rows[0]["auto_send"] is False
+
+
+
+def _paused_desired_settings():
+    return {
+        **_settings_row(),
+        "enabled": False,
+        "auto_send": False,
+        "auto_send_desired": True,
+        "legacy_pipeline_frozen": True,
+        "invoice_trigger_statuses": [
+            "completed", "delivering", "delivered",
+        ],
+        "trigger_once_only": True,
+        "plan_b_unified_auto_send_enabled": False,
+        "plan_b_auto_send_armed_at": None,
+        "plan_b_auto_send_orders_user_id": "owner",
+        "plan_b_auto_send_disabled_reason": (
+            "credentials_invalid_or_expired"
+        ),
+        "capabilities": {
+            "create_customers": True,
+            "create_products": True,
+            "create_invoices": True,
+            "create_receipts": True,
+        },
+    }
+
+
+@pytest.mark.asyncio
+async def test_verified_rotation_rearms_only_a_durable_previous_opt_in(
+    monkeypatch,
+    isolated_crypto,
+):
+    from integrations.qoyod import routes
+
+    mongo = AsyncMongoMockClient()
+    db = mongo["qoyod_rotation_recovery"]
+    await db.qoyod_settings.insert_one(_paused_desired_settings())
+    await db.qoyod_manual_canary_runs.insert_one({
+        "run_id": "canary-recovery",
+        "status": "succeeded",
+        "finished_at": "2026-09-14T10:00:00+00:00",
+    })
+    await db.salla_integrations.insert_one({
+        "user_id": "owner",
+        "status": "connected",
+    })
+    verified_keys = []
+
+    class _Client:
+        def __init__(self, key):
+            verified_keys.append(key)
+
+        async def me(self):
+            return {"id": "qoyod-account"}
+
+    monkeypatch.setattr(routes, "QoyodAPIClient", _Client)
+    app = _build_app(db)
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/api/integrations/qoyod/credentials",
+            json={"api_key": "verified-replacement-key"},
+        )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["auto_send_recovery"] == {
+        "requested": True,
+        "resumed": True,
+        "reason": "credentials_verified",
+        "issues": [],
+    }
+    assert verified_keys == ["verified-replacement-key"]
+    stored = await db.qoyod_settings.find_one({"user_id": "main"})
+    assert stored["auto_send_desired"] is True
+    assert stored["enabled"] is True
+    assert stored["auto_send"] is True
+    assert stored["plan_b_unified_auto_send_enabled"] is True
+    assert stored["plan_b_auto_send_armed_at"]
+    assert stored["plan_b_auto_send_canary_run_id"] == "canary-recovery"
+    assert stored["plan_b_auto_send_disabled_reason"] is None
+
+
+@pytest.mark.asyncio
+async def test_invalid_rotated_credential_stays_safely_paused(
+    monkeypatch,
+    isolated_crypto,
+):
+    from integrations.qoyod import routes
+    from integrations.qoyod.api_client import QoyodAPIError
+
+    mongo = AsyncMongoMockClient()
+    db = mongo["qoyod_rotation_invalid"]
+    await db.qoyod_settings.insert_one(_paused_desired_settings())
+    await db.qoyod_manual_canary_runs.insert_one({
+        "run_id": "canary-recovery",
+        "status": "succeeded",
+        "finished_at": "2026-09-14T10:00:00+00:00",
+    })
+    await db.salla_integrations.insert_one({
+        "user_id": "owner",
+        "status": "connected",
+    })
+
+    class _Client:
+        def __init__(self, _key):
+            pass
+
+        async def me(self):
+            raise QoyodAPIError(
+                401,
+                "qoyod_unauthorized",
+                "مفتاح API غير صالح أو منتهي",
+            )
+
+    monkeypatch.setattr(routes, "QoyodAPIClient", _Client)
+    app = _build_app(db)
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/api/integrations/qoyod/credentials",
+            json={"api_key": "invalid-replacement-key"},
+        )
+
+    assert response.status_code == 200
+    recovery = response.json()["auto_send_recovery"]
+    assert recovery["requested"] is True
+    assert recovery["resumed"] is False
+    assert recovery["reason"] == "readiness_failed"
+    assert recovery["issues"] == [{
+        "code": "qoyod_unauthorized",
+        "message": "مفتاح API غير صالح أو منتهي",
+    }]
+    stored = await db.qoyod_settings.find_one({"user_id": "main"})
+    assert stored["auto_send_desired"] is True
+    assert stored["enabled"] is False
+    assert stored["auto_send"] is False
+    assert stored["plan_b_unified_auto_send_enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_removing_credentials_pauses_runtime_but_keeps_durable_intent(
+    isolated_crypto,
+):
+    from integrations.qoyod.credentials import save_api_key
+
+    mongo = AsyncMongoMockClient()
+    db = mongo["qoyod_rotation_remove"]
+    settings = _paused_desired_settings()
+    settings.update({
+        "enabled": True,
+        "auto_send": True,
+        "plan_b_unified_auto_send_enabled": True,
+        "plan_b_auto_send_armed_at": "2026-09-14T10:00:00+00:00",
+    })
+    await db.qoyod_settings.insert_one(settings)
+    await save_api_key(db, "main", "key-to-remove")
+    app = _build_app(db)
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.delete(
+            "/api/integrations/qoyod/credentials",
+        )
+
+    assert response.status_code == 200
+    stored = await db.qoyod_settings.find_one({"user_id": "main"})
+    assert stored["auto_send_desired"] is True
+    assert stored["enabled"] is False
+    assert stored["auto_send"] is False
+    assert stored["plan_b_unified_auto_send_enabled"] is False
+    assert stored["plan_b_auto_send_armed_at"] is None
+    assert stored["plan_b_auto_send_disabled_reason"] == "credentials_removed"
+
+
+@pytest.mark.asyncio
+async def test_valid_rotation_in_dry_run_preserves_visible_runtime_settings(
+    monkeypatch,
+    isolated_crypto,
+):
+    from integrations.qoyod import routes
+
+    mongo = AsyncMongoMockClient()
+    db = mongo["qoyod_rotation_dry_run"]
+    settings = _paused_desired_settings()
+    settings.update({
+        "enabled": True,
+        "auto_send": True,
+        "dry_run_mode": True,
+        "plan_b_unified_auto_send_enabled": False,
+        "plan_b_auto_send_disabled_reason": "dry_run_enabled",
+    })
+    await db.qoyod_settings.insert_one(settings)
+    await db.qoyod_manual_canary_runs.insert_one({
+        "run_id": "canary-recovery",
+        "status": "succeeded",
+        "finished_at": "2026-09-14T10:00:00+00:00",
+    })
+    await db.salla_integrations.insert_one({
+        "user_id": "owner",
+        "status": "connected",
+    })
+
+    class _Client:
+        def __init__(self, _key):
+            pass
+
+        async def me(self):
+            return {"id": "qoyod-account"}
+
+    monkeypatch.setattr(routes, "QoyodAPIClient", _Client)
+    app = _build_app(db)
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/api/integrations/qoyod/credentials",
+            json={"api_key": "verified-dry-run-key"},
+        )
+
+    assert response.status_code == 200, response.text
+    recovery = response.json()["auto_send_recovery"]
+    assert recovery["requested"] is True
+    assert recovery["resumed"] is False
+    assert recovery["reason"] == "readiness_failed"
+    assert any(
+        issue["code"] == "dry_run_enabled"
+        for issue in recovery["issues"]
+    )
+    stored = await db.qoyod_settings.find_one({"user_id": "main"})
+    assert stored["auto_send_desired"] is True
+    assert stored["enabled"] is True
+    assert stored["auto_send"] is True
+    assert stored["dry_run_mode"] is True
+    assert stored["plan_b_unified_auto_send_enabled"] is False
+    assert stored["plan_b_auto_send_disabled_reason"] == "dry_run_enabled"
