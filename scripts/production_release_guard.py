@@ -38,20 +38,21 @@ from frontend_build_identity import (  # noqa: E402
     validate_frontend_reproducibility_proof,
 )
 
-try:  # noqa: E402 - backend is intentionally added to sys.path above.
-    from release_protocol_v5 import (
-        CRITICAL_FILES as RUNTIME_CRITICAL_FILES,
-        exact_json_equal,
-        validate_runtime_release_identity,
-    )
-except ImportError:  # The v5 module may be absent on an older checked-out guard.
-    validate_runtime_release_identity = None
-    exact_json_equal = None
-    RUNTIME_CRITICAL_FILES = (
-        "server.py",
-        "integrations/qoyod_manual/routes.py",
-        "integrations/qoyod_manual/send.py",
-    )
+from release_protocol_v5 import (  # noqa: E402
+    BACKEND_RUNTIME_GENERATED_PATHS,
+    BACKEND_RUNTIME_SOURCE_SCOPE,
+    CRITICAL_FILES as RUNTIME_CRITICAL_FILES,
+    RELEASE_CONTROL_SOURCE_SCOPE,
+    backend_runtime_source_path_included,
+    build_source_manifest,
+    exact_json_equal,
+    git_source_tree_oid,
+    source_manifest_summary,
+    validate_release_control_source_manifest,
+    validate_runtime_release_identity,
+    validate_source_path,
+    validate_source_manifest_summary,
+)
 
 
 PRODUCTION_BRANCH = "hotfix/prod-snap-meta-final"
@@ -59,6 +60,7 @@ PRODUCTION_ORIGIN = "https://mezansalla.com"
 SPA_SHELL_PATH = "/snapchat-accounts"
 STANDARD_SERVICE_WORKER_PATHS = ("/sw.js", "/service-worker.js")
 PROTOCOL_VERSION = 5
+RELEASE_INTENT_SCHEMA_VERSION = 2
 BOOT_CLOCK_SKEW = timedelta(minutes=5)
 GIT_DIR = REPO_ROOT / ".git"
 LEASE_DIR = GIT_DIR / "mezan-production-release.lock"
@@ -80,14 +82,22 @@ _RELEASE_INTENT_KEYS = frozenset({
     "kind",
     "protocol_version",
     "source_git_sha",
+    "source_base_git_sha",
     "branch",
     "frontend_source",
+    "backend_runtime_source",
+    "release_control_source",
     "client_environment",
     "frontend_build",
     "frontend_reproducibility",
     "critical_file_hashes",
     "runtime_identity",
 })
+_RELEASE_INTENT_V1_KEYS = _RELEASE_INTENT_KEYS - {
+    "source_base_git_sha",
+    "backend_runtime_source",
+    "release_control_source",
+}
 
 
 class ReleaseGuardError(RuntimeError):
@@ -106,6 +116,198 @@ def _run_git(*args: str) -> str:
             f"git {' '.join(args)} failed: {proc.stderr.strip()}"
         )
     return proc.stdout.strip()
+
+
+def _run_git_bytes(*args: str) -> bytes:
+    proc = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), *args],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if proc.returncode:
+        detail = proc.stderr.decode("utf-8", "replace").strip()
+        raise ReleaseGuardError(f"git {' '.join(args)} failed: {detail}")
+    return proc.stdout
+
+
+def _git_blob_contents(oids: list[str]) -> dict[str, bytes]:
+    """Read approved blob OIDs as binary data in one fail-closed batch."""
+    unique = tuple(dict.fromkeys(oids))
+    if not unique:
+        return {}
+    proc = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "cat-file", "--batch"],
+        input=b"".join(oid.encode("ascii") + b"\n" for oid in unique),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if proc.returncode:
+        detail = proc.stderr.decode("utf-8", "replace").strip()
+        raise ReleaseGuardError(f"git cat-file --batch failed: {detail}")
+    raw = proc.stdout
+    offset = 0
+    contents: dict[str, bytes] = {}
+    for expected_oid in unique:
+        newline = raw.find(b"\n", offset)
+        if newline < 0:
+            raise ReleaseGuardError("Git blob batch response is truncated")
+        try:
+            oid, object_type, raw_size = raw[offset:newline].decode(
+                "ascii"
+            ).split(" ")
+            size = int(raw_size)
+        except (UnicodeError, ValueError) as exc:
+            raise ReleaseGuardError(
+                "Git blob batch response header is malformed"
+            ) from exc
+        start = newline + 1
+        end = start + size
+        if (
+            oid != expected_oid
+            or object_type != "blob"
+            or size < 0
+            or end >= len(raw)
+            or raw[end:end + 1] != b"\n"
+        ):
+            raise ReleaseGuardError(
+                f"Git blob batch response is invalid for {expected_oid}"
+            )
+        contents[oid] = raw[start:end]
+        offset = end + 1
+    if offset != len(raw):
+        raise ReleaseGuardError("Git blob batch response has trailing data")
+    return contents
+
+
+def _git_source_record_path(repo_relative: str, *, scope: str) -> str | None:
+    try:
+        validate_source_path(repo_relative, "Git release source")
+    except Exception as exc:
+        raise ReleaseGuardError(str(exc)) from exc
+    if scope == BACKEND_RUNTIME_SOURCE_SCOPE:
+        if not repo_relative.startswith("backend/"):
+            raise ReleaseGuardError(
+                f"Backend Git source escaped its root: {repo_relative}"
+            )
+        relative = repo_relative.removeprefix("backend/")
+        try:
+            included = backend_runtime_source_path_included(relative)
+        except Exception as exc:
+            raise ReleaseGuardError(str(exc)) from exc
+        if relative in BACKEND_RUNTIME_GENERATED_PATHS:
+            raise ReleaseGuardError(
+                f"generated Backend path must not be tracked: {repo_relative}"
+            )
+        return relative if included else None
+    if scope == RELEASE_CONTROL_SOURCE_SCOPE:
+        if not (
+            repo_relative.startswith(".github/workflows/")
+            or repo_relative.startswith(".github/actions/")
+            or repo_relative.startswith("scripts/")
+        ):
+            raise ReleaseGuardError(
+                f"Release control Git source escaped its scope: {repo_relative}"
+            )
+        return repo_relative
+    raise ReleaseGuardError(f"unsupported release source scope: {scope}")
+
+
+def _git_source_records(commit: str, *, scope: str) -> list[dict[str, Any]]:
+    pathspecs = (
+        ("backend",)
+        if scope == BACKEND_RUNTIME_SOURCE_SCOPE
+        else (".github/workflows", ".github/actions", "scripts")
+    )
+    raw_tree = _run_git_bytes(
+        "ls-tree", "-rz", "--full-tree", commit, "--", *pathspecs
+    )
+    entries: list[tuple[str, str, str, str]] = []
+    for raw_entry in raw_tree.split(b"\0"):
+        if not raw_entry:
+            continue
+        try:
+            metadata, raw_path = raw_entry.split(b"\t", 1)
+            mode, object_type, raw_oid = metadata.split(b" ", 2)
+            repo_relative = raw_path.decode("utf-8")
+            git_mode = mode.decode("ascii")
+            git_type = object_type.decode("ascii")
+            oid = raw_oid.decode("ascii")
+        except (ValueError, UnicodeError) as exc:
+            raise ReleaseGuardError(
+                "Git release source contains a malformed or non-UTF-8 entry"
+            ) from exc
+        if git_type != "blob" or git_mode not in {"100644", "100755"}:
+            raise ReleaseGuardError(
+                f"unsupported Git release source entry: {repo_relative}"
+            )
+        relative = _git_source_record_path(repo_relative, scope=scope)
+        if relative is not None:
+            entries.append((repo_relative, relative, git_mode, oid))
+    contents = _git_blob_contents([entry[3] for entry in entries])
+    records: list[dict[str, Any]] = []
+    for repo_relative, relative, git_mode, oid in entries:
+        content = contents[oid]
+        header = f"blob {len(content)}\0".encode("utf-8")
+        actual_oid = hashlib.sha1(
+            header + content, usedforsecurity=False
+        ).hexdigest()
+        if actual_oid != oid:
+            raise ReleaseGuardError(
+                f"Git blob identity mismatch for release source: {repo_relative}"
+            )
+        records.append({
+            "path": relative,
+            "mode": git_mode,
+            "git_blob": oid,
+            "bytes": len(content),
+            "sha256": hashlib.sha256(content).hexdigest(),
+        })
+    return sorted(records, key=lambda row: row["path"])
+
+
+def _trusted_git_source_manifest(
+    *, scope: str, source_git_sha: str, source_base_git_sha: str
+) -> dict[str, Any]:
+    """Reconstruct a source manifest from immutable Git J/A objects."""
+    if _run_git("rev-parse", "--show-object-format") != "sha1":
+        raise ReleaseGuardError("release manifests require Git SHA-1 objects")
+    current = _git_source_records(source_git_sha, scope=scope)
+    baseline = _git_source_records(source_base_git_sha, scope=scope)
+    current_scope_oid = (
+        _run_git("rev-parse", f"{source_git_sha}:backend")
+        if scope == BACKEND_RUNTIME_SOURCE_SCOPE
+        else git_source_tree_oid(current)
+    )
+    base_scope_oid = (
+        _run_git("rev-parse", f"{source_base_git_sha}:backend")
+        if scope == BACKEND_RUNTIME_SOURCE_SCOPE
+        else git_source_tree_oid(baseline)
+    )
+    try:
+        return build_source_manifest(
+            scope=scope,
+            source_git_sha=source_git_sha,
+            source_base_git_sha=source_base_git_sha,
+            source_root_tree_oid=_run_git(
+                "rev-parse", f"{source_git_sha}^{{tree}}"
+            ),
+            source_base_root_tree_oid=_run_git(
+                "rev-parse", f"{source_base_git_sha}^{{tree}}"
+            ),
+            scope_tree_oid=current_scope_oid,
+            source_base_scope_tree_oid=base_scope_oid,
+            files=current,
+            base_files=baseline,
+            label=(
+                "Backend runtime source"
+                if scope == BACKEND_RUNTIME_SOURCE_SCOPE
+                else "Release control source"
+            ),
+        )
+    except Exception as exc:
+        raise ReleaseGuardError(
+            f"cannot reconstruct trusted {scope} manifest: {exc}"
+        ) from exc
 
 
 def _utc_now() -> str:
@@ -159,10 +361,6 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 def _validated_runtime_identity(payload: Any) -> dict[str, Any]:
     """Validate the deterministic identity materialized by the build adapter."""
-    if validate_runtime_release_identity is None:
-        raise ReleaseGuardError(
-            "release protocol v5 validator is unavailable; update the workspace"
-        )
     if not isinstance(payload, dict):
         raise ReleaseGuardError("runtime release identity is not a JSON object")
     try:
@@ -191,19 +389,61 @@ def _read_reviewed_runtime_identity() -> dict[str, Any]:
         raise ReleaseGuardError("reviewed release intent fields are invalid")
     if (
         type(intent.get("schema_version")) is not int
-        or intent.get("schema_version") != 1
+        or intent.get("schema_version") != RELEASE_INTENT_SCHEMA_VERSION
         or intent.get("kind") != "mezan_emergent_release_intent_v1"
         or type(intent.get("protocol_version")) is not int
         or intent.get("protocol_version") != PROTOCOL_VERSION
     ):
         raise ReleaseGuardError("reviewed release intent contract is invalid")
     identity = _validated_runtime_identity(intent.get("runtime_identity"))
+    source_git_sha = identity["source_git_sha"]
+    source_base_git_sha = identity["source_base_git_sha"]
+    try:
+        release_control_source = validate_release_control_source_manifest(
+            intent.get("release_control_source"),
+            repo_root=REPO_ROOT,
+            source_git_sha=source_git_sha,
+            source_base_git_sha=source_base_git_sha,
+        )
+        release_control_summary = source_manifest_summary(
+            release_control_source,
+            expected_scope=RELEASE_CONTROL_SOURCE_SCOPE,
+            label="Release control source",
+        )
+        trusted_backend_source = _trusted_git_source_manifest(
+            scope=BACKEND_RUNTIME_SOURCE_SCOPE,
+            source_git_sha=source_git_sha,
+            source_base_git_sha=source_base_git_sha,
+        )
+        trusted_control_source = _trusted_git_source_manifest(
+            scope=RELEASE_CONTROL_SOURCE_SCOPE,
+            source_git_sha=source_git_sha,
+            source_base_git_sha=source_base_git_sha,
+        )
+    except Exception as exc:
+        raise ReleaseGuardError(
+            f"reviewed release source validation failed: {exc}"
+        ) from exc
+    if not exact_json_equal(
+        intent.get("backend_runtime_source"), trusted_backend_source
+    ):
+        raise ReleaseGuardError(
+            "reviewed Backend runtime source differs from trusted Git J/A objects"
+        )
+    if not exact_json_equal(
+        release_control_source, trusted_control_source
+    ):
+        raise ReleaseGuardError(
+            "reviewed release control source differs from trusted Git J/A objects"
+        )
     client_environment = _validated_reviewed_client_environment(
         intent.get("client_environment")
     )
     mirrored = {
-        "source_git_sha": identity["source_git_sha"],
+        "source_git_sha": source_git_sha,
+        "source_base_git_sha": source_base_git_sha,
         "branch": identity["branch"],
+        "backend_runtime_source": identity["backend_runtime_source"],
         "frontend_build": identity["frontend_build"],
         "frontend_reproducibility": identity["frontend_reproducibility"],
         "critical_file_hashes": identity["critical_file_hashes"],
@@ -216,6 +456,12 @@ def _read_reviewed_runtime_identity() -> dict[str, Any]:
         raise ReleaseGuardError(
             "reviewed release intent does not match runtime identity: "
             + ", ".join(mismatches)
+        )
+    if not exact_json_equal(
+        identity.get("release_control_source"), release_control_summary
+    ):
+        raise ReleaseGuardError(
+            "reviewed release control source does not match runtime identity"
         )
     proof_values = (
         (identity.get("frontend_build") or {})
@@ -246,6 +492,33 @@ def _read_reviewed_runtime_identity() -> dict[str, Any]:
             "reviewed frontend source does not match retained build metadata"
         )
     return identity
+
+
+def _runtime_source_summaries(
+    identity: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Return the exact compact source proofs mirrored outside the identity."""
+    try:
+        backend_summary = source_manifest_summary(
+            identity.get("backend_runtime_source"),
+            expected_scope=BACKEND_RUNTIME_SOURCE_SCOPE,
+            label="Backend runtime source",
+        )
+    except Exception as exc:
+        raise ReleaseGuardError(
+            f"runtime Backend source summary is invalid: {exc}"
+        ) from exc
+    try:
+        control_summary = validate_source_manifest_summary(
+            identity.get("release_control_source"),
+            expected_scope=RELEASE_CONTROL_SOURCE_SCOPE,
+            label="Release control source",
+        )
+    except Exception as exc:
+        raise ReleaseGuardError(
+            f"runtime release control source summary is invalid: {exc}"
+        ) from exc
+    return backend_summary, control_summary
 
 
 def _validated_reviewed_client_environment(
@@ -301,12 +574,16 @@ def _runtime_identity_from_lease(lease: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(identity, dict):
         raise ReleaseGuardError("prepared runtime release identity is missing")
     normalized = _validated_runtime_identity(identity)
+    backend_summary, control_summary = _runtime_source_summaries(normalized)
     expected_aliases = {
         "release_id": normalized["release_id"],
         "source_git_sha": normalized["source_git_sha"],
+        "source_base_git_sha": normalized["source_base_git_sha"],
         "git_sha": normalized["source_git_sha"],
         "branch": normalized["branch"],
         "protocol_version": normalized["protocol_version"],
+        "backend_runtime_source": backend_summary,
+        "release_control_source": control_summary,
         "critical_file_hashes": normalized["critical_file_hashes"],
         "frontend_build": normalized["frontend_build"],
         "frontend_reproducibility": normalized[
@@ -358,13 +635,62 @@ def _assert_local_identity_binding(
 
 def _assert_reviewed_source_relation(
     *,
+    source_base_git_sha: str,
     source_git_sha: str,
     deployment_git_sha: str,
 ) -> None:
-    """Allow the deployment commit to differ only by the reviewed v5 intent."""
+    """Prove the reviewed base J -> source A -> intent-only deployment B."""
+    if source_base_git_sha == source_git_sha:
+        raise ReleaseGuardError(
+            "protocol v5 requires source A to advance from source base J"
+        )
     if source_git_sha == deployment_git_sha:
         raise ReleaseGuardError(
             "protocol v5 requires a separate tracked intent-only deployment commit"
+        )
+    _assert_previous_release_base(source_base_git_sha)
+    try:
+        _run_git(
+            "merge-base",
+            "--is-ancestor",
+            source_base_git_sha,
+            source_git_sha,
+        )
+    except ReleaseGuardError as exc:
+        raise ReleaseGuardError(
+            "runtime identity source base is not an ancestor of source A"
+        ) from exc
+    intent_history = _run_git(
+        "rev-list", "--full-history",
+        f"{source_base_git_sha}..{source_git_sha}", "--",
+        RELEASE_INTENT_RELATIVE_PATH,
+    )
+    if intent_history:
+        raise ReleaseGuardError(
+            "source A ancestry touches the reviewed release intent after base J"
+        )
+    source_changes = {
+        row.strip()
+        for row in _run_git(
+            "diff", "--name-only", source_base_git_sha, source_git_sha
+        ).splitlines()
+        if row.strip()
+    }
+    if not source_changes:
+        raise ReleaseGuardError("source A does not advance governed source from J")
+    if RELEASE_INTENT_RELATIVE_PATH in source_changes:
+        raise ReleaseGuardError(
+            "source A must retain J's previously reviewed release intent"
+        )
+    base_intent_blob = _run_git(
+        "rev-parse", f"{source_base_git_sha}:{RELEASE_INTENT_RELATIVE_PATH}"
+    )
+    source_intent_blob = _run_git(
+        "rev-parse", f"{source_git_sha}:{RELEASE_INTENT_RELATIVE_PATH}"
+    )
+    if base_intent_blob != source_intent_blob:
+        raise ReleaseGuardError(
+            "source A release intent bytes differ from source base J"
         )
     try:
         _run_git(
@@ -404,6 +730,81 @@ def _assert_reviewed_source_relation(
         raise ReleaseGuardError(
             "reviewed release intent bytes differ from deployment commit"
         )
+
+
+def _assert_previous_release_base(source_base_git_sha: str) -> str:
+    """Prove J is an earlier reviewed P -> intent-only J deployment pair."""
+    try:
+        raw = _run_git_bytes(
+            "show", f"{source_base_git_sha}:{RELEASE_INTENT_RELATIVE_PATH}"
+        )
+        previous_intent = json.loads(raw.decode("utf-8"))
+    except (ReleaseGuardError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ReleaseGuardError(
+            "source base J has no readable reviewed release intent"
+        ) from exc
+    if not isinstance(previous_intent, dict):
+        raise ReleaseGuardError("source base J release intent is not an object")
+    schema = previous_intent.get("schema_version")
+    expected_keys = (
+        _RELEASE_INTENT_V1_KEYS
+        if type(schema) is int and schema == 1
+        else _RELEASE_INTENT_KEYS
+        if type(schema) is int and schema == RELEASE_INTENT_SCHEMA_VERSION
+        else None
+    )
+    if (
+        expected_keys is None
+        or set(previous_intent) != expected_keys
+        or previous_intent.get("kind") != "mezan_emergent_release_intent_v1"
+        or type(previous_intent.get("protocol_version")) is not int
+        or previous_intent.get("protocol_version") != PROTOCOL_VERSION
+        or previous_intent.get("branch") != PRODUCTION_BRANCH
+    ):
+        raise ReleaseGuardError("source base J release intent contract is invalid")
+    previous_source_sha = previous_intent.get("source_git_sha")
+    if (
+        not isinstance(previous_source_sha, str)
+        or not _FULL_GIT_SHA.fullmatch(previous_source_sha)
+        or previous_source_sha == source_base_git_sha
+    ):
+        raise ReleaseGuardError("source base J previous source P is invalid")
+    previous_identity = previous_intent.get("runtime_identity")
+    if (
+        not isinstance(previous_identity, dict)
+        or previous_identity.get("source_git_sha") != previous_source_sha
+        or previous_identity.get("branch") != PRODUCTION_BRANCH
+        or type(previous_identity.get("protocol_version")) is not int
+        or previous_identity.get("protocol_version") != PROTOCOL_VERSION
+        or not _RELEASE_ID_V5.fullmatch(
+            str(previous_identity.get("release_id") or "")
+        )
+    ):
+        raise ReleaseGuardError(
+            "source base J runtime identity does not match previous source P"
+        )
+    try:
+        _run_git(
+            "merge-base", "--is-ancestor", previous_source_sha,
+            source_base_git_sha,
+        )
+    except ReleaseGuardError as exc:
+        raise ReleaseGuardError(
+            "source base J is not descended from previous source P"
+        ) from exc
+    changed = {
+        row.strip()
+        for row in _run_git(
+            "diff", "--name-only", previous_source_sha,
+            source_base_git_sha,
+        ).splitlines()
+        if row.strip()
+    }
+    if changed != {RELEASE_INTENT_RELATIVE_PATH}:
+        raise ReleaseGuardError(
+            "source base J is not an exact previous intent-only deployment"
+        )
+    return previous_source_sha
 
 
 def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
@@ -516,6 +917,7 @@ def _prepare_locked(actor: str) -> dict[str, Any]:
             )
         source_git_sha = runtime_identity["source_git_sha"]
         _assert_reviewed_source_relation(
+            source_base_git_sha=runtime_identity["source_base_git_sha"],
             source_git_sha=source_git_sha,
             deployment_git_sha=local_sha,
         )
@@ -525,15 +927,21 @@ def _prepare_locked(actor: str) -> dict[str, Any]:
                 expected_git_sha=source_git_sha,
             )
         )
+        backend_source_summary, control_source_summary = (
+            _runtime_source_summaries(runtime_identity)
+        )
         payload = {
             "release_id": runtime_identity["release_id"],
             "source_git_sha": source_git_sha,
+            "source_base_git_sha": runtime_identity["source_base_git_sha"],
             "git_sha": source_git_sha,
             "deployment_git_sha": local_sha,
             "branch": branch,
             "actor": actor,
             "prepared_at": _utc_now(),
             "protocol_version": PROTOCOL_VERSION,
+            "backend_runtime_source": backend_source_summary,
+            "release_control_source": control_source_summary,
             "critical_file_hashes": critical_hashes,
             "frontend_build": frontend_build,
             "frontend_reproducibility": frontend_reproducibility,
@@ -608,11 +1016,12 @@ def _prepublish_locked() -> dict[str, Any]:
             "release SHA changed after prepare: "
             f"lease={expected_deployment_sha} local={local_sha} remote={remote_sha}"
         )
+    prepared_identity = _runtime_identity_from_lease(lease)
     _assert_reviewed_source_relation(
+        source_base_git_sha=prepared_identity["source_base_git_sha"],
         source_git_sha=expected_source_sha,
         deployment_git_sha=expected_deployment_sha,
     )
-    prepared_identity = _runtime_identity_from_lease(lease)
     runtime_identity = _read_runtime_identity()
     reviewed_identity = _read_reviewed_runtime_identity()
     frontend_build, frontend_reproducibility, critical_hashes = (
@@ -1252,6 +1661,9 @@ def _verify_locked(base_url: str) -> dict[str, Any]:
         _validated_release_lease(lease)
     )
     expected_runtime_identity = _runtime_identity_from_lease(lease)
+    expected_backend_source, expected_control_source = (
+        _runtime_source_summaries(expected_runtime_identity)
+    )
     expected_health_identity = {
         "identity_kind": expected_runtime_identity["kind"],
         "identity_schema_version": expected_runtime_identity[
@@ -1262,6 +1674,7 @@ def _verify_locked(base_url: str) -> dict[str, Any]:
             for field in (
                 "release_id",
                 "source_git_sha",
+                "source_base_git_sha",
                 "branch",
                 "protocol_version",
                 "critical_file_hashes",
@@ -1269,6 +1682,8 @@ def _verify_locked(base_url: str) -> dict[str, Any]:
                 "frontend_reproducibility",
             )
         },
+        "backend_runtime_source": expected_backend_source,
+        "release_control_source": expected_control_source,
     }
     _, prepared_at = _aware_timestamp(
         lease.get("prepared_at"), "prepared release timestamp"
@@ -1282,6 +1697,14 @@ def _verify_locked(base_url: str) -> dict[str, Any]:
             raise ReleaseGuardError("production health is not ok")
         if release.get("verified_identity_available") is not True:
             raise ReleaseGuardError("production has no verified release identity")
+        if release.get("backend_runtime_source_verified") is not True:
+            raise ReleaseGuardError(
+                "production Backend runtime source is not fully verified"
+            )
+        if release.get("release_control_source_bound") is not True:
+            raise ReleaseGuardError(
+                "production release control source is not bound"
+            )
         if not isinstance(actual_sha, str) or actual_sha != expected_sha:
             raise ReleaseGuardError(
                 f"deployed SHA mismatch: expected={expected_sha} actual={actual_sha}"
@@ -1332,10 +1755,15 @@ def _verify_locked(base_url: str) -> dict[str, Any]:
     return {
         "verified": True,
         "source_git_sha": actual_sha,
+        "source_base_git_sha": expected_runtime_identity[
+            "source_base_git_sha"
+        ],
         "git_sha": actual_sha,
         "deployment_git_sha": expected_deployment_sha,
         "release_id": expected_release_id,
         "protocol_version": PROTOCOL_VERSION,
+        "backend_runtime_source": expected_backend_source,
+        "release_control_source": expected_control_source,
         "url": origin,
         "checks": len(observations),
         "boot_started_at": observations[0]["boot_started_at"],

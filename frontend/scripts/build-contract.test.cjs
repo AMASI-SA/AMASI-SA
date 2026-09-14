@@ -22,6 +22,14 @@ const requiredFrontendEnvMarker = [
   "",
 ].join("\n");
 
+function workflowSection(workflow, startMarker, endMarker) {
+  const start = workflow.indexOf(startMarker);
+  assert.notEqual(start, -1, `missing workflow marker: ${startMarker}`);
+  const end = workflow.indexOf(endMarker, start + startMarker.length);
+  assert.notEqual(end, -1, `missing workflow marker: ${endMarker}`);
+  return workflow.slice(start, end);
+}
+
 test("tracked frontend env marker is exact, non-secret, and inert", () => {
   const envPath = path.join(frontendRoot, ".env");
   const envStat = fs.lstatSync(envPath);
@@ -117,6 +125,191 @@ test("Emergent host compatibility does not relax governed releases", () => {
     assert.match(workflow, /yarn@1\.22\.22/);
     assert.match(workflow, /yarn install --frozen-lockfile --non-interactive/);
   }
+});
+
+test("release readiness binds schema-2 source ancestry and summary-only health", () => {
+  const workflow = fs.readFileSync(
+    path.join(
+      repositoryRoot,
+      ".github",
+      "workflows",
+      "mezan-production-release.yml",
+    ),
+    "utf8",
+  );
+
+  const classification = workflowSection(
+    workflow,
+    "      - name: Classify reviewed B or source candidate A",
+    "      - name: Build production frontend twice and retain verified build B",
+  );
+  assert.match(classification, /intent\["schema_version"\] != 2/);
+  assert.match(classification, /intent = load_release_intent\(\)/);
+  assert.match(
+    classification,
+    /from scripts\.emergent_deployment_adapter import \([\s\S]*?verify_release_intent_git,[\s\S]*?\)/,
+  );
+  assert.match(classification, /verify_release_intent_git\(intent\)/);
+  assert.match(
+    classification,
+    /git merge-base --is-ancestor \\\n\s+"\$candidate_base_sha" "\$candidate_source_sha"/,
+  );
+  assert.match(
+    classification,
+    /git merge-base --is-ancestor \\\n\s+"\$candidate_source_sha" "\$deployment_git_sha"/,
+  );
+  assert.match(
+    classification,
+    /git diff --quiet \\\n\s+"\$candidate_source_sha" "\$deployment_git_sha" -- \\\n\s+\. ':\(exclude\)release\/release-intent-v5\.json'/,
+  );
+  assert.match(
+    classification,
+    /! git diff --quiet \\\n\s+"\$candidate_source_sha" "\$deployment_git_sha" -- \\\n\s+release\/release-intent-v5\.json/,
+  );
+  assert.match(
+    classification,
+    /echo "SOURCE_BASE_GIT_SHA=\$source_base_git_sha" >> "\$GITHUB_ENV"/,
+  );
+
+  assert.match(
+    classification,
+    /PUSH_BEFORE_SHA: \$\{\{ github\.event\.before \|\| '' \}\}/,
+  );
+  const reviewedGate = workflowSection(
+    classification,
+    '          if test "$reviewed" = true; then',
+    "          else\n            if test \"$EVENT_NAME\" = push; then",
+  );
+  assert.match(
+    reviewedGate,
+    /if test "\$EVENT_NAME" = pull_request && \\\n\s+test "\$source_base_git_sha" != "\$PR_BASE_SHA"; then/,
+  );
+  assert.match(
+    reviewedGate,
+    /if test "\$EVENT_NAME" = push; then[\s\S]*?if ! \[\[ "\$PUSH_BEFORE_SHA" =~ \^\[0-9a-f\]\{40\}\$ \]\] \|\| \\\n\s+test "\$PUSH_BEFORE_SHA" = "0{40}"; then/,
+  );
+  assert.match(
+    reviewedGate,
+    /if test "\$source_base_git_sha" != "\$PUSH_BEFORE_SHA"; then/,
+  );
+  assert.match(
+    reviewedGate,
+    /reviewed B source base J must equal the Production push predecessor/,
+  );
+
+  // J is checked out and interpreted with its own adapter. Its reviewed source
+  // P must be an ancestor, and P -> J may change only the tracked intent.
+  assert.match(
+    classification,
+    /git -C "\$base_checkout" checkout --detach "\$source_base_git_sha"/,
+  );
+  assert.match(
+    classification,
+    /previous_source_sha="\$\([\s\S]*?load_release_intent\(\)\["source_git_sha"\][\s\S]*?\)"/,
+  );
+  assert.match(
+    classification,
+    /git merge-base --is-ancestor \\\n\s+"\$previous_source_sha" "\$source_base_git_sha"/,
+  );
+  assert.match(
+    classification,
+    /git diff --quiet \\\n\s+"\$previous_source_sha" "\$source_base_git_sha" -- \\\n\s+\. ':\(exclude\)release\/release-intent-v5\.json'/,
+  );
+  assert.match(
+    classification,
+    /! git diff --quiet \\\n\s+"\$previous_source_sha" "\$source_base_git_sha" -- \\\n\s+release\/release-intent-v5\.json/,
+  );
+
+  const freeze = workflowSection(
+    workflow,
+    "      - name: Freeze a candidate reviewed intent from the source commit",
+    "      - name: Retain the candidate reviewed intent",
+  );
+  assert.match(freeze, /candidate="\$RUNNER_TEMP\/release-intent-v5\.json"/);
+  assert.match(freeze, /--source-git-sha "\$SOURCE_GIT_SHA" \\/);
+  assert.match(freeze, /--source-base-git-sha "\$SOURCE_BASE_GIT_SHA" \\/);
+  assert.match(freeze, /--output "\$candidate" \\/);
+  assert.match(freeze, /payload\["schema_version"\] == 2/);
+  assert.match(freeze, /load_candidate_release_intent/);
+  assert.match(
+    freeze,
+    /payload = load_candidate_release_intent\(\s*candidate_path,\s*source_git_sha=os\.environ\["SOURCE_GIT_SHA"\],\s*source_base_git_sha=os\.environ\["SOURCE_BASE_GIT_SHA"\],\s*\)/,
+  );
+  assert.doesNotMatch(freeze, /load_release_intent\(candidate_path\)/);
+  assert.match(
+    freeze,
+    /payload\["source_base_git_sha"\] == os\.environ\["SOURCE_BASE_GIT_SHA"\]/,
+  );
+
+  const rehearsal = workflowSection(
+    workflow,
+    "      - name: Create a clean tracked-source clone",
+    "      - name: Prove generated release inputs are absent",
+  );
+  assert.match(
+    rehearsal,
+    /from scripts\.emergent_deployment_adapter import \([\s\S]*?verify_release_intent_git,[\s\S]*?\)/,
+  );
+  assert.match(rehearsal, /verify_release_intent_git\(intent\)/);
+  assert.match(
+    rehearsal,
+    /source_base_git_sha="\$\(node -p 'require\("\.\/release\/release-intent-v5\.json"\)\.source_base_git_sha'\)"/,
+  );
+  assert.match(
+    rehearsal,
+    /git merge-base --is-ancestor "\$source_base_git_sha" "\$source_git_sha"/,
+  );
+  assert.match(
+    rehearsal,
+    /git merge-base --is-ancestor "\$source_git_sha" "\$deployment_git_sha"/,
+  );
+  assert.match(
+    rehearsal,
+    /git diff --quiet \\\n\s+"\$source_git_sha" "\$deployment_git_sha" -- \\\n\s+\. ':\(exclude\)release\/release-intent-v5\.json'/,
+  );
+
+  const packageVerification = workflowSection(
+    workflow,
+    "      - name: Verify artifact, proof, identity, and package boundaries",
+    "      - name: Prove the governed runtime returns build metadata as JSON",
+  );
+  assert.match(
+    packageVerification,
+    /health\["backend_runtime_source_verified"\] is True/,
+  );
+  assert.match(
+    packageVerification,
+    /health\["release_control_source_bound"\] is True/,
+  );
+  assert.match(
+    packageVerification,
+    /health\["backend_runtime_source"\] == source_manifest_summary\(/,
+  );
+  assert.match(
+    packageVerification,
+    /health\["release_control_source"\] == source_manifest_summary\(/,
+  );
+  for (const manifest of ["backend_runtime_source", "release_control_source"]) {
+    assert.match(
+      packageVerification,
+      new RegExp(`assert "files" not in health\\["${manifest}"\\]`),
+    );
+    assert.match(
+      packageVerification,
+      new RegExp(`assert "tombstones" not in health\\["${manifest}"\\]`),
+    );
+  }
+
+  const runtimeProbe = workflowSection(
+    workflow,
+    "      - name: Prove the governed runtime returns build metadata as JSON",
+    "      - name: Retain sanitized rehearsal evidence",
+  );
+  const jsonImport = runtimeProbe.indexOf("          import json");
+  const jsonLoad = runtimeProbe.indexOf("json.loads(");
+  assert.notEqual(jsonImport, -1, "runtime probe must import json");
+  assert.notEqual(jsonLoad, -1, "runtime probe must parse JSON responses");
+  assert.ok(jsonImport < jsonLoad, "runtime probe must import json before use");
 });
 
 test("only the exact public client allowlist reaches the Vite child and build proof", async () => {

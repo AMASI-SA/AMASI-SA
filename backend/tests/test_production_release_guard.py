@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import hashlib
 import io
+import subprocess
 import tempfile
 import threading
 import unittest
@@ -13,6 +14,14 @@ from pathlib import Path
 from unittest.mock import patch
 
 from scripts import production_release_guard as guard
+from release_protocol_v5 import (
+    BACKEND_RUNTIME_SOURCE_SCOPE,
+    CRITICAL_FILES as RUNTIME_CRITICAL_FILES,
+    RELEASE_CONTROL_SOURCE_SCOPE,
+    build_runtime_release_identity,
+    build_source_manifest,
+    source_manifest_summary,
+)
 
 
 class _Headers(dict):
@@ -47,13 +56,16 @@ class _Response:
 
 class ProductionReleaseGuardTests(unittest.TestCase):
     def setUp(self):
-        runtime_validator = patch.object(
-            guard,
-            "validate_runtime_release_identity",
-            side_effect=lambda payload, **_kwargs: payload,
-        )
-        runtime_validator.start()
-        self.addCleanup(runtime_validator.stop)
+        if self._testMethodName != (
+            "test_reviewed_intent_integrates_real_runtime_and_control_validators"
+        ):
+            runtime_validator = patch.object(
+                guard,
+                "validate_runtime_release_identity",
+                side_effect=lambda payload, **_kwargs: payload,
+            )
+            runtime_validator.start()
+            self.addCleanup(runtime_validator.stop)
         # Source/deployment ancestry has a dedicated contract test below.
         # Other guard tests isolate lease, drift, and HTTP behavior.
         if self._testMethodName != (
@@ -66,6 +78,14 @@ class ProductionReleaseGuardTests(unittest.TestCase):
             )
             relation.start()
             self.addCleanup(relation.stop)
+        else:
+            previous_base = patch.object(
+                guard,
+                "_assert_previous_release_base",
+                return_value="f" * 40,
+            )
+            previous_base.start()
+            self.addCleanup(previous_base.stop)
         reproducibility = patch.object(
             guard,
             "_frontend_reproducibility_proof",
@@ -79,15 +99,18 @@ class ProductionReleaseGuardTests(unittest.TestCase):
             "_read_runtime_identity",
             return_value=runtime_identity,
         )
-        intent_reader = patch.object(
-            guard,
-            "_read_reviewed_runtime_identity",
-            return_value=runtime_identity,
-        )
         runtime_reader.start()
-        intent_reader.start()
         self.addCleanup(runtime_reader.stop)
-        self.addCleanup(intent_reader.stop)
+        if self._testMethodName != (
+            "test_reviewed_intent_integrates_real_runtime_and_control_validators"
+        ):
+            intent_reader = patch.object(
+                guard,
+                "_read_reviewed_runtime_identity",
+                return_value=runtime_identity,
+            )
+            intent_reader.start()
+            self.addCleanup(intent_reader.stop)
 
     @staticmethod
     def _build_meta_bytes():
@@ -146,7 +169,7 @@ class ProductionReleaseGuardTests(unittest.TestCase):
                 },
             },
             "index": index,
-            "entrypoints": [],
+            "entrypoints": [app],
             "assets": [app],
             "public_files": sorted(
                 [app, index, *retirement_workers],
@@ -163,6 +186,47 @@ class ProductionReleaseGuardTests(unittest.TestCase):
         }
 
     @staticmethod
+    def _source_record(path, content):
+        return {
+            "path": path,
+            "mode": "100644",
+            "git_blob": hashlib.sha1(
+                f"blob {len(content)}\0".encode() + content,
+                usedforsecurity=False,
+            ).hexdigest(),
+            "bytes": len(content),
+            "sha256": hashlib.sha256(content).hexdigest(),
+        }
+
+    @classmethod
+    def _source_manifest(cls, scope):
+        if scope == BACKEND_RUNTIME_SOURCE_SCOPE:
+            record = cls._source_record("server.py", b"backend source\n")
+            scope_tree = "3" * 40
+        else:
+            record = cls._source_record(
+                "scripts/production_release_guard.py",
+                b"release control source\n",
+            )
+            scope_tree = "4" * 40
+        return build_source_manifest(
+            scope=scope,
+            source_git_sha="a" * 40,
+            source_base_git_sha="0" * 40,
+            source_root_tree_oid="1" * 40,
+            source_base_root_tree_oid="2" * 40,
+            scope_tree_oid=scope_tree,
+            source_base_scope_tree_oid=scope_tree,
+            files=[record],
+            base_files=[record],
+            label=(
+                "Backend runtime source"
+                if scope == BACKEND_RUNTIME_SOURCE_SCOPE
+                else "Release control source"
+            ),
+        )
+
+    @staticmethod
     def _lease_payload():
         frontend_build = ProductionReleaseGuardTests._frontend_build()
         critical_file_hashes = {
@@ -174,13 +238,27 @@ class ProductionReleaseGuardTests(unittest.TestCase):
                 frontend_build
             )
         )
+        backend_runtime_source = ProductionReleaseGuardTests._source_manifest(
+            BACKEND_RUNTIME_SOURCE_SCOPE
+        )
+        release_control_manifest = ProductionReleaseGuardTests._source_manifest(
+            RELEASE_CONTROL_SOURCE_SCOPE
+        )
+        release_control_source = source_manifest_summary(
+            release_control_manifest,
+            expected_scope=RELEASE_CONTROL_SOURCE_SCOPE,
+            label="Release control source",
+        )
         runtime_identity = {
             "kind": "mezan_runtime_release_identity_v5",
-            "schema_version": 1,
+            "schema_version": 2,
             "protocol_version": guard.PROTOCOL_VERSION,
             "release_id": "rg5-" + "9" * 64,
             "source_git_sha": "a" * 40,
+            "source_base_git_sha": "0" * 40,
             "branch": guard.PRODUCTION_BRANCH,
+            "backend_runtime_source": backend_runtime_source,
+            "release_control_source": release_control_source,
             "critical_file_hashes": critical_file_hashes,
             "frontend_build": frontend_build,
             "frontend_reproducibility": frontend_reproducibility,
@@ -188,12 +266,19 @@ class ProductionReleaseGuardTests(unittest.TestCase):
         return {
             "release_id": runtime_identity["release_id"],
             "source_git_sha": "a" * 40,
+            "source_base_git_sha": "0" * 40,
             "git_sha": "a" * 40,
             "deployment_git_sha": "b" * 40,
             "branch": guard.PRODUCTION_BRANCH,
             "actor": "test",
             "prepared_at": "2026-08-13T10:00:00+00:00",
             "protocol_version": guard.PROTOCOL_VERSION,
+            "backend_runtime_source": source_manifest_summary(
+                backend_runtime_source,
+                expected_scope=BACKEND_RUNTIME_SOURCE_SCOPE,
+                label="Backend runtime source",
+            ),
+            "release_control_source": release_control_source,
             "critical_file_hashes": critical_file_hashes,
             "frontend_build": frontend_build,
             "frontend_reproducibility": frontend_reproducibility,
@@ -250,6 +335,7 @@ class ProductionReleaseGuardTests(unittest.TestCase):
                 for field in (
                     "release_id",
                     "source_git_sha",
+                    "source_base_git_sha",
                     "branch",
                     "protocol_version",
                     "critical_file_hashes",
@@ -257,6 +343,10 @@ class ProductionReleaseGuardTests(unittest.TestCase):
                     "frontend_reproducibility",
                 )
             },
+            "backend_runtime_source_verified": True,
+            "backend_runtime_source": lease["backend_runtime_source"],
+            "release_control_source_bound": True,
+            "release_control_source": lease["release_control_source"],
             "git_sha": lease["git_sha"],
             "critical_file_hashes_match": True,
             "frontend_build_verified": True,
@@ -480,6 +570,362 @@ class ProductionReleaseGuardTests(unittest.TestCase):
                 guard.ReleaseGuardError
             ):
                 guard._validated_reviewed_client_environment(rejected)
+
+    def test_reviewed_intent_integrates_real_runtime_and_control_validators(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp) / "repo"
+            backend_root = repo_root / "backend"
+            for index, relative in enumerate(RUNTIME_CRITICAL_FILES, start=1):
+                path = backend_root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(f"critical-{index}\n".encode())
+            control_paths = (
+                repo_root / "scripts" / "production_release_guard.py",
+                repo_root / ".github" / "workflows" / "release.yml",
+            )
+            for index, path in enumerate(control_paths, start=1):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(f"control-{index}\n".encode())
+
+            backend_records = [
+                self._source_record(relative, (backend_root / relative).read_bytes())
+                for relative in sorted(RUNTIME_CRITICAL_FILES)
+            ]
+            control_records = [
+                self._source_record(
+                    path.relative_to(repo_root).as_posix(), path.read_bytes()
+                )
+                for path in sorted(control_paths)
+            ]
+            manifest_arguments = {
+                "source_git_sha": "a" * 40,
+                "source_base_git_sha": "0" * 40,
+                "source_root_tree_oid": "1" * 40,
+                "source_base_root_tree_oid": "2" * 40,
+            }
+            backend_manifest = build_source_manifest(
+                scope=BACKEND_RUNTIME_SOURCE_SCOPE,
+                scope_tree_oid="3" * 40,
+                source_base_scope_tree_oid="3" * 40,
+                files=backend_records,
+                base_files=backend_records,
+                label="Backend runtime source",
+                **manifest_arguments,
+            )
+            control_manifest = build_source_manifest(
+                scope=RELEASE_CONTROL_SOURCE_SCOPE,
+                scope_tree_oid="4" * 40,
+                source_base_scope_tree_oid="4" * 40,
+                files=control_records,
+                base_files=control_records,
+                label="Release control source",
+                **manifest_arguments,
+            )
+            frontend_build = self._frontend_build()
+            frontend_build["environment"]["values"] = {
+                "REACT_APP_BACKEND_URL": {
+                    "present": True,
+                    "sha256": hashlib.sha256(
+                        guard.PRODUCTION_ORIGIN.encode("utf-8")
+                    ).hexdigest(),
+                }
+            }
+            frontend_reproducibility = self._frontend_reproducibility(
+                frontend_build
+            )
+            identity = build_runtime_release_identity(
+                source_git_sha="a" * 40,
+                source_base_git_sha="0" * 40,
+                branch=guard.PRODUCTION_BRANCH,
+                frontend_build=frontend_build,
+                frontend_reproducibility=frontend_reproducibility,
+                backend_root=backend_root,
+                backend_runtime_source=backend_manifest,
+                release_control_source=control_manifest,
+            )
+            intent = {
+                "schema_version": guard.RELEASE_INTENT_SCHEMA_VERSION,
+                "kind": "mezan_emergent_release_intent_v1",
+                "protocol_version": guard.PROTOCOL_VERSION,
+                "source_git_sha": identity["source_git_sha"],
+                "source_base_git_sha": identity["source_base_git_sha"],
+                "branch": identity["branch"],
+                "frontend_source": frontend_build["source"],
+                "backend_runtime_source": backend_manifest,
+                "release_control_source": control_manifest,
+                "client_environment": {
+                    "REACT_APP_BACKEND_URL": {
+                        "present": True,
+                        "value": guard.PRODUCTION_ORIGIN,
+                    }
+                },
+                "frontend_build": frontend_build,
+                "frontend_reproducibility": frontend_reproducibility,
+                "critical_file_hashes": identity["critical_file_hashes"],
+                "runtime_identity": identity,
+            }
+            intent_path = repo_root / "release" / "release-intent-v5.json"
+            intent_path.parent.mkdir(parents=True)
+            intent_path.write_text(json.dumps(intent), encoding="utf-8")
+            build_meta_path = repo_root / "frontend" / "build" / "build-meta.json"
+            build_meta_path.parent.mkdir(parents=True)
+            build_meta_path.write_text(
+                json.dumps({"source": frontend_build["source"]}),
+                encoding="utf-8",
+            )
+
+            def forged_backend_manifest(
+                *,
+                source_root="1" * 40,
+                base_root="2" * 40,
+                scope_tree="3" * 40,
+                base_scope_tree="3" * 40,
+                base_files=backend_records,
+            ):
+                return build_source_manifest(
+                    scope=BACKEND_RUNTIME_SOURCE_SCOPE,
+                    source_git_sha="a" * 40,
+                    source_base_git_sha="0" * 40,
+                    source_root_tree_oid=source_root,
+                    source_base_root_tree_oid=base_root,
+                    scope_tree_oid=scope_tree,
+                    source_base_scope_tree_oid=base_scope_tree,
+                    files=backend_records,
+                    base_files=base_files,
+                    label="Backend runtime source",
+                )
+
+            modified_base = list(backend_records)
+            modified_base[0] = self._source_record(
+                modified_base[0]["path"], b"prior bytes\n"
+            )
+            deleted_base = [
+                *backend_records,
+                self._source_record("removed.py", b"removed\n"),
+            ]
+            forged_manifests = {
+                "source_root_tree_oid": forged_backend_manifest(
+                    source_root="f" * 40
+                ),
+                "source_base_root_tree_oid": forged_backend_manifest(
+                    base_root="e" * 40
+                ),
+                "scope_tree_oid": forged_backend_manifest(
+                    scope_tree="d" * 40
+                ),
+                "source_base_scope_tree_oid": forged_backend_manifest(
+                    base_scope_tree="c" * 40
+                ),
+                "added_count": forged_backend_manifest(base_files=[]),
+                "modified_count": forged_backend_manifest(
+                    base_files=modified_base
+                ),
+                "tombstone": forged_backend_manifest(base_files=deleted_base),
+            }
+
+            def forged_control_manifest(
+                *,
+                source_root="1" * 40,
+                base_root="2" * 40,
+                scope_tree="4" * 40,
+                base_scope_tree="4" * 40,
+                base_files=control_records,
+            ):
+                return build_source_manifest(
+                    scope=RELEASE_CONTROL_SOURCE_SCOPE,
+                    source_git_sha="a" * 40,
+                    source_base_git_sha="0" * 40,
+                    source_root_tree_oid=source_root,
+                    source_base_root_tree_oid=base_root,
+                    scope_tree_oid=scope_tree,
+                    source_base_scope_tree_oid=base_scope_tree,
+                    files=control_records,
+                    base_files=base_files,
+                    label="Release control source",
+                )
+
+            modified_control_base = list(control_records)
+            modified_control_base[0] = self._source_record(
+                modified_control_base[0]["path"], b"prior control\n"
+            )
+            deleted_control_base = [
+                *control_records,
+                self._source_record("scripts/removed.py", b"removed\n"),
+            ]
+            forged_control_manifests = {
+                "source_root_tree_oid": forged_control_manifest(
+                    source_root="f" * 40
+                ),
+                "source_base_root_tree_oid": forged_control_manifest(
+                    base_root="e" * 40
+                ),
+                "scope_tree_oid": forged_control_manifest(
+                    scope_tree="d" * 40
+                ),
+                "source_base_scope_tree_oid": forged_control_manifest(
+                    base_scope_tree="c" * 40
+                ),
+                "added_count": forged_control_manifest(base_files=[]),
+                "modified_count": forged_control_manifest(
+                    base_files=modified_control_base
+                ),
+                "tombstone": forged_control_manifest(
+                    base_files=deleted_control_base
+                ),
+            }
+
+            with (
+                patch.object(guard, "REPO_ROOT", repo_root),
+                patch.object(guard, "BACKEND_ROOT", backend_root),
+                patch.object(guard, "RELEASE_INTENT_PATH", intent_path),
+                patch.object(guard, "FRONTEND_BUILD_META_PATH", build_meta_path),
+                patch.object(
+                    guard,
+                    "_trusted_git_source_manifest",
+                    side_effect=lambda *, scope, **_kwargs: (
+                        backend_manifest
+                        if scope == BACKEND_RUNTIME_SOURCE_SCOPE
+                        else control_manifest
+                    ),
+                ),
+            ):
+                self.assertEqual(guard._read_reviewed_runtime_identity(), identity)
+                for label, forged_manifest in forged_manifests.items():
+                    forged_identity = build_runtime_release_identity(
+                        source_git_sha="a" * 40,
+                        source_base_git_sha="0" * 40,
+                        branch=guard.PRODUCTION_BRANCH,
+                        frontend_build=frontend_build,
+                        frontend_reproducibility=frontend_reproducibility,
+                        backend_root=backend_root,
+                        backend_runtime_source=forged_manifest,
+                        release_control_source=control_manifest,
+                    )
+                    forged_intent = {
+                        **intent,
+                        "backend_runtime_source": forged_manifest,
+                        "critical_file_hashes": forged_identity[
+                            "critical_file_hashes"
+                        ],
+                        "runtime_identity": forged_identity,
+                    }
+                    intent_path.write_text(
+                        json.dumps(forged_intent), encoding="utf-8"
+                    )
+                    with self.subTest(forged=label), self.assertRaisesRegex(
+                        guard.ReleaseGuardError,
+                        "differs from trusted Git J/A objects",
+                    ):
+                        guard._read_reviewed_runtime_identity()
+                for label, forged_manifest in forged_control_manifests.items():
+                    forged_identity = build_runtime_release_identity(
+                        source_git_sha="a" * 40,
+                        source_base_git_sha="0" * 40,
+                        branch=guard.PRODUCTION_BRANCH,
+                        frontend_build=frontend_build,
+                        frontend_reproducibility=frontend_reproducibility,
+                        backend_root=backend_root,
+                        backend_runtime_source=backend_manifest,
+                        release_control_source=forged_manifest,
+                    )
+                    forged_intent = {
+                        **intent,
+                        "release_control_source": forged_manifest,
+                        "runtime_identity": forged_identity,
+                    }
+                    intent_path.write_text(
+                        json.dumps(forged_intent), encoding="utf-8"
+                    )
+                    with self.subTest(
+                        forged_control=label
+                    ), self.assertRaisesRegex(
+                        guard.ReleaseGuardError,
+                        "differs from trusted Git J/A objects",
+                    ):
+                        guard._read_reviewed_runtime_identity()
+                intent_path.write_text(json.dumps(intent), encoding="utf-8")
+                control_paths[0].write_text("drifted\n", encoding="utf-8")
+                with self.assertRaisesRegex(
+                    guard.ReleaseGuardError,
+                    "release source validation failed",
+                ):
+                    guard._read_reviewed_runtime_identity()
+
+    def test_trusted_git_manifest_reconstructs_immutable_base_delta(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp) / "repo"
+            repo_root.mkdir()
+
+            def git(*args):
+                return subprocess.run(
+                    ["git", *args],
+                    cwd=repo_root,
+                    check=True,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                ).stdout.strip()
+
+            git("init", "-q")
+            git("config", "user.name", "Release Guard Test")
+            git("config", "user.email", "release-guard@example.test")
+            for relative, content in {
+                "backend/app.py": "base app\n",
+                "backend/removed.py": "removed\n",
+                "scripts/guard.py": "base guard\n",
+                ".github/workflows/release.yml": "name: release\n",
+            }.items():
+                path = repo_root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content, encoding="utf-8")
+            git("add", ".")
+            git("commit", "-qm", "base")
+            base_sha = git("rev-parse", "HEAD")
+
+            (repo_root / "backend" / "app.py").write_text(
+                "source app\n", encoding="utf-8"
+            )
+            (repo_root / "backend" / "removed.py").unlink()
+            (repo_root / "backend" / "added.py").write_text(
+                "added\n", encoding="utf-8"
+            )
+            (repo_root / "scripts" / "guard.py").write_text(
+                "source guard\n", encoding="utf-8"
+            )
+            git("add", "-A")
+            git("commit", "-qm", "source")
+            source_sha = git("rev-parse", "HEAD")
+            (repo_root / "backend" / "app.py").write_text(
+                "uncommitted decoy\n", encoding="utf-8"
+            )
+
+            with patch.object(guard, "REPO_ROOT", repo_root):
+                backend_manifest = guard._trusted_git_source_manifest(
+                    scope=BACKEND_RUNTIME_SOURCE_SCOPE,
+                    source_git_sha=source_sha,
+                    source_base_git_sha=base_sha,
+                )
+                control_manifest = guard._trusted_git_source_manifest(
+                    scope=RELEASE_CONTROL_SOURCE_SCOPE,
+                    source_git_sha=source_sha,
+                    source_base_git_sha=base_sha,
+                )
+
+            self.assertEqual(backend_manifest["added_count"], 1)
+            self.assertEqual(backend_manifest["modified_count"], 1)
+            self.assertEqual(backend_manifest["deleted_count"], 1)
+            self.assertEqual(
+                [row["path"] for row in backend_manifest["tombstones"]],
+                ["removed.py"],
+            )
+            app = next(
+                row for row in backend_manifest["files"]
+                if row["path"] == "app.py"
+            )
+            self.assertEqual(
+                app["sha256"], hashlib.sha256(b"source app\n").hexdigest()
+            )
+            self.assertEqual(control_manifest["modified_count"], 1)
 
     def test_local_release_checks_require_clean_git_source_proof(self):
         proof = self._frontend_build()
@@ -710,6 +1156,27 @@ class ProductionReleaseGuardTests(unittest.TestCase):
         ):
             guard._runtime_identity_from_lease(lease)
 
+    def test_lease_mirror_rejects_base_and_source_summary_drift(self):
+        baseline = self._lease_payload()
+        mutations = {
+            "source_base_git_sha": "f" * 40,
+            "backend_runtime_source": {
+                **baseline["backend_runtime_source"],
+                "tree_sha256": "f" * 64,
+            },
+            "release_control_source": {
+                **baseline["release_control_source"],
+                "tree_sha256": "f" * 64,
+            },
+        }
+        for field, value in mutations.items():
+            lease = {**baseline, field: value}
+            with self.subTest(field=field), self.assertRaisesRegex(
+                guard.ReleaseGuardError,
+                f"prepared lease does not match runtime release identity: {field}",
+            ):
+                guard._runtime_identity_from_lease(lease)
+
     def test_local_identity_binding_rejects_integer_float_type_coercion(self):
         lease = self._lease_payload()
         identity = json.loads(json.dumps(lease["runtime_identity"]))
@@ -777,6 +1244,7 @@ class ProductionReleaseGuardTests(unittest.TestCase):
             self.assertFalse(lease_path.exists())
 
     def test_reviewed_source_relation_allows_only_release_intent_delta(self):
+        base = "0" * 40
         source = "a" * 40
         deployment = "b" * 40
         intent_blob = "c" * 40
@@ -784,13 +1252,18 @@ class ProductionReleaseGuardTests(unittest.TestCase):
         def allowed(*args):
             if args[:2] == ("merge-base", "--is-ancestor"):
                 return ""
+            if args[:2] == ("rev-list", "--full-history"):
+                return ""
             if args[:2] == ("diff", "--name-only"):
-                return guard.RELEASE_INTENT_RELATIVE_PATH
+                return (
+                    "backend/server.py"
+                    if args[2:] == (base, source)
+                    else guard.RELEASE_INTENT_RELATIVE_PATH
+                )
             if args[:2] == ("ls-files", "--error-unmatch"):
                 return guard.RELEASE_INTENT_RELATIVE_PATH
-            if args == (
-                "rev-parse",
-                f"{deployment}:{guard.RELEASE_INTENT_RELATIVE_PATH}",
+            if args[0] == "rev-parse" and args[1].endswith(
+                ":" + guard.RELEASE_INTENT_RELATIVE_PATH
             ):
                 return intent_blob
             if args == ("hash-object", guard.RELEASE_INTENT_RELATIVE_PATH):
@@ -799,6 +1272,7 @@ class ProductionReleaseGuardTests(unittest.TestCase):
 
         with patch.object(guard, "_run_git", side_effect=allowed):
             guard._assert_reviewed_source_relation(
+                source_base_git_sha=base,
                 source_git_sha=source,
                 deployment_git_sha=deployment,
             )
@@ -806,8 +1280,19 @@ class ProductionReleaseGuardTests(unittest.TestCase):
         def forbidden(*args):
             if args[:2] == ("merge-base", "--is-ancestor"):
                 return ""
+            if args[:2] == ("rev-list", "--full-history"):
+                return ""
             if args[:2] == ("diff", "--name-only"):
-                return guard.RELEASE_INTENT_RELATIVE_PATH + "\nbackend/server.py"
+                return (
+                    "backend/server.py"
+                    if args[2:] == (base, source)
+                    else guard.RELEASE_INTENT_RELATIVE_PATH
+                    + "\nbackend/server.py"
+                )
+            if args[0] == "rev-parse" and args[1].endswith(
+                ":" + guard.RELEASE_INTENT_RELATIVE_PATH
+            ):
+                return intent_blob
             raise AssertionError(args)
 
         with patch.object(
@@ -816,6 +1301,7 @@ class ProductionReleaseGuardTests(unittest.TestCase):
             guard.ReleaseGuardError, "reviewed release intent only"
         ):
             guard._assert_reviewed_source_relation(
+                source_base_git_sha=base,
                 source_git_sha=source,
                 deployment_git_sha=deployment,
             )
@@ -827,14 +1313,25 @@ class ProductionReleaseGuardTests(unittest.TestCase):
             def incomplete(*args):
                 if args[:2] == ("merge-base", "--is-ancestor"):
                     return ""
+                if args[:2] == ("rev-list", "--full-history"):
+                    return ""
                 if args[:2] == ("diff", "--name-only"):
-                    return changed
+                    return (
+                        "backend/server.py"
+                        if args[2:] == (base, source)
+                        else changed
+                    )
+                if args[0] == "rev-parse" and args[1].endswith(
+                    ":" + guard.RELEASE_INTENT_RELATIVE_PATH
+                ):
+                    return intent_blob
                 raise AssertionError(args)
 
             with self.subTest(changed=changed), patch.object(
                 guard, "_run_git", side_effect=incomplete
             ), self.assertRaisesRegex(guard.ReleaseGuardError, message):
                 guard._assert_reviewed_source_relation(
+                    source_base_git_sha=base,
                     source_git_sha=source,
                     deployment_git_sha=deployment,
                 )
@@ -844,9 +1341,110 @@ class ProductionReleaseGuardTests(unittest.TestCase):
             "separate tracked intent-only deployment commit",
         ):
             guard._assert_reviewed_source_relation(
+                source_base_git_sha=base,
                 source_git_sha=source,
                 deployment_git_sha=source,
             )
+
+        with self.assertRaisesRegex(
+            guard.ReleaseGuardError,
+            "source A to advance from source base J",
+        ):
+            guard._assert_reviewed_source_relation(
+                source_base_git_sha=source,
+                source_git_sha=source,
+                deployment_git_sha=deployment,
+            )
+
+        with patch.object(
+            guard,
+            "_run_git",
+            side_effect=guard.ReleaseGuardError("not an ancestor"),
+        ), self.assertRaisesRegex(
+            guard.ReleaseGuardError,
+            "source base is not an ancestor",
+        ):
+            guard._assert_reviewed_source_relation(
+                source_base_git_sha=base,
+                source_git_sha=source,
+                deployment_git_sha=deployment,
+            )
+
+        def stale_base(*args):
+            if args[:2] == ("merge-base", "--is-ancestor"):
+                return ""
+            if args[:2] == ("rev-list", "--full-history"):
+                return "e" * 40
+            raise AssertionError(args)
+
+        with patch.object(
+            guard, "_run_git", side_effect=stale_base
+        ), self.assertRaisesRegex(
+            guard.ReleaseGuardError,
+            "ancestry touches the reviewed release intent",
+        ):
+            guard._assert_reviewed_source_relation(
+                source_base_git_sha=base,
+                source_git_sha=source,
+                deployment_git_sha=deployment,
+            )
+
+    def test_previous_release_base_accepts_v1_migration_pair_only(self):
+        previous_source = "f" * 40
+        source_base = "0" * 40
+        previous_intent = {
+            "schema_version": 1,
+            "kind": "mezan_emergent_release_intent_v1",
+            "protocol_version": guard.PROTOCOL_VERSION,
+            "source_git_sha": previous_source,
+            "branch": guard.PRODUCTION_BRANCH,
+            "frontend_source": {},
+            "client_environment": {},
+            "frontend_build": {},
+            "frontend_reproducibility": {},
+            "critical_file_hashes": {},
+            "runtime_identity": {
+                "source_git_sha": previous_source,
+                "branch": guard.PRODUCTION_BRANCH,
+                "protocol_version": guard.PROTOCOL_VERSION,
+                "release_id": "rg5-" + "9" * 64,
+            },
+        }
+
+        def git_result(*args):
+            if args[:2] == ("merge-base", "--is-ancestor"):
+                return ""
+            if args[:2] == ("diff", "--name-only"):
+                return guard.RELEASE_INTENT_RELATIVE_PATH
+            raise AssertionError(args)
+
+        with patch.object(
+            guard,
+            "_run_git_bytes",
+            return_value=json.dumps(previous_intent).encode("utf-8"),
+        ), patch.object(guard, "_run_git", side_effect=git_result):
+            self.assertEqual(
+                guard._assert_previous_release_base(source_base),
+                previous_source,
+            )
+
+        with patch.object(
+            guard,
+            "_run_git_bytes",
+            return_value=json.dumps(previous_intent).encode("utf-8"),
+        ), patch.object(
+            guard,
+            "_run_git",
+            side_effect=lambda *args: (
+                ""
+                if args[:2] == ("merge-base", "--is-ancestor")
+                else guard.RELEASE_INTENT_RELATIVE_PATH + "\nbackend/server.py"
+            ),
+        ), self.assertRaisesRegex(
+            guard.ReleaseGuardError,
+            "not an exact previous intent-only deployment",
+        ):
+            guard._assert_previous_release_base(source_base)
 
     def test_verify_accepts_multiple_boots_for_same_prepared_identity(self):
         lease = self._lease_payload()
@@ -862,6 +1460,15 @@ class ProductionReleaseGuardTests(unittest.TestCase):
 
         self.assertTrue(result["verified"])
         self.assertEqual(result["git_sha"], lease["git_sha"])
+        self.assertEqual(
+            result["source_base_git_sha"], lease["source_base_git_sha"]
+        )
+        self.assertEqual(
+            result["backend_runtime_source"], lease["backend_runtime_source"]
+        )
+        self.assertEqual(
+            result["release_control_source"], lease["release_control_source"]
+        )
         self.assertEqual(result["checks"], 3)
         self.assertEqual(result["boot_started_at"], boot_times[0])
         self.assertEqual(
@@ -889,6 +1496,44 @@ class ProductionReleaseGuardTests(unittest.TestCase):
                         lease,
                         "2026-08-13T10:01:00+00:00",
                         **{field: value},
+                    )],
+                )
+
+    def test_verify_requires_full_backend_and_control_health_binding(self):
+        lease = self._lease_payload()
+        for field in (
+            "backend_runtime_source_verified",
+            "release_control_source_bound",
+        ):
+            with self.subTest(field=field), self.assertRaises(
+                guard.ReleaseGuardError
+            ):
+                self._verify_with(
+                    lease,
+                    [self._health_payload_for(
+                        lease,
+                        "2026-08-13T10:01:00+00:00",
+                        **{field: False},
+                    )],
+                )
+
+    def test_verify_rejects_backend_or_control_summary_drift(self):
+        lease = self._lease_payload()
+        for field in ("backend_runtime_source", "release_control_source"):
+            drifted = {
+                **lease[field],
+                "tree_sha256": "f" * 64,
+            }
+            with self.subTest(field=field), self.assertRaisesRegex(
+                guard.ReleaseGuardError,
+                f"release identity does not match prepared lease: {field}",
+            ):
+                self._verify_with(
+                    lease,
+                    [self._health_payload_for(
+                        lease,
+                        "2026-08-13T10:01:00+00:00",
+                        **{field: drifted},
                     )],
                 )
 
