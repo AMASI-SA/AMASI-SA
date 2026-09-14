@@ -195,7 +195,7 @@ class ReleaseIdentityTests(unittest.TestCase):
                 continue
             relative = path.relative_to(backend_root).as_posix()
             if (
-                relative in {".env", "release_identity.json"}
+                relative in {".env", "release_identity.json", "requirements.txt"}
                 or relative.startswith("tests/")
             ):
                 continue
@@ -550,6 +550,35 @@ class ReleaseIdentityTests(unittest.TestCase):
         self.assertNotIn("release_identity.json", source_paths)
         self.assertFalse(any(path.startswith("tests/") for path in source_paths))
         self.assertFalse(any("__pycache__" in path for path in source_paths))
+
+    def test_platform_generated_requirements_remain_outside_runtime_identity(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self._package_root(Path(tmp))
+            governed = root / "business_logic.py"
+            governed.write_bytes(b"reviewed\n")
+            requirements = root / "requirements.txt"
+            requirements.write_bytes(b"package>=1\n")
+            payload = self._identity(root)
+            source_paths = {
+                record["path"]
+                for record in payload["backend_runtime_source"]["files"]
+            }
+            self.assertNotIn("requirements.txt", source_paths)
+
+            # Emergent pins this platform-owned file after the reviewed build.
+            # Startup must still trust the bound source, while every governed
+            # backend file remains fail-closed.
+            requirements.write_bytes(b"package==1.2.3\n")
+            identity_path = root / "release_identity.json"
+            identity_path.write_text(json.dumps(payload), encoding="utf-8")
+            result = read_release_identity(identity_path, backend_root=root)
+            self.assertTrue(result["verified_identity_available"])
+            self.assertTrue(result["backend_runtime_source_verified"])
+
+            governed.write_bytes(b"tampered\n")
+            compromised = read_release_identity(identity_path, backend_root=root)
+            self.assertFalse(compromised["verified_identity_available"])
+            self.assertFalse(compromised["backend_runtime_source_verified"])
 
     def test_safe_root_env_sidecar_is_unread_and_outside_identity(self):
         for mode in (0o600, 0o640, 0o644):

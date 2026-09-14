@@ -54,6 +54,7 @@ RELEASE_CONTROL_REQUIRED_DIRECTORIES = (
 )
 RELEASE_CONTROL_OPTIONAL_DIRECTORIES = (".github/actions",)
 BACKEND_RUNTIME_GENERATED_PATHS = frozenset({"release_identity.json"})
+BACKEND_RUNTIME_PLATFORM_MUTATED_PATHS = frozenset({"requirements.txt"})
 BACKEND_RUNTIME_CONFIGURATION_SIDECARS = frozenset({".env"})
 BACKEND_RUNTIME_EXCLUDED_PREFIXES = ("tests/",)
 CRITICAL_FILES = (
@@ -209,9 +210,13 @@ def validate_source_path(value: Any, label: str) -> str:
 def backend_runtime_source_path_included(relative: Any) -> bool:
     """Return the single shared Backend package/source projection policy."""
     path = validate_source_path(relative, "Backend runtime source")
-    return path not in BACKEND_RUNTIME_GENERATED_PATHS and not any(
-        path == prefix.removesuffix("/") or path.startswith(prefix)
-        for prefix in BACKEND_RUNTIME_EXCLUDED_PREFIXES
+    return (
+        path not in BACKEND_RUNTIME_GENERATED_PATHS
+        and path not in BACKEND_RUNTIME_PLATFORM_MUTATED_PATHS
+        and not any(
+            path == prefix.removesuffix("/") or path.startswith(prefix)
+            for prefix in BACKEND_RUNTIME_EXCLUDED_PREFIXES
+        )
     )
 
 
@@ -874,7 +879,9 @@ def _backend_runtime_source_records(
         label="Backend runtime source",
         relative_to=backend_root,
         excluded_prefixes=BACKEND_RUNTIME_EXCLUDED_PREFIXES,
-        generated_paths=BACKEND_RUNTIME_GENERATED_PATHS,
+        generated_paths=(
+            BACKEND_RUNTIME_GENERATED_PATHS | BACKEND_RUNTIME_PLATFORM_MUTATED_PATHS
+        ),
         configuration_sidecars=BACKEND_RUNTIME_CONFIGURATION_SIDECARS,
         allow_derived_bytecode=allow_derived_bytecode,
     )
@@ -1587,6 +1594,7 @@ def build_runtime_release_identity(
 
 __all__ = (
     "BACKEND_RUNTIME_EXCLUDED_PREFIXES",
+    "BACKEND_RUNTIME_PLATFORM_MUTATED_PATHS",
     "BACKEND_RUNTIME_CONFIGURATION_SIDECARS",
     "BACKEND_RUNTIME_GENERATED_PATHS",
     "BACKEND_RUNTIME_SOURCE_SCOPE",

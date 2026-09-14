@@ -387,30 +387,24 @@ def _materialize_cloud_build_backend_requirements() -> dict[str, Any]:
             "Backend requirements manifest is not bound to intent provenance"
         )
 
-    requirements_expected = _manifest_file_record(
-        backend_manifest,
-        BACKEND_REQUIREMENTS_RELATIVE,
-        label="Backend requirements",
-    )
     reviewed_expected = _manifest_file_record(
         control_manifest,
         REVIEWED_BACKEND_REQUIREMENTS_RELATIVE,
         label="reviewed Backend requirements",
     )
-    expected_identity = _source_record_identity(requirements_expected)
-    if (
-        expected_identity != _source_record_identity(reviewed_expected)
-        or requirements_expected["mode"] != "100644"
-    ):
+    if reviewed_expected["mode"] != "100644":
         raise DeploymentAdapterError(
-            "reviewed Backend requirements do not match the Backend manifest"
+            "reviewed Backend requirements must use regular source mode"
         )
     if reviewed_actual != reviewed_expected:
         raise DeploymentAdapterError(
             "reviewed Backend requirements changed after manifest validation"
         )
 
-    restored = requirements_actual != requirements_expected
+    restored = (
+        _source_record_identity(requirements_actual)
+        != _source_record_identity(reviewed_expected)
+    )
     if restored:
         _atomic_replace_existing_regular_file(
             requirements_path,
@@ -422,7 +416,10 @@ def _materialize_cloud_build_backend_requirements() -> dict[str, Any]:
             relative=BACKEND_REQUIREMENTS_RELATIVE,
             label="Backend requirements",
         )
-        if requirements_actual != requirements_expected:
+        if (
+            _source_record_identity(requirements_actual)
+            != _source_record_identity(reviewed_expected)
+        ):
             raise DeploymentAdapterError(
                 "Backend requirements atomic materialization failed"
             )
@@ -430,8 +427,8 @@ def _materialize_cloud_build_backend_requirements() -> dict[str, Any]:
     return {
         "path": f"backend/{BACKEND_REQUIREMENTS_RELATIVE}",
         "restored": restored,
-        "bytes": requirements_expected["bytes"],
-        "sha256": requirements_expected["sha256"],
+        "bytes": reviewed_expected["bytes"],
+        "sha256": reviewed_expected["sha256"],
     }
 
 
