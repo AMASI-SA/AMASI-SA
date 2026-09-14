@@ -11,6 +11,19 @@ from boot_runtime import (
 )
 
 
+def _verified_release_payload():
+    return {
+        "release": {
+            "source_git_sha": "a" * 40,
+            "verified_identity_available": True,
+            "critical_file_hashes_match": True,
+            "frontend_build_verified": True,
+            "backend_runtime_source_verified": True,
+            "release_control_source_bound": True,
+        }
+    }
+
+
 def _boot_app(initializer):
     app = FastAPI()
     app.state.readiness = "starting"
@@ -120,3 +133,73 @@ async def test_missing_release_identity_fails_readiness_before_initialization():
             assert (await client.get("/ready")).status_code == 503
         assert app.state.readiness == "failed"
         assert initialization_called is False
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        pytest.param(
+            "backend_runtime_source_verified", None, id="runtime-source-missing"
+        ),
+        pytest.param(
+            "backend_runtime_source_verified", False, id="runtime-source-false"
+        ),
+        pytest.param(
+            "release_control_source_bound", None, id="control-source-missing"
+        ),
+        pytest.param(
+            "release_control_source_bound", False, id="control-source-false"
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_incomplete_source_binding_fails_readiness_before_initialization(
+    field, value
+):
+    initialization_called = False
+
+    async def initializer():
+        nonlocal initialization_called
+        payload = _verified_release_payload()
+        if value is None:
+            payload["release"].pop(field)
+        else:
+            payload["release"][field] = value
+        verified_release_key(payload, environment={"APP_ENV": "production"})
+        initialization_called = True
+
+    app = _boot_app(initializer)
+    async with app.router.lifespan_context(app):
+        with pytest.raises(ValueError, match="verified release source_git_sha"):
+            await app.state.deferred_startup_task
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://test"
+        ) as client:
+            assert (await client.get("/live")).status_code == 200
+            assert (await client.get("/health")).status_code == 503
+            assert (await client.get("/ready")).status_code == 503
+        assert app.state.readiness == "failed"
+        assert initialization_called is False
+
+
+@pytest.mark.asyncio
+async def test_complete_source_binding_allows_readiness_initialization():
+    app = None
+
+    async def initializer():
+        assert verified_release_key(
+            _verified_release_payload(), environment={"APP_ENV": "production"}
+        ) == "a" * 40
+        app.state.readiness = "ready"
+        app.state.startup_phase = "ready"
+
+    app = _boot_app(initializer)
+    async with app.router.lifespan_context(app):
+        await app.state.deferred_startup_task
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://test"
+        ) as client:
+            assert (await client.get("/health")).status_code == 200
+            assert (await client.get("/ready")).status_code == 200
