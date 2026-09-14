@@ -1573,6 +1573,7 @@ async def test_unknown_qoyod_reference_lookup_never_reaches_a_write(
     status_code,
 ):
     await _seed_settings(db)
+    monkeypatch.setenv("QOYOD_API_BASE", "https://qoyod.invalid")
     monkeypatch.setattr(
         "integrations.qoyod_manual.send.get_api_key",
         AsyncMock(return_value="synthetic-key"),
