@@ -2,12 +2,18 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import shutil
+import stat
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 import release_identity as release_identity_module
+import release_protocol_v5 as release_protocol_module
 
 from release_identity import (
     CRITICAL_FILES,
@@ -16,10 +22,13 @@ from release_identity import (
     release_health_payload,
 )
 from release_protocol_v5 import (
+    BACKEND_RUNTIME_SOURCE_SCOPE,
+    RELEASE_CONTROL_SOURCE_SCOPE,
     RELEASE_IDENTITY_KIND,
     RELEASE_IDENTITY_SCHEMA_VERSION,
     ReleaseProtocolV5Error,
     build_runtime_release_identity,
+    build_source_manifest,
     canonical_identity_core,
     deterministic_release_id,
     exact_json_equal,
@@ -152,16 +161,81 @@ class ReleaseIdentityTests(unittest.TestCase):
             },
         }
 
+    @staticmethod
+    def _release_control_source():
+        control_content = b"governed release control\n"
+        record = {
+            "path": "scripts/release.py",
+            "mode": "100644",
+            "git_blob": hashlib.sha1(
+                f"blob {len(control_content)}\0".encode() + control_content,
+                usedforsecurity=False,
+            ).hexdigest(),
+            "bytes": len(control_content),
+            "sha256": hashlib.sha256(control_content).hexdigest(),
+        }
+        return build_source_manifest(
+            scope=RELEASE_CONTROL_SOURCE_SCOPE,
+            source_git_sha=SOURCE_GIT_SHA,
+            source_base_git_sha=SOURCE_GIT_SHA,
+            source_root_tree_oid="f" * 40,
+            source_base_root_tree_oid="f" * 40,
+            scope_tree_oid="e" * 40,
+            source_base_scope_tree_oid="e" * 40,
+            files=[record],
+            base_files=[record],
+            label="Release control source",
+        )
+
+    @staticmethod
+    def _backend_runtime_source(backend_root: Path):
+        records = []
+        for path in sorted(backend_root.rglob("*")):
+            if not path.is_file() or path.is_symlink():
+                continue
+            relative = path.relative_to(backend_root).as_posix()
+            if (
+                relative in {".env", "release_identity.json"}
+                or relative.startswith("tests/")
+            ):
+                continue
+            content = path.read_bytes()
+            records.append({
+                "path": relative,
+                "mode": "100755" if path.stat().st_mode & 0o111 else "100644",
+                "git_blob": hashlib.sha1(
+                    f"blob {len(content)}\0".encode() + content,
+                    usedforsecurity=False,
+                ).hexdigest(),
+                "bytes": len(content),
+                "sha256": hashlib.sha256(content).hexdigest(),
+            })
+        return build_source_manifest(
+            scope=BACKEND_RUNTIME_SOURCE_SCOPE,
+            source_git_sha=SOURCE_GIT_SHA,
+            source_base_git_sha=SOURCE_GIT_SHA,
+            source_root_tree_oid="f" * 40,
+            source_base_root_tree_oid="f" * 40,
+            scope_tree_oid="d" * 40,
+            source_base_scope_tree_oid="d" * 40,
+            files=records,
+            base_files=records,
+            label="Backend runtime source",
+        )
+
     def _identity(self, backend_root: Path):
         frontend_build = self._frontend_build()
         return build_runtime_release_identity(
             source_git_sha=SOURCE_GIT_SHA,
+            source_base_git_sha=SOURCE_GIT_SHA,
             branch=BRANCH,
             frontend_build=frontend_build,
             frontend_reproducibility=self._frontend_reproducibility(
                 frontend_build
             ),
             backend_root=backend_root,
+            backend_runtime_source=self._backend_runtime_source(backend_root),
+            release_control_source=self._release_control_source(),
         )
 
     def test_valid_identity_is_public_exact_and_deterministic(self):
@@ -184,6 +258,7 @@ class ReleaseIdentityTests(unittest.TestCase):
         self.assertRegex(result["release_id"], r"^rg5-[0-9a-f]{64}$")
         self.assertEqual(result["git_sha"], SOURCE_GIT_SHA)
         self.assertEqual(result["source_git_sha"], SOURCE_GIT_SHA)
+        self.assertEqual(result["source_base_git_sha"], SOURCE_GIT_SHA)
         self.assertEqual(result["protocol_version"], 5)
         self.assertEqual(result["identity_kind"], RELEASE_IDENTITY_KIND)
         self.assertEqual(
@@ -191,6 +266,11 @@ class ReleaseIdentityTests(unittest.TestCase):
             RELEASE_IDENTITY_SCHEMA_VERSION,
         )
         self.assertTrue(result["critical_file_hashes_match"])
+        self.assertTrue(result["backend_runtime_source_verified"])
+        self.assertNotIn("files", result["backend_runtime_source"])
+        self.assertNotIn("tombstones", result["backend_runtime_source"])
+        self.assertNotIn("files", result["release_control_source"])
+        self.assertTrue(result["release_control_source_bound"])
         self.assertTrue(result["frontend_build_verified"])
         self.assertEqual(result["frontend_build"], first["frontend_build"])
         self.assertEqual(
@@ -389,6 +469,311 @@ class ReleaseIdentityTests(unittest.TestCase):
         self.assertIsNone(result["release_id"])
         self.assertIsNone(result["git_sha"])
 
+    def test_complete_backend_runtime_source_is_bound_to_identity(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self._package_root(Path(tmp))
+            governed = root / "business_logic.py"
+            governed.write_bytes(b"VALUE = 'reviewed'\n")
+            governed.chmod(0o755)
+
+            payload = self._identity(root)
+
+        source = payload["backend_runtime_source"]
+        self.assertEqual(source["scope"], "backend_runtime_package_v1")
+        self.assertEqual(source["file_count"], len(source["files"]))
+        records = {record["path"]: record for record in source["files"]}
+        self.assertEqual(
+            set(records["business_logic.py"]),
+            {"path", "mode", "git_blob", "bytes", "sha256"},
+        )
+        self.assertEqual(records["business_logic.py"]["mode"], "100755")
+        self.assertEqual(records["business_logic.py"]["bytes"], 19)
+        self.assertRegex(records["business_logic.py"]["git_blob"], r"^[0-9a-f]{40}$")
+        self.assertRegex(records["business_logic.py"]["sha256"], r"^[0-9a-f]{64}$")
+
+    def test_unreviewed_backend_addition_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self._package_root(Path(tmp))
+            (root / "business_logic.py").write_bytes(b"reviewed\n")
+            payload = self._identity(root)
+            (root / "unreviewed.py").write_bytes(b"not reviewed\n")
+
+            with self.assertRaisesRegex(
+                ReleaseProtocolV5Error,
+                "Backend runtime source membership",
+            ):
+                validate_runtime_release_identity(payload, backend_root=root)
+
+    def test_backend_modification_deletion_and_mode_drift_fail_closed(self):
+        for mutation in ("content", "delete", "mode"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as tmp:
+                root = self._package_root(Path(tmp))
+                governed = root / "business_logic.py"
+                governed.write_bytes(b"reviewed\n")
+                governed.chmod(0o644)
+                payload = self._identity(root)
+
+                if mutation == "content":
+                    governed.write_bytes(b"changed\n")
+                elif mutation == "delete":
+                    governed.unlink()
+                else:
+                    governed.chmod(0o755)
+
+                with self.assertRaisesRegex(
+                    ReleaseProtocolV5Error,
+                    "Backend runtime source",
+                ):
+                    validate_runtime_release_identity(payload, backend_root=root)
+
+    def test_tests_and_identity_are_excluded_but_bytecode_cache_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self._package_root(Path(tmp))
+            (root / "business_logic.py").write_bytes(b"reviewed\n")
+            (root / "tests").mkdir()
+            (root / "tests" / "test_fixture.py").write_bytes(b"ignored\n")
+            payload = self._identity(root)
+            (root / "__pycache__").mkdir()
+            (root / "__pycache__" / "business_logic.cpython-311.pyc").write_bytes(
+                b"generated\n"
+            )
+            identity_path = root / "release_identity.json"
+            identity_path.write_text(json.dumps(payload), encoding="utf-8")
+
+            result = read_release_identity(identity_path, backend_root=root)
+
+        self.assertFalse(result["verified_identity_available"])
+        self.assertFalse(result["backend_runtime_source_verified"])
+        source_paths = {
+            record["path"] for record in payload["backend_runtime_source"]["files"]
+        }
+        self.assertNotIn("release_identity.json", source_paths)
+        self.assertFalse(any(path.startswith("tests/") for path in source_paths))
+        self.assertFalse(any("__pycache__" in path for path in source_paths))
+
+    def test_safe_root_env_sidecar_is_unread_and_outside_identity(self):
+        for mode in (0o600, 0o640, 0o644):
+            with self.subTest(mode=oct(mode)), tempfile.TemporaryDirectory() as tmp:
+                root = self._package_root(Path(tmp))
+                sidecar = root / ".env"
+                marker = f"sidecar-marker-{mode:o}"
+                sidecar.write_text(f"TEST_MARKER={marker}\n", encoding="utf-8")
+                sidecar.chmod(mode)
+                real_open = os.open
+                opened: list[Path] = []
+
+                def guarded_open(path, *args, **kwargs):
+                    candidate = Path(path)
+                    opened.append(candidate)
+                    if candidate == sidecar:
+                        raise AssertionError("configuration sidecar was opened")
+                    return real_open(path, *args, **kwargs)
+
+                with patch.object(
+                    release_protocol_module.os,
+                    "open",
+                    side_effect=guarded_open,
+                ):
+                    payload = self._identity(root)
+                    identity_path = root / "release_identity.json"
+                    identity_path.write_text(json.dumps(payload), encoding="utf-8")
+                    result = read_release_identity(
+                        identity_path, backend_root=root
+                    )
+
+                self.assertTrue(result["verified_identity_available"])
+                self.assertNotIn(sidecar, opened)
+                serialized = json.dumps(payload)
+                self.assertNotIn(marker, serialized)
+                self.assertNotIn('"path": ".env"', serialized)
+
+    def test_root_env_sidecar_shape_and_permissions_fail_closed(self):
+        mutations = (
+            "symlink",
+            "fifo",
+            "group-write",
+            "executable",
+            "special",
+            "not-owner-readable",
+            "suffix",
+            "nested",
+        )
+        for mutation in mutations:
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as tmp:
+                temporary = Path(tmp)
+                root = self._package_root(temporary)
+                payload = self._identity(root)
+                sidecar = root / ".env"
+                if mutation == "symlink":
+                    target = temporary / "outside-env"
+                    target.write_text("SECRET=outside\n", encoding="utf-8")
+                    sidecar.symlink_to(target)
+                elif mutation == "fifo":
+                    os.mkfifo(sidecar)
+                elif mutation == "suffix":
+                    (root / ".env.local").write_text(
+                        "SECRET=suffix\n", encoding="utf-8"
+                    )
+                elif mutation == "nested":
+                    nested = root / "config"
+                    nested.mkdir()
+                    (nested / ".env").write_text(
+                        "SECRET=nested\n", encoding="utf-8"
+                    )
+                else:
+                    sidecar.write_text("SECRET=value\n", encoding="utf-8")
+                    sidecar.chmod({
+                        "group-write": 0o620,
+                        "executable": 0o700,
+                        "special": 0o4600,
+                        "not-owner-readable": 0o200,
+                    }[mutation])
+
+                with self.assertRaises(ReleaseProtocolV5Error):
+                    validate_runtime_release_identity(
+                        payload, backend_root=root
+                    )
+
+    def test_restrictive_source_and_directory_modes_preserve_git_category(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self._package_root(Path(tmp))
+            for path in root.rglob("*"):
+                if path.is_dir():
+                    path.chmod(0o700)
+                else:
+                    path.chmod(0o600)
+            root.chmod(0o700)
+            executable = root / "worker.py"
+            executable.write_text("print('worker')\n", encoding="utf-8")
+            executable.chmod(0o700)
+            payload = self._identity(root)
+
+            validated = validate_runtime_release_identity(
+                payload, backend_root=root
+            )
+            records = {
+                row["path"]: row
+                for row in validated["backend_runtime_source"]["files"]
+            }
+            self.assertEqual(records["server.py"]["mode"], "100644")
+            self.assertEqual(records["worker.py"]["mode"], "100755")
+            executable.chmod(0o600)
+            with self.assertRaisesRegex(
+                ReleaseProtocolV5Error, "mismatch for worker.py: mode"
+            ):
+                validate_runtime_release_identity(payload, backend_root=root)
+
+    def test_plain_python_boot_accepts_derived_cache_under_umask_077(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            temporary = Path(tmp)
+            root = temporary / "backend-package"
+            source_root = Path(release_identity_module.__file__).resolve().parent
+            root.mkdir()
+            for relative in (
+                "release_identity.py",
+                "release_protocol_v5.py",
+                "frontend_build_identity.py",
+            ):
+                shutil.copy2(source_root / relative, root / relative)
+            for index, relative in enumerate(
+                set(CRITICAL_FILES) - {
+                    "release_identity.py",
+                    "release_protocol_v5.py",
+                    "frontend_build_identity.py",
+                },
+                start=1,
+            ):
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(f"fixture-{index}\n", encoding="utf-8")
+            payload = self._identity(root)
+            (root / "release_identity.json").write_text(
+                json.dumps(payload), encoding="utf-8"
+            )
+            environment = dict(os.environ)
+            environment.pop("PYTHONDONTWRITEBYTECODE", None)
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-I",
+                    "-c",
+                    (
+                        "import json,os,sys;"
+                        "os.umask(0o077);"
+                        f"sys.path.insert(0,{str(root)!r});"
+                        "import release_identity;"
+                        "print(json.dumps(release_identity.BOOT_RELEASE_IDENTITY))"
+                    ),
+                ],
+                cwd=temporary,
+                env=environment,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            boot = json.loads(result.stdout)
+            self.assertTrue(boot["verified_identity_available"])
+            self.assertTrue(boot["backend_runtime_source_verified"])
+            caches = list((root / "__pycache__").glob("*.pyc"))
+            self.assertTrue(caches)
+            self.assertEqual(
+                {stat.S_IMODE(path.stat().st_mode) for path in caches},
+                {0o600},
+            )
+            with self.assertRaisesRegex(
+                ReleaseProtocolV5Error, "prepackaged bytecode"
+            ):
+                validate_runtime_release_identity(
+                    payload,
+                    backend_root=root,
+                    allow_derived_bytecode=False,
+                )
+            cached = caches[0]
+            for unsafe_mode in (0o700, 0o620, 0o4600, 0o200):
+                with self.subTest(unsafe_cache_mode=oct(unsafe_mode)):
+                    cached.chmod(unsafe_mode)
+                    with self.assertRaisesRegex(
+                        ReleaseProtocolV5Error,
+                        "unsafe derived-cache permissions",
+                    ):
+                        validate_runtime_release_identity(
+                            payload, backend_root=root
+                        )
+            cached.chmod(0o600)
+            cached.write_bytes(b"arbitrary cache bytes\n")
+            with self.assertRaisesRegex(
+                ReleaseProtocolV5Error, "non-derived bytecode"
+            ):
+                validate_runtime_release_identity(payload, backend_root=root)
+
+    def test_backend_mode_symlink_and_sourceless_bytecode_fail_closed(self):
+        for mutation in (
+            "critical-mode", "unsafe-mode", "symlink", "sourceless-bytecode",
+        ):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as tmp:
+                temporary = Path(tmp)
+                root = self._package_root(temporary)
+                governed = root / "business_logic.py"
+                governed.write_bytes(b"reviewed\n")
+                payload = self._identity(root)
+
+                if mutation == "critical-mode":
+                    (root / CRITICAL_FILES[0]).chmod(0o755)
+                elif mutation == "unsafe-mode":
+                    governed.chmod(0o666)
+                elif mutation == "symlink":
+                    target = temporary / "outside.py"
+                    target.write_bytes(governed.read_bytes())
+                    governed.unlink()
+                    governed.symlink_to(target)
+                else:
+                    (root / "evil.pyc").write_bytes(b"sourceless code\n")
+
+                with self.assertRaises(ReleaseProtocolV5Error):
+                    validate_runtime_release_identity(payload, backend_root=root)
+
     def test_critical_hash_keys_must_be_exact(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = self._package_root(Path(tmp))
@@ -462,10 +847,13 @@ class ReleaseIdentityTests(unittest.TestCase):
             ):
                 build_runtime_release_identity(
                     source_git_sha=SOURCE_GIT_SHA,
+                    source_base_git_sha=SOURCE_GIT_SHA,
                     branch=BRANCH,
                     frontend_build=frontend_build,
                     frontend_reproducibility=frontend_proof,
                     backend_root=root,
+                    backend_runtime_source=self._backend_runtime_source(root),
+                    release_control_source=self._release_control_source(),
                 )
 
     def test_release_id_cannot_be_reused_after_core_tampering(self):
@@ -488,12 +876,15 @@ class ReleaseIdentityTests(unittest.TestCase):
             with self.assertRaises(ReleaseProtocolV5Error):
                 build_runtime_release_identity(
                     source_git_sha="B" * 40,
+                    source_base_git_sha=SOURCE_GIT_SHA,
                     branch=BRANCH,
                     frontend_build=frontend_build,
                     frontend_reproducibility=(
                         self._frontend_reproducibility(frontend_build)
                     ),
                     backend_root=root,
+                    backend_runtime_source=self._backend_runtime_source(root),
+                    release_control_source=self._release_control_source(),
                 )
 
             mismatched_build = self._frontend_build("b" * 40)
@@ -502,12 +893,15 @@ class ReleaseIdentityTests(unittest.TestCase):
             ):
                 build_runtime_release_identity(
                     source_git_sha=SOURCE_GIT_SHA,
+                    source_base_git_sha=SOURCE_GIT_SHA,
                     branch=BRANCH,
                     frontend_build=mismatched_build,
                     frontend_reproducibility=(
                         self._frontend_reproducibility(mismatched_build)
                     ),
                     backend_root=root,
+                    backend_runtime_source=self._backend_runtime_source(root),
+                    release_control_source=self._release_control_source(),
                 )
 
     def test_random_lease_fields_and_v4_payload_are_rejected(self):

@@ -10,18 +10,22 @@ from typing import Any
 
 try:  # Support both production flat imports and package-style test imports.
     from .release_protocol_v5 import (
+        BACKEND_RUNTIME_SOURCE_SCOPE,
         CRITICAL_FILES,
         RELEASE_IDENTITY_KIND,
         RELEASE_IDENTITY_SCHEMA_VERSION,
         RELEASE_PROTOCOL_VERSION,
+        source_manifest_summary,
         validate_runtime_release_identity,
     )
 except ImportError:  # pragma: no cover - production imports from backend cwd
     from release_protocol_v5 import (
+        BACKEND_RUNTIME_SOURCE_SCOPE,
         CRITICAL_FILES,
         RELEASE_IDENTITY_KIND,
         RELEASE_IDENTITY_SCHEMA_VERSION,
         RELEASE_PROTOCOL_VERSION,
+        source_manifest_summary,
         validate_runtime_release_identity,
     )
 
@@ -51,6 +55,7 @@ def _unavailable_identity() -> dict[str, Any]:
         "release_id": None,
         "git_sha": None,
         "source_git_sha": None,
+        "source_base_git_sha": None,
         "branch": None,
         # Operational timestamps belong to the lease in v5. Keep this null
         # compatibility field for older health consumers.
@@ -58,6 +63,10 @@ def _unavailable_identity() -> dict[str, Any]:
         "protocol_version": RELEASE_PROTOCOL_VERSION,
         "identity_kind": RELEASE_IDENTITY_KIND,
         "identity_schema_version": RELEASE_IDENTITY_SCHEMA_VERSION,
+        "backend_runtime_source_verified": False,
+        "backend_runtime_source": None,
+        "release_control_source_bound": False,
+        "release_control_source": None,
         "critical_file_hashes_match": False,
         "critical_file_hashes": {},
         "frontend_build_verified": False,
@@ -73,8 +82,8 @@ def read_release_identity(
 ) -> dict[str, Any]:
     """Return a safe public identity; never raise during a health probe.
 
-    Runtime validation uses only the identity JSON and allowlisted bytes inside
-    the backend package. It does not require ``.git`` or a sibling frontend
+    Runtime validation uses only the identity JSON and the complete governed
+    source membership inside the backend package. It does not require ``.git`` or a sibling frontend
     directory, so separately packaged Emergent runtimes fail closed rather
     than silently depending on files that Cloud Build does not transfer.
     """
@@ -95,11 +104,20 @@ def read_release_identity(
             # its exact contract is the governed source commit SHA.
             "git_sha": source_git_sha,
             "source_git_sha": source_git_sha,
+            "source_base_git_sha": identity["source_base_git_sha"],
             "branch": identity["branch"],
             "prepared_at": None,
             "protocol_version": RELEASE_PROTOCOL_VERSION,
             "identity_kind": RELEASE_IDENTITY_KIND,
             "identity_schema_version": RELEASE_IDENTITY_SCHEMA_VERSION,
+            "backend_runtime_source_verified": True,
+            "backend_runtime_source": source_manifest_summary(
+                identity["backend_runtime_source"],
+                expected_scope=BACKEND_RUNTIME_SOURCE_SCOPE,
+                label="Backend runtime source",
+            ),
+            "release_control_source_bound": True,
+            "release_control_source": identity["release_control_source"],
             "critical_file_hashes_match": True,
             "critical_file_hashes": identity["critical_file_hashes"],
             "frontend_build_verified": True,

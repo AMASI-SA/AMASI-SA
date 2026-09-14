@@ -275,6 +275,8 @@ def test_verified_release_identity_is_required_in_production():
             "verified_identity_available": True,
             "critical_file_hashes_match": True,
             "frontend_build_verified": True,
+            "backend_runtime_source_verified": True,
+            "release_control_source_bound": True,
         }},
         environment={"APP_ENV": "production"},
     ) == "a" * 40
@@ -282,6 +284,43 @@ def test_verified_release_identity_is_required_in_production():
         startup_guard.verified_release_key(
             {"release": {"source_git_sha": "a" * 40}},
             environment={"APP_ENV": "production"},
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        pytest.param(
+            "backend_runtime_source_verified", None, id="runtime-source-missing"
+        ),
+        pytest.param(
+            "backend_runtime_source_verified", False, id="runtime-source-false"
+        ),
+        pytest.param(
+            "release_control_source_bound", None, id="control-source-missing"
+        ),
+        pytest.param(
+            "release_control_source_bound", False, id="control-source-false"
+        ),
+    ],
+)
+def test_verified_release_key_rejects_incomplete_source_binding(field, value):
+    release = {
+        "source_git_sha": "a" * 40,
+        "verified_identity_available": True,
+        "critical_file_hashes_match": True,
+        "frontend_build_verified": True,
+        "backend_runtime_source_verified": True,
+        "release_control_source_bound": True,
+    }
+    if value is None:
+        release.pop(field)
+    else:
+        release[field] = value
+
+    with pytest.raises(ValueError, match="verified release source_git_sha"):
+        startup_guard.verified_release_key(
+            {"release": release}, environment={"APP_ENV": "production"}
         )
 
 
