@@ -1585,7 +1585,11 @@ async def test_unknown_qoyod_reference_lookup_never_reaches_a_write(
             sku="SKU-LOOKUP",
         )
     )
-    invoice_post = AsyncMock()
+    invoice_post = AsyncMock(
+        side_effect=AssertionError(
+            "invoice POST must not run after an unknown reference lookup"
+        )
+    )
 
     with patch(
         "integrations.qoyod_manual.client.ManualQoyodClient."
