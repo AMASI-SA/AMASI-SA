@@ -146,7 +146,10 @@ class QoyodSettings(BaseModel):
 
     # ─── Master switches ────────────────────────────────────────────
     enabled:           bool = False     # ADR-001 #3 — connector master toggle
-    auto_send:         bool = True      # pipeline runs automatically on inbox
+    auto_send:         bool = True      # runtime switch; may pause on auth loss
+    # Durable merchant intent is separate from runtime health. None marks a
+    # legacy row; readers derive it once from the visible master switches.
+    auto_send_desired: Optional[bool] = None
     auto_receipt:      bool = True      # create receipt right after invoice
     # Day 5 safety net — when True the pipeline goes through every step,
     # builds the EXACT Qoyod payload, but skips the final POST. The
