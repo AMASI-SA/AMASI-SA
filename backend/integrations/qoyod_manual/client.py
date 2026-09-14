@@ -128,28 +128,35 @@ class ManualQoyodClient:
         self,
         path: str,
         query_options: tuple[dict, ...],
+        *,
+        stop_when=None,
     ) -> list[Any]:
         """Run lookup variants without converting unknown state to absence.
 
         Only a query-shape rejection (400/422) may try the next documented
         filter. Authentication, throttling, network, timeout, and provider
         failures propagate immediately so callers cannot perform a write
-        after an unconfirmed duplicate lookup.
+        after an unconfirmed duplicate lookup. Once an exact match is found,
+        later fallback queries are skipped so a subsequent throttle cannot
+        obscure an already-confirmed provider result.
         """
         bodies: list[Any] = []
         last_shape_error: Optional[ManualQoyodError] = None
         for params in query_options:
             try:
-                bodies.append(await self._request(
+                body = await self._request(
                     "GET",
                     path,
                     params=params,
-                ))
+                )
             except ManualQoyodError as exc:
                 if exc.status_code in {400, 422}:
                     last_shape_error = exc
                     continue
                 raise
+            bodies.append(body)
+            if stop_when is not None and stop_when(body):
+                break
         if not bodies and last_shape_error is not None:
             raise last_shape_error
         return bodies
@@ -159,6 +166,24 @@ class ManualQoyodClient:
         """Find an exact phone match while keeping provider failures visible."""
         if not phone:
             return []
+
+        def _phone_matches(body: Any) -> list[dict]:
+            rows = []
+            if isinstance(body, dict):
+                rows = body.get("customers") or body.get("data") or []
+            elif isinstance(body, list):
+                rows = body
+            matches = []
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                value = str(
+                    row.get("phone") or row.get("mobile") or ""
+                ).strip()
+                if value and value == phone:
+                    matches.append(row)
+            return matches
+
         bodies = await self._read_with_query_fallbacks(
             "/customers",
             (
@@ -166,20 +191,10 @@ class ManualQoyodClient:
                 {"q[mobile_eq]": phone, "limit": limit},
                 {"phone": phone, "limit": limit},
             ),
+            stop_when=lambda body: bool(_phone_matches(body)),
         )
         for body in bodies:
-            rows = []
-            if isinstance(body, dict):
-                rows = body.get("customers") or body.get("data") or []
-            elif isinstance(body, list):
-                rows = body
-            matches = []
-            for r in rows:
-                if not isinstance(r, dict):
-                    continue
-                rphone = str(r.get("phone") or r.get("mobile") or "").strip()
-                if rphone and rphone == phone:
-                    matches.append(r)
+            matches = _phone_matches(body)
             if matches:
                 return matches
         return []
@@ -205,25 +220,35 @@ class ManualQoyodClient:
         just uses the first match (Plan B rule)."""
         if not sku:
             return None
+
+        def _exact_product(body: Any) -> Optional[dict]:
+            rows = []
+            if isinstance(body, dict):
+                rows = body.get("products") or body.get("data") or []
+            elif isinstance(body, list):
+                rows = body
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                value = str(
+                    row.get("sku") or row.get("reference") or ""
+                ).strip()
+                if value == sku:
+                    return row
+            return None
+
         bodies = await self._read_with_query_fallbacks(
             "/products",
             (
                 {"q[sku_eq]": sku, "limit": 5},
                 {"sku": sku, "limit": 5},
             ),
+            stop_when=lambda body: _exact_product(body) is not None,
         )
         for body in bodies:
-            rows = []
-            if isinstance(body, dict):
-                rows = body.get("products") or body.get("data") or []
-            elif isinstance(body, list):
-                rows = body
-            for r in rows:
-                if not isinstance(r, dict):
-                    continue
-                rsku = str(r.get("sku") or r.get("reference") or "").strip()
-                if rsku == sku:
-                    return r
+            match = _exact_product(body)
+            if match is not None:
+                return match
         return None
 
     async def get_invoice(self, invoice_id: int) -> dict:
@@ -245,24 +270,32 @@ class ManualQoyodClient:
         the duplicate-check safety net (guard #1 supplement)."""
         if not reference:
             return None
+
+        def _exact_invoice(body: Any) -> Optional[dict]:
+            rows = []
+            if isinstance(body, dict):
+                rows = body.get("invoices") or body.get("data") or []
+            elif isinstance(body, list):
+                rows = body
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                if str(row.get("reference") or "") == str(reference):
+                    return row
+            return None
+
         bodies = await self._read_with_query_fallbacks(
             "/invoices",
             (
                 {"q[reference_eq]": reference, "limit": 3},
                 {"reference": reference, "limit": 3},
             ),
+            stop_when=lambda body: _exact_invoice(body) is not None,
         )
         for body in bodies:
-            rows = []
-            if isinstance(body, dict):
-                rows = body.get("invoices") or body.get("data") or []
-            elif isinstance(body, list):
-                rows = body
-            for r in rows:
-                if not isinstance(r, dict):
-                    continue
-                if str(r.get("reference") or "") == str(reference):
-                    return r
+            match = _exact_invoice(body)
+            if match is not None:
+                return match
         return None
 
     # ── Write endpoints ─────────────────────────────────────────────
