@@ -737,6 +737,35 @@ async def _load_candidate_rows(
     }
 
 
+def _qoyod_status_codes(value: Any) -> set[int]:
+    """Extract provider HTTP status codes from nested safe error details."""
+    result: set[int] = set()
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            if key == "status_code":
+                try:
+                    result.add(int(nested))
+                except (TypeError, ValueError):
+                    pass
+            else:
+                result.update(_qoyod_status_codes(nested))
+    elif isinstance(value, (list, tuple)):
+        for nested in value:
+            result.update(_qoyod_status_codes(nested))
+    return result
+
+
+def is_transient_qoyod_failure(exc: ManualSendRefused) -> bool:
+    """Return True only for network, throttle, or Qoyod 5xx failures."""
+    statuses = _qoyod_status_codes(exc.extra or {})
+    return any(
+        status_code == 0
+        or status_code == 429
+        or status_code >= 500
+        for status_code in statuses
+    )
+
+
 def is_credential_failure(exc: ManualSendRefused) -> bool:
     """Classify only missing/unauthorized credentials as a global pause."""
     if exc.code == "qoyod_credentials_missing":
@@ -937,6 +966,31 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
                     # A credential failure is global, not order-local. Stop
                     # this bounded round without quarantining any backlog row.
                     break
+                if is_transient_qoyod_failure(exc):
+                    status_codes = sorted(_qoyod_status_codes(exc.extra or {}))
+                    retryable = ManualSendRefused(
+                        "qoyod_transient_error",
+                        "تعذر تأكيد نتيجة قيود مؤقتاً؛ ستسبق أي محاولة "
+                        "لاحقة مصالحة المرجع لمنع التكرار.",
+                        {
+                            "source_code": exc.code,
+                            "status_codes": status_codes,
+                        },
+                    )
+                    await _quarantine_order(
+                        db,
+                        order_number=order_number,
+                        exc=retryable,
+                        run_id=run_id,
+                    )
+                    results.append({
+                        "order_number": order_number,
+                        "outcome": "retry_later",
+                        "code": retryable.code,
+                        "message": retryable.message,
+                        "detail": retryable.extra,
+                    })
+                    continue
                 if exc.code in SAFE_ALREADY_SENT_CODES:
                     results.append({
                         "order_number": order_number,
