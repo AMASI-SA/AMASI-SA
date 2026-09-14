@@ -608,6 +608,12 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                 "message": "تعذر التحقق من اتصال قيود",
             })
 
+        # Only a failed/unknown credential verification may force the
+        # runtime switches off. Other readiness gates (dry-run, missing
+        # canary, Salla disconnected) must preserve the operator's visible
+        # settings while keeping the hidden unified worker unarmed.
+        credential_verification_failed = bool(readiness_issues)
+
         orders_owner = orders_owner_id(user)
         canary = None
         salla_integration = None
@@ -649,7 +655,7 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                 {"$set": plan["settings_patch"]},
                 upsert=True,
             )
-        else:
+        elif credential_verification_failed:
             first_issue = (plan.get("issues") or [{}])[0]
             pause = credential_pause_patch(
                 settings,
