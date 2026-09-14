@@ -556,8 +556,8 @@ class ReleaseIdentityTests(unittest.TestCase):
             with self.subTest(mode=oct(mode)), tempfile.TemporaryDirectory() as tmp:
                 root = self._package_root(Path(tmp))
                 sidecar = root / ".env"
-                secret = "SIDECAR_SENTINEL_MUST_NOT_BE_READ"
-                sidecar.write_text(f"TOKEN={secret}\n", encoding="utf-8")
+                marker = f"sidecar-marker-{mode:o}"
+                sidecar.write_text(f"TEST_MARKER={marker}\n", encoding="utf-8")
                 sidecar.chmod(mode)
                 real_open = os.open
                 opened: list[Path] = []
@@ -584,7 +584,7 @@ class ReleaseIdentityTests(unittest.TestCase):
                 self.assertTrue(result["verified_identity_available"])
                 self.assertNotIn(sidecar, opened)
                 serialized = json.dumps(payload)
-                self.assertNotIn(secret, serialized)
+                self.assertNotIn(marker, serialized)
                 self.assertNotIn('"path": ".env"', serialized)
 
     def test_root_env_sidecar_shape_and_permissions_fail_closed(self):
