@@ -680,13 +680,17 @@ async def load_inbox_evidence(
     scan_limit: int = CANDIDATE_AUDIT_SCAN_LIMIT,
 ) -> dict[str, Any]:
     """Stream bounded marker evidence without retaining every inbox event."""
-    references = list(dict.fromkeys(
-        str(value).strip()
-        for value in (order_numbers or [])
-        if str(value).strip()
-    ))
+    references = (
+        None
+        if order_numbers is None
+        else list(dict.fromkeys(
+            str(value).strip()
+            for value in order_numbers
+            if str(value).strip()
+        ))
+    )
     scan_limit = max(1, int(scan_limit))
-    if order_numbers is not None and not references:
+    if references is not None and not references:
         return {
             "newest": {},
             "markers": {},
@@ -699,8 +703,9 @@ async def load_inbox_evidence(
         }
     query = {
         "user_id": _owner_query(marker_user_ids),
-        "salla_order_number": {"$in": references},
     }
+    if references is not None:
+        query["salla_order_number"] = {"$in": references}
     # Keep this projection deliberately small: canonical payloads, raw payloads,
     # item arrays, and complete stage histories can be very large.  The report
     # needs only classification fields plus real local marker ids.
@@ -737,7 +742,7 @@ async def load_inbox_evidence(
     markers: dict[str, dict[str, Any]] = {}
     event_counts: dict[str, int] = {}
     owners: dict[str, set[str]] = {}
-    allowed = set(references)
+    allowed = set(references) if references is not None else None
     marker_fields = (
         "manual_qoyod_invoice_id",
         "manual_qoyod_invoice_number",
@@ -754,7 +759,7 @@ async def load_inbox_evidence(
             scan_truncated = True
             break
         reference = str(row.get("salla_order_number") or "").strip()
-        if reference not in allowed:
+        if allowed is not None and reference not in allowed:
             continue
         newest.setdefault(reference, row)
         event_counts[reference] = event_counts.get(reference, 0) + 1
@@ -782,15 +787,21 @@ async def load_qoyod_reference_evidence(
     db: Any,
     *,
     markers_user_id: str,
-    order_numbers: Iterable[str],
+    order_numbers: Optional[Iterable[str]],
     scan_limit: int = CANDIDATE_AUDIT_SCAN_LIMIT,
 ) -> dict[str, Any]:
     """Load bounded real local Qoyod invoices grouped by exact reference."""
-    references = list(dict.fromkeys(
-        str(value).strip() for value in order_numbers if str(value).strip()
-    ))
+    references = (
+        None
+        if order_numbers is None
+        else list(dict.fromkeys(
+            str(value).strip()
+            for value in order_numbers
+            if str(value).strip()
+        ))
+    )
     scan_limit = max(1, int(scan_limit))
-    if not references:
+    if references is not None and not references:
         return {
             "by_reference": {},
             "references": set(),
@@ -824,7 +835,7 @@ async def load_qoyod_reference_evidence(
         "last_sync_at": 1,
     }
     query: dict[str, Any] = {"user_id": str(markers_user_id)}
-    if references:
+    if references is not None:
         reference_match = {"$in": references}
         query["$or"] = [
             {"reference": reference_match},
@@ -925,7 +936,7 @@ async def build_candidate_audit(
     invoices = await load_qoyod_reference_evidence(
         db,
         markers_user_id=str(markers_user_id),
-        order_numbers=eligible_refs,
+        order_numbers=eligible_refs if lightweight else None,
         scan_limit=scan_limit,
     )
     scan_metadata = {
