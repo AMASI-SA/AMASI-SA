@@ -1569,10 +1569,14 @@ async def test_freeze_toggle_stops_worker(db):
 @pytest.mark.parametrize("status_code", [0, 401, 403, 429, 500])
 async def test_unknown_qoyod_reference_lookup_never_reaches_a_write(
     db,
+    monkeypatch,
     status_code,
 ):
     await _seed_settings(db)
-    await _seed_credentials(db)
+    monkeypatch.setattr(
+        "integrations.qoyod_manual.send.get_api_key",
+        AsyncMock(return_value="synthetic-key"),
+    )
     await db.integration_inbox.insert_one(
         _inbox_row(
             order_number=f"LOOKUP-UNKNOWN-{status_code}",
