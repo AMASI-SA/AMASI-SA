@@ -1185,3 +1185,33 @@ async def test_credential_failure_pauses_worker_without_quarantining_orders(
 def test_credential_failure_classifier_is_closed(code, extra, expected):
     exc = ManualSendRefused(code, "safe", extra)
     assert auto_send.is_credential_failure(exc) is expected
+
+
+
+@pytest.mark.parametrize(
+    ("code", "extra", "expected"),
+    [
+        ("qoyod_http_error", {"status_code": 0}, True),
+        ("qoyod_http_error", {"status_code": 429}, True),
+        ("qoyod_http_error", {"status_code": 500}, True),
+        (
+            "product_create_failed",
+            {"response": {"status_code": 503}},
+            True,
+        ),
+        (
+            "product_create_failed",
+            {"primary_attempt": {"response": {"status_code": 422}}},
+            False,
+        ),
+        ("qoyod_http_error", {"status_code": 422}, False),
+        ("totals_mismatch", {"difference": 0.02}, False),
+    ],
+)
+def test_transient_qoyod_failure_classifier_is_status_aware(
+    code,
+    extra,
+    expected,
+):
+    exc = ManualSendRefused(code, "safe", extra)
+    assert auto_send.is_transient_qoyod_failure(exc) is expected
