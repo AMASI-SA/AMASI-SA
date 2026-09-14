@@ -210,7 +210,7 @@ test("release readiness binds schema-2 source ancestry and summary-only health",
   );
   assert.match(
     reviewedGate,
-    /reviewed B source base J must equal the Production push predecessor/,
+    /Production predecessor must be J or a staged source commit between J and A/,
   );
 
   // J is checked out and interpreted with its own adapter. Its reviewed source
