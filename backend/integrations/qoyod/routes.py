@@ -531,6 +531,146 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         payload["plan_b_auto_send_status"] = status_snapshot(payload)
         return payload
 
+    async def _recover_auto_send_after_credential_save(
+        tenant: str,
+        user: dict,
+        *,
+        saved_fingerprint: str,
+    ) -> Optional[dict[str, Any]]:
+        """Resume a previous opt-in only after the new key is verified."""
+        from integrations.qoyod_manual.auto_send import (
+            activation_issues,
+            credential_pause_patch,
+            credential_recovery_plan,
+            durable_auto_send_desired,
+        )
+
+        settings = await _load_settings(tenant)
+        if not durable_auto_send_desired(settings):
+            # Backwards compatibility: saving a first credential never turns
+            # the connector on. Only a durable previous opt-in can resume.
+            return None
+
+        now_iso = _now().isoformat()
+        readiness_issues: list[dict[str, str]] = []
+        try:
+            credential = await get_api_key_with_fingerprint(db, tenant)
+            if not credential or credential[1] != saved_fingerprint:
+                readiness_issues.append({
+                    "code": "qoyod_credentials_changed_during_save",
+                    "message": "تغير اعتماد قيود أثناء الحفظ؛ أعد المحاولة",
+                })
+            else:
+                key, _fingerprint, credential_version = credential
+                try:
+                    await QoyodAPIClient(key).me()
+                    verified = await mark_verified(
+                        db,
+                        tenant,
+                        credential_version=credential_version,
+                    )
+                    if not verified:
+                        readiness_issues.append({
+                            "code": "qoyod_credentials_changed_during_test",
+                            "message": (
+                                "تغير اعتماد قيود أثناء التحقق؛ أعد المحاولة"
+                            ),
+                        })
+                except QoyodAPIError as exc:
+                    safe_code = (
+                        exc.code
+                        if exc.code in _SAFE_CONNECTION_ERROR_MESSAGES
+                        else "qoyod_connection_failed"
+                    )
+                    readiness_issues.append({
+                        "code": safe_code,
+                        "message": _SAFE_CONNECTION_ERROR_MESSAGES.get(
+                            safe_code,
+                            "تعذر التحقق من اتصال قيود",
+                        ),
+                    })
+        except QoyodCredentialDecryptionError:
+            readiness_issues.append({
+                "code": "qoyod_credentials_decryption_failed",
+                "message": "تعذر قراءة اعتماد قيود المحفوظ بأمان",
+            })
+        except QoyodCredentialStorageError:
+            readiness_issues.append({
+                "code": "qoyod_credentials_read_failed",
+                "message": "تعذر قراءة اعتماد قيود المحفوظ بأمان",
+            })
+        except Exception:
+            logger.exception(
+                "Qoyod credential recovery verification failed"
+            )
+            readiness_issues.append({
+                "code": "qoyod_connection_failed",
+                "message": "تعذر التحقق من اتصال قيود",
+            })
+
+        orders_owner = orders_owner_id(user)
+        canary = None
+        salla_integration = None
+        try:
+            canary = await db.qoyod_manual_canary_runs.find_one(
+                {"status": "succeeded"},
+                {"_id": 0, "run_id": 1, "finished_at": 1},
+                sort=[("finished_at", -1)],
+            )
+            salla_integration = await db.salla_integrations.find_one(
+                {"user_id": orders_owner, "status": "connected"},
+                {"_id": 0, "user_id": 1},
+            )
+        except Exception:
+            logger.exception("Qoyod credential recovery readiness failed")
+            readiness_issues.append({
+                "code": "recovery_readiness_check_failed",
+                "message": "تعذر التحقق من جاهزية الإرسال التلقائي",
+            })
+
+        candidate = {**settings, "enabled": True, "auto_send": True}
+        readiness_issues.extend(activation_issues(
+            candidate,
+            credentials_configured=True,
+            canary_succeeded=bool(canary),
+            salla_connected=bool(salla_integration),
+        ))
+        plan = credential_recovery_plan(
+            settings,
+            readiness_issues=readiness_issues,
+            orders_user_id=orders_owner,
+            actor=str((user or {}).get("email") or user["id"]),
+            canary_run_id=(canary or {}).get("run_id"),
+            now_iso=now_iso,
+        )
+        if plan["resumed"]:
+            await db.qoyod_settings.update_one(
+                {"user_id": tenant},
+                {"$set": plan["settings_patch"]},
+                upsert=True,
+            )
+        else:
+            first_issue = (plan.get("issues") or [{}])[0]
+            pause = credential_pause_patch(
+                settings,
+                reason="credentials_unverified",
+                now_iso=now_iso,
+                error={
+                    "code": first_issue.get("code")
+                    or "credential_recovery_not_ready",
+                    "at": now_iso,
+                },
+            )
+            await db.qoyod_settings.update_one(
+                {"user_id": tenant},
+                {"$set": pause},
+                upsert=True,
+            )
+        return {
+            key: value for key, value in plan.items()
+            if key != "settings_patch"
+        }
+
     # ── GET /settings ────────────────────────────────────────────────
     @router.get("/settings")
     async def get_settings(
@@ -605,11 +745,18 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         # Dry Run disarms it immediately.
         from integrations.qoyod_manual.auto_send import (
             activation_issues,
+            durable_auto_send_desired,
             is_live_requested,
         )
         from integrations.qoyod.candidate_orders import (
             UNIFIED_CANDIDATE_AUTO_FLAG,
         )
+        if "enabled" in update or "auto_send" in update:
+            valid["auto_send_desired"] = bool(
+                valid.get("enabled") and valid.get("auto_send")
+            )
+        else:
+            valid["auto_send_desired"] = durable_auto_send_desired(current)
         if is_live_requested(valid):
             orders_owner = orders_owner_id(user)
             canary = await db.qoyod_manual_canary_runs.find_one(
@@ -729,8 +876,17 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                 },
                 headers=_CREDENTIAL_RESPONSE_HEADERS,
             ) from exc
-        # Don't auto-enable. Merchant decides explicitly.
-        return {"ok": True, **result}
+        # A first-time credential never auto-enables the connector. A verified
+        # replacement may resume only the merchant's durable previous opt-in.
+        recovery = await _recover_auto_send_after_credential_save(
+            tenant,
+            user,
+            saved_fingerprint=result["fingerprint"],
+        )
+        payload = {"ok": True, **result}
+        if recovery is not None:
+            payload["auto_send_recovery"] = recovery
+        return payload
 
     # ── DELETE /credentials ──────────────────────────────────────────
     @router.delete("/credentials")
@@ -741,15 +897,22 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         _disable_credential_response_cache(response)
         tenant = _tenant_id(user)
         try:
-            # Force-disable to avoid sync attempts with no key.
+            # Pause runtime writes while preserving the merchant's prior
+            # explicit opt-in for a later verified credential replacement.
+            from integrations.qoyod_manual.auto_send import (
+                credential_pause_patch,
+            )
+            settings = await _load_settings(tenant)
+            pause = credential_pause_patch(
+                settings,
+                reason="credentials_removed",
+                now_iso=_now().isoformat(),
+            )
             await db.qoyod_settings.update_one(
-                {"user_id": tenant}, {"$set": {
-                    "enabled": False,
-                    "auto_send": False,
-                    "plan_b_auto_send_armed_at": None,
-                    "plan_b_auto_send_disabled_at": _now(),
-                    "plan_b_auto_send_disabled_reason": "credentials_removed",
-                }})
+                {"user_id": tenant},
+                {"$set": pause},
+                upsert=True,
+            )
             ok = await delete_api_key(db, tenant)
         except Exception as exc:
             raise HTTPException(
