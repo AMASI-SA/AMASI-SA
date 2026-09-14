@@ -188,6 +188,114 @@ def is_live_requested(settings: dict) -> bool:
     )
 
 
+def durable_auto_send_desired(settings: dict) -> bool:
+    """Return the merchant's durable intent independently of runtime health.
+
+    Older settings documents predate auto_send_desired. For those rows, the
+    visible master switches are the only trustworthy evidence of an explicit
+    opt-in. Once written, the durable field is authoritative so a temporary
+    credential pause cannot be mistaken for an operator opt-out.
+    """
+    explicit = settings.get("auto_send_desired")
+    if isinstance(explicit, bool):
+        return explicit
+    return bool(settings.get("enabled") and settings.get("auto_send"))
+
+
+_CREDENTIAL_PAUSE_REASONS = frozenset({
+    "credentials_removed",
+    "credentials_invalid_or_expired",
+    "credentials_unverified",
+})
+
+
+def credential_pause_patch(
+    settings: dict,
+    *,
+    reason: str,
+    now_iso: str,
+    error: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    """Build the fail-closed runtime pause without erasing operator intent."""
+    return {
+        "auto_send_desired": durable_auto_send_desired(settings),
+        "enabled": False,
+        "auto_send": False,
+        UNIFIED_CANDIDATE_AUTO_FLAG: False,
+        "plan_b_auto_send_armed_at": None,
+        "plan_b_auto_send_disabled_at": now_iso,
+        "plan_b_auto_send_disabled_reason": reason,
+        "plan_b_auto_send_last_error": error,
+        "updated_at": now_iso,
+    }
+
+
+def credential_recovery_plan(
+    settings: dict,
+    *,
+    readiness_issues: list[dict[str, str]],
+    orders_user_id: str,
+    actor: str,
+    canary_run_id: Optional[str],
+    now_iso: str,
+) -> dict[str, Any]:
+    """Plan a credential-triggered resume; never mutate or bypass readiness."""
+    desired = durable_auto_send_desired(settings)
+    if not desired:
+        return {
+            "requested": False,
+            "resumed": False,
+            "reason": "operator_intent_disabled",
+            "issues": [],
+            "settings_patch": {},
+        }
+
+    issues = list(readiness_issues)
+    if settings.get("dry_run_mode") is True:
+        issues.append({
+            "code": "dry_run_enabled",
+            "message": "يجب إيقاف الوضع التجريبي قبل استئناف الإرسال التلقائي",
+        })
+    if issues:
+        return {
+            "requested": True,
+            "resumed": False,
+            "reason": "readiness_failed",
+            "issues": issues,
+            "settings_patch": {},
+        }
+
+    patch = {
+        "auto_send_desired": True,
+        "enabled": True,
+        "auto_send": True,
+        "dry_run_mode": False,
+        UNIFIED_CANDIDATE_AUTO_FLAG: True,
+        "plan_b_auto_send_armed_at": now_iso,
+        "plan_b_auto_send_orders_user_id": str(orders_user_id),
+        "plan_b_auto_send_actor": str(actor),
+        "plan_b_auto_send_canary_run_id": canary_run_id,
+        "plan_b_auto_send_disabled_at": None,
+        "plan_b_auto_send_disabled_reason": None,
+        "plan_b_auto_send_last_error": None,
+        "plan_b_auto_send_last_recovery": {
+            "reason": "credentials_verified",
+            "recovered_at": now_iso,
+        },
+        "updated_at": now_iso,
+    }
+    candidate = {**settings, **patch}
+    if not is_live_requested(candidate):
+        raise ValueError("credential recovery produced a non-live state")
+    return {
+        "requested": True,
+        "resumed": True,
+        "reason": "credentials_verified",
+        "issues": [],
+        "settings_patch": patch,
+    }
+
+
 def is_armed(settings: dict) -> bool:
     """Cheap runtime gate. Full validation happens when settings are saved."""
     return bool(
@@ -202,9 +310,15 @@ def is_armed(settings: dict) -> bool:
 
 
 def status_snapshot(settings: dict) -> dict[str, Any]:
+    desired = durable_auto_send_desired(settings)
+    armed = is_armed(settings)
+    disabled_reason = settings.get("plan_b_auto_send_disabled_reason")
     return {
+        "desired": desired,
         "requested": is_live_requested(settings),
-        "armed": is_armed(settings),
+        "armed": armed,
+        "credential_paused": disabled_reason in _CREDENTIAL_PAUSE_REASONS,
+        "resume_pending": bool(desired and not armed),
         "armed_at": settings.get("plan_b_auto_send_armed_at"),
         "armed_by": settings.get("plan_b_auto_send_actor"),
         "last_error": settings.get("plan_b_auto_send_last_error"),
