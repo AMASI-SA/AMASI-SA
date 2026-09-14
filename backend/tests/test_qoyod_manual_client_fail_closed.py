@@ -102,3 +102,62 @@ async def test_successful_empty_invoice_lookup_remains_a_confirmed_absence(
     monkeypatch.setattr(client, "_request", empty_lookup)
 
     assert await client.find_invoice_by_reference("283500005") is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "method,args,path,body,expected",
+    [
+        (
+            "find_invoice_by_reference",
+            ("283500006",),
+            "/invoices",
+            {"invoices": [{"id": 77, "reference": "283500006"}]},
+            {"id": 77, "reference": "283500006"},
+        ),
+        (
+            "find_customers_by_phone",
+            ("0500000000",),
+            "/customers",
+            {"customers": [{"id": 88, "phone": "0500000000"}]},
+            [{"id": 88, "phone": "0500000000"}],
+        ),
+        (
+            "find_product_by_sku",
+            ("SKU-3",),
+            "/products",
+            {"products": [{"id": 99, "sku": "SKU-3"}]},
+            {"id": 99, "sku": "SKU-3"},
+        ),
+    ],
+)
+async def test_exact_first_query_match_stops_before_later_provider_failure(
+    monkeypatch,
+    method,
+    args,
+    path,
+    body,
+    expected,
+):
+    client = ManualQoyodClient(
+        api_key="synthetic-key",
+        base_url="https://qoyod.invalid",
+    )
+    calls = []
+
+    async def first_match_then_throttle(http_method, request_path, **kwargs):
+        calls.append((http_method, request_path, kwargs.get("params")))
+        if len(calls) == 1:
+            assert http_method == "GET"
+            assert request_path == path
+            return body
+        raise ManualQoyodError(
+            status_code=429,
+            endpoint=f"{http_method} {request_path}",
+            response_excerpt="synthetic throttle after exact match",
+        )
+
+    monkeypatch.setattr(client, "_request", first_match_then_throttle)
+
+    assert await getattr(client, method)(*args) == expected
+    assert len(calls) == 1
