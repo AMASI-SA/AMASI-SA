@@ -124,22 +124,50 @@ class ManualQoyodClient:
         return body
 
     # ── Read endpoints ──────────────────────────────────────────────
+    async def _read_with_query_fallbacks(
+        self,
+        path: str,
+        query_options: tuple[dict, ...],
+    ) -> list[Any]:
+        """Run lookup variants without converting unknown state to absence.
+
+        Only a query-shape rejection (400/422) may try the next documented
+        filter. Authentication, throttling, network, timeout, and provider
+        failures propagate immediately so callers cannot perform a write
+        after an unconfirmed duplicate lookup.
+        """
+        bodies: list[Any] = []
+        last_shape_error: Optional[ManualQoyodError] = None
+        for params in query_options:
+            try:
+                bodies.append(await self._request(
+                    "GET",
+                    path,
+                    params=params,
+                ))
+            except ManualQoyodError as exc:
+                if exc.status_code in {400, 422}:
+                    last_shape_error = exc
+                    continue
+                raise
+        if not bodies and last_shape_error is not None:
+            raise last_shape_error
+        return bodies
+
     async def find_customers_by_phone(self, phone: str,
                                        *, limit: int = 5) -> list[dict]:
-        """Best-effort search by phone. Qoyod honours Ransack-style
-        `q[phone_eq]` on the legacy domain. Returns the list of matches
-        or `[]`."""
+        """Find an exact phone match while keeping provider failures visible."""
         if not phone:
             return []
-        for params in (
-            {"q[phone_eq]": phone, "limit": limit},
-            {"q[mobile_eq]": phone, "limit": limit},
-            {"phone": phone, "limit": limit},
-        ):
-            try:
-                body = await self._request("GET", "/customers", params=params)
-            except ManualQoyodError:
-                continue
+        bodies = await self._read_with_query_fallbacks(
+            "/customers",
+            (
+                {"q[phone_eq]": phone, "limit": limit},
+                {"q[mobile_eq]": phone, "limit": limit},
+                {"phone": phone, "limit": limit},
+            ),
+        )
+        for body in bodies:
             rows = []
             if isinstance(body, dict):
                 rows = body.get("customers") or body.get("data") or []
@@ -160,12 +188,9 @@ class ManualQoyodClient:
                                        *, limit: int = 5) -> list[dict]:
         if not email:
             return []
-        try:
-            body = await self._request(
-                "GET", "/customers",
-                params={"q[email_eq]": email, "limit": limit})
-        except ManualQoyodError:
-            return []
+        body = await self._request(
+            "GET", "/customers",
+            params={"q[email_eq]": email, "limit": limit})
         rows = []
         if isinstance(body, dict):
             rows = body.get("customers") or body.get("data") or []
@@ -180,15 +205,14 @@ class ManualQoyodClient:
         just uses the first match (Plan B rule)."""
         if not sku:
             return None
-        for params in (
-            {"q[sku_eq]": sku, "limit": 5},
-            {"sku": sku, "limit": 5},
-        ):
-            try:
-                body = await self._request(
-                    "GET", "/products", params=params)
-            except ManualQoyodError:
-                continue
+        bodies = await self._read_with_query_fallbacks(
+            "/products",
+            (
+                {"q[sku_eq]": sku, "limit": 5},
+                {"sku": sku, "limit": 5},
+            ),
+        )
+        for body in bodies:
             rows = []
             if isinstance(body, dict):
                 rows = body.get("products") or body.get("data") or []
@@ -221,15 +245,14 @@ class ManualQoyodClient:
         the duplicate-check safety net (guard #1 supplement)."""
         if not reference:
             return None
-        for params in (
-            {"q[reference_eq]": reference, "limit": 3},
-            {"reference": reference, "limit": 3},
-        ):
-            try:
-                body = await self._request(
-                    "GET", "/invoices", params=params)
-            except ManualQoyodError:
-                continue
+        bodies = await self._read_with_query_fallbacks(
+            "/invoices",
+            (
+                {"q[reference_eq]": reference, "limit": 3},
+                {"reference": reference, "limit": 3},
+            ),
+        )
+        for body in bodies:
             rows = []
             if isinstance(body, dict):
                 rows = body.get("invoices") or body.get("data") or []
