@@ -2873,8 +2873,30 @@ async def manual_send_one(
     try:
         existing_inv = await client.find_invoice_by_reference(
             str(order_number))
-    except ManualQoyodError:
-        existing_inv = None
+    except ManualQoyodError as exc:
+        # An unavailable/unauthorized lookup is UNKNOWN, never evidence that
+        # the reference is absent. Fail closed before any customer, product,
+        # invoice, or payment write. A later retry must reconcile first.
+        await _finalize_lock(
+            db,
+            order_number=str(order_number),
+            user_id=user_id,
+            lock_id=lock_id,
+            status="failed",
+            error={
+                "code": "qoyod_http_error",
+                "message": (
+                    f"تعذر التأكد من مرجع الفاتورة في قيود "
+                    f"({exc.status_code})"
+                ),
+                "detail": exc.to_dict(),
+            },
+        )
+        raise ManualSendRefused(
+            "qoyod_http_error",
+            f"تعذر التأكد من مرجع الفاتورة في قيود ({exc.status_code})",
+            exc.to_dict(),
+        ) from exc
     if existing_inv:
         eid = _to_int(existing_inv.get("id"))
         await _finalize_lock(
