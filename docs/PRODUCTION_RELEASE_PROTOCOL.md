@@ -136,6 +136,12 @@ file changed. Candidate-A CI uses the dedicated candidate validator, which
 requires HEAD=A, a clean J-to-A transition and exact Git-rederived manifests;
 the normal tracked-intent loader remains reserved for B and still rejects
 HEAD=A.
+
+If source A was staged onto Production before B, the reviewed-B pull request
+and Production push may start from that staged source commit instead of J.
+The event boundary must be an ancestor of A and a descendant of J. The normal
+J validation and the no-intent-change rule across J..A still apply, so this
+recovery path cannot omit or replace the previously reviewed intent.
 Do not leave the bootstrap variable set for a rehearsal or Cloud Build. Its
 only accepted enabled value is exactly `1`; all other non-empty values fail.
 

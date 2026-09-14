@@ -161,8 +161,13 @@ jobs:
           if test "$reviewed" = true; then
             if test "$EVENT_NAME" = pull_request && \
               test "$source_base_git_sha" != "$PR_BASE_SHA"; then
-              echo "::error::reviewed B source base J must equal the PR base"
-              exit 1
+              if ! git merge-base --is-ancestor \
+                   "$source_base_git_sha" "$PR_BASE_SHA" || \
+                 ! git merge-base --is-ancestor \
+                   "$PR_BASE_SHA" "$source_git_sha"; then
+                echo "::error::PR base must be J or a staged source commit between J and A"
+                exit 1
+              fi
             fi
             if test "$EVENT_NAME" = push; then
               if ! [[ "$PUSH_BEFORE_SHA" =~ ^[0-9a-f]{40}$ ]] || \
@@ -171,8 +176,13 @@ jobs:
                 exit 1
               fi
               if test "$source_base_git_sha" != "$PUSH_BEFORE_SHA"; then
-                echo "::error::reviewed B source base J must equal the Production push predecessor"
-                exit 1
+                if ! git merge-base --is-ancestor \
+                     "$source_base_git_sha" "$PUSH_BEFORE_SHA" || \
+                   ! git merge-base --is-ancestor \
+                     "$PUSH_BEFORE_SHA" "$source_git_sha"; then
+                  echo "::error::Production predecessor must be J or a staged source commit between J and A"
+                  exit 1
+                fi
               fi
             fi
             if test "$EVENT_NAME" = workflow_dispatch && \
