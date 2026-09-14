@@ -857,7 +857,7 @@ async def test_more_than_prefetch_page_of_quarantines_cannot_starve_older_row(
 
 
 @pytest.mark.asyncio
-async def test_qoyod_http_error_is_quarantined_and_next_candidate_sends(
+async def test_qoyod_503_is_retryable_and_next_candidate_sends(
     monkeypatch,
 ):
     calls = []
@@ -889,9 +889,11 @@ async def test_qoyod_http_error_is_quarantined_and_next_candidate_sends(
     assert result["ok"] is True
     assert result["status"] == "succeeded"
     assert result["sent_count"] == 1
-    assert result["manual_review_count"] == 1
+    assert result["manual_review_count"] == 0
+    assert result["retry_later_count"] == 1
     quarantine = db.qoyod_manual_auto_quarantines.rows["main:273811870"]
-    assert quarantine["code"] == "qoyod_http_error"
+    assert quarantine["code"] == "qoyod_transient_error"
+    assert quarantine["detail"]["status_codes"] == [503]
 
 
 @pytest.mark.asyncio
