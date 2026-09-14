@@ -53,9 +53,11 @@ class EmergentDeploymentAdapterV5Tests(unittest.TestCase):
             "backend/keep.py": "keep-v1\n",
             "backend/mode.py": "mode-v1\n",
             "backend/delete.py": "delete-v1\n",
+            "backend/requirements.txt": "package==1.0\n",
             "backend/tests/test_fixture.py": "excluded\n",
             "frontend/src.js": "console.log('source');\n",
             "scripts/release.py": "release-v1\n",
+            "scripts/release_backend_requirements.lock": "package==1.0\n",
             ".github/workflows/release.yml": "name: release\n",
         }
         for relative, content in tracked.items():
@@ -354,6 +356,11 @@ class EmergentDeploymentAdapterV5Tests(unittest.TestCase):
                     path.write_text("stale", encoding="utf-8")
                 with (
                     patch.object(adapter, "cloud_build_evidence", return_value={}),
+                    patch.object(
+                        adapter,
+                        "_materialize_cloud_build_backend_requirements",
+                        return_value={"restored": False},
+                    ),
                     patch.object(adapter, "load_release_intent", side_effect=adapter.DeploymentAdapterError("bad intent")),
                     self.assertRaisesRegex(adapter.DeploymentAdapterError, "bad intent"),
                 ):
@@ -388,6 +395,131 @@ class EmergentDeploymentAdapterV5Tests(unittest.TestCase):
                     sentinel.read_text(encoding="utf-8"),
                     "must survive\n",
                 )
+
+    def test_cloud_build_restores_manifest_bound_requirements_before_validation(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with self._roots(root):
+                _, source_base, source = self._git_manifest_history(root)
+                intent = self._candidate_intent(source_base, source)
+                adapter.INTENT_PATH.write_text(
+                    json.dumps(intent),
+                    encoding="utf-8",
+                )
+                (root / ".git").rename(root / "held-git")
+                (root / ".github" / "workflows" / "release.yml").unlink()
+                (root / ".github" / "workflows").rmdir()
+                (root / ".github").rmdir()
+                requirements = adapter.BACKEND_ROOT / "requirements.txt"
+                reviewed = (
+                    adapter.REPO_ROOT / "scripts" / "release_backend_requirements.lock"
+                )
+                requirements.write_text(
+                    "platform-added-package==9.9\n",
+                    encoding="utf-8",
+                )
+
+                result = adapter._materialize_cloud_build_backend_requirements()
+
+                self.assertTrue(result["restored"])
+                self.assertEqual(
+                    requirements.read_bytes(),
+                    reviewed.read_bytes(),
+                )
+                adapter._load_and_validate_release_intent(
+                    adapter.INTENT_PATH,
+                    verify_deployment_git=False,
+                )
+
+    def test_cloud_requirements_reject_tampered_reviewed_copy_before_write(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with self._roots(root):
+                _, source_base, source = self._git_manifest_history(root)
+                intent = self._candidate_intent(source_base, source)
+                adapter.INTENT_PATH.write_text(
+                    json.dumps(intent),
+                    encoding="utf-8",
+                )
+                (root / ".git").rename(root / "held-git")
+                requirements = adapter.BACKEND_ROOT / "requirements.txt"
+                reviewed = (
+                    adapter.REPO_ROOT / "scripts" / "release_backend_requirements.lock"
+                )
+                platform_bytes = b"platform-added-package==9.9\n"
+                requirements.write_bytes(platform_bytes)
+                reviewed.write_text("tampered==1.0\n", encoding="utf-8")
+
+                with self.assertRaisesRegex(
+                    adapter.DeploymentAdapterError,
+                    r"Release control source mismatch.*release_backend_requirements\.lock",
+                ):
+                    adapter._materialize_cloud_build_backend_requirements()
+
+                self.assertEqual(requirements.read_bytes(), platform_bytes)
+
+    def test_cloud_requirements_reject_symlink_without_touching_target(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with self._roots(root):
+                _, source_base, source = self._git_manifest_history(root)
+                intent = self._candidate_intent(source_base, source)
+                adapter.INTENT_PATH.write_text(
+                    json.dumps(intent),
+                    encoding="utf-8",
+                )
+                (root / ".git").rename(root / "held-git")
+                requirements = adapter.BACKEND_ROOT / "requirements.txt"
+                sentinel = root / "must-survive.txt"
+                sentinel.write_text("must survive\n", encoding="utf-8")
+                requirements.unlink()
+                requirements.symlink_to(sentinel)
+
+                with self.assertRaisesRegex(
+                    adapter.DeploymentAdapterError,
+                    "Backend requirements must be a regular file",
+                ):
+                    adapter._materialize_cloud_build_backend_requirements()
+
+                self.assertEqual(
+                    sentinel.read_text(encoding="utf-8"),
+                    "must survive\n",
+                )
+
+    def test_git_workspace_requirements_mismatch_is_not_repaired(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with self._roots(root):
+                _, source_base, source = self._git_manifest_history(root)
+                intent = self._candidate_intent(source_base, source)
+                adapter.INTENT_PATH.write_text(
+                    json.dumps(intent),
+                    encoding="utf-8",
+                )
+                requirements = adapter.BACKEND_ROOT / "requirements.txt"
+                platform_bytes = b"local-tamper==9.9\n"
+                requirements.write_bytes(platform_bytes)
+
+                with self.assertRaisesRegex(
+                    adapter.DeploymentAdapterError,
+                    "reviewed Backend requirements differ",
+                ):
+                    adapter._materialize_cloud_build_backend_requirements()
+
+                self.assertEqual(requirements.read_bytes(), platform_bytes)
+
+    def test_repository_reviewed_requirements_match_runtime_source(self):
+        result = adapter._materialize_cloud_build_backend_requirements()
+
+        self.assertFalse(result["restored"])
+        self.assertEqual(
+            result["sha256"],
+            _sha256((adapter.BACKEND_ROOT / "requirements.txt").read_bytes()),
+        )
 
     def test_reviewed_source_validates_without_git_and_rejects_tamper(self):
         with tempfile.TemporaryDirectory() as temporary:

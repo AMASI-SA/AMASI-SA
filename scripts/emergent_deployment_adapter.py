@@ -39,6 +39,8 @@ IDENTITY_PATH = BACKEND_ROOT / "release_identity.json"
 INTENT_PATH = REPO_ROOT / "release" / "release-intent-v5.json"
 TOOLCHAIN_SCRIPT = REPO_ROOT / "scripts" / "frontend_release_toolchain.py"
 VERIFY_SCRIPT = REPO_ROOT / "scripts" / "verify_frontend_build.py"
+BACKEND_REQUIREMENTS_RELATIVE = "requirements.txt"
+REVIEWED_BACKEND_REQUIREMENTS_RELATIVE = "scripts/release_backend_requirements.lock"
 INTENT_SCHEMA_VERSION = 2
 INTENT_KIND = "mezan_emergent_release_intent_v1"
 PROTOCOL_VERSION = 5
@@ -101,6 +103,7 @@ from release_protocol_v5 import (  # noqa: E402
     source_manifest_summary,
     validate_backend_runtime_source_manifest,
     validate_release_control_source_manifest,
+    validate_source_manifest,
     validate_source_path,
     validated_source_git_mode,
 )
@@ -199,6 +202,237 @@ def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
         os.replace(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def _read_regular_source_record(
+    path: Path,
+    *,
+    relative: str,
+    label: str,
+) -> tuple[dict[str, Any], bytes, os.stat_result]:
+    try:
+        initial = path.lstat()
+    except OSError as exc:
+        raise DeploymentAdapterError(f"{label} is missing: {relative}") from exc
+    if stat.S_ISLNK(initial.st_mode) or not stat.S_ISREG(initial.st_mode):
+        raise DeploymentAdapterError(f"{label} must be a regular file: {relative}")
+    try:
+        mode = validated_source_git_mode(
+            initial.st_mode,
+            label=label,
+            path=relative,
+        )
+    except ValueError as exc:
+        raise DeploymentAdapterError(str(exc)) from exc
+
+    descriptor: int | None = None
+    try:
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(path, flags)
+        opened = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or opened.st_dev != initial.st_dev
+            or opened.st_ino != initial.st_ino
+        ):
+            raise DeploymentAdapterError(
+                f"{label} changed while it was being read: {relative}"
+            )
+        with os.fdopen(descriptor, "rb") as stream:
+            descriptor = None
+            content = stream.read()
+    except OSError as exc:
+        raise DeploymentAdapterError(f"cannot read {label}: {relative}: {exc}") from exc
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+
+    return (
+        {
+            "path": relative,
+            "mode": mode,
+            "git_blob": _git_blob_oid(content),
+            "bytes": len(content),
+            "sha256": _sha256_bytes(content),
+        },
+        content,
+        initial,
+    )
+
+
+def _source_record_identity(record: dict[str, Any]) -> dict[str, Any]:
+    return {key: record[key] for key in ("mode", "git_blob", "bytes", "sha256")}
+
+
+def _manifest_file_record(
+    manifest: dict[str, Any],
+    relative: str,
+    *,
+    label: str,
+) -> dict[str, Any]:
+    matches = [record for record in manifest["files"] if record["path"] == relative]
+    if len(matches) != 1:
+        raise DeploymentAdapterError(
+            f"{label} is not bound exactly once in the reviewed intent: " f"{relative}"
+        )
+    return matches[0]
+
+
+def _atomic_replace_existing_regular_file(
+    path: Path,
+    payload: bytes,
+    *,
+    original: os.stat_result,
+) -> None:
+    try:
+        parent = path.parent
+        parent_info = parent.lstat()
+    except OSError as exc:
+        raise DeploymentAdapterError(
+            f"Backend requirements parent is unavailable: {parent}"
+        ) from exc
+    if stat.S_ISLNK(parent_info.st_mode) or not stat.S_ISDIR(parent_info.st_mode):
+        raise DeploymentAdapterError(
+            f"Backend requirements parent is not a real directory: {parent}"
+        )
+
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=parent,
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(temporary, 0o644)
+        current = path.lstat()
+        if (
+            stat.S_ISLNK(current.st_mode)
+            or not stat.S_ISREG(current.st_mode)
+            or current.st_dev != original.st_dev
+            or current.st_ino != original.st_ino
+        ):
+            raise DeploymentAdapterError(
+                "Backend requirements changed before atomic materialization"
+            )
+        os.replace(temporary, path)
+    except OSError as exc:
+        raise DeploymentAdapterError(
+            f"cannot atomically materialize Backend requirements: {exc}"
+        ) from exc
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _materialize_cloud_build_backend_requirements() -> dict[str, Any]:
+    """Restore only a manifest-bound platform rewrite before full validation."""
+    requirements_path = BACKEND_ROOT / BACKEND_REQUIREMENTS_RELATIVE
+    reviewed_path = REPO_ROOT / REVIEWED_BACKEND_REQUIREMENTS_RELATIVE
+    reviewed_actual, reviewed_bytes, _ = _read_regular_source_record(
+        reviewed_path,
+        relative=REVIEWED_BACKEND_REQUIREMENTS_RELATIVE,
+        label="reviewed Backend requirements",
+    )
+    requirements_actual, _, requirements_info = _read_regular_source_record(
+        requirements_path,
+        relative=BACKEND_REQUIREMENTS_RELATIVE,
+        label="Backend requirements",
+    )
+
+    if (REPO_ROOT / ".git").exists():
+        actual_identity = _source_record_identity(requirements_actual)
+        reviewed_identity = _source_record_identity(reviewed_actual)
+        if actual_identity != reviewed_identity:
+            raise DeploymentAdapterError(
+                "reviewed Backend requirements differ from " "backend/requirements.txt"
+            )
+        return {
+            "path": f"backend/{BACKEND_REQUIREMENTS_RELATIVE}",
+            "restored": False,
+            "bytes": requirements_actual["bytes"],
+            "sha256": requirements_actual["sha256"],
+        }
+
+    payload = _load_json(INTENT_PATH, "tracked release intent")
+    source_git_sha = _full_git_sha(payload.get("source_git_sha"))
+    source_base_git_sha = _full_git_sha(
+        payload.get("source_base_git_sha"),
+        "source_base_git_sha",
+    )
+    try:
+        backend_manifest = validate_source_manifest(
+            payload.get("backend_runtime_source"),
+            expected_scope=BACKEND_RUNTIME_SOURCE_SCOPE,
+            label="Backend runtime source",
+        )
+        control_manifest = validate_release_control_source_manifest(
+            payload.get("release_control_source"),
+            repo_root=REPO_ROOT,
+            source_git_sha=source_git_sha,
+            source_base_git_sha=source_base_git_sha,
+            allow_missing_github=True,
+        )
+    except (ValueError, TypeError) as exc:
+        raise DeploymentAdapterError(
+            "cannot materialize Backend requirements from reviewed source: " f"{exc}"
+        ) from exc
+    if (
+        backend_manifest["source_git_sha"] != source_git_sha
+        or backend_manifest["source_base_git_sha"] != source_base_git_sha
+    ):
+        raise DeploymentAdapterError(
+            "Backend requirements manifest is not bound to intent provenance"
+        )
+
+    requirements_expected = _manifest_file_record(
+        backend_manifest,
+        BACKEND_REQUIREMENTS_RELATIVE,
+        label="Backend requirements",
+    )
+    reviewed_expected = _manifest_file_record(
+        control_manifest,
+        REVIEWED_BACKEND_REQUIREMENTS_RELATIVE,
+        label="reviewed Backend requirements",
+    )
+    expected_identity = _source_record_identity(requirements_expected)
+    if (
+        expected_identity != _source_record_identity(reviewed_expected)
+        or requirements_expected["mode"] != "100644"
+    ):
+        raise DeploymentAdapterError(
+            "reviewed Backend requirements do not match the Backend manifest"
+        )
+    if reviewed_actual != reviewed_expected:
+        raise DeploymentAdapterError(
+            "reviewed Backend requirements changed after manifest validation"
+        )
+
+    restored = requirements_actual != requirements_expected
+    if restored:
+        _atomic_replace_existing_regular_file(
+            requirements_path,
+            reviewed_bytes,
+            original=requirements_info,
+        )
+        requirements_actual, _, _ = _read_regular_source_record(
+            requirements_path,
+            relative=BACKEND_REQUIREMENTS_RELATIVE,
+            label="Backend requirements",
+        )
+        if requirements_actual != requirements_expected:
+            raise DeploymentAdapterError(
+                "Backend requirements atomic materialization failed"
+            )
+
+    return {
+        "path": f"backend/{BACKEND_REQUIREMENTS_RELATIVE}",
+        "restored": restored,
+        "bytes": requirements_expected["bytes"],
+        "sha256": requirements_expected["sha256"],
+    }
 
 
 def _run(
@@ -1455,8 +1689,20 @@ def build_cloud_release() -> dict[str, Any]:
     _require_real_directory(REPO_ROOT, "repository root")
     _require_real_directory(FRONTEND_ROOT, "Frontend source root")
     _require_real_directory(BACKEND_ROOT, "Backend source root")
+    _require_real_directory(
+        (REPO_ROOT / REVIEWED_BACKEND_REQUIREMENTS_RELATIVE).parent,
+        "reviewed Backend requirements root",
+    )
     evidence = cloud_build_evidence()
     print(json.dumps(evidence, ensure_ascii=False, sort_keys=True))
+    materialization = _materialize_cloud_build_backend_requirements()
+    print(
+        json.dumps(
+            {"backend_requirements_materialization": materialization},
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+    )
     clean_generated_state(remove_dependencies=True)
     try:
         intent = load_release_intent()
