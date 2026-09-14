@@ -737,6 +737,51 @@ async def _load_candidate_rows(
     }
 
 
+def is_credential_failure(exc: ManualSendRefused) -> bool:
+    """Classify only missing/unauthorized credentials as a global pause."""
+    if exc.code == "qoyod_credentials_missing":
+        return True
+    if exc.code != "qoyod_http_error":
+        return False
+    try:
+        status_code = int((exc.extra or {}).get("status_code") or 0)
+    except (TypeError, ValueError):
+        return False
+    return status_code in {401, 403}
+
+
+async def _pause_for_credential_failure(
+    db,
+    *,
+    settings: dict[str, Any],
+    exc: ManualSendRefused,
+    run_id: str,
+) -> None:
+    """Pause the runtime once; keep backlog rows eligible for later resume."""
+    now_iso = _now().isoformat()
+    status_code = (exc.extra or {}).get("status_code")
+    safe_error = {
+        "code": (
+            "qoyod_credentials_missing"
+            if exc.code == "qoyod_credentials_missing"
+            else "qoyod_credentials_invalid_or_expired"
+        ),
+        "status_code": status_code,
+        "run_id": run_id,
+        "at": now_iso,
+    }
+    await db.qoyod_settings.update_one(
+        {"user_id": _TENANT},
+        {"$set": credential_pause_patch(
+            settings,
+            reason="credentials_invalid_or_expired",
+            now_iso=now_iso,
+            error=safe_error,
+        )},
+        upsert=True,
+    )
+
+
 async def _quarantine_order(
     db, *, order_number: str, exc: ManualSendRefused, run_id: str,
 ) -> None:
@@ -877,6 +922,21 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
                     "payment_id": payload.get("payment_id"),
                 })
             except ManualSendRefused as exc:
+                if is_credential_failure(exc):
+                    await _pause_for_credential_failure(
+                        db,
+                        settings=settings,
+                        exc=exc,
+                        run_id=run_id,
+                    )
+                    results.append({
+                        "order_number": order_number,
+                        "outcome": "credentials_paused",
+                        "code": exc.code,
+                    })
+                    # A credential failure is global, not order-local. Stop
+                    # this bounded round without quarantining any backlog row.
+                    break
                 if exc.code in SAFE_ALREADY_SENT_CODES:
                     results.append({
                         "order_number": order_number,
@@ -957,14 +1017,22 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
         retry_later_count = sum(
             r["outcome"] == "retry_later" for r in results
         )
+        credential_paused_count = sum(
+            r["outcome"] == "credentials_paused" for r in results
+        )
         result = {
             "ok": True,
-            "status": "succeeded",
+            "status": (
+                "credentials_paused"
+                if credential_paused_count
+                else "succeeded"
+            ),
             "run_id": run_id,
             "sent_count": sent_count,
             "already_sent_count": already_count,
             "manual_review_count": manual_review_count,
             "retry_later_count": retry_later_count,
+            "credential_paused_count": credential_paused_count,
             "candidate_count": candidate_counts[
                 "authoritative_backlog_count"
             ],
