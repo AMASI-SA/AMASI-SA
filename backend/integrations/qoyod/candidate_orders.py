@@ -539,19 +539,43 @@ async def load_unified_candidates(
     search: Optional[str] = None,
     scan_limit: int = CANDIDATE_AUDIT_SCAN_LIMIT,
     lightweight: bool = False,
+    scope_to_date_range: bool = False,
 ) -> dict[str, Any]:
     """Load the authoritative eligible set keyed by Salla order number."""
-    # Do not pre-filter on the legacy root ``order_date``. It can be one day
-    # behind the Salla/Riyadh business date, or absent while raw Salla
-    # evidence is valid. Scanning the tenant projection and applying the
-    # authoritative range below is the only way to report every exclusion
-    # reason without silently dropping rows at the Mongo query boundary.
+    # Full report/reconciliation callers intentionally do not pre-filter on
+    # the legacy root ``order_date``. It can be one day behind the
+    # Salla/Riyadh business date, or absent while raw Salla evidence is valid.
+    # The automatic sender opts into a padded Mongo superset below because it
+    # only needs actionable rows inside the configured sending window.
     query: dict[str, Any] = {"user_id": str(orders_user_id)}
     if search and str(search).strip():
         import re
         query["order_number"] = {
             "$regex": re.escape(str(search).strip())
         }
+    if scope_to_date_range:
+        # The automatic sender does not need to scan the merchant's complete
+        # order history on every 15-second tick.  ``order_date`` is the
+        # persisted YYYY-MM-DD index key used throughout Mezan.  It can be one
+        # Riyadh day behind the authoritative Salla timestamp, so query a
+        # one-day superset on both sides and retain missing dates for the exact
+        # evidence checks below.  This Mongo predicate only reduces I/O; the
+        # authoritative Salla/Riyadh date still decides eligibility in Python.
+        query["$or"] = [
+            {
+                "order_date": {
+                    "$gte": (
+                        date_range.from_date - timedelta(days=1)
+                    ).isoformat(),
+                    "$lte": (
+                        date_range.to_date + timedelta(days=1)
+                    ).isoformat(),
+                }
+            },
+            {"order_date": {"$exists": False}},
+            {"order_date": None},
+            {"order_date": ""},
+        ]
     projection = {
         "_id": 0,
         "user_id": 1,
@@ -906,6 +930,8 @@ async def build_candidate_audit(
     scan_limit: int = CANDIDATE_AUDIT_SCAN_LIMIT,
     lightweight: bool = False,
     require_complete: bool = True,
+    scope_unified_to_date_range: bool = False,
+    include_inbox_evidence: bool = True,
 ) -> dict[str, Any]:
     """Build exact eligible/sent/unsent reference sets and per-order proof."""
     captured = now or datetime.now(timezone.utc)
@@ -922,6 +948,7 @@ async def build_candidate_audit(
         search=search,
         scan_limit=scan_limit,
         lightweight=lightweight,
+        scope_to_date_range=scope_unified_to_date_range,
     )
     eligible_refs: set[str] = set(unified["references"])
     evidence_owners = list(marker_user_ids or (
@@ -930,7 +957,11 @@ async def build_candidate_audit(
     inbox = await load_inbox_evidence(
         db,
         marker_user_ids=evidence_owners,
-        order_numbers=eligible_refs if lightweight else None,
+        order_numbers=(
+            eligible_refs
+            if include_inbox_evidence and lightweight
+            else (None if include_inbox_evidence else ())
+        ),
         scan_limit=scan_limit,
     )
     invoices = await load_qoyod_reference_evidence(

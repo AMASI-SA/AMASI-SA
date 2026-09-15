@@ -583,6 +583,9 @@ async def _prepare_run(
     async def fake_candidate_snapshot(db, **kwargs):
         assert kwargs["from_date"] == "2026-07-01"
         assert kwargs["orders_user_id"] == "orders-user"
+        assert kwargs["lightweight"] is True
+        assert kwargs["scope_unified_to_date_range"] is True
+        assert kwargs["include_inbox_evidence"] is False
         snapshot_calls.append(kwargs)
         if candidates_by_status is None:
             authoritative_rows = list(candidates)
