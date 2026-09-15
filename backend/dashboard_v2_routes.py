@@ -68,6 +68,7 @@ from unified_marketing.gateway import (
 SNAP_FACTS = "mezan_snapchat_performance_daily_v2"
 META_FACTS = "mezan_meta_performance_daily_v2"
 TIKTOK_FACTS = "mezan_tiktok_performance_daily_v2"
+FINANCIAL_COST_COMPLETENESS_VERSION = "mezan_financial_cost_completeness_v1"
 RIYADH_TZ = ZoneInfo("Asia/Riyadh")
 PROVIDER_IDS = {
     "snapchat": SNAPCHAT_PROVIDER_ID,
@@ -568,6 +569,7 @@ async def build_mezan_v2_product_cost(
     missing_all_cost_lines = 0
     no_products_orders = 0
     incomplete_orders = 0
+    financially_incomplete_orders = 0
     product_profit_rows: dict[str, dict[str, Any]] = {}
 
     for order in orders:
@@ -576,11 +578,14 @@ async def build_mezan_v2_product_cost(
         order_product_lines: list[dict[str, Any]] = []
         items = order.get("products") or []
         order_incomplete = not bool(items)
+        financial_order_incomplete = not bool(items)
+        financial_line_count = 0
         if not items:
             no_products_orders += 1
         for item in items:
             if not isinstance(item, dict):
                 continue
+            financial_line_count += 1
             product = _line_product(
                 item,
                 products_by_id=products_by_id,
@@ -642,6 +647,8 @@ async def build_mezan_v2_product_cost(
                 if not result["base_complete"]:
                     missing_all_cost_lines += 1
                     missing_all_cost_products.add(identity)
+            if result["calculation_cost_available"] is not True:
+                financial_order_incomplete = True
             raw_order_total += result["line_total"]
             order_parts[result["base_cost_source"]] += result["base_total"]
             order_parts["product_components"] += result["product_components_total"]
@@ -724,6 +731,10 @@ async def build_mezan_v2_product_cost(
                 seen_in_order.add(identity)
         if order_incomplete:
             incomplete_orders += 1
+        if financial_line_count == 0:
+            financial_order_incomplete = True
+        if financial_order_incomplete:
+            financially_incomplete_orders += 1
 
     missing_product_rows = []
     for row in missing_products.values():
@@ -751,6 +762,15 @@ async def build_mezan_v2_product_cost(
         "missing_all_cost_products_count": len(missing_all_cost_products),
         "missing_all_cost_lines_count": missing_all_cost_lines,
         "salla_fallback_products_count": len(salla_fallback_products),
+        # Additive completeness contract. The legacy fields above intentionally
+        # keep their Mezan-setup semantics for existing product alerts/filters.
+        "financial_cost_contract_version": FINANCIAL_COST_COMPLETENESS_VERSION,
+        "mezan_setup_missing_products_count": len(missing_products),
+        "mezan_setup_missing_lines_count": missing_lines,
+        "mezan_setup_incomplete_orders_count": incomplete_orders,
+        "financial_cost_missing_products_count": len(missing_all_cost_products),
+        "financial_cost_missing_lines_count": missing_all_cost_lines,
+        "financially_incomplete_orders_count": financially_incomplete_orders,
         "missing_products": missing_product_rows,
         "product_rows": product_rows,
         "product_profit_summary": product_profit_summary,
@@ -766,6 +786,15 @@ async def build_mezan_v2_product_cost(
             "always_added": ["product_components", "selected_option_components"],
             "mezan_completion_sources": ["mezan_v2_variant", "mezan_v2_base"],
             "salla_fallback_is_missing_mezan_cost": True,
+            "financial_cost_completeness": {
+                "version": FINANCIAL_COST_COMPLETENESS_VERSION,
+                "available_when": "calculation_cost_available_is_true",
+                "missing_products_unit": "distinct_product_identity",
+                "missing_lines_unit": "order_product_line",
+                "incomplete_orders_unit": "order",
+                "partial_component_cost_does_not_complete_missing_base": True,
+                "explicit_zero_is_available": True,
+            },
             "product_sales": "unified_orders.products.total; price*quantity-discount+tax fallback",
             "product_profit": "product sales minus Mezan V2 product cost; ads/shipping/payment fees are not allocated per product",
         },
@@ -1518,6 +1547,27 @@ def make_dashboard_v2_router(
             "manual_product_cost": 0.0,
             "missing_product_cost_count": product_cost["missing_products_count"],
             "incomplete_profit_orders_count": product_cost["incomplete_orders_count"],
+            "financial_cost_contract_version": product_cost.get(
+                "financial_cost_contract_version"
+            ),
+            "mezan_setup_missing_products_count": product_cost.get(
+                "mezan_setup_missing_products_count"
+            ),
+            "mezan_setup_missing_lines_count": product_cost.get(
+                "mezan_setup_missing_lines_count"
+            ),
+            "mezan_setup_incomplete_orders_count": product_cost.get(
+                "mezan_setup_incomplete_orders_count"
+            ),
+            "financial_cost_missing_products_count": product_cost.get(
+                "financial_cost_missing_products_count"
+            ),
+            "financial_cost_missing_lines_count": product_cost.get(
+                "financial_cost_missing_lines_count"
+            ),
+            "financially_incomplete_orders_count": product_cost.get(
+                "financially_incomplete_orders_count"
+            ),
             "no_products_orders_count": product_cost["no_products_orders_count"],
             "excel_no_products_count": 0,
             "total_ads_cost": ads_total,
@@ -1795,6 +1845,27 @@ def make_dashboard_v2_router(
             "missing_products_count": month["missing_products_count"],
             "missing_all_cost_products_count": month["missing_all_cost_products_count"],
             "salla_fallback_products_count": month["salla_fallback_products_count"],
+            "financial_cost_contract_version": month.get(
+                "financial_cost_contract_version"
+            ),
+            "mezan_setup_missing_products_count": month.get(
+                "mezan_setup_missing_products_count"
+            ),
+            "mezan_setup_missing_lines_count": month.get(
+                "mezan_setup_missing_lines_count"
+            ),
+            "mezan_setup_incomplete_orders_count": month.get(
+                "mezan_setup_incomplete_orders_count"
+            ),
+            "financial_cost_missing_products_count": month.get(
+                "financial_cost_missing_products_count"
+            ),
+            "financial_cost_missing_lines_count": month.get(
+                "financial_cost_missing_lines_count"
+            ),
+            "financially_incomplete_orders_count": month.get(
+                "financially_incomplete_orders_count"
+            ),
             "missing_products": month["missing_products"],
             "period": {"from": month_start, "to": today_s},
             "breakdown": month["breakdown"],
