@@ -705,6 +705,7 @@ function OrderSummaryCard({ order, items, currency }) {
     const codFee = Number(totals.cod_fee || 0);
     const tax = Number(totals.tax_reported_by_source || 0);
     const total = Number(totals.total || 0);
+    const totalSar = totals.total_sar == null ? null : Number(totals.total_sar);
     const discounts = Array.isArray(totals.discounts) && totals.discounts.length
         ? totals.discounts
         : Number(totals.discount || 0) > 0
@@ -772,7 +773,14 @@ function OrderSummaryCard({ order, items, currency }) {
                 <div className="text-center font-extrabold text-teal-800">
                     {totalWeight !== null ? formatWeight(totalWeight, weightUnit) : "—"}
                 </div>
-                <div className="num text-left text-lg font-extrabold text-teal-800" dir="ltr">{formatMoney(total, currency)}</div>
+                <div className="text-left" dir="ltr">
+                    <div className="num text-lg font-extrabold text-teal-800">{formatMoney(total, currency)}</div>
+                    {currency !== "SAR" && (
+                        <div className={`num mt-1 text-xs font-bold ${totalSar == null ? "text-amber-700" : "text-slate-500"}`}>
+                            {totalSar == null ? "المعادل السعودي غير متاح" : `≈ ${formatMoney(totalSar, "SAR")}`}
+                        </div>
+                    )}
+                </div>
             </div>
         </section>
     );
@@ -927,7 +935,7 @@ export default function OrderDetailsV2() {
             <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:flex-row lg:items-center lg:justify-between">
                 <div><Link to={returnTo} className="mb-3 inline-flex items-center gap-2 text-sm font-bold text-violet-700"><ArrowRight size={17} /> {returnLabel}</Link><h1 className="num text-2xl font-extrabold text-slate-950">الطلب #{orderNumber}</h1><div className="mt-2 flex flex-wrap items-center gap-2 text-sm"><span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 font-bold text-sky-800">{status}</span><span className="text-slate-500">تاريخ الإنشاء: {formatOrderDate(order.created_at)}</span></div></div>
                 <div className="flex flex-col items-start gap-3 lg:items-end">
-                    <div className="text-left"><div className="num text-2xl font-extrabold text-slate-950">{formatMoney(total, currency)}</div><div className="mt-1 text-xs font-bold text-slate-400">عملة الطلب: {currency}</div></div>
+                    <div className="text-left"><div className="num text-2xl font-extrabold text-slate-950">{formatMoney(total, currency)}</div>{currency !== "SAR" && <div className={`num mt-1 text-sm font-bold ${order.totals?.total_sar == null ? "text-amber-700" : "text-teal-700"}`}>{order.totals?.total_sar == null ? "المعادل السعودي غير متاح" : `≈ ${formatMoney(order.totals.total_sar, "SAR")}`}</div>}<div className="mt-1 text-xs font-bold text-slate-400">عملة الطلب: {currency}</div></div>
                     <button
                         type="button"
                         onClick={updateOrderFromSalla}

@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from order_currency import order_total_sar
 from salla_marketing_attribution import canonical_ad_platform
 
 
@@ -95,19 +96,9 @@ def resolve_salla_ad_platform(order: dict[str, Any]) -> str | None:
     return None
 
 
-def _salla_sales(order: dict[str, Any]) -> float:
-    totals = order.get("totals") if isinstance(order.get("totals"), dict) else {}
-    amount = order.get("amount") if isinstance(order.get("amount"), dict) else {}
-    for candidate in (
-        order.get("total_amount"), order.get("total"),
-        totals.get("total"), amount.get("total"),
-    ):
-        if candidate is None or isinstance(candidate, bool):
-            continue
-        value = _number(candidate, -1.0)
-        if value >= 0:
-            return round(value, 2)
-    return 0.0
+def _salla_sales(order: dict[str, Any]) -> float | None:
+    """Return only a proven SAR outcome; native GCC numbers are not SAR."""
+    return order_total_sar(order)
 
 
 def build_salla_ads_executive_breakdown(
@@ -116,20 +107,36 @@ def build_salla_ads_executive_breakdown(
 ) -> dict[str, Any]:
     """Return Salla outcomes plus provider spend and platform CPA."""
     salla = {
-        provider: {"orders": 0, "sales_sar": 0.0}
+        provider: {
+            "orders": 0,
+            "known_sales_sar": 0.0,
+            "conversion_complete": True,
+        }
         for provider in PROVIDER_ORDER
     }
     unattributed_orders = 0
-    unattributed_sales = 0.0
+    unattributed_known_sales = 0.0
+    unattributed_conversion_complete = True
+    unverified_currency_orders: list[str] = []
     for order in orders:
         provider = resolve_salla_ad_platform(order)
         sales = _salla_sales(order)
+        if sales is None:
+            unverified_currency_orders.append(
+                str(order.get("order_number") or "unknown")
+            )
         if provider not in salla:
             unattributed_orders += 1
-            unattributed_sales += sales
+            if sales is None:
+                unattributed_conversion_complete = False
+            else:
+                unattributed_known_sales += sales
             continue
         salla[provider]["orders"] += 1
-        salla[provider]["sales_sar"] += sales
+        if sales is None:
+            salla[provider]["conversion_complete"] = False
+        else:
+            salla[provider]["known_sales_sar"] += sales
 
     providers: dict[str, dict[str, Any]] = {}
     known_total_spend = 0.0
@@ -165,10 +172,19 @@ def build_salla_ads_executive_breakdown(
             else None
         )
         salla_orders = int(salla[provider]["orders"])
-        salla_sales = round(_number(salla[provider]["sales_sar"]), 2)
+        provider_conversion_complete = bool(
+            salla[provider]["conversion_complete"]
+        )
+        known_salla_sales = round(
+            _number(salla[provider]["known_sales_sar"]),
+            2,
+        )
+        salla_sales = (
+            known_salla_sales if provider_conversion_complete else None
+        )
         actual_roas = (
             round(salla_sales / spend, 2)
-            if spend is not None and spend > 0
+            if salla_sales is not None and spend is not None and spend > 0
             else None
         )
         providers[provider] = {
@@ -180,6 +196,8 @@ def build_salla_ads_executive_breakdown(
             "amount_complete": provider_metrics.get("amount_complete"),
             "salla_orders": salla_orders,
             "salla_sales_sar": salla_sales,
+            "known_salla_sales_sar": known_salla_sales,
+            "sales_currency_conversion_complete": provider_conversion_complete,
             "platform_reported_orders": platform_orders,
             "platform_cost_per_order_sar": platform_cpa,
             "actual_roas": actual_roas,
@@ -194,12 +212,16 @@ def build_salla_ads_executive_breakdown(
         if spend is not None:
             known_total_spend += spend
         total_salla_orders += salla_orders
-        total_salla_sales += salla_sales
+        total_salla_sales += known_salla_sales
         if platform_orders is not None:
             total_platform_orders += platform_orders
 
     total_spend = round(known_total_spend, 2) if spend_complete else None
-    total_salla_sales = round(total_salla_sales, 2)
+    sales_conversion_complete = not unverified_currency_orders
+    known_total_salla_sales = round(total_salla_sales, 2)
+    total_salla_sales = (
+        known_total_salla_sales if sales_conversion_complete else None
+    )
     total_cpa = (
         round(total_spend / total_platform_orders, 2)
         if total_cpa_complete
@@ -218,21 +240,35 @@ def build_salla_ads_executive_breakdown(
             "platform_cost_per_order_sar": total_cpa,
             "actual_roas": (
                 round(total_salla_sales / total_spend, 2)
-                if total_spend is not None and total_spend > 0
+                if total_salla_sales is not None
+                and total_spend is not None
+                and total_spend > 0
                 else None
             ),
+            "known_salla_sales_sar": known_total_salla_sales,
         },
         "coverage": {
             "salla_orders_in_scope": len(orders),
             "salla_attributed_orders": total_salla_orders,
             "salla_unattributed_orders": unattributed_orders,
-            "salla_unattributed_sales_sar": round(unattributed_sales, 2),
+            "salla_unattributed_sales_sar": (
+                round(unattributed_known_sales, 2)
+                if unattributed_conversion_complete
+                else None
+            ),
+            "known_salla_unattributed_sales_sar": round(
+                unattributed_known_sales,
+                2,
+            ),
+            "sales_currency_conversion_complete": sales_conversion_complete,
+            "unverified_currency_orders": len(unverified_currency_orders),
+            "unverified_currency_order_numbers": unverified_currency_orders[:100],
             "platform_cpa_denominator_complete": total_cpa_complete,
             "spend_amount_complete": spend_complete,
         },
         "source_contract": {
             "orders": "unified_orders.source/utm_source:salla",
-            "sales": "unified_orders.total_amount:salla",
+            "sales": "unified_orders.total_amount_sar:salla_order_fx",
             "spend": "native_ad_platform_facts_with_mezan2_account_fx",
             "cost_per_order": "ad_platform_spend_divided_by_ad_platform_reported_orders",
             "roas": "salla_sales_divided_by_ad_platform_spend",

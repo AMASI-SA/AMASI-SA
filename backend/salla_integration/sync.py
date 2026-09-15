@@ -32,6 +32,7 @@ from typing import Any, Optional
 from pymongo.errors import DuplicateKeyError
 
 from carrier_handoff import advance_carrier_handoff_from_salla_status
+from order_currency import salla_order_currency_fields
 
 from salla_marketing_attribution import promoted_salla_attribution
 
@@ -773,6 +774,7 @@ def _salla_order_to_doc(salla_order: dict) -> dict:
 
     order_date_raw = (salla_order.get("date") or {}).get("date") if isinstance(salla_order.get("date"), dict) else salla_order.get("date")
     order_date = _normalize_date(salla_order.get("date") or salla_order.get("created_at"))
+    currency_fields = salla_order_currency_fields(salla_order)
 
     return {
         "order_id": _str(salla_order.get("id")),
@@ -809,7 +811,8 @@ def _salla_order_to_doc(salla_order: dict) -> dict:
         "discount": _money(discount_obj),
         "tax": _money(tax_obj),
         "total_amount": _money(total_obj),
-        "currency": _str(total_obj.get("currency") if isinstance(total_obj, dict) else "") or "SAR",
+        "currency": currency_fields["original_currency"],
+        **currency_fields,
         "source": _str(salla_order.get("source") or "salla_direct"),
         # Keep Salla's raw payload for audit while promoting only the stable
         # marketing fields needed by ad attribution.  This does not change the

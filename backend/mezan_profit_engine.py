@@ -15,6 +15,7 @@ from auth import DEFAULT_PAYMENT_METHODS, DEFAULT_SHIPPING_COMPANIES, ensure_use
 from dashboard_v2_routes import _filtered_orders, build_mezan_v2_ads, build_mezan_v2_product_cost
 from excel_parser import match_settings
 from expenses_routes import compute_operating_expenses_for_range
+from order_currency import summarize_orders_sar
 from orders_db import orders_to_parsed
 from recurring_obligations_routes import compute_recurring_obligations_for_range
 from shipping_cost_ssot import aggregate_breakdown, get_company_configs
@@ -79,11 +80,12 @@ def _accounting_quality(
     ads: dict[str, Any],
     operating: dict[str, Any],
     recurring: dict[str, Any],
+    sales_currency: dict[str, Any],
 ) -> dict[str, Any]:
     missing = _count(product_cost.get("missing_products_count"))
     incomplete = _count(product_cost.get("incomplete_orders_count"))
     component_known = {
-        "orders_sales": True,
+        "orders_sales": sales_currency.get("conversion_complete") is True,
         "product_cost": (
             "total" in product_cost
             and missing is not None
@@ -105,6 +107,8 @@ def _accounting_quality(
         issues.append("missing_product_cost")
     if incomplete is not None and incomplete > 0:
         issues.append("incomplete_profit_orders")
+    if sales_currency.get("conversion_complete") is not True:
+        issues.append("unverified_order_currency_conversion")
     return {
         "known": known,
         "complete": complete,
@@ -113,6 +117,7 @@ def _accounting_quality(
         "incomplete_profit_orders_count": incomplete,
         "component_known": component_known,
         "issues": issues,
+        "sales_currency": sales_currency,
         "unknown_is_zero": False,
     }
 
@@ -160,6 +165,7 @@ async def build_mezan_profit_envelope(
         compute_recurring_obligations_for_range(db, user_id, start, end),
     )
 
+    sales_currency = summarize_orders_sar(orders)
     quality = _accounting_quality(
         matched=matched,
         shipping=shipping,
@@ -167,6 +173,7 @@ async def build_mezan_profit_envelope(
         ads=ads,
         operating=operating,
         recurring=recurring,
+        sales_currency=sales_currency,
     )
     advertising_known = quality["component_known"]["advertising"] is True
 
@@ -183,25 +190,31 @@ async def build_mezan_profit_envelope(
     salary_total = _number(operating.get("salaries_total"))
     recurring_total = _number(recurring.get("total"))
     operating_total = salary_total + recurring_total
-    total_sales = round(sum(_number(order.get("total_amount")) for order in orders), 2)
+    total_sales = sales_currency["total_sar"]
     total_orders = len(orders)
 
-    profit_before_advertising = round(
-        total_sales
-        - payment_fees
-        - shipping_total
-        - product_total
-        - operating_total,
-        2,
+    profit_before_advertising = (
+        round(
+            total_sales
+            - payment_fees
+            - shipping_total
+            - product_total
+            - operating_total,
+            2,
+        )
+        if total_sales is not None
+        else None
     )
     net_profit = (
         round(profit_before_advertising - ad_bank_fee - float(ad_spend), 2)
-        if advertising_known and ad_spend is not None
+        if profit_before_advertising is not None
+        and advertising_known
+        and ad_spend is not None
         else None
     )
 
     source_contract = {
-        "orders_sales": "unified_orders:mezan_v2",
+        "orders_sales": "unified_orders.total_amount_sar:salla_order_fx",
         "product_cost": product_cost.get("source_contract") or {},
         "advertising": ads.get("source_contract") or {},
         "payment_fees": "settings.payment_methods + mezan_ad_account_cost_settings_v2",
@@ -214,7 +227,9 @@ async def build_mezan_profit_envelope(
         "total_orders": total_orders,
         "net_profit": net_profit,
         "profit_before_unknown_advertising_sar": (
-            profit_before_advertising if not advertising_known else None
+            profit_before_advertising
+            if profit_before_advertising is not None and not advertising_known
+            else None
         ),
         "total_ads_cost": round(ad_spend, 2) if ad_spend is not None else None,
         "total_product_cost": round(product_total, 2),
@@ -223,7 +238,7 @@ async def build_mezan_profit_envelope(
         "operating_expenses_total": round(operating_total, 2),
         "overall_roas": (
             round(total_sales / ad_spend, 2)
-            if ad_spend is not None and ad_spend > 0
+            if total_sales is not None and ad_spend is not None and ad_spend > 0
             else None
         ),
         "avg_cost_per_order": (
@@ -245,7 +260,13 @@ async def build_mezan_profit_envelope(
         "period": {"from": start_s, "to": end_s},
         "totals": totals,
         "components": {
-            "sales": {"amount_sar": total_sales, "orders": total_orders},
+            "sales": {
+                "amount_sar": total_sales,
+                "known_amount_sar": sales_currency["known_total_sar"],
+                "orders": total_orders,
+                "known": sales_currency["conversion_complete"],
+                "currency_conversion": sales_currency,
+            },
             "product_cost": {"amount_sar": round(product_total, 2)},
             "advertising": {
                 "amount_sar": round(ad_spend, 2) if ad_spend is not None else None,

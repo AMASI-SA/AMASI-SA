@@ -178,12 +178,17 @@ export function mergeDashboardAuthoritativeSummary(
         : {};
     const oldAds = finiteNonnegative(totals.total_ads_cost);
     const newAds = finiteNonnegative(authoritative.total_ads_cost);
-    const sales = finiteNonnegative(totals.total_sales);
+    const salesConversionComplete = legacyPayload?.currency_conversion?.complete !== false
+        && totals.sales_currency_conversion_complete !== false
+        && totals.total_sales != null;
+    const sales = salesConversionComplete
+        ? finiteNonnegative(totals.total_sales)
+        : null;
     const orders = finiteNonnegative(totals.total_orders);
     const nextTotals = {
         ...totals,
         total_ads_cost: Math.round(newAds * 100) / 100,
-        overall_roas: newAds > 0
+        overall_roas: sales != null && newAds > 0
             ? Math.round((sales / newAds) * 100) / 100
             : null,
         avg_cost_per_order: orders > 0
@@ -192,7 +197,7 @@ export function mergeDashboardAuthoritativeSummary(
         ads_cost_breakdown_v2: authoritative.breakdown || {},
         dashboard_source_contract_v2: authoritative.source_contract || {},
     };
-    if (Number.isFinite(Number(totals.net_profit))) {
+    if (totals.net_profit != null && Number.isFinite(Number(totals.net_profit))) {
         nextTotals.net_profit = Math.round(
             (Number(totals.net_profit) + oldAds - newAds) * 100,
         ) / 100;

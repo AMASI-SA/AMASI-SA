@@ -23,6 +23,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+from order_currency import order_total_sar, summarize_orders_sar
 from salla_marketing_attribution import (
     canonical_marketing_source,
     preserve_salla_raw_attribution,
@@ -83,6 +84,17 @@ MARKETING_ATTRIBUTION_FIELDS = {
     "traffic_source",
     "marketing_source",
     "ad_platform_source",
+}
+ORDER_CURRENCY_FIELDS = {
+    "currency",
+    "original_total_amount",
+    "original_currency",
+    "exchange_rate_to_sar",
+    "total_amount_sar",
+    "accounting_currency",
+    "currency_conversion_status",
+    "currency_conversion_source",
+    "currency_conversion_reason",
 }
 
 # Scalar fields we copy across sources. Lists/dicts handled separately below.
@@ -145,6 +157,14 @@ TRACKED_FIELDS = (
     "tax",
     "total_amount",
     "currency",
+    "original_total_amount",
+    "original_currency",
+    "exchange_rate_to_sar",
+    "total_amount_sar",
+    "accounting_currency",
+    "currency_conversion_status",
+    "currency_conversion_source",
+    "currency_conversion_reason",
     "source",                # Salla traffic source ("store", "snapchat" ...)
     "utm_source",
     "utm_medium",
@@ -788,8 +808,14 @@ def _merge_into(existing: dict, incoming: dict, source: str) -> dict:
                     *COLLECTION_FIELDS,
                     *PAYMENT_EVIDENCE_FIELDS,
                     *MARKETING_ATTRIBUTION_FIELDS,
+                    *ORDER_CURRENCY_FIELDS,
                     "shipping_label_url",
                 }
+                and (
+                    f not in ORDER_CURRENCY_FIELDS
+                    or incoming.get("total_amount_sar") is not None
+                    or merged.get("currency_conversion_status") != "verified"
+                )
             )
             if fills_empty_only and not salla_authoritative_override:
                 continue
@@ -1011,8 +1037,14 @@ def orders_to_parsed(orders: list[dict]) -> dict:
     sample: list[dict] = []
     individual: list[dict] = []
 
+    currency_summary = summarize_orders_sar(orders)
+
     for o in orders:
-        amount = float(o.get("total_amount") or 0)
+        resolved_sar = order_total_sar(o)
+        # Keep the legacy parser shape numeric for fee matching, while the
+        # explicit completeness contract below prevents an unknown foreign
+        # amount from being presented as a complete financial total.
+        amount = float(resolved_sar) if resolved_sar is not None else 0.0
         pay = (o.get("payment_method") or "غير محدد").strip() or "غير محدد"
         ship = (o.get("shipping_company") or "غير محدد").strip() or "غير محدد"
         src = (
@@ -1057,6 +1089,14 @@ def orders_to_parsed(orders: list[dict]) -> dict:
     return {
         "total_sales": round(total_sales, 2),
         "total_orders": total_orders,
+        "accounting_currency": "SAR",
+        "currency_conversion": {
+            "complete": currency_summary["conversion_complete"],
+            "known_total_sar": currency_summary["known_total_sar"],
+            "unverified_orders_count": currency_summary["unverified_orders_count"],
+            "missing_order_numbers": currency_summary["missing_order_numbers"],
+            "unknown_is_zero": False,
+        },
         "payment_methods": [
             {**v, "total_sales": round(v["total_sales"], 2)}
             for v in sorted(payments.values(), key=lambda x: -x["total_sales"])

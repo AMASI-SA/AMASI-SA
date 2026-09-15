@@ -28,6 +28,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query, Request
 
 from auth import ensure_user_settings, get_current_user_from_db
+from order_currency import order_total_sar
 from payment_methods import normalize_payment_method
 
 
@@ -278,7 +279,12 @@ async def compute_metrics(
     settlement-import service) we use `actual_payment_fee`,
     `actual_payment_vat`, `actual_net_amount`, `actual_refund_amount`,
     `actual_partial_refund_amount`. Otherwise we estimate from
-    `total_amount` and the registry's estimated_fee_rate.
+    the exact order-level SAR total and the registry's estimated_fee_rate.
+
+    Foreign Salla totals are converted with that order's stored exchange
+    rate.  If even one rate cannot be verified, affected monetary results are
+    returned as ``None`` with explicit conversion diagnostics; a missing rate
+    is never treated as zero SAR.
     """
     match: dict = {"user_id": user_id}
     date_clause: dict = {}
@@ -304,8 +310,20 @@ async def compute_metrics(
         {"$match": match},
         {"$project": {
             "_id": 0,
+            "order_number": 1,
             "order_status": 1,
-            "total_amount": {"$ifNull": ["$total_amount", 0]},
+            "total_amount": 1,
+            "currency": 1,
+            "original_total_amount": 1,
+            "original_currency": 1,
+            "exchange_rate_to_sar": 1,
+            "total_amount_sar": 1,
+            "accounting_currency": 1,
+            "currency_conversion_status": 1,
+            "raw_by_source.salla_direct.amounts.total": 1,
+            "raw_by_source.salla_direct.currency": 1,
+            "raw_by_source.salla_direct.total_amount": 1,
+            "raw_by_source.salla_direct.exchange_rate": 1,
             "payment_method": {"$ifNull": ["$payment_method", ""]},
             "actual_payment_method": {"$ifNull": ["$actual_payment_method", ""]},
             "payment_fee_status": {"$ifNull": ["$payment_fee_status", "estimated"]},
@@ -329,6 +347,8 @@ async def compute_metrics(
     excluded_gross = 0.0
     salla_reference_count = 0
     salla_reference_gross = 0.0
+    unverified_orders_count = 0
+    unverified_order_numbers: list[str] = []
 
     def _zero():
         return {
@@ -345,6 +365,9 @@ async def compute_metrics(
             "pending_gross": 0.0,
             "net": 0.0,           # gross − fees − vat − refunds
             "expected_in_assets": 0.0,  # net  (settles into the gateway account)
+            "currency_conversion_complete": True,
+            "unverified_orders_count": 0,
+            "unverified_order_numbers": [],
         }
 
     # Iter-83 — Load the user's order-status policy (confirmed/pending/
@@ -357,7 +380,14 @@ async def compute_metrics(
         # Iter-207c — Always count the row in the Salla reference
         # snapshot (before any filtering), so the UI can compare
         # against the platform.
-        row_amount = float(row.get("total_amount") or 0)
+        resolved_amount = order_total_sar(row)
+        conversion_verified = resolved_amount is not None
+        row_amount = float(resolved_amount or 0)
+        if not conversion_verified:
+            unverified_orders_count += 1
+            order_number = str(row.get("order_number") or "unknown")
+            if len(unverified_order_numbers) < 100:
+                unverified_order_numbers.append(order_number)
         salla_reference_count += 1
         salla_reference_gross += row_amount
         # Iter-207 — Pre-filter to mirror Profit Summary's
@@ -377,6 +407,13 @@ async def compute_metrics(
         raw_method = row.get("actual_payment_method") or row.get("payment_method")
         canon = resolve_canonical(raw_method) or "_other"
         bkt = buckets.setdefault(canon, _zero())
+        if not conversion_verified:
+            bkt["currency_conversion_complete"] = False
+            bkt["unverified_orders_count"] += 1
+            if len(bkt["unverified_order_numbers"]) < 100:
+                bkt["unverified_order_numbers"].append(
+                    str(row.get("order_number") or "unknown")
+                )
 
         order_status = (row.get("order_status") or "").strip()
         category = resolve_category(order_status, policy_overrides)
@@ -419,7 +456,7 @@ async def compute_metrics(
                 bkt["expected_in_assets"] += net
             continue
 
-        gross = float(row.get("total_amount") or 0)
+        gross = row_amount
 
         if category == "pending":
             # Iter-207 — pending orders are tracked SEPARATELY (their
@@ -611,15 +648,7 @@ async def compute_metrics(
         if (b["orders_count"] + b["pending_orders_count"]
                 + b["cancelled_orders_count"]) == 0:
             continue
-        rows.append({
-            "key": key,
-            "name_ar": meta["name_ar"],
-            "type": meta["type"],
-            "orders_count": b["orders_count"],
-            "actual_orders_count": b["actual_orders_count"],
-            "refunded_orders_count": b["refunded_orders_count"],
-            "cancelled_orders_count": b["cancelled_orders_count"],
-            "pending_orders_count": b["pending_orders_count"],
+        monetary = {
             "gross": round(b["gross"], 2),
             "fees": round(b["fees"], 2),
             "fees_vat": round(b["fees_vat"], 2),
@@ -629,6 +658,27 @@ async def compute_metrics(
             "pending_gross": round(b["pending_gross"], 2),
             "net": round(b["net"], 2),
             "expected_in_assets": round(b["expected_in_assets"], 2),
+        }
+        safe_monetary = (
+            monetary
+            if b["currency_conversion_complete"]
+            else {key: None for key in monetary}
+        )
+        rows.append({
+            "key": key,
+            "name_ar": meta["name_ar"],
+            "type": meta["type"],
+            "orders_count": b["orders_count"],
+            "actual_orders_count": b["actual_orders_count"],
+            "refunded_orders_count": b["refunded_orders_count"],
+            "cancelled_orders_count": b["cancelled_orders_count"],
+            "pending_orders_count": b["pending_orders_count"],
+            **safe_monetary,
+            "known_amounts_sar": monetary,
+            "accounting_currency": "SAR",
+            "currency_conversion_complete": b["currency_conversion_complete"],
+            "unverified_orders_count": b["unverified_orders_count"],
+            "unverified_order_numbers": b["unverified_order_numbers"],
             "coverage_pct": round(
                 (b["actual_orders_count"] / b["orders_count"]) * 100, 2,
             ) if b["orders_count"] else 0.0,
@@ -638,15 +688,7 @@ async def compute_metrics(
     # when the merchant has a new gateway not in the registry yet.
     other = buckets.get("_other")
     if other and other["orders_count"] > 0:
-        rows.append({
-            "key": "_other",
-            "name_ar": "أخرى",
-            "type": "unknown",
-            "orders_count": other["orders_count"],
-            "actual_orders_count": other["actual_orders_count"],
-            "refunded_orders_count": other["refunded_orders_count"],
-            "cancelled_orders_count": other["cancelled_orders_count"],
-            "pending_orders_count": other["pending_orders_count"],
+        monetary = {
             "gross": round(other["gross"], 2),
             "fees": round(other["fees"], 2),
             "fees_vat": round(other["fees_vat"], 2),
@@ -656,18 +698,46 @@ async def compute_metrics(
             "pending_gross": round(other["pending_gross"], 2),
             "net": round(other["net"], 2),
             "expected_in_assets": round(other["expected_in_assets"], 2),
+        }
+        safe_monetary = (
+            monetary
+            if other["currency_conversion_complete"]
+            else {key: None for key in monetary}
+        )
+        rows.append({
+            "key": "_other",
+            "name_ar": "أخرى",
+            "type": "unknown",
+            "orders_count": other["orders_count"],
+            "actual_orders_count": other["actual_orders_count"],
+            "refunded_orders_count": other["refunded_orders_count"],
+            "cancelled_orders_count": other["cancelled_orders_count"],
+            "pending_orders_count": other["pending_orders_count"],
+            **safe_monetary,
+            "known_amounts_sar": monetary,
+            "accounting_currency": "SAR",
+            "currency_conversion_complete": other["currency_conversion_complete"],
+            "unverified_orders_count": other["unverified_orders_count"],
+            "unverified_order_numbers": other["unverified_order_numbers"],
             "coverage_pct": 0.0,
         })
 
+    conversion_complete = not unverified_order_numbers
+    known_totals = {
+        field: round(sum(
+            float((r.get("known_amounts_sar") or {}).get(field) or 0)
+            for r in rows
+        ), 2)
+        for field in (
+            "gross", "fees", "fees_vat", "refund_full", "refund_partial",
+            "refund_total", "pending_gross", "net", "expected_in_assets",
+        )
+    }
     totals = {
-        "gross": round(sum(r["gross"] for r in rows), 2),
-        "fees": round(sum(r["fees"] for r in rows), 2),
-        "fees_vat": round(sum(r["fees_vat"] for r in rows), 2),
-        "refund_full": round(sum(r["refund_full"] for r in rows), 2),
-        "refund_partial": round(sum(r["refund_partial"] for r in rows), 2),
-        "refund_total": round(sum(r["refund_total"] for r in rows), 2),
-        "pending_gross": round(sum(r["pending_gross"] for r in rows), 2),
-        "net": round(sum(r["net"] for r in rows), 2),
+        **{
+            field: value if conversion_complete else None
+            for field, value in known_totals.items()
+        },
         "orders_count": sum(r["orders_count"] for r in rows),
         "actual_orders_count": sum(r["actual_orders_count"] for r in rows),
         "refunded_orders_count": sum(r["refunded_orders_count"] for r in rows),
@@ -677,9 +747,22 @@ async def compute_metrics(
         # "+X معلَّق/ملغى بقيمة Y ر.س" badge next to the main count
         # and a tooltip explaining the gap with the Salla platform.
         "excluded_orders_count": int(excluded_orders_count),
-        "excluded_gross": round(excluded_gross, 2),
+        "excluded_gross": (
+            round(excluded_gross, 2) if conversion_complete else None
+        ),
         "salla_reference_orders_count": int(salla_reference_count),
-        "salla_reference_gross": round(salla_reference_gross, 2),
+        "salla_reference_gross": (
+            round(salla_reference_gross, 2) if conversion_complete else None
+        ),
+        "accounting_currency": "SAR",
+        "currency_conversion_complete": conversion_complete,
+        "unverified_orders_count": unverified_orders_count,
+        "unverified_order_numbers": unverified_order_numbers,
+        "known_amounts_sar": {
+            **known_totals,
+            "excluded_gross": round(excluded_gross, 2),
+            "salla_reference_gross": round(salla_reference_gross, 2),
+        },
     }
 
     return {

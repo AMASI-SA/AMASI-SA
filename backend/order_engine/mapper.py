@@ -29,6 +29,8 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Iterable, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from order_currency import salla_order_currency_fields
+
 from .models import (
     AddressDTO,
     CustomerDTO,
@@ -1127,6 +1129,11 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
             raw_order.get("currency"),
         )
     ) or "SAR"
+    currency_fields = salla_order_currency_fields(
+        raw_order,
+        fallback_total=total_obj,
+        fallback_currency=currency,
+    )
 
     shipments = _list(raw_order.get("shipments"))
     first_shipment = _dict(shipments[0]) if shipments else {}
@@ -1350,7 +1357,12 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
             address=_address_from(shipping_address_raw),
         ),
         totals=MoneyTotalsDTO(
-            currency=currency,
+            currency=currency_fields["original_currency"],
+            accounting_currency=currency_fields["accounting_currency"],
+            total_sar=currency_fields["total_amount_sar"],
+            exchange_rate_to_sar=currency_fields["exchange_rate_to_sar"],
+            conversion_status=currency_fields["currency_conversion_status"],
+            conversion_source=currency_fields["currency_conversion_source"],
             subtotal=_number(
                 _first(
                     amounts.get("sub_total"),
