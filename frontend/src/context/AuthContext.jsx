@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
 import api, { formatApiErrorDetail } from "../lib/api";
 import {
     AUTH_SESSION_REQUEST_TIMEOUT_MS,
@@ -32,6 +32,7 @@ export function AuthProvider({ children }) {
     const [authStatus, setAuthStatus] = useState("checking");
     const [authError, setAuthError] = useState(null);
     const [probeGeneration, setProbeGeneration] = useState(0);
+    const bootstrapProbeActive = useRef(false);
     const loading = authStatus === "checking";
 
     const loadCurrentUser = useCallback(async ({
@@ -77,6 +78,7 @@ export function AuthProvider({ children }) {
 
         setAuthError(null);
         setAuthStatus("checking");
+        bootstrapProbeActive.current = true;
         clearLegacyBrowserAccessToken();
 
         runBoundedAuthBootstrap({
@@ -94,11 +96,13 @@ export function AuthProvider({ children }) {
             },
         }).then((result) => {
             if (cancelled) return;
+            bootstrapProbeActive.current = false;
             setUser(result.user);
             setAuthError(null);
             setAuthStatus(result.status);
         }).catch((error) => {
             if (cancelled || isAuthBootstrapAbort(error)) return;
+            bootstrapProbeActive.current = false;
             // Fail closed without deleting the cookie or pretending the user
             // is anonymous. Protected/Public routes render a retry surface.
             setAuthError(error);
@@ -112,6 +116,10 @@ export function AuthProvider({ children }) {
     }, [loadCurrentUser, probeGeneration]);
 
     const retryAuth = useCallback(() => {
+        if (bootstrapProbeActive.current) return;
+        // Close the same-tick double-click window before React schedules the
+        // next generation. The effect releases this flag on success/failure.
+        bootstrapProbeActive.current = true;
         setAuthError(null);
         setAuthStatus("checking");
         setProbeGeneration((generation) => generation + 1);
@@ -207,3 +215,4 @@ export function useAuth() {
     if (!ctx) throw new Error("useAuth must be used within AuthProvider");
     return ctx;
 }
+
