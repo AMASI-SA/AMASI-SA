@@ -313,6 +313,41 @@ async def test_unified_dashboard_scan_uses_light_projection_and_hard_cap():
 
 
 @pytest.mark.asyncio
+async def test_worker_scoped_audit_bounds_history_and_skips_inbox_evidence():
+    db = FakeDB(unified=[{
+        "user_id": "tenant-a",
+        "order_number": "100",
+        "order_date": "2026-09-01",
+        "order_status": "completed",
+        "order_status_slug": "completed",
+        "payment_status": "paid",
+        "payment_collection_status": "paid",
+        "remaining_amount": 0,
+        "total_amount": 100,
+    }])
+
+    result = await candidate_orders.build_candidate_audit(
+        db,
+        orders_user_id="tenant-a",
+        markers_user_id="tenant-a",
+        from_date="2026-09-01",
+        to_date="2026-09-02",
+        lightweight=True,
+        scope_unified_to_date_range=True,
+        include_inbox_evidence=False,
+    )
+
+    assert result["unsent_references"] == {"100"}
+    assert db.integration_inbox.query is None
+    assert db.unified_orders.query["$or"] == [
+        {"order_date": {"$gte": "2026-08-31", "$lte": "2026-09-03"}},
+        {"order_date": {"$exists": False}},
+        {"order_date": None},
+        {"order_date": ""},
+    ]
+
+
+@pytest.mark.asyncio
 async def test_inbox_projection_and_cursor_are_bounded_without_all_rows():
     now = datetime(2026, 9, 2, tzinfo=timezone.utc)
     db = FakeDB(inbox=[
