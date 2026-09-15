@@ -401,6 +401,7 @@ class SnapchatV2SyncPipeline:
         date_to: date | str | None = None,
         action_report_time: str = "conversion",
         run_type: str = "rolling_refresh",
+        financial_only: bool = False,
     ) -> dict[str, Any]:
         current = self.now().astimezone(timezone.utc)
         report_dates = _date_range(date_from, date_to, now=current)
@@ -571,16 +572,24 @@ class SnapchatV2SyncPipeline:
             # publish unit until staging/commit gates arrive in PR 3.
             governor.safe_checkpoint()
 
+            financial_rows = (
+                list(hourly.get("account_rows") or [])
+                if financial_only
+                else list(hourly["rows"])
+            )
             await update_sync_stage(
                 self.db,
                 sync_run_id,
                 "hourly_fact_publish",
-                details={"rows_received": len(hourly["rows"])},
+                details={
+                    "rows_received": len(financial_rows),
+                    "financial_only": financial_only,
+                },
                 now=self.now,
             )
             fact_write = await upsert_hourly_facts(
                 self.db,
-                hourly["rows"],
+                financial_rows,
                 now=self.now(),
                 on_batch_persisted=publish_heartbeat,
             )
@@ -608,11 +617,15 @@ class SnapchatV2SyncPipeline:
                 self.db,
                 sync_run_id,
                 "campaign",
-                "complete",
-                coverage={
-                    **hourly["coverage"],
-                    "campaign_rows": len(hourly["campaign_rows"]),
-                },
+                "not_requested" if financial_only else "complete",
+                coverage=(
+                    {"status": "not_requested", "financial_only": True}
+                    if financial_only
+                    else {
+                        **hourly["coverage"],
+                        "campaign_rows": len(hourly["campaign_rows"]),
+                    }
+                ),
                 now=self.now,
             )
             # Publish Ads Manager-compatible campaign DAY facts before the
@@ -621,38 +634,51 @@ class SnapchatV2SyncPipeline:
             # request budget consumed by identity discovery or child levels.
             total_report_dates = report_dates[-7:]
             breakdown_summary: dict[str, Any] = {}
-            campaign_summary, campaign_error = await self._sync_breakdown_performance(
-                client,
-                user_id=str(user_id),
-                account=account,
-                sync_run_id=sync_run_id,
-                entity_type="campaign",
-                campaign_rows=hourly["campaign_rows"],
-                start_utc=start_utc,
-                end_utc=end_utc,
-                action_report_time=action_report_time,
-                report_dates=total_report_dates,
-            )
-            breakdown_summary["campaign"] = campaign_summary
-            if campaign_error:
-                warnings.append(campaign_error)
+            if not financial_only:
+                campaign_summary, campaign_error = await self._sync_breakdown_performance(
+                    client,
+                    user_id=str(user_id),
+                    account=account,
+                    sync_run_id=sync_run_id,
+                    entity_type="campaign",
+                    campaign_rows=hourly["campaign_rows"],
+                    start_utc=start_utc,
+                    end_utc=end_utc,
+                    action_report_time=action_report_time,
+                    report_dates=total_report_dates,
+                )
+                breakdown_summary["campaign"] = campaign_summary
+                if campaign_error:
+                    warnings.append(campaign_error)
 
             # Refresh names and parent identities after the account-level
             # campaign report. Identity freshness is useful for presentation,
             # but it is not allowed to gate the headline purchase total.
-            identity_summary, identity_errors = await self._sync_identities(
-                client,
-                user_id=str(user_id),
-                account_id=account_id,
-                sync_run_id=sync_run_id,
-            )
-            warnings.extend(identity_errors)
+            if financial_only:
+                identity_summary = {"status": "not_requested"}
+                for level in ("ad_squad", "ad", "identity"):
+                    await set_level_status(
+                        self.db,
+                        sync_run_id,
+                        level,
+                        "not_requested",
+                        coverage={"status": "not_requested", "financial_only": True},
+                        now=self.now,
+                    )
+            else:
+                identity_summary, identity_errors = await self._sync_identities(
+                    client,
+                    user_id=str(user_id),
+                    account_id=account_id,
+                    sync_run_id=sync_run_id,
+                )
+                warnings.extend(identity_errors)
             # Exact account-day hierarchy facts are the intelligence/read surface,
             # not the financial source. Bound each rolling run to seven days
             # so large historical backfills cannot exhaust Snapchat's request
             # budget; older days retain their previously persisted TOTAL rows
             # and hourly facts remain available as the safe fallback.
-            for entity_type in ("ad_squad", "ad"):
+            for entity_type in (() if financial_only else ("ad_squad", "ad")):
                 level_summary, level_error = await self._sync_breakdown_performance(
                     client,
                     user_id=str(user_id),
@@ -771,11 +797,41 @@ class SnapchatV2SyncPipeline:
                 "reconciled_days": sum(
                     bool(row.get("reconciled")) for row in reconciliations
                 ),
+                "daily_completion": [
+                    {
+                        "date": report_date.isoformat(),
+                        "amount_complete": bool(
+                            by_key[
+                                (report_date.isoformat(), RIYADH_TIMEZONE)
+                            ].get("amount_complete")
+                        ),
+                        "reconciled": bool(
+                            next(
+                                (
+                                    row.get("reconciled")
+                                    for row in reconciliations
+                                    if str(row.get("report_date") or "")
+                                    == report_date.isoformat()
+                                ),
+                                False,
+                            )
+                        ),
+                        "source_fact_count": int(
+                            by_key[
+                                (report_date.isoformat(), RIYADH_TIMEZONE)
+                            ].get("source_fact_count")
+                            or 0
+                        ),
+                        "sync_run_id": sync_run_id,
+                    }
+                    for report_date in report_dates
+                ],
                 "warnings": warnings,
                 "recovered_leases": recovered_leases,
                 "recovered_runs": recovered_runs,
-                "shadow_mode": True,
-                "ui_switched": False,
+                "shadow_mode": not financial_only,
+                "ui_switched": financial_only,
+                "financial_only": financial_only,
             }
             await complete_sync_run(
                 self.db,

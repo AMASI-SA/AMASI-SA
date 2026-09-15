@@ -153,7 +153,7 @@ test("falls back to saved shared facts when provider refresh cannot run", async 
         dateFrom: "2026-08-05",
         dateTo: "2026-08-05",
         refresh: false,
-        maxAgeMs: 0,
+        maxAgeMs: 45_000,
     });
     expect(result.total_sar).toBe(132.5);
     expect(result.refresh_error).toContain("provider unavailable");
@@ -182,9 +182,42 @@ test("reads a multi-day four-platform series without forcing refresh", async () 
         dateFrom: "2026-08-04",
         dateTo: "2026-08-05",
         refresh: false,
-        maxAgeMs: 0,
+        maxAgeMs: 45_000,
     });
     expect(result.chart_granularity).toBe("day");
     expect(result.daily_spend).toHaveLength(2);
     expect(result.daily_spend[1].google).toBe(8);
+});
+
+
+test("preserves an incomplete Snapchat range instead of normalizing it to zero", () => {
+    const normalized = normalizeDashboardAdsSpend(fourPlatformPayload({
+        total_sar: null,
+        spend_quality: { amount_complete: false, status: "incomplete" },
+        provider_totals_sar: {
+            snapchat: null,
+            meta: 20,
+            tiktok: 5,
+            google: 7.5,
+        },
+        providers: {
+            ...fourPlatformPayload().providers,
+            snapchat: {
+                provider: "snapchat",
+                connected: true,
+                amount_complete: false,
+                requested_days: 30,
+                complete_days: 29,
+                missing_dates: ["2026-08-04"],
+                provisional_subtotal_sar: 912.34,
+            },
+        },
+    }));
+
+    expect(normalized.total_sar).toBeNull();
+    expect(normalized.provider_totals_sar.snapchat).toBeNull();
+    expect(normalized.providers.snapchat.requested_days).toBe(30);
+    expect(normalized.providers.snapchat.complete_days).toBe(29);
+    expect(normalized.providers.snapchat.missing_dates).toEqual(["2026-08-04"]);
+    expect(normalized.providers.snapchat.provisional_subtotal_sar).toBe(912.34);
 });

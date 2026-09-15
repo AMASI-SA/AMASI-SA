@@ -249,7 +249,9 @@ def _install_pipeline_fakes(
             for level in ("financial", "campaign", "ad_squad", "ad", "identity")
         ]
         run["status"] = (
-            "complete" if all(value == "complete" for value in statuses) else "partial"
+            "complete"
+            if all(value in {"complete", "not_requested"} for value in statuses)
+            else "partial"
         )
         run["stage"] = "completed"
         run["stage_status"] = run["status"]
@@ -429,6 +431,94 @@ async def test_2001_hourly_rows_publish_in_bounded_batches_with_live_heartbeat(
     ]
     assert all(ordered is True for _size, ordered in db.facts.bulk_calls)
     assert result["summary"]["rows_saved"] == 2001
+
+
+@pytest.mark.asyncio
+async def test_financial_fast_lane_skips_campaign_ad_and_identity_work(monkeypatch):
+    state = _state()
+    db = FakeDB(state)
+    _install_pipeline_fakes(monkeypatch, db, state)
+
+    async def forbidden(*_args, **_kwargs):
+        raise AssertionError("non-financial Snapchat work must not run")
+
+    monkeypatch.setattr(SnapchatV2SyncPipeline, "_sync_identities", forbidden)
+    monkeypatch.setattr(
+        SnapchatV2SyncPipeline,
+        "_sync_breakdown_performance",
+        forbidden,
+    )
+    pipeline = SnapchatV2SyncPipeline(
+        db,
+        now=lambda: NOW,
+        connection_manager=ConnectionManager(),
+        client_factory=lambda *_args: Client(0),
+    )
+
+    result = await pipeline.run(
+        USER_ID,
+        ACCOUNT_ID,
+        date_from=date(2026, 8, 28),
+        date_to=date(2026, 8, 28),
+        run_type="current_day_fast_lane",
+        financial_only=True,
+    )
+
+    assert result["status"] == "complete"
+    assert result["summary"]["financial_only"] is True
+    assert result["summary"]["ui_switched"] is True
+    assert state["run"]["financial_sync_status"] == "complete"
+    assert state["run"]["campaign_sync_status"] == "not_requested"
+    assert state["run"]["ad_squad_sync_status"] == "not_requested"
+    assert state["run"]["ad_sync_status"] == "not_requested"
+    assert state["run"]["identity_sync_status"] == "not_requested"
+
+
+@pytest.mark.asyncio
+async def test_parallel_refresh_is_rejected_by_the_distributed_account_lease(monkeypatch):
+    state = _state()
+    db = FakeDB(state)
+    _install_pipeline_fakes(monkeypatch, db, state)
+    releases = 0
+
+    async def unavailable(*_args, **_kwargs):
+        return False
+
+    class Governor:
+        async def acquire(self, *_args, **_kwargs):
+            return object(), None
+
+        async def release(self, _token):
+            nonlocal releases
+            releases += 1
+
+        def safe_checkpoint(self):
+            return None
+
+    monkeypatch.setattr(pipeline_module, "acquire_lease", unavailable)
+    monkeypatch.setattr(pipeline_module, "governor", Governor())
+    pipeline = SnapchatV2SyncPipeline(
+        db,
+        now=lambda: NOW,
+        connection_manager=ConnectionManager(),
+        client_factory=lambda *_args: Client(0),
+    )
+
+    result = await pipeline.run(
+        USER_ID,
+        ACCOUNT_ID,
+        date_from=date(2026, 8, 28),
+        date_to=date(2026, 8, 28),
+    )
+
+    assert result == {
+        "status": "skipped",
+        "reason": "lease_unavailable",
+        "ad_account_id": ACCOUNT_ID,
+    }
+    assert releases == 1
+    assert "run" not in state
+    assert db.facts.rows == []
 
 
 @pytest.mark.asyncio

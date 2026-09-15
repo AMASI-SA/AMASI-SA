@@ -673,6 +673,7 @@ export async function loadDashboardPeriodSnapshot({
     setLoading,
     setLoadError,
     platformSpendLoader = null,
+    platformSpendRefresh = false,
     platformSpendTimeoutMs = 12000,
     now = Date.now,
 }) {
@@ -687,6 +688,7 @@ export async function loadDashboardPeriodSnapshot({
             ? platformSpendLoader({
                 dateFrom: next.from,
                 dateTo: next.to || next.from,
+                refresh: platformSpendRefresh,
             }).catch(() => null)
             : Promise.resolve(null);
         const response = await apiClient.get(`/dashboard-v2?${query.toString()}`, {
@@ -724,7 +726,10 @@ export default function AdvancedDashboard() {
     const backgroundRefreshInFlightRef = useRef(false);
     const lastOrderSignatureRef = useRef("");
     const orderSignature = useMemo(() => dashboardOrdersSignature(orders), [orders]);
-    const loadPeriod = useCallback(async (next, { background = false } = {}) => {
+    const loadPeriod = useCallback(async (
+        next,
+        { background = false, refreshPlatform = false } = {},
+    ) => {
         if (background && backgroundRefreshInFlightRef.current) return;
         const requestSequence = ++requestSequenceRef.current;
         if (background) backgroundRefreshInFlightRef.current = true;
@@ -738,6 +743,7 @@ export default function AdvancedDashboard() {
                 setLoading,
                 setLoadError,
                 platformSpendLoader: getDashboardAdsSpend,
+                platformSpendRefresh: refreshPlatform,
             });
         } finally {
             if (background) backgroundRefreshInFlightRef.current = false;
@@ -838,12 +844,12 @@ export default function AdvancedDashboard() {
 <Link to={`/dashboard-charts?from=${filters.from}&to=${filters.to}`} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-2 text-sm font-black text-white shadow-sm"><BarChart3 className="h-4 w-4" />لوحة الرسم البياني</Link>
             <Link to="/dashboard-v2" className="inline-flex items-center gap-2 rounded-xl border bg-white px-4 py-2 text-sm font-bold"><ArrowRight className="h-4 w-4" />لوحة التحكم القديمة</Link>
         </header>
-        <div className="flex items-stretch gap-2"><div className="min-w-0 flex-1"><AdvancedFilters value={filters} onChange={setFilters} defaultPreset="today" /></div><button onClick={() => loadPeriod(filters)} className="rounded-xl border bg-white px-4 text-blue-700" aria-label="تحديث بيانات الفترة"><RefreshCw className={`h-5 w-5 ${loading ? "animate-spin" : ""}`} /></button></div>
+        <div className="flex items-stretch gap-2"><div className="min-w-0 flex-1"><AdvancedFilters value={filters} onChange={setFilters} defaultPreset="today" /></div><button onClick={() => loadPeriod(filters, { refreshPlatform: true })} className="rounded-xl border bg-white px-4 text-blue-700" aria-label="تحديث بيانات الفترة"><RefreshCw className={`h-5 w-5 ${loading ? "animate-spin" : ""}`} /></button></div>
         {!loading && loadError && <Panel className="border-amber-200 bg-amber-50 p-5 text-sm font-bold text-amber-900"><span role="alert">{loadError} — {data ? "تم الاحتفاظ بآخر بيانات موثوقة." : "لم تُعرض أرقام بديلة أو بيانات من فترة سابقة."}</span></Panel>}
         {(Boolean(data) || loading) && <>
         <SummaryStrip data={data} filters={filters} loading={loading} />
         <CampaignAdvisorCard />
-        <div dir="ltr" className="grid items-start gap-4 min-[1280px]:grid-cols-[minmax(420px,460px)_minmax(0,1fr)]"><aside dir="rtl" className="space-y-4"><DashboardAdsSpendCard fromDate={filters.from} toDate={filters.to} /><TopProductsCard rows={data?.product_cost_v2?.product_rows} summary={data?.product_cost_v2} filters={filters} loading={loading} /><AbandonedCartsCard carts={carts} summary={cartSummary} /></aside><main dir="rtl" className="min-w-0"><div dir="ltr" className="grid min-w-0 items-start gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]"><div dir="rtl" className="space-y-4"><ProfitCard data={data} loading={loading} /><LatestOrders orders={orders} totals={data?.totals} /></div><div dir="rtl" className="space-y-4"><GaLive data={ga} /><LatestSoldProductsCard /></div></div></main></div>
+        <div dir="ltr" className="grid items-start gap-4 min-[1280px]:grid-cols-[minmax(420px,460px)_minmax(0,1fr)]"><aside dir="rtl" className="space-y-4"><DashboardAdsSpendCard fromDate={filters.from} toDate={filters.to} data={data?.dashboard_platform_spend} loading={loading} onRefresh={() => loadPeriod(filters, { refreshPlatform: true })} /><TopProductsCard rows={data?.product_cost_v2?.product_rows} summary={data?.product_cost_v2} filters={filters} loading={loading} /><AbandonedCartsCard carts={carts} summary={cartSummary} /></aside><main dir="rtl" className="min-w-0"><div dir="ltr" className="grid min-w-0 items-start gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]"><div dir="rtl" className="space-y-4"><ProfitCard data={data} loading={loading} /><LatestOrders orders={orders} totals={data?.totals} /></div><div dir="rtl" className="space-y-4"><GaLive data={ga} /><LatestSoldProductsCard /></div></div></main></div>
         </>}
     </div>;
 }

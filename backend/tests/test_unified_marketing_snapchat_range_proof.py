@@ -9,6 +9,7 @@ from unified_marketing.readers.snapchat_v2 import (
     _projection_financial_status,
     _reconciliation_status,
 )
+from snapchat_v2.routes import _daily_retry_dates
 
 
 class Cursor:
@@ -209,6 +210,7 @@ async def test_dashboard_snapshot_uses_v2_projection_hours_and_cost_settings(
             "purchases": 4,
             "amount_complete": True,
             "data_state": "confirmed_data",
+            "source_fact_count": 1,
             "source_sync_run_ids": ["run-1"],
             "hours": [
                 {
@@ -227,7 +229,7 @@ async def test_dashboard_snapshot_uses_v2_projection_hours_and_cost_settings(
         }]
 
     async def complete_financial(*_args, **_kwargs):
-        return "complete"
+        return {"run-1": "complete"}
 
     async def reconciled(*_args, **_kwargs):
         return [{"report_date": "2026-08-24", "reconciled": True}]
@@ -247,7 +249,11 @@ async def test_dashboard_snapshot_uses_v2_projection_hours_and_cost_settings(
 
     monkeypatch.setattr(reader, "get_selected_account", selected)
     monkeypatch.setattr(reader, "list_daily_projections", projections)
-    monkeypatch.setattr(reader, "_projection_financial_status", complete_financial)
+    monkeypatch.setattr(
+        reader,
+        "_projection_financial_run_statuses",
+        complete_financial,
+    )
     monkeypatch.setattr(reader, "list_reconciliation", reconciled)
     monkeypatch.setattr(reader, "calculate_cost_components", cost)
 
@@ -311,7 +317,7 @@ async def test_open_riyadh_day_exposes_observed_spend_as_provisional_only(
         }]
 
     async def complete_financial(*_args, **_kwargs):
-        return "complete"
+        return {"run-open-day": "complete"}
 
     async def unreconciled(*_args, **_kwargs):
         return []
@@ -332,7 +338,11 @@ async def test_open_riyadh_day_exposes_observed_spend_as_provisional_only(
 
     monkeypatch.setattr(reader, "get_selected_account", selected)
     monkeypatch.setattr(reader, "list_daily_projections", projections)
-    monkeypatch.setattr(reader, "_projection_financial_status", complete_financial)
+    monkeypatch.setattr(
+        reader,
+        "_projection_financial_run_statuses",
+        complete_financial,
+    )
     monkeypatch.setattr(reader, "list_reconciliation", unreconciled)
     monkeypatch.setattr(reader, "calculate_cost_components", cost)
     monkeypatch.setattr(
@@ -360,7 +370,8 @@ async def test_open_riyadh_day_exposes_observed_spend_as_provisional_only(
         "not_required_open_day"
     )
     assert open_result["quality"]["reason_codes"] == [
-        "open_riyadh_day_reconciliation_pending"
+        "open_riyadh_day_reconciliation_pending",
+        "current_coverage_conflict",
     ]
     assert open_result["bank_commissions"]["total_fee_sar"] == 3.16
 
@@ -378,3 +389,214 @@ async def test_open_riyadh_day_exposes_observed_spend_as_provisional_only(
     assert closed_result["quality"]["status"] == "incomplete"
     assert closed_result["quality"]["amount_available"] is False
     assert closed_result["quality"]["provisional"] is False
+
+
+def _range_projection(day: date) -> dict:
+    return {
+        "report_date": day.isoformat(),
+        "base_spend_native": 1.0,
+        "purchase_value_native": 2.0,
+        "impressions": 10,
+        "swipes": 1,
+        "purchases": 1,
+        "amount_complete": True,
+        "data_state": "confirmed_data",
+        "source_fact_count": 24,
+        "source_sync_run_ids": ["range-run"],
+        "hours": [],
+    }
+
+
+async def _closed_range_result(
+    monkeypatch,
+    *,
+    days_present: int,
+    financial_run_status: str = "complete",
+    first_projection_overrides: dict | None = None,
+):
+    start = date(2026, 7, 1)
+    end = date(2026, 7, 30)
+    projections = [
+        _range_projection(start.fromordinal(start.toordinal() + offset))
+        for offset in range(days_present)
+    ]
+    if projections and first_projection_overrides:
+        projections[0].update(first_projection_overrides)
+
+    async def selected(*_args, **_kwargs):
+        return {
+            "ad_account_id": "snap-1",
+            "display_name": "Snap Account",
+            "currency": "USD",
+            "timezone": "America/Los_Angeles",
+        }
+
+    async def projection_rows(*_args, **_kwargs):
+        return projections
+
+    async def financial_runs(*_args, **_kwargs):
+        return {"range-run": financial_run_status}
+
+    async def reconciled(*_args, **_kwargs):
+        return [
+            {"report_date": start.fromordinal(start.toordinal() + offset).isoformat(), "reconciled": True}
+            for offset in range(30)
+        ]
+
+    async def cost(*_args, **kwargs):
+        native = float(kwargs["spend_native"])
+        return {
+            "native_currency": "USD",
+            "exchange_rate_to_sar": 3.75,
+            "cost_setting_configured": True,
+            "bank_commission_pct": 0.0,
+            "apply_bank_commission": False,
+            "base_spend_sar": round(native * 3.75, 2),
+            "commission_sar": 0.0,
+            "final_cost_sar": round(native * 3.75, 2),
+            "cost_coverage": {"complete": True},
+        }
+
+    monkeypatch.setattr(reader, "get_selected_account", selected)
+    monkeypatch.setattr(reader, "list_daily_projections", projection_rows)
+    monkeypatch.setattr(reader, "_projection_financial_run_statuses", financial_runs)
+    monkeypatch.setattr(reader, "list_reconciliation", reconciled)
+    monkeypatch.setattr(reader, "calculate_cost_components", cost)
+    monkeypatch.setattr(reader, "_today_in_timezone", lambda _name: date(2026, 8, 2))
+    return await reader.load_snapchat_v2_dashboard_spend(
+        object(),
+        "owner-1",
+        date_from=start,
+        date_to=end,
+        timezone_name="Asia/Riyadh",
+    )
+
+
+@pytest.mark.asyncio
+async def test_dashboard_range_is_final_only_for_30_of_30_days(monkeypatch):
+    result = await _closed_range_result(monkeypatch, days_present=30)
+
+    assert result["total_sar"] == 112.5
+    assert result["quality"]["amount_complete"] is True
+    assert result["quality"]["requested_days"] == 30
+    assert result["quality"]["complete_days"] == 30
+    assert result["quality"]["missing_dates"] == []
+    assert len(result["quality"]["daily_coverage"]) == 30
+
+
+@pytest.mark.asyncio
+async def test_dashboard_range_fails_closed_for_29_of_30_days(monkeypatch):
+    result = await _closed_range_result(monkeypatch, days_present=29)
+
+    assert result["total_sar"] is None
+    assert result["rows"] == []
+    assert result["quality"]["amount_complete"] is False
+    assert result["quality"]["requested_days"] == 30
+    assert result["quality"]["complete_days"] == 29
+    assert result["quality"]["missing_dates"] == ["2026-07-30"]
+    assert result["quality"]["provisional_subtotal_sar"] == 108.75
+    missing = result["quality"]["daily_coverage"][-1]
+    assert missing["date"] == "2026-07-30"
+    assert missing["reason"] == "account_day_fact_missing"
+    assert missing["usable"] is False
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_run_proof_fails_closed_with_exact_reason(monkeypatch):
+    result = await _closed_range_result(
+        monkeypatch,
+        days_present=30,
+        financial_run_status="partial",
+    )
+
+    assert result["total_sar"] is None
+    assert result["quality"]["amount_complete"] is False
+    assert result["quality"]["complete_days"] == 0
+    assert all(
+        "run_proof_missing_or_ambiguous" in row["reasons"]
+        for row in result["quality"]["daily_coverage"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_selected_account_without_daily_participation_fails_closed(monkeypatch):
+    result = await _closed_range_result(
+        monkeypatch,
+        days_present=30,
+        first_projection_overrides={
+            "source_fact_count": 0,
+            "coverage": {"status": "complete", "data_state": "confirmed_zero"},
+        },
+    )
+
+    assert result["total_sar"] is None
+    assert result["quality"]["amount_complete"] is False
+    assert result["quality"]["complete_days"] == 29
+    first = result["quality"]["daily_coverage"][0]
+    assert first["participating_account_ids"] == []
+    assert first["selected_account_ids"] == ["snap-1"]
+    assert "selected_account_not_in_run" in first["reasons"]
+
+
+@pytest.mark.asyncio
+async def test_targeted_retry_selects_only_missing_or_unproven_days():
+    start = date(2026, 7, 1)
+    projections = [
+        _range_projection(start.fromordinal(start.toordinal() + offset))
+        for offset in range(3)
+    ]
+    reconciliations = [
+        {"report_date": row["report_date"], "reconciled": True}
+        for row in projections
+    ]
+    db = Database({
+        "mezan_snapchat_sync_runs_v2": Collection([{
+            "user_id": "owner-1",
+            "ad_account_id": "snap-1",
+            "sync_run_id": "range-run",
+            "financial_sync_status": "complete",
+        }])
+    })
+
+    assert await _daily_retry_dates(
+        db,
+        user_id="owner-1",
+        ad_account_id="snap-1",
+        date_from=start,
+        date_to=date(2026, 7, 3),
+        projections=projections,
+        reconciliations=reconciliations,
+    ) == []
+
+    missing = await _daily_retry_dates(
+        db,
+        user_id="owner-1",
+        ad_account_id="snap-1",
+        date_from=start,
+        date_to=date(2026, 7, 3),
+        projections=projections[:1] + projections[2:],
+        reconciliations=reconciliations,
+    )
+    assert missing == [date(2026, 7, 2)]
+
+    recovered = await _daily_retry_dates(
+        db,
+        user_id="owner-1",
+        ad_account_id="snap-1",
+        date_from=start,
+        date_to=date(2026, 7, 3),
+        projections=projections,
+        reconciliations=reconciliations,
+    )
+    assert recovered == []
+
+    db["mezan_snapchat_sync_runs_v2"].rows[0]["financial_sync_status"] = "partial"
+    assert await _daily_retry_dates(
+        db,
+        user_id="owner-1",
+        ad_account_id="snap-1",
+        date_from=start,
+        date_to=date(2026, 7, 3),
+        projections=projections,
+        reconciliations=reconciliations,
+    ) == [date(2026, 7, 1), date(2026, 7, 2), date(2026, 7, 3)]

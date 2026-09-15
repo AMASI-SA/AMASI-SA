@@ -1,4 +1,4 @@
-"""Server-side five-minute shadow scheduler for Snapchat Reporting V2.
+"""Server-side bounded financial scheduler for Snapchat Reporting V2.
 
 Every backend replica may start this loop.  The per-account distributed lease
 inside ``SnapchatV2SyncPipeline`` is the authority that prevents overlapping
@@ -11,6 +11,7 @@ import os
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
+from zoneinfo import ZoneInfo
 
 from .accounts import (
     LEGACY_INTEGRATION_ACCOUNTS_COLLECTION,
@@ -23,7 +24,7 @@ SNAPCHAT_SHADOW_SCHEDULER_COLLECTION = "mezan_snapchat_shadow_scheduler_v2"
 ENABLED_ENV = "SNAPCHAT_REPORTING_V2_SHADOW_SCHEDULER_ENABLED"
 INTERVAL_ENV = "SNAPCHAT_REPORTING_V2_SHADOW_INTERVAL_SECONDS"
 STARTUP_DELAY_ENV = "SNAPCHAT_REPORTING_V2_SHADOW_STARTUP_DELAY_SECONDS"
-DEFAULT_INTERVAL_SECONDS = 300
+DEFAULT_INTERVAL_SECONDS = 600
 MIN_INTERVAL_SECONDS = 300
 MAX_INTERVAL_SECONDS = 3600
 DEFAULT_STARTUP_DELAY_SECONDS = 45
@@ -41,7 +42,7 @@ def _utcnow() -> datetime:
 
 
 def shadow_scheduler_enabled() -> bool:
-    return os.environ.get(ENABLED_ENV, "false").strip().lower() in {
+    return os.environ.get(ENABLED_ENV, "true").strip().lower() in {
         "1",
         "true",
         "yes",
@@ -136,12 +137,18 @@ async def _run_one(
     db: Any,
     identity: dict[str, str],
     semaphore: asyncio.Semaphore,
+    *,
+    report_date: datetime,
 ) -> dict[str, Any]:
     async with semaphore:
+        riyadh_day = report_date.astimezone(ZoneInfo("Asia/Riyadh")).date()
         result = await SnapchatV2SyncPipeline(db).run(
             identity["user_id"],
             identity["ad_account_id"],
-            run_type="rolling_refresh",
+            date_from=riyadh_day,
+            date_to=riyadh_day,
+            run_type="current_day_fast_lane",
+            financial_only=True,
         )
         return {
             "user_id": identity["user_id"],
@@ -162,7 +169,14 @@ async def run_shadow_cycle(db: Any, *, now: Callable[[], datetime] = _utcnow) ->
     results: list[Any] = []
     for identity in accounts:
         try:
-            results.append(await _run_one(db, identity, semaphore))
+            results.append(
+                await _run_one(
+                    db,
+                    identity,
+                    semaphore,
+                    report_date=started_at,
+                )
+            )
         except Exception as exc:  # preserve existing per-account semantics
             results.append(exc)
     safe_results: list[dict[str, Any]] = []
@@ -199,8 +213,10 @@ async def run_shadow_cycle(db: Any, *, now: Callable[[], datetime] = _utcnow) ->
         "skipped": sum(row.get("status") == "skipped" for row in safe_results),
         "failed": sum(row.get("status") == "failed" for row in safe_results),
         "results": safe_results,
-        "shadow_mode": True,
-        "ui_enabled": False,
+        "shadow_mode": False,
+        "ui_enabled": True,
+        "writer_authority": "snapchat_v2_financial_pipeline",
+        "sync_lane": "current_riyadh_day_only",
     }
     await db[SNAPCHAT_SHADOW_SCHEDULER_COLLECTION].update_one(
         {"_id": "snapchat-reporting-v2-shadow"},
