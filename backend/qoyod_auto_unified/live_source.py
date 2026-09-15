@@ -13,11 +13,11 @@ async def _refresh_snapshot_with_complete_payment(
     order_number: str,
     order_doc: dict[str, Any],
 ) -> dict[str, Any]:
-    """Persist all live Salla payment facts, not only the method label."""
+    """Persist live Salla payment and customer facts before Qoyod sending."""
     result = await original(db, user_id, order_number, order_doc)
     if not result.get("trace_id"):
         return result
-    source_fields = (
+    payment_fields = (
         "payment_method", "payment_status", "paid_amount",
         "remaining_amount", "has_remaining_amount",
         "is_pending_payment",
@@ -25,6 +25,10 @@ async def _refresh_snapshot_with_complete_payment(
         "receiving_bank_name", "receiving_bank_id",
         "payment_receipt_url",
     )
+    customer_fields = (
+        "customer_name", "customer_mobile", "customer_email",
+    )
+    source_fields = customer_fields + payment_fields
     canonical_patch: dict[str, Any] = {}
     unified_patch: dict[str, Any] = {}
     for field in source_fields:
@@ -33,8 +37,13 @@ async def _refresh_snapshot_with_complete_payment(
             canonical_patch[f"canonical_payload.{field}"] = value
             unified_patch[field] = value
     if canonical_patch:
-        canonical_patch["salla_direct_status_resync.payment_facts_complete"] = True
-        canonical_patch["salla_direct_status_resync.payment_facts_at"] = _now()
+        if any(field in unified_patch for field in payment_fields):
+            canonical_patch["salla_direct_status_resync.payment_facts_complete"] = True
+            canonical_patch["salla_direct_status_resync.payment_facts_at"] = _now()
+        if any(field in unified_patch for field in customer_fields):
+            canonical_patch[
+                "salla_direct_status_resync.customer_identity_facts_complete"
+            ] = True
         await db.integration_inbox.update_one(
             {
                 "user_id": str(user_id),
@@ -52,7 +61,13 @@ async def _refresh_snapshot_with_complete_payment(
             {"user_id": str(user_id), "order_number": str(order_number)},
             {"$set": unified_patch},
         )
-    result["payment_facts_complete"] = bool(unified_patch)
+    result["payment_facts_complete"] = any(
+        field in unified_patch for field in payment_fields
+    )
+    result["customer_identity_facts_complete"] = any(
+        field in unified_patch
+        for field in customer_fields
+    )
     return result
 
 
@@ -97,6 +112,9 @@ async def _promote_snapshot_to_unified(
         "receiving_bank_name": "receiving_bank_name",
         "receiving_bank_id": "receiving_bank_id",
         "payment_receipt_url": "payment_receipt_url",
+        "customer_name": "customer_name",
+        "customer_mobile": "customer_mobile",
+        "customer_email": "customer_email",
     }
     patch: dict[str, Any] = {}
     for source, target in mapping.items():

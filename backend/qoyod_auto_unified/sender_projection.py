@@ -86,6 +86,16 @@ async def _upsert_sender_projection(
     unified: dict[str, Any],
 ) -> dict[str, Any]:
     canonical = _canonical_from_unified(unified)
+    customer = canonical.get("customer")
+    customer_name = (
+        _text(customer.get("name")) if isinstance(customer, dict) else ""
+    )
+    if not customer_name:
+        return {
+            "ok": False,
+            "code": "authoritative_customer_identity_missing",
+            "order_number": str(order_number),
+        }
     raw_salla = _raw_salla(unified)
     now = _now()
     selector = {

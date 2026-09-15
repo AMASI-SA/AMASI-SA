@@ -221,6 +221,7 @@ async def _refresh_plan_b_status_snapshot(
     # and reduce a named bank transfer back to the generic value `bank`.
     for canonical_key in (
         "payment_method", "receiving_bank_name", "payment_receipt_url",
+        "customer_name", "customer_mobile", "customer_email",
     ):
         value = order_doc.get(canonical_key)
         if value not in (None, ""):
@@ -307,6 +308,27 @@ def _str(v: Any) -> str:
     if v is None:
         return ""
     return str(v).strip()
+
+
+def _salla_customer_name(customer: Any) -> str:
+    """Return the complete Salla customer name without inventing a value."""
+    if not isinstance(customer, dict):
+        return ""
+    direct = _str(
+        customer.get("full_name")
+        or customer.get("name")
+        or customer.get("display_name")
+    )
+    if direct:
+        return direct
+    return " ".join(
+        part
+        for part in (
+            _str(customer.get("first_name")),
+            _str(customer.get("last_name")),
+        )
+        if part
+    )
 
 
 def _money(v: Any, *, _depth: int = 0) -> float:
@@ -774,8 +796,11 @@ def _salla_order_to_doc(salla_order: dict) -> dict:
         "receiving_bank_name": receiving_bank_name,
         "receiving_bank_id": _store_bank_id(salla_order),
         "payment_receipt_url": payment_receipt_url,
-        "customer_name": _str(customer.get("full_name") or customer.get("first_name") or ""),
+        "customer_name": _salla_customer_name(customer),
         "customer_mobile": _str(customer.get("mobile") or customer.get("phone") or ""),
+        "customer_email": _str(
+            customer.get("email") or customer.get("email_address") or ""
+        ),
         "payment_method": _str(payment_method),
         "shipping_company": _str(shipping_company),
         "shipping_label_url": shipping_label_url,
