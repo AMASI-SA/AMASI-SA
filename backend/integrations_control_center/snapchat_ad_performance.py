@@ -16,6 +16,7 @@ from typing import Any, Callable
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
+from resource_governor import StageMetric
 
 from . import snapchat_account_hourly_refresh as hourly
 from .snapchat_account_selection import _load_selected_accounts
@@ -616,64 +617,109 @@ async def _fetch_ad_window(
     request_end: datetime,
 ) -> list[dict[str, Any]]:
     """Fetch one account-local Ad day with bounded provider concurrency."""
-    semaphore = asyncio.Semaphore(AD_FETCH_CONCURRENCY)
+    metric = StageMetric(
+        "snapchat_ad_campaign_fetch",
+        concurrency=AD_FETCH_CONCURRENCY,
+    )
 
     async def fetch_one(
         campaign_id: str,
         action_report_time: str,
     ) -> dict[str, Any]:
-        async with semaphore:
-            try:
-                rows, report_errors, breakdown_seen = (
-                    await _fetch_campaign_ad_totals(
-                        context,
-                        client,
-                        access_token,
-                        campaign_id=campaign_id,
-                        request_start=request_start,
-                        request_end=request_end,
-                        action_report_time=action_report_time,
-                    )
+        try:
+            rows, report_errors, breakdown_seen = (
+                await _fetch_campaign_ad_totals(
+                    context,
+                    client,
+                    access_token,
+                    campaign_id=campaign_id,
+                    request_start=request_start,
+                    request_end=request_end,
+                    action_report_time=action_report_time,
                 )
-                return {
+            )
+            return {
+                "campaign_id": campaign_id,
+                "action_report_time": action_report_time,
+                "rows": rows,
+                "errors": report_errors,
+                "breakdown_seen": breakdown_seen,
+                "data_state": _performance_data_state(
+                    rows,
+                    errors=report_errors,
+                    structure_seen=breakdown_seen,
+                ),
+            }
+        except SnapchatNativeSyncError as exc:
+            if exc.code == "snapchat_needs_reauth":
+                raise
+            return {
+                "campaign_id": campaign_id,
+                "action_report_time": action_report_time,
+                "rows": [],
+                "errors": [{
+                    "kind": "ad_total_stats",
                     "campaign_id": campaign_id,
-                    "action_report_time": action_report_time,
-                    "rows": rows,
-                    "errors": report_errors,
-                    "breakdown_seen": breakdown_seen,
-                    "data_state": _performance_data_state(
-                        rows,
-                        errors=report_errors,
-                        structure_seen=breakdown_seen,
-                    ),
-                }
-            except SnapchatNativeSyncError as exc:
-                if exc.code == "snapchat_needs_reauth":
-                    raise
-                return {
-                    "campaign_id": campaign_id,
-                    "action_report_time": action_report_time,
-                    "rows": [],
-                    "errors": [{
-                        "kind": "ad_total_stats",
-                        "campaign_id": campaign_id,
-                        "code": exc.code,
-                        "message": exc.message[:300],
-                        "retryable": bool(exc.retryable),
-                    }],
-                    "breakdown_seen": False,
-                    "data_state": DATA_STATE_UNKNOWN_INCOMPLETE,
-                }
+                    "code": exc.code,
+                    "message": exc.message[:300],
+                    "retryable": bool(exc.retryable),
+                }],
+                "breakdown_seen": False,
+                "data_state": DATA_STATE_UNKNOWN_INCOMPLETE,
+            }
 
-    tasks = [
-        fetch_one(campaign_id, action_report_time)
+    candidates = [
+        (campaign_id, action_report_time)
         for campaign in campaigns
         if (campaign_id := _text(campaign.get("external_id")))
         for action_report_time in ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES
     ]
-    if not tasks:
+    if not candidates:
+        metric.finish(status="complete", requested=0, completed=0, errors=0, rows=0)
         return []
-    return list(await asyncio.gather(*tasks))
+    queue: asyncio.Queue[tuple[int, str, str]] = asyncio.Queue()
+    for index, (campaign_id, action_report_time) in enumerate(candidates):
+        queue.put_nowait((index, campaign_id, action_report_time))
+    results: list[dict[str, Any] | None] = [None] * len(candidates)
+
+    async def worker() -> None:
+        while True:
+            try:
+                index, campaign_id, action_report_time = queue.get_nowait()
+            except asyncio.QueueEmpty:
+                return
+            results[index] = await fetch_one(campaign_id, action_report_time)
+
+    workers = [
+        asyncio.create_task(worker())
+        for _ in range(min(AD_FETCH_CONCURRENCY, len(candidates)))
+    ]
+    try:
+        await asyncio.gather(*workers)
+    except asyncio.CancelledError:
+        metric.finish(
+            status="cancelled", requested=len(candidates),
+            completed=sum(result is not None for result in results),
+        )
+        raise
+    except BaseException as exc:
+        metric.finish(
+            status="failed", reason=type(exc).__name__, requested=len(candidates),
+            completed=sum(result is not None for result in results),
+        )
+        raise
+    finally:
+        for worker_task in workers:
+            if not worker_task.done():
+                worker_task.cancel()
+        await asyncio.gather(*workers, return_exceptions=True)
+    completed = [result for result in results if result is not None]
+    metric.finish(
+        status="complete", requested=len(candidates), completed=len(completed),
+        errors=sum(len(result.get("errors") or []) for result in completed),
+        rows=sum(len(result.get("rows") or []) for result in completed),
+    )
+    return completed
 
 
 def _day_buckets(
