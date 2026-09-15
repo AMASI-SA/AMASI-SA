@@ -681,6 +681,54 @@ async def test_run_once_uses_one_snapshot_and_keeps_all_three_statuses(
 
 
 @pytest.mark.asyncio
+async def test_run_once_reuses_one_qoyod_client_scope_for_the_batch(
+    monkeypatch,
+):
+    events = []
+
+    def fake_begin_client_scope():
+        events.append("scope_enter")
+        return "scope-token"
+
+    def fake_end_client_scope(token):
+        assert token == "scope-token"
+        events.append("scope_exit")
+
+    async def fake_send(
+        db, *, user_id, orders_user_id, order_number, actor,
+        allow_historical_positive_total,
+    ):
+        events.append(f"send:{order_number}")
+        return {"invoice_id": f"q-{order_number}", "payment_id": "p-1"}
+
+    await _prepare_run(
+        monkeypatch,
+        candidates=[_candidate("1001"), _candidate("1002")],
+        send_one=fake_send,
+    )
+    monkeypatch.setattr(
+        auto_send,
+        "begin_shared_manual_qoyod_client",
+        fake_begin_client_scope,
+    )
+    monkeypatch.setattr(
+        auto_send,
+        "end_shared_manual_qoyod_client",
+        fake_end_client_scope,
+    )
+
+    result = await auto_send.run_once(_RunDb(), batch_limit=5)
+
+    assert result["sent_count"] == 2
+    assert events == [
+        "scope_enter",
+        "send:1001",
+        "send:1002",
+        "scope_exit",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_actual_total_mismatch_isolated_and_next_candidate_sends(
     monkeypatch,
 ):

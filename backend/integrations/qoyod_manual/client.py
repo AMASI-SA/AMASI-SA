@@ -17,6 +17,7 @@ This client is intentionally minimal:
 """
 from __future__ import annotations
 
+import asyncio
 import os
 from typing import Any, Optional
 
@@ -24,6 +25,14 @@ import httpx
 
 
 MEZAN_MANUAL_VERSION = "plan-b-manual-1.0"
+
+# Qoyod's supported invoice-list endpoint is the fail-closed fallback when
+# the optional exact-reference filter responds with 404.  The same complete
+# snapshot is reused by one client instance, so an automatic batch scans the
+# provider once rather than once per order.
+_INVOICE_SCAN_PAGE_SIZE = 50
+_INVOICE_SCAN_MAX_PAGES = 200
+_INVOICE_SCAN_DELAY_SECONDS = 0.1
 
 
 class ManualQoyodError(Exception):
@@ -66,6 +75,7 @@ class ManualQoyodClient:
         if not self._base_url:
             raise RuntimeError("QOYOD_API_BASE not set")
         self._timeout = timeout
+        self._invoice_reference_snapshot: Optional[dict[str, dict]] = None
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"ManualQoyodClient(base={self._base_url!r}, key=***)"
@@ -271,32 +281,131 @@ class ManualQoyodClient:
         if not reference:
             return None
 
+        normalized_reference = str(reference)
+        if self._invoice_reference_snapshot is not None:
+            return self._invoice_reference_snapshot.get(normalized_reference)
+
         def _exact_invoice(body: Any) -> Optional[dict]:
-            rows = []
-            if isinstance(body, dict):
-                rows = body.get("invoices") or body.get("data") or []
-            elif isinstance(body, list):
-                rows = body
+            rows = self._invoice_rows(body) or []
             for row in rows:
-                if not isinstance(row, dict):
-                    continue
                 if str(row.get("reference") or "") == str(reference):
                     return row
             return None
 
-        bodies = await self._read_with_query_fallbacks(
-            "/invoices",
-            (
-                {"q[reference_eq]": reference, "limit": 3},
-                {"reference": reference, "limit": 3},
-            ),
-            stop_when=lambda body: _exact_invoice(body) is not None,
-        )
+        try:
+            bodies = await self._read_with_query_fallbacks(
+                "/invoices",
+                (
+                    {"q[reference_eq]": reference, "limit": 3},
+                    {"reference": reference, "limit": 3},
+                ),
+                stop_when=lambda body: _exact_invoice(body) is not None,
+            )
+        except ManualQoyodError as exc:
+            if exc.status_code != 404:
+                raise
+            # The live Qoyod tenant responds with 404 for the optional
+            # reference-filter shape even though the documented unfiltered
+            # paginated list remains available.  A 404 is not absence: scan
+            # the complete list and only then decide whether the exact
+            # reference exists. Any incomplete/failed scan raises and keeps
+            # the caller's write path closed.
+            self._invoice_reference_snapshot = (
+                await self._load_complete_invoice_reference_snapshot()
+            )
+            return self._invoice_reference_snapshot.get(
+                normalized_reference
+            )
         for body in bodies:
+            if self._invoice_rows(body) is None:
+                raise ManualQoyodError(
+                    status_code=0,
+                    endpoint="GET /invoices",
+                    response_excerpt=(
+                        "invoice reference lookup response shape unknown"
+                    ),
+                )
             match = _exact_invoice(body)
             if match is not None:
                 return match
         return None
+
+    @staticmethod
+    def _invoice_rows(body: Any) -> Optional[list[dict]]:
+        """Extract one valid invoice-list page without guessing absence."""
+        node = body
+        if isinstance(node, dict) and "data" in node:
+            data = node.get("data")
+            if isinstance(data, dict):
+                node = data
+            elif isinstance(data, list):
+                node = data
+        if isinstance(node, dict):
+            for key in ("invoices", "items"):
+                rows = node.get(key)
+                if isinstance(rows, list):
+                    if any(not isinstance(row, dict) for row in rows):
+                        return None
+                    return rows
+            return None
+        if isinstance(node, list):
+            if any(not isinstance(row, dict) for row in node):
+                return None
+            return node
+        return None
+
+    async def _load_complete_invoice_reference_snapshot(
+        self,
+    ) -> dict[str, dict]:
+        """Read all Qoyod invoice pages or fail before any later write.
+
+        Qoyod uses 404 on list endpoints for an empty collection or a page
+        beyond the end. Other HTTP/network failures, unknown response shapes,
+        and a full final page at the safety cap remain UNKNOWN and propagate.
+        """
+        by_reference: dict[str, dict] = {}
+        for page in range(1, _INVOICE_SCAN_MAX_PAGES + 1):
+            try:
+                body = await self._request(
+                    "GET",
+                    "/invoices",
+                    params={
+                        "page": page,
+                        "limit": _INVOICE_SCAN_PAGE_SIZE,
+                    },
+                )
+            except ManualQoyodError as exc:
+                if exc.status_code == 404 and page > 1:
+                    return by_reference
+                raise
+
+            rows = self._invoice_rows(body)
+            if rows is None:
+                raise ManualQoyodError(
+                    status_code=0,
+                    endpoint="GET /invoices",
+                    response_excerpt=(
+                        "invoice reference snapshot response shape unknown"
+                    ),
+                )
+            for row in rows:
+                value = str(row.get("reference") or "").strip()
+                if value:
+                    by_reference.setdefault(value, row)
+
+            if len(rows) < _INVOICE_SCAN_PAGE_SIZE:
+                return by_reference
+            if page < _INVOICE_SCAN_MAX_PAGES \
+                    and _INVOICE_SCAN_DELAY_SECONDS > 0:
+                await asyncio.sleep(_INVOICE_SCAN_DELAY_SECONDS)
+
+        raise ManualQoyodError(
+            status_code=0,
+            endpoint="GET /invoices",
+            response_excerpt=(
+                "invoice reference snapshot incomplete at pagination cap"
+            ),
+        )
 
     # ── Write endpoints ─────────────────────────────────────────────
     async def create_customer(self, payload: dict, *, idem: str) -> Any:
@@ -308,8 +417,23 @@ class ManualQoyodClient:
             "POST", "/products", json_body=payload, idem=idem)
 
     async def create_invoice(self, payload: dict, *, idem: str) -> Any:
-        return await self._request(
+        body = await self._request(
             "POST", "/invoices", json_body=payload, idem=idem)
+        if self._invoice_reference_snapshot is not None:
+            invoice_payload = (
+                payload.get("invoice") if isinstance(payload, dict) else None
+            )
+            reference = str(
+                (invoice_payload or {}).get("reference") or ""
+            ).strip()
+            if reference:
+                invoice = (
+                    body.get("invoice") if isinstance(body, dict) else None
+                )
+                snapshot_row = dict(invoice or {})
+                snapshot_row.setdefault("reference", reference)
+                self._invoice_reference_snapshot[reference] = snapshot_row
+        return body
 
     async def create_invoice_payment(self, payload: dict, *,
                                      idem: str) -> Any:

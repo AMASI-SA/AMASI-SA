@@ -45,7 +45,12 @@ from integrations.qoyod.candidate_orders import (
 )
 from integrations.qoyod.eligible_orders import QOYOD_SYNC_START_DATE
 from integrations.qoyod_manual.canary_batch import SAFE_ALREADY_SENT_CODES
-from integrations.qoyod_manual.send import ManualSendRefused, manual_send_one
+from integrations.qoyod_manual.send import (
+    ManualSendRefused,
+    begin_shared_manual_qoyod_client,
+    end_shared_manual_qoyod_client,
+    manual_send_one,
+)
 from salla_integration.sync import resync_single_order
 
 logger = logging.getLogger(__name__)
@@ -871,6 +876,7 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
         _LAST_RUN_AT = _now()
         return result
 
+    client_scope_token = None
     try:
         # Re-read after the lease. A save/disable may have happened while the
         # worker was waiting.
@@ -917,6 +923,9 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
         # Audit exists before the first external write.
         await db.qoyod_manual_auto_runs.insert_one(audit)
 
+        # The loop is sequential. Keep one task-local client (and therefore
+        # one complete Qoyod invoice-reference snapshot) for this batch only.
+        client_scope_token = begin_shared_manual_qoyod_client()
         results: list[dict[str, Any]] = []
         for row in candidates:
             order_number = str(row["order_number"])
@@ -1125,6 +1134,8 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
         return result
     finally:
         _LAST_RUN_AT = _now()
+        if client_scope_token is not None:
+            end_shared_manual_qoyod_client(client_scope_token)
         await _release_lease(db, owner)
 
 
