@@ -36,7 +36,7 @@ jobs:
           pytest==9.0.3 pytest-asyncio
           motor==3.3.1 pymongo==4.6.3 mongomock-motor
           fastapi==0.140.0 PyJWT==2.13.0 bcrypt
-          cryptography httpx requests python-dotenv
+          cryptography httpx requests python-dotenv openpyxl
       - name: Run runtime and auth safety contracts
         env:
           JWT_SECRET: ci-only-runtime-secret
