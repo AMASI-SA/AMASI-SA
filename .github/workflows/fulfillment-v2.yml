@@ -255,7 +255,7 @@ jobs:
           exit "$status"
       - name: Upload Fulfillment V2 Jest log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fulfillment-v2-jest-log
           path: /tmp/fulfillment-v2-jest.log

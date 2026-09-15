@@ -128,7 +128,7 @@ jobs:
           exit $status
       - name: Upload Products V2 test log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: products-v2-pytest-log
           path: /tmp/products-v2-pytest.log
