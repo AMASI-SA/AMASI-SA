@@ -1,6 +1,7 @@
 """Read-only health and diagnostics for Snapchat Integration V2."""
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from typing import Any
 
@@ -32,15 +33,44 @@ def _as_utc(value: Any) -> datetime | None:
     return current.astimezone(timezone.utc)
 
 
-async def _latest_run(
+async def _run_snapshot(
     db: Any,
     query: dict[str, Any],
-    projection: dict[str, int] | None = None,
-) -> dict[str, Any] | None:
-    return await db[SNAPCHAT_SYNC_RUNS_COLLECTION].find_one(
-        query,
-        projection or {"_id": 0},
-        sort=[("started_at", -1)],
+) -> tuple[dict[str, Any] | None, dict[str, dict[str, Any] | None]]:
+    success_projection = {
+        "_id": 0,
+        "sync_run_id": 1,
+        "finished_at": 1,
+        "started_at": 1,
+    }
+    facets: dict[str, list[dict[str, Any]]] = {
+        "latest": [{"$limit": 1}, {"$project": {"_id": 0}}]
+    }
+    for level, field in LEVEL_STATUS_FIELDS.items():
+        facets[level] = [
+            {"$match": {field: "complete"}},
+            {"$limit": 1},
+            {"$project": success_projection},
+        ]
+    cursor = db[SNAPCHAT_SYNC_RUNS_COLLECTION].aggregate(
+        [
+            {"$match": query},
+            {"$sort": {"started_at": -1}},
+            {"$facet": facets},
+        ]
+    )
+    try:
+        rows = await cursor.to_list(length=1)
+    except TypeError:
+        rows = await cursor.to_list(1)
+    snapshot = rows[0] if rows else {}
+    latest_rows = snapshot.get("latest") or []
+    return (
+        latest_rows[0] if latest_rows else None,
+        {
+            level: ((snapshot.get(level) or [None])[0])
+            for level in LEVEL_STATUS_FIELDS
+        },
     )
 
 
@@ -53,13 +83,16 @@ async def snapchat_v2_status(
 ) -> dict[str, Any]:
     current = (now or _utcnow()).astimezone(timezone.utc)
     user_id = str(user_id)
-    selected = await get_selected_account(db, user_id)
+    selected, connection_row = await asyncio.gather(
+        get_selected_account(db, user_id),
+        db[SNAPCHAT_CONNECTIONS_COLLECTION].find_one(
+            {"user_id": user_id, "provider": SNAPCHAT_PROVIDER},
+            {"_id": 0},
+        ),
+    )
     account_id = str(ad_account_id or (selected or {}).get("ad_account_id") or "").strip()
 
-    connection = await db[SNAPCHAT_CONNECTIONS_COLLECTION].find_one(
-        {"user_id": user_id, "provider": SNAPCHAT_PROVIDER},
-        {"_id": 0},
-    ) or {}
+    connection = connection_row or {}
     if not account_id:
         return {
             "provider": SNAPCHAT_PROVIDER,
@@ -76,21 +109,14 @@ async def snapchat_v2_status(
         "provider": SNAPCHAT_PROVIDER,
         "ad_account_id": account_id,
     }
-    latest = await _latest_run(db, base_query)
-    last_success: dict[str, Any] = {}
-    for level, field in LEVEL_STATUS_FIELDS.items():
-        row = await _latest_run(
-            db,
-            {**base_query, field: "complete"},
-            {"_id": 0, "sync_run_id": 1, "finished_at": 1, "started_at": 1},
-        )
-        last_success[level] = row
-
-    lease = await get_lease_status(db, user_id, account_id)
-    latest_fact = await db[SNAPCHAT_HOURLY_FACTS_COLLECTION].find_one(
-        base_query,
-        {"_id": 0, "updated_at": 1, "hour_end_utc": 1, "sync_run_id": 1},
-        sort=[("updated_at", -1)],
+    (latest, last_success), lease, latest_fact = await asyncio.gather(
+        _run_snapshot(db, base_query),
+        get_lease_status(db, user_id, account_id),
+        db[SNAPCHAT_HOURLY_FACTS_COLLECTION].find_one(
+            base_query,
+            {"_id": 0, "updated_at": 1, "hour_end_utc": 1, "sync_run_id": 1},
+            sort=[("updated_at", -1)],
+        ),
     )
     fact_updated = _as_utc((latest_fact or {}).get("updated_at"))
     data_age_seconds = (

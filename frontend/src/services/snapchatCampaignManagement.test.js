@@ -1126,6 +1126,35 @@ describe("snapchatCampaignManagement", () => {
         expect(api.post).not.toHaveBeenCalled();
     });
 
+    test("reads only the exact visible settings batch and keeps it capped at 100", async () => {
+        api.get.mockResolvedValue({ data: { items: [] } });
+        const ids = Array.from({ length: 25 }, (_, index) => `campaign-${index}`);
+
+        await getSnapchatEntitySettings({
+            entityType: "campaign",
+            unifiedEntityIds: [...ids, ids[0]],
+            limit: 500,
+        });
+
+        expect(api.get).toHaveBeenCalledWith(
+            "/integrations-v2/snapchat_ads/management/entity-settings",
+            {
+                params: {
+                    entity_type: "campaign",
+                    unified_entity_id: undefined,
+                    unified_entity_ids: ids.join(","),
+                    parent_unified_id: undefined,
+                    limit: 100,
+                },
+            },
+        );
+        expect(api.post).not.toHaveBeenCalled();
+        await expect(getSnapchatEntitySettings({
+            entityType: "campaign",
+            unifiedEntityIds: Array.from({ length: 101 }, (_, index) => `campaign-${index}`),
+        })).rejects.toThrow("snapchat_settings_visible_batch_too_large");
+    });
+
     test("normalizes structured audit data and provider mapping independently", () => {
         const freshSettingsAt = new Date(Date.now() - 120_000).toISOString();
         const proposal = normalizeSnapchatManagementProposal({

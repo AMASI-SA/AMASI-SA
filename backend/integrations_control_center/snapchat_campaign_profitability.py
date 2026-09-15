@@ -52,6 +52,9 @@ CAMPAIGN_PROFITABILITY_CACHE_TTL_SECONDS = 5 * 60
 CAMPAIGN_PROFITABILITY_ALLOCATION_METHOD = (
     "order_sales_to_products_by_line_revenue_share_then_campaign_ad_spend_by_product_sales_share"
 )
+MAX_COST_CONTEXT_IDENTITIES = 10_000
+MAX_COST_CONTEXT_PRODUCTS = 10_000
+MAX_COST_CONTEXT_RELATED_ROWS = 50_000
 
 _CACHE: dict[tuple[str, str, str, int], tuple[datetime, dict[str, Any]]] = {}
 
@@ -80,10 +83,86 @@ def _cost_status(*, missing_everywhere: bool, uses_salla_fallback: bool) -> str:
     return "complete"
 
 
-async def _load_cost_context(db: Any, user_id: str) -> dict[str, Any]:
+def _cost_identity_scope(
+    orders: list[dict[str, Any]],
+) -> tuple[set[str], set[str], set[str]]:
+    """Return exact product, variant, and SKU identities used by orders."""
+    product_ids: set[str] = set()
+    variant_ids: set[str] = set()
+    skus: set[str] = set()
+    nested_keys = ("product", "variant", "sku", "source_product", "source_variant")
+    for order in orders:
+        for item in list(order.get("products") or []):
+            if not isinstance(item, dict):
+                continue
+            sources = [item]
+            sources.extend(
+                value
+                for key in nested_keys
+                if isinstance((value := item.get(key)), dict)
+            )
+            for source in sources:
+                for key in (
+                    "salla_product_id",
+                    "parent_product_id",
+                    "product_id",
+                    "source_product_id",
+                ):
+                    if value := _text(source.get(key)):
+                        product_ids.add(value)
+                for key in (
+                    "variant_id",
+                    "product_variant_id",
+                    "source_variant_id",
+                ):
+                    if value := _text(source.get(key)):
+                        variant_ids.add(value)
+                for key in ("sku", "product_sku", "variant_sku", "code"):
+                    if value := _text(source.get(key)):
+                        skus.add(value)
+    if len(product_ids | variant_ids | skus) > MAX_COST_CONTEXT_IDENTITIES:
+        raise ValueError("Snapchat cost identity scope exceeded the safe limit")
+    return product_ids, variant_ids, skus
+
+
+async def _load_cost_context(
+    db: Any,
+    user_id: str,
+    *,
+    orders: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    requested_product_ids: set[str] = set()
+    variant_ids: set[str] = set()
+    skus: set[str] = set()
+    product_query: dict[str, Any] = {"user_id": user_id}
+    product_limit = 100_000
+    restricted = orders is not None
+    if restricted:
+        requested_product_ids, variant_ids, skus = _cost_identity_scope(
+            list(orders or [])
+        )
+        clauses = [
+            *(
+                {field: {"$in": sorted(requested_product_ids)}}
+                for field in ("salla_product_id", "mezan_product_id", "id")
+                if requested_product_ids
+            ),
+            *(
+                {field: {"$in": sorted(variant_ids)}}
+                for field in ("variants.id",)
+                if variant_ids
+            ),
+            *(
+                {field: {"$in": sorted(skus)}}
+                for field in ("sku", "variants.sku")
+                if skus
+            ),
+        ]
+        product_query["$or"] = clauses or [{"_id": {"$exists": False}}]
+        product_limit = MAX_COST_CONTEXT_PRODUCTS + 1
     products = await _to_list(
         db[PRODUCTS].find(
-            {"user_id": user_id},
+            product_query,
             {
                 "_id": 0,
                 "id": 1,
@@ -96,36 +175,48 @@ async def _load_cost_context(db: Any, user_id: str) -> dict[str, Any]:
                 "variants": 1,
             },
         ),
-        100_000,
+        product_limit,
     )
+    if restricted and len(products) > MAX_COST_CONTEXT_PRODUCTS:
+        raise ValueError("Snapchat cost product scope exceeded the safe limit")
     products_by_id, products_by_variant, products_by_sku = _index_products(products)
 
-    product_ids = [
+    loaded_product_ids = [
         _text(product.get("salla_product_id"))
         for product in products
         if _text(product.get("salla_product_id"))
     ]
     profiles = await _to_list(
         db[COST_PROFILES].find(
-            {"user_id": user_id, "salla_product_id": {"$in": product_ids}},
+            {"user_id": user_id, "salla_product_id": {"$in": loaded_product_ids}},
             {"_id": 0},
         ),
-        max(1, len(product_ids)),
+        max(1, len(loaded_product_ids)),
+    )
+    related_limit = (
+        MAX_COST_CONTEXT_RELATED_ROWS + 1
+        if restricted
+        else 100_000
     )
     option_bindings = await _to_list(
         db[BINDINGS].find(
-            {"user_id": user_id, "salla_product_id": {"$in": product_ids}},
+            {"user_id": user_id, "salla_product_id": {"$in": loaded_product_ids}},
             {"_id": 0},
         ),
-        100_000,
+        related_limit,
     )
     product_bindings = await _to_list(
         db[PRODUCT_RESOURCE_BINDINGS].find(
-            {"user_id": user_id, "salla_product_id": {"$in": product_ids}},
+            {"user_id": user_id, "salla_product_id": {"$in": loaded_product_ids}},
             {"_id": 0},
         ),
-        100_000,
+        related_limit,
     )
+    if restricted and (
+        len(option_bindings) > MAX_COST_CONTEXT_RELATED_ROWS
+        or len(product_bindings) > MAX_COST_CONTEXT_RELATED_ROWS
+    ):
+        raise ValueError("Snapchat related cost scope exceeded the safe limit")
     resource_ids = {
         _text(binding.get("resource_id"))
         for binding in option_bindings + product_bindings
@@ -158,6 +249,17 @@ async def _load_cost_context(db: Any, user_id: str) -> dict[str, Any]:
         "product_binding_map": product_binding_map,
         "resources": {_text(row.get("id")): row for row in resource_rows},
         "policy": await get_policy_map(db, user_id),
+        "read_diagnostics": {
+            "restricted_to_order_identities": restricted,
+            "requested_product_ids": len(requested_product_ids),
+            "requested_variant_ids": len(variant_ids),
+            "requested_skus": len(skus),
+            "products_materialized": len(products),
+            "profiles_materialized": len(profiles),
+            "option_bindings_materialized": len(option_bindings),
+            "product_bindings_materialized": len(product_bindings),
+            "resources_materialized": len(resource_rows),
+        },
     }
 
 

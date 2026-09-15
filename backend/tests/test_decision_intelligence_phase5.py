@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+from copy import deepcopy
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -232,6 +233,94 @@ def test_closed_reconciled_day_builds_shadow_recommendation_chain():
     assert decision["approval"]["execution_performed"] is False
     assert decision["execution_allowed"] is False
     assert result["write_policy"]["platform_writes_performed"] is False
+
+
+def _set_campaign_collection_scope(
+    reports: dict[str, dict],
+    *,
+    total: int,
+    rows_returned: int,
+    complete: bool,
+) -> None:
+    template = reports["campaign"]["rows"][0]
+    reports["campaign"]["rows"] = []
+    for index in range(rows_returned):
+        row = deepcopy(template)
+        row["entity"]["id"] = f"campaign-{index:04d}"
+        row["entity"]["name"] = f"Campaign {index:04d}"
+        reports["campaign"]["rows"].append(row)
+    reports["campaign"]["pagination"] = {
+        "page": 1,
+        "page_size": rows_returned,
+        "total": total,
+        "filtered_total": total,
+        "pages": max(1, (total + rows_returned - 1) // rows_returned),
+        "has_more": not complete,
+        "rows_are_page": True,
+        "collection_complete": complete,
+    }
+    reports["campaign"]["entity_collection_complete"] = complete
+    reports["campaign"]["decision_eligibility"] = {
+        "eligible": False,
+        "reason": (
+            "ai_shadow_not_accepted"
+            if complete
+            else "paginated_entity_sample_not_account_complete"
+        ),
+    }
+
+
+def test_partial_campaign_page_cannot_be_account_complete_decision_evidence():
+    identity, reports = _bundle_inputs()
+    _set_campaign_collection_scope(
+        reports,
+        total=5_000,
+        rows_returned=25,
+        complete=False,
+    )
+
+    evidence = _evidence(identity, reports)
+
+    assert all(
+        gate["passed"]
+        for name, gate in evidence["gates"].items()
+        if name != "coverage"
+    )
+    assert evidence["gates"]["coverage"]["passed"] is False
+    assert evidence["gates"]["coverage"]["levels"]["campaign"] is False
+    assert evidence["decision_ready"] is False
+    assert evidence["blocked_by"] == ["coverage"]
+    assert len(evidence["candidates"]) == 25
+    assert all(candidate["blocked_by"] == ["coverage"] for candidate in evidence["candidates"])
+
+    result = run_phase5_shadow_from_evidence(evidence)
+    assert result["summary"] == {
+        "candidates_evaluated": 25,
+        "recommendations": 0,
+        "blocked": 25,
+        "blocked_reasons": ["coverage"],
+    }
+    assert all(decision["status"] == "BLOCKED" for decision in result["decisions"])
+    assert all("recommendation" not in decision for decision in result["decisions"])
+
+
+def test_complete_campaign_collection_remains_decision_eligible():
+    identity, reports = _bundle_inputs()
+    _set_campaign_collection_scope(
+        reports,
+        total=25,
+        rows_returned=25,
+        complete=True,
+    )
+
+    evidence = _evidence(identity, reports)
+    result = run_phase5_shadow_from_evidence(evidence)
+
+    assert evidence["gates"]["coverage"]["passed"] is True
+    assert evidence["decision_ready"] is True
+    assert result["summary"]["candidates_evaluated"] == 25
+    assert result["summary"]["recommendations"] == 25
+    assert result["summary"]["blocked"] == 0
 
 
 @pytest.mark.parametrize(
