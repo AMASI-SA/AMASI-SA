@@ -120,12 +120,14 @@ export default function Reports() {
             };
         }
         const t = dashboard.totals || {};
+        const currencyComplete = dashboard?.currency_conversion?.complete !== false
+            && t.sales_currency_conversion_complete !== false;
         const payments = (dashboard.payment_breakdown || []).map((p) => ({
             name: p.name,
             orders_count: p.orders_count || 0,
-            total_sales: p.total_sales || 0,
-            fee_amount: p.fee_amount || 0,
-        })).sort((a, b) => b.total_sales - a.total_sales);
+            total_sales: currencyComplete ? (p.total_sales ?? 0) : null,
+            fee_amount: currencyComplete ? (p.fee_amount ?? 0) : null,
+        })).sort((a, b) => Number(b.total_sales || 0) - Number(a.total_sales || 0));
         const shippings = (dashboard.shipping_breakdown || []).map((s) => ({
             name: s.name,
             orders_count: s.orders_count || 0,
@@ -137,23 +139,26 @@ export default function Reports() {
             total_sales: 0,
         }));
         return {
-            total_sales: t.total_sales || 0,
+            total_sales: currencyComplete ? (t.total_sales ?? 0) : null,
             total_orders: t.total_orders || 0,
-            total_fees: t.total_payment_fees || 0,
+            total_fees: currencyComplete ? (t.total_payment_fees ?? 0) : null,
             total_ship: t.total_shipping_cost || 0,
             total_ads: t.daily_ads_total || 0,
             total_prods: t.daily_products_total || 0,
-            net: t.net_profit || 0,
+            net: currencyComplete ? (t.net_profit ?? 0) : null,
+            currencyComplete,
             payments, shippings, sources,
         };
     }, [dashboard]);
 
     // monthly trend
     const monthly = useMemo(() => {
+        const currencyComplete = dashboard?.currency_conversion?.complete !== false
+            && dashboard?.totals?.sales_currency_conversion_complete !== false;
         const items = (dashboard?.monthly || []).map((m) => ({
             month: m.month,
-            sales: m.sales || 0,
-            profit: m.profit || 0,
+            sales: currencyComplete ? (m.sales ?? 0) : null,
+            profit: currencyComplete ? (m.profit ?? 0) : null,
             ads: 0,
         }));
         // Merge daily ads into ads by month
@@ -170,6 +175,10 @@ export default function Reports() {
 
     const hasData = (dashboard?.totals?.total_orders || 0) > 0
         || (dashboard?.recent_analyses?.length || 0) > 0;
+    const reportCurrencyComplete = agg.currencyComplete !== false
+        && reconciliation?.transparency?.currency_conversion_complete !== false
+        && gatewayMetrics?.totals?.currency_conversion_complete !== false;
+    const displayMoney = (value) => value == null ? "—" : formatMoney(value);
 
     if (loading) return <div className="p-10 text-center" data-testid="reports-loading">جاري التحميل…</div>;
 
@@ -228,24 +237,29 @@ export default function Reports() {
                 </div>
             ) : (
                 <>
+                    {!reportCurrencyComplete && (
+                        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-900" data-testid="reports-currency-warning">
+                            أوقِفت النتائج المالية مؤقتاً لوجود طلب بعملة أجنبية من دون سعر صرف موثّق من سلة. عدد الطلبات يظل ظاهراً، ولا يُعامل المبلغ المفقود كصفر.
+                        </div>
+                    )}
                     {/* Aggregate KPIs */}
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                         {[
                             // iter-71: use reconciliation.transparency.total_sales as the
                             // source of truth so the KPI matches the Reports↔Accounts card.
-                            { label: "إجمالي المبيعات", value: reconciliation?.transparency?.total_sales ?? agg.total_sales, accent: true },
+                            { label: "إجمالي المبيعات", value: reportCurrencyComplete ? (reconciliation?.transparency?.total_sales ?? agg.total_sales) : null, accent: true },
                             { label: "إجمالي الطلبات", value: agg.total_orders, isInt: true },
                             { label: "رسوم الدفع", value: agg.total_fees },
                             { label: "الشحن", value: agg.total_ship },
                             { label: "الإعلانات (يومي)", value: adsAgg.totalAds },
                             { label: "مصاريف يومية", value: adsAgg.totalProducts },
                             { label: "عدد التحاليل", value: dashboard?.recent_analyses?.length || 0, isInt: true },
-                            { label: "صافي الربح النهائي", value: agg.net - adsAgg.totalAds - adsAgg.totalProducts, accent: true },
+                            { label: "صافي الربح النهائي", value: agg.net == null ? null : agg.net - adsAgg.totalAds - adsAgg.totalProducts, accent: true },
                         ].map((c, idx) => (
                             <div key={idx} className={`rounded-xl border p-5 ${c.accent ? "bg-brand text-white border-brand" : "bg-white border-border"}`} data-testid={`agg-kpi-${idx}`}>
                                 <div className={`text-sm mb-1 ${c.accent ? "text-white/80" : "text-muted-foreground"}`}>{c.label}</div>
                                 <div className="num text-2xl font-extrabold" style={{ fontFamily: "Tajawal" }}>
-                                    {c.isInt ? formatInt(c.value) : formatMoney(c.value)}
+                                    {c.isInt ? formatInt(c.value) : displayMoney(c.value)}
                                 </div>
                             </div>
                         ))}
@@ -271,7 +285,7 @@ export default function Reports() {
                                 <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-4" data-testid="trx-total-sales">
                                     <div className="text-[11px] font-bold text-emerald-700">إجمالي المبيعات (التقارير)</div>
                                     <div className="num text-xl font-extrabold text-emerald-900 mt-1">
-                                        {formatMoney(reconciliation.transparency.total_sales)}
+                                        {displayMoney(reconciliation.transparency.total_sales)}
                                     </div>
                                     <div className="text-[10px] text-emerald-700/70 mt-1">
                                         {formatInt(reconciliation.transparency.in_accounts_orders +
@@ -282,7 +296,7 @@ export default function Reports() {
                                 <div className="rounded-lg bg-sky-50 border border-sky-200 p-4" data-testid="trx-in-accounts">
                                     <div className="text-[11px] font-bold text-sky-700">داخل الأصول (المنصات الـ 6)</div>
                                     <div className="num text-xl font-extrabold text-sky-900 mt-1">
-                                        {formatMoney(reconciliation.transparency.in_accounts)}
+                                        {displayMoney(reconciliation.transparency.in_accounts)}
                                     </div>
                                     <div className="text-[10px] text-sky-700/70 mt-1">
                                         {formatInt(reconciliation.transparency.in_accounts_orders)} طلب
@@ -291,10 +305,14 @@ export default function Reports() {
                                 <div className={`rounded-lg p-4 border ${reconciliation.transparency.gap === 0 ? "bg-slate-50 border-slate-200" : "bg-amber-50 border-amber-200"}`} data-testid="trx-gap">
                                     <div className={`text-[11px] font-bold ${reconciliation.transparency.gap === 0 ? "text-slate-700" : "text-amber-700"}`}>الفرق المُفسَّر</div>
                                     <div className={`num text-xl font-extrabold mt-1 ${reconciliation.transparency.gap === 0 ? "text-slate-900" : "text-amber-900"}`}>
-                                        {formatMoney(reconciliation.transparency.gap)}
+                                        {displayMoney(reconciliation.transparency.gap)}
                                     </div>
                                     <div className={`text-[10px] mt-1 ${reconciliation.transparency.gap === 0 ? "text-slate-700/70" : "text-amber-700/70"}`}>
-                                        {reconciliation.transparency.gap === 0 ? "الأرقام متطابقة" : "موضّح أدناه"}
+                                        {reconciliation.transparency.gap == null
+                                            ? "التحويل غير مكتمل"
+                                            : reconciliation.transparency.gap === 0
+                                                ? "الأرقام متطابقة"
+                                                : "موضّح أدناه"}
                                     </div>
                                 </div>
                             </div>
@@ -349,6 +367,14 @@ export default function Reports() {
                     {(() => {
                         const centralRows = gatewayMetrics?.rows || [];
                         const fallback = dashboard?.payment_breakdown || [];
+
+                        if (gatewayMetrics?.totals?.currency_conversion_complete === false) {
+                            return (
+                                <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm font-bold text-amber-900">
+                                    تفاصيل صافي مزوّدات الدفع غير متاحة حتى يكتمل سعر الصرف من سلة.
+                                </div>
+                            );
+                        }
 
                         // Adapt central row → fields ProviderCommissionCard expects.
                         // The card reads total_sales / fee_amount / refunded_amount /

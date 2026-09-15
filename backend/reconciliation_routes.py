@@ -20,6 +20,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from auth import get_current_user_from_db
+from order_currency import SALLA_RAW_CURRENCY_PROJECTION, order_total_sar
 from payment_gateway_metrics import compute_metrics
 
 
@@ -42,7 +43,7 @@ ACCOUNT_KEY_TO_CENTRAL_KEYS: dict[str, list[str]] = {
 
 def _central_expected_for_account(
     central_rows: list[dict], account_key: str | None
-) -> tuple[float, int, int]:
+) -> tuple[float | None, int, int]:
     """Sum (net, orders_count, actual_orders_count) for an account's
     canonical key by aggregating matching rows from the central metrics
     response. Returns (0.0, 0, 0) if account_key isn't mapped."""
@@ -54,12 +55,19 @@ def _central_expected_for_account(
     net = 0.0
     orders = 0
     actual_orders = 0
+    conversion_complete = True
     for r in central_rows:
         if r.get("key") in central_keys:
+            if r.get("currency_conversion_complete") is False:
+                conversion_complete = False
             net += float(r.get("net") or 0)
             orders += int(r.get("orders_count") or 0)
             actual_orders += int(r.get("actual_orders_count") or 0)
-    return round(net, 2), orders, actual_orders
+    return (
+        round(net, 2) if conversion_complete else None,
+        orders,
+        actual_orders,
+    )
 
 
 def attach_reconciliation_routes(parent_router: APIRouter, db) -> None:
@@ -122,7 +130,12 @@ def attach_reconciliation_routes(parent_router: APIRouter, db) -> None:
             c_expected, c_orders, c_actual = _central_expected_for_account(
                 central_rows, acc.get("normalized_payment_method")
             )
-            if c_expected > 0 or c_orders > 0:
+            if c_expected is None:
+                expected = None
+                orders_count = c_orders
+                actual_orders_count = c_actual
+                expected_source = "currency_conversion_incomplete"
+            elif c_expected > 0 or c_orders > 0:
                 expected = c_expected
                 orders_count = c_orders
                 actual_orders_count = c_actual
@@ -130,8 +143,16 @@ def attach_reconciliation_routes(parent_router: APIRouter, db) -> None:
 
         current_balance = round(float(acc.get("current_balance") or 0), 2)
         transferred = round(transferred, 2)
-        pending = round(expected - transferred, 2)
-        rate = round((transferred / expected * 100), 2) if expected > 0 else 0.0
+        pending = (
+            round(expected - transferred, 2)
+            if expected is not None
+            else None
+        )
+        rate = (
+            round((transferred / expected * 100), 2)
+            if expected is not None and expected > 0
+            else (0.0 if expected is not None else None)
+        )
 
         # Iter-118 — apply BNPL SSOT for Tabby / Tamara accounts so this
         # page shows the SAME `current_balance` as /accounts (Transfers
@@ -201,13 +222,26 @@ def attach_reconciliation_routes(parent_router: APIRouter, db) -> None:
         # Iter-81 — single source of truth for expected per platform.
         central = await compute_metrics(db, uid, from_date=from_date, to_date=to_date)
         central_rows = central.get("rows") or []
+        central_totals = central.get("totals") or {}
+        currency_conversion_complete = (
+            central_totals.get("currency_conversion_complete") is not False
+        )
 
         rows = [await _platform_row(uid, a, central_rows=central_rows) for a in accs]
-        total_expected = round(sum(r["expected"] for r in rows), 2)
+        known_expected = round(sum(
+            float(r["expected"] or 0) for r in rows
+        ), 2)
+        total_expected = known_expected if currency_conversion_complete else None
         total_transferred = round(sum(r["transferred"] for r in rows), 2)
-        total_pending = round(total_expected - total_transferred, 2)
+        total_pending = (
+            round(total_expected - total_transferred, 2)
+            if total_expected is not None
+            else None
+        )
         overall_rate = (
-            round(total_transferred / total_expected * 100, 2) if total_expected > 0 else 0.0
+            round(total_transferred / total_expected * 100, 2)
+            if total_expected is not None and total_expected > 0
+            else (0.0 if total_expected is not None else None)
         )
 
         # ── Transparency: compute Reports total_sales vs Accounts total
@@ -235,32 +269,58 @@ def attach_reconciliation_routes(parent_router: APIRouter, db) -> None:
                 date_q["$lte"] = to_date
             match_stage["order_date"] = date_q
 
+        order_projection = {
+            **SALLA_RAW_CURRENCY_PROJECTION,
+            "order_number": 1,
+            "payment_method": 1,
+            "total_amount": 1,
+            "currency": 1,
+            "original_total_amount": 1,
+            "original_currency": 1,
+            "exchange_rate_to_sar": 1,
+            "total_amount_sar": 1,
+            "accounting_currency": 1,
+            "currency_conversion_status": 1,
+        }
         pipeline = [
             {"$match": match_stage},
-            {"$group": {
-                "_id": {"$ifNull": ["$payment_method", ""]},
-                "amount": {"$sum": {"$ifNull": ["$total_amount", 0]}},
-                "count":  {"$sum": 1},
-            }},
+            {"$project": order_projection},
         ]
         in_accounts_amount = 0.0
         in_accounts_orders = 0
         unclassified_buckets: dict[str, dict] = {}
         empty_payment_amount = 0.0
         empty_payment_orders = 0
+        transparency_conversion_complete = True
+        transparency_unverified_orders: list[str] = []
         async for r in db.unified_orders.aggregate(pipeline):
-            raw = (r.get("_id") or "").strip()
-            amt = float(r.get("amount") or 0)
-            cnt = int(r.get("count") or 0)
+            raw = (r.get("payment_method") or "").strip()
+            amount_sar = order_total_sar(r)
+            amount_verified = amount_sar is not None
+            amt = float(amount_sar or 0)
+            cnt = 1
+            if not amount_verified:
+                transparency_conversion_complete = False
+                if len(transparency_unverified_orders) < 100:
+                    transparency_unverified_orders.append(
+                        str(r.get("order_number") or "unknown")
+                    )
             if not raw:
                 empty_payment_amount += amt
                 empty_payment_orders += cnt
                 continue
             key, _disp = _resolve(raw)
             if key is None:
-                slot = unclassified_buckets.setdefault(raw, {"raw": raw, "amount": 0.0, "count": 0})
+                slot = unclassified_buckets.setdefault(raw, {
+                    "raw": raw,
+                    "amount": 0.0,
+                    "count": 0,
+                    "currency_conversion_complete": True,
+                })
                 slot["amount"] += amt
                 slot["count"] += cnt
+                if not amount_verified:
+                    slot["currency_conversion_complete"] = False
             else:
                 in_accounts_amount += amt
                 in_accounts_orders += cnt
@@ -268,10 +328,23 @@ def attach_reconciliation_routes(parent_router: APIRouter, db) -> None:
         unclassified_amount = round(sum(b["amount"] for b in unclassified_buckets.values()), 2)
         empty_payment_amount = round(empty_payment_amount, 2)
         in_accounts_amount = round(in_accounts_amount, 2)
-        total_sales = round(
+        known_total_sales = round(
             in_accounts_amount + unclassified_amount + empty_payment_amount, 2
         )
-        gap = round(total_sales - in_accounts_amount, 2)
+        known_gap = round(known_total_sales - in_accounts_amount, 2)
+        total_sales = (
+            known_total_sales if transparency_conversion_complete else None
+        )
+        safe_in_accounts_amount = (
+            in_accounts_amount if transparency_conversion_complete else None
+        )
+        safe_unclassified_amount = (
+            unclassified_amount if transparency_conversion_complete else None
+        )
+        safe_empty_payment_amount = (
+            empty_payment_amount if transparency_conversion_complete else None
+        )
+        gap = known_gap if transparency_conversion_complete else None
 
         return {
             "totals": {
@@ -279,26 +352,53 @@ def attach_reconciliation_routes(parent_router: APIRouter, db) -> None:
                 "transferred": total_transferred,
                 "pending": total_pending,
                 "collection_rate": overall_rate,
+                "known_expected_sar": known_expected,
+                "accounting_currency": "SAR",
+                "currency_conversion_complete": currency_conversion_complete,
             },
             "platforms": rows,
             # User-facing transparency block — explains every riyal that's
             # in Reports total_sales but NOT in Accounts total_assets.
             "transparency": {
                 "total_sales": total_sales,
-                "in_accounts": in_accounts_amount,
+                "in_accounts": safe_in_accounts_amount,
                 "in_accounts_orders": in_accounts_orders,
-                "unclassified_amount": unclassified_amount,
+                "unclassified_amount": safe_unclassified_amount,
                 "unclassified_orders": sum(b["count"] for b in unclassified_buckets.values()),
                 "unclassified_buckets": sorted(
                     [
-                        {"raw": b["raw"], "amount": round(b["amount"], 2), "count": b["count"]}
+                        {
+                            "raw": b["raw"],
+                            "amount": (
+                                round(b["amount"], 2)
+                                if transparency_conversion_complete
+                                else None
+                            ),
+                            "known_amount_sar": round(b["amount"], 2),
+                            "count": b["count"],
+                        }
+                        | {
+                            "currency_conversion_complete": b[
+                                "currency_conversion_complete"
+                            ]
+                        }
                         for b in unclassified_buckets.values()
                     ],
-                    key=lambda x: -x["amount"],
+                    key=lambda x: -x["known_amount_sar"],
                 ),
-                "empty_payment_method_amount": empty_payment_amount,
+                "empty_payment_method_amount": safe_empty_payment_amount,
                 "empty_payment_method_orders": empty_payment_orders,
                 "gap": gap,
+                "known_total_sales_sar": known_total_sales,
+                "known_in_accounts_sar": in_accounts_amount,
+                "known_unclassified_sar": unclassified_amount,
+                "known_empty_payment_method_sar": empty_payment_amount,
+                "known_gap_sar": known_gap,
+                "accounting_currency": "SAR",
+                "currency_conversion_complete": (
+                    transparency_conversion_complete
+                ),
+                "unverified_order_numbers": transparency_unverified_orders,
                 "filters_applied": {
                     "report_included_statuses": included,
                     "hide_inferred_date_orders": bool(

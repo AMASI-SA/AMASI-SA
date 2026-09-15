@@ -24,6 +24,7 @@ import {
 
 import { useOrders } from "../hooks/useOrders";
 import { getOrderFilterSummary } from "../services/orderEngine";
+import OrderCurrencyAmount from "../components/OrderCurrencyAmount";
 
 const STATUS_PRIORITY = [
     ["بإنتظار المراجعة", "بانتظار المراجعة", "انتظار المراجعة", "under review"],
@@ -76,6 +77,7 @@ function statusVisual(status) {
 }
 
 function formatMoney(value) {
+    if (value === null || value === undefined || value === "" || typeof value === "boolean") return "—";
     return `${Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س`;
 }
 
@@ -320,6 +322,7 @@ export default function OrdersV2() {
             </section>
 
             {resultSummary && <section className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2 xl:grid-cols-5" data-testid="orders-v2-result-summary">{[["الطلبات",resultSummary.orders],["المدفوعة",resultSummary.paid_orders],["بانتظار الدفع",resultSummary.pending_payment_orders],["ملغاة/مسترجعة",Number(resultSummary.cancelled_orders || 0)+Number(resultSummary.refunded_orders || 0)],["المبيعات المدفوعة",formatMoney(resultSummary.paid_sales)],["متوسط السلة",formatMoney(resultSummary.average_basket)],["المنتجات / القطع",`${resultSummary.product_lines || 0} / ${resultSummary.units || 0}`],["غير منسوبة أو متعارضة",resultSummary.unattributed_or_conflicted],["قبل وقت القطع",resultSummary.orders_at_or_before_cutoff],["بعد وقت القطع",resultSummary.orders_after_cutoff]].map(([label,value]) => <div key={label} className="rounded-xl bg-slate-50 p-3"><div className="text-xs font-bold text-slate-500">{label}</div><div className="num mt-1 text-xl font-extrabold">{value ?? "—"}</div></div>)}</section>}
+            {resultSummary?.currency_conversion_complete === false && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-800">تعذّر احتساب ملخص المبيعات بالريال السعودي لوجود طلب بعملة أجنبية بلا سعر صرف موثّق من سلة.</div>}
 
             <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-4 sm:px-5"><div className="flex min-w-0 items-center gap-3"><SelectionBox checked={allVisibleSelected} disabled={!canSelectVisible} onChange={toggleVisible} label={canSelectVisible ? "تحديد الطلبات الظاهرة" : "تحديد الكل متاح داخل حالة موحدة فقط"} /><h2 className="truncate font-extrabold text-slate-900">{searchMode ? "نتيجة البحث" : activeStatusLabel ? `طلبات: ${activeStatusLabel}` : "أحدث الطلبات حسب تاريخ الإنشاء"}</h2></div>{selectedCount > 0 && <div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-teal-100 px-3 py-2 text-sm font-bold text-teal-900">تم تحديد {selectedCount.toLocaleString("en-US")} طلب</span><button type="button" onClick={() => setQuickEditOpen(true)} className="rounded-xl border border-teal-500 bg-white px-4 py-2 text-sm font-bold text-teal-800">تحرير سريع</button><button type="button" onClick={clearSelection} className="rounded-xl border px-3 py-2 text-sm">إلغاء التحديد</button></div>}</div>
@@ -348,7 +351,7 @@ export default function OrdersV2() {
                                     </div>
                                     <div className="col-start-2 flex min-w-0 items-center justify-between gap-2 sm:col-auto sm:shrink-0 sm:justify-end sm:gap-3">
                                         <div className="min-w-0 text-right sm:text-left">
-                                            <div className="flex items-center gap-1.5 sm:justify-end"><SourceBadge order={order} /><span className="whitespace-nowrap font-semibold text-teal-800">{formatMoney(order.totals?.total)}</span></div>
+                                            <div className="flex items-center gap-1.5 sm:justify-end"><SourceBadge order={order} /><OrderCurrencyAmount order={order} /></div>
                                             <div className="mt-1 whitespace-nowrap text-[11px] text-slate-400 sm:text-xs">{formatOrderDate(order.created_at, nowMs)}</div>
                                         </div>
                                         <CaretLeft size={17} className="shrink-0 text-slate-300" />

@@ -7,12 +7,39 @@ on:
     paths:
       - "backend/dashboard_v2_ads_executive.py"
       - "backend/dashboard_v2_routes.py"
+      - "backend/accounts_routes.py"
+      - "backend/dashboard_eligibility_filter.py"
+      - "backend/mezan_profit_engine.py"
+      - "backend/order_currency.py"
+      - "backend/order_engine/mapper.py"
+      - "backend/order_engine/models.py"
+      - "backend/order_engine/search.py"
+      - "backend/order_status_policy.py"
+      - "backend/orders_db.py"
+      - "backend/payment_gateway_metrics.py"
+      - "backend/reconciliation_routes.py"
+      - "backend/refunds_alert_routes.py"
+      - "backend/salla_integration/sync.py"
+      - "backend/server.py"
+      - "backend/tests/test_dashboard_eligibility_filter.py"
+      - "backend/tests/test_dashboard_v2_product_cost.py"
       - "backend/tests/test_dashboard_v2_salla_ads_executive.py"
+      - "backend/tests/test_order_currency_accounting.py"
+      - "backend/tests/test_salla_nested_money.py"
       - "frontend/src/components/AdsExecutiveBreakdownTable.jsx"
+      - "frontend/src/components/OrderCurrencyAmount.jsx"
       - "frontend/src/components/ProfitSummaryCard.jsx"
+      - "frontend/src/components/RefundsAlert.jsx"
+      - "frontend/src/components/UnifiedPaymentGatewaysCard.jsx"
+      - "frontend/src/lib/dashboardMezanV2Adapter.js"
+      - "frontend/src/lib/dashboardMezanV2Adapter.test.js"
       - "frontend/src/components/ProfitSummaryCard.adsExecutive.test.jsx"
       - "frontend/src/pages/Dashboard.jsx"
       - "frontend/src/pages/AdvancedDashboard.jsx"
+      - "frontend/src/pages/AdvancedDashboard.latestOrders.test.jsx"
+      - "frontend/src/pages/OrderDetailsV2.jsx"
+      - "frontend/src/pages/OrdersV2.jsx"
+      - "frontend/src/pages/Reports.jsx"
       - ".github/workflows/prod-dashboard-v2-salla-ads-executive.yml"
 
 permissions:
@@ -42,16 +69,34 @@ jobs:
           pytest
           pytest-asyncio
           openpyxl
+          reportlab
       - name: Compile executive advertising modules
         run: >-
           python -m py_compile
+          order_currency.py
+          accounts_routes.py
           dashboard_v2_ads_executive.py
           dashboard_v2_routes.py
+          mezan_profit_engine.py
+          order_engine/mapper.py
+          order_engine/models.py
+          order_engine/search.py
+          order_status_policy.py
+          orders_db.py
+          payment_gateway_metrics.py
+          reconciliation_routes.py
+          refunds_alert_routes.py
+          salla_integration/sync.py
+          server.py
           tests/test_dashboard_v2_salla_ads_executive.py
       - name: Test Salla and provider source contract
         run: >-
           python -m pytest
           tests/test_dashboard_v2_salla_ads_executive.py
+          tests/test_order_currency_accounting.py
+          tests/test_dashboard_eligibility_filter.py
+          tests/test_dashboard_v2_product_cost.py
+          tests/test_salla_nested_money.py
           tests/test_dashboard_v2_ad_account_costs.py
           -q --tb=short
       - name: Enforce authoritative read-only sources
@@ -60,7 +105,7 @@ jobs:
           ENGINE=backend/dashboard_v2_ads_executive.py
           DASH=backend/dashboard_v2_routes.py
           grep -q 'unified_orders.source/utm_source:salla' "$ENGINE"
-          grep -q 'unified_orders.total_amount:salla' "$ENGINE"
+          grep -q 'unified_orders.total_amount_sar:salla_order_fx' "$ENGINE"
           grep -q 'ad_platform_spend_divided_by_ad_platform_reported_orders' "$ENGINE"
           grep -q 'salla_sales_divided_by_ad_platform_spend' "$ENGINE"
           grep -q 'provider_conversion_sales_excluded.*True' "$ENGINE"
@@ -89,6 +134,8 @@ jobs:
           CI: "true"
         run: >-
           yarn test --watchAll=false --runInBand --runTestsByPath
+          src/lib/dashboardMezanV2Adapter.test.js
+          src/pages/AdvancedDashboard.latestOrders.test.jsx
           src/components/ProfitSummaryCard.adsExecutive.test.jsx
           src/components/ProfitSummaryCard.paymentFees.test.jsx
       - name: Build Production frontend

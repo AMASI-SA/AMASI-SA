@@ -23,6 +23,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from auth import get_current_user_from_db
+from order_currency import order_total_sar
 
 
 VALID_CATEGORIES = {"confirmed", "pending", "refunded", "cancelled"}
@@ -163,7 +164,7 @@ def effective_product_cost(
     # Partial refund — scale proportionally to refunded share of gross.
     rpart = float(order.get("actual_partial_refund_amount") or 0)
     if rpart > 0:
-        gross = float(order.get("total_amount") or 0)
+        gross = float(order_total_sar(order) or 0)
         if gross > 0:
             share = max(0.0, min(1.0, rpart / gross))
             return round(base * (1 - share), 2)

@@ -34,11 +34,26 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, validator
 
 from auth import get_current_user_from_db
+from order_currency import SALLA_RAW_CURRENCY_PROJECTION, order_total_sar
 from payment_gateway_metrics import compute_metrics
 from reconciliation_routes import (
     ACCOUNT_KEY_TO_CENTRAL_KEYS,
     _central_expected_for_account,
 )
+
+
+def _order_expected_amount_sar(order: dict) -> float | None:
+    """Amount that an order contributes to a SAR-denominated account.
+
+    A matched settlement's actual net is already a SAR ledger value;
+    otherwise the order must carry verifiable order-level Salla FX proof.
+    """
+    if (
+        order.get("payment_fee_status") == "actual"
+        and order.get("actual_net_amount") is not None
+    ):
+        return round(float(order["actual_net_amount"]), 2)
+    return order_total_sar(order)
 
 
 # ── Catalogue ──────────────────────────────────────────────────────────────
@@ -972,31 +987,53 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
         if settings.get("hide_inferred_date_orders"):
             match_stage["order_date_inferred"] = {"$ne": True}
 
+        # Compute and validate the central SAR view before mutating account
+        # balances.  This makes the sync atomic from the operator's point of
+        # view: a foreign order without an exact Salla rate blocks the sync
+        # instead of silently entering the ledger as zero or as faux SAR.
+        central = await compute_metrics(db, uid)
+        central_totals = central.get("totals") or {}
+        if central_totals.get("currency_conversion_complete") is False:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "order_currency_conversion_incomplete",
+                    "message": (
+                        "تعذرت مزامنة الحسابات: توجد طلبات بعملة أجنبية "
+                        "من دون سعر صرف موثق من سلة."
+                    ),
+                    "accounting_currency": "SAR",
+                    "unverified_orders_count": central_totals.get(
+                        "unverified_orders_count", 0
+                    ),
+                    "order_numbers": central_totals.get(
+                        "unverified_order_numbers", []
+                    ),
+                },
+            )
+
+        order_projection = {
+            **SALLA_RAW_CURRENCY_PROJECTION,
+            "order_number": 1,
+            "payment_method": 1,
+            "total_amount": 1,
+            "currency": 1,
+            "original_total_amount": 1,
+            "original_currency": 1,
+            "exchange_rate_to_sar": 1,
+            "total_amount_sar": 1,
+            "accounting_currency": 1,
+            "currency_conversion_status": 1,
+            "payment_fee_status": 1,
+            "actual_net_amount": 1,
+        }
         pipeline = [
             {"$match": match_stage},
-            # Phase 80 — prefer actual_net_amount (from settlement files
-            # uploaded via /payment-settlements) when present. Orders not
-            # yet matched against any settlement file fall back to the
-            # estimated total_amount so the expected balance stays
-            # populated. payment_fee_status='actual' is the flag set by
-            # the settlement importer.
-            {"$addFields": {
-                "_settlement_net": {
-                    "$cond": [
-                        {"$and": [
-                            {"$eq": ["$payment_fee_status", "actual"]},
-                            {"$ne": ["$actual_net_amount", None]},
-                        ]},
-                        "$actual_net_amount",
-                        {"$ifNull": ["$total_amount", 0]},
-                    ],
-                },
-            }},
-            {"$group": {
-                "_id": {"$ifNull": ["$payment_method", ""]},
-                "amount": {"$sum": "$_settlement_net"},
-                "count":  {"$sum": 1},
-            }},
+            # Phase 80 — actual settlement net is already denominated in
+            # the SAR ledger.  Unmatched orders use their verified per-order
+            # Salla conversion.  Grouping is intentionally done in Python so
+            # historical orders can be hydrated from the narrow raw proof.
+            {"$project": order_projection},
         ]
         # Iter-111 — Build routing map: { sub_key → bank_account_id }
         # so any orders whose payment_method maps to that sub_key are
@@ -1029,9 +1066,28 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
         # operator can fix the alias table later. Never becomes an account.
         unclassified: dict[str, dict] = {}
         async for row in db.unified_orders.aggregate(pipeline):
-            raw = (row.get("_id") or "").strip()
-            amount = float(row.get("amount") or 0)
-            count = int(row.get("count") or 0)
+            raw = (row.get("payment_method") or "").strip()
+            amount_sar = _order_expected_amount_sar(row)
+            if amount_sar is None:
+                # Defensive guard in case the collection changed between
+                # the preflight pass and this aggregation.  No account
+                # mutations have happened at this point.
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "order_currency_conversion_incomplete",
+                        "message": (
+                            "تعذرت مزامنة الحسابات بسبب طلب أجنبي "
+                            "من دون سعر صرف موثق من سلة."
+                        ),
+                        "accounting_currency": "SAR",
+                        "order_numbers": [
+                            str(row.get("order_number") or "unknown")
+                        ],
+                    },
+                )
+            amount = float(amount_sar)
+            count = 1
 
             # The single classification gate for the whole app. If the raw
             # value is empty / "\N" / "غير محدد" / unknown → log + skip.
@@ -1150,7 +1206,6 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
         # (actual settlement > estimated) and is what Reports /
         # Reconciliation read. Use it to populate
         # `expected_orders_balance` so the three pages always agree.
-        central = await compute_metrics(db, uid)
         central_rows = central.get("rows") or []
 
         # Iter-111 — the central metrics does its own aggregation pass
@@ -1322,6 +1377,8 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
             "removed_legacy": removed_subs,
             "hidden_with_transactions": kept_with_tx,
             "unclassified_count": len(unclassified),
+            "accounting_currency": "SAR",
+            "currency_conversion_complete": True,
             "unclassified": [
                 {"raw": u["raw"], "amount": round(u["amount"], 2), "count": u["count"]}
                 for u in unclassified.values()

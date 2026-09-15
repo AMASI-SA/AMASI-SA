@@ -86,6 +86,35 @@ test("replaces old ad costs and recalculates dependent Dashboard KPIs", () => {
 });
 
 
+test("does not turn an incomplete order-currency total into zero", () => {
+    const result = mergeDashboardAuthoritativeSummary(
+        {
+            currency_conversion: { complete: false },
+            totals: {
+                total_sales: null,
+                total_orders: 2,
+                total_ads_cost: 100,
+                net_profit: null,
+                overall_roas: null,
+                sales_currency_conversion_complete: false,
+            },
+        },
+        {
+            total_ads_cost: 250,
+            source_only: true,
+            provider_write_reached: false,
+            campaign_write_reached: false,
+            accounting_write_reached: false,
+            qoyod_write_reached: false,
+        },
+    );
+
+    expect(result.totals.total_sales).toBeNull();
+    expect(result.totals.overall_roas).toBeNull();
+    expect(result.totals.net_profit).toBeNull();
+});
+
+
 test("converts selected Snapchat V2 performance to the old daily shape", () => {
     const result = toLegacySnapDailySpend({
         spend_sar: 123.45,

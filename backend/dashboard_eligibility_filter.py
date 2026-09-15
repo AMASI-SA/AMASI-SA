@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict
 
 import dashboard_v2_routes as _dashboard
 from auth import ensure_user_settings
+from order_currency import order_amount_to_sar, order_total_sar
 
 ORDER_MIN_TOTAL_SAR = 50.0
 PRODUCT_MIN_UNIT_SALE_SAR = 25.0
@@ -32,15 +33,32 @@ def _number(value: Any) -> float:
 
 
 def order_is_eligible(order: dict[str, Any]) -> bool:
-    return _number(order.get("total_amount")) >= ORDER_MIN_TOTAL_SAR
+    total_sar = order_total_sar(order)
+    # Keep an unverified order in the pipeline so the downstream financial
+    # summary can fail closed and explain the missing Salla rate. Filtering it
+    # out here would make an incomplete total look valid.
+    return total_sar is None or total_sar >= ORDER_MIN_TOTAL_SAR
 
 
-def line_unit_sale(item: dict[str, Any]) -> float:
+def line_unit_sale(
+    item: dict[str, Any],
+    order: dict[str, Any] | None = None,
+) -> float:
     quantity = max(_number(item.get("quantity")), 1.0)
     line_total = item.get("total")
     if line_total is not None:
-        return max(_number(line_total) / quantity, 0.0)
-    return max(_number(item.get("price") or item.get("unit_price")), 0.0)
+        native_unit = max(_number(line_total) / quantity, 0.0)
+    else:
+        native_unit = max(
+            _number(item.get("price") or item.get("unit_price")),
+            0.0,
+        )
+    if order is None:
+        return native_unit
+    unit_sar = order_amount_to_sar(native_unit, order)
+    # Same fail-closed preservation as order_is_eligible: do not silently
+    # discard a line whose order-level conversion cannot be verified.
+    return unit_sar if unit_sar is not None else float("inf")
 
 
 def qualifying_piece_counts(orders: list[dict[str, Any]]) -> tuple[float, float]:
@@ -53,7 +71,7 @@ def qualifying_piece_counts(orders: list[dict[str, Any]]) -> tuple[float, float]
             if not isinstance(item, dict):
                 continue
             quantity = max(_number(item.get("quantity")), 1.0)
-            if line_unit_sale(item) >= PRODUCT_MIN_UNIT_SALE_SAR:
+            if line_unit_sale(item, order) >= PRODUCT_MIN_UNIT_SALE_SAR:
                 eligible_units += quantity
             else:
                 excluded_low_price_units += quantity
@@ -180,7 +198,11 @@ def make_dashboard_eligibility_router(db: Any, current_user: Callable[..., Any])
             "orders_total_before_filter": len(orders),
             "eligible_orders_count": len(eligible_orders),
             "excluded_orders_count": len(excluded_orders),
-            "excluded_orders_sales": round(sum(_number(order.get("total_amount")) for order in excluded_orders), 2),
+            "excluded_orders_sales": round(sum(
+                float(order_total_sar(order) or 0)
+                for order in excluded_orders
+            ), 2),
+            "accounting_currency": "SAR",
             "eligible_piece_count": eligible_units,
             "excluded_low_price_piece_count": excluded_units,
             "order_min_total_sar": ORDER_MIN_TOTAL_SAR,

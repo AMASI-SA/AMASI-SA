@@ -14,6 +14,7 @@ import DashboardAdsSpendCard from "../components/DashboardAdsSpendCard";
 import LatestSoldProductsCard from "../components/LatestSoldProductsCard";
 import { buildPaymentFeeRows } from "../components/ProfitSummaryCard";
 import { useOrders } from "../hooks/useOrders";
+import OrderCurrencyAmount from "../components/OrderCurrencyAmount";
 import { mergeDashboardWithPlatformSpend } from "../lib/dashboardPlatformSpendMerge";
 import { getDashboardAdsSpend } from "../services/dashboardAdsSpend";
 import { buildMezanProductCostHref, buildMissingMezanCostHref } from "../lib/mezanV2CostLinks";
@@ -301,7 +302,11 @@ export function TopProductsCard({ rows, summary = {}, filters = {}, loading = fa
     // includes products hidden under "المزيد" and stays consistent with the
     // displayed per-product values.
     const totalUnits = products.reduce((sum, item) => sum + Number(item.units_sold || 0), 0);
-    const totalSales = products.reduce((sum, item) => sum + Number(item.total_sales || 0), 0);
+    const salesConversionComplete = productSummary.sales_currency_conversion_complete !== false
+        && products.every((item) => item.sales_currency_conversion_complete !== false && item.total_sales != null);
+    const totalSales = salesConversionComplete
+        ? products.reduce((sum, item) => sum + Number(item.total_sales || 0), 0)
+        : null;
     const rowTotalCost = products.reduce((sum, item) => {
         const value = finiteFinancialValue(item.total_cost, { nonnegative: true });
         return sum + (value ?? 0);
@@ -360,7 +365,7 @@ export function TopProductsCard({ rows, summary = {}, filters = {}, loading = fa
                         ) : productImage}
                     </div>
                     <span className="num text-center text-xs font-bold">{integer(item.units_sold)}</span>
-                    <span className="num whitespace-nowrap text-center text-[10px] font-black text-slate-900">{money(item.total_sales)} ر.س</span>
+                    <span className="num whitespace-nowrap text-center text-[10px] font-black text-slate-900">{item.total_sales == null ? "غير مكتمل" : `${money(item.total_sales)} ر.س`}</span>
                     <span className={`num text-center text-[10px] font-black ${missingAllCost || partialCost ? "text-orange-600" : "text-blue-600"}`}>
                         {missingAllCost ? "بدون تكلفة" : `${money(item.total_cost)} ر.س`}
                         {partialCost && <span className="mt-0.5 block text-[7px]">تكلفة جزئية</span>}
@@ -380,12 +385,15 @@ export function TopProductsCard({ rows, summary = {}, filters = {}, loading = fa
                     </div>
                     <div className="grid grid-cols-4 divide-x divide-x-reverse divide-indigo-200 text-center">
                         <TopProductsTotal label="إجمالي القطع" value={integer(totalUnits)} />
-                        <TopProductsTotal label="إجمالي المبيعات" value={`${money(totalSales)} ر.س`} />
+                        <TopProductsTotal label="إجمالي المبيعات" value={totalSales == null ? "غير مكتمل" : `${money(totalSales)} ر.س`} />
                         <TopProductsTotal label="إجمالي تكلفة القطع" value={`${money(totalCost)} ر.س`} tone="indigo" />
                         <TopProductsTotal label="إجمالي صافي الربح" value={totalNetProfit == null ? "—" : `${money(totalNetProfit)} ر.س`} tone="emerald" />
                     </div>
                     {hasUnpricedProducts && (
                         <p className="mt-2 text-center text-[8px] font-bold text-amber-700">صافي الربح غير مكتمل حتى تُضاف تكلفة المنتجات الناقصة.</p>
+                    )}
+                    {!salesConversionComplete && (
+                        <p className="mt-2 text-center text-[8px] font-bold text-amber-700">المبيعات غير مكتملة لوجود طلب بعملة أجنبية بلا سعر صرف موثّق.</p>
                     )}
                 </div>
             )}
@@ -431,7 +439,7 @@ export function SummaryStrip({ data, filters, loading = false }) {
     return <div dir="ltr" className="grid gap-3 min-[1180px]:grid-cols-[minmax(0,1.75fr)_minmax(260px,.7fr)]" data-testid="advanced-date-summary">
         <div dir="rtl" className="grid grid-cols-2 gap-2 min-[1180px]:grid-cols-[minmax(118px,.46fr)_minmax(180px,.78fr)_minmax(0,2fr)]">
             <Metric label="طلبات الشهر" value={loading && !data ? "—" : integer(monthTotals.total_orders)} Icon={ShoppingCart} tone="bg-teal-50 text-teal-700" />
-            <Metric label="مبيعات الشهر" value={loading && !data ? "—" : `${money(monthTotals.total_sales)} ر.س`} Icon={CircleDollarSign} tone="bg-cyan-50 text-cyan-700" className="px-4" valueClassName="text-[19px]" />
+            <Metric label="مبيعات الشهر" value={loading && !data ? "—" : monthTotals.total_sales == null ? "غير مكتمل" : `${money(monthTotals.total_sales)} ر.س`} Icon={CircleDollarSign} tone="bg-cyan-50 text-cyan-700" className="px-4" valueClassName="text-[19px]" />
             <PlatformPeriodSummary ads={data?.ads_v2} />
         </div>
         <Link to={buildMissingMezanCostHref(data?.product_cost_v2, filters)} dir="rtl" className="flex min-h-[78px] items-center justify-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 text-center text-amber-900"><AlertTriangle className="h-5 w-5 text-amber-500" /><p className="text-xs font-extrabold">{loading && !data ? "جارٍ مزامنة تكاليف المنتجات…" : `${integer(missing)} منتجًا مبيعًا بدون تكلفة ميزان`}<span className="block text-amber-700">{loading && !data ? "" : "أضف التكلفة لاعتماد الأرباح"}</span></p></Link>
@@ -545,9 +553,14 @@ export function ProfitCard({ data, loading = false }) {
         { key: "payment", label: "إجمالي رسوم جميع طرق الدفع", value: fees, Icon: CreditCard, color: "text-violet-700", expandable: true },
         { key: "operating", label: "المصروفات التشغيلية (رواتب وإيجارات وغيرها)", value: t.operating_expenses_total, Icon: BriefcaseBusiness, color: "text-orange-700", expandable: true },
     ];
-    const sales = Number(t.total_sales || 0);
+    const salesValue = finiteFinancialValue(t.total_sales);
+    const salesConversionComplete = t.sales_currency_conversion_complete !== false
+        && data?.currency_conversion?.conversion_complete !== false;
+    const sales = salesValue ?? 0;
     const orderCount = Number(t.total_orders || 0);
-    const averageBasket = orderCount > 0 ? sales / orderCount : 0;
+    const averageBasket = salesConversionComplete && salesValue !== null && orderCount > 0
+        ? sales / orderCount
+        : null;
     const netProfit = finiteFinancialValue(t.net_profit);
     const netMargin = adsSpendAvailable && sales > 0 && netProfit !== null ? (netProfit / sales * 100).toFixed(2) : null;
     const details = {
@@ -557,7 +570,7 @@ export function ProfitCard({ data, loading = false }) {
         operating: <OperatingProfitDetails totals={t} total={t.operating_expenses_total} />,
     };
     const initialLoading = loading && !data;
-    return <Panel className="border-emerald-200" testid="advanced-profit-summary"><div className="flex h-14 items-center justify-between border-b border-emerald-800 bg-emerald-700 px-4 text-white"><h2 className="flex items-center gap-2 font-extrabold"><TrendingUp className="h-5 w-5" />الملخص التنفيذي للأرباح</h2><span className="text-[9px] font-bold text-emerald-100">{initialLoading ? "جارٍ مزامنة الفترة…" : adsSpendProvisional ? "الفترة المحددة · مؤقت" : "الفترة المحددة"}</span></div><div className="grid grid-cols-2 gap-2 border-b border-emerald-100 bg-emerald-50/40 p-3 sm:grid-cols-4"><Metric label="تكلفة الطلب" value={initialLoading || !adsSpendAvailable || t.avg_cost_per_order == null ? "—" : `${money(t.avg_cost_per_order)} ر.س`} Icon={ShoppingBag} tone="bg-blue-50 text-blue-700" /><Metric label="عدد الطلبات" value={initialLoading ? "—" : integer(orderCount)} Icon={ShoppingCart} tone="bg-emerald-50 text-emerald-700" /><Metric label="العائد" value={initialLoading || !adsSpendAvailable || t.overall_roas == null ? "—" : `${Number(t.overall_roas).toFixed(2)}×`} Icon={TrendingUp} tone="bg-violet-50 text-violet-700" /><Metric label="متوسط قيمة سلة المشتريات" value={initialLoading ? "—" : `${money(averageBasket)} ر.س`} Icon={ShoppingBag} tone="bg-rose-50 text-rose-600" /></div><div className="px-4 py-2">{rows.map((row, index) => { const rowValue = finiteFinancialValue(row.value); const rowIncomplete = row.key === "ads" && !adsSpendAvailable; const percentage = index > 0 && sales > 0 && rowValue !== null && !rowIncomplete ? (rowValue / sales * 100).toFixed(2) : null; return <div key={row.key}><button type="button" disabled={!row.expandable} onClick={() => row.expandable && setExpanded((value) => value === row.key ? null : row.key)} aria-expanded={row.expandable ? expanded === row.key : undefined} data-testid={`advanced-profit-row-${row.key}`} dir="rtl" className={`flex min-h-[56px] w-full items-center gap-3 border-b text-right last:border-0 ${row.expandable ? "cursor-pointer rounded-lg hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-200" : "cursor-default"}`}><span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-50 ${row.color}`}><row.Icon className="h-4 w-4" /></span><p className="flex min-w-0 flex-1 items-center gap-1 text-right text-xs font-extrabold text-slate-700">{row.label}{row.expandable && <ChevronDown className={`h-3 w-3 shrink-0 transition-transform ${expanded === row.key ? "rotate-180" : ""}`} />}</p><div dir="ltr" className={`num flex shrink-0 items-baseline gap-1 text-left text-base font-black ${row.color}`}><span>{initialLoading ? "—" : rowIncomplete ? "غير مكتمل" : optionalMoney(row.value)}</span>{!initialLoading && !rowIncomplete && rowValue !== null && <span className="text-[11px] font-extrabold">ر.س</span>}{percentage && <span className="ml-1 rounded-md bg-current/10 px-1.5 py-0.5 text-[9px] opacity-80">{percentage}%</span>}</div></button>{row.expandable && expanded === row.key && details[row.key]}</div>; })}</div><div dir="ltr" className="m-4 flex min-h-[64px] items-center justify-between rounded-xl bg-emerald-600 px-5 text-white"><p className="num flex items-baseline gap-1 text-xl font-black">{!initialLoading && netMargin && <span data-testid="advanced-profit-net-margin" title="هامش صافي الأرباح">{netMargin}%</span>}<span>{initialLoading ? "—" : !adsSpendAvailable ? "غير مكتمل" : optionalMoney(t.net_profit)}</span>{!initialLoading && adsSpendAvailable && netProfit !== null && <span className="text-sm">ر.س</span>}</p><div dir="rtl"><p className="font-black">صافي الأرباح</p><p className="text-[9px] text-emerald-100">{!initialLoading && !adsSpendAvailable ? "بانتظار اكتمال بيانات الإعلانات" : adsSpendProvisional ? "تقديري حتى آخر مزامنة للإعلانات" : "بعد جميع التكاليف والمصروفات"}</p></div></div></Panel>;
+    return <Panel className="border-emerald-200" testid="advanced-profit-summary"><div className="flex h-14 items-center justify-between border-b border-emerald-800 bg-emerald-700 px-4 text-white"><h2 className="flex items-center gap-2 font-extrabold"><TrendingUp className="h-5 w-5" />الملخص التنفيذي للأرباح</h2><span className="text-[9px] font-bold text-emerald-100">{initialLoading ? "جارٍ مزامنة الفترة…" : !salesConversionComplete ? "تحويل العملات غير مكتمل" : adsSpendProvisional ? "الفترة المحددة · مؤقت" : "الفترة المحددة"}</span></div><div className="grid grid-cols-2 gap-2 border-b border-emerald-100 bg-emerald-50/40 p-3 sm:grid-cols-4"><Metric label="تكلفة الطلب" value={initialLoading || !adsSpendAvailable || t.avg_cost_per_order == null ? "—" : `${money(t.avg_cost_per_order)} ر.س`} Icon={ShoppingBag} tone="bg-blue-50 text-blue-700" /><Metric label="عدد الطلبات" value={initialLoading ? "—" : integer(orderCount)} Icon={ShoppingCart} tone="bg-emerald-50 text-emerald-700" /><Metric label="العائد" value={initialLoading || !salesConversionComplete || !adsSpendAvailable || t.overall_roas == null ? "—" : `${Number(t.overall_roas).toFixed(2)}×`} Icon={TrendingUp} tone="bg-violet-50 text-violet-700" /><Metric label="متوسط قيمة سلة المشتريات" value={initialLoading || averageBasket == null ? "—" : `${money(averageBasket)} ر.س`} Icon={ShoppingBag} tone="bg-rose-50 text-rose-600" /></div><div className="px-4 py-2">{rows.map((row, index) => { const rowValue = finiteFinancialValue(row.value); const rowIncomplete = (row.key === "ads" && !adsSpendAvailable) || (row.key === "sales" && !salesConversionComplete); const percentage = index > 0 && sales > 0 && rowValue !== null && !rowIncomplete ? (rowValue / sales * 100).toFixed(2) : null; return <div key={row.key}><button type="button" disabled={!row.expandable} onClick={() => row.expandable && setExpanded((value) => value === row.key ? null : row.key)} aria-expanded={row.expandable ? expanded === row.key : undefined} data-testid={`advanced-profit-row-${row.key}`} dir="rtl" className={`flex min-h-[56px] w-full items-center gap-3 border-b text-right last:border-0 ${row.expandable ? "cursor-pointer rounded-lg hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-200" : "cursor-default"}`}><span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-50 ${row.color}`}><row.Icon className="h-4 w-4" /></span><p className="flex min-w-0 flex-1 items-center gap-1 text-right text-xs font-extrabold text-slate-700">{row.label}{row.expandable && <ChevronDown className={`h-3 w-3 shrink-0 transition-transform ${expanded === row.key ? "rotate-180" : ""}`} />}</p><div dir="ltr" className={`num flex shrink-0 items-baseline gap-1 text-left text-base font-black ${row.color}`}><span>{initialLoading ? "—" : rowIncomplete ? "غير مكتمل" : optionalMoney(row.value)}</span>{!initialLoading && !rowIncomplete && rowValue !== null && <span className="text-[11px] font-extrabold">ر.س</span>}{percentage && <span className="ml-1 rounded-md bg-current/10 px-1.5 py-0.5 text-[9px] opacity-80">{percentage}%</span>}</div></button>{row.expandable && expanded === row.key && details[row.key]}</div>; })}</div><div dir="ltr" className="m-4 flex min-h-[64px] items-center justify-between rounded-xl bg-emerald-600 px-5 text-white"><p className="num flex items-baseline gap-1 text-xl font-black">{!initialLoading && netMargin && <span data-testid="advanced-profit-net-margin" title="هامش صافي الأرباح">{netMargin}%</span>}<span>{initialLoading ? "—" : !salesConversionComplete || !adsSpendAvailable ? "غير مكتمل" : optionalMoney(t.net_profit)}</span>{!initialLoading && salesConversionComplete && adsSpendAvailable && netProfit !== null && <span className="text-sm">ر.س</span>}</p><div dir="rtl"><p className="font-black">صافي الأرباح</p><p className="text-[9px] text-emerald-100">{!initialLoading && !salesConversionComplete ? "بانتظار سعر صرف موثّق من طلب سلة" : !initialLoading && !adsSpendAvailable ? "بانتظار اكتمال بيانات الإعلانات" : adsSpendProvisional ? "تقديري حتى آخر مزامنة للإعلانات" : "بعد جميع التكاليف والمصروفات"}</p></div></div></Panel>;
 }
 
 function orderSource(order) {
@@ -620,11 +633,14 @@ function CustomerAvatar({ customer }) {
 
 export function LatestOrders({ orders, totals = {} }) {
     const orderCount = Number(totals.total_orders || 0);
-    const average = orderCount > 0 ? Number(totals.total_sales || 0) / orderCount : 0;
+    const totalSales = finiteFinancialValue(totals.total_sales);
+    const average = orderCount > 0 && totalSales !== null
+        ? totalSales / orderCount
+        : null;
     return <Panel className="border-sky-200" testid="advanced-latest-orders">
         <div className="flex h-14 items-center justify-between border-b border-sky-700 bg-sky-600 px-4 text-white">
             <h2 className="flex items-center gap-2 font-extrabold"><ShoppingBag className="h-5 w-5" />أحدث الطلبات</h2>
-            <div className="flex items-center gap-3 text-[10px] font-bold"><span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-1"><ShoppingBag className="h-3.5 w-3.5" />{integer(orderCount)} طلب</span><span className="whitespace-nowrap">متوسط: <b className="num">{money(average)} ر.س</b></span></div>
+            <div className="flex items-center gap-3 text-[10px] font-bold"><span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-1"><ShoppingBag className="h-3.5 w-3.5" />{integer(orderCount)} طلب</span><span className="whitespace-nowrap">متوسط: <b className="num">{average == null ? "—" : `${money(average)} ر.س`}</b></span></div>
         </div>
         <div className="divide-y divide-slate-100">{orders.slice(0, 8).map((order) => {
             const id = String(order.order_number);
@@ -652,7 +668,7 @@ export function LatestOrders({ orders, totals = {} }) {
                     </div>
                 </div>
                 <div className="shrink-0 text-left">
-                    <div className="flex items-center justify-end gap-1.5"><SourceBadge order={order} /><span className="num whitespace-nowrap font-semibold text-teal-800">{money(order.totals?.total || order.total_amount)} ر.س</span></div>
+                    <div className="flex items-center justify-end gap-1.5"><SourceBadge order={order} /><OrderCurrencyAmount order={order} /></div>
                     <div className="mt-1 whitespace-nowrap text-[11px] text-slate-400 sm:text-xs">{relativeTime(order.created_at || order.order_date)}</div>
                 </div>
                 <ChevronLeft className="h-4 w-4 shrink-0 text-slate-300" />

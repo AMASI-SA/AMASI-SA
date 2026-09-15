@@ -423,6 +423,8 @@ def test_product_profit_rows_show_complete_fallback_and_missing_costs_safely():
         "product_count": 3,
         "total_units": 6.0,
         "total_sales": 650.0,
+        "known_total_sales": 650.0,
+        "sales_currency_conversion_complete": True,
         "total_cost": 175.0,
         "net_profit": None,
         "has_unpriced_products": True,
