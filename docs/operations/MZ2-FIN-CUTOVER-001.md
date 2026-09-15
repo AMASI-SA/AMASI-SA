@@ -1,6 +1,6 @@
 # MZ2-FIN-CUTOVER-001 — Mezan 2 clean financial cutover
 
-Status: **implementation in progress**
+Status: **source preparation authorized; publish and financial activation not authorized**
 
 Owner: AMASI / Mezan owner
 
@@ -21,8 +21,9 @@ This operation ID is the stable handoff reference for every later session:
 
 ## Decisions already approved
 
-1. Do not migrate historical sales, balances, journals, or the legacy
-   financial position.
+1. Mezan 2 is a new book. Do not import, migrate, recreate, repost, or
+   backfill historical sales, balances, journals, financial movements, or the
+   legacy financial position.
 2. Trusted sources only: Salla, real Qoyod invoices, bank statements,
    provider settlement statements, provider tax invoices, courier statements,
    physical inventory count, employee contracts/payments, supplier evidence,
@@ -48,6 +49,75 @@ This operation ID is the stable handoff reference for every later session:
    or settlement evidence identifies Salla as the settler. Unknown methods are
    held as unclassified with an unapproved fee rule; the system must not guess
    the provider or commission.
+10. The owner authorized preparing all source, tests, reviewed PRs, and the
+    governed Release Guard candidate until only Publish approval remains.
+    This is not Publish authorization and cannot authorize an opening journal,
+    scenario 6, or any other financial write.
+11. Build P01–P08 without Production financial writes, publish the complete
+    candidate once in a dormant state after separate approval, post and verify
+    one opening batch after separate financial approval, then allow normal
+    journals only when `safe_active=true`.
+12. Approval does not transfer between boundaries: source-preparation
+    authorization, Publish authorization, opening-balance authorization, and
+    scenario-6 authorization are separate decisions.
+13. Legacy financial history, balances, journals, and evidence are always
+    prohibited. Only a non-financial definition or setting may be copied as an
+    unapproved draft with explicit provenance; owner review may turn it into
+    new Mezan 2 configuration, never into financial evidence or an opening
+    value.
+
+## Delivery and state contract
+
+Implementation order and operational acceptance are separate:
+
+- P00's prior `COMPLETE` evidence covers only the historical UI foundation
+  shipped by PR #851. Overall P00 is `IN_PROGRESS` because the physical V2
+  ledger foundation below is `OPEN / NOT_IMPLEMENTED`.
+- A later phase may enter implementation after the preceding implementation
+  gate without marking the preceding phase `COMPLETE`.
+- `QUEUED` means work has not started; `IN_PROGRESS` means it has.
+- Code, CI, or merge success may advance `implementation_status`, but never
+  proves Production behavior.
+- A merged phase remains `RUNTIME_ACCEPTANCE_PENDING` until the consolidated
+  runtime is published and its required acceptance is observed.
+- A financial phase cannot reach runtime `PASS` before
+  `safe_active=true`.
+- `COMPLETE` requires merged source, verified Production release, and the
+  phase's complete runtime evidence.
+
+The planned initial release is one governed dormant Publish of all implemented
+paths. Before `safe_active`, every ordinary ledger writer must fail closed
+before changing a draft, ledger, audit, or other financial state. The only
+pre-activation financial writer is the dedicated opening-balance post path,
+and it requires complete evidence, a current balanced preview, independent
+permission, and explicit same-session financial authorization.
+
+The final source commit A is fixed before the final Production merge. The
+governed build/freeze is produced from A, then an intent-only child commit B
+changes only `release/release-intent-v5.json` and points back to A. CI and
+review occur on A/B before the final merge. The merge must preserve both
+commits without squash or rebase, and the push must pass Release Readiness.
+`prepare` and `prepublish` are not source-preparation steps: they run only
+after explicit Publish authorization for the preserved A/B identity.
+
+Five foundation gates block A until fresh tests close them:
+
+- Mezan 2 uses physically separate
+  `accounting_journal_groups_v2`, `accounting_general_ledger_v2`,
+  `accounting_audit_log_v2`, and V2 sequences; `operation_id` is required
+  throughout, `general_ledger` is Legacy archive only, no union/migration/
+  backfill/fallback is permitted, and generic `/ledger` is not an MZ2 API;
+- every Legacy/import/backfill/replay/admin/bulk/manual or alternate writer is
+  denied before any mutation while `safe_active=false`, except the dedicated
+  opening post;
+- journal header, legs, idempotency state, and posted state commit in one
+  all-or-nothing transaction;
+- every financial read is tenant- and cutover-operation-scoped to the verified
+  opening group plus post-cutover journals, never `current_balance` or a
+  legacy summary;
+- every order event creates one complete balanced group containing every
+  applicable sales, VAT, receivable/cash, shipping/fee, COGS, and inventory
+  leg, or fails closed as `needs_review` without partial legs.
 
 ## Provider account model
 
@@ -141,10 +211,35 @@ Direct bank/cash transfers into Tamara or Tabby accounts are prohibited
 because they bypass the canonical BNPL settlement bridge. COD and generic
 bank-transfer labels are also not transferable wallets.
 
+## Complete post-cutover order journal
+
+At the canonical recognition event, one atomic order group must contain every
+applicable leg:
+
+- sales revenue and output VAT;
+- provider/courier/customer receivable, customer advance clearing, or cash;
+- shipping revenue plus shipping cost/fee and related VAT when applicable;
+- COGS and inventory reduction from the approved cost snapshot;
+- stable order/event reference, tenant, `operation_id`, and idempotency key.
+
+A later bank/provider/courier settlement remains its own canonical settlement
+group; it must not recreate the order revenue or COGS. If cost, tax treatment,
+account mapping, or another required leg is unavailable, the recognition event
+becomes `needs_review` and the whole order group fails before mutation. It is
+forbidden to post revenue now and append COGS or another missing leg later as a
+silent repair.
+
 ## Opening-balance rules
 
 Opening balances are a separate, signed cutover operation and are never
 derived from legacy Mezan.
+
+They cover, where applicable: banks/cash, payment and BNPL providers,
+shipping/COD and driver custody, inventory quantity and approved cost,
+supplier payables, customer receivables, payroll/advances/custody/taxes and
+other obligations, and capital/equity/opening result. A non-applicable section
+needs recorded evidence of non-applicability; a missing amount is never
+silently entered as zero.
 
 ### Employees
 
@@ -163,10 +258,22 @@ derived from legacy Mezan.
   to the verified tax point.
 - Delivered but unsettled order: opening receivable from the payment provider
   or shipping company.
+- Open customer invoice or contract: customer receivable only when independent
+  evidence proves the amount at the cutover instant.
 - Order created before cutover but delivered after cutover: normal journal at
   the post-cutover recognition event.
 - Existing real Qoyod invoice before cutover: link/reclassify only; do not
   duplicate the invoice.
+
+### Statements that cross cutover
+
+- The pre-cutover part belongs to the evidenced opening position.
+- A later collection of an opening provider/courier/customer receivable may
+  clear that opening balance, but must not recreate historical sales, fees,
+  VAT, or expenses.
+- Only post-cutover events use the normal event-journal rules.
+- A statement that cannot be split and reconciled at the cutover instant
+  remains `needs_review` and cannot post.
 
 ### Other balances
 
@@ -174,8 +281,9 @@ derived from legacy Mezan.
 - Providers: official unsettled statement at cutover.
 - Couriers: signed COD receivable and shipping payable reconciliation.
 - Inventory: approved physical count multiplied by approved unit cost.
-- Suppliers, annual obligations, rent, and other liabilities: only open,
-  evidenced amounts as of cutover.
+- Suppliers and customers: only open, evidenced balances as of cutover.
+- Payroll, advances, custody, tax, annual obligations, rent, and other
+  liabilities: only open, evidenced amounts as of cutover.
 
 ## VAT control
 
@@ -601,16 +709,24 @@ Purpose: a one-time, controlled cutover wizard, never a recurring data-entry
 screen.
 
 - The first mandatory field is the exact timezone-aware `توقيت القطع`.
-- Checklist: banks/cash, Salla/payment methods, couriers/COD, inventory,
-  suppliers, salaries/obligations, and capital/equity reconciliation.
+- Checklist: banks/cash, Salla/payment methods/BNPL, couriers/COD/driver
+  custody, inventory, suppliers, customer receivables,
+  payroll/advances/custody/tax/other obligations, and capital/equity
+  reconciliation.
 - Every row requires an evidence reference and the same cutover instant.
-- The preview shows total debit, total credit, and difference. Approval stays
-  disabled until all required evidence is present and the batch balances.
+- The preview shows total debit, total credit, and difference. Completing
+  readiness items 1–11 enables approval only; it does not enable posting.
 - Historical sales, historical paid salaries, and the legacy financial
-  position are not re-entered; reviewed pre-cutover net history is represented
-  through opening equity/retained result.
-- Primary action: `اعتماد الرصيد الافتتاحي`, protected by owner/accountant
-  approval and one idempotent operation key.
+  position are not re-entered; the independently evidenced pre-cutover net
+  position is represented through opening equity/retained result.
+- Approval at `11/13` records item 12 without a ledger write. Posting is a
+  separate protected action enabled only at `12/13` for the approved preview.
+- Readiness is `0/13` through `13/13`: cutover time, signed sheet, eight
+  evidence sections, balanced preview, approval, and verified opening group.
+  Successful post and independent verification create item 13 and only then
+  derive `safe_active=true`; item 13 is never a prerequisite for the post.
+- The screen is built before Publish but Production entry begins only after
+  the dormant release is verified. Publish approval is not opening approval.
 
 Reference: [07-opening-balances.png](../assets/mz2-accounting-ui/07-opening-balances.png)
 
@@ -670,47 +786,89 @@ Primary files:
 
 ## Remaining work, in order
 
-### Gate 1 — approve cutover evidence
+### Gate 1 — build every path without Publish
 
-1. Select the exact Riyadh cutover timestamp.
-2. Export and archive trusted bank/provider/courier/Qoyod/inventory/payroll
-   evidence at that timestamp.
-3. Prepare an opening-balance worksheet with source reference per row.
-4. Reconcile debit total to credit total and obtain owner approval.
+1. Finish P01 hardening, including the authoritative permission denial and a
+   central pre-activation write guard.
+2. Build P02–P06 event workflows and reports in implementation order.
+3. Build P07's eight-section evidence wizard, preview, approval, idempotent
+   opening post, and independent verification.
+4. Build P08 activation checks, monitoring, and runtime acceptance harness.
+5. Close the five foundation gates: physical V2 ledger isolation,
+   alternate/Legacy writer bypasses, atomic groups, operation-scoped reads
+   without `current_balance`, and the complete order journal.
+6. Run focused and integrated Backend/Frontend/security/build checks. Keep
+   every unstarted phase `QUEUED` and every started incomplete phase
+   `IN_PROGRESS`.
+7. Do not enter Production evidence or perform any financial write.
 
-### Gate 2 — post opening balances
+### Gate 2 — assemble the governed dormant candidate
 
-1. Add a dedicated preview/approve/post workflow with idempotency key tied to
-   this operation ID.
-2. Post bank, provider, courier, inventory, supplier, employee, tax, and equity
-   opening entries as one controlled cutover batch.
-3. Block legacy Mezan collections from all Mezan 2 financial readers.
-4. Run trial-balance and financial-position reconciliation.
+1. Assemble and review all governed source changes without the Release Intent.
+2. Freeze the final source commit A before the final Production merge.
+3. Run the governed clean/reproducible build and freeze from A.
+4. Create commit B as A's direct child, changing only
+   `release/release-intent-v5.json` and recording A.
+5. Complete CI and review on A/B.
+6. Merge while preserving both A and B without squash or rebase, then push and
+   confirm Release Readiness.
+7. Stop with the preserved candidate awaiting explicit Publish approval. Do
+   not run `prepare`, create a lease, or run `prepublish` before approval.
 
-### Gate 3 — event journals after cutover
+### Gate 3 — one separately authorized dormant Publish
 
-1. Journal trusted Salla order/payment/fulfilment/refund events once each.
-2. Complete Salla settlement posting from official files.
-3. Keep Tamara/Tabby/Emkan on their idempotent settlement bridge; add Emkan
-   connector coverage where official data is available.
-4. Journal courier COD receivable, shipping payable, fees, VAT, remittances,
-   and payments from the canonical shipping workflow.
-5. Complete payroll accrual schedule and payment clearing after cutover.
+1. Obtain explicit authorization for the exact A/B/release identity.
+2. Run Release Guard `prepare` and immediate `prepublish`.
+3. Publish once and require a newer successful deployment signal.
+4. Run Release Guard `verify`; all ordinary financial writers must still
+   fail before mutation because `safe_active=false`.
+5. Run only non-financial Production checks, including permission denial.
+6. Publish approval does not authorize the opening batch or scenario 6.
 
-### Gate 4 — production acceptance
+### Gate 4 — opening evidence and activation
 
-1. Trial balance is balanced.
-2. Provider subledgers reconcile to official statements.
-3. Bank balances reconcile to statements.
-4. Employee salary payable, advances, and custody reconcile per employee.
-5. Inventory reconciles to approved count/cost.
-6. No legacy sales or financial-position numbers appear in Mezan 2.
-7. Financial position contains assets, liabilities, VAT, equity, retained
-   result/current result, and the result is reproducible from journals.
+1. Select the exact timezone-aware cutover instant.
+2. Collect and archive the eight trusted evidence sections at that instant.
+3. Save and reopen each section as a draft; create a versioned balanced
+   preview with source reference per row.
+4. When items 1–11 are complete, obtain explicit approval for the exact
+   preview; that records item 12 without a ledger write.
+5. At `12/13`, obtain the required financial authorization and post one
+   opening group. Item 13 is the result, not a precondition, of successful
+   posting and independent verification.
+6. Only after item 13 is verified may the system display `13/13` and derive
+   `safe_active=true`.
+
+### Gate 5 — post-activation runtime acceptance
+
+1. Execute scenario 6 moved from P01: a separately authorized settlement
+   after cutover, or collection of an evidenced opening receivable, without
+   recreating pre-cutover history.
+2. Exercise each P02–P06 path once with stable idempotency and open its
+   journal/evidence.
+3. Reconcile provider, bank, courier, employee, customer, supplier, inventory,
+   tax, and equity balances to their evidence.
+4. Prove that disabling Legacy access does not change results and that no
+   historical backfill runs.
+5. Complete the recorded stability window before changing any phase to
+   `COMPLETE`.
 
 ## Safety constraints for future sessions
 
 - Do not post production financial data from this document alone.
+- Preparing source through a governed release candidate is authorized; Publish
+  remains a separate approval boundary.
+- Publish approval never authorizes the opening batch, scenario 6, reversal,
+  or another financial write.
+- Do not permit an ordinary ledger writer before `safe_active=true`; the
+  opening path is the only narrowly controlled pre-activation exception.
+- Do not freeze A while physical V2 ledger isolation, a legacy/alternate
+  writer bypass, partial journal transaction, cross-operation read,
+  `current_balance` dependency, or incomplete order journal remains open.
+- Do not copy Legacy financial history, balances, journals, or evidence.
+  A non-financial definition/setting may exist only as an unapproved
+  provenance-carrying draft until owner review makes it new Mezan 2
+  configuration.
 - Do not guess a cutover date or an opening balance.
 - Do not convert every provider movement into a generic transfer.
 - Do not let saving a tax invoice double-post a settlement.
@@ -730,7 +888,17 @@ Use this exact message:
 > them across the application. Treat the images as design references and the
 > written workflow/permissions as authoritative. Inspect the latest merged
 > commit and tests, report what is implemented versus design-only and identify
-> the current cutover gate before changing code. Continue only the next
-> incomplete approved item. Do not import legacy Mezan balances or sales, do
-> not guess the cutover timestamp or opening values, and do not post production
-> opening entries without the signed evidence sheet and explicit approval.
+> the current implementation gate before changing code. Source preparation
+> through a governed dormant release candidate is authorized, but do not
+> Publish. Continue the next queued implementation item without Production
+> financial writes and never mark a phase COMPLETE from code/CI alone. Do not
+> import, migrate, recreate, repost, or backfill legacy Mezan financial
+> history, balances, journals, or evidence. Close alternate writer bypasses,
+> atomic-group, operation-scoped read/no-current_balance, and complete-order-
+> journal gates before freezing source A. Build/freeze A, create intent-only B,
+> review both, and preserve them through the final merge; do not run prepare
+> before Publish approval. Do not guess the cutover timestamp or opening
+> values. After a
+> separately authorized and verified dormant Publish, the opening batch still
+> requires its own signed evidence sheet and explicit financial approval;
+> scenario 6 follows only after verified opening and `safe_active=true`.
