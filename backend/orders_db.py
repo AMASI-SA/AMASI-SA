@@ -103,6 +103,7 @@ TRACKED_FIELDS = (
     "payment_receipt_url",
     "customer_name",
     "customer_mobile",
+    "customer_email",
     "payment_method",
 
     # Salla webhook shipping fields.

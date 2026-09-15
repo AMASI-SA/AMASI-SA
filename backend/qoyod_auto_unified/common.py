@@ -14,6 +14,7 @@ _TWO_PLACES = Decimal("0.01")
 RETRYABLE_SYNC_FAILURE_CODES = frozenset({
     "salla_status_refresh_failed",
     "authoritative_order_missing_after_resync",
+    "authoritative_customer_identity_missing",
     "authoritative_payment_method_still_pending",
     "authoritative_payment_needs_verification",
     "legacy_sender_inbox_row_missing",
