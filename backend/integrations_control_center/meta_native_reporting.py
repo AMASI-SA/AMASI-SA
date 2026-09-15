@@ -4,6 +4,7 @@ The module reads only the encrypted Meta OAuth credential and owner-selected
 ad accounts. It stores provider evidence in an isolated V2 analytical collection
 and never writes campaigns, legacy ad tables, accounting, or Qoyod.
 """
+
 from __future__ import annotations
 
 import json
@@ -24,6 +25,13 @@ from .meta_campaign_reporting import (
     ensure_meta_campaign_reporting_indexes,
     fetch_meta_campaign_catalog,
     sync_meta_campaign_day,
+)
+from .meta_entity_reporting import (
+    ensure_meta_entity_reporting_indexes,
+    fetch_meta_entity_catalog,
+    persist_meta_entity_snapshots,
+    record_meta_entity_coverage,
+    sync_meta_entity_day,
 )
 from .meta_oauth_security import (
     META_CREDENTIALS_COLLECTION,
@@ -160,7 +168,10 @@ def _graph_error(response: httpx.Response, operation: str) -> MetaReportingError
             "Meta rejected or expired the saved access token.",
             status_code=409,
             retryable=False,
-            result={"provider_code": provider_code, "provider_subcode": provider_subcode},
+            result={
+                "provider_code": provider_code,
+                "provider_subcode": provider_subcode,
+            },
         )
     if response.status_code == 429 or provider_code in {4, 17, 32, 613}:
         return MetaReportingError(
@@ -168,7 +179,10 @@ def _graph_error(response: httpx.Response, operation: str) -> MetaReportingError
             "Meta temporarily rate-limited reporting requests.",
             status_code=429,
             retryable=True,
-            result={"provider_code": provider_code, "provider_subcode": provider_subcode},
+            result={
+                "provider_code": provider_code,
+                "provider_subcode": provider_subcode,
+            },
         )
     return MetaReportingError(
         f"{operation}_http_{response.status_code}",
@@ -272,6 +286,7 @@ async def _fetch_day(
             ),
             "time_increment": 1,
             "level": "account",
+            "action_report_time": "conversion",
             "use_account_attribution_setting": "true",
             "use_unified_attribution_setting": "true",
             "limit": 100,
@@ -350,6 +365,7 @@ async def run_meta_reporting_sync(
     now_value = now().astimezone(timezone.utc)
     await ensure_meta_reporting_indexes(db)
     await ensure_meta_campaign_reporting_indexes(db)
+    await ensure_meta_entity_reporting_indexes(db)
     access_token = await _credential(db, user_id, now_value)
     accounts = await _accounts(db, user_id)
     days = _dates(payload, now_value.date())
@@ -362,8 +378,16 @@ async def run_meta_reporting_sync(
         for account in accounts:
             saved = 0
             campaign_saved = 0
+            entity_saved = {"adset": 0, "ad": 0}
+            snapshot_saved = 0
             account_errors: list[dict[str, Any]] = []
             campaign_catalog: dict[str, dict[str, Any]] = {}
+            entity_catalog: dict[str, dict[str, dict[str, Any]]] = {
+                "campaign": {},
+                "adset": {},
+                "ad": {},
+            }
+            entity_catalog_ready = False
             try:
                 catalog_result = await fetch_meta_campaign_catalog(
                     client, access_token, account
@@ -383,13 +407,57 @@ async def run_meta_reporting_sync(
                 }
                 account_errors.append(item)
                 error_items.append(item)
+            if not any(
+                item.get("kind") == "campaign_catalog" for item in account_errors
+            ):
+                try:
+                    entity_catalog_result = await fetch_meta_entity_catalog(
+                        client,
+                        access_token,
+                        account,
+                        campaign_catalog=campaign_catalog,
+                    )
+                    provider_calls += int(
+                        entity_catalog_result.get("provider_calls") or 0
+                    )
+                    entity_catalog = entity_catalog_result.get("entities") or {}
+                    snapshot_saved = await persist_meta_entity_snapshots(
+                        db,
+                        user_id,
+                        account,
+                        entity_catalog=entity_catalog,
+                        observed_at=observed_at,
+                    )
+                    entity_catalog_ready = True
+                except MetaCampaignReportingError as exc:
+                    provider_calls += int(exc.provider_calls or 0)
+                    if exc.code == "meta_needs_reauth":
+                        raise MetaReportingError(
+                            exc.code, exc.message, status_code=exc.status_code
+                        ) from exc
+                    item = {
+                        "ad_account_id": account["ad_account_id"],
+                        "kind": "entity_catalog",
+                        "code": exc.code,
+                    }
+                    account_errors.append(item)
+                    error_items.append(item)
             for day in days:
                 try:
                     row = await _fetch_day(client, access_token, account, day)
                     provider_calls += 1
-                    currency = str(row.get("currency") or account.get("currency") or "").strip().upper() or None
+                    currency = (
+                        str(row.get("currency") or account.get("currency") or "")
+                        .strip()
+                        .upper()
+                        or None
+                    )
                     fx_rate, fx_source = _fx_to_sar(currency)
-                    spend_sar = round(row["spend_native"] * fx_rate, 2) if fx_rate is not None else None
+                    spend_sar = (
+                        round(row["spend_native"] * fx_rate, 2)
+                        if fx_rate is not None
+                        else None
+                    )
                     purchase_value_sar = (
                         round(row["purchase_value_native"] * fx_rate, 2)
                         if fx_rate is not None
@@ -425,7 +493,9 @@ async def run_meta_reporting_sync(
                                 "purchase_value_native": row["purchase_value_native"],
                                 "purchase_value_sar": purchase_value_sar,
                                 "purchase_action_type": row["purchase_action_type"],
-                                "purchase_value_action_type": row["purchase_value_action_type"],
+                                "purchase_value_action_type": row[
+                                    "purchase_value_action_type"
+                                ],
                                 "attribution_mode": "account_setting+unified",
                                 "empty_provider_row": row["empty"],
                                 "source_mode": META_REPORTING_SOURCE_MODE,
@@ -453,8 +523,18 @@ async def run_meta_reporting_sync(
                         provider_calls += int(
                             campaign_result.get("provider_calls") or 0
                         )
-                        campaign_saved += int(
-                            campaign_result.get("rows_saved") or 0
+                        campaign_saved += int(campaign_result.get("rows_saved") or 0)
+                        campaign_fx, _ = _fx_to_sar(str(account.get("currency") or ""))
+                        await record_meta_entity_coverage(
+                            db,
+                            user_id,
+                            account,
+                            day,
+                            entity_type="campaign",
+                            provider_rows=int(campaign_result.get("rows_saved") or 0),
+                            catalog_entities=len(entity_catalog.get("campaign") or {}),
+                            observed_at=observed_at,
+                            amount_complete=campaign_fx is not None,
                         )
                     except MetaCampaignReportingError as exc:
                         provider_calls += int(exc.provider_calls or 0)
@@ -472,6 +552,44 @@ async def run_meta_reporting_sync(
                         }
                         account_errors.append(item)
                         error_items.append(item)
+                    if entity_catalog_ready:
+                        for entity_type in ("adset", "ad"):
+                            try:
+                                entity_result = await sync_meta_entity_day(
+                                    db,
+                                    user_id,
+                                    client,
+                                    access_token,
+                                    account,
+                                    day,
+                                    entity_type=entity_type,
+                                    entity_catalog=(
+                                        entity_catalog.get(entity_type) or {}
+                                    ),
+                                    observed_at=observed_at,
+                                )
+                                provider_calls += int(
+                                    entity_result.get("provider_calls") or 0
+                                )
+                                entity_saved[entity_type] += int(
+                                    entity_result.get("rows_saved") or 0
+                                )
+                            except MetaCampaignReportingError as exc:
+                                provider_calls += int(exc.provider_calls or 0)
+                                if exc.code == "meta_needs_reauth":
+                                    raise MetaReportingError(
+                                        exc.code,
+                                        exc.message,
+                                        status_code=exc.status_code,
+                                    ) from exc
+                                item = {
+                                    "ad_account_id": account["ad_account_id"],
+                                    "date": day.isoformat(),
+                                    "kind": f"{entity_type}_insights",
+                                    "code": exc.code,
+                                }
+                                account_errors.append(item)
+                                error_items.append(item)
                 except MetaReportingError as exc:
                     provider_calls += 1
                     if exc.code == "meta_needs_reauth":
@@ -495,7 +613,9 @@ async def run_meta_reporting_sync(
                     "$set": {
                         "performance_rows_saved": saved,
                         "has_data": saved > 0,
-                        "last_sync_at": observed_at if complete else account.get("last_sync_at"),
+                        "last_sync_at": (
+                            observed_at if complete else account.get("last_sync_at")
+                        ),
                         "data_delay_minutes": 0 if complete else None,
                         "health_score": 100 if complete else 70,
                         "source_mode": META_REPORTING_SOURCE_MODE,
@@ -511,6 +631,9 @@ async def run_meta_reporting_sync(
                     "timezone": account.get("timezone"),
                     "rows_saved": saved,
                     "campaign_rows_saved": campaign_saved,
+                    "entity_snapshot_rows_saved": snapshot_saved,
+                    "adset_rows_saved": entity_saved["adset"],
+                    "ad_rows_saved": entity_saved["ad"],
                     "errors": len(account_errors),
                     "complete": complete,
                 }
@@ -520,6 +643,13 @@ async def run_meta_reporting_sync(
     campaign_rows_saved = sum(
         item.get("campaign_rows_saved", 0) for item in account_summaries
     )
+    entity_snapshot_rows_saved = sum(
+        item.get("entity_snapshot_rows_saved", 0) for item in account_summaries
+    )
+    adset_rows_saved = sum(
+        item.get("adset_rows_saved", 0) for item in account_summaries
+    )
+    ad_rows_saved = sum(item.get("ad_rows_saved", 0) for item in account_summaries)
     accounts_complete = sum(bool(item["complete"]) for item in account_summaries)
     if rows_saved == 0:
         raise MetaReportingError(
@@ -535,7 +665,9 @@ async def run_meta_reporting_sync(
             },
         )
 
-    sync_status = "complete" if accounts_complete == len(account_summaries) else "partial"
+    sync_status = (
+        "complete" if accounts_complete == len(account_summaries) else "partial"
+    )
     await db.mezan_integrations_v2.update_one(
         {"user_id": user_id, "provider": META_PROVIDER_ID},
         {
@@ -576,6 +708,9 @@ async def run_meta_reporting_sync(
         "accounts_complete": accounts_complete,
         "rows_saved": rows_saved,
         "campaign_rows_saved": campaign_rows_saved,
+        "entity_snapshot_rows_saved": entity_snapshot_rows_saved,
+        "adset_rows_saved": adset_rows_saved,
+        "ad_rows_saved": ad_rows_saved,
         "errors_count": len(error_items),
         "provider_calls": provider_calls,
         "items": account_summaries,

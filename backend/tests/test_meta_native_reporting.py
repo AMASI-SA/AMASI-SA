@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import pytest
 
 from integrations_control_center import meta_account_selection as selection
 from integrations_control_center import meta_campaign_reporting as campaign_reporting
+from integrations_control_center import meta_entity_reporting as entity_reporting
 from integrations_control_center import meta_native_reporting as reporting
 from integrations_control_center import meta_native_reporting_routes as routes
+from unified_marketing import gateway as unified_gateway
 
 
 class FakeResult:
@@ -22,7 +24,9 @@ def _matches(row, query):
         if isinstance(expected, dict):
             if "$in" in expected and actual not in expected["$in"]:
                 return False
-            if "$gt" in expected and not (actual is not None and actual > expected["$gt"]):
+            if "$gt" in expected and not (
+                actual is not None and actual > expected["$gt"]
+            ):
                 return False
             continue
         if actual != expected:
@@ -81,6 +85,7 @@ class FakeCollection:
         return object()
 
     async def find_one(self, query, projection=None, sort=None):
+        self.db.reads.append((self.name, "find_one", deepcopy(query)))
         rows = [row for row in self.rows if _matches(row, query)]
         if sort:
             for key, direction in reversed(sort):
@@ -91,9 +96,11 @@ class FakeCollection:
         return deepcopy(rows[0]) if rows else None
 
     def find(self, query, projection=None):
+        self.db.reads.append((self.name, "find", deepcopy(query)))
         return FakeCursor([row for row in self.rows if _matches(row, query)])
 
     async def count_documents(self, query):
+        self.db.reads.append((self.name, "count_documents", deepcopy(query)))
         return sum(_matches(row, query) for row in self.rows)
 
     async def delete_many(self, query):
@@ -128,6 +135,7 @@ class FakeDB:
         self.rows = {}
         self.writes = []
         self.indexes = []
+        self.reads = []
 
     def __getitem__(self, name):
         return FakeCollection(name, self)
@@ -200,9 +208,89 @@ class FakeCampaignInsightsResponse:
                     "account_currency": "USD",
                     "date_start": "2026-07-30",
                     "date_stop": "2026-07-30",
-                    "actions": [
-                        {"action_type": "omni_purchase", "value": "21"}
+                    "actions": [{"action_type": "omni_purchase", "value": "21"}],
+                    "action_values": [
+                        {"action_type": "omni_purchase", "value": "620.40"}
                     ],
+                }
+            ]
+        }
+
+
+class FakeAdSetCatalogResponse:
+    status_code = 200
+
+    def json(self):
+        return {
+            "data": [
+                {
+                    "id": "adset-1",
+                    "name": "Meta Prospecting Set",
+                    "campaign_id": "campaign-1",
+                    "status": "ACTIVE",
+                    "effective_status": "ACTIVE",
+                    "daily_budget": "25000",
+                    "bid_amount": "700",
+                    "bid_strategy": "LOWEST_COST_WITH_BID_CAP",
+                    "billing_event": "IMPRESSIONS",
+                    "optimization_goal": "OFFSITE_CONVERSIONS",
+                }
+            ]
+        }
+
+
+class FakeAdCatalogResponse:
+    status_code = 200
+
+    def json(self):
+        return {
+            "data": [
+                {
+                    "id": "ad-1",
+                    "name": "Meta Product Ad",
+                    "campaign_id": "campaign-1",
+                    "adset_id": "adset-1",
+                    "status": "ACTIVE",
+                    "effective_status": "ACTIVE",
+                    "creative": {"id": "creative-1", "name": "Product Creative"},
+                }
+            ]
+        }
+
+
+class FakeEntityInsightsResponse:
+    status_code = 200
+
+    def __init__(self, level):
+        self.level = level
+
+    def json(self):
+        identity = (
+            {
+                "adset_id": "adset-1",
+                "adset_name": "Meta Prospecting Set",
+            }
+            if self.level == "adset"
+            else {
+                "ad_id": "ad-1",
+                "ad_name": "Meta Product Ad",
+                "adset_id": "adset-1",
+                "adset_name": "Meta Prospecting Set",
+            }
+        )
+        return {
+            "data": [
+                {
+                    **identity,
+                    "campaign_id": "campaign-1",
+                    "campaign_name": "Meta Sales Campaign",
+                    "spend": "120.50",
+                    "impressions": "15000",
+                    "clicks": "510",
+                    "account_currency": "USD",
+                    "date_start": "2026-07-30",
+                    "date_stop": "2026-07-30",
+                    "actions": [{"action_type": "omni_purchase", "value": "21"}],
                     "action_values": [
                         {"action_type": "omni_purchase", "value": "620.40"}
                     ],
@@ -227,8 +315,15 @@ class FakeHttpClient:
         type(self).calls.append((url, deepcopy(kwargs)))
         if url.endswith("/campaigns"):
             return FakeCampaignCatalogResponse()
-        if (kwargs.get("params") or {}).get("level") == "campaign":
+        if url.endswith("/adsets"):
+            return FakeAdSetCatalogResponse()
+        if url.endswith("/ads"):
+            return FakeAdCatalogResponse()
+        level = (kwargs.get("params") or {}).get("level")
+        if level == "campaign":
             return FakeCampaignInsightsResponse()
+        if level in {"adset", "ad"}:
+            return FakeEntityInsightsResponse(level)
         return FakeResponse()
 
 
@@ -295,7 +390,11 @@ async def test_account_selection_saves_only_known_accounts():
         selection.MetaAccountSelectionInput(account_ids=["111"]),
     )
     assert result["selected_count"] == 1
-    selected = [row for row in db.rows["mezan_integration_accounts_v2"] if row.get("mezan_selected")]
+    selected = [
+        row
+        for row in db.rows["mezan_integration_accounts_v2"]
+        if row.get("mezan_selected")
+    ]
     assert [row["external_account_id"] for row in selected] == ["act_111"]
     run = db.rows["mezan_integration_sync_runs_v2"][0]
     assert run["summary"]["provider_write_reached"] is False
@@ -303,7 +402,31 @@ async def test_account_selection_saves_only_known_accounts():
 
 
 @pytest.mark.asyncio
-async def test_native_reporting_persists_only_selected_source_rows(configured, monkeypatch):
+async def test_unified_meta_identity_fails_closed_for_missing_or_ambiguous_selection():
+    db = FakeDB()
+    _seed_accounts(db)
+    db.rows["mezan_integration_accounts_v2"][0]["mezan_selected"] = False
+    assert (
+        await unified_gateway.load_unified_marketing_account_identity(
+            db, "owner-1", provider="meta_ads"
+        )
+        is None
+    )
+
+    for row in db.rows["mezan_integration_accounts_v2"]:
+        row["mezan_selected"] = True
+    with pytest.raises(
+        ValueError, match="unified_marketing_meta_selected_account_ambiguous"
+    ):
+        await unified_gateway.load_unified_marketing_account_identity(
+            db, "owner-1", provider="meta_ads"
+        )
+
+
+@pytest.mark.asyncio
+async def test_native_reporting_persists_only_selected_source_rows(
+    configured, monkeypatch
+):
     db = FakeDB()
     db.rows["mezan_meta_oauth_credentials_v2"] = [
         {
@@ -330,6 +453,9 @@ async def test_native_reporting_persists_only_selected_source_rows(configured, m
     assert result["accounts_complete"] == 1
     assert result["rows_saved"] == 1
     assert result["campaign_rows_saved"] == 1
+    assert result["entity_snapshot_rows_saved"] == 3
+    assert result["adset_rows_saved"] == 1
+    assert result["ad_rows_saved"] == 1
     assert result["source_only"] is True
     assert result["provider_write_reached"] is False
     assert result["campaign_write_reached"] is False
@@ -361,9 +487,7 @@ async def test_native_reporting_persists_only_selected_source_rows(configured, m
     assert reporting.META_REPORTING_COLLECTION in written_collections
     assert campaign_reporting.META_CAMPAIGN_REPORTING_COLLECTION in written_collections
 
-    campaign_rows = db.rows[
-        campaign_reporting.META_CAMPAIGN_REPORTING_COLLECTION
-    ]
+    campaign_rows = db.rows[campaign_reporting.META_CAMPAIGN_REPORTING_COLLECTION]
     assert len(campaign_rows) == 1
     campaign = campaign_rows[0]
     assert campaign["campaign_id"] == "campaign-1"
@@ -376,6 +500,32 @@ async def test_native_reporting_persists_only_selected_source_rows(configured, m
     assert campaign["source_only"] is True
     assert campaign["accounting_eligible"] is False
 
+    snapshots = db.rows[entity_reporting.META_ENTITY_SNAPSHOT_COLLECTION]
+    assert [row["external_id"] for row in snapshots] == [
+        "campaign-1",
+        "adset-1",
+        "ad-1",
+    ]
+    adset_snapshot = next(row for row in snapshots if row["entity_type"] == "adset")
+    assert adset_snapshot["campaign_id"] == "campaign-1"
+    assert adset_snapshot["bid_amount_native"] == 7.0
+    assert adset_snapshot["settings_fields_present"] == list(
+        entity_reporting.CATALOG_FIELDS["adset"]
+    )
+    ad_snapshot = next(row for row in snapshots if row["entity_type"] == "ad")
+    assert ad_snapshot["ad_group_id"] == "adset-1"
+    assert ad_snapshot["creative_id"] == "creative-1"
+
+    entity_facts = db.rows[entity_reporting.META_ENTITY_FACT_COLLECTION]
+    assert len(entity_facts) == 2
+    assert {row["entity_type"] for row in entity_facts} == {"adset", "ad"}
+    assert all(row["source_only"] is True for row in entity_facts)
+    assert all(row["spend_sar"] == 451.88 for row in entity_facts)
+    coverage = db.rows[entity_reporting.META_ENTITY_COVERAGE_COLLECTION]
+    assert {row["entity_type"] for row in coverage} == {"campaign", "adset", "ad"}
+    assert all(row["status"] == "complete" for row in coverage)
+    assert all(row["amount_complete"] is True for row in coverage)
+
     url, kwargs = next(
         (url, kwargs)
         for url, kwargs in FakeHttpClient.calls
@@ -386,6 +536,82 @@ async def test_native_reporting_persists_only_selected_source_rows(configured, m
     assert kwargs["params"]["appsecret_proof"]
     assert kwargs["params"]["use_account_attribution_setting"] == "true"
     assert kwargs["params"]["use_unified_attribution_setting"] == "true"
+
+    provider_calls_before = len(FakeHttpClient.calls)
+    database_writes_before = len(db.writes)
+    db.reads = []
+    identity = await unified_gateway.load_unified_marketing_account_identity(
+        db, "owner-1", provider="meta_ads"
+    )
+    ad_group_report = await unified_gateway.load_unified_marketing_entity_report(
+        db,
+        "owner-1",
+        provider="meta_ads",
+        entity_level="ad_group",
+        date_from=datetime(2026, 7, 30).date(),
+        date_to=datetime(2026, 7, 30).date(),
+        timezone_name="Asia/Riyadh",
+        include_stale=False,
+    )
+    daily = await unified_gateway.load_unified_marketing_entity_daily_series(
+        db,
+        "owner-1",
+        provider="meta_ads",
+        entity_level="ad_group",
+        entity_ids=["adset-1"],
+        date_from=datetime(2026, 7, 30).date(),
+        date_to=datetime(2026, 7, 30).date(),
+        timezone_name="Asia/Riyadh",
+    )
+    metadata = await unified_gateway.load_unified_marketing_entity_metadata(
+        db,
+        "owner-1",
+        provider="meta_ads",
+        entity_level="ad_group",
+        entity_id="adset-1",
+    )
+
+    assert identity["id"] == "act_111"
+    assert ad_group_report["provider"] == "meta_ads"
+    assert ad_group_report["entity_level"] == "ad_group"
+    assert ad_group_report["rows"][0]["entity"] == {
+        "level": "ad_group",
+        "provider_level": "adset",
+        "id": "adset-1",
+        "name": "Meta Prospecting Set",
+        "status": "ACTIVE",
+        "active": True,
+        "campaign_id": "campaign-1",
+        "ad_group_id": "adset-1",
+    }
+    assert (
+        ad_group_report["management_context"]["adset-1"]["settings_evidence_status"]
+        == "complete"
+    )
+    assert len(daily["rows"]) == 1
+    assert daily["rows"][0]["period"]["date_from"] == "2026-07-30"
+    assert metadata["creative_id"] is None
+    assert metadata["quality"]["read_only"] is True
+    assert len(db.reads) == 12
+    assert len(FakeHttpClient.calls) == provider_calls_before
+    assert len(db.writes) == database_writes_before
+
+    adset_fact = next(row for row in entity_facts if row["entity_type"] == "adset")
+    adset_fact["source_only"] = False
+    rejected = await unified_gateway.load_unified_marketing_entity_report(
+        db,
+        "owner-1",
+        provider="meta_ads",
+        entity_level="ad_group",
+        date_from=datetime(2026, 7, 30).date(),
+        date_to=datetime(2026, 7, 30).date(),
+        timezone_name="Asia/Riyadh",
+        include_stale=False,
+    )
+    assert rejected["totals"]["quality"]["sync_status"] == "partial"
+    assert rejected["totals"]["quality"]["reconciliation_status"] == "partial"
+    assert len(FakeHttpClient.calls) == provider_calls_before
+    assert len(db.writes) == database_writes_before
 
 
 @pytest.mark.asyncio
