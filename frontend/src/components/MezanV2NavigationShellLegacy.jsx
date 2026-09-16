@@ -14,6 +14,7 @@ import {
     Queue,
     Receipt,
     Robot,
+    SignOut,
     Storefront,
     UsersThree,
     X,
@@ -243,7 +244,7 @@ function SectionButton({ section, active, open, onToggle, onNavigate }) {
 }
 
 export default function MezanV2NavigationShell({ location, onOpenAll, searchForm = null, notificationControl = null }) {
-    const { user } = useOptionalAuth() || {};
+    const { user, logout } = useOptionalAuth() || {};
     const isMetaReviewer = user?.role === "meta_reviewer";
     const sections = isMetaReviewer ? META_REVIEWER_NAV_SECTIONS : MEZAN_V2_NAV_SECTIONS;
     const safeSearchForm = isMetaReviewer ? null : searchForm;
@@ -293,6 +294,12 @@ export default function MezanV2NavigationShell({ location, onOpenAll, searchForm
                 </div>
 
                 <div className="flex shrink-0 items-center gap-1.5">
+                    {isMetaReviewer && typeof logout === "function" && (
+                        <button type="button" onClick={() => logout()} className="inline-flex h-10 shrink-0 items-center gap-1 rounded-xl px-2 text-xs font-bold text-slate-100 transition hover:bg-white/10 hover:text-white sm:h-11" aria-label="تسجيل الخروج" data-testid="mezan-v2-reviewer-signout">
+                            <SignOut size={21} weight="bold" />
+                            <span className="hidden sm:inline">تسجيل الخروج</span>
+                        </button>
+                    )}
                     <div className="relative shrink-0">
                         <button type="button" onClick={() => { setOpenSectionId(null); setSearchOpen((value) => !value); }} className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-slate-100 transition hover:border-emerald-300 hover:bg-white/10 hover:text-emerald-200 sm:h-11 sm:w-11" aria-expanded={searchOpen} aria-controls="mezan-v2-search-dropdown" aria-label={searchOpen ? "إغلاق بحث الطلبات" : "فتح بحث الطلبات"} data-testid="mezan-v2-search-trigger">{searchOpen ? <X size={21} weight="bold" /> : <MagnifyingGlass size={21} weight="bold" />}</button>
                         {searchOpen && safeSearchForm && <div id="mezan-v2-search-dropdown" className="absolute left-0 top-[calc(100%+0.65rem)] z-[80] w-[calc(100vw-1rem)] max-w-[34rem] rounded-2xl border border-slate-200 bg-white p-3 shadow-2xl sm:w-[32rem]" data-testid="mezan-v2-search-dropdown">{safeSearchForm}</div>}

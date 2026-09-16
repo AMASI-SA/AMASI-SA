@@ -159,5 +159,18 @@
       "blocked_by": "P07",
       "exit_gate": "LOCKED"
     }
-  ]
+  ],
+  "preview_acceptance": {
+    "last_updated_date": "2026-09-16",
+    "status": "PARTIAL",
+    "scenario_5": "BLOCKED_NEEDS_INDEPENDENT_VIEWER",
+    "current_session_role": "meta_reviewer",
+    "current_session_settlement_view": "DENIED",
+    "synthetic_employee_records": 2,
+    "independent_viewer_login_verified": false,
+    "posting_endpoint_403_verified": false,
+    "financial_writes_by_this_session": 0,
+    "production_changed": false,
+    "continuation": "docs/operations/PREVIEW-REVIEWER-SIGNOUT-20260916.md"
+  }
 }
