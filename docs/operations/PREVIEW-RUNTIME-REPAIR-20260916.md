@@ -164,7 +164,7 @@ No Production authentication configuration or source was changed.
 - `scripts/preview_password_runtime.py` is installed only at
   `/opt/mezan-preview-runtime-20260916/preview_password_runtime.py`.
 - Active adapter SHA-256:
-  `eeb4feccd175a2faeb95df98b91aefa36768db797ec674b104d07c66b1b75403`.
+  `02e3dbac817c44da6b009396d472d5f5223f79c7db8c86088df70d229339b10b`.
 - Supervisor changes only the Preview backend command to the adapter's `serve` action.
   The base /app source and identity files are unchanged.
 - The adapter refuses another container hostname, a non-Preview frontend origin,
@@ -191,7 +191,7 @@ service was restarted and freshly verified; no release guard was bypassed.
 
 - Final acceptance and existing session-revocation regression command:
   `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/app/backend:/opt/mezan-preview-runtime-20260916 /root/.venv/bin/python -B -m pytest -q -p no:cacheprovider /opt/mezan-preview-runtime-20260916/test_preview_password_runtime.py /app/backend/tests/test_auth_session_revocation_v1.py`
-  => **24 passed** in 1.19s; one existing dependency deprecation warning.
+  => **25 passed** in 1.20s; one existing dependency deprecation warning.
 - Owner/Admin/accountant/viewer login, authenticated-user resolution and refresh need no second factor;
   wrong passwords, disabled/inactive accounts and revoked sessions still fail.
 - Non-Preview runtime and Production request origins fail closed.
@@ -201,7 +201,7 @@ service was restarted and freshly verified; no release guard was bypassed.
   `second_factor_required:false`, `session_signing:preview_only`.
 - Base release health: all five source/identity verification flags true.
 - A local request with Production Host was rejected with 403; no Production HTTP request was sent.
-- Frontend PID 117486 and Mongo PID 75151 unchanged; corrected backend PID 128935 running.
+- Frontend PID 117486 and Mongo PID 75151 unchanged; corrected backend PID 130800 running.
 - /app tracked and staged diffs empty; unrelated Supervisor sections byte-identical.
 - Bootstrap secret absent; independent session key mode 0600.
 - Sanitized evidence: `/opt/mezan-preview-runtime-20260916/password-verification.json`.
@@ -242,3 +242,31 @@ without admitting an invalid session. No real credentials were used in this prob
 
 Current checkpoint before interactive login: 63eb8f7a51c2bf0c8cec4c35d27ef4e187572327.
 Browser account login still requires a fresh secure credential submission after this correction.
+
+
+### Verified gateway Origin — final cookie-session recovery
+
+The cloud browser's remaining refresh 403 was traced by a one-time, credential-free
+boundary diagnostic. The request Host was allowed; the gateway supplied HTTPS Origin
+`salla-analytics.cluster-12.preview.emergentcf.cloud`, the same Preview upstream already
+identified in the original outage. No cookies, passwords, tokens or request bodies were logged.
+
+The final adapter trusts exactly the public Preview origin and this verified Preview gateway
+origin. It configures CORS accordingly and retains the original BrowserSecurityMiddleware
+with this two-origin CSRF allowlist. It does not disable CSRF or allow Production origins.
+The adapter still refuses every other runtime host and requires loopback Mongo and pinned
+base auth sources.
+
+Final code/test checkpoint: `9ed29085b738811e9d09d69d017a48868e2d4cfb`.
+Fresh focused tests: **25 passed**, 1 existing dependency warning, 1.20s.
+Live ready/health/policy: HTTP 200, ready true, all five base release flags true.
+Deliberately invalid refresh-cookie probes: public Preview 401; gateway Preview 401;
+Production Origin 403. Thus both Preview origins reach session validation while invalid
+sessions and Production-origin requests remain rejected.
+
+Fresh cloud-browser evidence: the session-error screen cleared after retry and redirected to
+the ordinary Preview /login email/password form. No successful account login is claimed yet.
+Current backend PID 130800; frontend and Mongo unchanged; /app tracked/staged diffs empty.
+
+Next: one secure email/password submission on the recovered /login form, verify a protected
+page, and record final authentication acceptance. No bootstrap or OTP setup is needed.
