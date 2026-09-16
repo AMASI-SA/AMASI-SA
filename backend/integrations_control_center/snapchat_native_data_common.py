@@ -55,6 +55,7 @@ class SnapchatNativeSyncInput(BaseModel):
     days: int = Field(default=30, ge=1, le=MAX_SYNC_DAYS)
     from_date: str | None = None
     to_date: str | None = None
+    ad_account_id: str | None = Field(default=None, min_length=1, max_length=128)
     idempotency_key: str | None = Field(default=None, min_length=1, max_length=128)
 
 
