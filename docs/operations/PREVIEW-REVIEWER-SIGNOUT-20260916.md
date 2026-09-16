@@ -1,7 +1,7 @@
 # Preview reviewer sign-out — 2026-09-16
 
 Task: PREVIEW-REVIEWER-SIGNOUT-20260916; supports MZ2-FIN-CUTOVER-001.
-Status: SOURCE_VERIFIED_AWAITING_PREVIEW_BUILD_AND_SWITCH.
+Status: PREVIEW_LOGOUT_VERIFIED_AWAITING_OWNER_SIGNIN.
 Scope: isolated Preview frontend only. Production changed: NO.
 
 ## Defect and change
@@ -57,3 +57,34 @@ the independent synthetic Viewer before granting settlement-view-only access.
 The first synthetic employee remains linked by the user's manual action to the
 existing Meta reviewer; do not unlink/disable the reviewer as a test shortcut.
 No live posting403 or accounting gate completion is claimed.
+
+## Preview activation and browser acceptance
+
+The isolated Vite build exited0 (5.54s). Existing warnings about CSS import placement,
+large chunks and mixed imports remain; they did not prevent the build.
+Served index SHA256: 2e377ff8aa4ac3910c1f9d70938f26d1161a3afbef5b9f5007cf654c19a7693c.
+The explicit preview-meta.json identifies source_patch_git_sha
+497311cd14208303730f5dfadac94c4d6b1c9d48 and the exact Preview API origin.
+
+Immediately before switching, the release guard was inactive. Compared the current
+frontend Supervisor section byte-for-byte with the previous repair record, saved
+before/after sections in the new runtime root, then changed only that section.
+Unrelated sections were byte-identical. The first immediate HTTP probe raced service
+startup and got connection refused; no repeat switch was attempted. A subsequent
+status/HTTP check confirmed frontend RUNNING PID156124, unchanged backend PID130800,
+and the correct served metadata. Shared /app tracked/staged diffs remained empty.
+Runtime evidence: /opt/mezan-preview-signout-20260916/signout-verification.json.
+
+Fresh browser reload showed the new logout button while the full menu remained
+disabled. Clicking logout navigated to the actual Preview /login and exposed the
+email/password form. Thus real browser logout is verified. Owner sign-in and
+independent Viewer acceptance remain pending. No account credentials were read,
+changed or stored by the agent, and no financial posting or Production change occurred.
+
+The previous repair's frontend rollback command is superseded by this new section.
+To roll back ONLY this task, first compare the current frontend section against
+/opt/mezan-preview-signout-20260916/frontend-section-after.txt, refusing if different.
+Replace only that section with frontend-section-before.txt in the same new root,
+then supervisorctl reread and supervisorctl update frontend. This returns to the
+previous working Preview frontend, whose reviewer logout defect is still present.
+Never replace the full Supervisor config or use the initial outage rollback.
