@@ -520,3 +520,56 @@ async def test_exhausted_429_is_retryable_and_never_leaks_provider_secret(
     assert context.provider_calls == common.SNAPCHAT_HTTP_429_MAX_RETRIES + 1
     assert secret not in error.message
     assert secret not in repr(error.result)
+
+
+class _RefreshAwareClient:
+    def __init__(self):
+        self.authorization_headers = []
+
+    async def get(self, _url, **kwargs):
+        authorization = kwargs["headers"]["Authorization"]
+        self.authorization_headers.append(authorization)
+        if authorization == "Bearer stale-access":
+            return FakeResponse(
+                {"request_status": "FAILURE"},
+                status_code=401,
+            )
+        assert authorization == "Bearer refreshed-access"
+        return FakeResponse({
+            "request_status": "SUCCESS",
+            "value": 7,
+        })
+
+
+@pytest.mark.asyncio
+async def test_refreshed_access_token_is_reused_across_request_headers(
+    monkeypatch,
+):
+    client = _RefreshAwareClient()
+    context = common.SnapchatSyncContext(object(), "owner-1")
+    refresh_forces = []
+
+    async def refresh_access_token(*, force_refresh=False):
+        refresh_forces.append(force_refresh)
+        return "refreshed-access"
+
+    monkeypatch.setattr(context, "access_token", refresh_access_token)
+    endpoint = "https://adsapi.snapchat.com/v1/adaccounts/account-1/stats"
+
+    await context.get_json(
+        client,
+        endpoint,
+        headers={"Authorization": "Bearer stale-access"},
+    )
+    await context.get_json(
+        client,
+        endpoint,
+        headers={"Authorization": "Bearer stale-access"},
+    )
+
+    assert refresh_forces == [True]
+    assert client.authorization_headers == [
+        "Bearer stale-access",
+        "Bearer refreshed-access",
+        "Bearer refreshed-access",
+    ]
