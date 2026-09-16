@@ -2,7 +2,7 @@
   "task_id": "MZ-ORDER-REVISION-SALLA-001",
   "updated_at": "2026-09-16",
   "phase": "P0",
-  "status": "LOCAL_REPAIR_VERIFIED_SANDBOX_BLOCKED",
+  "status": "REMOTE_REPAIR_VERIFIED_SANDBOX_BLOCKED",
   "branch": "fix/order-revision-p0-webhooks-20260916",
   "production_baseline": "9f8b16998f62cbdb08dc9361bc2e443223d27d17",
   "recovered_source": "684d9c9a8120d2158a02bb955500a415474b1279",
@@ -13,7 +13,7 @@
     ".github/workflows/salla-order-revision-p0.yml": "197c565fe62ef45ea8a113617bc220d1ac43dbbe3404e8b7a07be7f68ddca640"
   },
   "completed": [
-    "Recovered all original local commits without rewriting them",
+    "Recovered all original P0 source without content changes; exact original local commit history preserved in the verified recovery bundle",
     "Fixed stale pre-write webhook snapshot with bounded post-write collection",
     "Separated observed operation success from final webhook completeness",
     "Preserved UNKNOWN evidence and no-replay behavior for invalid post-write event source",
@@ -31,7 +31,8 @@
     "schema_validation": "FULL_DRAFT202012_VALIDATION_PASS",
     "python_311_syntax": "PASS, two Python files",
     "workflow_yaml": "PASS locally; no remote workflow execution",
-    "diff_check": "PASS"
+    "diff_check": "PASS",
+    "remote_ci": "PENDING"
   },
   "sandbox": {
     "readiness_exit_code": 2,
@@ -43,17 +44,24 @@
   },
   "runtime_integration": "NOT_IMPLEMENTED",
   "p1": "BLOCKED_BY_SANDBOX_PHASE_GATE",
-  "remote_checkpoint": "BLOCKED_PENDING_EXPLICIT_USER_UPLOAD_APPROVAL",
-  "approval_review": "Automatic review rejected git push: external upload not explicitly authorized by fix-and-supervise request; no workaround attempted",
-  "pr": "NOT_CREATED",
+  "remote_checkpoint": "UPLOADED_SOURCE_TREE_VERIFIED",
+  "approval_review": "Initial upload was blocked; user explicitly approved upload, Draft PR and Issue #1006 documentation on 2026-09-16. GitHub connector delivery succeeded after local git credential failure.",
+  "pr": {
+    "number": 1057,
+    "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1057",
+    "draft": true
+  },
   "merge": "NOT_PERFORMED",
   "release_intent": "UNCHANGED",
   "production_changed": false,
   "remaining": [
-    "User approval for remote checkpoint and Draft PR",
     "Verified Salla Demo Store, encrypted integration and seeded disposable orders/products",
     "Execute and record 21 Sandbox state-operation cells plus option/payment/inventory/retry evidence",
     "Implement P1 page/backend integration only after P0 exit criteria are met"
   ],
-  "next_safe_action": "After explicit approval, push only the task branch and open a Draft PR against hotfix/prod-snap-meta-final. Keep P0 Sandbox gate closed until real evidence exists. Never publish this research branch with the inherited release intent."
+  "next_safe_action": "Inspect PR #1057 CI, configure a verified Salla Demo Store and disposable fixtures, then collect the required P0 evidence. Keep P1 blocked until the Sandbox exit criteria pass. No production merge or publication is authorized.",
+  "delivery_commit": "407634facfc4e0be07b47d21ca8b243de563f87f",
+  "reviewed_local_commit": "8f9a738f10850cd5d8302371e0659aeaee011347",
+  "reviewed_delivery_tree": "0dc09b50aa59c79d658ff44b0cf6c5cf1e08b4da",
+  "delivery_method": "GitHub connector; source delivery tree exactly equals the reviewed local checkpoint. Remote commit SHA differs; original remote research parent is retained."
 }
