@@ -466,6 +466,34 @@ describe("SnapchatV2Page read-only load", () => {
         expect(createSnapchatManagementProposal).not.toHaveBeenCalled();
         expect(executeSnapchatManagementProposal).not.toHaveBeenCalled();
     });
+    it("sorts budgets across all filtered campaigns and reuses previously loaded settings", async () => {
+        const rows = Array.from({ length: 20 }, (_, i) => ({
+            delivery: {}, platform_outcomes: {},
+            entity: { id: `campaign-${i}`, level: "campaign", name: `Campaign ${i}`, status: "ACTIVE" },
+            quality: { sync_status: "complete", coverage_status: "complete" },
+        }));
+        const defaultGet = api.get.getMockImplementation();
+        api.get.mockImplementation((url, config) => url.endsWith("/campaigns")
+            ? Promise.resolve({ data: { unified: { entity_level: "campaign", rows }, salla: { summary: {} } } })
+            : defaultGet(url, config));
+        getSnapchatEntitySettings.mockImplementation(({ unifiedEntityId }) => Promise.resolve([{
+            unified_entity_id: unifiedEntityId, entity_type: "campaign", ad_account_id: "account-1",
+            daily_budget_micro: Number(unifiedEntityId.split("-")[1]) * 1_000_000,
+            account_currency: "USD", quality: { settings_status: "settings_complete" },
+        }]));
+        await act(async () => root.render(<SnapchatV2Page />));
+        expect(getSnapchatEntitySettings).toHaveBeenCalledTimes(9);
+        await act(async () => container.querySelector('[aria-label="ترتيب حسب ميزانية الحملة اليومية"]').click());
+        const table = container.querySelector('[data-testid="unified-marketing-entity-table"]');
+        expect(table.querySelector('tbody tr').textContent).toContain("Campaign 19");
+        expect(table.querySelector('[data-column="daily-budget"]').textContent).toContain("19.00 USD");
+        expect(getSnapchatEntitySettings).toHaveBeenCalledTimes(20);
+        await act(async () => container.querySelector('[aria-label="ترتيب حسب ميزانية الحملة اليومية"]').click());
+        expect(table.querySelector('tbody tr').textContent).toContain("Campaign 0");
+        expect(getSnapchatEntitySettings).toHaveBeenCalledTimes(20);
+        expect(api.post).not.toHaveBeenCalled();
+    });
+
     it("reads only nine visible exact IDs and fetches an off-page management selection precisely", async () => {
         const rows = Array.from({ length: 12 }, (_, i) => ({
             delivery: {}, platform_outcomes: {},
