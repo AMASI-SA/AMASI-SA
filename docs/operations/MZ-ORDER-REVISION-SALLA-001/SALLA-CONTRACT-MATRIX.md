@@ -2,7 +2,7 @@
 
 ## Status
 
-`BLOCKED_PENDING_SALLA_SANDBOX_ACCESS`
+`PENDING_AMASI_TEST_ORDER_FIXTURES_AND_EXECUTOR`
 
 - Current integration baseline: `9f8b16998f62cbdb08dc9361bc2e443223d27d17`
 - Recovered research source: `684d9c9a8120d2158a02bb955500a415474b1279`
@@ -12,12 +12,22 @@
 - Production writes performed: **none**
 - Product code changed: **none**
 
+## Approved test environment change — 2026-09-16
+
+The owner permits newly created disposable test orders in the real Amasi
+store. See [AMASI-TEST-ORDERS.md](AMASI-TEST-ORDERS.md) for the first sequence
+and evidence boundaries. This supersedes the Demo-only environment requirement
+in the original plan. It does not mark any matrix cell complete or activate
+the feature. No exact test order is selected and the dedicated live-test
+executor is not implemented. The existing CLI remains Demo-only.
+
 ## Recovery and webhook evidence
 
 The recovered source is a research CLI and its local contracts, not a running
 order editor. It does not register an application route, change the order page,
-or enable Salla writes in Production. P0 completion still requires the real
-Sandbox matrix below; local test success cannot complete that matrix.
+or enable Salla writes in Production. P0 completion still requires the provider
+evidence below; local test success cannot complete that matrix. The approved
+real-store test-order path must label its evidence separately from Sandbox.
 
 The earlier CLI read the webhook file before the mutation and reused that
 snapshot afterward. A reproduced case delivered one event after the write but
@@ -49,7 +59,7 @@ This document distinguishes documented API capability from behavior proven in
 a Salla Demo Store. An endpoint being documented is not evidence that Salla
 accepts it for every order or payment status.
 
-## Environment gate
+## Existing Demo runner environment gate
 
 No verified Demo identity, seeded Demo order identifiers, or credential
 resolver environment was available in the execution environment. The runner
@@ -97,9 +107,10 @@ that accepts a raw token.
 
 All required runtime values were absent. Consequently, the state matrix below
 is intentionally marked `NOT_EXECUTED`; filling it with inferred pass/fail
-results would be false evidence. P1 must not start until this matrix has real
-Demo Store evidence or an official Salla mock environment that models the
-status restrictions and payment side effects.
+results would be false evidence. P1 still requires this matrix's provider
+evidence. The approved Amasi test-order path may supply explicitly classified
+evidence; it must not misrepresent a real store as Demo or bypass the current
+runner's identity checks.
 
 ## Documented endpoint contracts
 
@@ -123,7 +134,7 @@ Official references reviewed:
 
 Legend:
 
-- `NOT_EXECUTED`: no Sandbox evidence exists yet.
+- `NOT_EXECUTED`: no qualifying provider evidence exists yet.
 - `PASS`: request accepted and all recorded postconditions matched.
 - `REJECTED_BY_SALLA`: Salla rejected the operation; record sanitized response.
 - `AMBIGUOUS`: response succeeded but read-after-write/payment/inventory facts did
@@ -139,11 +150,15 @@ Legend:
 | `completed` | NOT_EXECUTED | NOT_EXECUTED | NOT_EXECUTED | Sandbox order required |
 | `cancelled` | NOT_EXECUTED | NOT_EXECUTED | NOT_EXECUTED | Sandbox order required |
 
+The evidence column above retains the original fixture plan. Owner-approved
+Amasi test orders are now an alternative, with actual environment and observed
+status recorded per cell. No cell has been executed under either path.
+
 ## Per-case evidence record
 
 Each executed cell must record, with tokens and customer data redacted:
 
-1. Sandbox store and fixture identity.
+1. Actual environment, store and fixture identity (Demo or Amasi test order).
 2. Order id/reference and status id/slug before the call.
 3. Method/path, idempotency/retry attempt number, sanitized request body.
 4. HTTP status, sanitized response body and response/request correlation headers.
@@ -254,7 +269,7 @@ that adding/updating an item on a paid order will:
 - let the customer pay only the difference.
 
 No original-order difference-payment flow may be implemented until the paid
-and partially-paid Sandbox rows prove those postconditions. If they do not,
+and partially-paid provider-evidence rows prove those postconditions. If they do not,
 the approved fallback is a Salla supplemental order linked operationally to the
 original order. Mezan must not fabricate a financial line, payment status or
 refund.
@@ -263,13 +278,12 @@ refund.
 
 P0 is complete only when:
 
-- all 21 state/operation cells have sanitized Sandbox evidence;
+- all 21 state/operation cells have sanitized, environment-labelled provider evidence;
 - the required product/option cases have evidence;
 - item-id stability and variant behavior are decided;
 - webhooks and retry/lost-response behavior are recorded;
 - positive-difference behavior is proven or supplemental order is selected;
-- the document status changes from `BLOCKED_PENDING_SALLA_SANDBOX_ACCESS` to
-  `COMPLETE` with evidence references.
+- the document status changes to `COMPLETE` with evidence references.
 
 Until then, P1 is not authorized to start under the approved phase gate.
 

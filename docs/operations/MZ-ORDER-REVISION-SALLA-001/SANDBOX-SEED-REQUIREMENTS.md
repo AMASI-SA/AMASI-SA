@@ -2,7 +2,12 @@
 
 ## Purpose
 
-This manifest is required before any live P0 write test. All records must
+These requirements apply to the existing Demo-only CLI. The owner's later
+approval of Amasi test orders is recorded in
+[AMASI-TEST-ORDERS.md](AMASI-TEST-ORDERS.md); it requires a dedicated execution
+path and does not make production identifiers valid input to this manifest.
+
+This manifest is required before any Demo-runner write test. All records must
 belong to a non-production Salla store created specifically for destructive
 contract testing. Never provide production tokens or production order ids.
 

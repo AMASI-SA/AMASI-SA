@@ -7,13 +7,14 @@
     "Separated observed operation success from final webhook completeness",
     "Preserved UNKNOWN evidence and no-replay behavior for invalid post-write event source",
     "Installed required local jsonschema==4.26.0; added isolated CI workflow",
-    "Independent parent review and full 72-test verification"
+    "Independent parent review and full 72-test verification",
+    "Recorded owner-approved Amasi disposable test-order alternative and concrete first test sequence; no executable code changed"
   ],
   "delivery_commit": "407634facfc4e0be07b47d21ca8b243de563f87f",
   "delivery_method": "GitHub connector; source delivery tree exactly equals the reviewed local checkpoint. Remote commit SHA differs; original remote research parent is retained.",
   "merge": "NOT_PERFORMED",
-  "next_safe_action": "Configure a verified Salla Demo Store with encrypted integration and disposable fixtures, then collect all required P0 evidence. P1 remains blocked until Sandbox exit criteria pass. No production merge or publication is authorized.",
-  "p1": "BLOCKED_BY_SANDBOX_PHASE_GATE",
+  "next_safe_action": "Resolve the first newly created unpaid Amasi test order and its option-bearing product; implement and verify a dedicated fixture-bound live-test path before mutations. The existing Demo CLI remains unchanged. Inspect shipping, notification and Qoyod effects before execution.",
+  "p1": "BLOCKED_BY_REQUIRED_PROVIDER_EVIDENCE",
   "phase": "P0",
   "pr": {
     "draft": true,
@@ -26,9 +27,10 @@
   "recovery_merge": "e9be9ebf1abefb223560477f164f746c3bdbb67f",
   "release_intent": "UNCHANGED",
   "remaining": [
-    "Verified Salla Demo Store, encrypted integration and seeded disposable orders/products",
-    "Execute and record 21 Sandbox state-operation cells plus option/payment/inventory/retry evidence",
-    "Implement P1 page/backend integration only after P0 exit criteria are met"
+    "Identify exact newly created Amasi test-order fixtures and inspect downstream automation",
+    "Implement and verify a dedicated live-test executor bound to the verified Amasi store and exact fixture IDs; retain the Demo-only guard",
+    "Collect explicitly classified real-store test-order evidence, starting with add/update/options/delete on an unpaid order",
+    "Complete required state/option/payment/inventory/retry evidence before P1 integration and general activation"
   ],
   "remote_checkpoint": "UPLOADED_SOURCE_TREE_VERIFIED",
   "reviewed_delivery_tree": "0dc09b50aa59c79d658ff44b0cf6c5cf1e08b4da",
@@ -47,7 +49,7 @@
     "backend/tests/test_salla_order_item_contract_runner_p0.py": "3cdadb0d7ae9d97d54643bb2c3d91abc67b5c0ed16aef0756150658f23840fca",
     "scripts/research/salla_order_item_contract_runner.py": "e384bb7722f8a77c2f2a94b284e102792169614a9db5f642308d6b807c7687f8"
   },
-  "status": "REMOTE_REPAIR_VERIFIED_SANDBOX_BLOCKED",
+  "status": "PENDING_AMASI_TEST_ORDER_FIXTURES_AND_EXECUTOR",
   "task_id": "MZ-ORDER-REVISION-SALLA-001",
   "updated_at": "2026-09-16",
   "verification": {
@@ -72,5 +74,16 @@
     "skipped": 0,
     "tests": 72,
     "workflow_yaml": "PASS locally; dedicated GitHub workflow also passed"
+  },
+  "test_environment_decision": {
+    "date": "2026-09-16",
+    "owner_authorized": "Create and mutate disposable test orders in the real Amasi Salla store",
+    "supersedes": "Demo-only test environment requirement; evidence requirements remain outstanding",
+    "plan": "AMASI-TEST-ORDERS.md",
+    "exact_fixtures_identified": false,
+    "live_test_executor": "NOT_IMPLEMENTED",
+    "existing_demo_identity_guard": "UNCHANGED",
+    "live_store_writes_performed": 0,
+    "general_activation_or_deployment": "NOT_AUTHORIZED_BY_THIS_TEST_DECISION"
   }
 }
