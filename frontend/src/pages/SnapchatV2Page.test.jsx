@@ -194,6 +194,8 @@ describe("SnapchatV2Page read-only load", () => {
                             contract_version: "2",
                             entity_level: "campaign",
                             rows: [{
+                                delivery: {},
+                                platform_outcomes: {},
                                 entity: {
                                     level: "campaign",
                                     provider_level: "campaign",
@@ -220,6 +222,8 @@ describe("SnapchatV2Page read-only load", () => {
                             contract_version: "2",
                             entity_level: "ad_group",
                             rows: [{
+                                delivery: {},
+                                platform_outcomes: {},
                                 entity: {
                                     level: "ad_group",
                                     provider_level: "ad_squad",
