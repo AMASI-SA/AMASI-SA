@@ -160,7 +160,7 @@
   ],
   "plan_version": 1,
   "preview_acceptance": {
-    "blocker": "live_authenticated_posting_request_not_available_in_current_browser_tools",
+    "blocker": null,
     "continuation": "docs/operations/PREVIEW-REVIEWER-SIGNOUT-20260916.md",
     "current_session_role": "independent_viewer_verified_by_sidebar_identity",
     "current_session_settlement_view": "PASS_AFTER_RELOAD",
@@ -170,16 +170,20 @@
     "independent_viewer_permissions_verified": [
       "accounting.settlements.view"
     ],
-    "last_observation": "Independent test Viewer signed in. Settlement page opened before and after reload; upload/save draft and all four bank approval buttons disabled; permission management button absent. Opening-balances route denied. Zero settlement records observed; no journal posting or financial writes. Viewer session preserved on settlements. UI checks do not prove posting endpoint 403.",
+    "last_observation": "User supplied HTTP:403 and accounting_permission_required for the nonexistent-draft POST. Combined with agent-observed Viewer identity, settlement access after reload, disabled draft/bank writes and denied opening-balances page, Preview independent-Viewer scenario5 passes. Financial no-write conclusion is supported by nonexistent ID and inspected permission-before-draft/write control flow, not a fresh DB audit. This does not certify Production Turki scenario5 or complete Preview P01.",
     "last_updated_date": "2026-09-16",
     "owner_signin_verified": true,
-    "posting_endpoint_403_verified": false,
+    "posting_endpoint_403_verified": true,
     "production_changed": false,
     "reviewer_logout_source_sha": "497311cd14208303730f5dfadac94c4d6b1c9d48",
     "reviewer_logout_verified": true,
-    "scenario_5": "PARTIAL_VIEWER_UI_PASS_ENDPOINT_403_PENDING",
+    "scenario_5": "PASS_PREVIEW_INDEPENDENT_VIEWER_UI_AND_USER_EXECUTED_POST_403",
     "status": "PARTIAL",
-    "synthetic_employee_records": 2
+    "synthetic_employee_records": 2,
+    "posting_endpoint_evidence_source": "user_executed_browser_console_report",
+    "posting_endpoint_error_code": "accounting_permission_required",
+    "posting_endpoint_required_permission": "accounting.settlements.post",
+    "next_action": "prepare_owner_preview_settlement_cycle_and_verify_review_before_any_explicitly_authorized_post"
   },
   "production_branch": "hotfix/prod-snap-meta-final"
 }
