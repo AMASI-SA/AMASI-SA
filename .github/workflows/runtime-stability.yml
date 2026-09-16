@@ -4,11 +4,15 @@ on:
   pull_request:
     paths:
       - "backend/runtime_mongo.py"
+      - "backend/startup_guard.py"
+      - "backend/boot_runtime.py"
       - "backend/auth.py"
       - "backend/server.py"
       - "backend/mobile_app_permissions.py"
       - "backend/tests/test_runtime_stability_mongo_auth.py"
       - "backend/tests/test_asgi_boot_readiness.py"
+      - "backend/tests/test_auth_security_replica_startup.py"
+      - "backend/tests/test_startup_guard.py"
       - "backend/tests/runtime_stability_benchmark.py"
       - "frontend/src/context/AuthContext.jsx"
       - "frontend/src/context/AuthContext.test.jsx"
@@ -16,6 +20,8 @@ on:
       - "frontend/src/context/authBootstrap.test.js"
       - "frontend/src/components/ProtectedRoute.jsx"
       - "frontend/src/components/ProtectedRoute.test.jsx"
+      - "frontend/src/reviewCustomerWaiting.js"
+      - "frontend/src/reviewCustomerWaiting.test.js"
       - ".github/workflows/runtime-stability.yml"
 
 permissions:
@@ -44,6 +50,8 @@ jobs:
           PYTHONPATH=backend python -m pytest -q --tb=short
           backend/tests/test_runtime_stability_mongo_auth.py
           backend/tests/test_asgi_boot_readiness.py
+          backend/tests/test_auth_security_replica_startup.py
+          backend/tests/test_startup_guard.py
           backend/tests/test_auth_session_revocation_v1.py
           backend/tests/test_mobile_app_manager_role.py
           backend/tests/test_mobile_app_permission_owner_resolution.py
@@ -61,7 +69,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "22.23.2"
           cache: yarn
           cache-dependency-path: frontend/yarn.lock
       - name: Enable Yarn Classic
@@ -76,3 +84,4 @@ jobs:
           src/context/authBootstrap.test.js
           src/context/AuthContext.test.jsx
           src/components/ProtectedRoute.test.jsx
+          src/reviewCustomerWaiting.test.js

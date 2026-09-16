@@ -548,7 +548,11 @@ function openWaitingOrder(item) {
   showWaitingSummary(item);
 }
 
-async function loadWaiting() {
+export async function loadWaiting() {
+  // This enhancement is mounted globally, but its protected endpoint belongs
+  // only to the review queue. Do not probe authenticated APIs from /login or
+  // unrelated pages; the recurring timer will resume once this page mounts.
+  if (!pageHeader()) return;
   if (loadingWaiting) return;
   loadingWaiting = true;
   try {

@@ -312,8 +312,13 @@ async def get_current_user_from_db(request: Request, db) -> dict:
         raise_auth_dependency_unavailable(exc)
 
 
-async def _install_login_security_for_loaded_app(db) -> None:
-    """Attach progressive abuse protection, passkeys, Owner MFA, and email OTP."""
+async def install_process_local_auth_security(db) -> None:
+    """Attach every auth guard to the FastAPI app in this process.
+
+    ASGI middleware state is process-local, so every replica must run this
+    function.  Each installer is guarded per app; its repeated Mongo
+    ``create_index`` calls use identical definitions and are idempotent.
+    """
     app = None
     for module_name in ("server", "backend.server"):
         module = sys.modules.get(module_name)
@@ -355,6 +360,11 @@ async def _install_login_security_for_loaded_app(db) -> None:
     await install_passkey_security(app, db)
     await install_mfa_security(app, db)
     await install_email_otp_security(app, db)
+
+
+async def _install_login_security_for_loaded_app(db) -> None:
+    """Backward-compatible alias for older startup tests and callers."""
+    await install_process_local_auth_security(db)
 
 
 def _initial_owner_password() -> str:

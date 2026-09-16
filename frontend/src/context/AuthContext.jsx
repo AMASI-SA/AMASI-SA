@@ -145,7 +145,15 @@ export function AuthProvider({ children }) {
             return data;
         }
 
-        await refreshUser();
+        const authenticatedUser = await refreshUser();
+        if (!authenticatedUser) {
+            const error = new Error("Login session could not be established");
+            error.response = {
+                status: 401,
+                data: { detail: "تعذر تأكيد جلسة تسجيل الدخول. يرجى المحاولة مرة أخرى." },
+            };
+            throw error;
+        }
         return data;
     };
 
