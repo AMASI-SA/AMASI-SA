@@ -535,11 +535,19 @@ def validate_seed_structure(config: SandboxConfig, seed: dict[str, Any]) -> None
     if amasi:
         for row in orders:
             fields = required_fields | {"test_customer_id", "disposable_test_order", "preserve_item_id"}
-            _strict_object(row, allowed=fields, required=fields, error="BLOCKED_SEED_MISMATCH")
+            _strict_object(row, allowed=fields | {"pending_store_courier"}, required=fields, error="BLOCKED_SEED_MISMATCH")
             if not isinstance(row["state"], str) or row["state"] not in {"pending", "under_review"} or row["payment_method"] != "bank" or row["disposable_test_order"] is not True:
                 raise ContractRunnerError("AMASI_TEST_UNPAID_BANK_ORDER_REQUIRED")
             for key in ("test_customer_id", "preserve_item_id", "order_number", "branch_id"):
                 _id_text(row[key], "BLOCKED_SEED_MISMATCH")
+            if "pending_store_courier" in row:
+                policy = row["pending_store_courier"]
+                policy_fields = {"shipment_id", "courier_id", "not_dispatched_confirmed"}
+                _strict_object(policy, allowed=policy_fields, required=policy_fields, error="BLOCKED_SEED_MISMATCH")
+                for key in ("shipment_id", "courier_id"):
+                    _id_text(policy[key], "BLOCKED_SEED_MISMATCH")
+                if policy["not_dispatched_confirmed"] is not True:
+                    raise ContractRunnerError("AMASI_TEST_COURIER_REVIEW_REQUIRED")
     products = seed.get("products", [])
     if (
         not isinstance(products, list)
@@ -668,7 +676,7 @@ def readiness(config: SandboxConfig, transport: Any) -> dict[str, Any]:
         if isinstance(config, AmasiTestConfig):
             try:
                 _validate_amasi_order(order, row)
-                _verify_amasi_no_shipments(transport, order_id, "p0-readiness")
+                _verify_amasi_shipments(transport, row, "p0-readiness")
             except ContractRunnerError as exc:
                 return {"status": str(exc)}
     for row in seed["products"]:
@@ -1059,9 +1067,20 @@ def _validate_amasi_order(order: dict[str, Any], row: dict[str, Any]) -> None:
             or str(customer.get("id", "")) != str(row["test_customer_id"])
             or _status_slug(order) != row["state"]):
         raise ContractRunnerError("AMASI_TEST_ORDER_IDENTITY_OR_STATE_MISMATCH")
-    if order.get("payment_method") != "bank" or order.get("payment_methods") != []:
+    if order.get("payment_method") != "bank":
         raise ContractRunnerError("AMASI_TEST_UNPAID_BANK_ORDER_REQUIRED")
-    if order.get("shipping_status") not in (None, "not_shippable"):
+    methods = order.get("payment_methods")
+    if methods != []:
+        if not isinstance(methods, list) or len(methods) != 1:
+            raise ContractRunnerError("AMASI_TEST_UNPAID_BANK_ORDER_REQUIRED")
+        fields = {"payment_method", "amount", "provider", "transaction_reference"}
+        _strict_object(methods[0], allowed=fields, required=fields, error="AMASI_TEST_UNPAID_BANK_ORDER_REQUIRED")
+        method = methods[0]
+        if (method["payment_method"] != "bank" or _amasi_money(method["amount"], "SAR") != 0
+                or method["provider"] is not None or method["transaction_reference"] is not None):
+            raise ContractRunnerError("AMASI_TEST_UNPAID_BANK_ORDER_REQUIRED")
+    allowed_shipping = ("shipping_ready",) if "pending_store_courier" in row else (None, "not_shippable")
+    if order.get("shipping_status") not in allowed_shipping:
         raise ContractRunnerError("AMASI_TEST_SHIPMENT_ABSENCE_UNPROVEN")
     amounts = order.get("amounts")
     actions = order.get("payment_actions")
@@ -1117,27 +1136,65 @@ def _validate_amasi_order(order: dict[str, Any], row: dict[str, Any]) -> None:
                 raise ContractRunnerError("AMASI_TEST_PAYMENT_UNPROVEN")
 
 
-def _verify_amasi_no_shipments(transport: Any, order_id: str, correlation_id: str) -> None:
+def _verify_amasi_shipments(transport: Any, row: dict[str, Any], correlation_id: str) -> dict[str, Any]:
+    """Default to no shipments; optionally bind one reviewed pending courier.
+
+    Missing tracking is not evidence of non-dispatch for a store courier.
+    The explicit operator attestation and fresh pending-state checks are both
+    required; this is only a disposable-fixture policy, never a shipping rule.
+    """
+    order_id = str(row["order_id"])
+    policy = row.get("pending_store_courier")
+    expected_count = 1 if policy is not None else 0
+    error = "AMASI_TEST_COURIER_STATE_UNPROVEN" if policy is not None else "AMASI_TEST_SHIPMENT_ABSENCE_UNPROVEN"
     response = transport.request("GET", f"/shipments?order_id={urllib.parse.quote(order_id, safe='')}&per_page=1", None, correlation_id)
     body = response.get("body")
     page = body.get("pagination") if isinstance(body, dict) else None
-    if (response.get("status") != 200 or not isinstance(body, dict)
-            or body.get("success") is not True or body.get("data") != [] or not isinstance(page, dict)):
-        raise ContractRunnerError("AMASI_TEST_SHIPMENT_ABSENCE_UNPROVEN")
-    for key, expected in (("total", 0), ("count", 0), ("currentPage", 1)):
+    shipments = body.get("data") if isinstance(body, dict) else None
+    if (response.get("status") != 200 or not _amasi_response_success(response)
+            or not isinstance(shipments, list) or len(shipments) != expected_count or not isinstance(page, dict)):
+        raise ContractRunnerError(error)
+    for key, expected in (("total", expected_count), ("count", expected_count), ("currentPage", 1)):
         if type(page.get(key)) is not int or page[key] != expected:
-            raise ContractRunnerError("AMASI_TEST_SHIPMENT_ABSENCE_UNPROVEN")
-    if type(page.get("totalPages")) is not int or page["totalPages"] not in (0, 1):
-        raise ContractRunnerError("AMASI_TEST_SHIPMENT_ABSENCE_UNPROVEN")
+            raise ContractRunnerError(error)
+    if type(page.get("totalPages")) is not int or page["totalPages"] not in ((1,) if expected_count else (0, 1)):
+        raise ContractRunnerError(error)
     for links in (page, page.get("links", {}), body.get("links", {})):
+        if links == []:
+            continue  # Salla also encodes an empty links collection as [].
         if not isinstance(links, dict) or any(links.get(key) not in (None, "") for key in ("next", "nextPage", "next_page_url")):
-            raise ContractRunnerError("AMASI_TEST_SHIPMENT_ABSENCE_UNPROVEN")
+            raise ContractRunnerError(error)
+    if policy is None:
+        return {"mode": "no_shipments", "count": 0}
+    shipment = shipments[0]
+    expected = {"id": policy["shipment_id"], "courier_id": policy["courier_id"],
+                "order_id": row["order_id"], "order_reference_id": row["order_number"]}
+    if not isinstance(shipment, dict):
+        raise ContractRunnerError(error)
+    for key, value in expected.items():
+        if _id_text(shipment.get(key), error) != str(value):
+            raise ContractRunnerError(error)
+    if (shipment.get("status") != "pending" or shipment.get("type") != "shipment"
+            or shipment.get("source") != "dashboard" or shipment.get("payment_method") != "bank"
+            or shipment.get("trackable") is not False):
+        raise ContractRunnerError(error)
+    for key in ("label", "shipping_number", "tracking_number", "tracking_link", "driver_info", "pickup_id", "shipping_route"):
+        if key not in shipment or shipment[key] is not None:
+            raise ContractRunnerError(error)
+    # Other consumers recognize these aliases; a null canonical field cannot
+    # hide a generated label, carrier handoff or delivery evidence elsewhere.
+    for key in ("label_url", "pdf_label", "pdf_url", "documents", "waybill_number", "awb", "tracking_url",
+                "shipped_at", "dispatched_at", "handed_over_at", "delivered_at", "received_at"):
+        if shipment.get(key) not in (None, "", [], {}):
+            raise ContractRunnerError(error)
+    return {"mode": "pending_store_courier", "count": 1, "status": "pending",
+            "shipment_id_hash": _hash_id(shipment["id"]), "courier_id_hash": _hash_id(shipment["courier_id"])}
 
 
 def _amasi_fresh_snapshot(transport: Any, seed: dict[str, Any], case: dict[str, Any], correlation_id: str, *, before_write: bool = False) -> dict[str, Any]:
     row = next(row for row in seed["orders"] if str(row["order_id"]) == str(case["order_id"]))
     order_id = str(row["order_id"])
-    _verify_amasi_no_shipments(transport, order_id, correlation_id)
+    shipment_review = _verify_amasi_shipments(transport, row, correlation_id)
     order_response = transport.request("GET", f"/orders/{order_id}", None, correlation_id)
     order = _data(order_response)
     if order_response.get("status") != 200 or not isinstance(order, dict):
@@ -1151,6 +1208,9 @@ def _amasi_fresh_snapshot(transport: Any, seed: dict[str, Any], case: dict[str, 
     if not isinstance(order, dict):
         raise ContractRunnerError(BASELINE_FETCH_REQUIRED)
     _validate_amasi_order(order, row)
+    final_shipment_review = _verify_amasi_shipments(transport, row, correlation_id)
+    if final_shipment_review != shipment_review:
+        raise ContractRunnerError("AMASI_TEST_COURIER_STATE_CHANGED")
     snapshot = extract_snapshot(order_response, items_response)
     items = _data(items_response)
     if (not snapshot["fetch_ok"] or not isinstance(items, list) or not items
@@ -1168,7 +1228,7 @@ def _amasi_fresh_snapshot(transport: Any, seed: dict[str, Any], case: dict[str, 
         if _amasi_money(order["amounts"]["total"], "SAR") != _amasi_money(expected_total, "SAR"):
             raise ContractRunnerError("AMASI_TEST_BASELINE_TOTAL_CHANGED")
     snapshot.update(paid_amount=0, outstanding_amount=_amount(order["payment_actions"]["remaining_action"]["remaining_amount"]),
-                    payment_status="unpaid", shipment_count=0)
+                    payment_status="unpaid", shipment_count=shipment_review["count"], shipment_review=shipment_review)
     return snapshot
 
 

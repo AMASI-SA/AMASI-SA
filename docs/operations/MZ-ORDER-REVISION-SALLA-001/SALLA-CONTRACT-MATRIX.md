@@ -2,7 +2,7 @@
 
 ## Status
 
-`AMASI_TEST_EXECUTOR_LOCAL_VERIFIED_PENDING_FIXTURES`
+`AMASI_PENDING_COURIER_VERIFIED_RECEIPT_BLOCKED`
 
 - Current integration baseline: `9f8b16998f62cbdb08dc9361bc2e443223d27d17`
 - Recovered research source: `684d9c9a8120d2158a02bb955500a415474b1279`
@@ -18,9 +18,13 @@ The owner permits newly created disposable test orders in the real Amasi
 store. See [AMASI-TEST-ORDERS.md](AMASI-TEST-ORDERS.md) for the first sequence
 and evidence boundaries. This supersedes the Demo-only environment requirement
 in the original plan. It does not mark any matrix cell complete or activate
-the feature. No exact test order is selected. The CLI now has an explicit
-fixture-bound Amasi test mode, locally verified with synthetic I/O. Its default
-Demo mode and identity check remain. Actual live evidence is still missing.
+the feature. An owner-selected disposable fixture has been inspected read-only;
+its unresolved receipt still blocks mutation. The CLI has an explicit
+fixture-bound Amasi test mode with an optional bound pending store-courier
+policy and zero-value bank-method handling, verified with synthetic I/O. Its
+default Demo mode and identity check remain. Actual live mutation evidence is
+still missing; changing carrier or finding no tracking number is not proof of
+non-dispatch.
 
 ## Recovery and webhook evidence
 

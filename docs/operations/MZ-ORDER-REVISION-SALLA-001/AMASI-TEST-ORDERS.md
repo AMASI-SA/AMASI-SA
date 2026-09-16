@@ -9,15 +9,18 @@ test-order scenario; it does not identify any existing customer order as a
 test fixture or authorize general feature activation.
 
 The owner supplied a disposable test-order reference, which was resolved to a
-unique order using authenticated Salla reads. Its payment and shipment facts
-do not meet the initial contract: the required positive unpaid balance is not
-established, the payment-method collection is nonempty, and an existing
-pending shipment fails the no-shipment requirement. Pending does not prove
-dispatch. Customer options were observed in shipment packages only. No item
-mutation or CLI readiness run was performed, and no live mutation evidence
-exists. Obtain an eligible replacement fixture; keep all filled identifiers
-and customer details outside GitHub. Do not change eligibility or the rejected
-order merely to force the first test.
+unique order using authenticated Salla reads. A later read establishes a
+positive full unpaid balance. The owner clarified that delivery uses the
+store's own courier, which does not have a tracking number. The initial
+no-shipment predicate was too narrow for that approved disposable scenario;
+changing carriers does not resolve it. The runner now has an explicit bound
+pending-courier policy described below. A zero-value bank-method row is no
+longer confused with a positive payment. A receipt attachment remains present
+and unresolved, so the actual fixture is still blocked before mutation.
+Customer options were observed in shipment packages only. No item mutation or
+CLI readiness run was performed, and no live mutation evidence exists. Keep
+all filled identifiers and customer details outside GitHub. Do not remove a
+real receipt or assume it is synthetic simply because the order is for testing.
 
 ## Implementation boundary
 
@@ -46,7 +49,8 @@ The initial mode supports only `pending` or `under_review`, quantity at most
 two, and no direct price/cost/weight overrides. COD can qualify for automatic
 fulfillment, so it is excluded. The order must have positive total, explicit
 zero paid, remaining equal to total, no receipt or contradictory payment/refund
-facts, and no shipments. The original line is protected from PUT and DELETE.
+facts, and either no shipments or one explicitly reviewed pending store-courier
+record. The original line is protected from PUT and DELETE.
 The mutation case must include independently reviewed before/after total
 assertions; unchanged or incorrect totals cannot pass on item evidence alone.
 
@@ -89,6 +93,35 @@ identifiers/totals; `downstream_reviewed` starts false and is an operator
 attestation, not an automated guarantee. Keep the encrypted credential resolver
 and existing five-minute single-attempt review metadata; never copy a token.
 
+For a disposable order assigned to the store's courier, optionally add this
+object to its single manifest order row (identifiers stay private):
+
+```json
+"pending_store_courier": {
+  "shipment_id": "FILL_REVIEWED_SHIPMENT_ID",
+  "courier_id": "FILL_REVIEWED_STORE_COURIER_ID",
+  "not_dispatched_confirmed": false
+}
+```
+
+Set `not_dispatched_confirmed` to true only after the operator confirms that
+this test order has not been handed over. Missing tracking is not such proof.
+The runner additionally requires exactly one matching shipment/courier/order/
+reference, complete pagination, `pending`, `shipment`, dashboard source, bank
+payment, `trackable=false`, and explicitly null label/tracking/pickup/driver/
+route fields. Populated label or tracking aliases and dispatch/delivery
+timestamps are rejected. Order shipping status must be `shipping_ready`.
+Removing, replacing or advancing the record blocks the operation; changing
+carriers is not an alternative. Without the object, the no-shipment rule stays.
+
+Shipment checks bracket the order/items reads and are repeated under the
+one-attempt lock immediately before writing. Evidence records count one and
+hashed bound shipment facts for this policy, never claims shipment absence.
+These reads cannot make Salla state atomic or establish downstream isolation.
+The payment-method list may be empty or exactly one bank row with explicit zero
+amount and null provider/transaction reference; unknown fields or additional
+rows are rejected. The receipt and all positive-payment/refund guards remain.
+
 Scopes are `orders.read_write`, product read, and additionally `shipping.read`
 for this live mode. A declared scope is not proof it was granted: the actual
 read must succeed. Store identity and non-Demo type were observed through the
@@ -124,8 +157,11 @@ uncertain write/verification quarantines the order without replay.
 [Order Details](https://docs.salla.dev/5394147e0) exposes payment-action facts;
 its light response does not establish shipment absence. The mode separately
 uses [List Shipments](https://docs.salla.dev/shipments/list) with the exact order
-ID, no status/type filter, and requires explicit empty data and zero pagination
-totals. [Store Information](https://docs.salla.dev/merchants/store-info) supplies
+ID, no status/type filter, and requires complete pagination for either zero
+records or the one explicitly bound pending-courier record. The latter is a
+reviewed test policy based on observed provider fields and owner confirmation,
+not a claim that missing tracking proves non-dispatch.
+[Store Information](https://docs.salla.dev/merchants/store-info) supplies
 the identity/type match, and [payment methods](https://docs.salla.dev/payments/available-methods)
 distinguishes `bank` and `cod`.
 

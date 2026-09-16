@@ -54,6 +54,31 @@ def unpaid_order():
     }
 
 
+def courier_seed():
+    seed = live_seed()
+    seed['orders'][0]['pending_store_courier'] = {
+        'shipment_id': 'shipment-1', 'courier_id': 'courier-1',
+        'not_dispatched_confirmed': True,
+    }
+    return seed
+
+
+def configure_pending_courier(http):
+    http.order['shipping_status'] = 'shipping_ready'
+    http.order['payment_methods'] = [
+        {'payment_method': 'bank', 'amount': '0.00', 'provider': None,
+         'transaction_reference': None},
+    ]
+    http.shipments['body'].update(data=[{
+        'id': 'shipment-1', 'courier_id': 'courier-1', 'order_id': 'o0',
+        'order_reference_id': 'N0', 'status': 'pending', 'type': 'shipment',
+        'source': 'dashboard', 'payment_method': 'bank', 'trackable': False,
+        'label': None, 'shipping_number': None, 'tracking_number': None,
+        'tracking_link': None, 'driver_info': None, 'pickup_id': None,
+        'shipping_route': None,
+    }], pagination={'total': 1, 'count': 1, 'currentPage': 1, 'totalPages': 1, 'links': []})
+
+
 class LiveHttp(base.FakeSallaHttp):
     def __init__(self, seed, *, evidence_dir, case=None):
         super().__init__(seed, evidence_dir=evidence_dir)
@@ -74,9 +99,12 @@ class LiveHttp(base.FakeSallaHttp):
         self.reject_envelope_path = None
         self.http_error_path = None
         self.reject_write_envelope = False
+        self.on_items_read = None
 
     def __call__(self, request, timeout):
         path = request.full_url.split('/admin/v2', 1)[1]
+        if path == '/orders/items?order_id=o0' and self.on_items_read:
+            self.on_items_read()
         if path == self.http_error_path:
             self.calls.append((request.get_method(), path))
             body = copy.deepcopy(self.responses[(request.get_method(), path)]['body'])
@@ -93,7 +121,7 @@ class LiveHttp(base.FakeSallaHttp):
         if path.startswith('/shipments?'):
             self.calls.append((request.get_method(), path))
             self.shipment_reads += 1
-            if self.on_final_check and self.shipment_reads == 3:
+            if self.on_final_check and list(self.evidence_dir.glob('*.intent.json')):
                 callback, self.on_final_check = self.on_final_check, None
                 callback()
             return base.FakeHttpResponse(self.shipments)
@@ -102,6 +130,9 @@ class LiveHttp(base.FakeSallaHttp):
             items = [{'id': 'i0', 'product_id': 'p0', 'sku': 'SKU0', 'quantity': 1, 'branch_id': 'b1'},
                      {'id': 'i-new', 'product_id': 'p0', 'sku': 'SKU0', 'quantity': 1, 'branch_id': 'b1', 'options': self.options_before}]
             if self.post_seen:
+                if self.after_first_hook:
+                    callback, self.after_first_hook = self.after_first_hook, None
+                    callback()
                 if self.case['method'] == 'DELETE':
                     items.pop()
                 else:
@@ -172,6 +203,130 @@ class AmasiTestOrderTests(unittest.TestCase):
             self.assertNotIn('secret-live-test-token', json.dumps(evidence))
             schema = json.loads((base.ROOT / 'docs/operations/MZ-ORDER-REVISION-SALLA-001/schemas/evidence-record.schema.json').read_text())
             base.require_draft202012_validator()(schema).validate(evidence)
+
+    def test_reviewed_pending_store_courier_supports_add_update_delete(self):
+        for method in ('POST', 'PUT', 'DELETE'):
+            with self.subTest(method=method), tempfile.TemporaryDirectory() as d:
+                seed = courier_seed()
+                case = live_case()
+                if method != 'POST':
+                    seed['orders'][0]['item_id'] = 'i-new'
+                    case = live_case(method=method, path='/orders/items/i-new',
+                        body={'order_id': 'o0', 'quantity': 2} if method == 'PUT' else {})
+                rc, output, http, evidence, _ = self.run_cli(
+                    Path(d), seed=seed, case=case, change_http=configure_pending_courier, webhook=True)
+                self.assertEqual(rc, 0, output)
+                self.assertEqual([m for m, _ in http.calls if m != 'GET'], [method])
+                self.assertEqual(evidence['verdict'], 'PASS', evidence)
+                self.assertEqual(evidence['before']['shipment_count'], 1)
+                self.assertEqual(evidence['after']['shipment_count'], 1)
+                self.assertEqual(evidence['before']['shipment_review']['mode'], 'pending_store_courier')
+                self.assertNotIn('shipment-1', json.dumps(evidence['before']['shipment_review']))
+                schema = json.loads((base.ROOT / 'docs/operations/MZ-ORDER-REVISION-SALLA-001/schemas/evidence-record.schema.json').read_text())
+                base.require_draft202012_validator()(schema).validate(evidence)
+
+    def test_pending_courier_requires_explicit_valid_bound_manifest(self):
+        policies = [None, {}, {'shipment_id': 'shipment-1', 'courier_id': 'courier-1', 'not_dispatched_confirmed': False},
+                    {'shipment_id': '', 'courier_id': 'courier-1', 'not_dispatched_confirmed': True},
+                    {'shipment_id': 'shipment-1', 'courier_id': True, 'not_dispatched_confirmed': True},
+                    {**courier_seed()['orders'][0]['pending_store_courier'], 'allow_shipped': True}]
+        for policy in policies:
+            with self.subTest(policy=policy), tempfile.TemporaryDirectory() as d:
+                seed = live_seed()
+                if policy is not None:
+                    seed['orders'][0]['pending_store_courier'] = policy
+                rc, _, http, _, _ = self.run_cli(Path(d), seed=seed, change_http=configure_pending_courier)
+                self.assertEqual(rc, 2)
+                self.assertFalse(any(m != 'GET' for m, _ in http.calls))
+
+    def test_pending_courier_rejects_identity_dispatch_and_incomplete_page(self):
+        fields = [('id', 'other-shipment'), ('courier_id', 'other-courier'), ('order_id', 'other-order'),
+                  ('order_reference_id', 'other-reference'), ('status', 'delivering'), ('status', 'delivered'),
+                  ('status', 'unknown'), ('type', 'return'), ('source', 'api'), ('payment_method', 'cod'),
+                  ('trackable', True), ('trackable', 0), ('label', []), ('label', 'label-url'),
+                  ('shipping_number', '123'), ('tracking_number', '123'), ('tracking_link', 'tracking-url'),
+                  ('driver_info', {}), ('pickup_id', 'pickup'), ('shipping_route', 'route'),
+                  ('shipped_at', 'now'), ('dispatched_at', 'now'), ('handed_over_at', 'now'), ('delivered_at', 'now'),
+                  ('waybill_number', '123'), ('awb', '123'), ('label_url', 'url'), ('pdf_label', 'url'),
+                  ('pdf_url', 'url'), ('documents', ['url']), ('tracking_url', 'url')]
+        def shipment_field(key, value):
+            return lambda h: h.shipments['body']['data'][0].update({key: value})
+        mutations = [shipment_field(*pair) for pair in fields]
+        mutations += [
+            lambda h: h.shipments['body']['data'][0].pop('label'),
+            lambda h: h.shipments['body'].update(data=[]),
+            lambda h: h.shipments['body']['data'].append(copy.deepcopy(h.shipments['body']['data'][0])),
+            lambda h: h.shipments['body']['pagination'].update(total=2, totalPages=2),
+            lambda h: h.shipments['body']['pagination'].update(total=True),
+            lambda h: h.shipments['body']['pagination'].update(links={'next': 'url'}),
+            lambda h: h.shipments['body']['pagination'].update(links=['url']),
+            lambda h: h.shipments['body'].update(success=False),
+            lambda h: h.order.update(shipping_status='shipped'),
+        ]
+        for mutation in mutations:
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as d:
+                def configure(http):
+                    configure_pending_courier(http)
+                    mutation(http)
+                rc, _, http, _, _ = self.run_cli(Path(d), seed=courier_seed(), change_http=configure)
+                self.assertEqual(rc, 2)
+                self.assertFalse(any(m != 'GET' for m, _ in http.calls))
+
+    def test_zero_bank_method_is_not_a_payment_but_other_rows_are_rejected(self):
+        good = {'payment_method': 'bank', 'amount': '0.00', 'provider': None, 'transaction_reference': None}
+        with tempfile.TemporaryDirectory() as d:
+            rc, output, _, evidence, _ = self.run_cli(Path(d), change_http=lambda h: h.order.update(payment_methods=[good]))
+            self.assertEqual(rc, 0, output)
+            self.assertEqual(evidence['observed_verdict'], 'PASS')
+        rows = [None, {}, [good, good], [dict(good, amount=1)], [dict(good, amount=False)],
+                [dict(good, amount='NaN')], [dict(good, payment_method='cod')],
+                [dict(good, provider='bank-provider')], [dict(good, transaction_reference='transfer')],
+                [dict(good, paid_at='now')], [{'payment_method': 'bank', 'amount': 0}]]
+        for methods in rows:
+            with self.subTest(methods=methods), tempfile.TemporaryDirectory() as d:
+                rc, _, http, _, _ = self.run_cli(Path(d), change_http=lambda h: h.order.update(payment_methods=methods))
+                self.assertEqual(rc, 2)
+                self.assertFalse(any(m != 'GET' for m, _ in http.calls))
+
+    def test_pending_courier_does_not_override_receipt_or_paid_balance(self):
+        for updates in ({'receipt_image': 'https://test.invalid/receipt'}, {'paid_amount': 1}):
+            with self.subTest(updates=updates), tempfile.TemporaryDirectory() as d:
+                def configure(http):
+                    configure_pending_courier(http)
+                    http.order.update(updates)
+                rc, _, http, _, _ = self.run_cli(Path(d), seed=courier_seed(), change_http=configure)
+                self.assertEqual(rc, 2)
+                self.assertFalse(any(m != 'GET' for m, _ in http.calls))
+
+    def test_pending_courier_dispatch_during_final_items_read_blocks_write(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            def configure(http):
+                configure_pending_courier(http)
+                def drift():
+                    if list((tmp / 'evidence').glob('*.intent.json')):
+                        http.shipments['body']['data'][0]['status'] = 'delivering'
+                http.on_items_read = drift
+            rc, _, http, evidence, _ = self.run_cli(tmp, seed=courier_seed(), change_http=configure)
+            self.assertEqual(rc, 2)
+            self.assertFalse(any(m != 'GET' for m, _ in http.calls))
+            self.assertEqual(evidence['attempt_outcome'], 'UNKNOWN')
+
+    def test_pending_courier_postwrite_dispatch_is_not_a_pass_or_retried(self):
+        with tempfile.TemporaryDirectory() as d:
+            def configure(http):
+                configure_pending_courier(http)
+                http.after_first_hook = lambda: http.shipments['body']['data'][0].update(status='delivering')
+            _, _, http, evidence, _ = self.run_cli(Path(d), seed=courier_seed(), change_http=configure)
+            self.assertNotEqual(evidence['observed_verdict'], 'PASS')
+            self.assertEqual([m for m, _ in http.calls if m != 'GET'], ['POST'])
+
+    def test_empty_pagination_links_array_does_not_imply_another_page(self):
+        with tempfile.TemporaryDirectory() as d:
+            rc, output, _, evidence, _ = self.run_cli(Path(d),
+                change_http=lambda h: h.shipments['body']['pagination'].update(links=[]))
+            self.assertEqual(rc, 0, output)
+            self.assertEqual(evidence['observed_verdict'], 'PASS')
 
     def test_live_update_and_delete_preserve_original_line(self):
         for method in ('PUT', 'DELETE'):
