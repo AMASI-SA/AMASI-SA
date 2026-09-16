@@ -161,7 +161,7 @@ function SettingsDetails({ row, settings, parentCampaign, onManageEntity }) {
             </td>
             <td className="px-4 py-4 align-top" data-testid="snapchat-settings-parent">
                 {type === "ad_squad" ? <>
-                    <div>{parentCampaign?.entity?.id === row?.entity?.campaign_id ? parentCampaign.entity.name : "الحملة المرتبطة"}</div>
+                    <div>{parentCampaign?.entity?.id && parentCampaign.entity.id === row?.entity?.campaign_id ? parentCampaign.entity.name : "الحملة المرتبطة"}</div>
                     <div dir="ltr">{row?.entity?.campaign_id || parentCampaign?.entity?.id || "—"}</div>
                     <Metric label="معرف الحملة لدى Snapchat">{providerSetting(settings, settings?.provider_parent_id)}</Metric>
                 </> : "—"}
@@ -270,7 +270,7 @@ export default function SnapchatEntitySettingsTable({
                             <th className="px-4 py-3 font-black">مطابقة المعرف</th>
                             <th className="px-4 py-3 font-black">{isAdSquad ? "ميزانية المجموعة" : "ميزانية الحملة"}</th>
                             <th className="px-4 py-3 font-black">مجموع ميزانيات المجموعات</th>
-                            <th className="px-4 py-3 font-black">Bid / Target Cost</th>
+                            <th className="px-4 py-3 font-black">المزايدة / التكلفة المستهدفة</th>
                             <th className="px-4 py-3 font-black">الجودة والمزامنة</th>
                         </tr>
                     </thead>

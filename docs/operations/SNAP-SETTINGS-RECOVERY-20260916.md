@@ -26,3 +26,6 @@ Next: create Draft PR, inspect CI, repair any failures, and write final verifica
 
 Production changed: no.
 
+
+## CI repair checkpoint
+Source 8ce61206c1c365f3e3c078400eeb1742ae7b76b5, Draft PR #1045, run 35106731000: backend 107 PASS; frontend 77 PASS / 5 FAIL caused by missing parentCampaign optional data. Added explicit parent-ID existence guard; neutral bid header preserves strategy-only Target Cost labeling; added last-selection-wins management regression. Next: rerun dedicated CI on repair commit. Production changed: no.

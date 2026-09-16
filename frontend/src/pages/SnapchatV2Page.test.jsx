@@ -463,7 +463,7 @@ describe("SnapchatV2Page read-only load", () => {
     });
     it("reads only five visible exact IDs and fetches an off-page management selection precisely", async () => {
         const rows = Array.from({ length: 12 }, (_, i) => ({
-            entity: { id: `campaign-${i}`, level: "campaign", name: `Campaign ${i}` },
+            entity: { id: `campaign-${i}`, level: "campaign", provider_level: "campaign", name: `Campaign ${i}` },
             quality: { sync_status: "complete", coverage_status: "complete" },
         }));
         const defaultGet = api.get.getMockImplementation();
@@ -490,6 +490,19 @@ describe("SnapchatV2Page read-only load", () => {
         expect(getSnapchatEntitySettings).toHaveBeenLastCalledWith(expect.objectContaining({
             entityType: "campaign", unifiedEntityId: "campaign-11", limit: 1,
         }));
+        const older = deferred();
+        const newer = deferred();
+        getSnapchatEntitySettings.mockImplementationOnce(() => older.promise).mockImplementationOnce(() => newer.promise);
+        await act(async () => { container.querySelector('[data-testid="manage-campaign-10"]').click(); });
+        await act(async () => { container.querySelector('[data-testid="manage-campaign-11"]').click(); });
+        const selection = (id) => [{ unified_entity_id: id, provider_entity_id: `selected-${id}`,
+            ad_account_id: "account-1", quality: { settings_status: "settings_complete" } }];
+        await act(async () => { newer.resolve(selection("campaign-11")); });
+        await act(async () => { older.resolve(selection("campaign-10")); });
+        await act(async () => { container.querySelector('[data-testid="snapchat-campaign-management-panel"] > button').click(); });
+        const card = container.querySelector('[data-testid="snapchat-management-current-settings"]');
+        expect(card.textContent).toContain("selected-campaign-11");
+        expect(card.textContent).not.toContain("selected-campaign-10");
         expect(api.post).not.toHaveBeenCalled();
         expect(createSnapchatManagementProposal).not.toHaveBeenCalled();
         expect(executeSnapchatManagementProposal).not.toHaveBeenCalled();
