@@ -156,7 +156,7 @@ The user explicitly changed the requirement: this isolated Preview must accept e
 password only, without OTP, authenticator enrollment or passkey requirements.
 This supersedes the preceding bootstrap-secret setup and its next-action instructions.
 
-Current status: PASSWORD_ONLY_RUNTIME_VERIFIED; interactive account sign-in still pending.
+Current status: PASSWORD_ONLY_LOGIN_VERIFIED; protected dashboard rendered after secure email/password submission.
 No Production authentication configuration or source was changed.
 
 ### Isolated adapter
@@ -265,8 +265,28 @@ Production Origin 403. Thus both Preview origins reach session validation while 
 sessions and Production-origin requests remain rejected.
 
 Fresh cloud-browser evidence: the session-error screen cleared after retry and redirected to
-the ordinary Preview /login email/password form. No successful account login is claimed yet.
+the ordinary Preview /login email/password form. Account login was subsequently verified as recorded below.
 Current backend PID 130800; frontend and Mongo unchanged; /app tracked/staged diffs empty.
 
 Next: one secure email/password submission on the recovered /login form, verify a protected
 page, and record final authentication acceptance. No bootstrap or OTP setup is needed.
+
+
+## Final acceptance — PASSWORD_ONLY_LOGIN_VERIFIED
+
+Fresh secure browser authentication completed with email/password only. The Preview browser
+navigated to `https://salla-analytics.preview.emergentagent.com/dashboard-advanced` and rendered
+the protected Mezan dashboard and navigation (orders, employees, suppliers and accounting).
+No bootstrap, OTP, TOTP, passkey or authenticator enrollment was requested.
+
+This confirms actual browser login, beyond service readiness and isolated test assertions.
+The active adapter fingerprint remains
+`02e3dbac817c44da6b009396d472d5f5223f79c7db8c86088df70d229339b10b`.
+The final focused suite passed 25 tests. Default Production authentication policy and /app
+tracked files remain unchanged; no Production publish or Production data operation was performed.
+
+Handoff: continue the accounting conversation in this authenticated Preview, using its own
+test accounts and permission acceptance plan. Accounting posting/cutover and comprehensive
+permission tests have not been performed by this repair. Production cutover still requires
+its separate workflow and authorization. Keep the independent Preview session key private,
+preserve the explicit two-origin allowlist and use the scoped rollback above when required.
