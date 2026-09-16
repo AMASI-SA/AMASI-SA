@@ -130,6 +130,10 @@ def create_app():
     require(len(key) >= 64 and key != os.environ.get('JWT_SECRET'), 'Independent Preview session key required')
     os.environ['JWT_SECRET'] = key
     os.environ['PYTHONDONTWRITEBYTECODE'] = '1'
+    # The base CSRF guard trusts FRONTEND_URL (not just CORS_ORIGINS).
+    # Bind both to Preview before importing server and constructing middleware.
+    os.environ['FRONTEND_URL'] = ORIGIN
+    os.environ['CORS_ORIGINS'] = ORIGIN
     sys.path.insert(0, str(BACKEND))
     apply_password_only_policy()
     server = importlib.import_module('server')
