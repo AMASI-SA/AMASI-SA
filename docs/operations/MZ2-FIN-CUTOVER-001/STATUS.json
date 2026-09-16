@@ -160,9 +160,9 @@
   ],
   "plan_version": 1,
   "preview_acceptance": {
-    "blocker": null,
+    "blocker": "preview_excel_orders_excluded_and_cloud_browser_terminal_unavailable",
     "continuation": "docs/operations/PREVIEW-REVIEWER-SIGNOUT-20260916.md",
-    "current_session_role": "independent_viewer_verified_by_sidebar_identity",
+    "current_session_role": "owner",
     "current_session_settlement_view": "PASS_AFTER_RELOAD",
     "financial_writes_by_this_session": 0,
     "independent_viewer_account_created": true,
@@ -170,7 +170,7 @@
     "independent_viewer_permissions_verified": [
       "accounting.settlements.view"
     ],
-    "last_observation": "User supplied HTTP:403 and accounting_permission_required for the nonexistent-draft POST. Combined with agent-observed Viewer identity, settlement access after reload, disabled draft/bank writes and denied opening-balances page, Preview independent-Viewer scenario5 passes. Financial no-write conclusion is supported by nonexistent ID and inspected permission-before-draft/write control flow, not a fresh DB audit. This does not certify Production Turki scenario5 or complete Preview P01.",
+    "last_observation": "User uploaded settlement draft; unmatched rows remain. Import-jobs UI reports completed Excel order import with no failures. Default frontend fixtures hide API results. With mock=0, API-backed UI lists only seeded Preview orders; repository and summary filter require raw_by_source.salla_direct, excluding Excel-only orders. Settlement matching independently uses unified_orders and needs a fresh rematch after import. Browser/independent-terminal reads repeatedly time out, including after runtime recovery. No runtime mutation or journal posting performed.",
     "last_updated_date": "2026-09-16",
     "owner_signin_verified": true,
     "posting_endpoint_403_verified": true,
@@ -183,7 +183,8 @@
     "posting_endpoint_evidence_source": "user_executed_browser_console_report",
     "posting_endpoint_error_code": "accounting_permission_required",
     "posting_endpoint_required_permission": "accounting.settlements.post",
-    "next_action": "prepare_owner_preview_settlement_cycle_and_verify_review_before_any_explicitly_authorized_post"
+    "next_action": "Restore independent Preview terminal access; inspect imported order shape and implement read-only Excel order projection without fabricating salla_direct provenance. Test owner scoping, currency, dates, deduplication, list/detail/count/search parity and preserve mutation guards. Apply tested frontend default fix only in isolated Preview; verify imported orders and settlement matching before declaring readiness.",
+    "preview_default_mode_fix": "SOURCE_TESTED_NOT_DEPLOYED"
   },
   "production_branch": "hotfix/prod-snap-meta-final"
 }

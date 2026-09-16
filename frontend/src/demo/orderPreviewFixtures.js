@@ -84,9 +84,9 @@ export function getPreviewDemoMode() {
     if (stored === "live") return false;
     if (stored === "mock") return true;
   } catch (_) {
-    // Preview defaults to mock mode even when storage is unavailable.
+    // Use the isolated environment's API unless fixtures were explicitly selected.
   }
-  return true;
+  return false;
 }
 
 export function setPreviewDemoMode(enabled) {
