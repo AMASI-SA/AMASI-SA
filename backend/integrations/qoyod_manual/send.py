@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from contextvars import ContextVar
 from datetime import datetime, date, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Optional
@@ -55,6 +56,24 @@ from qoyod_order_accounting_sync import (
 )
 
 logger = logging.getLogger(__name__)
+
+# One automatic worker round processes a small sequential batch.  Reusing the
+# client inside that task also reuses its complete, read-only Qoyod reference
+# snapshot after the provider's exact-reference filter returns 404. ContextVar
+# keeps concurrent manual requests and worker replicas isolated.
+_SHARED_QOYOD_CLIENT_HOLDER: ContextVar[
+    Optional[dict[str, ManualQoyodClient]]
+] = ContextVar("qoyod_manual_shared_client_holder", default=None)
+
+
+def begin_shared_manual_qoyod_client():
+    """Start a task-local client scope for one sequential send batch."""
+    return _SHARED_QOYOD_CLIENT_HOLDER.set({})
+
+
+def end_shared_manual_qoyod_client(token) -> None:
+    """Close a task-local client scope without leaking it to later work."""
+    _SHARED_QOYOD_CLIENT_HOLDER.reset(token)
 
 _FLOOR_DATE: date = date.fromisoformat(QOYOD_SYNC_START_DATE)
 
@@ -2810,13 +2829,20 @@ async def manual_send_one(
         )
 
     # ── Load Qoyod credentials ─────────────────────────────────────
-    api_key = await get_api_key(db, user_id)
-    if not api_key:
-        raise ManualSendRefused(
-            "qoyod_credentials_missing",
-            "لم يتم إعداد مفتاح API لقيود من الإعدادات")
-
-    client = ManualQoyodClient(api_key=api_key)
+    # A bounded automatic batch shares one task-local client. This preserves
+    # the complete invoice-reference snapshot obtained by the first order's
+    # safe 404 fallback, avoiding a full provider scan for every later order.
+    client_holder = _SHARED_QOYOD_CLIENT_HOLDER.get()
+    client = client_holder.get("client") if client_holder is not None else None
+    if client is None:
+        api_key = await get_api_key(db, user_id)
+        if not api_key:
+            raise ManualSendRefused(
+                "qoyod_credentials_missing",
+                "لم يتم إعداد مفتاح API لقيود من الإعدادات")
+        client = ManualQoyodClient(api_key=api_key)
+        if client_holder is not None:
+            client_holder["client"] = client
 
     # ── Guard G1b — atomic idempotency lock ────────────────────────
     lock_id = await _acquire_lock(
@@ -2873,8 +2899,30 @@ async def manual_send_one(
     try:
         existing_inv = await client.find_invoice_by_reference(
             str(order_number))
-    except ManualQoyodError:
-        existing_inv = None
+    except ManualQoyodError as exc:
+        # An unavailable/unauthorized lookup is UNKNOWN, never evidence that
+        # the reference is absent. Fail closed before any customer, product,
+        # invoice, or payment write. A later retry must reconcile first.
+        await _finalize_lock(
+            db,
+            order_number=str(order_number),
+            user_id=user_id,
+            lock_id=lock_id,
+            status="failed",
+            error={
+                "code": "qoyod_http_error",
+                "message": (
+                    f"تعذر التأكد من مرجع الفاتورة في قيود "
+                    f"({exc.status_code})"
+                ),
+                "detail": exc.to_dict(),
+            },
+        )
+        raise ManualSendRefused(
+            "qoyod_http_error",
+            f"تعذر التأكد من مرجع الفاتورة في قيود ({exc.status_code})",
+            exc.to_dict(),
+        ) from exc
     if existing_inv:
         eid = _to_int(existing_inv.get("id"))
         await _finalize_lock(

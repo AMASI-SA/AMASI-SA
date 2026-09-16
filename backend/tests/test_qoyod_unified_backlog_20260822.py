@@ -767,6 +767,50 @@ async def test_explicit_range_uses_riyadh_business_date(db):
 
 
 @pytest.mark.asyncio
+async def test_worker_scope_avoids_historical_and_inbox_scan_caps(db):
+    await db.unified_orders.insert_many([
+        _unified_order(
+            f"historical-outside-worker-window-{index}",
+            stored_date="2026-07-01",
+        )
+        for index in range(5)
+    ] + [
+        _unified_order(
+            "scoped-riyadh-boundary",
+            stored_date="2026-08-14",
+            raw_salla_date="2026-08-14T21:30:00+00:00",
+        ),
+        _unified_order("scoped-current-window"),
+    ])
+    await db.integration_inbox.insert_many([{
+        "id": f"historical-inbox-{index}",
+        "trace_id": f"historical-inbox-{index}",
+        "user_id": QOYOD_TENANT,
+        "salla_order_number": f"historical-outside-worker-window-{index}",
+        "received_at": NOW - timedelta(days=30),
+    } for index in range(5)])
+
+    audit = await _audit(
+        db,
+        scan_limit=2,
+        lightweight=True,
+        scope_unified_to_date_range=True,
+        include_inbox_evidence=False,
+    )
+
+    assert audit["eligible_references"] == {
+        "scoped-riyadh-boundary",
+        "scoped-current-window",
+    }
+    assert audit["scan_truncated"] is False
+    assert audit["scanned_rows"] == {
+        "unified_orders": 2,
+        "integration_inbox": 0,
+        "qoyod_invoices": 0,
+    }
+
+
+@pytest.mark.asyncio
 async def test_orders_owner_and_qoyod_tenant_are_separate_authorities(db):
     await db.unified_orders.insert_many([
         _unified_order("main-qoyod-reference"),

@@ -46,6 +46,7 @@ uses those local outputs as inputs.
 
 | Entity | Lifetime and purpose |
 | --- | --- |
+| Source base J | Current published intent commit used as the explicit manifest delta base |
 | Source commit A | Reviewed commit containing all governed source changes |
 | `release/release-intent-v5.json` | Tracked, reviewed handoff binding A to the expected deterministic build and runtime identity |
 | Intent/deployment commit B | Commit which changes only the intent file after A |
@@ -72,15 +73,18 @@ two commits.
 5. The operational guard records B, or a tree-equivalent merge commit, as
    `deployment_git_sha`.
 
-When `.git` is present, the guard requires A to be an ancestor of the
+When `.git` is present, the guard requires J to be an ancestor of A and A to
+be an ancestor of the
 deployment commit and rejects any governed source change after A. The only
 tracked content change allowed in `A..deployment_git_sha` is
 `release/release-intent-v5.json`; merge-parent metadata may differ but may not
-introduce additional content. When `.git` is absent, the adapter validates the
-complete Frontend source membership, modes, Git blob IDs, byte counts and
-SHA256 values from the intent, plus the exact critical Backend hashes. It does
-not infer ancestry without Git; the adapter logs that limitation and fails if
-any source byte inside the intent's governed scope drifts.
+introduce additional content. Before Git is removed, the adapter re-derives
+both governed source manifests from the J and A objects and compares them
+exactly with the intent. When `.git` is absent, it validates complete Frontend
+and Backend runtime membership, modes, Git blob IDs, byte counts and SHA256
+values. It also validates every available release-control script; `.github`
+is not required inside the isolated Backend package because it is not runtime
+content.
 
 A squash merge, rebase, amend, or conflict resolution after freezing changes
 the commit/tree relation and invalidates the handoff. Preserve A and the
@@ -95,7 +99,12 @@ commit. Operational diagnostics must use the separately named
 
 ## Freezing the reviewed intent
 
-Start from clean source commit A. The bootstrap switch is permitted only while
+Start from clean source commit A and pass current published intent commit J
+explicitly. J must itself be a valid prior intent-only B over the source P
+named by J's intent; J must be an ancestor of A, and A must carry J's exact
+intent bytes without touching that path anywhere in J..A. This permits a
+schema-1 intent at J to bootstrap schema 2 without trusting it as the new
+intent. The bootstrap switch is permitted only while
 creating the reviewed intent, because an intent does not exist yet for A:
 
 ```bash
@@ -116,17 +125,38 @@ python scripts/frontend_release_toolchain.py exec -- \
 
 python scripts/emergent_deployment_adapter.py freeze-intent \
   --source-git-sha "$(git rev-parse HEAD)" \
-  --branch hotfix/prod-snap-meta-final
+  --source-base-git-sha "<published-intent-commit-J>" \
+  --branch hotfix/prod-snap-meta-final \
+  --output "$(mktemp)"
 ```
 
-Review the complete intent, then create B with only that tracked file changed.
+The output must be an absolute path outside the worktree. Copy the reviewed
+output to `release/release-intent-v5.json`, then create B with only that tracked
+file changed. Candidate-A CI uses the dedicated candidate validator, which
+requires HEAD=A, a clean J-to-A transition and exact Git-rederived manifests;
+the normal tracked-intent loader remains reserved for B and still rejects
+HEAD=A.
+
+If source A was staged onto Production before B, the reviewed-B pull request
+and Production push may start from that staged source commit instead of J.
+The event boundary must be an ancestor of A and a descendant of J. The normal
+J validation and the no-intent-change rule across J..A still apply, so this
+recovery path cannot omit or replace the previously reviewed intent.
 Do not leave the bootstrap variable set for a rehearsal or Cloud Build. Its
 only accepted enabled value is exactly `1`; all other non-empty values fail.
 
 The intent binds:
 
 - full lowercase source commit A SHA;
+- full lowercase source base J SHA and the actual A/J root-tree OIDs;
 - the complete tracked Frontend source manifest and its canonical tree hashes;
+- the complete Backend runtime manifest at A, including path, mode, Git blob,
+  byte count and SHA256 for every runtime file, the actual `A:backend` and
+  `J:backend` tree OIDs, the filtered projection tree OID, exact delta counts,
+  and canonical J-to-A deletion tombstones;
+- the complete release-control manifest for all tracked
+  `.github/workflows/**`, `.github/actions/**`, and `scripts/**` files, with
+  the same J-to-A provenance and tombstone contract;
 - exact Node/Yarn versions and governed client environment proof;
 - every meaningful Frontend build file, `index.html`, `build-meta.json`, and
   the complete artifact tree digest;
@@ -135,8 +165,10 @@ The intent binds:
 - the complete deterministic runtime identity.
 
 The release ID is `rg5-` followed by the SHA256 of canonical compact JSON for
-the identity core. The same source, critical bytes, artifact, metadata, and
-proof therefore produce the same identity locally and in Cloud Build.
+the identity core. The complete Backend manifest and canonical control
+summary, including their manifest/tree/tombstone digests and counts, are part
+of that core. The same governed source, artifact, metadata, and proof therefore
+produce the same identity locally and in Cloud Build.
 
 `REACT_APP_BACKEND_URL` is public browser configuration, not a secret. Its
 reviewed v5 value is `https://mezansalla.com`; both the bootstrap build and the
@@ -239,19 +271,50 @@ The Backend runtime identity embeds everything needed to verify itself inside
 an isolated Backend package:
 
 - `source_git_sha` and its backward-compatible `git_sha` health alias;
+- `source_base_git_sha=J`;
 - deterministic `rg5-…` release ID;
+- the full `backend_runtime_source` manifest needed for no-Git exact package
+  verification;
+- a canonical `release_control_source` summary (the intent retains its full
+  records);
 - critical Backend file hashes;
 - exact Frontend build identity, artifact tree and build-meta record;
 - exact normalized Frontend reproducibility proof.
 
 Backend health validation does not read `.git`, `frontend/build`, or the
-ignored proof from a sibling workspace. It hashes allowlisted critical files
-inside its own package and validates the canonical embedded identity. A valid
-package reports:
+ignored proof from a sibling workspace. It walks the complete Backend package
+and rejects an extra, missing, modified, mode-drifted, symlinked or special
+runtime entry. `backend/tests/**` and generated `backend/release_identity.json`
+are the only non-runtime projections. Sourceless bytecode is never excluded;
+package minting rejects all prepackaged caches, while a running interpreter may
+ignore only a canonical `__pycache__` entry reproduced byte-for-byte from its
+current sibling source, cache tag, optimization and timestamp metadata. A
+derived cache may use restrictive modes such as `0600` under `umask 077`, but
+must remain owner-readable, non-executable, free of special bits, and not
+group/world-writable. The
+six critical hashes remain required compatibility anchors, not the manifest
+boundary. A valid package reports:
+
+Runtime configuration has one narrow sidecar exception: an untracked,
+root-level `backend/.env`. The scanner checks only its directory entry and
+permissions; it never opens, hashes, logs, adds, or copies the file. It must be
+a regular non-symlink file, owner-readable and non-executable, with no special
+bits or group/world write (`0600`, `0640`, and `0644` are valid). A tracked
+`.env`, `.env.*`, nested `.env`, symlink, special node, or unsafe mode remains a
+hard failure before any content read.
+
+Filesystem permissions may be narrowed by a clone/build umask without changing
+Git mode identity. Source files must be owner-readable with no special bits or
+group/world write; an executable category additionally requires owner execute.
+Directories require owner read/execute under the same limits. Thus
+`0600`/`0700` package trees remain valid while a change between Git's
+non-executable and executable categories still fails manifest matching.
 
 ```text
 verified_identity_available=true
 critical_file_hashes_match=true
+backend_runtime_source_verified=true
+release_control_source_bound=true
 frontend_build_verified=true
 ```
 
@@ -282,6 +345,14 @@ The Frontend candidate package must contain exact records for:
 - the reviewed runtime entry files (`package.json`, `yarn.lock`,
   `vite.config.js`, and `scripts/start-governed-runtime.cjs`).
 
+The tracked root `frontend/.env` is a public package member containing only
+reviewed comments for the Emergent build boundary. The Frontend package scan
+must opt in to that exact `.env` path, then reads and hashes it as an ordinary
+public record. This exception does not apply to Backend scanning; `.env.*`, a
+nested `.env`, symlinks, special nodes, executable files, and unsafe modes
+remain forbidden. It is distinct from the untracked and unread Backend
+configuration sidecar described above.
+
 The isolated candidate executes the runtime artifact validator without
 `node_modules`; the separate clean-clone HTTP check runs the exact `yarn start`
 entry point after the pinned dependency installation.
@@ -289,9 +360,12 @@ entry point after the pinned dependency installation.
 The Backend candidate package must contain:
 
 - `release_identity.json`;
-- every critical Backend file with the bound SHA256;
-- enough v5 validation code for an isolated import to return the exact release
-  ID with `verified_identity_available=true`.
+- every file, and only every file, in `backend_runtime_source`, with exact mode,
+  bytes, Git blob and SHA256;
+- enough v5 validation code for an ordinary isolated Python import (without
+  disabling bytecode generation) to return the exact release ID with
+  `verified_identity_available=true` and
+  `backend_runtime_source_verified=true`.
 
 The proof records candidate runtime roots, file counts, package tree digests,
 and exact records for required identity and metadata members; it is not a full
@@ -329,6 +403,8 @@ The job then independently requires:
 - `backend/release_identity.json` equal to the intent identity;
 - matching source SHA, artifact tree, build metadata, critical hashes, and
   deterministic release ID;
+- Git-rederived Backend/control manifests equal to the reviewed intent,
+  including root/scope OIDs, delta counts and tombstones;
 - verified Backend identity from its package-local reader;
 - a clean tracked worktree after all ignored outputs are generated.
 
@@ -376,6 +452,8 @@ release_id=<expected rg5 identity>
 source_git_sha=<expected source commit A>
 git_sha=<same source commit A>
 critical_file_hashes_match=true
+backend_runtime_source_verified=true
+release_control_source_bound=true
 frontend_build_verified=true
 ```
 

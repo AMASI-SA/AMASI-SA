@@ -690,30 +690,30 @@ async def process_shadow_job(
         return fence_owned
 
     try:
-        prepare = getattr(engine, "prepare_order_snapshot", None)
-        call_args = {
-            "user_id": str(job.get("user_id") or ""),
-            "store_id": str(job.get("store_id") or ""),
-            "light_order": job.get("light_order") or {},
-            "event_created_at": job.get("event_created_at"),
-        }
-        if callable(prepare):
-            result = await prepare(
-                **call_args,
-                signal_revision=signal_revision,
-                before_items=fence_before_items,
-            )
-        else:
-            result = await engine.sync_order(**call_args)
-    except Exception as exc:
-        result = {
-            "ok": False,
-            "items_sync_status": "failed",
-            "items_payload_valid": False,
-            "error_type": type(exc).__name__,
-        }
+        try:
+            prepare = getattr(engine, "prepare_order_snapshot", None)
+            call_args = {
+                "user_id": str(job.get("user_id") or ""),
+                "store_id": str(job.get("store_id") or ""),
+                "light_order": job.get("light_order") or {},
+                "event_created_at": job.get("event_created_at"),
+            }
+            if callable(prepare):
+                result = await prepare(
+                    **call_args,
+                    signal_revision=signal_revision,
+                    before_items=fence_before_items,
+                )
+            else:
+                result = await engine.sync_order(**call_args)
+        except Exception as exc:
+            result = {
+                "ok": False,
+                "items_sync_status": "failed",
+                "items_payload_valid": False,
+                "error_type": type(exc).__name__,
+            }
 
-    try:
         return await _finalize_shadow_job(
             db,
             jobs=jobs,
@@ -1461,3 +1461,33 @@ def start_salla_orders_v3_shadow_worker(db: Any) -> Optional[asyncio.Task]:
         return _task
     _task = asyncio.create_task(_worker_loop(db), name="salla-orders-v3-shadow")
     return _task
+
+
+async def start_salla_orders_v3_shadow_runtime(db: Any) -> Optional[asyncio.Task]:
+    """Initialize the optional observer for this process, including restarts.
+
+    Indexes are idempotent. This must not live inside the once-per-release
+    startup lease: a restarted process still needs its own task. Mongo fences
+    retain ownership of each bounded discovery/enrichment operation.
+    """
+    if not shadow_enabled():
+        return None
+    if _task is not None and not _task.done():
+        return _task
+    await ensure_salla_orders_v3_indexes(db)
+    return start_salla_orders_v3_shadow_worker(db)
+
+
+async def stop_salla_orders_v3_shadow_worker(task: Optional[asyncio.Task]) -> None:
+    """Drain cancellation before the caller closes its Mongo client."""
+    global _task
+    if task is None:
+        return
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+    finally:
+        if _task is task:
+            _task = None

@@ -78,9 +78,11 @@ def test_disabled_shadow_creates_neither_worker_nor_indexes_at_startup():
 
     assert 'SHADOW_ENABLED_ENV = "SALLA_ORDERS_V3_SHADOW_ENABLED"' in config
     assert 'os.environ.get(SHADOW_ENABLED_ENV, "false")' in worker
-    assert "if _salla_orders_v3_shadow_enabled():" in server
-    guarded = server.split("if _salla_orders_v3_shadow_enabled():", 1)[1]
-    assert "await _ensure_salla_orders_v3_indexes(db)" in guarded
+    assert "await start_salla_orders_v3_shadow_runtime(db)" in server
+    guarded = worker.split("async def start_salla_orders_v3_shadow_runtime", 1)[1]
+    assert guarded.index("if not shadow_enabled():") < guarded.index(
+        "await ensure_salla_orders_v3_indexes(db)"
+    )
     assert "repair_event_job_outbox_once" not in server
     assert "requeue_shadow_job_manually" not in server
 

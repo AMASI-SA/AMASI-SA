@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 from copy import deepcopy
+from unittest.mock import patch
 
 from qoyod_auto_payment_freshness import (
     _canonical_from_unified,
@@ -164,6 +165,72 @@ def _paid_order():
     }
 
 
+def test_salla_detail_customer_identity_survives_unified_projection():
+    from orders_db import TRACKED_FIELDS
+    from qoyod_auto_unified.live_source import (
+        _refresh_snapshot_with_complete_payment,
+    )
+    from salla_integration.sync import _salla_order_to_doc
+
+    order = _paid_order()
+    for key in ("customer_name", "customer_mobile", "customer_email"):
+        order.pop(key, None)
+    db = _DB(order)
+
+    salla_detail = {
+        "id": "salla-1",
+        "reference_id": "279460595",
+        "date": {"date": "2026-08-23T10:00:00+03:00"},
+        "customer": {
+            "first_name": "سارة",
+            "last_name": "القحطاني",
+            "mobile": "0500000000",
+            "email": "customer@example.test",
+        },
+        "status": {"slug": "completed", "name": "تم التنفيذ"},
+        "payment_method": {"code": "mada", "name": "مدى"},
+        "payment": {"status": "paid"},
+        "payment_actions": {
+            "remaining_action": {
+                "paid_amount": 187.92,
+                "remaining_amount": 0.0,
+                "has_remaining_amount": False,
+            },
+        },
+        "amounts": {
+            "total": {"amount": 187.92, "currency": "SAR"},
+        },
+    }
+    detail_doc = _salla_order_to_doc(salla_detail)
+
+    assert detail_doc["customer_name"] == "سارة القحطاني"
+    assert detail_doc["customer_mobile"] == "0500000000"
+    assert detail_doc["customer_email"] == "customer@example.test"
+    assert "customer_email" in TRACKED_FIELDS
+
+    async def original(*args, **kwargs):
+        return {"trace_id": "trace-customer"}
+
+    result = asyncio.run(_refresh_snapshot_with_complete_payment(
+        original,
+        db,
+        "owner-1",
+        "279460595",
+        detail_doc,
+    ))
+
+    assert result["payment_facts_complete"] is True
+    assert db.unified_orders.row["customer_name"] == "سارة القحطاني"
+    assert db.unified_orders.row["customer_mobile"] == "0500000000"
+    assert db.unified_orders.row["customer_email"] == "customer@example.test"
+    canonical = _canonical_from_unified(db.unified_orders.row)
+    assert canonical["customer"] == {
+        "name": "سارة القحطاني",
+        "phone": "0500000000",
+        "email": "customer@example.test",
+    }
+
+
 def test_paid_order_without_legacy_inbox_row_creates_sender_projection():
     db = _DB(_paid_order())
 
@@ -213,6 +280,29 @@ def test_sender_projection_adopts_stable_row_from_previous_owner():
     assert selector == {"_id": "mongo-row-1"}
     assert update["$set"]["user_id"] == "main"
     assert upsert is True
+
+
+def test_missing_customer_identity_is_retryable_prewrite_failure():
+    from qoyod_auto_unified.common import RETRYABLE_SYNC_FAILURE_CODES
+
+    order = _paid_order()
+    order["customer_name"] = ""
+    db = _DB(order)
+
+    result = asyncio.run(sync_authoritative_payment_to_inbox(
+        db,
+        orders_user_id="owner-1",
+        legacy_user_id="main",
+        order_number="279460595",
+    ))
+
+    assert result == {
+        "ok": False,
+        "code": "authoritative_customer_identity_missing",
+        "order_number": "279460595",
+    }
+    assert result["code"] in RETRYABLE_SYNC_FAILURE_CODES
+    assert db.integration_inbox.upserts == []
 
 
 def test_sender_projection_exception_becomes_retryable_prewrite_failure():
@@ -349,6 +439,90 @@ def test_worker_sort_key_is_oldest_first():
     assert [row["order_number"] for row in sorted(rows, key=_oldest_key)] == [
         "1", "2", "3",
     ]
+
+
+def test_manual_sender_prepares_unified_projection_before_qoyod_boundary():
+    from qoyod_auto_unified import installer
+
+    calls = []
+
+    async def project(db, **kwargs):
+        calls.append((db, kwargs))
+        return {"ok": True, "source_authority": "unified_orders"}
+
+    db = object()
+    with patch.object(
+        installer, "sync_authoritative_payment_to_inbox", project,
+    ):
+        result = asyncio.run(installer._prepare_sender_projection(
+            db,
+            user_id="main",
+            orders_user_id="owner-1",
+            order_number="279460595",
+            actor="manual-ui:operator",
+        ))
+
+    assert result["ok"] is True
+    assert calls == [(db, {
+        "orders_user_id": "owner-1",
+        "legacy_user_id": "main",
+        "order_number": "279460595",
+    })]
+
+
+def test_manual_sender_preserves_genuine_legacy_order_fallback():
+    from qoyod_auto_unified import installer
+
+    async def missing_unified(*args, **kwargs):
+        return {
+            "ok": False,
+            "code": "authoritative_order_missing_after_resync",
+        }
+
+    with patch.object(
+        installer, "sync_authoritative_payment_to_inbox", missing_unified,
+    ):
+        result = asyncio.run(installer._prepare_sender_projection(
+            object(),
+            user_id="main",
+            orders_user_id="owner-1",
+            order_number="legacy-1",
+            actor="manual-ui",
+        ))
+
+    assert result == {
+        "ok": True,
+        "skipped": True,
+        "reason": "legacy_order_without_unified_projection",
+    }
+
+
+def test_manual_sender_fails_closed_on_unified_payment_refusal():
+    from integrations.qoyod_manual.send import ManualSendRefused
+    from qoyod_auto_unified import installer
+
+    async def unpaid(*args, **kwargs):
+        return {
+            "ok": False,
+            "code": "authoritative_payment_not_eligible",
+            "order_number": "279460595",
+        }
+
+    with patch.object(
+        installer, "sync_authoritative_payment_to_inbox", unpaid,
+    ):
+        try:
+            asyncio.run(installer._prepare_sender_projection(
+                object(),
+                user_id="main",
+                orders_user_id="owner-1",
+                order_number="279460595",
+                actor="failed-retry-ui:operator",
+            ))
+        except ManualSendRefused as exc:
+            assert exc.code == "authoritative_payment_not_eligible"
+        else:
+            raise AssertionError("unpaid unified order crossed Qoyod boundary")
 
 
 def test_paid_exact_reference_overrides_stale_failure_classification():

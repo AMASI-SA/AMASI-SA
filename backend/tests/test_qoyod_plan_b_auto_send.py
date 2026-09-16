@@ -253,6 +253,100 @@ async def test_qoyod_live_preflight_skips_items_and_shipments(monkeypatch):
     assert "keyword" not in calls[0][2]
 
 
+class _StoredSallaOrderCollection:
+    async def find_one(self, selector, projection):
+        assert selector == {
+            "user_id": "orders-user",
+            "order_number": "273000003",
+        }
+        assert projection == {"_id": 0, "order_id": 1}
+        return {"order_id": "987654"}
+
+
+class _StoredSallaOrderDb:
+    unified_orders = _StoredSallaOrderCollection()
+
+
+@pytest.mark.asyncio
+async def test_live_preflight_uses_stored_salla_id_before_reference_search(
+    monkeypatch,
+):
+    """A freshly ingested order must not depend on list-filter semantics."""
+    from salla_integration import sync as salla_sync
+
+    calls = []
+
+    async def fake_call_salla(db, user_id, method, endpoint, params=None):
+        calls.append((method, endpoint, params))
+        if endpoint == "/orders/987654":
+            return {
+                "data": {
+                    "id": 987654,
+                    "reference_id": "273000003",
+                    "status": {
+                        "slug": "completed",
+                        "name": "تم التنفيذ",
+                    },
+                },
+            }
+        if endpoint == "/orders/items":
+            assert params == {"order_id": "987654"}
+            return {"data": []}
+        if endpoint == "/shipments":
+            assert params == {"order_id": "987654", "per_page": 50}
+            return {"data": []}
+        raise AssertionError(f"unexpected Salla endpoint: {endpoint}")
+
+    monkeypatch.setattr(salla_sync, "call_salla", fake_call_salla)
+
+    details = await salla_sync._fetch_salla_order_details(
+        _StoredSallaOrderDb(),
+        "orders-user",
+        "273000003",
+    )
+
+    assert details["reference_id"] == "273000003"
+    assert calls[0] == ("GET", "/orders/987654", None)
+    assert "/orders" not in [endpoint for _, endpoint, _ in calls]
+    assert {endpoint for _, endpoint, _ in calls[1:]} == {
+        "/orders/items",
+        "/shipments",
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("returned_reference", ["", "different-order"])
+async def test_stored_salla_id_requires_exact_reference_before_enrichment(
+    monkeypatch,
+    returned_reference,
+):
+    from salla_integration import sync as salla_sync
+
+    calls = []
+
+    async def fake_call_salla(db, user_id, method, endpoint, params=None):
+        calls.append(endpoint)
+        assert endpoint == "/orders/987654"
+        return {
+            "data": {
+                "id": 987654,
+                "reference_id": returned_reference,
+                "status": {"slug": "completed", "name": "تم التنفيذ"},
+            },
+        }
+
+    monkeypatch.setattr(salla_sync, "call_salla", fake_call_salla)
+
+    with pytest.raises(RuntimeError, match="reference mismatch"):
+        await salla_sync._fetch_salla_order_details(
+            _StoredSallaOrderDb(),
+            "orders-user",
+            "273000003",
+        )
+
+    assert calls == ["/orders/987654"]
+
+
 class _UpdateResult:
     modified_count = 1
 
@@ -489,6 +583,9 @@ async def _prepare_run(
     async def fake_candidate_snapshot(db, **kwargs):
         assert kwargs["from_date"] == "2026-07-01"
         assert kwargs["orders_user_id"] == "orders-user"
+        assert kwargs["lightweight"] is True
+        assert kwargs["scope_unified_to_date_range"] is True
+        assert kwargs["include_inbox_evidence"] is False
         snapshot_calls.append(kwargs)
         if candidates_by_status is None:
             authoritative_rows = list(candidates)
@@ -584,6 +681,54 @@ async def test_run_once_uses_one_snapshot_and_keeps_all_three_statuses(
         "delivering": 1,
         "delivered": 1,
     }
+
+
+@pytest.mark.asyncio
+async def test_run_once_reuses_one_qoyod_client_scope_for_the_batch(
+    monkeypatch,
+):
+    events = []
+
+    def fake_begin_client_scope():
+        events.append("scope_enter")
+        return "scope-token"
+
+    def fake_end_client_scope(token):
+        assert token == "scope-token"
+        events.append("scope_exit")
+
+    async def fake_send(
+        db, *, user_id, orders_user_id, order_number, actor,
+        allow_historical_positive_total,
+    ):
+        events.append(f"send:{order_number}")
+        return {"invoice_id": f"q-{order_number}", "payment_id": "p-1"}
+
+    await _prepare_run(
+        monkeypatch,
+        candidates=[_candidate("1001"), _candidate("1002")],
+        send_one=fake_send,
+    )
+    monkeypatch.setattr(
+        auto_send,
+        "begin_shared_manual_qoyod_client",
+        fake_begin_client_scope,
+    )
+    monkeypatch.setattr(
+        auto_send,
+        "end_shared_manual_qoyod_client",
+        fake_end_client_scope,
+    )
+
+    result = await auto_send.run_once(_RunDb(), batch_limit=5)
+
+    assert result["sent_count"] == 2
+    assert events == [
+        "scope_enter",
+        "send:1001",
+        "send:1002",
+        "scope_exit",
+    ]
 
 
 @pytest.mark.asyncio
@@ -763,7 +908,7 @@ async def test_more_than_prefetch_page_of_quarantines_cannot_starve_older_row(
 
 
 @pytest.mark.asyncio
-async def test_qoyod_http_error_is_quarantined_and_next_candidate_sends(
+async def test_qoyod_503_is_retryable_and_next_candidate_sends(
     monkeypatch,
 ):
     calls = []
@@ -795,9 +940,11 @@ async def test_qoyod_http_error_is_quarantined_and_next_candidate_sends(
     assert result["ok"] is True
     assert result["status"] == "succeeded"
     assert result["sent_count"] == 1
-    assert result["manual_review_count"] == 1
+    assert result["manual_review_count"] == 0
+    assert result["retry_later_count"] == 1
     quarantine = db.qoyod_manual_auto_quarantines.rows["main:273811870"]
-    assert quarantine["code"] == "qoyod_http_error"
+    assert quarantine["code"] == "qoyod_transient_error"
+    assert quarantine["detail"]["status_codes"] == [503]
 
 
 @pytest.mark.asyncio
@@ -852,7 +999,58 @@ async def test_salla_refresh_failure_retries_later_and_next_candidate_sends(
     assert result["results"][0]["outcome"] == "sent"
     assert result["results"][1]["outcome"] == "retry_later"
     assert result["results"][1]["order_number"] == "276776919"
-    assert db.qoyod_manual_auto_quarantines.rows == {}
+    retry = db.qoyod_manual_auto_quarantines.rows["main:276776919"]
+    assert retry["status"] == "open"
+    assert retry["code"] == "salla_status_refresh_failed"
+    assert retry["recovery_class"] == "sync_retryable"
+    assert retry["next_retry_at"] > retry["retry_scheduled_at"]
+
+
+@pytest.mark.asyncio
+async def test_salla_refresh_retry_delay_allows_next_order_in_later_round(
+    monkeypatch,
+):
+    sent = []
+
+    async def fake_send(
+        db, *, user_id, orders_user_id, order_number, actor,
+        allow_historical_positive_total,
+    ):
+        assert allow_historical_positive_total is True
+        sent.append(order_number)
+        return {"invoice_id": 901, "payment_id": 902}
+
+    await _prepare_run(
+        monkeypatch,
+        candidates=[_candidate("276776919"), _candidate("276776920")],
+        send_one=fake_send,
+    )
+
+    async def fake_refresh(db, *, orders_user_id, order_number):
+        if order_number == "276776919":
+            raise ManualSendRefused(
+                "salla_status_refresh_failed",
+                "تعذر التحقق من الحالة الحالية للطلب في سلة",
+                {"stage": "fetch_order_details", "needs_reauth": False},
+            )
+        return True, {
+            "ok": True,
+            "found": True,
+            "plan_b_status_snapshot": {"status_native": "تم التنفيذ"},
+        }
+
+    monkeypatch.setattr(
+        auto_send, "_refresh_and_verify_salla_status", fake_refresh
+    )
+
+    db = _RunDb()
+    first = await auto_send.run_once(db, batch_limit=1)
+    second = await auto_send.run_once(db, batch_limit=1)
+
+    assert first["retry_later_count"] == 1
+    assert first["sent_count"] == 0
+    assert second["sent_count"] == 1
+    assert sent == ["276776920"]
 
 
 @pytest.mark.asyncio
@@ -961,3 +1159,112 @@ async def test_live_unpaid_order_is_refused_by_unchanged_manual_sender(
     ]
     assert quarantine["code"] == "payment_not_completed"
     assert quarantine["detail"]["qoyod_write_performed"] is False
+
+
+
+class _CredentialPauseSettingsCollection:
+    def __init__(self):
+        self.calls = []
+
+    async def update_one(self, selector, update, upsert=False):
+        self.calls.append((selector, update, upsert))
+        return _UpdateResult()
+
+
+@pytest.mark.asyncio
+async def test_credential_failure_pauses_worker_without_quarantining_orders(
+    monkeypatch,
+):
+    calls = []
+
+    async def fake_send(
+        db, *, user_id, orders_user_id, order_number, actor,
+        allow_historical_positive_total,
+    ):
+        calls.append(order_number)
+        raise ManualSendRefused(
+            "qoyod_http_error",
+            "استجابة غير ناجحة من قيود (401)",
+            {
+                "status_code": 401,
+                "endpoint": "POST /invoices",
+            },
+        )
+
+    await _prepare_run(
+        monkeypatch,
+        candidates=[_candidate("283500001"), _candidate("283500002")],
+        send_one=fake_send,
+    )
+    db = _RunDb()
+    db.qoyod_settings = _CredentialPauseSettingsCollection()
+
+    result = await auto_send.run_once(db, batch_limit=5)
+
+    assert calls == ["283500001"]
+    assert result["ok"] is True
+    assert result["status"] == "credentials_paused"
+    assert result["sent_count"] == 0
+    assert result["credential_paused_count"] == 1
+    assert result["results"] == [{
+        "order_number": "283500001",
+        "outcome": "credentials_paused",
+        "code": "qoyod_http_error",
+    }]
+    assert db.qoyod_manual_auto_quarantines.rows == {}
+    selector, update, upsert = db.qoyod_settings.calls[0]
+    assert selector == {"user_id": "main"}
+    assert upsert is True
+    patch = update["$set"]
+    assert patch["auto_send_desired"] is True
+    assert patch["enabled"] is False
+    assert patch["auto_send"] is False
+    assert patch["plan_b_unified_auto_send_enabled"] is False
+    assert patch["plan_b_auto_send_disabled_reason"] == (
+        "credentials_invalid_or_expired"
+    )
+
+
+@pytest.mark.parametrize(
+    ("code", "extra", "expected"),
+    [
+        ("qoyod_credentials_missing", {}, True),
+        ("qoyod_http_error", {"status_code": 401}, True),
+        ("qoyod_http_error", {"status_code": 403}, True),
+        ("qoyod_http_error", {"status_code": 429}, False),
+        ("qoyod_preflight_total_mismatch", {"difference": 0.02}, False),
+    ],
+)
+def test_credential_failure_classifier_is_closed(code, extra, expected):
+    exc = ManualSendRefused(code, "safe", extra)
+    assert auto_send.is_credential_failure(exc) is expected
+
+
+
+@pytest.mark.parametrize(
+    ("code", "extra", "expected"),
+    [
+        ("qoyod_http_error", {"status_code": 0}, True),
+        ("qoyod_http_error", {"status_code": 429}, True),
+        ("qoyod_http_error", {"status_code": 500}, True),
+        (
+            "product_create_failed",
+            {"response": {"status_code": 503}},
+            True,
+        ),
+        (
+            "product_create_failed",
+            {"primary_attempt": {"response": {"status_code": 422}}},
+            False,
+        ),
+        ("qoyod_http_error", {"status_code": 422}, False),
+        ("totals_mismatch", {"difference": 0.02}, False),
+    ],
+)
+def test_transient_qoyod_failure_classifier_is_status_aware(
+    code,
+    extra,
+    expected,
+):
+    exc = ManualSendRefused(code, "safe", extra)
+    assert auto_send.is_transient_qoyod_failure(exc) is expected

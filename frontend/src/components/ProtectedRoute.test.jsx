@@ -1,4 +1,4 @@
-import React, { act } from "react";
+import React, { act, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { useAuth } from "../context/AuthContext";
 import ProtectedRoute from "./ProtectedRoute";
@@ -94,6 +94,38 @@ describe("ProtectedRoute auth bootstrap states", () => {
 
         expect(container.querySelector('[data-testid="protected-content"]'))
             .not.toBeNull();
+    });
+
+    test("starts Snapchat page reads only after auth succeeds", async () => {
+        const loadSnapchat = jest.fn();
+        function SnapchatProbe() {
+            useEffect(() => loadSnapchat(), []);
+            return <div data-testid="snapchat-page">Snapchat</div>;
+        }
+        useAuth.mockReturnValue({
+            user: null,
+            loading: false,
+            authStatus: "unavailable",
+            retryAuth: jest.fn(),
+        });
+        await act(async () => {
+            root.render(<ProtectedRoute><SnapchatProbe /></ProtectedRoute>);
+            await Promise.resolve();
+        });
+        expect(loadSnapchat).not.toHaveBeenCalled();
+
+        useAuth.mockReturnValue({
+            user: { id: "owner-1", role: "owner" },
+            loading: false,
+            authStatus: "authenticated",
+            retryAuth: jest.fn(),
+        });
+        await act(async () => {
+            root.render(<ProtectedRoute><SnapchatProbe /></ProtectedRoute>);
+            await Promise.resolve();
+        });
+        expect(loadSnapchat).toHaveBeenCalledTimes(1);
+        expect(container.querySelector('[data-testid="snapchat-page"]')).not.toBeNull();
     });
 
     test("redirects only a confirmed anonymous session to login", async () => {

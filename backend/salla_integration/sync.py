@@ -32,6 +32,7 @@ from typing import Any, Optional
 from pymongo.errors import DuplicateKeyError
 
 from carrier_handoff import advance_carrier_handoff_from_salla_status
+from order_currency import salla_order_currency_fields
 
 from salla_marketing_attribution import promoted_salla_attribution
 
@@ -221,6 +222,7 @@ async def _refresh_plan_b_status_snapshot(
     # and reduce a named bank transfer back to the generic value `bank`.
     for canonical_key in (
         "payment_method", "receiving_bank_name", "payment_receipt_url",
+        "customer_name", "customer_mobile", "customer_email",
     ):
         value = order_doc.get(canonical_key)
         if value not in (None, ""):
@@ -307,6 +309,27 @@ def _str(v: Any) -> str:
     if v is None:
         return ""
     return str(v).strip()
+
+
+def _salla_customer_name(customer: Any) -> str:
+    """Return the complete Salla customer name without inventing a value."""
+    if not isinstance(customer, dict):
+        return ""
+    direct = _str(
+        customer.get("full_name")
+        or customer.get("name")
+        or customer.get("display_name")
+    )
+    if direct:
+        return direct
+    return " ".join(
+        part
+        for part in (
+            _str(customer.get("first_name")),
+            _str(customer.get("last_name")),
+        )
+        if part
+    )
 
 
 def _money(v: Any, *, _depth: int = 0) -> float:
@@ -751,6 +774,7 @@ def _salla_order_to_doc(salla_order: dict) -> dict:
 
     order_date_raw = (salla_order.get("date") or {}).get("date") if isinstance(salla_order.get("date"), dict) else salla_order.get("date")
     order_date = _normalize_date(salla_order.get("date") or salla_order.get("created_at"))
+    currency_fields = salla_order_currency_fields(salla_order)
 
     return {
         "order_id": _str(salla_order.get("id")),
@@ -774,8 +798,11 @@ def _salla_order_to_doc(salla_order: dict) -> dict:
         "receiving_bank_name": receiving_bank_name,
         "receiving_bank_id": _store_bank_id(salla_order),
         "payment_receipt_url": payment_receipt_url,
-        "customer_name": _str(customer.get("full_name") or customer.get("first_name") or ""),
+        "customer_name": _salla_customer_name(customer),
         "customer_mobile": _str(customer.get("mobile") or customer.get("phone") or ""),
+        "customer_email": _str(
+            customer.get("email") or customer.get("email_address") or ""
+        ),
         "payment_method": _str(payment_method),
         "shipping_company": _str(shipping_company),
         "shipping_label_url": shipping_label_url,
@@ -784,7 +811,8 @@ def _salla_order_to_doc(salla_order: dict) -> dict:
         "discount": _money(discount_obj),
         "tax": _money(tax_obj),
         "total_amount": _money(total_obj),
-        "currency": _str(total_obj.get("currency") if isinstance(total_obj, dict) else "") or "SAR",
+        "currency": currency_fields["original_currency"],
+        **currency_fields,
         "source": _str(salla_order.get("source") or "salla_direct"),
         # Keep Salla's raw payload for audit while promoting only the stable
         # marketing fields needed by ad attribution.  This does not change the
@@ -1323,12 +1351,35 @@ async def _fetch_salla_shipment_details(
 
     return list(await asyncio.gather(*(enrich(row) for row in rows)))
 
-async def _fetch_salla_order_details(
+async def _stored_salla_order_id(
     db,
     user_id: str,
     order_number: str,
-) -> dict | None:
-    """Resolve the internal Salla id, then fetch authoritative details."""
+) -> str:
+    """Return the internal Salla id retained by the ingestion boundary."""
+    collection = getattr(db, "unified_orders", None)
+    if collection is None:
+        return ""
+    row = await collection.find_one(
+        {
+            "user_id": str(user_id),
+            "order_number": str(order_number),
+        },
+        {"_id": 0, "order_id": 1},
+    )
+    return _str((row or {}).get("order_id"))
+
+
+async def _resolve_salla_order_id(
+    db,
+    user_id: str,
+    order_number: str,
+) -> str:
+    """Prefer the ingested Salla id; search by reference only as fallback."""
+    internal_id = await _stored_salla_order_id(db, user_id, order_number)
+    if internal_id:
+        return internal_id
+
     search_resp = await call_salla(
         db,
         user_id,
@@ -1357,13 +1408,27 @@ async def _fetch_salla_order_details(
     if match is None and len(rows) == 1 and isinstance(rows[0], dict):
         match = rows[0]
     if match is None:
-        return None
+        return ""
 
     internal_id = str(match.get("id") or "").strip()
     if not internal_id:
         raise RuntimeError(
             f"Salla search result missing internal id: {order_number}"
         )
+    return internal_id
+
+
+async def _fetch_salla_order_details(
+    db,
+    user_id: str,
+    order_number: str,
+) -> dict | None:
+    """Resolve the internal Salla id, then fetch authoritative details."""
+    internal_id = await _resolve_salla_order_id(
+        db, user_id, order_number
+    )
+    if not internal_id:
+        return None
 
     details_resp = await call_salla(
         db,
@@ -1380,7 +1445,7 @@ async def _fetch_salla_order_details(
     actual_reference = str(
         details.get("reference_id") or details.get("order_number") or ""
     ).strip()
-    if actual_reference and actual_reference != order_number:
+    if actual_reference != order_number:
         raise RuntimeError(
             "Salla Order Details reference mismatch: "
             f"expected={order_number} actual={actual_reference}"
@@ -1434,43 +1499,16 @@ async def fetch_single_order_status(
 
     stage = "search_order"
     try:
-        search_resp = await call_salla(
-            db,
-            user_id,
-            "GET",
-            "/orders",
-            params={
-                "reference_id": order_number,
-                "format": "light",
-                "per_page": 10,
-            },
+        internal_id = await _resolve_salla_order_id(
+            db, user_id, order_number
         )
-        rows = search_resp.get("data") if isinstance(search_resp, dict) else None
-        if not isinstance(rows, list):
-            rows = []
-
-        match = None
-        for row in rows:
-            if not isinstance(row, dict):
-                continue
-            reference_id = str(row.get("reference_id") or "").strip()
-            row_id = str(row.get("id") or "").strip()
-            if reference_id == order_number or row_id == order_number:
-                match = row
-                break
-        if match is None:
+        if not internal_id:
             return {
                 "ok": True,
                 "found": False,
                 "error": "not_found_in_salla",
                 "stage": stage,
             }
-
-        internal_id = str(match.get("id") or "").strip()
-        if not internal_id:
-            raise RuntimeError(
-                f"Salla search result missing internal id: {order_number}"
-            )
 
         stage = "fetch_order_status"
         details_resp = await call_salla(
@@ -1494,7 +1532,7 @@ async def fetch_single_order_status(
             or details.get("order_number")
             or ""
         ).strip()
-        if actual_reference and actual_reference != order_number:
+        if actual_reference != order_number:
             raise RuntimeError(
                 "Salla Order Details reference mismatch: "
                 f"expected={order_number} actual={actual_reference}"

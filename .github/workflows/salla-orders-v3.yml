@@ -1,0 +1,81 @@
+name: Salla Orders V3 acceptance
+
+on:
+  pull_request:
+    branches: [hotfix/prod-snap-meta-final]
+    paths:
+      - 'backend/salla_orders_v3/**'
+      - 'backend/tests/test_salla_orders_v3_*.py'
+      - 'backend/server.py'
+      - 'backend/salla_integration/webhook_event_capture.py'
+      - '.github/workflows/salla-orders-v3.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: salla-orders-v3-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  replica-set-acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: backend:.
+      MEZAN_SALLA_V3_TEST_MONGO_URL: mongodb://127.0.0.1:27017/?replicaSet=salla-test-rs
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install isolated test dependencies
+        run: >-
+          python -m pip install
+          pytest pytest-asyncio fastapi 'pymongo==4.6.3' 'motor==3.3.1'
+          python-dotenv PyJWT python-multipart email-validator httpx cryptography
+          passlib bcrypt PyYAML reportlab arabic-reshaper python-bidi PyMuPDF
+          qrcode mongomock-motor openpyxl requests pandas
+      - name: Start disposable Mongo replica set
+        run: |
+          docker run -d --name salla-v3-test-mongo -p 127.0.0.1:27017:27017 \
+            mongo:7.0.14 --replSet salla-test-rs --bind_ip_all
+          for attempt in {1..30}; do
+            if docker exec salla-v3-test-mongo mongosh --quiet --eval 'db.adminCommand({ping:1})'; then
+              break
+            fi
+            sleep 1
+          done
+          docker exec salla-v3-test-mongo mongosh --quiet --eval \
+            'rs.initiate({_id:"salla-test-rs",members:[{_id:0,host:"127.0.0.1:27017"}]})'
+          for attempt in {1..30}; do
+            if docker exec salla-v3-test-mongo mongosh --quiet --eval \
+              'quit(db.hello().isWritablePrimary ? 0 : 1)'; then
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1
+      - name: Run V3 contracts and real transaction acceptance
+        run: python -m pytest -q backend/tests/test_salla_orders_v3_*.py --junitxml=salla-v3-results.xml
+      - name: Require executed Mongo acceptance cases
+        run: |
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          cases = [case for case in ET.parse('salla-v3-results.xml').iter('testcase')
+                   if 'test_salla_orders_v3_mongo' in case.get('classname', '')]
+          assert len(cases) >= 5, 'Mongo acceptance cases were not collected'
+          assert all(not any(case.find(tag) is not None for tag in ('skipped', 'failure', 'error'))
+                     for case in cases), 'every Mongo acceptance case must execute and pass'
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: salla-v3-acceptance-${{ github.sha }}
+          path: salla-v3-results.xml
+      - name: Remove disposable Mongo
+        if: always()
+        run: docker rm -f salla-v3-test-mongo

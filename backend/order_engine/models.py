@@ -169,6 +169,11 @@ class MoneyTotalsDTO(CanonicalDTO):
     """Commercial order totals."""
 
     currency: str = "SAR"
+    accounting_currency: str = "SAR"
+    total_sar: Optional[float] = None
+    exchange_rate_to_sar: Optional[str] = None
+    conversion_status: Optional[str] = None
+    conversion_source: Optional[str] = None
     subtotal: float = 0.0
     options: float = 0.0
     shipping: float = 0.0

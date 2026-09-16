@@ -40,6 +40,10 @@ from starlette.middleware.cors import CORSMiddleware
 from browser_security import BrowserSecurityMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from mongo_observability import mongo_metrics
+from runtime_mongo import (
+    TRANSIENT_MONGO_ERRORS,
+    main_client_options,
+)
 from pydantic import BaseModel, EmailStr, Field, validator, root_validator
 
 from auth import (
@@ -52,8 +56,10 @@ from auth import (
     set_auth_cookies,
     clear_auth_cookies,
     refresh_browser_session,
+    raise_auth_dependency_unavailable,
     get_current_user_from_db,
     seed_admin,
+    install_process_local_auth_security,
     ensure_user_settings,
     DEFAULT_PAYMENT_METHODS,
     DEFAULT_SHIPPING_COMPANIES,
@@ -93,6 +99,12 @@ from courier_cod_fee_rules import (
     validate_courier_cod_fee_tiers,
 )
 from order_status_policy import attach_order_status_policy_routes
+from order_currency import (
+    SALLA_RAW_CURRENCY_PROJECTION,
+    hydrate_order_currency_fields,
+    order_total_sar,
+    summarize_orders_sar,
+)
 from shipping_ledger_routes import attach_shipping_ledger_routes
 from orders_explorer_routes import attach_orders_explorer_routes
 from salla_marketing_attribution import (
@@ -179,7 +191,10 @@ def _parse_date_or(s: Optional[str], fallback):
 
 # ── Database ──────────────────────────────────────────────────────────────────
 mongo_url = os.environ["MONGO_URL"]
-client = AsyncIOMotorClient(mongo_url, event_listeners=[mongo_metrics])
+client = AsyncIOMotorClient(
+    mongo_url,
+    **main_client_options(event_listener=mongo_metrics),
+)
 db = client[os.environ["DB_NAME"]]
 
 
@@ -401,7 +416,7 @@ def _effective_perms(user_doc: dict) -> set[str]:
     Formula:  role_defaults ∪ extra_permissions  −  denied_permissions
     The owner ALWAYS has every permission and cannot be downgraded.
     """
-    role = (user_doc.get("role") or "").lower()
+    role = str(user_doc.get("role") or "").strip().casefold()
     if role == "owner":
         return set(PERMISSIONS_CATALOGUE.keys())
     # Unknown/missing roles fail closed. They must never inherit viewer access.
@@ -412,7 +427,7 @@ def _effective_perms(user_doc: dict) -> set[str]:
 
 
 def _is_owner(user_doc: dict) -> bool:
-    return (user_doc.get("role") or "").lower() == "owner"
+    return str(user_doc.get("role") or "").strip().casefold() == "owner"
 
 
 class PaymentMethod(BaseModel):
@@ -693,20 +708,18 @@ async def me(user: dict = Depends(current_user)):
     # inherit these capabilities merely from its broad legacy role.
     from ai_store_access_contract import merged_session_permissions
 
-    permissions = await merged_session_permissions(
-        db,
-        user,
-        _effective_perms(user),
-    )
-    # Native-app permissions remain a separate namespace and are never merged
-    # into Mezan's browser/operational ``permissions`` list. Return the
-    # authenticated account's own app-access snapshot on every profile refresh:
-    # the mobile client persists this response for navigation, and an auth
-    # middleware losing its client marker must not turn 13 saved pages into 0.
-    # Operational mobile routes still enforce their signed-session policy.
-    from mobile_app_permissions import mobile_app_access_for_user
-
-    mobile_app_access = await mobile_app_access_for_user(db, user)
+    try:
+        permissions = await merged_session_permissions(
+            db,
+            user,
+            _effective_perms(user),
+        )
+        # Native-app permissions remain a separate namespace and are never
+        # merged into Mezan's browser/operational ``permissions`` list.
+        from mobile_app_permissions import mobile_app_access_for_user
+        mobile_app_access = await mobile_app_access_for_user(db, user)
+    except TRANSIENT_MONGO_ERRORS as exc:
+        raise_auth_dependency_unavailable(exc)
     return {
         "id": user["id"], "name": user.get("name"), "email": user["email"],
         "role": user.get("role", "user"),
@@ -2048,11 +2061,14 @@ async def dashboard(
         orders_q, {"_id": 0, "raw_by_source": 0}
     ).to_list(100000)
     if all_orders:
-        attribution_rows = await db.unified_orders.find(
+        raw_projection = dict(SALLA_RAW_CURRENCY_PROJECTION)
+        raw_projection.update(SALLA_RAW_ATTRIBUTION_PROJECTION)
+        projected_rows = await db.unified_orders.find(
             orders_q,
-            SALLA_RAW_ATTRIBUTION_PROJECTION,
+            raw_projection,
         ).to_list(100000)
-        attach_projected_salla_attribution(all_orders, attribution_rows)
+        hydrate_order_currency_fields(all_orders, projected_rows)
+        attach_projected_salla_attribution(all_orders, projected_rows)
 
     # Iteration 31: data_source self-heal. Past orders whose data_source
     # was demoted to "excel" by Excel re-imports (pre-iteration-31 bug)
@@ -2118,9 +2134,8 @@ async def dashboard(
     # status filter so the UI can render a transparency badge:
     #   "+X طلب معلَّق/ملغى بقيمة Y ر.س"
     salla_ref_orders_count = len(all_orders)
-    salla_ref_gross = round(
-        sum(float(o.get("total_amount") or 0) for o in all_orders), 2,
-    )
+    salla_ref_currency = summarize_orders_sar(all_orders)
+    salla_ref_gross = salla_ref_currency["total_sar"]
     if included_statuses:
         all_orders = [
             o for o in all_orders
@@ -2128,6 +2143,8 @@ async def dashboard(
         ]
 
     parsed_all = orders_to_parsed(all_orders)
+    currency_conversion = parsed_all["currency_conversion"]
+    currency_conversion_complete = currency_conversion["complete"] is True
     matched_all = match_settings(
         parsed_all,
         settings.get("payment_methods", DEFAULT_PAYMENT_METHODS),
@@ -2551,18 +2568,30 @@ async def dashboard(
     # ── Monthly trend from unified orders + legacy analyses ─────────────────
     from collections import defaultdict
     monthly_sales = defaultdict(float)
+    monthly_unverified_currency: set[str] = set()
     for o in all_orders:
         d = (o.get("order_date") or "")[:7]
         if not d:
             continue
-        monthly_sales[d] += float(o.get("total_amount") or 0)
+        monthly_sales[d] += 0.0
+        amount_sar = order_total_sar(o)
+        if amount_sar is None:
+            monthly_unverified_currency.add(d)
+        else:
+            monthly_sales[d] += amount_sar
     for a in legacy_analyses:
         d = (a.get("date") or a.get("created_at") or "")[:7]
         if not d:
             continue
         monthly_sales[d] += float(((a.get("report") or {}).get("summary") or {}).get("total_sales") or 0)
     monthly = sorted([
-        {"month": k, "sales": round(v, 2), "profit": 0}
+        {
+            "month": k,
+            "sales": None if k in monthly_unverified_currency else round(v, 2),
+            "known_sales_sar": round(v, 2),
+            "currency_conversion_complete": k not in monthly_unverified_currency,
+            "profit": 0,
+        }
         for k, v in monthly_sales.items()
     ], key=lambda x: x["month"])
 
@@ -2675,6 +2704,17 @@ async def dashboard(
 
     from payment_methods import PARENT_LABELS
     payment_breakdown_merged = _rollup_payment_breakdown(payment_breakdown_merged)
+    if not currency_conversion_complete:
+        for payment_row in payment_breakdown_merged:
+            for field in ("total_sales", "fee_amount", "vat_amount"):
+                payment_row[f"known_{field}_sar"] = payment_row.get(field)
+                payment_row[field] = None
+            payment_row["currency_conversion_complete"] = False
+            for sub_method in payment_row.get("sub_methods") or []:
+                for field in ("total_sales", "fee_amount"):
+                    sub_method[f"known_{field}_sar"] = sub_method.get(field)
+                    sub_method[field] = None
+                sub_method["currency_conversion_complete"] = False
 
     # ── Iter-44: Cross-platform ROAS + Average Cost Per Order ────────────
     # ROAS (Return On Ad Spend) — how many SAR of revenue each SAR of ad
@@ -2751,24 +2791,40 @@ async def dashboard(
     return {
         "range": {"from_date": from_date, "to_date": to_date},
         "totals": {
-            "total_sales": round(total_sales, 2),
-            "net_sales": round(net_sales, 2),
+            "total_sales": (
+                round(total_sales, 2) if currency_conversion_complete else None
+            ),
+            "net_sales": (
+                round(net_sales, 2) if currency_conversion_complete else None
+            ),
+            "accounting_currency": "SAR",
+            "sales_currency_conversion_complete": currency_conversion_complete,
+            "unverified_currency_orders_count": currency_conversion[
+                "unverified_orders_count"
+            ],
             "total_orders": int(total_orders),
             # iter-44 — cross-platform marketing KPIs
-            "overall_roas": overall_roas,
+            "overall_roas": overall_roas if currency_conversion_complete else None,
             "avg_cost_per_order": avg_cost_per_order,
-            "total_payment_fees": round(total_fees, 2),
-            "bnpl_fees": round(bnpl_fees, 2),
-            "tamara_fees": round(tamara_fees, 2),
-            "tabby_fees": round(tabby_fees, 2),
-            "emkan_fees": round(emkan_fees, 2),
-            "other_payment_fees": round(other_payment_fees, 2),
-            # iter-56 — electronic_net now subtracts Salla settlements too
-            "electronic_net": round(
-                other_payment_sales - other_payment_fees - salla_adj, 2,
+            "total_payment_fees": (
+                round(total_fees, 2) if currency_conversion_complete else None
             ),
-            "electronic_net_before_settlements": round(
-                other_payment_sales - other_payment_fees, 2,
+            "bnpl_fees": round(bnpl_fees, 2) if currency_conversion_complete else None,
+            "tamara_fees": round(tamara_fees, 2) if currency_conversion_complete else None,
+            "tabby_fees": round(tabby_fees, 2) if currency_conversion_complete else None,
+            "emkan_fees": round(emkan_fees, 2) if currency_conversion_complete else None,
+            "other_payment_fees": (
+                round(other_payment_fees, 2)
+                if currency_conversion_complete else None
+            ),
+            # iter-56 — electronic_net now subtracts Salla settlements too
+            "electronic_net": (
+                round(other_payment_sales - other_payment_fees - salla_adj, 2)
+                if currency_conversion_complete else None
+            ),
+            "electronic_net_before_settlements": (
+                round(other_payment_sales - other_payment_fees, 2)
+                if currency_conversion_complete else None
             ),
             # iter-45 — visible filtering metadata for the UI
             "electronic_net_breakdown": electronic_net_breakdown,
@@ -2778,17 +2834,28 @@ async def dashboard(
             "settlements_by_provider": settlements_by_provider,
             "salla_settlements_inside_14d": round(salla_settle_inside, 2),
             "salla_settlements_outside_14d": round(salla_settle_outside, 2),
-            "bnpl_net": round(bnpl_sales - bnpl_fees - tamara_adj - tabby_adj - emkan_adj, 2),
+            "bnpl_net": (
+                round(bnpl_sales - bnpl_fees - tamara_adj - tabby_adj - emkan_adj, 2)
+                if currency_conversion_complete else None
+            ),
             # iter-47 — Bank transfer is now a dedicated KPI; the figures
             # below give the UI everything it needs to render the new card.
-            "bank_sales": round(bank_sales, 2),
-            "bank_fees": round(bank_fees, 2),
-            "bank_net": round(bank_sales - bank_fees - bank_adj, 2),
+            "bank_sales": round(bank_sales, 2) if currency_conversion_complete else None,
+            "bank_fees": round(bank_fees, 2) if currency_conversion_complete else None,
+            "bank_net": (
+                round(bank_sales - bank_fees - bank_adj, 2)
+                if currency_conversion_complete else None
+            ),
             "total_shipping_cost": round(total_shipping, 2),
             "deferred_shipping_cost": round(deferred_shipping, 2),
             "regular_shipping_cost": round(total_shipping - deferred_shipping, 2),
-            "expected_salla_transfer": round(
-                total_sales - total_fees - (total_shipping - deferred_shipping), 2
+            "expected_salla_transfer": (
+                round(
+                    total_sales - total_fees
+                    - (total_shipping - deferred_shipping),
+                    2,
+                )
+                if currency_conversion_complete else None
             ),
             "total_ads_cost": round(daily_ads_total, 2),
             "total_product_cost": round(product_cost_effective, 2),
@@ -2806,14 +2873,21 @@ async def dashboard(
             # render a badge "+X معلَّق/ملغى بقيمة Y ر.س" next to the main
             # orders count, and a tooltip explaining the methodology.
             "salla_reference_orders_count": int(salla_ref_orders_count),
-            "salla_reference_gross": float(salla_ref_gross),
+            "salla_reference_gross": salla_ref_gross,
             "excluded_orders_count": int(
                 max(0, salla_ref_orders_count - total_orders)),
-            "excluded_gross": round(
-                max(0.0, salla_ref_gross - float(total_sales)), 2),
+            "excluded_gross": (
+                round(max(0.0, float(salla_ref_gross) - float(total_sales)), 2)
+                if salla_ref_gross is not None and currency_conversion_complete
+                else None
+            ),
             "daily_expenses_total": round(daily_products_total, 2),
-            "net_profit": round(net_profit_adjusted, 2),
-            "total_vat": round(total_vat, 2),
+            "net_profit": (
+                round(net_profit_adjusted, 2)
+                if currency_conversion_complete
+                else None
+            ),
+            "total_vat": round(total_vat, 2) if currency_conversion_complete else None,
             "daily_costs_total": round(daily_totals, 2),
             "daily_ads_total": round(daily_ads_total, 2),
             "daily_products_total": round(daily_products_total, 2),
@@ -2852,6 +2926,7 @@ async def dashboard(
         },
         "net_sales_config": cfg,
         "hide_inferred_date_orders": bool(settings.get("hide_inferred_date_orders")),
+        "currency_conversion": currency_conversion,
         "monthly": monthly,
         "payment_breakdown": payment_breakdown_merged,
         "shipping_breakdown": shipping_breakdown_merged,
@@ -2904,6 +2979,12 @@ async def excluded_orders_list(
     all_orders = await db.unified_orders.find(
         q, {"_id": 0, "raw_by_source": 0},
     ).to_list(50000)
+    if all_orders:
+        projected_rows = await db.unified_orders.find(
+            q,
+            SALLA_RAW_CURRENCY_PROJECTION,
+        ).to_list(50000)
+        hydrate_order_currency_fields(all_orders, projected_rows)
 
     excluded: list = []
     for o in all_orders:
@@ -2935,9 +3016,15 @@ async def excluded_orders_list(
     # Slim payload — only fields the modal needs to render the table.
     rows = []
     total_value = 0.0
+    unverified_currency_orders: list[str] = []
     for o in excluded:
-        amt = float(o.get("total_amount") or 0)
-        total_value += amt
+        amt = order_total_sar(o)
+        if amt is None:
+            unverified_currency_orders.append(
+                str(o.get("order_number") or "unknown")
+            )
+        else:
+            total_value += amt
         rows.append({
             "order_number": str(o.get("order_number") or ""),
             "order_date": o.get("order_date") or "",
@@ -2948,7 +3035,12 @@ async def excluded_orders_list(
                                 or "—",
             "customer_name": (o.get("customer_name") or "").strip()
                              or (o.get("customer") or {}).get("name") or "",
-            "total_amount": round(amt, 2),
+            "total_amount": round(amt, 2) if amt is not None else None,
+            "accounting_currency": "SAR",
+            "original_total_amount": o.get("original_total_amount")
+                                     or o.get("total_amount"),
+            "original_currency": o.get("original_currency")
+                                 or o.get("currency") or "SAR",
         })
     rows.sort(key=lambda x: (x["order_date"], x["order_number"]))
     return {
@@ -2956,7 +3048,13 @@ async def excluded_orders_list(
         "to_date": to_date,
         "included_statuses": included_statuses,
         "orders_count": len(rows),
-        "total_amount": round(total_value, 2),
+        "total_amount": (
+            round(total_value, 2) if not unverified_currency_orders else None
+        ),
+        "known_total_amount_sar": round(total_value, 2),
+        "accounting_currency": "SAR",
+        "currency_conversion_complete": not unverified_currency_orders,
+        "unverified_currency_order_numbers": unverified_currency_orders[:100],
         "orders": rows,
     }
 
@@ -4560,19 +4658,6 @@ async def _global_startup() -> None:
     # errors, and future campaign↔product identity links.
     await ensure_integrations_control_center_indexes(db)
     await ensure_first_party_attribution_indexes(db)
-    # Salla Orders V3 remains an isolated observer until all three parity gates
-    # pass. The worker is disabled unless SALLA_ORDERS_V3_SHADOW_ENABLED=true.
-    from salla_orders_v3.worker import (
-        ensure_salla_orders_v3_indexes as _ensure_salla_orders_v3_indexes,
-        shadow_enabled as _salla_orders_v3_shadow_enabled,
-        start_salla_orders_v3_shadow_worker as _start_salla_orders_v3_shadow_worker,
-    )
-    app.state.salla_orders_v3_shadow_task = None
-    if _salla_orders_v3_shadow_enabled():
-        await _ensure_salla_orders_v3_indexes(db)
-        app.state.salla_orders_v3_shadow_task = (
-            _start_salla_orders_v3_shadow_worker(db)
-        )
     # Five-hour Snapchat + Meta campaign monitoring. The worker only refreshes
     # analytical facts and persists recommendations; provider changes remain
     # behind the separate owner-only approval endpoint.
@@ -5186,6 +5271,17 @@ async def _global_startup() -> None:
 
 async def _local_startup() -> None:
     """Finish process-local readiness after global release work completes."""
+    # Middleware stacks live in one Python process. The release-global leader
+    # installs these guards through seed_admin, but every follower must install
+    # them too before it can advertise readiness. Installers are app-idempotent;
+    # their identical Mongo create_index calls are safe to repeat per replica.
+    await install_process_local_auth_security(db)
+    # Each process restart needs a new optional observer task, even when the
+    # release-global initialization record was completed by an earlier process.
+    from salla_orders_v3.worker import start_salla_orders_v3_shadow_runtime
+    app.state.salla_orders_v3_shadow_task = (
+        await start_salla_orders_v3_shadow_runtime(db)
+    )
     try:
         from integrations.qoyod.worker import start_worker as _qoyod_worker_start
         _qoyod_worker_start(db, interval_sec=5.0, batch_limit=25)
@@ -5269,6 +5365,10 @@ async def on_startup():
 async def on_shutdown():
     process_local_readiness_event.clear()
     await cancel_deferred_task(app)
+    from salla_orders_v3.worker import stop_salla_orders_v3_shadow_worker
+    await stop_salla_orders_v3_shadow_worker(
+        getattr(app.state, "salla_orders_v3_shadow_task", None)
+    )
     for task_name in ("event_loop_lag_task",):
         task = getattr(app.state, task_name, None)
         if task is not None:

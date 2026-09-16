@@ -24,6 +24,7 @@ from integrations.qoyod_manual.send import (
     manual_send_one, ManualSendRefused,
     _preflight_qoyod_invoice_payload, _find_historical_positive_canon,
 )
+from integrations.qoyod_manual.client import ManualQoyodError
 from integrations.qoyod.worker import _one_round
 
 
@@ -1561,3 +1562,62 @@ async def test_freeze_toggle_stops_worker(db):
     )
     result = await _one_round(db, user_id=TENANT, batch_limit=5)
     assert "frozen" not in result
+
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status_code", [0, 401, 403, 429, 500])
+async def test_unknown_qoyod_reference_lookup_never_reaches_a_write(
+    db,
+    monkeypatch,
+    status_code,
+):
+    await _seed_settings(db)
+    monkeypatch.setenv("QOYOD_API_BASE", "https://qoyod.invalid")
+    monkeypatch.setattr(
+        "integrations.qoyod_manual.send.get_api_key",
+        AsyncMock(return_value="synthetic-key"),
+    )
+    await db.integration_inbox.insert_one(
+        _inbox_row(
+            order_number=f"LOOKUP-UNKNOWN-{status_code}",
+            total=115.0,
+            sku="SKU-LOOKUP",
+        )
+    )
+    invoice_post = AsyncMock(
+        side_effect=AssertionError(
+            "invoice POST must not run after an unknown reference lookup"
+        )
+    )
+
+    with patch(
+        "integrations.qoyod_manual.client.ManualQoyodClient."
+        "find_invoice_by_reference",
+        new=AsyncMock(side_effect=ManualQoyodError(
+            status_code=status_code,
+            endpoint="GET /invoices",
+            response_excerpt="synthetic lookup failure",
+        )),
+    ), patch(
+        "integrations.qoyod_manual.client.ManualQoyodClient."
+        "find_customers_by_phone",
+        new=AsyncMock(return_value=[{"id": 33}]),
+    ), patch(
+        "integrations.qoyod_manual.client.ManualQoyodClient."
+        "find_product_by_sku",
+        new=AsyncMock(return_value={"id": 77, "sku": "SKU-LOOKUP"}),
+    ), patch(
+        "integrations.qoyod_manual.client.ManualQoyodClient.create_invoice",
+        new=invoice_post,
+    ):
+        with pytest.raises(ManualSendRefused) as captured:
+            await manual_send_one(
+                db,
+                user_id=TENANT,
+                order_number=f"LOOKUP-UNKNOWN-{status_code}",
+            )
+
+    assert captured.value.code == "qoyod_http_error"
+    assert captured.value.extra["status_code"] == status_code
+    invoice_post.assert_not_awaited()

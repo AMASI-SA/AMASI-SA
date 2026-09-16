@@ -14,6 +14,7 @@ _TWO_PLACES = Decimal("0.01")
 RETRYABLE_SYNC_FAILURE_CODES = frozenset({
     "salla_status_refresh_failed",
     "authoritative_order_missing_after_resync",
+    "authoritative_customer_identity_missing",
     "authoritative_payment_method_still_pending",
     "authoritative_payment_needs_verification",
     "legacy_sender_inbox_row_missing",
@@ -21,6 +22,10 @@ RETRYABLE_SYNC_FAILURE_CODES = frozenset({
     "authoritative_payment_refresh_failed",
     "unified_sender_row_upsert_failed",
     "qoyod_reference_reconciliation_failed",
+    # Network, throttling and provider 5xx failures are unknown outcomes.
+    # Retry only after a delay; the sender always performs the exact Qoyod
+    # reference lookup again before any later invoice write.
+    "qoyod_transient_error",
     # These refusals happen before any Qoyod resource is created. A later
     # Salla details refresh can supply the missing SKU or corrected accounting
     # facts, so retry them slowly instead of quarantining forever.

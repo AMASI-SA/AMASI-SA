@@ -77,6 +77,7 @@ async def recheck_payment_read_only(
         )
     preflight = None
     code = None
+    preflight_deferred = False
     if outcome == "ready" and qoyod_user_id:
         if preflight_fn is None:
             from integrations.qoyod_manual.diagnose import diagnose_totals
@@ -91,7 +92,23 @@ async def recheck_payment_read_only(
             resolved_total = float(preflight.get("salla_total"))
         except (TypeError, ValueError):
             resolved_total = None
-        if (
+        legacy_projection_missing = (
+            not preflight.get("ok")
+            and preflight.get("code") == "order_not_found"
+        )
+        if legacy_projection_missing:
+            # The live Salla read above is authoritative for status/payment.
+            # Unified-only orders intentionally have no legacy inbox row until
+            # the guarded sender materializes its compatibility projection.
+            # Keep this check read-only and defer monetary validation to that
+            # sender; every other preflight failure remains fail-closed.
+            preflight_deferred = True
+            code = "qoyod_preflight_deferred_to_sender_projection"
+            message = (
+                "حالة الطلب والدفع مؤهلتان؛ سيُعاد فحص المبلغ عند تجهيز "
+                "سجل الإرسال الموحد"
+            )
+        elif (
             not preflight.get("ok")
             or preflight.get("diagnosis_status") == "blocked"
             or resolved_total is None
@@ -128,6 +145,7 @@ async def recheck_payment_read_only(
         "remaining_amount": row.get("remaining_amount"),
         "total_amount": row.get("total_amount"),
         "read_only": True,
+        "qoyod_preflight_deferred": preflight_deferred,
         "qoyod_preflight": preflight,
         "invoice_sent": False,
     }

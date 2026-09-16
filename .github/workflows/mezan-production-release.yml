@@ -8,6 +8,13 @@ on:
     branches:
       - hotfix/prod-snap-meta-final
   workflow_dispatch:
+    inputs:
+      candidate_source_base_git_sha:
+        description: >-
+          Required only when the selected ref is an unreviewed source candidate A;
+          enter the exact reviewed Production base J (40 lowercase hex).
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -20,12 +27,16 @@ jobs:
   backend-preflight:
     name: Backend preflight
     runs-on: ubuntu-latest
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - name: Compile backend Python sources
+        env:
+          PYTHONPYCACHEPREFIX: ${{ runner.temp }}/mezan-release-v5-pycache
         run: python -m compileall -q backend
       - name: Run frontend identity and release guard unit suites
         env:
@@ -44,6 +55,7 @@ jobs:
     outputs:
       reviewed_intent: ${{ steps.intent.outputs.reviewed }}
     env:
+      PYTHONDONTWRITEBYTECODE: "1"
       REACT_APP_BACKEND_URL: https://mezansalla.com
     defaults:
       run:
@@ -73,24 +85,186 @@ jobs:
           scripts/release-intent.test.cjs
           scripts/service-worker-retirement.test.cjs
           scripts/start-governed-runtime.test.cjs
-      - name: Select reviewed identity or bootstrap a candidate
+      - name: Classify reviewed B or source candidate A
         id: intent
         shell: bash
         env:
-          REVIEWED_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          CHECKED_OUT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          PUSH_BEFORE_SHA: ${{ github.event.before || '' }}
+          DISPATCH_CANDIDATE_BASE_SHA: ${{ inputs.candidate_source_base_git_sha || '' }}
         run: |
           set -euo pipefail
-          if test -f ../release/release-intent-v5.json; then
-            source_git_sha="$(node -p 'require("../release/release-intent-v5.json").source_git_sha')"
+          cd "$GITHUB_WORKSPACE"
+
+          deployment_git_sha="$(git rev-parse HEAD)"
+          test "$deployment_git_sha" = "$CHECKED_OUT_SHA"
+          reviewed=false
+          reviewed_info=""
+
+          # A tracked file is not enough to call HEAD reviewed. The schema-2
+          # adapter must validate the complete intent against the checkout,
+          # then Git must prove the exact A -> B intent-only relation.
+          if reviewed_info="$(
+            PYTHONPATH=backend:. python - <<'PY'
+          from scripts.emergent_deployment_adapter import (
+              load_release_intent,
+              verify_release_intent_git,
+          )
+
+          intent = load_release_intent()
+          if intent["schema_version"] != 2:
+              raise SystemExit("reviewed intent is not schema 2")
+          verify_release_intent_git(intent)
+          print(intent["source_git_sha"])
+          print(intent["source_base_git_sha"])
+          PY
+          )"; then
+            mapfile -t reviewed_fields <<< "$reviewed_info"
+            if test "${#reviewed_fields[@]}" -eq 2; then
+              candidate_source_sha="${reviewed_fields[0]}"
+              candidate_base_sha="${reviewed_fields[1]}"
+              if
+                [[ "$candidate_source_sha" =~ ^[0-9a-f]{40}$ ]] &&
+                [[ "$candidate_base_sha" =~ ^[0-9a-f]{40}$ ]] &&
+                test "$candidate_source_sha" != "$deployment_git_sha" &&
+                test "$candidate_base_sha" != "$candidate_source_sha" &&
+                git cat-file -e "${candidate_base_sha}^{commit}" &&
+                git cat-file -e "${candidate_source_sha}^{commit}" &&
+                git merge-base --is-ancestor \
+                  "$candidate_base_sha" "$candidate_source_sha" &&
+                git merge-base --is-ancestor \
+                  "$candidate_source_sha" "$deployment_git_sha" &&
+                ! git diff --quiet \
+                  "$candidate_base_sha" "$candidate_source_sha" &&
+                test -z "$(git rev-list --full-history \
+                  "${candidate_base_sha}..${candidate_source_sha}" -- \
+                  release/release-intent-v5.json)" &&
+                git diff --quiet \
+                  "$candidate_base_sha" "$candidate_source_sha" -- \
+                  release/release-intent-v5.json &&
+                git diff --quiet \
+                  "$candidate_source_sha" "$deployment_git_sha" -- \
+                  . ':(exclude)release/release-intent-v5.json' &&
+                ! git diff --quiet \
+                  "$candidate_source_sha" "$deployment_git_sha" -- \
+                  release/release-intent-v5.json
+              then
+                reviewed=true
+                source_git_sha="$candidate_source_sha"
+                source_base_git_sha="$candidate_base_sha"
+              fi
+            fi
+          fi
+
+          if test "$reviewed" = true; then
+            if test "$EVENT_NAME" = pull_request && \
+              test "$source_base_git_sha" != "$PR_BASE_SHA"; then
+              if ! git merge-base --is-ancestor \
+                   "$source_base_git_sha" "$PR_BASE_SHA" || \
+                 ! git merge-base --is-ancestor \
+                   "$PR_BASE_SHA" "$source_git_sha"; then
+                echo "::error::PR base must be J or a staged source commit between J and A"
+                exit 1
+              fi
+            fi
+            if test "$EVENT_NAME" = push; then
+              if ! [[ "$PUSH_BEFORE_SHA" =~ ^[0-9a-f]{40}$ ]] || \
+                test "$PUSH_BEFORE_SHA" = "0000000000000000000000000000000000000000"; then
+                echo "::error::reviewed Production push has no valid predecessor J"
+                exit 1
+              fi
+              if test "$source_base_git_sha" != "$PUSH_BEFORE_SHA"; then
+                if ! git merge-base --is-ancestor \
+                     "$source_base_git_sha" "$PUSH_BEFORE_SHA" || \
+                   ! git merge-base --is-ancestor \
+                     "$PUSH_BEFORE_SHA" "$source_git_sha"; then
+                  echo "::error::Production predecessor must be J or a staged source commit between J and A"
+                  exit 1
+                fi
+              fi
+            fi
+            if test "$EVENT_NAME" = workflow_dispatch && \
+              test -n "$DISPATCH_CANDIDATE_BASE_SHA"; then
+              echo "::error::candidate_source_base_git_sha is forbidden for reviewed B"
+              exit 1
+            fi
             echo "reviewed=true" >> "$GITHUB_OUTPUT"
             echo "MEZAN_RELEASE_USE_REVIEWED_INTENT=1" >> "$GITHUB_ENV"
           else
-            source_git_sha="$REVIEWED_HEAD_SHA"
+            if test "$EVENT_NAME" = push; then
+              echo "::error::Production push must be reviewed schema-2 B, not candidate A"
+              exit 1
+            elif test "$EVENT_NAME" = pull_request; then
+              source_base_git_sha="$(
+                PYTHONPATH=backend:. python - <<'PY'
+          import os
+          from scripts.emergent_deployment_adapter import resolve_candidate_source_base
+          print(resolve_candidate_source_base(os.environ["PR_BASE_SHA"], os.environ["CHECKED_OUT_SHA"]))
+          PY
+              )"
+            elif test "$EVENT_NAME" = workflow_dispatch; then
+              source_base_git_sha="$DISPATCH_CANDIDATE_BASE_SHA"
+              if test -z "$source_base_git_sha"; then
+                echo "::error::candidate A dispatch requires candidate_source_base_git_sha"
+                exit 1
+              fi
+            else
+              echo "::error::unsupported release-readiness event"
+              exit 1
+            fi
+
+            source_git_sha="$deployment_git_sha"
+            [[ "$source_base_git_sha" =~ ^[0-9a-f]{40}$ ]]
+            test "$source_base_git_sha" != "$source_git_sha"
+            git cat-file -e "${source_base_git_sha}^{commit}"
+            git merge-base --is-ancestor \
+              "$source_base_git_sha" "$source_git_sha"
+            ! git diff --quiet "$source_base_git_sha" "$source_git_sha"
+            test -z "$(git rev-list --full-history \
+              "${source_base_git_sha}..${source_git_sha}" -- \
+              release/release-intent-v5.json)"
+            git diff --quiet \
+              "$source_base_git_sha" "$source_git_sha" -- \
+              release/release-intent-v5.json
+
             echo "reviewed=false" >> "$GITHUB_OUTPUT"
             echo "MEZAN_RELEASE_BOOTSTRAP_INTENT=1" >> "$GITHUB_ENV"
           fi
+
           [[ "$source_git_sha" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$source_base_git_sha" =~ ^[0-9a-f]{40}$ ]]
+
+          # Candidate and reviewed paths both anchor J in the exact previously
+          # reviewed P -> J pair. Validate J with the code shipped at J, then
+          # prove that J differs from its governed source P by intent only.
+          base_checkout="$RUNNER_TEMP/release-base-j"
+          git clone --local --no-hardlinks "$GITHUB_WORKSPACE" "$base_checkout"
+          git -C "$base_checkout" checkout --detach "$source_base_git_sha"
+          previous_source_sha="$(
+            cd "$base_checkout"
+            PYTHONPATH=backend:. python - <<'PY'
+          from scripts.emergent_deployment_adapter import load_release_intent
+
+          print(load_release_intent()["source_git_sha"])
+          PY
+          )"
+          [[ "$previous_source_sha" =~ ^[0-9a-f]{40}$ ]]
+          test "$previous_source_sha" != "$source_base_git_sha"
+          git cat-file -e "${previous_source_sha}^{commit}"
+          git merge-base --is-ancestor \
+            "$previous_source_sha" "$source_base_git_sha"
+          git diff --quiet \
+            "$previous_source_sha" "$source_base_git_sha" -- \
+            . ':(exclude)release/release-intent-v5.json'
+          ! git diff --quiet \
+            "$previous_source_sha" "$source_base_git_sha" -- \
+            release/release-intent-v5.json
+
           echo "SOURCE_GIT_SHA=$source_git_sha" >> "$GITHUB_ENV"
+          echo "SOURCE_BASE_GIT_SHA=$source_base_git_sha" >> "$GITHUB_ENV"
+          echo "DEPLOYMENT_GIT_SHA=$deployment_git_sha" >> "$GITHUB_ENV"
       - name: Build production frontend twice and retain verified build B
         env:
           CI: "false"
@@ -107,11 +281,47 @@ jobs:
           candidate="$RUNNER_TEMP/release-intent-v5.json"
           python ../scripts/emergent_deployment_adapter.py freeze-intent \
             --source-git-sha "$SOURCE_GIT_SHA" \
+            --source-base-git-sha "$SOURCE_BASE_GIT_SHA" \
             --branch hotfix/prod-snap-meta-final \
+            --output "$candidate" \
             > "$RUNNER_TEMP/release-intent-v5.freeze.log"
-          cp ../release/release-intent-v5.json "$candidate"
-          rm ../release/release-intent-v5.json
           python -m json.tool "$candidate" >/dev/null
+          PYTHONPATH=../backend:.. python - "$candidate" <<'PY'
+          import os
+          import sys
+          from pathlib import Path
+
+          from release_protocol_v5 import (
+              BACKEND_RUNTIME_SOURCE_SCOPE,
+              RELEASE_CONTROL_SOURCE_SCOPE,
+              exact_json_equal,
+          )
+          from scripts.emergent_deployment_adapter import (
+              _git_source_manifest,
+              load_candidate_release_intent,
+          )
+
+          candidate_path = Path(sys.argv[1])
+          payload = load_candidate_release_intent(
+              candidate_path,
+              source_git_sha=os.environ["SOURCE_GIT_SHA"],
+              source_base_git_sha=os.environ["SOURCE_BASE_GIT_SHA"],
+          )
+          assert payload["schema_version"] == 2
+          assert payload["source_git_sha"] == os.environ["SOURCE_GIT_SHA"]
+          assert payload["source_base_git_sha"] == os.environ["SOURCE_BASE_GIT_SHA"]
+          for field, scope in (
+              ("backend_runtime_source", BACKEND_RUNTIME_SOURCE_SCOPE),
+              ("release_control_source", RELEASE_CONTROL_SOURCE_SCOPE),
+          ):
+              derived = _git_source_manifest(
+                  scope=scope,
+                  source_git_sha=payload["source_git_sha"],
+                  source_base_git_sha=payload["source_base_git_sha"],
+              )
+              assert payload[field]["file_count"] > 0
+              assert exact_json_equal(payload[field], derived), field
+          PY
       - name: Retain the candidate reviewed intent
         if: steps.intent.outputs.reviewed == 'false'
         uses: actions/upload-artifact@v4
@@ -134,6 +344,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
+      PYTHONDONTWRITEBYTECODE: "1"
       REACT_APP_BACKEND_URL: https://mezansalla.com
     steps:
       - uses: actions/checkout@v4
@@ -157,19 +368,43 @@ jobs:
           set -euo pipefail
           deployment_git_sha="$(git rev-parse HEAD)"
           source_git_sha="$(node -p 'require("./release/release-intent-v5.json").source_git_sha')"
+          source_base_git_sha="$(node -p 'require("./release/release-intent-v5.json").source_base_git_sha')"
           [[ "$source_git_sha" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$source_base_git_sha" =~ ^[0-9a-f]{40}$ ]]
+          test "$source_base_git_sha" != "$source_git_sha"
+          test "$source_git_sha" != "$deployment_git_sha"
+          git cat-file -e "${source_base_git_sha}^{commit}"
           git cat-file -e "${source_git_sha}^{commit}"
+          git merge-base --is-ancestor "$source_base_git_sha" "$source_git_sha"
           git merge-base --is-ancestor "$source_git_sha" "$deployment_git_sha"
-          mapfile -t changed_paths < <(
-            git diff --name-only "$source_git_sha" "$deployment_git_sha"
+          ! git diff --quiet "$source_base_git_sha" "$source_git_sha"
+          test -z "$(git rev-list --full-history \
+            "${source_base_git_sha}..${source_git_sha}" -- \
+            release/release-intent-v5.json)"
+          git diff --quiet \
+            "$source_base_git_sha" "$source_git_sha" -- \
+            release/release-intent-v5.json
+          git diff --quiet \
+            "$source_git_sha" "$deployment_git_sha" -- \
+            . ':(exclude)release/release-intent-v5.json'
+          ! git diff --quiet \
+            "$source_git_sha" "$deployment_git_sha" -- \
+            release/release-intent-v5.json
+          PYTHONPATH=backend:. python - <<'PY'
+          from scripts.emergent_deployment_adapter import (
+              load_release_intent,
+              verify_release_intent_git,
           )
-          test "${#changed_paths[@]}" -eq 1
-          test "${changed_paths[0]}" = "release/release-intent-v5.json"
+
+          intent = load_release_intent()
+          verify_release_intent_git(intent)
+          PY
           rehearsal_root="$(mktemp -d)"
           git clone --local --no-hardlinks "$GITHUB_WORKSPACE" "$rehearsal_root/repo"
           git -C "$rehearsal_root/repo" checkout --detach "$deployment_git_sha"
           {
             echo "REHEARSAL_REPO=$rehearsal_root/repo"
+            echo "INTENT_SOURCE_BASE_SHA=$source_base_git_sha"
             echo "INTENT_SOURCE_SHA=$source_git_sha"
             echo "DEPLOYMENT_GIT_SHA=$deployment_git_sha"
           } >> "$GITHUB_ENV"
@@ -240,6 +475,11 @@ jobs:
           )
           from release_identity import read_release_identity
           from release_identity import release_health_payload
+          from release_protocol_v5 import (
+              BACKEND_RUNTIME_SOURCE_SCOPE,
+              RELEASE_CONTROL_SOURCE_SCOPE,
+              source_manifest_summary,
+          )
           from scripts.emergent_deployment_adapter import (
               _assert_isolated_backend_health,
           )
@@ -272,16 +512,34 @@ jobs:
           assert proof == intent["frontend_reproducibility"]
           assert identity == intent["runtime_identity"]
           assert identity["source_git_sha"] == intent["source_git_sha"]
+          assert identity["source_base_git_sha"] == intent["source_base_git_sha"]
           assert identity["release_id"].startswith("rg5-")
           assert identity["frontend_build"]["artifact_tree_sha256"] == intent["frontend_build"]["artifact_tree_sha256"]
           assert identity["critical_file_hashes"] == intent["critical_file_hashes"]
           assert frontend_build["toolchain"]["node"] == "22.23.2"
           assert frontend_build["toolchain"]["yarn"] == "1.22.22"
           assert health["verified_identity_available"] is True
+          assert health["backend_runtime_source_verified"] is True
+          assert health["release_control_source_bound"] is True
           assert health["critical_file_hashes_match"] is True
           assert health["frontend_build_verified"] is True
           assert health["release_id"] == identity["release_id"]
           assert health["source_git_sha"] == intent["source_git_sha"]
+          assert health["source_base_git_sha"] == intent["source_base_git_sha"]
+          assert health["backend_runtime_source"] == source_manifest_summary(
+              intent["backend_runtime_source"],
+              expected_scope=BACKEND_RUNTIME_SOURCE_SCOPE,
+              label="Backend runtime source",
+          )
+          assert health["release_control_source"] == source_manifest_summary(
+              intent["release_control_source"],
+              expected_scope=RELEASE_CONTROL_SOURCE_SCOPE,
+              label="Release control source",
+          )
+          assert "files" not in health["backend_runtime_source"]
+          assert "tombstones" not in health["backend_runtime_source"]
+          assert "files" not in health["release_control_source"]
+          assert "tombstones" not in health["release_control_source"]
           _assert_isolated_backend_health(health, health_payload)
           PY
           mv "$RUNNER_TEMP/mezan-rehearsal-v5.git" .git
@@ -431,7 +689,7 @@ jobs:
           6. In the same project choose **Manage Publishing → Re-publish changes** exactly once.
           7. Preserve the adapter's sanitized Cloud Build evidence and wait for an explicit newer `Deployment Succeeded`.
           8. Run `python scripts/production_release_guard.py verify --url https://mezansalla.com`.
-          9. Require exact v5 identity/critical/artifact checks and real JSON MIME at `/build-meta.json` before accepting the release.
+          9. Require exact v5 identity, complete Backend/control source summaries, artifact checks, and real JSON MIME at `/build-meta.json` before accepting the release.
           10. Do not perform financial or other irreversible writes until verification returns `verified: true` and `status` returns `active: false`.
 
           GitHub is the review/CI/audit source. A future Emergent deployment requires separate authorization and its own Cloud/runtime evidence.

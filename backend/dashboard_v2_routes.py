@@ -37,6 +37,13 @@ from order_option_cost_snapshot_routes import (
     classify_base_unit_cost,
     selected_option_tokens,
 )
+from order_currency import (
+    SALLA_RAW_CURRENCY_PROJECTION,
+    hydrate_order_currency_fields,
+    order_amount_to_sar,
+    order_total_sar,
+    summarize_orders_sar,
+)
 from order_status_policy import effective_product_cost, get_policy_map
 from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS
 from product_option_cost_routes import BINDINGS, RESOURCES
@@ -374,7 +381,11 @@ def _finalize_product_profit_rows(
         units = max(_float(raw.get("units_sold")), 0.0)
         if units <= 0:
             continue
-        sales = round(_float(raw.get("total_sales")), 2)
+        known_sales = round(_float(raw.get("total_sales")), 2)
+        sales_conversion_complete = bool(
+            raw.get("sales_conversion_complete", True)
+        )
+        sales = known_sales if sales_conversion_complete else None
         accumulated_cost = round(_float(raw.get("total_cost")), 2)
         missing_everywhere = bool(raw.get("missing_everywhere"))
         uses_salla_fallback = bool(raw.get("uses_salla_fallback"))
@@ -401,7 +412,9 @@ def _finalize_product_profit_rows(
         )
         net_profit = (
             round(sales - reportable_cost, 2)
-            if reportable_cost is not None and cost_status != "missing"
+            if sales is not None
+            and reportable_cost is not None
+            and cost_status != "missing"
             else None
         )
         items.append({
@@ -416,11 +429,13 @@ def _finalize_product_profit_rows(
             "orders_count": int(raw.get("orders_count") or 0),
             "average_unit_cost": average_unit_cost,
             "total_sales": sales,
+            "known_total_sales": known_sales,
+            "sales_currency_conversion_complete": sales_conversion_complete,
             "total_cost": reportable_cost,
             "net_profit": net_profit,
             "profit_margin_pct": (
                 round((net_profit / sales) * 100, 2)
-                if net_profit is not None and sales > 0
+                if net_profit is not None and sales is not None and sales > 0
                 else None
             ),
             "cost_status": cost_status,
@@ -439,14 +454,27 @@ def _finalize_product_profit_rows(
     ))
     has_unpriced = any(row["cost_status"] == "missing" for row in items)
     has_fallback = any(row["cost_status"] == "salla_fallback" for row in items)
-    total_sales = round(sum(_float(row["total_sales"]) for row in items), 2)
+    has_unconverted_sales = any(
+        not row["sales_currency_conversion_complete"] for row in items
+    )
+    known_total_sales = round(
+        sum(_float(row["known_total_sales"]) for row in items),
+        2,
+    )
+    total_sales = None if has_unconverted_sales else known_total_sales
     accumulated_cost = round(sum(_float(raw.get("total_cost")) for raw in rows.values()), 2)
     return items, {
         "product_count": len(items),
         "total_units": round(sum(_float(row["units_sold"]) for row in items), 2),
         "total_sales": total_sales,
+        "known_total_sales": known_total_sales,
+        "sales_currency_conversion_complete": not has_unconverted_sales,
         "total_cost": accumulated_cost,
-        "net_profit": None if has_unpriced else round(total_sales - accumulated_cost, 2),
+        "net_profit": (
+            None
+            if has_unpriced or has_unconverted_sales
+            else round(total_sales - accumulated_cost, 2)
+        ),
         "has_unpriced_products": has_unpriced,
         "uses_salla_fallback": has_fallback,
     }
@@ -476,15 +504,20 @@ async def _filtered_orders(
         db.unified_orders.find(query, {"_id": 0, "raw_by_source": 0}),
         100000,
     )
-    if include_marketing_attribution and orders:
-        # Fetch only Salla's whitelisted attribution metadata in a separate
-        # projection.  The main dashboard query remains lightweight and no
-        # customer, address, payment or product raw data is loaded.
-        attribution_rows = await _to_list(
-            db.unified_orders.find(query, SALLA_RAW_ATTRIBUTION_PROJECTION),
+    if orders:
+        # Historical rows predate promoted SAR fields. Fetch only the Salla FX
+        # proof needed to hydrate them in memory; no customer/payment/product
+        # raw data is loaded and no database write is performed.
+        raw_projection = dict(SALLA_RAW_CURRENCY_PROJECTION)
+        if include_marketing_attribution:
+            raw_projection.update(SALLA_RAW_ATTRIBUTION_PROJECTION)
+        projected_rows = await _to_list(
+            db.unified_orders.find(query, raw_projection),
             100000,
         )
-        attach_projected_salla_attribution(orders, attribution_rows)
+        hydrate_order_currency_fields(orders, projected_rows)
+        if include_marketing_attribution:
+            attach_projected_salla_attribution(orders, projected_rows)
     pm_list = [part.strip() for part in (payment_methods or "").split(",") if part.strip()]
     ship_list = [part.strip() for part in (shipping_companies or "").split(",") if part.strip()]
     included_statuses = settings.get("report_included_statuses") or []
@@ -646,6 +679,7 @@ async def build_mezan_v2_product_cost(
             order_parts[result["base_cost_source"]] += result["base_total"]
             order_parts["product_components"] += result["product_components_total"]
             order_parts["selected_options"] += result["selected_options_total"]
+            native_line_sales = _line_sales_total(item, result["quantity"])
             order_product_lines.append({
                 "identity": identity,
                 "salla_product_id": product_id or str(
@@ -662,7 +696,7 @@ async def build_mezan_v2_product_cost(
                     or ""
                 ),
                 "quantity": result["quantity"],
-                "line_sales": _line_sales_total(item, result["quantity"]),
+                "line_sales": order_amount_to_sar(native_line_sales, order),
                 "line_cost": result["line_total"],
                 "base_complete": result["base_complete"],
                 "mezan_cost_complete": result["mezan_cost_complete"],
@@ -698,6 +732,7 @@ async def build_mezan_v2_product_cost(
                 "units_sold": 0.0,
                 "orders_count": 0,
                 "total_sales": 0.0,
+                "sales_conversion_complete": True,
                 "total_cost": 0.0,
                 "mezan_cost_complete": True,
                 "uses_salla_fallback": False,
@@ -705,7 +740,10 @@ async def build_mezan_v2_product_cost(
                 "cost_sources": set(),
             })
             row["units_sold"] += _float(line["quantity"]) * product_scale
-            row["total_sales"] += _float(line["line_sales"]) * product_scale
+            if line["line_sales"] is None:
+                row["sales_conversion_complete"] = False
+            else:
+                row["total_sales"] += _float(line["line_sales"]) * product_scale
             row["total_cost"] += _float(line["line_cost"]) * product_scale
             row["mezan_cost_complete"] = bool(
                 row["mezan_cost_complete"] and line["mezan_cost_complete"]
@@ -766,7 +804,7 @@ async def build_mezan_v2_product_cost(
             "always_added": ["product_components", "selected_option_components"],
             "mezan_completion_sources": ["mezan_v2_variant", "mezan_v2_base"],
             "salla_fallback_is_missing_mezan_cost": True,
-            "product_sales": "unified_orders.products.total; price*quantity-discount+tax fallback",
+            "product_sales": "native order lines converted by verified Salla order FX to SAR",
             "product_profit": "product sales minus Mezan V2 product cost; ads/shipping/payment fees are not allocated per product",
         },
     }
@@ -1302,6 +1340,7 @@ def make_dashboard_v2_router(
             row_map = {row["date"]: row for row in rows}
 
         imprecise_timestamps = 0
+        unverified_currency_orders: list[str] = []
         for order in orders:
             raw = order.get("created_at") or order.get("order_date_raw") or order.get("order_date")
             parsed: datetime | None = None
@@ -1329,8 +1368,20 @@ def make_dashboard_v2_router(
             bucket = row_map.get(parsed.hour if hourly else parsed.date().isoformat())
             if bucket is None:
                 continue
-            bucket["sales"] = round(_float(bucket["sales"]) + _float(order.get("total_amount")), 2)
+            sales_sar = order_total_sar(order)
+            if sales_sar is None:
+                bucket["currency_conversion_complete"] = False
+                unverified_currency_orders.append(
+                    str(order.get("order_number") or "unknown")
+                )
+            else:
+                bucket["sales"] = round(_float(bucket["sales"]) + sales_sar, 2)
             bucket["orders"] += 1
+
+        for row in rows:
+            if row.pop("currency_conversion_complete", True) is False:
+                row["known_sales_sar"] = row["sales"]
+                row["sales"] = None
 
         return {
             "from_date": from_date,
@@ -1339,12 +1390,27 @@ def make_dashboard_v2_router(
             "granularity": "hour" if hourly else "day",
             "series": rows,
             "summary": {
-                "sales": round(sum(_float(row["sales"]) for row in rows), 2),
+                "sales": (
+                    round(sum(_float(row["sales"]) for row in rows), 2)
+                    if not unverified_currency_orders
+                    else None
+                ),
+                "known_sales_sar": round(
+                    sum(
+                        _float(row.get("known_sales_sar", row.get("sales")))
+                        for row in rows
+                    ),
+                    2,
+                ),
                 "orders": sum(int(row["orders"]) for row in rows),
             },
             "data_quality": {
                 "orders_without_precise_time": imprecise_timestamps,
                 "hourly_precision_complete": imprecise_timestamps == 0,
+                "sales_currency_conversion_complete": not unverified_currency_orders,
+                "unverified_currency_orders": len(unverified_currency_orders),
+                "unverified_currency_order_numbers": unverified_currency_orders[:100],
+                "unknown_is_zero": False,
             },
             "source_only": True,
             "accounting_write_reached": False,
@@ -1402,28 +1468,37 @@ def make_dashboard_v2_router(
             month_orders = orders
         else:
             month_orders = initial_results[2]
+        month_sales = summarize_orders_sar(month_orders)
         month_kpis = {
             "from_date": month_start,
             "to_date": today_s,
             "total_orders": len(month_orders),
-            "total_sales": round(
-                sum(_float(order.get("total_amount")) for order in month_orders),
-                2,
-            ),
+            "total_sales": month_sales["total_sar"],
+            "accounting_currency": "SAR",
+            "currency_conversion": month_sales,
         }
         totals = response["totals"]
         # The V2 filtered order set is the authoritative source for both the
         # count and gross sales.  The legacy dashboard can under-report fresh
         # Salla Direct orders when payment-collection fields are still empty,
         # even though each normalized order already has a valid total_amount.
-        authoritative_sales = round(
-            sum(_float(order.get("total_amount")) for order in orders),
-            2,
-        )
+        sales_currency = summarize_orders_sar(orders)
+        authoritative_sales = sales_currency["total_sar"]
         previous_sales = _float(totals.get("total_sales"))
-        sales_delta = round(authoritative_sales - previous_sales, 2)
+        sales_delta = (
+            round(float(authoritative_sales) - previous_sales, 2)
+            if authoritative_sales is not None
+            else 0.0
+        )
         totals["total_orders"] = len(orders)
         totals["total_sales"] = authoritative_sales
+        totals["accounting_currency"] = "SAR"
+        totals["sales_currency_conversion_complete"] = sales_currency[
+            "conversion_complete"
+        ]
+        totals["unverified_currency_orders_count"] = sales_currency[
+            "unverified_orders_count"
+        ]
         previous_product = _float(totals.get("total_product_cost"))
         previous_ads = _float(totals.get("total_ads_cost"))
         previous_operating = _float(totals.get("operating_expenses_total"))
@@ -1582,9 +1657,10 @@ def make_dashboard_v2_router(
             "product_cost_v2": product_cost,
             "ads_v2": ads,
             "month_kpis": month_kpis,
+            "currency_conversion": sales_currency,
             "dashboard_source": "mezan_v2",
             "source_contract": {
-                "orders_sales_payment_methods": "unified_orders:mezan_v2",
+                "orders_sales_payment_methods": "unified_orders.total_amount_sar:salla_order_fx",
                 "product_cost": product_cost["source_contract"],
                 "advertising": ads["source_contract"],
                 "employee_salaries": "mezan_employee_salary_contracts_v2",
@@ -1596,6 +1672,17 @@ def make_dashboard_v2_router(
             "accounting_write_reached": False,
             "qoyod_write_reached": False,
         })
+        if not sales_currency["conversion_complete"]:
+            # Do not turn an unverified GCC amount into zero or a fake SAR
+            # result anywhere in the executive accounting surface.
+            for field in (
+                "total_sales",
+                "net_sales",
+                "net_profit",
+                "overall_roas",
+                "total_payment_fees",
+            ):
+                totals[field] = None
         response["recurring_obligations_v2"] = recurring
         return response
 

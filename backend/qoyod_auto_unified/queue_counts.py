@@ -31,23 +31,32 @@ async def _queue_audit(
     now: Optional[datetime],
     from_date: Any,
     to_date: Any,
+    audit: Optional[dict[str, Any]] = None,
+    failures: Optional[dict[str, dict[str, Any]]] = None,
 ) -> tuple[dict[str, Any], dict[str, dict[str, Any]], dict[str, int]]:
     from integrations.qoyod import unsent_orders as unsent_module
 
-    audit = await build_candidate_audit(
-        db,
-        orders_user_id=str(orders_user_id),
-        markers_user_id=str(user_id),
-        marker_user_ids=(str(user_id), str(orders_user_id)),
-        from_date=from_date,
-        to_date=to_date,
-        days=days,
-        now=now,
-        search=search,
-    )
-    failures = await unsent_module._manual_failure_evidence(
-        db, markers_user_id=str(user_id)
-    )
+    if audit is None:
+        audit = await build_candidate_audit(
+            db,
+            orders_user_id=str(orders_user_id),
+            markers_user_id=str(user_id),
+            marker_user_ids=(str(user_id), str(orders_user_id)),
+            from_date=from_date,
+            to_date=to_date,
+            days=days,
+            now=now,
+            search=search,
+            lightweight=True,
+            require_complete=False,
+        )
+    if failures is None:
+        failures = await unsent_module._manual_failure_evidence(
+            db,
+            markers_user_id=str(user_id),
+            order_numbers=audit["eligible_references"],
+            scan_limit=int(audit.get("scan_limit") or 10_000),
+        )
     queue = {
         "ready_to_send": 0,
         "quarantined": 0,

@@ -2,11 +2,13 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { WarningCircle } from "@phosphor-icons/react";
 
-import api from "../lib/api";
+import {
+    isQoyodRequestAbort,
+    loadQoyodUnsentOrders,
+} from "../lib/qoyodUnsentOrdersClient";
 
-const QOYOD_BASE = "/integrations/qoyod";
 const QOYOD_SYNC_START_DATE = "2026-07-01";
-const REFRESH_INTERVAL_MS = 15_000;
+const REFRESH_INTERVAL_MS = 60_000;
 
 export function eligibleQoyodUnsentCount(payload) {
     const value = Number(payload?.counts?.["لم يُرسل"] ?? 0);
@@ -17,26 +19,45 @@ export function eligibleQoyodUnsentCount(payload) {
 export default function QoyodUnsentHeaderAlert() {
     const [count, setCount] = useState(0);
 
-    const refresh = useCallback(async () => {
+    const refresh = useCallback(async (signal) => {
         try {
-            const { data } = await api.get(`${QOYOD_BASE}/unsent-orders`, {
-                params: {
+            const payload = await loadQoyodUnsentOrders(
+                {
                     from_date: QOYOD_SYNC_START_DATE,
                     limit: 5000,
                     status: "لم يُرسل",
                 },
-            });
-            setCount(eligibleQoyodUnsentCount(data));
-        } catch (_) {
+                { signal },
+            );
+            if (!signal.aborted) {
+                setCount(eligibleQoyodUnsentCount(payload));
+            }
+        } catch (error) {
+            if (isQoyodRequestAbort(error)) return;
             // This owner-only check must never break the store header.
             // Keep the last confirmed count until the next successful refresh.
         }
     }, []);
 
     useEffect(() => {
-        refresh();
-        const timer = window.setInterval(refresh, REFRESH_INTERVAL_MS);
-        return () => window.clearInterval(timer);
+        let running = false;
+        let controller = null;
+        const run = async () => {
+            if (running) return;
+            running = true;
+            controller = new AbortController();
+            try {
+                await refresh(controller.signal);
+            } finally {
+                running = false;
+            }
+        };
+        run();
+        const timer = window.setInterval(run, REFRESH_INTERVAL_MS);
+        return () => {
+            window.clearInterval(timer);
+            controller?.abort();
+        };
     }, [refresh]);
 
     if (count === 0) return null;

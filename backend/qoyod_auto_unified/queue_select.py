@@ -69,6 +69,9 @@ async def _load_candidate_rows_oldest_first(
         markers_user_id=_TENANT,
         marker_user_ids=(_TENANT, str(orders_user_id)),
         from_date=QOYOD_SYNC_START_DATE,
+        lightweight=True,
+        scope_unified_to_date_range=True,
+        include_inbox_evidence=False,
     )
     all_candidates = sorted(
         (

@@ -29,6 +29,39 @@ from integrations.qoyod.payment_methods import (
 
 RIYADH_TZ = ZoneInfo("Asia/Riyadh")
 
+CANDIDATE_AUDIT_SCAN_LIMIT = 10_000
+CANDIDATE_AUDIT_BATCH_SIZE = 100
+CANDIDATE_AUDIT_MAX_TIME_MS = 8_000
+
+
+class CandidateAuditScanLimitExceeded(RuntimeError):
+    """Fail closed when an exact candidate audit exceeds its safety ceiling."""
+
+    def __init__(self, scan_metadata: dict[str, Any]):
+        self.scan_metadata = scan_metadata
+        super().__init__(
+            "candidate audit scan limit exceeded; exact result unavailable"
+        )
+
+
+def _bounded_cursor(
+    cursor: Any,
+    *,
+    scan_limit: int,
+    batch_size: int = CANDIDATE_AUDIT_BATCH_SIZE,
+    max_time_ms: int = CANDIDATE_AUDIT_MAX_TIME_MS,
+) -> Any:
+    """Apply Motor/PyMongo bounds while remaining compatible with test fakes."""
+    for method_name, value in (
+        ("batch_size", max(1, int(batch_size))),
+        ("max_time_ms", max(1, int(max_time_ms))),
+        ("limit", max(1, int(scan_limit)) + 1),
+    ):
+        method = getattr(cursor, method_name, None)
+        if callable(method):
+            cursor = method(value)
+    return cursor
+
 # Candidate visibility and automated financial-write authorization are
 # deliberately separate. This worker-only flag is absent/false on existing
 # production settings, so deploying the unified read model cannot send a
@@ -504,19 +537,45 @@ async def load_unified_candidates(
     orders_user_id: str,
     date_range: CandidateDateRange,
     search: Optional[str] = None,
+    scan_limit: int = CANDIDATE_AUDIT_SCAN_LIMIT,
+    lightweight: bool = False,
+    scope_to_date_range: bool = False,
 ) -> dict[str, Any]:
     """Load the authoritative eligible set keyed by Salla order number."""
-    # Do not pre-filter on the legacy root ``order_date``. It can be one day
-    # behind the Salla/Riyadh business date, or absent while raw Salla
-    # evidence is valid. Scanning the tenant projection and applying the
-    # authoritative range below is the only way to report every exclusion
-    # reason without silently dropping rows at the Mongo query boundary.
+    # Full report/reconciliation callers intentionally do not pre-filter on
+    # the legacy root ``order_date``. It can be one day behind the
+    # Salla/Riyadh business date, or absent while raw Salla evidence is valid.
+    # The automatic sender opts into a padded Mongo superset below because it
+    # only needs actionable rows inside the configured sending window.
     query: dict[str, Any] = {"user_id": str(orders_user_id)}
     if search and str(search).strip():
         import re
         query["order_number"] = {
             "$regex": re.escape(str(search).strip())
         }
+    if scope_to_date_range:
+        # The automatic sender does not need to scan the merchant's complete
+        # order history on every 15-second tick.  ``order_date`` is the
+        # persisted YYYY-MM-DD index key used throughout Mezan.  It can be one
+        # Riyadh day behind the authoritative Salla timestamp, so query a
+        # one-day superset on both sides and retain missing dates for the exact
+        # evidence checks below.  This Mongo predicate only reduces I/O; the
+        # authoritative Salla/Riyadh date still decides eligibility in Python.
+        query["$or"] = [
+            {
+                "order_date": {
+                    "$gte": (
+                        date_range.from_date - timedelta(days=1)
+                    ).isoformat(),
+                    "$lte": (
+                        date_range.to_date + timedelta(days=1)
+                    ).isoformat(),
+                }
+            },
+            {"order_date": {"$exists": False}},
+            {"order_date": None},
+            {"order_date": ""},
+        ]
     projection = {
         "_id": 0,
         "user_id": 1,
@@ -555,7 +614,18 @@ async def load_unified_candidates(
         "delivered_at": 1,
         "updated_at": 1,
     }
+    if lightweight:
+        for field in (
+            "order_id", "shipping_amount", "tax_amount", "items", "products",
+            "customer_email", "customer",
+        ):
+            projection.pop(field, None)
+        projection["customer.name"] = 1
+        projection["customer.phone"] = 1
+
+    scan_limit = max(1, int(scan_limit))
     cursor = db.unified_orders.find(query, projection).sort("order_date", -1)
+    cursor = _bounded_cursor(cursor, scan_limit=scan_limit)
     candidates: dict[str, dict[str, Any]] = {}
     excluded: dict[str, int] = {
         "missing_order_number": 0,
@@ -567,8 +637,12 @@ async def load_unified_candidates(
     }
     excluded_by_status: dict[str, int] = {}
     scanned = 0
+    scan_truncated = False
     async for row in cursor:
         scanned += 1
+        if scanned > scan_limit:
+            scan_truncated = True
+            break
         order_number = str(row.get("order_number") or "").strip()
         if not order_number:
             excluded["missing_order_number"] += 1
@@ -613,7 +687,10 @@ async def load_unified_candidates(
     return {
         "by_reference": candidates,
         "references": set(candidates),
-        "scanned": scanned,
+        "scanned": min(scanned, scan_limit),
+        "observed_rows": scanned,
+        "scan_limit": scan_limit,
+        "scan_truncated": scan_truncated,
         "excluded": excluded,
         "excluded_by_status": excluded_by_status,
     }
@@ -623,63 +700,110 @@ async def load_inbox_evidence(
     db: Any,
     *,
     marker_user_ids: Iterable[str],
-    order_numbers: Iterable[str],
+    order_numbers: Optional[Iterable[str]] = None,
+    scan_limit: int = CANDIDATE_AUDIT_SCAN_LIMIT,
 ) -> dict[str, Any]:
-    """Load newest traces and real markers without expanding the universe."""
-    references = list(dict.fromkeys(
-        str(value).strip() for value in order_numbers if str(value).strip()
-    ))
-    if not references:
-        return {"newest": {}, "all_rows": {}, "owners_by_reference": {}}
+    """Stream bounded marker evidence without retaining every inbox event."""
+    references = (
+        None
+        if order_numbers is None
+        else list(dict.fromkeys(
+            str(value).strip()
+            for value in order_numbers
+            if str(value).strip()
+        ))
+    )
+    scan_limit = max(1, int(scan_limit))
+    if references is not None and not references:
+        return {
+            "newest": {},
+            "markers": {},
+            "event_counts": {},
+            "owners_by_reference": {},
+            "scanned_rows": 0,
+            "observed_rows": 0,
+            "scan_limit": scan_limit,
+            "scan_truncated": False,
+        }
     query = {
         "user_id": _owner_query(marker_user_ids),
-        "salla_order_number": {"$in": references},
     }
+    if references is not None:
+        query["salla_order_number"] = {"$in": references}
+    # Keep this projection deliberately small: canonical payloads, raw payloads,
+    # item arrays, and complete stage histories can be very large.  The report
+    # needs only classification fields plus real local marker ids.
     projection = {
         "_id": 0,
         "id": 1,
         "trace_id": 1,
         "user_id": 1,
-        "salla_order_id": 1,
         "salla_order_number": 1,
         "received_at": 1,
         "pipeline_stage": 1,
-        "pipeline_error": 1,
-        "dead_letter_evidence": 1,
-        "duplicate_of_invoice": 1,
+        "pipeline_error.code": 1,
+        "dead_letter_evidence.fail_stage": 1,
+        "duplicate_of_invoice.qoyod_invoice_id": 1,
+        "duplicate_of_invoice.qoyod_invoice_number": 1,
         "canary_budget_hold": 1,
-        "selective_auto_send_gate": 1,
-        "stage_history": 1,
+        "selective_auto_send_gate.reason": 1,
+        "stage_history": {"$slice": -6},
         "manual_qoyod_invoice_id": 1,
         "manual_qoyod_invoice_number": 1,
         "manual_qoyod_payment_id": 1,
         "qoyod_invoice_id": 1,
         "qoyod_invoice_number": 1,
         "qoyod_invoice_source": 1,
-        "canonical_payload": 1,
-        "raw_payload.data.date": 1,
-        "raw_payload.data.created_at": 1,
+        "canonical_payload.order_status_slug": 1,
+        "canonical_payload.order_status": 1,
+        "canonical_payload.order_status_native": 1,
     }
     cursor = db.integration_inbox.find(query, projection).sort(
         "received_at", -1
     )
+    cursor = _bounded_cursor(cursor, scan_limit=scan_limit)
     newest: dict[str, dict[str, Any]] = {}
-    all_rows: dict[str, list[dict[str, Any]]] = {}
+    markers: dict[str, dict[str, Any]] = {}
+    event_counts: dict[str, int] = {}
     owners: dict[str, set[str]] = {}
-    allowed = set(references)
+    allowed = set(references) if references is not None else None
+    marker_fields = (
+        "manual_qoyod_invoice_id",
+        "manual_qoyod_invoice_number",
+        "manual_qoyod_payment_id",
+        "qoyod_invoice_id",
+        "qoyod_invoice_number",
+        "qoyod_invoice_source",
+    )
+    scanned = 0
+    scan_truncated = False
     async for row in cursor:
+        scanned += 1
+        if scanned > scan_limit:
+            scan_truncated = True
+            break
         reference = str(row.get("salla_order_number") or "").strip()
-        if reference not in allowed:
+        if allowed is not None and reference not in allowed:
             continue
         newest.setdefault(reference, row)
-        all_rows.setdefault(reference, []).append(row)
+        event_counts[reference] = event_counts.get(reference, 0) + 1
+        marker_summary = markers.setdefault(reference, {})
+        for field in marker_fields:
+            value = row.get(field)
+            if field not in marker_summary and value not in (None, ""):
+                marker_summary[field] = value
         owner = str(row.get("user_id") or "").strip()
         if owner:
             owners.setdefault(reference, set()).add(owner)
     return {
         "newest": newest,
-        "all_rows": all_rows,
+        "markers": markers,
+        "event_counts": event_counts,
         "owners_by_reference": owners,
+        "scanned_rows": min(scanned, scan_limit),
+        "observed_rows": scanned,
+        "scan_limit": scan_limit,
+        "scan_truncated": scan_truncated,
     }
 
 
@@ -687,8 +811,31 @@ async def load_qoyod_reference_evidence(
     db: Any,
     *,
     markers_user_id: str,
+    order_numbers: Optional[Iterable[str]],
+    scan_limit: int = CANDIDATE_AUDIT_SCAN_LIMIT,
 ) -> dict[str, Any]:
-    """Load real local Qoyod invoices grouped by exact ``reference``."""
+    """Load bounded real local Qoyod invoices grouped by exact reference."""
+    references = (
+        None
+        if order_numbers is None
+        else list(dict.fromkeys(
+            str(value).strip()
+            for value in order_numbers
+            if str(value).strip()
+        ))
+    )
+    scan_limit = max(1, int(scan_limit))
+    if references is not None and not references:
+        return {
+            "by_reference": {},
+            "references": set(),
+            "unreferenced": [],
+            "duplicate_references": {},
+            "scanned_rows": 0,
+            "observed_rows": 0,
+            "scan_limit": scan_limit,
+            "scan_truncated": False,
+        }
     projection = {
         "_id": 0,
         "user_id": 1,
@@ -711,12 +858,30 @@ async def load_qoyod_reference_evidence(
         "created_at": 1,
         "last_sync_at": 1,
     }
-    cursor = db.qoyod_invoices.find(
-        {"user_id": str(markers_user_id)}, projection
-    ).sort([("issue_date", -1), ("created_at", -1)])
+    query: dict[str, Any] = {"user_id": str(markers_user_id)}
+    if references is not None:
+        reference_match = {"$in": references}
+        query["$or"] = [
+            {"reference": reference_match},
+            {"qoyod_official_reference": reference_match},
+            {"external_reference": reference_match},
+            {"source_reference": reference_match},
+            {"raw_response.reference": reference_match},
+            {"salla_order_number": reference_match},
+        ]
+    cursor = db.qoyod_invoices.find(query, projection).sort(
+        [("issue_date", -1), ("created_at", -1)]
+    )
+    cursor = _bounded_cursor(cursor, scan_limit=scan_limit)
     by_reference: dict[str, list[dict[str, Any]]] = {}
     unreferenced: list[dict[str, Any]] = []
+    scanned = 0
+    scan_truncated = False
     async for row in cursor:
+        scanned += 1
+        if scanned > scan_limit:
+            scan_truncated = True
+            break
         if not real_invoice_id(row.get("qoyod_invoice_id")):
             continue
         stored_reference = row.get("reference")
@@ -736,6 +901,10 @@ async def load_qoyod_reference_evidence(
             reference: rows for reference, rows in by_reference.items()
             if len(rows) > 1
         },
+        "scanned_rows": min(scanned, scan_limit),
+        "observed_rows": scanned,
+        "scan_limit": scan_limit,
+        "scan_truncated": scan_truncated,
     }
 
 
@@ -758,6 +927,11 @@ async def build_candidate_audit(
     days: int = 90,
     now: Optional[datetime] = None,
     search: Optional[str] = None,
+    scan_limit: int = CANDIDATE_AUDIT_SCAN_LIMIT,
+    lightweight: bool = False,
+    require_complete: bool = True,
+    scope_unified_to_date_range: bool = False,
+    include_inbox_evidence: bool = True,
 ) -> dict[str, Any]:
     """Build exact eligible/sent/unsent reference sets and per-order proof."""
     captured = now or datetime.now(timezone.utc)
@@ -772,6 +946,9 @@ async def build_candidate_audit(
         orders_user_id=str(orders_user_id),
         date_range=date_range,
         search=search,
+        scan_limit=scan_limit,
+        lightweight=lightweight,
+        scope_to_date_range=scope_unified_to_date_range,
     )
     eligible_refs: set[str] = set(unified["references"])
     evidence_owners = list(marker_user_ids or (
@@ -780,11 +957,34 @@ async def build_candidate_audit(
     inbox = await load_inbox_evidence(
         db,
         marker_user_ids=evidence_owners,
-        order_numbers=eligible_refs,
+        order_numbers=(
+            eligible_refs
+            if include_inbox_evidence and lightweight
+            else (None if include_inbox_evidence else ())
+        ),
+        scan_limit=scan_limit,
     )
     invoices = await load_qoyod_reference_evidence(
-        db, markers_user_id=str(markers_user_id)
+        db,
+        markers_user_id=str(markers_user_id),
+        order_numbers=eligible_refs if lightweight else None,
+        scan_limit=scan_limit,
     )
+    scan_metadata = {
+        "scan_truncated": bool(
+            unified["scan_truncated"]
+            or inbox["scan_truncated"]
+            or invoices["scan_truncated"]
+        ),
+        "scan_limit": max(1, int(scan_limit)),
+        "scanned_rows": {
+            "unified_orders": unified["scanned"],
+            "integration_inbox": inbox["scanned_rows"],
+            "qoyod_invoices": invoices["scanned_rows"],
+        },
+    }
+    if scan_metadata["scan_truncated"] and require_complete:
+        raise CandidateAuditScanLimitExceeded(scan_metadata)
     invoice_refs: set[str] = set(invoices["references"])
 
     # These are genuine set operations over exact references.  No total-count
@@ -796,7 +996,8 @@ async def build_candidate_audit(
     rows: list[dict[str, Any]] = []
     for reference, order in unified["by_reference"].items():
         inbox_row = inbox["newest"].get(reference)
-        inbox_rows = inbox["all_rows"].get(reference, [])
+        inbox_markers = inbox["markers"].get(reference, {})
+        inbox_rows = [inbox_markers] if inbox_markers else []
         invoice_rows = invoices["by_reference"].get(reference, [])
         invoice = invoice_rows[0] if invoice_rows else None
         has_inbox = inbox_row is not None
@@ -848,7 +1049,9 @@ async def build_candidate_audit(
             "in_unified_orders": True,
             "unified_orders_owner_id": str(orders_user_id),
             "in_integration_inbox": has_inbox,
-            "integration_inbox_event_count": len(inbox_rows),
+            "integration_inbox_event_count": inbox["event_counts"].get(
+                reference, 0
+            ),
             "integration_inbox_owner_ids": sorted(
                 inbox["owners_by_reference"].get(reference, set())
             ),
@@ -925,6 +1128,7 @@ async def build_candidate_audit(
             to_date=date_range.to_date,
         ),
         "source_authority": "unified_orders",
+        **scan_metadata,
         "match_contract": "unified_orders.order_number == qoyod_invoices.reference",
         "orders_user_id": str(orders_user_id),
         "markers_user_id": str(markers_user_id),

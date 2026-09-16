@@ -53,6 +53,8 @@ def verified_release_key(
         release.get("verified_identity_available") is True
         and release.get("critical_file_hashes_match") is True
         and release.get("frontend_build_verified") is True
+        and release.get("backend_runtime_source_verified") is True
+        and release.get("release_control_source_bound") is True
     )
     if verified and FULL_GIT_SHA.fullmatch(source_sha):
         return source_sha

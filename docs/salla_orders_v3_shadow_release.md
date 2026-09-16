@@ -296,6 +296,46 @@ exists yet. Those comparisons require enabling the isolated observer after
 review and waiting for Shadow rows; they remain mandatory PR/cutover blockers
 and are not inferred as passing from the existing sync history.
 
+## 2026-09-16 release preparation checkpoint
+
+The previously local cycle-5 source was recovered intact. Its reviewed tree
+`ad138a8fed886df8055e171139c1839542c546c3` is now durable on
+`recovery/salla-v3-cycle5-20260916` at
+`ddf0a861dd6a63335d922a7fcd2d7a3b66584846`. The recovered original commit was
+`54e4a0ecfc12ab27bd203fe92bf104657202f0bb`; the remote checkpoint consolidates
+its unpublished history, with identical source bytes and different commit
+metadata. The candidate integrates Production source
+`67de138c57fc3204ba4af529b14460e99b4dbf9f` without replacing other work.
+
+Two restart/shutdown defects are fixed in this candidate:
+
+- Optional observer initialization runs on every process startup, outside the
+  once-per-release startup lease. Index creation still precedes task creation.
+- Shutdown awaits observer cancellation before closing Mongo. Cancelling an
+  in-flight provider call also drains its job heartbeat, leaving interrupted
+  leases available for bounded recovery after expiry.
+
+`Salla Orders V3 acceptance` runs all V3 contracts plus five real Mongo replica
+set tests: concurrent duplicate delivery, rollback and repair after a failure
+between writes, rollback after lease expiry, exclusive queue ownership and
+supersession, and tenant isolation. These use synthetic events and a disposable
+loopback-only MongoDB, with no Salla credentials. A skipped Mongo case fails the
+CI gate. Local contract success alone does not prove transaction readiness.
+
+Deployment is staged: this source can only introduce the disabled observer.
+The sole Shadow switch remains false by default and cutover remains unavailable.
+Deploying this stage does not repair existing operational order records. Before
+calling the whole order-sync replacement ready, complete real same-runtime
+List/Details/Items evidence, trusted parity-artifact production, Qoyod and
+attribution comparisons, and a separately reviewed operational adapter. Do not
+turn on Shadow merely because unit tests pass.
+
+Before any separately authorized deployment: require green acceptance and
+release-readiness checks on the exact candidate; freeze a fresh protocol-v5
+source-A/intent-only-B pair; complete the clean-clone rehearsal. The inherited
+release intent belongs to an earlier release and must not be reused for this
+candidate. PR #1000 and Issue #1006 record the actual CI and preparation state.
+
 ## Rollback
 
 Rollback is operationally small because there is no cutover:

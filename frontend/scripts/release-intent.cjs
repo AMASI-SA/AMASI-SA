@@ -4,7 +4,7 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const INTENT_SCHEMA_VERSION = 1;
+const INTENT_SCHEMA_VERSION = 2;
 const INTENT_KIND = "mezan_emergent_release_intent_v1";
 const PROTOCOL_VERSION = 5;
 const SOURCE_SCOPE = "git_head_frontend_tree_v1";
@@ -265,6 +265,26 @@ function loadReviewedReleaseIntent({ intentPath, frontendRoot }) {
     throw new Error(`Reviewed release intent is not valid JSON: ${error.message}`);
   }
   requirePlainObject(intent, "release intent");
+  requireExactKeys(
+    intent,
+    [
+      "schema_version",
+      "kind",
+      "protocol_version",
+      "source_git_sha",
+      "source_base_git_sha",
+      "branch",
+      "frontend_source",
+      "backend_runtime_source",
+      "release_control_source",
+      "client_environment",
+      "frontend_build",
+      "frontend_reproducibility",
+      "critical_file_hashes",
+      "runtime_identity",
+    ],
+    "release intent",
+  );
   if (intent.schema_version !== INTENT_SCHEMA_VERSION) {
     throw new Error(`Unsupported release intent schema_version: ${String(intent.schema_version)}`);
   }
@@ -277,15 +297,54 @@ function loadReviewedReleaseIntent({ intentPath, frontendRoot }) {
   if (typeof intent.source_git_sha !== "string" || !FULL_GIT_SHA.test(intent.source_git_sha)) {
     throw new Error("release intent source_git_sha must be a lowercase full Git SHA");
   }
+  if (
+    typeof intent.source_base_git_sha !== "string"
+    || !FULL_GIT_SHA.test(intent.source_base_git_sha)
+  ) {
+    throw new Error("release intent source_base_git_sha must be a lowercase full Git SHA");
+  }
   if (typeof intent.branch !== "string" || !intent.branch.trim() || intent.branch.length > 255) {
     throw new Error("release intent branch must be a non-empty string");
   }
   if (intent.branch !== intent.branch.trim()) {
     throw new Error("release intent branch must not contain surrounding whitespace");
   }
+  const backendRuntimeSource = requirePlainObject(
+    intent.backend_runtime_source,
+    "release intent backend_runtime_source",
+  );
+  const releaseControlSource = requirePlainObject(
+    intent.release_control_source,
+    "release intent release_control_source",
+  );
+  requirePlainObject(intent.client_environment, "release intent client_environment");
+  requirePlainObject(intent.frontend_build, "release intent frontend_build");
+  requirePlainObject(
+    intent.frontend_reproducibility,
+    "release intent frontend_reproducibility",
+  );
+  requirePlainObject(intent.critical_file_hashes, "release intent critical_file_hashes");
+  const runtimeIdentity = requirePlainObject(
+    intent.runtime_identity,
+    "release intent runtime_identity",
+  );
+  if (runtimeIdentity.source_git_sha !== intent.source_git_sha) {
+    throw new Error("release intent runtime_identity source_git_sha differs from intent");
+  }
+  if (runtimeIdentity.source_base_git_sha !== intent.source_base_git_sha) {
+    throw new Error("release intent runtime_identity source_base_git_sha differs from intent");
+  }
+  if (runtimeIdentity.branch !== intent.branch) {
+    throw new Error("release intent runtime_identity branch differs from intent");
+  }
   return {
     source_git_sha: intent.source_git_sha,
+    source_base_git_sha: intent.source_base_git_sha,
+    branch: intent.branch,
     frontend_source: validateFrontendSource(intent.frontend_source, { frontendRoot }),
+    backend_runtime_source: backendRuntimeSource,
+    release_control_source: releaseControlSource,
+    runtime_identity: runtimeIdentity,
   };
 }
 

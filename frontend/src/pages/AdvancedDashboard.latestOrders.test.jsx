@@ -35,7 +35,7 @@ jest.mock("react-router-dom", () => {
 
 const source = fs.readFileSync(path.join(__dirname, "AdvancedDashboard.jsx"), "utf8");
 
-test("latest orders mirrors the Orders V2 information row", () => {
+test("latest orders mirrors Orders V2 and keeps each order's original currency", () => {
     const markup = renderToStaticMarkup(
         <MemoryRouter>
             <LatestOrders totals={{ total_orders: 2, total_sales: 337.33 }} orders={[
@@ -49,7 +49,12 @@ test("latest orders mirrors the Orders V2 information row", () => {
                     items: [{}, {}, {}],
                     payment: { method_native: "credit_card" },
                     source: { channel: "snapchat" },
-                    totals: { total: 187.33 },
+                    totals: {
+                        currency: "QAR",
+                        total: 187.33,
+                        total_sar: 192.79,
+                        conversion_status: "verified",
+                    },
                 },
                 {
                     order_number: "278105072",
@@ -77,6 +82,10 @@ test("latest orders mirrors the Orders V2 information row", () => {
     expect(markup).toContain("2 طلب");
     expect(markup).toContain("متوسط:");
     expect(markup).toContain("168.67 ر.س");
+    expect(markup).toContain("187.33 QAR");
+    expect(markup).toContain("≈ 192.79 ر.س");
+    expect(markup).toContain("150.00 ر.س");
+    expect(markup).not.toContain("187.33 ر.س");
 });
 
 test("summary strip includes current month order and sales cards", () => {

@@ -74,16 +74,24 @@ function createFixture() {
     tree_sha256: canonicalSourceTreeSha256(files),
   };
   const intent = {
-    schema_version: 1,
+    schema_version: 2,
     kind: "mezan_emergent_release_intent_v1",
     protocol_version: 5,
     source_git_sha: "a".repeat(40),
+    source_base_git_sha: "b".repeat(40),
     branch: "hotfix/prod-snap-meta-final",
     frontend_source: frontendSource,
+    backend_runtime_source: {},
+    release_control_source: {},
+    client_environment: {},
     frontend_build: {},
     frontend_reproducibility: {},
     critical_file_hashes: {},
-    runtime_identity: {},
+    runtime_identity: {
+      source_git_sha: "a".repeat(40),
+      source_base_git_sha: "b".repeat(40),
+      branch: "hotfix/prod-snap-meta-final",
+    },
   };
   writeJson(intentPath, intent);
 
@@ -113,6 +121,8 @@ test("reviewed release intent validates full frontend source without .git", () =
       frontendRoot: fixture.frontendRoot,
     });
     assert.equal(loaded.source_git_sha, "a".repeat(40));
+    assert.equal(loaded.source_base_git_sha, "b".repeat(40));
+    assert.equal(loaded.branch, fixture.intent.branch);
     assert.deepEqual(loaded.frontend_source, fixture.intent.frontend_source);
 
     const captured = captureSourceIdentity({
@@ -239,6 +249,125 @@ test("reviewed release intent rejects symlinks, malformed identity, and noncanon
       fixture.cleanup();
     }
   });
+});
+
+test("reviewed release intent requires the exact schema v2 top-level contract", async (t) => {
+  await t.test("schema v1 is rejected", () => {
+    const fixture = createFixture();
+    try {
+      fixture.intent.schema_version = 1;
+      writeJson(fixture.intentPath, fixture.intent);
+      assert.throws(
+        () => loadReviewedReleaseIntent({
+          intentPath: fixture.intentPath,
+          frontendRoot: fixture.frontendRoot,
+        }),
+        /unsupported release intent schema_version/i,
+      );
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  await t.test("missing and extra top-level keys are rejected", () => {
+    const fixture = createFixture();
+    try {
+      delete fixture.intent.backend_runtime_source;
+      writeJson(fixture.intentPath, fixture.intent);
+      assert.throws(
+        () => loadReviewedReleaseIntent({
+          intentPath: fixture.intentPath,
+          frontendRoot: fixture.frontendRoot,
+        }),
+        /release intent keys are not canonical/i,
+      );
+
+      fixture.intent.backend_runtime_source = {};
+      fixture.intent.unreviewed = {};
+      writeJson(fixture.intentPath, fixture.intent);
+      assert.throws(
+        () => loadReviewedReleaseIntent({
+          intentPath: fixture.intentPath,
+          frontendRoot: fixture.frontendRoot,
+        }),
+        /release intent keys are not canonical/i,
+      );
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  await t.test("source base SHA must be lowercase and full length", () => {
+    for (const invalid of ["B".repeat(40), "b".repeat(39), "g".repeat(40)]) {
+      const fixture = createFixture();
+      try {
+        fixture.intent.source_base_git_sha = invalid;
+        fixture.intent.runtime_identity.source_base_git_sha = invalid;
+        writeJson(fixture.intentPath, fixture.intent);
+        assert.throws(
+          () => loadReviewedReleaseIntent({
+            intentPath: fixture.intentPath,
+            frontendRoot: fixture.frontendRoot,
+          }),
+          /source_base_git_sha.*lowercase full Git SHA/i,
+        );
+      } finally {
+        fixture.cleanup();
+      }
+    }
+  });
+
+  await t.test("governed identity sections must be plain objects", () => {
+    for (const name of [
+      "backend_runtime_source",
+      "release_control_source",
+      "client_environment",
+      "frontend_build",
+      "frontend_reproducibility",
+      "critical_file_hashes",
+      "runtime_identity",
+    ]) {
+      const fixture = createFixture();
+      try {
+        fixture.intent[name] = [];
+        writeJson(fixture.intentPath, fixture.intent);
+        assert.throws(
+          () => loadReviewedReleaseIntent({
+            intentPath: fixture.intentPath,
+            frontendRoot: fixture.frontendRoot,
+          }),
+          new RegExp(`${name} must be a JSON object`, "i"),
+        );
+      } finally {
+        fixture.cleanup();
+      }
+    }
+  });
+});
+
+test("reviewed release intent binds runtime identity provenance", async (t) => {
+  for (const [name, replacement] of [
+    ["source_git_sha", "c".repeat(40)],
+    ["source_base_git_sha", "d".repeat(40)],
+    ["branch", "different-release-branch"],
+  ]) {
+    await t.test(`${name} mirror drift is rejected`, () => {
+      const fixture = createFixture();
+      try {
+        fixture.intent.runtime_identity[name] = replacement;
+        writeJson(fixture.intentPath, fixture.intent);
+        assert.throws(
+          () => loadReviewedReleaseIntent({
+            intentPath: fixture.intentPath,
+            frontendRoot: fixture.frontendRoot,
+          }),
+          new RegExp(`runtime_identity ${name} differs from intent`, "i"),
+        );
+      } finally {
+        fixture.cleanup();
+      }
+    });
+  }
 });
 
 test("bootstrap capture is an explicit one-value switch", () => {

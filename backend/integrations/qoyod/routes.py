@@ -25,7 +25,7 @@ import logging
 from datetime import date, datetime, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from integrations.qoyod.api_client import QoyodAPIClient, QoyodAPIError
@@ -37,7 +37,11 @@ from integrations.qoyod.write_lock import (
 from integrations.qoyod.product_resolver import adopt_qoyod_product
 from integrations.qoyod.customer_resolver import adopt_qoyod_customer
 from integrations.qoyod.credentials import (
-    save_api_key, get_api_key, get_fingerprint, delete_api_key, mark_verified,
+    QoyodCredentialDecryptionError,
+    QoyodCredentialEncryptionError,
+    QoyodCredentialStorageError,
+    save_api_key, get_api_key, get_api_key_with_fingerprint,
+    get_fingerprint, delete_api_key, mark_verified,
 )
 from integrations.qoyod.models import (
     QoyodSettings, QoyodCapabilityFlags,
@@ -199,10 +203,6 @@ class SettingsPatch(BaseModel):
     production_writes_locked:      Optional[bool] = None
 
 
-class CredentialsRequest(BaseModel):
-    api_key: str = Field(min_length=1, max_length=512)
-
-
 class FreshStartExecutePayload(BaseModel):
     job_id:  str = Field(..., description="The plan job_id to execute")
     confirm: str = Field(..., description="Must equal DELETE-CONFIRM")
@@ -351,6 +351,26 @@ class TestConnectionResponse(BaseModel):
     error:       Optional[dict] = None
 
 
+_CREDENTIAL_RESPONSE_HEADERS = {
+    "Cache-Control": "no-store",
+    "Pragma": "no-cache",
+}
+
+_SAFE_CONNECTION_ERROR_MESSAGES = {
+    "qoyod_unauthorized": "مفتاح API غير صالح أو منتهي",
+    "qoyod_forbidden": "ليس لديك صلاحية للتحقق من اتصال قيود",
+    "qoyod_not_found": "تعذر العثور على مورد التحقق في قيود",
+    "qoyod_rate_limited": "تجاوز الاختبار حد الطلبات المسموح من قيود",
+    "qoyod_server_error": "قيود ترجع خطأ مؤقتًا",
+    "qoyod_timeout": "انتهت مهلة الاتصال بقيود",
+    "qoyod_network_error": "تعذر الاتصال بقيود",
+}
+
+
+def _disable_credential_response_cache(response: Response) -> None:
+    response.headers.update(_CREDENTIAL_RESPONSE_HEADERS)
+
+
 # ─────────────────────────────────────────────────────────────────────
 # Router factory
 # ─────────────────────────────────────────────────────────────────────
@@ -436,6 +456,19 @@ class DisableTabbyLiveCanaryBody(BaseModel):
     reason:        Optional[str] = Field(None, max_length=256)
 
 
+class _DismissPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    note: Optional[str] = Field(default=None, max_length=500)
+
+
+class _PaymentMethodProbeBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    empty_payment_method_invoice_id: str = Field(
+        ..., min_length=1, max_length=64)
+    reference_invoice_id_with_payment: str = Field(
+        ..., min_length=1, max_length=64)
+
+
 # ─────────────────────────────────────────────────────────────────────
 def make_qoyod_router(db, current_user) -> APIRouter:
     router = APIRouter(
@@ -498,9 +531,159 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         payload["plan_b_auto_send_status"] = status_snapshot(payload)
         return payload
 
+    async def _recover_auto_send_after_credential_save(
+        tenant: str,
+        user: dict,
+        *,
+        saved_fingerprint: str,
+    ) -> Optional[dict[str, Any]]:
+        """Resume a previous opt-in only after the new key is verified."""
+        from integrations.qoyod_manual.auto_send import (
+            activation_issues,
+            credential_pause_patch,
+            credential_recovery_plan,
+            durable_auto_send_desired,
+        )
+
+        settings = await _load_settings(tenant)
+        if not durable_auto_send_desired(settings):
+            # Backwards compatibility: saving a first credential never turns
+            # the connector on. Only a durable previous opt-in can resume.
+            return None
+
+        now_iso = _now().isoformat()
+        readiness_issues: list[dict[str, str]] = []
+        try:
+            credential = await get_api_key_with_fingerprint(db, tenant)
+            if not credential or credential[1] != saved_fingerprint:
+                readiness_issues.append({
+                    "code": "qoyod_credentials_changed_during_save",
+                    "message": "تغير اعتماد قيود أثناء الحفظ؛ أعد المحاولة",
+                })
+            else:
+                key, _fingerprint, credential_version = credential
+                try:
+                    await QoyodAPIClient(key).me()
+                    verified = await mark_verified(
+                        db,
+                        tenant,
+                        credential_version=credential_version,
+                    )
+                    if not verified:
+                        readiness_issues.append({
+                            "code": "qoyod_credentials_changed_during_test",
+                            "message": (
+                                "تغير اعتماد قيود أثناء التحقق؛ أعد المحاولة"
+                            ),
+                        })
+                except QoyodAPIError as exc:
+                    safe_code = (
+                        exc.code
+                        if exc.code in _SAFE_CONNECTION_ERROR_MESSAGES
+                        else "qoyod_connection_failed"
+                    )
+                    readiness_issues.append({
+                        "code": safe_code,
+                        "message": _SAFE_CONNECTION_ERROR_MESSAGES.get(
+                            safe_code,
+                            "تعذر التحقق من اتصال قيود",
+                        ),
+                    })
+        except QoyodCredentialDecryptionError:
+            readiness_issues.append({
+                "code": "qoyod_credentials_decryption_failed",
+                "message": "تعذر قراءة اعتماد قيود المحفوظ بأمان",
+            })
+        except QoyodCredentialStorageError:
+            readiness_issues.append({
+                "code": "qoyod_credentials_read_failed",
+                "message": "تعذر قراءة اعتماد قيود المحفوظ بأمان",
+            })
+        except Exception:
+            logger.exception(
+                "Qoyod credential recovery verification failed"
+            )
+            readiness_issues.append({
+                "code": "qoyod_connection_failed",
+                "message": "تعذر التحقق من اتصال قيود",
+            })
+
+        # Only a failed/unknown credential verification may force the
+        # runtime switches off. Other readiness gates (dry-run, missing
+        # canary, Salla disconnected) must preserve the operator's visible
+        # settings while keeping the hidden unified worker unarmed.
+        credential_verification_failed = bool(readiness_issues)
+
+        orders_owner = orders_owner_id(user)
+        canary = None
+        salla_integration = None
+        try:
+            canary = await db.qoyod_manual_canary_runs.find_one(
+                {"status": "succeeded"},
+                {"_id": 0, "run_id": 1, "finished_at": 1},
+                sort=[("finished_at", -1)],
+            )
+            salla_integration = await db.salla_integrations.find_one(
+                {"user_id": orders_owner, "status": "connected"},
+                {"_id": 0, "user_id": 1},
+            )
+        except Exception:
+            logger.exception("Qoyod credential recovery readiness failed")
+            readiness_issues.append({
+                "code": "recovery_readiness_check_failed",
+                "message": "تعذر التحقق من جاهزية الإرسال التلقائي",
+            })
+
+        candidate = {**settings, "enabled": True, "auto_send": True}
+        readiness_issues.extend(activation_issues(
+            candidate,
+            credentials_configured=True,
+            canary_succeeded=bool(canary),
+            salla_connected=bool(salla_integration),
+        ))
+        plan = credential_recovery_plan(
+            settings,
+            readiness_issues=readiness_issues,
+            orders_user_id=orders_owner,
+            actor=str((user or {}).get("email") or user["id"]),
+            canary_run_id=(canary or {}).get("run_id"),
+            now_iso=now_iso,
+        )
+        if plan["resumed"]:
+            await db.qoyod_settings.update_one(
+                {"user_id": tenant},
+                {"$set": plan["settings_patch"]},
+                upsert=True,
+            )
+        elif credential_verification_failed:
+            first_issue = (plan.get("issues") or [{}])[0]
+            pause = credential_pause_patch(
+                settings,
+                reason="credentials_unverified",
+                now_iso=now_iso,
+                error={
+                    "code": first_issue.get("code")
+                    or "credential_recovery_not_ready",
+                    "at": now_iso,
+                },
+            )
+            await db.qoyod_settings.update_one(
+                {"user_id": tenant},
+                {"$set": pause},
+                upsert=True,
+            )
+        return {
+            key: value for key, value in plan.items()
+            if key != "settings_patch"
+        }
+
     # ── GET /settings ────────────────────────────────────────────────
     @router.get("/settings")
-    async def get_settings(user=Depends(current_user)):
+    async def get_settings(
+        response: Response,
+        user=Depends(current_user),
+    ):
+        _disable_credential_response_cache(response)
         tenant = _tenant_id(user)
         s = await _load_settings(tenant)
         return await _attach_fingerprint(tenant, s)
@@ -568,11 +751,18 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         # Dry Run disarms it immediately.
         from integrations.qoyod_manual.auto_send import (
             activation_issues,
+            durable_auto_send_desired,
             is_live_requested,
         )
         from integrations.qoyod.candidate_orders import (
             UNIFIED_CANDIDATE_AUTO_FLAG,
         )
+        if "enabled" in update or "auto_send" in update:
+            valid["auto_send_desired"] = bool(
+                valid.get("enabled") and valid.get("auto_send")
+            )
+        else:
+            valid["auto_send_desired"] = durable_auto_send_desired(current)
         if is_live_requested(valid):
             orders_owner = orders_owner_id(user)
             canary = await db.qoyod_manual_canary_runs.find_one(
@@ -638,26 +828,107 @@ def make_qoyod_router(db, current_user) -> APIRouter:
     # ── POST /credentials ────────────────────────────────────────────
     @router.post("/credentials")
     async def save_credentials(
-        body: CredentialsRequest, user=Depends(current_user)):
+        response: Response,
+        body: Any = Body(default=None),
+        user=Depends(current_user),
+    ):
+        _disable_credential_response_cache(response)
         tenant = _tenant_id(user)
-        result = await save_api_key(db, tenant, body.api_key)
-        # Don't auto-enable. Merchant decides explicitly.
-        return {"ok": True, **result}
+        api_key = body.get("api_key") if isinstance(body, dict) else None
+        if not isinstance(api_key, str) or not api_key.strip() or len(api_key) > 512:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "qoyod_credentials_invalid",
+                    "message": "بيانات اعتماد قيود غير صالحة",
+                },
+                headers=_CREDENTIAL_RESPONSE_HEADERS,
+            )
+        try:
+            result = await save_api_key(db, tenant, api_key)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "qoyod_credentials_invalid",
+                    "message": "مفتاح قيود لا يمكن أن يكون فارغًا",
+                },
+                headers=_CREDENTIAL_RESPONSE_HEADERS,
+            ) from exc
+        except QoyodCredentialEncryptionError as exc:
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "code": "qoyod_credentials_encryption_failed",
+                    "message": "تعذر تشفير اعتماد قيود بأمان",
+                },
+                headers=_CREDENTIAL_RESPONSE_HEADERS,
+            ) from exc
+        except QoyodCredentialStorageError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "code": "qoyod_credentials_storage_failed",
+                    "message": "تعذر حفظ اعتماد قيود بأمان",
+                },
+                headers=_CREDENTIAL_RESPONSE_HEADERS,
+            ) from exc
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "code": "qoyod_credentials_save_failed",
+                    "message": "تعذر حفظ اعتماد قيود بأمان",
+                },
+                headers=_CREDENTIAL_RESPONSE_HEADERS,
+            ) from exc
+        # A first-time credential never auto-enables the connector. A verified
+        # replacement may resume only the merchant's durable previous opt-in.
+        recovery = await _recover_auto_send_after_credential_save(
+            tenant,
+            user,
+            saved_fingerprint=result["fingerprint"],
+        )
+        payload = {"ok": True, **result}
+        if recovery is not None:
+            payload["auto_send_recovery"] = recovery
+        return payload
 
     # ── DELETE /credentials ──────────────────────────────────────────
     @router.delete("/credentials")
-    async def remove_credentials(user=Depends(current_user)):
+    async def remove_credentials(
+        response: Response,
+        user=Depends(current_user),
+    ):
+        _disable_credential_response_cache(response)
         tenant = _tenant_id(user)
-        # Force-disable to avoid sync attempts with no key.
-        await db.qoyod_settings.update_one(
-            {"user_id": tenant}, {"$set": {
-                "enabled": False,
-                "auto_send": False,
-                "plan_b_auto_send_armed_at": None,
-                "plan_b_auto_send_disabled_at": _now(),
-                "plan_b_auto_send_disabled_reason": "credentials_removed",
-            }})
-        ok = await delete_api_key(db, tenant)
+        try:
+            # Pause runtime writes while preserving the merchant's prior
+            # explicit opt-in for a later verified credential replacement.
+            from integrations.qoyod_manual.auto_send import (
+                credential_pause_patch,
+            )
+            settings = await _load_settings(tenant)
+            pause = credential_pause_patch(
+                settings,
+                reason="credentials_removed",
+                now_iso=_now().isoformat(),
+            )
+            await db.qoyod_settings.update_one(
+                {"user_id": tenant},
+                {"$set": pause},
+                upsert=True,
+            )
+            ok = await delete_api_key(db, tenant)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "code": "qoyod_credentials_delete_failed",
+                    "message": "تعذر حذف اعتماد قيود بأمان",
+                },
+                headers=_CREDENTIAL_RESPONSE_HEADERS,
+            ) from exc
         return {"ok": ok}
 
     # ── Webhook Token (Make.com → Mezan shared secret) ───────────────
@@ -694,24 +965,86 @@ def make_qoyod_router(db, current_user) -> APIRouter:
 
     # ── POST /test-connection ────────────────────────────────────────
     @router.post("/test-connection", response_model=TestConnectionResponse)
-    async def test_connection(user=Depends(current_user)):
+    async def test_connection(
+        response: Response,
+        user=Depends(current_user),
+    ):
+        _disable_credential_response_cache(response)
         tenant = _tenant_id(user)
-        key = await get_api_key(db, tenant)
-        if not key:
-            raise HTTPException(400, "no_credentials")
+        try:
+            credential = await get_api_key_with_fingerprint(db, tenant)
+        except QoyodCredentialDecryptionError as exc:
+            return TestConnectionResponse(
+                ok=False,
+                fingerprint=exc.fingerprint,
+                error={
+                    "code": "qoyod_credentials_decryption_failed",
+                    "message": "تعذر قراءة اعتماد قيود المحفوظ بأمان",
+                },
+            )
+        except QoyodCredentialStorageError:
+            return TestConnectionResponse(
+                ok=False,
+                error={
+                    "code": "qoyod_credentials_read_failed",
+                    "message": "تعذر قراءة اعتماد قيود المحفوظ بأمان",
+                },
+            )
+        if not credential:
+            raise HTTPException(
+                400,
+                "no_credentials",
+                headers=_CREDENTIAL_RESPONSE_HEADERS,
+            )
+        key, fingerprint, credential_version = credential
         try:
             me = await QoyodAPIClient(key).me()
-            await mark_verified(db, tenant)
+            try:
+                verified = await mark_verified(
+                    db,
+                    tenant,
+                    credential_version=credential_version,
+                )
+            except QoyodCredentialStorageError:
+                return TestConnectionResponse(
+                    ok=False,
+                    fingerprint=fingerprint,
+                    error={
+                        "code": "qoyod_credentials_verification_persist_failed",
+                        "message": "نجح اتصال قيود وتعذر حفظ نتيجة التحقق بأمان",
+                    },
+                )
+            if not verified:
+                return TestConnectionResponse(
+                    ok=False,
+                    fingerprint=fingerprint,
+                    error={
+                        "code": "qoyod_credentials_changed_during_test",
+                        "message": "تغير اعتماد قيود أثناء الاختبار؛ أعد الاختبار للمفتاح الحالي",
+                    },
+                )
             return TestConnectionResponse(
                 ok=True,
-                fingerprint=await get_fingerprint(db, tenant),
+                fingerprint=fingerprint,
                 qoyod_user=me if isinstance(me, dict) else {"raw": str(me)[:300]},
             )
         except QoyodAPIError as exc:
+            safe_code = (
+                exc.code
+                if exc.code in _SAFE_CONNECTION_ERROR_MESSAGES
+                else "qoyod_connection_failed"
+            )
             return TestConnectionResponse(
                 ok=False,
-                fingerprint=await get_fingerprint(db, tenant),
-                error=exc.to_log_dict(),
+                fingerprint=fingerprint,
+                error={
+                    "code": safe_code,
+                    "message": _SAFE_CONNECTION_ERROR_MESSAGES.get(
+                        safe_code,
+                        "تعذر التحقق من اتصال قيود",
+                    ),
+                    "status_code": exc.status_code,
+                },
             )
 
     # ── Catalogs proxies — read-only convenience for the UI ──────────
@@ -2827,10 +3160,6 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             max_receipts=max_receipts, max_invoices=max_invoices,
         )
 
-    class _DismissPatch(BaseModel):
-        model_config = ConfigDict(extra="forbid")
-        note: Optional[str] = Field(default=None, max_length=500)
-
     @router.post("/admin/unallocated-receipts/{receipt_id}/dismiss")
     async def admin_unallocated_receipt_dismiss(
         receipt_id: str,
@@ -3116,13 +3445,6 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                     **exc.extra}
 
     # ── Iter-290h.7 — Payment-method field probe (read-only) ────────
-    class _PaymentMethodProbeBody(BaseModel):
-        model_config = ConfigDict(extra="forbid")
-        empty_payment_method_invoice_id:   str = Field(
-            ..., min_length=1, max_length=64)
-        reference_invoice_id_with_payment: str = Field(
-            ..., min_length=1, max_length=64)
-
     @router.post("/admin/payment-method-field-probe")
     async def admin_payment_method_field_probe(
         body: _PaymentMethodProbeBody, user=Depends(current_user),

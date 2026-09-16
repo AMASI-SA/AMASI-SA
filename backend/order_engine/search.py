@@ -88,7 +88,18 @@ def _summary(items: list[OrderDTO], cutoff: datetime | None) -> dict[str, Any]:
     pending = [item for item in items if _has(_status(item), _PENDING_PAYMENT)]
     cancelled = [item for item in items if _has(_status(item), _CANCELLED)]
     refunded = [item for item in items if _has(_status(item), _REFUNDED)]
-    revenue = round(sum(item.totals.total for item in paid), 2)
+    sar_sales: list[float] = []
+    unverified_currency_orders: list[str] = []
+    for item in paid:
+        amount = item.totals.total_sar
+        if amount is None and item.totals.currency.upper() == "SAR":
+            amount = item.totals.total
+        if amount is None:
+            unverified_currency_orders.append(item.order_number)
+        else:
+            sar_sales.append(amount)
+    conversion_complete = not unverified_currency_orders
+    revenue = round(sum(sar_sales), 2) if conversion_complete else None
     products = sum(len(item.items) for item in items)
     units = sum(sum(row.quantity for row in item.items) for item in items)
     before = [item for item in items if cutoff and item.created_at <= cutoff]
@@ -96,12 +107,21 @@ def _summary(items: list[OrderDTO], cutoff: datetime | None) -> dict[str, Any]:
     return {
         "orders": len(items), "paid_orders": len(paid), "pending_payment_orders": len(pending),
         "cancelled_orders": len(cancelled), "refunded_orders": len(refunded),
-        "paid_sales": revenue, "average_basket": round(revenue / len(paid), 2) if paid else 0.0,
+        "paid_sales": revenue,
+        "average_basket": (
+            round(revenue / len(paid), 2)
+            if paid and revenue is not None
+            else (0.0 if not paid else None)
+        ),
         "product_lines": products, "units": units,
         "unattributed_or_conflicted": sum(item.source.match_status != "matched" for item in items),
         "baseline_cutoff_at": cutoff, "orders_at_or_before_cutoff": len(before),
         "orders_after_cutoff": len(after), "current_total": len(items),
         "financial_policy": "paid_only_excludes_pending_cancelled_refunded",
+        "accounting_currency": "SAR",
+        "currency_conversion_complete": conversion_complete,
+        "unverified_currency_orders": unverified_currency_orders[:100],
+        "unknown_is_zero": False,
     }
 
 

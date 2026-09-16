@@ -70,3 +70,76 @@ def test_google_spend_keeps_total_platform_cpa_unavailable_without_google_orders
     assert result["providers"]["snapchat"]["platform_cost_per_order_sar"] == 50
     assert result["providers"]["google"]["platform_cost_per_order_sar"] is None
     assert result["total"]["platform_cost_per_order_sar"] is None
+
+
+def test_salla_sales_are_converted_to_sar_before_roas():
+    orders = [
+        {
+            "order_number": "286153601",
+            "source": "snapchat",
+            "currency": "QAR",
+            "total_amount": 302.20,
+            "total_amount_sar": 311.01,
+            "accounting_currency": "SAR",
+            "currency_conversion_status": "verified",
+        },
+        {
+            "order_number": "286153452",
+            "source": "snapchat",
+            "currency": "AED",
+            "total_amount": 558.01,
+            "total_amount_sar": 570.01,
+            "accounting_currency": "SAR",
+            "currency_conversion_status": "verified",
+        },
+    ]
+    ads = {
+        "breakdown": {
+            "snapchat": 100,
+            "tiktok": 0,
+            "meta": 0,
+            "google_transitional": 0,
+        },
+        "providers": {
+            "snapchat": {"orders": 2},
+            "tiktok": {"orders": 0},
+            "meta": {"orders": 0},
+        },
+    }
+
+    result = build_salla_ads_executive_breakdown(orders, ads)
+
+    assert result["providers"]["snapchat"]["salla_sales_sar"] == 881.02
+    assert result["providers"]["snapchat"]["actual_roas"] == 8.81
+    assert result["total"]["salla_sales_sar"] == 881.02
+    assert result["coverage"]["sales_currency_conversion_complete"] is True
+
+
+def test_unverified_foreign_sales_never_appear_as_sar():
+    result = build_salla_ads_executive_breakdown(
+        [{
+            "order_number": "missing-rate",
+            "source": "snapchat",
+            "currency": "KWD",
+            "total_amount": 28.84,
+        }],
+        {
+            "breakdown": {
+                "snapchat": 100,
+                "tiktok": 0,
+                "meta": 0,
+                "google_transitional": 0,
+            },
+            "providers": {
+                "snapchat": {"orders": 1},
+                "tiktok": {"orders": 0},
+                "meta": {"orders": 0},
+            },
+        },
+    )
+
+    assert result["providers"]["snapchat"]["salla_sales_sar"] is None
+    assert result["providers"]["snapchat"]["actual_roas"] is None
+    assert result["total"]["salla_sales_sar"] is None
+    assert result["coverage"]["sales_currency_conversion_complete"] is False
+    assert result["coverage"]["unverified_currency_orders"] == 1
