@@ -91,3 +91,60 @@ coordinate any shared `/app` change with the active release owner.
 
 Next: sign in to Preview and resume the existing accounting acceptance workflow.
 Keep Preview test results separate from Production accounting/cutover acceptance.
+
+
+## MFA first-enrollment follow-up — prepared, awaiting user secret entry
+
+Status: MFA_CONFIGURATION_PREPARED_USER_INPUT_REQUIRED. Service recovery above remains verified;
+successful privileged sign-in is still unverified.
+
+The user supplied a Preview login screenshot showing `mfa_bootstrap_not_configured`.
+The backend code emits this 503 only after the password route returns 200 for an Owner/Admin
+without completed MFA enrollment. Read-only host inspection confirmed:
+- effective `MFA_BOOTSTRAP_CODE` absent, not merely too short;
+- existing JWT configuration present (no value read back or logged);
+- /app HEAD remains `9f8b16998f62cbdb08dc9361bc2e443223d27d17`, tracked diff empty;
+- MFA source SHA-256 `9dc25dfc20c08093d0becfdf7ed6a66748824d7e1ba9ce00c41e9172b0eaefda`;
+- the previously repaired backend command remains unchanged.
+
+Prepared `scripts/preview_mfa_setup.py`, installed outside /app at
+`/opt/mezan-preview-runtime-20260916/preview_mfa_setup.py`.
+Its SHA-256 is `2dbed157711db917bd9919462e8b31ca90ec16deeca055cf3e0f4944de7d2dba`.
+No bootstrap credential has been generated, stored or changed by this preparation.
+
+The interactive configure action requires the user to choose and repeat a new ASCII secret of
+at least 12 characters through hidden terminal input. It never prints the secret, puts it in
+argv or writes it into /app. After entry it repeats the preflight, stores an owner-only file
+outside /app, changes only the backend Supervisor command to a secret-loading launcher,
+restarts only that service and checks readiness and all five release verification flags.
+Authentication, roles, enrollment rules, databases and Production files are not modified.
+Existing secrets, changed source/configuration and active release leases cause refusal.
+
+Fresh preparation evidence:
+- local compilation, backend section isolation, rollback, concurrent-change rejection,
+  owner-only file mode and refusal to overwrite a secret: PASS;
+- remote `check`: PASS, no service configuration changes;
+- focused existing MFA tests:
+  `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/app/backend /root/.venv/bin/python -B -m pytest -q -p no:cacheprovider /app/backend/tests/test_mfa_security_v1.py -k 'bootstrap_code or password_only'`
+  => 2 passed, 9 deselected (0.34s); only an existing dependency deprecation warning.
+
+Next safe action in dedicated Terminal 6:
+
+```sh
+/root/.venv/bin/python -B /opt/mezan-preview-runtime-20260916/preview_mfa_setup.py configure
+```
+
+User personally enters the new secret twice. No account password or authentication code should
+be sent in chat. The browser credential-creation rule requires this user handoff.
+After completion inspect the sanitized `mfa-verification.json`, then repeat normal Preview
+login with secure credential entry and let the user complete authenticator enrollment.
+Do not bypass enrollment, set account MFA flags in Mongo, or mint an authenticated session.
+
+If activation needs reversal, `preview_mfa_setup.py rollback` restores only the recorded
+backend section, refuses changed configuration and retains the private file. This may restore
+the original MFA enrollment block. Never re-run configure over a partial installation;
+inspect its private-file and Supervisor state first.
+
+Production changed by this follow-up: NO. No merge, publication, account creation, accounting
+mutation or permission acceptance. Remote script/configuration verification does not prove
+successful login; that acceptance remains pending.
