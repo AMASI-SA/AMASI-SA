@@ -147,9 +147,9 @@ async def test_mongo_same_provider_ids_are_isolated_by_owner(mongo_db):
 
 @pytest.mark.asyncio
 async def test_mongo_probe_single_winner_and_sealed_evidence_without_operational_writes(mongo_db, monkeypatch):
-    from test_salla_orders_v3_probe import setup_probe, collect
+    from .test_salla_orders_v3_probe import setup_probe, collect
 
-    db, calls = await setup_probe(monkeypatch, db=mongo_db)
+    db, calls = await setup_probe(monkeypatch, db=mongo_db, now=datetime.now(timezone.utc))
     before = await db.unified_orders.find_one({})
     results = await asyncio.gather(collect(db), collect(db), return_exceptions=True)
     assert sum(isinstance(result, dict) for result in results) == 1

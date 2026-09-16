@@ -23,12 +23,12 @@ ITEMS = [{"id": 123, "product_id": 45, "name": "Synthetic product", "sku": "SKU"
                                       {"name": "Gift", "value": False}]}]
 
 
-async def setup_probe(monkeypatch, handler=None, db=None):
+async def setup_probe(monkeypatch, handler=None, db=None, now=NOW):
     db = db if db is not None else AsyncMongoMockClient(tz_aware=True).db
     await db.salla_integrations.insert_one({
         "user_id": "owner-1", "store_id": 50, "status": "connected",
         "scope": "orders.read_write", "token_revision": "r1",
-        "access_token_encrypted": "synthetic-encrypted", "expires_at": NOW + timedelta(hours=1),
+        "access_token_encrypted": "synthetic-encrypted", "expires_at": now + timedelta(hours=1),
     })
     await db.unified_orders.insert_one({
         **IDENTITY, "order_id": "901", "products": [], "customer_name": "PRIVATE",
@@ -51,7 +51,7 @@ async def setup_probe(monkeypatch, handler=None, db=None):
         return httpx.Response(200, json={"success": True, "data": data})
 
     monkeypatch.setattr(diagnostics, "_trusted_candidate_head_sha", lambda: HEAD)
-    monkeypatch.setattr(diagnostics, "_utcnow", lambda: NOW)
+    monkeypatch.setattr(diagnostics, "_utcnow", lambda: now)
     monkeypatch.setattr(probe, "_decrypt_access", lambda row: "synthetic-token")
     monkeypatch.setattr(probe, "_http_client", lambda: httpx.AsyncClient(
         transport=httpx.MockTransport(transport), timeout=30, follow_redirects=False,
