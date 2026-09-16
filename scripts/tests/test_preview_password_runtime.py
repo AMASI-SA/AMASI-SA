@@ -139,8 +139,10 @@ async def test_attempt_guards_unchanged_when_only_second_factor_installers_are_s
 
 
 @pytest.mark.asyncio
-async def test_factory_binds_cookie_csrf_trust_to_preview_before_server_import(monkeypatch, tmp_path):
+@pytest.mark.parametrize('origin', [preview.ORIGIN, preview.UPSTREAM_ORIGIN])
+async def test_factory_binds_cookie_csrf_trust_to_preview_before_server_import(monkeypatch, tmp_path, origin):
     import dotenv
+    from fastapi import FastAPI
     from browser_security import BrowserSecurityMiddleware
     key = tmp_path / 'preview-test-signing-key'
     key.write_text('isolated-preview-test-key-' + 'x' * 64)
@@ -158,8 +160,12 @@ async def test_factory_binds_cookie_csrf_trust_to_preview_before_server_import(m
         await Response(status_code=204)(scope, receive, send)
     def load_server(name):
         assert name == 'server'
-        return SimpleNamespace(app=BrowserSecurityMiddleware(
-            handler, trusted_origins={os.environ['FRONTEND_URL']}))
+        app = FastAPI()
+        app.add_middleware(BrowserSecurityMiddleware, trusted_origins={os.environ['FRONTEND_URL']})
+        @app.post('/api/auth/refresh')
+        async def refresh():
+            return Response(status_code=204)
+        return SimpleNamespace(app=app)
     monkeypatch.setattr(preview.importlib, 'import_module', load_server)
     app = preview.create_app()
     sent = []
@@ -167,9 +173,10 @@ async def test_factory_binds_cookie_csrf_trust_to_preview_before_server_import(m
         sent.append(message)
     async def receive():
         return {'type': 'http.request', 'body': b''}
-    await app({'type': 'http', 'method': 'POST', 'path': '/api/auth/refresh',
+    await app({'type': 'http', 'method': 'POST', 'path': '/api/auth/refresh', 'query_string': b'',
+               'scheme': 'https', 'server': ('salla-analytics.preview.emergentagent.com', 443),
                'headers': [(b'host', b'salla-analytics.preview.emergentagent.com'),
-                           (b'origin', preview.ORIGIN.encode()),
+                           (b'origin', origin.encode()),
                            (b'cookie', b'refresh_token=test-fixture'),
                            (b'sec-fetch-site', b'same-origin')]}, receive, send)
     assert next(item for item in sent if item['type'] == 'http.response.start')['status'] == 204
