@@ -6,8 +6,10 @@ on:
     paths:
       - 'scripts/research/salla_order_item_contract_runner.py'
       - 'backend/tests/test_salla_order_item_contract_runner_p0.py'
+      - 'backend/tests/test_salla_order_item_amasi_test_orders.py'
       - 'docs/operations/MZ-ORDER-REVISION-SALLA-001/**'
       - '.env.salla-sandbox.example'
+      - '.env.salla-amasi-test.example'
       - '.github/workflows/salla-order-revision-p0.yml'
   workflow_dispatch:
 
@@ -26,6 +28,7 @@ jobs:
       PYTHONDONTWRITEBYTECODE: '1'
       SALLA_SANDBOX_RUN_WRITES: 'false'
       SALLA_DEMO_STORE_CONFIRMED: 'false'
+      SALLA_AMASI_TEST_RUN_WRITES: 'false'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -36,4 +39,4 @@ jobs:
       - name: Install schema validation dependencies
         run: python -m pip install 'jsonschema==4.26.0' 'jsonschema-specifications==2025.9.1'
       - name: Run isolated CLI contracts and full Draft 2020-12 validation
-        run: python -B -m unittest discover -s backend/tests -p test_salla_order_item_contract_runner_p0.py -v
+        run: python -B -m unittest discover -s backend/tests -p 'test_salla_order_item_*.py' -v

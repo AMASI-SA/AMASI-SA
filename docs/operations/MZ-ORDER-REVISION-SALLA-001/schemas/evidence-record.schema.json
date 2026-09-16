@@ -37,7 +37,7 @@
   ],
   "properties": {
     "record_type": {"const": "WRITE_ATTEMPT_TERMINAL"},
-    "classification": {"const": "SALLA_DEMO_STORE_EVIDENCE"},
+    "classification": {"enum": ["SALLA_DEMO_STORE_EVIDENCE", "SALLA_LIVE_TEST_ORDER_EVIDENCE"]},
     "timestamp": {"type": "string", "format": "date-time"},
     "test_case_id": {"type": ["string", "integer"]},
     "attempt_id": {"type": "string", "pattern": "^[0-9a-f]{24}$"},

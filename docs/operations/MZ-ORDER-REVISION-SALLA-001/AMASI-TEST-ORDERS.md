@@ -10,29 +10,40 @@ test fixture or authorize general feature activation.
 
 No Amasi test order has been identified or mutated in this task yet. No live
 test evidence exists. The first required input is the reference of a new,
-unpaid test order containing a product with customer options. Resolve that
+unpaid bank-transfer test order containing a product with customer options. Resolve that
 reference to an exact Salla store/order/item identity before execution; keep
 filled fixture identifiers and customer details outside GitHub.
 
 ## Implementation boundary
 
-The existing CLI verifies that `/store/info` reports `type=demo`. It still
-rejects a real store and must not be used with a fabricated Demo identity.
-Neither an Amasi test-order executor nor the Mezan order-page controls are
-implemented. This document is an execution plan, not a runnable capability.
+The default CLI still verifies that `/store/info` reports `type=demo`.
+The explicit `--environment amasi-test-orders` mode uses separate configuration,
+manifest and evidence classification. It is implemented and verified with
+synthetic I/O only; actual Amasi fixtures and live behavior remain unverified.
+Mezan order-page controls are still not implemented.
 
-A dedicated live-test path must bind the verified Amasi store and exact test
-order/product/item/option identifiers, preserve one-attempt locking and
-before/after evidence, and reject any order outside that fixture list. Retain
-the current Demo path and its tests. Do not enable a store-wide write switch
-or send ad-hoc provider writes to bypass the existing executor.
+The live-test path binds one exact order, its reference and controlled test
+customer, the verified store ID and observed non-Demo store type, and allowed
+product/item/option tuples. It uses the same canonical clone-local lock and
+quarantine ledger as Demo execution, with an environment-bound one-use
+capability. A final read under that lock must still match the reviewed baseline.
+Redirects and automatic retries are rejected. Each invocation sends at most
+one mutation and never exposes a public raw-token write transport.
 
 ## First sequence
 
-Start with one unpaid, unshipped disposable order and a controlled test
+Start with one unpaid, unshipped SAR bank-transfer order and a controlled test
 contact. Inspect the applicable shipping, notification and Qoyod automation
 before creating or mutating it; a test label alone does not suppress those
 systems. Do not claim downstream isolation until it has been observed.
+
+The initial mode supports only `pending` or `under_review`, quantity at most
+two, and no direct price/cost/weight overrides. COD can qualify for automatic
+fulfillment, so it is excluded. The order must have positive total, explicit
+zero paid, remaining equal to total, no receipt or contradictory payment/refund
+facts, and no shipments. The original line is protected from PUT and DELETE.
+The mutation case must include independently reviewed before/after total
+assertions; unchanged or incorrect totals cannot pass on item evidence alone.
 
 1. Read Order Details, Order Items and the selected Product Details. Record
    exact IDs, quantities, selected options, totals, payment and inventory
@@ -63,3 +74,59 @@ environment, not the meaning of a passing result.
 
 P1's required provider evidence is still outstanding. General activation and
 production deployment are separate from this controlled test authorization.
+
+## Inputs and commands
+
+Copy `.env.salla-amasi-test.example`, `fixtures/amasi-test-manifest.example.json`
+and `fixtures/amasi-add-case.example.json` outside Git. The example totals are
+illustrative, not defaults for an actual order. Fill the exact reviewed
+identifiers/totals; `downstream_reviewed` starts false and is an operator
+attestation, not an automated guarantee. Keep the encrypted credential resolver
+and existing five-minute single-attempt review metadata; never copy a token.
+
+Scopes are `orders.read_write`, product read, and additionally `shipping.read`
+for this live mode. A declared scope is not proof it was granted: the actual
+read must succeed. Store type must come from a fresh trusted Store Information
+observation; no real-store type literal has yet been observed in this task.
+
+```bash
+python scripts/research/salla_order_item_contract_runner.py readiness \
+  --environment amasi-test-orders
+```
+
+After fixture review, readiness and one-case review, enable the dedicated
+`SALLA_AMASI_TEST_RUN_WRITES` opt-in and run:
+
+```bash
+python scripts/research/salla_order_item_contract_runner.py run \
+  --environment amasi-test-orders \
+  --case-file /private/reviewed-case.json \
+  --webhook-events /private/atomic-case-events.json
+```
+
+After POST, use the observed new item ID for each PUT and DELETE case and the
+manifest's target `item_id`; retain `preserve_item_id` for the original line.
+DELETE uses an empty body and empty steps. No fabricated replacement proof is
+needed to remove the added line while preserving the original. Each subsequent
+case needs fresh expected totals, correlation and one-attempt metadata.
+CLI exit zero means evidence saved, not that the case passed. Inspect both
+`observed_verdict` and final `verdict`. A missing webhook is inconclusive; an
+uncertain write/verification quarantines the order without replay.
+
+## Source and evidence limits
+
+[Order Details](https://docs.salla.dev/5394147e0) exposes payment-action facts;
+its light response does not establish shipment absence. The mode separately
+uses [List Shipments](https://docs.salla.dev/shipments/list) with the exact order
+ID, no status/type filter, and requires explicit empty data and zero pagination
+totals. [Store Information](https://docs.salla.dev/merchants/store-info) supplies
+the identity/type match, and [payment methods](https://docs.salla.dev/payments/available-methods)
+distinguishes `bank` and `cod`.
+
+Current code inspection shows webhook ingestion can call fulfillment routing;
+no generic test-order exclusion was found. Opening Order Details may remove
+Salla's new-order indicator. These effects are confined to the selected fixture
+by the executor, but surrounding automation still needs an actual review.
+The test runner does not create orders, ship, capture/refund payments, write to
+Qoyod, verify inventory conservation, or implement variant-changing runtime UI.
+Those outcomes must never be inferred from an item-operation PASS.

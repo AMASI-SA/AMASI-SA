@@ -1,4 +1,4 @@
-"""Fail-closed Demo Store contract runner for MZ-ORDER-REVISION-SALLA-001."""
+"""Explicit, fixture-bound Salla contract runner for MZ-ORDER-REVISION-SALLA-001."""
 from __future__ import annotations
 
 import argparse
@@ -20,6 +20,7 @@ import urllib.request
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Callable
 
@@ -29,6 +30,9 @@ ENDPOINT_NOT_ALLOWED = "SALLA_P0_ENDPOINT_NOT_ALLOWED"
 WRITES_DISABLED = "SALLA_SANDBOX_WRITES_DISABLED"
 FIXTURE_CLASSIFICATION = "MOCK_CONTRACT_FIXTURE"
 REAL_EVIDENCE_CLASSIFICATION = "SALLA_DEMO_STORE_EVIDENCE"
+AMASI_EVIDENCE_CLASSIFICATION = "SALLA_LIVE_TEST_ORDER_EVIDENCE"
+AMASI_MANIFEST_CLASSIFICATION = "AMASI_TEST_ORDER_MANIFEST"
+AMASI_CASE_CLASSIFICATION = "AMASI_TEST_ORDER_CASE"
 OFFICIAL_BASE_URL = "https://api.salla.dev/admin/v2"
 CREDENTIAL_RESOLVER_ENV_UNAVAILABLE = "P0_CREDENTIAL_RESOLVER_ENV_UNAVAILABLE"
 CREDENTIAL_RESOLVER_IDENTITY_UNAVAILABLE = "P0_CREDENTIAL_RESOLVER_IDENTITY_UNAVAILABLE"
@@ -214,6 +218,36 @@ class SandboxConfig:
         )
 
 
+@dataclass(frozen=True)
+class AmasiTestConfig(SandboxConfig):
+    """Separate opt-in; inherited store-id field is only a compatibility name."""
+    expected_store_type: str = ""
+
+    @classmethod
+    def from_env(cls, env: dict[str, str] | None = None) -> "AmasiTestConfig":
+        source = env if env is not None else os.environ
+        keys = ("STORE_ID", "STORE_TYPE", "TOKEN_SCOPES", "MANIFEST", "EVIDENCE_DIR")
+        values = {key: source.get(f"SALLA_AMASI_TEST_{key}", "").strip() for key in keys}
+        if not all(values.values()):
+            raise ContractRunnerError("AMASI_TEST_NOT_CONFIGURED")
+        if values["STORE_TYPE"].casefold() == "demo":
+            raise ContractRunnerError("AMASI_TEST_STORE_TYPE_INVALID")
+        return cls(
+            OFFICIAL_BASE_URL, values["STORE_ID"],
+            frozenset(x.strip() for x in values["TOKEN_SCOPES"].split(",") if x.strip()),
+            Path(values["MANIFEST"]), Path(values["EVIDENCE_DIR"]), False,
+            source.get("SALLA_AMASI_TEST_RUN_WRITES", "").casefold() == "true", False,
+            source.get("SALLA_P0_WRITE_APPROVAL_ID", "").strip(),
+            source.get("SALLA_P0_WRITE_APPROVAL_ISSUED_AT", "").strip(),
+            values["STORE_TYPE"],
+        )
+
+
+class _NoLiveTestRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(req.full_url, code, "AMASI_TEST_REDIRECT_REJECTED", headers, fp)
+
+
 def _is_sensitive(key: str) -> bool:
     normalized = re.sub(r"[^a-z0-9]+", "_", key.casefold()).strip("_")
     return normalized in SENSITIVE_KEYS or any(x in normalized for x in ("secret", "password", "authorization", "token"))
@@ -241,14 +275,19 @@ def sanitize(value: Any, *, key: str = "", exact_secrets: tuple[str, ...] | froz
     return value
 
 
-def load_seed_manifest(path: Path) -> dict[str, Any]:
+def load_seed_manifest(path: Path, *, classification: str = "SANDBOX_SEED_MANIFEST") -> dict[str, Any]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ContractRunnerError("BLOCKED_SEED_MISMATCH") from exc
-    if data.get("classification") != "SANDBOX_SEED_MANIFEST":
+    if not isinstance(data, dict) or data.get("classification") != classification:
         raise ContractRunnerError("BLOCKED_SEED_MISMATCH")
     return data
+
+
+def _load_config_seed(config: SandboxConfig) -> dict[str, Any]:
+    classification = AMASI_MANIFEST_CLASSIFICATION if isinstance(config, AmasiTestConfig) else "SANDBOX_SEED_MANIFEST"
+    return load_seed_manifest(config.seed_manifest, classification=classification)
 
 
 def validate_endpoint(method: str, path: str) -> None:
@@ -475,24 +514,38 @@ def _seed_product_relations(row: dict[str, Any]) -> tuple[frozenset[tuple[str, s
 
 
 def validate_seed_structure(config: SandboxConfig, seed: dict[str, Any]) -> None:
+    amasi = isinstance(config, AmasiTestConfig)
+    if amasi:
+        _strict_object(seed, allowed={"classification", "store_id", "orders", "products", "downstream_reviewed"},
+                       required={"classification", "store_id", "orders", "products", "downstream_reviewed"}, error="BLOCKED_SEED_MISMATCH")
+        if seed["classification"] != AMASI_MANIFEST_CLASSIFICATION or seed["downstream_reviewed"] is not True:
+            raise ContractRunnerError("AMASI_TEST_FIXTURE_REVIEW_REQUIRED")
     if str(seed.get("store_id", "")) != config.demo_store_id:
         raise ContractRunnerError("BLOCKED_SEED_MISMATCH")
     orders = seed.get("orders", [])
     required_fields = {"state", "order_id", "order_number", "item_id", "product_id", "sku", "payment_method", "branch_id"}
     if (
         not isinstance(orders, list)
-        or len(orders) != len(REQUIRED_ORDER_STATES)
+        or len(orders) != (1 if amasi else len(REQUIRED_ORDER_STATES))
         or any(type(x) is not dict for x in orders)
-        or {str(x.get("state", "")) for x in orders} != REQUIRED_ORDER_STATES
+        or (not amasi and {str(x.get("state", "")) for x in orders} != REQUIRED_ORDER_STATES)
         or any(not all(_nonempty(x.get(k)) for k in required_fields) for x in orders)
     ):
         raise ContractRunnerError("BLOCKED_FIXTURE_MISSING")
+    if amasi:
+        for row in orders:
+            fields = required_fields | {"test_customer_id", "disposable_test_order", "preserve_item_id"}
+            _strict_object(row, allowed=fields, required=fields, error="BLOCKED_SEED_MISMATCH")
+            if not isinstance(row["state"], str) or row["state"] not in {"pending", "under_review"} or row["payment_method"] != "bank" or row["disposable_test_order"] is not True:
+                raise ContractRunnerError("AMASI_TEST_UNPAID_BANK_ORDER_REQUIRED")
+            for key in ("test_customer_id", "preserve_item_id", "order_number", "branch_id"):
+                _id_text(row[key], "BLOCKED_SEED_MISMATCH")
     products = seed.get("products", [])
     if (
         not isinstance(products, list)
-        or len(products) != len(REQUIRED_PRODUCT_KINDS)
+        or (not 1 <= len(products) <= 6 if amasi else len(products) != len(REQUIRED_PRODUCT_KINDS))
         or any(type(x) is not dict for x in products)
-        or {str(x.get("kind", "")) for x in products} != REQUIRED_PRODUCT_KINDS
+        or (not {str(x.get("kind", "")) for x in products}.issubset(REQUIRED_PRODUCT_KINDS) if amasi else {str(x.get("kind", "")) for x in products} != REQUIRED_PRODUCT_KINDS)
         or any(not _nonempty(x.get("product_id")) or not _nonempty(x.get("sku")) for x in products)
     ):
         raise ContractRunnerError("BLOCKED_FIXTURE_MISSING")
@@ -506,6 +559,9 @@ def validate_seed_structure(config: SandboxConfig, seed: dict[str, Any]) -> None
     if len(set(order_ids)) != len(order_ids) or len(set(item_ids)) != len(item_ids) or len(set(product_ids)) != len(product_ids) or len(set(product_skus)) != len(product_skus):
         raise ContractRunnerError("BLOCKED_SEED_MISMATCH")
     for row in products:
+        if amasi:
+            _strict_object(row, allowed={"kind", "product_id", "sku", "branch_id", "variant_ids", "option_ids", "value_ids", "option_value_tuples", "variant_tuples"},
+                           required={"kind", "product_id", "sku", "branch_id"}, error="BLOCKED_SEED_MISMATCH")
         if row.get("kind") == "size_color_variant" and not all(_nonempty(row.get(k)) for k in ("variant_ids", "option_ids", "value_ids")):
             raise ContractRunnerError("BLOCKED_FIXTURE_MISSING")
         if row.get("kind") in {"text_option", "checkbox_yes_no"} and not _nonempty(row.get("option_ids")):
@@ -575,13 +631,24 @@ def _hash_id(value: Any) -> str:
 
 def readiness(config: SandboxConfig, transport: Any) -> dict[str, Any]:
     try:
-        identity = verify_demo_identity(config, transport)
+        if isinstance(config, AmasiTestConfig):
+            response = transport.request("GET", "/store/info", None, "p0-identity")
+            data = _data(response)
+            if (response.get("status") != 200 or not isinstance(data, dict)
+                    or str(data.get("id", "")) != config.demo_store_id
+                    or data.get("type") != config.expected_store_type):
+                raise ContractRunnerError("AMASI_TEST_STORE_IDENTITY_MISMATCH")
+            identity = {"store_id": str(data["id"])}
+        else:
+            identity = verify_demo_identity(config, transport)
     except ContractRunnerError as exc:
         return {"status": "BLOCKED_IDENTITY_MISMATCH", "reason": str(exc)}
     if "orders.read_write" not in config.token_scopes or not ({"products.read", "products.read_write"} & config.token_scopes):
         return {"status": "BLOCKED_SCOPE_MISSING", "required": ["orders.read_write", "products.read|products.read_write"]}
+    if isinstance(config, AmasiTestConfig) and "shipping.read" not in config.token_scopes:
+        return {"status": "BLOCKED_SCOPE_MISSING", "required": ["shipping.read"]}
     try:
-        seed = load_seed_manifest(config.seed_manifest)
+        seed = _load_config_seed(config)
         validate_seed_structure(config, seed)
     except ContractRunnerError as exc:
         return {"status": str(exc) if str(exc).startswith("BLOCKED_") else "BLOCKED_SEED_MISMATCH", "reason": str(exc)}
@@ -598,6 +665,12 @@ def readiness(config: SandboxConfig, transport: Any) -> dict[str, Any]:
         ]
         if not isinstance(order, dict) or str(order.get("id", "")) != order_id or _status_slug(order) != row["state"] or len(item_matches) != 1:
             return {"status": "BLOCKED_SEED_MISMATCH", "order_id_hash": _hash_id(order_id)}
+        if isinstance(config, AmasiTestConfig):
+            try:
+                _validate_amasi_order(order, row)
+                _verify_amasi_no_shipments(transport, order_id, "p0-readiness")
+            except ContractRunnerError as exc:
+                return {"status": str(exc)}
     for row in seed["products"]:
         product_id = str(row["product_id"])
         product = _data(transport.request("GET", f"/products/{product_id}", None, "p0-readiness"))
@@ -617,11 +690,14 @@ def readiness(config: SandboxConfig, transport: Any) -> dict[str, Any]:
             pass
     except OSError:
         return {"status": "BLOCKED_FIXTURE_MISSING", "reason": "EVIDENCE_DIRECTORY_NOT_WRITABLE"}
+    ready_status = "READY_FOR_SANDBOX_WRITES" if config.demo_confirmed and config.writes_enabled else "READY_FOR_READ_ONLY"
+    if isinstance(config, AmasiTestConfig) and config.writes_enabled:
+        ready_status = "READY_FOR_AMASI_TEST_WRITES"
     return {
-        "status": "READY_FOR_SANDBOX_WRITES" if config.demo_confirmed and config.writes_enabled else "READY_FOR_READ_ONLY",
+        "status": ready_status,
         "identity_verified": False,
         "response_identity_matched": True, "store_id_hash": _hash_id(identity["store_id"]),
-        "scopes_verified": ["orders.read_write", "products.read"],
+        "scopes_verified": ["orders.read_write", "products.read", *(["shipping.read"] if isinstance(config, AmasiTestConfig) else [])],
         "transactions_scope_required": False, "branches_scope_required": False,
     }
 
@@ -772,7 +848,9 @@ def _validate_delete_steps(steps: Any, *, order_id: str, item_id: str, seed: dic
 
 def validate_case(case: dict[str, Any], seed: dict[str, Any]) -> None:
     _strict_object(case, allowed=CASE_FIELDS, required={"id", "order_id", "method", "path", "body", "assertions"})
-    if case.get("classification", "SANDBOX_CASE_TEMPLATE") != "SANDBOX_CASE_TEMPLATE":
+    amasi = seed.get("classification") == AMASI_MANIFEST_CLASSIFICATION
+    expected_classification = AMASI_CASE_CLASSIFICATION if amasi else "SANDBOX_CASE_TEMPLATE"
+    if case.get("classification", "SANDBOX_CASE_TEMPLATE") != expected_classification:
         raise ContractRunnerError(CASE_INVALID)
     _id_text(case["id"])
     order_id = _id_text(case["order_id"], "SALLA_P0_ORDER_ID_NOT_AUTHORIZED")
@@ -800,6 +878,8 @@ def validate_case(case: dict[str, Any], seed: dict[str, Any]) -> None:
     item_id = str(item_match.group(1)) if item_match else ""
     if item_id and str(order_row["item_id"]) != item_id:
         raise ContractRunnerError("SALLA_P0_ITEM_ID_NOT_AUTHORIZED")
+    if amasi and item_id == str(order_row["preserve_item_id"]):
+        raise ContractRunnerError("AMASI_TEST_ORIGINAL_ITEM_PROTECTED")
 
     for name in ("retry_once", "disposable_order_confirmed", "simulate_lost_response"):
         if name in case and type(case[name]) is not bool:
@@ -824,7 +904,10 @@ def validate_case(case: dict[str, Any], seed: dict[str, Any]) -> None:
             raise ContractRunnerError(CASE_INVALID)
 
     steps = case.get("steps", [])
-    if method == "DELETE":
+    if method == "DELETE" and amasi:
+        if steps != [] or str(order_row["preserve_item_id"]) == item_id:
+            raise ContractRunnerError("AMASI_TEST_ORIGINAL_ITEM_PROTECTED")
+    elif method == "DELETE":
         _validate_delete_steps(steps, order_id=order_id, item_id=item_id, seed=seed)
     elif steps != []:
         raise ContractRunnerError(CASE_INVALID)
@@ -845,9 +928,24 @@ def validate_case(case: dict[str, Any], seed: dict[str, Any]) -> None:
             _validate_options(body["options"], binding)
         elif binding["variant_id"] is not None:
             raise ContractRunnerError("SALLA_P0_VARIANT_OPTION_TUPLE_MISMATCH")
+    if amasi:
+        if case.get("disposable_order_confirmed") is not True or case.get("retry_once", False):
+            raise ContractRunnerError("AMASI_TEST_SINGLE_REVIEWED_ATTEMPT_REQUIRED")
+        if set(body) & {"price", "cost", "weight"} or body.get("quantity", 1) > 2:
+            raise ContractRunnerError("AMASI_TEST_MUTATION_LIMIT_EXCEEDED")
+        for path in ("before.order_total", "after.order_total"):
+            totals = [check["equals"] for check in case["assertions"] if check["path"] == path]
+            if len(totals) != 1 or isinstance(totals[0], bool) or not isinstance(totals[0], (int, float)) or not math.isfinite(totals[0]) or totals[0] <= 0:
+                raise ContractRunnerError("AMASI_TEST_REVIEWED_TOTALS_REQUIRED")
+        if method == "POST" and binding["option_pairs"]:
+            selected = _validate_options(body.get("options", []), binding)
+            if {key for key, _ in selected} != {key for key, _ in binding["option_pairs"]}:
+                raise ContractRunnerError("AMASI_TEST_OPTIONS_REQUIRED")
 
 
 def validate_prewrite_gates(config: SandboxConfig, case: dict[str, Any]) -> None:
+    if isinstance(config, AmasiTestConfig) and not config.writes_enabled:
+        raise ContractRunnerError("AMASI_TEST_WRITES_DISABLED")
     if case.get("retry_once") and (not config.destructive_retry_enabled or case.get("disposable_order_confirmed") is not True):
         raise ContractRunnerError("SALLA_DESTRUCTIVE_RETRY_NOT_CONFIRMED")
 
@@ -926,6 +1024,152 @@ def extract_snapshot(order_response: dict[str, Any], items_response: dict[str, A
 
 def fetch_snapshot(transport: Any, order_id: str, correlation_id: str) -> dict[str, Any]:
     return extract_snapshot(transport.request("GET", f"/orders/{order_id}", None, correlation_id), transport.request("GET", f"/orders/items?order_id={urllib.parse.quote(order_id)}", None, correlation_id))
+
+
+def _amasi_money(value: Any, currency: str) -> Decimal:
+    if isinstance(value, dict):
+        if value.get("currency") != currency:
+            raise ContractRunnerError("AMASI_TEST_PAYMENT_UNPROVEN")
+        value = value.get("amount")
+    if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+        raise ContractRunnerError("AMASI_TEST_PAYMENT_UNPROVEN")
+    try:
+        amount = Decimal(str(value))
+    except InvalidOperation:
+        raise ContractRunnerError("AMASI_TEST_PAYMENT_UNPROVEN") from None
+    if not amount.is_finite() or amount < 0:
+        raise ContractRunnerError("AMASI_TEST_PAYMENT_UNPROVEN")
+    return amount
+
+
+def _amasi_response_success(response: dict[str, Any]) -> bool:
+    body = response.get("body")
+    status = response.get("status")
+    if type(status) is not int or not 200 <= status < 300 or not isinstance(body, dict) or body.get("success") is not True:
+        return False
+    declared = body.get("status")
+    return declared is None or (type(declared) is int and 200 <= declared < 300)
+
+
+def _validate_amasi_order(order: dict[str, Any], row: dict[str, Any]) -> None:
+    customer = order.get("customer")
+    if (str(order.get("id", "")) != str(row["order_id"])
+            or str(order.get("reference_id", "")) != str(row["order_number"])
+            or not isinstance(customer, dict)
+            or str(customer.get("id", "")) != str(row["test_customer_id"])
+            or _status_slug(order) != row["state"]):
+        raise ContractRunnerError("AMASI_TEST_ORDER_IDENTITY_OR_STATE_MISMATCH")
+    if order.get("payment_method") != "bank" or order.get("payment_methods") != []:
+        raise ContractRunnerError("AMASI_TEST_UNPAID_BANK_ORDER_REQUIRED")
+    if order.get("shipping_status") not in (None, "not_shippable"):
+        raise ContractRunnerError("AMASI_TEST_SHIPMENT_ABSENCE_UNPROVEN")
+    amounts = order.get("amounts")
+    actions = order.get("payment_actions")
+    remaining = actions.get("remaining_action") if isinstance(actions, dict) else None
+    total_value = amounts.get("total") if isinstance(amounts, dict) else None
+    if not isinstance(total_value, dict) or not isinstance(remaining, dict):
+        raise ContractRunnerError("AMASI_TEST_PAYMENT_UNPROVEN")
+    currency = total_value.get("currency")
+    if currency != "SAR" or remaining.get("has_remaining_amount") is not True:
+        raise ContractRunnerError("AMASI_TEST_PAYMENT_UNPROVEN")
+    total = _amasi_money(total_value, currency)
+    if (total <= 0 or _amasi_money(remaining.get("paid_amount"), currency) != 0
+            or _amasi_money(remaining.get("remaining_amount"), currency) != total):
+        raise ContractRunnerError("AMASI_TEST_PAYMENT_UNPROVEN")
+    refund = actions.get("refund_action")
+    if refund is not None:
+        if not isinstance(refund, dict) or refund.get("can_refund") is True:
+            raise ContractRunnerError("AMASI_TEST_PAYMENT_UNPROVEN")
+        for field_name in ("paid_amount", "refund_amount"):
+            if _amasi_money(refund.get(field_name), currency) != 0:
+                raise ContractRunnerError("AMASI_TEST_PAYMENT_UNPROVEN")
+        if ("has_refund_amount" in refund and refund["has_refund_amount"] is not False
+                or refund.get("pending_refund_amount") is not None and _amasi_money(refund["pending_refund_amount"], currency) != 0):
+            raise ContractRunnerError("AMASI_TEST_PAYMENT_UNPROVEN")
+    payment = order.get("payment")
+    if payment is not None and not isinstance(payment, dict):
+        raise ContractRunnerError("AMASI_TEST_PAYMENT_UNPROVEN")
+    if (payment or {}).get("reference") not in (None, ""):
+        raise ContractRunnerError("AMASI_TEST_PAYMENT_UNPROVEN")
+    for container, fields in ((order, ("paid_amount", "refund_amount")),
+                              (amounts, ("paid", "refunded")),
+                              (payment or {}, ("paid_amount", "refund_amount"))):
+        for field_name in fields:
+            if field_name in container and _amasi_money(container[field_name], currency) != 0:
+                raise ContractRunnerError("AMASI_TEST_PAYMENT_UNPROVEN")
+    for container in (order, payment or {}):
+        if "remaining_amount" in container and _amasi_money(container["remaining_amount"], currency) != total:
+            raise ContractRunnerError("AMASI_TEST_PAYMENT_UNPROVEN")
+        if "has_remaining_amount" in container and container["has_remaining_amount"] is not True:
+            raise ContractRunnerError("AMASI_TEST_PAYMENT_UNPROVEN")
+    for value in (order.get("payment_status"), order.get("payment_collection_status"),
+                  (payment or {}).get("status"), (payment or {}).get("collection_status")):
+        if value is not None and (not isinstance(value, str) or value not in {"pending", "unpaid"}):
+            raise ContractRunnerError("AMASI_TEST_PAYMENT_UNPROVEN")
+    bank = order.get("bank")
+    if bank is not None and not isinstance(bank, dict):
+        raise ContractRunnerError("AMASI_TEST_PAYMENT_UNPROVEN")
+    for container in (order, payment or {}, bank or {}):
+        for key in ("receipt", "receipt_image", "bank_receipt", "transfer_receipt", "transaction_reference", "transactions",
+                    "payment_receipt_url", "receipt_url", "attachment_url", "proof_url", "proof", "transfer_receipt_url",
+                    "paid_at", "captured_at", "refunded_at", "transaction_id"):
+            if container.get(key) not in (None, "", [], {}):
+                raise ContractRunnerError("AMASI_TEST_PAYMENT_UNPROVEN")
+
+
+def _verify_amasi_no_shipments(transport: Any, order_id: str, correlation_id: str) -> None:
+    response = transport.request("GET", f"/shipments?order_id={urllib.parse.quote(order_id, safe='')}&per_page=1", None, correlation_id)
+    body = response.get("body")
+    page = body.get("pagination") if isinstance(body, dict) else None
+    if (response.get("status") != 200 or not isinstance(body, dict)
+            or body.get("success") is not True or body.get("data") != [] or not isinstance(page, dict)):
+        raise ContractRunnerError("AMASI_TEST_SHIPMENT_ABSENCE_UNPROVEN")
+    for key, expected in (("total", 0), ("count", 0), ("currentPage", 1)):
+        if type(page.get(key)) is not int or page[key] != expected:
+            raise ContractRunnerError("AMASI_TEST_SHIPMENT_ABSENCE_UNPROVEN")
+    if type(page.get("totalPages")) is not int or page["totalPages"] not in (0, 1):
+        raise ContractRunnerError("AMASI_TEST_SHIPMENT_ABSENCE_UNPROVEN")
+    for links in (page, page.get("links", {}), body.get("links", {})):
+        if not isinstance(links, dict) or any(links.get(key) not in (None, "") for key in ("next", "nextPage", "next_page_url")):
+            raise ContractRunnerError("AMASI_TEST_SHIPMENT_ABSENCE_UNPROVEN")
+
+
+def _amasi_fresh_snapshot(transport: Any, seed: dict[str, Any], case: dict[str, Any], correlation_id: str, *, before_write: bool = False) -> dict[str, Any]:
+    row = next(row for row in seed["orders"] if str(row["order_id"]) == str(case["order_id"]))
+    order_id = str(row["order_id"])
+    _verify_amasi_no_shipments(transport, order_id, correlation_id)
+    order_response = transport.request("GET", f"/orders/{order_id}", None, correlation_id)
+    order = _data(order_response)
+    if order_response.get("status") != 200 or not isinstance(order, dict):
+        raise ContractRunnerError(BASELINE_FETCH_REQUIRED)
+    _validate_amasi_order(order, row)
+    items_response = transport.request("GET", f"/orders/items?order_id={urllib.parse.quote(order_id, safe='')}", None, correlation_id)
+    # Item reads are another network boundary: recheck payment/state afterward
+    # before interpreting the combined snapshot or dispatching the mutation.
+    order_response = transport.request("GET", f"/orders/{order_id}", None, correlation_id)
+    order = _data(order_response)
+    if not isinstance(order, dict):
+        raise ContractRunnerError(BASELINE_FETCH_REQUIRED)
+    _validate_amasi_order(order, row)
+    snapshot = extract_snapshot(order_response, items_response)
+    items = _data(items_response)
+    if (not snapshot["fetch_ok"] or not isinstance(items, list) or not items
+            or any(not isinstance(item, dict) or not _nonempty(item.get("id")) for item in items)
+            or len({str(item["id"]) for item in items}) != len(items)):
+        raise ContractRunnerError(BASELINE_FETCH_REQUIRED)
+    if not any(str(item["id"]) == str(row["preserve_item_id"]) for item in items):
+        raise ContractRunnerError("AMASI_TEST_ORIGINAL_ITEM_MISSING")
+    if before_write:
+        targets = [item for item in items if str(item["id"]) == str(row["item_id"])]
+        if (len(targets) != 1 or str(_item_product_id(targets[0])) != str(row["product_id"])
+                or str(targets[0].get("sku")) != str(row["sku"])):
+            raise ContractRunnerError("AMASI_TEST_TARGET_ITEM_MISMATCH")
+        expected_total = next(check["equals"] for check in case["assertions"] if check["path"] == "before.order_total")
+        if _amasi_money(order["amounts"]["total"], "SAR") != _amasi_money(expected_total, "SAR"):
+            raise ContractRunnerError("AMASI_TEST_BASELINE_TOTAL_CHANGED")
+    snapshot.update(paid_amount=0, outstanding_amount=_amount(order["payment_actions"]["remaining_action"]["remaining_amount"]),
+                    payment_status="unpaid", shipment_count=0)
+    return snapshot
 
 
 def _resolve_path(value: Any, path: str) -> Any:
@@ -1384,8 +1628,15 @@ def _safe_fetch_snapshot(transport: Any, order_id: str, correlation_id: str) -> 
         )
 
 
-def _verify_delete_replacement_in_baseline(case: dict[str, Any], before: dict[str, Any]) -> None:
+def _verify_delete_replacement_in_baseline(case: dict[str, Any], before: dict[str, Any], *, seed: dict[str, Any] | None = None) -> None:
     if case["method"] != "DELETE":
+        return
+    if seed and seed.get("classification") == AMASI_MANIFEST_CLASSIFICATION:
+        row = next(row for row in seed["orders"] if str(row["order_id"]) == str(case["order_id"]))
+        if (_snapshot_item_by_id(before, str(row["preserve_item_id"])) is None
+                or _snapshot_item_by_id(before, str(row["item_id"])) is None
+                or str(row["preserve_item_id"]) == str(row["item_id"])):
+            raise ContractRunnerError("AMASI_TEST_ORIGINAL_ITEM_PROTECTED")
         return
     verify_step = case["steps"][1]
     replacement_item_id = str(verify_step["replacement_item_id"])
@@ -1566,6 +1817,18 @@ def evaluate_fixed_postconditions(case: dict[str, Any], seed: dict[str, Any], be
         )
     else:
         item_id = urllib.parse.urlsplit(case["path"]).path.rsplit("/", 1)[-1]
+        if seed.get("classification") == AMASI_MANIFEST_CLASSIFICATION:
+            preserved_id = str(order_row["preserve_item_id"])
+            conditions.extend([
+                _postcondition("delete_target_present_before", True, _snapshot_item_by_id(before, item_id) is not None),
+                _postcondition("delete_only_target_removed", sorted(before_ids - {item_id}), sorted(after_ids)),
+                _postcondition("delete_item_count_delta", len(before_items) - 1, len(after_items)),
+                _postcondition("delete_original_item_preserved", True, preserved_id != item_id and preserved_id in before_ids & after_ids),
+                _postcondition("delete_remaining_items_unchanged",
+                               {key: before_by_id[key] for key in sorted(before_ids - {item_id})},
+                               {key: after_by_id.get(key) for key in sorted(after_ids)}),
+            ])
+            return conditions
         verify_step = case["steps"][1]
         replacement_id = str(verify_step["replacement_item_id"])
         replacement_before = _snapshot_item_by_id(before, replacement_id)
@@ -1607,7 +1870,8 @@ def _analyze_observed_attempt(
     attempt_outcome = "UNKNOWN" if response.get("transport_error") or not after.get("fetch_ok") or (retry_response and retry_response.get("transport_error")) else "TERMINAL"
     if attempt_outcome == "UNKNOWN":
         observed_verdict, observed_reason = "INCONCLUSIVE", "WRITE_OUTCOME_UNKNOWN_RECONCILIATION_REQUIRED"
-    elif not isinstance(response.get("status"), int) or not 200 <= response["status"] < 300:
+    elif (not isinstance(response.get("status"), int) or not 200 <= response["status"] < 300
+          or seed.get("classification") == AMASI_MANIFEST_CLASSIFICATION and not _amasi_response_success(response)):
         observed_verdict, observed_reason = "FAIL", "SALLA_WRITE_REJECTED"
     elif retry_response is not None and (not isinstance(retry_response.get("status"), int) or not 200 <= retry_response["status"] < 300):
         observed_verdict, observed_reason = "FAIL", "SALLA_RETRY_REJECTED"
@@ -1651,7 +1915,7 @@ def analyze_attempt(
 
 def run_case(config: SandboxConfig, case: dict[str, Any], transport: Any, writer: EvidenceWriter, webhook_loader: Callable[[str], list[dict[str, Any]]]) -> Path:
     """Compatibility gate: imported callers cannot execute a commercial write."""
-    seed = load_seed_manifest(config.seed_manifest)
+    seed = _load_config_seed(config)
     validate_seed_structure(config, seed)
     validate_case(case, seed)
     correlation_id = case.get("client_request_id") or f"p0-{case['id']}-{uuid.uuid4().hex}"
@@ -1671,6 +1935,7 @@ def _print_prewrite_block(command: str, reason: str) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("command", choices=("readiness", "run"))
+    parser.add_argument("--environment", choices=("demo", "amasi-test-orders"), default="demo")
     parser.add_argument("--case-file", type=Path)
     parser.add_argument("--webhook-events", type=Path)
     parser.add_argument(
@@ -1684,10 +1949,12 @@ def main(argv: list[str] | None = None) -> int:
         _print_prewrite_block(args.command, str(exc))
         return 2
     try:
-        config = SandboxConfig.from_env()
+        config = AmasiTestConfig.from_env() if args.environment == "amasi-test-orders" else SandboxConfig.from_env()
     except ContractRunnerError as exc:
         _print_prewrite_block(args.command, str(exc))
         return 2
+    amasi = isinstance(config, AmasiTestConfig)
+    evidence_classification = AMASI_EVIDENCE_CLASSIFICATION if amasi else REAL_EVIDENCE_CLASSIFICATION
     case: dict[str, Any] | None = None
     events: list[dict[str, Any]] = []
     seed: dict[str, Any] | None = None
@@ -1699,7 +1966,7 @@ def main(argv: list[str] | None = None) -> int:
             case = json.loads(args.case_file.read_text(encoding="utf-8"))
             if args.webhook_events:
                 events = json.loads(args.webhook_events.read_text(encoding="utf-8"))
-            seed = load_seed_manifest(config.seed_manifest)
+            seed = _load_config_seed(config)
             validate_seed_structure(config, seed)
             validate_case(case, seed)
             validate_prewrite_gates(config, case)
@@ -1709,6 +1976,14 @@ def main(argv: list[str] | None = None) -> int:
                 raise ContractRunnerError(CASE_INVALID)
         except (ContractRunnerError, OSError, json.JSONDecodeError, TypeError) as exc:
             _print_prewrite_block(args.command, str(exc) if isinstance(exc, ContractRunnerError) else CASE_INVALID)
+            return 2
+
+    if amasi and args.command == "readiness":
+        try:
+            seed = _load_config_seed(config)
+            validate_seed_structure(config, seed)
+        except ContractRunnerError as exc:
+            _print_prewrite_block(args.command, str(exc))
             return 2
 
     # The credential resolver and HTTP implementation intentionally live only in
@@ -1746,6 +2021,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     token_value = access_token.strip()
+    http_open = urllib.request.build_opener(_NoLiveTestRedirect()).open if amasi else urllib.request.urlopen
 
     def redact_live(record: Any) -> Any:
         return sanitize(record, exact_secrets=(token_value,))
@@ -1757,7 +2033,12 @@ def main(argv: list[str] | None = None) -> int:
 
     def request(method: str, path: str, body: dict[str, Any] | None, correlation_id: str) -> dict[str, Any]:
         nonlocal write_attempted
-        validate_endpoint(method, path)
+        shipment_path = (
+            f"/shipments?order_id={urllib.parse.quote(str(seed['orders'][0]['order_id']), safe='')}&per_page=1"
+            if amasi and seed is not None else None
+        )
+        if not (amasi and method == "GET" and body is None and path == shipment_path):
+            validate_endpoint(method, path)
         http_request = urllib.request.Request(
             f"{config.base_url}/{path.lstrip('/')}",
             data=None if body is None else json.dumps(body, ensure_ascii=False, allow_nan=False).encode("utf-8"),
@@ -1775,7 +2056,12 @@ def main(argv: list[str] | None = None) -> int:
             if method != "GET":
                 if live_capability is None or live_lease is None or live_operation is None or seed is None or case is None:
                     raise ContractRunnerError(LIVE_EXECUTOR_REQUIRED)
+                if amasi:
+                    fresh_before = _amasi_fresh_snapshot(transport, seed, case, correlation_id, before_write=True)
+                    if canonical_digest(fresh_before) != canonical_digest(before):
+                        raise ContractRunnerError("AMASI_TEST_BASELINE_CHANGED")
                 current_operation = {
+                    **({"environment": "amasi-test-orders"} if amasi else {}),
                     "store_id": config.demo_store_id,
                     "manifest_digest": canonical_digest(seed),
                     "case_digest": canonical_digest(case),
@@ -1808,10 +2094,16 @@ def main(argv: list[str] | None = None) -> int:
                     raise ContractRunnerError(ATTEMPT_REPLAY_BLOCKED)
                 live_capability["remaining_write_budget"] -= 1
                 write_attempted = True
-            with urllib.request.urlopen(http_request, timeout=30) as response:
-                return _decode_response(response.status, response.read().decode("utf-8", errors="replace"), response.headers, started)
+            with http_open(http_request, timeout=30) as response:
+                decoded = _decode_response(response.status, response.read().decode("utf-8", errors="replace"), response.headers, started)
+                if amasi and method == "GET" and not _amasi_response_success(decoded):
+                    raise ContractRunnerError("AMASI_TEST_PROVIDER_READ_REJECTED")
+                return decoded
         except urllib.error.HTTPError as exc:
-            return _decode_response(exc.code, exc.read().decode("utf-8", errors="replace"), exc.headers, started)
+            decoded = _decode_response(exc.code, exc.read().decode("utf-8", errors="replace"), exc.headers, started)
+            if amasi and method == "GET" and not _amasi_response_success(decoded):
+                raise ContractRunnerError("AMASI_TEST_PROVIDER_READ_REJECTED") from None
+            return decoded
         except (urllib.error.URLError, TimeoutError, socket.timeout, ConnectionError) as exc:
             return {"status": None, "body": None, "transport_error": type(exc).__name__, "elapsed_ms": round((time.monotonic() - started) * 1000)}
 
@@ -1826,23 +2118,25 @@ def main(argv: list[str] | None = None) -> int:
     transport = _CliReadOnlyTransport()
     try:
         if args.command == "readiness":
-            print(json.dumps(readiness(config, transport), ensure_ascii=False, indent=2))
-            return 0
+            gate = readiness(config, transport)
+            print(json.dumps(gate, ensure_ascii=False, indent=2))
+            return 2 if amasi and not gate["status"].startswith("READY_FOR_") else 0
         assert case is not None and seed is not None and capability_expiry is not None
         gate = readiness(config, transport)
-        if gate["status"] != "READY_FOR_SANDBOX_WRITES":
+        if gate["status"] != ("READY_FOR_AMASI_TEST_WRITES" if amasi else "READY_FOR_SANDBOX_WRITES"):
             raise ContractRunnerError(gate["status"])
 
         order_id = str(case["order_id"])
         correlation_id = case.get("client_request_id") or f"p0-{case['id']}-{uuid.uuid4().hex}"
-        before = _safe_fetch_snapshot(transport, order_id, correlation_id)
+        before = _amasi_fresh_snapshot(transport, seed, case, correlation_id, before_write=True) if amasi else _safe_fetch_snapshot(transport, order_id, correlation_id)
         if not before["fetch_ok"] or str(before.get("order_id")) != order_id:
             raise ContractRunnerError(BASELINE_FETCH_REQUIRED)
-        _verify_delete_replacement_in_baseline(case, before)
+        _verify_delete_replacement_in_baseline(case, before, seed=seed)
 
         manifest_digest = canonical_digest(seed)
         case_digest = canonical_digest(case)
         operation = {
+            **({"environment": "amasi-test-orders"} if amasi else {}),
             "store_id": config.demo_store_id,
             "manifest_digest": manifest_digest,
             "case_digest": case_digest,
@@ -1889,7 +2183,7 @@ def main(argv: list[str] | None = None) -> int:
                 lease.attempt_id,
                 redact_live({
                     "record_type": "WRITE_INTENT_START",
-                    "classification": REAL_EVIDENCE_CLASSIFICATION,
+                    "classification": evidence_classification,
                     "timestamp": started_at.isoformat(),
                     "attempt_id": lease.attempt_id,
                     "test_case_id": case["id"],
@@ -1911,7 +2205,7 @@ def main(argv: list[str] | None = None) -> int:
                 response = {"status": None, "body": None, "transport_error": str(exc)}
             except Exception as exc:
                 response = {"status": None, "body": None, "transport_error": type(exc).__name__}
-            after = _safe_fetch_snapshot(transport, order_id, correlation_id)
+            after = _amasi_fresh_snapshot(transport, seed, case, correlation_id) if amasi else _safe_fetch_snapshot(transport, order_id, correlation_id)
             idempotency = "SALLA_IDEMPOTENCY_INCONCLUSIVE"
             first_postconditions = evaluate_fixed_postconditions(case, seed, before, after)
             first_write_proven = (
@@ -1956,7 +2250,7 @@ def main(argv: list[str] | None = None) -> int:
                 final_reason = "WEBHOOK_SOURCE_NOT_CONFIGURED" if args.webhook_events is None else "WEBHOOK_EVIDENCE_NOT_OBSERVED"
             evidence = {
                 "record_type": "WRITE_ATTEMPT_TERMINAL",
-                "classification": REAL_EVIDENCE_CLASSIFICATION,
+                "classification": evidence_classification,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "test_case_id": case["id"],
                 "attempt_id": lease.attempt_id,
@@ -1993,7 +2287,7 @@ def main(argv: list[str] | None = None) -> int:
                         lease.attempt_id,
                         redact_live({
                             "record_type": "WRITE_ATTEMPT_TERMINAL",
-                            "classification": REAL_EVIDENCE_CLASSIFICATION,
+                            "classification": evidence_classification,
                             "timestamp": datetime.now(timezone.utc).isoformat(),
                             "test_case_id": case["id"],
                             "attempt_id": lease.attempt_id,

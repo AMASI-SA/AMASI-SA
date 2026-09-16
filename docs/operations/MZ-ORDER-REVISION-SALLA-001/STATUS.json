@@ -8,12 +8,13 @@
     "Preserved UNKNOWN evidence and no-replay behavior for invalid post-write event source",
     "Installed required local jsonschema==4.26.0; added isolated CI workflow",
     "Independent parent review and full 72-test verification",
-    "Recorded owner-approved Amasi disposable test-order alternative and concrete first test sequence; no executable code changed"
+    "Recorded owner-approved Amasi disposable test-order alternative and concrete first test sequence; no executable code changed",
+    "Implemented explicit Amasi test-order CLI mode with fixture/payment/shipment/original-line guards, one-write execution, reviewed totals, live evidence classification and redirect rejection; 18 new isolated contracts pass"
   ],
   "delivery_commit": "407634facfc4e0be07b47d21ca8b243de563f87f",
   "delivery_method": "GitHub connector; source delivery tree exactly equals the reviewed local checkpoint. Remote commit SHA differs; original remote research parent is retained.",
   "merge": "NOT_PERFORMED",
-  "next_safe_action": "Resolve the first newly created unpaid Amasi test order and its option-bearing product; implement and verify a dedicated fixture-bound live-test path before mutations. The existing Demo CLI remains unchanged. Inspect shipping, notification and Qoyod effects before execution.",
+  "next_safe_action": "Obtain the first newly created unpaid SAR bank-transfer test order reference (no receipt), inspect downstream automation and encrypted integration shipping.read access, fill private exact fixture/case files, then run readiness --environment amasi-test-orders before one reviewed mutation. No order-page activation or deployment yet.",
   "p1": "BLOCKED_BY_REQUIRED_PROVIDER_EVIDENCE",
   "phase": "P0",
   "pr": {
@@ -27,10 +28,10 @@
   "recovery_merge": "e9be9ebf1abefb223560477f164f746c3bdbb67f",
   "release_intent": "UNCHANGED",
   "remaining": [
-    "Identify exact newly created Amasi test-order fixtures and inspect downstream automation",
-    "Implement and verify a dedicated live-test executor bound to the verified Amasi store and exact fixture IDs; retain the Demo-only guard",
-    "Collect explicitly classified real-store test-order evidence, starting with add/update/options/delete on an unpaid order",
-    "Complete required state/option/payment/inventory/retry evidence before P1 integration and general activation"
+    "Identify and verify exact Amasi test store/order/customer/item/product/option identities and actual non-Demo store type",
+    "Inspect actual shipping/notification/Qoyod automation; confirm shipping.read for exact-order shipment lookup",
+    "Execute the first add/quantity/options/delete sequence and retain actual provider/webhook evidence",
+    "Complete required state/option/payment/inventory/retry evidence before P1 order-page integration and general activation"
   ],
   "remote_checkpoint": "UPLOADED_SOURCE_TREE_VERIFIED",
   "reviewed_delivery_tree": "0dc09b50aa59c79d658ff44b0cf6c5cf1e08b4da",
@@ -45,22 +46,28 @@
     "scope": "Local environment presence and read-only preflight only; no provider or credential DB I/O"
   },
   "source_sha256": {
-    ".github/workflows/salla-order-revision-p0.yml": "197c565fe62ef45ea8a113617bc220d1ac43dbbe3404e8b7a07be7f68ddca640",
+    ".github/workflows/salla-order-revision-p0.yml": "10d8e9f815bd2449dd861816b9c467c264e27fa85bd6ccecd83de8a68190e893",
     "backend/tests/test_salla_order_item_contract_runner_p0.py": "3cdadb0d7ae9d97d54643bb2c3d91abc67b5c0ed16aef0756150658f23840fca",
-    "scripts/research/salla_order_item_contract_runner.py": "e384bb7722f8a77c2f2a94b284e102792169614a9db5f642308d6b807c7687f8"
+    "scripts/research/salla_order_item_contract_runner.py": "b55fa892cefe55adb0d55e0365c0ac40fd6dc30acdf9322f73c04d07e3141611",
+    "backend/tests/test_salla_order_item_amasi_test_orders.py": "b2209dd64834af89fdb689628713c6338bf36fa3baceac532fbb3f945ed0f34d",
+    "docs/operations/MZ-ORDER-REVISION-SALLA-001/schemas/evidence-record.schema.json": "1fa04fe9902ce79f1df8ff83029722b0b870ae636dbd25200389c24aa5349367"
   },
-  "status": "PENDING_AMASI_TEST_ORDER_FIXTURES_AND_EXECUTOR",
+  "status": "AMASI_TEST_EXECUTOR_LOCAL_VERIFIED_PENDING_FIXTURES",
   "task_id": "MZ-ORDER-REVISION-SALLA-001",
   "updated_at": "2026-09-16",
   "verification": {
     "baseline_regression": "Immediate post-mutation event missing; failed before fix and passed afterward",
-    "command": "PYTHONDONTWRITEBYTECODE=1 python -B -m unittest discover -s backend/tests -p test_salla_order_item_contract_runner_p0.py -v",
+    "command": "PYTHONDONTWRITEBYTECODE=1 python -B -m unittest discover -s backend/tests -p 'test_salla_order_item_*.py' -q",
     "diff_check": "PASS",
     "errors": 0,
     "exit_code": 0,
     "failures": 0,
-    "python_311_syntax": "PASS, two Python files",
-    "remote_ci": {
+    "python_311_syntax": "PASS for changed Python source and new tests",
+    "schema_validation": "FULL_DRAFT202012_VALIDATION_PASS",
+    "skipped": 0,
+    "tests": 90,
+    "workflow_yaml": "Updated isolated workflow runs both suites; no live secrets or live invocation",
+    "previous_demo_remote_ci": {
       "status": "PASS",
       "head": "2c357716fd155fc12ca693dd2465f4d6b3c15480",
       "run_id": 35146575800,
@@ -70,10 +77,11 @@
       "skipped": 0,
       "schema_validation": "PASS"
     },
-    "schema_validation": "FULL_DRAFT202012_VALIDATION_PASS",
-    "skipped": 0,
-    "tests": 72,
-    "workflow_yaml": "PASS locally; dedicated GitHub workflow also passed"
+    "remote_ci": {
+      "status": "PENDING_NEW_SOURCE_CHECKPOINT"
+    },
+    "amasi_mode_regression": "New mode rejected before implementation; add/update/options/delete and evidence pass through synthetic CLI after implementation. HTTPError rejection, contradictory payment facts, original-line protection, reviewed totals and postwrite eligibility drift covered.",
+    "independent_review": "Read-only subagent found envelope/contradiction/total/original-line gaps; parent fixed each with focused regressions and reran all90 tests. Review performed no live I/O."
   },
   "test_environment_decision": {
     "date": "2026-09-16",
@@ -81,9 +89,11 @@
     "supersedes": "Demo-only test environment requirement; evidence requirements remain outstanding",
     "plan": "AMASI-TEST-ORDERS.md",
     "exact_fixtures_identified": false,
-    "live_test_executor": "NOT_IMPLEMENTED",
+    "live_test_executor": "IMPLEMENTED_LOCAL_CONTRACTS_VERIFIED",
     "existing_demo_identity_guard": "UNCHANGED",
     "live_store_writes_performed": 0,
-    "general_activation_or_deployment": "NOT_AUTHORIZED_BY_THIS_TEST_DECISION"
+    "general_activation_or_deployment": "NOT_AUTHORIZED_BY_THIS_TEST_DECISION",
+    "initial_scope": "One pending/under_review SAR bank-transfer test order; zero paid, no receipt/refund/shipment; quantities 1..2; preserved original line; no automatic retry",
+    "additional_read_scope": "shipping.read"
   }
 }
