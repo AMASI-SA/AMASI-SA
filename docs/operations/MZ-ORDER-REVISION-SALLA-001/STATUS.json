@@ -33,7 +33,7 @@
     "Execute the first add/quantity/options/delete sequence and retain actual provider/webhook evidence",
     "Complete required state/option/payment/inventory/retry evidence before P1 order-page integration and general activation"
   ],
-  "remote_checkpoint": "UPLOADED_SOURCE_TREE_VERIFIED",
+  "remote_checkpoint": "AMASI_EXECUTOR_SOURCE_UPLOADED_AND_P0_CI_VERIFIED",
   "reviewed_delivery_tree": "0dc09b50aa59c79d658ff44b0cf6c5cf1e08b4da",
   "reviewed_local_commit": "8f9a738f10850cd5d8302371e0659aeaee011347",
   "runtime_integration": "NOT_IMPLEMENTED",
@@ -66,7 +66,7 @@
     "schema_validation": "FULL_DRAFT202012_VALIDATION_PASS",
     "skipped": 0,
     "tests": 90,
-    "workflow_yaml": "Updated isolated workflow runs both suites; no live secrets or live invocation",
+    "workflow_yaml": "Executed successfully on GitHub, Python3.11; both isolated suites passed",
     "previous_demo_remote_ci": {
       "status": "PASS",
       "head": "2c357716fd155fc12ca693dd2465f4d6b3c15480",
@@ -78,10 +78,25 @@
       "schema_validation": "PASS"
     },
     "remote_ci": {
-      "status": "PENDING_NEW_SOURCE_CHECKPOINT"
+      "status": "PASS",
+      "head": "cf1acbf2271b67b1a8064b9081d8f92b5cff31d9",
+      "run_id": 35154071687,
+      "job_id": 104989190751,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/35154071687",
+      "tests": 90,
+      "skipped": 0,
+      "schema_validation": "PASS"
     },
     "amasi_mode_regression": "New mode rejected before implementation; add/update/options/delete and evidence pass through synthetic CLI after implementation. HTTPError rejection, contradictory payment facts, original-line protection, reviewed totals and postwrite eligibility drift covered.",
-    "independent_review": "Read-only subagent found envelope/contradiction/total/original-line gaps; parent fixed each with focused regressions and reran all90 tests. Review performed no live I/O."
+    "independent_review": "Read-only subagent found envelope/contradiction/total/original-line gaps; parent fixed each with focused regressions and reran all90 tests. Review performed no live I/O.",
+    "release_readiness": {
+      "status": "FAIL",
+      "head": "cf1acbf2271b67b1a8064b9081d8f92b5cff31d9",
+      "run_id": 35154071721,
+      "job_id": 104989191124,
+      "reason": "Release control source membership differs: new P0 workflow and research runner are not covered by the inherited reviewed intent; source-candidate classification also rejected.",
+      "disposition": "Not deployment-ready. Release intent and release protocol remain unchanged; resolve through reviewed v5 release preparation when feature/runtime scope is ready and publication is authorized."
+    }
   },
   "test_environment_decision": {
     "date": "2026-09-16",
@@ -95,5 +110,6 @@
     "general_activation_or_deployment": "NOT_AUTHORIZED_BY_THIS_TEST_DECISION",
     "initial_scope": "One pending/under_review SAR bank-transfer test order; zero paid, no receipt/refund/shipment; quantities 1..2; preserved original line; no automatic retry",
     "additional_read_scope": "shipping.read"
-  }
+  },
+  "amasi_executor_source_commit": "cf1acbf2271b67b1a8064b9081d8f92b5cff31d9"
 }
