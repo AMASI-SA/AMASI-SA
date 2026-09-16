@@ -94,6 +94,7 @@ def apply_password_only_policy():
 class PreviewHostBoundary:
     def __init__(self, app):
         self.app = app
+        self.rejection_logged = False
 
     async def __call__(self, scope, receive, send):
         if scope['type'] != 'http':
@@ -107,6 +108,16 @@ class PreviewHostBoundary:
                    '127.0.0.1', 'localhost', '::1'}
         origin = headers.get(b'origin', b'').decode('ascii', errors='ignore')
         if hostname not in allowed or (origin and origin != ORIGIN):
+            if not self.rejection_logged:
+                # Origin/host classification only: no cookies, request bodies,
+                # credentials, query strings or client addresses are logged.
+                print('PREVIEW_BOUNDARY_REJECTION ' + json.dumps({
+                    'host_allowed': hostname in allowed,
+                    'origin_scheme': urlsplit(origin).scheme,
+                    'origin_host': urlsplit(origin).hostname,
+                    'null_origin': origin == 'null',
+                }), flush=True)
+                self.rejection_logged = True
             await JSONResponse({'detail': 'Preview origin required'}, status_code=403)(scope, receive, send)
             return
         if scope.get('path') == POLICY_PATH:
