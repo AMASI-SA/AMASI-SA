@@ -172,3 +172,66 @@ and `status` must then report `"active": false`.
 
 Never use `git reset --hard` to satisfy this protocol. Preserve unrelated
 Emergent files and never clear another conversation's lease.
+
+## Mandatory conversation continuity protocol
+
+These rules apply to every multi-step task so work can continue safely when a
+conversation, terminal, cloud workspace, or context window ends.
+
+### Durable checkpoint is required
+
+- Never keep material work only in `/tmp`, an unpushed worktree, terminal
+  scrollback, screenshots, or conversation memory.
+- Use a dedicated task branch. Do not place checkpoint commits directly on the
+  production branch.
+- When the current user authorization permits GitHub writes, create a commit and
+  push the task branch after every meaningful verified milestone, and before a
+  long-running command, approval wait, handoff, or likely context limit.
+- Incomplete but useful work must be preserved as an explicitly labeled WIP
+  checkpoint or Draft PR. A checkpoint is not evidence that the change is ready
+  to merge, deploy, or publish.
+- If GitHub writes are not authorized or unavailable, stop before the session
+  can be lost, preserve the work as a patch outside ephemeral directories, and
+  ask for the minimum permission needed to create the remote checkpoint.
+
+### Canonical handoff record
+
+GitHub Issue #1006 is the repository-wide continuation ledger. Each operation
+that already has a task-specific status document must update that document as
+well (for example, `docs/operations/<TASK-ID>/STATUS.json`). After every material
+checkpoint, record:
+
+1. task ID and scope;
+2. repository, task branch, and exact full commit SHA;
+3. changed files and the behavior completed;
+4. verification commands, exit status, and material results;
+5. PR, CI, review, merge, Release Guard, and deployment state when applicable;
+6. incomplete work, blockers, risks, and unrelated work intentionally preserved;
+7. the exact next safe action or command; and
+8. whether Production changed (`yes` or `no`), with evidence if `yes`.
+
+Do not record secrets, tokens, customer data, or environment values in commits,
+status documents, issues, PRs, or logs.
+
+### Resume procedure for a new conversation
+
+A new conversation must not rely on the phrase "continue", screenshots, or a
+summary alone. Before editing, it must:
+
+1. read the applicable `AGENTS.md` files;
+2. read the task status document and latest relevant entry in Issue #1006;
+3. fetch the remote task branch and verify the recorded full SHA;
+4. inspect `git status`, recent commits, the PR, CI, and release/deployment
+   state as applicable; and
+5. compare repository evidence with the handoff record.
+
+Continue only from the latest verified remote checkpoint. Do not restart
+completed work, repeat a successful deployment step, reuse another
+conversation's lease, or assume uncommitted files exist in a new workspace. If
+the evidence differs from the handoff, stop and report the discrepancy before
+making changes.
+
+Before declaring a task complete, leave the task branch remotely recoverable
+and write a final handoff entry even when the same conversation expects to
+continue.
+
