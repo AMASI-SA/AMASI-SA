@@ -24,7 +24,7 @@ def run(argv, **kwargs):
     return subprocess.run(argv, check=True, **kwargs)
 
 def env():
-    return {"PATH":"/usr/local/bin:/usr/bin:/bin", "HOME":str(ROOT),
+    return {"PATH":"/usr/local/bin:/usr/bin:/bin", 
             "LANG":"C.UTF-8", "NODE_ENV":"production", "REACT_APP_BACKEND_URL":ORIGIN}
 
 def section(text):
