@@ -191,4 +191,31 @@ describe("UnifiedMarketingEntityTable", () => {
         expect(container.textContent).toContain("ليست مبيعات أو ربحًا للحملة");
         expect(container.textContent).toContain("420.00 SAR");
     });
+    test("optional columns align totals and fetch only the visible filtered page", async () => {
+        const rows = Array.from({ length: 12 }, (_, i) => row("campaign", `row-${i}`));
+        const report = { entity_level: "campaign", rows, totals: rows[0] };
+        const onVisibleRowsChange = jest.fn();
+        const extraColumns = [{ key: "budget", label: "Daily budget", render: value => `budget-${value.entity.id}` }];
+        const render = (value = report) => <UnifiedMarketingEntityTable report={value} pageSize={5} extraColumns={extraColumns} onVisibleRowsChange={onVisibleRowsChange} />;
+        await act(async () => root.render(render()));
+        expect(onVisibleRowsChange).toHaveBeenCalledTimes(1);
+        expect(onVisibleRowsChange.mock.calls[0][0]).toEqual(rows.slice(0, 5));
+        expect(container.querySelector("thead tr").children.length).toBe(container.querySelector("tfoot tr").children.length);
+        expect(container.querySelector("tbody tr").textContent).toContain("budget-row-0");
+        await act(async () => root.render(render()));
+        expect(onVisibleRowsChange).toHaveBeenCalledTimes(1);
+        await act(async () => [...container.querySelectorAll("footer button")].find(button => button.textContent === "التالي").click());
+        expect(onVisibleRowsChange).toHaveBeenLastCalledWith(rows.slice(5, 10));
+        const activeButton = [...container.querySelectorAll("button")].find(button => button.textContent === "النشط فقط");
+        await act(async () => activeButton.click());
+        expect(onVisibleRowsChange).toHaveBeenLastCalledWith(rows.slice(0, 5));
+        await act(async () => activeButton.click());
+        expect(onVisibleRowsChange).toHaveBeenLastCalledWith(rows.slice(0, 5));
+        const next = { ...report, rows: rows.slice(0, 2) };
+        await act(async () => root.render(render(next)));
+        expect(onVisibleRowsChange).toHaveBeenLastCalledWith(next.rows);
+        expect(container.querySelectorAll("tbody tr")).toHaveLength(2);
+        expect(onVisibleRowsChange).toHaveBeenCalledTimes(5);
+    });
+
 });
