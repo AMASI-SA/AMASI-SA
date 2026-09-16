@@ -3,7 +3,7 @@ import { ArrowsClockwise, CheckCircle, Clock, Ghost, WarningCircle } from "@phos
 import { toast } from "sonner";
 
 import SnapchatCampaignManagementPanel from "../components/marketing/SnapchatCampaignManagementPanel";
-import SnapchatEntitySettingsTable from "../components/marketing/SnapchatEntitySettingsTable";
+import { snapchatInlineColumns } from "../components/marketing/SnapchatInlineSettings";
 import UnifiedMarketingEntityTable from "../components/marketing/UnifiedMarketingEntityTable";
 import UnifiedMarketingOrdersPanel from "../components/marketing/UnifiedMarketingOrdersPanel";
 import api, { formatApiErrorDetail } from "../lib/api";
@@ -568,15 +568,14 @@ export default function SnapchatV2Page() {
                     <span className="mr-auto pb-3 text-[11px] font-bold text-slate-400">قراءة V2 موحدة · إدارة Snapchat محكومة</span>
                 </nav>
                 {(selectedCampaign || selectedAdGroup) && <div className="flex flex-wrap items-center gap-2 border-x border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-bold text-slate-600"><button type="button" onClick={returnToCampaigns} className="rounded-lg bg-white px-3 py-1.5 text-emerald-700 shadow-sm">كل الحملات</button>{selectedCampaign && <><span>/</span><button type="button" onClick={returnToAdGroups} className="rounded-lg px-2 py-1.5 hover:bg-white">{selectedCampaign.entity.name}</button></>}{selectedAdGroup && <><span>/</span><span className="rounded-lg bg-violet-50 px-2 py-1.5 text-violet-700">{selectedAdGroup.entity.name}</span></>}</div>}
-                <UnifiedMarketingEntityTable report={activeContract} loading={loading || entityLoading} onOpenChildren={openChildren} onManageEntity={manageEntity} />
-                <SnapchatEntitySettingsTable
+                <UnifiedMarketingEntityTable
                     report={activeContract}
-                    settingsByEntityId={settingsByEntityId}
-                    loading={settingsLoading}
-                    dataLoading={loading || entityLoading}
-                    onVisibleRowsChange={loadVisibleSettings}
+                    loading={loading || entityLoading}
+                    onOpenChildren={openChildren}
                     onManageEntity={manageEntity}
-                    parentCampaign={selectedCampaign}
+                    pageSize={5}
+                    onVisibleRowsChange={loadVisibleSettings}
+                    extraColumns={snapchatInlineColumns({ level: entityLevel, settingsByEntityId, loading: settingsLoading, parentCampaign: selectedCampaign })}
                 />
             </section>
 
