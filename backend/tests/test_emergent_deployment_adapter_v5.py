@@ -90,6 +90,64 @@ class EmergentDeploymentAdapterV5Tests(unittest.TestCase):
         source = self._git(root, "rev-parse", "HEAD")
         return previous_source, source_base, source
 
+    def test_resolve_base_after_documentation_merge(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _, base, _ = self._git_manifest_history(root)
+            self._git(root, "checkout", "-qb", "docs", base)
+            (root / "AGENTS.md").write_text("Mandatory continuity\n")
+            self._git(root, "add", "AGENTS.md")
+            self._git(root, "commit", "-qm", "continuity docs")
+            docs = self._git(root, "rev-parse", "HEAD")
+            self._git(root, "checkout", "-qb", "production", base)
+            self._git(root, "merge", "--no-ff", "-m", "merge docs", docs)
+            production = self._git(root, "rev-parse", "HEAD")
+            (root / "frontend" / "src.js").write_text("fixed settings\n")
+            self._git(root, "commit", "-qam", "candidate")
+            source = self._git(root, "rev-parse", "HEAD")
+            with patch.object(adapter, "REPO_ROOT", root):
+                self.assertEqual(adapter.resolve_candidate_source_base(production, source), base)
+                adapter._assert_candidate_source_transition(source_git_sha=source, source_base_git_sha=base)
+
+    def test_resolve_base_preserves_exact_prior_pair(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _, base, source = self._git_manifest_history(root)
+            with patch.object(adapter, "REPO_ROOT", root):
+                self.assertEqual(adapter.resolve_candidate_source_base(base, source), base)
+
+    def test_resolve_base_rejects_unreviewed_application_change(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _, _, production = self._git_manifest_history(root)
+            (root / "AGENTS.md").write_text("docs\n")
+            self._git(root, "add", ".")
+            self._git(root, "commit", "-qm", "candidate")
+            source = self._git(root, "rev-parse", "HEAD")
+            with patch.object(adapter, "REPO_ROOT", root):
+                with self.assertRaises(adapter.DeploymentAdapterError):
+                    adapter.resolve_candidate_source_base(production, source)
+
+    def test_resolve_base_rejects_intent_edit_and_revert(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _, base, _ = self._git_manifest_history(root)
+            self._git(root, "checkout", "-qb", "reverted", base)
+            intent = root / "release" / "release-intent-v5.json"
+            original = intent.read_text()
+            intent.write_text(original + "\n")
+            self._git(root, "commit", "-qam", "touch intent")
+            intent.write_text(original)
+            self._git(root, "commit", "-qam", "revert intent")
+            production = self._git(root, "rev-parse", "HEAD")
+            (root / "AGENTS.md").write_text("docs\n")
+            self._git(root, "add", ".")
+            self._git(root, "commit", "-qm", "candidate")
+            source = self._git(root, "rev-parse", "HEAD")
+            with patch.object(adapter, "REPO_ROOT", root):
+                with self.assertRaises(adapter.DeploymentAdapterError):
+                    adapter.resolve_candidate_source_base(base, source)
+
     def _candidate_intent(self, source_base: str, source: str) -> dict:
         from backend.tests.test_release_identity import ReleaseIdentityTests
         from release_protocol_v5 import build_runtime_release_identity
