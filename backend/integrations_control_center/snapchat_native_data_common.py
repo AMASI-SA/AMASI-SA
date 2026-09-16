@@ -322,6 +322,11 @@ class SnapchatSyncContext:
         init=False,
         repr=False,
     )
+    _access_token_cache: str | None = field(
+        default=None,
+        init=False,
+        repr=False,
+    )
 
     def now_iso(self) -> str:
         return _iso(self.now())
@@ -383,7 +388,11 @@ class SnapchatSyncContext:
 
     async def get_json(self, client: httpx.AsyncClient, url: str, *,
                        headers: dict[str, str], params: dict[str, Any] | None = None) -> dict:
-        request_headers = headers
+        request_headers = dict(headers)
+        if self._access_token_cache:
+            request_headers["Authorization"] = (
+                f"Bearer {self._access_token_cache}"
+            )
         response = await self._provider_get(
             client,
             url,
@@ -392,8 +401,9 @@ class SnapchatSyncContext:
         )
         if response.status_code == 401:
             fresh_access = await self.access_token(force_refresh=True)
+            self._access_token_cache = fresh_access
+            headers["Authorization"] = f"Bearer {fresh_access}"
             retry_headers = dict(headers)
-            retry_headers["Authorization"] = f"Bearer {fresh_access}"
             request_headers = retry_headers
             response = await self._provider_get(
                 client,
@@ -469,6 +479,8 @@ class SnapchatSyncContext:
 
     async def access_token(self, *, force_refresh: bool = False) -> str:
         self.observe_failure_stage("credential_decrypt_or_refresh")
+        if not force_refresh and self._access_token_cache:
+            return self._access_token_cache
         credentials = await _collection(self.db, SNAPCHAT_CREDENTIALS_COLLECTION).find_one(
             {"user_id": self.user_id, "provider": SNAPCHAT_PROVIDER_ID},
             {"_id": 0, "access_token_ciphertext": 1, "refresh_token_ciphertext": 1,
@@ -502,6 +514,7 @@ class SnapchatSyncContext:
             and expires_at.astimezone(timezone.utc)
             > self.now().astimezone(timezone.utc) + timedelta(seconds=120)
         ):
+            self._access_token_cache = access
             return access
 
         client_id = os.environ.get("SNAPCHAT_MARKETING_CLIENT_ID", "").strip()
@@ -631,6 +644,7 @@ class SnapchatSyncContext:
                 "updated_at": now,
             }},
         )
+        self._access_token_cache = access
         return access
 
     async def to_sar(self, value: float | None, currency: str) -> float | None:
