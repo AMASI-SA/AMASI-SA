@@ -218,6 +218,34 @@ describe("UnifiedMarketingEntityTable", () => {
         expect(onVisibleRowsChange).toHaveBeenCalledTimes(5);
     });
 
+    test("seven-row viewport pins period totals and starts loading when the first batch fits", async () => {
+        const rows = Array.from({ length: 21 }, (_, i) => row("campaign", `seven-${i}`));
+        const totals = row("campaign", "totals");
+        totals.delivery.spend.amount = 777;
+        totals.platform_outcomes.conversions = 42;
+        const report = { entity_level: "campaign", rows, totals };
+        await act(async () => root.render(<UnifiedMarketingEntityTable report={report} pageSize={7} infiniteScroll />));
+        const scroll = container.querySelector('[aria-label="جدول الحملات والمجموعات"]');
+        const footer = container.querySelector("tfoot");
+        expect(container.querySelectorAll("tbody tr")).toHaveLength(7);
+        expect(footer.className).toContain("sticky bottom-0");
+        expect(footer.textContent).toContain("777.00 USD");
+        expect(footer.textContent).toContain("42");
+        const initialTotals = footer.textContent;
+        const height = scroll.style.height;
+        Object.defineProperties(scroll, { scrollHeight: { configurable: true, value: 800 }, clientHeight: { configurable: true, value: 800 } });
+        await act(async () => scroll.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -100 })));
+        expect(container.querySelectorAll("tbody tr")).toHaveLength(7);
+        await act(async () => scroll.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: 100 })));
+        expect(container.querySelectorAll("tbody tr")).toHaveLength(14);
+        Object.defineProperty(scroll, "scrollHeight", { configurable: true, value: 1600 });
+        scroll.scrollTop = 800;
+        await act(async () => scroll.dispatchEvent(new Event("scroll", { bubbles: true })));
+        expect(container.querySelectorAll("tbody tr")).toHaveLength(21);
+        expect(footer.textContent).toBe(initialTotals);
+        expect(scroll.style.height).toBe(height);
+    });
+
     test("Snapchat scroll shows nine then nine, active by default, with global reversible numeric sorting", async () => {
         const rows = Array.from({ length: 23 }, (_, i) => {
             const value = row("campaign", `row-${i}`);
