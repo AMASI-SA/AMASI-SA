@@ -181,17 +181,20 @@ export default function UnifiedMarketingEntityTable({
         const viewport = scrollRef.current;
         const head = viewport.querySelector("thead");
         const firstRow = viewport.querySelector("tbody tr");
+        const foot = viewport.querySelector("tfoot");
         const measure = () => {
             const headerHeight = head?.getBoundingClientRect().height || 80;
             const rowHeight = firstRow?.getBoundingClientRect().height || 96;
             const scrollbarHeight = Math.max(0, viewport.offsetHeight - viewport.clientHeight);
-            setViewportHeight(headerHeight + pageSize * rowHeight + scrollbarHeight);
+            const footerHeight = foot?.getBoundingClientRect().height || 0;
+            setViewportHeight(headerHeight + pageSize * rowHeight + footerHeight + scrollbarHeight);
         };
         measure();
         if (typeof ResizeObserver === "undefined") return;
         const observer = new ResizeObserver(measure);
         if (head) observer.observe(head);
         if (firstRow) observer.observe(firstRow);
+        if (foot) observer.observe(foot);
         return () => observer.disconnect();
     }, [infiniteScroll, pageSize, report, loading]);
     const [pagination, setPagination] = useState({});
@@ -269,6 +272,7 @@ export default function UnifiedMarketingEntityTable({
             setPage(() => Math.min(pages, page + 1));
         }
     }
+
 
     return (
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white" data-testid="unified-marketing-entity-table">
@@ -390,7 +394,7 @@ export default function UnifiedMarketingEntityTable({
                         )}
                     </tbody>
                     {totals && (
-                        <tfoot className="border-t-2 border-slate-300 bg-slate-50 font-black">
+                        <tfoot className={`border-t-2 border-slate-300 bg-slate-50 font-black ${infiniteScroll ? "sticky bottom-0 z-10" : ""}`}>
                             <tr>
                                 <td className="px-4 py-4">إجمالي الفترة</td>
                                 <td className="px-4 py-4" />
@@ -420,6 +424,8 @@ export default function UnifiedMarketingEntityTable({
                         </tfoot>
                     )}
                 </table>
+                {/* Keep native scrolling available when the first batch exactly fills the viewport. */}
+                {infiniteScroll && page < pages && <div aria-hidden="true" className="h-px" data-testid="table-load-more-sentinel" />}
             </div>
             {infiniteScroll && <div role="status" className="border-t border-slate-200 px-4 py-3 text-xs text-slate-600">عرض {rows.length} من {filteredRows.length}{rows.length < filteredRows.length ? " · مرّر للأسفل لعرض المزيد" : ""}</div>}
             {!infiniteScroll && filteredRows.length > pageSize && (
