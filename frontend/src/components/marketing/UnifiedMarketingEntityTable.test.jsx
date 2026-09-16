@@ -218,4 +218,64 @@ describe("UnifiedMarketingEntityTable", () => {
         expect(onVisibleRowsChange).toHaveBeenCalledTimes(5);
     });
 
+    test("Snapchat scroll shows nine then nine, active by default, with global reversible numeric sorting", async () => {
+        const rows = Array.from({ length: 23 }, (_, i) => {
+            const value = row("campaign", `row-${i}`);
+            value.delivery.spend.amount = i;
+            value.delivery.impressions = 100 - i;
+            return value;
+        });
+        rows[22].entity.status = "PAUSED"; // contradictory active=true is deliberate
+        rows[21].delivery.spend.amount = null;
+        const report = { entity_level: "campaign", rows };
+        const onVisibleRowsChange = jest.fn();
+        await act(async () => root.render(<UnifiedMarketingEntityTable report={report} pageSize={9} infiniteScroll defaultActiveOnly sortable onVisibleRowsChange={onVisibleRowsChange} />));
+        const ids = () => [...container.querySelectorAll("tbody tr")].map(tr => tr.querySelector("td div[title]").title);
+        expect(ids()).toHaveLength(9);
+        expect(ids()[0]).toBe("Entity row-20");
+        expect(container.querySelector("footer")).toBeNull();
+        const scroll = container.querySelector('[aria-label="جدول الحملات والمجموعات"]');
+        Object.defineProperties(scroll, { scrollHeight: { configurable: true, value: 1600 }, clientHeight: { configurable: true, value: 800 } });
+        scroll.scrollTop = 800;
+        await act(async () => scroll.dispatchEvent(new Event("scroll", { bubbles: true })));
+        expect(ids()).toHaveLength(18);
+        expect(new Set(ids()).size).toBe(18);
+        expect(onVisibleRowsChange.mock.calls.at(-1)[0]).toHaveLength(9);
+        await act(async () => container.querySelector('[aria-label="ترتيب حسب الظهور"]').click());
+        expect(ids()).toHaveLength(9);
+        expect(ids()[0]).toBe("Entity row-0");
+        expect(scroll.scrollTop).toBe(0);
+        await act(async () => container.querySelector('[aria-label="ترتيب حسب الظهور"]').click());
+        expect(ids()[0]).toBe("Entity row-21");
+        await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent === "النشط فقط").click());
+        expect(ids()[0]).toBe("Entity row-22");
+        const paused = container.querySelector("tbody tr td:nth-child(2) span");
+        expect(paused.textContent).toBe("PAUSED");
+        expect(paused.className).toContain("text-red-700");
+        await act(async () => container.querySelector('[aria-label="ترتيب حسب الصرف"]').click());
+        expect(ids()[0]).toBe("Entity row-22");
+        await act(async () => container.querySelector('[aria-label="ترتيب حسب الصرف"]').click());
+        expect(ids()[0]).toBe("Entity row-0");
+        expect(ids()).not.toContain("Entity row-21"); // unknown remains last in either direction
+    });
+
+    test("settings sort reads all filtered rows before ordering and ignores a late answer after report change", async () => {
+        let finish;
+        const prepareSort = jest.fn(() => new Promise(resolve => { finish = resolve; }));
+        const rows = Array.from({ length: 12 }, (_, i) => row("campaign", `row-${i}`));
+        const report = { entity_level: "campaign", rows };
+        const extraColumns = [{ key: "budget", label: "Budget", prepareSort, render: () => "—" }];
+        const render = report => <UnifiedMarketingEntityTable report={report} extraColumns={extraColumns} pageSize={9} infiniteScroll sortable />;
+        await act(async () => root.render(render(report)));
+        await act(async () => container.querySelector('[aria-label="ترتيب حسب Budget"]').click());
+        expect(prepareSort.mock.calls[0][0]).toEqual(rows);
+        await act(async () => finish(Object.fromEntries(rows.map((r, i) => [r.entity.id, i]))));
+        expect(container.querySelector("tbody tr").textContent).toContain("Entity row-11");
+        await act(async () => container.querySelector('[aria-label="ترتيب حسب Budget"]').click());
+        await act(async () => root.render(render({ entity_level: "campaign", rows: [row("campaign", "other-account")] })));
+        await act(async () => finish({ "row-11": 999 }));
+        expect(container.querySelector("tbody tr").textContent).toContain("other-account");
+        expect(container.textContent).not.toContain("جارٍ تجهيز");
+    });
+
 });
