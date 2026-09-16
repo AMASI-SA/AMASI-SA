@@ -175,6 +175,25 @@ export default function UnifiedMarketingEntityTable({
     const sortRequest = useRef(0);
     const sortAbort = useRef(null);
     const scrollRef = useRef(null);
+    const [viewportHeight, setViewportHeight] = useState(pageSize * 96 + 80);
+    useEffect(() => {
+        if (!infiniteScroll || !scrollRef.current) return;
+        const viewport = scrollRef.current;
+        const head = viewport.querySelector("thead");
+        const firstRow = viewport.querySelector("tbody tr");
+        const measure = () => {
+            const headerHeight = head?.getBoundingClientRect().height || 80;
+            const rowHeight = firstRow?.getBoundingClientRect().height || 96;
+            const scrollbarHeight = Math.max(0, viewport.offsetHeight - viewport.clientHeight);
+            setViewportHeight(headerHeight + pageSize * rowHeight + scrollbarHeight);
+        };
+        measure();
+        if (typeof ResizeObserver === "undefined") return;
+        const observer = new ResizeObserver(measure);
+        if (head) observer.observe(head);
+        if (firstRow) observer.observe(firstRow);
+        return () => observer.disconnect();
+    }, [infiniteScroll, pageSize, report, loading]);
     const [pagination, setPagination] = useState({});
     const samePageContext = pagination.report === report && pagination.query === query && pagination.activeOnly === activeOnly && pagination.sort === sort;
     const page = samePageContext ? pagination.page : 1;
@@ -274,8 +293,8 @@ export default function UnifiedMarketingEntityTable({
             </header>
             {sortBusy && <p role="status" className="px-4 py-2 text-sm">جارٍ تجهيز ترتيب الحملات…</p>}
             {sortError && <p role="alert" className="px-4 py-2 text-sm text-red-700">{sortError}</p>}
-            <div ref={scrollRef} onScroll={onScroll} tabIndex={infiniteScroll ? 0 : undefined} aria-label="جدول الحملات والمجموعات" className={infiniteScroll ? "max-h-[640px] overflow-auto" : "overflow-x-auto"}>
-                <table className="min-w-[2450px] w-full text-right text-xs">
+            <div ref={scrollRef} onScroll={onScroll} tabIndex={infiniteScroll ? 0 : undefined} aria-label="جدول الحملات والمجموعات" style={infiniteScroll ? { height: viewportHeight } : undefined} className={infiniteScroll ? "overflow-auto" : "overflow-x-auto"}>
+                <table className={`min-w-[2450px] w-full text-right text-xs ${infiniteScroll ? "whitespace-nowrap" : ""}`}>
                     <thead className="sticky top-0 z-10 bg-slate-50 text-slate-600">
                         <tr>
                             {heading("الكيان")}
@@ -306,7 +325,7 @@ export default function UnifiedMarketingEntityTable({
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                         {rows.map((row) => (
-                            <tr key={`${row.entity.level}:${row.entity.id}`} className="hover:bg-slate-50">
+                            <tr key={`${row.entity.level}:${row.entity.id}`} style={infiniteScroll ? { height: 96 } : undefined} className="hover:bg-slate-50">
                                 <td className="px-4 py-4">
                                     <div className="max-w-[260px] truncate text-sm font-black text-slate-950" title={row.entity.name}>{row.entity.name}</div>
                                     <div className="mt-1 font-mono text-[10px] text-slate-400">{row.entity.id}</div>
