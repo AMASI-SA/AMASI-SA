@@ -108,6 +108,7 @@ jobs:
               scripts/emergent_deployment_adapter.py|\
               backend/tests/test_emergent_deployment_adapter_v5.py|\
               .github/workflows/mezan-production-release.yml|\
+              release/release-intent-v5.json|\
               docs/operations/SNAP-SETTINGS-RECOVERY-20260916.md|\
               .github/workflows/snapchat-settings-management-v2.yml)
                 ;;
