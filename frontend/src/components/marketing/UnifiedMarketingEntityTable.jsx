@@ -152,6 +152,7 @@ function ProfitabilityDialog({ row, onClose }) {
 export default function UnifiedMarketingEntityTable({
     report,
     loading = false,
+    loadingMore = false,
     onOpenChildren,
     onManageEntity,
     extraColumns = EMPTY_COLUMNS,
@@ -243,7 +244,7 @@ export default function UnifiedMarketingEntityTable({
     }
     function onScroll(event) {
         const el = event.currentTarget;
-        if (infiniteScroll && !loading && !sortBusy && el.scrollHeight > el.clientHeight && el.scrollTop + el.clientHeight >= el.scrollHeight - 24 && page < pages) {
+        if (infiniteScroll && !loading && !loadingMore && !sortBusy && el.scrollHeight > el.clientHeight && el.scrollTop + el.clientHeight >= el.scrollHeight - 24 && page < pages) {
             setPage(() => Math.min(pages, page + 1));
         }
     }
@@ -271,7 +272,7 @@ export default function UnifiedMarketingEntityTable({
             </header>
             {sortBusy && <p role="status" className="px-4 py-2 text-sm">جارٍ تجهيز ترتيب الحملات…</p>}
             {sortError && <p role="alert" className="px-4 py-2 text-sm text-red-700">{sortError}</p>}
-            <div ref={scrollRef} onScroll={onScroll} tabIndex={infiniteScroll ? 0 : undefined} aria-label="جدول الحملات والمجموعات" className={infiniteScroll ? "max-h-[850px] overflow-auto" : "overflow-x-auto"}>
+            <div ref={scrollRef} onScroll={onScroll} tabIndex={infiniteScroll ? 0 : undefined} aria-label="جدول الحملات والمجموعات" className={infiniteScroll ? "max-h-[640px] overflow-auto" : "overflow-x-auto"}>
                 <table className="min-w-[2450px] w-full text-right text-xs">
                     <thead className="sticky top-0 z-10 bg-slate-50 text-slate-600">
                         <tr>
