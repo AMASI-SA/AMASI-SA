@@ -164,7 +164,7 @@ No Production authentication configuration or source was changed.
 - `scripts/preview_password_runtime.py` is installed only at
   `/opt/mezan-preview-runtime-20260916/preview_password_runtime.py`.
 - Active adapter SHA-256:
-  `fed1f79a147acce835237d0e56e6fce9415672d5bc30f6c077328c99c76abcf0`.
+  `eeb4feccd175a2faeb95df98b91aefa36768db797ec674b104d07c66b1b75403`.
 - Supervisor changes only the Preview backend command to the adapter's `serve` action.
   The base /app source and identity files are unchanged.
 - The adapter refuses another container hostname, a non-Preview frontend origin,
@@ -191,7 +191,7 @@ service was restarted and freshly verified; no release guard was bypassed.
 
 - Final acceptance and existing session-revocation regression command:
   `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/app/backend:/opt/mezan-preview-runtime-20260916 /root/.venv/bin/python -B -m pytest -q -p no:cacheprovider /opt/mezan-preview-runtime-20260916/test_preview_password_runtime.py /app/backend/tests/test_auth_session_revocation_v1.py`
-  => **23 passed** in 1.20s; one existing dependency deprecation warning.
+  => **24 passed** in 1.19s; one existing dependency deprecation warning.
 - Owner/Admin/accountant/viewer login, authenticated-user resolution and refresh need no second factor;
   wrong passwords, disabled/inactive accounts and revoked sessions still fail.
 - Non-Preview runtime and Production request origins fail closed.
@@ -201,7 +201,7 @@ service was restarted and freshly verified; no release guard was bypassed.
   `second_factor_required:false`, `session_signing:preview_only`.
 - Base release health: all five source/identity verification flags true.
 - A local request with Production Host was rejected with 403; no Production HTTP request was sent.
-- Frontend PID 117486 and Mongo PID 75151 unchanged; corrected backend PID 126559 running.
+- Frontend PID 117486 and Mongo PID 75151 unchanged; corrected backend PID 128935 running.
 - /app tracked and staged diffs empty; unrelated Supervisor sections byte-identical.
 - Bootstrap secret absent; independent session key mode 0600.
 - Sanitized evidence: `/opt/mezan-preview-runtime-20260916/password-verification.json`.
@@ -220,3 +220,25 @@ The private signing file is retained. Do not rerun activate over an existing ins
 
 Next: secure email/password entry on the existing Preview /login form, verify a protected page,
 then hand off to the accounting conversation. Do not run the superseded bootstrap configure step.
+
+
+### Preview browser-cookie origin correction
+
+The first browser attempt after activation returned 403; sanitized backend request-status logs
+confirmed login/refresh rejection and authenticated-user 401. This was not evidence of a wrong
+password. The unchanged base BrowserSecurityMiddleware trusts FRONTEND_URL independently of CORS.
+The runtime inherited the previous frontend origin, so Preview requests carrying stale cookies
+were rejected by the existing CSRF policy.
+
+The Preview adapter now binds FRONTEND_URL and CORS_ORIGINS to its exact Preview origin before
+importing server. The CSRF middleware remains intact; the outer Preview boundary still rejects
+Production origins. No .env or Production setting was changed.
+
+A targeted regression first failed for the intended reason (403 instead of 204); after the fix
+the complete focused suite passed **24 tests**. Corrected live ready/health/policy remain HTTP 200.
+A POST to local /api/auth/refresh with the Preview Origin and a deliberately invalid test cookie
+now reaches session validation and returns 401 Invalid refresh token, proving origin acceptance
+without admitting an invalid session. No real credentials were used in this probe.
+
+Current checkpoint before interactive login: 63eb8f7a51c2bf0c8cec4c35d27ef4e187572327.
+Browser account login still requires a fresh secure credential submission after this correction.
