@@ -163,9 +163,9 @@
   "preview_acceptance": {
     "last_updated_date": "2026-09-16",
     "status": "PARTIAL",
-    "scenario_5": "BLOCKED_NEEDS_INDEPENDENT_VIEWER",
-    "current_session_role": "owner_verified_by_identity_and_employee_admin_page",
-    "current_session_settlement_view": "OWNER_PREVIOUSLY_VERIFIED_NOT_RETESTED_THIS_LOGIN",
+    "scenario_5": "PENDING_INDEPENDENT_VIEWER_LOGIN_AND_ENDPOINT_TEST",
+    "current_session_role": "signed_out_login_form",
+    "current_session_settlement_view": "OWNER_VERIFIED",
     "synthetic_employee_records": 2,
     "independent_viewer_login_verified": false,
     "posting_endpoint_403_verified": false,
@@ -175,7 +175,11 @@
     "reviewer_logout_verified": true,
     "reviewer_logout_source_sha": "497311cd14208303730f5dfadac94c4d6b1c9d48",
     "owner_signin_verified": true,
-    "blocker": "independent_viewer_new_credential_entry_and_submission_require_user",
-    "last_observation": "Owner login succeeded; independent synthetic employee still unlinked; new-account form prepared, not submitted."
+    "blocker": "awaiting_independent_viewer_secure_signin",
+    "last_observation": "Independent Viewer linked and enabled. Accounting permission management exists within Accounting, separate from Team/Employee roles; prior missing-feature diagnosis corrected. Granted only settlement view and verified all 15 other accounting permissions unchecked after reopening. No source change needed. Secure login requested; latest readback remains login form.",
+    "independent_viewer_account_created": true,
+    "independent_viewer_permissions_verified": [
+      "accounting.settlements.view"
+    ]
   }
 }
