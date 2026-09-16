@@ -173,7 +173,10 @@ if __name__ == '__main__':
     action = sys.argv[1]
     if action == 'serve':
         import uvicorn
-        uvicorn.run(create_app(), host='0.0.0.0', port=8001, workers=1)
+        # Import the base server inside Uvicorn's running event loop. Creating
+        # it before uvicorn.run binds Motor to a different, inactive loop.
+        uvicorn.run('preview_password_runtime:create_app', factory=True,
+                    host='0.0.0.0', port=8001, workers=1)
     elif action == 'activate':
         activate()
     elif action == 'rollback':
