@@ -1,7 +1,7 @@
 # Preview reviewer sign-out — 2026-09-16
 
 Task: PREVIEW-REVIEWER-SIGNOUT-20260916; supports MZ2-FIN-CUTOVER-001.
-Status: PREVIEW_LOGOUT_VERIFIED_OWNER_SIGNIN_BLOCKED_BY_BROWSER_CONNECTION.
+Status: OWNER_SIGNIN_VERIFIED_AWAITING_INDEPENDENT_VIEWER_CREATION.
 Scope: isolated Preview frontend only. Production changed: NO.
 
 ## Defect and change
@@ -104,3 +104,34 @@ tab. If still authenticated as reviewer, use the now-verified ordinary logout
 button. If already on /login, directly display the normal secure credential form
 and ask for the OWNER account. Do not request credentials in chat or repeat
 account creation. Then resume independent Viewer setup and P01 permissions testing.
+
+## Browser recovery and owner sign-in verified
+
+Browser control recovered after the prior connection failure. Fresh inspection of
+the existing Preview tab showed the reviewer session. Ordinary logout through the
+repaired button succeeded and the actual /login email/password form rendered.
+The secure credential form was displayed and submitted by the user. Fresh Preview
+dashboard navigation, the owner's visible account identity, and successful access
+to /employees-v2 verified owner sign-in. No second factor was requested. The owner
+session remains active; do not sign out until independent Viewer setup is ready.
+
+Readback: two synthetic employee records, one login linked, UI financial writes0.
+The second record «اختبار P01 — حساب مستقل» is still unlinked with zero permissions
+and no salary contract. Its account dialog now shows only the create-Viewer form;
+no independent login exists. Prepared the reserved test email
+p01-viewer@preview.invalid; password entry and create/link submission remain
+unperformed. The first record remains linked to the existing Meta reviewer;
+no changes were made to that user's role, permissions, password, status or linkage.
+
+The secure in-chat sign-in mechanism cannot be repurposed for new-account creation;
+that attempt was previously rejected because its prompt described sign-in.
+Browser credential-creation rules require the user to own new-password entry and
+submission. Manual Cloud Browser control was previously reported unusable, so the
+available user path is the same employee/account form in their normal browser,
+which shares the Preview database. Their normal-browser sign-in alone does not
+authenticate the agent browser; actual account creation can be read back here.
+
+Next: user creates the Viewer for the SECOND synthetic record; agent verifies the
+resulting independent login, then sets only settlement-view permission within the
+authorized Preview test scope. No Viewer/posting403 acceptance yet, no financial
+writes, no Production changes. Source/runtime remain497311cd14208303730f5dfadac94c4d6b1c9d48.
