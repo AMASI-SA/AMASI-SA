@@ -5276,6 +5276,12 @@ async def _local_startup() -> None:
     # them too before it can advertise readiness. Installers are app-idempotent;
     # their identical Mongo create_index calls are safe to repeat per replica.
     await install_process_local_auth_security(db)
+    # Each process restart needs a new optional observer task, even when the
+    # release-global initialization record was completed by an earlier process.
+    from salla_orders_v3.worker import start_salla_orders_v3_shadow_runtime
+    app.state.salla_orders_v3_shadow_task = (
+        await start_salla_orders_v3_shadow_runtime(db)
+    )
     try:
         from integrations.qoyod.worker import start_worker as _qoyod_worker_start
         _qoyod_worker_start(db, interval_sec=5.0, batch_limit=25)
@@ -5359,6 +5365,10 @@ async def on_startup():
 async def on_shutdown():
     process_local_readiness_event.clear()
     await cancel_deferred_task(app)
+    from salla_orders_v3.worker import stop_salla_orders_v3_shadow_worker
+    await stop_salla_orders_v3_shadow_worker(
+        getattr(app.state, "salla_orders_v3_shadow_task", None)
+    )
     for task_name in ("event_loop_lag_task",):
         task = getattr(app.state, task_name, None)
         if task is not None:
