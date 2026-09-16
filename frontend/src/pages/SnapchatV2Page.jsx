@@ -166,7 +166,7 @@ export default function SnapchatV2Page() {
             viewEpochRef.current === expectedViewEpoch
             && epochRef.current === settingsEpoch
         );
-        const governedRows = rows.filter((row) => ["campaign", "ad_group"].includes(row?.entity?.level)).slice(0, 9);
+        const governedRows = rows.filter((row) => ["campaign", "ad_group"].includes(row?.entity?.level)).slice(0, 7);
         if (!governedRows.length) {
             if (requestIsCurrent()) {
                 setItems({});
@@ -421,11 +421,11 @@ export default function SnapchatV2Page() {
     async function prepareSettingsSort(rows, field, signal) {
         const viewEpoch = viewEpochRef.current;
         const result = {};
-        for (let offset = 0; offset < rows.length; offset += 9) {
+        for (let offset = 0; offset < rows.length; offset += 7) {
             if (signal?.aborted || viewEpochRef.current !== viewEpoch) throw new Error("View changed");
             const items = await loadEntitySettings({
                 entityType: entityLevel === "ad_group" ? "ad_squad" : "campaign",
-                rows: rows.slice(offset, offset + 9),
+                rows: rows.slice(offset, offset + 7),
                 parentUnifiedId: entityLevel === "ad_group" ? selectedCampaign?.entity?.id || "" : "",
                 expectedAccountId: accountId, viewEpoch,
             });
@@ -611,7 +611,7 @@ export default function SnapchatV2Page() {
                     onOpenChildren={openChildren}
                     onManageEntity={manageEntity}
                     key={`${accountId}:${entityLevel}:${selectedCampaign?.entity?.id || ""}:${selectedAdGroup?.entity?.id || ""}`}
-                    pageSize={9}
+                    pageSize={7}
                     infiniteScroll
                     defaultActiveOnly
                     sortable
