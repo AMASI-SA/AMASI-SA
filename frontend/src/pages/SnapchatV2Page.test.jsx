@@ -41,9 +41,12 @@ jest.mock("../services/mezanProductsV2", () => ({
 }));
 
 jest.mock("../components/marketing/UnifiedMarketingEntityTable", () => (
-    function MockUnifiedMarketingEntityTable({ report, onOpenChildren, onManageEntity }) {
+    function MockUnifiedMarketingEntityTable(props) {
+        const { report, onOpenChildren, onManageEntity } = props;
+        const RealTable = jest.requireActual("../components/marketing/UnifiedMarketingEntityTable").default;
         return (
             <div data-testid="mock-unified-table">
+                <RealTable {...props} />
                 {(report?.rows || []).map((row) => (
                     <div key={row.entity.id}>
                     <button
@@ -259,7 +262,8 @@ describe("SnapchatV2Page read-only load", () => {
             entityType: "campaign",
         }));
         expect(container.textContent).toContain("da5049b7-5417-4be9-a596-20a74f9fd54c");
-        expect(container.textContent).toContain("snap-provider-campaign-afrol");
+        expect(container.querySelector('[data-column="daily-budget"]').textContent).toBe("غير متاح على مستوى الحملة");
+        expect(container.querySelector('[data-testid="snapchat-entity-settings-table"]')).toBeNull();
         expect(api.post).not.toHaveBeenCalled();
         expect(createSnapchatManagementProposal).not.toHaveBeenCalled();
         expect(executeSnapchatManagementProposal).not.toHaveBeenCalled();
@@ -275,7 +279,8 @@ describe("SnapchatV2Page read-only load", () => {
             parentUnifiedId: "da5049b7-5417-4be9-a596-20a74f9fd54c",
         }));
         expect(container.textContent).toContain("7c0f5bfa-3f59-437b-bb89-1c70b11d0526");
-        expect(container.textContent).toContain("snap-provider-ad-squad-afrol");
+        expect(container.querySelector('[data-column="daily-budget"]').textContent).toContain("125.00 USD");
+        expect(container.querySelector('[data-column="bid-target-cost"]').textContent).toContain("Target Cost15.00 USD");
 
         await act(async () => {
             container.querySelector(
@@ -316,8 +321,8 @@ describe("SnapchatV2Page read-only load", () => {
             await Promise.resolve();
             await Promise.resolve();
         });
-        expect(container.textContent).toContain("settings_sync_failed");
-        expect(container.textContent).toContain("فشل إثبات ارتباط إعدادات الكيان بالحساب الإعلاني المحدد");
+        expect(container.textContent).toContain("تعذّر جلب الإعدادات");
+        expect(container.querySelector('[data-column="daily-budget"] span').title).toContain("فشل إثبات ارتباط إعدادات الكيان بالحساب الإعلاني المحدد");
         expect(container.textContent).not.toContain("99.00 USD");
         expect(api.post).not.toHaveBeenCalled();
         expect(createSnapchatManagementProposal).not.toHaveBeenCalled();
@@ -413,8 +418,8 @@ describe("SnapchatV2Page read-only load", () => {
                 mapping_verified: true,
                 ad_account_id: "account-B",
                 account_currency: "USD",
-                daily_budget_micro: null,
-                daily_budget_availability: "unsupported_at_provider_level",
+                daily_budget_micro: 72_000_000,
+                daily_budget_availability: "available",
                 daily_budget_unavailable_message_ar: "غير متاح من Snapchat على هذا المستوى",
                 quality: {
                     settings_status: "settings_complete",
@@ -426,9 +431,7 @@ describe("SnapchatV2Page read-only load", () => {
             await accountBSettings.promise;
             await Promise.resolve();
         });
-        expect(container.textContent).toContain("provider-campaign-B");
-        expect(container.textContent).toContain("settings-from-account-B");
-        expect(container.textContent).toContain("account-B");
+        expect(container.querySelector('[data-column="daily-budget"]').textContent).toContain("72.00 USD");
 
         await act(async () => {
             accountASettings.resolve([{
@@ -439,8 +442,8 @@ describe("SnapchatV2Page read-only load", () => {
                 mapping_verified: true,
                 ad_account_id: "account-A",
                 account_currency: "USD",
-                daily_budget_micro: null,
-                daily_budget_availability: "unsupported_at_provider_level",
+                daily_budget_micro: 91_000_000,
+                daily_budget_availability: "available",
                 daily_budget_unavailable_message_ar: "غير متاح من Snapchat على هذا المستوى",
                 quality: {
                     settings_status: "settings_complete",
@@ -453,16 +456,15 @@ describe("SnapchatV2Page read-only load", () => {
             await Promise.resolve();
         });
 
-        expect(container.textContent).toContain("provider-campaign-B");
-        expect(container.textContent).toContain("settings-from-account-B");
-        expect(container.textContent).not.toContain("provider-campaign-A");
-        expect(container.textContent).not.toContain("settings-from-account-A");
+        expect(container.querySelector('[data-column="daily-budget"]').textContent).toContain("72.00 USD");
+        expect(container.querySelector('[data-column="daily-budget"]').textContent).not.toContain("91.00 USD");
         expect(api.post).not.toHaveBeenCalled();
         expect(createSnapchatManagementProposal).not.toHaveBeenCalled();
         expect(executeSnapchatManagementProposal).not.toHaveBeenCalled();
     });
     it("reads only five visible exact IDs and fetches an off-page management selection precisely", async () => {
         const rows = Array.from({ length: 12 }, (_, i) => ({
+            delivery: {}, platform_outcomes: {},
             entity: { id: `campaign-${i}`, level: "campaign", provider_level: "campaign", name: `Campaign ${i}` },
             quality: { sync_status: "complete", coverage_status: "complete" },
         }));
@@ -481,9 +483,9 @@ describe("SnapchatV2Page read-only load", () => {
         expect(getSnapchatEntitySettings.mock.calls.map(([params]) => params.unifiedEntityId))
             .toEqual(rows.slice(0, 5).map(row => row.entity.id));
         expect(getSnapchatEntitySettings.mock.calls.every(([params]) => params.limit === 1)).toBe(true);
-        const table = container.querySelector('[data-testid="snapchat-entity-settings-table"]');
+        const table = container.querySelector('[data-testid="unified-marketing-entity-table"]');
         expect(table.querySelectorAll('tbody tr')).toHaveLength(5);
-        await act(async () => { [...table.querySelectorAll('nav button')].find(button => button.textContent === "التالي").click(); });
+        await act(async () => { [...table.querySelectorAll('footer button')].find(button => button.textContent === "التالي").click(); });
         expect(getSnapchatEntitySettings.mock.calls.slice(5).map(([params]) => params.unifiedEntityId))
             .toEqual(rows.slice(5, 10).map(row => row.entity.id));
         await act(async () => { container.querySelector('[data-testid="manage-campaign-11"]').click(); });

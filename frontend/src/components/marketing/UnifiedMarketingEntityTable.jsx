@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { CaretLeft, MagnifyingGlass, Package, PencilSimple, X } from "@phosphor-icons/react";
 import { buildProfitabilityProductCostHref } from "../../campaignProfitabilityProductNavigation";
 
+const EMPTY_ROWS = [];
+const EMPTY_COLUMNS = [];
+
 const LEVEL_LABELS = {
     campaign: "الحملات",
     ad_group: "المجموعات الإعلانية",
@@ -114,18 +117,22 @@ export default function UnifiedMarketingEntityTable({
     loading = false,
     onOpenChildren,
     onManageEntity,
+    extraColumns = EMPTY_COLUMNS,
+    onVisibleRowsChange,
+    pageSize = 25,
 }) {
-    const allRows = report?.rows || [];
+    const allRows = report?.rows || EMPTY_ROWS;
     const level = report?.entity_level || "campaign";
     const totals = report?.totals || null;
     const canOpenChildren = ["campaign", "ad_group"].includes(level);
     const childLabel = level === "campaign" ? "Ad Squads" : "Ads";
     const [query, setQuery] = useState("");
     const [activeOnly, setActiveOnly] = useState(false);
-    const [page, setPage] = useState(1);
+    const [pagination, setPagination] = useState({ report: null, query: "", activeOnly: false, page: 1 });
+    const page = pagination.report === report && pagination.query === query && pagination.activeOnly === activeOnly ? pagination.page : 1;
+    const setPage = (update) => setPagination({ report, query, activeOnly, page: update(page) });
     const [profitRow, setProfitRow] = useState(null);
     const [cartRow, setCartRow] = useState(null);
-    const pageSize = 25;
     const filteredRows = useMemo(() => {
         const needle = query.trim().toLocaleLowerCase();
         return allRows.filter((row) => {
@@ -141,11 +148,11 @@ export default function UnifiedMarketingEntityTable({
         });
     }, [activeOnly, allRows, query]);
     const pages = Math.ceil(filteredRows.length / pageSize);
-    const rows = filteredRows.slice((page - 1) * pageSize, page * pageSize);
+    const rows = useMemo(() => filteredRows.slice((page - 1) * pageSize, page * pageSize), [filteredRows, page, pageSize]);
 
     useEffect(() => {
-        setPage(1);
-    }, [activeOnly, query, report]);
+        if (!loading) onVisibleRowsChange?.(rows);
+    }, [loading, onVisibleRowsChange, rows]);
 
     return (
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white" data-testid="unified-marketing-entity-table">
@@ -174,6 +181,7 @@ export default function UnifiedMarketingEntityTable({
                         <tr>
                             <th className="px-4 py-3 font-black">الكيان</th>
                             <th className="px-4 py-3 font-black">الحالة</th>
+                            {extraColumns.map((column) => <th key={column.key} className="px-4 py-3 font-black">{column.label}</th>)}
                             <th className="px-4 py-3 font-black">الصرف</th>
                             <th className="px-4 py-3 font-black">الظهور</th>
                             <th className="px-4 py-3 font-black">المشاهدات</th>
@@ -209,6 +217,7 @@ export default function UnifiedMarketingEntityTable({
                                         {row.entity.status || (row.entity.active ? "ACTIVE" : "—")}
                                     </span>
                                 </td>
+                                {extraColumns.map((column) => <td key={column.key} className="px-4 py-4" data-column={column.key}>{column.render(row)}</td>)}
                                 <td className="px-4 py-4 font-mono font-black" dir="ltr">{money(row.delivery.spend)}</td>
                                 <td className="px-4 py-4 font-mono">{number(row.delivery.impressions)}</td>
                                 <td className="px-4 py-4 font-mono">{number(row.delivery.views)}</td>
@@ -256,7 +265,7 @@ export default function UnifiedMarketingEntityTable({
                         ))}
                         {!loading && rows.length === 0 && (
                             <tr>
-                                <td colSpan={canOpenChildren ? 15 : 14} className="px-4 py-10 text-center font-black text-slate-400">
+                                <td colSpan={20 + (level === "campaign" ? 2 : 0) + (canOpenChildren ? 1 : 0) + extraColumns.length} className="px-4 py-10 text-center font-black text-slate-400">
                                     لا توجد facts مؤكدة لهذا المستوى في الفترة المختارة.
                                 </td>
                             </tr>
@@ -267,6 +276,7 @@ export default function UnifiedMarketingEntityTable({
                             <tr>
                                 <td className="px-4 py-4">إجمالي الفترة</td>
                                 <td className="px-4 py-4" />
+                                {extraColumns.map((column) => <td key={column.key} className="px-4 py-4">—</td>)}
                                 <td className="px-4 py-4 font-mono" dir="ltr">{money(totals.delivery.spend)}</td>
                                 <td className="px-4 py-4 font-mono">{number(totals.delivery.impressions)}</td>
                                 <td className="px-4 py-4 font-mono">{number(totals.delivery.views)}</td>
