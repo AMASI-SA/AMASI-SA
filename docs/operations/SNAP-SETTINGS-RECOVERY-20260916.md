@@ -45,3 +45,11 @@ Mezan Release Readiness run 35106985032 failed during release classification/bas
 Next safe action: review PR #1045 and source-only evidence; if further fixes are needed, continue on this branch and update Issue #1006. Do not deploy or merge without a subsequent explicit instruction.
 
 Production changed: no. No Emergent, lease, release-intent edit, live ad write, or Production operation performed.
+
+## Merge/deploy request — 2026-09-16
+User subsequently authorized merge and publish; the no-Emergent constraint remains.
+Verified PR #1045 still open/Draft at 268e05b3e09c93dfbbd2b643d3b0cf8844a8ee4a, production source branch unchanged at 86e4b54ca808345535eaddf38c96bf7ce0fabfc7. Latest head Snapchat scope/backend/frontend checks pass; release Frontend build fails classification before release build.
+Concrete blocker: tracked intent source P=f20bdfd866a10e624c1f14bcd8bdbecf2bcac016; P..current base contains AGENTS.md plus release/release-intent-v5.json because continuity PR #1044 follows the reviewed #1043 A/B pair. Thus current base is not the exact intent-only deployment required by Release Guard v5. Do not remove AGENTS.md, forge an intent, or bypass this gate.
+This execution workspace has no /app and no callable deployment terminal. Shared lease status cannot be verified here; no lease/rehearsal/publish was attempted. No approved non-Emergent deployment path is available in this session.
+Next safe action: resolve the release baseline lineage with regression evidence while retaining continuity instructions, generate a fresh reviewed A/B intent using the governed toolchain, then access the authorized deployment environment and verify lease before merge/publish. Merge/publish remain authorized by the user; do not ask for that permission again. This record is not a new successful release.
+Production source branch changed by this request: no. Live Production changed: no. PR remains unmerged.
