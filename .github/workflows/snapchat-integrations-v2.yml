@@ -40,11 +40,10 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-      - name: Install backend dependencies
-        run: >-
-          python -m pip install -q
-          -r requirements.txt
-          pytest-asyncio
+      - name: Install public backend test dependencies
+        run: |
+          sed '/^emergentintegrations==/d' requirements.txt \
+            | python -m pip install -q -r /dev/stdin pytest-asyncio
       - name: Compile Snapchat V2 connector
         run: |
           python -m compileall -q integrations_control_center
