@@ -1,17 +1,19 @@
 # Salla Orders V3 — P0 shadow release
 
-Production base: `1de6118484ac4fe1d0981e230618dbb573d8c58c`
+Current release-preparation base: `67de138c57fc3204ba4af529b14460e99b4dbf9f`
 
-Local PR #1000 hardening baseline: `013ca7cf9abb3e150c20b76950ca1369004c5007`
+Original audit base: `1de6118484ac4fe1d0981e230618dbb573d8c58c`.
+PR #1000 hardening baseline: `013ca7cf9abb3e150c20b76950ca1369004c5007`.
 
 This change deliberately stops before cutover. V3 is an isolated observer and
 compatibility producer. Existing Order Review, Fulfillment, supplier files,
 Qoyod, Snapchat attribution, campaign revenue, and dashboard totals continue to
 read the current production order path.
 
-The PR #1000 hardening pass remains local-only. It does not enable Shadow,
-create a cutover route, touch provider data, or alter Production. Its purpose is
-to make the dormant observer safe to review before any separate activation.
+The hardening source is now preserved on GitHub in PR #1000 and the cycle-5
+recovery branch. Release preparation continues in PR #1049 on
+`codex/salla-v3-release-prep-20260916`. It does not enable Shadow, create a
+cutover route, touch provider data, or alter Production.
 
 ## Root causes confirmed in the production base
 
@@ -322,6 +324,13 @@ supersession, and tenant isolation. These use synthetic events and a disposable
 loopback-only MongoDB, with no Salla credentials. A skipped Mongo case fails the
 CI gate. Local contract success alone does not prove transaction readiness.
 
+GitHub acceptance run `35122217190` passed all 156 V3 tests, including all five
+real-Mongo cases, on recovered HEAD `4870a255cb84c998aa513c13385f92eb7b2452a1`.
+The delivery branch starts with the identical source tree directly on the
+current Production parent: the old merge history was rejected by the v5
+full-history intent check. No release guard was changed and no original branch
+was force-updated. Exact delivery-HEAD CI is required before freezing its intent.
+
 Deployment is staged: this source can only introduce the disabled observer.
 The sole Shadow switch remains false by default and cutover remains unavailable.
 Deploying this stage does not repair existing operational order records. Before
@@ -334,7 +343,7 @@ Before any separately authorized deployment: require green acceptance and
 release-readiness checks on the exact candidate; freeze a fresh protocol-v5
 source-A/intent-only-B pair; complete the clean-clone rehearsal. The inherited
 release intent belongs to an earlier release and must not be reused for this
-candidate. PR #1000 and Issue #1006 record the actual CI and preparation state.
+candidate. PR #1049 and Issue #1006 record the actual CI and preparation state.
 
 ## Rollback
 
