@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import stat
 from datetime import datetime, timezone
@@ -34,6 +35,7 @@ DEFAULT_RELEASE_IDENTITY_PATH = Path(__file__).with_name(
     "release_identity.json"
 )
 BACKEND_ROOT = Path(__file__).resolve().parent
+logger = logging.getLogger(__name__)
 
 
 def _read_identity_json(path: Path) -> Any:
@@ -126,7 +128,16 @@ def read_release_identity(
                 "frontend_reproducibility"
             ],
         }
-    except Exception:
+    except Exception as exc:
+        # Keep the public health payload fail-closed while preserving the
+        # concrete validation failure in private runtime logs.  Without this,
+        # every packaging or identity mismatch collapses to the same startup
+        # error and cannot be distinguished during a failed rollout.
+        logger.error(
+            "release identity validation failed (%s): %s",
+            type(exc).__name__,
+            exc,
+        )
         return _unavailable_identity()
 
 
