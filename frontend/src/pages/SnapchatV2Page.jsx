@@ -607,6 +607,7 @@ export default function SnapchatV2Page() {
                 <UnifiedMarketingEntityTable
                     report={activeContract}
                     loading={loading || entityLoading}
+                    loadingMore={settingsLoading}
                     onOpenChildren={openChildren}
                     onManageEntity={manageEntity}
                     key={`${accountId}:${entityLevel}:${selectedCampaign?.entity?.id || ""}:${selectedAdGroup?.entity?.id || ""}`}
