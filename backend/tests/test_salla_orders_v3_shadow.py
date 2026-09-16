@@ -1,5 +1,4 @@
 import pytest
-from pymongo.errors import DuplicateKeyError
 
 from salla_orders_v3.shadow import SallaOrdersShadowEngine
 
@@ -54,7 +53,7 @@ class _Gateway:
 
 
 @pytest.mark.asyncio
-async def test_shadow_sync_writes_only_dedicated_collection_and_is_idempotent():
+async def test_shadow_engine_builds_repeatable_candidate_without_persistence():
     db = _DB()
     engine = SallaOrdersShadowEngine(db, gateway=_Gateway())
 
@@ -62,65 +61,92 @@ async def test_shadow_sync_writes_only_dedicated_collection_and_is_idempotent():
         user_id="owner-1",
         store_id="store-1",
         light_order={"id": 901, "reference_id": "3001"},
-        fetch_details=True,
     )
     second = await engine.sync_order(
         user_id="owner-1",
         store_id="store-1",
         light_order={"id": 901, "reference_id": "3001"},
-        fetch_details=True,
     )
 
     assert first["ok"] is True
     assert second["ok"] is True
-    assert len(db.salla_orders_v3_shadow.rows) == 1
-    stored = next(iter(db.salla_orders_v3_shadow.rows.values()))
-    assert stored["user_id"] == "owner-1"
-    assert stored["store_id"] == "store-1"
-    assert stored["compatibility_order"]["products"][0]["options"][0]["value"] == "XL"
-    assert stored["shadow_only"] is True
-    assert stored["excluded_from_operational_reads"] is True
-
-
-class _ConflictShadowCollection(_ShadowCollection):
-    def __init__(self):
-        super().__init__()
-        self.conflicted = False
-
-    async def update_one(self, query, update, upsert=False):
-        if not self.conflicted:
-            self.conflicted = True
-            self.rows[query["_id"]] = {
-                "_id": query["_id"],
-                "compatibility_order": {
-                    "provider_updated_at": "2099-01-01T00:00:00+00:00",
-                    "items_synced_at": "2099-01-01T00:01:00+00:00",
-                    "items_sync_status": "succeeded",
-                    "items_payload_valid": True,
-                    "products": [{"order_item_id": "newer", "quantity": 3}],
-                    "sync_revision": 7,
-                },
-            }
-            raise DuplicateKeyError("simulated concurrent insert")
-        return await super().update_one(query, update, upsert=upsert)
+    assert db.salla_orders_v3_shadow.rows == {}
+    first_order = dict(first["compatibility_order"])
+    second_order = dict(second["compatibility_order"])
+    for field in (
+        "ingested_at",
+        "items_last_attempt_at",
+        "items_last_success_at",
+        "items_synced_at",
+    ):
+        first_order.pop(field)
+        second_order.pop(field)
+    assert first_order == second_order
+    assert first["compatibility_order"]["products"][0]["options"][0]["value"] == "XL"
 
 
 @pytest.mark.asyncio
-async def test_shadow_write_retries_revision_conflict_without_losing_newer_items():
+async def test_details_are_the_canonical_snapshot_not_a_webhook_payload_merge():
+    engine = SallaOrdersShadowEngine(_DB(), gateway=_Gateway())
+
+    result = await engine.prepare_order_snapshot(
+        user_id="owner-1",
+        store_id="store-1",
+        light_order={
+            "id": 901,
+            "reference_id": "3001",
+            "status": {"slug": "stale-webhook"},
+            "utm_campaign": "stale-webhook-value",
+            "customer": {"name": "stale-webhook-value"},
+        },
+    )
+
+    snapshot = result["compatibility_order"]
+    assert snapshot["order_status_slug"] == "under_review"
+    assert "utm_campaign" not in snapshot
+    assert "customer" not in snapshot
+
+
+@pytest.mark.asyncio
+async def test_shadow_accepts_order_id_alias_but_rejects_mismatched_details_identity():
+    class _MismatchedGateway(_Gateway):
+        async def get_light_order_details(self, user_id, internal_id):
+            return {"id": 902, "reference_id": "3001"}
+
     db = _DB()
-    db.salla_orders_v3_shadow = _ConflictShadowCollection()
+    alias_engine = SallaOrdersShadowEngine(db, gateway=_Gateway())
+    accepted = await alias_engine.sync_order(
+        user_id="owner-1",
+        store_id="store-1",
+        light_order={"order_id": 901, "order_number": "3001"},
+    )
+    assert accepted["ok"] is True
+    assert accepted["compatibility_order"]["order_status_slug"] == "under_review"
+
+    mismatch_engine = SallaOrdersShadowEngine(_DB(), gateway=_MismatchedGateway())
+    with pytest.raises(RuntimeError, match="internal identity mismatch"):
+        await mismatch_engine.sync_order(
+            user_id="owner-1",
+            store_id="store-1",
+            light_order={"id": 901, "reference_id": "3001"},
+        )
+
+
+@pytest.mark.asyncio
+async def test_shadow_engine_never_touches_snapshot_collection():
+    class _NoPersistence:
+        def __getattr__(self, name):
+            raise AssertionError(f"unexpected persistence access: {name}")
+
+    db = _DB()
+    db.salla_orders_v3_shadow = _NoPersistence()
     engine = SallaOrdersShadowEngine(db, gateway=_Gateway())
 
     result = await engine.sync_order(
         user_id="owner-1",
         store_id="store-1",
         light_order={"id": 901, "reference_id": "3001"},
-        fetch_details=True,
     )
 
-    stored = next(iter(db.salla_orders_v3_shadow.rows.values()))
     assert result["ok"] is True
-    assert stored["compatibility_order"]["products"] == [
-        {"order_item_id": "newer", "quantity": 3}
-    ]
-    assert stored["compatibility_order"]["sync_revision"] == 8
+    assert result["compatibility_order"]["items_authoritative"] is True

@@ -48,44 +48,93 @@ def decide_shadow_merge(
     )
 
     merged = deepcopy(previous)
+    item_metadata = {
+        "products",
+        "items_sync_status",
+        "items_payload_valid",
+        "items_count",
+        "items_synced_at",
+        "items_last_attempt_at",
+        "items_last_success_at",
+        "items_sync_error",
+        "items_authoritative",
+        "items_authoritative_empty",
+        "needs_items_enrichment",
+    }
     if base_is_current:
         for key, value in candidate.items():
-            if key in {
-                "products",
-                "items_sync_status",
-                "items_payload_valid",
-                "items_count",
-                "items_synced_at",
-                "items_sync_error",
-            }:
+            if key in item_metadata:
                 continue
             if value not in (None, "", [], {}):
                 merged[key] = deepcopy(value)
 
-    items_are_current = _newer(
+    successful_items_are_current = _newer(
         candidate.get("items_synced_at"),
         previous.get("items_synced_at"),
     )
     if (
         items_sync_status == "succeeded"
         and items_payload_valid
-        and items_are_current
+        and successful_items_are_current
     ):
         merged["products"] = deepcopy(candidate.get("products") or [])
         merged["items_synced_at"] = candidate.get("items_synced_at")
+        merged["items_last_success_at"] = (
+            candidate.get("items_last_success_at")
+            or candidate.get("items_synced_at")
+        )
+        merged["items_last_attempt_at"] = (
+            candidate.get("items_last_attempt_at")
+            or candidate.get("items_synced_at")
+        )
         merged["items_sync_status"] = "succeeded"
         merged["items_payload_valid"] = True
         merged["items_sync_error"] = None
         merged["items_count"] = len(candidate.get("products") or [])
-    elif items_are_current:
-        merged["items_sync_status"] = items_sync_status
-        merged["items_payload_valid"] = False
-        if candidate.get("items_sync_error"):
+        merged["items_authoritative"] = True
+        merged["items_authoritative_empty"] = not bool(
+            candidate.get("products")
+        )
+        merged["needs_items_enrichment"] = False
+    else:
+        incoming_attempt = (
+            candidate.get("items_last_attempt_at")
+            or candidate.get("items_synced_at")
+        )
+        previous_attempt = (
+            previous.get("items_last_attempt_at")
+            or previous.get("items_synced_at")
+        )
+        attempt_is_current = _newer(incoming_attempt, previous_attempt)
+        if attempt_is_current or not previous:
+            merged["items_last_attempt_at"] = incoming_attempt
+            merged["items_sync_status"] = str(
+                items_sync_status or "not_requested"
+            )
+            merged["items_payload_valid"] = False
             merged["items_sync_error"] = candidate.get("items_sync_error")
-        if previous.get("products"):
-            merged["products"] = deepcopy(previous["products"])
+            merged["needs_items_enrichment"] = True
+
+        # A failed, invalid, or uncalled Items request can never replace the
+        # last successful item snapshot or create an authoritative empty one.
+        merged["products"] = deepcopy(previous.get("products") or [])
+        merged["items_authoritative"] = bool(
+            previous.get("items_authoritative", False)
+        )
+        merged["items_authoritative_empty"] = bool(
+            previous.get("items_authoritative_empty", False)
+        )
+        if previous.get("items_synced_at") is not None:
+            merged["items_synced_at"] = previous.get("items_synced_at")
+        if previous.get("items_last_success_at") is not None:
+            merged["items_last_success_at"] = previous.get(
+                "items_last_success_at"
+            )
 
     merged.setdefault("products", [])
+    merged.setdefault("items_authoritative", False)
+    merged.setdefault("items_authoritative_empty", False)
+    merged.setdefault("needs_items_enrichment", True)
 
     previous_revision = int(previous.get("sync_revision") or 0)
     candidate_revision = int(candidate.get("sync_revision") or 0)

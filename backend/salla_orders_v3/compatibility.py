@@ -81,10 +81,17 @@ def build_compatibility_order(
     items_payload_valid: bool,
     items_sync_error: Optional[str] = None,
     items_synced_at: Optional[str] = None,
+    items_attempted_at: Optional[str] = None,
     event_created_at: Any = None,
     sync_revision: int = 1,
 ) -> dict[str, Any]:
     """Emit the current order/product schema plus V3 audit metadata."""
+    status = str(items_sync_status or "not_requested")
+    authoritative = status == "succeeded" and items_payload_valid is True
+    if (status == "succeeded") != bool(items_payload_valid):
+        raise ValueError(
+            "items_sync_status=succeeded and items_payload_valid=true must agree"
+        )
     base = deepcopy(base_order or {})
     normalized = [deepcopy(item) for item in normalized_items]
     base["items"] = [deepcopy(item.get("raw_item") or {}) for item in normalized]
@@ -101,6 +108,10 @@ def build_compatibility_order(
     ]
 
     now = datetime.now(timezone.utc).isoformat()
+    attempt_at = items_attempted_at
+    if status != "not_requested" and not attempt_at:
+        attempt_at = now
+    success_at = (items_synced_at or attempt_at or now) if authoritative else None
     legacy_doc.update({
         "products": products,
         "provider_created_at": _iso(
@@ -112,13 +123,16 @@ def build_compatibility_order(
         "event_created_at": _iso(event_created_at),
         "ingested_at": now,
         "sync_revision": max(1, int(sync_revision)),
-        "items_sync_status": str(items_sync_status or "not_requested"),
-        "items_synced_at": items_synced_at or (
-            now if items_sync_status == "succeeded" else None
-        ),
+        "items_sync_status": status,
+        "items_synced_at": success_at,
+        "items_last_attempt_at": attempt_at,
+        "items_last_success_at": success_at,
         "items_sync_error": items_sync_error,
         "items_payload_valid": bool(items_payload_valid),
-        "items_count": len(products) if items_payload_valid else None,
+        "items_count": len(products) if authoritative else None,
+        "items_authoritative": authoritative,
+        "items_authoritative_empty": authoritative and not products,
+        "needs_items_enrichment": not authoritative,
     })
 
     # Preserve the marketing compatibility surface exactly as supplied. The

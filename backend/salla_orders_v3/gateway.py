@@ -5,46 +5,122 @@ from __future__ import annotations
 import asyncio
 import inspect
 from copy import deepcopy
+from dataclasses import dataclass
 from typing import Any, AsyncIterator, Awaitable, Callable, Optional
 
 from salla_integration.service import SallaError, call_salla
 
+from .config import (
+    MAX_DISCOVERY_PAGES_PER_RUN,
+    MAX_PROVIDER_ATTEMPTS,
+    ORDERS_PER_PAGE,
+    validate_provider_read_request,
+)
+from .normalizer import has_order_item_identity
 
-ORDERS_PER_PAGE = 30
-MAX_PAGES_PER_RUN = 200
-MAX_ATTEMPTS = 3
+
+# Compatibility aliases retained for the existing internal import surface.
+MAX_PAGES_PER_RUN = MAX_DISCOVERY_PAGES_PER_RUN
+MAX_ATTEMPTS = MAX_PROVIDER_ATTEMPTS
 
 ProviderCall = Callable[..., Awaitable[dict[str, Any]]]
+
+
+@dataclass(frozen=True)
+class PaginationPage:
+    current_page: int
+    total_pages: int | None
+    next_page: int | None
+    exhausted: bool
+
+    @property
+    def continuation(self) -> bool:
+        return not self.exhausted
 
 
 def _rows(response: Any) -> list[dict[str, Any]]:
     data = response.get("data") if isinstance(response, dict) else None
     if not isinstance(data, list):
         raise RuntimeError("Salla Orders endpoint returned invalid payload")
-    return [deepcopy(row) for row in data if isinstance(row, dict)]
+    if any(not isinstance(row, dict) for row in data):
+        raise RuntimeError("Salla Orders endpoint returned invalid order")
+    return [deepcopy(row) for row in data]
 
 
-def _pagination(response: Any, requested_page: int) -> tuple[int, int, bool]:
+def _positive_int(value: Any, *, field: str) -> int:
+    if isinstance(value, bool):
+        raise RuntimeError(f"Salla Orders pagination metadata has invalid {field}")
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError(f"Salla Orders pagination metadata has invalid {field}") from exc
+    if parsed < 1:
+        raise RuntimeError(f"Salla Orders pagination metadata has invalid {field}")
+    return parsed
+
+
+def _nonnegative_int(value: Any, *, field: str) -> int:
+    if isinstance(value, bool):
+        raise RuntimeError(f"Salla Orders pagination metadata has invalid {field}")
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError(f"Salla Orders pagination metadata has invalid {field}") from exc
+    if parsed < 0:
+        raise RuntimeError(f"Salla Orders pagination metadata has invalid {field}")
+    return parsed
+
+
+def _first_defined(mapping: dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in mapping and mapping[key] is not None:
+            return mapping[key]
+    return None
+
+
+def _pagination(response: Any, requested_page: int) -> PaginationPage:
     pagination = response.get("pagination") if isinstance(response, dict) else None
-    pagination = pagination if isinstance(pagination, dict) else {}
-    current = int(
-        pagination.get("currentPage")
-        or pagination.get("current_page")
-        or pagination.get("page")
-        or requested_page
+    if not isinstance(pagination, dict) or not pagination:
+        raise RuntimeError("Salla Orders pagination metadata is missing")
+
+    current_value = _first_defined(
+        pagination,
+        "currentPage",
+        "current_page",
+        "page",
     )
-    total_pages = int(
-        pagination.get("totalPages")
-        or pagination.get("total_pages")
-        or pagination.get("last_page")
-        or 0
+    current = _positive_int(current_value, field="current page")
+    if current != requested_page:
+        raise RuntimeError("Salla Orders pagination metadata changed the requested page")
+
+    total_value = _first_defined(
+        pagination,
+        "totalPages",
+        "total_pages",
+        "last_page",
     )
+    total_pages = (
+        _nonnegative_int(total_value, field="total pages")
+        if total_value is not None
+        else None
+    )
+    if total_pages is not None and current > max(1, total_pages):
+        raise RuntimeError("Salla Orders pagination metadata is inconsistent")
+
     links = pagination.get("links")
     next_link = links.get("next") if isinstance(links, dict) else None
-    exhausted = bool(total_pages and current >= total_pages)
-    if not total_pages and pagination:
+    if total_pages is not None:
+        exhausted = total_pages == 0 or current >= total_pages
+        next_page = None if exhausted else current + 1
+    else:
         exhausted = not bool(next_link)
-    return current, total_pages, exhausted
+        next_page = None if exhausted else current + 1
+    return PaginationPage(
+        current_page=current,
+        total_pages=total_pages,
+        next_page=next_page,
+        exhausted=exhausted,
+    )
 
 
 class SallaOrdersGateway:
@@ -59,7 +135,7 @@ class SallaOrdersGateway:
         self.db = db
         self._call_provider = call_provider
         self._sleep = sleep
-        self.max_attempts = max(1, int(max_attempts))
+        self.max_attempts = max(1, min(int(max_attempts), MAX_ATTEMPTS))
 
     async def _pause(self, seconds: float) -> None:
         result = self._sleep(seconds)
@@ -73,6 +149,7 @@ class SallaOrdersGateway:
         *,
         params: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
+        validate_provider_read_request("GET", path)
         last_error: Optional[Exception] = None
         for attempt in range(1, self.max_attempts + 1):
             try:
@@ -105,8 +182,7 @@ class SallaOrdersGateway:
         page: int,
         from_date: Optional[str] = None,
         to_date: Optional[str] = None,
-        updated_at_gt: Optional[str] = None,
-    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    ) -> tuple[list[dict[str, Any]], PaginationPage]:
         params: dict[str, Any] = {
             "page": max(1, int(page)),
             "per_page": ORDERS_PER_PAGE,
@@ -116,10 +192,8 @@ class SallaOrdersGateway:
             params["from_date"] = from_date
         if to_date:
             params["to_date"] = to_date
-        if updated_at_gt:
-            params["updated_at_gt"] = updated_at_gt
         response = await self._get(user_id, "/orders", params=params)
-        return _rows(response), response
+        return _rows(response), _pagination(response, int(params["page"]))
 
     async def iter_light_orders(
         self,
@@ -127,25 +201,26 @@ class SallaOrdersGateway:
         *,
         from_date: Optional[str] = None,
         to_date: Optional[str] = None,
-        updated_at_gt: Optional[str] = None,
         max_pages: int = MAX_PAGES_PER_RUN,
+        start_page: int = 1,
     ) -> AsyncIterator[list[dict[str, Any]]]:
-        page = 1
-        while page <= max(1, int(max_pages)):
-            rows, response = await self.list_light_orders_page(
+        page = max(1, int(start_page))
+        pages_read = 0
+        page_budget = max(1, min(int(max_pages), MAX_PAGES_PER_RUN))
+        while pages_read < page_budget:
+            rows, pagination = await self.list_light_orders_page(
                 user_id,
                 page=page,
                 from_date=from_date,
                 to_date=to_date,
-                updated_at_gt=updated_at_gt,
             )
-            if not rows:
-                break
             yield rows
-            current, _total, exhausted = _pagination(response, page)
-            if exhausted:
+            pages_read += 1
+            if pagination.exhausted:
                 break
-            page = max(page + 1, current + 1)
+            if pagination.next_page is None:
+                raise RuntimeError("Salla Orders pagination metadata omitted next page")
+            page = pagination.next_page
             await self._pause(0.15)
 
     async def resolve_light_order(
@@ -204,4 +279,8 @@ class SallaOrdersGateway:
         data = response.get("data")
         if not isinstance(data, list):
             raise RuntimeError("Salla List Order Items returned invalid payload")
-        return [deepcopy(row) for row in data if isinstance(row, dict)]
+        if any(not isinstance(row, dict) for row in data):
+            raise RuntimeError("Salla List Order Items returned invalid item")
+        if any(not has_order_item_identity(row) for row in data):
+            raise RuntimeError("Salla List Order Items returned item without identity")
+        return [deepcopy(row) for row in data]

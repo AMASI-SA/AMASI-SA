@@ -165,6 +165,83 @@ def test_stale_failed_attempt_cannot_downgrade_newer_success_metadata():
     assert merged["sync_revision"] == 5
 
 
+def test_failed_items_read_is_never_recorded_as_authoritative_empty():
+    candidate = build_compatibility_order(
+        _base_order(),
+        normalized_items=[],
+        items_sync_status="failed",
+        items_payload_valid=False,
+        items_sync_error="TimeoutError",
+        items_attempted_at="2026-08-30T11:02:00+00:00",
+    )
+    merged = decide_shadow_merge(
+        {},
+        candidate,
+        items_sync_status="failed",
+        items_payload_valid=False,
+    )
+
+    assert merged["products"] == []
+    assert merged["items_authoritative"] is False
+    assert merged["items_authoritative_empty"] is False
+    assert merged["needs_items_enrichment"] is True
+    assert merged["items_sync_status"] == "failed"
+    assert merged["items_sync_error"] == "TimeoutError"
+
+    fulfillment = compare_fulfillment_parity(
+        {"products": []},
+        merged,
+    )
+    assert fulfillment["passed"] is False
+    assert fulfillment["v3_items_authoritative"] is False
+
+
+def test_not_called_items_endpoint_is_never_recorded_as_authoritative_empty():
+    candidate = build_compatibility_order(
+        _base_order(),
+        normalized_items=[],
+        items_sync_status="not_requested",
+        items_payload_valid=False,
+        items_attempted_at=None,
+    )
+    merged = decide_shadow_merge(
+        {},
+        candidate,
+        items_sync_status="not_requested",
+        items_payload_valid=False,
+    )
+
+    assert merged["items_authoritative"] is False
+    assert merged["items_authoritative_empty"] is False
+    assert merged["needs_items_enrichment"] is True
+
+
+def test_successful_empty_items_read_is_explicitly_authoritative():
+    candidate = build_compatibility_order(
+        _base_order(),
+        normalized_items=[],
+        items_sync_status="succeeded",
+        items_payload_valid=True,
+        items_attempted_at="2026-08-30T11:02:00+00:00",
+        items_synced_at="2026-08-30T11:02:00+00:00",
+    )
+    merged = decide_shadow_merge(
+        {
+            "products": [{"order_item_id": "old"}],
+            "items_authoritative": True,
+            "items_synced_at": "2026-08-30T11:01:00+00:00",
+        },
+        candidate,
+        items_sync_status="succeeded",
+        items_payload_valid=True,
+    )
+
+    assert merged["products"] == []
+    assert merged["items_authoritative"] is True
+    assert merged["items_authoritative_empty"] is True
+    assert merged["needs_items_enrichment"] is False
+
+
 def test_three_parity_comparators_are_strict_and_side_effect_free():
     order = build_compatibility_order(
         _base_order(),
@@ -175,15 +252,36 @@ def test_three_parity_comparators_are_strict_and_side_effect_free():
         items_sync_status="succeeded",
         items_payload_valid=True,
     )
+    order.update({"signal_revision": 1, "items_success_signal_revision": 1})
 
     fulfillment = compare_fulfillment_parity(order, order)
     qoyod = compare_qoyod_parity(
-        {"eligible": True, "payload": {"x": 1}, "idempotency_key": "same"},
-        {"eligible": True, "payload": {"x": 1}, "idempotency_key": "same"},
+        {
+            "eligible": True,
+            "payload": {"x": 1},
+            "idempotency_key": "same",
+            "provider_write_reached": False,
+        },
+        {
+            "eligible": True,
+            "payload": {"x": 1},
+            "idempotency_key": "same",
+            "provider_write_reached": False,
+        },
     )
     attribution = compare_attribution_parity(
-        [{"order_number": "3001", "campaign_id": "cmp-1", "utm_source": "snapchat", "revenue": 103.5}],
-        [{"order_number": "3001", "campaign_id": "cmp-1", "utm_source": "snapchat", "revenue": 103.5}],
+        [{
+            "order_number": "3001",
+            "campaign_id": "cmp-1",
+            "utm_source": "snapchat",
+            "revenue": 103.5,
+        }],
+        [{
+            "order_number": "3001",
+            "campaign_id": "cmp-1",
+            "utm_source": "snapchat",
+            "revenue": 103.5,
+        }],
     )
 
     assert fulfillment["passed"] is True
@@ -191,3 +289,109 @@ def test_three_parity_comparators_are_strict_and_side_effect_free():
     assert qoyod["idempotency_key_unchanged"] is True
     assert attribution["passed"] is True
     assert attribution["duplicate_orders"] == {"legacy": [], "v3": []}
+
+
+def test_attribution_semantic_values_keep_bool_and_int_types_distinct():
+    result = compare_attribution_parity(
+        [{
+            "order_number": "3001",
+            "campaign_id": "cmp-1",
+            "utm_content": True,
+            "revenue": 10,
+        }],
+        [{
+            "order_number": "3001",
+            "campaign_id": "cmp-1",
+            "utm_content": 1,
+            "revenue": 10,
+        }],
+    )
+
+    assert result["passed"] is False
+
+
+def test_qoyod_parity_fails_if_either_dry_run_reports_a_provider_write():
+    result = compare_qoyod_parity(
+        {
+            "eligible": True,
+            "payload": {"x": 1},
+            "idempotency_key": "same",
+            "provider_write_reached": False,
+        },
+        {
+            "eligible": True,
+            "payload": {"x": 1},
+            "idempotency_key": "same",
+            "provider_write_reached": True,
+        },
+    )
+
+    assert result["passed"] is False
+    assert result["provider_write_reached"] is True
+
+
+def test_fulfillment_parity_uses_semantic_option_values_not_raw_provenance():
+    legacy = {
+        "products": [{
+            "order_item_id": "7",
+            "product_id": "11",
+            "quantity": 1,
+            "options": [{
+                "name": "المقاس",
+                "value": "M",
+                "source": "legacy",
+                "raw": {"provider_shape": 1},
+            }],
+            "custom_fields": [{"name": "الاسم", "value": "نورة"}],
+        }],
+    }
+    v3 = {
+        "products": [{
+            "order_item_id": "7",
+            "product_id": "11",
+            "quantity": 1,
+            "options": [{
+                "name": "المقاس",
+                "value": "M",
+                "source": "customer_options",
+                "raw": {"new_shape": True},
+            }],
+            "custom_fields": [{
+                "name": "الاسم",
+                "value": "نورة",
+                "source": "questions",
+            }],
+        }],
+        "items_authoritative": True,
+        "items_payload_valid": True,
+        "needs_items_enrichment": False,
+        "signal_revision": 4,
+        "items_success_signal_revision": 4,
+    }
+
+    assert compare_fulfillment_parity(legacy, v3)["passed"] is True
+    v3["products"][0]["options"][0]["value"] = "L"
+    assert compare_fulfillment_parity(legacy, v3)["passed"] is False
+
+
+def test_fulfillment_parity_requires_success_for_the_current_signal_revision():
+    legacy = {"products": []}
+    v3 = {
+        "products": [],
+        "items_authoritative": True,
+        "items_payload_valid": True,
+        "needs_items_enrichment": False,
+        "signal_revision": 8,
+        "items_success_signal_revision": 7,
+    }
+
+    result = compare_fulfillment_parity(legacy, v3)
+
+    assert result["passed"] is False
+    assert result["latest_success_matches_signal"] is False
+
+    v3["items_success_signal_revision"] = 8
+    v3.pop("needs_items_enrichment")
+    result = compare_fulfillment_parity(legacy, v3)
+    assert result["passed"] is False
+    assert result["v3_enrichment_complete"] is False

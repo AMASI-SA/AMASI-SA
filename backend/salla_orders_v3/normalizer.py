@@ -75,6 +75,39 @@ def _first(*values: Any) -> Any:
     return None
 
 
+def has_order_item_identity(item: Any) -> bool:
+    """Return whether an Items row carries a usable provider/product identity."""
+    if not isinstance(item, dict) or not item:
+        return False
+    product = _dict(item.get("product"))
+    variant = _dict(_first(item.get("variant"), product.get("variant")))
+    candidates = (
+        item.get("id"),
+        item.get("item_id"),
+        item.get("order_item_id"),
+        item.get("product_id"),
+        item.get("parent_product_id"),
+        item.get("variant_id"),
+        item.get("product_sku_id"),
+        item.get("sku"),
+        item.get("name"),
+        product.get("id"),
+        product.get("parent_id"),
+        product.get("variant_id"),
+        product.get("sku"),
+        product.get("name"),
+        variant.get("id"),
+        variant.get("sku"),
+        variant.get("name"),
+    )
+    return any(
+        not isinstance(value, (bool, dict, list, tuple, set))
+        and value is not None
+        and str(value).strip()
+        for value in candidates
+    )
+
+
 def _number(value: Any, default: float = 0.0) -> float:
     if isinstance(value, bool):
         return default
@@ -240,18 +273,35 @@ def _stable_order_item_id(
     if source_item_id:
         return f"salla:{order_number}:{source_item_id}"
 
+    product = _dict(item.get("product"))
+    variant = _dict(_first(item.get("variant"), product.get("variant")))
+    customer_choices = {
+        source: deepcopy(item.get(source))
+        for source in OPTION_SOURCES + CUSTOM_FIELD_SOURCES
+        if source in item
+    }
+    nested_customer_choices = {
+        owner_name: {
+            source: deepcopy(owner.get(source))
+            for source in OPTION_SOURCES + CUSTOM_FIELD_SOURCES
+            if source in owner
+        }
+        for owner_name, owner in (("product", product), ("variant", variant))
+    }
     signature = {
         "order_number": order_number,
-        "product_id": item.get("product_id"),
-        "parent_product_id": item.get("parent_product_id"),
-        "variant_id": item.get("variant_id") or item.get("product_sku_id"),
-        "sku": item.get("sku"),
-        "name": item.get("name"),
+        "product_id": item.get("product_id") or product.get("id"),
+        "parent_product_id": item.get("parent_product_id") or product.get("parent_id"),
+        "variant_id": (
+            item.get("variant_id")
+            or item.get("product_sku_id")
+            or variant.get("id")
+        ),
+        "sku": variant.get("sku") or item.get("sku") or product.get("sku"),
+        "name": item.get("name") or variant.get("name") or product.get("name"),
         "quantity": item.get("quantity"),
-        "options": item.get("options"),
-        "custom_fields": item.get("custom_fields"),
-        "customizations": item.get("customizations"),
-        "personalization": item.get("personalization"),
+        "customer_choices": customer_choices,
+        "nested_customer_choices": nested_customer_choices,
         "amounts": item.get("amounts"),
     }
     canonical = json.dumps(
@@ -273,6 +323,8 @@ def normalize_order_item(
 ) -> dict[str, Any]:
     if not isinstance(item, dict):
         raise TypeError("Salla order item must be an object")
+    if not has_order_item_identity(item):
+        raise ValueError("Salla order item has no usable identity")
 
     raw_item = deepcopy(item)
     product = _dict(item.get("product"))
@@ -313,16 +365,23 @@ def normalize_order_item(
     for source in OPTION_SOURCES:
         options.extend(normalize_named_values(item.get(source), source=source))
     for source_owner in (variant, product):
-        if source_owner.get("options") is not None:
-            options.extend(
-                normalize_named_values(source_owner.get("options"), source="options")
-            )
+        for source in OPTION_SOURCES:
+            if source_owner.get(source) is not None:
+                options.extend(
+                    normalize_named_values(source_owner.get(source), source=source)
+                )
 
     custom_fields: list[dict[str, Any]] = []
     for source in CUSTOM_FIELD_SOURCES:
         custom_fields.extend(
             normalize_named_values(item.get(source), source=source)
         )
+    for source_owner in (variant, product):
+        for source in CUSTOM_FIELD_SOURCES:
+            if source_owner.get(source) is not None:
+                custom_fields.extend(
+                    normalize_named_values(source_owner.get(source), source=source)
+                )
 
     quantity = _number(item.get("quantity"), 1.0)
 
@@ -385,7 +444,7 @@ def normalize_order_items(
     identities: set[str] = set()
     for index, item in enumerate(items):
         if not isinstance(item, dict):
-            continue
+            raise TypeError("Salla order item must be an object")
         normalized = normalize_order_item(
             item,
             order_number=order_number,

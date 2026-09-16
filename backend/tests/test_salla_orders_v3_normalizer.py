@@ -1,3 +1,5 @@
+import pytest
+
 from salla_orders_v3.normalizer import normalize_order_item, normalize_order_items
 
 
@@ -24,7 +26,10 @@ def test_normalizer_preserves_all_customer_value_shapes_without_raw_json():
         "customizations": [{"name": "نص الإهداء", "value": "مبارك"}],
         "personalization": [{"title": "الحروف", "option_value": "NA"}],
         "attachments": [{"name": "صورة العميل", "url": "https://files.test/a.png"}],
-        "files": [{"label": "ملف الطباعة", "value": {"url": "https://files.test/b.pdf"}}],
+        "files": [{
+            "label": "ملف الطباعة",
+            "value": {"url": "https://files.test/b.pdf"},
+        }],
     }
 
     normalized = normalize_order_item(item, order_number="3001", index=0)
@@ -114,3 +119,68 @@ def test_zero_quantity_is_preserved_instead_of_becoming_one():
     )
 
     assert normalized["quantity"] == 0
+
+
+def test_false_and_zero_mapping_values_are_preserved_with_customer_fields():
+    normalized = normalize_order_item(
+        {
+            "id": 10,
+            "sku": "BOOLEAN",
+            "quantity": 1,
+            "customer_options": {"طباعة خلفية": False, "عدد الإضافات": 0},
+            "questions": {"موافقة العميل": False, "رقم الصف": 0},
+        },
+        order_number="5004",
+        index=0,
+    )
+
+    options = {row["name"]: row["value"] for row in normalized["options"]}
+    custom = {row["name"]: row["value"] for row in normalized["custom_fields"]}
+    assert options == {"طباعة خلفية": False, "عدد الإضافات": 0}
+    assert custom == {"موافقة العميل": False, "رقم الصف": 0}
+
+
+def test_fallback_identity_includes_every_supported_customer_choice_source():
+    base = {"sku": "SAME", "name": "منتج", "quantity": 1}
+    first = normalize_order_item(
+        base | {"customer_options": {"المقاس": "S"}},
+        order_number="5005",
+        index=0,
+    )
+    second = normalize_order_item(
+        base | {"customer_options": {"المقاس": "M"}},
+        order_number="5005",
+        index=1,
+    )
+
+    assert first["order_item_id"] != second["order_item_id"]
+
+
+def test_nested_product_and_variant_customer_fields_are_preserved():
+    normalized = normalize_order_item(
+        {
+            "id": 11,
+            "product": {
+                "id": 90,
+                "customer_options": {"لون التغليف": "أخضر"},
+                "custom_fields": {"رسالة": "مبارك"},
+            },
+            "variant": {
+                "id": 91,
+                "selected_options": {"المقاس": "M"},
+                "personalization": {"طباعة؟": False},
+            },
+        },
+        order_number="5006",
+        index=0,
+    )
+
+    options = {row["name"]: row["value"] for row in normalized["options"]}
+    custom = {row["name"]: row["value"] for row in normalized["custom_fields"]}
+    assert options == {"المقاس": "M", "لون التغليف": "أخضر"}
+    assert custom == {"طباعة؟": False, "رسالة": "مبارك"}
+
+
+def test_invalid_item_member_fails_closed_instead_of_becoming_empty():
+    with pytest.raises(TypeError, match="must be an object"):
+        normalize_order_items([None], order_number="5007")
