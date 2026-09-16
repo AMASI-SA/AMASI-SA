@@ -261,6 +261,149 @@ async def test_selected_summary_excludes_unselected_historical_rows():
 
 
 @pytest.mark.asyncio
+async def test_dashboard_sync_maps_30_days_to_canonical_v2_range():
+    db = _db()
+    fixed_now = lambda: datetime(
+        2026, 9, 16, 18, 0, tzinfo=timezone.utc
+    )
+    calls = []
+
+    class FakePipeline:
+        def __init__(self, db_value, *, now):
+            assert db_value is db
+            assert now is fixed_now
+
+        async def run(self, user_id, **kwargs):
+            calls.append((user_id, kwargs))
+            return {
+                "status": "complete",
+                "sync_run_id": "canonical-30d",
+                "summary": {
+                    "rows_saved": 720,
+                    "warnings": [],
+                },
+            }
+
+    result = await async_routes.execute_snapchat_dashboard_sync(
+        db,
+        "owner-1",
+        SnapchatNativeSyncInput(days=30),
+        now=fixed_now,
+        pipeline_factory=FakePipeline,
+    )
+
+    assert calls == [(
+        "owner-1",
+        {
+            "date_from": datetime(2026, 8, 18).date(),
+            "date_to": datetime(2026, 9, 16).date(),
+            "action_report_time": "conversion",
+            "run_type": "manual",
+        },
+    )]
+    assert result == {
+        "run_id": "canonical-30d",
+        "provider": "snapchat_ads",
+        "status": "complete",
+        "date_from": "2026-08-18",
+        "date_to": "2026-09-16",
+        "accounts_attempted": 1,
+        "accounts_complete": 1,
+        "rows_saved": 720,
+        "errors_count": 0,
+        "source_only": True,
+        "accounting_write_reached": False,
+        "qoyod_write_reached": False,
+    }
+
+
+@pytest.mark.asyncio
+async def test_dashboard_sync_preserves_explicit_47_day_account_range():
+    fixed_now = lambda: datetime(2026, 9, 16, 20, 0, tzinfo=timezone.utc)
+    calls = []
+
+    class FakePipeline:
+        def __init__(self, db, *, now):
+            pass
+
+        async def run(self, user_id, **kwargs):
+            calls.append((user_id, kwargs))
+            return {"status": "complete", "sync_run_id": "canonical-47d", "summary": {"rows_saved": 1128}}
+
+    result = await async_routes.execute_snapchat_dashboard_sync(
+        _db(), "owner-1",
+        SnapchatNativeSyncInput(from_date="2026-08-01", to_date="2026-09-16", ad_account_id="usd-main"),
+        now=fixed_now, pipeline_factory=FakePipeline,
+    )
+    assert calls == [("owner-1", {
+        "ad_account_id": "usd-main",
+        "date_from": datetime(2026, 8, 1).date(),
+        "date_to": datetime(2026, 9, 16).date(),
+        "action_report_time": "conversion", "run_type": "manual",
+    })]
+    assert result["date_from"] == "2026-08-01"
+    assert result["date_to"] == "2026-09-16"
+    assert result["run_id"] == "canonical-47d"
+
+
+@pytest.mark.asyncio
+async def test_same_range_other_account_cannot_join_canonical_job():
+    db = _db()
+    db.rows["mezan_integration_sync_runs_v2"] = [{
+        "user_id": "owner-1", "provider": "snapchat_ads", "run_id": "other-account-job",
+        "run_type": async_routes.ASYNC_SYNC_RUN_TYPE, "status": "running",
+        "summary": {"date_from": "2026-08-01", "date_to": "2026-09-16", "ad_account_id": "other-account"},
+    }]
+    with pytest.raises(SnapchatNativeSyncError) as exc:
+        await async_routes._assert_no_active_sync(
+            db, "owner-1", requested_date_from="2026-08-01", requested_date_to="2026-09-16",
+            requested_ad_account_id="usd-main",
+        )
+    assert exc.value.run_id is None
+
+
+@pytest.mark.asyncio
+async def test_dashboard_sync_retries_a_busy_canonical_lease():
+    db = _db()
+    fixed_now = lambda: datetime(
+        2026, 9, 16, 18, 0, tzinfo=timezone.utc
+    )
+    results = [
+        {"status": "skipped", "reason": "lease_unavailable"},
+        {
+            "status": "complete",
+            "sync_run_id": "canonical-after-wait",
+            "summary": {"rows_saved": 24, "warnings": []},
+        },
+    ]
+    waits = []
+
+    class FakePipeline:
+        def __init__(self, db_value, *, now):
+            assert db_value is db
+            assert now is fixed_now
+
+        async def run(self, _user_id, **_kwargs):
+            return results.pop(0)
+
+    async def fake_sleep(delay):
+        waits.append(delay)
+
+    result = await async_routes.execute_snapchat_dashboard_sync(
+        db,
+        "owner-1",
+        SnapchatNativeSyncInput(days=1),
+        now=fixed_now,
+        pipeline_factory=FakePipeline,
+        sleep=fake_sleep,
+    )
+
+    assert waits == [async_routes.CANONICAL_SYNC_RETRY_DELAY_SECONDS]
+    assert result["run_id"] == "canonical-after-wait"
+    assert result["status"] == "complete"
+
+
+@pytest.mark.asyncio
 async def test_async_job_returns_queued_then_records_child_result(
     monkeypatch,
 ):
@@ -291,14 +434,13 @@ async def test_async_job_returns_queued_then_records_child_result(
         payload,
         *,
         now,
-        parent_run_id,
     ):
         assert db_value is db
         assert user_id == "owner-1"
         assert payload.days == 2
-        assert parent_run_id == accepted["run_id"]
+        assert now is fixed_now
         return {
-            "run_id": "child-run-1",
+            "run_id": "canonical-run-1",
             "provider": "snapchat_ads",
             "status": "complete",
             "accounts_attempted": 2,
@@ -312,7 +454,7 @@ async def test_async_job_returns_queued_then_records_child_result(
 
     monkeypatch.setattr(
         async_routes,
-        "execute_snapchat_native_sync",
+        "execute_snapchat_dashboard_sync",
         fake_execute,
     )
     await async_routes.execute_snapchat_native_sync_job(
@@ -333,7 +475,7 @@ async def test_async_job_returns_queued_then_records_child_result(
     assert final["accounts_attempted"] == 2
     assert final["accounts_complete"] == 2
     assert final["rows_saved"] == 15604
-    assert final["child_run_id"] == "child-run-1"
+    assert final["child_run_id"] == "canonical-run-1"
     assert final["error"] is None
     parent = next(
         row
@@ -357,6 +499,10 @@ async def test_async_job_rejects_a_second_active_sync(monkeypatch):
             "worker_started_at": "2026-07-30T17:00:00+00:00",
             "worker_heartbeat_at": "2026-07-30T17:59:00+00:00",
             "lock_expires_at": "2026-07-30T22:00:00+00:00",
+            "summary": {
+                "date_from": "2026-07-30",
+                "date_to": "2026-07-30",
+            },
         }
     )
     monkeypatch.setattr(
@@ -503,7 +649,9 @@ async def test_manual_job_preserves_recent_scheduler_run(monkeypatch):
         )
 
     assert exc.value.code == "snapchat_analytics_sync_in_progress"
-    assert exc.value.run_id == "live-scheduler-run"
+    assert exc.value.run_id is None
+    assert exc.value.result["date_from"] == "2026-07-30"
+    assert exc.value.result["date_to"] == "2026-07-30"
     assert db.rows["mezan_integration_sync_runs_v2"][0]["status"] == "running"
 
 

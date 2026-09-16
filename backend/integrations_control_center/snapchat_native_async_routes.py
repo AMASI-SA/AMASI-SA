@@ -1,6 +1,7 @@
-"""Timeout-safe background orchestration for native Snapchat analytics sync."""
+"""Timeout-safe background orchestration for canonical Snapchat reporting sync."""
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
@@ -25,14 +26,15 @@ from .snapchat_native_data_common import (
     enumerate_native_sync_dates,
     snapchat_native_sync_enabled,
 )
-from .snapchat_native_data_sync import execute_snapchat_native_sync
-
 ASYNC_SYNC_RUN_TYPE = "analytics_refresh_async"
 ASYNC_SYNC_SOURCE_MODE = "snapchat_marketing_native_async_sync_v2"
 ACTIVE_SYNC_STATUSES = ("queued", "running")
 SCHEDULER_SYNC_RUN_TYPE = "analytics_refresh"
 SCHEDULER_ACTIVE_RUN_TTL = timedelta(minutes=25)
 RUN_CLOCK_SKEW_TOLERANCE = timedelta(minutes=5)
+CANONICAL_SYNC_RETRY_ATTEMPTS = 12
+CANONICAL_SYNC_RETRY_DELAY_SECONDS = 5.0
+CANONICAL_SYNC_RETRY_REASONS = {"lease_unavailable", "resource_pressure"}
 
 
 def _safe_job(document: dict[str, Any]) -> dict[str, Any]:
@@ -97,6 +99,111 @@ def _failure_detail(
         "code": exc.code,
         "message": exc.message,
         "retryable": exc.retryable,
+    }
+
+
+async def execute_snapchat_dashboard_sync(
+    db: Any,
+    user_id: str,
+    payload: SnapchatNativeSyncInput,
+    *,
+    now: Callable[[], datetime] = _utcnow,
+    pipeline_factory: Callable[..., Any] | None = None,
+    sleep: Callable[[float], Any] = asyncio.sleep,
+) -> dict[str, Any]:
+    """Refresh the canonical V2 facts used by Dashboard and Snapchat pages."""
+    now_value = now().astimezone(timezone.utc)
+    dates = enumerate_native_sync_dates(
+        payload,
+        today=now_value.astimezone(_timezone(BUSINESS_TIMEZONE)).date(),
+    )
+    if pipeline_factory is None:
+        from snapchat_v2.sync_pipeline import SnapchatV2SyncPipeline
+
+        pipeline_factory = SnapchatV2SyncPipeline
+
+    result: dict[str, Any] = {}
+    for attempt in range(CANONICAL_SYNC_RETRY_ATTEMPTS):
+        pipeline = pipeline_factory(db, now=now)
+        result = await pipeline.run(
+            user_id,
+            **({"ad_account_id": payload.ad_account_id} if payload.ad_account_id else {}),
+            date_from=dates[0],
+            date_to=dates[-1],
+            action_report_time="conversion",
+            run_type="manual",
+        )
+        status = str(result.get("status") or "").strip().lower()
+        reason = str(result.get("reason") or "").strip().lower()
+        should_retry = (
+            status == "skipped"
+            and reason in CANONICAL_SYNC_RETRY_REASONS
+            and attempt + 1 < CANONICAL_SYNC_RETRY_ATTEMPTS
+        )
+        if not should_retry:
+            break
+        await sleep(CANONICAL_SYNC_RETRY_DELAY_SECONDS)
+
+    status = str(result.get("status") or "").strip().lower()
+    summary = (
+        result.get("summary")
+        if isinstance(result.get("summary"), dict)
+        else {}
+    )
+    warnings = (
+        summary.get("warnings")
+        if isinstance(summary.get("warnings"), list)
+        else []
+    )
+    if status not in {"complete", "partial"}:
+        error = (
+            result.get("error")
+            if isinstance(result.get("error"), dict)
+            else {}
+        )
+        reason = str(result.get("reason") or "").strip().lower()
+        code = str(error.get("code") or "").strip()
+        if not code:
+            code = (
+                f"snapchat_reporting_v2_{reason}"
+                if reason
+                else "snapchat_reporting_v2_sync_failed"
+            )
+        raise SnapchatNativeSyncError(
+            code,
+            "The canonical Snapchat reporting sync did not complete.",
+            status_code=503 if status == "skipped" else 502,
+            retryable=(
+                status == "skipped"
+                or bool(error.get("retryable"))
+            ),
+            result={
+                "date_from": dates[0].isoformat(),
+                "date_to": dates[-1].isoformat(),
+                "accounts_synced": 0,
+                "accounts_complete": 0,
+                "rows_saved": int(summary.get("rows_saved") or 0),
+                "errors_count": 1,
+            },
+        )
+
+    return {
+        "run_id": result.get("sync_run_id"),
+        "provider": SNAPCHAT_PROVIDER_ID,
+        "status": status,
+        "date_from": dates[0].isoformat(),
+        "date_to": dates[-1].isoformat(),
+        "accounts_attempted": 1,
+        "accounts_complete": 1 if status == "complete" else 0,
+        "rows_saved": int(summary.get("rows_saved") or 0),
+        "errors_count": (
+            len(warnings)
+            if status == "complete"
+            else max(1, len(warnings))
+        ),
+        "source_only": True,
+        "accounting_write_reached": False,
+        "qoyod_write_reached": False,
     }
 
 
@@ -208,7 +315,14 @@ async def _recover_stale_jobs(
         )
 
 
-async def _assert_no_active_sync(db: Any, user_id: str) -> None:
+async def _assert_no_active_sync(
+    db: Any,
+    user_id: str,
+    *,
+    requested_date_from: str,
+    requested_date_to: str,
+    requested_ad_account_id: str | None = None,
+) -> None:
     active = await _collection(
         db, "mezan_integration_sync_runs_v2"
     ).find_one(
@@ -220,18 +334,43 @@ async def _assert_no_active_sync(db: Any, user_id: str) -> None:
             },
             "status": {"$in": list(ACTIVE_SYNC_STATUSES)},
         },
-        {"_id": 0, "run_id": 1},
+        {
+            "_id": 0,
+            "run_id": 1,
+            "run_type": 1,
+            "summary.date_from": 1,
+            "summary.date_to": 1,
+            "summary.ad_account_id": 1,
+        },
         sort=[("started_at", -1)],
     )
     if not active:
         return
+    summary = (
+        active.get("summary")
+        if isinstance(active.get("summary"), dict)
+        else {}
+    )
+    same_manual_request = (
+        active.get("run_type") == ASYNC_SYNC_RUN_TYPE
+        and summary.get("date_from") == requested_date_from
+        and summary.get("date_to") == requested_date_to
+        and summary.get("ad_account_id") == requested_ad_account_id
+    )
     error = SnapchatNativeSyncError(
         "snapchat_analytics_sync_in_progress",
         "A Snapchat native data sync is already running.",
         status_code=409,
         retryable=True,
+        result={
+            "date_from": requested_date_from,
+            "date_to": requested_date_to,
+        },
     )
-    error.run_id = active.get("run_id")
+    # Only a duplicate click for the exact same manual range may join the
+    # active job. A scheduler run or another range must never be reported as
+    # successful for this request.
+    error.run_id = active.get("run_id") if same_manual_request else None
     raise error
 
 
@@ -257,7 +396,13 @@ async def create_snapchat_native_sync_job(
     )
     selected_accounts = await _load_selected_accounts(db, user_id)
     await _recover_stale_jobs(db, user_id, now_value=now_value)
-    await _assert_no_active_sync(db, user_id)
+    await _assert_no_active_sync(
+        db,
+        user_id,
+        requested_date_from=dates[0].isoformat(),
+        requested_date_to=dates[-1].isoformat(),
+        requested_ad_account_id=payload.ad_account_id,
+    )
 
     run_id = str(uuid.uuid4())
     document = {
@@ -275,6 +420,7 @@ async def create_snapchat_native_sync_job(
         "summary": {
             "date_from": dates[0].isoformat(),
             "date_to": dates[-1].isoformat(),
+            "ad_account_id": payload.ad_account_id,
             "selected_accounts": len(selected_accounts),
             "accounts_attempted": 0,
             "accounts_complete": 0,
@@ -330,12 +476,11 @@ async def execute_snapchat_native_sync_job(
     )
     try:
         try:
-            result = await execute_snapchat_native_sync(
+            result = await execute_snapchat_dashboard_sync(
                 db,
                 user_id,
                 payload,
                 now=now,
-                parent_run_id=run_id,
             )
         finally:
             await _stop_sync_run_heartbeat(heartbeat)
@@ -516,6 +661,7 @@ __all__ = [
     "ASYNC_SYNC_RUN_TYPE",
     "attach_snapchat_native_async_routes",
     "create_snapchat_native_sync_job",
+    "execute_snapchat_dashboard_sync",
     "execute_snapchat_native_sync_job",
     "get_snapchat_native_sync_job",
 ]
