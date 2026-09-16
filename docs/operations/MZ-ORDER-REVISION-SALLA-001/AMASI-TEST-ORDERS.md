@@ -8,11 +8,16 @@ Store is no longer the only accepted test environment. This authorizes the
 test-order scenario; it does not identify any existing customer order as a
 test fixture or authorize general feature activation.
 
-No Amasi test order has been identified or mutated in this task yet. No live
-test evidence exists. The first required input is the reference of a new,
-unpaid bank-transfer test order containing a product with customer options. Resolve that
-reference to an exact Salla store/order/item identity before execution; keep
-filled fixture identifiers and customer details outside GitHub.
+The owner supplied a disposable test-order reference, which was resolved to a
+unique order using authenticated Salla reads. Its payment and shipment facts
+do not meet the initial contract: the required positive unpaid balance is not
+established, the payment-method collection is nonempty, and an existing
+pending shipment fails the no-shipment requirement. Pending does not prove
+dispatch. Customer options were observed in shipment packages only. No item
+mutation or CLI readiness run was performed, and no live mutation evidence
+exists. Obtain an eligible replacement fixture; keep all filled identifiers
+and customer details outside GitHub. Do not change eligibility or the rejected
+order merely to force the first test.
 
 ## Implementation boundary
 
@@ -86,8 +91,9 @@ and existing five-minute single-attempt review metadata; never copy a token.
 
 Scopes are `orders.read_write`, product read, and additionally `shipping.read`
 for this live mode. A declared scope is not proof it was granted: the actual
-read must succeed. Store type must come from a fresh trusted Store Information
-observation; no real-store type literal has yet been observed in this task.
+read must succeed. Store identity and non-Demo type were observed through the
+authenticated connector. The executor must still confirm them fresh, and the
+connector shipment read does not establish the encrypted runtime token scope.
 
 ```bash
 python scripts/research/salla_order_item_contract_runner.py readiness \

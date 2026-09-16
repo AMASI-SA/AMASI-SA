@@ -9,12 +9,13 @@
     "Installed required local jsonschema==4.26.0; added isolated CI workflow",
     "Independent parent review and full 72-test verification",
     "Recorded owner-approved Amasi disposable test-order alternative and concrete first test sequence; no executable code changed",
-    "Implemented explicit Amasi test-order CLI mode with fixture/payment/shipment/original-line guards, one-write execution, reviewed totals, live evidence classification and redirect rejection; 18 new isolated contracts pass"
+    "Implemented explicit Amasi test-order CLI mode with fixture/payment/shipment/original-line guards, one-write execution, reviewed totals, live evidence classification and redirect rejection; 18 new isolated contracts pass",
+    "Resolved the owner-supplied disposable fixture through authenticated Salla reads; verified store identity/type, payment facts and exact-order shipments; rejected the fixture before any mutation because it does not meet the initial test contract"
   ],
   "delivery_commit": "407634facfc4e0be07b47d21ca8b243de563f87f",
   "delivery_method": "GitHub connector; source delivery tree exactly equals the reviewed local checkpoint. Remote commit SHA differs; original remote research parent is retained.",
   "merge": "NOT_PERFORMED",
-  "next_safe_action": "Obtain the first newly created unpaid SAR bank-transfer test order reference (no receipt), inspect downstream automation and encrypted integration shipping.read access, fill private exact fixture/case files, then run readiness --environment amasi-test-orders before one reviewed mutation. No order-page activation or deployment yet.",
+  "next_safe_action": "Obtain a replacement disposable SAR bank-transfer fixture with positive total, explicit zero paid and remaining equal to total, no receipt and no shipment records. Resolve fresh exact private identities, inspect downstream automation and encrypted integration read access, then run Amasi readiness before a reviewed mutation. Do not broaden eligibility or alter the rejected order to force this first test.",
   "p1": "BLOCKED_BY_REQUIRED_PROVIDER_EVIDENCE",
   "phase": "P0",
   "pr": {
@@ -28,12 +29,12 @@
   "recovery_merge": "e9be9ebf1abefb223560477f164f746c3bdbb67f",
   "release_intent": "UNCHANGED",
   "remaining": [
-    "Identify and verify exact Amasi test store/order/customer/item/product/option identities and actual non-Demo store type",
-    "Inspect actual shipping/notification/Qoyod automation; confirm shipping.read for exact-order shipment lookup",
+    "Resolve an eligible replacement test order and exact private item/product/option identities; store identity and non-Demo type were observed, but must be checked fresh by the executor",
+    "Inspect actual shipping/notification/Qoyod automation and verify shipment-read access through the encrypted runtime integration; a successful connector read does not prove that integration token scope",
     "Execute the first add/quantity/options/delete sequence and retain actual provider/webhook evidence",
     "Complete required state/option/payment/inventory/retry evidence before P1 order-page integration and general activation"
   ],
-  "remote_checkpoint": "AMASI_EXECUTOR_SOURCE_UPLOADED_AND_P0_CI_VERIFIED",
+  "remote_checkpoint": "AMASI_FIXTURE_READ_ONLY_PREFLIGHT_RECORDED",
   "reviewed_delivery_tree": "0dc09b50aa59c79d658ff44b0cf6c5cf1e08b4da",
   "reviewed_local_commit": "8f9a738f10850cd5d8302371e0659aeaee011347",
   "runtime_integration": "NOT_IMPLEMENTED",
@@ -52,7 +53,7 @@
     "backend/tests/test_salla_order_item_amasi_test_orders.py": "b2209dd64834af89fdb689628713c6338bf36fa3baceac532fbb3f945ed0f34d",
     "docs/operations/MZ-ORDER-REVISION-SALLA-001/schemas/evidence-record.schema.json": "1fa04fe9902ce79f1df8ff83029722b0b870ae636dbd25200389c24aa5349367"
   },
-  "status": "AMASI_TEST_EXECUTOR_LOCAL_VERIFIED_PENDING_FIXTURES",
+  "status": "AMASI_FIXTURE_PREFLIGHT_BLOCKED",
   "task_id": "MZ-ORDER-REVISION-SALLA-001",
   "updated_at": "2026-09-16",
   "verification": {
@@ -103,13 +104,30 @@
     "owner_authorized": "Create and mutate disposable test orders in the real Amasi Salla store",
     "supersedes": "Demo-only test environment requirement; evidence requirements remain outstanding",
     "plan": "AMASI-TEST-ORDERS.md",
-    "exact_fixtures_identified": false,
+    "exact_fixtures_identified": true,
     "live_test_executor": "IMPLEMENTED_LOCAL_CONTRACTS_VERIFIED",
     "existing_demo_identity_guard": "UNCHANGED",
     "live_store_writes_performed": 0,
     "general_activation_or_deployment": "NOT_AUTHORIZED_BY_THIS_TEST_DECISION",
     "initial_scope": "One pending/under_review SAR bank-transfer test order; zero paid, no receipt/refund/shipment; quantities 1..2; preserved original line; no automatic retry",
-    "additional_read_scope": "shipping.read"
+    "additional_read_scope": "shipping.read",
+    "eligible_fixture_identified": false,
+    "fixture_preflight": {
+      "result": "BLOCKED_BEFORE_MUTATION",
+      "source": "Authenticated Salla connector: reference-filtered Orders List, Order Details, exact-order unfiltered Shipments List and Store Context",
+      "identity_resolution": "Exactly one matching order; identifiers and customer details excluded from repository records",
+      "blocking_contracts": [
+        "Positive order total and full unpaid remaining balance are not established",
+        "Payment methods list is not empty",
+        "Shipping readiness and an existing pending shipment are outside the initial no-shipment contract"
+      ],
+      "shipment_interpretation": "A pending shipment record is not evidence of dispatch; it still fails the implemented absence requirement",
+      "customer_options": "Options observed in shipment packages; standalone Order Items and mutation round-trip are not yet verified",
+      "store_identity_type": "Observed through successful Store Context response; private values omitted",
+      "readiness_cli_run": false,
+      "salla_item_writes_performed": 0,
+      "runtime_scope_proven": false
+    }
   },
   "amasi_executor_source_commit": "cf1acbf2271b67b1a8064b9081d8f92b5cff31d9"
 }
