@@ -105,6 +105,7 @@ jobs:
               frontend/src/components/marketing/SnapchatEntitySettingsTable.test.jsx|\
               frontend/src/services/snapchatCampaignManagement.js|\
               frontend/src/services/snapchatCampaignManagement.test.js|\
+              docs/operations/SNAP-SETTINGS-RECOVERY-20260916.md|\
               .github/workflows/snapchat-settings-management-v2.yml)
                 ;;
               *)

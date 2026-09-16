@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react";
 import { snapchatBidLabel } from "../../services/snapchatCampaignManagement";
 
 export const SNAPCHAT_SETTINGS_UNAVAILABLE = "غير متاح — فشل جلب الإعدادات";
@@ -117,7 +118,7 @@ function SettingsStatus({ row, settings, loading }) {
     );
 }
 
-function SettingsDetails({ row, settings }) {
+function SettingsDetails({ row, settings, parentCampaign, onManageEntity }) {
     const type = row?.entity?.level === "ad_group" ? "ad_squad" : "campaign";
     const quality = settings?.quality || {};
     const identityContract = settings?.identity_contract && typeof settings.identity_contract === "object"
@@ -155,7 +156,15 @@ function SettingsDetails({ row, settings }) {
                 <div className="max-w-[240px]">
                     <div className="truncate text-sm font-black text-slate-950" title={row?.entity?.name}>{row?.entity?.name || "—"}</div>
                     <div className="mt-1 font-mono text-[10px] text-slate-400" dir="ltr">{row?.entity?.id || "—"}</div>
+                    {onManageEntity && <button type="button" onClick={() => onManageEntity(row)} className="mt-2 text-sky-700">إعدادات الكيان</button>}
                 </div>
+            </td>
+            <td className="px-4 py-4 align-top" data-testid="snapchat-settings-parent">
+                {type === "ad_squad" ? <>
+                    <div>{parentCampaign?.entity?.id === row?.entity?.campaign_id ? parentCampaign.entity.name : "الحملة المرتبطة"}</div>
+                    <div dir="ltr">{row?.entity?.campaign_id || parentCampaign?.entity?.id || "—"}</div>
+                    <Metric label="معرف الحملة لدى Snapchat">{providerSetting(settings, settings?.provider_parent_id)}</Metric>
+                </> : "—"}
             </td>
             <td className="px-4 py-4 align-top"><SettingsStatus row={row} settings={settings} /></td>
             <td className="px-4 py-4 align-top">
@@ -173,14 +182,16 @@ function SettingsDetails({ row, settings }) {
                 <div className="w-[300px] grid grid-cols-2 gap-2 rounded-xl border border-slate-100 bg-slate-50 p-2">
                     <Metric label="الميزانية اليومية الخام" testId="snapchat-settings-daily-budget-raw">{budget.raw}</Metric>
                     <Metric label="الميزانية اليومية المحولة">{budget.converted}</Metric>
-                    {type === "campaign" && (
+                </div>
+            </td>
+            <td className="px-4 py-4 align-top">
+                    {type === "campaign" ? (
                         <>
                             <Metric label="مجموع ميزانيات Ad Squads الخام">{childBudget.raw}</Metric>
                             <Metric label="مجموع ميزانيات Ad Squads">{childBudget.converted}</Metric>
                             <Metric label="Ad Squads النشطة" testId="snapchat-settings-active-ad-squads">{activeCountAvailable ? number(settings?.active_ad_squads) : SNAPCHAT_SETTINGS_UNAVAILABLE}</Metric>
                         </>
-                    )}
-                </div>
+                    ) : "—"}
             </td>
             <td className="px-4 py-4 align-top">
                 <div className="w-[300px] grid grid-cols-2 gap-2 rounded-xl border border-slate-100 bg-slate-50 p-2">
@@ -222,35 +233,55 @@ export default function SnapchatEntitySettingsTable({
     report,
     settingsByEntityId = {},
     loading = false,
+    dataLoading = false,
+    onVisibleRowsChange,
+    onManageEntity,
+    parentCampaign,
 }) {
-    const rows = (report?.rows || []).filter((row) => ["campaign", "ad_group"].includes(row?.entity?.level));
+    const rows = useMemo(() => (report?.rows || []).filter((row) => ["campaign", "ad_group"].includes(row?.entity?.level)), [report]);
+    const [pagination, setPagination] = useState({ report: null, page: 0 });
+    const pageCount = Math.max(1, Math.ceil(rows.length / 5));
+    const page = pagination.report === report ? Math.min(pagination.page, pageCount - 1) : 0;
+    const visibleRows = useMemo(() => rows.slice(page * 5, page * 5 + 5), [rows, page]);
+    useEffect(() => {
+        if (!dataLoading) onVisibleRowsChange?.(visibleRows);
+    }, [visibleRows, dataLoading, onVisibleRowsChange]);
+    const changePage = (nextPage) => setPagination({ report, page: nextPage });
+    const isAdSquad = rows[0]?.entity?.level === "ad_group";
     if (!rows.length && !loading) return null;
     return (
         <section className="mt-4 overflow-hidden rounded-2xl border border-sky-200 bg-white" data-testid="snapchat-entity-settings-table">
             <header className="border-b border-sky-100 bg-sky-50 px-4 py-4">
                 <h3 className="text-lg font-black text-slate-950">إعدادات Campaign / Ad Squad من Snapchat</h3>
-                <p className="mt-1 text-xs font-bold text-slate-600">قراءة entity/settings المنفصلة عن reporting وfacts؛ Missing provider field لا يُعرض صفرًا.</p>
+                <p className="mt-1 text-xs font-bold text-slate-600">ميزانيات وإعدادات Snapchat؛ القيم غير المتاحة لا تُعرض كصفر.</p>
             </header>
+            <nav aria-label="صفحات إعدادات سناب" className="flex items-center gap-4 p-3">
+                <button type="button" disabled={dataLoading || page === 0} onClick={() => changePage(page - 1)}>السابق</button>
+                <span aria-live="polite">الصفحة {page + 1} من {pageCount} · {rows.length} كيان</span>
+                <button type="button" disabled={dataLoading || page + 1 >= pageCount} onClick={() => changePage(page + 1)}>التالي</button>
+            </nav>
             <div className="overflow-x-auto">
                 <table className="min-w-[1850px] w-full text-right text-xs">
                     <thead className="bg-slate-50 text-slate-600">
                         <tr>
                             <th className="px-4 py-3 font-black">الكيان</th>
+                            <th className="px-4 py-3 font-black">الحملة المرتبطة</th>
                             <th className="px-4 py-3 font-black">حالة الأداء / الإعدادات</th>
                             <th className="px-4 py-3 font-black">مطابقة المعرف</th>
-                            <th className="px-4 py-3 font-black">الميزانية</th>
-                            <th className="px-4 py-3 font-black">المزايدة</th>
+                            <th className="px-4 py-3 font-black">{isAdSquad ? "ميزانية المجموعة" : "ميزانية الحملة"}</th>
+                            <th className="px-4 py-3 font-black">مجموع ميزانيات المجموعات</th>
+                            <th className="px-4 py-3 font-black">Bid / Target Cost</th>
                             <th className="px-4 py-3 font-black">الجودة والمزامنة</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                        {rows.map((row) => (
+                        {visibleRows.map((row) => (
                             <tr key={`${row.entity.level}:${row.entity.id}`} data-testid={`snapchat-settings-${row.entity.id}`}>
-                                <SettingsDetails row={row} settings={settingsByEntityId[row.entity.id]} />
+                                <SettingsDetails row={row} settings={settingsByEntityId[row.entity.id]} parentCampaign={parentCampaign} onManageEntity={onManageEntity} />
                             </tr>
                         ))}
                         {!rows.length && loading && (
-                            <tr><td colSpan={6} className="px-4 py-10 text-center font-black text-slate-400">جارٍ تحميل إعدادات Snapchat…</td></tr>
+                            <tr><td colSpan={8} className="px-4 py-10 text-center font-black text-slate-400">جارٍ تحميل إعدادات Snapchat…</td></tr>
                         )}
                     </tbody>
                 </table>
