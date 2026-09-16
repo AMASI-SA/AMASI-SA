@@ -19,6 +19,7 @@ from .abandoned_carts import (
     persist_abandoned_cart_event,
 )
 from .webhook_order_sync import (
+    _resolve_user_id,
     sync_order_from_verified_webhook,
     sync_shipment_payload_from_verified_webhook,
 )
@@ -148,6 +149,10 @@ async def capture_unknown_event(
         "attempted": False,
         "reason": "not_abandoned_cart_event",
     }
+    orders_v3_shadow: dict[str, Any] = {
+        "accepted": False,
+        "reason": "shadow_disabled_or_not_order_event",
+    }
 
     if is_abandoned_cart_event:
         # Abandoned-cart webhooks have a deliberately isolated execution
@@ -183,6 +188,38 @@ async def capture_unknown_event(
                 "error": str(exc)[:500],
                 "no_salla_api_calls": True,
                 "no_qoyod_calls": True,
+            }
+
+    # The V3 observer runs only after webhook verification and writes only to
+    # its isolated shadow event/queue collections. It cannot change the result
+    # of the established operational handler above.
+    if not is_abandoned_cart_event and event_name in {
+        "order.created", "order.updated", "order.status.updated",
+    }:
+        try:
+            from salla_orders_v3.ingestion import capture_verified_order_event
+            from salla_orders_v3.worker import shadow_enabled
+
+            if shadow_enabled():
+                shadow_user_id = await _resolve_user_id(db, merchant_id)
+                if shadow_user_id:
+                    orders_v3_shadow = await capture_verified_order_event(
+                        db,
+                        user_id=shadow_user_id,
+                        store_id=merchant_id or "",
+                        event_body=event_body,
+                    )
+                else:
+                    orders_v3_shadow = {
+                        "accepted": False,
+                        "reason": "connected_owner_not_found",
+                    }
+        except Exception as exc:
+            log.exception("salla.orders_v3.shadow_capture_failed event=%s", event_name)
+            orders_v3_shadow = {
+                "accepted": False,
+                "reason": "shadow_capture_failed",
+                "error_type": type(exc).__name__,
             }
 
     # Provider delivery is never performed inside the webhook.  This call only
@@ -270,6 +307,7 @@ async def capture_unknown_event(
             "shipment_sync": shipment_sync,
             "snapchat_capi": snapchat_capi,
             "abandoned_cart_sync": cart_sync,
+            "orders_v3_shadow": orders_v3_shadow,
             "abandoned_cart_isolated": is_abandoned_cart_event,
             "order_mutation_scope": order_mutation_scope,
         },
@@ -290,6 +328,7 @@ async def capture_unknown_event(
         "shipment_sync": shipment_sync,
         "snapchat_capi": snapchat_capi,
         "abandoned_cart_sync": cart_sync,
+        "orders_v3_shadow": orders_v3_shadow,
         "abandoned_cart_isolated": is_abandoned_cart_event,
         "order_mutation_scope": order_mutation_scope,
         "no_salla_api_calls": True,
