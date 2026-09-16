@@ -206,11 +206,16 @@ describe("UnifiedMarketingEntityTable", () => {
         expect(onVisibleRowsChange).toHaveBeenCalledTimes(1);
         await act(async () => [...container.querySelectorAll("footer button")].find(button => button.textContent === "التالي").click());
         expect(onVisibleRowsChange).toHaveBeenLastCalledWith(rows.slice(5, 10));
+        const activeButton = [...container.querySelectorAll("button")].find(button => button.textContent === "النشط فقط");
+        await act(async () => activeButton.click());
+        expect(onVisibleRowsChange).toHaveBeenLastCalledWith(rows.slice(0, 5));
+        await act(async () => activeButton.click());
+        expect(onVisibleRowsChange).toHaveBeenLastCalledWith(rows.slice(0, 5));
         const next = { ...report, rows: rows.slice(0, 2) };
         await act(async () => root.render(render(next)));
         expect(onVisibleRowsChange).toHaveBeenLastCalledWith(next.rows);
         expect(container.querySelectorAll("tbody tr")).toHaveLength(2);
-        expect(onVisibleRowsChange).toHaveBeenCalledTimes(3);
+        expect(onVisibleRowsChange).toHaveBeenCalledTimes(5);
     });
 
 });

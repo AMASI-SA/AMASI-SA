@@ -129,7 +129,9 @@ export default function UnifiedMarketingEntityTable({
     const [query, setQuery] = useState("");
     const [activeOnly, setActiveOnly] = useState(false);
     const [pagination, setPagination] = useState({ report: null, query: "", activeOnly: false, page: 1 });
-    const page = pagination.report === report && pagination.query === query && pagination.activeOnly === activeOnly ? pagination.page : 1;
+    const samePageContext = pagination.report === report && pagination.query === query && pagination.activeOnly === activeOnly;
+    const page = samePageContext ? pagination.page : 1;
+    if (!samePageContext) setPagination({ report, query, activeOnly, page: 1 });
     const setPage = (update) => setPagination({ report, query, activeOnly, page: update(page) });
     const [profitRow, setProfitRow] = useState(null);
     const [cartRow, setCartRow] = useState(null);
