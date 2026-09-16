@@ -185,6 +185,8 @@ export default function UnifiedMarketingEntityTable({
         sortAbort.current?.abort();
         setSortBusy(false);
         setSortError("");
+        // A settings snapshot is scoped to the filtered report it was read for.
+        setSort(previous => previous.values ? { key: "الصرف", direction: "desc" } : previous);
         if (scrollRef.current) scrollRef.current.scrollTop = 0;
         return () => { sortRequest.current += 1; sortAbort.current?.abort(); };
     }, [report, query, activeOnly]);
