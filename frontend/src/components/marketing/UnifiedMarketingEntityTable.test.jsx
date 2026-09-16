@@ -240,7 +240,13 @@ describe("UnifiedMarketingEntityTable", () => {
         await act(async () => scroll.dispatchEvent(new Event("scroll", { bubbles: true })));
         expect(ids()).toHaveLength(18);
         expect(new Set(ids()).size).toBe(18);
-        expect(onVisibleRowsChange.mock.calls.at(-1)[0]).toHaveLength(9);
+        const fixedHeight = scroll.style.height;
+        Object.defineProperty(scroll, "scrollHeight", { configurable: true, value: 2400 });
+        scroll.scrollTop = 1600;
+        await act(async () => scroll.dispatchEvent(new Event("scroll", { bubbles: true })));
+        expect(ids()).toHaveLength(22);
+        expect(scroll.style.height).toBe(fixedHeight);
+        expect(onVisibleRowsChange.mock.calls.at(-1)[0]).toHaveLength(4);
         await act(async () => container.querySelector('[aria-label="ترتيب حسب الظهور"]').click());
         expect(ids()).toHaveLength(9);
         expect(ids()[0]).toBe("Entity row-0");
