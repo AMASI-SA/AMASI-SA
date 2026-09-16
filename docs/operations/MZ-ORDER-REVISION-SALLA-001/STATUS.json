@@ -1,0 +1,59 @@
+{
+  "task_id": "MZ-ORDER-REVISION-SALLA-001",
+  "updated_at": "2026-09-16",
+  "phase": "P0",
+  "status": "LOCAL_REPAIR_VERIFIED_SANDBOX_BLOCKED",
+  "branch": "fix/order-revision-p0-webhooks-20260916",
+  "production_baseline": "9f8b16998f62cbdb08dc9361bc2e443223d27d17",
+  "recovered_source": "684d9c9a8120d2158a02bb955500a415474b1279",
+  "recovery_merge": "e9be9ebf1abefb223560477f164f746c3bdbb67f",
+  "source_sha256": {
+    "scripts/research/salla_order_item_contract_runner.py": "e384bb7722f8a77c2f2a94b284e102792169614a9db5f642308d6b807c7687f8",
+    "backend/tests/test_salla_order_item_contract_runner_p0.py": "3cdadb0d7ae9d97d54643bb2c3d91abc67b5c0ed16aef0756150658f23840fca",
+    ".github/workflows/salla-order-revision-p0.yml": "197c565fe62ef45ea8a113617bc220d1ac43dbbe3404e8b7a07be7f68ddca640"
+  },
+  "completed": [
+    "Recovered all original local commits without rewriting them",
+    "Fixed stale pre-write webhook snapshot with bounded post-write collection",
+    "Separated observed operation success from final webhook completeness",
+    "Preserved UNKNOWN evidence and no-replay behavior for invalid post-write event source",
+    "Installed required local jsonschema==4.26.0; added isolated CI workflow",
+    "Independent parent review and full 72-test verification"
+  ],
+  "verification": {
+    "baseline_regression": "Immediate post-mutation event missing; failed before fix and passed afterward",
+    "command": "PYTHONDONTWRITEBYTECODE=1 python -B -m unittest discover -s backend/tests -p test_salla_order_item_contract_runner_p0.py -v",
+    "exit_code": 0,
+    "tests": 72,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "schema_validation": "FULL_DRAFT202012_VALIDATION_PASS",
+    "python_311_syntax": "PASS, two Python files",
+    "workflow_yaml": "PASS locally; no remote workflow execution",
+    "diff_check": "PASS"
+  },
+  "sandbox": {
+    "readiness_exit_code": 2,
+    "reason": "SALLA_SANDBOX_NOT_CONFIGURED",
+    "evidence_cells_completed": 0,
+    "required_state_operation_cells": 21,
+    "live_writes_performed": 0,
+    "scope": "Local environment presence and read-only preflight only; no provider or credential DB I/O"
+  },
+  "runtime_integration": "NOT_IMPLEMENTED",
+  "p1": "BLOCKED_BY_SANDBOX_PHASE_GATE",
+  "remote_checkpoint": "BLOCKED_PENDING_EXPLICIT_USER_UPLOAD_APPROVAL",
+  "approval_review": "Automatic review rejected git push: external upload not explicitly authorized by fix-and-supervise request; no workaround attempted",
+  "pr": "NOT_CREATED",
+  "merge": "NOT_PERFORMED",
+  "release_intent": "UNCHANGED",
+  "production_changed": false,
+  "remaining": [
+    "User approval for remote checkpoint and Draft PR",
+    "Verified Salla Demo Store, encrypted integration and seeded disposable orders/products",
+    "Execute and record 21 Sandbox state-operation cells plus option/payment/inventory/retry evidence",
+    "Implement P1 page/backend integration only after P0 exit criteria are met"
+  ],
+  "next_safe_action": "After explicit approval, push only the task branch and open a Draft PR against hotfix/prod-snap-meta-final. Keep P0 Sandbox gate closed until real evidence exists. Never publish this research branch with the inherited release intent."
+}
