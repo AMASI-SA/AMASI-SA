@@ -466,10 +466,38 @@ describe("SnapchatV2Page read-only load", () => {
         expect(createSnapchatManagementProposal).not.toHaveBeenCalled();
         expect(executeSnapchatManagementProposal).not.toHaveBeenCalled();
     });
-    it("reads only five visible exact IDs and fetches an off-page management selection precisely", async () => {
+    it("sorts budgets across all filtered campaigns and reuses previously loaded settings", async () => {
+        const rows = Array.from({ length: 20 }, (_, i) => ({
+            delivery: {}, platform_outcomes: {},
+            entity: { id: `campaign-${i}`, level: "campaign", name: `Campaign ${i}`, status: "ACTIVE" },
+            quality: { sync_status: "complete", coverage_status: "complete" },
+        }));
+        const defaultGet = api.get.getMockImplementation();
+        api.get.mockImplementation((url, config) => url.endsWith("/campaigns")
+            ? Promise.resolve({ data: { unified: { entity_level: "campaign", rows }, salla: { summary: {} } } })
+            : defaultGet(url, config));
+        getSnapchatEntitySettings.mockImplementation(({ unifiedEntityId }) => Promise.resolve([{
+            unified_entity_id: unifiedEntityId, entity_type: "campaign", ad_account_id: "account-1",
+            daily_budget_micro: Number(unifiedEntityId.split("-")[1]) * 1_000_000,
+            account_currency: "USD", quality: { settings_status: "settings_complete" },
+        }]));
+        await act(async () => root.render(<SnapchatV2Page />));
+        expect(getSnapchatEntitySettings).toHaveBeenCalledTimes(9);
+        await act(async () => container.querySelector('[aria-label="ترتيب حسب ميزانية الحملة اليومية"]').click());
+        const table = container.querySelector('[data-testid="unified-marketing-entity-table"]');
+        expect(table.querySelector('tbody tr').textContent).toContain("Campaign 19");
+        expect(table.querySelector('[data-column="daily-budget"]').textContent).toContain("19.00 USD");
+        expect(getSnapchatEntitySettings).toHaveBeenCalledTimes(20);
+        await act(async () => container.querySelector('[aria-label="ترتيب حسب ميزانية الحملة اليومية"]').click());
+        expect(table.querySelector('tbody tr').textContent).toContain("Campaign 0");
+        expect(getSnapchatEntitySettings).toHaveBeenCalledTimes(20);
+        expect(api.post).not.toHaveBeenCalled();
+    });
+
+    it("reads only nine visible exact IDs and fetches an off-page management selection precisely", async () => {
         const rows = Array.from({ length: 12 }, (_, i) => ({
             delivery: {}, platform_outcomes: {},
-            entity: { id: `campaign-${i}`, level: "campaign", provider_level: "campaign", name: `Campaign ${i}` },
+            entity: { id: `campaign-${i}`, level: "campaign", provider_level: "campaign", name: `Campaign ${i}`, status: "ACTIVE" },
             quality: { sync_status: "complete", coverage_status: "complete" },
         }));
         const defaultGet = api.get.getMockImplementation();
@@ -485,13 +513,18 @@ describe("SnapchatV2Page read-only load", () => {
         }]));
         await act(async () => { root.render(<SnapchatV2Page />); });
         expect(getSnapchatEntitySettings.mock.calls.map(([params]) => params.unifiedEntityId))
-            .toEqual(rows.slice(0, 5).map(row => row.entity.id));
+            .toEqual(rows.slice(0, 9).map(row => row.entity.id));
         expect(getSnapchatEntitySettings.mock.calls.every(([params]) => params.limit === 1)).toBe(true);
         const table = container.querySelector('[data-testid="unified-marketing-entity-table"]');
-        expect(table.querySelectorAll('tbody tr')).toHaveLength(5);
-        await act(async () => { [...table.querySelectorAll('footer button')].find(button => button.textContent === "التالي").click(); });
-        expect(getSnapchatEntitySettings.mock.calls.slice(5).map(([params]) => params.unifiedEntityId))
-            .toEqual(rows.slice(5, 10).map(row => row.entity.id));
+        expect(table.querySelectorAll('tbody tr')).toHaveLength(9);
+        const scroll = table.querySelector('[aria-label="جدول الحملات والمجموعات"]');
+        Object.defineProperties(scroll, { scrollHeight: { value: 1600 }, clientHeight: { value: 800 } });
+        scroll.scrollTop = 800;
+        await act(async () => { scroll.dispatchEvent(new Event("scroll", { bubbles: true })); });
+        expect(table.querySelectorAll('tbody tr')).toHaveLength(12);
+        expect(table.querySelector('[data-column="daily-budget"]')).not.toBeNull();
+        expect(getSnapchatEntitySettings.mock.calls.slice(9).map(([params]) => params.unifiedEntityId))
+            .toEqual(rows.slice(9, 12).map(row => row.entity.id));
         await act(async () => { container.querySelector('[data-testid="manage-campaign-11"]').click(); });
         expect(getSnapchatEntitySettings).toHaveBeenLastCalledWith(expect.objectContaining({
             entityType: "campaign", unifiedEntityId: "campaign-11", limit: 1,

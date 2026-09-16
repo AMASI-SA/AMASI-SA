@@ -17,7 +17,7 @@ function amount(settings, value) {
 
 // Opt-in columns keep other report consumers unchanged. Only the visible page
 // supplies settings; absent/stale values must never become a numeric zero.
-export function snapchatInlineColumns({ level, settingsByEntityId, loading, parentCampaign }) {
+export function snapchatInlineColumns({ level, settingsByEntityId, loading, parentCampaign, prepareSettingsSort }) {
     if (!["campaign", "ad_group"].includes(level)) return [];
     const settingsFor = (row) => {
         const settings = settingsByEntityId[row.entity.id];
@@ -26,6 +26,7 @@ export function snapchatInlineColumns({ level, settingsByEntityId, loading, pare
     const columns = [{
         key: "daily-budget",
         label: level === "campaign" ? "ميزانية الحملة اليومية" : "ميزانية المجموعة اليومية",
+        prepareSort: prepareSettingsSort ? (rows, signal) => prepareSettingsSort(rows, "daily_budget_micro", signal) : undefined,
         render: (row) => {
             const settings = settingsFor(row);
             return unavailable(settings, loading) || (settings.daily_budget_availability === "unsupported_at_provider_level"
@@ -35,6 +36,7 @@ export function snapchatInlineColumns({ level, settingsByEntityId, loading, pare
     if (level === "ad_group") {
         columns.push({
             key: "bid-target-cost", label: "Target Cost / Bid",
+            prepareSort: prepareSettingsSort ? (rows, signal) => prepareSettingsSort(rows, "bid_micro", signal) : undefined,
             render: (row) => {
                 const settings = settingsFor(row);
                 const missing = unavailable(settings, loading);
@@ -46,6 +48,8 @@ export function snapchatInlineColumns({ level, settingsByEntityId, loading, pare
             },
         }, {
             key: "parent-campaign", label: "الحملة المرتبطة",
+            direction: "asc",
+            value: row => row.entity.campaign_id === parentCampaign?.entity?.id ? parentCampaign.entity.name : row.entity.campaign_id,
             render: (row) => {
                 const id = row.entity.campaign_id;
                 return <span className="block max-w-[220px] truncate" title={id || ""}>{id && parentCampaign?.entity?.id === id ? parentCampaign.entity.name : id || "غير متاح"}</span>;

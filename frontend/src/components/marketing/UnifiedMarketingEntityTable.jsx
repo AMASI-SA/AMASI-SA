@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CaretLeft, MagnifyingGlass, Package, PencilSimple, X } from "@phosphor-icons/react";
 import { buildProfitabilityProductCostHref } from "../../campaignProfitabilityProductNavigation";
 
@@ -64,6 +64,43 @@ function abandonedCarts(row) {
     return row?.abandoned_cart_outcomes || {};
 }
 
+// Explicit provider status wins over a contradictory cached active flag.
+function isActive(row) {
+    const status = String(row.entity.status || "").toUpperCase();
+    return status ? status === "ACTIVE" : row.entity.active === true;
+}
+
+const SORT_COLUMNS = [
+    ["الكيان", r => r.entity.name, "asc"],
+    ["الحالة", r => r.entity.status, "asc"],
+    ["الصرف", r => r.delivery?.spend?.amount],
+    ["الظهور", r => r.delivery?.impressions],
+    ["المشاهدات", r => r.delivery?.views],
+    ["النقرات/السحب", r => r.delivery?.clicks],
+    ["الوصول", r => r.delivery?.reach],
+    ["تكرار المشاهدة", r => r.delivery?.frequency],
+    ["إضافة للسلة", r => r.platform_outcomes?.add_to_cart],
+    ["بدء الدفع", r => r.platform_outcomes?.start_checkout],
+    ["مشتريات Snapchat", r => r.platform_outcomes?.conversions],
+    ["تكلفة الطلب حسب Snapchat", r => snapchatCostPerPurchase(r).amount],
+    ["قيمة Snapchat", r => r.platform_outcomes?.revenue?.amount],
+    ["ROAS Snapchat", r => r.platform_outcomes?.roas],
+    ["طلبات سلة", r => commerce(r).status === "complete" ? commerce(r).orders : null],
+    ["تكلفة الطلب حسب سلة", r => sallaCostPerOrder(r).amount],
+    ["مبيعات سلة", r => commerce(r).status === "complete" ? commerce(r).revenue?.amount : null],
+    ["ROAS سلة", r => commerce(r).status === "complete" ? commerce(r).roas : null],
+    ["المنتجات والربح", r => profitability(r).product_count],
+    ["السلات المتروكة", r => abandonedCarts(r).status === "complete" ? abandonedCarts(r).abandoned_carts : null],
+    ["جودة البيانات", r => r.quality.sync_status, "asc"],
+];
+
+function compareValues(a, b, direction, text) {
+    const missing = v => v == null || v === "" || (!text && !Number.isFinite(Number(v)));
+    if (missing(a) || missing(b)) return missing(a) === missing(b) ? 0 : missing(a) ? 1 : -1;
+    const result = text ? String(a).localeCompare(String(b), "ar", { numeric: true }) : Number(a) - Number(b);
+    return direction === "asc" ? result : -result;
+}
+
 function AbandonedCartsDialog({ row, onClose }) {
     if (!row) return null;
     const value = abandonedCarts(row);
@@ -115,11 +152,15 @@ function ProfitabilityDialog({ row, onClose }) {
 export default function UnifiedMarketingEntityTable({
     report,
     loading = false,
+    loadingMore = false,
     onOpenChildren,
     onManageEntity,
     extraColumns = EMPTY_COLUMNS,
     onVisibleRowsChange,
     pageSize = 25,
+    infiniteScroll = false,
+    defaultActiveOnly = false,
+    sortable = false,
 }) {
     const allRows = report?.rows || EMPTY_ROWS;
     const level = report?.entity_level || "campaign";
@@ -127,18 +168,54 @@ export default function UnifiedMarketingEntityTable({
     const canOpenChildren = ["campaign", "ad_group"].includes(level);
     const childLabel = level === "campaign" ? "Ad Squads" : "Ads";
     const [query, setQuery] = useState("");
-    const [activeOnly, setActiveOnly] = useState(false);
-    const [pagination, setPagination] = useState({ report: null, query: "", activeOnly: false, page: 1 });
-    const samePageContext = pagination.report === report && pagination.query === query && pagination.activeOnly === activeOnly;
+    const [activeOnly, setActiveOnly] = useState(defaultActiveOnly);
+    const [sort, setSort] = useState({ key: "الصرف", direction: "desc" });
+    const [sortBusy, setSortBusy] = useState(false);
+    const [sortError, setSortError] = useState("");
+    const sortRequest = useRef(0);
+    const sortAbort = useRef(null);
+    const scrollRef = useRef(null);
+    const [viewportHeight, setViewportHeight] = useState(pageSize * 96 + 80);
+    useEffect(() => {
+        if (!infiniteScroll || !scrollRef.current) return;
+        const viewport = scrollRef.current;
+        const head = viewport.querySelector("thead");
+        const firstRow = viewport.querySelector("tbody tr");
+        const measure = () => {
+            const headerHeight = head?.getBoundingClientRect().height || 80;
+            const rowHeight = firstRow?.getBoundingClientRect().height || 96;
+            const scrollbarHeight = Math.max(0, viewport.offsetHeight - viewport.clientHeight);
+            setViewportHeight(headerHeight + pageSize * rowHeight + scrollbarHeight);
+        };
+        measure();
+        if (typeof ResizeObserver === "undefined") return;
+        const observer = new ResizeObserver(measure);
+        if (head) observer.observe(head);
+        if (firstRow) observer.observe(firstRow);
+        return () => observer.disconnect();
+    }, [infiniteScroll, pageSize, report, loading]);
+    const [pagination, setPagination] = useState({});
+    const samePageContext = pagination.report === report && pagination.query === query && pagination.activeOnly === activeOnly && pagination.sort === sort;
     const page = samePageContext ? pagination.page : 1;
-    if (!samePageContext) setPagination({ report, query, activeOnly, page: 1 });
-    const setPage = (update) => setPagination({ report, query, activeOnly, page: update(page) });
+    if (!samePageContext) setPagination({ report, query, activeOnly, sort, page: 1 });
+    const setPage = (update) => setPagination(previous => ({ report, query, activeOnly, sort, page: update(previous.page || 1) }));
+    useEffect(() => {
+        sortRequest.current += 1;
+        sortAbort.current?.abort();
+        setSortBusy(false);
+        setSortError("");
+        // A settings snapshot is scoped to the filtered report it was read for.
+        setSort(previous => previous.values ? { key: "الصرف", direction: "desc" } : previous);
+        if (scrollRef.current) scrollRef.current.scrollTop = 0;
+        return () => { sortRequest.current += 1; sortAbort.current?.abort(); };
+    }, [report, query, activeOnly]);
+    useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = 0; }, [sort]);
     const [profitRow, setProfitRow] = useState(null);
     const [cartRow, setCartRow] = useState(null);
     const filteredRows = useMemo(() => {
         const needle = query.trim().toLocaleLowerCase();
         return allRows.filter((row) => {
-            if (activeOnly && row.entity.active !== true) return false;
+            if (activeOnly && !isActive(row)) return false;
             if (!needle) return true;
             return [
                 row.entity.name,
@@ -149,12 +226,49 @@ export default function UnifiedMarketingEntityTable({
             ].some((value) => String(value || "").toLocaleLowerCase().includes(needle));
         });
     }, [activeOnly, allRows, query]);
-    const pages = Math.ceil(filteredRows.length / pageSize);
-    const rows = useMemo(() => filteredRows.slice((page - 1) * pageSize, page * pageSize), [filteredRows, page, pageSize]);
-
+    const columns = [...SORT_COLUMNS.map(([label, value, direction]) => ({ key: label, label, value, direction })), ...extraColumns];
+    const sortedRows = useMemo(() => {
+        if (!sortable) return filteredRows;
+        const getter = sort.values && sort.report === report ? r => sort.values[r.entity.id] : sort.value || SORT_COLUMNS.find(c => c[0] === sort.key)?.[1];
+        if (!getter) return filteredRows;
+        return [...filteredRows].sort((a, b) => compareValues(getter(a), getter(b), sort.direction, sort.text === true || ["الكيان", "الحالة", "جودة البيانات"].includes(sort.key)));
+    }, [filteredRows, sortable, sort, report]);
+    const pages = Math.ceil(sortedRows.length / pageSize);
+    const rows = useMemo(() => sortedRows.slice(infiniteScroll ? 0 : (page - 1) * pageSize, page * pageSize), [sortedRows, page, pageSize, infiniteScroll]);
+    const batch = useMemo(() => sortedRows.slice((page - 1) * pageSize, page * pageSize), [sortedRows, page, pageSize]);
     useEffect(() => {
-        if (!loading) onVisibleRowsChange?.(rows);
-    }, [loading, onVisibleRowsChange, rows]);
+        if (!loading && !sortBusy) onVisibleRowsChange?.(batch);
+    }, [loading, sortBusy, onVisibleRowsChange, batch]);
+    async function selectSort(column) {
+        const direction = sort.key === column.key ? (sort.direction === "desc" ? "asc" : "desc") : column.direction || "desc";
+        const request = ++sortRequest.current;
+        sortAbort.current?.abort();
+        const controller = new AbortController();
+        sortAbort.current = controller;
+        setSortError("");
+        setSortBusy(Boolean(column.prepareSort));
+        try {
+            const values = column.prepareSort ? await column.prepareSort(filteredRows, controller.signal) : undefined;
+            if (request !== sortRequest.current) return;
+            setSort({ key: column.key, direction, values, report, value: column.value, text: column.direction === "asc" });
+        } catch (_error) {
+            if (request === sortRequest.current) setSortError("تعذّر تجهيز ترتيب هذا العمود؛ حاول مجددًا.");
+        } finally {
+            if (request === sortRequest.current) setSortBusy(false);
+        }
+    }
+    function heading(label, key = label) {
+        const column = columns.find(c => c.key === key);
+        return <th key={key} className="px-4 py-3 font-black" aria-sort={sortable && column ? sort.key === key ? sort.direction === "desc" ? "descending" : "ascending" : "none" : undefined}>
+            {sortable && column ? <button type="button" onClick={() => selectSort(column)} className="inline-flex items-center gap-1 text-right" aria-label={`ترتيب حسب ${label}`}>{label}<span aria-hidden="true">{sort.key === key ? sort.direction === "desc" ? "↓" : "↑" : "↕"}</span></button> : label}
+        </th>;
+    }
+    function onScroll(event) {
+        const el = event.currentTarget;
+        if (infiniteScroll && !loading && !loadingMore && !sortBusy && el.scrollHeight > el.clientHeight && el.scrollTop + el.clientHeight >= el.scrollHeight - 24 && page < pages) {
+            setPage(() => Math.min(pages, page + 1));
+        }
+    }
 
     return (
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white" data-testid="unified-marketing-entity-table">
@@ -177,45 +291,47 @@ export default function UnifiedMarketingEntityTable({
                     </span>
                 </div>
             </header>
-            <div className="overflow-x-auto">
-                <table className="min-w-[2450px] w-full text-right text-xs">
-                    <thead className="bg-slate-50 text-slate-600">
+            {sortBusy && <p role="status" className="px-4 py-2 text-sm">جارٍ تجهيز ترتيب الحملات…</p>}
+            {sortError && <p role="alert" className="px-4 py-2 text-sm text-red-700">{sortError}</p>}
+            <div ref={scrollRef} onScroll={onScroll} tabIndex={infiniteScroll ? 0 : undefined} aria-label="جدول الحملات والمجموعات" style={infiniteScroll ? { height: viewportHeight } : undefined} className={infiniteScroll ? "overflow-auto" : "overflow-x-auto"}>
+                <table className={`min-w-[2450px] w-full text-right text-xs ${infiniteScroll ? "whitespace-nowrap" : ""}`}>
+                    <thead className="sticky top-0 z-10 bg-slate-50 text-slate-600">
                         <tr>
-                            <th className="px-4 py-3 font-black">الكيان</th>
-                            <th className="px-4 py-3 font-black">الحالة</th>
-                            {extraColumns.map((column) => <th key={column.key} className="px-4 py-3 font-black">{column.label}</th>)}
-                            <th className="px-4 py-3 font-black">الصرف</th>
-                            <th className="px-4 py-3 font-black">الظهور</th>
-                            <th className="px-4 py-3 font-black">المشاهدات</th>
-                            <th className="px-4 py-3 font-black">النقرات/السحب</th>
-                            <th className="px-4 py-3 font-black">الوصول</th>
-                            <th className="px-4 py-3 font-black">تكرار المشاهدة</th>
-                            <th className="px-4 py-3 font-black">إضافة للسلة</th>
-                            <th className="px-4 py-3 font-black">بدء الدفع</th>
-                            <th className="px-4 py-3 font-black">مشتريات Snapchat</th>
-                            <th className="px-4 py-3 font-black">تكلفة الطلب حسب Snapchat</th>
-                            <th className="px-4 py-3 font-black">قيمة Snapchat</th>
-                            <th className="px-4 py-3 font-black">ROAS Snapchat</th>
-                            <th className="px-4 py-3 font-black">طلبات سلة</th>
-                            <th className="px-4 py-3 font-black">تكلفة الطلب حسب سلة</th>
-                            <th className="px-4 py-3 font-black">مبيعات سلة</th>
-                            <th className="px-4 py-3 font-black">ROAS سلة</th>
-                            {level === "campaign" && <th className="px-4 py-3 font-black">المنتجات والربح</th>}
-                            {level === "campaign" && <th className="px-4 py-3 font-black">السلات المتروكة</th>}
-                            <th className="px-4 py-3 font-black">جودة البيانات</th>
-                            <th className="px-4 py-3 font-black">الإدارة</th>
-                            {canOpenChildren && <th className="px-4 py-3 font-black">التفاصيل</th>}
+                            {heading("الكيان")}
+                            {heading("الحالة")}
+                            {extraColumns.map((column) => heading(column.label, column.key))}
+                            {heading("الصرف")}
+                            {heading("الظهور")}
+                            {heading("المشاهدات")}
+                            {heading("النقرات/السحب")}
+                            {heading("الوصول")}
+                            {heading("تكرار المشاهدة")}
+                            {heading("إضافة للسلة")}
+                            {heading("بدء الدفع")}
+                            {heading("مشتريات Snapchat")}
+                            {heading("تكلفة الطلب حسب Snapchat")}
+                            {heading("قيمة Snapchat")}
+                            {heading("ROAS Snapchat")}
+                            {heading("طلبات سلة")}
+                            {heading("تكلفة الطلب حسب سلة")}
+                            {heading("مبيعات سلة")}
+                            {heading("ROAS سلة")}
+                            {level === "campaign" && heading("المنتجات والربح")}
+                            {level === "campaign" && heading("السلات المتروكة")}
+                            {heading("جودة البيانات")}
+                            {heading("الإدارة")}
+                            {canOpenChildren && heading("التفاصيل")}
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                         {rows.map((row) => (
-                            <tr key={`${row.entity.level}:${row.entity.id}`} className="hover:bg-slate-50">
+                            <tr key={`${row.entity.level}:${row.entity.id}`} style={infiniteScroll ? { height: 96 } : undefined} className="hover:bg-slate-50">
                                 <td className="px-4 py-4">
                                     <div className="max-w-[260px] truncate text-sm font-black text-slate-950" title={row.entity.name}>{row.entity.name}</div>
                                     <div className="mt-1 font-mono text-[10px] text-slate-400">{row.entity.id}</div>
                                 </td>
                                 <td className="px-4 py-4">
-                                    <span className={`rounded-full px-2 py-1 font-black ${row.entity.active === true ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
+                                    <span className={`rounded-full px-2 py-1 font-black ${String(row.entity.status).toUpperCase() === "PAUSED" ? "bg-red-50 text-red-700" : isActive(row) ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
                                         {row.entity.status || (row.entity.active ? "ACTIVE" : "—")}
                                     </span>
                                 </td>
@@ -305,7 +421,8 @@ export default function UnifiedMarketingEntityTable({
                     )}
                 </table>
             </div>
-            {filteredRows.length > pageSize && (
+            {infiniteScroll && <div role="status" className="border-t border-slate-200 px-4 py-3 text-xs text-slate-600">عرض {rows.length} من {filteredRows.length}{rows.length < filteredRows.length ? " · مرّر للأسفل لعرض المزيد" : ""}</div>}
+            {!infiniteScroll && filteredRows.length > pageSize && (
                 <footer className="flex items-center justify-between gap-3 border-t border-slate-200 px-4 py-3 text-xs font-black text-slate-600">
                     <span>الصفحة {page} من {pages}</span>
                     <div className="flex gap-2">
