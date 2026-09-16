@@ -59,6 +59,7 @@ from auth import (
     raise_auth_dependency_unavailable,
     get_current_user_from_db,
     seed_admin,
+    install_process_local_auth_security,
     ensure_user_settings,
     DEFAULT_PAYMENT_METHODS,
     DEFAULT_SHIPPING_COMPANIES,
@@ -5270,6 +5271,11 @@ async def _global_startup() -> None:
 
 async def _local_startup() -> None:
     """Finish process-local readiness after global release work completes."""
+    # Middleware stacks live in one Python process. The release-global leader
+    # installs these guards through seed_admin, but every follower must install
+    # them too before it can advertise readiness. Installers are app-idempotent;
+    # their identical Mongo create_index calls are safe to repeat per replica.
+    await install_process_local_auth_security(db)
     try:
         from integrations.qoyod.worker import start_worker as _qoyod_worker_start
         _qoyod_worker_start(db, interval_sec=5.0, batch_limit=25)

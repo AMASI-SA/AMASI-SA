@@ -20,6 +20,7 @@ function AuthStateProbe() {
         authError,
         retryAuth,
         refreshUser,
+        login,
     } = useAuth();
     return (
         <div>
@@ -36,6 +37,19 @@ function AuthStateProbe() {
                 onClick={() => refreshUser().catch(() => {})}
             >
                 refresh user
+            </button>
+            <button
+                type="button"
+                data-testid="login"
+                onClick={() => login("owner@example.test", "not-a-real-password")
+                    .then(() => {
+                        document.body.dataset.loginResult = "resolved";
+                    })
+                    .catch(() => {
+                        document.body.dataset.loginResult = "rejected";
+                    })}
+            >
+                login
             </button>
         </div>
     );
@@ -67,6 +81,7 @@ describe("AuthProvider bootstrap", () => {
         container.remove();
         jest.useRealTimers();
         delete globalThis.IS_REACT_ACT_ENVIRONMENT;
+        delete document.body.dataset.loginResult;
     });
 
     async function renderProvider() {
@@ -195,5 +210,71 @@ describe("AuthProvider bootstrap", () => {
             .toBe("owner-1");
         expect(container.querySelector('[data-testid="error"]').textContent)
             .toBe("present");
+    });
+
+    test("rejects login when the new cookie session cannot be hydrated", async () => {
+        api.get
+            .mockRejectedValueOnce(Object.assign(new Error("anonymous"), {
+                response: { status: 401, headers: {} },
+            }))
+            .mockRejectedValueOnce(Object.assign(new Error("session missing"), {
+                response: { status: 401, headers: {} },
+            }));
+        api.post.mockResolvedValueOnce({ data: { ok: true } });
+        await renderProvider();
+
+        await act(async () => {
+            container.querySelector('[data-testid="login"]').click();
+            await flushPromises();
+        });
+
+        expect(api.post).toHaveBeenCalledWith("/auth/login", {
+            email: "owner@example.test",
+            password: "not-a-real-password",
+        });
+        expect(document.body.dataset.loginResult).toBe("rejected");
+        expect(container.querySelector('[data-testid="status"]').textContent)
+            .toBe("anonymous");
+    });
+
+    test("resolves login after the cookie session hydrates a user", async () => {
+        api.get
+            .mockRejectedValueOnce(Object.assign(new Error("anonymous"), {
+                response: { status: 401, headers: {} },
+            }))
+            .mockResolvedValueOnce({ data: { id: "owner-1", is_owner: true } });
+        api.post.mockResolvedValueOnce({ data: { ok: true } });
+        await renderProvider();
+
+        await act(async () => {
+            container.querySelector('[data-testid="login"]').click();
+            await flushPromises();
+        });
+
+        expect(document.body.dataset.loginResult).toBe("resolved");
+        expect(container.querySelector('[data-testid="status"]').textContent)
+            .toBe("authenticated");
+        expect(container.querySelector('[data-testid="user"]').textContent)
+            .toBe("owner-1");
+    });
+
+    test("returns an MFA challenge without attempting session hydration", async () => {
+        api.get.mockRejectedValueOnce(Object.assign(new Error("anonymous"), {
+            response: { status: 401, headers: {} },
+        }));
+        api.post.mockResolvedValueOnce({
+            data: { mfa_required: true, challenge_token: "challenge" },
+        });
+        await renderProvider();
+
+        await act(async () => {
+            container.querySelector('[data-testid="login"]').click();
+            await flushPromises();
+        });
+
+        expect(document.body.dataset.loginResult).toBe("resolved");
+        expect(api.get).toHaveBeenCalledTimes(1);
+        expect(container.querySelector('[data-testid="status"]').textContent)
+            .toBe("anonymous");
     });
 });
