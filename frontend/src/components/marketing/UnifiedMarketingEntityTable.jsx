@@ -181,17 +181,20 @@ export default function UnifiedMarketingEntityTable({
         const viewport = scrollRef.current;
         const head = viewport.querySelector("thead");
         const firstRow = viewport.querySelector("tbody tr");
+        const foot = viewport.querySelector("tfoot");
         const measure = () => {
             const headerHeight = head?.getBoundingClientRect().height || 80;
             const rowHeight = firstRow?.getBoundingClientRect().height || 96;
             const scrollbarHeight = Math.max(0, viewport.offsetHeight - viewport.clientHeight);
-            setViewportHeight(headerHeight + pageSize * rowHeight + scrollbarHeight);
+            const footerHeight = foot?.getBoundingClientRect().height || 0;
+            setViewportHeight(headerHeight + pageSize * rowHeight + footerHeight + scrollbarHeight);
         };
         measure();
         if (typeof ResizeObserver === "undefined") return;
         const observer = new ResizeObserver(measure);
         if (head) observer.observe(head);
         if (firstRow) observer.observe(firstRow);
+        if (foot) observer.observe(foot);
         return () => observer.disconnect();
     }, [infiniteScroll, pageSize, report, loading]);
     const [pagination, setPagination] = useState({});
@@ -270,6 +273,16 @@ export default function UnifiedMarketingEntityTable({
         }
     }
 
+    function onInitialScrollIntent(event) {
+        const el = event.currentTarget;
+        const downward = event.type === "wheel" ? event.deltaY > 0 : ["ArrowDown", "PageDown", "End"].includes(event.key);
+        if (event.target !== el && event.type !== "wheel") return;
+        if (downward && infiniteScroll && !loading && !loadingMore && !sortBusy && el.scrollHeight <= el.clientHeight && page < pages) {
+            if (event.type === "keydown") event.preventDefault();
+            setPage(() => Math.min(pages, page + 1));
+        }
+    }
+
     return (
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white" data-testid="unified-marketing-entity-table">
             <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-4">
@@ -293,7 +306,7 @@ export default function UnifiedMarketingEntityTable({
             </header>
             {sortBusy && <p role="status" className="px-4 py-2 text-sm">جارٍ تجهيز ترتيب الحملات…</p>}
             {sortError && <p role="alert" className="px-4 py-2 text-sm text-red-700">{sortError}</p>}
-            <div ref={scrollRef} onScroll={onScroll} tabIndex={infiniteScroll ? 0 : undefined} aria-label="جدول الحملات والمجموعات" style={infiniteScroll ? { height: viewportHeight } : undefined} className={infiniteScroll ? "overflow-auto" : "overflow-x-auto"}>
+            <div ref={scrollRef} onScroll={onScroll} onWheel={onInitialScrollIntent} onKeyDown={onInitialScrollIntent} tabIndex={infiniteScroll ? 0 : undefined} aria-label="جدول الحملات والمجموعات" style={infiniteScroll ? { height: viewportHeight } : undefined} className={infiniteScroll ? "overflow-auto" : "overflow-x-auto"}>
                 <table className={`min-w-[2450px] w-full text-right text-xs ${infiniteScroll ? "whitespace-nowrap" : ""}`}>
                     <thead className="sticky top-0 z-10 bg-slate-50 text-slate-600">
                         <tr>
@@ -390,7 +403,7 @@ export default function UnifiedMarketingEntityTable({
                         )}
                     </tbody>
                     {totals && (
-                        <tfoot className="border-t-2 border-slate-300 bg-slate-50 font-black">
+                        <tfoot className={`border-t-2 border-slate-300 bg-slate-50 font-black ${infiniteScroll ? "sticky bottom-0 z-10" : ""}`}>
                             <tr>
                                 <td className="px-4 py-4">إجمالي الفترة</td>
                                 <td className="px-4 py-4" />
