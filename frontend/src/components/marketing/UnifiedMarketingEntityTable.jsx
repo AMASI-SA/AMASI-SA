@@ -273,15 +273,6 @@ export default function UnifiedMarketingEntityTable({
         }
     }
 
-    function onInitialScrollIntent(event) {
-        const el = event.currentTarget;
-        const downward = event.type === "wheel" ? event.deltaY > 0 : ["ArrowDown", "PageDown", "End"].includes(event.key);
-        if (event.target !== el && event.type !== "wheel") return;
-        if (downward && infiniteScroll && !loading && !loadingMore && !sortBusy && el.scrollHeight <= el.clientHeight && page < pages) {
-            if (event.type === "keydown") event.preventDefault();
-            setPage(() => Math.min(pages, page + 1));
-        }
-    }
 
     return (
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white" data-testid="unified-marketing-entity-table">
@@ -306,7 +297,7 @@ export default function UnifiedMarketingEntityTable({
             </header>
             {sortBusy && <p role="status" className="px-4 py-2 text-sm">جارٍ تجهيز ترتيب الحملات…</p>}
             {sortError && <p role="alert" className="px-4 py-2 text-sm text-red-700">{sortError}</p>}
-            <div ref={scrollRef} onScroll={onScroll} onWheel={onInitialScrollIntent} onKeyDown={onInitialScrollIntent} tabIndex={infiniteScroll ? 0 : undefined} aria-label="جدول الحملات والمجموعات" style={infiniteScroll ? { height: viewportHeight } : undefined} className={infiniteScroll ? "overflow-auto" : "overflow-x-auto"}>
+            <div ref={scrollRef} onScroll={onScroll} tabIndex={infiniteScroll ? 0 : undefined} aria-label="جدول الحملات والمجموعات" style={infiniteScroll ? { height: viewportHeight } : undefined} className={infiniteScroll ? "overflow-auto" : "overflow-x-auto"}>
                 <table className={`min-w-[2450px] w-full text-right text-xs ${infiniteScroll ? "whitespace-nowrap" : ""}`}>
                     <thead className="sticky top-0 z-10 bg-slate-50 text-slate-600">
                         <tr>
@@ -433,6 +424,8 @@ export default function UnifiedMarketingEntityTable({
                         </tfoot>
                     )}
                 </table>
+                {/* Keep native scrolling available when the first batch exactly fills the viewport. */}
+                {infiniteScroll && page < pages && <div aria-hidden="true" className="h-px" data-testid="table-load-more-sentinel" />}
             </div>
             {infiniteScroll && <div role="status" className="border-t border-slate-200 px-4 py-3 text-xs text-slate-600">عرض {rows.length} من {filteredRows.length}{rows.length < filteredRows.length ? " · مرّر للأسفل لعرض المزيد" : ""}</div>}
             {!infiniteScroll && filteredRows.length > pageSize && (
