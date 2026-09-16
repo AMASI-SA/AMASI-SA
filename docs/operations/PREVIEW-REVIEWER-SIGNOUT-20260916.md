@@ -1,7 +1,7 @@
 # Preview reviewer sign-out — 2026-09-16
 
 Task: PREVIEW-REVIEWER-SIGNOUT-20260916; supports MZ2-FIN-CUTOVER-001.
-Status: PREVIEW_LOGOUT_VERIFIED_AWAITING_OWNER_SIGNIN.
+Status: PREVIEW_LOGOUT_VERIFIED_OWNER_SIGNIN_BLOCKED_BY_BROWSER_CONNECTION.
 Scope: isolated Preview frontend only. Production changed: NO.
 
 ## Defect and change
@@ -88,3 +88,19 @@ Replace only that section with frontend-section-before.txt in the same new root,
 then supervisorctl reread and supervisorctl update frontend. This returns to the
 previous working Preview frontend, whose reviewer logout defect is still present.
 Never replace the full Supervisor config or use the initial outage rollback.
+
+## Final sign-in handoff state
+
+The secure normal login form was displayed and submitted. Fresh visible evidence
+again showed the reviewer-only navigation and the new logout button. The user
+explicitly confirmed they had entered the employee account by mistake.
+A subsequent normal logout click was requested, but the browser call stopped
+returning. No result was received; the outer wait was terminated after more than
+two minutes. A documentation-only connection-recovery call also did not return.
+Do not assume this second logout succeeded or failed. Current session state is UNKNOWN.
+
+Next safe action: when browser control is responsive, inspect the existing Preview
+tab. If still authenticated as reviewer, use the now-verified ordinary logout
+button. If already on /login, directly display the normal secure credential form
+and ask for the OWNER account. Do not request credentials in chat or repeat
+account creation. Then resume independent Viewer setup and P01 permissions testing.
