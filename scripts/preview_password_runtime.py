@@ -23,6 +23,8 @@ ROOT = Path('/opt/mezan-preview-runtime-20260916')
 BACKEND = Path('/app/backend')
 HOST = 'agent-env-f5e6b93a-68a2-4155-84ad-e55b4fa936d3'
 ORIGIN = 'https://salla-analytics.preview.emergentagent.com'
+UPSTREAM_ORIGIN = 'https://salla-analytics.cluster-12.preview.emergentcf.cloud'
+PREVIEW_ORIGINS = frozenset({ORIGIN, UPSTREAM_ORIGIN})
 KEY = ROOT / 'preview-session-signing.secret'
 SCRIPT = ROOT / 'preview_password_runtime.py'
 POLICY_PATH = '/api/preview-auth-policy'
@@ -107,7 +109,7 @@ class PreviewHostBoundary:
         allowed = {urlsplit(ORIGIN).hostname, 'salla-analytics.cluster-12.preview.emergentcf.cloud',
                    '127.0.0.1', 'localhost', '::1'}
         origin = headers.get(b'origin', b'').decode('ascii', errors='ignore')
-        if hostname not in allowed or (origin and origin != ORIGIN):
+        if hostname not in allowed or (origin and origin not in PREVIEW_ORIGINS):
             if not self.rejection_logged:
                 # Origin/host classification only: no cookies, request bodies,
                 # credentials, query strings or client addresses are logged.
@@ -144,10 +146,20 @@ def create_app():
     # The base CSRF guard trusts FRONTEND_URL (not just CORS_ORIGINS).
     # Bind both to Preview before importing server and constructing middleware.
     os.environ['FRONTEND_URL'] = ORIGIN
-    os.environ['CORS_ORIGINS'] = ORIGIN
+    os.environ['CORS_ORIGINS'] = ','.join(sorted(PREVIEW_ORIGINS))
     sys.path.insert(0, str(BACKEND))
     apply_password_only_policy()
     server = importlib.import_module('server')
+    # The verified Preview gateway rewrites Origin to its cluster alias.
+    # Trust only these two Preview origins, using the existing CSRF middleware.
+    from starlette.middleware import Middleware
+    from browser_security import BrowserSecurityMiddleware
+    positions = [i for i, item in enumerate(server.app.user_middleware)
+                 if item.cls is BrowserSecurityMiddleware]
+    require(len(positions) == 1, 'Expected exactly one base browser security guard')
+    server.app.user_middleware[positions[0]] = Middleware(
+        BrowserSecurityMiddleware, trusted_origins=PREVIEW_ORIGINS)
+    server.app.middleware_stack = None
     print('PREVIEW ONLY: email/password authentication; independent sessions; password, roles and attempt guards preserved.', flush=True)
     return PreviewHostBoundary(server.app)
 
