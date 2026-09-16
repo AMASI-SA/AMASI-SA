@@ -197,7 +197,13 @@ jobs:
               echo "::error::Production push must be reviewed schema-2 B, not candidate A"
               exit 1
             elif test "$EVENT_NAME" = pull_request; then
-              source_base_git_sha="$PR_BASE_SHA"
+              source_base_git_sha="$(
+                PYTHONPATH=backend:. python - <<'PY'
+          import os
+          from scripts.emergent_deployment_adapter import resolve_candidate_source_base
+          print(resolve_candidate_source_base(os.environ["PR_BASE_SHA"], os.environ["CHECKED_OUT_SHA"]))
+          PY
+              )"
             elif test "$EVENT_NAME" = workflow_dispatch; then
               source_base_git_sha="$DISPATCH_CANDIDATE_BASE_SHA"
               if test -z "$source_base_git_sha"; then

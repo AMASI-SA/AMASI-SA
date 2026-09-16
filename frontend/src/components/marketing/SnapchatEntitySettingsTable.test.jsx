@@ -38,6 +38,38 @@ describe("SnapchatEntitySettingsTable", () => {
         container.remove();
     });
 
+    test("bounds each settings page to five rows and resets when the report changes", async () => {
+        const report = { rows: Array.from({ length: 12 }, (_, i) => row("campaign", `c-${i}`)) };
+        const visible = jest.fn();
+        await act(async () => root.render(<SnapchatEntitySettingsTable report={report} onVisibleRowsChange={visible} />));
+        const ids = () => [...container.querySelectorAll("tbody tr")].map((tr) => tr.getAttribute("data-testid"));
+        expect(ids()).toEqual([0, 1, 2, 3, 4].map((i) => `snapchat-settings-c-${i}`));
+        expect(visible.mock.calls.at(-1)[0].map((r) => r.entity.id)).toEqual(["c-0", "c-1", "c-2", "c-3", "c-4"]);
+        await act(async () => container.querySelector('nav button:last-child').click());
+        expect(ids()).toEqual([5, 6, 7, 8, 9].map((i) => `snapchat-settings-c-${i}`));
+        await act(async () => container.querySelector('nav button:last-child').click());
+        expect(ids()).toEqual(["snapchat-settings-c-10", "snapchat-settings-c-11"]);
+        expect(container.querySelector('nav button:last-child').disabled).toBe(true);
+        await act(async () => root.render(<SnapchatEntitySettingsTable report={{ rows: [row("ad_group", "s-1")] }} onVisibleRowsChange={visible} />));
+        expect(ids()).toEqual(["snapchat-settings-s-1"]);
+        expect(container.querySelector('nav button:first-child').disabled).toBe(true);
+    });
+
+    test("shows the parent campaign and distinct budget columns without treating child totals as campaign budget", async () => {
+        const squad = row("ad_group", "s-1");
+        squad.entity.campaign_id = "c-1";
+        await act(async () => root.render(<SnapchatEntitySettingsTable
+            report={{ rows: [squad] }} parentCampaign={{ entity: { id: "c-1", name: "Parent campaign" } }}
+            settingsByEntityId={{ "s-1": { account_currency: "USD", provider_parent_id: "c-1", daily_budget_micro: 80000000,
+                bid_micro: 12000000, bid_strategy: "TARGET_COST", quality: { settings_status: "settings_complete" } } }}
+        />));
+        expect(container.querySelector('[data-testid="snapchat-settings-parent"]').textContent).toContain("Parent campaign");
+        expect(container.textContent).toContain("ميزانية المجموعة");
+        expect(container.textContent).toContain("80.00 USD");
+        expect(container.textContent).toContain("12.00 USD");
+        expect(container.querySelector('[data-testid="snapchat-settings-bid-label"]').textContent).toContain("Target Cost");
+    });
+
     test("keeps campaign budget separate from child squad budgets and exposes freshness proof", async () => {
         const campaign = row("campaign", "unified-campaign-1");
         await act(async () => {

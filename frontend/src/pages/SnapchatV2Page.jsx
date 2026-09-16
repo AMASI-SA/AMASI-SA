@@ -113,6 +113,7 @@ export default function SnapchatV2Page() {
     const [managementTarget, setManagementTarget] = useState(null);
     const [settingsByEntityId, setSettingsByEntityId] = useState({});
     const [settingsLoading, setSettingsLoading] = useState(false);
+    const [managementSettingsById, setManagementSettingsById] = useState({});
     const [loading, setLoading] = useState(true);
     const [entityLoading, setEntityLoading] = useState(false);
     const [syncing, setSyncing] = useState(false);
@@ -121,6 +122,7 @@ export default function SnapchatV2Page() {
     const loadEpochRef = useRef(0);
     const viewEpochRef = useRef(0);
     const settingsEpochRef = useRef(0);
+    const managementEpochRef = useRef(0);
 
     const account = status?.selected_account || null;
     const accountId = account?.ad_account_id || "";
@@ -132,6 +134,9 @@ export default function SnapchatV2Page() {
         const nextEpoch = viewEpochRef.current + 1;
         viewEpochRef.current = nextEpoch;
         settingsEpochRef.current += 1;
+        managementEpochRef.current += 1;
+        setManagementSettingsById({});
+        setManagementTarget(null);
         setSettingsByEntityId({});
         setSettingsLoading(false);
         return nextEpoch;
@@ -143,24 +148,28 @@ export default function SnapchatV2Page() {
         parentUnifiedId = "",
         expectedAccountId = "",
         viewEpoch,
+        forManagement = false,
     }) => {
         const expectedViewEpoch = Number(viewEpoch);
         if (viewEpochRef.current !== expectedViewEpoch) return;
-        const settingsEpoch = settingsEpochRef.current + 1;
-        settingsEpochRef.current = settingsEpoch;
+        const epochRef = forManagement ? managementEpochRef : settingsEpochRef;
+        const setItems = forManagement ? setManagementSettingsById : setSettingsByEntityId;
+        const setBusy = forManagement ? () => {} : setSettingsLoading;
+        const settingsEpoch = epochRef.current + 1;
+        epochRef.current = settingsEpoch;
         const requestIsCurrent = () => (
             viewEpochRef.current === expectedViewEpoch
-            && settingsEpochRef.current === settingsEpoch
+            && epochRef.current === settingsEpoch
         );
-        const governedRows = rows.filter((row) => ["campaign", "ad_group"].includes(row?.entity?.level));
+        const governedRows = rows.filter((row) => ["campaign", "ad_group"].includes(row?.entity?.level)).slice(0, 5);
         if (!governedRows.length) {
             if (requestIsCurrent()) {
-                setSettingsByEntityId({});
-                setSettingsLoading(false);
+                setItems({});
+                setBusy(false);
             }
             return;
         }
-        setSettingsLoading(true);
+        setBusy(true);
         const rowIds = new Set(governedRows.map(
             (row) => String(row?.entity?.id || "").trim(),
         ).filter(Boolean));
@@ -179,15 +188,26 @@ export default function SnapchatV2Page() {
             },
         });
         if (!requestIsCurrent()) return;
-        setSettingsByEntityId(Object.fromEntries(
+        setItems(Object.fromEntries(
             [...rowIds].map((id) => [id, unavailableForRow(id)]),
         ));
         try {
-            const items = await getSnapchatEntitySettings({
-                entityType,
-                parentUnifiedId,
-                limit: Math.max(100, governedRows.length * 2),
-            });
+            // Exact IDs prevent an arbitrary provider-order prefix from hiding
+            // the selected entity. At most five read-only requests per page.
+            const batches = await Promise.all([...rowIds].map(async (id) => {
+                try {
+                    const items = await getSnapchatEntitySettings({
+                        entityType,
+                        unifiedEntityId: id,
+                        parentUnifiedId,
+                        limit: 1,
+                    });
+                    return items.filter((item) => item?.unified_entity_id === id);
+                } catch (_error) {
+                    return [unavailableForRow(id, "settings_sync_failed", "فشل جلب إعدادات Snapchat.")];
+                }
+            }));
+            const items = batches.flat();
             const next = {};
             items.forEach((item) => {
                 const key = String(item?.unified_entity_id || "").trim();
@@ -218,7 +238,7 @@ export default function SnapchatV2Page() {
                 }
             });
             if (!requestIsCurrent()) return;
-            setSettingsByEntityId(next);
+            setItems(next);
         } catch (_requestError) {
             const failed = Object.fromEntries(governedRows.map((row) => {
                 const id = String(row?.entity?.id || "").trim();
@@ -229,9 +249,9 @@ export default function SnapchatV2Page() {
                 )];
             }).filter(([id]) => id));
             if (!requestIsCurrent()) return;
-            setSettingsByEntityId(failed);
+            setItems(failed);
         } finally {
-            if (requestIsCurrent()) setSettingsLoading(false);
+            if (requestIsCurrent()) setBusy(false);
         }
     }, []);
 
@@ -282,12 +302,6 @@ export default function SnapchatV2Page() {
             const nextCampaignContract = campaignsResult.data?.unified || null;
             setCampaignContract(nextCampaignContract);
             setSallaSummary(campaignsResult.data?.salla?.summary || {});
-            void loadEntitySettings({
-                entityType: "campaign",
-                rows: nextCampaignContract?.rows || [],
-                expectedAccountId: statusData?.selected_account?.ad_account_id || "",
-                viewEpoch,
-            });
             setChildContract(null);
             setSelectedCampaign(null);
             setSelectedAdGroup(null);
@@ -344,13 +358,6 @@ export default function SnapchatV2Page() {
                 const nextChildContract = data?.unified || null;
                 setChildContract(nextChildContract);
                 setEntityLevel("ad_group");
-                void loadEntitySettings({
-                    entityType: "ad_squad",
-                    rows: nextChildContract?.rows || [],
-                    parentUnifiedId: row.entity.id,
-                    expectedAccountId: accountId,
-                    viewEpoch,
-                });
             } else if (row.entity.level === "ad_group") {
                 const campaignId = row.entity.campaign_id || selectedCampaign?.entity?.id;
                 const { data } = await api.get("/integrations-v2/snapchat-v2/ads", {
@@ -377,7 +384,7 @@ export default function SnapchatV2Page() {
     }
 
     function returnToCampaigns() {
-        const viewEpoch = beginViewContext();
+        beginViewContext();
         setLoading(false);
         setEntityLoading(false);
         setEntityLevel("campaign");
@@ -386,16 +393,29 @@ export default function SnapchatV2Page() {
         setSelectedAdGroup(null);
         setManagementTarget(null);
         setClockNow(Date.now());
-        void loadEntitySettings({
-            entityType: "campaign",
-            rows: campaignContract?.rows || [],
-            expectedAccountId: accountId,
-            viewEpoch,
-        });
     }
+
+    const loadVisibleSettings = useCallback((rows) => {
+        void loadEntitySettings({
+            entityType: entityLevel === "ad_group" ? "ad_squad" : "campaign",
+            rows,
+            parentUnifiedId: entityLevel === "ad_group" ? selectedCampaign?.entity?.id || "" : "",
+            expectedAccountId: accountId,
+            viewEpoch: viewEpochRef.current,
+        });
+    }, [accountId, entityLevel, selectedCampaign, loadEntitySettings]);
 
     function manageEntity(row) {
         setManagementTarget(row);
+        setManagementSettingsById({});
+        void loadEntitySettings({
+            entityType: row.entity.level === "ad_group" ? "ad_squad" : "campaign",
+            rows: [row],
+            parentUnifiedId: row.entity.level === "ad_group" ? row.entity.campaign_id || selectedCampaign?.entity?.id || "" : "",
+            expectedAccountId: accountId,
+            viewEpoch: viewEpochRef.current,
+            forManagement: true,
+        });
         window.setTimeout(() => {
             document.querySelector('[data-testid="snapchat-campaign-management-panel"]')
                 ?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -465,9 +485,9 @@ export default function SnapchatV2Page() {
     const managementAction = managementTarget
         ? `${managementTarget.entity.provider_level}.update`
         : null;
-    const managementSettings = settingsByEntityId[managementTarget?.entity?.id]
-        || managementTarget?.current_settings
-        || null;
+    const managementSettings = managementTarget?.entity?.level === "ad"
+        ? managementTarget?.current_settings || null
+        : managementSettingsById[managementTarget?.entity?.id] || null;
 
     return (
         <div className="space-y-5" dir="rtl" data-testid="snapchat-v2-page">
@@ -549,7 +569,15 @@ export default function SnapchatV2Page() {
                 </nav>
                 {(selectedCampaign || selectedAdGroup) && <div className="flex flex-wrap items-center gap-2 border-x border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-bold text-slate-600"><button type="button" onClick={returnToCampaigns} className="rounded-lg bg-white px-3 py-1.5 text-emerald-700 shadow-sm">كل الحملات</button>{selectedCampaign && <><span>/</span><button type="button" onClick={returnToAdGroups} className="rounded-lg px-2 py-1.5 hover:bg-white">{selectedCampaign.entity.name}</button></>}{selectedAdGroup && <><span>/</span><span className="rounded-lg bg-violet-50 px-2 py-1.5 text-violet-700">{selectedAdGroup.entity.name}</span></>}</div>}
                 <UnifiedMarketingEntityTable report={activeContract} loading={loading || entityLoading} onOpenChildren={openChildren} onManageEntity={manageEntity} />
-                <SnapchatEntitySettingsTable report={activeContract} settingsByEntityId={settingsByEntityId} loading={settingsLoading} />
+                <SnapchatEntitySettingsTable
+                    report={activeContract}
+                    settingsByEntityId={settingsByEntityId}
+                    loading={settingsLoading}
+                    dataLoading={loading || entityLoading}
+                    onVisibleRowsChange={loadVisibleSettings}
+                    onManageEntity={manageEntity}
+                    parentCampaign={selectedCampaign}
+                />
             </section>
 
             <UnifiedMarketingOrdersPanel report={campaignContract} campaignId={selectedCampaign?.entity?.id || null} />

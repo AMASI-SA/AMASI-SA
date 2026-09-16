@@ -41,10 +41,11 @@ jest.mock("../services/mezanProductsV2", () => ({
 }));
 
 jest.mock("../components/marketing/UnifiedMarketingEntityTable", () => (
-    function MockUnifiedMarketingEntityTable({ report, onOpenChildren }) {
+    function MockUnifiedMarketingEntityTable({ report, onOpenChildren, onManageEntity }) {
         return (
             <div data-testid="mock-unified-table">
                 {(report?.rows || []).map((row) => (
+                    <div key={row.entity.id}>
                     <button
                         key={row.entity.id}
                         type="button"
@@ -53,6 +54,8 @@ jest.mock("../components/marketing/UnifiedMarketingEntityTable", () => (
                     >
                         {row.entity.name}
                     </button>
+                    <button data-testid={`manage-${row.entity.id}`} onClick={() => onManageEntity?.(row)}>Manage</button>
+                    </div>
                 ))}
             </div>
         );
@@ -85,6 +88,7 @@ describe("SnapchatV2Page read-only load", () => {
 
     beforeEach(() => {
         global.IS_REACT_ACT_ENVIRONMENT = true;
+        Element.prototype.scrollIntoView = jest.fn();
         container = document.createElement("div");
         document.body.appendChild(container);
         root = createRoot(container);
@@ -457,4 +461,51 @@ describe("SnapchatV2Page read-only load", () => {
         expect(createSnapchatManagementProposal).not.toHaveBeenCalled();
         expect(executeSnapchatManagementProposal).not.toHaveBeenCalled();
     });
+    it("reads only five visible exact IDs and fetches an off-page management selection precisely", async () => {
+        const rows = Array.from({ length: 12 }, (_, i) => ({
+            entity: { id: `campaign-${i}`, level: "campaign", provider_level: "campaign", name: `Campaign ${i}` },
+            quality: { sync_status: "complete", coverage_status: "complete" },
+        }));
+        const defaultGet = api.get.getMockImplementation();
+        api.get.mockImplementation((url, config) => url.endsWith("/campaigns")
+            ? Promise.resolve({ data: { unified: { entity_level: "campaign", rows }, salla: { summary: {} } } })
+            : defaultGet(url, config));
+        getSnapchatEntitySettings.mockImplementation(({ unifiedEntityId }) => Promise.resolve([{
+            unified_entity_id: unifiedEntityId,
+            entity_type: "campaign",
+            provider_entity_id: `provider-${unifiedEntityId}`,
+            ad_account_id: "account-1",
+            quality: { settings_status: "settings_complete" },
+        }]));
+        await act(async () => { root.render(<SnapchatV2Page />); });
+        expect(getSnapchatEntitySettings.mock.calls.map(([params]) => params.unifiedEntityId))
+            .toEqual(rows.slice(0, 5).map(row => row.entity.id));
+        expect(getSnapchatEntitySettings.mock.calls.every(([params]) => params.limit === 1)).toBe(true);
+        const table = container.querySelector('[data-testid="snapchat-entity-settings-table"]');
+        expect(table.querySelectorAll('tbody tr')).toHaveLength(5);
+        await act(async () => { [...table.querySelectorAll('nav button')].find(button => button.textContent === "التالي").click(); });
+        expect(getSnapchatEntitySettings.mock.calls.slice(5).map(([params]) => params.unifiedEntityId))
+            .toEqual(rows.slice(5, 10).map(row => row.entity.id));
+        await act(async () => { container.querySelector('[data-testid="manage-campaign-11"]').click(); });
+        expect(getSnapchatEntitySettings).toHaveBeenLastCalledWith(expect.objectContaining({
+            entityType: "campaign", unifiedEntityId: "campaign-11", limit: 1,
+        }));
+        const older = deferred();
+        const newer = deferred();
+        getSnapchatEntitySettings.mockImplementationOnce(() => older.promise).mockImplementationOnce(() => newer.promise);
+        await act(async () => { container.querySelector('[data-testid="manage-campaign-10"]').click(); });
+        await act(async () => { container.querySelector('[data-testid="manage-campaign-11"]').click(); });
+        const selection = (id) => [{ unified_entity_id: id, provider_entity_id: `selected-${id}`,
+            ad_account_id: "account-1", quality: { settings_status: "settings_complete" } }];
+        await act(async () => { newer.resolve(selection("campaign-11")); });
+        await act(async () => { older.resolve(selection("campaign-10")); });
+        await act(async () => { container.querySelector('[data-testid="snapchat-campaign-management-panel"] > button').click(); });
+        const card = container.querySelector('[data-testid="snapchat-management-current-settings"]');
+        expect(card.textContent).toContain("selected-campaign-11");
+        expect(card.textContent).not.toContain("selected-campaign-10");
+        expect(api.post).not.toHaveBeenCalled();
+        expect(createSnapchatManagementProposal).not.toHaveBeenCalled();
+        expect(executeSnapchatManagementProposal).not.toHaveBeenCalled();
+    });
+
 });

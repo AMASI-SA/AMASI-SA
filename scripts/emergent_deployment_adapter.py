@@ -584,6 +584,33 @@ def _tracked_intent_at(commit: str) -> dict[str, Any]:
     return payload
 
 
+def resolve_candidate_source_base(production_head: str, source_git_sha: str) -> str:
+    """Resolve the prior exact A/B pair across documentation-only staging.
+
+    This selects J; it does not trust or materialize an intent. The workflow
+    still validates J with its own adapter and all existing A/B checks remain.
+    """
+    head = _full_git_sha(production_head, "production_head")
+    source = _full_git_sha(source_git_sha, "source_git_sha")
+    _run_git_bytes("merge-base", "--is-ancestor", head, source)
+    intent = _tracked_intent_at(head)
+    previous_source = _full_git_sha(intent.get("source_git_sha"), "previous source")
+    _run_git_bytes("merge-base", "--is-ancestor", previous_source, head)
+    intent_path = "release/release-intent-v5.json"
+    for candidate in _run_git_text("rev-list", "--first-parent", "--max-count=128", head).splitlines():
+        paths = _git_changed_paths(previous_source, candidate)
+        if paths == [intent_path]:
+            # Includes full-history rejection of intent edits/reverts in J..A.
+            _assert_candidate_source_transition(source_git_sha=source, source_base_git_sha=candidate)
+            return candidate
+        extra = [path for path in paths if path != intent_path]
+        if not extra or any(path != "AGENTS.md" and not path.startswith("docs/") for path in extra):
+            raise DeploymentAdapterError("production base contains unreviewed non-documentation changes")
+        if _run_git_bytes("show", f"{candidate}:{intent_path}") != _run_git_bytes("show", f"{head}:{intent_path}"):
+            raise DeploymentAdapterError("documentation staging changed the reviewed intent")
+    raise DeploymentAdapterError("no exact prior source/intent pair within bounded first-parent history")
+
+
 def _assert_candidate_source_transition(
     *,
     source_git_sha: str,
