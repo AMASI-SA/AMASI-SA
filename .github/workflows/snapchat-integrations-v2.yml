@@ -17,6 +17,8 @@ on:
       - "backend/tests/test_snapchat_account_selection_v2.py"
       - "frontend/src/services/snapchatIntegrationsV2.js"
       - "frontend/src/services/snapchatIntegrationsV2.test.js"
+      - "frontend/src/lib/api.js"
+      - "frontend/src/lib/snapchatSyncRecovery.js"
       - "frontend/src/components/integrationsV2/ProviderMark.jsx"
       - "docs/SNAPCHAT_INTEGRATIONS_V2_SETUP.md"
       - ".github/workflows/snapchat-integrations-v2.yml"
@@ -92,5 +94,7 @@ jobs:
           --watchAll=false
           --runInBand
           src/services/snapchatIntegrationsV2.test.js
+          src/lib/snapchatSyncRecovery.active.test.js
+          src/lib/api.authRefresh.test.js
       - name: Build frontend
         run: CI=false yarn build

@@ -41,8 +41,15 @@ function activeSyncConflict(error) {
 export function isSnapchatSyncRequest(config = {}) {
     if (config?._mezanSnapchatSyncRequest === true) return true;
     const method = String(config?.method || "").trim().toLowerCase();
-    return method === "post"
-        && syncPath(config).endsWith("/integrations-v2/snapchat_ads/sync");
+    if (method !== "post") return false;
+    if (syncPath(config).endsWith("/integrations-v2/snapchat_ads/sync")) return true;
+    if (!syncPath(config).endsWith("/integrations-v2/snapchat-v2/sync")) return false;
+    try {
+        const payload = typeof config.data === "string" ? JSON.parse(config.data) : config.data;
+        return payload?.action_report_time === "conversion" && payload?.run_type === "manual";
+    } catch {
+        return false;
+    }
 }
 
 export function rewriteSnapchatSyncRequest(config = {}) {
@@ -53,7 +60,15 @@ export function rewriteSnapchatSyncRequest(config = {}) {
     const pathname = queryIndex >= 0 ? rawUrl.slice(0, queryIndex) : rawUrl;
     const suffix = queryIndex >= 0 ? rawUrl.slice(queryIndex) : "";
     const normalizedPath = pathname.replace(/\/+$/, "");
-    const rewrittenPath = normalizedPath.endsWith(
+    const canonical = normalizedPath.endsWith("/integrations-v2/snapchat-v2/sync");
+    const payload = canonical && typeof config.data === "string"
+        ? JSON.parse(config.data) : config.data;
+    // Preserve the synchronous API's other supported modes. The UI's manual
+    // conversion report can use the durable canonical background job.
+    if (canonical && (payload?.action_report_time !== "conversion" || payload?.run_type !== "manual")) return config;
+    const rewrittenPath = canonical
+        ? normalizedPath.replace(/\/snapchat-v2\/sync$/, "/snapchat_ads/sync-async")
+        : normalizedPath.endsWith(
         "/integrations-v2/snapchat_ads/sync",
     )
         ? `${normalizedPath}-async`
@@ -62,6 +77,14 @@ export function rewriteSnapchatSyncRequest(config = {}) {
     return {
         ...config,
         url: `${rewrittenPath}${suffix}`,
+        ...(canonical ? {
+            data: {
+                from_date: payload.date_from,
+                to_date: payload.date_to,
+                ad_account_id: payload.ad_account_id,
+            },
+            _mezanSnapchatCanonicalSync: true,
+        } : {}),
         _mezanSnapchatSyncRequest: true,
         _mezanSnapchatAsyncSync: true,
     };
@@ -69,6 +92,17 @@ export function rewriteSnapchatSyncRequest(config = {}) {
 
 export function isSnapchatAsyncSyncResponse(response = {}) {
     return response?.config?._mezanSnapchatAsyncSync === true;
+}
+
+export function assertCanonicalSnapchatSyncResult(config, payload) {
+    if (config?._mezanSnapchatCanonicalSync !== true || payload?.status !== "failed") return;
+    const detail = payload.error || {
+        code: "snapchat_canonical_sync_failed",
+        message: "تعذر إكمال مزامنة صرف Snapchat.",
+    };
+    const failure = new Error(detail.message);
+    failure.response = { status: 502, data: { detail } };
+    throw failure;
 }
 
 export async function pollSnapchatAsyncSyncJob({
@@ -125,6 +159,10 @@ export function shouldRecoverSnapchatSyncFailure(error) {
     // V2 job. This is not a failure: join that run and return its result.
     if (activeSyncConflict(error)) return true;
 
+    // Without the accepted job ID a canonical request cannot be matched to a
+    // scheduler by timing alone. Keep the original transport error visible.
+    if (error?.config?._mezanSnapchatCanonicalSync === true) return false;
+
     // Any other structured Backend error is authoritative and should be
     // presented directly instead of being hidden by transport recovery.
     const detailCode = error?.response?.data?.detail?.code;
@@ -173,6 +211,7 @@ function recoveredPayload(run) {
         run_id: run?.run_id || summary.run_id || null,
         provider: "snapchat_ads",
         status: run?.status || summary.status || "failed",
+        ...(run?.error ? { error: run.error } : {}),
     };
 }
 

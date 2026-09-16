@@ -28,6 +28,7 @@ import {
     toLegacyMetaSyncPayload,
 } from "./metaDashboardV2Adapter";
 import {
+    assertCanonicalSnapchatSyncResult,
     isSnapchatAsyncSyncResponse,
     isSnapchatSyncRequest,
     pollSnapchatAsyncSyncJob,
@@ -237,6 +238,8 @@ api.interceptors.response.use(
                 },
             });
 
+            assertCanonicalSnapchatSyncResult(response.config, payload);
+
             if (isSnapDailyCompatibilityResponse(response)) {
                 return {
                     ...response,
@@ -387,6 +390,7 @@ api.interceptors.response.use(
             },
         });
         if (!recovered) return Promise.reject(error);
+        assertCanonicalSnapchatSyncResult(error.config, recovered.payload);
         if (error?.config?._mezanSnapDailyCompatibility === true) {
             return {
                 data: await loadSnapDailyCompatibility(error.config),

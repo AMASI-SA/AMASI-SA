@@ -318,6 +318,51 @@ async def test_dashboard_sync_maps_30_days_to_canonical_v2_range():
 
 
 @pytest.mark.asyncio
+async def test_dashboard_sync_preserves_explicit_47_day_account_range():
+    fixed_now = lambda: datetime(2026, 9, 16, 20, 0, tzinfo=timezone.utc)
+    calls = []
+
+    class FakePipeline:
+        def __init__(self, db, *, now):
+            pass
+
+        async def run(self, user_id, **kwargs):
+            calls.append((user_id, kwargs))
+            return {"status": "complete", "sync_run_id": "canonical-47d", "summary": {"rows_saved": 1128}}
+
+    result = await async_routes.execute_snapchat_dashboard_sync(
+        _db(), "owner-1",
+        SnapchatNativeSyncInput(from_date="2026-08-01", to_date="2026-09-16", ad_account_id="usd-main"),
+        now=fixed_now, pipeline_factory=FakePipeline,
+    )
+    assert calls == [("owner-1", {
+        "ad_account_id": "usd-main",
+        "date_from": datetime(2026, 8, 1).date(),
+        "date_to": datetime(2026, 9, 16).date(),
+        "action_report_time": "conversion", "run_type": "manual",
+    })]
+    assert result["date_from"] == "2026-08-01"
+    assert result["date_to"] == "2026-09-16"
+    assert result["run_id"] == "canonical-47d"
+
+
+@pytest.mark.asyncio
+async def test_same_range_other_account_cannot_join_canonical_job():
+    db = _db()
+    db.rows["mezan_integration_sync_runs_v2"] = [{
+        "user_id": "owner-1", "provider": "snapchat_ads", "run_id": "other-account-job",
+        "run_type": async_routes.ASYNC_SYNC_RUN_TYPE, "status": "running",
+        "summary": {"date_from": "2026-08-01", "date_to": "2026-09-16", "ad_account_id": "other-account"},
+    }]
+    with pytest.raises(SnapchatNativeSyncError) as exc:
+        await async_routes._assert_no_active_sync(
+            db, "owner-1", requested_date_from="2026-08-01", requested_date_to="2026-09-16",
+            requested_ad_account_id="usd-main",
+        )
+    assert exc.value.run_id is None
+
+
+@pytest.mark.asyncio
 async def test_dashboard_sync_retries_a_busy_canonical_lease():
     db = _db()
     fixed_now = lambda: datetime(

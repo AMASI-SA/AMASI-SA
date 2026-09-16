@@ -127,6 +127,7 @@ async def execute_snapchat_dashboard_sync(
         pipeline = pipeline_factory(db, now=now)
         result = await pipeline.run(
             user_id,
+            **({"ad_account_id": payload.ad_account_id} if payload.ad_account_id else {}),
             date_from=dates[0],
             date_to=dates[-1],
             action_report_time="conversion",
@@ -320,6 +321,7 @@ async def _assert_no_active_sync(
     *,
     requested_date_from: str,
     requested_date_to: str,
+    requested_ad_account_id: str | None = None,
 ) -> None:
     active = await _collection(
         db, "mezan_integration_sync_runs_v2"
@@ -338,6 +340,7 @@ async def _assert_no_active_sync(
             "run_type": 1,
             "summary.date_from": 1,
             "summary.date_to": 1,
+            "summary.ad_account_id": 1,
         },
         sort=[("started_at", -1)],
     )
@@ -352,6 +355,7 @@ async def _assert_no_active_sync(
         active.get("run_type") == ASYNC_SYNC_RUN_TYPE
         and summary.get("date_from") == requested_date_from
         and summary.get("date_to") == requested_date_to
+        and summary.get("ad_account_id") == requested_ad_account_id
     )
     error = SnapchatNativeSyncError(
         "snapchat_analytics_sync_in_progress",
@@ -397,6 +401,7 @@ async def create_snapchat_native_sync_job(
         user_id,
         requested_date_from=dates[0].isoformat(),
         requested_date_to=dates[-1].isoformat(),
+        requested_ad_account_id=payload.ad_account_id,
     )
 
     run_id = str(uuid.uuid4())
@@ -415,6 +420,7 @@ async def create_snapchat_native_sync_job(
         "summary": {
             "date_from": dates[0].isoformat(),
             "date_to": dates[-1].isoformat(),
+            "ad_account_id": payload.ad_account_id,
             "selected_accounts": len(selected_accounts),
             "accounts_attempted": 0,
             "accounts_complete": 0,
