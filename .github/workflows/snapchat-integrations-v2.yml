@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - main
+      - hotfix/prod-snap-meta-final
     paths:
       - "backend/integrations_control_center/snapchat_*.py"
       - "backend/integrations_control_center/__init__.py"
