@@ -11,12 +11,13 @@
     "Recorded owner-approved Amasi disposable test-order alternative and concrete first test sequence; no executable code changed",
     "Implemented explicit Amasi test-order CLI mode with fixture/payment/shipment/original-line guards, one-write execution, reviewed totals, live evidence classification and redirect rejection; 18 new isolated contracts pass",
     "Resolved the owner-supplied disposable fixture through authenticated Salla reads; verified store identity/type, payment facts and exact-order shipments; rejected the fixture before any mutation because it does not meet the initial test contract",
-    "Corrected disposable fixture validation for one explicitly bound pending store-courier record and one zero-value bank-method row; added late shipment rechecks and preserved receipt/payment/original-line guards"
+    "Corrected disposable fixture validation for one explicitly bound pending store-courier record and one zero-value bank-method row; added late shipment rechecks and preserved receipt/payment/original-line guards",
+    "Optional owner-confirmed synthetic receipt binding; exact top-level attachment reference only, with drift and payment rejection"
   ],
   "delivery_commit": "407634facfc4e0be07b47d21ca8b243de563f87f",
   "delivery_method": "GitHub connector; source delivery tree exactly equals the reviewed local checkpoint. Remote commit SHA differs; original remote research parent is retained.",
   "merge": "NOT_PERFORMED",
-  "next_safe_action": "Resolve the owner-selected fixture receipt attachment (synthetic versus actual transfer). Do not assume it is synthetic, delete a real receipt, or require a carrier change. Then resolve private Order Items/product/option identities, confirm no courier handoff and downstream automation, validate encrypted runtime access and run explicit Amasi readiness before one reviewed mutation. Live execution remains blocked by the unresolved receipt and runtime review; synthetic PASS is not live evidence.",
+  "next_safe_action": "Restore authenticated encrypted runtime access; complete private fixture/product/options and downstream/non-handoff review. Bind owner-confirmed synthetic receipt reference in private manifest, run Amasi readiness, then one reviewed item operation. No item writes have occurred.",
   "p1": "BLOCKED_BY_REQUIRED_PROVIDER_EVIDENCE",
   "phase": "P0",
   "pr": {
@@ -30,12 +31,12 @@
   "recovery_merge": "e9be9ebf1abefb223560477f164f746c3bdbb67f",
   "release_intent": "UNCHANGED",
   "remaining": [
-    "Resolve receipt attachment and remaining private item/product/option identities for the owner-selected disposable fixture; fresh store/payment/courier checks and operator non-dispatch confirmation required",
+    "Complete private fixture/item/product/option bindings and courier/downstream review; owner has confirmed attached receipt is synthetic",
     "Inspect actual shipping/notification/Qoyod automation and verify shipment-read access through the encrypted runtime integration; a successful connector read does not prove that integration token scope",
     "Execute the first add/quantity/options/delete sequence and retain actual provider/webhook evidence",
     "Complete required state/option/payment/inventory/retry evidence before P1 order-page integration and general activation"
   ],
-  "remote_checkpoint": "PENDING_COURIER_SOURCE_UPLOADED_AND_CI_VERIFIED",
+  "remote_checkpoint": "SYNTHETIC_RECEIPT_CHECKPOINT_PENDING_UPLOAD",
   "reviewed_delivery_tree": "0dc09b50aa59c79d658ff44b0cf6c5cf1e08b4da",
   "reviewed_local_commit": "8f9a738f10850cd5d8302371e0659aeaee011347",
   "runtime_integration": "NOT_IMPLEMENTED",
@@ -50,11 +51,11 @@
   "source_sha256": {
     ".github/workflows/salla-order-revision-p0.yml": "10d8e9f815bd2449dd861816b9c467c264e27fa85bd6ccecd83de8a68190e893",
     "backend/tests/test_salla_order_item_contract_runner_p0.py": "3cdadb0d7ae9d97d54643bb2c3d91abc67b5c0ed16aef0756150658f23840fca",
-    "scripts/research/salla_order_item_contract_runner.py": "bcd9c74e406693e8609018a0e95323b7290ca4c7c8bd4b4aa9f7eb12090ec7d1",
-    "backend/tests/test_salla_order_item_amasi_test_orders.py": "082fc1aab99e7d949a8651ef735ac90bba28a804070954560a6683b29342df9a",
+    "scripts/research/salla_order_item_contract_runner.py": "ff4b73495cc58dcf6bdfd09e6a74346e9bdad29194610e6d835454edcf59bc70",
+    "backend/tests/test_salla_order_item_amasi_test_orders.py": "beef6847c79f73463ddd13c328f35488bf2384281aa3861d64f5a6807059a1cd",
     "docs/operations/MZ-ORDER-REVISION-SALLA-001/schemas/evidence-record.schema.json": "1fa04fe9902ce79f1df8ff83029722b0b870ae636dbd25200389c24aa5349367"
   },
-  "status": "AMASI_PENDING_COURIER_VERIFIED_RECEIPT_BLOCKED",
+  "status": "SYNTHETIC_RECEIPT_VERIFIED_RUNTIME_NOT_CONFIGURED",
   "task_id": "MZ-ORDER-REVISION-SALLA-001",
   "updated_at": "2026-09-16",
   "verification": {
@@ -137,8 +138,7 @@
       "source": "Authenticated Salla connector: reference-filtered Orders List, Order Details, exact-order unfiltered Shipments List and Store Context",
       "identity_resolution": "Exactly one matching order; identifiers and customer details excluded from repository records",
       "blocking_contracts": [
-        "Receipt attachment is present and its synthetic-versus-actual nature is unresolved",
-        "Runtime readiness, private item/product/option bindings, non-dispatch and actual downstream review remain incomplete"
+        "Runtime not configured; private item/product/options, non-handoff and downstream review incomplete"
       ],
       "shipment_interpretation": "Store-courier record is pending and untracked. This is not evidence of dispatch or proof of non-dispatch; optional exact binding plus operator attestation and fresh strict checks cover only this disposable test scenario.",
       "customer_options": "Options observed in shipment packages; standalone Order Items and mutation round-trip are not yet verified",
@@ -146,9 +146,20 @@
       "readiness_cli_run": false,
       "salla_item_writes_performed": 0,
       "runtime_scope_proven": false,
-      "payment_observation": "Positive SAR total, explicit zero paid and remaining equal to total were observed; exact amounts excluded from repository records"
+      "payment_observation": "Positive SAR total, explicit zero paid and remaining equal to total were observed; exact amounts excluded from repository records",
+      "receipt_decision": "Owner explicitly confirms synthetic image; exact reference binding implemented, no deletion"
     }
   },
   "amasi_executor_source_commit": "cf1acbf2271b67b1a8064b9081d8f92b5cff31d9",
-  "pending_courier_source_commit": "f51fa26744aaeb854f89d13e886e0d67b59f7345"
+  "pending_courier_source_commit": "f51fa26744aaeb854f89d13e886e0d67b59f7345",
+  "synthetic_receipt_verification": {
+    "tests": 101,
+    "exit_code": 0,
+    "command": "PYTHONDONTWRITEBYTECODE=1 /workspace/scratch/6071a6aea328/salla-test-env/bin/python -B -m unittest discover -s backend/tests -p 'test_salla_order_item_*.py' -q",
+    "schema_validation": "PASS",
+    "regression": "POST/PUT/DELETE failed with BLOCKED_SEED_MISMATCH before patch, pass afterward; unconfirmed/mismatched/removed receipt, other proof/payment, and prewrite drift blocked",
+    "readiness": "AMASI_TEST_NOT_CONFIGURED",
+    "readiness_exit_code": 2,
+    "remote_ci": "NOT_YET_RUN"
+  }
 }

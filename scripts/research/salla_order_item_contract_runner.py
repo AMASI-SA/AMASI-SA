@@ -535,11 +535,19 @@ def validate_seed_structure(config: SandboxConfig, seed: dict[str, Any]) -> None
     if amasi:
         for row in orders:
             fields = required_fields | {"test_customer_id", "disposable_test_order", "preserve_item_id"}
-            _strict_object(row, allowed=fields | {"pending_store_courier"}, required=fields, error="BLOCKED_SEED_MISMATCH")
+            _strict_object(row, allowed=fields | {"pending_store_courier", "synthetic_receipt"}, required=fields, error="BLOCKED_SEED_MISMATCH")
             if not isinstance(row["state"], str) or row["state"] not in {"pending", "under_review"} or row["payment_method"] != "bank" or row["disposable_test_order"] is not True:
                 raise ContractRunnerError("AMASI_TEST_UNPAID_BANK_ORDER_REQUIRED")
             for key in ("test_customer_id", "preserve_item_id", "order_number", "branch_id"):
                 _id_text(row[key], "BLOCKED_SEED_MISMATCH")
+            if "synthetic_receipt" in row:
+                policy = row["synthetic_receipt"]
+                receipt_fields = {"owner_confirmed", "receipt_image_sha256"}
+                _strict_object(policy, allowed=receipt_fields, required=receipt_fields, error="BLOCKED_SEED_MISMATCH")
+                digest = policy["receipt_image_sha256"]
+                if (policy["owner_confirmed"] is not True or not isinstance(digest, str)
+                        or len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest)):
+                    raise ContractRunnerError("AMASI_TEST_RECEIPT_REVIEW_REQUIRED")
             if "pending_store_courier" in row:
                 policy = row["pending_store_courier"]
                 policy_fields = {"shipment_id", "courier_id", "not_dispatched_confirmed"}
@@ -1128,10 +1136,21 @@ def _validate_amasi_order(order: dict[str, Any], row: dict[str, Any]) -> None:
     bank = order.get("bank")
     if bank is not None and not isinstance(bank, dict):
         raise ContractRunnerError("AMASI_TEST_PAYMENT_UNPROVEN")
+    receipt_policy = row.get("synthetic_receipt")
+    if receipt_policy is not None:
+        receipt_image = order.get("receipt_image")
+        if (receipt_policy.get("owner_confirmed") is not True
+                or not isinstance(receipt_image, str) or not receipt_image.strip()
+                or canonical_digest(receipt_image) != receipt_policy.get("receipt_image_sha256")):
+            raise ContractRunnerError("AMASI_TEST_RECEIPT_REVIEW_REQUIRED")
     for container in (order, payment or {}, bank or {}):
         for key in ("receipt", "receipt_image", "bank_receipt", "transfer_receipt", "transaction_reference", "transactions",
                     "payment_receipt_url", "receipt_url", "attachment_url", "proof_url", "proof", "transfer_receipt_url",
                     "paid_at", "captured_at", "refunded_at", "transaction_id"):
+            # Only the exact owner-confirmed synthetic top-level attachment is
+            # accepted. Payment facts and other proof fields remain guarded.
+            if container is order and key == "receipt_image" and receipt_policy is not None:
+                continue
             if container.get(key) not in (None, "", [], {}):
                 raise ContractRunnerError("AMASI_TEST_PAYMENT_UNPROVEN")
 

@@ -15,8 +15,9 @@ store's own courier, which does not have a tracking number. The initial
 no-shipment predicate was too narrow for that approved disposable scenario;
 changing carriers does not resolve it. The runner now has an explicit bound
 pending-courier policy described below. A zero-value bank-method row is no
-longer confused with a positive payment. A receipt attachment remains present
-and unresolved, so the actual fixture is still blocked before mutation.
+longer confused with a positive payment. The owner has now explicitly confirmed that the attached receipt image is
+synthetic. The optional exact attachment policy below records that decision;
+runtime configuration and fixture/downstream review still block live execution.
 Customer options were observed in shipment packages only. No item mutation or
 CLI readiness run was performed, and no live mutation evidence exists. Keep
 all filled identifiers and customer details outside GitHub. Do not remove a
@@ -48,7 +49,7 @@ systems. Do not claim downstream isolation until it has been observed.
 The initial mode supports only `pending` or `under_review`, quantity at most
 two, and no direct price/cost/weight overrides. COD can qualify for automatic
 fulfillment, so it is excluded. The order must have positive total, explicit
-zero paid, remaining equal to total, no receipt or contradictory payment/refund
+zero paid, remaining equal to total, no unreviewed receipt or contradictory payment/refund
 facts, and either no shipments or one explicitly reviewed pending store-courier
 record. The original line is protected from PUT and DELETE.
 The mutation case must include independently reviewed before/after total
@@ -120,7 +121,7 @@ hashed bound shipment facts for this policy, never claims shipment absence.
 These reads cannot make Salla state atomic or establish downstream isolation.
 The payment-method list may be empty or exactly one bank row with explicit zero
 amount and null provider/transaction reference; unknown fields or additional
-rows are rejected. The receipt and all positive-payment/refund guards remain.
+rows are rejected. Other receipt fields and all positive-payment/refund guards remain.
 
 Scopes are `orders.read_write`, product read, and additionally `shipping.read`
 for this live mode. A declared scope is not proof it was granted: the actual
@@ -172,3 +173,25 @@ by the executor, but surrounding automation still needs an actual review.
 The test runner does not create orders, ship, capture/refund payments, write to
 Qoyod, verify inventory conservation, or implement variant-changing runtime UI.
 Those outcomes must never be inferred from an item-operation PASS.
+
+## Owner-confirmed synthetic receipt
+
+The owner confirmed the selected attachment is a test image, not evidence of
+a real transfer. Do not delete it. Only in the explicit Amasi test mode, the
+single private manifest order may include `synthetic_receipt` with
+`owner_confirmed: true` and `receipt_image_sha256`: the runner's canonical
+JSON SHA256 of the exact nonempty top-level `receipt_image` string. Do not
+store its URL, hash or actual fixture identifiers in GitHub. This is a binding
+to the provider attachment reference, not a downloaded image content hash.
+
+The binding is checked at every order validation, including before a write.
+A removed or replaced reference, another populated receipt/proof field, or
+positive payment still blocks. The original image is never edited by the
+runner. Acceptance does not prove no courier handoff or downstream isolation.
+
+Fresh local verification: 101 isolated tests pass with full schema validation.
+Live readiness returned `AMASI_TEST_NOT_CONFIGURED` (exit 2) in this session;
+no live order-item mutation occurred. The current toolset provides connector
+reads but no order-item write or authenticated cloud terminal/browser access.
+Next: restore the configured encrypted runtime, complete the private manifest
+and downstream review, then run readiness and one reviewed operation.

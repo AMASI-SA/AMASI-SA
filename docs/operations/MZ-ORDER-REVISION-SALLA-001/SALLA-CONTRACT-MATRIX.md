@@ -19,7 +19,7 @@ store. See [AMASI-TEST-ORDERS.md](AMASI-TEST-ORDERS.md) for the first sequence
 and evidence boundaries. This supersedes the Demo-only environment requirement
 in the original plan. It does not mark any matrix cell complete or activate
 the feature. An owner-selected disposable fixture has been inspected read-only;
-its unresolved receipt still blocks mutation. The CLI has an explicit
+its receipt is now owner-confirmed synthetic; runtime and private fixture review still block mutation. The CLI has an explicit
 fixture-bound Amasi test mode with an optional bound pending store-courier
 policy and zero-value bank-method handling, verified with synthetic I/O. Its
 default Demo mode and identity check remain. Actual live mutation evidence is

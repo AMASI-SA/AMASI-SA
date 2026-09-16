@@ -145,6 +145,65 @@ class LiveHttp(base.FakeSallaHttp):
 
 
 class AmasiTestOrderTests(unittest.TestCase):
+    def test_synthetic_receipt_allows_bound_fixture_operations(self):
+        receipt = 'https://test.invalid/synthetic-receipt.png'
+        for method in ('POST', 'PUT', 'DELETE'):
+            with self.subTest(method=method), tempfile.TemporaryDirectory() as d:
+                seed = courier_seed()
+                seed['orders'][0]['synthetic_receipt'] = {
+                    'owner_confirmed': True, 'receipt_image_sha256': runner.canonical_digest(receipt)}
+                case = live_case()
+                if method != 'POST':
+                    seed['orders'][0]['item_id'] = 'i-new'
+                    case = live_case(method=method, path='/orders/items/i-new',
+                        body={'order_id': 'o0', 'quantity': 2} if method == 'PUT' else {})
+                def configure(http):
+                    configure_pending_courier(http)
+                    http.order['receipt_image'] = receipt
+                rc, output, http, evidence, _ = self.run_cli(
+                    Path(d), seed=seed, case=case, change_http=configure, webhook=True)
+                self.assertEqual(rc, 0, output)
+                self.assertEqual([m for m, _ in http.calls if m != 'GET'], [method])
+                self.assertEqual(evidence['verdict'], 'PASS')
+                self.assertEqual(http.order['receipt_image'], receipt)
+                self.assertNotIn(receipt, json.dumps(evidence))
+
+    def test_synthetic_receipt_rejects_unreviewed_binding_and_payment(self):
+        receipt = 'https://test.invalid/synthetic-receipt.png'
+        valid = {'owner_confirmed': True, 'receipt_image_sha256': runner.canonical_digest(receipt)}
+        cases = [(None, {}), ({}, {}), ({**valid, 'owner_confirmed': False}, {}),
+                 ({**valid, 'receipt_image_sha256': '0'*64}, {}),
+                 ({**valid, 'receipt_image_sha256': True}, {}),
+                 ({**valid, 'allow_paid': True}, {}), (valid, {'receipt_image': None}),
+                 (valid, {'receipt_image': {'url': receipt}}), (valid, {'paid_amount': 1}),
+                 (valid, {'receipt_url': receipt}), (valid, {'bank': {'receipt_image': receipt}}),
+                 (valid, {'transaction_id': 'transaction'})]
+        for policy, updates in cases:
+            with self.subTest(policy=policy, updates=updates), tempfile.TemporaryDirectory() as d:
+                seed = live_seed()
+                if policy is not None:
+                    seed['orders'][0]['synthetic_receipt'] = policy
+                def configure(http):
+                    http.order.update(receipt_image=receipt)
+                    http.order.update(updates)
+                rc, _, http, _, _ = self.run_cli(Path(d), seed=seed, change_http=configure)
+                self.assertEqual(rc, 2)
+                self.assertFalse(any(m != 'GET' for m, _ in http.calls))
+
+    def test_synthetic_receipt_drift_before_write_blocks_operation(self):
+        receipt = 'https://test.invalid/synthetic-receipt.png'
+        seed = courier_seed()
+        seed['orders'][0]['synthetic_receipt'] = {
+            'owner_confirmed': True, 'receipt_image_sha256': runner.canonical_digest(receipt)}
+        def configure(http):
+            configure_pending_courier(http)
+            http.order['receipt_image'] = receipt
+            http.on_final_check = lambda: http.order.update(receipt_image='https://test.invalid/replaced.png')
+        with tempfile.TemporaryDirectory() as d:
+            rc, _, http, _, _ = self.run_cli(Path(d), seed=seed, change_http=configure)
+            self.assertEqual(rc, 2)
+            self.assertFalse(any(m != 'GET' for m, _ in http.calls))
+
     def run_cli(self, tmp, *, seed=None, case=None, change_http=None, env_updates=None, args=None, webhook=False):
         seed = seed or live_seed()
         case = case or live_case()
