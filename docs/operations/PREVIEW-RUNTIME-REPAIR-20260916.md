@@ -95,7 +95,7 @@ Keep Preview test results separate from Production accounting/cutover acceptance
 
 ## MFA first-enrollment follow-up — prepared, awaiting user secret entry
 
-Status: MFA_CONFIGURATION_PREPARED_USER_INPUT_REQUIRED. Service recovery above remains verified;
+Status: SUPERSEDED_BY_USER_PASSWORD_ONLY_REQUEST. The waiting configure process was cancelled before secret entry. No bootstrap credential was created. Service recovery above remains verified;
 successful privileged sign-in is still unverified.
 
 The user supplied a Preview login screenshot showing `mfa_bootstrap_not_configured`.
@@ -148,3 +148,75 @@ inspect its private-file and Supervisor state first.
 Production changed by this follow-up: NO. No merge, publication, account creation, accounting
 mutation or permission acceptance. Remote script/configuration verification does not prove
 successful login; that acceptance remains pending.
+
+
+## Password-only Preview — activated and runtime-verified
+
+The user explicitly changed the requirement: this isolated Preview must accept email and
+password only, without OTP, authenticator enrollment or passkey requirements.
+This supersedes the preceding bootstrap-secret setup and its next-action instructions.
+
+Current status: PASSWORD_ONLY_RUNTIME_VERIFIED; interactive account sign-in still pending.
+No Production authentication configuration or source was changed.
+
+### Isolated adapter
+
+- `scripts/preview_password_runtime.py` is installed only at
+  `/opt/mezan-preview-runtime-20260916/preview_password_runtime.py`.
+- Active adapter SHA-256:
+  `fed1f79a147acce835237d0e56e6fce9415672d5bc30f6c077328c99c76abcf0`.
+- Supervisor changes only the Preview backend command to the adapter's `serve` action.
+  The base /app source and identity files are unchanged.
+- The adapter refuses another container hostname, a non-Preview frontend origin,
+  a non-loopback database, or changed hashes of the five reviewed authentication modules.
+- In this process only, it removes second-factor policy for login/access/refresh and skips
+  TOTP, passkey and email-OTP middleware installation. Password verification, disabled-account
+  checks, revocation, role/permission enforcement and login-attempt protection stay intact.
+  It does not mutate account roles or MFA enrollment in Mongo and does not fabricate MFA success;
+  tokens retain their truthful `mfa:false` claim.
+- A new owner-only session-signing file is generated outside /app. Preview sessions use this
+  independent key, so they are not base-runtime/Production sessions. Existing Preview cookies
+  require a new login. No secret value is printed, committed or returned by diagnostics.
+- The outer HTTP boundary rejects Production Host/Origin.
+- `/api/preview-auth-policy` explicitly identifies this separate Preview adapter and fingerprint.
+  Base `/api/health` verification attests the unchanged /app package, not Production-equivalent
+  behavior of the additional Preview policy.
+
+### Verification and resolved activation defect
+
+The initial adapter constructed the base app before Uvicorn's event loop, which caused Motor
+startup to fail with a Future attached to a different loop. This was corrected by using the
+Uvicorn application factory so the app is created inside the serving loop. The corrected
+service was restarted and freshly verified; no release guard was bypassed.
+
+- Final acceptance and existing session-revocation regression command:
+  `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/app/backend:/opt/mezan-preview-runtime-20260916 /root/.venv/bin/python -B -m pytest -q -p no:cacheprovider /opt/mezan-preview-runtime-20260916/test_preview_password_runtime.py /app/backend/tests/test_auth_session_revocation_v1.py`
+  => **23 passed** in 1.20s; one existing dependency deprecation warning.
+- Owner/Admin/accountant/viewer login, authenticated-user resolution and refresh need no second factor;
+  wrong passwords, disabled/inactive accounts and revoked sessions still fail.
+- Non-Preview runtime and Production request origins fail closed.
+- Default base policy still requires a second factor when the adapter is not applied.
+- Live local readiness, health and explicit Preview policy endpoints: HTTP 200.
+- Readiness `ready:true`; policy `authentication:email_password`,
+  `second_factor_required:false`, `session_signing:preview_only`.
+- Base release health: all five source/identity verification flags true.
+- A local request with Production Host was rejected with 403; no Production HTTP request was sent.
+- Frontend PID 117486 and Mongo PID 75151 unchanged; corrected backend PID 126559 running.
+- /app tracked and staged diffs empty; unrelated Supervisor sections byte-identical.
+- Bootstrap secret absent; independent session key mode 0600.
+- Sanitized evidence: `/opt/mezan-preview-runtime-20260916/password-verification.json`.
+
+No real test-account creation, accounting mutation, permission acceptance, Production publication
+or Production data change. Browser login acceptance remains a separate final check.
+
+Rollback restores only the recorded Preview backend section and refuses later config changes:
+
+```sh
+/root/.venv/bin/python -B /opt/mezan-preview-runtime-20260916/preview_password_runtime.py rollback
+```
+
+This re-enables the previous MFA policy and may restore the original missing-bootstrap block.
+The private signing file is retained. Do not rerun activate over an existing installation.
+
+Next: secure email/password entry on the existing Preview /login form, verify a protected page,
+then hand off to the accounting conversation. Do not run the superseded bootstrap configure step.
