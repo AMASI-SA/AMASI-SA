@@ -136,3 +136,40 @@ async def test_attempt_guards_unchanged_when_only_second_factor_installers_are_s
     for install in [mfa.install_mfa_security, email.install_email_otp_security, passkey.install_passkey_security]:
         await install(app, object())
     assert app.state.mezan_preview_password_only is True
+
+
+@pytest.mark.asyncio
+async def test_factory_binds_cookie_csrf_trust_to_preview_before_server_import(monkeypatch, tmp_path):
+    import dotenv
+    from browser_security import BrowserSecurityMiddleware
+    key = tmp_path / 'preview-test-signing-key'
+    key.write_text('isolated-preview-test-key-' + 'x' * 64)
+    key.chmod(0o600)
+    monkeypatch.setattr(preview, 'KEY', key)
+    monkeypatch.setattr(preview, 'verify_boundary', lambda: None)
+    monkeypatch.setattr(preview, 'apply_password_only_policy', lambda: None)
+    monkeypatch.setattr(dotenv, 'load_dotenv', lambda *args: None)
+    for name, value in [('JWT_SECRET', 'existing-base-test-key'),
+                        ('FRONTEND_URL', 'https://mezansalla.com'),
+                        ('CORS_ORIGINS', 'https://mezansalla.com'),
+                        ('PYTHONDONTWRITEBYTECODE', '1')]:
+        monkeypatch.setenv(name, value)
+    async def handler(scope, receive, send):
+        await Response(status_code=204)(scope, receive, send)
+    def load_server(name):
+        assert name == 'server'
+        return SimpleNamespace(app=BrowserSecurityMiddleware(
+            handler, trusted_origins={os.environ['FRONTEND_URL']}))
+    monkeypatch.setattr(preview.importlib, 'import_module', load_server)
+    app = preview.create_app()
+    sent = []
+    async def send(message):
+        sent.append(message)
+    async def receive():
+        return {'type': 'http.request', 'body': b''}
+    await app({'type': 'http', 'method': 'POST', 'path': '/api/auth/refresh',
+               'headers': [(b'host', b'salla-analytics.preview.emergentagent.com'),
+                           (b'origin', preview.ORIGIN.encode()),
+                           (b'cookie', b'refresh_token=test-fixture'),
+                           (b'sec-fetch-site', b'same-origin')]}, receive, send)
+    assert next(item for item in sent if item['type'] == 'http.response.start')['status'] == 204
