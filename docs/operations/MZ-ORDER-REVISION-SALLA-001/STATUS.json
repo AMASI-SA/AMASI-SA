@@ -35,7 +35,7 @@
     "Execute the first add/quantity/options/delete sequence and retain actual provider/webhook evidence",
     "Complete required state/option/payment/inventory/retry evidence before P1 order-page integration and general activation"
   ],
-  "remote_checkpoint": "PENDING_COURIER_SOURCE_LOCAL_VERIFIED",
+  "remote_checkpoint": "PENDING_COURIER_SOURCE_UPLOADED_AND_CI_VERIFIED",
   "reviewed_delivery_tree": "0dc09b50aa59c79d658ff44b0cf6c5cf1e08b4da",
   "reviewed_local_commit": "8f9a738f10850cd5d8302371e0659aeaee011347",
   "runtime_integration": "NOT_IMPLEMENTED",
@@ -83,9 +83,9 @@
     "independent_review": "Read-only reviewer found no remaining material blocker in pending-courier patch; independently ran 26 Amasi contracts and diff check, exit0. Reviewed runner SHA256 bcd9c74e406693e8609018a0e95323b7290ca4c7c8bd4b4aa9f7eb12090ec7d1. No provider I/O or edits.",
     "release_readiness": {
       "status": "FAIL",
-      "head": "cf1acbf2271b67b1a8064b9081d8f92b5cff31d9",
-      "run_id": 35154071721,
-      "job_id": 104989191124,
+      "head": "f51fa26744aaeb854f89d13e886e0d67b59f7345",
+      "run_id": 35156600750,
+      "job_id": 104997418533,
       "reason": "Release control source membership differs: new P0 workflow and research runner are not covered by the inherited reviewed intent; source-candidate classification also rejected.",
       "disposition": "Not deployment-ready. Release intent and release protocol remain unchanged; resolve through reviewed v5 release preparation when feature/runtime scope is ready and publication is authorized."
     },
@@ -101,8 +101,22 @@
       "schema_validation": "PASS"
     },
     "remote_ci": {
-      "status": "PENDING_UPLOAD",
-      "note": "Prior 90-test source result is retained separately and is not evidence for the new source"
+      "status": "PASS",
+      "head": "f51fa26744aaeb854f89d13e886e0d67b59f7345",
+      "run_id": 35156600854,
+      "job_id": 104997418351,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/35156600854",
+      "tests": 98,
+      "skipped": 0,
+      "schema_validation": "PASS",
+      "python": "3.11",
+      "log_result": "Ran98 tests in1.383s; OK"
+    },
+    "adjacent_ci": {
+      "Snapchat Settings Management V2": "PASS",
+      "Qoyod Payment Freshness": "PASS",
+      "Security Gate": "PASS",
+      "CodeQL": "LAST_OBSERVED_IN_PROGRESS"
     }
   },
   "test_environment_decision": {
@@ -135,5 +149,6 @@
       "payment_observation": "Positive SAR total, explicit zero paid and remaining equal to total were observed; exact amounts excluded from repository records"
     }
   },
-  "amasi_executor_source_commit": "cf1acbf2271b67b1a8064b9081d8f92b5cff31d9"
+  "amasi_executor_source_commit": "cf1acbf2271b67b1a8064b9081d8f92b5cff31d9",
+  "pending_courier_source_commit": "f51fa26744aaeb854f89d13e886e0d67b59f7345"
 }
