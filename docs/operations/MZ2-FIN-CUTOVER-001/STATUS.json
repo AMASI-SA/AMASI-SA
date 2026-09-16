@@ -1,22 +1,26 @@
 {
-  "operation_id": "MZ2-FIN-CUTOVER-001",
-  "plan_version": 1,
-  "last_updated_date": "2026-08-25",
-  "production_branch": "hotfix/prod-snap-meta-final",
-  "foundation_pr": 851,
-  "foundation_merge_sha": "c116d80fd375c0ddfd4acf0eb0ea7e8a8a0dd092",
-  "phase_lock_enabled": true,
+  "browser_agent_policy": {
+    "ask_only_missing_fields": true,
+    "draft_entry_allowed": true,
+    "irreversible_action_requires_explicit_same_session_authorization": true,
+    "read_status_first": true,
+    "secrets_in_github_forbidden": true,
+    "update_status_after_session": true,
+    "work_current_phase_only": true
+  },
+  "current_blocker": "P01_browser_acceptance_scenarios_5_and_6_not_completed",
   "current_phase": "P01",
   "current_phase_file": "PHASE-01-SETTLEMENTS.md",
   "current_phase_status": "IN_PROGRESS",
-  "next_allowed_action": "complete_p01_scenario_5_and_obtain_explicit_same_session_authorization_before_scenario_6",
-  "current_blocker": "P01_browser_acceptance_scenarios_5_and_6_not_completed",
+  "foundation_merge_sha": "c116d80fd375c0ddfd4acf0eb0ea7e8a8a0dd092",
+  "foundation_pr": 851,
+  "last_updated_date": "2026-08-25",
   "legacy_mezan_policy": {
-    "dynamic_financial_dependency_allowed": false,
-    "copy_reference_values_allowed": true,
     "copied_value_status": "unverified_draft",
-    "copied_values_may_post_journals": false,
     "copied_values_may_create_opening_balances": false,
+    "copied_values_may_post_journals": false,
+    "copy_reference_values_allowed": true,
+    "dynamic_financial_dependency_allowed": false,
     "owner_confirmation_required": true,
     "prohibited_copy_categories": [
       "bank_balances",
@@ -32,60 +36,40 @@
       "financial_position"
     ]
   },
-  "browser_agent_policy": {
-    "read_status_first": true,
-    "work_current_phase_only": true,
-    "ask_only_missing_fields": true,
-    "draft_entry_allowed": true,
-    "irreversible_action_requires_explicit_same_session_authorization": true,
-    "secrets_in_github_forbidden": true,
-    "update_status_after_session": true
-  },
+  "next_allowed_action": "complete_p01_scenario_5_and_obtain_explicit_same_session_authorization_before_scenario_6",
+  "operation_id": "MZ2-FIN-CUTOVER-001",
+  "phase_lock_enabled": true,
   "phases": [
     {
+      "evidence": {
+        "merge_sha": "c116d80fd375c0ddfd4acf0eb0ea7e8a8a0dd092",
+        "pr": 851,
+        "production_ui_observed": true
+      },
+      "file": "PHASE-00-FOUNDATION.md",
       "id": "P00",
       "name": "الأساس والحوكمة",
-      "status": "COMPLETE",
-      "file": "PHASE-00-FOUNDATION.md",
-      "evidence": {
-        "pr": 851,
-        "merge_sha": "c116d80fd375c0ddfd4acf0eb0ea7e8a8a0dd092",
-        "production_ui_observed": true
-      }
+      "status": "COMPLETE"
     },
     {
-      "id": "P01",
-      "name": "التسويات وربط البنوك الفعلية",
-      "status": "IN_PROGRESS",
-      "file": "PHASE-01-SETTLEMENTS.md",
       "blocked_by": null,
-      "exit_gate": "DEPLOYED_AWAITING_BROWSER_ACCEPTANCE",
       "evidence": {
-        "pr": 868,
-        "implementation_head_sha": "0c9b00ffa7d0f1f694fd76d7f1a67c9ec7f83a1c",
         "accounting_workflow_run_id": 32769235392,
         "backend_contract": "PASS",
-        "frontend_contract": "PASS",
-        "frontend_build": "PASS",
-        "merge_sha": "97f5197cee143b080c499f08cd4eecff42564ea6",
-        "production_sha": "97f5197cee143b080c499f08cd4eecff42564ea6",
-        "release_id": "37060d5b-b857-449c-8b49-33b4cf7800de",
-        "release_guard_verified": true,
-        "production_health_ok": true,
-        "critical_file_hashes_match": true,
-        "release_boot_started_at": "2026-08-24T21:03:45.282177+00:00",
-        "release_lease_active_after_verify": false,
-        "browser_verified": false,
-        "browser_acceptance_runtime_sha": "47d750b7cf2edbda4262f6d496a885bb1f30ccdc",
-        "browser_acceptance_release_id": "aaa57d5d-8f27-4d46-8d85-4d8ee47f2e7c",
-        "browser_acceptance_release_guard_verified": true,
-        "browser_acceptance_release_guard_checks": 3,
         "browser_acceptance_boot_started_at_observations": [
           "2026-08-25T03:01:01.050949+00:00",
           "2026-08-25T03:01:44.733022+00:00"
         ],
-        "browser_acceptance_fix_pr": 887,
         "browser_acceptance_fix_merge_sha": "47d750b7cf2edbda4262f6d496a885bb1f30ccdc",
+        "browser_acceptance_fix_pr": 887,
+        "browser_acceptance_release_guard_checks": 3,
+        "browser_acceptance_release_guard_verified": true,
+        "browser_acceptance_release_id": "aaa57d5d-8f27-4d46-8d85-4d8ee47f2e7c",
+        "browser_acceptance_runtime_sha": "47d750b7cf2edbda4262f6d496a885bb1f30ccdc",
+        "browser_drafts": [
+          "salla:6585798",
+          "tamara:P0420741SA260725"
+        ],
         "browser_scenarios": {
           "1": "PASS_DRAFT_SAVED_AND_REOPENED",
           "2": "PASS_PROVIDER_FILE_PARSED",
@@ -96,90 +80,106 @@
           "7": "PASS_DIFFERENCE_BLOCKED_AND_TEMPORARY_MATCH_REMOVED",
           "8": "PASS_UNSUPPORTED_CURRENCY_REJECTED_NO_WRITE"
         },
-        "browser_drafts": [
-          "salla:6585798",
-          "tamara:P0420741SA260725"
-        ],
-        "journal_posted_during_browser_acceptance": false
-      }
+        "browser_verified": false,
+        "critical_file_hashes_match": true,
+        "frontend_build": "PASS",
+        "frontend_contract": "PASS",
+        "implementation_head_sha": "0c9b00ffa7d0f1f694fd76d7f1a67c9ec7f83a1c",
+        "journal_posted_during_browser_acceptance": false,
+        "merge_sha": "97f5197cee143b080c499f08cd4eecff42564ea6",
+        "pr": 868,
+        "production_health_ok": true,
+        "production_sha": "97f5197cee143b080c499f08cd4eecff42564ea6",
+        "release_boot_started_at": "2026-08-24T21:03:45.282177+00:00",
+        "release_guard_verified": true,
+        "release_id": "37060d5b-b857-449c-8b49-33b4cf7800de",
+        "release_lease_active_after_verify": false
+      },
+      "exit_gate": "DEPLOYED_AWAITING_BROWSER_ACCEPTANCE",
+      "file": "PHASE-01-SETTLEMENTS.md",
+      "id": "P01",
+      "name": "التسويات وربط البنوك الفعلية",
+      "status": "IN_PROGRESS"
     },
     {
+      "blocked_by": "P01",
+      "exit_gate": "LOCKED",
+      "file": "PHASE-02-SHIPPING-COD.md",
       "id": "P02",
       "name": "الشحن وCOD ومناديب المتجر",
-      "status": "BLOCKED_BY_PREVIOUS_PHASE",
-      "file": "PHASE-02-SHIPPING-COD.md",
-      "blocked_by": "P01",
-      "exit_gate": "LOCKED"
+      "status": "BLOCKED_BY_PREVIOUS_PHASE"
     },
     {
+      "blocked_by": "P02",
+      "exit_gate": "LOCKED",
+      "file": "PHASE-03-INVENTORY-PURCHASES.md",
       "id": "P03",
       "name": "المخزون والمشتريات",
-      "status": "BLOCKED_BY_PREVIOUS_PHASE",
-      "file": "PHASE-03-INVENTORY-PURCHASES.md",
-      "blocked_by": "P02",
-      "exit_gate": "LOCKED"
+      "status": "BLOCKED_BY_PREVIOUS_PHASE"
     },
     {
+      "blocked_by": "P03",
+      "exit_gate": "LOCKED",
+      "file": "PHASE-04-FINANCIAL-MOVEMENTS.md",
       "id": "P04",
       "name": "الحركات المالية",
-      "status": "BLOCKED_BY_PREVIOUS_PHASE",
-      "file": "PHASE-04-FINANCIAL-MOVEMENTS.md",
-      "blocked_by": "P03",
-      "exit_gate": "LOCKED"
+      "status": "BLOCKED_BY_PREVIOUS_PHASE"
     },
     {
+      "blocked_by": "P04",
+      "exit_gate": "LOCKED",
+      "file": "PHASE-05-PAYROLL-OBLIGATIONS.md",
       "id": "P05",
       "name": "الرواتب والالتزامات",
-      "status": "BLOCKED_BY_PREVIOUS_PHASE",
-      "file": "PHASE-05-PAYROLL-OBLIGATIONS.md",
-      "blocked_by": "P04",
-      "exit_gate": "LOCKED"
+      "status": "BLOCKED_BY_PREVIOUS_PHASE"
     },
     {
+      "blocked_by": "P05",
+      "exit_gate": "LOCKED",
+      "file": "PHASE-06-JOURNALS-REPORTS.md",
       "id": "P06",
       "name": "القيود والتقارير والعكس",
-      "status": "BLOCKED_BY_PREVIOUS_PHASE",
-      "file": "PHASE-06-JOURNALS-REPORTS.md",
-      "blocked_by": "P05",
-      "exit_gate": "LOCKED"
+      "status": "BLOCKED_BY_PREVIOUS_PHASE"
     },
     {
+      "blocked_by": "P06",
+      "exit_gate": "LOCKED",
+      "file": "PHASE-07-OPENING-BALANCES.md",
       "id": "P07",
       "name": "الأرصدة الافتتاحية والقطع",
-      "status": "BLOCKED_BY_PREVIOUS_PHASE",
-      "file": "PHASE-07-OPENING-BALANCES.md",
-      "blocked_by": "P06",
-      "exit_gate": "LOCKED"
+      "status": "BLOCKED_BY_PREVIOUS_PHASE"
     },
     {
+      "blocked_by": "P07",
+      "exit_gate": "LOCKED",
+      "file": "PHASE-08-ACTIVATION-VERIFICATION.md",
       "id": "P08",
       "name": "التفعيل والتحقق بعد القطع",
-      "status": "BLOCKED_BY_PREVIOUS_PHASE",
-      "file": "PHASE-08-ACTIVATION-VERIFICATION.md",
-      "blocked_by": "P07",
-      "exit_gate": "LOCKED"
+      "status": "BLOCKED_BY_PREVIOUS_PHASE"
     }
   ],
+  "plan_version": 1,
   "preview_acceptance": {
-    "last_updated_date": "2026-09-16",
-    "status": "PARTIAL",
-    "scenario_5": "PENDING_INDEPENDENT_VIEWER_LOGIN_AND_ENDPOINT_TEST",
-    "current_session_role": "signed_out_login_form",
-    "current_session_settlement_view": "OWNER_VERIFIED",
-    "synthetic_employee_records": 2,
-    "independent_viewer_login_verified": false,
-    "posting_endpoint_403_verified": false,
-    "financial_writes_by_this_session": 0,
-    "production_changed": false,
+    "blocker": "live_authenticated_posting_request_not_available_in_current_browser_tools",
     "continuation": "docs/operations/PREVIEW-REVIEWER-SIGNOUT-20260916.md",
-    "reviewer_logout_verified": true,
-    "reviewer_logout_source_sha": "497311cd14208303730f5dfadac94c4d6b1c9d48",
-    "owner_signin_verified": true,
-    "blocker": "awaiting_independent_viewer_secure_signin",
-    "last_observation": "Independent Viewer linked and enabled. Accounting permission management exists within Accounting, separate from Team/Employee roles; prior missing-feature diagnosis corrected. Granted only settlement view and verified all 15 other accounting permissions unchecked after reopening. No source change needed. Secure login requested; latest readback remains login form.",
+    "current_session_role": "independent_viewer_verified_by_sidebar_identity",
+    "current_session_settlement_view": "PASS_AFTER_RELOAD",
+    "financial_writes_by_this_session": 0,
     "independent_viewer_account_created": true,
+    "independent_viewer_login_verified": true,
     "independent_viewer_permissions_verified": [
       "accounting.settlements.view"
-    ]
-  }
+    ],
+    "last_observation": "Independent test Viewer signed in. Settlement page opened before and after reload; upload/save draft and all four bank approval buttons disabled; permission management button absent. Opening-balances route denied. Zero settlement records observed; no journal posting or financial writes. Viewer session preserved on settlements. UI checks do not prove posting endpoint 403.",
+    "last_updated_date": "2026-09-16",
+    "owner_signin_verified": true,
+    "posting_endpoint_403_verified": false,
+    "production_changed": false,
+    "reviewer_logout_source_sha": "497311cd14208303730f5dfadac94c4d6b1c9d48",
+    "reviewer_logout_verified": true,
+    "scenario_5": "PARTIAL_VIEWER_UI_PASS_ENDPOINT_403_PENDING",
+    "status": "PARTIAL",
+    "synthetic_employee_records": 2
+  },
+  "production_branch": "hotfix/prod-snap-meta-final"
 }
