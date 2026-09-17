@@ -13,9 +13,10 @@ across campaigns.
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
+from .period_candidates import bounded_period_cursor, period_candidate_query
 
 from salla_marketing_attribution import (
     SALLA_RAW_ATTRIBUTION_PROJECTION,
@@ -67,6 +68,7 @@ ORDER_PROJECTION = {
     "source_campaign_name": 1,
     "ad_campaign_name": 1,
     "raw_by_source.salla_direct.date.date": 1,
+    "raw_by_source.salla_direct.date.value": 1,
     "raw_by_source.salla_direct.date.timezone": 1,
     "raw_by_source.salla_direct.created_at": 1,
 }
@@ -274,17 +276,12 @@ async def load_salla_campaign_outcomes(
     campaign_spend_sar: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     settings = await _load_report_settings(db, str(user_id))
-    query: dict[str, Any] = {
-        "user_id": str(user_id),
-        "order_date": {
-            "$gte": (date_from - timedelta(days=1)).isoformat(),
-            "$lte": (date_to + timedelta(days=1)).isoformat(),
-        },
-    }
-    if settings.get("hide_inferred_date_orders"):
-        query["order_date_inferred"] = {"$ne": True}
+    query = period_candidate_query(
+        user_id, date_from, date_to,
+        hide_inferred=settings.get("hide_inferred_date_orders"),
+    )
     orders = await _to_list(
-        db.unified_orders.find(query, ORDER_PROJECTION),
+        bounded_period_cursor(db.unified_orders, query, ORDER_PROJECTION, MAX_ORDER_ROWS),
         MAX_ORDER_ROWS,
     )
     if len(orders) > MAX_ORDER_ROWS:

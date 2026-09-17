@@ -1,8 +1,8 @@
 """Bounded, read-only diagnosis of report date-window non-additivity.
 
 This is an operator diagnostic, not a reporting or attribution policy change.
-Only aggregates leave the process. It compares both partitions against one
-snapshot of the whole window; it cannot detect orders absent from that window.
+Only aggregates leave the process. Each window uses the report candidate selector. Reads are not a database
+transaction; concurrent order updates can affect the comparison.
 Explicit Snapchat source is deliberately separate from campaign attribution.
 """
 from __future__ import annotations
@@ -16,6 +16,7 @@ from datetime import date, timedelta
 from zoneinfo import ZoneInfo
 
 from salla_marketing_attribution import canonical_ad_platform
+from .period_candidates import bounded_period_cursor, period_candidate_query
 from .salla_outcomes import (
     ORDER_PROJECTION, _load_report_settings, _localized_order_period_date, _to_list,
 )
@@ -41,53 +42,49 @@ async def audit_period_partition(
         raise ValueError("row limit must be between 1 and 100000")
     zone = ZoneInfo(timezone_name)
     settings = await _load_report_settings(db, user_id)
-    query = {
-        "user_id": str(user_id),
-        "order_date": {
-            "$gte": (date_from - timedelta(days=1)).isoformat(),
-            "$lte": (date_to + timedelta(days=1)).isoformat(),
-        },
-    }
-    if settings.get("hide_inferred_date_orders"):
-        query["order_date_inferred"] = {"$ne": True}
-    rows = await _to_list(db.unified_orders.find(query, DIAGNOSTIC_PROJECTION), max_rows)
-    if len(rows) > max_rows:
-        raise ValueError("diagnostic exceeded row limit; no partial result")
-
     windows = {
         "whole": (date_from, date_to),
         "left": (date_from, split_on - timedelta(days=1)),
         "right": (split_on, date_to),
     }
     counts = {name: Counter() for name in ("all_orders", "explicit_snapchat_source")}
+    candidate_counts = {}
     explanations = Counter()
-    for row in rows:
-        local_date, _, _ = _localized_order_period_date(row, zone=zone)
-        # Match the report's Mongo string bounds exactly, including a stored
-        # timestamp string, rather than silently normalizing the candidate date.
-        stored_date = row.get("order_date")
-        if not isinstance(stored_date, str):
-            raise ValueError("unsupported stored date type; no partial result")
-        included = {}
-        for name, (start, end) in windows.items():
-            included[name] = bool(
-                start.isoformat() <= local_date <= end.isoformat()
-                and (start - timedelta(days=1)).isoformat() <= stored_date
-                <= (end + timedelta(days=1)).isoformat()
-            )
-            if included[name]:
-                counts["all_orders"][name] += 1
-                if canonical_ad_platform(row) == "snapchat":
-                    counts["explicit_snapchat_source"][name] += 1
-        if included["whole"] and not (included["left"] or included["right"]):
-            explanations["stored_date_outside_partition_query"] += 1
+    # Query each partition independently: computing both from the whole list
+    # would always reconcile and would hide a candidate-selection regression.
+    for part, (start, end) in windows.items():
+        query = period_candidate_query(
+            user_id, start, end, hide_inferred=settings.get("hide_inferred_date_orders"),
+        )
+        rows = await _to_list(
+            bounded_period_cursor(db.unified_orders, query, DIAGNOSTIC_PROJECTION, max_rows),
+            max_rows,
+        )
+        if len(rows) > max_rows:
+            raise ValueError("diagnostic exceeded row limit; no partial result")
+        candidate_counts[part] = len(rows)
+        for row in rows:
+            local_date, _, _ = _localized_order_period_date(row, zone=zone)
+            if not start.isoformat() <= local_date <= end.isoformat():
+                continue
+            counts["all_orders"][part] += 1
+            if canonical_ad_platform(row) == "snapchat":
+                counts["explicit_snapchat_source"][part] += 1
+            if part == "whole":
+                stored_date = str(row.get("order_date") or "")
+                target = "left" if local_date < split_on.isoformat() else "right"
+                first, last = windows[target]
+                if not (first - timedelta(days=1)).isoformat() <= stored_date <= (last + timedelta(days=1)).isoformat():
+                    explanations["stored_date_outside_partition_query"] += 1
 
     result = {
         "timezone": timezone_name,
         "periods": {name: [start.isoformat(), end.isoformat()]
                     for name, (start, end) in windows.items()},
-        "candidate_rows": len(rows),
-        "complete_within_whole_window_candidates": True,
+        "candidate_rows": candidate_counts["whole"],
+        "candidate_rows_by_period": candidate_counts,
+        "comparison_reads": "independent_bounded_windows",
+        "complete_within_candidate_windows": True,
         "explanations": dict(explanations),
     }
     for name, values in counts.items():
