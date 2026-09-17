@@ -392,6 +392,12 @@
         "reversed filter returns synthetic only"
       ],
       "financial_readback": "PASS baseline balances, baseline ledger and real statement unchanged"
+    },
+    "unified_settlement_ui": {
+      "status": "BUILT_TESTED_PENDING_PREVIEW_DEPLOYMENT",
+      "approved_by_owner": true,
+      "scope": "One searchable register and one selection; workflow inline and evidence in expandable section; permissions preserved; Arabic reversed badge included",
+      "production_changed": false
     }
   },
   "production_branch": "hotfix/prod-snap-meta-final"

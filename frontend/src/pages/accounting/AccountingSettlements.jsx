@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ArrowClockwise,
     Bank,
@@ -11,7 +11,6 @@ import { toast } from "sonner";
 
 import {
     getAccountingSettlementContext,
-    getAccountingSettlementDrafts,
     matchAccountingSettlementEntry,
     postAccountingSettlementDraft,
     rejectAccountingSettlementDraft,
@@ -21,6 +20,8 @@ import {
     updateAccountingSettlementDraft,
     uploadAccountingSettlementDraft,
 } from "../../services/accountingModule";
+
+import AccountingSettlementRegister from "./AccountingSettlementRegister";
 
 const STATUS = {
     draft: ["مسودة", "border-sky-200 bg-sky-50 text-sky-800"],
@@ -85,7 +86,8 @@ function emptyEdit() {
 
 export default function AccountingSettlements({ accountingPermissions = [] }) {
     const [context, setContext] = useState(null);
-    const [drafts, setDrafts] = useState([]);
+    const [refreshKey, setRefreshKey] = useState(0);
+    const [requestedDraftId, setRequestedDraftId] = useState("");
     const [selected, setSelected] = useState(null);
     const [loading, setLoading] = useState(true);
     const [busy, setBusy] = useState("");
@@ -114,16 +116,8 @@ export default function AccountingSettlements({ accountingPermissions = [] }) {
     const load = async ({ keepSelection = true } = {}) => {
         setLoading(true);
         try {
-            const [nextContext, result] = await Promise.all([
-                getAccountingSettlementContext(),
-                getAccountingSettlementDrafts({ limit: 200 }),
-            ]);
-            const nextDrafts = result?.items || [];
-            setContext(nextContext);
-            setDrafts(nextDrafts);
-            if (keepSelection && selectedIdRef.current) {
-                setSelected(nextDrafts.find((item) => item.id === selectedIdRef.current) || null);
-            }
+            setContext(await getAccountingSettlementContext());
+            if (keepSelection) setRefreshKey((value) => value + 1);
         } catch (error) {
             toast.error(errorText(error, "تعذر تحميل صفحة التسويات"));
         } finally {
@@ -159,9 +153,17 @@ export default function AccountingSettlements({ accountingPermissions = [] }) {
         setMatchInputs({});
     }, [selected]);
 
+    const selectDraft = useCallback((draft) => {
+        setRequestedDraftId(draft?.id || "");
+        setSelected(draft?.status === "matched"
+            ? { ...draft, status: "ready_for_review", workflow_state: "matched" }
+            : draft);
+    }, []);
+
     const refreshAfter = async (result) => {
         if (result?.id) {
             selectedIdRef.current = result.id;
+            setRequestedDraftId(result.id);
             setSelected(result);
         }
         await load();
@@ -388,27 +390,12 @@ export default function AccountingSettlements({ accountingPermissions = [] }) {
                 </div>
             </form>
 
-            <section className="grid gap-5 xl:grid-cols-[minmax(0,.9fr)_minmax(0,1.4fr)]">
-                <div className="rounded-2xl border bg-white p-4">
-                    <h3 className="font-black">سجل التسويات</h3>
-                    <p className="text-xs font-semibold text-slate-500">{drafts.length} سجل</p>
-                    <div className="mt-3 max-h-[760px] space-y-2 overflow-y-auto" data-testid="settlement-draft-list">
-                        {!drafts.length && <div className="rounded-xl border border-dashed p-8 text-center text-sm font-bold text-slate-500">لا توجد مسودات.</div>}
-                        {drafts.map((item) => (
-                            <button key={item.id} type="button" onClick={() => setSelected(item)}
-                                className={`w-full rounded-xl border p-3 text-right ${selected?.id === item.id ? "border-emerald-500 bg-emerald-50" : "border-slate-200"}`}>
-                                <div className="flex justify-between gap-2">
-                                    <div>
-                                        <div className="font-extrabold">{item.provider_label} · {item.statement_reference || "بدون مرجع"}</div>
-                                        <div className="mt-1 text-xs font-semibold text-slate-500">{item.bank_account_name || "بلا بنك"} · {money(item.amounts?.reported_net)} SAR</div>
-                                    </div>
-                                    <Badge value={item.status} />
-                                </div>
-                            </button>
-                        ))}
-                    </div>
-                </div>
-
+            <AccountingSettlementRegister
+                accountingPermissions={accountingPermissions}
+                onDraftSelected={selectDraft}
+                refreshKey={refreshKey}
+                requestedDraftId={requestedDraftId}
+                renderWorkflow={(draft) => draft.id === selected?.id ? (
                 <div className="rounded-2xl border bg-white p-5" data-testid="settlement-draft-detail">
                     {!selected && (
                         <div className="flex min-h-[360px] flex-col items-center justify-center text-center">
@@ -550,7 +537,8 @@ export default function AccountingSettlements({ accountingPermissions = [] }) {
                         </div>
                     )}
                 </div>
-            </section>
+                ) : null}
+            />
         </div>
     );
 }

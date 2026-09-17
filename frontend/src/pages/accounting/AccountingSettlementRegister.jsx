@@ -111,7 +111,7 @@ function Summary({ label, value, hint, tone = "slate" }) {
     );
 }
 
-export default function AccountingSettlementRegister({ accountingPermissions = [] }) {
+export default function AccountingSettlementRegister({ accountingPermissions = [], onDraftSelected, renderWorkflow, refreshKey = 0, requestedDraftId = "" }) {
     const [filters, setFilters] = useState(EMPTY_FILTERS);
     const [appliedFilters, setAppliedFilters] = useState(EMPTY_FILTERS);
     const [items, setItems] = useState([]);
@@ -153,6 +153,7 @@ export default function AccountingSettlementRegister({ accountingPermissions = [
             if (selectedId && !nextItems.some((item) => item.id === selectedId)) {
                 setSelectedId("");
                 setDetail(null);
+                onDraftSelected?.(null);
                 setCandidates([]);
             }
         } catch (error) {
@@ -162,7 +163,7 @@ export default function AccountingSettlementRegister({ accountingPermissions = [
         } finally {
             setLoading(false);
         }
-    }, [appliedFilters, selectedId]);
+    }, [appliedFilters, selectedId, onDraftSelected]);
 
     const openDetail = useCallback(async (draftId) => {
         if (!draftId) return;
@@ -172,23 +173,32 @@ export default function AccountingSettlementRegister({ accountingPermissions = [
         try {
             const result = await getAccountingSettlementRegisterDetail(draftId);
             setDetail(result);
+            onDraftSelected?.(result?.draft || null);
             setBankSelection(result?.draft?.bank_transaction_id || "");
             setBankNotes(result?.draft?.bank_match_notes || "");
         } catch (error) {
             toast.error(errorText(error, "تعذر فتح تفاصيل التسوية"));
             setDetail(null);
+            onDraftSelected?.(null);
         } finally {
             setDetailLoading(false);
         }
-    }, []);
+    }, [onDraftSelected]);
 
     useEffect(() => { loadRegister(); }, [loadRegister]);
+
+    useEffect(() => {
+        if (!refreshKey) return;
+        loadRegister();
+        if (requestedDraftId || selectedId) openDetail(requestedDraftId || selectedId);
+    }, [refreshKey]);
 
     const applyFilters = (event) => {
         event.preventDefault();
         setAppliedFilters({ ...filters });
         setSelectedId("");
         setDetail(null);
+        onDraftSelected?.(null);
         setCandidates([]);
     };
 
@@ -197,6 +207,7 @@ export default function AccountingSettlementRegister({ accountingPermissions = [
         setAppliedFilters(EMPTY_FILTERS);
         setSelectedId("");
         setDetail(null);
+        onDraftSelected?.(null);
         setCandidates([]);
     };
 
@@ -254,9 +265,9 @@ export default function AccountingSettlementRegister({ accountingPermissions = [
                         <Receipt size={25} weight="duotone" />
                     </span>
                     <div>
-                        <h3 className="text-lg font-black text-slate-950">السجل المحاسبي للتسويات</h3>
+                        <h3 className="text-lg font-black text-slate-950">سجل التسويات</h3>
                         <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
-                            بحث موحد حسب المزود والفترة والحالة والبنك، مع الكشف وحركة البنك وأرجل القيد في شاشة واحدة.
+                            ابحث واختر التسوية لمطابقتها ومراجعتها، أو عرض الكشف وحركة البنك والقيد.
                         </p>
                     </div>
                 </div>
@@ -354,7 +365,11 @@ export default function AccountingSettlementRegister({ accountingPermissions = [
                     {selectedId && detailLoading && <div className="p-12 text-center text-sm font-bold text-slate-500">جاري تحميل تفاصيل التسوية…</div>}
 
                     {selectedId && !detailLoading && selectedDraft && (
-                        <div className="space-y-5">
+                        <>
+                        {renderWorkflow?.(selectedDraft)}
+                        <details open={!renderWorkflow} className="mt-4 rounded-xl border border-slate-200 p-3">
+                            <summary className="cursor-pointer text-sm font-extrabold text-emerald-800">الكشف وحركة البنك والقيد</summary>
+                        <div className="mt-4 space-y-5">
                             <div className="flex flex-wrap items-start justify-between gap-3">
                                 <div>
                                     <div className="text-xs font-extrabold text-emerald-700">{selectedDraft.provider_label || selectedDraft.provider}</div>
@@ -532,6 +547,8 @@ export default function AccountingSettlementRegister({ accountingPermissions = [
                                     : "هذه الشاشة لا ترحّل القيد؛ الترحيل يبقى داخل دورة المسودة والمراجعة وبصلاحية مستقلة."}
                             </div>
                         </div>
+                        </details>
+                        </>
                     )}
                 </div>
             </div>
