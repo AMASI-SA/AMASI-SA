@@ -160,7 +160,7 @@
   ],
   "plan_version": 1,
   "preview_acceptance": {
-    "blocker": "user_final_reversal_actions_required_by_auto_review",
+    "blocker": "settlement_status_stale_after_ledger_reversal",
     "continuation": "docs/operations/PREVIEW-REVIEWER-SIGNOUT-20260916.md",
     "current_session_role": "owner_signed_in",
     "current_session_settlement_view": "PASS_AFTER_RELOAD",
@@ -214,7 +214,7 @@
       "accounting.settlements.view"
     ],
     "journal_posting_count": 0,
-    "last_observation": "FX deployed and verified for7foreign orders against source export;9focused tests PASS. Settlement6743152 submitted and reviewed via owner UI; refreshed history confirms reviewed. Ledger/settlement entries/files unchanged. Read-only posting preflight finds available Salla receivable0SAR, required58538.94SAR. No posting attempted. No Production/Salla mutations.",
+    "last_observation": "User confirmed both synthetic reversals. Fresh read-only DB verification: settlement4/4legs and seed2/2legs reversed with reversal references; all5balance deltas zero; baseline ledger and real statement6743152 exactly unchanged. UI shows both groups reversed. Synthetic settlement draft still posted.",
     "last_updated_date": "2026-09-17",
     "mezan2_independence": {
       "independent_import_required": true,
@@ -225,7 +225,7 @@
       "required": true,
       "verification": "NOT_YET_COMPLETE"
     },
-    "next_action": "User confirm prepared reversal of seed groupd4c1235d-beb9-46fc-a04a-bd2fcbc6115c, then read-only verify all6legs reversed and baseline balances restored. Investigate settlement draft still posted after ledger reversal; do not manually mask it.",
+    "next_action": "Investigate and fix Preview settlement lifecycle status after audited ledger reversal; do not mask by manual database edits. Replay acceptance remains unexecuted; P01 and Production gates remain open.",
     "order_import": {
       "created": 3,
       "evidence": "owner_authenticated_preview_import_jobs_ui",
@@ -329,7 +329,7 @@
     "status": "PARTIAL",
     "synthetic_employee_records": 2,
     "posting_test_proposal": {
-      "status": "AUTHORIZED_STARTED_BROWSER_RECOVERY_BLOCKED",
+      "status": "EXECUTED_AND_REVERSED_LIFECYCLE_DEFECT_OPEN",
       "document": "docs/operations/MZ2-FIN-CUTOVER-001/PREVIEW-POSTING-TEST-20260917.md",
       "fixture_receivable_sar": 100,
       "settlement_net_sar": 97.7,
@@ -337,10 +337,10 @@
       "commission_vat_sar": 0.3,
       "existing_service_tests_passed": 7,
       "existing_statement_unchanged": true,
-      "executed": false
+      "executed": true
     },
     "posting_test_execution": {
-      "status": "SETTLEMENT_REVERSED_SEED_REVERSAL_PENDING",
+      "status": "POST_AND_REVERSAL_VERIFIED_LIFECYCLE_DEFECT_OPEN",
       "reference": "PREVIEW-P01-POST-TEST-20260917",
       "explicit_owner_authorization": true,
       "synthetic_receivable_created_sar": 100,
@@ -348,7 +348,7 @@
       "submit_pass": true,
       "review_pass": true,
       "post_click_result": "User confirmed; DB posted and UI register verified",
-      "cleanup_done": false,
+      "cleanup_done": true,
       "private_checkpoint": "/opt/mezan-preview-excel-20260917/p01-post-test.json",
       "recovery_error": "CDP operation refresh tabs was superseded by browser recovery",
       "fixture_currency_setup_issue": "Initial helper omitted currency guard. Normal build_currency_guarded_create reused same draft and verified SAR. No bypass.",
@@ -364,14 +364,14 @@
       "journal_ui_opened": true,
       "replay_attempted": false,
       "settlement_reversed_legs": 4,
-      "seed_reversed_legs": 0,
+      "seed_reversed_legs": 2,
       "baseline_ledger_unchanged": true,
       "balance_deltas": [
         0,
         0,
         0,
-        100,
-        -100
+        0,
+        0
       ],
       "finding": "Settlement draft remains posted after ledger group reversal; register lifecycle consistency needs investigation"
     }
