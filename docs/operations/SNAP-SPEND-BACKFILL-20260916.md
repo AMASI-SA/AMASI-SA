@@ -1,5 +1,28 @@
 # Snapchat canonical spend backfill — 2026-09-16
 
+## Follow-up blocked by current service health — 2026-09-17T18:01Z
+
+Fresh full navigation of integrations-v2 and reopening Sync/Errors still shows
+the17:41UTC campaigns/expenses row running. User requested follow-up; one
+Control Center "Sync30days" request was attempted around17:59, with no new
+accepted job visible. No duplicate repeated requests, lock removal or source
+changes were made.
+
+Read-only publishing UI now shows a DIFFERENT newer live release:
+Publish100 c68356e, about4minutes old at17:58 observation.
+Our verified Publish99 3b0f6db remains in history. This conversation did not
+publish c68356e and must not claim its identity verified. A concurrent
+deployment may have interrupted the job, but this is not proven.
+
+Read-only View Logs for current release contains explicit nginx upstream
+timeouts waiting for Backend GET /health at17:59:33,17:59:38 and18:00:03UTC.
+This is an observed service-health problem, not proof of a30-day boundary
+defect. Other logged dashboard summary stages took roughly20–28seconds.
+No new financial or terminal-run success is claimed; prior full30-day coverage
+and August preservation evidence remain valid as historical observations.
+Closed only the logs modal; no Emergent chat used, no deployment/rollback/
+restart/lease mutation. Final closure remains blocked on service recovery and
+a terminal sync result on a stable live release.
 ## Retry verification — 2026-09-17T17:47Z
 
 User requested another live attempt. One additional click on latest30 Sync V2
