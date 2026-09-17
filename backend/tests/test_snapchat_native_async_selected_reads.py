@@ -318,7 +318,7 @@ async def test_dashboard_sync_maps_30_days_to_canonical_v2_range():
 
 
 @pytest.mark.asyncio
-async def test_dashboard_sync_preserves_explicit_47_day_account_range():
+async def test_dashboard_sync_preserves_explicit_30_day_account_range():
     fixed_now = lambda: datetime(2026, 9, 16, 20, 0, tzinfo=timezone.utc)
     calls = []
 
@@ -328,22 +328,22 @@ async def test_dashboard_sync_preserves_explicit_47_day_account_range():
 
         async def run(self, user_id, **kwargs):
             calls.append((user_id, kwargs))
-            return {"status": "complete", "sync_run_id": "canonical-47d", "summary": {"rows_saved": 1128}}
+            return {"status": "complete", "sync_run_id": "canonical-30d", "summary": {"rows_saved": 720}}
 
     result = await async_routes.execute_snapchat_dashboard_sync(
         _db(), "owner-1",
-        SnapchatNativeSyncInput(from_date="2026-08-01", to_date="2026-09-16", ad_account_id="usd-main"),
+        SnapchatNativeSyncInput(from_date="2026-08-18", to_date="2026-09-16", ad_account_id="usd-main"),
         now=fixed_now, pipeline_factory=FakePipeline,
     )
     assert calls == [("owner-1", {
         "ad_account_id": "usd-main",
-        "date_from": datetime(2026, 8, 1).date(),
+        "date_from": datetime(2026, 8, 18).date(),
         "date_to": datetime(2026, 9, 16).date(),
         "action_report_time": "conversion", "run_type": "manual",
     })]
-    assert result["date_from"] == "2026-08-01"
+    assert result["date_from"] == "2026-08-18"
     assert result["date_to"] == "2026-09-16"
-    assert result["run_id"] == "canonical-47d"
+    assert result["run_id"] == "canonical-30d"
 
 
 @pytest.mark.asyncio

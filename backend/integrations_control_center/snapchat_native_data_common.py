@@ -23,7 +23,8 @@ from .snapchat_oauth_security import (
 
 SNAPCHAT_API_BASE = "https://adsapi.snapchat.com/v1"
 BUSINESS_TIMEZONE = "Asia/Riyadh"
-MAX_SYNC_DAYS = 62
+MAX_SYNC_DAYS = 30
+MAX_READ_DAYS = 62
 MAX_SYNC_ACCOUNTS = 20
 MAX_PROVIDER_CALLS = 250
 MAX_PAGES = 10
@@ -51,12 +52,16 @@ NATIVE_RESPONSE_KEYS = (
 )
 
 
-class SnapchatNativeSyncInput(BaseModel):
-    days: int = Field(default=30, ge=1, le=MAX_SYNC_DAYS)
+class SnapchatNativeReadInput(BaseModel):
+    days: int = Field(default=30, ge=1, le=MAX_READ_DAYS)
     from_date: str | None = None
     to_date: str | None = None
     ad_account_id: str | None = Field(default=None, min_length=1, max_length=128)
     idempotency_key: str | None = Field(default=None, min_length=1, max_length=128)
+
+
+class SnapchatNativeSyncInput(SnapchatNativeReadInput):
+    days: int = Field(default=30, ge=1, le=MAX_SYNC_DAYS)
 
 
 class SnapchatNativeSyncError(Exception):
@@ -180,7 +185,7 @@ def _parse_date(value: str, field_name: str) -> date:
         ) from exc
 
 
-def enumerate_native_sync_dates(payload: SnapchatNativeSyncInput, *, today: date) -> list[date]:
+def enumerate_native_read_dates(payload: SnapchatNativeReadInput, *, today: date) -> list[date]:
     has_from, has_to = bool(payload.from_date), bool(payload.to_date)
     if has_from != has_to:
         raise SnapchatNativeSyncError(
@@ -195,14 +200,30 @@ def enumerate_native_sync_dates(payload: SnapchatNativeSyncInput, *, today: date
                 "invalid_date_range", "to_date must be on or after from_date.", status_code=400
             )
         days = (end - start).days + 1
-        if days > MAX_SYNC_DAYS:
+        if days > MAX_READ_DAYS:
             raise SnapchatNativeSyncError(
-                "date_range_too_wide", f"Date range cannot exceed {MAX_SYNC_DAYS} days.",
+                "date_range_too_wide", f"Date range cannot exceed {MAX_READ_DAYS} days.",
                 status_code=400,
             )
         return [start + timedelta(days=offset) for offset in range(days)]
     start = today - timedelta(days=payload.days - 1)
     return [start + timedelta(days=offset) for offset in range(payload.days)]
+
+
+def enumerate_native_sync_dates(payload: SnapchatNativeSyncInput, *, today: date) -> list[date]:
+    dates = enumerate_native_read_dates(payload, today=today)
+    if len(dates) > MAX_SYNC_DAYS:
+        raise SnapchatNativeSyncError(
+            "date_range_too_wide", f"Date range cannot exceed {MAX_SYNC_DAYS} days.",
+            status_code=400,
+        )
+    if dates[0] < today - timedelta(days=MAX_SYNC_DAYS - 1) or dates[-1] > today:
+        raise SnapchatNativeSyncError(
+            "date_range_outside_sync_window",
+            f"Snapchat sync is limited to the latest {MAX_SYNC_DAYS} Riyadh dates.",
+            status_code=400,
+        )
+    return dates
 
 
 def snapchat_native_sync_enabled() -> bool:

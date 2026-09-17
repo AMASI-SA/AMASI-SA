@@ -13,11 +13,11 @@ from .snapchat_native_data_common import (
     SNAPCHAT_PERFORMANCE_COLLECTION,
     SNAPCHAT_PROVIDER_ID,
     SnapchatNativeSyncError,
-    SnapchatNativeSyncInput,
+    SnapchatNativeReadInput,
     _collection,
     _timezone,
     _utcnow,
-    enumerate_native_sync_dates,
+    enumerate_native_read_dates,
 )
 
 
@@ -30,13 +30,13 @@ async def selected_snapchat_performance_summary(
     now: Callable[[], datetime] = _utcnow,
 ) -> dict[str, Any]:
     """Aggregate ad-account rows while excluding every unselected account."""
-    payload = SnapchatNativeSyncInput(
+    payload = SnapchatNativeReadInput(
         from_date=from_date,
         to_date=to_date,
         days=1,
     )
     now_value = now().astimezone(timezone.utc)
-    dates = enumerate_native_sync_dates(
+    dates = enumerate_native_read_dates(
         payload,
         today=now_value.astimezone(
             _timezone(BUSINESS_TIMEZONE)

@@ -15,16 +15,15 @@ from .snapchat_account_selection import _load_selected_accounts
 from .snapchat_native_data_common import (
     ATTRIBUTION_MODEL,
     BUSINESS_TIMEZONE,
-    MAX_SYNC_DAYS,
     SNAPCHAT_ENTITY_COLLECTION,
     SNAPCHAT_PERFORMANCE_COLLECTION,
     SNAPCHAT_PROVIDER_ID,
     SnapchatNativeSyncError,
-    SnapchatNativeSyncInput,
+    SnapchatNativeReadInput,
     _collection,
     _parse_datetime,
     _timezone,
-    enumerate_native_sync_dates,
+    enumerate_native_read_dates,
 )
 
 DEFAULT_REPORT_DAYS = 30
@@ -134,12 +133,12 @@ def resolve_report_dates(
     today: date | None = None,
 ) -> list[date]:
     business_today = today or datetime.now(_timezone(BUSINESS_TIMEZONE)).date()
-    payload = SnapchatNativeSyncInput(
+    payload = SnapchatNativeReadInput(
         days=DEFAULT_REPORT_DAYS,
         from_date=from_date,
         to_date=to_date,
     )
-    dates = enumerate_native_sync_dates(payload, today=business_today)
+    dates = enumerate_native_read_dates(payload, today=business_today)
     if dates[-1] > business_today:
         raise SnapchatNativeSyncError(
             "future_date_not_allowed",

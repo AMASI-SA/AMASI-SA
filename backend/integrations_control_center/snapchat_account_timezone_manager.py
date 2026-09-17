@@ -46,14 +46,14 @@ from .snapchat_native_data_common import (
     SNAPCHAT_PERFORMANCE_COLLECTION,
     SNAPCHAT_PROVIDER_ID,
     SnapchatNativeSyncError,
-    SnapchatNativeSyncInput,
+    SnapchatNativeReadInput,
     SnapchatSyncContext,
     _as_number,
     _collection,
     _parse_datetime,
     _timezone,
     _utcnow,
-    enumerate_native_sync_dates,
+    enumerate_native_read_dates,
 )
 from .snapchat_native_performance_sync import (
     CONVERSION_SOURCE_TYPES,
@@ -124,12 +124,12 @@ def resolve_account_report_dates(
     now: datetime | None = None,
 ) -> list[date]:
     today = account_local_today(timezone_name, now=now)
-    payload = SnapchatNativeSyncInput(
+    payload = SnapchatNativeReadInput(
         days=1,
         from_date=from_date,
         to_date=to_date,
     )
-    dates = enumerate_native_sync_dates(payload, today=today)
+    dates = enumerate_native_read_dates(payload, today=today)
     if dates[-1] > today:
         raise SnapchatNativeSyncError(
             "future_date_not_allowed",
