@@ -8,13 +8,13 @@
     "update_status_after_session": true,
     "work_current_phase_only": true
   },
-  "current_blocker": "P01_browser_acceptance_scenarios_5_and_6_not_completed",
+  "current_blocker": "P01_preview_acceptance_matrix_and_provider_bank_confirmation_pending",
   "current_phase": "P01",
   "current_phase_file": "PHASE-01-SETTLEMENTS.md",
   "current_phase_status": "IN_PROGRESS",
   "foundation_merge_sha": "c116d80fd375c0ddfd4acf0eb0ea7e8a8a0dd092",
   "foundation_pr": 851,
-  "last_updated_date": "2026-08-25",
+  "last_updated_date": "2026-09-17",
   "legacy_mezan_policy": {
     "copied_value_status": "unverified_draft",
     "copied_values_may_create_opening_balances": false,
@@ -36,7 +36,7 @@
       "financial_position"
     ]
   },
-  "next_allowed_action": "complete_p01_scenario_5_and_obtain_explicit_same_session_authorization_before_scenario_6",
+  "next_allowed_action": "Complete remaining P01 acceptance on isolated Preview; retain historical Production evidence separately. Do not repeat synthetic posting/reversal or post real6743152.",
   "operation_id": "MZ2-FIN-CUTOVER-001",
   "phase_lock_enabled": true,
   "phases": [
@@ -213,8 +213,8 @@
     "independent_viewer_permissions_verified": [
       "accounting.settlements.view"
     ],
-    "journal_posting_count": 0,
-    "last_observation": "User confirmed both synthetic reversals. Fresh read-only DB verification: settlement4/4legs and seed2/2legs reversed with reversal references; all5balance deltas zero; baseline ledger and real statement6743152 exactly unchanged. UI shows both groups reversed. Synthetic settlement draft still posted.",
+    "journal_posting_count": 1,
+    "last_observation": "Fresh browser read: unified register contains reversed synthetic settlement and reviewed real6743152. Four provider bank cards remain copied/unconfirmed. Shipping bank links show3/3confirmed. No financial action performed.",
     "last_updated_date": "2026-09-17",
     "mezan2_independence": {
       "independent_import_required": true,
@@ -225,7 +225,7 @@
       "required": true,
       "verification": "NOT_YET_COMPLETE"
     },
-    "next_action": "Unified Preview settlement UI and reversal state are verified. Continue remaining P01 acceptance and Mezan2 standalone journal interface; do not repeat synthetic posting/reversal or post real6743152. Production unchanged.",
+    "next_action": "Complete and document remaining current Preview P01 scenarios with isolated synthetic drafts; obtain explicit bank confirmation before marking provider links verified. Keep P02 locked.",
     "order_import": {
       "created": 3,
       "evidence": "owner_authenticated_preview_import_jobs_ui",
@@ -256,7 +256,7 @@
       "debit_total": 100,
       "draft_net_sar": 97.7,
       "explicit_owner_authorization": true,
-      "finding": "Settlement draft remains posted after ledger group reversal; register lifecycle consistency needs investigation",
+      "finding": "Lifecycle display defect resolved by authoritative ledger read projection; stored posting snapshot intentionally preserved.",
       "fixture_currency_setup_issue": "Initial helper omitted currency guard. Normal build_currency_guarded_create reused same draft and verified SAR. No bypass.",
       "journal_ui_opened": true,
       "ledger_group_id": "27711eca-2d9b-46c9-a1b6-fc4a55e6fb96",
@@ -274,7 +274,7 @@
       "settlement_groups": 1,
       "settlement_legs": 4,
       "settlement_reversed_legs": 4,
-      "status": "POST_AND_REVERSAL_VERIFIED_LIFECYCLE_DEFECT_OPEN",
+      "status": "POST_AND_REVERSAL_VERIFIED_LIFECYCLE_FIX_VERIFIED",
       "submit_pass": true,
       "synthetic_receivable_created_sar": 100
     },
@@ -287,7 +287,7 @@
       "existing_statement_unchanged": true,
       "fixture_receivable_sar": 100,
       "settlement_net_sar": 97.7,
-      "status": "EXECUTED_AND_REVERSED_LIFECYCLE_DEFECT_OPEN"
+      "status": "EXECUTED_REVERSED_AND_LIFECYCLE_FIX_VERIFIED"
     },
     "preview_default_mode_fix": "DEPLOYED_PREVIEW_RUNTIME_LOGIN_PENDING",
     "preview_settlement_metadata_and_actual_fields_updated": true,
@@ -411,6 +411,17 @@
       "rollback": "/opt/mezan-preview-signout-20260916/frontend/before-unified-settlements-20260917",
       "financial_actions_executed": false,
       "production_changed": false
+    },
+    "journal_posting_count_scope": "Synthetic settlement group only; subsequently reversed. Separate synthetic receivable seed also reversed.",
+    "acceptance_matrix": {
+      "environment": "isolated Preview",
+      "scenario_5": "PASS: viewer UI plus owner-reported authenticated403 accounting_permission_required",
+      "scenario_6": "PASS: authorized synthetic posting, balanced group/evidence opened, both groups reversed and baseline restored",
+      "scenarios_1_2_3_4_7_8": "Historical Production PASS exists; full current Preview scenario evidence has not been reconciled. Do not represent historical runs as fresh Preview tests.",
+      "provider_bank_confirmation": "PENDING: Salla,Tamara,Tabby,Emkan displayed copied/unconfirmed in current UI",
+      "live_replay": "NOT_EXECUTED; automated idempotency/terminal-state tests are separate evidence",
+      "overall": "PARTIAL",
+      "next_action": "Complete and document remaining current Preview P01 scenarios with isolated synthetic drafts; obtain explicit bank confirmation before marking provider links verified. Keep P02 locked."
     }
   },
   "production_branch": "hotfix/prod-snap-meta-final"
