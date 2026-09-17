@@ -1,0 +1,62 @@
+{
+  "classification": "SANDBOX_SEED_MANIFEST",
+  "store_id": "FILL_DEMO_STORE_ID",
+  "orders": [
+    {"state": "pending", "order_id": "FILL_PENDING_ORDER_ID", "order_number": "FILL_PENDING_ORDER_NUMBER", "item_id": "FILL_PENDING_ITEM_ID", "product_id": "FILL_SIMPLE_PRODUCT_ID", "sku": "FILL_SIMPLE_SKU", "payment_method": "FILL_DEMO_PAYMENT", "branch_id": "FILL_DEMO_BRANCH_ID"},
+    {"state": "under_review", "order_id": "FILL_UNDER_REVIEW_ORDER_ID", "order_number": "FILL_UNDER_REVIEW_ORDER_NUMBER", "item_id": "FILL_UNDER_REVIEW_ITEM_ID", "product_id": "FILL_SIMPLE_PRODUCT_ID", "sku": "FILL_SIMPLE_SKU", "payment_method": "FILL_DEMO_PAYMENT", "branch_id": "FILL_DEMO_BRANCH_ID"},
+    {"state": "in_progress", "order_id": "FILL_IN_PROGRESS_ORDER_ID", "order_number": "FILL_IN_PROGRESS_ORDER_NUMBER", "item_id": "FILL_IN_PROGRESS_ITEM_ID", "product_id": "FILL_SIMPLE_PRODUCT_ID", "sku": "FILL_SIMPLE_SKU", "payment_method": "FILL_DEMO_PAYMENT", "branch_id": "FILL_DEMO_BRANCH_ID"},
+    {"state": "paid", "order_id": "FILL_PAID_ORDER_ID", "order_number": "FILL_PAID_ORDER_NUMBER", "item_id": "FILL_PAID_ITEM_ID", "product_id": "FILL_SIMPLE_PRODUCT_ID", "sku": "FILL_SIMPLE_SKU", "payment_method": "FILL_DEMO_PAYMENT", "branch_id": "FILL_DEMO_BRANCH_ID"},
+    {"state": "partially_paid", "order_id": "FILL_PARTIALLY_PAID_ORDER_ID", "order_number": "FILL_PARTIALLY_PAID_ORDER_NUMBER", "item_id": "FILL_PARTIALLY_PAID_ITEM_ID", "product_id": "FILL_SIMPLE_PRODUCT_ID", "sku": "FILL_SIMPLE_SKU", "payment_method": "FILL_DEMO_PAYMENT", "branch_id": "FILL_DEMO_BRANCH_ID"},
+    {"state": "completed", "order_id": "FILL_COMPLETED_ORDER_ID", "order_number": "FILL_COMPLETED_ORDER_NUMBER", "item_id": "FILL_COMPLETED_ITEM_ID", "product_id": "FILL_SIMPLE_PRODUCT_ID", "sku": "FILL_SIMPLE_SKU", "payment_method": "FILL_DEMO_PAYMENT", "branch_id": "FILL_DEMO_BRANCH_ID"},
+    {"state": "cancelled", "order_id": "FILL_CANCELLED_ORDER_ID", "order_number": "FILL_CANCELLED_ORDER_NUMBER", "item_id": "FILL_CANCELLED_ITEM_ID", "product_id": "FILL_SIMPLE_PRODUCT_ID", "sku": "FILL_SIMPLE_SKU", "payment_method": "FILL_DEMO_PAYMENT", "branch_id": "FILL_DEMO_BRANCH_ID"}
+  ],
+  "products": [
+    {"kind": "simple", "product_id": "FILL_SIMPLE_PRODUCT_ID", "sku": "FILL_SIMPLE_SKU", "branch_id": "FILL_DEMO_BRANCH_ID"},
+    {
+      "kind": "size_color_variant",
+      "product_id": "FILL_VARIANT_PRODUCT_ID",
+      "sku": "FILL_VARIANT_PARENT_SKU",
+      "branch_id": "FILL_DEMO_BRANCH_ID",
+      "variant_ids": ["FILL_RED_SMALL_VARIANT_ID"],
+      "option_ids": ["FILL_COLOR_OPTION_ID", "FILL_SIZE_OPTION_ID"],
+      "value_ids": ["FILL_RED_VALUE_ID", "FILL_SMALL_VALUE_ID"],
+      "option_value_tuples": [
+        {"option_id": "FILL_COLOR_OPTION_ID", "value_id": "FILL_RED_VALUE_ID"},
+        {"option_id": "FILL_SIZE_OPTION_ID", "value_id": "FILL_SMALL_VALUE_ID"}
+      ],
+      "variant_tuples": [
+        {
+          "product_id": "FILL_VARIANT_PRODUCT_ID",
+          "variant_id": "FILL_RED_SMALL_VARIANT_ID",
+          "sku": "FILL_RED_SMALL_VARIANT_SKU",
+          "option_value_tuples": [
+            {"option_id": "FILL_COLOR_OPTION_ID", "value_id": "FILL_RED_VALUE_ID"},
+            {"option_id": "FILL_SIZE_OPTION_ID", "value_id": "FILL_SMALL_VALUE_ID"}
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "text_option",
+      "product_id": "FILL_TEXT_PRODUCT_ID",
+      "sku": "FILL_TEXT_SKU",
+      "option_ids": ["FILL_TEXT_OPTION_ID"],
+      "option_value_tuples": [
+        {"option_id": "FILL_TEXT_OPTION_ID", "value_kind": "text"}
+      ]
+    },
+    {
+      "kind": "checkbox_yes_no",
+      "product_id": "FILL_CHECKBOX_PRODUCT_ID",
+      "sku": "FILL_CHECKBOX_SKU",
+      "option_ids": ["FILL_CHECKBOX_OPTION_ID"],
+      "value_ids": ["FILL_YES_VALUE_ID", "FILL_NO_VALUE_ID"],
+      "option_value_tuples": [
+        {"option_id": "FILL_CHECKBOX_OPTION_ID", "value_id": "FILL_YES_VALUE_ID"},
+        {"option_id": "FILL_CHECKBOX_OPTION_ID", "value_id": "FILL_NO_VALUE_ID"}
+      ]
+    },
+    {"kind": "multi_quantity", "product_id": "FILL_MULTI_PRODUCT_ID", "sku": "FILL_MULTI_SKU"},
+    {"kind": "replacement", "product_id": "FILL_REPLACEMENT_PRODUCT_ID", "sku": "FILL_REPLACEMENT_SKU"}
+  ]
+}
