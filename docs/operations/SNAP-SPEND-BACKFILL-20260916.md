@@ -30,6 +30,16 @@ until those pass. The read-only preflight in own Terminal 4 found `/app` clean
 at the production SHA above and Release Guard `active:false`; PR1058's owner
 has separately verified and closed that deployment. No Emergent chat used.
 
+Release preparation update: all 23 check results on source
+`ef273cf065742ad58ea2faee6a5ac064f96e0ea6` were successful or properly skipped;
+the settings-only guard passed unchanged after the split. The governed A/B
+bootstrap and freeze succeeded. Cloud Git push requested an additional GitHub
+sign-in; that attempt was cancelled, and the remote branch remained at A.
+The unpublished local intent commit is preserved rather than rewritten. This
+documentation update creates a fresh source A: rebuild and freeze its intent,
+verify exact blob transfer, then create its first B through the connected
+GitHub tool. Do not substitute the unpublished prior B or its stale intent.
+
 ## Current operational checkpoint — 2026-09-17
 
 This section supersedes the historical pending-release notes below. PR #1055
