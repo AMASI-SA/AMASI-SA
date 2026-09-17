@@ -1,5 +1,32 @@
 # Snapchat canonical spend backfill — 2026-09-16
 
+## Retry verification — 2026-09-17T17:47Z
+
+User requested another live attempt. One additional click on latest30 Sync V2
+at17:41UTC. Activity subsequently showed the previous17:16 row failed and a new
+"campaigns and expenses" row running since17:41UTC. No background async job ID
+is exposed; do not attribute this row to the manual click without evidence.
+
+Correction to preceding checkpoint: this page's button calls canonical
+POST /integrations-v2/snapchat-v2/sync synchronously (run_type manual), not the
+native async endpoint. The native2min/25min recovery rules quoted below must
+NOT be used to diagnose this button. Canonical runs have separate heartbeat
+and lease handling. No locks were manually removed and no source was changed.
+
+Fully loaded latest30 dashboard Aug19–Sep17: Snapchat326,767.12SAR. All30 distinct
+rendered daily tooltips inspected, all30 contain a numeric Snapchat spend;
+none missing. Historical Aug18–21 preservation proof remains unchanged.
+After retry, fully loaded Snapchat V2 report rose from86,563.04 to86,577.62USD;
+Financial:complete, hourly distribution still updating. This proves refreshed
+financial data, not terminal completion of the new entire run.
+Dashboard refresh finished; latest30 total remained326,767.12SAR.
+Currencies/timezones of those pages differ; do not compare totals directly.
+
+At17:47UTC Activity still says new17:41 run running. No duplicate submission,
+forced cancellation, new publication or Release Guard lease acquisition.
+Task closure remains pending terminal run verification. Published30-day
+restriction and saved30-day daily coverage are independently verified.
+
 ## Production verified; final sync admission pending — 2026-09-17T17:33Z
 
 Publication succeeded: platform version **3b0f6db**, Deployment finished Sep17
