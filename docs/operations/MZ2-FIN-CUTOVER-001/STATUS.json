@@ -160,6 +160,16 @@
   ],
   "plan_version": 1,
   "preview_acceptance": {
+    "acceptance_matrix": {
+      "environment": "isolated Preview",
+      "live_replay": "NOT_EXECUTED; automated idempotency/terminal-state tests are separate evidence",
+      "next_action": "Complete and document remaining current Preview P01 scenarios with isolated synthetic drafts; obtain explicit bank confirmation before marking provider links verified. Keep P02 locked.",
+      "overall": "PARTIAL",
+      "provider_bank_confirmation": "PENDING: Salla,Tamara,Tabby,Emkan displayed copied/unconfirmed in current UI",
+      "scenario_5": "PASS: viewer UI plus owner-reported authenticated403 accounting_permission_required",
+      "scenario_6": "PASS: authorized synthetic posting, balanced group/evidence opened, both groups reversed and baseline restored",
+      "scenarios_1_2_3_4_7_8": "Historical Production PASS exists; full current Preview scenario evidence has not been reconciled. Do not represent historical runs as fresh Preview tests."
+    },
     "blocker": "P01_remaining_acceptance_and_Mezan2_independence_not_complete",
     "continuation": "docs/operations/PREVIEW-REVIEWER-SIGNOUT-20260916.md",
     "current_session_role": "owner_signed_in",
@@ -214,6 +224,7 @@
       "accounting.settlements.view"
     ],
     "journal_posting_count": 1,
+    "journal_posting_count_scope": "Synthetic settlement group only; subsequently reversed. Separate synthetic receivable seed also reversed.",
     "last_observation": "Fresh browser read: unified register contains reversed synthetic settlement and reviewed real6743152. Four provider bank cards remain copied/unconfirmed. Shipping bank links show3/3confirmed. No financial action performed.",
     "last_updated_date": "2026-09-17",
     "mezan2_independence": {
@@ -394,12 +405,7 @@
     "status": "PARTIAL",
     "synthetic_employee_records": 2,
     "unified_settlement_ui": {
-      "status": "PREVIEW_DEPLOYED_UI_VERIFIED",
-      "source_sha": "e677c8edd0a3170b71c38c65cc96aeadbbe8190b",
       "approved_by_owner": true,
-      "tests_passed": 9,
-      "test_suites": 2,
-      "build": "PASS",
       "browser_evidence": [
         "single register heading and list",
         "select reversed synthetic: Arabic label, fields disabled, no post",
@@ -408,20 +414,38 @@
         "select reviewed real: review/post controls preserved without clicking",
         "top refresh preserves selection"
       ],
-      "rollback": "/opt/mezan-preview-signout-20260916/frontend/before-unified-settlements-20260917",
+      "build": "PASS",
       "financial_actions_executed": false,
-      "production_changed": false
+      "production_changed": false,
+      "rollback": "/opt/mezan-preview-signout-20260916/frontend/before-unified-settlements-20260917",
+      "source_sha": "e677c8edd0a3170b71c38c65cc96aeadbbe8190b",
+      "status": "PREVIEW_DEPLOYED_UI_VERIFIED",
+      "test_suites": 2,
+      "tests_passed": 9
     },
-    "journal_posting_count_scope": "Synthetic settlement group only; subsequently reversed. Separate synthetic receivable seed also reversed.",
-    "acceptance_matrix": {
-      "environment": "isolated Preview",
-      "scenario_5": "PASS: viewer UI plus owner-reported authenticated403 accounting_permission_required",
-      "scenario_6": "PASS: authorized synthetic posting, balanced group/evidence opened, both groups reversed and baseline restored",
-      "scenarios_1_2_3_4_7_8": "Historical Production PASS exists; full current Preview scenario evidence has not been reconciled. Do not represent historical runs as fresh Preview tests.",
-      "provider_bank_confirmation": "PENDING: Salla,Tamara,Tabby,Emkan displayed copied/unconfirmed in current UI",
-      "live_replay": "NOT_EXECUTED; automated idempotency/terminal-state tests are separate evidence",
-      "overall": "PARTIAL",
-      "next_action": "Complete and document remaining current Preview P01 scenarios with isolated synthetic drafts; obtain explicit bank confirmation before marking provider links verified. Keep P02 locked."
+    "paypal_discovery_test": {
+      "status": "ORDER_VISIBLE_SETTLEMENT_PROVIDER_MISSING",
+      "date": "2026-09-17",
+      "order_reference": "PREVIEW-PAYPAL-20260917-001",
+      "order_amount_sar": 100,
+      "order_import": {
+        "created": 1,
+        "updated": 0,
+        "failed": 0,
+        "ui_payment_label": "PayPal",
+        "status": "بانتظار المراجعة"
+      },
+      "settlement_fixture": {
+        "gross_sar": 100,
+        "illustrative_fee_sar": 3,
+        "net_sar": 97,
+        "official_paypal_format": false,
+        "uploaded": false,
+        "blocker": "PayPal absent from creation provider selector after order import; did not misclassify as Salla."
+      },
+      "financial_posting_executed": false,
+      "production_changed": false,
+      "next_action": "Implement authorized extensible provider discovery/setup and safe statement import before PayPal settlement test can continue. Preserve distinct payment method and settlement provider. Do not invent real PayPal fees or official export compatibility."
     }
   },
   "production_branch": "hotfix/prod-snap-meta-final"
