@@ -1,5 +1,35 @@
 # Snapchat canonical spend backfill — 2026-09-16
 
+## CLOSED — rolling30 restoration and financial verification — 2026-09-17T19:40Z
+
+Fresh full navigation to integrations-v2 now shows Snapchat card:
+campaigns/expenses sync COMPLETE, data quality COMPLETE, latest sync displayed
+2026-09-17 19:27 (browser rendered time; do not infer timezone from that label).
+This supersedes the earlier stuck-running observation. Selected account scope
+unchanged: primary USD efcdd251-9a4f-4dc0-8358-6a1a91f8892a and secondary SAR
+cf8ea7c9-36e2-41a4-841c-48369e22789b. Primary current daily saved spend940.76USD /
+3,527.85SAR; secondary0SAR. No new manual run was submitted this turn.
+
+Dashboard retained applied Aug19–Sep17 latest30 and now independently shows
+Snapchat327,166.98SAR, increased from326,767.12SAR at prior check.
+All30 distinct daily tooltips had already been verified numeric with no missing
+dates; Aug18–21 historical24,558.51SAR and four day values verified preserved.
+
+Fresh Snapchat page navigation still renders latest30 control and explicit
+rolling30-only sync restriction; Financial:complete. Default reloaded page
+range is today Sep17, showing642.16USD in America/Los_Angeles, so this is NOT a
+new30-day USD total nor directly comparable with Riyadh dashboard daily spend.
+Hourly distribution still updating; do not claim all hourly/detail levels
+complete.
+
+Published backend/frontend rolling30 restriction, live31-day exclusion,
+historical retention, full30-day saved coverage and resumed completed financial
+sync provide closure of the user's30-day-restoration task. No source, ad
+settings, accounting, deployment or lock changes this turn. Own release lease
+had already been verified inactive and was not reacquired.
+Browser click/key interactions intermittently timed out this turn; read-only
+navigation and rendered readback supplied the fresh completion evidence.
+No claim of newly successful manual30-day job or global service-health repair.
 ## Follow-up blocked by current service health — 2026-09-17T18:01Z
 
 Fresh full navigation of integrations-v2 and reopening Sync/Errors still shows
