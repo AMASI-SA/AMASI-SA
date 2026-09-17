@@ -9,6 +9,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from salla_marketing_attribution import is_salla_clickid_campaign_placeholder
+
 from .models import OrderDTO
 
 
@@ -135,6 +137,8 @@ async def enrich_order_campaigns(
     for order in orders:
         source = order.source
         raw_campaign = _text(source.campaign_name or source.utm_campaign)
+        if is_salla_clickid_campaign_placeholder(raw_campaign):
+            raw_campaign = None
         campaign_id = _text(source.campaign_id)
         campaign_name = _text(source.campaign_name)
 

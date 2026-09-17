@@ -46,6 +46,7 @@ import Settlements from "./pages/Settlements";
 import Accounts from "./pages/Accounts";
 import AccountDetails from "./pages/AccountDetails";
 import OrdersDiagnostics from "./pages/OrdersDiagnostics";
+import SnapchatPeriodDiagnosticsPage from "./pages/SnapchatPeriodDiagnosticsPage";
 import Orders from "./pages/Orders";
 import OrdersV2 from "./pages/OrdersV2";
 import OrderDetailsV2 from "./pages/OrderDetailsV2";
@@ -258,6 +259,7 @@ function AppRoutes() {
             <Route path="/shipping/orders-ledger" element={<ProtectedRoute><Layout><ShippingLedger /></Layout></ProtectedRoute>} />
             <Route path="/reconciliation/:accountId" element={<ProtectedRoute><Layout><ReconciliationDetail /></Layout></ProtectedRoute>} />
             <Route path="/diagnostics" element={<ProtectedRoute><Layout><OrdersDiagnostics /></Layout></ProtectedRoute>} />
+            <Route path="/diagnostics/snapchat-period" element={<ProtectedRoute><Layout><SnapchatPeriodDiagnosticsPage /></Layout></ProtectedRoute>} />
             <Route path="/orders" element={<ProtectedRoute><Layout><Orders /></Layout></ProtectedRoute>} />
             <Route
                 path="/dashboard-v2"

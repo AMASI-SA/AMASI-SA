@@ -22,6 +22,7 @@ from salla_marketing_attribution import (
     campaign_id_candidates,
     campaign_name_candidates,
     canonical_ad_platform,
+    is_salla_clickid_campaign_placeholder,
     meaningful_source_label,
 )
 
@@ -55,6 +56,16 @@ ORDER_PROJECTION = {
     "type_of_order": 1,
     "is_gift": 1,
     "products": 1,
+    # Older normalized snapshots can retain identity after a light provider
+    # payload omits it. Order Engine already reads these same stored fields.
+    "campaign_id": 1,
+    "source_campaign_id": 1,
+    "utm_campaign_id": 1,
+    "ad_campaign_id": 1,
+    "utm_campaign": 1,
+    "campaign_name": 1,
+    "source_campaign_name": 1,
+    "ad_campaign_name": 1,
     "raw_by_source.salla_direct.date.date": 1,
     "raw_by_source.salla_direct.date.timezone": 1,
     "raw_by_source.salla_direct.created_at": 1,
@@ -191,16 +202,25 @@ def _match_order_campaign(
     id_lookup: dict[str, tuple[str, str] | None],
     name_lookup: dict[str, tuple[str, str] | None],
 ) -> tuple[tuple[str, str] | None, str]:
-    platform = canonical_ad_platform(order)
+    raw_by_source = order.get("raw_by_source")
+    raw = raw_by_source.get("salla_direct") if isinstance(raw_by_source, dict) else None
+    raw = raw if isinstance(raw, dict) else {}
+    platform = canonical_ad_platform(raw) or canonical_ad_platform(order)
     if platform and platform != "snapchat":
         return None, "foreign_platform"
-    for candidate in campaign_id_candidates(order):
+    # An explicit provider identity/correction wins over a normalized fallback.
+    # Click-only descriptions do not constitute campaign identity.
+    raw_candidates = campaign_id_candidates(raw) + campaign_name_candidates(raw)
+    evidence = raw if any(
+        not is_salla_clickid_campaign_placeholder(value) for value in raw_candidates
+    ) else order
+    for candidate in campaign_id_candidates(evidence):
         normalized = _norm(candidate)
         if normalized and normalized in id_lookup:
             key = id_lookup[normalized]
             return (key, "campaign_id") if key else (None, "ambiguous_id")
     if platform == "snapchat":
-        for candidate in campaign_name_candidates(order):
+        for candidate in campaign_name_candidates(evidence):
             normalized = _norm(candidate)
             if normalized and normalized in name_lookup:
                 key = name_lookup[normalized]
