@@ -10,6 +10,33 @@ import api, { formatApiErrorDetail } from "../lib/api";
 import { snapchatV2SpendDisplay } from "../lib/snapchatV2SpendDisplay";
 import { getSnapchatEntitySettings } from "../services/snapchatCampaignManagement";
 
+export const SNAPCHAT_SYNC_DAYS = 30;
+export const SNAPCHAT_SYNC_WINDOW_MESSAGE = "المزامنة متاحة لآخر 30 يومًا فقط بتوقيت الرياض. يمكنك عرض الصرف المحفوظ للفترات الأقدم.";
+
+export function latestSnapchatSyncRange(now = Date.now()) {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Riyadh", year: "numeric", month: "2-digit", day: "2-digit",
+    }).formatToParts(new Date(now));
+    const part = (type) => parts.find((item) => item.type === type)?.value;
+    const dateTo = `${part("year")}-${part("month")}-${part("day")}`;
+    const first = new Date(`${dateTo}T00:00:00Z`);
+    first.setUTCDate(first.getUTCDate() - (SNAPCHAT_SYNC_DAYS - 1));
+    return { dateFrom: first.toISOString().slice(0, 10), dateTo };
+}
+
+export function snapchatSyncRangeAllowed(range, now = Date.now()) {
+    if (!range) return false;
+    const { dateFrom, dateTo } = range;
+    const validDate = (value) => {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) return false;
+        const parsed = new Date(`${value}T00:00:00Z`);
+        return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+    };
+    if (!validDate(dateFrom) || !validDate(dateTo) || dateTo < dateFrom) return false;
+    const window = latestSnapchatSyncRange(now);
+    return dateFrom >= window.dateFrom && dateTo <= window.dateTo;
+}
+
 const ENTITY_TABS = [
     { id: "campaign", label: "الحملات" },
     { id: "ad_group", label: "Ad Squads" },
@@ -469,6 +496,10 @@ export default function SnapchatV2Page() {
 
     async function syncRange() {
         if (!appliedRange || !accountId) return;
+        if (!snapchatSyncRangeAllowed(appliedRange)) {
+            toast.error(SNAPCHAT_SYNC_WINDOW_MESSAGE);
+            return;
+        }
         setSyncing(true);
         try {
             const { data } = await api.post("/integrations-v2/snapchat-v2/sync", {
@@ -542,7 +573,9 @@ export default function SnapchatV2Page() {
                         <label className="text-xs font-black text-slate-600">من<input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} className="mt-1 block rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-bold" dir="ltr" /></label>
                         <label className="text-xs font-black text-slate-600">إلى<input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} className="mt-1 block rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-bold" dir="ltr" /></label>
                         <button type="submit" disabled={loading} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-black disabled:opacity-50"><ArrowsClockwise size={17} className={loading ? "animate-spin" : ""} /> تطبيق الفترة</button>
-                        <button type="button" onClick={syncRange} disabled={syncing || !appliedRange || !accountId} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-yellow-500 px-4 text-sm font-black text-white disabled:opacity-50"><ArrowsClockwise size={17} className={syncing ? "animate-spin" : ""} />{syncing ? "جاري المزامنة" : "مزامنة V2"}</button>
+                        <button type="button" disabled={loading || syncing} onClick={() => { const range = latestSnapchatSyncRange(); setDateFrom(range.dateFrom); setDateTo(range.dateTo); load(range); }} className="inline-flex h-10 items-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-black disabled:opacity-50">آخر 30 يومًا</button>
+                        <button type="button" onClick={syncRange} disabled={loading || syncing || !accountId || !snapchatSyncRangeAllowed(appliedRange, clockNow)} title={SNAPCHAT_SYNC_WINDOW_MESSAGE} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-yellow-500 px-4 text-sm font-black text-white disabled:opacity-50"><ArrowsClockwise size={17} className={syncing ? "animate-spin" : ""} />{syncing ? "جاري المزامنة" : "مزامنة V2"}</button>
+                        <p className="w-full text-xs font-semibold text-slate-600">{SNAPCHAT_SYNC_WINDOW_MESSAGE}</p>
                     </form>
                 </div>
             </header>
