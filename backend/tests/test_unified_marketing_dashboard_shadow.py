@@ -97,7 +97,7 @@ async def test_gateway_rejects_unregistered_provider_before_any_read():
         await load_unified_marketing_account_report(
             object(),
             "u1",
-            provider="meta_ads",
+            provider="unregistered_ads",
             date_from=date(2026, 8, 25),
             date_to=date(2026, 8, 25),
             timezone_name="Asia/Riyadh",
