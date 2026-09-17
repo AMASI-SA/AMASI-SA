@@ -369,6 +369,13 @@ def preserve_salla_raw_attribution(
     return incoming
 
 
+def is_salla_clickid_campaign_placeholder(value: Any) -> bool:
+    """Recognize Salla's click-only attribution label, never a campaign ID/name."""
+    return " ".join(_text(value).casefold().split()) == (
+        "using the clickid sccid provided by snapchat"
+    )
+
+
 def canonical_order_source(order: dict[str, Any]) -> dict[str, str | None]:
     """Build the source contract consumed by Order Engine and detail pages."""
     promoted = promoted_salla_attribution(order)
@@ -413,6 +420,19 @@ def canonical_order_source(order: dict[str, Any]) -> dict[str, str | None]:
         "ad_campaign_id",
     )
     campaign_names = campaign_name_candidates(order)
+    # Preserve provider UTM evidence, but exclude its click-only explanatory
+    # label from the normalized identity used to claim a campaign match.
+    campaign_ids = [
+        value for value in campaign_ids
+        if not is_salla_clickid_campaign_placeholder(value)
+    ]
+    campaign_names = [
+        value for value in campaign_names
+        if not is_salla_clickid_campaign_placeholder(value)
+    ]
+    for key in ("campaign_id", "campaign_name"):
+        if is_salla_clickid_campaign_placeholder(promoted.get(key)):
+            promoted.pop(key)
     devices = field_values(order, "device", "device_type", "client_device")
     return {
         "source": canonical,
@@ -537,6 +557,7 @@ __all__ = [
     "canonical_marketing_source",
     "canonical_order_source",
     "field_values",
+    "is_salla_clickid_campaign_placeholder",
     "meaningful_source_label",
     "order_source_candidates",
     "preserve_salla_raw_attribution",
