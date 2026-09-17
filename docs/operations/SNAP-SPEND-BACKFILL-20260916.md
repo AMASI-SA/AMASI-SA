@@ -1,5 +1,21 @@
 # Snapchat canonical spend backfill — 2026-09-16
 
+## Approved publication started — 2026-09-17T17:10:13Z
+
+Browser recovered on the user's retry. Fresh /app stayed clean at reviewed
+merge99241021fdc8b38efba7eea2c68f3facd569ffbe; own lease active:true,
+actor codex-snap30-restore-20260917, prepared2026-09-17T16:08:15.436044Z.
+Renewed prepublish returned ready_to_publish:true with expected source/runtime.
+UI still showed live bc02ed7 and no intervening publication. Inspected the
+confirmation and clicked Yes, Re-publish exactly ONCE under saved approval.
+Platform now explicitly shows Deployment Started and Publishing....
+
+Do not republish while this operation is running. Next wait for a NEW explicit
+Deployment finished and live version, verify all three Release Guard probes,
+then confirm lease inactive. Only then test live30-day restriction, run one
+30-day sync and verify saved August18–21 spend. Production outcome is pending;
+no new identity or task closure is claimed. Existing source/intent frozen.
+
 ## Publication approved; browser connection interrupted — 2026-09-17
 
 User explicitly answered «نعم موافق» to publishing this reviewed 30-day update
