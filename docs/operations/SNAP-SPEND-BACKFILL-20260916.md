@@ -1,5 +1,44 @@
 # Snapchat canonical spend backfill — 2026-09-16
 
+## Awaiting explicit publication approval — 2026-09-17 15:57 UTC
+
+Implementation, review and build are ready; task is NOT closed. Production
+runtime has NOT changed in this follow-up. PR1061 and PR1063 are merged;
+final deployment merge is `99241021fdc8b38efba7eea2c68f3facd569ffbe`.
+The exact source/intent/runtime identities in the next section remain valid.
+
+Shared /app was clean and Guard active:false before fast-forward to this exact
+reviewed merge. First full adapter attempt refused 14 empty __pycache__
+directories (zero .pyc files). Verified all were empty, then preserved them
+outside the package under /tmp/snap30-prepublish-empty-caches-20260917.
+No tracked source or unrelated Preview artifacts were removed. The subsequent
+full governed adapter completed and emitted matching runtime/source plus
+verified isolated package proof in /tmp/snap30-final-app-rehearsal.log.
+All latest exact-B CI, including clean-clone rehearsal, and16 fresh UI tests
+passed. Backend affected suite63 passed earlier.
+
+Automatic approval review REJECTED the tool action containing
+production_release_guard.py prepare --actor codex-snap30-restore-20260917:
+it stated that restoring/verifying sync did not explicitly authorize acquiring
+a production release lease or publishing. No retry or indirect publish was
+performed. Personal-context review found explicit September16 authorization
+for PR1055 and the September17 restore30 request, but no new explicit publish
+approval for this follow-up. Do not treat another task's permission as approval.
+
+Fresh read-only check after rejection: /app HEAD is the exact final merge,
+git status clean, Release Guard active:false. No lease was acquired and no
+Re-publish button clicked. The existing live version remains bc02ed7 (PR1058).
+The previous August backfill proof remains valid; live acceptance of the new
+30-day restriction is still pending, so do not claim closure.
+
+Next safe action: ask user explicitly to approve publishing this reviewed
+Snapchat30-day update through the deployment admin UI, then verify current
+source/Guard, prepare own lease, prepublish, one UI republish and three live
+identity probes. Only after the new version is proven live, run one30-day sync
+and read back all daily financial data plus saved August18–21. Preserve other
+Meta, attribution, Qoyod and Preview work. No campaigns/budgets/bids/accounting
+writes are part of this task.
+
 ## Final reviewed release ready — 2026-09-17 15:52 UTC
 
 PR1063 merged as `99241021fdc8b38efba7eea2c68f3facd569ffbe`, tree-equal to
