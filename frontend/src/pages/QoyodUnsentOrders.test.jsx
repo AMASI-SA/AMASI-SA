@@ -40,6 +40,30 @@ beforeEach(() => {
   });
 });
 
+test("stored provider failure distinguishes the operation without a retry or fresh probe", async () => {
+  api.get.mockResolvedValue({ data: {
+    source_authority: "unified_orders", counts: { "لم يُرسل": 1 },
+    salla_status_counts: {},
+    orders: [{ order_number: "100000099", status: "لم يُرسل", retry_allowed: true,
+      reason: "استجابة غير ناجحة من قيود (404)",
+      provider_failure: { operation: "البحث عن العميل", endpoint: "GET /customers",
+        status_code: 404, observed_at: "2026-09-16T12:00:00+00:00" } }],
+  } });
+  const { container, root } = await renderRecoveryPage();
+  try {
+    const details = container.querySelector('[data-testid="qoyod-provider-failure-100000099"]');
+    await act(async () => details.querySelector("summary").click());
+    expect(details.textContent).toContain("البحث عن العميل");
+    expect(details.textContent).toContain("GET /customers");
+    expect(details.textContent).toContain("HTTP 404");
+    expect(details.textContent).toContain("2026-09-16T12:00:00+00:00");
+    expect(details.textContent).toContain("هذه نتيجة محفوظة");
+    expect(api.get).toHaveBeenCalledTimes(1);
+    expect(api.post).not.toHaveBeenCalled();
+    expect(container.querySelector('[data-testid="qoyod-failed-retry-confirm-100000099"]')).toBeNull();
+  } finally { await cleanup(container, root); }
+});
+
 test("recovery panel documents the closed three-status live gate", async () => {
   const { container, root } = await renderRecoveryPage("/?recovery=1");
   try {

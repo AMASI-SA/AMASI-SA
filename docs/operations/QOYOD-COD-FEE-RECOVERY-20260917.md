@@ -1,6 +1,61 @@
 # Qoyod COD fee recovery — source checkpoint
 
-Status: partial repair, pending review and deployment; live invoices unresolved.
+Status: diagnostic preparation, pending review and deployment; live invoice
+root causes and recovery remain unresolved. Do not present this PR as a proven
+COD or provider-404 fix.
+
+## Sequential root-cause investigation — 2026-09-17
+
+The user requested root fixes one at a time: first HTTP 404, then explicit COD
+fees, then remaining amount/payment failures. Existing source evidence does not
+yet identify the failing provider operation for the live generic 404 cases.
+The message can originate in customer/product lookup or creation, invoice
+creation/readback, or payment. Do not turn all 404 results into "not found" or
+release quarantines based on that message alone.
+
+- Fresh UI inspection found 99 generic 404 messages and 24 COD differences of
+  approximately 5 SAR in 129 loaded unsent rows. This is a truncated subset,
+  not a complete classification of the 190-order header backlog. A later header
+  refresh showed 191. Counts have different scopes and must not be equated.
+- A fresh status refresh showed last cycle `2026-09-17 15:50`, ready 1,
+  scheduled resync 13, quarantined 173, duplicate 0, payment verification 0,
+  and existing-in-Qoyod 3649 for that dashboard's range. These observations do
+  not prove a successful invoice or full queue recovery.
+- Settings reference-list diagnostics from August 12 identify 404 for
+  categories, product units, and branches. They are historical configuration
+  list failures, not evidence of the endpoint failing the current invoices.
+- `order_source.py` at the July 20 repair and production source has the same
+  blob `732fe0ed5b40493510e56d9bb3f6f9b1c17a491a`. The old COD source repair was
+  not removed. A successful fee-free COD order cannot prove fee-bearing COD
+  works. Missing fee mapping remains a hypothesis until read from production.
+- Fresh fetched production commit was
+  `8e85e772c70c2b49658f5c316ca1182bccbd73db`; Qoyod code is unchanged relative
+  to this task's base. Other conversations' Snap source/release work is left
+  untouched. No release intent is created or reused by this task.
+
+### Added persisted-error visibility
+
+The unsent read model previously discarded the saved provider endpoint and
+timestamp. It now exposes an allowlisted operation, HTTP status, and failure
+time from existing open quarantine/failed-lock records. Invoice IDs are replaced
+by an endpoint template; unknown endpoint shapes, query strings, request bodies,
+and response excerpts are not exposed. Mongo projections retrieve only the
+needed diagnostic fields. The UI labels this as a historical saved failure;
+opening it makes no new request or retry. The active queue wrapper hides old
+failure details after invoice reconciliation and preserves send eligibility.
+
+Verification of this addition: focused backend range/eligibility/memory tests
+35 passed; exceptions-page Jest tests 8 passed; `git diff --check` passed.
+Fixtures are synthetic. Tests assert unchanged quarantine/lock state, no new
+invoice, safe field exposure, and suppression after reconciliation. Existing
+Qoyod memory CI already includes all changed test modules.
+
+Next safe action: review/deploy the diagnostic source through a permitted
+release surface, then inspect one actual saved 404 endpoint/time and one COD
+totals breakdown before selecting either financial-path fix. The existing
+automatic approval rejection for Emergent/code-server access still applies;
+no alternative session, hidden browser state, or direct request workaround was
+used. All production invoice/configuration state remains unchanged by this task.
 
 Update after source checkpoint `709918aa607486c89c8e21a99ae86973f67cd374`
 (Draft PR #1059): all seven GitHub workflow runs passed, including CodeQL,

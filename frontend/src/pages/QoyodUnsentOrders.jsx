@@ -526,7 +526,21 @@ export default function QoyodUnsentOrders() {
                       {o.status}
                     </span>
                   </td>
-                  <td className="px-3 py-2 text-slate-600 max-w-md">{o.reason}</td>
+                  <td className="px-3 py-2 text-slate-600 max-w-md">
+                    {o.reason}
+                    {o.provider_failure && (
+                      <details className="mt-1 text-xs" data-testid={`qoyod-provider-failure-${o.order_number}`}>
+                        <summary className="cursor-pointer">تفاصيل آخر فشل محفوظ</summary>
+                        <p>{o.provider_failure.operation}</p>
+                        <p dir="ltr">{o.provider_failure.endpoint}</p>
+                        <p>{o.provider_failure.status_code === 0
+                          ? "تعذر الاتصال بقيود"
+                          : `HTTP ${o.provider_failure.status_code}`}</p>
+                        <p>وقت الفشل: {o.provider_failure.observed_at || "غير مسجل"}</p>
+                        <p>هذه نتيجة محفوظة؛ عرضها لا يعيد الإرسال ولا يفحص قيود مجددًا.</p>
+                      </details>
+                    )}
+                  </td>
                   <td className="px-3 py-2" dir="ltr">{o.qoyod_invoice_id || "—"}</td>
                   <td className="px-3 py-2 min-w-48">
                     <button type="button"

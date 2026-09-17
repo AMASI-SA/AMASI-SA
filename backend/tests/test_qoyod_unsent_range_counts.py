@@ -14,11 +14,111 @@ from integrations.qoyod.unsent_orders import (
     SENT,
     UNSENT,
     list_unsent_orders,
+    _provider_failure_evidence,
 )
 
 
 TENANT = "main"
 NOW = datetime(2026, 8, 13, 14, 30, tzinfo=timezone.utc)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source", ["quarantine", "lock"])
+@pytest.mark.parametrize("endpoint,operation", [
+    ("GET /customers", "البحث عن العميل"),
+    ("GET /products", "البحث عن المنتج"),
+    ("POST /invoices", "إنشاء الفاتورة"),
+    ("POST /invoice_payments", "تسجيل السداد"),
+])
+async def test_provider_failure_is_visible_without_changing_send_state(
+    db, source, endpoint, operation,
+):
+    reference = "SYNTHETIC-FAILURE-001"
+    await _insert_quarantined(
+        db, order_number=reference, status_slug="completed", status_native="تم التنفيذ",
+    )
+    detail = {
+        "endpoint": endpoint, "status_code": 404,
+        "response_excerpt": "SYNTHETIC-PRIVATE-RESPONSE",
+        "request_body": {"email": "synthetic-private@example.invalid"},
+    }
+    if source == "quarantine":
+        await db.qoyod_manual_auto_quarantines.update_one(
+            {"order_number": reference},
+            {"$set": {"code": "qoyod_http_error", "detail": detail,
+                      "message": "استجابة غير ناجحة من قيود (404)",
+                      "last_seen_at": NOW}},
+        )
+    else:
+        await db.qoyod_manual_auto_quarantines.delete_many({})
+        await db.qoyod_manual_send_locks.insert_one({
+            "user_id": TENANT, "order_number": reference, "status": "failed",
+            "finished_at": NOW,
+            "last_error": {"code": "qoyod_http_error", "detail": detail,
+                           "message": "استجابة غير ناجحة من قيود (404)"},
+        })
+    before = await db.qoyod_manual_auto_quarantines.find({}).to_list(None)
+    locks_before = await db.qoyod_manual_send_locks.find({}).to_list(None)
+    result = await list_unsent_orders(db, user_id=TENANT, days=30, now=NOW)
+    row = next(row for row in result["orders"] if row["order_number"] == reference)
+    assert row["status"] == UNSENT
+    assert row["retry_allowed"] is True
+    evidence = row["provider_failure"]
+    assert evidence["endpoint"] == endpoint
+    assert evidence["operation"] == operation
+    assert evidence["status_code"] == 404
+    assert evidence["observed_at"].startswith("2026-08-13T14:30:00")
+    assert "SYNTHETIC-PRIVATE-RESPONSE" not in str(result)
+    assert "synthetic-private@example.invalid" not in str(result)
+    assert await db.qoyod_manual_auto_quarantines.find({}).to_list(None) == before
+    assert await db.qoyod_manual_send_locks.find({}).to_list(None) == locks_before
+    assert await db.qoyod_invoices.count_documents({}) == 0
+
+
+@pytest.mark.asyncio
+async def test_live_queue_wrapper_retains_failure_and_hides_it_after_reconciliation(db):
+    from qoyod_auto_unified.queue_api import _execute_list
+
+    reference = "SYNTHETIC-FAILURE-002"
+    await _insert_quarantined(
+        db, order_number=reference, status_slug="completed", status_native="تم التنفيذ",
+    )
+    await db.qoyod_manual_auto_quarantines.update_one(
+        {"order_number": reference},
+        {"$set": {"detail": {"endpoint": "GET /customers", "status_code": 404}}},
+    )
+    # Unified orders can have no legacy inbox projection yet.
+    await db.integration_inbox.delete_many({})
+    result = await _execute_list(list_unsent_orders, db, user_id=TENANT, days=30, now=NOW)
+    assert result["orders"][0]["provider_failure"]["endpoint"] == "GET /customers"
+    await db.qoyod_invoices.insert_one({
+        "user_id": TENANT, "reference": reference,
+        "qoyod_official_reference": reference, "reference_provenance": "qoyod.reference",
+        "qoyod_invoice_id": "SYNTHETIC-INVOICE-002",
+    })
+    result = await _execute_list(list_unsent_orders, db, user_id=TENANT, days=30, now=NOW)
+    assert result["orders"][0]["status"] == SENT
+    assert result["orders"][0]["provider_failure"] is None
+    assert result["orders"][0]["retry_allowed"] is False
+
+
+@pytest.mark.parametrize("detail", [
+    None, [], {"endpoint": "GET /customers?email=private", "status_code": 404},
+    {"endpoint": "GET /unknown/private", "status_code": 404},
+    {"endpoint": "GET /customers", "status_code": "private"},
+    {"endpoint": "GET /customers", "status_code": True},
+])
+def test_provider_failure_does_not_guess_or_expose_unknown_fields(detail):
+    assert _provider_failure_evidence(detail) is None
+
+
+def test_provider_invoice_id_and_untrusted_timestamp_are_not_exposed():
+    result = _provider_failure_evidence(
+        {"endpoint": "GET /invoices/123456", "status_code": 404}, "private text",
+    )
+    assert result["endpoint"] == "GET /invoices/{id}"
+    assert result["observed_at"] is None
+
 
 
 @pytest.fixture

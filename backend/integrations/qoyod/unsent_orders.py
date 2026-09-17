@@ -13,6 +13,7 @@ Internal pipeline stages stay developer-only. READ-ONLY module.
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
+import re
 from typing import Any
 
 from integrations.qoyod.candidate_orders import (
@@ -206,6 +207,47 @@ def simplify_row(row: dict, *,
     return {"status": UNSENT, "reason": "بانتظار الإرسال إلى قيود"}
 
 
+def _provider_failure_evidence(detail: Any, observed_at: Any = None) -> dict | None:
+    """Expose only known operation/status/time, never provider payloads or IDs.
+
+    This describes a persisted failure, not a fresh provider probe. Unknown
+    endpoints stay undisclosed instead of leaking query strings or response data.
+    """
+    if not isinstance(detail, dict):
+        return None
+    endpoint = detail.get("endpoint")
+    operations = {
+        "GET /customers": "البحث عن العميل",
+        "POST /customers": "إنشاء العميل",
+        "GET /products": "البحث عن المنتج",
+        "POST /products": "إنشاء المنتج",
+        "GET /invoices": "البحث عن مرجع الفاتورة",
+        "GET /invoices/{id}": "قراءة الفاتورة",
+        "POST /invoices": "إنشاء الفاتورة",
+        "POST /invoice_payments": "تسجيل السداد",
+    }
+    if isinstance(endpoint, str) and re.fullmatch(r"GET /invoices/[0-9]+", endpoint):
+        endpoint = "GET /invoices/{id}"
+    if not isinstance(endpoint, str) or endpoint not in operations:
+        return None
+    status_code = detail.get("status_code")
+    if type(status_code) is not int or not (status_code == 0 or 100 <= status_code <= 599):
+        return None
+    if isinstance(observed_at, str):
+        try:
+            observed_at = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
+        except ValueError:
+            observed_at = None
+    if isinstance(observed_at, datetime) and observed_at.tzinfo is None:
+        observed_at = observed_at.replace(tzinfo=timezone.utc)
+    return {
+        "endpoint": endpoint,
+        "operation": operations[endpoint],
+        "status_code": status_code,
+        "observed_at": observed_at.isoformat() if isinstance(observed_at, datetime) else None,
+    }
+
+
 def _overlay_manual_failure(
     classification: dict, failure: dict | None,
 ) -> dict:
@@ -226,6 +268,7 @@ def _overlay_manual_failure(
         "reason": message,
         "failure_code": failure.get("code"),
         "failure_source": failure.get("source"),
+        "provider_failure": failure.get("provider_failure"),
         "retry_allowed": True,
     }
 
@@ -319,6 +362,9 @@ async def _list_unsent_orders_from_inbox_legacy(
             "code": 1,
             "message": 1,
             "attempt_count": 1,
+            "detail.endpoint": 1,
+            "detail.status_code": 1,
+            "last_seen_at": 1,
         },
     )
     async for failed in quarantine_cursor:
@@ -328,6 +374,8 @@ async def _list_unsent_orders_from_inbox_legacy(
                 "source": "auto_quarantine",
                 "code": failed.get("code"),
                 "message": failed.get("message"),
+                "provider_failure": _provider_failure_evidence(
+                    failed.get("detail"), failed.get("last_seen_at")),
             }
 
     lock_cursor = db.qoyod_manual_send_locks.find(
@@ -339,7 +387,11 @@ async def _list_unsent_orders_from_inbox_legacy(
             "_id": 0,
             "order_number": 1,
             "status": 1,
-            "last_error": 1,
+            "last_error.code": 1,
+            "last_error.message": 1,
+            "last_error.detail.endpoint": 1,
+            "last_error.detail.status_code": 1,
+            "finished_at": 1,
         },
     )
     async for failed in lock_cursor:
@@ -351,6 +403,8 @@ async def _list_unsent_orders_from_inbox_legacy(
             "source": "manual_send_lock",
             "code": last_error.get("code") or failed.get("status"),
             "message": last_error.get("message"),
+            "provider_failure": _provider_failure_evidence(
+                last_error.get("detail"), failed.get("finished_at")),
         }
 
     # rev37.1 — ONE entry per SALLA ORDER, not per inbox row. The
@@ -442,6 +496,7 @@ async def _list_unsent_orders_from_inbox_legacy(
             "reason":         s["reason"],
             "failure_code":   s.get("failure_code"),
             "failure_source": s.get("failure_source"),
+            "provider_failure": s.get("provider_failure"),
             "retry_allowed":  bool(
                 s.get("retry_allowed", s["status"] == FAILED)
             ),
@@ -573,7 +628,8 @@ async def _manual_failure_evidence(
             quarantine_query["order_number"] = {"$in": references}
         cursor = quarantines.find(
             quarantine_query,
-            {"_id": 0, "order_number": 1, "code": 1, "message": 1},
+            {"_id": 0, "order_number": 1, "code": 1, "message": 1,
+             "detail.endpoint": 1, "detail.status_code": 1, "last_seen_at": 1},
         )
         cursor = _bounded_cursor(cursor, scan_limit=scan_limit)
         async for row in cursor:
@@ -583,6 +639,8 @@ async def _manual_failure_evidence(
                     "source": "auto_quarantine",
                     "code": row.get("code"),
                     "message": row.get("message"),
+                    "provider_failure": _provider_failure_evidence(
+                        row.get("detail"), row.get("last_seen_at")),
                 }
     locks = getattr(db, "qoyod_manual_send_locks", None)
     if locks is not None:
@@ -594,7 +652,10 @@ async def _manual_failure_evidence(
             lock_query["order_number"] = {"$in": references}
         cursor = locks.find(
             lock_query,
-            {"_id": 0, "order_number": 1, "status": 1, "last_error": 1},
+            {"_id": 0, "order_number": 1, "status": 1,
+             "last_error.code": 1, "last_error.message": 1,
+             "last_error.detail.endpoint": 1, "last_error.detail.status_code": 1,
+             "finished_at": 1},
         )
         cursor = _bounded_cursor(cursor, scan_limit=scan_limit)
         async for row in cursor:
@@ -606,6 +667,8 @@ async def _manual_failure_evidence(
                 "source": "manual_send_lock",
                 "code": error.get("code") or row.get("status"),
                 "message": error.get("message"),
+                "provider_failure": _provider_failure_evidence(
+                    error.get("detail"), row.get("finished_at")),
             }
     return failures
 
@@ -672,6 +735,7 @@ async def list_unsent_orders(
                 )),
                 "failure_code": failure.get("code"),
                 "failure_source": failure.get("source"),
+                "provider_failure": failure.get("provider_failure"),
                 "retry_allowed": True,
             }
         elif (
@@ -739,6 +803,7 @@ async def list_unsent_orders(
             "reason": classification["reason"],
             "failure_code": classification.get("failure_code"),
             "failure_source": classification.get("failure_source"),
+            "provider_failure": classification.get("provider_failure"),
             "retry_allowed": bool(classification.get("retry_allowed", False)),
             "qoyod_invoice_id": proof.get("qoyod_invoice_id"),
             "trace_id": proof.get("trace_id"),
