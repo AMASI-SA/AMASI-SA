@@ -225,7 +225,7 @@
       "required": true,
       "verification": "NOT_YET_COMPLETE"
     },
-    "next_action": "User confirm prepared settlement group reversal in Preview UI, then reverse synthetic seed group. Verify six original entries reversed and all baseline balances/real statement unchanged. Do not run terminal cleanup to bypass handoff requirement. No further posting.",
+    "next_action": "User confirm prepared reversal of seed groupd4c1235d-beb9-46fc-a04a-bd2fcbc6115c, then read-only verify all6legs reversed and baseline balances restored. Investigate settlement draft still posted after ledger reversal; do not manually mask it.",
     "order_import": {
       "created": 3,
       "evidence": "owner_authenticated_preview_import_jobs_ui",
@@ -340,7 +340,7 @@
       "executed": false
     },
     "posting_test_execution": {
-      "status": "POSTED_VERIFIED_AWAITING_USER_REVERSALS",
+      "status": "SETTLEMENT_REVERSED_SEED_REVERSAL_PENDING",
       "reference": "PREVIEW-P01-POST-TEST-20260917",
       "explicit_owner_authorization": true,
       "synthetic_receivable_created_sar": 100,
@@ -362,7 +362,18 @@
       "original_statement_unchanged": true,
       "linked_synthetic_evidence_viewed": true,
       "journal_ui_opened": true,
-      "replay_attempted": false
+      "replay_attempted": false,
+      "settlement_reversed_legs": 4,
+      "seed_reversed_legs": 0,
+      "baseline_ledger_unchanged": true,
+      "balance_deltas": [
+        0,
+        0,
+        0,
+        100,
+        -100
+      ],
+      "finding": "Settlement draft remains posted after ledger group reversal; register lifecycle consistency needs investigation"
     }
   },
   "production_branch": "hotfix/prod-snap-meta-final"
