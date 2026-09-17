@@ -1,5 +1,52 @@
 # Snapchat canonical spend backfill — 2026-09-16
 
+## Current operational checkpoint — 2026-09-17
+
+This section supersedes the historical pending-release notes below. PR #1055
+was merged and published as platform version `d63531b`, with explicit platform
+completion on September 16 at 22:01 UTC. Release Guard passed three probes and
+closed its own lease (`active: false`):
+
+- source A: `41e71a0e567aebf83d9794100bccda7b804bf1dd`;
+- intent B: `64658be5b12bc281b600899cae447732937e2281`;
+- deployment merge: `8ad1576eb8605e6ac332498a5118d4efd2f72de4`;
+- runtime: `rg5-1725638d57bdb08697f0721d4037834e5ecbe6b9c7fd133f5878d948b38dbce2`;
+- boot: `2026-09-16T22:01:07.022141+00:00`.
+
+The user asked to continue on September 17. The requested end date now includes
+September 17, preserving the original instruction to synchronize through today.
+Authenticated live UI confirms the selected primary USD account and the applied
+range `2026-08-01` through `2026-09-17` (48 inclusive dates).
+
+Manual attempts during automatic refresh did not create a job; the error toast
+renders `[object Object]`. The deployed admission code rejects an active
+`analytics_refresh` run. At 12:49 UTC, fresh activity readback showed the prior
+automatic run complete and no Snapchat job running. The next manual submission
+was accepted: at 12:50 UTC (15:50 Riyadh), Integrations activity showed a new
+`مهمة مزامنة Snapchat الخلفية` as running, while the Snapchat page displayed
+`جاري المزامنة`. Its run ID is not exposed by these UI elements. Do not invent
+one or infer completion from the pre-existing Financial: complete badge.
+
+Before this accepted job, freshly loaded Dashboard August 18–21 still showed
+Snapchat as no data/waiting. Meta was 2,322.42 SAR and Google 465.71 SAR. The
+historical gap is NOT verified repaired yet. No new job should be submitted
+while the accepted job remains active. Next: read its terminal outcome, then
+refresh the Dashboard and verify the four missing daily values and full range.
+
+This docs-only continuation uses `ops/snap-spend-backfill-20260917` based on
+production branch commit `836d36b831c1cd8aa9915f543f159b4e160ea438`; it must not
+be deployed or treated as a new release contract. That commit belongs to the
+separate PR #1058 deployment. Its active lease and shared `/app` must not be
+changed by this task. The old cloud workspace was recreated; do not assume
+September 16 `/tmp` evidence or terminals still exist. No terminal/database
+mutation or new source change was used to start this accepted live job.
+
+Current approval continues to cover source push, merge, deployment and this
+backfill. No budget, bid, accounting or Qoyod write is authorized by this task.
+The accepted analytical backfill is the only current live data operation.
+
+## Historical checkpoints
+
 Task: synchronize 2026-08-01 through 2026-09-16 (47 inclusive dates), then
 verify Dashboard advertising spend, particularly August 18–21.
 
