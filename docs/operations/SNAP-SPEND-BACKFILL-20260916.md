@@ -29,9 +29,48 @@ one or infer completion from the pre-existing Financial: complete badge.
 
 Before this accepted job, freshly loaded Dashboard August 18–21 still showed
 Snapchat as no data/waiting. Meta was 2,322.42 SAR and Google 465.71 SAR. The
-historical gap is NOT verified repaired yet. No new job should be submitted
-while the accepted job remains active. Next: read its terminal outcome, then
-refresh the Dashboard and verify the four missing daily values and full range.
+accepted job reached terminal `partial` at 13:04 UTC (16:04 Riyadh), confirmed
+again in Integrations activity at 13:13 UTC. No second historical job was
+submitted. A subsequent live Dashboard read confirmed the historical gap is
+repaired: Snapchat August 18–21 totals **24,558.51 SAR**, with original daily
+data. The individual visible chart tooltips showed:
+
+| Riyadh date | Snapchat spend (SAR) |
+| --- | ---: |
+| 2026-08-18 | 5,173.08 |
+| 2026-08-19 | 5,854.99 |
+| 2026-08-20 | 7,396.73 |
+| 2026-08-21 | 6,133.71 |
+
+At 13:13–13:14 UTC, the live Dashboard applied August 1–September 17 and
+displayed Snapchat **398,777.06 SAR**, original daily data. Keyboard navigation
+through the rendered chart tooltips verified **48 distinct consecutive dates,
+zero missing Snapchat daily values**. September 17 showed 2,191.82 SAR at
+readback and remains an open day. The rounded daily labels sum to 398,777.02
+SAR, 0.04 below the displayed aggregate; retain the displayed aggregate and
+do not claim the rounded labels sum to it exactly. The complete observed daily
+labels are retained below. Meta/TikTok/Google displayed 53,554.07 / 7,133.25 /
+2,901.74 SAR; no campaign settings were changed.
+
+After reapplying the same dates in the Snapchat page, its headline changed
+from 81,106.18 to **105,976.10 USD**. This page uses America/Los_Angeles account
+time, unlike the Riyadh Dashboard; these totals must not be directly equated.
+It showed `Financial: complete` and a 10.31 USD amount not yet distributed
+across hours. This is evidence of recovered daily financial data, not a claim
+that every detailed performance or hourly reconciliation stage is complete.
+The pipeline source only emits overall `partial` after financial completion
+when another level remains incomplete. The precise incomplete level and job
+ID are not exposed in the inspected activity UI.
+
+Remaining UI limitation: selecting the full 48-day Dashboard range attempts
+an all-platform refresh and displays HTTP 422, then successfully reads saved
+facts for the complete range. Source confirms refresh permits at most 31 days
+(`dashboard_ads_platform_refresh.MAX_REFRESH_DAYS`), while saved reads permit
+90. This warning does not negate the 48 observed daily values. No extra
+historical sync, source patch, or deployment was attempted to hide the warning.
+The requested spend backfill and missing-day restoration are verified; do not
+repeat them merely because the broader job status is partial. A separate
+follow-up can address long-range refresh UX and detailed performance status.
 
 This docs-only continuation uses `ops/snap-spend-backfill-20260917` based on
 production branch commit `836d36b831c1cd8aa9915f543f159b4e160ea438`; it must not
@@ -43,7 +82,42 @@ mutation or new source change was used to start this accepted live job.
 
 Current approval continues to cover source push, merge, deployment and this
 backfill. No budget, bid, accounting or Qoyod write is authorized by this task.
-The accepted analytical backfill is the only current live data operation.
+The accepted analytical backfill was the only manually initiated historical
+live data operation. Production analytical data changed and was read back;
+this continuation made no source/runtime or database-terminal mutation.
+
+### Verified daily chart labels — SAR, Riyadh
+
+Observed through authenticated live Dashboard tooltips, not hidden application
+state or a database query. Figures are as of September 17 at approximately
+13:14 UTC; the current day continues to change.
+
+| Date | Snapchat SAR | Date | Snapchat SAR |
+| --- | ---: | --- | ---: |
+| 2026-08-01 | 2,449.18 | 2026-08-25 | 5,588.57 |
+| 2026-08-02 | 5,703.95 | 2026-08-26 | 8,160.94 |
+| 2026-08-03 | 8,198.03 | 2026-08-27 | 9,848.17 |
+| 2026-08-04 | 6,678.03 | 2026-08-28 | 14,887.96 |
+| 2026-08-05 | 6,366.34 | 2026-08-29 | 13,987.73 |
+| 2026-08-06 | 5,391.73 | 2026-08-30 | 11,537.01 |
+| 2026-08-07 | 2,952.27 | 2026-08-31 | 12,799.61 |
+| 2026-08-08 | 2,837.46 | 2026-09-01 | 16,599.10 |
+| 2026-08-09 | 3,046.92 | 2026-09-02 | 16,368.43 |
+| 2026-08-10 | 2,484.47 | 2026-09-03 | 16,139.19 |
+| 2026-08-11 | 3,138.34 | 2026-09-04 | 18,661.66 |
+| 2026-08-12 | 3,671.43 | 2026-09-05 | 16,268.19 |
+| 2026-08-13 | 3,626.00 | 2026-09-06 | 13,590.52 |
+| 2026-08-14 | 2,523.75 | 2026-09-07 | 16,468.75 |
+| 2026-08-15 | 3,234.45 | 2026-09-08 | 9,704.56 |
+| 2026-08-16 | 3,103.76 | 2026-09-09 | 10,661.41 |
+| 2026-08-17 | 2,371.05 | 2026-09-10 | 8,393.19 |
+| 2026-08-18 | 5,173.08 | 2026-09-11 | 10,327.79 |
+| 2026-08-19 | 5,854.99 | 2026-09-12 | 11,940.79 |
+| 2026-08-20 | 7,396.73 | 2026-09-13 | 10,225.07 |
+| 2026-08-21 | 6,133.71 | 2026-09-14 | 11,909.44 |
+| 2026-08-22 | 5,980.53 | 2026-09-15 | 8,898.49 |
+| 2026-08-23 | 8,206.29 | 2026-09-16 | 5,518.40 |
+| 2026-08-24 | 11,577.74 | 2026-09-17 | 2,191.82 |
 
 ## Historical checkpoints
 
