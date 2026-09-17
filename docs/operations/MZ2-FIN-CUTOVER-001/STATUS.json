@@ -172,7 +172,7 @@
     },
     "blocker": "P01_remaining_acceptance_and_Mezan2_independence_not_complete",
     "continuation": "docs/operations/PREVIEW-REVIEWER-SIGNOUT-20260916.md",
-    "current_session_role": "signed_out_after_runtime_recovery",
+    "current_session_role": "owner_signed_in",
     "current_session_settlement_view": "PASS_AFTER_RELOAD",
     "excel_projection": {
       "all_rows_mapping_errors": 0,
@@ -467,7 +467,7 @@
       "production_changed": false
     },
     "runtime_recovery": {
-      "status": "SERVICES_RESTORED_LOGIN_PENDING",
+      "status": "RESTORED_LOGIN_AND_SETTLEMENT_UI_VERIFIED",
       "observed_date": "2026-09-17",
       "source_checkpoint": "72542d8aa0764721f1a2bd575e81cefe2e3f0176",
       "shared_base": "f8fae757409b94e84a4994f64297fbfd1f90cb4d",
@@ -476,14 +476,29 @@
       "tests": "24 passed: ledger lifecycle, Excel projection, import fidelity; 1 multipart deprecation warning",
       "activate": "PASS; frontend and backend RUNNING",
       "http_local": "200 Preview metadata and auth policy",
-      "browser": "502 gone; login form visible after reload; normal owner login required",
+      "browser": "Normal login succeeded; dashboard and authenticated unified settlement register verified",
       "data": "2 settlements retained; real6743152 reviewed; synthetic effective status reversed; ledger count6117 unchanged; Emkan drafts/files0",
       "release_guard_active": false,
       "shared_git_status": "clean",
       "supervisor_configuration": "unchanged",
       "production_changed": false,
-      "next_action": "Owner normal login through secure browserAuth, verify settlement UI, upload Emkan draft once. No financial posting.",
+      "next_action": "Match Emkan statement row to evidenced existing order before review; do not post.",
       "limitation": "Private runtime recovered from Git; durability of /opt across future platform resets is not guaranteed."
+    },
+    "emkan_statement_test": {
+      "status": "DRAFT_SAVED_NEEDS_ORDER_MATCH",
+      "file": "BNPL_Settlement_Report_BNPL401146073415.xlsx",
+      "rows": 1,
+      "gross_sar": 304.64,
+      "commission_sar": 22.79,
+      "commission_vat_sar": 3.42,
+      "net_sar": 278.43,
+      "equation_difference_sar": 0,
+      "unmatched_rows": 1,
+      "bank_confirmation": "copied/unconfirmed",
+      "source_note": "Nonrefundable commission rate69 with zero amount flagged for source review; not adopted as policy",
+      "posted": false,
+      "production_changed": false
     }
   },
   "production_branch": "hotfix/prod-snap-meta-final"
