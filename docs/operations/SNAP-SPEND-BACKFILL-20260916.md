@@ -1,5 +1,41 @@
 # Snapchat canonical spend backfill — 2026-09-16
 
+## Publication approved; browser connection interrupted — 2026-09-17
+
+User explicitly answered «نعم موافق» to publishing this reviewed 30-day update
+and performing live verification/closure. Approval remains valid; do NOT ask
+again for the same action. This supersedes the old approval blocker below.
+
+Fresh GitHub production and shared /app HEAD both matched final reviewed
+merge 99241021fdc8b38efba7eea2c68f3facd569ffbe; working tree clean. Initial
+Guard active:false. Own prepare with actor codex-snap30-restore-20260917 then
+succeeded. Prepublish explicitly returned ready_to_publish:true with source
+b10700b3b5bc8280d48ddf60f03d51db7fd775bb and expected runtime
+rg5-3c4f78c97719fd0e900dff857f7879356d9d5d1d409ed38214db2414d1a5021a.
+The own release lease must be considered ACTIVE until a fresh guard read.
+
+Admin-UI Re-publish changes click timed out and reset browser runtime before
+the confirmation dialog could be inspected. No Yes, Re-publish action was
+sent. Browser bootstrap succeeded, but subsequent tab discovery repeatedly
+reported recovery supersession, then CDP refresh timed out. One read-only
+inspection of known tab2 also timed out and reset the runtime. No further
+publish attempts or alternative execution paths were used. Actual UI state
+is unknown; do not infer success or repeat publication without inspection.
+Last verified platform live version before interruption was bc02ed7.
+
+Task remains OPEN. No new live identity probes, 30-day sync or historical
+readback after deployment have occurred. Existing August backfill evidence
+is preserved. No ad settings, budgets, bids, Qoyod or accounting writes.
+
+Next safe action: reinitialize browser via Browser skill, inspect the existing
+admin publish UI and own Terminal5. Read Guard status and /app SHA. If the
+confirmation is open, continue the single authorized publication; if already
+publishing or completed, do not submit again. Re-run own prepublish immediately
+before actual confirmation if needed. After explicit new deployment success,
+verify three identity probes and lease closure, then one latest30-day sync and
+saved August18–21 readback. Never clear another task's lease. Do not close task
+until operational verification succeeds. Source and intent are frozen.
+
 ## Awaiting explicit publication approval — 2026-09-17 15:57 UTC
 
 Implementation, review and build are ready; task is NOT closed. Production
