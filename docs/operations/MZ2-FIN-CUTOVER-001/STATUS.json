@@ -160,9 +160,9 @@
   ],
   "plan_version": 1,
   "preview_acceptance": {
-    "blocker": "excel_orders_read_projection_missing_owner_login_pending",
+    "blocker": "excel_orders_read_projection_missing_and_three_settlement_orders_absent",
     "continuation": "docs/operations/PREVIEW-REVIEWER-SIGNOUT-20260916.md",
-    "current_session_role": "signed_out_after_runtime_recovery",
+    "current_session_role": "owner_signed_in",
     "current_session_settlement_view": "PASS_AFTER_RELOAD",
     "financial_writes_by_this_session": 0,
     "independent_viewer_account_created": true,
@@ -170,7 +170,7 @@
     "independent_viewer_permissions_verified": [
       "accounting.settlements.view"
     ],
-    "last_observation": "2026-09-17 recovery executed after fresh inactive guard. Restored missing /opt runtimes from reviewed source without /app or Supervisor edits. Isolated Vite build and pinned auth boundary PASS. Frontend/backend RUNNING. Local preview-meta, ready and auth-policy HTTP200; ready:true. Public Preview renders normal email/password login. No authenticated order readback yet. Default API-mode frontend fix now deployed to Preview only; Excel-only order read projection remains unimplemented. Private Preview signing key regenerated after loss; prior sessions invalidated. Runtime persistence across sleep not established.",
+    "last_observation": "Recovery verified readiness200 and successful normal owner login. /orders-v2 shows20 stored direct seed orders, no frontend fixture banner. Read-only isolated Mongo inspection: tenant containing known settlement reference has6654 total orders,6633 Excel-source orders,20direct. Exact tenant-scoped join of supplied217 settlement rows (215unique refs) found214rows/212unique refs;3unique order numbers absent. No record linking or writes performed. Excel schema confirmed normalized root order_number/order_date/currency/total_amount/customer/payment/shipping and raw_by_source.excel flat imported fields. Existing Order Engine repository and summary require salla_direct and exclude these imports. Full Excel projection implementation and tests remain required; missing3orders must be supplied for complete settlement acceptance.",
     "last_updated_date": "2026-09-17",
     "owner_signin_verified": true,
     "posting_endpoint_403_verified": true,
@@ -183,7 +183,7 @@
     "posting_endpoint_evidence_source": "user_executed_browser_console_report",
     "posting_endpoint_error_code": "accounting_permission_required",
     "posting_endpoint_required_permission": "accounting.settlements.post",
-    "next_action": "Use normal secure owner login; inspect imported-order data and implement/test explicit Excel read projection; verify list/detail/summary and settlement rematch. No journal posting or Production writes.",
+    "next_action": "Implement tested explicit Excel-source read model for list/detail/search/count with original currency/date/provenance and no fake Salla payload writes; deploy only to isolated Preview with truthful runtime identity. Owner browser session active. Obtain missing3 orders from user for settlement completion; do not treat their absence as blocker for implementing order display. Then refresh draft matching without journal posting.",
     "preview_default_mode_fix": "DEPLOYED_PREVIEW_RUNTIME_LOGIN_PENDING",
     "recovery_source_sha": "b034e4954b50751f765c1fceb1669005e6230842"
   },
