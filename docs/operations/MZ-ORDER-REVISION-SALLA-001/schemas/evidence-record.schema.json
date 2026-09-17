@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mezan.invalid/schemas/MZ-ORDER-REVISION-SALLA-001/evidence-record.schema.json",
+  "title": "MZ-ORDER-REVISION-SALLA-001 Sanitized Live Terminal Evidence Record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "record_type",
+    "classification",
+    "timestamp",
+    "test_case_id",
+    "attempt_id",
+    "intent_record",
+    "attempt_outcome",
+    "durability",
+    "store_id_hash",
+    "identity_verified",
+    "manifest_digest",
+    "case_digest",
+    "operation_digest",
+    "request",
+    "response_status",
+    "response_body",
+    "before",
+    "after",
+    "semantic_diff",
+    "webhook_events",
+    "assertions_executed",
+    "assertions",
+    "fixed_postconditions",
+    "verdict",
+    "final_verdict_reason",
+    "observed_verdict",
+    "observed_outcome_reason",
+    "idempotency",
+    "transaction_level_behavior"
+  ],
+  "properties": {
+    "record_type": {"const": "WRITE_ATTEMPT_TERMINAL"},
+    "classification": {"enum": ["SALLA_DEMO_STORE_EVIDENCE", "SALLA_LIVE_TEST_ORDER_EVIDENCE"]},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "test_case_id": {"type": ["string", "integer"]},
+    "attempt_id": {"type": "string", "pattern": "^[0-9a-f]{24}$"},
+    "intent_record": {"type": "string", "pattern": "\\.intent\\.json$"},
+    "attempt_outcome": {"enum": ["TERMINAL", "UNKNOWN"]},
+    "durability": {"const": "LOCAL_FILESYSTEM_ONLY_NO_DB_DURABILITY"},
+    "store_id_hash": {"type": "string", "pattern": "^[0-9a-f]{16}$"},
+    "identity_verified": {"const": true},
+    "manifest_digest": {"$ref": "#/$defs/digest"},
+    "case_digest": {"$ref": "#/$defs/digest"},
+    "operation_digest": {"$ref": "#/$defs/digest"},
+    "request": {"$ref": "#/$defs/request"},
+    "response_status": {"type": ["integer", "null"], "minimum": 100, "maximum": 599},
+    "response_body": {},
+    "request_id": {"type": ["string", "null"]},
+    "response_id": {"type": ["string", "null"]},
+    "transport_error": {"type": ["string", "null"]},
+    "retry_response": {"type": ["object", "null"]},
+    "before": {"type": "object"},
+    "after": {"type": "object"},
+    "semantic_diff": {"type": "object"},
+    "webhook_events": {"type": "array", "items": {"type": "object"}},
+    "assertions_executed": {"type": "integer", "minimum": 0},
+    "assertions": {"type": "array", "items": {"type": "object"}},
+    "fixed_postconditions": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/postcondition"}
+    },
+    "verdict": {"$ref": "#/$defs/verdict"},
+    "final_verdict_reason": {"type": "string", "minLength": 1},
+    "observed_verdict": {"$ref": "#/$defs/verdict"},
+    "observed_outcome_reason": {"type": "string", "minLength": 1},
+    "idempotency": {
+      "enum": ["SALLA_IDEMPOTENCY_UNSUPPORTED", "SALLA_IDEMPOTENCY_OBSERVED", "SALLA_IDEMPOTENCY_INCONCLUSIVE"]
+    },
+    "transaction_level_behavior": {"const": "UNAVAILABLE_SCOPE_NOT_GRANTED"}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "path", "body", "correlation_id"],
+      "properties": {
+        "method": {"enum": ["POST", "PUT", "DELETE"]},
+        "path": {"type": "string", "pattern": "^/orders/items(?:/[^/]+)?$"},
+        "body": {"type": ["object", "null"]},
+        "correlation_id": {"type": "string", "minLength": 1}
+      }
+    },
+    "postcondition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["check", "expected", "actual", "passed"],
+      "properties": {
+        "check": {"type": "string", "minLength": 1},
+        "expected": {},
+        "actual": {},
+        "passed": {"type": "boolean"}
+      }
+    },
+    "verdict": {"enum": ["PASS", "FAIL", "INCONCLUSIVE"]}
+  }
+}

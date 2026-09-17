@@ -5,6 +5,7 @@ from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 
 import httpx
+import mongomock
 import pytest
 from fastapi import FastAPI
 from mongomock_motor import AsyncMongoMockClient
@@ -24,6 +25,10 @@ ITEMS = [{"id": 123, "product_id": 45, "name": "Synthetic product", "sku": "SKU"
 
 
 async def setup_probe(monkeypatch, handler=None, db=None, now=NOW):
+    if db is None:
+        # The fake TTL monitor must use the same clock as the frozen probe.
+        # Otherwise yesterday's fixture is deleted immediately on read.
+        monkeypatch.setattr(mongomock, "utcnow", lambda: diagnostics._utcnow().replace(tzinfo=None))
     db = db if db is not None else AsyncMongoMockClient(tz_aware=True).db
     await db.salla_integrations.insert_one({
         "user_id": "owner-1", "store_id": 50, "status": "connected",
