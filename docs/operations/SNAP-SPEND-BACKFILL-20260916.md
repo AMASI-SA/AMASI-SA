@@ -1,5 +1,36 @@
 # Snapchat canonical spend backfill — 2026-09-16
 
+## Production verified; final sync admission pending — 2026-09-17T17:33Z
+
+Publication succeeded: platform version **3b0f6db**, Deployment finished Sep17
+17:22 UTC. Release Guard verify exited0 with all3 live probes passed:
+source A b10700b3b5bc8280d48ddf60f03d51db7fd775bb;
+intent B fc866d7e1299b586a7f404598f23ea8a968ee727;
+deployment merge 99241021fdc8b38efba7eea2c68f3facd569ffbe;
+runtime rg5-3c4f78c97719fd0e900dff857f7879356d9d5d1d409ed38214db2414d1a5021a;
+boot 2026-09-17T17:21:44.214348+00:00.
+Frontend artifact a273b2c6f7cf859ea2d199176cda98b1ef332a7be46331b3fd8d78a638af1b1b.
+Fresh Guard status active:false; own lease closed. Cloud evidence
+/tmp/snap30-live-verify.json. No republish needed; frozen source unchanged.
+
+Live UI after refresh: latest30 preset selects Aug19–Sep17 inclusive and sync
+enabled. Applied Aug18–Sep17 (31 days), waited until Apply re-enabled:
+saved report readable, sync disabled. Returned to latest30.
+
+Dashboard Aug18–21 postrelease fully loaded, Snapchat total24,558.51SAR.
+All four rendered daily tooltips match baseline exactly: Aug18 5,173.08;
+Aug19 5,854.99; Aug20 7,396.73; Aug21 6,133.71SAR. Historical backfill preserved.
+
+At17:29 submitted one valid30-day manual sync request from live UI.
+No new background task appeared in refreshed Activity; do not claim acceptance
+or new financial completion. Existing automatic row still running since17:16
+(predeployment). Normal async admission recovers stale scheduler jobs using
+2min heartbeat expiry, or25min start age if heartbeat absent. Do not force
+DB lock deletion or duplicate valid active jobs. Final new-run verification
+and task closure remain pending. Latest30 dashboard read requested, waiting
+for load before recording values. Prior Financial:complete report is saved
+data, not evidence of a newly accepted run.
+
 ## Approved publication started — 2026-09-17T17:10:13Z
 
 Browser recovered on the user's retry. Fresh /app stayed clean at reviewed
