@@ -13,6 +13,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 
+sys.dont_write_bytecode = True
+
 
 def input_digest(draft, entries):
     return hashlib.sha256(json.dumps([draft, sorted(entries, key=lambda x: x['id'])],
@@ -24,7 +26,7 @@ async def main(args):
     from motor.motor_asyncio import AsyncIOMotorClient
     assert Path('/opt/mezan-preview-runtime-20260916/preview_password_runtime.py').is_file()
     guard = json.loads(subprocess.check_output(
-        [sys.executable, '/app/scripts/production_release_guard.py', 'status'], text=True))
+        [sys.executable, '-B', '/app/scripts/production_release_guard.py', 'status'], text=True))
     assert guard.get('active') is False, 'Release is active'
     env = dotenv_values('/app/backend/.env')
     assert urlsplit(env['MONGO_URL']).hostname in {'localhost', '127.0.0.1', '::1'}

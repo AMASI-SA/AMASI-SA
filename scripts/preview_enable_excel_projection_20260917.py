@@ -19,7 +19,7 @@ BASE_SHA = '836d36b831c1cd8aa9915f543f159b4e160ea438'
 
 def main():
     assert socket.gethostname() == 'agent-env-f5e6b93a-68a2-4155-84ad-e55b4fa936d3'
-    assert json.loads(subprocess.check_output(['python', '/app/scripts/production_release_guard.py', 'status']))['active'] is False
+    assert json.loads(subprocess.check_output(['python', '-B', '/app/scripts/production_release_guard.py', 'status']))['active'] is False
     assert subprocess.check_output(['git', '-C', '/app', 'rev-parse', 'HEAD'], text=True).strip() == BASE_SHA
     assert not OVERLAY.exists(), 'Overlay already exists; inspect rather than overwrite'
     adapter = ROOT / 'preview_password_runtime.py'
