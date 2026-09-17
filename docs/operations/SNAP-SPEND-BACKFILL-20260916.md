@@ -1,5 +1,72 @@
 # Snapchat canonical spend backfill — 2026-09-16
 
+## Latest 30-day release checkpoint — 2026-09-17 15:43 UTC
+
+Backend PR1061 merged at `8e85e772c70c2b49658f5c316ca1182bccbd73db`
+after all exact-head checks passed, including clean-clone adapter rehearsal.
+Its source A is `c9ee6d3e7d03ccb3c9b8def6a9769c569c000325`, intent B
+`f26b92c764c11a82058a42a825d0702675d9df2e`; 63 affected backend tests pass.
+Do not publish this intermediate backend alone.
+
+UI PR1062 has been superseded by PR1063. The unchanged two-file UI passed
+16 tests and full isolated exact-B adapter rehearsal (exit 0), but GitHub's
+Frontend readiness gate rejected its stacked release lineage: the production
+merge was not an ancestor of its frozen source A. Preserve its A/B unchanged;
+no gate was weakened. New PR1063 source A
+`b10700b3b5bc8280d48ddf60f03d51db7fd775bb` is directly based on production
+merge `8e85e772c70c2b49658f5c316ca1182bccbd73db`, branch
+`fix/snapchat-30-day-sync-ui-final-20260917`. Its new governed A/B build is
+running in own isolated worktree `/tmp/mezan-snap30-ui-20260917`.
+Next: freeze a new intent-only B, pass exact-head CI, merge, then fresh guard
+check, fast-forward shared /app, governed rehearsal and one authorized publish.
+Verify the exact runtime using three guard probes, run one latest-30-day sync,
+and read back saved August 18–21 before closing.
+
+Production changed: no. No lease prepared or publish clicked by this follow-up.
+Fresh shared /app Release Guard reports active:false. Other Preview, Meta,
+attribution and Qoyod work remains untouched. This ops branch is a durable
+record only; never deploy it or alter frozen source to update the record.
+
+## Restore normal synchronization window — September 17
+
+The user accepted the completed August backfill and explicitly requested
+restoring synchronization to the latest 30 days, verifying it, then closing
+the task. Branch `fix/snapchat-restore-30-day-sync-20260917` starts from current
+production `836d36b831c1cd8aa9915f543f159b4e160ea438`.
+
+Implementation: native/async and canonical sync accept at most the latest 30
+inclusive Riyadh dates (today plus 29 preceding dates), reject older/future
+dates before synchronization, and preserve the existing scheduler cadence.
+Read validation is separated from sync validation in both data planes so
+the saved August reports remain accessible. No records are deleted. The
+Snapchat page preset/window explanation is separated into a following UI PR:
+the existing settings-only CI guard forbids mixing page edits with reporting
+source. That guard is unchanged. The initial combined checkpoint is preserved
+at `2b317982bac607f64114f0f5da4287b174171936`; its UI tests passed 16/16 before
+splitting. PR1061 now owns backend/read-window changes only. After merging its
+valid A/B pair, the two-file UI PR will receive its own A/B pair; publish the
+final combined result once, after both sets of checks pass.
+
+Evidence: the new regression suite initially failed 6 and passed 2 on baseline;
+after implementation, 63 affected backend tests pass (window, async mapping,
+native sync, scheduler, heartbeat, campaign report, account-timezone report).
+Standalone Node window checks pass including Riyadh midnight. `git diff
+--check` passes. Exact-head CI, governed v5 release and live
+30-day acceptance remain pending. Do not close the task or claim deployment
+until those pass. The read-only preflight in own Terminal 4 found `/app` clean
+at the production SHA above and Release Guard `active:false`; PR1058's owner
+has separately verified and closed that deployment. No Emergent chat used.
+
+Release preparation update: all 23 check results on source
+`ef273cf065742ad58ea2faee6a5ac064f96e0ea6` were successful or properly skipped;
+the settings-only guard passed unchanged after the split. The governed A/B
+bootstrap and freeze succeeded. Cloud Git push requested an additional GitHub
+sign-in; that attempt was cancelled, and the remote branch remained at A.
+The unpublished local intent commit is preserved rather than rewritten. This
+documentation update creates a fresh source A: rebuild and freeze its intent,
+verify exact blob transfer, then create its first B through the connected
+GitHub tool. Do not substitute the unpublished prior B or its stale intent.
+
 ## Current operational checkpoint — 2026-09-17
 
 This section supersedes the historical pending-release notes below. PR #1055
