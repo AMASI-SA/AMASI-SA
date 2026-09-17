@@ -10,7 +10,7 @@ import ProductMediaDraftEditor from "../components/products/ProductMediaDraftEdi
 import ProductOptionCostEditor from "../components/products/ProductOptionCostEditor";
 import ProductOperationsEditor from "../components/products/ProductOperationsEditor";
 import {
-    applyMissingSkus, getProductV2Costs, getProductsV2Summary,
+    applyMissingSkus, getProductV2, getProductV2Costs, getProductsV2Summary,
     listWorkspaceProducts, previewMissingSkus, refreshProductV2Details,
     saveProductV2Costs, syncProductsV2,
 } from "../services/mezanProductsV2";
@@ -43,12 +43,17 @@ function initialMissingCostRange() {
         return { from: "", to: "", paymentMethods: "", shippingCompanies: "", productIds: "" };
     }
     const params = new URLSearchParams(window.location.search);
+    const targetedProduct = params.get("product") || "";
     return {
         from: params.get("from") || "",
         to: params.get("to") || "",
         paymentMethods: params.get("payment_methods") || "",
         shippingCompanies: params.get("shipping_companies") || "",
-        productIds: params.get("product_ids") || "",
+        productIds: params.get("product_ids") || (
+            params.get("missing_mezan_cost") === "1" && params.get("sold_only") === "1"
+                ? targetedProduct
+                : ""
+        ),
     };
 }
 
@@ -122,6 +127,8 @@ export default function MezanProductsWorkspace() {
     const [focusCostEditor] = useState(initialCostFocus);
     const [loading, setLoading] = useState(true);
     const [detailLoading, setDetailLoading] = useState(false);
+    const [sallaRefreshing, setSallaRefreshing] = useState(false);
+    const [sallaRefreshError, setSallaRefreshError] = useState("");
     const [costSaving, setCostSaving] = useState(false);
     const [syncing, setSyncing] = useState(false);
     const [skuPreview, setSkuPreview] = useState(null);
@@ -177,13 +184,37 @@ export default function MezanProductsWorkspace() {
     const loadSelected = useCallback(async () => {
         if (!selectedId) return;
         setDetailLoading(true);
-        try {
-            const [detailResult, costResult] = await Promise.all([refreshProductV2Details(selectedId), getProductV2Costs(selectedId)]);
-            setSelected(detailResult.product || null);
-            setCosts({ base_cost: costResult?.base_cost ?? "", variant_costs: costResult?.variant_costs || {}, notes: costResult?.notes || "" });
-        } catch (err) { toast.error(err?.response?.data?.detail?.message || "تعذر جلب تفاصيل المنتج"); }
-        finally { setDetailLoading(false); }
+        const [detailResult, costResult] = await Promise.allSettled([
+            getProductV2(selectedId),
+            getProductV2Costs(selectedId),
+        ]);
+        if (detailResult.status === "fulfilled") {
+            setSelected(detailResult.value?.product || detailResult.value || null);
+        } else {
+            toast.error(detailResult.reason?.response?.data?.detail?.message || "تعذر جلب المنتج المحلي");
+        }
+        if (costResult.status === "fulfilled") {
+            setCosts({ base_cost: costResult.value?.base_cost ?? "", variant_costs: costResult.value?.variant_costs || {}, notes: costResult.value?.notes || "" });
+        } else {
+            toast.error(costResult.reason?.response?.data?.detail?.message || "تعذر جلب تكاليف ميزان");
+        }
+        setDetailLoading(false);
     }, [selectedId]);
+
+    async function refreshSelectedFromSalla() {
+        if (!selectedId) return;
+        setSallaRefreshing(true);
+        setSallaRefreshError("");
+        try {
+            const result = await refreshProductV2Details(selectedId);
+            setSelected(result?.product || result || selected);
+            toast.success("تم تحديث بيانات سلة");
+        } catch {
+            setSallaRefreshError("تعذر تحديث بيانات سلة — البيانات المحلية ما زالت متاحة");
+        } finally {
+            setSallaRefreshing(false);
+        }
+    }
 
     useEffect(() => { load({ page: 1 }); }, [status, sort, missingSku, missingMezanCost]); // eslint-disable-line react-hooks/exhaustive-deps
     useEffect(() => { loadSelected(); }, [loadSelected]);
@@ -204,10 +235,16 @@ export default function MezanProductsWorkspace() {
     const customFields = selected?.custom_fields || [];
     const variants = selected?.variants || [];
     const selectedStatusLabel = useMemo(() => STATUS_FILTERS.find(([value]) => value === status)?.[1] || "كل المنتجات", [status]);
+    const selectedOutsideFilter = Boolean(
+        selectedId
+        && selected
+        && !loading
+        && !items.some((item) => (item.mezan_product_id || item.id) === selectedId),
+    );
 
     async function syncNow() {
         setSyncing(true);
-        try { const result = await syncProductsV2(); toast.success(`تمت المزامنة: ${result.seen_products || 0} منتج`); await load({ page: pagination.page || 1 }); }
+        try { const result = await syncProductsV2(); if (result?.reason === "active_product_publish") toast.info("توجد محاولة نشر نشطة؛ أُجّلت المزامنة لحماية النتيجة."); else { toast.success(`تمت المزامنة: ${result.seen_products || 0} منتج`); await load({ page: pagination.page || 1 }); } }
         catch { toast.error("تعذرت المزامنة"); }
         finally { setSyncing(false); }
     }
@@ -317,7 +354,9 @@ export default function MezanProductsWorkspace() {
             <main className={`${mobileView === "list" ? "hidden lg:block" : "block"} min-w-0 overflow-hidden rounded-2xl border bg-white p-3 sm:rounded-3xl sm:p-5`}>
                 <button type="button" onClick={() => setMobileView("list")} className="mb-3 flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold lg:hidden"><ArrowRight /> العودة إلى المنتجات</button>
                 {detailLoading ? <div className="flex h-72 items-center justify-center"><SpinnerGap className="animate-spin" /></div> : !selected ? <div className="flex h-72 flex-col items-center justify-center text-slate-400"><Cube size={54} /><p>اختر منتجًا</p></div> : <div className="min-w-0 space-y-4 sm:space-y-5">
-                    <div className="flex min-w-0 items-center gap-3 border-b pb-4 sm:gap-4 sm:pb-5"><ProductThumb product={selected} size="lg" /><div className="min-w-0"><h1 className="break-words text-lg font-black sm:text-xl">{selected.name}</h1><p className="break-all text-xs text-slate-500">Salla #{selected.salla_product_id} · {selected.sku || "بدون SKU"}</p></div></div>
+                    {selectedOutsideFilter && <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm font-bold text-sky-900">المنتج المحدد مفتوح مباشرة، لكنه غير موجود حاليًا ضمن نتيجة الفلتر.</div>}
+                    <div className="flex min-w-0 flex-wrap items-center gap-3 border-b pb-4 sm:gap-4 sm:pb-5"><ProductThumb product={selected} size="lg" /><div className="min-w-0 flex-1"><h1 className="break-words text-lg font-black sm:text-xl">{selected.name}</h1><p className="break-all text-xs text-slate-500">Salla #{selected.salla_product_id} · {selected.sku || "بدون SKU"}</p></div><button type="button" onClick={refreshSelectedFromSalla} disabled={sallaRefreshing} className="rounded-xl border px-3 py-2 text-sm font-bold"><ArrowsClockwise className={`inline ${sallaRefreshing ? "animate-spin" : ""}`} /> تحديث بيانات سلة</button></div>
+                    {sallaRefreshError && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-900">{sallaRefreshError}</div>}
                     <ProductControlCenterPanel productId={selectedId} product={selected} onPublished={loadSelected} />
                     <ProductMediaDraftEditor productId={selectedId} images={media} onPublished={loadSelected} />
                     <section className="rounded-2xl border p-3 sm:p-4"><h2 className="mb-3 font-black">معاينة وصف المنتج الحالي</h2><DescriptionPreview html={selected.description_html || selected.description} /></section>
