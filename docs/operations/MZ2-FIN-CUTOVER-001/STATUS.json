@@ -160,9 +160,9 @@
   ],
   "plan_version": 1,
   "preview_acceptance": {
-    "blocker": "preview_excel_orders_excluded_and_cloud_browser_terminal_unavailable",
+    "blocker": "preview_runtime_files_lost_on_sleep_and_shared_release_lease_active",
     "continuation": "docs/operations/PREVIEW-REVIEWER-SIGNOUT-20260916.md",
-    "current_session_role": "owner",
+    "current_session_role": "unverified_after_runtime_loss",
     "current_session_settlement_view": "PASS_AFTER_RELOAD",
     "financial_writes_by_this_session": 0,
     "independent_viewer_account_created": true,
@@ -170,8 +170,8 @@
     "independent_viewer_permissions_verified": [
       "accounting.settlements.view"
     ],
-    "last_observation": "User uploaded settlement draft; unmatched rows remain. Import-jobs UI reports completed Excel order import with no failures. Default frontend fixtures hide API results. With mock=0, API-backed UI lists only seeded Preview orders; repository and summary filter require raw_by_source.salla_direct, excluding Excel-only orders. Settlement matching independently uses unified_orders and needs a fresh rematch after import. Browser/independent-terminal reads repeatedly time out, including after runtime recovery. No runtime mutation or journal posting performed.",
-    "last_updated_date": "2026-09-16",
+    "last_observation": "Fresh browser showed servers asleep. Used visible Wake up servers; authenticated independent code-server workspace successfully. Prior /opt/mezan-preview-* directories no longer exist. Supervisor backend and frontend both FATAL and point to those missing adapter/launcher files. /app HEAD836d36b831c1cd8aa9915f543f159b4e160ea438, clean tracked worktree; frontend/build/index.html missing, backend/release_identity.json exists. Five pinned auth hashes still match prior reviewed adapter. Release guard ACTIVE owned by codex-snap1058-deploy. No cloud source/config/credential/database changes or service restart executed. Original Preview source fix remains90b315342c7c2464aca07b70aef8afb2a8275208; Excel projection not implemented.",
+    "last_updated_date": "2026-09-17",
     "owner_signin_verified": true,
     "posting_endpoint_403_verified": true,
     "production_changed": false,
@@ -183,7 +183,7 @@
     "posting_endpoint_evidence_source": "user_executed_browser_console_report",
     "posting_endpoint_error_code": "accounting_permission_required",
     "posting_endpoint_required_permission": "accounting.settlements.post",
-    "next_action": "Restore independent Preview terminal access; inspect imported order shape and implement read-only Excel order projection without fabricating salla_direct provenance. Test owner scoping, currency, dates, deduplication, list/detail/count/search parity and preserve mutation guards. Apply tested frontend default fix only in isolated Preview; verify imported orders and settlement matching before declaring readiness.",
+    "next_action": "Release owner codex-snap1058-deploy must finish or close its own active lease. Then recheck guard/base identity and restore isolated Preview launchers from reviewed GitHub source in a persistence-approved location; preserve password-only policy and independent signing boundary. Verify readiness and restore normal owner login. Implement/test explicit Excel read projection and rematch settlement; do not claim comprehensive readiness.",
     "preview_default_mode_fix": "SOURCE_TESTED_NOT_DEPLOYED"
   },
   "production_branch": "hotfix/prod-snap-meta-final"
