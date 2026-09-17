@@ -298,6 +298,12 @@
       "production_changed": false,
       "salla_mutations": false,
       "remaining": "Original currencies display correctly. Preview DTO SAR equivalents remain unavailable; verify existing currency policy and provider exchange evidence before accounting reports consume these rows. No review/posting acceptance performed."
+    },
+    "sar_equivalent_verification": {
+      "status": "SOURCE_TESTED_AWAITING_PREVIEW_RUNTIME",
+      "tests_passed": 9,
+      "provider_rates_match_export": 7,
+      "production_changed": false
     }
   },
   "production_branch": "hotfix/prod-snap-meta-final"

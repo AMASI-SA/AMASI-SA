@@ -9,6 +9,7 @@ import os
 import json
 import hashlib
 from zoneinfo import ZoneInfo
+from order_currency import salla_order_currency_fields
 
 from .models import OrderDTO, OrderSourceDTO, CustomerDTO, PaymentDTO, ShippingDTO, MoneyTotalsDTO, OrderItemDTO, AddressDTO
 from .mapper import OrderMappingError
@@ -88,6 +89,13 @@ def map_excel_order(row):
         if items:
             raise OrderMappingError('invoice enrichment must not replace exported items')
         items = [OrderItemDTO(**item) for item in verification['items']]
+    # Reuse the accounting currency contract in memory. Only order-read
+    # evidence bound to this Excel snapshot can supply a foreign exchange rate.
+    currency_fields = salla_order_currency_fields({
+        'currency': currency, 'total_amount': amount('total_amount'),
+        'exchange_rate': (verification.get('exchange_rate_reported')
+                          if verification.get('source') == 'salla_order_read' else None),
+    })
     return OrderDTO(
         order_id=str(value('order_id') or number), order_number=number, created_at=created,
         status=value('order_status'), status_native=value('order_status'),
@@ -101,6 +109,10 @@ def map_excel_order(row):
             formatted=excel.get('customer_address'))),
         items=items,
         totals=MoneyTotalsDTO(currency=currency, total=amount('total_amount'),
+                             total_sar=currency_fields['total_amount_sar'],
+                             exchange_rate_to_sar=currency_fields['exchange_rate_to_sar'],
+                             conversion_status=currency_fields['currency_conversion_status'],
+                             conversion_source=currency_fields['currency_conversion_source'],
                              subtotal=amount('subtotal'), discount=amount('discount'),
                              shipping=amount('shipping_cost'),
                              tax_reported_by_source=float(verified_amounts.get('tax', excel.get('tax')) or 0)),

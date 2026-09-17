@@ -83,6 +83,38 @@ class ExcelProjectionTests(unittest.TestCase):
         self.assertEqual(dto.items[0].total, 5.13)
         self.assertEqual(dto.items[0].discount, .25)
 
+    def test_verified_fx_uses_exact_order_rate_and_preserves_native_total(self):
+        row = record()
+        row.update(currency='KWD', total_amount=28.84)
+        row['preview_excel_verification'] = {
+            'source': 'salla_order_read', 'order_number': '123',
+            'excel_fingerprint': hashlib.sha256(json.dumps(row['raw_by_source']['excel'], sort_keys=True, default=str).encode()).hexdigest(),
+            'exchange_rate_reported': {'base_currency': 'SAR', 'exchange_currency': 'KWD', 'rate': '12.17048414'},
+        }
+        original = deepcopy(row)
+        totals = map_excel_order(row).totals
+        self.assertEqual(totals.total, 28.84)
+        self.assertEqual(totals.currency, 'KWD')
+        self.assertEqual(totals.total_sar, 351.0)
+        self.assertEqual(totals.exchange_rate_to_sar, '12.17048414')
+        self.assertEqual(totals.conversion_status, 'verified')
+        self.assertEqual(row, original)
+        for change in ({'rate': 'NaN'}, {'rate': '-1'}, {'rate': '0'},
+                       {'base_currency': 'KWD', 'exchange_currency': 'SAR'},
+                       {'exchange_currency': 'QAR'}):
+            invalid = deepcopy(row)
+            invalid['preview_excel_verification']['exchange_rate_reported'].update(change)
+            self.assertIsNone(map_excel_order(invalid).totals.total_sar)
+        row['preview_excel_verification']['source'] = 'salla_invoice_read'
+        self.assertIsNone(map_excel_order(row).totals.total_sar)
+
+    def test_native_sar_requires_no_foreign_rate(self):
+        row = record(); row.update(currency='SAR', total_amount=128.60)
+        totals = map_excel_order(row).totals
+        self.assertEqual(totals.total_sar, 128.60)
+        self.assertEqual(totals.exchange_rate_to_sar, '1')
+        self.assertEqual(totals.conversion_status, 'native_sar')
+
     def test_quoted_original_date_keeps_original_time(self):
         row = record(); row['order_date_raw'] = "'2026-06-05 00:07:29'"
         self.assertEqual(map_excel_order(row).created_at.isoformat(), '2026-06-05T00:07:29+03:00')
