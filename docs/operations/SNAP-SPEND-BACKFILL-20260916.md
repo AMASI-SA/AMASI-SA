@@ -1,5 +1,24 @@
 # Snapchat canonical spend backfill — 2026-09-16
 
+## Final reviewed release ready — 2026-09-17 15:52 UTC
+
+PR1063 merged as `99241021fdc8b38efba7eea2c68f3facd569ffbe`, tree-equal to
+intent-only B `fc866d7e1299b586a7f404598f23ea8a968ee727`.
+Source A: `b10700b3b5bc8280d48ddf60f03d51db7fd775bb`.
+Base J: `8e85e772c70c2b49658f5c316ca1182bccbd73db`.
+Runtime: `rg5-3c4f78c97719fd0e900dff857f7879356d9d5d1d409ed38214db2414d1a5021a`.
+Intent blob: `1057d4481b152af287e7ba376adf837580235f76`.
+All latest exact-B checks succeeded or appropriately skipped; cancelled earlier
+settings runs were superseded by successful runs. Clean-clone Host Node20
+adapter rehearsal job105274461032 passed. Fresh UI tests16/16 passed.
+
+Next: fresh shared /app Guard status, fast-forward reviewed production, run
+full governed adapter rehearsal, prepare own lease and prepublish, then one
+previously authorized UI publish. Verify exact identity using three probes,
+run latest30-day sync and verify August18–21 saved spend before closure.
+Production runtime unchanged at this checkpoint; shared /app still clean836d36b
+and Guard active:false at last read. No other task branch is included.
+
 ## Latest 30-day release checkpoint — 2026-09-17 15:43 UTC
 
 Backend PR1061 merged at `8e85e772c70c2b49658f5c316ca1182bccbd73db`
