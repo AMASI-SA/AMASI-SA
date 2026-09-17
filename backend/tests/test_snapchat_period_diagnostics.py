@@ -1,13 +1,16 @@
 from datetime import date
 
 import pytest
+import mongomock
 
 from snapchat_v2.period_diagnostics import audit_period_partition
 
 
 class Orders:
     def __init__(self, rows):
-        self.rows = rows
+        self.collection = mongomock.MongoClient(tz_aware=True).db.orders
+        if rows:
+            self.collection.insert_many([{**row, "user_id": "tenant"} for row in rows])
 
     def find(self, query, projection):
         assert query["user_id"] == "tenant"
@@ -15,9 +18,7 @@ class Orders:
         assert "products" not in projection
         assert "total_amount" not in projection
         assert "order_number" not in projection
-        bounds = query["order_date"]
-        self.selected = [row for row in self.rows
-                         if bounds["$gte"] <= row["order_date"] <= bounds["$lte"]]
+        self.selected = list(self.collection.find(query, projection))
         return self
 
     async def to_list(self, length):
@@ -44,7 +45,7 @@ async def run(rows, **kwargs):
 
 
 @pytest.mark.asyncio
-async def test_explains_an_order_lost_only_when_window_is_partitioned():
+async def test_independent_partition_query_recovers_previously_lost_order():
     result = await run([{
         "order_date": "2026-08-20", "source": "snapchat",
         "raw_by_source": {"salla_direct": {"date": {
@@ -52,7 +53,7 @@ async def test_explains_an_order_lost_only_when_window_is_partitioned():
         }}},
         "order_number": "must-not-appear", "total_amount": 123,
     }])
-    assert result["all_orders"] == {"whole": 1, "left": 0, "right": 0, "gap": 1}
+    assert result["all_orders"] == {"whole": 1, "left": 0, "right": 1, "gap": 0}
     assert result["explicit_snapchat_source"] == result["all_orders"]
     assert result["explanations"] == {"stored_date_outside_partition_query": 1}
     assert "must-not-appear" not in str(result)
