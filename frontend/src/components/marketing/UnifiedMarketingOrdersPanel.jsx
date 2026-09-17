@@ -1,6 +1,15 @@
 import { useMemo, useState } from "react";
 import { MagnifyingGlass } from "@phosphor-icons/react";
 
+const ATTRIBUTION_REASON_LABELS = {
+    campaign_identity_missing: "لم يصل معرف الحملة أو اسمها",
+    click_reference_only: "وصل مرجع نقرة فقط دون هوية الحملة",
+    campaign_not_in_catalog: "الحملة الواردة غير موجودة في سجل سناب",
+    ambiguous_id: "معرف الحملة مرتبط بأكثر من كيان",
+    ambiguous_name: "اسم الحملة مكرر",
+    foreign_platform: "مصدر الطلب الأصلي يشير إلى منصة أخرى",
+};
+
 function number(value) {
     if (value === null || value === undefined || value === "") return "—";
     const parsed = Number(value);
@@ -59,6 +68,13 @@ export default function UnifiedMarketingOrdersPanel({ report, campaignId = null 
                 <div className="rounded-xl bg-violet-50 p-3"><div className="text-xs font-black text-violet-700">مشتريات Snapchat</div><div className="mt-2 text-2xl font-black">{number(summary.platform_attributed_conversions)}</div></div>
                 <div className="rounded-xl bg-amber-50 p-3"><div className="text-xs font-black text-amber-700">طلبات غير منسوبة لحملة</div><div className="mt-2 text-2xl font-black">{number(summary.unmatched_orders)}</div></div>
             </div>
+            {summary.campaign_attribution && <details className="rounded-xl border border-slate-200 bg-white p-4" data-testid="snapchat-attribution-proof">
+                <summary className="cursor-pointer text-sm font-bold">جودة ربط الطلبات بالحملات للفترة المعروضة</summary>
+                <p className="mt-2 text-sm">مرتبط {number(summary.campaign_attribution.matched_orders)} من {number(summary.campaign_attribution.evaluated_orders)} · غير مرتبط {number(summary.campaign_attribution.unmatched_orders)}</p>
+                <ul className="mt-2 space-y-1 text-sm">{Object.entries(summary.campaign_attribution.reason_counts || {}).map(([reason, count]) => <li key={reason}>{ATTRIBUTION_REASON_LABELS[reason] || "سبب غير مصنف"}: {number(count)}</li>)}</ul>
+                <p className="mt-2 text-xs text-slate-600">الحساب يشمل كامل الفترة بتوقيت حساب سناب. الطلب غير المرتبط يبقى ضمن إجمالي المنصة ولا يُوزع على حملة بالتخمين.</p>
+            </details>}
+
             <div className="max-h-[480px] overflow-auto">
                 <table className="min-w-[980px] w-full text-right text-xs">
                     <thead className="sticky top-0 bg-slate-50 text-slate-600">

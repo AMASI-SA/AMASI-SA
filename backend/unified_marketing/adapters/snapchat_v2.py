@@ -295,6 +295,7 @@ def _commerce_order_summary(value: dict[str, Any]) -> UnifiedCommerceOrderSummar
     available = status == "complete"
     platform_conversions = value.get("platform_attributed_purchases")
     return UnifiedCommerceOrderSummary(
+        campaign_attribution=value.get("campaign_attribution") if available else None,
         status=(
             "complete"
             if available

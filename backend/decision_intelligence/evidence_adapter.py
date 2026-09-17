@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 
 import unified_marketing.gateway as unified_gateway
 from unified_marketing.contract import CONTRACT_VERSION
+from unified_marketing.attribution import campaign_attribution_complete
 
 ENTITY_LEVELS = ("campaign", "ad_group", "ad")
 REQUIRED_DECISION_GATES = (
@@ -272,6 +273,9 @@ def evaluate_decision_evidence(
         and order_summary.get("matched_financial_orders") is not None
         and account_commerce.get("status") == "complete"
         and str(account_commerce.get("attribution_scope") or "").strip()
+        and (provider != "snapchat_ads" or campaign_attribution_complete(
+            order_summary.get("campaign_attribution")
+        ))
     )
     financial_passed = _row_financial_complete(account_totals)
 
@@ -310,6 +314,7 @@ def evaluate_decision_evidence(
             order_summary_status=order_summary.get("status"),
             truncated=bool(order_summary.get("truncated")),
             attribution_policy=order_summary.get("attribution_policy"),
+            campaign_attribution=order_summary.get("campaign_attribution"),
         ),
         "financial_coverage": _gate(
             financial_passed,
