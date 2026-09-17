@@ -46,3 +46,39 @@ class EligibilityTests(unittest.TestCase):
         with self.assertRaises(ContractRunnerError):
             item_revision_decision({'status': 'pending'}, method='PUT', item_id='i',
                 preparation_records=[{'order_item_id': 'other', 'status': 'assigned'}])
+
+
+class PreparationReadTests(unittest.IsolatedAsyncioTestCase):
+    async def test_pausing_ready_item_does_not_bypass_confirmation(self):
+        from test_salla_order_item_console import AsyncDb
+        from order_revision_eligibility import read_preparation
+        from datetime import datetime, timezone
+        db = AsyncDb()
+        for status in ('blocked', 'cancelled'):
+            db.raw['mezan_preparation_pieces_v1'].delete_many({})
+            db.raw['mezan_fulfillment_holds_v1'].delete_many({})
+            db.raw['mezan_preparation_pieces_v1'].insert_one({
+                'user_id': 'owner', 'order_number': '1', 'order_item_id': 'i',
+                'piece_id': 'p', 'status': status, 'active_hold_id': 'h',
+                'updated_at': datetime.now(timezone.utc)})
+            db.raw['mezan_fulfillment_holds_v1'].insert_one({
+                'id': 'h', 'user_id': 'owner', 'order_number': '1', 'status': 'active',
+                'before_states': [{'piece_id': 'p', 'status': 'ready_for_employee_receipt'}]})
+            records = await read_preparation(db, 'owner', '1', 'i')
+            decision = item_revision_decision({'status': 'processing'}, method='DELETE',
+                item_id='i', preparation_records=records)
+            self.assertTrue(decision['confirmation_required'])
+            self.assertEqual(len(decision['preparation_revision']), 64)
+
+    async def test_missing_or_foreign_hold_cannot_prove_preparation(self):
+        from test_salla_order_item_console import AsyncDb
+        from order_revision_eligibility import read_preparation
+        db = AsyncDb()
+        db.raw['mezan_preparation_pieces_v1'].insert_one({
+            'user_id': 'owner', 'order_number': '1', 'order_item_id': 'i',
+            'piece_id': 'p', 'status': 'blocked', 'active_hold_id': 'h'})
+        db.raw['mezan_fulfillment_holds_v1'].insert_one({
+            'id': 'h', 'user_id': 'other', 'order_number': '1', 'status': 'active',
+            'before_states': [{'piece_id': 'p', 'status': 'assigned'}]})
+        with self.assertRaisesRegex(ContractRunnerError, 'item_preparation_hold_unproven'):
+            await read_preparation(db, 'owner', '1', 'i')

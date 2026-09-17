@@ -20,7 +20,7 @@
   "delivery_commit": "407634facfc4e0be07b47d21ca8b243de563f87f",
   "delivery_method": "GitHub connector; source delivery tree exactly equals the reviewed local checkpoint. Remote commit SHA differs; original remote research parent is retained.",
   "merge": "NOT_PERFORMED",
-  "next_safe_action": "Finish customer-service confirmation persistence and preparation invalidation as one coherent workflow before enabling ready-item dispatch. Then provider Console evidence and P1 integration. No shipment dependency or per-order bypass.",
+  "next_safe_action": "Run broader preparation/tracking regression job, inspect result, then finish provider dispatch + hold/reconciliation lifecycle before activating general editor. No Salla item mutation or production change.",
   "p1": "BLOCKED_BY_REQUIRED_PROVIDER_EVIDENCE",
   "phase": "P0",
   "production_baseline": "f8fae757409b94e84a4994f64297fbfd1f90cb4d",
@@ -185,5 +185,25 @@
     "behavior": "Reuse tracking notes within OrderDetailsV2, bound to opened order and existing customer-service permission. Original standalone route retained. No item mutation automation added.",
     "verification": "2 React DOM tests PASS: embedded binding/order switch isolation and standalone search; no writes on opening",
     "remaining": "Browser visual verification and governed release; full item revision workflow remains WIP"
+  },
+  "customer_service_hold_checkpoint": {
+    "state": "IMPLEMENTED_FOCUSED_TESTS_PASS_NOT_DEPLOYED",
+    "completed": [
+      "Ready-item stop confirmation bound to preparation revision and authenticated staff, stored with instruction time and reason",
+      "Edit/delete stop follows selected item across operational stages; other items unaffected",
+      "Delete-product hold pauses rather than prematurely cancelling the preparation piece",
+      "Physical hold uses conditional per-piece writes to reject concurrent readiness drift",
+      "Preparation eligibility preserves pre-hold readiness for blocked/cancelled legacy holds; Mongo datetime values canonically hashed"
+    ],
+    "tests": {
+      "isolated_revision_contracts": 131,
+      "tracking_hold_contracts": 4,
+      "react_dom": 4
+    },
+    "remaining": [
+      "Broader preparation/tracking regressions",
+      "Full provider dispatch integration with hold lifecycle, authoritative reset and unknown-outcome protection",
+      "Browser verification, fresh release intent, merge/publish, actual Console test"
+    ]
   }
 }

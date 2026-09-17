@@ -63,7 +63,13 @@ const STATUS_LABELS = {
 
 function errorMessage(error) {
     const detail = error?.response?.data?.detail;
-    return detail?.message || detail?.code || error?.message || "تعذر تنفيذ العملية";
+    const messages = {
+        order_fulfillment_blocks_revision: "لا يمكن تعديل المنتجات أو حذفها بعد تم التنفيذ أو أثناء التوصيل أو بعد التسليم.",
+        product_revision_requires_item_scope: "اختر المنتجات المطلوب تعديلها أو حذفها.",
+        ready_item_customer_confirmation_required: "تغيرت حالة تجهيز المنتج؛ حدّث بيانات الطلب وأعد التأكيد.",
+        fulfillment_stop_piece_conflict: "تغيرت حالة تجهيز المنتج أثناء الإيقاف؛ حدّث الطلب وأعد المحاولة.",
+    };
+    return detail?.message || messages[detail?.code] || detail?.code || error?.message || "تعذر تنفيذ العملية";
 }
 
 function formatDate(value) {
@@ -198,7 +204,20 @@ export function OrderTrackingNotesPanel({ orderNumber = "", embedded = false }) 
         };
         setSaving(true);
         try {
-            await createTrackingInstruction(selectedNumber, payload);
+            try {
+                await createTrackingInstruction(selectedNumber, payload);
+            } catch (error) {
+                const detail = error?.response?.data?.detail;
+                if (detail?.code !== "ready_item_customer_confirmation_required" || !detail.items) throw error;
+                if (!window.confirm(`${detail.message}\nسيتم إيقاف المنتجات المحددة عن التجهيز لتتمكن خدمة العملاء من متابعة طلب العميل.`)) return;
+                const confirmations = Object.fromEntries(Object.entries(detail.items).map(([id, decision]) => [id, {
+                    customer_requested: true,
+                    item_id: id,
+                    preparation_revision: decision.preparation_revision,
+                    reason: payload.note,
+                }]));
+                await createTrackingInstruction(selectedNumber, { ...payload, ready_item_confirmations: confirmations });
+            }
             toast.success("حُفظت التعليمات وربطت بالمراحل المختارة.");
             await load(selectedNumber);
         } catch (error) {
@@ -284,7 +303,7 @@ export function OrderTrackingNotesPanel({ orderNumber = "", embedded = false }) 
                         <h2 className="flex items-center gap-2 text-lg font-black"><NotePencil size={24} /> إضافة ملاحظة أو مهمة</h2>
                         <label className="mt-4 block text-xs font-black text-slate-600">النطاق<select value={form.scope} onChange={(event) => setForm((current) => ({ ...current, scope: event.target.value, target_ids: [] }))} className="mt-1 h-11 w-full rounded-xl border px-3"><option value="order">الطلب كاملًا</option><option value="item">منتجات محددة</option></select></label>
                         {form.scope === "item" && <div className="mt-3 max-h-52 space-y-2 overflow-y-auto rounded-2xl border bg-slate-50 p-2">{orderItems(data).map((item) => { const id = itemId(item); return <label key={id} className="flex cursor-pointer items-center gap-2 rounded-xl bg-white p-2 text-xs font-black"><input type="checkbox" checked={form.target_ids.includes(id)} onChange={() => toggleTarget(id)} />{itemImage(item) ? <img src={itemImage(item)} alt="" className="h-10 w-10 rounded-lg object-cover" /> : <Package size={30} className="text-slate-300" />}<span>{item.name || "منتج"}</span></label>; })}</div>}
-                        <div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-black text-slate-600">نوع الملاحظة<select value={form.action_type} onChange={(event) => setForm((current) => ({ ...current, action_type: event.target.value }))} className="mt-1 h-11 w-full rounded-xl border px-3">{ACTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="text-xs font-black text-slate-600">الأولوية<select value={form.priority} onChange={(event) => setForm((current) => ({ ...current, priority: event.target.value }))} className="mt-1 h-11 w-full rounded-xl border px-3"><option value="normal">عادية</option><option value="high">مهمة</option><option value="urgent">مستعجلة</option></select></label></div>
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-black text-slate-600">نوع الملاحظة<select value={form.action_type} onChange={(event) => setForm((current) => ({ ...current, action_type: event.target.value, scope: ["edit_product", "delete_product"].includes(event.target.value) ? "item" : current.scope }))} className="mt-1 h-11 w-full rounded-xl border px-3">{ACTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="text-xs font-black text-slate-600">الأولوية<select value={form.priority} onChange={(event) => setForm((current) => ({ ...current, priority: event.target.value }))} className="mt-1 h-11 w-full rounded-xl border px-3"><option value="normal">عادية</option><option value="high">مهمة</option><option value="urgent">مستعجلة</option></select></label></div>
                         {BLOCKING_ACTIONS.has(form.action_type) && <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-black text-rose-900">هذا النوع يوقف المنتج أو الطلب إلزاميًا، ولا يُفتح المسار إلا بعد موافقة خدمة العملاء.</div>}
                         <label className="mt-3 block text-xs font-black text-slate-600">الملاحظة أو المطلوب<textarea rows={4} value={form.note} onChange={(event) => setForm((current) => ({ ...current, note: event.target.value }))} className="mt-1 w-full rounded-xl border p-3 text-sm" placeholder="اكتب المطلوب بوضوح للموظف…" /></label>
                         <div className="mt-3"><div className="text-xs font-black text-slate-600">مرحلة الظهور</div><div className="mt-2 flex max-h-44 flex-wrap gap-2 overflow-y-auto">{STAGES.map(([value, label]) => <button key={value} type="button" onClick={() => toggleStage(value)} className={`rounded-full border px-3 py-1.5 text-xs font-black ${form.target_stages.includes(value) ? "border-violet-700 bg-violet-700 text-white" : "border-slate-300 bg-white text-slate-600"}`}>{label}</button>)}</div></div>

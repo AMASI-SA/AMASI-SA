@@ -4,6 +4,8 @@ The caller supplies authoritative order and preparation records, re-read just
 before dispatch. A confirmation applies to a specific item revision, not to
 an order or customer for all subsequent edits.
 """
+from datetime import datetime, timezone
+
 from order_revision_contracts import ContractRunnerError, canonical_digest
 
 
@@ -45,11 +47,24 @@ def item_revision_decision(order, *, method, item_id, preparation_records):
                 or record.get('assembly_ready_piece_ids')):
             ready.append(record)
     revision = canonical_digest(sorted(
-        (canonical_digest(record) for record in preparation_records)))
+        (canonical_digest(_digest_value(record)) for record in preparation_records)))
     result = {'confirmation_required': bool(ready), 'preparation_revision': revision}
     if ready:
         result['warning'] = READY_WARNING
     return result
+
+
+def _digest_value(value):
+    # Mongo returns datetime objects; use a canonical UTC representation.
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc).isoformat()
+    if isinstance(value, dict):
+        return {k: _digest_value(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_digest_value(v) for v in value]
+    return value
 
 
 def validate_ready_confirmation(decision, confirmation, *, actor_id, item_id):
@@ -75,11 +90,22 @@ async def read_preparation(db, owner, order_number, item_id):
         raise ContractRunnerError('item_preparation_unproven')
     records = []
     for piece in pieces:
-        if piece.get('status') == 'cancelled':
+        held = piece.get('active_hold_id')
+        if piece.get('status') == 'cancelled' and not held:
             continue
-        records.append({k: piece.get(k) for k in (
+        record = {k: piece.get(k) for k in (
             'order_item_id', 'piece_id', 'status', 'assembly_status', 'execution_status',
-            'updated_at', 'assembly_ready_at', 'completed_at')})
+            'updated_at', 'assembly_ready_at', 'completed_at', 'active_hold_id')}
+        if held:
+            hold = await db['mezan_fulfillment_holds_v1'].find_one(
+                {'user_id': owner, 'id': held, 'order_number': str(order_number), 'status': 'active'})
+            before = next((x for x in (hold or {}).get('before_states', [])
+                           if x.get('piece_id') == piece.get('piece_id')), None)
+            if not before:
+                raise ContractRunnerError('item_preparation_hold_unproven')
+            record['status'] = before.get('status')
+            record['execution_status'] = before.get('execution_status')
+        records.append(record)
     workflow = await db['order_review_workflows'].find_one(
         {'user_id': owner, 'order_number': str(order_number)})
     if workflow:

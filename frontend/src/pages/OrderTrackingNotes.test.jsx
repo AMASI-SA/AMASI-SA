@@ -34,3 +34,30 @@ test("standalone panel retains order search", async () => {
     expect(host.querySelector('input[placeholder="رقم الطلب، اسم العميل، أو رقم الجوال"]')).not.toBeNull();
     expect(getTrackedOrder).not.toHaveBeenCalled();
 });
+
+test.each([true, false])("ready-item stop retries only after explicit customer confirmation (%s)", async (accepted) => {
+    getTrackedOrder.mockResolvedValue({ order: { items: [{ id: "i", name: "منتج تجريبي" }] }, instructions: [] });
+    const decision = { confirmation_required: true, preparation_revision: "revision-1" };
+    createTrackingInstruction.mockRejectedValueOnce({ response: { data: { detail: {
+        code: "ready_item_customer_confirmation_required", message: "هذا المنتج جاهز", items: { i: decision },
+    } } } }).mockResolvedValueOnce({});
+    const confirm = jest.spyOn(window, "confirm").mockReturnValue(accepted);
+    await act(async () => root.render(<OrderTrackingNotesPanel orderNumber="101" embedded />));
+    const select = [...host.querySelectorAll("select")].find((node) => [...node.options].some((o) => o.value === "delete_product"));
+    await act(async () => { select.value = "delete_product"; select.dispatchEvent(new Event("change", { bubbles: true })); });
+    await act(async () => host.querySelector('input[type="checkbox"]').click());
+    const note = host.querySelector("textarea");
+    await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set.call(note, "طلب العميل حذف المنتج");
+        note.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => host.querySelector("form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(createTrackingInstruction).toHaveBeenCalledTimes(accepted ? 2 : 1);
+    if (accepted) expect(createTrackingInstruction.mock.calls[1]).toEqual(["101", expect.objectContaining({
+        scope: "item", target_ids: ["i"], ready_item_confirmations: { i: {
+            customer_requested: true, item_id: "i", preparation_revision: "revision-1", reason: "طلب العميل حذف المنتج",
+        } },
+    })]);
+    confirm.mockRestore();
+});
