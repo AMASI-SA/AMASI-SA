@@ -2,6 +2,27 @@
 
 Status: partial repair, pending review and deployment; live invoices unresolved.
 
+Update after source checkpoint `709918aa607486c89c8e21a99ae86973f67cd374`
+(Draft PR #1059): all seven GitHub workflow runs passed, including CodeQL,
+Security, Release Readiness, and the three Qoyod workflows. Source tree matched
+the locally tested tree exactly. A fresh existing UI read-only payment check
+returned `review` and a totals mismatch, confirming the live calculation still
+fails; no invoice or database change was made. Actual COD mapping remains unread.
+
+PR #1058 has since completed publication and guard verification according to
+Issue #1006 comment 5714930182, with owned lease closed. Live activity shows the
+historical analytics job as partial and another ordinary sync running; no job
+was cancelled or restarted by this task.
+
+Current deployment access blocker: opening an independent code-server page led
+to a sign-in screen. A subsequent capability inspection was rejected by
+automatic approval review, which interpreted the user's prohibition on Emergent
+as covering this code-server interaction. No credentials were entered, no
+terminal command was run, and no alternate Emergent session was used. Deployment
+requires the user to clarify permission for the deployment/admin surface only,
+or an authorized operator to perform the reviewed release. Do not bypass the
+rejection. The user prohibition on using Emergent chat remains in force.
+
 Task branch: `fix/qoyod-cod-fee-recovery-20260917`.
 Base: `836d36b831c1cd8aa9915f543f159b4e160ea438` on
 `hotfix/prod-snap-meta-final`. The exact checkpoint SHA is recorded in Issue #1006.
@@ -62,10 +83,11 @@ credentials are included in this checkpoint.
    (`ERR_BLOCKED_BY_CLIENT`). No hidden state, credential extraction, or alternate
    request client was used to bypass it. The new visible UI provides diagnosis
    once properly deployed.
-3. Other conversations are operating on the same production deployment and
+3. Historical coordination evidence: other conversations were operating on the same production deployment and
    analytics worker. Issue #1006 comment 5714733213 reports a new PR #1058
-   publication in progress and owned active lease; comment 5714777079 reports
-   an overlapping active historical analytics job. Do not alter either task.
+   publication in progress and owned active lease; comment 5714777079 reported
+   an overlapping active historical analytics job. See the newer update above;
+   do not assume either historical active state is still current.
 4. Review this source-only PR and its CI. Before any production merge/rehearsal,
    refresh the ledger and actual Release Guard status, reconcile the current
    deployment and background job, and prepare a fresh governed A/B intent for
