@@ -106,6 +106,11 @@ const EMPTY_FORM = {
 export default function OrderTrackingNotes() {
     const [searchParams] = useSearchParams();
     const linkedOrder = (searchParams.get("order") || "").trim();
+    return <OrderTrackingNotesPanel key={linkedOrder} orderNumber={linkedOrder} />;
+}
+
+export function OrderTrackingNotesPanel({ orderNumber = "", embedded = false }) {
+    const linkedOrder = String(orderNumber).trim();
     const [query, setQuery] = useState("");
     const [results, setResults] = useState([]);
     const [searching, setSearching] = useState(false);
@@ -119,6 +124,8 @@ export default function OrderTrackingNotes() {
     const load = useCallback(async (orderNumber) => {
         if (!orderNumber) return;
         setLoading(true);
+        setData(null);
+        setSelectedNumber("");
         try {
             const response = await getTrackedOrder(orderNumber);
             setData(response);
@@ -247,17 +254,19 @@ export default function OrderTrackingNotes() {
         [data],
     );
 
+    const Container = embedded ? "section" : "main";
+    const Heading = embedded ? "h2" : "h1";
     return (
-        <main className="mx-auto max-w-7xl space-y-5 p-3 sm:p-5" dir="rtl" data-testid="order-tracking-notes-page">
+        <Container className={embedded ? "space-y-5" : "mx-auto max-w-7xl space-y-5 p-3 sm:p-5"} dir="rtl" data-testid={embedded ? "order-tracking-notes-panel" : "order-tracking-notes-page"}>
             <header className="rounded-3xl bg-gradient-to-l from-slate-950 via-violet-950 to-violet-800 p-5 text-white shadow-xl">
-                <div className="flex items-start gap-3"><ClockCounterClockwise size={34} weight="duotone" /><div><h1 className="text-2xl font-black">تتبع الطلب وملاحظاته</h1><p className="mt-1 text-sm font-bold text-violet-100">المسار الكامل للطلب ولكل قطعة، وتعليمات خدمة العملاء الملزمة في المرحلة المحددة.</p></div></div>
-                <form onSubmit={search} className="mt-5 flex flex-col gap-2 sm:flex-row">
+                <div className="flex items-start gap-3"><ClockCounterClockwise size={34} weight="duotone" /><div><Heading className="text-2xl font-black">تتبع الطلب وملاحظاته</Heading><p className="mt-1 text-sm font-bold text-violet-100">المسار الكامل للطلب ولكل قطعة، وتعليمات خدمة العملاء الملزمة في المرحلة المحددة.</p></div></div>
+                {!embedded && <form onSubmit={search} className="mt-5 flex flex-col gap-2 sm:flex-row">
                     <div className="relative flex-1"><MagnifyingGlass className="absolute right-4 top-3.5 text-slate-400" size={22} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="رقم الطلب، اسم العميل، أو رقم الجوال" className="h-12 w-full rounded-2xl border-0 bg-white pr-12 pl-4 font-bold text-slate-950 outline-none ring-violet-300 focus:ring-4" /></div>
                     <button disabled={searching} className="h-12 rounded-2xl bg-emerald-500 px-6 font-black text-slate-950 disabled:opacity-50">{searching ? <SpinnerGap className="ml-1 inline animate-spin" /> : null} بحث</button>
-                </form>
+                </form>}
             </header>
 
-            {results.length > 0 && <section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{results.map((row) => <button key={row.order_number} onClick={() => load(row.order_number)} className={`rounded-2xl border p-4 text-right shadow-sm ${selectedNumber === row.order_number ? "border-violet-500 bg-violet-50" : "border-slate-200 bg-white"}`}><div className="font-black">طلب #{row.order_number}</div><div className="mt-1 text-sm font-bold text-slate-600">{row.customer_name || "—"} · {row.shipping_city || "—"}</div><div className="mt-2 text-xs font-black text-violet-700">{row.order_status || "غير محدد"}</div></button>)}</section>}
+            {!embedded && results.length > 0 && <section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{results.map((row) => <button key={row.order_number} onClick={() => load(row.order_number)} className={`rounded-2xl border p-4 text-right shadow-sm ${selectedNumber === row.order_number ? "border-violet-500 bg-violet-50" : "border-slate-200 bg-white"}`}><div className="font-black">طلب #{row.order_number}</div><div className="mt-1 text-sm font-bold text-slate-600">{row.customer_name || "—"} · {row.shipping_city || "—"}</div><div className="mt-2 text-xs font-black text-violet-700">{row.order_status || "غير محدد"}</div></button>)}</section>}
 
             {loading && <div className="flex min-h-64 items-center justify-center"><SpinnerGap size={38} className="animate-spin text-violet-700" /></div>}
 
@@ -295,6 +304,6 @@ export default function OrderTrackingNotes() {
                     </div>
                 </section>
             </>}
-        </main>
+        </Container>
     );
 }

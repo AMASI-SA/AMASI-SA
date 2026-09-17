@@ -179,5 +179,11 @@
     ],
     "ready_item": "Mezan preparation records produce a confirmation-required warning. Dispatch remains blocked until confirmation and preparation reset workflow is integrated.",
     "scope": "No fixture-specific exception; owner-only disposable Console remains limited to existing unpaid test manifests. General P1 still pending."
+  },
+  "order_tracking_inline": {
+    "state": "IMPLEMENTED_NOT_DEPLOYED",
+    "behavior": "Reuse tracking notes within OrderDetailsV2, bound to opened order and existing customer-service permission. Original standalone route retained. No item mutation automation added.",
+    "verification": "2 React DOM tests PASS: embedded binding/order switch isolation and standalone search; no writes on opening",
+    "remaining": "Browser visual verification and governed release; full item revision workflow remains WIP"
   }
 }
