@@ -4216,6 +4216,8 @@ attach_preparation_routes(api, db)
 attach_salla_routes(api, db)
 from salla_orders_v3.probe_routes import make_salla_orders_v3_probe_router
 api.include_router(make_salla_orders_v3_probe_router(db, current_user))
+from order_revision_console_routes import make_order_revision_console_router
+api.include_router(make_order_revision_console_router(db, current_user))
 attach_payment_settlements_routes(api, db)
 attach_refunds_alert_routes(api, db)
 attach_payment_gateway_metrics_routes(api, db)

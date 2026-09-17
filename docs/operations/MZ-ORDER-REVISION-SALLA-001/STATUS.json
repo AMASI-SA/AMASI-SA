@@ -1,0 +1,165 @@
+{
+  "approval_review": "Initial upload was blocked; user explicitly approved upload, Draft PR and Issue #1006 documentation on 2026-09-16. GitHub connector delivery succeeded after local git credential failure.",
+  "branch": "fix/order-revision-p0-webhooks-20260916",
+  "completed": [
+    "Recovered all original P0 source without content changes; exact original local commit history preserved in the verified recovery bundle",
+    "Fixed stale pre-write webhook snapshot with bounded post-write collection",
+    "Separated observed operation success from final webhook completeness",
+    "Preserved UNKNOWN evidence and no-replay behavior for invalid post-write event source",
+    "Installed required local jsonschema==4.26.0; added isolated CI workflow",
+    "Independent parent review and full 72-test verification",
+    "Recorded owner-approved Amasi disposable test-order alternative and concrete first test sequence; no executable code changed",
+    "Implemented explicit Amasi test-order CLI mode with fixture/payment/shipment/original-line guards, one-write execution, reviewed totals, live evidence classification and redirect rejection; 18 new isolated contracts pass",
+    "Resolved the owner-supplied disposable fixture through authenticated Salla reads; verified store identity/type, payment facts and exact-order shipments; rejected the fixture before any mutation because it does not meet the initial test contract",
+    "Corrected disposable fixture validation for one explicitly bound pending store-courier record and one zero-value bank-method row; added late shipment rechecks and preserved receipt/payment/original-line guards",
+    "Optional owner-confirmed synthetic receipt binding; exact top-level attachment reference only, with drift and payment rejection",
+    "Extracted shared pure contracts; implemented disabled owner HTTP test bridge with durable plans/order locks and browser Console helper; 120 isolated tests passed"
+  ],
+  "delivery_commit": "407634facfc4e0be07b47d21ca8b243de563f87f",
+  "delivery_method": "GitHub connector; source delivery tree exactly equals the reviewed local checkpoint. Remote commit SHA differs; original remote research parent is retained.",
+  "merge": "NOT_PERFORMED",
+  "next_safe_action": "Review HTTP bridge and CI; prepare separately authorized protocol-v5 release before production Console use. Complete private fixture and downstream review, then prepare/read/execute one Console plan. No terminal provider writes.",
+  "p1": "BLOCKED_BY_REQUIRED_PROVIDER_EVIDENCE",
+  "phase": "P0",
+  "pr": {
+    "draft": true,
+    "number": 1057,
+    "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1057"
+  },
+  "production_baseline": "9f8b16998f62cbdb08dc9361bc2e443223d27d17",
+  "production_changed": false,
+  "recovered_source": "684d9c9a8120d2158a02bb955500a415474b1279",
+  "recovery_merge": "e9be9ebf1abefb223560477f164f746c3bdbb67f",
+  "release_intent": "UNCHANGED",
+  "remaining": [
+    "Review and deploy the disabled HTTP bridge through an authorized protocol-v5 release; explicitly enable only for controlled Console test",
+    "Complete private fixture/item/product/option bindings and courier/downstream review; owner has confirmed attached receipt is synthetic",
+    "Inspect actual shipping/notification/Qoyod automation and verify shipment-read access through the encrypted runtime integration; a successful connector read does not prove that integration token scope",
+    "Execute the first add/quantity/options/delete sequence and retain actual provider/webhook evidence",
+    "Complete required state/option/payment/inventory/retry evidence before P1 order-page integration and general activation"
+  ],
+  "remote_checkpoint": "Console bridge source checkpoint: resolve full commit SHA from associated Issue #1006 entry; prior head f93913dbb81ab62a2aa7cc9f075af3cf1930ea98",
+  "reviewed_delivery_tree": "0dc09b50aa59c79d658ff44b0cf6c5cf1e08b4da",
+  "reviewed_local_commit": "8f9a738f10850cd5d8302371e0659aeaee011347",
+  "runtime_integration": "OWNER_HTTP_TEST_BRIDGE_IMPLEMENTED_DISABLED_NOT_DEPLOYED",
+  "sandbox": {
+    "evidence_cells_completed": 0,
+    "live_writes_performed": 0,
+    "readiness_exit_code": 2,
+    "reason": "SALLA_SANDBOX_NOT_CONFIGURED",
+    "required_state_operation_cells": 21,
+    "scope": "Local environment presence and read-only preflight only; no provider or credential DB I/O"
+  },
+  "source_sha256": {
+    ".github/workflows/salla-order-revision-p0.yml": "946c2ff2df5509ab078e4b35122d29d248fcf25d27226c4c0f6392f04b432c96",
+    "backend/tests/test_salla_order_item_contract_runner_p0.py": "3cdadb0d7ae9d97d54643bb2c3d91abc67b5c0ed16aef0756150658f23840fca",
+    "scripts/research/salla_order_item_contract_runner.py": "63ee098bff63926265c528a4ffeb28c55c66083fc543658ab116c5e2a4617d6d",
+    "backend/tests/test_salla_order_item_amasi_test_orders.py": "beef6847c79f73463ddd13c328f35488bf2384281aa3861d64f5a6807059a1cd",
+    "docs/operations/MZ-ORDER-REVISION-SALLA-001/schemas/evidence-record.schema.json": "1fa04fe9902ce79f1df8ff83029722b0b870ae636dbd25200389c24aa5349367",
+    "backend/order_revision_contracts.py": "fa5f605b6865b691db57e52c99859874e09f1ac50e79e2e9950ccb0e1f22f620",
+    "backend/order_revision_console.py": "6e2e1d3657b425fff4db543df4ab70382273cd8fce5c5e088783239a31425b28",
+    "backend/order_revision_console_routes.py": "c5ba35e78584ac966b2358bf4bfb7c7ec1e92bfc951bca3b55f9c4424d80a3ee",
+    "backend/tests/test_salla_order_item_console.py": "6ec97ab358de1d7def71e1519c7ea7557575494f9a8167bd5eff67f09f35cf67"
+  },
+  "status": "CONSOLE_BRIDGE_LOCAL_VERIFIED_NOT_DEPLOYED",
+  "task_id": "MZ-ORDER-REVISION-SALLA-001",
+  "updated_at": "2026-09-17",
+  "verification": {
+    "baseline_regression": "Immediate post-mutation event missing; failed before fix and passed afterward",
+    "command": "PYTHONDONTWRITEBYTECODE=1 python -B -m unittest discover -s backend/tests -p 'test_salla_order_item_*.py' -q",
+    "diff_check": "PASS",
+    "errors": 0,
+    "exit_code": 0,
+    "failures": 0,
+    "python_311_syntax": "PASS for changed Python source and new tests",
+    "schema_validation": "FULL_DRAFT202012_VALIDATION_PASS",
+    "skipped": 0,
+    "tests": 120,
+    "workflow_yaml": "Console bridge workflow updated; remote execution pending",
+    "previous_demo_remote_ci": {
+      "status": "PASS",
+      "head": "2c357716fd155fc12ca693dd2465f4d6b3c15480",
+      "run_id": 35146575800,
+      "job_id": 104964077380,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/35146575800",
+      "tests": 72,
+      "skipped": 0,
+      "schema_validation": "PASS"
+    },
+    "amasi_mode_regression": "New mode rejected before implementation; add/update/options/delete and evidence pass through synthetic CLI after implementation. HTTPError rejection, contradictory payment facts, original-line protection, reviewed totals and postwrite eligibility drift covered.",
+    "independent_review": "Console bridge reviewed locally; no separate independent-agent review claimed",
+    "release_readiness": {
+      "status": "FAIL",
+      "head": "f51fa26744aaeb854f89d13e886e0d67b59f7345",
+      "run_id": 35156600750,
+      "job_id": 104997418533,
+      "reason": "Release control source membership differs: new P0 workflow and research runner are not covered by the inherited reviewed intent; source-candidate classification also rejected.",
+      "disposition": "Not deployment-ready. Release intent and release protocol remain unchanged; resolve through reviewed v5 release preparation when feature/runtime scope is ready and publication is authorized."
+    },
+    "pending_courier_regression": "New acceptance cases failed on prior source for seed, nonempty bank row and empty links array. After implementation: 98/98 pass, including add/PUT/DELETE, complete-page and alias negatives, receipt preservation, prewrite shipment drift and postwrite non-PASS/no-retry.",
+    "previous_executor_remote_ci": {
+      "status": "PASS",
+      "head": "cf1acbf2271b67b1a8064b9081d8f92b5cff31d9",
+      "run_id": 35154071687,
+      "job_id": 104989190751,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/35154071687",
+      "tests": 90,
+      "skipped": 0,
+      "schema_validation": "PASS"
+    },
+    "remote_ci": {
+      "status": "PENDING_FOR_CONSOLE_BRIDGE",
+      "previous_verified_head": "f93913dbb81ab62a2aa7cc9f075af3cf1930ea98",
+      "previous_tests": 101,
+      "previous_run_id": 35158516780
+    },
+    "adjacent_ci": {
+      "Snapchat Settings Management V2": "PASS",
+      "Qoyod Payment Freshness": "PASS",
+      "Security Gate": "PASS",
+      "CodeQL": "LAST_OBSERVED_IN_PROGRESS"
+    }
+  },
+  "test_environment_decision": {
+    "date": "2026-09-16",
+    "owner_authorized": "Create and mutate disposable test orders in the real Amasi Salla store",
+    "supersedes": "Demo-only test environment requirement; evidence requirements remain outstanding",
+    "plan": "AMASI-TEST-ORDERS.md",
+    "exact_fixtures_identified": true,
+    "live_test_executor": "BROWSER_CONSOLE_REQUIRED; HTTP bridge implemented but not deployed",
+    "existing_demo_identity_guard": "UNCHANGED",
+    "live_store_writes_performed": 0,
+    "general_activation_or_deployment": "NOT_AUTHORIZED_BY_THIS_TEST_DECISION",
+    "initial_scope": "One pending/under_review SAR bank-transfer test order; zero paid, no receipt/refund; either no shipment or exactly one manifest-bound pending store-courier record with explicit non-dispatch confirmation; quantities 1..2; preserved original line; no automatic retry",
+    "additional_read_scope": "shipping.read",
+    "eligible_fixture_identified": false,
+    "fixture_preflight": {
+      "result": "BLOCKED_BEFORE_MUTATION",
+      "source": "Authenticated Salla connector: reference-filtered Orders List, Order Details, exact-order unfiltered Shipments List and Store Context",
+      "identity_resolution": "Exactly one matching order; identifiers and customer details excluded from repository records",
+      "blocking_contracts": [
+        "Runtime not configured; private item/product/options, non-handoff and downstream review incomplete"
+      ],
+      "shipment_interpretation": "Store-courier record is pending and untracked. This is not evidence of dispatch or proof of non-dispatch; optional exact binding plus operator attestation and fresh strict checks cover only this disposable test scenario.",
+      "customer_options": "Options observed in shipment packages; standalone Order Items and mutation round-trip are not yet verified",
+      "store_identity_type": "Observed through successful Store Context response; private values omitted",
+      "readiness_cli_run": false,
+      "salla_item_writes_performed": 0,
+      "runtime_scope_proven": false,
+      "payment_observation": "Positive SAR total, explicit zero paid and remaining equal to total were observed; exact amounts excluded from repository records",
+      "receipt_decision": "Owner explicitly confirms synthetic image; exact reference binding implemented, no deletion"
+    }
+  },
+  "amasi_executor_source_commit": "cf1acbf2271b67b1a8064b9081d8f92b5cff31d9",
+  "pending_courier_source_commit": "f51fa26744aaeb854f89d13e886e0d67b59f7345",
+  "synthetic_receipt_verification": {
+    "tests": 101,
+    "exit_code": 0,
+    "command": "PYTHONDONTWRITEBYTECODE=1 /workspace/scratch/6071a6aea328/salla-test-env/bin/python -B -m unittest discover -s backend/tests -p 'test_salla_order_item_*.py' -q",
+    "schema_validation": "PASS",
+    "regression": "POST/PUT/DELETE failed with BLOCKED_SEED_MISMATCH before patch, pass afterward; unconfirmed/mismatched/removed receipt, other proof/payment, and prewrite drift blocked",
+    "readiness": "AMASI_TEST_NOT_CONFIGURED",
+    "readiness_exit_code": 2,
+    "remote_ci": "NOT_YET_RUN"
+  }
+}
