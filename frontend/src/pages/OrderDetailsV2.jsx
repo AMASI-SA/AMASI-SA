@@ -1,3 +1,6 @@
+import { OrderTrackingNotesPanel } from "./OrderTrackingNotes";
+import { useAuth } from "../context/AuthContext";
+import { userHasPermission } from "../components/PermissionRoute";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
@@ -871,6 +874,7 @@ function AccountingSummary({ order, currency }) {
 }
 
 export default function OrderDetailsV2() {
+    const { user } = useAuth();
     const { orderNumber } = useParams();
     const [searchParams] = useSearchParams();
     const requestedReturnTo = searchParams.get("returnTo");
@@ -968,6 +972,9 @@ export default function OrderDetailsV2() {
             </section>
 
             <FulfillmentExperimentPanel orderNumber={openedOrderNumber} items={items} />
+            {userHasPermission(user, "customer_intelligence.inbox.read") && openedOrderNumber && (
+                <OrderTrackingNotesPanel key={openedOrderNumber} orderNumber={openedOrderNumber} embedded />
+            )}
 
             <OrderSummaryCard order={order} items={items} currency={currency} />
 

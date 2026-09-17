@@ -23,6 +23,9 @@ from fulfillment_experiment_routes import (
     release_piece_update,
 )
 from fulfillment_v2_routes import _actor_context
+from order_revision_contracts import ContractRunnerError
+from order_revision_eligibility import (READY_STATES, read_preparation, item_revision_decision,
+    validate_ready_confirmation, validate_order_state)
 from order_engine.repository import MongoOrderRepository
 from order_engine.service import OrderNotFoundError, get_order
 from order_review_routes import EVENTS as REVIEW_EVENTS, WORKFLOWS
@@ -185,6 +188,7 @@ class TrackingInstructionCreate(BaseModel):
     enforcement: str = Field(default="notice", max_length=40)
     required_action: str = Field(default="none", max_length=40)
     approval_required: bool = False
+    ready_item_confirmations: dict[str, dict[str, Any]] = Field(default_factory=dict)
     delivery_date: str | None = Field(default=None, max_length=10)
     delivery_time: str | None = Field(default=None, max_length=5)
 
@@ -650,6 +654,39 @@ async def _resolve_instruction_alerts(
         return
 
 
+async def _revision_hold_confirmations(db, *, merchant_id, order_number, item_ids,
+                                       order, workflow, payload, actor_id):
+    if payload.action_type not in {"edit_product", "delete_product"}:
+        return []
+    if payload.scope != "item":
+        raise HTTPException(422, detail={"code": "product_revision_requires_item_scope",
+            "message": "اختر المنتجات المطلوب تعديلها أو حذفها."})
+    try:
+        validate_order_state({"status": order.get("status_native") or order.get("status")})
+        validate_order_state({"status": workflow.get("stage") or "pending_review"})
+        decisions = {}
+        for item_id in item_ids:
+            records = await read_preparation(db, merchant_id, order_number, item_id)
+            decisions[item_id] = item_revision_decision(
+                {"status": order.get("status_native") or order.get("status")},
+                method="DELETE" if payload.action_type == "delete_product" else "PUT",
+                item_id=item_id, preparation_records=records)
+        missing = {key: value for key, value in decisions.items()
+                   if value["confirmation_required"]
+                   and not payload.ready_item_confirmations.get(key)}
+        if missing:
+            raise HTTPException(409, detail={
+                "code": "ready_item_customer_confirmation_required",
+                "message": "هذا المنتج جاهز. هل أكد العميل طلب تعديله أو حذفه رغم اكتمال التجهيز؟",
+                "items": missing,
+            })
+        return [confirmation for key, decision in decisions.items()
+                if (confirmation := validate_ready_confirmation(decision,
+                    payload.ready_item_confirmations.get(key), actor_id=actor_id, item_id=key))]
+    except ContractRunnerError as exc:
+        raise HTTPException(409, detail={"code": str(exc)}) from None
+
+
 async def _create_operational_hold(
     db: Any,
     *,
@@ -659,7 +696,8 @@ async def _create_operational_hold(
     instruction: dict[str, Any],
     actor: dict[str, Any],
 ) -> tuple[str | None, list[dict[str, Any]]]:
-    eligible = [row for row in pieces if text(row.get("status")) in ACTIVE_PIECE_STATUSES]
+    eligible_statuses = ACTIVE_PIECE_STATUSES | (READY_STATES if instruction["action_type"] in {"edit_product", "delete_product"} else set())
+    eligible = [row for row in pieces if text(row.get("status")) in eligible_statuses]
     if not eligible:
         return None, []
     conflicting = [text(row.get("piece_id")) for row in eligible if text(row.get("active_hold_id"))]
@@ -679,24 +717,26 @@ async def _create_operational_hold(
     piece_ids = [row["piece_id"] for row in before_states]
     patch = hold_piece_patch(
         hold_id=hold_id,
-        stop_type=stop_type,
+        stop_type="edit" if instruction["action_type"] == "delete_product" else stop_type,
+        # Product deletion remains a pause until the revision succeeds.
         note=instruction["note"],
         actor=actor,
         stopped_at=now,
     )
-    updated = await db[PIECES].update_many(
-        {
-            "user_id": merchant_id,
-            "piece_id": {"$in": piece_ids},
-            "$or": [
-                {"active_hold_id": {"$exists": False}},
-                {"active_hold_id": None},
-                {"active_hold_id": ""},
-            ],
-        },
-        {"$set": patch},
-    )
-    if int(updated.modified_count) != len(piece_ids):
+    patch.update({"hold_stop_type": stop_type, "hold_stop_label": STOP_TYPE_LABELS[stop_type]})
+    changed = []
+    for row in eligible:
+        result = await db[PIECES].update_one(
+            {"user_id": merchant_id, "piece_id": row["piece_id"],
+             "status": row.get("status"), "updated_at": row.get("updated_at"),
+             "assembly_status": row.get("assembly_status"),
+             "$or": [{"active_hold_id": {"$exists": False}},
+                     {"active_hold_id": None}, {"active_hold_id": ""}]},
+            {"$set": patch})
+        if result.modified_count != 1:
+            break
+        changed.append(row["piece_id"])
+    if len(changed) != len(piece_ids):
         before_by_id = {row["piece_id"]: row for row in before_states}
         for piece_id in piece_ids:
             await db[PIECES].update_one(
@@ -1106,11 +1146,17 @@ def make_order_tracking_notes_router(
             target_pieces = pieces
         if payload.scope != "order" and pieces and not target_pieces:
             raise HTTPException(status_code=404, detail={"code": "customer_service_instruction_target_not_found"})
+        ready_confirmations = await _revision_hold_confirmations(
+            db, merchant_id=context["merchant_id"], order_number=normalized,
+            item_ids=requested_target_ids, order=_model_dict(order), workflow=workflow,
+            payload=payload, actor_id=context["actor_id"])
         target_stages = list(payload.target_stages)
         if "current_stage" in target_stages:
             target_stages = [row for row in target_stages if row != "current_stage"]
             target_stages.insert(0, _current_stage(workflow, target_pieces or pieces))
             target_stages = list(dict.fromkeys(target_stages))
+        if payload.action_type in {"edit_product", "delete_product"}:
+            target_stages = sorted(TARGET_STAGES)
         now = _now()
         instruction_id = f"customer-instruction-{uuid.uuid4().hex}"
         effective_enforcement = (
@@ -1145,6 +1191,7 @@ def make_order_tracking_notes_router(
             "delivery_time": payload.delivery_time,
             "status": "active",
             "operational_hold": payload.action_type in BLOCKING_ACTION_TYPES,
+            "ready_item_confirmations": ready_confirmations,
             "target_piece_ids": [text(row.get("piece_id")) for row in target_pieces if text(row.get("piece_id"))],
             "acknowledged_by_ids": [],
             "acknowledgment_history": [],
