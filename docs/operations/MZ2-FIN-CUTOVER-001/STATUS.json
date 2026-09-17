@@ -237,7 +237,22 @@
       "verification": "NOT_YET_COMPLETE"
     },
     "journal_posting_count": 0,
-    "preview_settlement_metadata_and_actual_fields_updated": true
+    "preview_settlement_metadata_and_actual_fields_updated": true,
+    "salla_independent_sync": {
+      "status": "BLOCKED_PENDING_INDEPENDENT_APP_IDENTITY",
+      "production_connection_must_remain_unchanged": true,
+      "observed_date": "2026-09-17",
+      "preview_local_database_verified": true,
+      "existing_integration_status": "needs_reauth",
+      "existing_encrypted_tokens_present": true,
+      "oauth_config_present": true,
+      "independent_app_identity_verified": false,
+      "credential_values_exposed": false,
+      "token_refresh_attempted": false,
+      "oauth_reauthorization_attempted": false,
+      "webhook_changed": false,
+      "next_action": "Identify a separate Salla application/installation dedicated to Preview before authorization. Do not copy or refresh Production credentials. Implement Preview-only read synchronization with outbound writes and Qoyod sending disabled, then verify order fidelity and unchanged Production connection."
+    }
   },
   "production_branch": "hotfix/prod-snap-meta-final"
 }
