@@ -60,7 +60,7 @@ export default function SnapchatPeriodDiagnostic({ accountId, dateFrom, dateTo, 
                 <tbody>{[["whole", "الفترة الكاملة"], ["left", "الجزء الأول"], ["right", "الجزء الثاني"], ["gap", "فرق العدّ"]].map(([key, label]) =>
                     <tr key={key}><th className="py-2">{label}{result.periods[key] && <span className="block font-normal" dir="ltr">{result.periods[key].join(" — ")}</span>}</th><td>{result.all_orders[key]}</td><td>{result.explicit_snapchat_source[key]}</td></tr>)}</tbody>
             </table></div>
-            <p>يفحص الطلبات التي يجلبها التقرير للفترة الكاملة فقط. عمود سناب يعتمد على مصدر الطلب الصريح؛ لا يقيس نسبة الربط بالحملات.</p>
+            <p>يفحص كل فترة بطلب مستقل ومحدود. تحديث الطلبات أثناء الفحص قد يؤثر في المقارنة. عمود سناب يعتمد على مصدر الطلب الصريح؛ لا يقيس نسبة الربط بالحملات.</p>
         </div>}
     </details>;
 }

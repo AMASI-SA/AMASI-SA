@@ -25,9 +25,15 @@ jobs:
   reporting-v2-tests:
     name: Snapchat reporting V2 foundation
     runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:7.0
+        ports:
+          - 27017:27017
     env:
       JWT_SECRET: snapchat-reporting-v2-test-secret
       SNAPCHAT_TOKEN_ENC_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+      SNAP_PERIOD_TEST_MONGO: "1"
     defaults:
       run:
         working-directory: backend
@@ -53,6 +59,7 @@ jobs:
           bcrypt==4.1.3
           PyJWT==2.13.0
           reportlab==4.5.1
+          mongomock==4.3.0
       - name: Compile reporting V2
         run: |
           python -m compileall -q snapchat_v2
