@@ -47,7 +47,7 @@ def map_excel_order(row):
         raise OrderMappingError('Excel order identity/currency/total missing')
     raw_date = value('order_date_raw') or value('order_date')
     try:
-        created = raw_date if isinstance(raw_date, datetime) else datetime.fromisoformat(str(raw_date).replace('Z', '+00:00'))
+        created = raw_date if isinstance(raw_date, datetime) else datetime.fromisoformat(str(raw_date).strip().strip("'\"").replace('Z', '+00:00'))
         if created.tzinfo is None:
             created = created.replace(tzinfo=ZoneInfo('Asia/Riyadh'))
     except (TypeError, ValueError) as exc:

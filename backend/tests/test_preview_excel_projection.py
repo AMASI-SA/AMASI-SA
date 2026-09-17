@@ -40,6 +40,10 @@ class ExcelProjectionTests(unittest.TestCase):
             self.assertEqual(_map_discovery_row(row).order_number, '123')
             self.assertIn('$or', discovery_source_query())
 
+    def test_quoted_original_date_keeps_original_time(self):
+        row = record(); row['order_date_raw'] = "'2026-06-05 00:07:29'"
+        self.assertEqual(map_excel_order(row).created_at.isoformat(), '2026-06-05T00:07:29+03:00')
+
     def test_invalid_and_simulated_do_not_become_real_orders(self):
         for change in ({'currency': ''}, {'total_amount': 'NaN'}, {'order_date_raw': 'bad'}):
             row = record(); row.update(change)
