@@ -135,6 +135,11 @@ def _report(level: str) -> dict:
         "rows": [row],
         "orders": [],
         "order_summary": {
+            "campaign_attribution": {
+                "status": "complete", "evaluated_orders": 8, "matched_orders": 8,
+                "unmatched_orders": 0, "coverage_pct": 100, "reason_counts": {},
+                "date_scope": "account_timezone", "complete_population": True,
+            },
             "status": "complete",
             "source": "commerce_adapter",
             "created_orders": 9,

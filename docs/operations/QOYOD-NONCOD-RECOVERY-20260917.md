@@ -52,3 +52,13 @@ This is a confirmed reference-list defect, not proof of the latest invoice
 The /branches behavior is untouched (existing route documents its absence in
 Qoyod v2). Fresh governed A/B release and latest invoice failure diagnosis
 remain pending; admin access rejection described above remains unresolved.
+
+Release-base update: Snap1074 live verification and closed lease recorded in
+Issue1006 comment5721926260. Incorporated reviewed production base
+0cea6ed2f5dc3489510ab30a0f072a09c948fd8e into this task candidate without
+conflicts; same 50-test selection passes again in1.13s. This includes Snap
+changes by ancestry, without editing their source. Fresh A/B intent still
+required. The user explicitly approved reading the Emergent /chat page for
+administration only; access succeeded. The earlier approval blocker is
+resolved. Current browser attempts instead report CDP operation superseded
+by browser recovery; no /app source, lease, publication or financial writes.

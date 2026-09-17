@@ -85,6 +85,11 @@ def _report(level, *, complete=True, commerce_complete=True):
         },
         "rows": [{"entity": {"id": f"{level}-1"}}],
         "order_summary": {
+            "campaign_attribution": {
+                "status": "complete", "evaluated_orders": 2, "matched_orders": 2,
+                "unmatched_orders": 0, "coverage_pct": 100, "reason_counts": {},
+                "date_scope": "account_timezone", "complete_population": True,
+            },
             "status": "complete" if commerce_complete else "partial",
             "truncated": False,
         },
