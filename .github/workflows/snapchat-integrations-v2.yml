@@ -16,7 +16,7 @@ on:
       - "backend/tests/test_snapchat_tracking_error_details_v2.py"
       - "backend/tests/test_snapchat_account_selection_v2.py"
       - "frontend/src/services/snapchatIntegrationsV2.js"
-      - "frontend/src/pages/SnapchatV2Page*"
+      - "frontend/src/pages/SnapchatPeriodDiagnosticsPage*"
       - "frontend/src/components/marketing/SnapchatPeriodDiagnostic*"
       - "frontend/src/services/snapchatIntegrationsV2.test.js"
       - "frontend/src/lib/api.js"
