@@ -47,5 +47,21 @@ describe("UnifiedMarketingOrdersPanel", () => {
         expect(container.textContent).toContain("150.00 SAR");
         expect(container.textContent).toContain("50.00 SAR");
         expect(container.textContent).toContain("1001");
+        expect(container.querySelector('[data-testid="snapchat-attribution-proof"]')).toBeNull();
+    });
+
+    test("shows whole-period gap reasons independently of visible order rows", async () => {
+        await act(async () => root.render(<UnifiedMarketingOrdersPanel report={{
+            order_summary: { campaign_attribution: {
+                evaluated_orders: 505, matched_orders: 501, unmatched_orders: 4,
+                reason_counts: { click_reference_only: 3, campaign_identity_missing: 1 },
+            } },
+            orders: [],
+        }} />));
+        const proof = container.querySelector('[data-testid="snapchat-attribution-proof"]');
+        expect(proof.textContent).toContain("مرتبط 501 من 505");
+        expect(proof.textContent).toContain("غير مرتبط 4");
+        expect(proof.textContent).toContain("وصل مرجع نقرة فقط دون هوية الحملة: 3");
+        expect(proof.textContent).toContain("لم يصل معرف الحملة أو اسمها: 1");
     });
 });

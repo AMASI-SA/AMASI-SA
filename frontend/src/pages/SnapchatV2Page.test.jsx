@@ -250,31 +250,6 @@ describe("SnapchatV2Page read-only load", () => {
         });
     });
 
-    test("shows account-period attribution gaps without changing orders or campaigns", async () => {
-        const original = api.get.getMockImplementation();
-        api.get.mockImplementation(async (url, config) => {
-            const response = await original(url, config);
-            if (url.endsWith("/campaigns")) response.data.unified.order_summary = {
-                campaign_attribution: {
-                    status: "partial", evaluated_orders: 10, matched_orders: 8,
-                    unmatched_orders: 2, reason_counts: { click_reference_only: 2 },
-                },
-            };
-            return response;
-        });
-        await act(async () => {
-            root.render(<SnapchatV2Page />);
-            await Promise.resolve();
-            await Promise.resolve();
-            await Promise.resolve();
-        });
-        const proof = container.querySelector('[data-testid="snapchat-attribution-proof"]');
-        expect(proof.textContent).toContain("مرتبط 8 من 10");
-        expect(proof.textContent).toContain("غير مرتبط 2");
-        expect(proof.textContent).toContain("وصل مرجع نقرة فقط دون هوية الحملة: 2");
-        expect(api.post).not.toHaveBeenCalled();
-    });
-
     afterEach(async () => {
         await act(async () => root.unmount());
         container.remove();

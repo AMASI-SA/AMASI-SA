@@ -12,6 +12,9 @@ on:
       - ready_for_review
     paths:
       - "backend/snapchat_v2/**"
+      - "backend/unified_marketing/**"
+      - "backend/decision_intelligence/evidence_adapter.py"
+      - "frontend/src/components/marketing/UnifiedMarketingOrdersPanel*"
       - "backend/snapchat_v2_test_bootstrap.py"
       - "backend/integrations_control_center/snapchat_native_tracking_routes.py"
       - "backend/tests/test_snapchat_reporting_v2_*.py"
@@ -78,3 +81,24 @@ jobs:
           tests/test_decision_intelligence_phase5.py
           -q
           --tb=short
+
+  attribution-ui-tests:
+    name: Snapchat attribution details UI
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --frozen-lockfile --non-interactive
+      - name: Test order attribution details and page integration
+        run: >-
+          CI=true yarn test --watchAll=false --runInBand
+          src/components/marketing/UnifiedMarketingOrdersPanel.test.jsx
+          src/pages/SnapchatV2Page.test.jsx

@@ -43,15 +43,6 @@ const ENTITY_TABS = [
     { id: "ad", label: "Ads" },
 ];
 
-const ATTRIBUTION_REASON_LABELS = {
-    campaign_identity_missing: "لم يصل معرف الحملة أو اسمها",
-    click_reference_only: "وصل مرجع نقرة فقط دون هوية الحملة",
-    campaign_not_in_catalog: "الحملة الواردة غير موجودة في سجل سناب",
-    ambiguous_id: "معرف الحملة مرتبط بأكثر من كيان",
-    ambiguous_name: "اسم الحملة مكرر",
-    foreign_platform: "مصدر الطلب الأصلي يشير إلى منصة أخرى",
-};
-
 function localDateInTimezone(timezone) {
     try {
         return new Intl.DateTimeFormat("en-CA", {
@@ -599,13 +590,6 @@ export default function SnapchatV2Page() {
                 <div className="rounded-xl border border-slate-200 bg-white p-4"><div className="text-xs font-bold text-slate-500">حالة المزامنة</div><div className="mt-2 flex items-center gap-2 text-xl font-black">{hourlyBreakdownComplete ? <CheckCircle className="text-emerald-600" weight="fill" /> : <Clock className="text-amber-600" />}{hourlyBreakdownComplete ? "مكتمل" : "التوزيع الساعي قيد التحديث"}</div><div className={`mt-2 inline-flex rounded-full border px-2 py-1 text-xs font-black ${statusTone(financialDisplayStatus)}`}>Financial: {financialDisplayStatus}</div></div>
                 <div data-testid="snapchat-unified-readiness" className={`rounded-xl border p-4 ${readiness?.ready ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}><div className={`text-xs font-bold ${readiness?.ready ? "text-emerald-700" : "text-amber-700"}`}>جاهزية العقد الموحد</div><div className="mt-2 flex items-center gap-2 text-xl font-black">{readiness?.ready ? <CheckCircle className="text-emerald-600" weight="fill" /> : <Clock className="text-amber-600" />}{readinessLoading ? "جارٍ التحقق" : readiness?.reasons?.includes("readiness_request_failed") ? "تعذر التحقق" : readiness?.ready ? "جاهز" : "غير مكتمل"}</div><div className="mt-2 text-[11px] font-bold text-slate-600">{readiness?.period?.date_from || "آخر يوم مغلق"} · Decision Intelligence غير مربوط</div></div>
             </section>
-
-            {campaignContract?.order_summary?.campaign_attribution && <details className="rounded-xl border border-slate-200 bg-white p-4" data-testid="snapchat-attribution-proof">
-                <summary className="cursor-pointer text-sm font-bold">جودة ربط الطلبات بالحملات للفترة المعروضة</summary>
-                <p className="mt-2 text-sm">مرتبط {number(campaignContract.order_summary.campaign_attribution.matched_orders)} من {number(campaignContract.order_summary.campaign_attribution.evaluated_orders)} · غير مرتبط {number(campaignContract.order_summary.campaign_attribution.unmatched_orders)}</p>
-                <ul className="mt-2 space-y-1 text-sm">{Object.entries(campaignContract.order_summary.campaign_attribution.reason_counts || {}).map(([reason, count]) => <li key={reason}>{ATTRIBUTION_REASON_LABELS[reason] || "سبب غير مصنف"}: {number(count)}</li>)}</ul>
-                <p className="mt-2 text-xs text-slate-600">الحساب يشمل كامل الفترة بتوقيت حساب سناب. الطلب غير المرتبط يبقى ضمن إجمالي المنصة ولا يُوزع على حملة بالتخمين.</p>
-            </details>}
 
             <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
                 <div className="mb-4 flex items-center justify-between gap-3"><div><h2 className="text-lg font-black">الصرف بالساعة — {appliedRange?.dateTo || "—"}</h2><p className="text-xs font-semibold text-slate-500">حسب توقيت حساب Snapchat · الساعة الحالية provisional · الساعات المستقبلية لا تُعرض كصفر</p></div><div className="text-xs font-black text-slate-500">{confirmedHours.length} ساعة مؤكدة</div></div>
