@@ -8,7 +8,6 @@ import UnifiedMarketingEntityTable from "../components/marketing/UnifiedMarketin
 import UnifiedMarketingOrdersPanel from "../components/marketing/UnifiedMarketingOrdersPanel";
 import api, { formatApiErrorDetail } from "../lib/api";
 import { snapchatV2SpendDisplay } from "../lib/snapchatV2SpendDisplay";
-import { latestSnapchatSyncRange, snapchatSyncRangeAllowed, SNAPCHAT_SYNC_WINDOW_MESSAGE } from "../lib/snapchatSyncWindow";
 import { getSnapchatEntitySettings } from "../services/snapchatCampaignManagement";
 
 const ENTITY_TABS = [
@@ -470,10 +469,6 @@ export default function SnapchatV2Page() {
 
     async function syncRange() {
         if (!appliedRange || !accountId) return;
-        if (!snapchatSyncRangeAllowed(appliedRange)) {
-            toast.error(SNAPCHAT_SYNC_WINDOW_MESSAGE);
-            return;
-        }
         setSyncing(true);
         try {
             const { data } = await api.post("/integrations-v2/snapchat-v2/sync", {
@@ -547,9 +542,7 @@ export default function SnapchatV2Page() {
                         <label className="text-xs font-black text-slate-600">من<input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} className="mt-1 block rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-bold" dir="ltr" /></label>
                         <label className="text-xs font-black text-slate-600">إلى<input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} className="mt-1 block rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-bold" dir="ltr" /></label>
                         <button type="submit" disabled={loading} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-black disabled:opacity-50"><ArrowsClockwise size={17} className={loading ? "animate-spin" : ""} /> تطبيق الفترة</button>
-                        <button type="button" disabled={loading || syncing} onClick={() => { const range = latestSnapchatSyncRange(); setDateFrom(range.dateFrom); setDateTo(range.dateTo); load(range); }} className="inline-flex h-10 items-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-black disabled:opacity-50">آخر 30 يومًا</button>
-                        <button type="button" onClick={syncRange} disabled={loading || syncing || !accountId || !snapchatSyncRangeAllowed(appliedRange, clockNow)} title={SNAPCHAT_SYNC_WINDOW_MESSAGE} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-yellow-500 px-4 text-sm font-black text-white disabled:opacity-50"><ArrowsClockwise size={17} className={syncing ? "animate-spin" : ""} />{syncing ? "جاري المزامنة" : "مزامنة V2"}</button>
-                        <p className="w-full text-xs font-semibold text-slate-600">{SNAPCHAT_SYNC_WINDOW_MESSAGE}</p>
+                        <button type="button" onClick={syncRange} disabled={syncing || !appliedRange || !accountId} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-yellow-500 px-4 text-sm font-black text-white disabled:opacity-50"><ArrowsClockwise size={17} className={syncing ? "animate-spin" : ""} />{syncing ? "جاري المزامنة" : "مزامنة V2"}</button>
                     </form>
                 </div>
             </header>

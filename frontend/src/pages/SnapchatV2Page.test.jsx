@@ -255,25 +255,6 @@ describe("SnapchatV2Page read-only load", () => {
         container.remove();
     });
 
-    test("last 30 days preset submits the exact rolling sync range", async () => {
-        const clock = jest.spyOn(Date, "now").mockReturnValue(Date.parse("2026-09-17T12:00:00Z"));
-        api.post.mockResolvedValue({ data: { status: "complete" } });
-        try {
-            await act(async () => root.render(<SnapchatV2Page />));
-            const button = (text) => Array.from(container.querySelectorAll("button")).find((item) => item.textContent.trim() === text);
-            await act(async () => button("آخر 30 يومًا").click());
-            expect(Array.from(container.querySelectorAll('input[type="date"]')).map((item) => item.value)).toEqual(["2026-08-19", "2026-09-17"]);
-            expect(button("مزامنة V2").disabled).toBe(false);
-            await act(async () => button("مزامنة V2").click());
-            expect(api.post).toHaveBeenCalledTimes(1);
-            expect(api.post).toHaveBeenCalledWith("/integrations-v2/snapchat-v2/sync", expect.objectContaining({
-                date_from: "2026-08-19", date_to: "2026-09-17", run_type: "manual",
-            }));
-        } finally {
-            clock.mockRestore();
-        }
-    });
-
     test("render and opening management issue no POST, proposal creation, or execution", async () => {
         await act(async () => {
             root.render(<SnapchatV2Page />);

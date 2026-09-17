@@ -11,15 +11,20 @@ Implementation: native/async and canonical sync accept at most the latest 30
 inclusive Riyadh dates (today plus 29 preceding dates), reject older/future
 dates before synchronization, and preserve the existing scheduler cadence.
 Read validation is separated from sync validation in both data planes so
-the saved August reports remain accessible. No records are deleted. Snapchat
-page adds a last-30-days preset and disables sync outside that window, with
-an Arabic explanation. Existing date selection still reads historical facts.
+the saved August reports remain accessible. No records are deleted. The
+Snapchat page preset/window explanation is separated into a following UI PR:
+the existing settings-only CI guard forbids mixing page edits with reporting
+source. That guard is unchanged. The initial combined checkpoint is preserved
+at `2b317982bac607f64114f0f5da4287b174171936`; its UI tests passed 16/16 before
+splitting. PR1061 now owns backend/read-window changes only. After merging its
+valid A/B pair, the two-file UI PR will receive its own A/B pair; publish the
+final combined result once, after both sets of checks pass.
 
 Evidence: the new regression suite initially failed 6 and passed 2 on baseline;
 after implementation, 63 affected backend tests pass (window, async mapping,
 native sync, scheduler, heartbeat, campaign report, account-timezone report).
 Standalone Node window checks pass including Riyadh midnight. `git diff
---check` passes. React page test, exact-head CI, governed v5 release and live
+--check` passes. Exact-head CI, governed v5 release and live
 30-day acceptance remain pending. Do not close the task or claim deployment
 until those pass. The read-only preflight in own Terminal 4 found `/app` clean
 at the production SHA above and Release Guard `active:false`; PR1058's owner

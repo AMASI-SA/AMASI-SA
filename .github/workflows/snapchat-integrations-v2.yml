@@ -13,7 +13,6 @@ on:
       - "backend/tests/test_snapchat_native_async_selected_reads.py"
       - "backend/tests/test_snapchat_sync_30_day_window.py"
       - "backend/snapchat_v2/**"
-      - "frontend/src/lib/snapchatSyncWindow*"
       - "backend/tests/test_snapchat_entity_pagination_v2.py"
       - "backend/tests/test_snapchat_native_tracking_diagnostics_v2.py"
       - "backend/tests/test_snapchat_tracking_error_details_v2.py"
@@ -99,7 +98,6 @@ jobs:
           --runInBand
           src/services/snapchatIntegrationsV2.test.js
           src/lib/snapchatSyncRecovery.active.test.js
-          src/lib/snapchatSyncWindow.test.js
           src/lib/api.authRefresh.test.js
       - name: Build frontend
         run: CI=false yarn build
