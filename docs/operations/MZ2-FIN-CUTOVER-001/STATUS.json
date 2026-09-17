@@ -160,9 +160,9 @@
   ],
   "plan_version": 1,
   "preview_acceptance": {
-    "blocker": "preview_runtime_files_lost_on_sleep_and_shared_release_lease_active",
+    "blocker": "excel_orders_read_projection_missing_owner_login_pending",
     "continuation": "docs/operations/PREVIEW-REVIEWER-SIGNOUT-20260916.md",
-    "current_session_role": "unverified_after_runtime_loss",
+    "current_session_role": "signed_out_after_runtime_recovery",
     "current_session_settlement_view": "PASS_AFTER_RELOAD",
     "financial_writes_by_this_session": 0,
     "independent_viewer_account_created": true,
@@ -170,7 +170,7 @@
     "independent_viewer_permissions_verified": [
       "accounting.settlements.view"
     ],
-    "last_observation": "Fresh browser showed servers asleep. Used visible Wake up servers; authenticated independent code-server workspace successfully. Prior /opt/mezan-preview-* directories no longer exist. Supervisor backend and frontend both FATAL and point to those missing adapter/launcher files. /app HEAD836d36b831c1cd8aa9915f543f159b4e160ea438, clean tracked worktree; frontend/build/index.html missing, backend/release_identity.json exists. Five pinned auth hashes still match prior reviewed adapter. Release guard ACTIVE owned by codex-snap1058-deploy. No cloud source/config/credential/database changes or service restart executed. Original Preview source fix remains90b315342c7c2464aca07b70aef8afb2a8275208; Excel projection not implemented.",
+    "last_observation": "2026-09-17 recovery executed after fresh inactive guard. Restored missing /opt runtimes from reviewed source without /app or Supervisor edits. Isolated Vite build and pinned auth boundary PASS. Frontend/backend RUNNING. Local preview-meta, ready and auth-policy HTTP200; ready:true. Public Preview renders normal email/password login. No authenticated order readback yet. Default API-mode frontend fix now deployed to Preview only; Excel-only order read projection remains unimplemented. Private Preview signing key regenerated after loss; prior sessions invalidated. Runtime persistence across sleep not established.",
     "last_updated_date": "2026-09-17",
     "owner_signin_verified": true,
     "posting_endpoint_403_verified": true,
@@ -183,8 +183,9 @@
     "posting_endpoint_evidence_source": "user_executed_browser_console_report",
     "posting_endpoint_error_code": "accounting_permission_required",
     "posting_endpoint_required_permission": "accounting.settlements.post",
-    "next_action": "Release owner codex-snap1058-deploy must finish or close its own active lease. Then recheck guard/base identity and restore isolated Preview launchers from reviewed GitHub source in a persistence-approved location; preserve password-only policy and independent signing boundary. Verify readiness and restore normal owner login. Implement/test explicit Excel read projection and rematch settlement; do not claim comprehensive readiness.",
-    "preview_default_mode_fix": "SOURCE_TESTED_NOT_DEPLOYED"
+    "next_action": "Use normal secure owner login; inspect imported-order data and implement/test explicit Excel read projection; verify list/detail/summary and settlement rematch. No journal posting or Production writes.",
+    "preview_default_mode_fix": "DEPLOYED_PREVIEW_RUNTIME_LOGIN_PENDING",
+    "recovery_source_sha": "b034e4954b50751f765c1fceb1669005e6230842"
   },
   "production_branch": "hotfix/prod-snap-meta-final"
 }
