@@ -3,6 +3,7 @@ import { ArrowsClockwise, CheckCircle, Clock, Ghost, WarningCircle } from "@phos
 import { toast } from "sonner";
 
 import SnapchatCampaignManagementPanel from "../components/marketing/SnapchatCampaignManagementPanel";
+import SnapchatPeriodDiagnostic from "../components/marketing/SnapchatPeriodDiagnostic";
 import { snapchatInlineColumns } from "../components/marketing/SnapchatInlineSettings";
 import UnifiedMarketingEntityTable from "../components/marketing/UnifiedMarketingEntityTable";
 import UnifiedMarketingOrdersPanel from "../components/marketing/UnifiedMarketingOrdersPanel";
@@ -621,6 +622,11 @@ export default function SnapchatV2Page() {
             </section>
 
             <UnifiedMarketingOrdersPanel report={campaignContract} campaignId={selectedCampaign?.entity?.id || null} />
+            {accountId && appliedRange && <SnapchatPeriodDiagnostic
+                key={`${accountId}:${appliedRange.dateFrom}:${appliedRange.dateTo}:${loading}`}
+                accountId={accountId} dateFrom={appliedRange.dateFrom} dateTo={appliedRange.dateTo}
+                disabled={loading || syncing}
+            />}
         </div>
     );
 }

@@ -1,6 +1,7 @@
 """Versioned read-only APIs for the Snapchat Integration V2 shadow plane."""
 from __future__ import annotations
 
+import asyncio
 import os
 from datetime import date, datetime, timedelta
 from typing import Any, Callable, Literal
@@ -23,6 +24,7 @@ from .projections import (
 )
 from .reconciliation import calculate_cost_components, list_reconciliation
 from .salla_outcomes import load_salla_campaign_outcomes
+from .period_diagnostics import audit_period_partition
 from .status import snapchat_v2_status
 from .sync_pipeline import MAX_SYNC_DAYS, SnapchatV2SyncPipeline
 from .total_facts import (
@@ -463,6 +465,35 @@ def attach_snapchat_v2_routes(
     current_user: Callable,
     require_owner: Callable[[Any], dict],
 ) -> None:
+    @router.get("/snapchat-v2/period-diagnostics")
+    async def snapchat_v2_period_diagnostics_route(
+        date_from: date = Query(...),
+        date_to: date = Query(...),
+        split_on: date = Query(...),
+        ad_account_id: str = Query(..., min_length=1, max_length=128),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        user_id = _user_id(user, require_owner)
+        _read_days(date_from, date_to)
+        if not date_from < split_on <= date_to:
+            raise HTTPException(status_code=422, detail="invalid_period_split")
+        account = await _selected_account_or_404(db, user_id)
+        if str(account["ad_account_id"]) != ad_account_id:
+            raise HTTPException(status_code=409, detail="selected_account_changed")
+        try:
+            result = await asyncio.wait_for(audit_period_partition(
+                db, user_id, date_from=date_from, date_to=date_to,
+                split_on=split_on, timezone_name=str(account["timezone"]),
+                max_rows=10_000,
+            ), timeout=20)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="period_diagnostic_incomplete") from None
+        except (TimeoutError, asyncio.TimeoutError):
+            raise HTTPException(status_code=503, detail="period_diagnostic_timeout") from None
+        except Exception:
+            raise HTTPException(status_code=503, detail="period_diagnostic_unavailable") from None
+        return {"ad_account_id": ad_account_id, **result}
+
     @router.get("/snapchat-v2/status")
     async def snapchat_v2_status_route(
         ad_account_id: str | None = Query(default=None, max_length=128),

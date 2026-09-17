@@ -59,5 +59,8 @@ jobs:
           python -m pytest
           -p snapchat_v2_test_bootstrap
           tests/test_snapchat_reporting_v2_*.py
+          tests/test_snapchat_period_diagnostics*.py
+          tests/test_snapchat_order_projection.py
+          tests/test_snapchat_clickid_attribution.py
           -q
           --tb=short
