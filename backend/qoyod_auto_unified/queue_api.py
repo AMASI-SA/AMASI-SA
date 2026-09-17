@@ -151,6 +151,11 @@ async def _execute_list(
                 "reason": classification["reason"],
                 "failure_code": classification.get("failure_code"),
                 "failure_source": classification.get("failure_source"),
+                "provider_failure": (
+                    (failures.get(reference) or {}).get("provider_failure")
+                    if classification["status"] not in (SENT, DUPLICATE)
+                    else None
+                ),
                 "retry_allowed": bool(
                     classification.get("retry_allowed", False)
                 ),
