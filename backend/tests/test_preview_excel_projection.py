@@ -40,6 +40,17 @@ class ExcelProjectionTests(unittest.TestCase):
             self.assertEqual(_map_discovery_row(row).order_number, '123')
             self.assertIn('$or', discovery_source_query())
 
+    def test_source_items_keep_quantities_and_net_line_amount(self):
+        row = record()
+        row['raw_by_source']['excel'].update({
+            'skus_json': '[["Fixture",2,"SKU",50,90]]', 'tax': 9.53})
+        dto = map_excel_order(row)
+        self.assertEqual(len(dto.items), 1)
+        self.assertEqual(dto.items[0].quantity, 2)
+        self.assertEqual(dto.items[0].unit_price, 45)
+        self.assertEqual(dto.items[0].total, 90)
+        self.assertEqual(dto.totals.tax_reported_by_source, 9.53)
+
     def test_quoted_original_date_keeps_original_time(self):
         row = record(); row['order_date_raw'] = "'2026-06-05 00:07:29'"
         self.assertEqual(map_excel_order(row).created_at.isoformat(), '2026-06-05T00:07:29+03:00')

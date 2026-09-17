@@ -6,9 +6,10 @@ Missing product/payment facts remain unknown; no amounts or rates are inferred.
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 import os
+import json
 from zoneinfo import ZoneInfo
 
-from .models import OrderDTO, OrderSourceDTO, CustomerDTO, PaymentDTO, ShippingDTO, MoneyTotalsDTO
+from .models import OrderDTO, OrderSourceDTO, CustomerDTO, PaymentDTO, ShippingDTO, MoneyTotalsDTO, OrderItemDTO, AddressDTO
 from .mapper import OrderMappingError
 
 
@@ -52,6 +53,28 @@ def map_excel_order(row):
             created = created.replace(tzinfo=ZoneInfo('Asia/Riyadh'))
     except (TypeError, ValueError) as exc:
         raise OrderMappingError('invalid Excel original date') from exc
+    items = []
+    if excel.get('skus_json'):
+        try:
+            tuples = json.loads(excel['skus_json'])
+            if not isinstance(tuples, list):
+                raise ValueError('item list required')
+            for index, entry in enumerate(tuples):
+                if not isinstance(entry, list) or len(entry) != 5:
+                    raise ValueError('unsupported Excel item tuple')
+                name, quantity, sku, catalog_price, line_total = entry
+                qty, total = Decimal(str(quantity)), Decimal(str(line_total))
+                if not qty.is_finite() or qty <= 0 or not total.is_finite() or total < 0:
+                    raise ValueError('invalid item quantity or total')
+                # Export's fifth value is the net line amount. Do not treat
+                # the catalogue-price column as the actual selling price.
+                items.append(OrderItemDTO(
+                    order_item_id=f'excel:{number}:{index}', name=str(name),
+                    sku=str(sku) if sku else None, quantity=float(qty),
+                    unit_price=float(total / qty), total=float(total),
+                ))
+        except (TypeError, ValueError, InvalidOperation) as exc:
+            raise OrderMappingError('invalid Excel items') from exc
     return OrderDTO(
         order_id=str(value('order_id') or number), order_number=number, created_at=created,
         status=value('order_status'), status_native=value('order_status'),
@@ -60,8 +83,12 @@ def map_excel_order(row):
         customer=CustomerDTO(name=value('customer_name'), mobile=value('customer_mobile')),
         payment=PaymentDTO(method=value('payment_method'), method_native=value('payment_method'),
                            collection_status='unknown'),
-        shipping=ShippingDTO(company=value('shipping_company')),
+        shipping=ShippingDTO(company=value('shipping_company'), address=AddressDTO(
+            city=excel.get('customer_city'), country=excel.get('customer_country'),
+            formatted=excel.get('customer_address'))),
+        items=items,
         totals=MoneyTotalsDTO(currency=currency, total=amount('total_amount'),
                              subtotal=amount('subtotal'), discount=amount('discount'),
-                             shipping=amount('shipping_cost')),
+                             shipping=amount('shipping_cost'),
+                             tax_reported_by_source=float(excel.get('tax') or 0)),
     )

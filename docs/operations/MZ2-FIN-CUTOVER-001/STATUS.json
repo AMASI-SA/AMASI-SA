@@ -164,14 +164,46 @@
     "continuation": "docs/operations/PREVIEW-REVIEWER-SIGNOUT-20260916.md",
     "current_session_role": "owner_signed_in",
     "current_session_settlement_view": "PASS_AFTER_RELOAD",
+    "excel_projection": {
+      "all_rows_mapping_errors": 0,
+      "base_sha": "836d36b831c1cd8aa9915f543f159b4e160ea438",
+      "baseline_suite_failed": 9,
+      "baseline_suite_passed": 17,
+      "excel_orders": 6636,
+      "installer_sha": "23a4a68b314ae2f06b6da0f448700e46c437ffc4",
+      "limitations": [
+        "legacy import did not retain item records",
+        "stored original timestamp precision was lost by importer",
+        "subtotal column differs from authoritative workbook for verified sample",
+        "combined search retains pre-existing5000row scan cap"
+      ],
+      "new_tests_passed": 4,
+      "production_default": "disabled",
+      "rollback": "Restore /opt/mezan-preview-runtime-20260916/preview_password_runtime.py.before-excel and restart backend; remove excel overlay metadata fields if rollback.",
+      "runtime_path": "/opt/mezan-preview-excel-20260917",
+      "source_sha": "428fceb48f284a1158a4f0b243879a9d2f02fa98",
+      "status": "PREVIEW_DEPLOYED_UI_VERIFIED",
+      "stored_direct_seed_orders": 20,
+      "total_discoverable": 6656
+    },
     "independent_viewer_account_created": true,
     "independent_viewer_login_verified": true,
     "independent_viewer_permissions_verified": [
       "accounting.settlements.view"
     ],
+    "journal_posting_count": 0,
     "last_observation": "Grouped settlement rematch remains217rows/215refs/0unmatched, balanced draft. Explicit Excel DTO overlay deployed only to Preview; browser orders-v2 now6656total (6636Excel +20stored direct seed), exact search and detail opening verified for first missing reference; get_orders verified all3. All6656rows mapped without errors,4new projection tests PASS. Existing repository/service/routes suite17PASS9FAIL; exact9route failures reproduced unchanged on baseline. Startup briefly503 from generated non-derived Python cache; removed327untracked derived .pyc under guardactivefalse, read_release_identity verified true, restarted backend and UI recovered. No authentication/release guard weakened; /app tracked source unchanged. Existing importer still loses products/exact times and maps a subtotal incorrectly; independent importer is mandatory before readiness.",
     "last_updated_date": "2026-09-17",
-    "next_action": "Implement a Mezan2-owned Excel import UI/API/parser without legacy analysis dependency; preserve authoritative line items, exact original timestamps, currency and all amount columns. Current imported subtotal for first added order differs from workbook (100 vs9.53 displayed), and items are absent. Do not assume display success proves import fidelity. Test corrected importer on same files and reconcile totals before complete acceptance. Add normal grouped rematch UI/API and exact counts beyond200. Then test with legacy routes/workers disabled. No Production deployment or journal posting authorized.",
+    "mezan2_independence": {
+      "independent_import_required": true,
+      "legacy_analysis_dependency_allowed": false,
+      "legacy_runtime_dependency_allowed": false,
+      "production_gate": "BLOCKED_UNTIL_LEGACY_DISABLED_ACCEPTANCE_PASSES",
+      "required": true,
+      "verification": "NOT_YET_COMPLETE",
+      "preview_legacy_import_temporarily_allowed": true
+    },
+    "next_action": "Deploy tested parser/projection overlay only to Preview, back up imported orders and financial evidence, reimport same workbook, repair stale Excel-owned original-date/subtotal fields, compare order/settlement/ledger readback. Production must remain independent of legacy. No journal posting.",
     "order_import": {
       "created": 3,
       "evidence": "owner_authenticated_preview_import_jobs_ui",
@@ -189,6 +221,7 @@
     "posting_endpoint_evidence_source": "user_executed_browser_console_report",
     "posting_endpoint_required_permission": "accounting.settlements.post",
     "preview_default_mode_fix": "DEPLOYED_PREVIEW_RUNTIME_LOGIN_PENDING",
+    "preview_settlement_metadata_and_actual_fields_updated": true,
     "production_changed": false,
     "recovery_source_sha": "b034e4954b50751f765c1fceb1669005e6230842",
     "rematch_diagnostics": {
@@ -203,55 +236,33 @@
     },
     "reviewer_logout_source_sha": "497311cd14208303730f5dfadac94c4d6b1c9d48",
     "reviewer_logout_verified": true,
+    "salla_independent_sync": {
+      "credential_values_exposed": false,
+      "existing_encrypted_tokens_present": true,
+      "existing_integration_status": "needs_reauth",
+      "independent_app_identity_verified": false,
+      "next_action": "Identify a separate Salla application/installation dedicated to Preview before authorization. Do not copy or refresh Production credentials. Implement Preview-only read synchronization with outbound writes and Qoyod sending disabled, then verify order fidelity and unchanged Production connection.",
+      "oauth_config_present": true,
+      "oauth_reauthorization_attempted": false,
+      "observed_date": "2026-09-17",
+      "preview_local_database_verified": true,
+      "production_connection_must_remain_unchanged": true,
+      "status": "DEFERRED_BY_OWNER_USE_PREVIEW_EXCEL",
+      "token_refresh_attempted": false,
+      "webhook_changed": false
+    },
     "scenario_5": "PASS_PREVIEW_INDEPENDENT_VIEWER_UI_AND_USER_EXECUTED_POST_403",
     "status": "PARTIAL",
     "synthetic_employee_records": 2,
-    "excel_projection": {
-      "status": "PREVIEW_DEPLOYED_UI_VERIFIED",
-      "source_sha": "428fceb48f284a1158a4f0b243879a9d2f02fa98",
-      "installer_sha": "23a4a68b314ae2f06b6da0f448700e46c437ffc4",
-      "base_sha": "836d36b831c1cd8aa9915f543f159b4e160ea438",
-      "total_discoverable": 6656,
-      "excel_orders": 6636,
-      "stored_direct_seed_orders": 20,
-      "all_rows_mapping_errors": 0,
-      "new_tests_passed": 4,
-      "baseline_suite_passed": 17,
-      "baseline_suite_failed": 9,
-      "production_default": "disabled",
-      "runtime_path": "/opt/mezan-preview-excel-20260917",
-      "rollback": "Restore /opt/mezan-preview-runtime-20260916/preview_password_runtime.py.before-excel and restart backend; remove excel overlay metadata fields if rollback.",
-      "limitations": [
-        "legacy import did not retain item records",
-        "stored original timestamp precision was lost by importer",
-        "subtotal column differs from authoritative workbook for verified sample",
-        "combined search retains pre-existing5000row scan cap"
-      ]
-    },
-    "mezan2_independence": {
-      "required": true,
-      "production_gate": "BLOCKED_UNTIL_LEGACY_DISABLED_ACCEPTANCE_PASSES",
-      "legacy_runtime_dependency_allowed": false,
-      "legacy_analysis_dependency_allowed": false,
-      "independent_import_required": true,
-      "verification": "NOT_YET_COMPLETE"
-    },
-    "journal_posting_count": 0,
-    "preview_settlement_metadata_and_actual_fields_updated": true,
-    "salla_independent_sync": {
-      "status": "BLOCKED_PENDING_INDEPENDENT_APP_IDENTITY",
-      "production_connection_must_remain_unchanged": true,
-      "observed_date": "2026-09-17",
-      "preview_local_database_verified": true,
-      "existing_integration_status": "needs_reauth",
-      "existing_encrypted_tokens_present": true,
-      "oauth_config_present": true,
-      "independent_app_identity_verified": false,
-      "credential_values_exposed": false,
-      "token_refresh_attempted": false,
-      "oauth_reauthorization_attempted": false,
-      "webhook_changed": false,
-      "next_action": "Identify a separate Salla application/installation dedicated to Preview before authorization. Do not copy or refresh Production credentials. Implement Preview-only read synchronization with outbound writes and Qoyod sending disabled, then verify order fidelity and unchanged Production connection."
+    "import_fidelity_fix": {
+      "status": "TESTED_NOT_DEPLOYED",
+      "tests_passed": 7,
+      "source_file_rows": 2819,
+      "rows_with_skus_json": 2816,
+      "rows_missing_skus_json": 3,
+      "source_quantity_discrepancy_rows": 21,
+      "source_net_line_discrepancy_rows": 8,
+      "production_changed": false
     }
   },
   "production_branch": "hotfix/prod-snap-meta-final"

@@ -46,10 +46,10 @@ SOURCE_COLS = [
 ]
 CUSTOMER_NAME_COLS = ["اسم العميل", "العميل", "الاسم", "اسم المشتري", "customer", "customer name", "buyer", "buyer name", "name"]
 CUSTOMER_MOBILE_COLS = ["جوال العميل", "رقم الجوال", "الجوال", "الهاتف", "رقم الهاتف", "phone", "mobile", "customer phone", "customer mobile"]
-SUBTOTAL_COLS = ["المجموع الفرعي", "السعر قبل الضريبة", "subtotal", "sub total", "items total"]
+SUBTOTAL_COLS = ["مجموع السلة", "المجموع الفرعي", "السعر قبل الضريبة", "subtotal", "sub total", "items total"]
 SHIPPING_COST_COLS = ["تكلفة الشحن", "رسوم الشحن", "shipping cost", "shipping fees", "shipping price"]
 DISCOUNT_COLS = ["الخصم", "قيمة الخصم", "discount", "coupon"]
-CURRENCY_COLS = ["العملة", "currency"]
+CURRENCY_COLS = ["عملة الطلب", "العملة", "currency"]
 
 
 def _normalize_currency(v) -> str:
@@ -128,7 +128,7 @@ def _match_col(headers_norm: list[str], candidates: list[str]) -> Optional[int]:
         if not h:
             continue
         for c in cand_norm:
-            if c and (c in h or h in c):
+            if c and c in h:
                 return i
     return None
 
@@ -170,9 +170,9 @@ def parse_salla_excel(file_bytes: bytes) -> dict:
     )
     try:
         ws = wb.active
-        if ws.max_row > MAX_SALLA_ROWS + 15:
+        if ws.max_row is not None and ws.max_row > MAX_SALLA_ROWS + 15:
             raise ValueError("يتجاوز الملف الحد المسموح: 50,000 طلب")
-        if ws.max_column > MAX_SALLA_COLUMNS:
+        if ws.max_column is not None and ws.max_column > MAX_SALLA_COLUMNS:
             raise ValueError("يتجاوز الملف الحد المسموح: 128 عمود")
         rows = [
             list(r)
@@ -204,6 +204,19 @@ def parse_salla_excel(file_bytes: bytes) -> dict:
     col_ship_cost = _match_col(headers_norm, SHIPPING_COST_COLS)
     col_discount = _match_col(headers_norm, DISCOUNT_COLS)
     col_currency = _match_col(headers_norm, CURRENCY_COLS)
+    # Preserve provider columns explicitly; never reinterpret an unrelated
+    # shorter header (e.g. tax) as a longer monetary field (pre-tax price).
+    def exact(name):
+        return headers_norm.index(_norm(name)) if _norm(name) in headers_norm else None
+    extra_columns = {key: exact(name) for key, name in {
+        'tax': 'الضريبة', 'skus_json': 'skus_json',
+        'products_description': 'اسماء المنتجات مع SKU',
+        'quantity_reported': 'إجمالي كمية الطلب',
+        'original_currency': 'العملة الأصلية للطلب',
+        'original_total_amount': 'إجمالي الطلب بالعملة الأصلية',
+        'customer_city': 'المدينة', 'customer_country': 'الدولة',
+        'customer_address': 'عنوان العميل',
+    }.items()}
 
     # Salla's standard Excel layout: column A = order number, column B = order status.
     # If no header keyword matched, fall back to column index B (1).
@@ -288,7 +301,7 @@ def parse_salla_excel(file_bytes: bytes) -> dict:
         # openpyxl returns datetime/date objects when cell is formatted as Excel date.
         # Preserve the ISO date so downstream `_normalize_date_str` parses it correctly.
         if isinstance(date_raw, datetime):
-            date_val = date_raw.date().isoformat()
+            date_val = date_raw.isoformat()
         elif isinstance(date_raw, date):
             date_val = date_raw.isoformat()
         else:
@@ -323,6 +336,9 @@ def parse_salla_excel(file_bytes: bytes) -> dict:
                 "total_amount": amount,
                 "currency": _normalize_currency(_cell(col_currency, row)),
                 "source": source_name if source_name != "غير محدد" else "",
+                # Keep the original item tuples, including their price columns,
+                # without pretending this is a Salla API snapshot.
+                **{key: _cell(col, row) for key, col in extra_columns.items()},
             })
 
     if total_orders == 0:
