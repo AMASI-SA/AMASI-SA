@@ -465,6 +465,18 @@
       ],
       "close_gate": "Do not mark refund-fee/dashboard accounting acceptance complete without these tests and source linkage.",
       "production_changed": false
+    },
+    "runtime_recovery": {
+      "status": "WIP_BLOCKED_BY_ACTIVE_RELEASE_GUARD",
+      "observed_date": "2026-09-17",
+      "root_cause": "Supervisor backend and frontend point to missing /opt Preview runtime directories; backend ENOENT and frontend chdir ENOENT.",
+      "source_checkpoint": "65f648c5ef83f62bdfd62bd231015f72b4cad266",
+      "shared_head_observed_before": "b957882332b34f9f5a3828fb46bbd170d7809f5d",
+      "shared_head_observed_latest": "f8fae757409b94e84a4994f64297fbfd1f90cb4d",
+      "restore_script": "scripts/preview_restore_full_20260917.py",
+      "script_state": "WIP syntax checked only; intentionally pins previous observed base and will refuse changed HEAD or active guard. No prepare or activation executed.",
+      "next_action": "Read current guard; only after inactive review new shared HEAD compatibility, update pinned base with evidence, prepare private runtimes, verify overlay tests then activate and verify Preview and existing data. Do not clear another lease.",
+      "production_changed": false
     }
   },
   "production_branch": "hotfix/prod-snap-meta-final"
