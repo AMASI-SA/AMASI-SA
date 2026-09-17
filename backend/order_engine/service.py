@@ -12,6 +12,7 @@ from .attribution import build_attribution_projection
 from .mapper import OrderMappingError, map_salla_order
 from .models import OrderDTO
 from .repository import OrderRepository
+from .excel_projection import map_excel_order
 
 DEFAULT_LIMIT = 15
 MAX_LIMIT = 50
@@ -270,6 +271,12 @@ def _map_row(raw: dict[str, Any], *, current_status: Optional[str] = None) -> Or
     )
 
 
+def _map_discovery_row(row) -> OrderDTO:
+    if getattr(row, "excel_record", None) is not None:
+        return map_excel_order(row.excel_record)
+    return _map_row(row.salla_raw, current_status=row.current_status)
+
+
 async def list_orders(
     repository: OrderRepository,
     *,
@@ -305,7 +312,7 @@ async def list_orders(
     last_valid_order_number: Optional[str] = None
     for row in rows:
         try:
-            dto = _map_row(row.salla_raw, current_status=row.current_status)
+            dto = _map_discovery_row(row)
         except OrderMappingError:
             skipped_invalid += 1
             continue
@@ -329,7 +336,7 @@ async def get_order(repository: OrderRepository, *, user_id: str, order_number: 
     if row is None:
         raise OrderNotFoundError(f"order not found: {normalized_order_number}")
     try:
-        return _map_row(row.salla_raw, current_status=row.current_status)
+        return _map_discovery_row(row)
     except OrderMappingError as exc:
         raise OrderNotFoundError(f"order payload invalid: {normalized_order_number}") from exc
 
@@ -355,10 +362,7 @@ async def get_orders(
     result: dict[str, OrderDTO] = {}
     for row in rows:
         try:
-            result[row.order_number] = _map_row(
-                row.salla_raw,
-                current_status=row.current_status,
-            )
+            result[row.order_number] = _map_discovery_row(row)
         except OrderMappingError:
             continue
     return result

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from .excel_projection import EXCEL_ROOT_FIELDS, discovery_source_query
 from dataclasses import dataclass
 from typing import Any, Optional, Protocol
 
@@ -22,6 +23,7 @@ class OrderDiscoveryRow:
     order_date: str
     salla_raw: dict[str, Any]
     current_status: Optional[str] = None
+    excel_record: Optional[dict[str, Any]] = None
 
 
 class OrderRepository(Protocol):
@@ -359,7 +361,7 @@ class MongoOrderRepository:
     ) -> list[OrderDiscoveryRow]:
         query: dict[str, Any] = {
             "user_id": str(user_id),
-            "raw_by_source.salla_direct": {"$exists": True},
+            **discovery_source_query(),
         }
         and_clauses: list[dict[str, Any]] = []
 
@@ -403,6 +405,8 @@ class MongoOrderRepository:
             "order_date": 1,
             "order_status": 1,
             "raw_by_source.salla_direct": 1,
+            "raw_by_source.excel": 1,
+            **{field: 1 for field in EXCEL_ROOT_FIELDS},
             **{field: 1 for field in _V2_CANONICAL_ROOT_FIELDS},
         }
         cursor = (
@@ -428,7 +432,7 @@ class MongoOrderRepository:
             {
                 "user_id": str(user_id),
                 "order_number": str(order_number),
-                "raw_by_source.salla_direct": {"$exists": True},
+                **discovery_source_query(),
             },
             {
                 "_id": 0,
@@ -436,6 +440,8 @@ class MongoOrderRepository:
                 "order_date": 1,
                 "order_status": 1,
                 "raw_by_source.salla_direct": 1,
+            "raw_by_source.excel": 1,
+            **{field: 1 for field in EXCEL_ROOT_FIELDS},
                 **{field: 1 for field in _V2_CANONICAL_ROOT_FIELDS},
             },
         )
@@ -459,7 +465,7 @@ class MongoOrderRepository:
             {
                 "user_id": str(user_id),
                 "order_number": {"$in": normalized},
-                "raw_by_source.salla_direct": {"$exists": True},
+                **discovery_source_query(),
             },
             {
                 "_id": 0,
@@ -467,6 +473,8 @@ class MongoOrderRepository:
                 "order_date": 1,
                 "order_status": 1,
                 "raw_by_source.salla_direct": 1,
+            "raw_by_source.excel": 1,
+            **{field: 1 for field in EXCEL_ROOT_FIELDS},
                 **{field: 1 for field in _V2_CANONICAL_ROOT_FIELDS},
             },
         )
@@ -487,8 +495,15 @@ class MongoOrderRepository:
         if not isinstance(raw_by_source, dict):
             return None
         raw_provider = raw_by_source.get("salla_direct")
-        if not isinstance(raw_provider, dict) or not order_number or not order_date:
+        if not order_number or not order_date:
             return None
+        if not isinstance(raw_provider, dict):
+            excel = raw_by_source.get("excel")
+            if "$or" not in discovery_source_query() or not isinstance(excel, dict) or "simulated" in excel:
+                return None
+            return OrderDiscoveryRow(order_number=order_number, order_date=order_date,
+                                     salla_raw={}, current_status=row.get("order_status"),
+                                     excel_record=deepcopy(row))
 
         # Provider payload stays authoritative.  Missing V2 operational
         # fields are rehydrated from the durable normalized root snapshot so a

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
+from .excel_projection import discovery_source_query
 
 
 _REVIEW_PARENT_VALUES = [
@@ -161,7 +162,7 @@ def _effective_status_expression() -> dict[str, Any]:
 async def build_order_filter_summary(db: Any, *, user_id: str) -> dict[str, Any]:
     base_query = {
         "user_id": str(user_id),
-        "raw_by_source.salla_direct": {"$exists": True},
+        **discovery_source_query(),
     }
 
     total = await db.unified_orders.count_documents(base_query)
