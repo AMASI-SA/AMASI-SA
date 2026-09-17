@@ -1,3 +1,11 @@
+# Current outcome — live verified
+
+User published through platform. New explicit Deployment finished observed Sep18 00:57 (platform display). Release Guard verify exit0, verified:true, checks:3, exact source ac1ece749b91e8ed2c48d71543dc9ce9e07ee4a6, deployment0cea6ed2f5dc3489510ab30a0f072a09c948fd8e, runtime rg5-ce1101d0b001ad62be0828b3768d46da417fd438c3806805cda844f6ddd50fba. Fresh guard status active:false. Verification log /tmp/snap1074-live-verify.log in cloud environment. Production changed:YES; PR1074 release verified. Do not publish again.
+
+Fresh authenticated live UI after reload: Sep17 account-local day 59/59 matched, gap0. Unified contract readiness ready for last closed Sep16; Decision Intelligence remains NOT connected. Historical Aug1–Sep17:3947/3969,99.45%,gap22. New full-population diagnostic precisely reports click_reference_only9 and campaign_not_in_catalog13. UI lists these reasons; gap is not unclassified anymore. No matching or data writes performed. Current-hour allocation provisional remains separate.
+
+Status: DEPLOYMENT_COMPLETE; OVERALL_AI_READINESS_IN_PROGRESS. Next investigate13 catalog identities against authoritative campaign history/account scope, and9 click-only cases against existing first-party evidence. Never guess a campaign from click reference alone. Assess all DI gates (coverage,reconciliation,freshness,attribution,financial profitability) before enabling connection. Last closed-day unified readiness alone is not proof all DI gates pass. Preserve other owner work. Prior recovery history follows; prior prepared/not-published statements below are superseded.
+
 # Snapchat AI readiness — 2026-09-17
 
 Status: IN_PROGRESS, MERGED, PREPARED, NOT PUBLISHED by this task. Deploy reviewed merge 0cea6ed2f5dc3489510ab30a0f072a09c948fd8e (PR1074), not this later docs checkpoint. Frozen A ac1ece749b91e8ed2c48d71543dc9ce9e07ee4a6; B 431e4232192589ccbe3efaf65fd0f62dd1867e37; runtime rg5-ce1101d0b001ad62be0828b3768d46da417fd438c3806805cda844f6ddd50fba.
