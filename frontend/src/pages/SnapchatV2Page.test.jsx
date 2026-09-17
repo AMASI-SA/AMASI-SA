@@ -73,7 +73,7 @@ import {
     getSnapchatManagementReadiness,
     listSnapchatManagementProposals,
 } from "../services/snapchatCampaignManagement";
-import SnapchatV2Page from "./SnapchatV2Page";
+import SnapchatV2Page, { latestSnapchatSyncRange, snapchatSyncRangeAllowed } from "./SnapchatV2Page";
 
 function deferred() {
     let resolve;
@@ -253,6 +253,25 @@ describe("SnapchatV2Page read-only load", () => {
     afterEach(async () => {
         await act(async () => root.unmount());
         container.remove();
+    });
+
+    test("last 30 days preset submits the exact rolling sync range", async () => {
+        const clock = jest.spyOn(Date, "now").mockReturnValue(Date.parse("2026-09-17T12:00:00Z"));
+        api.post.mockResolvedValue({ data: { status: "complete" } });
+        try {
+            await act(async () => root.render(<SnapchatV2Page />));
+            const button = (text) => Array.from(container.querySelectorAll("button")).find((item) => item.textContent.trim() === text);
+            await act(async () => button("آخر 30 يومًا").click());
+            expect(Array.from(container.querySelectorAll('input[type="date"]')).map((item) => item.value)).toEqual(["2026-08-19", "2026-09-17"]);
+            expect(button("مزامنة V2").disabled).toBe(false);
+            await act(async () => button("مزامنة V2").click());
+            expect(api.post).toHaveBeenCalledTimes(1);
+            expect(api.post).toHaveBeenCalledWith("/integrations-v2/snapchat-v2/sync", expect.objectContaining({
+                date_from: "2026-08-19", date_to: "2026-09-17", run_type: "manual",
+            }));
+        } finally {
+            clock.mockRestore();
+        }
     });
 
     test("render and opening management issue no POST, proposal creation, or execution", async () => {
@@ -547,4 +566,30 @@ describe("SnapchatV2Page read-only load", () => {
         expect(executeSnapchatManagementProposal).not.toHaveBeenCalled();
     });
 
+});
+
+
+const now = Date.parse("2026-09-17T12:00:00Z");
+
+test("last 30 days includes today and 29 prior Riyadh dates", () => {
+    expect(latestSnapchatSyncRange(now)).toEqual({ dateFrom: "2026-08-19", dateTo: "2026-09-17" });
+    expect(snapchatSyncRangeAllowed(latestSnapchatSyncRange(now), now)).toBe(true);
+    expect(snapchatSyncRangeAllowed({ dateFrom: "2026-09-17", dateTo: "2026-09-17" }, now)).toBe(true);
+});
+
+test.each([
+    ["2026-08-18", "2026-09-17"],
+    ["2026-08-01", "2026-09-17"],
+    ["2026-08-18", "2026-08-18"],
+    ["2026-09-18", "2026-09-18"],
+    ["2026-09-17", "2026-09-16"],
+    ["2026-02-30", "2026-09-17"],
+    ["", "2026-09-17"],
+])("rejects synchronization outside the rolling window: %s to %s", (dateFrom, dateTo) => {
+    expect(snapchatSyncRangeAllowed({ dateFrom, dateTo }, now)).toBe(false);
+});
+
+test("window changes at Riyadh midnight, irrespective of browser timezone", () => {
+    expect(latestSnapchatSyncRange(Date.parse("2026-09-16T20:59:00Z"))).toEqual({ dateFrom: "2026-08-18", dateTo: "2026-09-16" });
+    expect(latestSnapchatSyncRange(Date.parse("2026-09-16T21:00:00Z"))).toEqual({ dateFrom: "2026-08-19", dateTo: "2026-09-17" });
 });
