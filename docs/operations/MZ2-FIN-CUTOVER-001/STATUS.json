@@ -160,7 +160,7 @@
   ],
   "plan_version": 1,
   "preview_acceptance": {
-    "blocker": "excel_orders_read_projection_missing_and_three_settlement_orders_absent",
+    "blocker": "excel_orders_read_projection_missing_and_settlement_rematch_pending",
     "continuation": "docs/operations/PREVIEW-REVIEWER-SIGNOUT-20260916.md",
     "current_session_role": "owner_signed_in",
     "current_session_settlement_view": "PASS_AFTER_RELOAD",
@@ -170,22 +170,33 @@
     "independent_viewer_permissions_verified": [
       "accounting.settlements.view"
     ],
-    "last_observation": "Recovery verified readiness200 and successful normal owner login. /orders-v2 shows20 stored direct seed orders, no frontend fixture banner. Read-only isolated Mongo inspection: tenant containing known settlement reference has6654 total orders,6633 Excel-source orders,20direct. Exact tenant-scoped join of supplied217 settlement rows (215unique refs) found214rows/212unique refs;3unique order numbers absent. No record linking or writes performed. Excel schema confirmed normalized root order_number/order_date/currency/total_amount/customer/payment/shipping and raw_by_source.excel flat imported fields. Existing Order Engine repository and summary require salla_direct and exclude these imports. Full Excel projection implementation and tests remain required; missing3orders must be supplied for complete settlement acceptance.",
+    "last_observation": "Three missing settlement orders verified read-only via Salla app: August creation dates, September refunds, canceled status, including one partial refund. Added authoritative rows to original2816-order XLSX, preserving all original values. First upload failed before processing because exported worksheet lacked dimensions; corrected OOXML dimensions without changing data. Retry completed in Preview UI at2026-09-17 17:05:32 displayed browser time:2819/2819 processed,3new,2816updated,0failed. No journal posting. Settlement rematch and Excel-source orders-v2 projection remain unverified/not implemented.",
     "last_updated_date": "2026-09-17",
+    "next_action": "Implement tested explicit Excel-source read model for list/detail/search/count with original currency/date/provenance and no fake Salla payload writes; deploy only to isolated Preview with truthful runtime identity. Refresh settlement draft matching against imported orders without journal posting.",
     "owner_signin_verified": true,
     "posting_endpoint_403_verified": true,
+    "posting_endpoint_error_code": "accounting_permission_required",
+    "posting_endpoint_evidence_source": "user_executed_browser_console_report",
+    "posting_endpoint_required_permission": "accounting.settlements.post",
+    "preview_default_mode_fix": "DEPLOYED_PREVIEW_RUNTIME_LOGIN_PENDING",
     "production_changed": false,
+    "recovery_source_sha": "b034e4954b50751f765c1fceb1669005e6230842",
     "reviewer_logout_source_sha": "497311cd14208303730f5dfadac94c4d6b1c9d48",
     "reviewer_logout_verified": true,
     "scenario_5": "PASS_PREVIEW_INDEPENDENT_VIEWER_UI_AND_USER_EXECUTED_POST_403",
     "status": "PARTIAL",
     "synthetic_employee_records": 2,
-    "posting_endpoint_evidence_source": "user_executed_browser_console_report",
-    "posting_endpoint_error_code": "accounting_permission_required",
-    "posting_endpoint_required_permission": "accounting.settlements.post",
-    "next_action": "Implement tested explicit Excel-source read model for list/detail/search/count with original currency/date/provenance and no fake Salla payload writes; deploy only to isolated Preview with truthful runtime identity. Owner browser session active. Obtain missing3 orders from user for settlement completion; do not treat their absence as blocker for implementing order display. Then refresh draft matching without journal posting.",
-    "preview_default_mode_fix": "DEPLOYED_PREVIEW_RUNTIME_LOGIN_PENDING",
-    "recovery_source_sha": "b034e4954b50751f765c1fceb1669005e6230842"
+    "order_import": {
+      "file": "salla-orders-with-refunds.xlsx",
+      "status": "COMPLETE",
+      "processed": 2819,
+      "created": 3,
+      "updated": 2816,
+      "failed": 0,
+      "evidence": "owner_authenticated_preview_import_jobs_ui",
+      "original_excel_rows_preserved": true,
+      "settlement_rematch_verified": false
+    }
   },
   "production_branch": "hotfix/prod-snap-meta-final"
 }
