@@ -4,7 +4,7 @@ The cards must use Salla's order creation date and must be counted before the
 public table-row limit.  Raw webhook/status traces are not the unit being
 counted.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import mongomock_motor
 import pytest
@@ -351,3 +351,43 @@ async def test_eligible_current_salla_status_keeps_error_in_unsent_list(db):
     assert result["excluded_not_eligible"] == 0
     assert result["orders"][0]["status"] == UNSENT
     assert result["orders"][0]["retry_allowed"] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("latest", ["retry", "lock", "unknown_retry", "older_retry", "pending_retry"])
+async def test_latest_provider_failure_replaces_stale_quarantine_evidence(db, latest):
+    reference = "SYNTHETIC-LATEST-001"
+    await _insert_quarantined(db, order_number=reference, status_slug="completed", status_native="تم التنفيذ")
+    old = NOW - timedelta(hours=2)
+    detail = {"endpoint": "GET /products", "status_code": 404}
+    fresh = {"endpoint": "GET /customers", "status_code": 429,
+             "response_excerpt": "PRIVATE-DO-NOT-EXPOSE"}
+    patch = {"code": "qoyod_http_error", "message": "original quarantine",
+             "detail": detail, "last_seen_at": old}
+    if latest != "lock":
+        patch.update(last_manual_retry_at=(old - timedelta(hours=1) if latest == "older_retry" else NOW), last_manual_retry_error={
+            "code": "qoyod_http_error", "detail": fresh if latest == "retry" else {},
+        })
+    if latest == "pending_retry":
+        patch["last_manual_retry_error"] = None
+    await db.qoyod_manual_auto_quarantines.update_one({"order_number": reference}, {"$set": patch})
+    if latest == "lock":
+        await db.qoyod_manual_send_locks.insert_one({
+            "user_id": TENANT, "order_number": reference, "status": "failed",
+            "finished_at": NOW, "last_error": {"code": "qoyod_http_error", "detail": fresh},
+        })
+    before = await db.qoyod_manual_auto_quarantines.find({}).to_list(None)
+    result = await list_unsent_orders(db, user_id=TENANT, days=30, now=NOW)
+    row = next(r for r in result["orders"] if r["order_number"] == reference)
+    assert row["status"] == UNSENT
+    if latest in {"older_retry", "pending_retry"}:
+        assert row["provider_failure"]["endpoint"] == "GET /products"
+    elif latest == "unknown_retry":
+        assert row["provider_failure"] is None
+    else:
+        assert row["provider_failure"]["endpoint"] == "GET /customers"
+        assert row["provider_failure"]["status_code"] == 429
+        assert row["provider_failure"]["observed_at"] == NOW.isoformat()
+    assert "PRIVATE-DO-NOT-EXPOSE" not in str(result)
+    assert await db.qoyod_manual_auto_quarantines.find({}).to_list(None) == before
+    assert await db.qoyod_invoices.count_documents({}) == 0
