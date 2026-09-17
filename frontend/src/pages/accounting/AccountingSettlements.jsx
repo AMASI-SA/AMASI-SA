@@ -29,6 +29,7 @@ const STATUS = {
     reviewed: ["تمت المراجعة", "border-emerald-200 bg-emerald-50 text-emerald-800"],
     posting: ["جاري الترحيل", "border-slate-200 bg-slate-100 text-slate-700"],
     posted: ["مرحّلة", "border-emerald-300 bg-emerald-100 text-emerald-900"],
+    reversed: ["معكوسة", "border-rose-300 bg-rose-100 text-rose-950"],
     rejected: ["مرفوضة", "border-rose-200 bg-rose-50 text-rose-800"],
 };
 

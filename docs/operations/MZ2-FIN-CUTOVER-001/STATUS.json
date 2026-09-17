@@ -160,7 +160,7 @@
   ],
   "plan_version": 1,
   "preview_acceptance": {
-    "blocker": "settlement_status_stale_after_ledger_reversal",
+    "blocker": "reversal_state_fix_deployment_waiting_for_active_release_lease",
     "continuation": "docs/operations/PREVIEW-REVIEWER-SIGNOUT-20260916.md",
     "current_session_role": "owner_signed_in",
     "current_session_settlement_view": "PASS_AFTER_RELOAD",
@@ -225,7 +225,7 @@
       "required": true,
       "verification": "NOT_YET_COMPLETE"
     },
-    "next_action": "Investigate and fix Preview settlement lifecycle status after audited ledger reversal; do not mask by manual database edits. Replay acceptance remains unexecuted; P01 and Production gates remain open.",
+    "next_action": "After release owner closes active lease, compare runtime source with candidate, install tested reversal state overlay in isolated Preview, build draft badge if needed, restart Preview backend only, and verify register/draft UI plus restored balances. Do not clear another lease. No financial posting/reversal is needed.",
     "order_import": {
       "created": 3,
       "evidence": "owner_authenticated_preview_import_jobs_ui",
@@ -374,6 +374,15 @@
         0
       ],
       "finding": "Settlement draft remains posted after ledger group reversal; register lifecycle consistency needs investigation"
+    },
+    "reversal_state_fix": {
+      "status": "IMPLEMENTED_TESTED_NOT_DEPLOYED",
+      "strategy": "Authoritative read projection from fully audited reversed ledger group; preserves stored posting snapshot and audit history without financial writes.",
+      "tests_passed": 24,
+      "actual_preview_read": "PASS: candidate draft API returns reversed for synthetic settlement; real statement and stored documents unchanged",
+      "deployment_blocker": "Release Guard active true; no runtime change or restart",
+      "frontend_badge": "Added reversed label to draft screen; build/browser verification pending",
+      "production_changed": false
     }
   },
   "production_branch": "hotfix/prod-snap-meta-final"

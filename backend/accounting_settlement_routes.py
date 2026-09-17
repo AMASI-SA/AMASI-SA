@@ -37,6 +37,7 @@ from accounting_settlement_service import (
     statement_reference_from_file,
 )
 from excel_upload_security import read_safe_xlsx_upload
+from accounting_settlement_ledger_state import with_ledger_state, ledger_status_candidates
 from ledger_core import write_audit
 from settlements_import.service import _apply_entries, import_file
 
@@ -49,6 +50,8 @@ DRAFT_STATUSES = {
     "reviewed",
     "posting",
     "posted",
+    "reversed",
+    "matched",
     "rejected",
 }
 BINDING_SOURCE_KINDS = {
@@ -263,7 +266,7 @@ async def _draft_or_404(db, owner_id: str, draft_id: str) -> dict[str, Any]:
     )
     if not doc:
         raise HTTPException(404, "مسودة التسوية غير موجودة")
-    return doc
+    return (await with_ledger_state(db, owner_id, [doc]))[0]
 
 
 async def _source_review_count(db, owner_id: str, file_id: str) -> int:
@@ -659,12 +662,15 @@ def install_accounting_settlement_routes(router, db, current_user):
             invalid = [item for item in statuses if item not in DRAFT_STATUSES]
             if invalid:
                 raise HTTPException(400, f"حالات غير معروفة: {', '.join(invalid)}")
-            query["status"] = {"$in": statuses}
+            query["status"] = {"$in": ledger_status_candidates(statuses)}
         if provider:
             query["provider"] = canonical_provider(provider)
         docs = await db.accounting_settlements_v2.find(
             query, {"_id": 0}
-        ).sort("updated_at", -1).to_list(limit)
+        ).sort("updated_at", -1).to_list(None if status else limit)
+        docs = await with_ledger_state(db, owner_id, docs)
+        if status:
+            docs = [doc for doc in docs if doc.get("status") in statuses][:limit]
         return {"items": docs, "count": len(docs)}
 
     @router.get("/accounting-module/settlements/drafts/{draft_id}")

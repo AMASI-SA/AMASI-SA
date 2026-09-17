@@ -9,6 +9,7 @@ from fastapi import Depends, HTTPException, Query
 from accounting_module_contract import accounting_owner_id, require_accounting_permission
 from accounting_module_status_routes import fresh_accounting_user
 from accounting_settlement_service import canonical_provider
+from accounting_settlement_ledger_state import with_ledger_state, ledger_status_candidates
 
 REGISTER_STATUSES = frozenset({
     "draft",
@@ -126,7 +127,7 @@ def install_accounting_settlement_register_routes(router, db, current_user):
             expanded = set(statuses)
             if "matched" in expanded:
                 expanded.add("ready_for_review")
-            query["status"] = {"$in": sorted(expanded)}
+            query["status"] = {"$in": ledger_status_candidates(expanded)}
         if bank_account_id:
             query["bank_account_id"] = _clean(bank_account_id)
 
@@ -134,6 +135,9 @@ def install_accounting_settlement_register_routes(router, db, current_user):
             query,
             {"_id": 0},
         ).sort("updated_at", -1).to_list(2000)
+        documents = await with_ledger_state(db, owner_id, documents)
+        if status:
+            documents = [doc for doc in documents if doc.get("status") in expanded]
         start = _date(period_from)
         end = _date(period_to)
         search = _clean(q)
@@ -170,6 +174,7 @@ def install_accounting_settlement_register_routes(router, db, current_user):
         if not draft:
             raise HTTPException(404, "تسوية السجل غير موجودة")
 
+        draft = (await with_ledger_state(db, owner_id, [draft]))[0]
         source_file = None
         if draft.get("source_file_id"):
             source_file = await db.settlement_files.find_one(
