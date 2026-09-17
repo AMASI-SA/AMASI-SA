@@ -18,6 +18,8 @@ on:
       - "frontend/src/lib/qoyodUnsentOrdersClient.test.js"
       - "frontend/src/qoyodUnsentHeaderAlert.test.js"
       - "frontend/src/pages/QoyodUnsentOrders.test.jsx"
+      - "frontend/src/components/qoyod/QoyodTotalsDiagnosis.jsx"
+      - "frontend/src/components/qoyod/QoyodTotalsDiagnosis.test.jsx"
       - ".github/workflows/qoyod-memory-bounds.yml"
   workflow_dispatch:
 
@@ -88,3 +90,4 @@ jobs:
           src/lib/qoyodUnsentOrdersClient.test.js
           src/qoyodUnsentHeaderAlert.test.js
           src/pages/QoyodUnsentOrders.test.jsx
+          src/components/qoyod/QoyodTotalsDiagnosis.test.jsx

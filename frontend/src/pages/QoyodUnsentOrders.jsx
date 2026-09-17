@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import api from "../lib/api";
+import QoyodTotalsDiagnosis from "../components/qoyod/QoyodTotalsDiagnosis";
 import {
   isQoyodRequestAbort,
   loadQoyodUnsentOrders,
@@ -45,6 +46,7 @@ export default function QoyodUnsentOrders() {
   const [retryConfirmOrder, setRetryConfirmOrder] = useState(null);
   const [retryingOrder, setRetryingOrder] = useState(null);
   const [retryNotice, setRetryNotice] = useState(null);
+  const [diagnosisOrder, setDiagnosisOrder] = useState(null);
   const [paymentCheckRunning, setPaymentCheckRunning] = useState(false);
   const [paymentCheckOrder, setPaymentCheckOrder] = useState(null);
   const [paymentCheckResults, setPaymentCheckResults] = useState([]);
@@ -332,6 +334,9 @@ export default function QoyodUnsentOrders() {
         </div>
       </div>
 
+      {diagnosisOrder && <QoyodTotalsDiagnosis key={diagnosisOrder}
+        orderNumber={diagnosisOrder} onClose={() => setDiagnosisOrder(null)} />}
+
       {bulkRecoveryAvailable && recoveryOpen && (
         <div id="qoyod-recovery-panel"
              className="rounded-xl border border-rose-300 bg-rose-50 p-4 space-y-3"
@@ -524,6 +529,12 @@ export default function QoyodUnsentOrders() {
                   <td className="px-3 py-2 text-slate-600 max-w-md">{o.reason}</td>
                   <td className="px-3 py-2" dir="ltr">{o.qoyod_invoice_id || "—"}</td>
                   <td className="px-3 py-2 min-w-48">
+                    <button type="button"
+                      onClick={() => setDiagnosisOrder(String(o.order_number))}
+                      data-testid={`qoyod-totals-diagnose-${o.order_number}`}
+                      className="mb-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold">
+                      فحص المبلغ فقط
+                    </button>
                     <button
                       type="button"
                       onClick={() => runPaymentCheck(o.order_number)}

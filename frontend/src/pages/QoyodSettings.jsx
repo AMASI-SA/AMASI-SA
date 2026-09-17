@@ -1241,7 +1241,7 @@ export default function QoyodSettings() {
         // Iter-293.1 — COD-fee product id (Qoyod product representing
         // the "رسوم الدفع عند الاستلام" charge). Required only when
         // incoming COD orders carry `amounts.cash_on_delivery > 0`.
-        default_cod_fee_product_id:   (settings.default_cod_fee_product_id || "").trim() || null,
+        default_cod_fee_product_id:   String(settings.default_cod_fee_product_id || "").trim() || null,
         // Optional shipping product id (kept for parity with backend).
         default_shipping_product_id:  (settings.default_shipping_product_id || "").trim() || null,
         // Iter-285 — Tax mode + zero-tax id (for customer_first invoicing).
@@ -1283,6 +1283,11 @@ export default function QoyodSettings() {
     const issues = [];
     const branch = (settings.default_branch_id || "").toString().trim();
     const tax    = (settings.default_tax_id    || "").toString().trim();
+    const codProduct = String(settings.default_cod_fee_product_id || "").trim();
+    if (codProduct && !/^[1-9]\d*$/.test(codProduct)) {
+      issues.push({ code: "invalid_cod_fee_product_id", field: "default_cod_fee_product_id",
+        severity: "blocker", message: "معرّف بند رسوم الدفع عند الاستلام يجب أن يكون رقم منتج صحيحًا موجبًا من قيود." });
+    }
     if (!branch) {
       issues.push({ code: "missing_branch_id", field: "default_branch_id",
         severity: "warning",
@@ -1864,6 +1869,23 @@ export default function QoyodSettings() {
               <div className="text-xs text-rose-600 mt-1">مطلوب</div>
             )}
           </div>
+        </div>
+
+        <div data-testid="field-default_cod_fee_product_id" className="mt-4">
+          <IDInput
+            label="معرّف بند رسوم الدفع عند الاستلام في قيود"
+            value={settings.default_cod_fee_product_id}
+            onChange={(value) => patch({ default_cod_fee_product_id: value })}
+            placeholder="معرّف منتج الخدمة الموجود في قيود"
+            testid="input-cod-fee-product"
+            disabled={!hasCreds}
+            invalid={fieldInvalid("default_cod_fee_product_id")}
+          />
+          <p className="mt-2 text-xs text-slate-600">
+            يُستخدم لإضافة رسوم الدفع عند الاستلام المسجلة في الطلب إلى الفاتورة.
+            عند وجود رسوم دون ربط هذا البند يبقى الطلب متوقفًا بسبب فرق المبلغ.
+            فاتورة الدفع عند الاستلام تبقى آجلة دون سند قبض.
+          </p>
         </div>
 
         {/* Auto-Adopt toggle (Iter-288) */}

@@ -56,6 +56,26 @@ test("recovery panel documents the closed three-status live gate", async () => {
   }
 });
 
+test("a quarantined order can be diagnosed without sending or checking payment", async () => {
+  api.get.mockImplementation((url) => Promise.resolve({ data: url.endsWith("/diagnose/100000001")
+    ? { ok: true, order_number: "100000001", within_tolerance: false,
+      salla_total: 230, expected_qoyod_total: 225, difference: -5,
+      canonical_summary: { cod_fee_amount: 5 },
+      settings_used: { default_cod_fee_product_id: null },
+      breakdown: { cod_fee: { included: false, reason: "بند الرسوم غير مربوط" } } }
+    : { source_authority: "unified_orders", counts: { "لم يُرسل": 1 },
+      orders: [{ order_number: "100000001", status: "لم يُرسل", retry_allowed: true }],
+      salla_status_counts: {} } }));
+  const { container, root } = await renderRecoveryPage();
+  try {
+    await act(async () => container.querySelector('[data-testid="qoyod-totals-diagnose-100000001"]').click());
+    expect(container.querySelector('[data-testid="qoyod-totals-diagnosis"]').textContent).toContain("بند الرسوم غير مربوط");
+    expect(api.get).toHaveBeenCalledWith("/integrations/qoyod/manual/diagnose/100000001");
+    expect(api.post).not.toHaveBeenCalled();
+    expect(container.querySelector('[data-testid="qoyod-failed-retry-confirm-100000001"]')).toBeNull();
+  } finally { await cleanup(container, root); }
+});
+
 test("visible recovery button opens the automatic bulk resend panel", async () => {
   const { container, root } = await renderRecoveryPage();
   try {
