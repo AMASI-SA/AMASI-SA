@@ -31,6 +31,10 @@ from .total_facts import (
 )
 
 
+# Stored historical reports remain available after the one-time backfill closes.
+MAX_READ_DAYS = 62
+
+
 class SnapchatV2SyncInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -65,7 +69,7 @@ def _read_days(date_from: date, date_to: date) -> int:
     if date_to < date_from:
         raise HTTPException(status_code=422, detail="invalid_date_range")
     count = (date_to - date_from).days + 1
-    if count > MAX_SYNC_DAYS:
+    if count > MAX_READ_DAYS:
         raise HTTPException(status_code=422, detail="date_range_too_large")
     return count
 
