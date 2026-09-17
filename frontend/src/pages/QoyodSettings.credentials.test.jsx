@@ -136,6 +136,36 @@ beforeEach(() => {
   jest.clearAllMocks();
 });
 
+test("exposes and saves the COD service product without changing credentials", async () => {
+  axios.put.mockResolvedValue({ data: { ...completeSettings(), default_cod_fee_product_id: "700" } });
+  axios.post.mockResolvedValue({ data: { validation: { ok: true, issues: [] } } });
+  const { container, root } = await renderPage();
+  try {
+    const input = container.querySelector('[data-testid="input-cod-fee-product"]');
+    expect(input).not.toBeNull();
+    await setInput(input, "700");
+    const save = Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent.includes("حفظ الإعدادات النهائية"));
+    await act(async () => save.click());
+    await flush();
+    expect(axios.put).toHaveBeenCalledWith(SETTINGS_PATH,
+      expect.objectContaining({ default_cod_fee_product_id: "700" }));
+    expect(axios.delete).not.toHaveBeenCalled();
+    expect(axios.post.mock.calls.some(([url]) => url === CREDENTIALS_PATH)).toBe(false);
+  } finally { await cleanup(container, root); }
+});
+
+test("invalid COD product IDs cannot be saved", async () => {
+  const { container, root } = await renderPage();
+  try {
+    await setInput(container.querySelector('[data-testid="input-cod-fee-product"]'), "-7");
+    const save = Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent.includes("حفظ الإعدادات النهائية"));
+    expect(save.disabled).toBe(true);
+    expect(axios.put).not.toHaveBeenCalled();
+  } finally { await cleanup(container, root); }
+});
+
 test("replaces an existing key through the credentials endpoint without deleting or saving settings", async () => {
   axios.post.mockImplementation((url) => {
     if (url === CREDENTIALS_PATH) {
