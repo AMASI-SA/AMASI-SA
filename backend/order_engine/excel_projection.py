@@ -7,6 +7,7 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 import os
 import json
+import hashlib
 from zoneinfo import ZoneInfo
 
 from .models import OrderDTO, OrderSourceDTO, CustomerDTO, PaymentDTO, ShippingDTO, MoneyTotalsDTO, OrderItemDTO, AddressDTO
@@ -14,7 +15,7 @@ from .mapper import OrderMappingError
 
 
 EXCEL_ROOT_FIELDS = ('order_id', 'order_date_raw', 'currency', 'total_amount',
-                     'subtotal', 'discount', 'shipping_cost')
+                     'subtotal', 'discount', 'shipping_cost', 'preview_excel_verification')
 
 
 def discovery_source_query():
@@ -29,10 +30,18 @@ def map_excel_order(row):
     excel = row.get('raw_by_source', {}).get('excel')
     if not isinstance(excel, dict) or 'simulated' in excel:
         raise OrderMappingError('invalid Excel source')
+    verification = row.get('preview_excel_verification') or {}
+    if verification:
+        fingerprint = hashlib.sha256(json.dumps(excel, sort_keys=True, default=str).encode()).hexdigest()
+        if (verification.get('order_number') != str(row.get('order_number'))
+                or verification.get('excel_fingerprint') != fingerprint
+                or verification.get('source') not in {'salla_order_read', 'salla_invoice_read'}):
+            raise OrderMappingError('stale or invalid Excel verification')
+    verified_amounts = verification.get('amounts') or {}
     def value(key):
         return row.get(key) if row.get(key) is not None else excel.get(key)
     def amount(key):
-        raw = value(key)
+        raw = verified_amounts.get(key, value(key))
         if raw in (None, ''):
             return 0.0
         try:
@@ -43,7 +52,7 @@ def map_excel_order(row):
         except (InvalidOperation, ValueError) as exc:
             raise OrderMappingError('invalid Excel amount') from exc
     number = str(value('order_number') or '').strip()
-    currency = str(value('currency') or '').strip().upper()
+    currency = str(verified_amounts.get('currency') or value('currency') or '').strip().upper()
     if not number or not currency or value('total_amount') in (None, ''):
         raise OrderMappingError('Excel order identity/currency/total missing')
     raw_date = value('order_date_raw') or value('order_date')
@@ -75,6 +84,10 @@ def map_excel_order(row):
                 ))
         except (TypeError, ValueError, InvalidOperation) as exc:
             raise OrderMappingError('invalid Excel items') from exc
+    if verification.get('items') is not None:
+        if items:
+            raise OrderMappingError('invoice enrichment must not replace exported items')
+        items = [OrderItemDTO(**item) for item in verification['items']]
     return OrderDTO(
         order_id=str(value('order_id') or number), order_number=number, created_at=created,
         status=value('order_status'), status_native=value('order_status'),
@@ -90,5 +103,5 @@ def map_excel_order(row):
         totals=MoneyTotalsDTO(currency=currency, total=amount('total_amount'),
                              subtotal=amount('subtotal'), discount=amount('discount'),
                              shipping=amount('shipping_cost'),
-                             tax_reported_by_source=float(excel.get('tax') or 0)),
+                             tax_reported_by_source=float(verified_amounts.get('tax', excel.get('tax')) or 0)),
     )
