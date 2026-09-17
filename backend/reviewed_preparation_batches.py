@@ -303,7 +303,17 @@ def _reviewed_ready_identity(
         for row in workflow.get("items") or []
         if isinstance(row, dict) and _text(row.get("order_item_id"))
     }
-    state = states.get(order_item_id, {})
+    aliases = {
+        _text(value)
+        for value in (
+            list(line.get("order_item_aliases") or []) + [order_item_id]
+        )
+        if _text(value)
+    }
+    state_candidates = [states[value] for value in aliases if value in states]
+    if len(state_candidates) > 1:
+        return None
+    state = state_candidates[0] if state_candidates else {}
     quantity = _unit_quantity(frozen.get("quantity"))
     if quantity <= 0 or _unit_quantity(allocation.get("quantity")) > quantity:
         return None
@@ -414,6 +424,8 @@ def plan_preparation_allocations(
 
         pending = quantity
         for line in product.get("source_lines") or []:
+            if line.get("identity_reconciliation_ambiguous"):
+                raise ValueError("preparation_identity_ambiguous")
             available = [
                 int(value)
                 for value in (line.get("available_unit_indices") or [])
@@ -442,6 +454,16 @@ def plan_preparation_allocations(
                 "order_item_id": _text(line.get("order_item_id")),
                 "ready_item_id": _text(line.get("ready_item_id")) or None,
                 "ready_unit_id": _text(line.get("ready_unit_id")) or None,
+                "authoritative_commercial_line_key": _text(
+                    line.get("authoritative_commercial_line_key")
+                ) or None,
+                "authoritative_quantity": int(
+                    line.get("authoritative_quantity") or line.get("quantity") or 0
+                ),
+                "order_item_aliases": list(
+                    line.get("order_item_aliases")
+                    or [_text(line.get("order_item_id"))]
+                ),
                 "quantity": take,
                 "unit_indices": available[:take],
                 "line": dict(line),
@@ -452,6 +474,207 @@ def plan_preparation_allocations(
         if pending > 0:
             raise ValueError("reviewed_product_allocation_incomplete")
 
+    return planned
+
+
+def preparation_allocation_identity_fields(
+    allocation: dict[str, Any],
+) -> dict[str, Any]:
+    """Persist the stable commercial identity used by both preparation routes."""
+    line = allocation.get("line") if isinstance(allocation.get("line"), dict) else {}
+    aliases = sorted({
+        _text(value)
+        for value in (
+            list(allocation.get("order_item_aliases") or [])
+            + list(line.get("order_item_aliases") or [])
+            + [allocation.get("order_item_id")]
+        )
+        if _text(value)
+    })
+    return {
+        "authoritative_commercial_line_key": _text(
+            allocation.get("authoritative_commercial_line_key")
+            or line.get("authoritative_commercial_line_key")
+        ),
+        "authoritative_quantity": int(
+            allocation.get("authoritative_quantity")
+            or line.get("authoritative_quantity")
+            or line.get("quantity")
+            or 0
+        ),
+        "order_item_aliases": aliases,
+    }
+
+
+def _allocation_invariant_error(
+    code: str,
+    *,
+    order_number: str,
+    key: str,
+    authoritative_quantity: int,
+    active_units: int,
+    planned_units: int,
+) -> HTTPException:
+    messages = {
+        "preparation_authoritative_identity_missing": (
+            "تعذّر إثبات هوية القطعة المرجعية؛ لم يتم إنشاء ملف."
+        ),
+        "preparation_authoritative_quantity_exceeded": (
+            "تجاوزت الوحدات المحجوزة والمختارة الكمية المرجعية؛ لم يتم إنشاء ملف."
+        ),
+        "preparation_unit_index_out_of_range": (
+            "رقم الوحدة خارج نطاق الكمية المرجعية؛ لم يتم إنشاء ملف."
+        ),
+        "preparation_authoritative_unit_duplicate": (
+            "تم اكتشاف حجزين لنفس الوحدة المرجعية؛ لم يتم إنشاء ملف."
+        ),
+        "preparation_authoritative_identity_ambiguous": (
+            "تعارضت هويات القطعة المرجعية؛ لم يتم إنشاء ملف."
+        ),
+    }
+    return HTTPException(
+        status_code=409,
+        detail={
+            "code": code,
+            "message": messages[code],
+            "order_number": order_number,
+            "authoritative_commercial_line_key": key,
+            "authoritative_quantity": authoritative_quantity,
+            "active_units": active_units,
+            "planned_units": planned_units,
+        },
+    )
+
+
+def assert_authoritative_allocation_invariant(
+    planned: list[dict[str, Any]],
+    allocation_documents: list[dict[str, Any]],
+    *,
+    planned_persisted: bool = False,
+) -> None:
+    """Fail closed when aliases would exceed one frozen commercial quantity."""
+    groups: dict[tuple[str, str], dict[str, Any]] = {}
+    alias_to_groups: dict[tuple[str, str], set[tuple[str, str]]] = defaultdict(set)
+
+    for allocation in planned:
+        order_number = _text(allocation.get("order_number"))
+        identity = preparation_allocation_identity_fields(allocation)
+        key = _text(identity.get("authoritative_commercial_line_key"))
+        authoritative_quantity = int(identity.get("authoritative_quantity") or 0)
+        if not order_number or not key or authoritative_quantity <= 0:
+            raise _allocation_invariant_error(
+                "preparation_authoritative_identity_missing",
+                order_number=order_number,
+                key=key,
+                authoritative_quantity=authoritative_quantity,
+                active_units=0,
+                planned_units=0,
+            )
+        group_id = (order_number, key)
+        group = groups.setdefault(group_id, {
+            "authoritative_quantity": authoritative_quantity,
+            "aliases": set(),
+            "planned_indices": [],
+            "active_indices": [],
+        })
+        if group["authoritative_quantity"] != authoritative_quantity:
+            raise _allocation_invariant_error(
+                "preparation_authoritative_identity_ambiguous",
+                order_number=order_number,
+                key=key,
+                authoritative_quantity=authoritative_quantity,
+                active_units=0,
+                planned_units=0,
+            )
+        aliases = {
+            _text(value)
+            for value in identity.get("order_item_aliases") or []
+            if _text(value)
+        }
+        group["aliases"].update(aliases)
+        for alias in aliases:
+            alias_to_groups[(order_number, alias)].add(group_id)
+        if not planned_persisted:
+            group["planned_indices"].extend(
+                int(value) for value in allocation.get("unit_indices") or []
+            )
+
+    for row in allocation_documents:
+        if _text(row.get("status")) not in ACTIVE_PREPARATION_ALLOCATION_STATUSES:
+            continue
+        order_number = _text(row.get("order_number"))
+        row_key = _text(row.get("authoritative_commercial_line_key"))
+        candidates: set[tuple[str, str]] = set()
+        if row_key and (order_number, row_key) in groups:
+            candidates.add((order_number, row_key))
+        row_item_id = _text(row.get("order_item_id"))
+        if row_item_id:
+            candidates.update(alias_to_groups.get((order_number, row_item_id), set()))
+        if not candidates:
+            continue
+        if len(candidates) != 1:
+            key = row_key or "ambiguous"
+            raise _allocation_invariant_error(
+                "preparation_authoritative_identity_ambiguous",
+                order_number=order_number,
+                key=key,
+                authoritative_quantity=0,
+                active_units=0,
+                planned_units=0,
+            )
+        try:
+            unit_index = int(row.get("unit_index") or 0)
+        except (TypeError, ValueError):
+            unit_index = 0
+        groups[next(iter(candidates))]["active_indices"].append(unit_index)
+
+    for (order_number, key), group in groups.items():
+        authoritative_quantity = int(group["authoritative_quantity"])
+        active_indices = list(group["active_indices"])
+        planned_indices = list(group["planned_indices"])
+        all_indices = active_indices + planned_indices
+        active_units = len(active_indices)
+        planned_units = len(planned_indices)
+        if active_units + planned_units > authoritative_quantity:
+            raise _allocation_invariant_error(
+                "preparation_authoritative_quantity_exceeded",
+                order_number=order_number,
+                key=key,
+                authoritative_quantity=authoritative_quantity,
+                active_units=active_units,
+                planned_units=planned_units,
+            )
+        if any(
+            index < 1 or index > authoritative_quantity
+            for index in all_indices
+        ):
+            raise _allocation_invariant_error(
+                "preparation_unit_index_out_of_range",
+                order_number=order_number,
+                key=key,
+                authoritative_quantity=authoritative_quantity,
+                active_units=active_units,
+                planned_units=planned_units,
+            )
+        if len(all_indices) != len(set(all_indices)):
+            raise _allocation_invariant_error(
+                "preparation_authoritative_unit_duplicate",
+                order_number=order_number,
+                key=key,
+                authoritative_quantity=authoritative_quantity,
+                active_units=active_units,
+                planned_units=planned_units,
+            )
+
+
+def plan_and_validate_preparation_allocations(
+    products: list[dict[str, Any]],
+    selections: list[dict[str, Any]],
+    allocation_documents: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Shared Web/Mobile planner with the pre-write quantity invariant."""
+    planned = plan_preparation_allocations(products, selections)
+    assert_authoritative_allocation_invariant(planned, allocation_documents)
     return planned
 
 
@@ -917,6 +1140,19 @@ async def ensure_preparation_batch_indexes(db: Any) -> None:
         name="uq_preparation_unit_allocation_v2",
     )
     await db[PREPARATION_UNIT_ALLOCATIONS].create_index(
+        [
+            ("user_id", ASCENDING),
+            ("order_number", ASCENDING),
+            ("authoritative_commercial_line_key", ASCENDING),
+            ("unit_index", ASCENDING),
+        ],
+        unique=True,
+        partialFilterExpression={
+            "authoritative_commercial_line_key": {"$type": "string"},
+        },
+        name="uq_preparation_authoritative_unit_v2",
+    )
+    await db[PREPARATION_UNIT_ALLOCATIONS].create_index(
         [("user_id", ASCENDING), ("batch_id", ASCENDING)],
         name="ix_preparation_allocations_batch_v2",
     )
@@ -1169,6 +1405,7 @@ async def _build_batch_lines(
             "order_item_id": order_item_id,
             "ready_item_id": _text(allocation.get("ready_item_id")) or None,
             "ready_unit_id": _text(allocation.get("ready_unit_id")) or None,
+            **preparation_allocation_identity_fields(allocation),
             "unit_indices": list(allocation.get("unit_indices") or []),
             "quantity": int(allocation.get("quantity") or 0),
             "product_name": _text(getattr(identity, "name", None)) or _text(allocation.get("product_name")),
@@ -1213,6 +1450,53 @@ async def _build_batch_lines(
         )
         row["image_mime"] = image_mime
     return result
+
+
+async def build_batch_lines_after_allocation_guard(
+    db: Any,
+    *,
+    user_id: str,
+    context: dict[str, Any],
+    planned: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Recheck persisted reservations before any batch line or PDF exists."""
+    order_numbers = sorted({
+        _text(row.get("order_number"))
+        for row in planned
+        if _text(row.get("order_number"))
+    })
+    active_allocations = []
+    if order_numbers:
+        active_allocations = await db[PREPARATION_UNIT_ALLOCATIONS].find(
+            {
+                "user_id": user_id,
+                "order_number": {"$in": order_numbers},
+                "status": {"$in": list(ACTIVE_PREPARATION_ALLOCATION_STATUSES)},
+            },
+            {
+                "_id": 0,
+                "order_number": 1,
+                "order_item_id": 1,
+                "authoritative_commercial_line_key": 1,
+                "authoritative_quantity": 1,
+                "unit_index": 1,
+                "status": 1,
+            },
+        ).to_list(MAX_BATCH_UNITS * 4 + 1)
+        if len(active_allocations) > MAX_BATCH_UNITS * 4:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "preparation_allocation_evidence_too_large",
+                    "message": "تعذّر فحص الحجوزات ضمن الحد الآمن؛ لم يتم إنشاء ملف.",
+                },
+            )
+    assert_authoritative_allocation_invariant(
+        planned,
+        active_allocations,
+        planned_persisted=True,
+    )
+    return await _build_batch_lines(context, planned)
 
 async def _reconcile_order_stage(
     db: Any,
@@ -1499,9 +1783,10 @@ def make_reviewed_preparation_batches_router(
             )
         selection_rows = [value.model_dump() for value in payload.selections]
         try:
-            planned = plan_preparation_allocations(
+            planned = plan_and_validate_preparation_allocations(
                 context["catalog"].get("products") or [],
                 selection_rows,
+                context.get("allocation_documents") or [],
             )
         except ValueError as exc:
             code = str(exc)
@@ -1515,6 +1800,9 @@ def make_reviewed_preparation_batches_router(
                     "تم تحديث القائمة؛ أعد تحديد الكمية."
                 ),
                 "preparation_piece_quantity_must_be_one": "يجب اختيار كل قطعة كبطاقة مستقلة.",
+                "preparation_identity_ambiguous": (
+                    "تعارضت هويات القطعة؛ لم يتم إنشاء ملف حتى تُحسم الهوية المرجعية."
+                ),
             }
             raise HTTPException(
                 status_code=409,
@@ -1592,6 +1880,7 @@ def make_reviewed_preparation_batches_router(
                     "order_item_id": allocation["order_item_id"],
                     "ready_item_id": allocation.get("ready_item_id"),
                     "ready_unit_id": allocation.get("ready_unit_id"),
+                    **preparation_allocation_identity_fields(allocation),
                     "unit_index": int(unit_index),
                     "reserved_at": now,
                     "expires_at": reservation_expiry,
@@ -1616,7 +1905,12 @@ def make_reviewed_preparation_batches_router(
             ) from exc
 
         try:
-            batch_lines = await _build_batch_lines(context, planned)
+            batch_lines = await build_batch_lines_after_allocation_guard(
+                db,
+                user_id=user_id,
+                context=context,
+                planned=planned,
+            )
             option_repair = await refresh_and_repair_batch_customer_options(
                 db,
                 user_id=user_id,

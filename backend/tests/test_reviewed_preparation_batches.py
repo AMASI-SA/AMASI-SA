@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import fitz
 import pytest
 from PIL import Image
+from fastapi import HTTPException
 
 import reviewed_preparation_batches as batch_module
 import preparation_pdf_reference_layout as reference_layout_module
@@ -39,6 +40,9 @@ from reviewed_preparation_batches import (
     _reconcile_order_stage,
     make_reviewed_preparation_batches_router,
     plan_preparation_allocations,
+    plan_and_validate_preparation_allocations,
+    assert_authoritative_allocation_invariant,
+    build_batch_lines_after_allocation_guard,
     repair_batch_line_customer_options,
     render_preparation_batch_pdf,
 )
@@ -152,6 +156,50 @@ def test_normal_reviewed_ready_identity_does_not_remap_live_salla_line():
         "المقاس": "كبير",
         "اللون": "ذهبي",
     }
+    assert state == workflow["items"][0]
+
+
+def test_reviewed_ready_identity_resolves_frozen_state_through_alias():
+    order = SimpleNamespace(
+        order_id="order-201",
+        order_number="201",
+        created_at=datetime(2026, 8, 27, tzinfo=timezone.utc),
+        source=SimpleNamespace(source_order_id="salla-order-201"),
+    )
+    workflow = {"items": [{
+        "order_item_id": "snapshot-id",
+        "product_id": "p-ready",
+        "quantity": 1,
+        "specifications_snapshot": {"name": "سارة"},
+    }]}
+    line = {
+        "identity_source": "reviewed_ready",
+        "order_number": "201",
+        "order_item_id": "current-id",
+        "order_item_aliases": ["current-id", "snapshot-id"],
+        "line_index": 0,
+        "quantity": 1,
+        "ready_item_identity": {
+            "order_item_id": "current-id",
+            "product_id": "p-ready",
+            "quantity": 1,
+            "options": {"name": "سارة"},
+        },
+    }
+    line["ready_item_id"] = stable_ready_item_id(line)
+    allocation = {
+        "order_item_id": "current-id",
+        "ready_item_id": line["ready_item_id"],
+        "quantity": 1,
+        "unit_indices": [1],
+        "line": line,
+    }
+
+    resolved = _reviewed_ready_identity(order, workflow, allocation)
+
+    assert resolved is not None
+    identity, state = resolved
+    assert identity.order_item_id == "current-id"
     assert state == workflow["items"][0]
 
     changed = {
@@ -628,11 +676,13 @@ class _Collection:
         self.rows = list(rows or [])
         self.last_update = None
         self.inserted = []
+        self.find_calls = []
 
     async def find_one(self, *_args, **_kwargs):
         return dict(self.one) if isinstance(self.one, dict) else self.one
 
-    def find(self, *_args, **_kwargs):
+    def find(self, *args, **kwargs):
+        self.find_calls.append((args, kwargs))
         return _Cursor(self.rows)
 
     async def update_one(self, _selector, update, **_kwargs):
@@ -735,6 +785,240 @@ def test_duplicate_group_is_rejected():
                 {"group_key": "product:p-1", "quantity": 5},
             ],
         )
+
+
+def _authoritative_line(
+    order_item_id,
+    quantity,
+    *,
+    key="acl:one",
+    aliases=None,
+    available=None,
+):
+    return {
+        "order_number": "100",
+        "order_item_id": order_item_id,
+        "order_item_aliases": aliases or [order_item_id],
+        "authoritative_commercial_line_key": key,
+        "authoritative_quantity": quantity,
+        "quantity": quantity,
+        "available_unit_indices": available or list(range(1, quantity + 1)),
+    }
+
+
+def _authoritative_plan(line, unit_indices):
+    return [{
+        "group_key": "product:p-1",
+        "order_number": line["order_number"],
+        "order_item_id": line["order_item_id"],
+        "quantity": len(unit_indices),
+        "unit_indices": unit_indices,
+        "line": line,
+        "authoritative_commercial_line_key": line["authoritative_commercial_line_key"],
+        "authoritative_quantity": line["authoritative_quantity"],
+        "order_item_aliases": line["order_item_aliases"],
+    }]
+
+
+def test_ambiguous_catalog_line_cannot_be_planned():
+    line = {
+        **_authoritative_line("line-a", 1),
+        "identity_reconciliation_ambiguous": True,
+    }
+    with pytest.raises(ValueError, match="preparation_identity_ambiguous"):
+        plan_preparation_allocations(
+            [_product("product:p-1", 1, [line])],
+            [{"group_key": "product:p-1", "quantity": 1}],
+        )
+
+
+def test_existing_allocation_under_alias_a_rejects_alias_b_for_quantity_one():
+    line = _authoritative_line(
+        "alias-b",
+        1,
+        aliases=["alias-a", "alias-b"],
+    )
+    planned = _authoritative_plan(line, [1])
+    existing = [{
+        "status": "committed",
+        "order_number": "100",
+        "order_item_id": "alias-a",
+        "unit_index": 1,
+    }]
+
+    with pytest.raises(HTTPException) as caught:
+        assert_authoritative_allocation_invariant(planned, existing)
+    assert caught.value.status_code == 409
+    assert caught.value.detail["code"] == "preparation_authoritative_quantity_exceeded"
+
+
+def test_alias_a_index_one_then_alias_b_index_two_rejected_for_quantity_one():
+    line = _authoritative_line(
+        "alias-b",
+        1,
+        aliases=["alias-a", "alias-b"],
+        available=[2],
+    )
+    planned = _authoritative_plan(line, [2])
+    existing = [{
+        "status": "committed",
+        "order_number": "100",
+        "order_item_id": "alias-a",
+        "unit_index": 1,
+    }]
+
+    with pytest.raises(HTTPException) as caught:
+        assert_authoritative_allocation_invariant(planned, existing)
+    assert caught.value.detail["code"] == "preparation_authoritative_quantity_exceeded"
+
+
+def test_planned_two_rejected_when_authoritative_quantity_is_one():
+    line = _authoritative_line("line-a", 1, available=[1, 2])
+    planned = _authoritative_plan(line, [1, 2])
+
+    with pytest.raises(HTTPException) as caught:
+        assert_authoritative_allocation_invariant(planned, [])
+    assert caught.value.detail["code"] == "preparation_authoritative_quantity_exceeded"
+
+
+def test_committed_one_plus_planned_one_rejected_for_quantity_one():
+    line = _authoritative_line("line-a", 1)
+    planned = _authoritative_plan(line, [1])
+    existing = [{
+        "status": "committed",
+        "order_number": "100",
+        "order_item_id": "line-a",
+        "authoritative_commercial_line_key": "acl:one",
+        "unit_index": 1,
+    }]
+
+    with pytest.raises(HTTPException):
+        assert_authoritative_allocation_invariant(planned, existing)
+
+
+def test_quantity_two_accepts_committed_one_plus_planned_one():
+    line = _authoritative_line("line-a", 2, available=[2])
+    planned = _authoritative_plan(line, [2])
+    existing = [{
+        "status": "committed",
+        "order_number": "100",
+        "order_item_id": "line-a",
+        "authoritative_commercial_line_key": "acl:one",
+        "unit_index": 1,
+    }]
+
+    assert_authoritative_allocation_invariant(planned, existing)
+
+
+def test_quantity_two_rejects_duplicate_unit_index_separately():
+    line = _authoritative_line("line-a", 2, available=[1])
+    planned = _authoritative_plan(line, [1])
+    existing = [{
+        "status": "committed",
+        "order_number": "100",
+        "order_item_id": "line-a",
+        "authoritative_commercial_line_key": "acl:one",
+        "unit_index": 1,
+    }]
+
+    with pytest.raises(HTTPException) as caught:
+        assert_authoritative_allocation_invariant(planned, existing)
+    assert caught.value.detail["code"] == "preparation_authoritative_unit_duplicate"
+
+
+def test_unit_index_out_of_authoritative_range_is_rejected():
+    line = _authoritative_line("line-a", 2, available=[3])
+    planned = _authoritative_plan(line, [3])
+
+    with pytest.raises(HTTPException) as caught:
+        assert_authoritative_allocation_invariant(planned, [])
+    assert caught.value.detail["code"] == "preparation_unit_index_out_of_range"
+
+
+def test_web_and_mobile_shared_planner_return_the_same_unit_count():
+    line = _authoritative_line("line-a", 2)
+    products = [_product("product:p-1", 2, [line])]
+    web_plan = plan_and_validate_preparation_allocations(
+        products,
+        [{"group_key": "product:p-1", "quantity": 2}],
+        [],
+    )
+    mobile_plan = plan_and_validate_preparation_allocations(
+        products,
+        [{"group_key": "product:p-1", "quantity": 2}],
+        [],
+    )
+
+    assert sum(row["quantity"] for row in web_plan) == 2
+    assert sum(row["quantity"] for row in mobile_plan) == 2
+    assert web_plan == mobile_plan
+
+
+@pytest.mark.asyncio
+async def test_invalid_persisted_plan_fails_before_batch_lines_or_pdf(monkeypatch):
+    line = _authoritative_line("alias-b", 1, aliases=["alias-a", "alias-b"])
+    planned = _authoritative_plan(line, [1])
+    existing = [
+        {
+            "status": "committed",
+            "order_number": "100",
+            "order_item_id": "alias-a",
+            "unit_index": 1,
+        },
+        {
+            "status": "reserved",
+            "order_number": "100",
+            "order_item_id": "alias-b",
+            "authoritative_commercial_line_key": "acl:one",
+            "unit_index": 1,
+        },
+    ]
+    called = False
+
+    async def unexpected_build(*_args, **_kwargs):
+        nonlocal called
+        called = True
+        return []
+
+    monkeypatch.setattr(batch_module, "_build_batch_lines", unexpected_build)
+    with pytest.raises(HTTPException):
+        await build_batch_lines_after_allocation_guard(
+            _DB(None, existing),
+            user_id="owner-1",
+            context={},
+            planned=planned,
+        )
+    assert called is False
+
+
+@pytest.mark.asyncio
+async def test_post_reservation_guard_uses_one_bounded_allocation_query(monkeypatch):
+    line = _authoritative_line("line-a", 1)
+    planned = _authoritative_plan(line, [1])
+
+    async def build_without_external_work(_context, _planned):
+        return []
+
+    database = _DB(None, [{
+        "status": "reserved",
+        "order_number": "100",
+        "order_item_id": "line-a",
+        "authoritative_commercial_line_key": "acl:one",
+        "unit_index": 1,
+    }])
+    monkeypatch.setattr(batch_module, "_build_batch_lines", build_without_external_work)
+
+    assert await build_batch_lines_after_allocation_guard(
+        database,
+        user_id="owner-1",
+        context={},
+        planned=planned,
+    ) == []
+    calls = database[PREPARATION_UNIT_ALLOCATIONS].find_calls
+    assert len(calls) == 1
+    selector = calls[0][0][0]
+    assert selector["user_id"] == "owner-1"
+    assert selector["order_number"] == {"$in": ["100"]}
 
 
 def test_file_fields_preserve_name_color_size_and_notes():
