@@ -249,6 +249,30 @@
       "updated": 2816
     },
     "owner_signin_verified": true,
+    "paypal_discovery_test": {
+      "date": "2026-09-17",
+      "financial_posting_executed": false,
+      "next_action": "Implement authorized extensible provider discovery/setup and safe statement import before PayPal settlement test can continue. Preserve distinct payment method and settlement provider. Do not invent real PayPal fees or official export compatibility.",
+      "order_amount_sar": 100,
+      "order_import": {
+        "created": 1,
+        "failed": 0,
+        "status": "بانتظار المراجعة",
+        "ui_payment_label": "PayPal",
+        "updated": 0
+      },
+      "order_reference": "PREVIEW-PAYPAL-20260917-001",
+      "production_changed": false,
+      "settlement_fixture": {
+        "blocker": "PayPal absent from creation provider selector after order import; did not misclassify as Salla.",
+        "gross_sar": 100,
+        "illustrative_fee_sar": 3,
+        "net_sar": 97,
+        "official_paypal_format": false,
+        "uploaded": false
+      },
+      "status": "ORDER_VISIBLE_SETTLEMENT_PROVIDER_MISSING"
+    },
     "posting_endpoint_403_verified": true,
     "posting_endpoint_error_code": "accounting_permission_required",
     "posting_endpoint_evidence_source": "user_executed_browser_console_report",
@@ -423,29 +447,24 @@
       "test_suites": 2,
       "tests_passed": 9
     },
-    "paypal_discovery_test": {
-      "status": "ORDER_VISIBLE_SETTLEMENT_PROVIDER_MISSING",
-      "date": "2026-09-17",
-      "order_reference": "PREVIEW-PAYPAL-20260917-001",
-      "order_amount_sar": 100,
-      "order_import": {
-        "created": 1,
-        "updated": 0,
-        "failed": 0,
-        "ui_payment_label": "PayPal",
-        "status": "بانتظار المراجعة"
-      },
-      "settlement_fixture": {
-        "gross_sar": 100,
-        "illustrative_fee_sar": 3,
-        "net_sar": 97,
-        "official_paypal_format": false,
-        "uploaded": false,
-        "blocker": "PayPal absent from creation provider selector after order import; did not misclassify as Salla."
-      },
-      "financial_posting_executed": false,
-      "production_changed": false,
-      "next_action": "Implement authorized extensible provider discovery/setup and safe statement import before PayPal settlement test can continue. Preserve distinct payment method and settlement provider. Do not invent real PayPal fees or official export compatibility."
+    "refund_fee_acceptance": {
+      "status": "REQUIRED_NOT_VERIFIED_IN_DASHBOARD",
+      "source": "docs/operations/MZ2-FIN-CUTOVER-001.md",
+      "source_analysis_date": "2026-08-23",
+      "evidence_scope": "Prior documented merchant statement analysis, not a fresh raw-workbook audit or universal current provider policy.",
+      "tamara": "Five statements: original capture commission not rebated on refund; cancellation separately charged1.50SAR+.23VAT.",
+      "tabby": "Four statements: refund rebate4.99% of refunded amount plus related fee VAT;2% and1SAR fixed plus their VAT retained. Six refund rows;69.30SAR fee rebate+10.39VAT.",
+      "salla": "Seven invoices:12negative refund rows zero NEW fee/VAT; original-fee retention or later rebate requires linked-event verification. Do not infer refund policy from zero alone.",
+      "required_tests": [
+        "Full refund excludes sale but retains evidenced nonrefundable cost in dashboard and accounting.",
+        "Partial refund returns only evidenced fee components and related tax.",
+        "Cancellation distinguished from refund after capture.",
+        "No duplicate cost between estimate, statement actual and journal.",
+        "Existing posted journals preserved; audited adjustments only.",
+        "Unknown policy not automatically treated as zero cost or full retained cost."
+      ],
+      "close_gate": "Do not mark refund-fee/dashboard accounting acceptance complete without these tests and source linkage.",
+      "production_changed": false
     }
   },
   "production_branch": "hotfix/prod-snap-meta-final"
