@@ -160,7 +160,7 @@
   ],
   "plan_version": 1,
   "preview_acceptance": {
-    "blocker": "excel_orders_read_projection_missing_and_settlement_rematch_pending",
+    "blocker": "terminal_reauthentication_required; excel_read_projection_and_grouped_rematch_not_implemented",
     "continuation": "docs/operations/PREVIEW-REVIEWER-SIGNOUT-20260916.md",
     "current_session_role": "owner_signed_in",
     "current_session_settlement_view": "PASS_AFTER_RELOAD",
@@ -170,9 +170,20 @@
     "independent_viewer_permissions_verified": [
       "accounting.settlements.view"
     ],
-    "last_observation": "Three missing settlement orders verified read-only via Salla app: August creation dates, September refunds, canceled status, including one partial refund. Added authoritative rows to original2816-order XLSX, preserving all original values. First upload failed before processing because exported worksheet lacked dimensions; corrected OOXML dimensions without changing data. Retry completed in Preview UI at2026-09-17 17:05:32 displayed browser time:2819/2819 processed,3new,2816updated,0failed. No journal posting. Settlement rematch and Excel-source orders-v2 projection remain unverified/not implemented.",
+    "last_observation": "Post-import browser verification: import2819complete/3new/2816updated/0failed; settlements draft still cached215unmatched, UI renders200manual-match inputs; orders-v2 still20direct-source Preview seed orders. Read-only source inspection confirmed manual match applies a single entry via _apply_entries, which overwrites per-order consolidated actual amounts; duplicate-order rows require grouped reapplication. _unmatched_entries caps at200 and manual matching uses len(capped_list) as count, risking incorrect counts. No matching or financial mutations executed. Independent terminal reconnect failed; Reload Window returned Code Server password form. No application source edits made.",
     "last_updated_date": "2026-09-17",
-    "next_action": "Implement tested explicit Excel-source read model for list/detail/search/count with original currency/date/provenance and no fake Salla payload writes; deploy only to isolated Preview with truthful runtime identity. Refresh settlement draft matching against imported orders without journal posting.",
+    "next_action": "Restore independent Code Server login through secure browserAuth. Implement and test grouped complete-file rematching with fresh permissions, tenant scope, draft state/concurrency guard, exact counts independent of200-row display cap, duplicate sale/refund preservation and no journals. Implement Excel-source orders-v2 projection; deploy only Preview and verify UI. Existing import is complete and must not be repeated.",
+    "order_import": {
+      "created": 3,
+      "evidence": "owner_authenticated_preview_import_jobs_ui",
+      "failed": 0,
+      "file": "salla-orders-with-refunds.xlsx",
+      "original_excel_rows_preserved": true,
+      "processed": 2819,
+      "settlement_rematch_verified": false,
+      "status": "COMPLETE",
+      "updated": 2816
+    },
     "owner_signin_verified": true,
     "posting_endpoint_403_verified": true,
     "posting_endpoint_error_code": "accounting_permission_required",
@@ -186,16 +197,12 @@
     "scenario_5": "PASS_PREVIEW_INDEPENDENT_VIEWER_UI_AND_USER_EXECUTED_POST_403",
     "status": "PARTIAL",
     "synthetic_employee_records": 2,
-    "order_import": {
-      "file": "salla-orders-with-refunds.xlsx",
-      "status": "COMPLETE",
-      "processed": 2819,
-      "created": 3,
-      "updated": 2816,
-      "failed": 0,
-      "evidence": "owner_authenticated_preview_import_jobs_ui",
-      "original_excel_rows_preserved": true,
-      "settlement_rematch_verified": false
+    "rematch_diagnostics": {
+      "cached_unmatched": 215,
+      "visible_manual_inputs": 200,
+      "orders_v2_total": 20,
+      "code_changes_made": false,
+      "rematch_executed": false
     }
   },
   "production_branch": "hotfix/prod-snap-meta-final"
