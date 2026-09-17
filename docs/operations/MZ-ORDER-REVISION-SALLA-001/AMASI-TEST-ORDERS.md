@@ -195,3 +195,10 @@ no live order-item mutation occurred. The current toolset provides connector
 reads but no order-item write or authenticated cloud terminal/browser access.
 Next: restore the configured encrypted runtime, complete the private manifest
 and downstream review, then run readiness and one reviewed operation.
+
+## Browser Console execution decision — 2026-09-17
+
+The owner requires the live test through the production browser Console.
+Use [CONSOLE-TEST.md](CONSOLE-TEST.md) for the new disabled HTTP bridge.
+The CLI commands remain for synthetic regression and historical documentation;
+do not run them against the live fixture. The HTTP bridge is not yet deployed.
