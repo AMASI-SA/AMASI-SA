@@ -160,7 +160,7 @@
   ],
   "plan_version": 1,
   "preview_acceptance": {
-    "blocker": "terminal_reauthentication_required; excel_read_projection_and_grouped_rematch_not_implemented",
+    "blocker": "excel_orders_read_projection_missing",
     "continuation": "docs/operations/PREVIEW-REVIEWER-SIGNOUT-20260916.md",
     "current_session_role": "owner_signed_in",
     "current_session_settlement_view": "PASS_AFTER_RELOAD",
@@ -170,9 +170,9 @@
     "independent_viewer_permissions_verified": [
       "accounting.settlements.view"
     ],
-    "last_observation": "Post-import browser verification: import2819complete/3new/2816updated/0failed; settlements draft still cached215unmatched, UI renders200manual-match inputs; orders-v2 still20direct-source Preview seed orders. Read-only source inspection confirmed manual match applies a single entry via _apply_entries, which overwrites per-order consolidated actual amounts; duplicate-order rows require grouped reapplication. _unmatched_entries caps at200 and manual matching uses len(capped_list) as count, risking incorrect counts. No matching or financial mutations executed. Independent terminal reconnect failed; Reload Window returned Code Server password form. No application source edits made.",
+    "last_observation": "Preview-only grouped maintenance applied successfully to existing Salla draft:217entries/215unique orders,0missing,2repeated groups. Verified every consolidated actual field by rereading orders; journal count unchanged; source amounts unchanged. Draft recomputed to draft, balanced=true. Browser reopened draft:needs-review warning gone and submit-for-review enabled. No submission/review/post performed. Terminal secure reauthentication succeeded. Remaining orders-v2 still20direct seed records; Excel projection pending.",
     "last_updated_date": "2026-09-17",
-    "next_action": "Restore independent Code Server login through secure browserAuth. Implement and test grouped complete-file rematching with fresh permissions, tenant scope, draft state/concurrency guard, exact counts independent of200-row display cap, duplicate sale/refund preservation and no journals. Implement Excel-source orders-v2 projection; deploy only Preview and verify UI. Existing import is complete and must not be repeated.",
+    "next_action": "Implement tested explicit Excel-source DTO read projection for list/detail/search/count without fabricating Salla raw payloads. Deploy only isolated Preview, verify imported order references/currency/date and UI. Rematch already succeeded; do not repeat import or maintenance.",
     "order_import": {
       "created": 3,
       "evidence": "owner_authenticated_preview_import_jobs_ui",
@@ -198,11 +198,14 @@
     "status": "PARTIAL",
     "synthetic_employee_records": 2,
     "rematch_diagnostics": {
-      "cached_unmatched": 215,
-      "visible_manual_inputs": 200,
-      "orders_v2_total": 20,
-      "code_changes_made": false,
-      "rematch_executed": false
+      "status": "APPLIED_AND_UI_VERIFIED",
+      "rows": 217,
+      "unique_orders": 215,
+      "missing_orders": 0,
+      "repeated_order_groups": 2,
+      "balanced": true,
+      "journal_count_unchanged": true,
+      "maintenance_source_sha": "94153c44f9f559571ca66b4d9a454d85afaac12f"
     }
   },
   "production_branch": "hotfix/prod-snap-meta-final"
