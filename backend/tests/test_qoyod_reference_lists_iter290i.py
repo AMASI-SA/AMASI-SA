@@ -282,3 +282,30 @@ async def test_get_reference_lists_returns_cached_doc_after_refresh(
     assert out["ok"] is True
     assert out["cached"] is True
     assert out["lists"]["categories"] == [{"id": "1", "name": "Default"}]
+
+
+@pytest.mark.asyncio
+async def test_documented_reference_routes_and_response_wrappers(patched_creds, monkeypatch):
+    """Qoyod's public v2 collection defines these paths and JSON roots."""
+    from integrations.qoyod.api_client import QoyodAPIClient
+
+    client = QoyodAPIClient("test-key", base_url="https://qoyod.invalid/2.0")
+    calls = []
+
+    async def documented_request(method, path, **kwargs):
+        calls.append((method, path))
+        assert method == "GET"
+        fixtures = {
+            "/categories": {"categories": [{"id": 4, "name": "Category"}]},
+            "/product_unit_types": {"product_unit_types": [{"id": 6, "name": "Piece"}]},
+        }
+        return fixtures.get(path, {})
+
+    monkeypatch.setattr(client, "_request", documented_request)
+    db = _FakeDB()
+    out = await refresh_reference_lists(db, user_id="tenant-a", client_factory=lambda _k: client)
+    assert ("GET", "/categories") in calls
+    assert ("GET", "/product_unit_types") in calls
+    assert out["lists"]["categories"] == [{"id": "4", "name": "Category"}]
+    assert out["lists"]["unit_types"] == [{"id": "6", "name": "Piece"}]
+    assert db.qoyod_reference_lists.store["tenant-a"]["lists"]["unit_types"] == out["lists"]["unit_types"]
