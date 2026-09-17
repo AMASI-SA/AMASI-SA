@@ -160,7 +160,7 @@
   ],
   "plan_version": 1,
   "preview_acceptance": {
-    "blocker": "independent_mezan2_import_and_full_order_fidelity_required_before_production",
+    "blocker": "source_item_completeness_and_discrepancies_require_review_before_full_acceptance",
     "continuation": "docs/operations/PREVIEW-REVIEWER-SIGNOUT-20260916.md",
     "current_session_role": "owner_signed_in",
     "current_session_settlement_view": "PASS_AFTER_RELOAD",
@@ -172,19 +172,43 @@
       "excel_orders": 6636,
       "installer_sha": "23a4a68b314ae2f06b6da0f448700e46c437ffc4",
       "limitations": [
-        "legacy import did not retain item records",
-        "stored original timestamp precision was lost by importer",
-        "subtotal column differs from authoritative workbook for verified sample",
+        "3 appended workbook rows lack skus_json; no invented products/quantities/prices",
+        "21 source workbook rows have aggregate quantity different from item quantity sum",
+        "8 source workbook rows have basket-minus-discount different from summed net item amounts within 0.03 tolerance",
+        "Older files outside this 2819-row import have not been repaired",
         "combined search retains pre-existing5000row scan cap"
       ],
       "new_tests_passed": 4,
       "production_default": "disabled",
       "rollback": "Restore /opt/mezan-preview-runtime-20260916/preview_password_runtime.py.before-excel and restart backend; remove excel overlay metadata fields if rollback.",
       "runtime_path": "/opt/mezan-preview-excel-20260917",
-      "source_sha": "428fceb48f284a1158a4f0b243879a9d2f02fa98",
+      "source_sha": "03ac5da33111fdbb7a3bc14183b76e13018253c9",
       "status": "PREVIEW_DEPLOYED_UI_VERIFIED",
       "stored_direct_seed_orders": 20,
       "total_discoverable": 6656
+    },
+    "import_fidelity_fix": {
+      "production_changed": false,
+      "rows_missing_skus_json": 3,
+      "rows_with_skus_json": 2816,
+      "source_file_rows": 2819,
+      "source_net_line_discrepancy_rows": 8,
+      "source_quantity_discrepancy_rows": 21,
+      "status": "PREVIEW_DEPLOYED_REIMPORTED_AND_UI_VERIFIED",
+      "tests_passed": 7,
+      "source_sha": "03ac5da33111fdbb7a3bc14183b76e13018253c9",
+      "additional_parser_limits_tests_passed": 3,
+      "reimport_processed": 2819,
+      "reimport_updated": 2819,
+      "reimport_created": 0,
+      "reimport_errors": 0,
+      "stale_excel_owned_records_repaired": 2811,
+      "remaining_stale_fields_in_reimported_file": 0,
+      "projected_item_lines": 4458,
+      "projection_errors": 0,
+      "financial_snapshots_and_actual_fields_unchanged": true,
+      "backup_path": "/opt/mezan-preview-excel-20260917/before-fidelity/data.json",
+      "backup_contains_customer_data_do_not_commit": true
     },
     "independent_viewer_account_created": true,
     "independent_viewer_login_verified": true,
@@ -192,18 +216,18 @@
       "accounting.settlements.view"
     ],
     "journal_posting_count": 0,
-    "last_observation": "Grouped settlement rematch remains217rows/215refs/0unmatched, balanced draft. Explicit Excel DTO overlay deployed only to Preview; browser orders-v2 now6656total (6636Excel +20stored direct seed), exact search and detail opening verified for first missing reference; get_orders verified all3. All6656rows mapped without errors,4new projection tests PASS. Existing repository/service/routes suite17PASS9FAIL; exact9route failures reproduced unchanged on baseline. Startup briefly503 from generated non-derived Python cache; removed327untracked derived .pyc under guardactivefalse, read_release_identity verified true, restarted backend and UI recovered. No authentication/release guard weakened; /app tracked source unchanged. Existing importer still loses products/exact times and maps a subtotal incorrectly; independent importer is mandatory before readiness.",
+    "last_observation": "Fixed reversed substring header collision (tax incorrectly became subtotal), datetime truncation, missing product tuples. Preview overlay source03ac5da; 7 focused tests +3 parser limits tests pass. Same workbook reimported2819updated/0created/0failed; guarded repair updated2811Excel-owned records. All2819mapped,4458item lines,0errors,0remaining subtotal/date/currency/total mismatches against parsed source. UI verifies sample basket100 tax9.53 timestamp09:09; another sample shows product SKU quantity and151.05net line. Settlement6743152 still draft57285.32SAR; full financial collections and all actual_* order fields unchanged against pre-import backup. No Production/Salla/Qoyod writes or journal posting.",
     "last_updated_date": "2026-09-17",
     "mezan2_independence": {
       "independent_import_required": true,
       "legacy_analysis_dependency_allowed": false,
       "legacy_runtime_dependency_allowed": false,
+      "preview_legacy_import_temporarily_allowed": true,
       "production_gate": "BLOCKED_UNTIL_LEGACY_DISABLED_ACCEPTANCE_PASSES",
       "required": true,
-      "verification": "NOT_YET_COMPLETE",
-      "preview_legacy_import_temporarily_allowed": true
+      "verification": "NOT_YET_COMPLETE"
     },
-    "next_action": "Deploy tested parser/projection overlay only to Preview, back up imported orders and financial evidence, reimport same workbook, repair stale Excel-owned original-date/subtotal fields, compare order/settlement/ledger readback. Production must remain independent of legacy. No journal posting.",
+    "next_action": "Resolve 3 missing item-detail rows and inspect 21 quantity /8 net-line source discrepancies using authoritative source evidence without invented allocations. Current Preview may use legacy Excel import temporarily per owner. General grouped-rematch/count-over200 fix remains. Complete review/posting acceptance only with required authorization. Production readiness still requires legacy-independent runtime acceptance.",
     "order_import": {
       "created": 3,
       "evidence": "owner_authenticated_preview_import_jobs_ui",
@@ -253,17 +277,7 @@
     },
     "scenario_5": "PASS_PREVIEW_INDEPENDENT_VIEWER_UI_AND_USER_EXECUTED_POST_403",
     "status": "PARTIAL",
-    "synthetic_employee_records": 2,
-    "import_fidelity_fix": {
-      "status": "TESTED_NOT_DEPLOYED",
-      "tests_passed": 7,
-      "source_file_rows": 2819,
-      "rows_with_skus_json": 2816,
-      "rows_missing_skus_json": 3,
-      "source_quantity_discrepancy_rows": 21,
-      "source_net_line_discrepancy_rows": 8,
-      "production_changed": false
-    }
+    "synthetic_employee_records": 2
   },
   "production_branch": "hotfix/prod-snap-meta-final"
 }
