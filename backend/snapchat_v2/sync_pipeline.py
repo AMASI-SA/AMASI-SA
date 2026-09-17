@@ -43,7 +43,7 @@ from .sync_runs import (
 )
 from .total_facts import upsert_total_facts
 
-MAX_SYNC_DAYS = 62
+MAX_SYNC_DAYS = 30
 HEARTBEAT_SECONDS = 20.0
 logger = logging.getLogger(__name__)
 
@@ -106,6 +106,8 @@ def _date_range(
     count = (end - start).days + 1
     if count > MAX_SYNC_DAYS:
         raise ValueError(f"Snapchat reporting range cannot exceed {MAX_SYNC_DAYS} days")
+    if start < riyadh_today - timedelta(days=MAX_SYNC_DAYS - 1):
+        raise ValueError(f"Snapchat sync is limited to the latest {MAX_SYNC_DAYS} Riyadh dates")
     return [start + timedelta(days=offset) for offset in range(count)]
 
 
