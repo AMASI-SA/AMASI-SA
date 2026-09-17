@@ -679,7 +679,7 @@ def _amasi_response_success(response: dict[str, Any]) -> bool:
     declared = body.get("status")
     return declared is None or (type(declared) is int and 200 <= declared < 300)
 
-def _validate_amasi_order(order: dict[str, Any], row: dict[str, Any]) -> None:
+def _validate_amasi_order(order: dict[str, Any], row: dict[str, Any], *, check_shipping: bool = True) -> None:
     customer = order.get("customer")
     if (str(order.get("id", "")) != str(row["order_id"])
             or str(order.get("reference_id", "")) != str(row["order_number"])
@@ -700,7 +700,7 @@ def _validate_amasi_order(order: dict[str, Any], row: dict[str, Any]) -> None:
                 or method["provider"] is not None or method["transaction_reference"] is not None):
             raise ContractRunnerError("AMASI_TEST_UNPAID_BANK_ORDER_REQUIRED")
     allowed_shipping = ("shipping_ready",) if "pending_store_courier" in row else (None, "not_shippable")
-    if order.get("shipping_status") not in allowed_shipping:
+    if check_shipping and order.get("shipping_status") not in allowed_shipping:
         raise ContractRunnerError("AMASI_TEST_SHIPMENT_ABSENCE_UNPROVEN")
     amounts = order.get("amounts")
     actions = order.get("payment_actions")
