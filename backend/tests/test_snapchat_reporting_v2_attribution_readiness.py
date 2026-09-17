@@ -3,13 +3,13 @@ from datetime import date
 
 import pytest
 
-from test_snapchat_reporting_v2_period_candidates import database, row
+from tests.test_snapchat_reporting_v2_period_candidates import database, row
 from snapchat_v2.salla_outcomes import load_salla_campaign_outcomes
 from unified_marketing.adapters.snapchat_v2 import _commerce_order_summary
-from test_decision_intelligence_phase5 import _bundle_inputs, _evidence
+from tests.test_decision_intelligence_phase5 import _bundle_inputs, _evidence
 from unified_marketing.attribution import campaign_attribution_complete
 from unified_marketing.readiness import evaluate_snapchat_unified_readiness
-from test_unified_marketing_snapchat_readiness import _report
+from tests.test_unified_marketing_snapchat_readiness import _report
 
 
 @pytest.mark.asyncio
