@@ -225,7 +225,7 @@
       "required": true,
       "verification": "NOT_YET_COMPLETE"
     },
-    "next_action": "Inspect legitimate Preview receivable recognition/testing setup within P01; imported orders do not create ledger balances. Do not invent opening balances or bypass available-receivable guard. Obtain explicit applicable authorization before journal writes. Production independence and other phase gates remain open.",
+    "next_action": "Obtain explicit owner authorization for isolated synthetic100SAR fixture,97.70SAR settlement posting and audited reversals. Then preflight supported journal/reversal paths and baseline before any writes. Keep real statement6743152 reviewed and unchanged. Do not create opening balances or activate cutover.",
     "order_import": {
       "created": 3,
       "evidence": "owner_authenticated_preview_import_jobs_ui",
@@ -274,21 +274,36 @@
       "webhook_changed": false
     },
     "sar_equivalent_verification": {
-      "status": "PREVIEW_DEPLOYED_REPOSITORY_AND_UI_VERIFIED",
-      "source_sha": "409760486e1ab7fe78796fa3abba0eee9aed7ecb",
-      "tests_passed": 9,
+      "financial_collections_unchanged_by_fx": true,
+      "native_sar_identity": true,
+      "production_changed": false,
       "provider_rates_match_export": 7,
       "real_repository_reads_verified": 7,
-      "native_sar_identity": true,
-      "unverified_rates_remain_unknown": true,
-      "financial_collections_unchanged_by_fx": true,
+      "source_sha": "409760486e1ab7fe78796fa3abba0eee9aed7ecb",
+      "status": "PREVIEW_DEPLOYED_REPOSITORY_AND_UI_VERIFIED",
+      "tests_passed": 9,
       "ui_sample": {
         "original": "28.840 KWD",
         "sar": "351.00 SAR"
       },
-      "production_changed": false
+      "unverified_rates_remain_unknown": true
     },
     "scenario_5": "PASS_PREVIEW_INDEPENDENT_VIEWER_UI_AND_USER_EXECUTED_POST_403",
+    "settlement_review": {
+      "available_provider_receivable_sar": 0,
+      "difference_sar": 0,
+      "evidence": "read-only ledger_core.compute_balance; reviewed draft UI and database",
+      "ledger_entries_files_unchanged": true,
+      "net_sar": 57285.32,
+      "posting_attempted": false,
+      "posting_blocker": "insufficient_provider_receivable",
+      "provider_receivable_close_sar": 58538.94,
+      "refreshed_history_verified": true,
+      "review_ui_pass": true,
+      "statement_reference": "6743152",
+      "status": "REVIEWED",
+      "submit_ui_pass": true
+    },
     "source_discrepancy_review": {
       "all_imported_orders_projected": 2819,
       "exact_repository_reads_verified": 10,
@@ -313,20 +328,16 @@
     },
     "status": "PARTIAL",
     "synthetic_employee_records": 2,
-    "settlement_review": {
-      "status": "REVIEWED",
-      "statement_reference": "6743152",
-      "net_sar": 57285.32,
-      "provider_receivable_close_sar": 58538.94,
-      "difference_sar": 0,
-      "submit_ui_pass": true,
-      "review_ui_pass": true,
-      "refreshed_history_verified": true,
-      "ledger_entries_files_unchanged": true,
-      "posting_attempted": false,
-      "available_provider_receivable_sar": 0,
-      "posting_blocker": "insufficient_provider_receivable",
-      "evidence": "read-only ledger_core.compute_balance; reviewed draft UI and database"
+    "posting_test_proposal": {
+      "status": "PREPARED_AWAITING_EXPLICIT_FIXTURE_POST_AND_REVERSAL_AUTHORIZATION",
+      "document": "docs/operations/MZ2-FIN-CUTOVER-001/PREVIEW-POSTING-TEST-20260917.md",
+      "fixture_receivable_sar": 100,
+      "settlement_net_sar": 97.7,
+      "commission_sar": 2,
+      "commission_vat_sar": 0.3,
+      "existing_service_tests_passed": 7,
+      "existing_statement_unchanged": true,
+      "executed": false
     }
   },
   "production_branch": "hotfix/prod-snap-meta-final"
