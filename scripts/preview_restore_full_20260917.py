@@ -15,7 +15,7 @@ import socket
 import subprocess
 import tarfile
 
-BASE = 'b957882332b34f9f5a3828fb46bbd170d7809f5d'
+BASE = 'f8fae757409b94e84a4994f64297fbfd1f90cb4d'
 FRONTEND_BASE = '65f648c5ef83f62bdfd62bd231015f72b4cad266'
 PATCH = FRONTEND_BASE
 OVERLAY = Path('/opt/mezan-preview-excel-20260917')
