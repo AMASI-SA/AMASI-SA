@@ -36,3 +36,19 @@ Next: review this diagnostic patch/CI, prepare a fresh governed sourceA/intentB
 release only through an authorized available admin path, then inspect latest
 persisted failure before any new non-COD retry. COD remains deferred. Source
 checkpoint alone is not ready to deploy; current tracked intent is unchanged.
+
+Reference-list RCA follow-up: fresh Production refresh at 2026-09-17T21:04:45Z
+returned 404 for /product_categories and /product_units, while accounts,
+customers, taxes and inventory succeeded. Official https://apidoc.qoyod.com/
+collection documents /categories and /product_unit_types, with response roots
+categories and product_unit_types. Corrected both GET paths and accepted the
+unit response root while retaining legacy response compatibility. A regression
+through the client list methods and refresh/cache boundary failed on the old
+paths, then passed. Combined reference-list/diagnostics/unsent/failed-retry
+suite: 50 passed in 1.14s, exit 0; git diff --check exit 0.
+
+This is a confirmed reference-list defect, not proof of the latest invoice
+404 endpoint. No new send, settings change, lease or Production deployment.
+The /branches behavior is untouched (existing route documents its absence in
+Qoyod v2). Fresh governed A/B release and latest invoice failure diagnosis
+remain pending; admin access rejection described above remains unresolved.

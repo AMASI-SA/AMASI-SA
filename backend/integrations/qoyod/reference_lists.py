@@ -129,7 +129,7 @@ _LIST_SPECS = [
      ["product_categories", "product_category", "categories", "category"],
      None),
     ("unit_types",  "list_product_units",
-     ["product_units", "product_unit", "units", "unit", "unit_types"],
+     ["product_unit_types", "product_units", "product_unit", "units", "unit", "unit_types"],
      None),
     ("inventories", "list_inventories",
      ["inventories", "inventory"], None),
