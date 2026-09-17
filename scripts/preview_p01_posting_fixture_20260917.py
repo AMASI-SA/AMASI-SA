@@ -18,6 +18,7 @@ async def main(mode):
     from motor.motor_asyncio import AsyncIOMotorClient
     from ledger_core import post_txn_group, reverse_entry, compute_balance
     from accounting_settlement_routes import _create_draft_from_file
+    from accounting_settlement_currency_guard import build_currency_guarded_create
     from accounting_settlement_service import post_reviewed_settlement
     from fastapi import HTTPException
     assert socket.gethostname() == 'agent-env-f5e6b93a-68a2-4155-84ad-e55b4fa936d3'
@@ -52,7 +53,7 @@ async def main(mode):
                     'matched':0,'unmatched':0,'synthetic':True,'test_evidence':evidence,
                     'notes':'Owner-authorized synthetic aggregate fixture. Not a Salla export.'}
         await db.settlement_files.insert_one(file_doc)
-        draft = await _create_draft_from_file(db,owner_id=uid,actor=actor,file_doc=file_doc,
+        draft = await build_currency_guarded_create(_create_draft_from_file)(db,owner_id=uid,actor=actor,file_doc=file_doc,
                     bank_account_id=original['bank_account_id'],notes='اختبار البرفيو فقط — بيانات اصطناعية مصرح بها وليست مبيعات فعلية')
         assert not draft['review_reasons']
         state['draft_id'] = draft['id']; save(state)
