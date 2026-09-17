@@ -34,6 +34,10 @@ _INVOICE_SCAN_PAGE_SIZE = 50
 _INVOICE_SCAN_MAX_PAGES = 200
 _INVOICE_SCAN_DELAY_SECONDS = 0.1
 
+_PRODUCT_SCAN_PAGE_SIZE = 50
+_PRODUCT_SCAN_MAX_PAGES = 200
+_PRODUCT_SCAN_DELAY_SECONDS = 0.1
+
 
 class ManualQoyodError(Exception):
     """Raised for any non-2xx response from Qoyod."""
@@ -76,6 +80,7 @@ class ManualQoyodClient:
             raise RuntimeError("QOYOD_API_BASE not set")
         self._timeout = timeout
         self._invoice_reference_snapshot: Optional[dict[str, dict]] = None
+        self._product_sku_snapshot: Optional[dict[str, dict]] = None
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"ManualQoyodClient(base={self._base_url!r}, key=***)"
@@ -231,15 +236,11 @@ class ManualQoyodClient:
         if not sku:
             return None
 
+        if self._product_sku_snapshot is not None:
+            return self._product_sku_snapshot.get(sku)
+
         def _exact_product(body: Any) -> Optional[dict]:
-            rows = []
-            if isinstance(body, dict):
-                rows = body.get("products") or body.get("data") or []
-            elif isinstance(body, list):
-                rows = body
-            for row in rows:
-                if not isinstance(row, dict):
-                    continue
+            for row in self._product_rows(body):
                 value = str(
                     row.get("sku") or row.get("reference") or ""
                 ).strip()
@@ -247,19 +248,109 @@ class ManualQoyodClient:
                     return row
             return None
 
-        bodies = await self._read_with_query_fallbacks(
-            "/products",
-            (
-                {"q[sku_eq]": sku, "limit": 5},
-                {"sku": sku, "limit": 5},
-            ),
-            stop_when=lambda body: _exact_product(body) is not None,
-        )
+        try:
+            bodies = await self._read_with_query_fallbacks(
+                "/products",
+                (
+                    {"q[sku_eq]": sku, "limit": 5},
+                    {"sku": sku, "limit": 5},
+                ),
+                stop_when=lambda body: _exact_product(body) is not None,
+            )
+        except ManualQoyodError as exc:
+            if exc.status_code != 404:
+                raise
+            # A filtered 404 is not evidence that a product is absent.
+            # Independently read the unfiltered catalog; only a complete,
+            # valid successful list may authorize the caller's create path.
+            self._product_sku_snapshot = await self._load_product_sku_snapshot()
+            return self._product_sku_snapshot.get(sku)
         for body in bodies:
             match = _exact_product(body)
             if match is not None:
                 return match
+        if any(self._product_rows(body) for body in bodies):
+            # A nonempty list without an exact match may mean the provider
+            # ignored the filter. A limited first page cannot prove absence.
+            self._product_sku_snapshot = await self._load_product_sku_snapshot()
+            return self._product_sku_snapshot.get(sku)
         return None
+
+    @staticmethod
+    def _product_rows(body: Any) -> list[dict]:
+        node = body
+        if isinstance(node, dict) and "data" in node:
+            node = node["data"]
+        if isinstance(node, dict):
+            node = node.get("products")
+        if not isinstance(node, list) or any(
+            not isinstance(row, dict) for row in node
+        ):
+            raise ManualQoyodError(
+                status_code=0, endpoint="GET /products",
+                response_excerpt="product lookup response shape unknown",
+            )
+        return node
+
+    async def _load_product_sku_snapshot(self) -> dict[str, dict]:
+        """Bounded catalog scan; no HTTP error is interpreted as absence.
+
+        A short successful page completes the existing page/limit contract.
+        Repeated pages, unknown bodies, a full final page at the cap, and
+        every HTTP/network failure leave absence unconfirmed. The snapshot
+        is published only after completion and lives for this client only.
+        """
+        by_sku: dict[str, dict] = {}
+        seen_ids: set[str] = set()
+        expected_count: Optional[int] = None
+        for page in range(1, _PRODUCT_SCAN_MAX_PAGES + 1):
+            body = await self._request(
+                "GET", "/products",
+                params={"page": page, "limit": _PRODUCT_SCAN_PAGE_SIZE},
+            )
+            rows = self._product_rows(body)
+            meta = body.get("meta") if isinstance(body, dict) else None
+            if isinstance(meta, dict) and "total" in meta:
+                total = meta["total"]
+                if isinstance(total, str) and total.isdigit():
+                    total = int(total)
+                if type(total) is not int or total < 0 or (
+                    expected_count is not None and total != expected_count
+                ):
+                    raise ManualQoyodError(
+                        status_code=0, endpoint="GET /products",
+                        response_excerpt="product catalog total unconfirmed",
+                    )
+                expected_count = total
+            for row in rows:
+                product_id = str(row.get("id") or "").strip()
+                if not product_id or product_id in seen_ids:
+                    raise ManualQoyodError(
+                        status_code=0, endpoint="GET /products",
+                        response_excerpt="product catalog identity/pagination unconfirmed",
+                    )
+                seen_ids.add(product_id)
+                sku = str(row.get("sku") or row.get("reference") or "").strip()
+                if sku:
+                    by_sku.setdefault(sku, row)
+            if expected_count is not None:
+                if len(seen_ids) > expected_count or (
+                    not rows and len(seen_ids) != expected_count
+                ):
+                    raise ManualQoyodError(
+                        status_code=0, endpoint="GET /products",
+                        response_excerpt="product catalog incomplete or changed during scan",
+                    )
+                if len(seen_ids) == expected_count:
+                    return by_sku
+            elif len(rows) < _PRODUCT_SCAN_PAGE_SIZE:
+                return by_sku
+            if page < _PRODUCT_SCAN_MAX_PAGES and _PRODUCT_SCAN_DELAY_SECONDS > 0:
+                await asyncio.sleep(_PRODUCT_SCAN_DELAY_SECONDS)
+        raise ManualQoyodError(
+            status_code=0, endpoint="GET /products",
+            response_excerpt="product catalog incomplete at pagination cap",
+        )
 
     async def get_invoice(self, invoice_id: int) -> dict:
         """Read one invoice from Qoyod after creation.
@@ -413,6 +504,9 @@ class ManualQoyodClient:
             "POST", "/customers", json_body=payload, idem=idem)
 
     async def create_product(self, payload: dict, *, idem: str) -> Any:
+        # Invalidate before the write: even a timeout can mean the provider
+        # persisted the product. Never reuse a cached absence after a POST.
+        self._product_sku_snapshot = None
         return await self._request(
             "POST", "/products", json_body=payload, idem=idem)
 

@@ -1,8 +1,64 @@
 # Qoyod COD fee recovery — source checkpoint
 
-Status: diagnostic preparation, pending review and deployment; live invoice
-root causes and recovery remain unresolved. Do not present this PR as a proven
-COD or provider-404 fix.
+## Current continuation: product lookup repair
+
+Diagnostic PR #1066 is deployed and verified, with source
+`f42b4917bef5c036197c236445bd1f5e5e02417f` and deployment
+`5040e0adce41bfbecf60aa790b5e4ea529a0e0a8`. Platform reported deployment
+finished at 2026-09-17 17:54 UTC. The guard passed three identity, hash and
+frontend probes and closed the owned lease. Canonical evidence is Issue #1006
+comment 5718921743. No paid platform chat was used.
+
+Fresh production UI evidence identifies `GET /products` in two saved 404
+failures. Read-only COD totals diagnosis also confirms a missing
+`default_cod_fee_product_id` and omission of the explicit fee in a fee-bearing
+sample. The historical COD source repair remains present. Customer data and
+identifiers are intentionally excluded from this record.
+
+Current release source branch: `release/qoyod-product-current-20260917`, based
+on reviewed Production commit `77dd3ec3200f4cd6e27e057cfbbd6009eb4d8fa2`.
+PR #1068 preserves the implementation history: all five reviewed-B workflows
+passed and its isolated remote adapter rehearsal exited 0. Before merge,
+PR #1067 advanced Production; its source is preserved in this new candidate.
+Do not publish #1068's old intent. A new source A and intent-only B are required.
+
+The change repairs the lookup
+mechanism: after filtered 404, or nonmatching rows indicating an ignored
+filter, read a bounded unfiltered catalog and match exact SKU/reference.
+Unknown response shapes, missing/repeated identities, inconsistent totals,
+incomplete pagination, auth/throttle/server/network errors and any unfiltered
+404 remain failures. No 404 is converted directly to absence. A completed
+snapshot is local to the client and invalidated before every product POST,
+including uncertain POST outcomes. Existing first-match behavior is retained.
+
+Focused regression reproductions failed on the old implementation at the
+product lookup seam. The payment freshness CI command now includes both
+manual-client regression modules. Fresh verification and exact source SHA
+are recorded in the next Issue #1006 checkpoint. Initial integration runs
+lacked synthetic encryption/base-URL configuration; with ephemeral test-only
+configuration, the selected payment/idempotency/wire suite passed 23 cases.
+No live provider credentials or network calls were used by these tests.
+
+A separate guarded operational catalog read checked only the Preview
+credential metadata for an exact public fingerprint match to Production.
+No match existed, so it stopped before credential decryption or any Qoyod
+request. Preview data must not be treated as Production evidence. No config
+was copied or changed. A live catalog match still needs verification through
+the correct Production account.
+
+The new product repair is not yet deployed. Actual unfiltered provider
+behavior and live backlog recovery remain unverified. No financial retry,
+invoice/receipt creation, COD mapping save or quarantine release has occurred
+in this task. Verify a real existing COD service product before mapping it;
+never use synthetic test IDs. Preserve the prior financial-retry approval
+review restriction. Deployment/admin authorization persists; only paid agent
+chat is forbidden. Refresh production, CI, ledger and shared lease before
+preparing a fresh A/B intent; never reuse #1066's frozen intent for changed code.
+
+## Historical diagnostic preparation record
+
+The following entries describe the earlier preparation stages and are
+superseded by the current continuation above where deployment status differs.
 
 ## Authorized diagnostic release preparation — 2026-09-17
 
