@@ -74,5 +74,7 @@ jobs:
           tests/test_snapchat_period_diagnostics*.py
           tests/test_snapchat_order_projection.py
           tests/test_snapchat_clickid_attribution.py
+          tests/test_unified_marketing_snapchat_readiness.py
+          tests/test_decision_intelligence_phase5.py
           -q
           --tb=short

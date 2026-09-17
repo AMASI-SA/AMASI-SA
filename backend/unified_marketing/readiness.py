@@ -12,6 +12,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from .contract import CONTRACT_VERSION
+from .attribution import campaign_attribution_complete
 from .gateway import (
     load_unified_marketing_account_identity,
     load_unified_marketing_account_report,
@@ -116,6 +117,8 @@ def evaluate_snapchat_unified_readiness(
         order_summary.get("status") == "complete"
         and not bool(order_summary.get("truncated"))
     )
+    attribution = order_summary.get("campaign_attribution")
+    attribution_complete = campaign_attribution_complete(attribution)
     levels = {
         level: _level_summary(entity_reports.get(level) or {}, level)
         for level in ENTITY_LEVELS
@@ -134,6 +137,7 @@ def evaluate_snapchat_unified_readiness(
         and reconciliation_complete
         and hierarchy_complete
         and commerce_complete
+        and attribution_complete
         and decision_disabled
     )
     reasons: list[str] = []
@@ -147,6 +151,8 @@ def evaluate_snapchat_unified_readiness(
         reasons.append("entity_hierarchy_incomplete")
     if not commerce_complete:
         reasons.append("salla_comparison_incomplete")
+    if not attribution_complete:
+        reasons.append("campaign_attribution_incomplete")
     if not decision_disabled:
         reasons.append("decision_isolation_guard_failed")
     return {
@@ -169,6 +175,7 @@ def evaluate_snapchat_unified_readiness(
             "status": order_summary.get("status"),
             "truncated": bool(order_summary.get("truncated")),
         },
+        "campaign_attribution": attribution,
         "decision_isolation": {
             "passed": decision_disabled,
             "connected": False,

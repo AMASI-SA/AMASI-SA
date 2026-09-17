@@ -230,6 +230,22 @@ def _match_order_campaign(
     return None, "unmatched"
 
 
+def _unmatched_reason(order: dict[str, Any], method: str) -> str:
+    """Explain a failed match without inventing a campaign from a click ID."""
+    if method != "unmatched":
+        return method
+    sources = order.get("raw_by_source")
+    raw = sources.get("salla_direct") if isinstance(sources, dict) else None
+    raw = raw if isinstance(raw, dict) else {}
+    raw_candidates = campaign_id_candidates(raw) + campaign_name_candidates(raw)
+    candidates = raw_candidates if any(
+        not is_salla_clickid_campaign_placeholder(value) for value in raw_candidates
+    ) else campaign_id_candidates(order) + campaign_name_candidates(order) + raw_candidates
+    if any(not is_salla_clickid_campaign_placeholder(value) for value in candidates):
+        return "campaign_not_in_catalog"
+    return "click_reference_only" if candidates else "campaign_identity_missing"
+
+
 async def _to_list(cursor: Any, limit: int) -> list[dict[str, Any]]:
     if hasattr(cursor, "to_list"):
         try:
@@ -298,6 +314,7 @@ async def load_salla_campaign_outcomes(
     to_value = date_to.isoformat()
     included_statuses = list(settings.get("report_included_statuses") or [])
     counters: Counter[str] = Counter()
+    attribution_reasons: Counter[str] = Counter()
     by_campaign: dict[tuple[str, str], dict[str, Any]] = defaultdict(
         lambda: {"orders": 0, "sales_sar": 0.0}
     )
@@ -367,6 +384,8 @@ async def load_salla_campaign_outcomes(
                 account_timezone_snapchat_attributed_sales += amount
                 if key is not None:
                     counters["account_period_campaign_matched_orders_account_timezone"] += 1
+                else:
+                    attribution_reasons[_unmatched_reason(order, match_method)] += 1
                 if financial:
                     counters["snapchat_attributed_financial_orders_account_timezone"] += 1
                     account_timezone_snapchat_attributed_financial_sales += amount
@@ -538,6 +557,16 @@ async def load_salla_campaign_outcomes(
         },
         "summary": {
             "coverage_status": "complete",
+            "campaign_attribution": {
+                "status": "partial" if attribution_reasons else "complete",
+                "evaluated_orders": account_timezone_snapchat_attributed_orders,
+                "matched_orders": account_timezone_campaign_matched_orders,
+                "unmatched_orders": sum(attribution_reasons.values()),
+                "coverage_pct": account_timezone_campaign_match_coverage_pct,
+                "reason_counts": dict(attribution_reasons),
+                "date_scope": "account_timezone",
+                "complete_population": True,
+            },
             "total_salla_created_orders": int(counters["total_salla_created_orders"]),
             "total_financial_orders": int(counters["total_financial_orders"]),
             "total_financial_sales_sar": round(total_financial_sales, 2),

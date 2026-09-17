@@ -188,6 +188,17 @@ class UnifiedCommerceOrder(StrictModel):
     campaign_name: str | None = None
 
 
+class UnifiedCampaignAttribution(StrictModel):
+    status: CoverageStatus
+    evaluated_orders: int = Field(ge=0)
+    matched_orders: int = Field(ge=0)
+    unmatched_orders: int = Field(ge=0)
+    coverage_pct: float | None = Field(default=None, ge=0, le=100)
+    reason_counts: dict[str, int] = Field(default_factory=dict)
+    date_scope: Literal["account_timezone"]
+    complete_population: bool = False
+
+
 class UnifiedCommerceOrderSummary(StrictModel):
     status: CoverageStatus
     source: str
@@ -207,6 +218,7 @@ class UnifiedCommerceOrderSummary(StrictModel):
     orders_returned: int | None = Field(default=None, ge=0)
     truncated: bool = False
     reason: str | None = None
+    campaign_attribution: UnifiedCampaignAttribution | None = None
 
 
 class UnifiedMarketingReport(StrictModel):
