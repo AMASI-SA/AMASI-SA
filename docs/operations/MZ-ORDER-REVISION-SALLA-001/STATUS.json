@@ -1,6 +1,6 @@
 {
   "approval_review": "Owner explicitly approved merge/publication after PR1064 validation. Base then advanced with PR1065/1066; same task rebuilt preserving both. No renewed approval needed for same scope.",
-  "branch": "release/order-console-current-20260917",
+  "branch": "fix/order-revision-eligibility-20260917",
   "completed": [
     "Recovered all original P0 source without content changes; exact original local commit history preserved in the verified recovery bundle",
     "Fixed stale pre-write webhook snapshot with bounded post-write collection",
@@ -20,15 +20,16 @@
   "delivery_commit": "407634facfc4e0be07b47d21ca8b243de563f87f",
   "delivery_method": "GitHub connector; source delivery tree exactly equals the reviewed local checkpoint. Remote commit SHA differs; original remote research parent is retained.",
   "merge": "NOT_PERFORMED",
-  "next_safe_action": "Freeze reviewed CI artifact as intent-only B, verify clean-clone rehearsal and unchanged base/lease, then merge and publish under existing owner approval. Console test remains disabled until verified deployment.",
+  "next_safe_action": "Run broader preparation/tracking regression job, inspect result, then finish provider dispatch + hold/reconciliation lifecycle before activating general editor. No Salla item mutation or production change.",
   "p1": "BLOCKED_BY_REQUIRED_PROVIDER_EVIDENCE",
   "phase": "P0",
-  "production_baseline": "5040e0adce41bfbecf60aa790b5e4ea529a0e0a8",
+  "production_baseline": "f8fae757409b94e84a4994f64297fbfd1f90cb4d",
   "production_changed": false,
   "recovered_source": "684d9c9a8120d2158a02bb955500a415474b1279",
   "recovery_merge": "e9be9ebf1abefb223560477f164f746c3bdbb67f",
   "release_intent": "UNCHANGED",
   "remaining": [
+    "Complete ready-item customer confirmation, audit persistence and authoritative preparation reset with concurrency tests; no direct override is wired yet.",
     "Review and deploy the disabled HTTP bridge through an authorized protocol-v5 release; explicitly enable only for controlled Console test",
     "Complete private fixture/item/product/option bindings and courier/downstream review; owner has confirmed attached receipt is synthetic",
     "Inspect actual shipping/notification/Qoyod automation and verify shipment-read access through the encrypted runtime integration; a successful connector read does not prove that integration token scope",
@@ -59,7 +60,7 @@
     "backend/tests/test_salla_order_item_console.py": "6ec97ab358de1d7def71e1519c7ea7557575494f9a8167bd5eff67f09f35cf67",
     "backend/tests/test_salla_orders_v3_probe.py": "4c4266cd5ab9206ca450de30c245532bbfc4b22bb9a29443c3f07cfcc99b2fb1"
   },
-  "status": "PUBLICATION_AUTHORIZED_REBUILD_ON_NEW_BASE",
+  "status": "WIP_ORDER_STATE_AND_ITEM_READINESS_POLICY",
   "task_id": "MZ-ORDER-REVISION-SALLA-001",
   "updated_at": "2026-09-17",
   "verification": {
@@ -72,7 +73,7 @@
     "python_311_syntax": "PASS for changed Python source and new tests",
     "schema_validation": "FULL_DRAFT202012_VALIDATION_PASS",
     "skipped": 0,
-    "tests": 120,
+    "tests": 129,
     "workflow_yaml": "Console bridge workflow updated; remote execution pending",
     "previous_demo_remote_ci": {
       "status": "PASS",
@@ -102,10 +103,7 @@
       "schema_validation": "PASS"
     },
     "remote_ci": {
-      "status": "NEW_CANDIDATE_PENDING",
-      "previous_verified_head": "cae34f301d710e4ae8c3a9da131f49eea4a6b0e9",
-      "previous_tests": 120,
-      "previous_run_id": 35242846818
+      "status": "PENDING"
     },
     "adjacent_ci": {
       "Snapchat Settings Management V2": "PASS",
@@ -171,5 +169,49 @@
   "pr": {
     "draft": true,
     "state": "NEW_RELEASE_CANDIDATE_PR_PENDING"
+  },
+  "current_policy": {
+    "shipping": "No shipment API, number, courier status, or shipping status participates in Console eligibility. Historical CLI contracts unchanged.",
+    "blocked_order_states": [
+      "completed",
+      "delivering",
+      "delivered"
+    ],
+    "ready_item": "Mezan preparation records produce a confirmation-required warning. Dispatch remains blocked until confirmation and preparation reset workflow is integrated.",
+    "scope": "No fixture-specific exception; owner-only disposable Console remains limited to existing unpaid test manifests. General P1 still pending."
+  },
+  "order_tracking_inline": {
+    "state": "IMPLEMENTED_NOT_DEPLOYED",
+    "behavior": "Reuse tracking notes within OrderDetailsV2, bound to opened order and existing customer-service permission. Original standalone route retained. No item mutation automation added.",
+    "verification": "2 React DOM tests PASS: embedded binding/order switch isolation and standalone search; no writes on opening",
+    "remaining": "Browser visual verification and governed release; full item revision workflow remains WIP"
+  },
+  "customer_service_hold_checkpoint": {
+    "state": "IMPLEMENTED_FOCUSED_TESTS_PASS_NOT_DEPLOYED",
+    "completed": [
+      "Ready-item stop confirmation bound to preparation revision and authenticated staff, stored with instruction time and reason",
+      "Edit/delete stop follows selected item across operational stages; other items unaffected",
+      "Delete-product hold pauses rather than prematurely cancelling the preparation piece",
+      "Physical hold uses conditional per-piece writes to reject concurrent readiness drift",
+      "Preparation eligibility preserves pre-hold readiness for blocked/cancelled legacy holds; Mongo datetime values canonically hashed"
+    ],
+    "tests": {
+      "isolated_revision_contracts": 131,
+      "tracking_hold_contracts": 4,
+      "react_dom": 4
+    },
+    "remaining": [
+      "Broader preparation/tracking regressions",
+      "Full provider dispatch integration with hold lifecycle, authoritative reset and unknown-outcome protection",
+      "Browser verification, fresh release intent, merge/publish, actual Console test"
+    ]
+  },
+  "release_candidate": {
+    "branch": "release/order-tracking-console-20260917",
+    "base": "0cea6ed2f5dc3489510ab30a0f072a09c948fd8e",
+    "scope": "Inline order tracking, CS ready-item stop confirmation, disabled unallocated-line Console bridge. Not general editor.",
+    "production_changed": false,
+    "guard_preflight": "active=false from independent code-server tab",
+    "broader_regressions": "40 PASS in 2.16 seconds; CPJ launcher did not run, direct focused run succeeded"
   }
 }
