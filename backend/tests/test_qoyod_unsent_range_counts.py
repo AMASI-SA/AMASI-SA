@@ -77,7 +77,14 @@ async def test_provider_failure_is_visible_without_changing_send_state(
 
 @pytest.mark.asyncio
 async def test_live_queue_wrapper_retains_failure_and_hides_it_after_reconciliation(db):
-    from qoyod_auto_unified.queue_api import _execute_list
+    from integrations.qoyod_manual import auto_send
+    from integrations.qoyod import unsent_orders
+    from qoyod_auto_unified.queue_api import _reset_query_coordinator_for_tests
+
+    # Exercise the installed public reader exactly once, regardless of which
+    # other test imported the automatic sender during collection.
+    assert auto_send._unified_source_patch_installed is True
+    _reset_query_coordinator_for_tests()
 
     reference = "SYNTHETIC-FAILURE-002"
     await _insert_quarantined(
@@ -89,14 +96,15 @@ async def test_live_queue_wrapper_retains_failure_and_hides_it_after_reconciliat
     )
     # Unified orders can have no legacy inbox projection yet.
     await db.integration_inbox.delete_many({})
-    result = await _execute_list(list_unsent_orders, db, user_id=TENANT, days=30, now=NOW)
+    result = await unsent_orders.list_unsent_orders(db, user_id=TENANT, days=30, now=NOW)
     assert result["orders"][0]["provider_failure"]["endpoint"] == "GET /customers"
     await db.qoyod_invoices.insert_one({
         "user_id": TENANT, "reference": reference,
         "qoyod_official_reference": reference, "reference_provenance": "qoyod.reference",
         "qoyod_invoice_id": "SYNTHETIC-INVOICE-002",
     })
-    result = await _execute_list(list_unsent_orders, db, user_id=TENANT, days=30, now=NOW)
+    _reset_query_coordinator_for_tests()
+    result = await unsent_orders.list_unsent_orders(db, user_id=TENANT, days=30, now=NOW)
     assert result["orders"][0]["status"] == SENT
     assert result["orders"][0]["provider_failure"] is None
     assert result["orders"][0]["retry_allowed"] is False

@@ -50,6 +50,15 @@ Fixtures are synthetic. Tests assert unchanged quarantine/lock state, no new
 invoice, safe field exposure, and suppression after reconciliation. Existing
 Qoyod memory CI already includes all changed test modules.
 
+CI follow-up: the first new source checkpoint passed the Qoyod memory workflow
+but its payment workflow exposed test-order sensitivity in the new integration
+test: the automatic-send bootstrap had already installed the queue wrapper,
+and the test wrapped it again. The test now boots the normal package and calls
+the installed public reader exactly once, clearing only the test query cache
+between the two fixture states. The full eight-module payment workflow command
+passes locally from `backend` (62 tests), and the focused range/eligibility/memory
+group still passes (35). This correction changes tests only, not runtime logic.
+
 Next safe action: review/deploy the diagnostic source through a permitted
 release surface, then inspect one actual saved 404 endpoint/time and one COD
 totals breakdown before selecting either financial-path fix. The existing
