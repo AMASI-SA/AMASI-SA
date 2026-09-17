@@ -8,7 +8,7 @@
     "update_status_after_session": true,
     "work_current_phase_only": true
   },
-  "current_blocker": "P01_preview_acceptance_matrix_and_provider_bank_confirmation_pending",
+  "current_blocker": "Preview_runtime_missing_and_base_build_artifacts_absent",
   "current_phase": "P01",
   "current_phase_file": "PHASE-01-SETTLEMENTS.md",
   "current_phase_status": "IN_PROGRESS",
@@ -165,7 +165,7 @@
       "live_replay": "NOT_EXECUTED; automated idempotency/terminal-state tests are separate evidence",
       "next_action": "Complete and document remaining current Preview P01 scenarios with isolated synthetic drafts; obtain explicit bank confirmation before marking provider links verified. Keep P02 locked.",
       "overall": "PARTIAL",
-      "provider_bank_confirmation": "PENDING: Salla,Tamara,Tabby,Emkan displayed copied/unconfirmed in current UI",
+      "provider_bank_confirmation": "OWNER_CONFIRMED_ALL_ALINMA_2026-09-17; persistence blocked by Preview outage",
       "scenario_5": "PASS: viewer UI plus owner-reported authenticated403 accounting_permission_required",
       "scenario_6": "PASS: authorized synthetic posting, balanced group/evidence opened, both groups reversed and baseline restored",
       "scenarios_1_2_3_4_7_8": "Historical Production PASS exists; full current Preview scenario evidence has not been reconciled. Do not represent historical runs as fresh Preview tests."
@@ -236,7 +236,7 @@
       "required": true,
       "verification": "NOT_YET_COMPLETE"
     },
-    "next_action": "Complete and document remaining current Preview P01 scenarios with isolated synthetic drafts; obtain explicit bank confirmation before marking provider links verified. Keep P02 locked.",
+    "next_action": "Coordinate completion of shared base governed build; verify current HEAD and inactive guard, then run pinned recovery prepare/activate and verify HTTP/login. Do not fabricate identity or remove preflight checks.",
     "order_import": {
       "created": 3,
       "evidence": "owner_authenticated_preview_import_jobs_ui",
@@ -467,23 +467,24 @@
       "production_changed": false
     },
     "runtime_recovery": {
-      "status": "RESTORED_LOGIN_AND_SETTLEMENT_UI_VERIFIED",
+      "status": "BLOCKED_MISSING_BASE_ARTIFACTS_AFTER_RECURRENT_OPT_LOSS",
       "observed_date": "2026-09-17",
-      "source_checkpoint": "72542d8aa0764721f1a2bd575e81cefe2e3f0176",
-      "shared_base": "f8fae757409b94e84a4994f64297fbfd1f90cb4d",
-      "root_cause": "Missing private /opt runtime directories referenced by Supervisor",
-      "prepare": "PASS; Preview Vite build and auth boundary verified",
+      "source_checkpoint": "25250208a1bdf84d9efbce6f5f3df29e28e88af0",
+      "shared_base": "0cea6ed2f5dc3489510ab30a0f072a09c948fd8e",
+      "root_cause": "Supervisor references missing /opt Preview runtime and frontend directories; both FATAL. Base backend/release_identity.json and frontend/build/build-meta.json also absent.",
+      "prepare": "NOT_EXECUTED: current-base preflight stopped at missing base release identity before mutation",
       "tests": "24 passed: ledger lifecycle, Excel projection, import fidelity; 1 multipart deprecation warning",
-      "activate": "PASS; frontend and backend RUNNING",
+      "activate": "NOT_EXECUTED",
       "http_local": "200 Preview metadata and auth policy",
-      "browser": "Normal login succeeded; dashboard and authenticated unified settlement register verified",
+      "browser": "Last observed502; not recovered",
       "data": "2 settlements retained; real6743152 reviewed; synthetic effective status reversed; ledger count6117 unchanged; Emkan drafts/files0",
       "release_guard_active": false,
-      "shared_git_status": "clean",
+      "shared_git_status": "clean at inspection",
       "supervisor_configuration": "unchanged",
       "production_changed": false,
-      "next_action": "Match Emkan statement row to evidenced existing order before review; do not post.",
-      "limitation": "Private runtime recovered from Git; durability of /opt across future platform resets is not guaranteed."
+      "next_action": "Coordinate completion of shared base governed build; verify current HEAD and inactive guard, then run pinned recovery prepare/activate and verify HTTP/login. Do not fabricate identity or remove preflight checks.",
+      "limitation": "Private runtime recovered from Git; durability of /opt across future platform resets is not guaranteed.",
+      "concurrency": "Shared HEAD advanced during diagnosis; another frontend_release_toolchain.py process observed, then exited. Its build outcome unknown; base artifacts still absent."
     },
     "emkan_statement_test": {
       "status": "DRAFT_SAVED_NEEDS_ORDER_MATCH",
