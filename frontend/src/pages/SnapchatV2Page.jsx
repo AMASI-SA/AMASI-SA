@@ -3,6 +3,7 @@ import { ArrowsClockwise, CheckCircle, Clock, Ghost, WarningCircle } from "@phos
 import { toast } from "sonner";
 
 import SnapchatCampaignManagementPanel from "../components/marketing/SnapchatCampaignManagementPanel";
+import SnapchatDecisionReadiness from "../components/marketing/SnapchatDecisionReadiness";
 import { snapchatInlineColumns } from "../components/marketing/SnapchatInlineSettings";
 import UnifiedMarketingEntityTable from "../components/marketing/UnifiedMarketingEntityTable";
 import UnifiedMarketingOrdersPanel from "../components/marketing/UnifiedMarketingOrdersPanel";
@@ -582,6 +583,7 @@ export default function SnapchatV2Page() {
 
             {error && <div className="flex items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 font-bold text-rose-700"><WarningCircle size={22} weight="fill" /> {error}</div>}
 
+            <SnapchatDecisionReadiness accountId={accountId} date={readiness?.period?.date_from} />
             <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
                 <div className="rounded-xl border border-slate-200 bg-white p-4"><div className="text-xs font-bold text-slate-500">الحساب المعتمد</div><div className="mt-2 text-lg font-black">{account?.display_name || "—"}</div><div className="mt-1 truncate text-xs text-slate-500" dir="ltr">{accountId || "—"}</div></div>
                 <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-4"><div className="text-xs font-bold text-amber-700">صرف الفترة</div><div className="mt-2 text-2xl font-black text-amber-950" data-testid="snapchat-v2-spend-headline">{money(accountSpendNative, currency)}</div><div className="mt-1 text-xs font-bold text-amber-700">{appliedRange?.dateFrom || "—"} — {appliedRange?.dateTo || "—"}</div>{hasUnallocatedSpend && <div className="mt-1 text-[11px] font-bold text-amber-800" data-testid="snapchat-v2-unallocated-spend">فرق غير موزع على الساعات: {money(unallocatedSpendNative, currency)}</div>}</div>
