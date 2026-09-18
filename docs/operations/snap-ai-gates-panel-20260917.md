@@ -1,3 +1,7 @@
+# PR1079 merged, deployment pending
+
+All B CI succeeded including releasecleanclone35347624532 andCodeQL35347624571. CloudisolatedB rehearsal /tmp/mezan-snap-ai-1079 exit0. Afe341e1a2db91923c11e521194792d2f1a79f960/B8d6e84928edbc2f799b3a6a992df6f66d5acdb49 mergedMdfe2554f4719645c1cebd4b81fad3ae5d569ccfa. Runtime rg5-7c9f9e6f4f9fe5e35f0c4ba6b5d9a117ce5136085a8a38fe07f41b83d654255f; reviewedbase1c25b0ba.27frontend/143backendtests passed. Artifact10547288536 ZIPdigest e21d54252520a72ca583726af9ed960a503e4a8447e7aad71bc62be1b397007f. No newlease/publishyet. DeployMnotthislaterdoccheckpoint. Nextfreshguard/cleanapp, governedbuild/prepare/prepublish/publish/3verify, thenUIreadactualgates. OverallAIreadinessunproven.
+
 # Readiness endpoint correction — WIP
 
 PR1078 deployed and verified3/3 on M1c25b0ba4da818300c4fb240bbb20a5bcbbe3dda; guardinactive, previewrunning. Live button for2026-09-17 failed HTTP404 confirmed in Production ViewLogs. Backend route mounted under /api/ads-manager, while consumer omitted /ads-manager. Correct consumer URL; regression derives expected URL from backend router declarations/composition rather than another identical mock. Remove misleading owner-login diagnosis from generic error. No backend/auth/gates/writes/scheduler changes. Fresh CI pending; not yet release-ready. OverallAIreadiness unknown. Branchfix/snap-ai-readiness-route-20260918; next CI, v5newintent, cleanclone, merge/deployverify, actuallivegates.
