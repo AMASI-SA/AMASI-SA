@@ -31,5 +31,8 @@ COD handling, or automatic retry policy.
 - Route-level and ambiguous 404 variants remain blocked.
 - The focused product lookup tests and the neighboring Plan-B manual/automatic
   send safety suites must pass before release preparation.
+- The source PR also advances the already-pinned `anyio` dependency from
+  `4.13.0` to the security-gate-required `4.14.2`; the gate reported
+  GHSA-82r6-8w77-94w6 and GHSA-5p39-cfhj-2xmp against `4.13.0`.
 - Production acceptance still requires one normal retry of the same non-COD
   canary, exactly one Qoyod invoice, and no duplicate. COD remains deferred.
