@@ -1,4 +1,5 @@
 import SettlementJournalDialog from "./SettlementJournalDialog";
+import SettlementOriginalFile from "./SettlementOriginalFile";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
     ArrowClockwise,
@@ -481,6 +482,7 @@ export default function AccountingSettlementRegister({ accountingPermissions = [
                                         <div>عدد السطور: <span className="font-mono font-black text-slate-900" dir="ltr">{detail?.evidence?.entry_count || 0}</span></div>
                                         <div>مرجع الملف: <span className="font-mono text-[10px]" dir="ltr">{selectedDraft.source_file_id || "—"}</span></div>
                                     </div>
+                                    <SettlementOriginalFile key={selectedDraft.id} draftId={selectedDraft.id} />
                                     {!!evidenceEntries.length && (
                                         <div className="mt-3 max-h-44 overflow-y-auto rounded-lg border border-slate-100">
                                             {evidenceEntries.slice(0, 20).map((entry) => (
