@@ -312,19 +312,19 @@ class QoyodAPIClient:
         return await self._request("GET", "/taxes")
 
     async def list_product_categories(self) -> Any:
-        """Iter-290i — Qoyod product categories (`/product_categories`).
+        """Iter-290i — Qoyod product categories (`/categories`).
 
         Read-only — used by the Reference-Lists picker so operators
         can choose categories by name instead of typing numeric ids.
         """
-        return await self._request("GET", "/product_categories")
+        return await self._request("GET", "/categories")
 
     async def list_product_units(self) -> Any:
-        """Iter-290i — Qoyod product units (`/product_units`).
+        """Iter-290i — Qoyod product units (`/product_unit_types`).
 
         Read-only — same purpose as `list_product_categories`.
         """
-        return await self._request("GET", "/product_units")
+        return await self._request("GET", "/product_unit_types")
 
     async def list_products(self, *, page: int = 1, limit: int = 50) -> Any:
         """GET /products — used by Go-Live Readiness to estimate how many

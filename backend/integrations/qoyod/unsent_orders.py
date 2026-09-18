@@ -207,6 +207,22 @@ def simplify_row(row: dict, *,
     return {"status": UNSENT, "reason": "بانتظار الإرسال إلى قيود"}
 
 
+def _failure_time(value: Any) -> datetime | None:
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    if not isinstance(value, datetime):
+        return None
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+
+
+def _newer_failure_time(candidate: Any, current: Any) -> bool:
+    candidate, current = _failure_time(candidate), _failure_time(current)
+    return candidate is not None and (current is None or candidate > current)
+
+
 def _provider_failure_evidence(detail: Any, observed_at: Any = None) -> dict | None:
     """Expose only known operation/status/time, never provider payloads or IDs.
 
@@ -618,6 +634,7 @@ async def _manual_failure_evidence(
         return {}
     scan_limit = max(1, int(scan_limit))
     failures: dict[str, dict[str, Any]] = {}
+    evidence_times: dict[str, Any] = {}
     quarantines = getattr(db, "qoyod_manual_auto_quarantines", None)
     if quarantines is not None:
         quarantine_query: dict[str, Any] = {
@@ -629,18 +646,30 @@ async def _manual_failure_evidence(
         cursor = quarantines.find(
             quarantine_query,
             {"_id": 0, "order_number": 1, "code": 1, "message": 1,
-             "detail.endpoint": 1, "detail.status_code": 1, "last_seen_at": 1},
+             "detail.endpoint": 1, "detail.status_code": 1, "last_seen_at": 1,
+             "last_manual_retry_at": 1, "last_manual_retry_error.code": 1,
+             "last_manual_retry_error.detail.endpoint": 1,
+             "last_manual_retry_error.detail.status_code": 1},
         )
         cursor = _bounded_cursor(cursor, scan_limit=scan_limit)
         async for row in cursor:
             reference = str(row.get("order_number") or "").strip()
             if reference:
+                observed_at = row.get("last_seen_at")
+                detail = row.get("detail")
+                retry = row.get("last_manual_retry_error")
+                if isinstance(retry, dict) and retry and _newer_failure_time(
+                    row.get("last_manual_retry_at"), observed_at,
+                ):
+                    observed_at = row.get("last_manual_retry_at")
+                    detail = retry.get("detail")
+                evidence_times[reference] = observed_at
                 failures[reference] = {
                     "source": "auto_quarantine",
                     "code": row.get("code"),
                     "message": row.get("message"),
                     "provider_failure": _provider_failure_evidence(
-                        row.get("detail"), row.get("last_seen_at")),
+                        detail, observed_at),
                 }
     locks = getattr(db, "qoyod_manual_send_locks", None)
     if locks is not None:
@@ -660,9 +689,16 @@ async def _manual_failure_evidence(
         cursor = _bounded_cursor(cursor, scan_limit=scan_limit)
         async for row in cursor:
             reference = str(row.get("order_number") or "").strip()
-            if not reference or reference in failures:
+            if not reference:
                 continue
             error = row.get("last_error") or {}
+            if reference in failures:
+                if _newer_failure_time(row.get("finished_at"), evidence_times.get(reference)):
+                    # Keep quarantine classification/guards; refresh diagnostics only.
+                    failures[reference]["provider_failure"] = _provider_failure_evidence(
+                        error.get("detail"), row.get("finished_at"))
+                    evidence_times[reference] = row.get("finished_at")
+                continue
             failures[reference] = {
                 "source": "manual_send_lock",
                 "code": error.get("code") or row.get("status"),
