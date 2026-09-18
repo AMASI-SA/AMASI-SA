@@ -8,7 +8,7 @@
     "update_status_after_session": true,
     "work_current_phase_only": true
   },
-  "current_blocker": "P01_remaining_acceptance_and_runtime_durability",
+  "current_blocker": "P01_Preview_backend_stopped_by_active_shared_Snap_release_and_remaining_refund_dashboard_acceptance",
   "current_phase": "P01",
   "current_phase_file": "PHASE-01-SETTLEMENTS.md",
   "current_phase_status": "IN_PROGRESS",
@@ -170,7 +170,7 @@
       "scenario_6": "PASS: authorized synthetic posting, balanced group/evidence opened, both groups reversed and baseline restored",
       "scenarios_1_2_3_4_7_8": "Historical Production PASS exists; full current Preview scenario evidence has not been reconciled. Do not represent historical runs as fresh Preview tests."
     },
-    "blocker": "P01_remaining_acceptance_and_Mezan2_independence_not_complete",
+    "blocker": "P01_Preview_backend_stopped_by_active_shared_Snap_release_and_remaining_refund_dashboard_acceptance",
     "continuation": "docs/operations/PREVIEW-REVIEWER-SIGNOUT-20260916.md",
     "current_session_role": "authenticated_dashboard_and_accounting_access_verified",
     "current_session_settlement_view": "PASS_2026-09-18_AFTER_RECOVERY",
@@ -236,7 +236,7 @@
       "required": true,
       "verification": "NOT_YET_COMPLETE"
     },
-    "next_action": "Establish stable Preview backend and recheck retained draft versions17(Tamara)/3(Emkan). Clarify Tabby Company Name discrepancy; continue linked refund-fee/dashboard acceptance. No real posting.",
+    "next_action": "Wait for active codex-snap-ai-readiness-1078-20260918 Release Guard to close; then restore stable Preview backend, reload retained Tamara17 and Emkan3 drafts, and execute dashboard refund-fee acceptance. Clarify Tabby Company Name discrepancy. No real posting.",
     "order_import": {
       "created": 3,
       "evidence": "owner_authenticated_preview_import_jobs_ui",
@@ -494,6 +494,36 @@
           "policy_verified": false
         },
         "dashboard_acceptance": "NOT_EXECUTED"
+      },
+      "linked_salla_evidence_20260918": {
+        "status": "SOURCE_LINKAGE_VERIFIED_DASHBOARD_ACCEPTANCE_PENDING",
+        "tabby": {
+          "orders": 2,
+          "payment_method": "tabby_installment",
+          "salla_status": "restored",
+          "sale_and_return_invoices_present": true,
+          "salla_original_order_totals_sar": [
+            610.47,
+            288.19
+          ],
+          "settlement_refund_events_sar": [
+            267,
+            133
+          ],
+          "settlement_refund_total_sar": 400,
+          "fee_rebate_sar": 19.96,
+          "vat_rebate_sar": 3,
+          "conclusion": "Provider statement records event amounts independently of current fully restored Salla order. Rebate applies to refundable commission and related VAT; fixed and non-refundable components remain on observed rows."
+        },
+        "tamara": {
+          "orders_checked": 4,
+          "exact_provider_reference_linked": true,
+          "statement_refund_total_sar": 697.34,
+          "salla_refund_transactions_present_for_three": true,
+          "one_dispute_event_not_reflected_as_salla_refund_transaction": true,
+          "conclusion": "Statement events must remain source-of-truth accounting events; current order status alone is insufficient."
+        },
+        "production_changed": false
       }
     },
     "runtime_recovery": {
