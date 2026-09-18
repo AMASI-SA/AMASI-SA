@@ -225,7 +225,7 @@
     ],
     "journal_posting_count": 1,
     "journal_posting_count_scope": "Synthetic settlement group only; subsequently reversed. Separate synthetic receivable seed also reversed.",
-    "last_observation": "16 August Tamara orders imported with16 created/0 updated/0 failed; all16 source-verified row matches persist at draft version17 after reload. Net and zero equation difference unchanged. No real posting.",
+    "last_observation": "Tamara16 matches and Emkan exact transaction-reference match verified after reload. Later Preview backend stopped/restarted externally; session verification became unavailable, so final register-wide check blocked.",
     "last_updated_date": "2026-09-18",
     "mezan2_independence": {
       "independent_import_required": true,
@@ -236,7 +236,7 @@
       "required": true,
       "verification": "NOT_YET_COMPLETE"
     },
-    "next_action": "Resolve Emkan source order identity; audit linked refund/capture/fee events and Tabby merchant-heading discrepancy. Complete remaining Preview P01 acceptance. No real posting or invented opening balances.",
+    "next_action": "Establish stable Preview backend and recheck retained draft versions17(Tamara)/3(Emkan). Clarify Tabby Company Name discrepancy; continue linked refund-fee/dashboard acceptance. No real posting.",
     "order_import": {
       "created": 3,
       "evidence": "owner_authenticated_preview_import_jobs_ui",
@@ -464,7 +464,37 @@
         "Unknown policy not automatically treated as zero cost or full retained cost."
       ],
       "close_gate": "Do not mark refund-fee/dashboard accounting acceptance complete without these tests and source linkage.",
-      "production_changed": false
+      "production_changed": false,
+      "current_workbook_audit_20260918": {
+        "tabby": {
+          "partial_refunds": 2,
+          "refund_sar": 400,
+          "fee_rebate_sar": 19.96,
+          "vat_rebate_sar": 3,
+          "nonrefundable_fee_rebate_sar": 0,
+          "fixed_fee_rebate_sar": 0,
+          "original_capture_rows_in_same_statement": false,
+          "merchant_heading_discrepancy": "Company Name differs from store identity in transaction rows; owner/source clarification required."
+        },
+        "tamara": {
+          "refund_events": 4,
+          "refund_sar": 697.34,
+          "new_refund_fee_or_rebate_in_these_rows": 0,
+          "cancellation_events": 3,
+          "cancellation_fee_sar_each": 1.5,
+          "cancellation_vat_sar_each": 0.23,
+          "limitation": "No fee reversal on these rows does not alone prove historical capture commission retention."
+        },
+        "emkan": {
+          "refund_events": 0,
+          "commission_percent": 6.99,
+          "fixed_fee_sar": 1.5,
+          "nonrefundable_rate_field": 69,
+          "nonrefundable_amount": 0,
+          "policy_verified": false
+        },
+        "dashboard_acceptance": "NOT_EXECUTED"
+      }
     },
     "runtime_recovery": {
       "status": "RESTORED_LOGIN_AND_SETTLEMENT_UI_VERIFIED",
@@ -484,10 +514,23 @@
       "production_changed": false,
       "next_action": "Investigate Tamara 16 unmatched rows and Emkan one unmatched row against authorized source; do not fabricate matches. Independently verify refunds and retained/rebated fees; resolve Tabby merchant-heading discrepancy before final review. P01 remains partial; no real posting.",
       "limitation": "Private runtime recovered from Git; durability of /opt across future platform resets is not guaranteed.",
-      "concurrency": "Shared HEAD unchanged at 0cea6ed2f5dc3489510ab30a0f072a09c948fd8e; clean tree; inactive guard; no build process observed before prepare"
+      "concurrency": "Shared HEAD unchanged at 0cea6ed2f5dc3489510ab30a0f072a09c948fd8e; clean tree; inactive guard; no build process observed before prepare",
+      "latest_interruption": {
+        "observed_date": "2026-09-18",
+        "supervisor_events": [
+          "12:35:15 stopped backend exit0",
+          "12:36:12 spawned backend",
+          "12:36:39 stopped backend exit0"
+        ],
+        "timezone": "as shown in Supervisor log; not independently established",
+        "initiator": "unknown; no stop/start issued by this continuation",
+        "shared_worktree": "clean",
+        "release_guard_active": false,
+        "status": "BACKEND_STOPPED_FRONTEND_RUNNING; AUTH_VERIFICATION_UNAVAILABLE"
+      }
     },
     "emkan_statement_test": {
-      "status": "DRAFT_SAVED_NEEDS_ORDER_MATCH",
+      "status": "DRAFT_MATCHED_UI_RELOAD_VERIFIED",
       "file": "BNPL_Settlement_Report_BNPL401146073415.xlsx",
       "rows": 1,
       "gross_sar": 304.64,
@@ -495,11 +538,13 @@
       "commission_vat_sar": 3.42,
       "net_sar": 278.43,
       "equation_difference_sar": 0,
-      "unmatched_rows": 1,
-      "bank_confirmation": "copied/unconfirmed",
+      "unmatched_rows": 0,
+      "bank_confirmation": "owner_confirmed_alinma",
       "source_note": "Nonrefundable commission rate69 with zero amount flagged for source review; not adopted as policy",
       "posted": false,
-      "production_changed": false
+      "production_changed": false,
+      "match_evidence": "Exact UUID equality between statement Order ID and Salla payment_methods.transaction_reference; method emkan_installment, creation date and amount also agree.",
+      "draft_version": 3
     },
     "provider_bank_confirmation": {
       "status": "CONFIRMED_AND_PERSISTED",
