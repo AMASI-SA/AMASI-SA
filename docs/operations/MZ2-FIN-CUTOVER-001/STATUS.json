@@ -165,7 +165,7 @@
       "live_replay": "NOT_EXECUTED; automated idempotency/terminal-state tests are separate evidence",
       "next_action": "Complete and document remaining current Preview P01 scenarios with isolated synthetic drafts; obtain explicit bank confirmation before marking provider links verified. Keep P02 locked.",
       "overall": "PARTIAL",
-      "provider_bank_confirmation": "OWNER_CONFIRMED_ALL_ALINMA_2026-09-17; persistence blocked by Preview outage",
+      "provider_bank_confirmation": "PASS_OWNER_AUTHORIZED_ALL_ALINMA_PERSISTED_UI_RELOAD_2026-09-18",
       "scenario_5": "PASS: viewer UI plus owner-reported authenticated403 accounting_permission_required",
       "scenario_6": "PASS: authorized synthetic posting, balanced group/evidence opened, both groups reversed and baseline restored",
       "scenarios_1_2_3_4_7_8": "Historical Production PASS exists; full current Preview scenario evidence has not been reconciled. Do not represent historical runs as fresh Preview tests."
@@ -225,7 +225,7 @@
     ],
     "journal_posting_count": 1,
     "journal_posting_count_scope": "Synthetic settlement group only; subsequently reversed. Separate synthetic receivable seed also reversed.",
-    "last_observation": "Fresh secure login succeeded. Advanced dashboard and settlement page loaded. Three retained records: Emkan needs processing, synthetic reversed, real Salla reviewed. Tamara/Tabby absent from current unfiltered register; four provider banks copied/unconfirmed.",
+    "last_observation": "Four provider banks approved as Alinma; Tamara and Tabby uploaded as drafts and persisted after reload. No real posting.",
     "last_updated_date": "2026-09-18",
     "mezan2_independence": {
       "independent_import_required": true,
@@ -236,7 +236,7 @@
       "required": true,
       "verification": "NOT_YET_COMPLETE"
     },
-    "next_action": "Persist previously authorized Alinma provider-bank confirmations and resume P01 draft imports/review; no real posting. Runtime durability after future platform resets remains unresolved.",
+    "next_action": "Investigate Tamara 16 unmatched rows and Emkan one unmatched row against authorized source; do not fabricate matches. Independently verify refunds and retained/rebated fees; resolve Tabby merchant-heading discrepancy before final review. P01 remains partial; no real posting.",
     "order_import": {
       "created": 3,
       "evidence": "owner_authenticated_preview_import_jobs_ui",
@@ -482,7 +482,7 @@
       "shared_git_status": "clean at inspection",
       "supervisor_configuration": "unchanged",
       "production_changed": false,
-      "next_action": "Persist previously authorized Alinma provider-bank confirmations and resume P01 draft imports/review; no real posting. Runtime durability after future platform resets remains unresolved.",
+      "next_action": "Investigate Tamara 16 unmatched rows and Emkan one unmatched row against authorized source; do not fabricate matches. Independently verify refunds and retained/rebated fees; resolve Tabby merchant-heading discrepancy before final review. P01 remains partial; no real posting.",
       "limitation": "Private runtime recovered from Git; durability of /opt across future platform resets is not guaranteed.",
       "concurrency": "Shared HEAD unchanged at 0cea6ed2f5dc3489510ab30a0f072a09c948fd8e; clean tree; inactive guard; no build process observed before prepare"
     },
@@ -499,6 +499,48 @@
       "bank_confirmation": "copied/unconfirmed",
       "source_note": "Nonrefundable commission rate69 with zero amount flagged for source review; not adopted as policy",
       "posted": false,
+      "production_changed": false
+    },
+    "provider_bank_confirmation": {
+      "status": "CONFIRMED_AND_PERSISTED",
+      "providers": [
+        "salla",
+        "tamara",
+        "tabby",
+        "emkan"
+      ],
+      "bank": "بنك الإنماء",
+      "date": "2026-09-18",
+      "evidence": "Four cards show bank approved for new settlements after full reload",
+      "production_changed": false
+    },
+    "statement_imports_20260918": {
+      "environment": "isolated Preview",
+      "tamara": {
+        "reference": "P0420741SA260912",
+        "status": "needs_processing",
+        "net_sar": 102702.37,
+        "gross_sar": 113254.76,
+        "refund_sar": 697.34,
+        "commission_sar": 8569.39,
+        "commission_vat_sar": 1285.66,
+        "equation_difference_sar": 0,
+        "unmatched_rows": 16,
+        "posted": false
+      },
+      "tabby": {
+        "reference": "Tabby20260914SAR",
+        "status": "draft",
+        "net_sar": 41133.07,
+        "gross_sar": 45571.12,
+        "refund_sar": 400,
+        "net_commission_sar": 3511.33,
+        "net_commission_vat_sar": 526.72,
+        "equation_difference_sar": 0,
+        "ui_matching_blocker": false,
+        "posted": false
+      },
+      "readback": "Five register entries persist after reload; original Salla reviewed and synthetic reversed preserved",
       "production_changed": false
     }
   },
