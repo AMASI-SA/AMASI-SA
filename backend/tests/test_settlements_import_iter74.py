@@ -135,7 +135,14 @@ def test_tabby_parser_totals():
     assert res["provider"] == "tabby"
     assert res["totals"]["rows"] == 82
     assert abs(res["totals"]["gross"] - 15771.96) < 0.05
-    assert abs(res["totals"]["net"] - 13815.78) < 0.05
+    # 13,815.78 is the sum of order-row transfers in the fixture.
+    # The parser also includes Tabby's statement-level payout fee + VAT.
+    expected_net = (
+        13815.78
+        - res["totals"]["settlement_fee"]
+        - res["totals"]["settlement_fee_vat"]
+    )
+    assert abs(res["totals"]["net"] - expected_net) < 0.05
     assert res["header"]["statement_id"] == "Tabby20260601SAR"
     sample = res["entries"][0]
     assert sample["actual_payment_method"] == "tabby"
