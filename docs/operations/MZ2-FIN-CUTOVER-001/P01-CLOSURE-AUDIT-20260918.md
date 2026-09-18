@@ -44,7 +44,7 @@ PR #1086 is a Preview-only single-sale pilot, supports only Tamara/Emkan, and pi
 - #1085 is Preview restoration tooling based on another Preview branch. Its old pins omit later fixes; do not rerun or merge it blindly. Refresh its pins only after selecting the final accepted composition.
 - #1086 remains separate Preview pilot tooling; do not treat merging it as an operational recognition solution.
 
-Combined candidate base: 1f2923f19ba503017a04677636d75caad8e4df91. Code commits: 83f8d8c2bcad2a72faa466659f9a64c8fa108f82, c72a0ee0f3c8413496e85cde19c6724e1cc72f66, 61a0cc90c2bf97f51c7b01c5db2972e46b365c3e.
+Combined candidate base: 1f2923f19ba503017a04677636d75caad8e4df91. Code commits: 83f8d8c2bcad2a72faa466659f9a64c8fa108f82, c72a0ee0f3c8413496e85cde19c6724e1cc72f66, 485f2fb17b55dd1a233628cf5a316ac2a80937fd.
 
 Validation: 55 targeted backend cases, 20 frontend cases, full optimized Vite build with Preview configuration; #1086 pilot separately 17 cases. Frontend Jest needs module mappings for the existing @ alias and installed Radix conditional subpath. This is not a claim of full pytest.
 
