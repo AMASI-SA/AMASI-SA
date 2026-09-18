@@ -275,12 +275,18 @@ async def _source_review_count(db, owner_id: str, file_id: str) -> int:
     }))
 
 
+def _order_matching_entries(entries):
+    """Provider payout fees are evidence, not merchant orders to match."""
+    return [entry for entry in entries if entry.get("event_type") != "settlement_fee"]
+
+
 async def _unmatched_entries(db, owner_id: str, file_id: str) -> list[dict[str, Any]]:
     return await db.settlement_entries.find(
         {
             "user_id": owner_id,
             "file_id": file_id,
             "matched": {"$ne": True},
+            "event_type": {"$ne": "settlement_fee"},
         },
         {
             "_id": 0,
@@ -344,6 +350,12 @@ async def _recomputed_draft(
         preview = None
     return {
         **draft,
+        "source_snapshot": {
+            **(draft.get("source_snapshot") or {}),
+            "unmatched_entries": _order_matching_entries(
+                (draft.get("source_snapshot") or {}).get("unmatched_entries") or []
+            ),
+        },
         "bank_account_id": (bank or {}).get("id"),
         "bank_account_name": (bank or {}).get("name"),
         "bank_account_type": (bank or {}).get("account_type"),
