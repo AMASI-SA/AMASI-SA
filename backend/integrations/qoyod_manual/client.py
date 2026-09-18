@@ -23,6 +23,8 @@ from typing import Any, Optional
 
 import httpx
 
+from integrations.qoyod.base_url import normalize_qoyod_api_base
+
 
 MEZAN_MANUAL_VERSION = "plan-b-manual-1.0"
 
@@ -37,16 +39,6 @@ _INVOICE_SCAN_DELAY_SECONDS = 0.1
 _PRODUCT_SCAN_PAGE_SIZE = 50
 _PRODUCT_SCAN_MAX_PAGES = 200
 _PRODUCT_SCAN_DELAY_SECONDS = 0.1
-
-# Qoyod's current public API documentation uses api.qoyod.com/2.0.  The
-# production integration still carries the older legacy.qoyod.com base, where
-# the product index now returns 404 even though the same credential may remain
-# valid for the canonical API.  We only fail over after that exact read-only
-# 404.  A successful canonical read promotes this client instance so every
-# subsequent product/invoice/payment call stays on one provider origin.
-_CANONICAL_QOYOD_API_BASE = "https://api.qoyod.com/2.0"
-_LEGACY_QOYOD_HOSTS = {"legacy.qoyod.com", "www.qoyod.com"}
-
 
 def _is_confirmed_empty_list(exc: "ManualQoyodError") -> bool:
     """Recognize Qoyod's documented-by-production empty-list sentinel.
@@ -96,8 +88,8 @@ class ManualQoyodClient:
         if not api_key:
             raise ValueError("Qoyod API key is required")
         self._api_key = api_key
-        self._base_url = (base_url
-                          or os.environ.get("QOYOD_API_BASE", "")).rstrip("/")
+        configured_base = base_url or os.environ.get("QOYOD_API_BASE", "")
+        self._base_url = normalize_qoyod_api_base(configured_base)
         if not self._base_url:
             raise RuntimeError("QOYOD_API_BASE not set")
         self._timeout = timeout
@@ -138,26 +130,6 @@ class ManualQoyodClient:
                     json=json_body,
                     params=params,
                 )
-                if (
-                    method.upper() == "GET"
-                    and path == "/products"
-                    and resp.status_code == 404
-                    and httpx.URL(self._base_url).host in _LEGACY_QOYOD_HOSTS
-                ):
-                    canonical_url = f"{_CANONICAL_QOYOD_API_BASE}{path}"
-                    canonical = await http.request(
-                        method,
-                        canonical_url,
-                        headers=self._headers(idem=idem),
-                        json=json_body,
-                        params=params,
-                    )
-                    # Promote only after an authenticated, successful read.
-                    # Any canonical failure remains visible and cannot be
-                    # misread as a confirmed absence that authorizes a POST.
-                    if 200 <= canonical.status_code < 300:
-                        self._base_url = _CANONICAL_QOYOD_API_BASE
-                    resp = canonical
         except httpx.RequestError as exc:
             raise ManualQoyodError(
                 status_code=0,
