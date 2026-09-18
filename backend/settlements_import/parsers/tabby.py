@@ -22,7 +22,8 @@ Real sample layout (verified — 2026-06):
         col17: Transferred amount
         col18: Transfer Date
     Rows 12..M: data
-    Trailing rows: "Payout fee" line + grand-total row. Skipped.
+    Trailing rows: "Payout fee" line + grand-total row. The payout fee is
+    aggregated into statement totals; the grand-total row is skipped.
 """
 from __future__ import annotations
 
@@ -128,16 +129,35 @@ def parse(workbook: openpyxl.Workbook) -> dict:
     total_net = 0.0
     total_refund_full = 0.0
     total_refund_partial = 0.0
+    settlement_fee = 0.0
+    settlement_fee_vat = 0.0
 
     for r in rows[header_idx + 1:]:
         if not r:
             continue
+        # Tabby stores the per-statement payout charge in a row with no
+        # order number and the label "Payout fee" in Product Type. Keep
+        # it out of per-order matching, but preserve its official fee,
+        # VAT, and net-transfer impact in the statement totals.
+        product_type = to_str(
+            r[cols["product_type"]]
+            if cols.get("product_type") is not None
+            and cols["product_type"] < len(r)
+            else ""
+        )
+        if product_type.strip().lower() == "payout fee":
+            settlement_fee += to_float(r[cols["total_fee"]])
+            if cols.get("vat_amount") is not None:
+                settlement_fee_vat += to_float(r[cols["vat_amount"]])
+            total_net += to_float(r[cols["transferred_amount"]])
+            continue
+
         order_no = to_str(r[cols["order_number"]] if cols["order_number"] < len(r) else "")
         if not order_no:
             continue
         order_no = re.sub(r"\.0+$", "", order_no)
 
-        # Skip totals/summary trailing rows (Payout fee or grand totals)
+        # Skip grand totals and notes; only numeric orders become entries.
         if not order_no.isdigit():
             continue
 
@@ -146,7 +166,6 @@ def parse(workbook: openpyxl.Workbook) -> dict:
         fees = to_float(r[cols["total_fee"]])
         vat = to_float(r[cols.get("vat_amount", -1)]) if cols.get("vat_amount") is not None else 0.0
         net = to_float(r[cols["transferred_amount"]])
-        product_type = to_str(r[cols.get("product_type", -1)]) if cols.get("product_type") is not None else ""
         event_date = _parse_dt(r[cols.get("event_date", -1)] if cols.get("event_date") is not None else None)
         transfer_date = _parse_dt(r[cols.get("transfer_date", -1)] if cols.get("transfer_date") is not None else None)
         commission_rate = to_float(r[cols.get("commission_rate", -1)]) if cols.get("commission_rate") is not None else 0.0
@@ -162,10 +181,11 @@ def parse(workbook: openpyxl.Workbook) -> dict:
         refund_full = 0.0
         refund_partial = 0.0
         if is_refund:
-            if abs(round(abs(net) - gross, 2)) < 0.51:
-                refund_full = abs(net)
+            refund_amount = abs(gross)
+            if abs(round(abs(net) - refund_amount, 2)) < 0.51:
+                refund_full = refund_amount
             else:
-                refund_partial = abs(net)
+                refund_partial = refund_amount
 
         fee_rate = commission_rate  # Tabby already reports the rate (%) directly
 
@@ -189,6 +209,11 @@ def parse(workbook: openpyxl.Workbook) -> dict:
         if is_refund:
             total_refund_full += refund_full
             total_refund_partial += refund_partial
+            # Refund rows carry negative commission/VAT rebates. Include
+            # those in statement totals even though refund entries keep
+            # their per-order fee fields at zero.
+            total_fees += fees
+            total_vat += vat
             total_net += net
         else:
             total_gross += gross
@@ -209,6 +234,8 @@ def parse(workbook: openpyxl.Workbook) -> dict:
             "gross": round(total_gross, 2),
             "fees": round(total_fees, 2),
             "fees_vat": round(total_vat, 2),
+            "settlement_fee": round(settlement_fee, 2),
+            "settlement_fee_vat": round(settlement_fee_vat, 2),
             "net": round(total_net, 2),
             "refund_full": round(total_refund_full, 2),
             "refund_partial": round(total_refund_partial, 2),
