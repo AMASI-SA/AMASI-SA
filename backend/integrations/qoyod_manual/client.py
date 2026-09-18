@@ -48,6 +48,19 @@ _CANONICAL_QOYOD_API_BASE = "https://api.qoyod.com/2.0"
 _LEGACY_QOYOD_HOSTS = {"legacy.qoyod.com", "www.qoyod.com"}
 
 
+def _is_confirmed_empty_list(exc: "ManualQoyodError") -> bool:
+    """Recognize Qoyod's documented-by-production empty-list sentinel.
+
+    Qoyod returns HTTP 404 with ``We found nothing`` for an empty list on
+    some tenants.  Keep this deliberately narrower than a generic 404: route
+    failures such as ``URL not found`` must never authorize a later create.
+    """
+    return (
+        exc.status_code == 404
+        and "we found nothing" in exc.response_excerpt.casefold()
+    )
+
+
 class ManualQoyodError(Exception):
     """Raised for any non-2xx response from Qoyod."""
 
@@ -333,10 +346,18 @@ class ManualQoyodClient:
         seen_ids: set[str] = set()
         expected_count: Optional[int] = None
         for page in range(1, _PRODUCT_SCAN_MAX_PAGES + 1):
-            body = await self._request(
-                "GET", "/products",
-                params={"page": page, "limit": _PRODUCT_SCAN_PAGE_SIZE},
-            )
+            try:
+                body = await self._request(
+                    "GET", "/products",
+                    params={"page": page, "limit": _PRODUCT_SCAN_PAGE_SIZE},
+                )
+            except ManualQoyodError as exc:
+                # On the first unfiltered page, Qoyod's exact empty-list
+                # sentinel confirms that the tenant currently has no
+                # products.  Every other 404 remains unknown/fail-closed.
+                if page == 1 and _is_confirmed_empty_list(exc):
+                    return {}
+                raise
             rows = self._product_rows(body)
             meta = body.get("meta") if isinstance(body, dict) else None
             if isinstance(meta, dict) and "total" in meta:
