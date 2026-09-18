@@ -36,6 +36,9 @@ from integrations.qoyod.write_lock import (
 # exact Mezan build that produced a payload in case of incident.
 MEZAN_VERSION = os.environ.get("MEZAN_VERSION", "1.0.0-qoyod-mvp")
 
+_CANONICAL_QOYOD_API_BASE = "https://api.qoyod.com/2.0"
+_LEGACY_QOYOD_HOSTS = {"legacy.qoyod.com", "www.qoyod.com"}
+
 
 class QoyodAPIError(Exception):
     """Raised for any non-2xx response. Carries the parsed body so the
@@ -247,6 +250,22 @@ class QoyodAPIClient:
                     headers=self._headers(idempotency_key),
                     json=json_body, params=params,
                 )
+                if (
+                    method.upper() == "GET"
+                    and path == "/products"
+                    and resp.status_code == 404
+                    and httpx.URL(self._base_url).host in _LEGACY_QOYOD_HOSTS
+                ):
+                    canonical = await http.request(
+                        method,
+                        f"{_CANONICAL_QOYOD_API_BASE}{path}",
+                        headers=self._headers(idempotency_key),
+                        json=json_body,
+                        params=params,
+                    )
+                    if 200 <= canonical.status_code < 300:
+                        self._base_url = _CANONICAL_QOYOD_API_BASE
+                    resp = canonical
             except httpx.TimeoutException as exc:
                 raise QoyodAPIError(
                     status_code=0, code="qoyod_timeout",
