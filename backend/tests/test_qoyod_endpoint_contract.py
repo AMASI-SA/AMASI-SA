@@ -61,7 +61,7 @@ def test_no_residual_contacts_post_in_api_client_source():
 
 
 @pytest.mark.asyncio
-async def test_product_read_promotes_legacy_client_to_canonical_api(monkeypatch):
+async def test_legacy_base_is_normalized_before_product_read(monkeypatch):
     calls = []
 
     class FakeHTTP:
@@ -77,8 +77,6 @@ async def test_product_read_promotes_legacy_client_to_canonical_api(monkeypatch)
         async def request(self, method, url, **kwargs):
             calls.append(url)
             request = httpx.Request(method, url)
-            if url.startswith("https://legacy.qoyod.com/"):
-                return httpx.Response(404, json={"error": "not found"}, request=request)
             return httpx.Response(
                 200,
                 json={"products": [{"id": 42, "sku": "TARGET"}]},
@@ -95,14 +93,13 @@ async def test_product_read_promotes_legacy_client_to_canonical_api(monkeypatch)
 
     assert body["products"][0]["id"] == 42
     assert calls == [
-        "https://legacy.qoyod.com/api/2.0/products",
         "https://api.qoyod.com/2.0/products",
     ]
     assert client._base_url == "https://api.qoyod.com/2.0"
 
 
 @pytest.mark.asyncio
-async def test_canonical_product_failure_stays_fail_closed(monkeypatch):
+async def test_normalized_canonical_product_failure_stays_fail_closed(monkeypatch):
     class FakeHTTP:
         def __init__(self, *args, **kwargs):
             pass
@@ -115,8 +112,7 @@ async def test_canonical_product_failure_stays_fail_closed(monkeypatch):
 
         async def request(self, method, url, **kwargs):
             request = httpx.Request(method, url)
-            status = 404 if url.startswith("https://legacy.qoyod.com/") else 401
-            return httpx.Response(status, json={"error": "refused"}, request=request)
+            return httpx.Response(401, json={"error": "refused"}, request=request)
 
     monkeypatch.setattr(httpx, "AsyncClient", FakeHTTP)
     client = QoyodAPIClient(
@@ -128,4 +124,4 @@ async def test_canonical_product_failure_stays_fail_closed(monkeypatch):
         await client.list_products(page=1, limit=1)
 
     assert result.value.status_code == 401
-    assert client._base_url == "https://legacy.qoyod.com/api/2.0"
+    assert client._base_url == "https://api.qoyod.com/2.0"

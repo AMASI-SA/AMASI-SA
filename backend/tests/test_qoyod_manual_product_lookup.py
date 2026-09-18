@@ -21,7 +21,7 @@ def provider_error(status=404, response_excerpt="synthetic"):
 
 
 @pytest.mark.asyncio
-async def test_legacy_product_404_promotes_client_to_canonical_api(monkeypatch):
+async def test_legacy_base_is_normalized_before_product_lookup(monkeypatch):
     calls = []
 
     class FakeHTTP:
@@ -37,8 +37,6 @@ async def test_legacy_product_404_promotes_client_to_canonical_api(monkeypatch):
         async def request(self, method, url, **kwargs):
             calls.append((method, url))
             request = httpx.Request(method, url)
-            if url.startswith("https://legacy.qoyod.com/"):
-                return httpx.Response(404, json={"error": "not found"}, request=request)
             if method == "GET":
                 return httpx.Response(
                     200,
@@ -63,7 +61,6 @@ async def test_legacy_product_404_promotes_client_to_canonical_api(monkeypatch):
     )
 
     assert calls == [
-        ("GET", "https://legacy.qoyod.com/api/2.0/products"),
         ("GET", "https://api.qoyod.com/2.0/products"),
         ("POST", "https://api.qoyod.com/2.0/products"),
     ]

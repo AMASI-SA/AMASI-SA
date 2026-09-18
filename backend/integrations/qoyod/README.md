@@ -84,7 +84,7 @@ reconciliation.
 ```text
 QOYOD_TOKEN_ENC_KEY      Fernet key for API key encryption
 QOYOD_TOKEN_ENC_KEY_OLD  optional rotation key (decrypt-only)
-QOYOD_API_BASE           https://www.qoyod.com/api/2.0
+QOYOD_API_BASE           https://api.qoyod.com/2.0
 QOYOD_WEBHOOK_TOKEN      shared secret in Make.com webhook URL
 ```
 
