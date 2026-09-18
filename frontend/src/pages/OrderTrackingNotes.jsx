@@ -63,7 +63,13 @@ const STATUS_LABELS = {
 
 function errorMessage(error) {
     const detail = error?.response?.data?.detail;
-    return detail?.message || detail?.code || error?.message || "تعذر تنفيذ العملية";
+    const messages = {
+        order_fulfillment_blocks_revision: "لا يمكن تعديل المنتجات أو حذفها بعد تم التنفيذ أو أثناء التوصيل أو بعد التسليم.",
+        product_revision_requires_item_scope: "اختر المنتجات المطلوب تعديلها أو حذفها.",
+        ready_item_customer_confirmation_required: "تغيرت حالة تجهيز المنتج؛ حدّث بيانات الطلب وأعد التأكيد.",
+        fulfillment_stop_piece_conflict: "تغيرت حالة تجهيز المنتج أثناء الإيقاف؛ حدّث الطلب وأعد المحاولة.",
+    };
+    return detail?.message || messages[detail?.code] || detail?.code || error?.message || "تعذر تنفيذ العملية";
 }
 
 function formatDate(value) {
@@ -106,6 +112,11 @@ const EMPTY_FORM = {
 export default function OrderTrackingNotes() {
     const [searchParams] = useSearchParams();
     const linkedOrder = (searchParams.get("order") || "").trim();
+    return <OrderTrackingNotesPanel key={linkedOrder} orderNumber={linkedOrder} />;
+}
+
+export function OrderTrackingNotesPanel({ orderNumber = "", embedded = false }) {
+    const linkedOrder = String(orderNumber).trim();
     const [query, setQuery] = useState("");
     const [results, setResults] = useState([]);
     const [searching, setSearching] = useState(false);
@@ -119,6 +130,8 @@ export default function OrderTrackingNotes() {
     const load = useCallback(async (orderNumber) => {
         if (!orderNumber) return;
         setLoading(true);
+        setData(null);
+        setSelectedNumber("");
         try {
             const response = await getTrackedOrder(orderNumber);
             setData(response);
@@ -191,7 +204,20 @@ export default function OrderTrackingNotes() {
         };
         setSaving(true);
         try {
-            await createTrackingInstruction(selectedNumber, payload);
+            try {
+                await createTrackingInstruction(selectedNumber, payload);
+            } catch (error) {
+                const detail = error?.response?.data?.detail;
+                if (detail?.code !== "ready_item_customer_confirmation_required" || !detail.items) throw error;
+                if (!window.confirm(`${detail.message}\nسيتم إيقاف المنتجات المحددة عن التجهيز لتتمكن خدمة العملاء من متابعة طلب العميل.`)) return;
+                const confirmations = Object.fromEntries(Object.entries(detail.items).map(([id, decision]) => [id, {
+                    customer_requested: true,
+                    item_id: id,
+                    preparation_revision: decision.preparation_revision,
+                    reason: payload.note,
+                }]));
+                await createTrackingInstruction(selectedNumber, { ...payload, ready_item_confirmations: confirmations });
+            }
             toast.success("حُفظت التعليمات وربطت بالمراحل المختارة.");
             await load(selectedNumber);
         } catch (error) {
@@ -247,17 +273,19 @@ export default function OrderTrackingNotes() {
         [data],
     );
 
+    const Container = embedded ? "section" : "main";
+    const Heading = embedded ? "h2" : "h1";
     return (
-        <main className="mx-auto max-w-7xl space-y-5 p-3 sm:p-5" dir="rtl" data-testid="order-tracking-notes-page">
+        <Container className={embedded ? "space-y-5" : "mx-auto max-w-7xl space-y-5 p-3 sm:p-5"} dir="rtl" data-testid={embedded ? "order-tracking-notes-panel" : "order-tracking-notes-page"}>
             <header className="rounded-3xl bg-gradient-to-l from-slate-950 via-violet-950 to-violet-800 p-5 text-white shadow-xl">
-                <div className="flex items-start gap-3"><ClockCounterClockwise size={34} weight="duotone" /><div><h1 className="text-2xl font-black">تتبع الطلب وملاحظاته</h1><p className="mt-1 text-sm font-bold text-violet-100">المسار الكامل للطلب ولكل قطعة، وتعليمات خدمة العملاء الملزمة في المرحلة المحددة.</p></div></div>
-                <form onSubmit={search} className="mt-5 flex flex-col gap-2 sm:flex-row">
+                <div className="flex items-start gap-3"><ClockCounterClockwise size={34} weight="duotone" /><div><Heading className="text-2xl font-black">تتبع الطلب وملاحظاته</Heading><p className="mt-1 text-sm font-bold text-violet-100">المسار الكامل للطلب ولكل قطعة، وتعليمات خدمة العملاء الملزمة في المرحلة المحددة.</p></div></div>
+                {!embedded && <form onSubmit={search} className="mt-5 flex flex-col gap-2 sm:flex-row">
                     <div className="relative flex-1"><MagnifyingGlass className="absolute right-4 top-3.5 text-slate-400" size={22} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="رقم الطلب، اسم العميل، أو رقم الجوال" className="h-12 w-full rounded-2xl border-0 bg-white pr-12 pl-4 font-bold text-slate-950 outline-none ring-violet-300 focus:ring-4" /></div>
                     <button disabled={searching} className="h-12 rounded-2xl bg-emerald-500 px-6 font-black text-slate-950 disabled:opacity-50">{searching ? <SpinnerGap className="ml-1 inline animate-spin" /> : null} بحث</button>
-                </form>
+                </form>}
             </header>
 
-            {results.length > 0 && <section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{results.map((row) => <button key={row.order_number} onClick={() => load(row.order_number)} className={`rounded-2xl border p-4 text-right shadow-sm ${selectedNumber === row.order_number ? "border-violet-500 bg-violet-50" : "border-slate-200 bg-white"}`}><div className="font-black">طلب #{row.order_number}</div><div className="mt-1 text-sm font-bold text-slate-600">{row.customer_name || "—"} · {row.shipping_city || "—"}</div><div className="mt-2 text-xs font-black text-violet-700">{row.order_status || "غير محدد"}</div></button>)}</section>}
+            {!embedded && results.length > 0 && <section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{results.map((row) => <button key={row.order_number} onClick={() => load(row.order_number)} className={`rounded-2xl border p-4 text-right shadow-sm ${selectedNumber === row.order_number ? "border-violet-500 bg-violet-50" : "border-slate-200 bg-white"}`}><div className="font-black">طلب #{row.order_number}</div><div className="mt-1 text-sm font-bold text-slate-600">{row.customer_name || "—"} · {row.shipping_city || "—"}</div><div className="mt-2 text-xs font-black text-violet-700">{row.order_status || "غير محدد"}</div></button>)}</section>}
 
             {loading && <div className="flex min-h-64 items-center justify-center"><SpinnerGap size={38} className="animate-spin text-violet-700" /></div>}
 
@@ -275,7 +303,7 @@ export default function OrderTrackingNotes() {
                         <h2 className="flex items-center gap-2 text-lg font-black"><NotePencil size={24} /> إضافة ملاحظة أو مهمة</h2>
                         <label className="mt-4 block text-xs font-black text-slate-600">النطاق<select value={form.scope} onChange={(event) => setForm((current) => ({ ...current, scope: event.target.value, target_ids: [] }))} className="mt-1 h-11 w-full rounded-xl border px-3"><option value="order">الطلب كاملًا</option><option value="item">منتجات محددة</option></select></label>
                         {form.scope === "item" && <div className="mt-3 max-h-52 space-y-2 overflow-y-auto rounded-2xl border bg-slate-50 p-2">{orderItems(data).map((item) => { const id = itemId(item); return <label key={id} className="flex cursor-pointer items-center gap-2 rounded-xl bg-white p-2 text-xs font-black"><input type="checkbox" checked={form.target_ids.includes(id)} onChange={() => toggleTarget(id)} />{itemImage(item) ? <img src={itemImage(item)} alt="" className="h-10 w-10 rounded-lg object-cover" /> : <Package size={30} className="text-slate-300" />}<span>{item.name || "منتج"}</span></label>; })}</div>}
-                        <div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-black text-slate-600">نوع الملاحظة<select value={form.action_type} onChange={(event) => setForm((current) => ({ ...current, action_type: event.target.value }))} className="mt-1 h-11 w-full rounded-xl border px-3">{ACTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="text-xs font-black text-slate-600">الأولوية<select value={form.priority} onChange={(event) => setForm((current) => ({ ...current, priority: event.target.value }))} className="mt-1 h-11 w-full rounded-xl border px-3"><option value="normal">عادية</option><option value="high">مهمة</option><option value="urgent">مستعجلة</option></select></label></div>
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-black text-slate-600">نوع الملاحظة<select value={form.action_type} onChange={(event) => setForm((current) => ({ ...current, action_type: event.target.value, scope: ["edit_product", "delete_product"].includes(event.target.value) ? "item" : current.scope }))} className="mt-1 h-11 w-full rounded-xl border px-3">{ACTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="text-xs font-black text-slate-600">الأولوية<select value={form.priority} onChange={(event) => setForm((current) => ({ ...current, priority: event.target.value }))} className="mt-1 h-11 w-full rounded-xl border px-3"><option value="normal">عادية</option><option value="high">مهمة</option><option value="urgent">مستعجلة</option></select></label></div>
                         {BLOCKING_ACTIONS.has(form.action_type) && <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-black text-rose-900">هذا النوع يوقف المنتج أو الطلب إلزاميًا، ولا يُفتح المسار إلا بعد موافقة خدمة العملاء.</div>}
                         <label className="mt-3 block text-xs font-black text-slate-600">الملاحظة أو المطلوب<textarea rows={4} value={form.note} onChange={(event) => setForm((current) => ({ ...current, note: event.target.value }))} className="mt-1 w-full rounded-xl border p-3 text-sm" placeholder="اكتب المطلوب بوضوح للموظف…" /></label>
                         <div className="mt-3"><div className="text-xs font-black text-slate-600">مرحلة الظهور</div><div className="mt-2 flex max-h-44 flex-wrap gap-2 overflow-y-auto">{STAGES.map(([value, label]) => <button key={value} type="button" onClick={() => toggleStage(value)} className={`rounded-full border px-3 py-1.5 text-xs font-black ${form.target_stages.includes(value) ? "border-violet-700 bg-violet-700 text-white" : "border-slate-300 bg-white text-slate-600"}`}>{label}</button>)}</div></div>
@@ -295,6 +323,6 @@ export default function OrderTrackingNotes() {
                     </div>
                 </section>
             </>}
-        </main>
+        </Container>
     );
 }

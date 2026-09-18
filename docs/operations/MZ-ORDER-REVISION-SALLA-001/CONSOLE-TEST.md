@@ -61,3 +61,32 @@ attempts, intent-before-write, expiry, payment/receipt drift and quarantine.
 They do not prove live Salla permissions, real Mongo failover durability, complete
 live pagination shape, webhook arrival, inventory or downstream behavior. These
 remain required live evidence. The general editor and release are incomplete.
+
+
+## Owner policy update — 2026-09-17 (WIP, not deployed)
+
+Console eligibility no longer requests Salla shipments or examines shipment
+numbers, shipment status or courier state. The legacy research CLI retains its
+historical fixture contracts; it is not the authorized live test executor.
+Completed, delivering and delivered order states prohibit all item mutations.
+The state is checked on preparation and again immediately before execution.
+
+Mezan preparation pieces and workflow items are read for PUT/DELETE. Ready
+items expose an Arabic confirmation warning and remain blocked from dispatch.
+The shared confirmation contract binds customer request, item identity,
+preparation revision, reason and authenticated actor. It is intentionally not
+wired to execution yet: durable audit, service UI and preparation invalidation
+must land together. Do not enable ready-item execution or claim this WIP is a
+finished order editor. POST does not require confirmation for existing ready
+items. Existing test manifest/payment/original-item protections remain.
+
+## Reviewed staged release boundary
+
+This candidate publishes the inline tracking UI and customer-service product
+stop confirmations. The Console test bridge remains disabled by default and
+not a general editor. Until provider read-back plus authoritative preparation
+reconciliation is proven, PUT/DELETE rejects any existing Mezan preparation
+records, including non-ready records. Ready items retain their explicit warning.
+Only unallocated disposable test lines can proceed through the test bridge.
+No shipment scope, shipment status or tracking number is required.
+Actual test writes must use the production browser Console, never a terminal.
