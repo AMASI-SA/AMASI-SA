@@ -377,6 +377,8 @@ async def _create_draft_from_file(
         {"_id": 0},
     )
     if existing:
+        if not source_hash or _clean(existing.get("source_file_hash")) != source_hash:
+            raise HTTPException(409, "settlement_source_conflict")
         return {**existing, "duplicate": True}
 
     selected_bank_id = _clean(bank_account_id) or await _verified_binding_bank_id(
