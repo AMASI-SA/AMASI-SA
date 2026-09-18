@@ -225,7 +225,7 @@
     ],
     "journal_posting_count": 1,
     "journal_posting_count_scope": "Synthetic settlement group only; subsequently reversed. Separate synthetic receivable seed also reversed.",
-    "last_observation": "Four provider banks approved as Alinma; Tamara and Tabby uploaded as drafts and persisted after reload. No real posting.",
+    "last_observation": "16 August Tamara orders imported with16 created/0 updated/0 failed; all16 source-verified row matches persist at draft version17 after reload. Net and zero equation difference unchanged. No real posting.",
     "last_updated_date": "2026-09-18",
     "mezan2_independence": {
       "independent_import_required": true,
@@ -236,7 +236,7 @@
       "required": true,
       "verification": "NOT_YET_COMPLETE"
     },
-    "next_action": "Investigate Tamara 16 unmatched rows and Emkan one unmatched row against authorized source; do not fabricate matches. Independently verify refunds and retained/rebated fees; resolve Tabby merchant-heading discrepancy before final review. P01 remains partial; no real posting.",
+    "next_action": "Resolve Emkan source order identity; audit linked refund/capture/fee events and Tabby merchant-heading discrepancy. Complete remaining Preview P01 acceptance. No real posting or invented opening balances.",
     "order_import": {
       "created": 3,
       "evidence": "owner_authenticated_preview_import_jobs_ui",
@@ -518,14 +518,14 @@
       "environment": "isolated Preview",
       "tamara": {
         "reference": "P0420741SA260912",
-        "status": "needs_processing",
+        "status": "draft",
         "net_sar": 102702.37,
         "gross_sar": 113254.76,
         "refund_sar": 697.34,
         "commission_sar": 8569.39,
         "commission_vat_sar": 1285.66,
         "equation_difference_sar": 0,
-        "unmatched_rows": 16,
+        "unmatched_rows": 0,
         "posted": false
       },
       "tabby": {
@@ -541,6 +541,30 @@
         "posted": false
       },
       "readback": "Five register entries persist after reload; original Salla reviewed and synthetic reversed preserved",
+      "production_changed": false
+    },
+    "august_tamara_order_recovery": {
+      "date": "2026-09-18",
+      "status": "IMPORTED_AND_16_MATCHES_PERSISTED_UI_RELOAD",
+      "source": "Authorized read-only Salla orders and invoices APIs",
+      "source_period": "2026-08-17 to 2026-08-31",
+      "reason": "Missing from September-only order import",
+      "file": "tamara-august-orders-preview.xlsx",
+      "created": 16,
+      "updated": 0,
+      "failed": 0,
+      "unmatched_before": 16,
+      "unmatched_after": 0,
+      "draft_version": 17,
+      "statement_totals_unchanged": true,
+      "net_sar": 102702.37,
+      "equation_difference_sar": 0,
+      "posted": false,
+      "limitations": [
+        "Identity matching does not certify refund-fee accounting.",
+        "Current order amount and original statement capture differ in one case by16.09SAR; refund_action field alone is not proof of completed refund.",
+        "Two source amounts differ by0.01SAR; source values preserved."
+      ],
       "production_changed": false
     }
   },
