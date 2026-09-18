@@ -1,3 +1,7 @@
+# PR1079 deployment started — do not repeat
+
+Governed /app APP1079_BUILD_EXIT=0; prepare/prepublish readytrue for Mdfe2554f4719645c1cebd4b81fad3ae5d569ccfa/Afe341e1a2db91923c11e521194792d2f1a79f960/runtime rg5-7c9f9e6f4f9fe5e35f0c4ba6b5d9a117ce5136085a8a38fe07f41b83d654255f. Leaseactorcodex-snap-ai-readiness-1079-20260918. YesRe-publish authorized/clicked; platformDeploymentStarted Sep18 04:08PM, Publishing. No successyet. Previewbackendpaused with900s autorestart /tmp/snap1079-preview-restart.log. NextwaitnewexplicitLive, restartpreview, guarded3verify andinactivelease, thenliveUIreadiness. No paidagentchat; no ads/financialwrites. Priorcheckpoint follows.
+
 # PR1079 merged, deployment pending
 
 All B CI succeeded including releasecleanclone35347624532 andCodeQL35347624571. CloudisolatedB rehearsal /tmp/mezan-snap-ai-1079 exit0. Afe341e1a2db91923c11e521194792d2f1a79f960/B8d6e84928edbc2f799b3a6a992df6f66d5acdb49 mergedMdfe2554f4719645c1cebd4b81fad3ae5d569ccfa. Runtime rg5-7c9f9e6f4f9fe5e35f0c4ba6b5d9a117ce5136085a8a38fe07f41b83d654255f; reviewedbase1c25b0ba.27frontend/143backendtests passed. Artifact10547288536 ZIPdigest e21d54252520a72ca583726af9ed960a503e4a8447e7aad71bc62be1b397007f. No newlease/publishyet. DeployMnotthislaterdoccheckpoint. Nextfreshguard/cleanapp, governedbuild/prepare/prepublish/publish/3verify, thenUIreadactualgates. OverallAIreadinessunproven.
