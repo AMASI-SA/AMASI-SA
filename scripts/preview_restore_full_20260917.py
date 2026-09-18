@@ -79,7 +79,28 @@ def prepare():
     for relative in changed:
         content = subprocess.check_output(['git', '-C', '/app', 'show', PATCH + ':backend/' + relative])
         (OVERLAY / relative).write_bytes(content)
-    manifest = {'source_sha': PATCH, 'base_sha': BASE, 'files': {
+    shutil.copytree('/app/backend/settlements_import', OVERLAY / 'settlements_import',
+                    ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+    tabby_sha = 'e17ef6dd081bc9b16ff040ae91c212b9b90192fe'
+    test_sha = '08009fb7159bc4ec340ceaec694e88a1ea25f133'
+    (OVERLAY / 'settlements_import/parsers/tabby.py').write_bytes(
+        subprocess.check_output(['git', '-C', '/app', 'show',
+                                 tabby_sha + ':backend/settlements_import/parsers/tabby.py']))
+    test_file = ROOT / 'test_tabby_payout_fee.py'
+    test_file.write_bytes(subprocess.check_output(['git', '-C', '/app', 'show',
+                                                 test_sha + ':backend/tests/test_tabby_payout_fee.py']))
+    test_env = dict(os.environ, PYTHONPATH=str(OVERLAY) + ':/app/backend',
+                    PYTHONDONTWRITEBYTECODE='1')
+    with (ROOT / 'targeted-tests.log').open('w') as log:
+        subprocess.run(['/root/.venv/bin/python', '-B', '-m', 'pytest', '-q',
+                        '-p', 'no:cacheprovider', str(test_file),
+                        '/app/backend/tests/test_mz2_settlements_p01.py',
+                        '/app/backend/tests/test_mz2_settlement_currency_guard_p01.py',
+                        '/app/backend/tests/test_mz2_settlement_identity_p01.py',
+                        '/app/backend/tests/test_mz2_settlement_evidence_guard_p01.py'],
+                       cwd='/app', env=test_env, stdout=log, stderr=subprocess.STDOUT, check=True)
+    manifest = {'source_sha': PATCH, 'base_sha': BASE,
+                'tabby_parser_sha': tabby_sha, 'tabby_test_sha': test_sha, 'files': {
         str(p.relative_to(OVERLAY)): hashlib.sha256(p.read_bytes()).hexdigest()
         for p in sorted(OVERLAY.rglob('*.py'))}}
     (OVERLAY / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
@@ -93,6 +114,10 @@ def prepare():
     sys.path.insert(0, str(excel_root))
 """
     assert adapter.count(needle) == 1
+    server_needle = "    server = importlib.import_module('server')\n"
+    assert adapter.count(server_needle) == 1
+    isolation = "    # Preview only: retain auth installation, omit production startup jobs.\n    require([(f.__module__, f.__name__) for f in server.app.router.on_startup] == [('snapchat_v2.scheduler', 'start'), ('integrations_control_center.snapchat_capi_purchases', 'start'), ('integrations_control_center.ads_auto_sync_scheduler', 'start'), ('campaign_ai_subprocess_scheduler', '_start_campaign_ai_subprocess_scheduler'), ('advertising_product_watch_scheduler_v3', '_start'), ('server', 'on_startup')], 'Unexpected startup handlers')\n    async def isolated_preview_startup():\n        await server.install_process_local_auth_security(server.db)\n        server.app.state.startup_phase = 'preview_isolated_ready'\n        server.app.state.readiness = 'ready'\n        server.process_local_readiness_event.set()\n    server.app.router.on_startup[:] = [isolated_preview_startup]\n    import ipaddress\n    def preview_egress_guard(event, args):\n        if event not in {'socket.connect', 'socket.sendto'}:\n            return\n        address = args[-1]\n        if isinstance(address, str):\n            return  # Unix local socket\n        host = address[0]\n        try:\n            allowed = ipaddress.ip_address(host).is_loopback\n        except ValueError:\n            allowed = host == 'localhost'\n        if not allowed:\n            raise PermissionError('Preview external network is disabled')\n    sys.addaudithook(preview_egress_guard)\n    try:\n        preview_egress_guard('socket.connect', (None, ('203.0.113.1', 443)))\n    except PermissionError:\n        pass\n    else:\n        raise RuntimeError('Preview egress isolation failed')\n    print('PREVIEW_ISOLATION: external network denied; automatic workers disabled', flush=True)\n"
+    adapter = adapter.replace(server_needle, server_needle + isolation)
     (ROOT / 'preview_password_runtime.py').write_text(adapter.replace(needle, needle + addition))
     subprocess.run(['cp', '-a', '--reflink=auto', '/app/frontend/node_modules', str(FRONT / 'frontend/node_modules')], check=True)
     env = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'LANG': 'C.UTF-8', 'NODE_ENV': 'production', 'REACT_APP_BACKEND_URL': ORIGIN}
@@ -104,7 +129,9 @@ def prepare():
     assert not (FRONT / 'frontend/build/build-meta.json').exists()
     meta = {'environment': 'preview', 'api_origin': ORIGIN, 'source_git_sha': FRONTEND_BASE,
             'source_patch_git_sha': PATCH, 'backend_base_git_sha': BASE, 'overlay_source_git_sha': PATCH,
-            'index_sha256': hashlib.sha256(index.read_bytes()).hexdigest(), 'contains_production_release_identity': False}
+            'index_sha256': hashlib.sha256(index.read_bytes()).hexdigest(), 'contains_production_release_identity': False,
+            'tabby_parser_sha': tabby_sha, 'tabby_test_sha': test_sha,
+            'external_network': 'denied', 'automatic_workers': 'disabled'}
     (FRONT / 'frontend/build/preview-meta.json').write_text(json.dumps(meta, indent=2) + '\n')
     (ROOT / 'frontend/build').mkdir(parents=True)
     (ROOT / 'frontend/build/preview-meta.json').write_text(json.dumps(meta) + '\n')
