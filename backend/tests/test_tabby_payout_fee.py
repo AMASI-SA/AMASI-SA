@@ -25,7 +25,7 @@ def _tabby_workbook_with_payout_fee():
     ws.append(["Settlement Report"])
     ws.append(["Date", "14/09/2026"])
     ws.append(["Statement #", "Tabby20260914SAR"])
-    while ws.max_row < 10:
+    for _ in range(10 - ws.max_row):
         ws.append([])
     ws.append(HEADERS)
     ws.append([
