@@ -1,3 +1,7 @@
+## Verified source checkpoint 3e201bb284ca63f353377e8a20688b948d1281c5 (PR1077)
+
+CI: 26 frontend tests passed (3 suites),143 backend tests passed; Security Gate and Mezan Release Readiness succeeded. Old settings-only scope guard failed because it does not list the new approved page dependency, its tests, reporting test workflow or task doc. Exact-path registration now adds only those four paths; no wildcard, no suppression, no gate removal. Local execution of its rejection logic accepts that UI surface and still rejects backend DI, Snapchat reporting routes and Dashboard source (4 checks passed). Existing settings regressions remain enabled. Next run fresh combined CI then freeze v5 intent. Production unchanged; no live Phase5 evidence yet.
+
 # Snapchat decision readiness inspection
 
 Task: continue Snapchat readiness for Decision Intelligence. Branch: fix/snap-ai-gates-panel-20260917. Base: reviewed/deployed PR1074 merge 0cea6ed2f5dc3489510ab30a0f072a09c948fd8e. Prior task checkpoint b9b61ffa354c4c2c0853a9bb8e2854d39b0fc5b1 and Issue1006 comment5722028541 read and compared; remote Production still matches base.

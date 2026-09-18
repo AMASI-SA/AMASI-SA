@@ -71,6 +71,8 @@ jobs:
               backend/tests/test_snapchat_management_safety_regressions_v1.py|\
               frontend/src/pages/SnapchatV2Page.jsx|\
               frontend/src/pages/SnapchatV2Page.test.jsx|\
+              frontend/src/components/marketing/SnapchatDecisionReadiness.jsx|\
+              frontend/src/components/marketing/SnapchatDecisionReadiness.test.jsx|\
               frontend/src/components/marketing/SnapchatCampaignManagementPanel.jsx|\
               frontend/src/components/marketing/SnapchatCampaignManagementPanel.test.jsx|\
               frontend/src/components/marketing/SnapchatEntitySettingsTable.jsx|\
@@ -103,6 +105,8 @@ jobs:
               backend/tests/test_snapchat_management_safety_regressions_v1.py|\
               frontend/src/pages/SnapchatV2Page.jsx|\
               frontend/src/pages/SnapchatV2Page.test.jsx|\
+              frontend/src/components/marketing/SnapchatDecisionReadiness.jsx|\
+              frontend/src/components/marketing/SnapchatDecisionReadiness.test.jsx|\
               frontend/src/components/marketing/SnapchatCampaignManagementPanel.jsx|\
               frontend/src/components/marketing/SnapchatCampaignManagementPanel.test.jsx|\
               frontend/src/components/marketing/SnapchatEntitySettingsTable.jsx|\
@@ -119,6 +123,8 @@ jobs:
               release/release-intent-v5.json|\
               docs/operations/SNAP-SETTINGS-RECOVERY-20260916.md|\
               docs/operations/SNAP-INLINE-SETTINGS-20260916.md|\
+              docs/operations/snap-ai-gates-panel-20260917.md|\
+              .github/workflows/snapchat-reporting-v2.yml|\
               .github/workflows/snapchat-settings-management-v2.yml)
                 ;;
               *)
