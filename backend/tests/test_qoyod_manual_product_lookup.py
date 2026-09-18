@@ -12,9 +12,11 @@ def client():
     return ManualQoyodClient(api_key="synthetic", base_url="https://qoyod.invalid")
 
 
-def provider_error(status=404):
+def provider_error(status=404, response_excerpt="synthetic"):
     return ManualQoyodError(
-        status_code=status, endpoint="GET /products", response_excerpt="synthetic"
+        status_code=status,
+        endpoint="GET /products",
+        response_excerpt=response_excerpt,
     )
 
 
@@ -118,6 +120,110 @@ async def test_filtered_404_does_not_hide_catalog_failure(client, monkeypatch, s
     with pytest.raises(ManualQoyodError) as result:
         await client.find_product_by_sku("TARGET")
     assert result.value.status_code == status
+
+
+@pytest.mark.asyncio
+async def test_exact_qoyod_empty_list_sentinel_confirms_empty_catalog(
+    client, monkeypatch
+):
+    calls = []
+
+    async def request(method, path, **kwargs):
+        calls.append(kwargs["params"])
+        if "q[sku_eq]" in kwargs["params"]:
+            raise provider_error(404, "{'error': 'We found nothing'}")
+        raise provider_error(404, "{'error': 'We found nothing'}")
+
+    monkeypatch.setattr(client, "_request", request)
+
+    assert await client.find_product_by_sku("TARGET") is None
+    assert calls == [
+        {"q[sku_eq]": "TARGET", "limit": 5},
+        {"page": 1, "limit": 50},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_confirmed_empty_catalog_allows_one_guarded_product_create(
+    monkeypatch,
+):
+    calls = []
+
+    class FakeHTTP:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def request(self, method, url, **kwargs):
+            calls.append((method, url, kwargs.get("params")))
+            request = httpx.Request(method, url)
+            if method == "GET":
+                return httpx.Response(
+                    404,
+                    json={"error": "We found nothing"},
+                    request=request,
+                )
+            return httpx.Response(
+                201,
+                json={"product": {"id": 43, "sku": "TARGET"}},
+                request=request,
+            )
+
+    monkeypatch.setattr(httpx, "AsyncClient", FakeHTTP)
+    client = ManualQoyodClient(
+        api_key="synthetic",
+        base_url="https://api.qoyod.com/2.0",
+    )
+
+    assert await client.find_product_by_sku("TARGET") is None
+    created = await client.create_product(
+        {"product": {"sku": "TARGET"}},
+        idem="synthetic-idem",
+    )
+
+    assert created["product"]["id"] == 43
+    assert calls == [
+        (
+            "GET",
+            "https://api.qoyod.com/2.0/products",
+            {"q[sku_eq]": "TARGET", "limit": 5},
+        ),
+        (
+            "GET",
+            "https://api.qoyod.com/2.0/products",
+            {"page": 1, "limit": 50},
+        ),
+        ("POST", "https://api.qoyod.com/2.0/products", None),
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "response_excerpt",
+    [
+        "{'error': 'URL not found'}",
+        "{'error': 'Not found'}",
+        "<html>404</html>",
+    ],
+)
+async def test_other_first_page_404s_remain_fail_closed(
+    client, monkeypatch, response_excerpt
+):
+    async def request(method, path, **kwargs):
+        if "q[sku_eq]" in kwargs["params"]:
+            raise provider_error(404)
+        raise provider_error(404, response_excerpt)
+
+    monkeypatch.setattr(client, "_request", request)
+
+    with pytest.raises(ManualQoyodError) as result:
+        await client.find_product_by_sku("TARGET")
+    assert result.value.response_excerpt == response_excerpt
 
 
 @pytest.mark.asyncio
