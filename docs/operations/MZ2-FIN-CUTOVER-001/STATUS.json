@@ -8,7 +8,7 @@
     "update_status_after_session": true,
     "work_current_phase_only": true
   },
-  "current_blocker": "Preview_restored_login_and_remaining_P01_acceptance_pending",
+  "current_blocker": "P01_remaining_acceptance_and_runtime_durability",
   "current_phase": "P01",
   "current_phase_file": "PHASE-01-SETTLEMENTS.md",
   "current_phase_status": "IN_PROGRESS",
@@ -172,8 +172,8 @@
     },
     "blocker": "P01_remaining_acceptance_and_Mezan2_independence_not_complete",
     "continuation": "docs/operations/PREVIEW-REVIEWER-SIGNOUT-20260916.md",
-    "current_session_role": "fresh_login_required_after_runtime_recovery",
-    "current_session_settlement_view": "PASS_AFTER_RELOAD",
+    "current_session_role": "authenticated_dashboard_and_accounting_access_verified",
+    "current_session_settlement_view": "PASS_2026-09-18_AFTER_RECOVERY",
     "excel_projection": {
       "all_rows_mapping_errors": 0,
       "base_sha": "836d36b831c1cd8aa9915f543f159b4e160ea438",
@@ -225,8 +225,8 @@
     ],
     "journal_posting_count": 1,
     "journal_posting_count_scope": "Synthetic settlement group only; subsequently reversed. Separate synthetic receivable seed also reversed.",
-    "last_observation": "Fresh browser read: unified register contains reversed synthetic settlement and reviewed real6743152. Four provider bank cards remain copied/unconfirmed. Shipping bank links show3/3confirmed. No financial action performed.",
-    "last_updated_date": "2026-09-17",
+    "last_observation": "Fresh secure login succeeded. Advanced dashboard and settlement page loaded. Three retained records: Emkan needs processing, synthetic reversed, real Salla reviewed. Tamara/Tabby absent from current unfiltered register; four provider banks copied/unconfirmed.",
+    "last_updated_date": "2026-09-18",
     "mezan2_independence": {
       "independent_import_required": true,
       "legacy_analysis_dependency_allowed": false,
@@ -236,7 +236,7 @@
       "required": true,
       "verification": "NOT_YET_COMPLETE"
     },
-    "next_action": "Normal owner login on restored Preview; inspect retained drafts before any upload. Resolve runtime durability separately; no Production publish.",
+    "next_action": "Persist previously authorized Alinma provider-bank confirmations and resume P01 draft imports/review; no real posting. Runtime durability after future platform resets remains unresolved.",
     "order_import": {
       "created": 3,
       "evidence": "owner_authenticated_preview_import_jobs_ui",
@@ -467,7 +467,7 @@
       "production_changed": false
     },
     "runtime_recovery": {
-      "status": "RESTORED_HTTP_AND_PUBLIC_LOGIN_VERIFIED",
+      "status": "RESTORED_LOGIN_AND_SETTLEMENT_UI_VERIFIED",
       "observed_date": "2026-09-18",
       "source_checkpoint": "3a8226ea7a801e91b42747ad3722ae344a923c1c",
       "shared_base": "0cea6ed2f5dc3489510ab30a0f072a09c948fd8e",
@@ -476,13 +476,13 @@
       "tests": "24 passed: ledger lifecycle, Excel projection, import fidelity; 1 multipart deprecation warning",
       "activate": "PASS: frontend/backend started and RUNNING",
       "http_local": "200 Preview metadata and auth policy; Preview API origin confirmed",
-      "browser": "Public dashboard route resolves to normal Mezan login after retry; authenticated acceptance pending",
-      "data": "No financial mutations by recovery. Database records not freshly inspected this turn.",
+      "browser": "Secure login succeeded; dashboard and settlement page loaded with three retained entries.",
+      "data": "UI verified three retained settlement records; no financial mutation by recovery.",
       "release_guard_active": false,
       "shared_git_status": "clean at inspection",
       "supervisor_configuration": "unchanged",
       "production_changed": false,
-      "next_action": "Normal owner login on restored Preview; inspect retained drafts before any upload. Resolve runtime durability separately; no Production publish.",
+      "next_action": "Persist previously authorized Alinma provider-bank confirmations and resume P01 draft imports/review; no real posting. Runtime durability after future platform resets remains unresolved.",
       "limitation": "Private runtime recovered from Git; durability of /opt across future platform resets is not guaranteed.",
       "concurrency": "Shared HEAD unchanged at 0cea6ed2f5dc3489510ab30a0f072a09c948fd8e; clean tree; inactive guard; no build process observed before prepare"
     },
