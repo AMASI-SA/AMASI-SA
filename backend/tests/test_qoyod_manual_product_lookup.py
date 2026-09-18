@@ -1,6 +1,7 @@
 """Product lookup must confirm a SKU or a complete absence before creation."""
 from __future__ import annotations
 
+import httpx
 import pytest
 
 from integrations.qoyod_manual.client import ManualQoyodClient, ManualQoyodError
@@ -15,6 +16,55 @@ def provider_error(status=404):
     return ManualQoyodError(
         status_code=status, endpoint="GET /products", response_excerpt="synthetic"
     )
+
+
+@pytest.mark.asyncio
+async def test_legacy_product_404_promotes_client_to_canonical_api(monkeypatch):
+    calls = []
+
+    class FakeHTTP:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def request(self, method, url, **kwargs):
+            calls.append((method, url))
+            request = httpx.Request(method, url)
+            if url.startswith("https://legacy.qoyod.com/"):
+                return httpx.Response(404, json={"error": "not found"}, request=request)
+            if method == "GET":
+                return httpx.Response(
+                    200,
+                    json={"products": [{"id": 42, "sku": "TARGET"}]},
+                    request=request,
+                )
+            return httpx.Response(
+                201,
+                json={"product": {"id": 43, "sku": "NEW"}},
+                request=request,
+            )
+
+    monkeypatch.setattr(httpx, "AsyncClient", FakeHTTP)
+    client = ManualQoyodClient(
+        api_key="synthetic",
+        base_url="https://legacy.qoyod.com/api/2.0",
+    )
+
+    assert (await client.find_product_by_sku("TARGET"))["id"] == 42
+    await client.create_product(
+        {"product": {"sku": "NEW"}}, idem="synthetic-idem"
+    )
+
+    assert calls == [
+        ("GET", "https://legacy.qoyod.com/api/2.0/products"),
+        ("GET", "https://api.qoyod.com/2.0/products"),
+        ("POST", "https://api.qoyod.com/2.0/products"),
+    ]
 
 
 @pytest.mark.asyncio
