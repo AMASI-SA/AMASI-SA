@@ -263,7 +263,7 @@ async def _draft_or_404(db, owner_id: str, draft_id: str) -> dict[str, Any]:
     )
     if not doc:
         raise HTTPException(404, "مسودة التسوية غير موجودة")
-    return doc
+    return _draft_matching_view(doc)
 
 
 async def _source_review_count(db, owner_id: str, file_id: str) -> int:
@@ -278,6 +278,12 @@ async def _source_review_count(db, owner_id: str, file_id: str) -> int:
 def _order_matching_entries(entries):
     """Provider payout fees are evidence, not merchant orders to match."""
     return [entry for entry in entries if entry.get("event_type") != "settlement_fee"]
+
+
+def _draft_matching_view(draft):
+    snapshot = draft.get("source_snapshot") or {}
+    return {**draft, "source_snapshot": {**snapshot, "unmatched_entries":
+        _order_matching_entries(snapshot.get("unmatched_entries") or [])}}
 
 
 async def _unmatched_entries(db, owner_id: str, file_id: str) -> list[dict[str, Any]]:
@@ -679,7 +685,7 @@ def install_accounting_settlement_routes(router, db, current_user):
         docs = await db.accounting_settlements_v2.find(
             query, {"_id": 0}
         ).sort("updated_at", -1).to_list(limit)
-        return {"items": docs, "count": len(docs)}
+        return {"items": [_draft_matching_view(doc) for doc in docs], "count": len(docs)}
 
     @router.get("/accounting-module/settlements/drafts/{draft_id}")
     async def get_settlement_draft(
