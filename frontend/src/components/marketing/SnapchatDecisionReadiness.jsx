@@ -32,7 +32,7 @@ export default function SnapchatDecisionReadiness({ accountId, date }) {
         const current = ++request.current;
         setState({ status: "loading" });
         try {
-            const { data } = await api.get("/decision-intelligence/phase5/shadow", {
+            const { data } = await api.get("/ads-manager/decision-intelligence/phase5/shadow", {
                 params: { provider: "snapchat_ads", date_from: date, date_to: date, max_candidates: 1 },
             });
             if (request.current !== current) return;
@@ -58,7 +58,7 @@ export default function SnapchatDecisionReadiness({ accountId, date }) {
                 {state.status === "loading" ? "جارٍ فحص الجاهزية…" : "فحص جاهزية الذكاء"}
             </button>
         </div>
-        {state.status === "error" && <p role="alert" className="mt-3 text-sm text-red-700">تعذر التحقق من جاهزية هذا الحساب والفترة. يلزم دخول المالك وإعادة الفحص.</p>}
+        {state.status === "error" && <p role="alert" className="mt-3 text-sm text-red-700">تعذر التحقق من جاهزية هذا الحساب والفترة. أعد المحاولة؛ نتيجة الجاهزية لم تُحدّد.</p>}
         {data && <div className="mt-3" aria-live="polite">
             <p className={`font-bold ${ready ? "text-emerald-700" : "text-amber-800"}`}>{ready ? "اجتازت الفترة شروط البيانات للتوصيات التجريبية" : "الجاهزية غير مكتملة"}</p>
             <ul className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
