@@ -48,8 +48,8 @@ describe("SnapchatDecisionReadiness", () => {
         const route = read("decision_intelligence/routes.py");
         expect(server).toContain("api.include_router(make_ads_manager_router(db, current_user))");
         expect(composition).toContain("attach_decision_intelligence_phase5_routes(");
-        const prefix = router.match(/APIRouter\\(\\s*prefix="([^"]+)"/)[1];
-        const endpoint = route.match(/@router\\.get\\("([^"]+)"/)[1];
+        const prefix = router.split('prefix="')[1].split('"')[0];
+        const endpoint = route.split('@router.get("')[1].split('"')[0];
         api.get.mockResolvedValue({ data: response() });
         await render(); await click();
         expect(api.get.mock.calls[0][0]).toBe(prefix + endpoint);
