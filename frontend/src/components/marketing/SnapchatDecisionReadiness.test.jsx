@@ -1,4 +1,6 @@
 import React, { act } from "react";
+import { readFileSync } from "fs";
+import path from "path";
 import { createRoot } from "react-dom/client";
 import api from "../../lib/api";
 import SnapchatDecisionReadiness from "./SnapchatDecisionReadiness";
@@ -31,11 +33,26 @@ describe("SnapchatDecisionReadiness", () => {
         await render();
         expect(api.get).not.toHaveBeenCalled();
         await click();
-        expect(api.get).toHaveBeenCalledWith("/decision-intelligence/phase5/shadow", { params: {
+        expect(api.get).toHaveBeenCalledWith("/ads-manager/decision-intelligence/phase5/shadow", { params: {
             provider: "snapchat_ads", date_from: date, date_to: date, max_candidates: 1,
         } });
         expect(container.textContent).toContain("اجتازت الفترة شروط البيانات للتوصيات التجريبية");
         expect(container.textContent).toContain("لا تعني تفعيل الربط أو التنفيذ الآلي");
+    });
+    test("request matches the backend router mount rather than a mocked URL", async () => {
+        const backend = path.resolve(process.cwd(), "../backend");
+        const read = file => readFileSync(path.join(backend, file), "utf8");
+        const server = read("server.py");
+        const composition = read("ads_manager/__init__.py");
+        const router = read("ads_manager/routes.py");
+        const route = read("decision_intelligence/routes.py");
+        expect(server).toContain("api.include_router(make_ads_manager_router(db, current_user))");
+        expect(composition).toContain("attach_decision_intelligence_phase5_routes(");
+        const prefix = router.split('prefix="')[1].split('"')[0];
+        const endpoint = route.split('@router.get("')[1].split('"')[0];
+        api.get.mockResolvedValue({ data: response() });
+        await render(); await click();
+        expect(api.get.mock.calls[0][0]).toBe(prefix + endpoint);
     });
     test("reports actual blockers and counts without declaring incomplete evidence ready", async () => {
         const data = response();
