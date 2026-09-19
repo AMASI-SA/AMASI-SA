@@ -23,7 +23,7 @@ export default function AccountingCustomerRefunds({ accountingPermissions = [] }
     const [error, setError] = useState("");
     const [busy, setBusy] = useState(false);
     const can = p => accountingPermissions.includes("accounting.refunds." + p);
-    async function load() { setData((await api.get(base, { params: { order_number: order } })).data); }
+    async function load() { setData({ originals: [], banks: [], cases: [], payments: [], ...(await api.get(base, { params: { order_number: order } })).data }); }
     async function run(work) {
         setError(""); setBusy(true);
         try { await work(); await load(); }
@@ -37,7 +37,7 @@ export default function AccountingCustomerRefunds({ accountingPermissions = [] }
         let binary = ""; for (const byte of new Uint8Array(bytes)) binary += String.fromCharCode(byte);
         setProof({ proof_name: file.name, proof_base64: btoa(binary) });
     }
-    const instant = date + "T00:00:00+03:00";
+    const instant = date + "T00:00:00Z";
     async function download(row) {
         const response = await api.get(base + "/bank-payments/" + row.id + "/proof", { responseType: "blob" });
         const url = URL.createObjectURL(response.data); const link = document.createElement("a");

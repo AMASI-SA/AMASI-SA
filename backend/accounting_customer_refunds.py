@@ -182,8 +182,9 @@ async def post_bank_payment(db, *, owner, actor, payment_id):
                 original_provider=row['original_provider'],execution_channel=channel,proof_sha256=payment['proof_sha256'],
                 paid_at=payment['paid_at'],sales_tax=tax))
         paid=Decimal(row['paid'])+Decimal(payment['amount']);remaining=Decimal(row['amount'])-paid
+        cumulative_tax={**tax, **{field:format(Decimal(tax[field])+Decimal((row.get('tax') or {}).get(field,'0')),'.2f') for field in ('gross','net','tax')}}
         changes=dict(paid=format(paid,'.2f'),remaining=format(remaining,'.2f'),state='paid' if remaining==0 else 'partially_paid',
-            recognized=True,tax=tax)
+            recognized=True,tax=cumulative_tax)
         if not row['recognized']:
             changes['due_txn_group_id']=result['txn_group_id']
         await scoped.mz2_customer_refunds.update_one({'_id':row['_id']},{'$set':changes})

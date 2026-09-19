@@ -4,6 +4,7 @@ import api from "../../lib/api";
 const BASE = "/financial-provider-apps/accounting-module";
 const reasons = {
     refund_identity_required: "تحتاج مراجعة: معرف الاسترداد المالي الأصلي مفقود؛ رقم الطلب وحده لا يكفي",
+    refund_requires_daily_movement_approval: "بانتظار تسجيل الاسترداد واعتماده من الحركات المالية اليومية؛ تحديث الطلب والكشف لا يرحّلان الاسترداد",
     sales_tax_not_configured_for_date: "لم تُدخل نسبة ضريبة سارية في تاريخ الاعتراف",
     recognition_cutoff_not_configured: "لم يُحدد تاريخ قطع لهذا المسار",
     payment_evidence_missing: "دليل الدفع غير موجود",
