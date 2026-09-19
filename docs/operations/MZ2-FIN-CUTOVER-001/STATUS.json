@@ -9,8 +9,8 @@
   "current_phase": "P01",
   "current_phase_file": "PHASE-01-SETTLEMENTS.md",
   "current_phase_status": "IN_PROGRESS",
-  "next_allowed_action": "restore_access_read_current_guard_and_own_reservation_then_verify_isolated_transactional_mongo_and_matching_candidate_runtimes",
-  "current_blocker": "preview_access_and_current_release_lease_unverified_runtime_identity_ui_acceptance_pending",
+  "next_allowed_action": "review_pr_1097_stacked_on_1091_complete_remaining_preview_evidence_preserve_existing_settlements",
+  "current_blocker": "preview_synthetic_receipt_workflow_passed_browser_saved_file_proof_and_written_release_gate_pending",
   "legacy_mezan_policy": {
     "dynamic_financial_dependency_allowed": false,
     "copy_reference_values_allowed": true,

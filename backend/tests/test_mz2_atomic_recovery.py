@@ -70,7 +70,9 @@ class AtomicRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(balance["net_balance"], 0)
         # Mongo expires the dead session's uncommitted transaction; no lock
         # deletion or manual ledger repair is needed.
-        await asyncio.wait_for(self.preview_and_post(), 45)
+        # Default Mongo transaction lifetime is 60s; expiry cleanup can add
+        # another interval. Do not require the shortened CI server setting.
+        await asyncio.wait_for(self.preview_and_post(), 150)
         await self.assert_one_balanced_sale()
 
     async def test_committed_response_lost_then_restart_returns_same_group(self):
