@@ -1,10 +1,14 @@
 {
   "task_id": "QOYOD-PRODUCT-PAGINATION-20260919",
-  "status": "PRODUCTION_VERIFIED_SINGLE_CANARY_IN_PROGRESS",
+  "status": "PRODUCTION_VERIFIED_SINGLE_CANARY_ACCEPTED",
   "deployment_success_ui": "Sep 19, 04:29 PM (green Deployment finished)",
   "guard_active": false,
-  "canary_authorization": "User explicitly authorized one new attempt after release verification; consumed once, result pending, do not resend",
+  "canary_authorization": "User explicitly authorized one new attempt after release verification; consumed exactly once and succeeded; do not resend",
   "canary_baseline": "Fresh invoice snapshot at 2026-09-19T13:35:48.257000 returned zero matching invoices; target confirmed mada/non-COD",
+  "canary_result": "Sent and reconciled; one paid invoice, total matches order, zero balance, no duplicate",
+  "final_provider_readback_at": "2026-09-19T13:46:18.568000",
+  "final_matching_invoice_count": 1,
+  "operational_limitation": "Synchronous invoice sync and send exceeded Cloudflare 120-second response timeout, then completed successfully in background. Never resend on timeout; read persisted status first.",
   "deployment_commit": "4eb3f95706cb26d0255116942a9f106c77a5514f",
   "prepared_at": "2026-09-19T13:14:44.847679+00:00",
   "lease_actor": "codex-qoyod-1093-01a0b575-20260919",
@@ -18,7 +22,7 @@
   "branch": "codex/qoyod-root-cause-20260919",
   "base_commit": "1f2923f19ba503017a04677636d75caad8e4df91",
   "production_changed": true,
-  "financial_writes": "One authorized canary submitted; provider outcome pending",
+  "financial_writes": "Exactly one newly authorized canary attempt completed and verified; no bulk or COD actions",
   "cod_deferred": true,
   "root_cause": "Exact provider empty-page sentinel was accepted only on the first product catalog page.",
   "verification": {
@@ -34,8 +38,5 @@
     "ci_and_manual_suite": "180 passed with 4 manual-send test setup failures (missing synthetic base URL)",
     "manual_suite_after_setup_fix": "43 passed with synthetic base URL and ephemeral synthetic encryption key"
   },
-  "remaining": [
-    "Read-only canary result and fresh invoice count verification; do not resend",
-    "Final durable acceptance evidence and handoff"
-  ]
+  "remaining": []
 }
