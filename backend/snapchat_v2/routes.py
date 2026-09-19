@@ -155,6 +155,9 @@ async def _latest_level_status(
     user_id: str,
     ad_account_id: str,
     entity_type: str,
+    date_from: date,
+    date_to: date,
+    action_report_time: str,
 ) -> str:
     field = {
         "campaign": "campaign_sync_status",
@@ -164,10 +167,16 @@ async def _latest_level_status(
     row = await db["mezan_snapchat_sync_runs_v2"].find_one(
         {
             "user_id": str(user_id),
+            "provider": "snapchat_ads",
             "ad_account_id": str(ad_account_id),
+            "status": "complete",
+            field: "complete",
+            "request_window.date_from": {"$lte": date_from.isoformat()},
+            "request_window.date_to": {"$gte": date_to.isoformat()},
+            "request_window.action_report_time": action_report_time,
         },
         {"_id": 0, field: 1, "finished_at": 1, "started_at": 1},
-        sort=[("started_at", -1)],
+        sort=[("finished_at", -1), ("started_at", -1)],
     )
     return str((row or {}).get(field) or "partial")
 
@@ -268,6 +277,9 @@ async def _entity_performance_report(
         user_id=user_id,
         ad_account_id=account_id,
         entity_type=entity_type,
+        date_from=date_from,
+        date_to=date_to,
+        action_report_time=action_report_time,
     )
     facts = await load_hourly_facts(
         db,

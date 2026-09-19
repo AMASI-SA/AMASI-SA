@@ -9,12 +9,66 @@ from snapchat_v2.client import SnapchatClientError, SnapchatV2Client
 from snapchat_v2.routes import (
     _add_sar_spend,
     _entity_performance_report,
+    _latest_level_status,
     _total_fact_date_coverage_complete,
 )
 from snapchat_v2.salla_outcomes import load_salla_campaign_outcomes
 from snapchat_v2.sync_pipeline import SnapchatV2SyncPipeline
 from snapchat_v2.token_store import SnapchatTokenStoreError
 from unified_marketing.adapters.snapchat_v2 import build_snapchat_v2_unified_report
+
+
+@pytest.mark.asyncio
+async def test_latest_level_status_uses_completed_run_covering_requested_period():
+    class SyncRuns:
+        def __init__(self):
+            self.query = None
+            self.projection = None
+            self.sort = None
+
+        async def find_one(self, query, projection, *, sort):
+            self.query = query
+            self.projection = projection
+            self.sort = sort
+            if (
+                query.get("status") == "complete"
+                and query.get("campaign_sync_status") == "complete"
+                and query.get("request_window.date_from") == {"$lte": "2026-09-18"}
+                and query.get("request_window.date_to") == {"$gte": "2026-09-18"}
+                and query.get("request_window.action_report_time") == "conversion"
+            ):
+                return {"campaign_sync_status": "complete"}
+            return {"campaign_sync_status": "partial"}
+
+    sync_runs = SyncRuns()
+
+    class DB:
+        def __getitem__(self, name):
+            assert name == "mezan_snapchat_sync_runs_v2"
+            return sync_runs
+
+    status = await _latest_level_status(
+        DB(),
+        user_id="u1",
+        ad_account_id="a1",
+        entity_type="campaign",
+        date_from=date(2026, 9, 18),
+        date_to=date(2026, 9, 18),
+        action_report_time="conversion",
+    )
+
+    assert status == "complete"
+    assert sync_runs.query == {
+        "user_id": "u1",
+        "provider": "snapchat_ads",
+        "ad_account_id": "a1",
+        "status": "complete",
+        "campaign_sync_status": "complete",
+        "request_window.date_from": {"$lte": "2026-09-18"},
+        "request_window.date_to": {"$gte": "2026-09-18"},
+        "request_window.action_report_time": "conversion",
+    }
+    assert sync_runs.sort == [("finished_at", -1), ("started_at", -1)]
 
 
 class FakeResponse:
@@ -563,7 +617,10 @@ async def test_entity_report_joins_ad_to_v2_parent_identities(monkeypatch):
             ],
         }[entity_type]
 
-    async def complete(*_args, **_kwargs):
+    async def complete(*_args, **kwargs):
+        assert kwargs["date_from"] == date(2026, 8, 22)
+        assert kwargs["date_to"] == date(2026, 8, 22)
+        assert kwargs["action_report_time"] == "conversion"
         return "complete"
 
     monkeypatch.setattr("snapchat_v2.routes.load_hourly_facts", fake_facts)
