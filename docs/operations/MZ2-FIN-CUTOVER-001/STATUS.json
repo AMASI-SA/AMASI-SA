@@ -9,8 +9,8 @@
   "current_phase": "P01",
   "current_phase_file": "PHASE-01-SETTLEMENTS.md",
   "current_phase_status": "IN_PROGRESS",
-  "next_allowed_action": "implement_daily_only_refund_approval_preserve_posted_history_verify_preview",
-  "current_blocker": "daily_only_refund_decision_implementation_and_preview_acceptance_pending",
+  "next_allowed_action": "review_candidate_stack_and_prepare_separately_authorized_production_release_no_P02",
+  "current_blocker": "synthetic_preview_acceptance_passed_production_review_build_merge_deploy_verify_pending",
   "legacy_mezan_policy": {
     "dynamic_financial_dependency_allowed": false,
     "copy_reference_values_allowed": true,
@@ -268,7 +268,12 @@
     "decision": "REFUND_JOURNAL_ONLY_FROM_DAILY_MOVEMENT_APPROVAL",
     "pr": 1097,
     "runtime_sha": "080953eb1669987b53d2474a8f52c42e951e2178",
-    "state": "OPEN_PREVIEW_RESUME_ACCEPTANCE_VERIFIED_REMAINING_PHASE_GATE",
+    "state": "PREVIEW_ACCEPTED_SYNTHETIC_P01_OPEN_RELEASE_GATE_PENDING",
+    "seven_remaining_live_scenarios": "PASS_ALL_SEVEN_FINAL_BASELINE_ASSERTION_PASSED",
+    "seven_scenario_evidence": "P01-SEVEN-SCENARIOS-20260919.md",
+    "codex_blank_login_issue": "UNRESOLVED_NOT_APPLICATION_ACCEPTANCE_PROOF",
+    "confirmed_browser_engine": "CHROMIUM",
+    "seven_scenario_browser_review": "PASS_ALL_SEVEN_CHROMIUM_READ_ONLY_AFTER_HOST_RECOVERY",
     "final_tested_candidate": "080953eb1669987b53d2474a8f52c42e951e2178",
     "final_isolated_mongo_tests": 34,
     "final_frontend_tests": 31,
@@ -295,7 +300,6 @@
       "arrival_orders": 2,
       "frontend_tests": 9,
       "pending": [
-        "remaining_statement_arrival_order_matrix_under_latest_refund_contract",
         "review_and_merge_candidate_stack_separately_from_preview_acceptance",
         "production_release_gate_not_authorized_in_this_task"
       ],
