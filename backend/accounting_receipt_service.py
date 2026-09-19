@@ -140,6 +140,11 @@ async def link_receipt(db, *, owner, actor, draft_id, receipt_id):
             settlement_id=draft_id, status='linked', linked_by=actor['id'], linked_at=linked_at)})
         update = dict(bank_receipt_id=receipt_id, status='draft', workflow_state='draft',
                       updated_at=linked_at, updated_by=actor['id'], receipt_linked_at=linked_at)
+        # Persist fresh blockers with the link: the UI reads the saved draft,
+        # so a stale "receipt required" reason would disable submission.
+        from accounting_settlement_routes import _recomputed_draft
+        refreshed = await _recomputed_draft(scoped, owner_id=owner, draft={**draft, **update})
+        update.update({key: refreshed[key] for key in ('review_reasons', 'calculation', 'journal_preview')})
         await scoped.accounting_settlements_v2.update_one({'id': draft_id, 'user_id': owner},
             {'$set': update, '$inc': {'version': 1}})
         return public({**draft, **update, 'version': int(draft.get('version', 1)) + 1})
