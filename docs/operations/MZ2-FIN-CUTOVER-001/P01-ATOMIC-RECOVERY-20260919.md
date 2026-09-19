@@ -42,3 +42,6 @@ Backend and Frontend candidate runtime identities remain unverified.
 7. Keep P01 open pending those acceptance proofs. No Production release is authorized.
 
 References: MongoDB transactions documentation https://www.mongodb.com/docs/v7.0/core/transactions/ and driver transaction retry specification https://github.com/mongodb/specifications/blob/master/source/transactions/transactions.md .
+
+## Final verification
+Code commit b35fa098e9d35e673f1198c9486f0c96dc163fec passed all MZ2 jobs in https://github.com/AMASI-SA/AMASI-SA/actions/runs/35442913594 : 12 real-Mongo operational tests, 7 real-Mongo atomic recovery tests, 11 arithmetic/policy tests, 49 backend contract tests, 36 frontend tests and frontend build. The added endpoint and exact-cent tests passed. Fresh Preview probe still returned HTTP 502 at 2026-09-19 12:27:46 UTC. This documentation-only checkpoint adds no application changes after that tested code commit.

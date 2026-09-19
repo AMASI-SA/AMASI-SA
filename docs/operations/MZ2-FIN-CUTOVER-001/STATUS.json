@@ -243,20 +243,21 @@
   "atomic_recovery_20260919": {
     "state": "REAL_ISOLATED_MONGO_VERIFIED_PREVIEW_PENDING",
     "prior_candidate": "18144cb44f1abdb5c27e54eeed4427cf99e75b3f",
-    "tested_code_commit": "631e8d9bd7f32c1290a9cc8178ec73d2a615af7c",
+    "tested_code_commit": "b35fa098e9d35e673f1198c9486f0c96dc163fec",
     "pr": 1091,
     "transaction_boundary": "recognition_event_all_ledger_legs_counters_audit_and_settlement_draft_status",
     "database": "MongoDB 8.0.12 dedicated replica set in CI; standalone fail-closed tested",
     "actual_mongo_recognition_tests": 12,
-    "actual_mongo_recovery_tests": 5,
-    "ci_run": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/35442683637",
-    "additional_endpoint_and_exact_balance_tests": "added_pending_followup_CI",
+    "actual_mongo_recovery_tests": 7,
+    "ci_run": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/35442913594",
+    "additional_endpoint_and_exact_balance_tests": "PASS_REAL_MONGO",
     "preview_database_capabilities": "not_read_access_unavailable",
     "preview_runtime_sha": "unverified",
     "preview_financial_writes": false,
     "production_changed": false,
     "own_reservation": "/tmp/mz2-p01-operational-preview.lock; ownership must be reread before release",
     "existing_three_settlements": "untouched_by_task",
-    "evidence_file": "P01-ATOMIC-RECOVERY-20260919.md"
+    "evidence_file": "P01-ATOMIC-RECOVERY-20260919.md",
+    "last_preview_probe": "HTTP 502 at 2026-09-19 12:27:46 UTC"
   }
 }
