@@ -58,6 +58,7 @@ class WriteControlTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertTrue(response.json()["paused"])
         self.assertEqual((await self.client.get(self.base + "/sales-tax")).status_code, 200)
+        self.assertEqual((await self.client.get("/financial-provider-apps")).status_code,200)
         preview = await self.client.post(self.base + "/receivables/preview", json=self.payload())
         self.assertEqual(preview.status_code, 200, preview.text)
         before = await self.count_writes()
@@ -67,6 +68,9 @@ class WriteControlTests(unittest.IsolatedAsyncioTestCase):
             self.client.put(self.base + "/sales-tax", json={"rate":"20","revision":1,
                 "effective_at":"2020-01-01T00:00:00Z","reason":"blocked"}),
             self.client.patch(self.base + "/settlements/drafts/not-present", json={"notes":"blocked"}),
+            self.client.post("/financial-provider-apps/tamara/tax-invoices", json={
+                "invoice_number":"PAUSED-SYN", "issue_date":"2020-01-02",
+                "net_amount":100,"vat_amount":15,"total_amount":115}),
         ]
         for result in await asyncio.gather(*calls):
             self.assertEqual(result.status_code, 423, result.text)

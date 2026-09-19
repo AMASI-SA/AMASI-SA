@@ -79,7 +79,7 @@ def make_financial_provider_apps_router(db, current_user):
     async def provider_user(user: dict = Depends(current_user)):
         fresh = await fresh_accounting_user(db, user)
         require_accounting_permission(fresh, "accounting.settlements.view")
-        return {**fresh, "id": accounting_owner_id(fresh)}
+        return {**fresh, "id": accounting_owner_id(fresh), "_accounting_actor_id": fresh["id"]}
 
     # The historical importer accepts the UI hint as authoritative. P01 swaps
     # only its local reference for a fail-closed detector that compares the

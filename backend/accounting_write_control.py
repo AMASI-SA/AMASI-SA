@@ -126,7 +126,7 @@ def protect_accounting_routes(router, db):
     from accounting_atomic import atomic_owner
     for route in router.routes:
         path = route.path
-        if "/accounting-module/" not in path or not route.methods.intersection({"POST", "PUT", "PATCH", "DELETE"}):
+        if not route.methods.intersection({"POST", "PUT", "PATCH", "DELETE"}):
             continue
         if "/write-control" in path or path.endswith(("/receivables/preview", "/drafts/upload")):
             continue
@@ -134,7 +134,9 @@ def protect_accounting_routes(router, db):
         def wrap(endpoint):
             @wraps(endpoint)
             async def guarded(**kwargs):
-                actor = await fresh_actor(db.root, kwargs.get("user") or {})
+                user = kwargs.get("user") or {}
+                actor = await fresh_actor(db.root, {
+                    "id": user.get("_accounting_actor_id", user.get("id"))})
                 owner = accounting_owner_id(actor)
                 async def operation(scoped):
                     token = db.scope.set(scoped)
