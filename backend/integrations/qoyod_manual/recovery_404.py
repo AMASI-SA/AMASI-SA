@@ -104,6 +104,10 @@ class Outcome:
     state: str
     reason: str
     invoice_id: str | None = None
+    invoice_total: str | None = None
+    paid_amount: str | None = None
+    remaining: str | None = None
+    salla_total: str | None = None
 
 
 class Ports(Protocol):
@@ -224,6 +228,18 @@ async def recover_one(scope: Scope, reference: str, ports: Ports) -> Outcome:
     except Exception as exc:
         # Do not persist provider response bodies or exception strings (PII).
         reason = safe_reason(exc)
+        if isinstance(exc, EvidenceError) and reason == "provider_settlement_incomplete":
+            # Only this known settlement error may be isolated. Independently
+            # refresh both sources; timeouts and uncertain writes never reach
+            # this exception path and must still pause the whole campaign.
+            try:
+                audited = await audit_one(scope, reference, ports)
+                if audited.state == "rounding_review":
+                    return audited
+            except Exception:
+                # Even local audit persistence failure is not permission to
+                # continue. Keep the original conservative pause behavior.
+                pass
         result = Outcome(reference, "unknown" if sent else "blocked", reason)
         # Pause before finish: a local persistence failure must not permit more sends.
         await ports.pause(reason)
@@ -244,7 +260,34 @@ async def audit_one(scope: Scope, reference: str, ports: Ports) -> Outcome:
         if facts.reference != reference or not facts.fresh_salla:
             raise EvidenceError("salla_evidence_unverified")
         evidence = await ports.observe(reference)
-        invoice = verified_invoice(reference, facts, evidence)
+        try:
+            invoice = verified_invoice(reference, facts, evidence)
+        except EvidenceError as exc:
+            # Isolation requires a fresh, unique, known invoice; an unknown
+            # result is never permission to continue the campaign. This path
+            # changes local audit evidence only, never receipts or claims.
+            if str(exc) != "provider_settlement_incomplete":
+                raise
+            invoice = evidence.invoices[0]
+            if (reference in scope.excluded
+                    or not scope.from_date <= facts.order_date <= scope.to_date
+                    or facts.status not in {"completed", "in_delivery", "delivered"}
+                    or not facts.payment_eligible or facts.is_cod
+                    or not facts.skus_complete or facts.currency != "SAR"
+                    or money(facts.total) <= 0
+                    or (bool(evidence.mezan_invoice_id)
+                        and evidence.mezan_invoice_id != invoice.invoice_id)
+                    or money(invoice.total) != money(facts.total) + Decimal("0.01")
+                    or money(invoice.paid) != money(facts.total)
+                    or money(invoice.remaining) != Decimal("0.01")
+                    or money(invoice.total) != money(invoice.paid) + money(invoice.remaining)):
+                raise
+            result = Outcome(
+                reference, "rounding_review", "existing_invoice_rounding_requires_settlement",
+                invoice.invoice_id, invoice.total, invoice.paid,
+                invoice.remaining, facts.total)
+            await ports.finish(result)
+            return result
         if invoice is None:
             raise EvidenceError("submitted_invoice_not_found_do_not_retry")
         if not evidence.mezan_sent_reconciled or evidence.mezan_invoice_id != invoice.invoice_id:

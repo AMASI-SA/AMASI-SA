@@ -29,6 +29,28 @@ def scope_from(doc):
                  doc["release_identity"])
 
 
+def validate_closed_campaign(campaign, rows):
+    refs = sorted(campaign["references"])
+    excluded = sorted(x for x in refs if hashlib.sha256(x.encode()).hexdigest() in COMPLETED_DIGESTS)
+    if (len(refs) != 199 or len(set(refs)) != 199
+            or hashlib.sha256("\n".join(refs).encode()).hexdigest() != COHORT_DIGEST
+            or len(excluded) != 2 or sorted(campaign["excluded"]) != excluded
+            or campaign["from_date"] != "2026-07-01" or campaign["to_date"] != "2026-09-19"
+            or scope_from(campaign).fingerprint != campaign["fingerprint"]
+            or sorted(r["reference"] for r in rows) != refs
+            or any(r["state"] != "excluded_completed" for r in rows if r["reference"] in excluded)):
+        raise ValueError("closed_cohort_mismatch")
+
+
+def unresolved_attempt(row):
+    return (row["state"] in {"running", "unknown", "review"}
+            or (row["state"] == "blocked" and row.get("reason") not in {
+                "outside_recovery_scope", "salla_evidence_unverified", "outside_date_scope",
+                "ineligible_status", "cod_deferred", "missing_sku_deferred", "payment_ineligible",
+                "not_proven_old_product_404", "unsupported_currency", "nonpositive_total",
+                "preflight_amount_mismatch"}))
+
+
 async def prepare(db, references, owner, actor, release_identity):
     refs = sorted(str(x).strip() for x in references)
     digest = hashlib.sha256("\n".join(refs).encode()).hexdigest()
@@ -82,7 +104,15 @@ async def report(db):
     for row in rows:
         counts[row["state"]] = counts.get(row["state"], 0) + 1
     verified = sum(counts.get(key, 0) for key in VERIFIED)
+    can_activate = (campaign["state"] in {"prepared", "paused"}
+                    and not campaign.get("busy") and not campaign.get("cursor")
+                    and not any(unresolved_attempt(row) for row in rows))
+    try:
+        validate_closed_campaign(campaign, rows)
+    except (ValueError, KeyError):
+        can_activate = False
     return {**campaign, **audit_eligibility(campaign), "results": sorted(rows, key=lambda x: x["reference"]),
+            "can_activate": can_activate, "rounding_unsettled": counts.get("rounding_review", 0),
             "counts": counts, "total": len(campaign["references"]),
             "verified": verified, "remaining": len(campaign["references"]) - verified}
 
@@ -94,14 +124,38 @@ async def activate(db, fingerprint, owner, actor, release_identity):
             or campaign["release_identity"] != release_identity):
         raise ValueError("activation_scope_or_release_mismatch")
     rows = [row async for row in db.qoyod_404_outcomes.find({"campaign": CAMPAIGN})]
-    if len(rows) != 199 or any(r["state"] in {"running", "unknown", "review"} for r in rows):
+    validate_closed_campaign(campaign, rows)
+    if any(unresolved_attempt(r) for r in rows):
         raise ValueError("unresolved_attempt_requires_read_only_audit")
     result = await db.qoyod_404_campaigns.update_one(
-        {"_id": CAMPAIGN, "fingerprint": fingerprint, "busy": False,
+        {"_id": CAMPAIGN, "fingerprint": fingerprint, "busy": False, "cursor": None,
          "state": {"$in": ["prepared", "paused"]}},
         {"$set": {"state": "active", "activated_by": actor, "activated_at": now()}})
     if not result.modified_count:
         raise ValueError("campaign_not_activatable")
+    return await report(db)
+
+
+async def review_release(db, fingerprint, owner, actor, release_identity):
+    """Explicit local-only rebind after deploy; never activates or clears claims."""
+    campaign = await db.qoyod_404_campaigns.find_one({"_id": CAMPAIGN})
+    if (not campaign or campaign["orders_owner"] != owner
+            or campaign["fingerprint"] != fingerprint):
+        raise ValueError("activation_scope_or_release_mismatch")
+    rows = [row async for row in db.qoyod_404_outcomes.find({"campaign": CAMPAIGN})]
+    validate_closed_campaign(campaign, rows)
+    if not audit_eligibility(campaign)["can_audit"] or campaign.get("busy") or campaign.get("cursor"):
+        raise ValueError("read_only_audit_required_before_release_review")
+    new_scope = scope_from({**campaign, "release_identity": release_identity})
+    result = await db.qoyod_404_campaigns.update_one(
+        {"_id": CAMPAIGN, "fingerprint": fingerprint, "orders_owner": owner,
+         "state": {"$in": ["paused", "prepared", "review_complete"]}, "busy": False, "cursor": None},
+        {"$set": {"release_identity": release_identity, "fingerprint": new_scope.fingerprint,
+                  "state": "paused", "release_reviewed_by": actor, "release_reviewed_at": now()},
+         "$push": {"release_reviews": {"previous_identity": campaign["release_identity"],
+                   "release_identity": release_identity, "actor": actor, "at": now()}}})
+    if not result.modified_count:
+        raise ValueError("campaign_not_reviewable")
     return await report(db)
 
 
@@ -232,7 +286,9 @@ async def audit_pending(db, external_factory):
     ports = DurablePorts(db, campaign, external_factory(db, campaign))
     try:
         rows = [row async for row in db.qoyod_404_outcomes.find(
-            {"campaign": CAMPAIGN, "state": {"$in": ["unknown", "running", "review"]}})]
+            {"campaign": CAMPAIGN, "$or": [
+                {"state": {"$in": ["unknown", "running", "review", "rounding_review"]}},
+                {"state": "blocked", "reason": "provider_settlement_incomplete"}]} )]
         for row in rows:
             await audit_one(scope, row["reference"], ports)
     finally:

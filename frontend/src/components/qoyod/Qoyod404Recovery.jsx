@@ -12,6 +12,7 @@ const LABELS = {
   verified_audit: "تم التحقق بعد انقطاع الاستجابة",
   blocked: "مانع يحتاج مراجعة", unknown: "نتيجة غير محسومة — لا يُعاد الإرسال",
   review: "يحتاج مراجعة", disabled: "التفعيل متوقف",
+  rounding_review: "فاتورة موجودة — فرق تقريب يحتاج تسوية",
 };
 const REASONS = {
   awaiting_activation: "بانتظار تفعيل المجموعة", refreshing_salla: "تحديث بيانات سلة",
@@ -29,6 +30,7 @@ const REASONS = {
   campaign_not_prepared: "يجب تجهيز النطاق أولًا",
   campaign_active: "أوقف التعافي قبل التدقيق",
   operation_in_progress: "توجد عملية بحجز سارٍ؛ انتظر انتهاءها ثم حدّث الحالة",
+  existing_invoice_rounding_requires_settlement: "فرق هللة مثبت؛ لا يُعاد الإرسال أو السداد، ويبقى غير مكتمل حتى تسويته في قيود",
 };
 
 export default function Qoyod404Recovery() {
@@ -59,12 +61,13 @@ export default function Qoyod404Recovery() {
       setRefs(json.order_numbers); setError("");
     } catch { setRefs(null); setError("اختر ملف المجموعة الأصلية الذي يحتوي على 199 رقم طلب"); }
   }
-  const unresolved = ["running", "unknown", "review"].some(key => data?.counts?.[key] > 0);
-  const activatable = ["prepared", "paused"].includes(data?.state) && !data?.busy && !unresolved;
+  const activatable = data?.can_activate === true;
   return <section className="rounded-xl border p-4 space-y-3" dir="rtl" data-testid="recovery-404">
     <h2 className="text-lg font-bold">تعافي مجموعة أخطاء 404</h2>
     <p>المجموعة الأصلية 199 طلبًا. الطلبان المكتملان مستبعدان من إعادة الإرسال. COD والمنتجات بلا SKU مؤجلة. يُحدّث العامل بيانات سلة قبل كل تقييم، ويعالج طلبًا واحدًا في كل دورة.</p>
     <p data-testid="recovery-counts">المكتمل: {data?.verified ?? 2} / {data?.total ?? 199} — المتبقي: {data?.remaining ?? 197}</p>
+    <p>أُرسل وتحقق: {data?.counts?.verified_sent || 0} — صُولح بفاتورة موجودة: {data?.counts?.verified_existing || 0} — تحقق بالتدقيق: {data?.counts?.verified_audit || 0} — فرق تقريب غير مسوّى: {data?.rounding_unsettled || 0} — بانتظار المعالجة: {data?.counts?.pending || 0}</p>
+    <p>سماحية هللة واحدة تسمح باستمرار البقية بعد إثبات الفاتورة والسداد الفعليين؛ لا تعني تسوية الرصيد أو اكتمال الطلب.</p>
     <p>الحالة: {LABELS[data?.state] || data?.state || "جارٍ التحميل"}</p>
     {error && <p role="alert">{String(error)}</p>}
     {data?.state === "not_prepared" && <>
@@ -73,6 +76,7 @@ export default function Qoyod404Recovery() {
     </>}
     {data?.fingerprint && <>
       <p>النطاق: {data.from_date} إلى {data.to_date} — المستبعد المكتمل: {data.excluded?.join("، ")}</p>
+      {data.release_review_required && <button disabled={busy || data.busy || !data.can_audit} onClick={() => action("review-release", { fingerprint: data.fingerprint })}>تجهيز الاستئناف على الإصدار الحالي — دون إرسال</button>}
       {activatable && <>
         <label><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} /> أوافق على معالجة الطلبات المتبقية من هذه المجموعة فقط، مع التوقف عند نتيجة غير محسومة.</label>
         <button disabled={!confirmed || busy} onClick={() => action("activate", { fingerprint: data.fingerprint, confirmation: "ACTIVATE_REVIEWED_404_COHORT" })}>تفعيل التعافي التلقائي للنطاق المحدد</button>
@@ -83,8 +87,8 @@ export default function Qoyod404Recovery() {
     </>}
     <button disabled={busy} onClick={refresh}>تحديث حالة التعافي</button>
     {data?.results?.length > 0 && <details><summary>نتيجة كل طلب ({data.results.length})</summary>
-      <table className="w-full"><thead><tr><th>الطلب</th><th>النتيجة</th><th>السبب</th><th>الفاتورة</th></tr></thead>
-        <tbody>{data.results.map(row => <tr key={row.reference}><td>{row.reference}</td><td>{LABELS[row.state] || row.state}</td><td>{REASONS[row.reason] || row.reason}</td><td>{row.invoice_id || "—"}</td></tr>)}</tbody>
+      <table className="w-full"><thead><tr><th>الطلب</th><th>النتيجة</th><th>السبب</th><th>الفاتورة</th><th>إجمالي سلة</th><th>إجمالي قيود</th><th>المدفوع الفعلي</th><th>المتبقي في قيود</th></tr></thead>
+        <tbody>{data.results.map(row => <tr key={row.reference}><td>{row.reference}</td><td>{LABELS[row.state] || row.state}</td><td>{REASONS[row.reason] || row.reason}</td><td>{row.invoice_id || "—"}</td><td>{row.salla_total ?? "—"}</td><td>{row.invoice_total ?? "—"}</td><td>{row.paid_amount ?? "—"}</td><td>{row.remaining ?? "—"}</td></tr>)}</tbody>
       </table></details>}
   </section>;
 }

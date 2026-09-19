@@ -1,6 +1,6 @@
 {
   "task_id": "QOYOD-404-RECOVERY-20260919",
-  "status": "REVIEW_FIXES_TESTED_AWAITING_CI_AND_REVIEW",
+  "status": "WIP_ROUNDING_ISOLATION_TESTED_NOT_RELEASED",
   "authorized_sequence": [
     "404",
     "COD",
@@ -9,7 +9,7 @@
   "current_phase": "404",
   "scope": "Eligible completed/delivering/delivered orders from 2026-07-01 through 2026-09-19",
   "source_checkpoint": "e302afb5d13e67885844cfca2d70eeef1605d8ac",
-  "production_deployment": "4eb3f95706cb26d0255116942a9f106c77a5514f",
+  "production_deployment": "635e181f7520354029efbdc8e89d76a94de77ff2",
   "census_proof": {
     "unique_90_day_rows": 6579,
     "sent": 5729,
@@ -28,7 +28,7 @@
   "reconciled_existing_invoices": 0,
   "production_source_changed": false,
   "cod_sku_actions": false,
-  "next": "Review source PR and CI. Follow v5 source-A/intent-B release protocol before any management-page publish. After fresh deployment proof, import exact private cohort and prepare without sending. User activation remains separate and subject to automatic review. Monitor every remaining result; no terminal/API activation bypass.",
+  "next": "Finish sender regression/case test, independently review, checkpoint source A, governed build and intent-only B; CI/review/merge; management deployment and three-probe verify; read-only audit and release review; user activates once; verify all199 actual outcomes",
   "findings": {
     "first_precheck": "Salla order and payment eligible; no invoice sent",
     "sample_failure": "Historical GET /products 404 before accepted release",
@@ -53,12 +53,19 @@
     "fresh_backend_total": 178,
     "fresh_subtests": 35
   },
-  "task_branch": "codex/qoyod-404-worker-20260919",
-  "reviewed_base": "4eb3f95706cb26d0255116942a9f106c77a5514f",
-  "production_activation": "not prepared or activated",
+  "task_branch": "codex/qoyod-404-rounding-20260919",
+  "reviewed_base": "635e181f7520354029efbdc8e89d76a94de77ff2",
+  "production_activation": "paused after existing invoice rounding residual",
   "review_fixes": {
     "owner_authority": "All control POSTs require authenticated nonempty actor id, owner role and campaign ownership; GET visibility unchanged",
     "expired_audit": "Server can_audit and audit_block_reason; server recheck and atomic lease retained; financial claims unchanged",
     "production_changed": false
+  },
+  "rounding_checkpoint": {
+    "live": "2 excluded completed, 1 review with existing invoice +0.01 SAR outstanding, 196 pending; no new live writes this turn",
+    "local_tests": "50 core/integration tests passed; React DOM passed; sender regression and final combined tests pending",
+    "root_cause": "Runtime LRM wrapper rebuilds product discount to 3dp after base alignment. Placeholder preflight normalizes a throwaway payload; actual outgoing payload was rebuilt without final normalization. Reproduced sanitized Salla amounts locally: 139 unit, 135.11 product gross, 24.07 shipping net, 161.11 total; LRM emits 21.508 discount, normalized document total 161.12.",
+    "scope": "User approved 0.01 SAR tolerance for continuation; keep outstanding visible and not complete; no extra invoice/payment or COD/SKU action",
+    "next": "Finish sender regression/case test, independently review, checkpoint source A, governed build and intent-only B; CI/review/merge; management deployment and three-probe verify; read-only audit and release review; user activates once; verify all199 actual outcomes"
   }
 }
