@@ -13,11 +13,12 @@ global.HTMLElement = dom.window.HTMLElement; global.IS_REACT_ACT_ENVIRONMENT = t
 const React = req('react');
 const {createRoot} = req('react-dom/client');
 const {act} = React;
-let data = {state:'prepared', fingerprint:'reviewed-scope', total:199, verified:2, remaining:197,
+let data = {state:'prepared', can_audit:true, fingerprint:'reviewed-scope', total:199, verified:2, remaining:197,
   excluded:['synthetic-a','synthetic-b'], results:[{reference:'synthetic-c',state:'pending',reason:'awaiting_activation'}]};
 const posts = [];
 global.__recoveryApi = {get: async () => ({data}), post: async (url, body) => {
-  posts.push({url, body}); data = {...data, state:url.endsWith('/activate')?'active':'paused'}; return {data};
+  posts.push({url, body}); data = {...data, state:url.endsWith('/activate')?'active':'paused',
+    can_audit:!url.endsWith('/activate')}; return {data};
 }};
 (async () => {
   const build = await esbuild.build({entryPoints:[path.join(root,'frontend/src/components/qoyod/Qoyod404Recovery.jsx')],
@@ -47,6 +48,30 @@ global.__recoveryApi = {get: async () => ({data}), post: async (url, body) => {
   assert.ok(posts[2].url.endsWith('/audit'));
   assert.equal(posts.filter(x=>x.url.endsWith('/activate')).length,1);
   assert.match(container.textContent,/synthetic-c/,'per-order result remains visible');
+  const auditText = 'التحقق من المحاولات غير المحسومة — دون إرسال';
+  async function show(next) {
+    data = {...data, ...next};
+    await act(async()=>{findButton('تحديث حالة التعافي').click();});
+  }
+  // The server clock/lease decision is authoritative, not a persisted busy bit.
+  await show({state:'paused',busy:true,can_audit:true,audit_block_reason:null,
+    lease_until:'2000-01-01T00:00:00Z',counts:{unknown:1}});
+  assert.equal(findButton(auditText).disabled,false,'expired paused lease can audit');
+  assert.equal(findButton('تفعيل التعافي التلقائي للنطاق المحدد'),undefined);
+  const before = posts.length;
+  await act(async()=>{findButton(auditText).click();});
+  assert.deepEqual(posts.slice(before),[{url:'/integrations/qoyod/manual/recovery-404/audit',body:{}}]);
+  for (const state of ['paused','active']) {
+    await show({state,busy:true,can_audit:false,audit_block_reason:'operation_in_progress',
+      lease_until:'2099-01-01T00:00:00Z'});
+    assert.equal(findButton(auditText).disabled,true,'live lease cannot audit');
+    const count = posts.length;
+    await act(async()=>{findButton(auditText).click();});
+    assert.equal(posts.length,count);
+  }
+  await show({state:'paused',busy:false,can_audit:undefined});
+  assert.equal(findButton(auditText).disabled,true,'missing server eligibility fails closed');
+  assert.equal(posts.filter(x=>x.url.endsWith('/activate')).length,1,'audit never reactivates');
   await act(async()=>{app.unmount();});
   console.log('PASS: real React DOM, counters, explicit fingerprint activation, pause, read-only audit, no implicit send');
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>dom.window.close());

@@ -26,6 +26,9 @@ const REASONS = {
   not_proven_old_product_404: "سبب الحجز الحالي خارج خطأ صفحات المنتجات المعتمد",
   live_total_changed_before_send: "تغير مبلغ سلة قبل الإرسال",
   mezan_marker_unverified: "علامة المصالحة في ميزان لم تُتحقق",
+  campaign_not_prepared: "يجب تجهيز النطاق أولًا",
+  campaign_active: "أوقف التعافي قبل التدقيق",
+  operation_in_progress: "توجد عملية بحجز سارٍ؛ انتظر انتهاءها ثم حدّث الحالة",
 };
 
 export default function Qoyod404Recovery() {
@@ -75,7 +78,8 @@ export default function Qoyod404Recovery() {
         <button disabled={!confirmed || busy} onClick={() => action("activate", { fingerprint: data.fingerprint, confirmation: "ACTIVATE_REVIEWED_404_COHORT" })}>تفعيل التعافي التلقائي للنطاق المحدد</button>
       </>}
       <button disabled={busy || data.state !== "active"} onClick={() => action("pause")}>إيقاف التعافي</button>
-      <button disabled={busy || data.state === "active" || data.busy} onClick={() => action("audit")}>التحقق من المحاولات غير المحسومة — دون إرسال</button>
+      <button disabled={busy || data.can_audit !== true} onClick={() => action("audit")}>التحقق من المحاولات غير المحسومة — دون إرسال</button>
+      {data.audit_block_reason && <p>{REASONS[data.audit_block_reason] || data.audit_block_reason}</p>}
     </>}
     <button disabled={busy} onClick={refresh}>تحديث حالة التعافي</button>
     {data?.results?.length > 0 && <details><summary>نتيجة كل طلب ({data.results.length})</summary>

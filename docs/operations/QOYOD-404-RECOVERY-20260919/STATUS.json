@@ -1,6 +1,6 @@
 {
   "task_id": "QOYOD-404-RECOVERY-20260919",
-  "status": "INTEGRATED_REVIEW_CANDIDATE_NOT_DEPLOYED",
+  "status": "REVIEW_FIXES_TESTED_AWAITING_CI_AND_REVIEW",
   "authorized_sequence": [
     "404",
     "COD",
@@ -8,7 +8,7 @@
   ],
   "current_phase": "404",
   "scope": "Eligible completed/delivering/delivered orders from 2026-07-01 through 2026-09-19",
-  "source_checkpoint": "d34a278414651f122b1086306479a5ae7d38a1d6",
+  "source_checkpoint": "e302afb5d13e67885844cfca2d70eeef1605d8ac",
   "production_deployment": "4eb3f95706cb26d0255116942a9f106c77a5514f",
   "census_proof": {
     "unique_90_day_rows": 6579,
@@ -44,14 +44,21 @@
     "activation": "explicit fingerprint-bound UI and HTTP route",
     "network": "all provider boundaries mocked",
     "core": 18,
-    "full_frontend_build": "not run; CI pending",
+    "full_frontend_build": "Pending fresh governed CI build on review-fix SHA; not claimed from prior run",
     "live_provider_testing": "not performed",
     "worker_integration": "one order per tick; durable claims; audit-only stale cursor",
     "new_react_dom": "passed",
     "existing_frontend": 8,
-    "http_mongo_worker_adapter": 19
+    "http_mongo_worker_adapter": 22,
+    "fresh_backend_total": 178,
+    "fresh_subtests": 35
   },
   "task_branch": "codex/qoyod-404-worker-20260919",
   "reviewed_base": "4eb3f95706cb26d0255116942a9f106c77a5514f",
-  "production_activation": "not prepared or activated"
+  "production_activation": "not prepared or activated",
+  "review_fixes": {
+    "owner_authority": "All control POSTs require authenticated nonempty actor id, owner role and campaign ownership; GET visibility unchanged",
+    "expired_audit": "Server can_audit and audit_block_reason; server recheck and atomic lease retained; financial claims unchanged",
+    "production_changed": false
+  }
 }

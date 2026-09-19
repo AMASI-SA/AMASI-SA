@@ -58,16 +58,31 @@ async def prepare(db, references, owner, actor, release_identity):
     return await report(db)
 
 
+def audit_eligibility(campaign):
+    """Scheduling eligibility only; routes still authorize and audit acquires CAS."""
+    if not campaign:
+        return {"can_audit": False, "audit_block_reason": "campaign_not_prepared"}
+    if campaign["state"] == "active":
+        return {"can_audit": False, "audit_block_reason": "campaign_active"}
+    lease = campaign.get("lease_until")
+    if lease is not None and lease.tzinfo is None:
+        lease = lease.replace(tzinfo=timezone.utc)
+    if campaign.get("busy") and (lease is None or lease >= now()):
+        return {"can_audit": False, "audit_block_reason": "operation_in_progress"}
+    return {"can_audit": True, "audit_block_reason": None}
+
+
 async def report(db):
     campaign = await db.qoyod_404_campaigns.find_one({"_id": CAMPAIGN}, {"_id": 0})
     if not campaign:
-        return {"state": "not_prepared", "total": 199, "verified": 2, "remaining": 197, "results": []}
+        return {"state": "not_prepared", "total": 199, "verified": 2, "remaining": 197,
+                "results": [], **audit_eligibility(None)}
     rows = [row async for row in db.qoyod_404_outcomes.find({"campaign": CAMPAIGN}, {"_id": 0})]
     counts = {}
     for row in rows:
         counts[row["state"]] = counts.get(row["state"], 0) + 1
     verified = sum(counts.get(key, 0) for key in VERIFIED)
-    return {**campaign, "results": sorted(rows, key=lambda x: x["reference"]),
+    return {**campaign, **audit_eligibility(campaign), "results": sorted(rows, key=lambda x: x["reference"]),
             "counts": counts, "total": len(campaign["references"]),
             "verified": verified, "remaining": len(campaign["references"]) - verified}
 
@@ -203,11 +218,7 @@ async def tick(db, external_factory):
 
 async def audit_pending(db, external_factory):
     campaign = await db.qoyod_404_campaigns.find_one({"_id": CAMPAIGN})
-    lease = (campaign or {}).get("lease_until")
-    if lease is not None and lease.tzinfo is None:
-        lease = lease.replace(tzinfo=timezone.utc)
-    live_busy = (campaign or {}).get("busy") and (lease is None or lease >= now())
-    if not campaign or campaign["state"] == "active" or live_busy:
+    if not audit_eligibility(campaign)["can_audit"]:
         raise ValueError("pause_campaign_before_audit")
     token = uuid.uuid4().hex
     acquired = await db.qoyod_404_campaigns.update_one(

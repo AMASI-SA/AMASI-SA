@@ -58,6 +58,20 @@ includes blocked/review/unknown rows until their accounting evidence is verified
 
 ## Required production handoff
 
+Review corrections: control-plane POSTs require an authenticated actor with an
+explicit owner role and matching campaign ownership. Employee `created_by`
+membership is not write authority; existing GET visibility is unchanged.
+Status exposes server-computed `can_audit` and `audit_block_reason`. A paused,
+expired scheduling lease may be audited even with a stale busy bit. The audit
+route rechecks eligibility and acquires its atomic lease; neither the UI flag
+nor scheduling expiry releases a permanent financial attempt claim.
+
+Fresh correction validation: 178 backend tests and 35 subtests, 8 existing page
+tests and the real React DOM recovery test. These include owner-only mutations,
+unchanged employee display access, expired/live lease controls, overlapping
+audits, and no financial writes during audit. Full governed frontend build and
+CI must be verified on the new commit, not inferred from the prior review.
+
 1. Review source PR and CI. Merge source A only after review.
 2. Follow repository AGENTS.md protocol v5: build reproducibly from A, freeze
    intent-only B, review/merge without squash or rebase. Check `/app` lease status

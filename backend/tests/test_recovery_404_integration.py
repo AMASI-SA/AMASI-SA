@@ -77,9 +77,10 @@ class Integration(unittest.IsolatedAsyncioTestCase):
                         patch.object(c, "COMPLETED_DIGESTS", {hashlib.sha256(x.encode()).hexdigest() for x in COMPLETED})]
         for item in self.patches: item.start()
         app = FastAPI()
-        async def user(): return {"id": "operator"}
+        self.user = {"id": "store", "role": "owner"}
+        async def user(): return self.user
         app.include_router(make_recovery_router(self.db, user, identity_fn=lambda: "test-release",
-            external_factory=self.factory, owner_fn=lambda user: "store"), prefix="/integrations/qoyod/manual")
+            external_factory=self.factory), prefix="/integrations/qoyod/manual")
         self.http = AsyncClient(transport=ASGITransport(app=app), base_url="http://isolated.test")
 
     async def asyncTearDown(self):
@@ -111,6 +112,50 @@ class Integration(unittest.IsolatedAsyncioTestCase):
         for confirmation, fingerprint in [("", doc["fingerprint"]), ("ACTIVATE_REVIEWED_404_COHORT", "wrong")]:
             response = await self.http.post(BASE + "/activate", json={"fingerprint": fingerprint, "confirmation": confirmation})
             self.assertEqual(response.status_code, 409)
+
+    async def test_control_mutations_require_actual_owner_not_merchant_membership(self):
+        doc = await self.prepare()
+        original = await self.db.qoyod_404_campaigns.find_one({"_id": c.CAMPAIGN})
+        denied = [
+            {"id": "viewer", "role": "employee", "created_by": "store", "permissions": ["orders.view"]},
+            {"id": "store"},
+            {"id": "store", "role": "admin"},
+            {"id": "", "role": "owner"},
+            {"id": "other-store", "role": "owner"},
+        ]
+        payloads = {"prepare": {"order_numbers": REFS}, "activate": {
+            "fingerprint": doc["fingerprint"], "confirmation": "ACTIVATE_REVIEWED_404_COHORT"},
+            "pause": {}, "audit": {}}
+        with patch.object(c, "prepare", AsyncMock(return_value={})) as prepare, \
+             patch.object(c, "activate", AsyncMock(return_value={})) as activate, \
+             patch.object(c, "pause", AsyncMock(return_value=None)) as pause, \
+             patch.object(c, "audit_pending", AsyncMock(return_value={})) as audit, \
+             patch.object(self.provider, "authorized", AsyncMock()) as ready:
+            for actor in denied:
+                self.user = actor
+                for action, payload in payloads.items():
+                    with self.subTest(actor=actor, action=action):
+                        response = await self.http.post(BASE + "/" + action, json=payload)
+                        self.assertEqual(response.status_code, 403, response.text)
+            for boundary in (prepare, activate, pause, audit, ready):
+                boundary.assert_not_awaited()
+        self.assertEqual(await self.db.qoyod_404_campaigns.find_one({"_id": c.CAMPAIGN}), original)
+        self.assertEqual((self.provider.invoice_posts, self.provider.payment_posts), (0, 0))
+        # Existing same-store display access is intentionally retained.
+        self.user = denied[0]
+        self.assertEqual((await self.http.get(BASE)).status_code, 200)
+        self.user = denied[-1]
+        self.assertEqual((await self.http.get(BASE)).status_code, 403)
+        self.user = {"id": "store", "role": "owner"}
+        response = await self.http.post(BASE + "/activate", json=payloads["activate"])
+        self.assertEqual(response.status_code, 200, response.text)
+
+    async def test_employee_cannot_prepare_unowned_campaign(self):
+        self.user = {"id": "viewer", "role": "employee", "created_by": "store"}
+        response = await self.http.post(BASE + "/prepare", json={"order_numbers": REFS})
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(await self.db.qoyod_404_campaigns.count_documents({}), 0)
+        self.assertEqual(await self.db.qoyod_404_outcomes.count_documents({}), 0)
 
     async def test_activated_worker_sends_one_then_reports_all_199(self):
         await self.activate()
@@ -239,10 +284,34 @@ class Integration(unittest.IsolatedAsyncioTestCase):
         await self.db.qoyod_404_campaigns.update_one({"_id":c.CAMPAIGN}, {"$set":{
             "state":"paused","busy":True,"cursor":TARGET,"lease_until":c.now()-timedelta(seconds=1)}})
         await self.db.qoyod_404_outcomes.update_one({"reference":TARGET},{"$set":{"state":"running"}})
+        claim = {"_id": f"main:{TARGET}", "reference": TARGET, "fingerprint": "durable"}
+        await self.db.qoyod_404_attempts.insert_one(claim)
+        state = (await self.http.get(BASE)).json()
+        self.assertTrue(state["busy"])
+        self.assertTrue(state["can_audit"])
+        self.assertIsNone(state["audit_block_reason"])
         response = await self.http.post(BASE + "/audit")
         self.assertEqual(response.status_code,200,response.text)
         self.assertFalse(response.json()["busy"])
-        self.assertEqual(self.provider.invoice_posts,0)
+        self.assertEqual((self.provider.invoice_posts,self.provider.payment_posts),(0,0))
+        self.assertEqual(await self.db.qoyod_404_attempts.find_one({"_id": claim["_id"]}), claim)
+        self.assertEqual(response.json()["verified"], 2)
+
+    async def test_audit_eligibility_blocks_active_and_live_or_unknown_lease(self):
+        await self.activate()
+        for state, busy, lease, reason in [
+            ("active", False, c.now()-timedelta(seconds=1), "campaign_active"),
+            ("paused", True, c.now()+timedelta(minutes=5), "operation_in_progress"),
+            ("paused", True, None, "operation_in_progress"),
+        ]:
+            await self.db.qoyod_404_campaigns.update_one({"_id": c.CAMPAIGN}, {"$set": {
+                "state": state, "busy": busy, "lease_until": lease}})
+            doc = (await self.http.get(BASE)).json()
+            self.assertFalse(doc["can_audit"])
+            self.assertEqual(doc["audit_block_reason"], reason)
+            response = await self.http.post(BASE + "/audit")
+            self.assertEqual(response.status_code, 409)
+        self.assertEqual((self.provider.invoice_posts,self.provider.payment_posts),(0,0))
 
     async def test_adapter_refreshes_again_and_blocks_changed_total_before_sender(self):
         from integrations.qoyod_manual.recovery_404 import EvidenceError
@@ -298,11 +367,19 @@ class Integration(unittest.IsolatedAsyncioTestCase):
             if (await c.report(self.db)).get("busy"): break
             await asyncio.sleep(0)
         state = await c.report(self.db)
+        self.assertFalse(state["can_audit"])
+        second_audit = await self.http.post(BASE + "/audit")
+        self.assertEqual(second_audit.status_code, 409)
+        # Even a stale optimistic precheck cannot bypass the atomic lease.
+        with patch.object(c, "audit_eligibility", return_value={"can_audit": True}):
+            with self.assertRaisesRegex(ValueError, "audit_already_running"):
+                await c.audit_pending(self.db, self.factory)
         response = await self.http.post(BASE + "/activate",json={"fingerprint":state["fingerprint"],
             "confirmation":"ACTIVATE_REVIEWED_404_COHORT"})
         self.assertEqual(response.status_code,409)
         release.set(); await auditing
         self.assertEqual(self.provider.payment_posts,1)
+        self.assertEqual(self.provider.invoice_posts,1)
 
     async def test_entire_cohort_has_one_disposition_per_reference(self):
         await self.activate()
