@@ -83,6 +83,8 @@ REASON_CODES: dict[str, str] = {
 }
 
 ENTRY_TYPES = (
+    "customer_refund_due",
+    "customer_refund_payment",
     # Generic
     "spend", "topup", "payment", "adjustment", "reversal",
     "settlement", "writeoff", "accrual", "opening_balance",
