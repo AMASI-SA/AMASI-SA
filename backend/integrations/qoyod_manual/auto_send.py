@@ -1146,7 +1146,10 @@ async def _loop(db, *, interval_sec: float, batch_limit: int) -> None:
     )
     while True:
         try:
-            await run_once(db, batch_limit=batch_limit)
+            from .recovery_campaign import tick as recovery_tick
+            from .recovery_adapter import ProductionPorts
+            if not await recovery_tick(db, ProductionPorts):
+                await run_once(db, batch_limit=batch_limit)
         except Exception:
             # run_once already isolates failures; this protects task liveness.
             logger.exception("Plan-B Qoyod auto-send worker tick escaped")

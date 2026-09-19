@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import api from "../lib/api";
 import QoyodTotalsDiagnosis from "../components/qoyod/QoyodTotalsDiagnosis";
+import Qoyod404Recovery from "../components/qoyod/Qoyod404Recovery";
 import {
   isQoyodRequestAbort,
   loadQoyodUnsentOrders,
@@ -249,6 +250,7 @@ export default function QoyodUnsentOrders() {
 
   return (
     <div className="space-y-6" dir="rtl" data-testid="qoyod-unsent-orders-page">
+      <Qoyod404Recovery />
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">

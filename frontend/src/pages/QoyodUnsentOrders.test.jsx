@@ -5,6 +5,9 @@ jest.mock("../lib/api", () => ({
   get: jest.fn(),
   post: jest.fn(),
 }));
+// The recovery child has its own real DOM/API-boundary test. Keep these
+// legacy order-table request assertions scoped to the order-table component.
+jest.mock("../components/qoyod/Qoyod404Recovery", () => () => null);
 
 import api from "../lib/api";
 import { __resetQoyodUnsentOrdersClientForTests } from "../lib/qoyodUnsentOrdersClient";
