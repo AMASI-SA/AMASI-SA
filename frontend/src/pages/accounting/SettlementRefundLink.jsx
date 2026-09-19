@@ -23,8 +23,8 @@ export default function SettlementRefundLink({ draft, entries, canEdit, onLinked
         {refunds.map(row => <div key={row.id} className="rounded border p-2">
             <p>طلب {row.order_number} — استرداد {(Number(row.actual_refund_amount || 0) + Number(row.actual_partial_refund_amount || 0)).toFixed(2)} SAR</p>
             {row.refund_links?.length ? <p>مرتبط بالاستردادات {row.refund_links.map(link => link.refund_id + " — " + link.txn_group_id).join("، ")}</p>
-                : <><p>تحتاج مراجعة: هوية الاسترداد الأصلية وربط قيده غير مثبتين.</p>
-                    {canEdit && <><label>معرفات استردادات المزود الأصلية (افصل بفاصلة عند تجميع عدة استردادات)<input aria-label={`معرف استرداد ${row.id}`} value={values[row.id] || ""}
+                : <><p>بانتظار تسجيل الاسترداد واعتماد حركته من الحركات المالية اليومية. حفظ الكشف ومطابقته لا ينشئان قيدًا.</p>
+                    {canEdit && <><label>معرفات الحركات اليومية المعتمدة أو الاستردادات الأصلية المثبتة سابقًا (افصل بفاصلة عند التجميع)<input aria-label={`معرف استرداد ${row.id}`} value={values[row.id] || ""}
                         onChange={e => setValues(old => ({ ...old, [row.id]: e.target.value }))} className="block w-full rounded border p-2" /></label>
                         <button disabled={busy || !values[row.id]} onClick={() => link(row)} className="rounded border p-2">ربط الاسترداد المثبت دون قيد جديد</button></>}
                 </>}

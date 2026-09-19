@@ -73,11 +73,6 @@ async def source_documents(db, owner, provider, payment_id, refund_id=None, inco
 
 async def prepare(db, *, owner, provider, payment_id, refund_id=None, incoming=None):
     order, payment, refund = await source_documents(db, owner, provider, payment_id, refund_id, incoming)
-    if refund is not None:
-        from accounting_customer_refunds import provider_case_guard
-        from accounting_recognition_evidence import REFUNDED
-        if refund.get('status') in REFUNDED:
-            await provider_case_guard(db, owner, digest([owner, f'bnpl_sale:{provider}:{payment_id}']), refund)
     event = qualify(owner, provider, order, payment, cutoff=await cutoff_for(db, owner), refund=refund)
     economic = {k: event[k] for k in (
         "kind", "provider", "provider_payment_id", "canonical_event_id",
@@ -92,6 +87,8 @@ async def prepare(db, *, owner, provider, payment_id, refund_id=None, incoming=N
             raise EvidenceError("previous_post_result_requires_recovery")
         return {**prior["proposal"], "state": "already_posted",
                 "txn_group_id": prior["txn_group_id"]}
+    if refund is not None:
+        raise EvidenceError("refund_requires_daily_movement_approval")
     # Detect both the canonical bridge id and other recorded revenue/order
     # paths. Never silently reclassify an existing gross or tax journal.
     alternatives = [{"metadata.idempotency_key": event["idempotency_key"]}]

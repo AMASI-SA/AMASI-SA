@@ -1,6 +1,6 @@
 from fastapi import Depends, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field
-from accounting_customer_refunds import create_case, post_case, create_bank_payment, post_bank_payment
+from accounting_customer_refunds import create_case, create_bank_payment, post_bank_payment
 from accounting_sales_tax import TaxError
 from accounting_recognition_evidence import EvidenceError
 
@@ -18,12 +18,14 @@ class PaymentInput(BaseModel):
     model_config = ConfigDict(extra='forbid')
     original_key: str = Field(min_length=64,max_length=64)
     case_reference: str = Field(min_length=1,max_length=200)
-    bank_account_id: str = Field(min_length=1,max_length=100)
+    bank_account_id: str = Field(default='',max_length=100)
+    execution_channel: str = Field(default='bank',pattern='^(bank|salla|tamara|tabby|emkan)$')
+    provider_refund_id: str | None = Field(default=None,max_length=200)
     amount: str = Field(min_length=1,max_length=30)
     paid_at: str = Field(min_length=1,max_length=40)
-    bank_reference: str = Field(min_length=1,max_length=200)
-    proof_name: str = Field(min_length=1,max_length=200)
-    proof_base64: str = Field(min_length=1,max_length=1400000)
+    bank_reference: str = Field(default='',max_length=200)
+    proof_name: str = Field(default='',max_length=200)
+    proof_base64: str = Field(default='',max_length=1400000)
 
 
 def install_customer_refund_routes(router, db, current_user, actor_for):
@@ -57,10 +59,6 @@ def install_customer_refund_routes(router, db, current_user, actor_for):
     @router.post(base)
     async def create(payload:CaseInput,user:dict=Depends(current_user)):
         return await call(create_case,user,'accounting.refunds.create',**payload.model_dump())
-
-    @router.post(base+'/{case_id}/approve')
-    async def approve(case_id:str,user:dict=Depends(current_user)):
-        return await call(post_case,user,'accounting.refunds.post',case_id=case_id)
 
     @router.post(base+'/bank-payments')
     async def payment(payload:PaymentInput,user:dict=Depends(current_user)):

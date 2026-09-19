@@ -1,57 +1,18 @@
 """Mezan 2 refund ingress: Salla is an order source, not a payment provider.
 
-Only independently identified, confirmed payment_refunds can post. Order totals,
-status, notification hashes and statement row numbers are never refund IDs.
+Only approved daily movements create new refund journals. Order totals,
+status, notification hashes and statement row numbers are never execution IDs.
 """
 from decimal import Decimal
-from accounting_receivable_service import managed_owner, execute, prepare, digest
+from accounting_receivable_service import prepare, digest
 from accounting_recognition_evidence import EvidenceError
 from accounting_sales_tax import TaxError
 
 
-async def process_order_refunds(db, *, owner, order_number, source):
-    if not await managed_owner(db, owner):
-        return {"state": "not_managed", "items": []}
-    await db.mz2_order_refund_reviews.update_one(
-        {"_id": digest([owner, str(order_number)])},
-        {"$set": {"user_id": owner, "order_number": str(order_number), "state": "pending"},
-         "$addToSet": {"sources": source}}, upsert=True)
-    originals = await db.mz2_recognition_events.find({
-        "user_id": owner, "status": "posted", "proposal.event.kind": "sale",
-        "proposal.event.order_number": str(order_number),
-    }).to_list(100)
-    results = []
-    for original in originals:
-        event = original["proposal"]["event"]
-        # Resolve the liability from the original journal, never source=Salla.
-        provider, payment = event["provider"], event["provider_payment_id"]
-        refunds = await db.payment_refunds.find({"user_id": owner,
-            "provider": provider, "provider_payment_id": payment}).to_list(1000)
-        for refund in refunds:
-            rid = refund.get("provider_refund_id")
-            row = {"provider": provider, "payment_id": payment, "refund_id": rid}
-            if not rid:
-                row.update(state="needs_review", reason="refund_identity_required")
-            else:
-                try:
-                    result = await execute(db, owner=owner, actor_id="verified_order_refund",
-                        actor_name="Mezan 2 verified refund ingress", provider=provider,
-                        payment_id=payment, refund_id=rid, incoming=refund)
-                    row.update(state=result["state"], txn_group_id=result["txn_group_id"])
-                except (EvidenceError, TaxError) as exc:
-                    row.update(state="needs_review", reason=str(exc))
-                    if str(exc) == 'provider_refund_after_bank_payment_possible_double_payment':
-                        await db.mz2_customer_refunds.update_many({'user_id':owner,'original_key':original['_id']},
-                            {'$set':{'state':'conflict','conflict_reason':str(exc)},'$addToSet':{'conflicting_provider_refund_ids':rid}})
-            results.append(row)
-    if not results:
-        results = [{"state": "needs_review", "reason": "identified_refund_and_original_required"}]
-    result = {"state": "needs_review" if any(x['state']=='needs_review' for x in results) else "reconciled",
-              "items": results, "source": source, "order_number": str(order_number)}
-    await db.mz2_order_refund_reviews.update_one(
-        {"_id": digest([owner, str(order_number)])},
-        {"$set": {"user_id": owner, **result}}, upsert=True)
-    return result
+async def process_order_refunds(db, *, owner, order_number, source, payload=None):
+    """Verified notifications only maintain drafts/review; never post a journal."""
+    from accounting_refund_drafts import observe_refund
+    return await observe_refund(db, owner=owner, order_number=order_number, source=source, payload=payload)
 
 
 def refund_amount(row):
@@ -74,7 +35,7 @@ async def refund_review_reasons(db, owner, draft):
         if not links or sum(Decimal(x['amount']) for x in links) != refund_amount(row):
             reasons.append({'code': 'refund_identity_review:' + row['id'],
                 'message': 'استرداد الطلب ' + str(row.get('order_number') or '') +
-                           ' يحتاج ربطًا صريحًا بحركات الاسترداد الأصلية؛ رقم الطلب وحده لا يكفي'})
+                           ' بانتظار تسجيل الاسترداد واعتماد حركته اليومية وربطها؛ رقم الطلب وحده لا يكفي'})
     return reasons
 
 
@@ -96,6 +57,21 @@ async def link_statement_refund(db, *, owner, draft_id, entry_id, actor, refund_
             raise HTTPException(409,'refund_statement_row_required')
         proposals = []
         for rid in identities:
+            payments = await scoped.mz2_customer_refund_payments.find({'user_id':owner,
+                'execution_channel':draft['provider'], 'status':'posted',
+                '$or':[{'id':rid},{'provider_refund_id':rid}]}).to_list(2)
+            if payments:
+                if len(payments)!=1 or payments[0]['order_number']!=str(row.get('order_number')):
+                    raise HTTPException(409,'daily_refund_identity_or_order_conflict')
+                payment=payments[0]
+                case=await scoped.mz2_customer_refunds.find_one({'id':payment['case_id'],'user_id':owner})
+                if not case or case['state']=='conflict':
+                    raise HTTPException(409,'refund_execution_conflict_requires_review')
+                proposal={'state':'already_posted','event_key':'daily-refund:'+payment['id'],
+                    'txn_group_id':payment['txn_group_id'],'event':{'order_number':payment['order_number'],
+                        'provider':payment['execution_channel'],'amount':payment['amount']}}
+                proposals.append((rid,proposal))
+                continue
             refunds = await scoped.payment_refunds.find({'user_id': owner, 'provider': draft['provider'],
                 'provider_refund_id': rid}).to_list(2)
             if len(refunds) != 1:
