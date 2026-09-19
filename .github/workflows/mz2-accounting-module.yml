@@ -24,6 +24,7 @@ on:
       - "backend/tests/test_mz2_refund_entitlements.py"
       - "backend/accounting_order_refunds.py"
       - "backend/tests/test_mz2_daily_refunds.py"
+      - "backend/tests/test_mz2_order_refunds.py"
       - "backend/tests/test_mz2_receipt_intake.py"
       - "backend/tests/test_mz2_atomic_recovery.py"
       - "backend/accounting_recognition_evidence.py"
@@ -91,7 +92,7 @@ jobs:
         run: python -m unittest discover -s tests -p test_mz2_atomic_recovery.py -v
       - name: Test non-ledger receipts and the authoritative lifecycle
         run: python -m unittest discover -s tests -p test_mz2_receipt_intake.py -v
-      - name: Test daily-only refund approval and non-financial webhook drafts
+      - name: Test entitlement settlement and non-financial webhook drafts
         run: python -m unittest discover -s tests -p test_mz2_daily_refunds.py -v
       - name: Test write pause, transaction drain and durable replay
         run: python -m unittest discover -s tests -p test_mz2_write_control.py -v
