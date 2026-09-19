@@ -1,12 +1,14 @@
-"""Local ASGI + actual ledger bridge/core with isolated Mongo emulation."""
+"""ASGI + actual ledger/core with a dedicated real Mongo replica set."""
 import asyncio
 import copy
+import os
+from uuid import uuid4
 import unittest
 from unittest.mock import patch
 
 from fastapi import FastAPI, APIRouter, HTTPException
 from httpx import ASGITransport, AsyncClient
-from mongomock_motor import AsyncMongoMockClient
+from motor.motor_asyncio import AsyncIOMotorClient
 
 from accounting_receivable_routes import install_accounting_receivable_routes
 from accounting_receivable_service import OPERATION, prepare, execute
@@ -20,7 +22,12 @@ WHEN = "2020-01-02T12:00:00Z"
 
 class WorkflowTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.db = AsyncMongoMockClient().test
+        uri = os.environ["MZ2_TEST_MONGO_URI"]
+        self.mongo = AsyncIOMotorClient(uri, serverSelectionTimeoutMS=5000)
+        self.db = self.mongo["mz2_atomic_test_" + uuid4().hex]
+        self.assertTrue((await self.db.command("hello")).get("setName"))
+        # No production connection fallback; a unique fixture DB per test.
+
         self.actor = "owner"
         await self.db.users.insert_many([
             {"id": "owner", "role": "owner", "name": "Test accountant"},
@@ -43,6 +50,7 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.client.aclose()
+        self.mongo.close()
 
     async def configure(self, rate="15", revision=0, effective_at="2020-01-01T00:00:00Z"):
         return await save_policy(self.db, owner="owner", actor_id="owner", rate=rate,
@@ -193,15 +201,20 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
             await prepare(self.db, owner="owner", **self.payload("tabby"))
         self.assertEqual(await self.count_writes(), before)
 
-    async def test_uncertain_post_is_not_retried(self):
+    async def test_interrupted_post_aborts_and_retry_completes(self):
         import ledger_core
-        with patch.object(ledger_core, "post_txn_group", side_effect=RuntimeError("injected write interruption")):
+        original = ledger_core.post_ledger_entry
+        async def after_first_leg(*args, **kwargs):
+            await original(*args, **kwargs)
+            raise RuntimeError("injected write interruption")
+        with patch.object(ledger_core, "post_ledger_entry", side_effect=after_first_leg):
             with self.assertRaisesRegex(RuntimeError, "interruption"):
                 await self.preview_and_post()
-        before = await self.count_writes()
-        with self.assertRaisesRegex(EvidenceError, "requires_recovery"):
-            await prepare(self.db, owner="owner", **self.payload())
-        self.assertEqual(await self.count_writes(), before)
+        self.assertEqual(await self.db.general_ledger.count_documents({}), 0)
+        self.assertEqual(await self.db.accounting_audit_log.count_documents({}), 0)
+        self.assertEqual(await self.db.mz2_recognition_events.count_documents({}), 0)
+        await self.preview_and_post()
+        self.assertEqual(await self.db.general_ledger.count_documents({}), 3)
 
     async def test_two_ingress_requests_one_group(self):
         results = await asyncio.gather(*[
@@ -294,3 +307,4 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

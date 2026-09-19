@@ -38,6 +38,7 @@ from accounting_settlement_service import (
 )
 from excel_upload_security import read_safe_xlsx_upload
 from ledger_core import write_audit
+from accounting_atomic import atomic_owner
 from settlements_import.service import _apply_entries, import_file
 
 MAX_FILE_BYTES = 10 * 1024 * 1024
@@ -1040,6 +1041,11 @@ def install_accounting_settlement_routes(router, db, current_user):
         actor, owner_id = await _scope(
             db, user, "accounting.settlements.post"
         )
+        async def commit_settlement(scoped):
+            return await _post_settlement_transaction(scoped, owner_id, actor, draft_id, payload)
+        return await atomic_owner(db, owner_id, commit_settlement)
+
+    async def _post_settlement_transaction(db, owner_id, actor, draft_id, payload):
         current = await _draft_or_404(db, owner_id, draft_id)
         if current.get("status") != "reviewed":
             raise HTTPException(409, "يجب مراجعة التسوية قبل ترحيلها")
@@ -1112,3 +1118,4 @@ __all__ = [
     "ensure_accounting_settlement_indexes",
     "install_accounting_settlement_routes",
 ]
+

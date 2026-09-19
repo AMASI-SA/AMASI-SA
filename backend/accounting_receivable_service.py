@@ -7,7 +7,7 @@ from __future__ import annotations
 import hashlib
 import json
 from decimal import Decimal
-from uuid import uuid4
+from accounting_atomic import atomic_owner
 
 from accounting_sales_tax import TaxError, refund_split
 from accounting_sales_tax_service import read_policy, sale_snapshot
@@ -138,62 +138,60 @@ async def execute(db, *, owner, actor_id, actor_name, provider, payment_id,
         return proposal
     if preview_hash is not None and proposal["preview_hash"] != preview_hash:
         raise EvidenceError("preview_changed_review_again")
-    token = str(uuid4())
+    async def commit_recognition(scoped):
+        return await _execute_transaction(scoped, owner=owner, actor_id=actor_id,
+            actor_name=actor_name, provider=provider, payment_id=payment_id,
+            refund_id=refund_id, proposal=proposal, incoming=incoming)
+    return await atomic_owner(db, owner, commit_recognition)
+
+
+async def _execute_transaction(db, *, owner, actor_id, actor_name, provider,
+                               payment_id, refund_id, proposal, incoming):
+    latest = await prepare(db, owner=owner, provider=provider, payment_id=payment_id,
+                           refund_id=refund_id, incoming=incoming)
+    if latest["state"] == "already_posted":
+        return latest
+    if latest["preview_hash"] != proposal["preview_hash"]:
+        raise EvidenceError("preview_changed_review_again")
+    event, tax = latest["event"], latest["tax"]
+    kind = event["kind"]
+    is_sale = kind == "sale"
+    entries = [{
+        "entity_type": "payment_gateway", "entity_id": provider, "sub_account": "receivable",
+        "side": "debit" if is_sale else "credit", "amount": tax["gross"],
+        "entry_type": f"bnpl_{kind}",
+    }]
+    for entity_type, entity_id, amount in (
+        ("revenue", "bnpl_sales", tax["net"]), ("tax", "sales_vat_payable", tax["tax"]),
+    ):
+        if Decimal(amount) > 0:
+            entries.append({"entity_type": entity_type, "entity_id": entity_id,
+                            "side": "credit" if is_sale else "debit",
+                            "amount": amount, "entry_type": f"bnpl_{kind}"})
+    record = {"_id": latest["event_key"], "user_id": owner, "status": "posting",
+              "economic_hash": latest["economic_hash"], "proposal": latest,
+              "original_key": latest["original_key"], "actor_id": actor_id}
+    await db.mz2_recognition_events.insert_one(record)
     try:
-        await db.mz2_recognition_locks.insert_one({"_id": owner, "token": token})
-    except Exception as exc:
-        if getattr(exc, "code", None) == 11000:
-            raise EvidenceError("recognition_in_progress") from None
+        from ledger_core import post_txn_group
+        result = await post_txn_group(
+            db, user_id=owner, actor_id=actor_id, actor_name=actor_name,
+            entries=entries, txn_type=f"bnpl_{kind}",
+            notes=f"ميزان 2 — إثبات {kind} {provider} {event['order_number']}",
+            metadata={"operation_id": OPERATION, "idempotency_key": event["idempotency_key"],
+                      "provider": provider, "provider_id": payment_id,
+                      "order_reference_id": event["order_number"],
+                      "recognition_event_key": latest["event_key"],
+                      "recognized_at": event["recognized_at"],
+                      "recognition_source": event["source"], "sales_tax": tax,
+                      "original_recognition_key": latest["original_key"]},
+        )
+        await db.mz2_recognition_events.update_one(
+            {"_id": record["_id"], "user_id": owner, "status": "posting"},
+            {"$set": {"status": "posted", "txn_group_id": result["txn_group_id"]}})
+    except Exception:
+        # The enclosing Mongo transaction aborts every leg, event and audit.
+        # A process crash is recovered by Mongo; retry uses canonical identity.
         raise
-    try:
-        # Re-read after the cross-process owner lock to serialize refunds and
-        # prevent two different ingress paths from recognizing the same sale.
-        latest = await prepare(db, owner=owner, provider=provider, payment_id=payment_id,
-                               refund_id=refund_id, incoming=incoming)
-        if latest["state"] == "already_posted":
-            return latest
-        if latest["preview_hash"] != proposal["preview_hash"]:
-            raise EvidenceError("preview_changed_review_again")
-        event, tax = latest["event"], latest["tax"]
-        kind = event["kind"]
-        is_sale = kind == "sale"
-        entries = [{
-            "entity_type": "payment_gateway", "entity_id": provider, "sub_account": "receivable",
-            "side": "debit" if is_sale else "credit", "amount": tax["gross"],
-            "entry_type": f"bnpl_{kind}",
-        }]
-        for entity_type, entity_id, amount in (
-            ("revenue", "bnpl_sales", tax["net"]), ("tax", "sales_vat_payable", tax["tax"]),
-        ):
-            if Decimal(amount) > 0:
-                entries.append({"entity_type": entity_type, "entity_id": entity_id,
-                                "side": "credit" if is_sale else "debit",
-                                "amount": amount, "entry_type": f"bnpl_{kind}"})
-        record = {"_id": latest["event_key"], "user_id": owner, "status": "posting",
-                  "economic_hash": latest["economic_hash"], "proposal": latest,
-                  "original_key": latest["original_key"], "actor_id": actor_id}
-        await db.mz2_recognition_events.insert_one(record)
-        try:
-            from ledger_core import post_txn_group
-            result = await post_txn_group(
-                db, user_id=owner, actor_id=actor_id, actor_name=actor_name,
-                entries=entries, txn_type=f"bnpl_{kind}",
-                notes=f"ميزان 2 — إثبات {kind} {provider} {event['order_number']}",
-                metadata={"operation_id": OPERATION, "idempotency_key": event["idempotency_key"],
-                          "provider": provider, "provider_id": payment_id,
-                          "order_reference_id": event["order_number"],
-                          "recognition_event_key": latest["event_key"],
-                          "recognized_at": event["recognized_at"],
-                          "recognition_source": event["source"], "sales_tax": tax,
-                          "original_recognition_key": latest["original_key"]},
-            )
-            await db.mz2_recognition_events.update_one(
-                {"_id": record["_id"], "user_id": owner, "status": "posting"},
-                {"$set": {"status": "posted", "txn_group_id": result["txn_group_id"]}})
-        except Exception:
-            # Do not roll back, repost, or silently retry an uncertain group.
-            # The durable posting record blocks re-entry even after process loss.
-            raise
-        return {**latest, "state": "posted", "txn_group_id": result["txn_group_id"]}
-    finally:
-        await db.mz2_recognition_locks.delete_one({"_id": owner, "token": token})
+    return {**latest, "state": "posted", "txn_group_id": result["txn_group_id"]}
+
