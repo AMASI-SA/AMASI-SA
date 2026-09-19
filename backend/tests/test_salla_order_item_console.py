@@ -23,6 +23,13 @@ class AsyncCollection:
     def __init__(self, collection):
         self.collection = collection
 
+    def find(self, *args, **kwargs):
+        cursor = self.collection.find(*args, **kwargs)
+        class Cursor:
+            async def to_list(self, length):
+                return list(cursor.limit(length))
+        return Cursor()
+
     def __getattr__(self, name):
         async def call(*args, **kwargs):
             return getattr(self.collection, name)(*args, **kwargs)
@@ -102,6 +109,30 @@ class ConsoleContracts(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(first['result']['verdict'], 'INCONCLUSIVE')
         self.assertEqual(self.db.raw[runtime.LOCKS].count_documents({}), 0)
         self.assertNotIn('test-customer', json.dumps(first, default=str))
+
+    async def test_shipment_endpoint_is_never_read_and_shipping_does_not_block(self):
+        self.http.order['shipping_status'] = 'shipping_ready'
+        self.http.order['shipping_number'] = 'synthetic-tracking'
+        original = self.provider.request
+        async def no_shipments(method, path, body=None):
+            self.assertFalse(path.startswith('/shipments'))
+            return await original(method, path, body)
+        self.provider.request = no_shipments
+        plan = await self.prepare()
+        self.http.order['shipping_status'] = 'shipped'
+        result = await self.service.execute('owner', plan['plan_id'])
+        self.assertEqual(result['state'], 'observed', result)
+        self.assertEqual(self.writes(), ['POST'])
+
+    async def test_fulfilled_order_drift_blocks_before_write(self):
+        for state in ('completed', 'delivering', 'delivered'):
+            self.http.order['status'] = {'slug': self.seed['orders'][0]['state']}
+            plan = await self.prepare()
+            self.http.order['status'] = {'slug': state}
+            result = await self.service.execute('owner', plan['plan_id'])
+            self.assertEqual(result['state'], 'blocked')
+            self.assertEqual(result['result']['code'], 'order_fulfillment_blocks_revision')
+            self.assertEqual(self.writes(), [])
 
     async def test_unknown_outcome_retains_lock_and_cannot_replay(self):
         plan = await self.prepare()
@@ -192,6 +223,42 @@ class ConsoleContracts(unittest.IsolatedAsyncioTestCase):
                 result = await self.service.execute('owner', plan['plan_id'])
                 self.assertEqual(result['state'], 'observed', result)
                 self.assertEqual(self.writes(), [method])
+
+    async def test_ready_piece_requires_confirmation_and_cannot_dispatch(self):
+        self.seed['orders'][0]['item_id'] = 'i-new'
+        self.case = fixture.live_case(method='DELETE', path='/orders/items/i-new', body={})
+        self.http = fixture.LiveHttp(self.seed, evidence_dir=Path(self.tmp.name), case=self.case)
+        self.provider = ProviderAdapter(self.http)
+        self.service = runtime.ConsoleTests(self.db, lambda *_: self.provider)
+        self.db.raw[runtime.FIXTURES].insert_one({'_id': 'owner',
+            'policy_digest': runtime.policy_digest(self.seed),
+            'original_item_ids': ['i0'], 'created_item_ids': ['i-new']})
+        self.db.raw['mezan_preparation_pieces_v1'].insert_one({
+            'user_id': 'owner', 'order_number': self.seed['orders'][0]['order_number'],
+            'order_item_id': 'i-new', 'piece_id': 'piece1', 'status': 'ready_for_employee_receipt'})
+        plan = await self.prepare()
+        self.assertTrue(plan['preparation']['confirmation_required'])
+        result = await self.service.execute('owner', plan['plan_id'])
+        self.assertEqual(result['result']['code'], 'ready_item_customer_confirmation_required')
+        self.assertEqual(self.writes(), [])
+
+    async def test_unfinished_preparation_lifecycle_blocks_nonready_piece(self):
+        self.seed['orders'][0]['item_id'] = 'i-new'
+        self.case = fixture.live_case(method='DELETE', path='/orders/items/i-new', body={})
+        self.http = fixture.LiveHttp(self.seed, evidence_dir=Path(self.tmp.name), case=self.case)
+        self.provider = ProviderAdapter(self.http)
+        self.service = runtime.ConsoleTests(self.db, lambda *_: self.provider)
+        self.db.raw[runtime.FIXTURES].insert_one({'_id': 'owner',
+            'policy_digest': runtime.policy_digest(self.seed),
+            'original_item_ids': ['i0'], 'created_item_ids': ['i-new']})
+        self.db.raw['mezan_preparation_pieces_v1'].insert_one({
+            'user_id': 'owner', 'order_number': self.seed['orders'][0]['order_number'],
+            'order_item_id': 'i-new', 'piece_id': 'piece1', 'status': 'assigned'})
+        plan = await self.prepare()
+        self.assertFalse(plan['preparation']['confirmation_required'])
+        result = await self.service.execute('owner', plan['plan_id'])
+        self.assertEqual(result['result']['code'], 'prepared_item_lifecycle_not_enabled')
+        self.assertEqual(self.writes(), [])
 
     async def test_text_options_of_recorded_added_line(self):
         self.seed['orders'][0]['item_id'] = 'i-new'
