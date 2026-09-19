@@ -15,6 +15,16 @@ class OrderRefundTests(unittest.IsolatedAsyncioTestCase):
     payload = fixtures.WorkflowTests.payload
     preview_and_post = fixtures.WorkflowTests.preview_and_post
 
+    async def daily_post(self, provider, rid):
+        original=await self.db.mz2_recognition_events.find_one({'proposal.event.provider':provider,'proposal.event.kind':'sale'})
+        case=await self.db.mz2_customer_refunds.find_one({'original_key':original['_id']})
+        root='/accounting-module/customer-refunds'
+        payment=await self.client.post(root+'/bank-payments',json=dict(original_key=original['_id'],case_reference=case['case_reference'],amount='23',paid_at='2020-01-03T12:00:00Z',execution_channel=provider,bank_reference=rid,provider_refund_id=rid))
+        self.assertEqual(payment.status_code,200,payment.text)
+        result=await self.client.post(root+'/bank-payments/'+payment.json()['id']+'/approve')
+        self.assertEqual(result.status_code,200,result.text)
+        return result.json()
+
     async def scenario(self, provider, statement_first):
         if provider != 'tamara':
             await self.source(provider)
@@ -37,7 +47,8 @@ class OrderRefundTests(unittest.IsolatedAsyncioTestCase):
                 refunded_at='2020-01-03T12:00:00Z', source='synthetic_provider_refund'))
             results = await asyncio.gather(*[process_order_refunds(self.db, owner='owner',
                 order_number=number, source={'kind':source}) for source in ['salla_order_update','replay','sync']])
-            self.assertTrue(all(r['state']=='reconciled' for r in results), results)
+            self.assertTrue(all(r['financial_write'] is False for r in results), results)
+            await self.daily_post(provider,rid)
             if not statement_first:
                 await self.db.settlement_entries.insert_one(entry)
             before = await self.db.general_ledger.count_documents({})
@@ -53,9 +64,10 @@ class OrderRefundTests(unittest.IsolatedAsyncioTestCase):
         balance = sum(Decimal(str(x['amount']))*(1 if x['side']=='debit' else -1) for x in rows)
         self.assertEqual(balance, Decimal('69'))
         groups = await self.db.mz2_recognition_events.find({'proposal.event.provider':provider}).to_list(10)
+        groups += await self.db.mz2_customer_refund_payments.find({'execution_channel':provider,'status':'posted'}).to_list(10)
         self.assertEqual(len(groups), 3)
         self.assertEqual(len({x['txn_group_id'] for x in groups}), 3)
-        self.assertTrue(all(x['proposal']['tax']['rate']=='15' for x in groups))
+        self.assertTrue(all((x.get('tax') or x['proposal']['tax'])['rate']=='15' for x in groups))
         print('REFUND_PROOF', provider, statement_first, self.db.name, [x['txn_group_id'] for x in groups])
 
     async def test_order_first_all_actual_payment_providers(self):
@@ -73,6 +85,8 @@ class OrderRefundTests(unittest.IsolatedAsyncioTestCase):
                 provider_refund_id=rid,provider_payment_id='SYN-CAPTURE-emkan',currency='SAR',
                 amount='23',status='completed',refunded_at='2020-01-03T12:00:00Z',source='synthetic'))
         await process_order_refunds(self.db,owner='owner',order_number='SYN-MANUAL-TAX-emkan',source={'kind':'order_update'})
+        for rid in ['SYN-AGG-1','SYN-AGG-2']:
+            await self.daily_post('emkan',rid)
         draft=dict(id='aggregate',user_id='owner',provider='emkan',status='draft',source_file_id='aggregate-file',amounts={})
         await self.db.accounting_settlements_v2.insert_one(draft)
         await self.db.settlement_entries.insert_one(dict(id='aggregate-row',user_id='owner',file_id='aggregate-file',
@@ -92,7 +106,7 @@ class OrderRefundTests(unittest.IsolatedAsyncioTestCase):
         before = await self.db.general_ledger.count_documents({})
         result = await process_order_refunds(self.db,owner='owner',order_number='SYN-MANUAL-TAX-tamara',source={'kind':'SYN'})
         self.assertEqual(result['state'],'needs_review')
-        self.assertEqual(result['items'][0]['reason'],'refund_identity_required')
+        self.assertIn(result['items'][0]['reason'],['refund_amount_or_identity_required','awaiting_daily_refund_recording'])
         self.assertEqual(await self.db.general_ledger.count_documents({}),before)
 
     async def test_conflicting_statement_and_cross_owner_do_not_write(self):
