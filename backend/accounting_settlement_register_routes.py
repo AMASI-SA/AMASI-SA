@@ -190,9 +190,9 @@ def install_accounting_settlement_register_routes(router, db, current_user):
                 {"_id": 0},
             ).sort("created_at", 1).to_list(1000)
         for entry in source_entries:
-            if entry.get('event_type') == 'refund':
-                entry['refund_link'] = await db.mz2_statement_refund_links.find_one(
-                    {'user_id': owner_id, 'draft_id': draft_id, 'entry_id': entry['id']}, {'_id': 0})
+            if float(entry.get('actual_refund_amount') or 0) + float(entry.get('actual_partial_refund_amount') or 0) > 0:
+                entry['refund_links'] = await db.mz2_statement_refund_links.find(
+                    {'user_id': owner_id, 'draft_id': draft_id, 'entry_id': entry['id']}, {'_id': 0}).to_list(100)
         ledger_entries = []
         if draft.get("ledger_txn_group_id"):
             ledger_entries = await db.general_ledger.find(

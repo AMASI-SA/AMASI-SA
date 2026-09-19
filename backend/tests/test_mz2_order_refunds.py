@@ -66,6 +66,25 @@ class OrderRefundTests(unittest.IsolatedAsyncioTestCase):
         for provider in ['salla','tamara','tabby','emkan']:
             await self.scenario(provider, True)
 
+    async def test_emkan_aggregate_row_links_two_distinct_partial_refunds(self):
+        await self.source('emkan');await self.preview_and_post('emkan')
+        for rid in ['SYN-AGG-1','SYN-AGG-2']:
+            await self.db.payment_refunds.insert_one(dict(id=rid,user_id='owner',provider='emkan',
+                provider_refund_id=rid,provider_payment_id='SYN-CAPTURE-emkan',currency='SAR',
+                amount='23',status='completed',refunded_at='2020-01-03T12:00:00Z',source='synthetic'))
+        await process_order_refunds(self.db,owner='owner',order_number='SYN-MANUAL-TAX-emkan',source={'kind':'order_update'})
+        draft=dict(id='aggregate',user_id='owner',provider='emkan',status='draft',source_file_id='aggregate-file',amounts={})
+        await self.db.accounting_settlements_v2.insert_one(draft)
+        await self.db.settlement_entries.insert_one(dict(id='aggregate-row',user_id='owner',file_id='aggregate-file',
+            event_type='sale_with_partial_refund',order_number='SYN-MANUAL-TAX-emkan',actual_partial_refund_amount=46))
+        self.assertTrue(await refund_review_reasons(self.db,'owner',draft))
+        with self.assertRaises(HTTPException):
+            await link_statement_refund(self.db,owner='owner',actor={'id':'owner'},draft_id='aggregate',entry_id='aggregate-row',refund_id='SYN-AGG-1')
+        self.assertEqual(await self.db.mz2_statement_refund_links.count_documents({}),0)
+        await link_statement_refund(self.db,owner='owner',actor={'id':'owner'},draft_id='aggregate',entry_id='aggregate-row',refund_ids=['SYN-AGG-1','SYN-AGG-2'])
+        self.assertFalse(await refund_review_reasons(self.db,'owner',draft))
+        self.assertEqual(await self.db.general_ledger.count_documents({}),9)
+
     async def test_missing_identity_is_review_without_financial_write(self):
         await self.preview_and_post()
         await self.db.payment_refunds.insert_one(dict(id='local-only',user_id='owner',provider='tamara',

@@ -173,7 +173,8 @@ def install_accounting_receipt_routes(router, db, current_user):
     class RefundLinkIn(BaseModel):
         model_config = ConfigDict(extra='forbid')
         entry_id: str = Field(min_length=1, max_length=120)
-        refund_id: str = Field(min_length=1, max_length=200)
+        refund_id: str | None = Field(default=None, min_length=1, max_length=200)
+        refund_ids: list[str] | None = Field(default=None, min_length=1, max_length=100)
 
     class LinkIn(BaseModel):
         model_config = ConfigDict(extra='forbid')
