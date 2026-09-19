@@ -40,6 +40,9 @@ async def process_order_refunds(db, *, owner, order_number, source):
                     row.update(state=result["state"], txn_group_id=result["txn_group_id"])
                 except (EvidenceError, TaxError) as exc:
                     row.update(state="needs_review", reason=str(exc))
+                    if str(exc) == 'provider_refund_after_bank_payment_possible_double_payment':
+                        await db.mz2_customer_refunds.update_many({'user_id':owner,'original_key':original['_id']},
+                            {'$set':{'state':'conflict','conflict_reason':str(exc)},'$addToSet':{'conflicting_provider_refund_ids':rid}})
             results.append(row)
     if not results:
         results = [{"state": "needs_review", "reason": "identified_refund_and_original_required"}]

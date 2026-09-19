@@ -9,8 +9,8 @@
   "current_phase": "P01",
   "current_phase_file": "PHASE-01-SETTLEMENTS.md",
   "current_phase_status": "IN_PROGRESS",
-  "next_allowed_action": "review_pr_1097_stacked_on_1091_complete_remaining_preview_evidence_preserve_existing_settlements",
-  "current_blocker": "preview_synthetic_receipt_workflow_passed_browser_saved_file_proof_and_written_release_gate_pending",
+  "next_allowed_action": "implement_daily_only_refund_approval_preserve_posted_history_verify_preview",
+  "current_blocker": "daily_only_refund_decision_implementation_and_preview_acceptance_pending",
   "legacy_mezan_policy": {
     "dynamic_financial_dependency_allowed": false,
     "copy_reference_values_allowed": true,
@@ -73,7 +73,7 @@
         "release_guard_verified": true,
         "production_health_ok": true,
         "critical_file_hashes_match": true,
-        "release_boot_started_at": "2026-08-24T21:03:45.282177+00:00",
+        "release_boot_started_at": "2026-08-25T00:03:45.282177+03:00",
         "release_lease_active_after_verify": false,
         "browser_verified": false,
         "browser_acceptance_runtime_sha": "47d750b7cf2edbda4262f6d496a885bb1f30ccdc",
@@ -81,8 +81,8 @@
         "browser_acceptance_release_guard_verified": true,
         "browser_acceptance_release_guard_checks": 3,
         "browser_acceptance_boot_started_at_observations": [
-          "2026-08-25T03:01:01.050949+00:00",
-          "2026-08-25T03:01:44.733022+00:00"
+          "2026-08-25T06:01:01.050949+03:00",
+          "2026-08-25T06:01:44.733022+03:00"
         ],
         "browser_acceptance_fix_pr": 887,
         "browser_acceptance_fix_merge_sha": "47d750b7cf2edbda4262f6d496a885bb1f30ccdc",
@@ -259,5 +259,18 @@
     "existing_three_settlements": "untouched_by_task",
     "evidence_file": "P01-ATOMIC-RECOVERY-20260919.md",
     "last_preview_probe": "HTTP 502 at 2026-09-19 12:27:46 UTC"
+  },
+  "refund_resume_20260919": {
+    "isolated_mongo_tests": 5,
+    "production_changed": false,
+    "protected_settlements": "PRESERVED",
+    "prior_actual_preview_test": "PARTIAL_FIRST_PROVIDER_EVENT_FIRST_STOPPED_ON_MONGO_FILE_LIMIT",
+    "decision": "REFUND_JOURNAL_ONLY_FROM_DAILY_MOVEMENT_APPROVAL",
+    "pr": 1097,
+    "runtime_sha": "4554170b08c48f7614758269cae91ab0aa42a695",
+    "state": "WIP_DECISION_CHANGED",
+    "frontend_tests": 16,
+    "automatic_order_webhook_statement_posting": "MUST_BE_DISABLED_IN_NEXT_CANDIDATE",
+    "evidence": "PRIVATE_RUNTIME_REFUND_LIVE_EVIDENCE"
   }
 }

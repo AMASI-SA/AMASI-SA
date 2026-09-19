@@ -43,6 +43,9 @@ def install_accounting_receivable_routes(router, db, current_user):
         require_accounting_permission(actor, permission)
         return actor, accounting_owner_id(actor)
 
+    from accounting_customer_refund_routes import install_customer_refund_routes
+    install_customer_refund_routes(router, db, current_user, actor_for)
+
     @router.get("/accounting-module/sales-tax")
     async def get_tax(user: dict = Depends(current_user)):
         _, owner = await actor_for(user, "accounting.settlements.view")
