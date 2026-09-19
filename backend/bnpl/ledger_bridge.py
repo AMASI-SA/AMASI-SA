@@ -106,7 +106,7 @@ async def post_bnpl_sale_to_ledger(
     No-op for unsupported statuses or zero amounts. Safe to call
     after every upsert — re-runs short-circuit via the idem key.
     """
-    from accounting_receivable_service import managed_owner, execute
+    from accounting_receivable_service import managed_owner
     if await managed_owner(db, user_id):
         from accounting_ingress import ingest
         evidence = {key: txn[key] for key in (
@@ -114,8 +114,9 @@ async def post_bnpl_sale_to_ledger(
         ) if key in txn}
         evidence["provider"] = _norm_provider(txn)
         result = await ingest(db, owner=user_id, kind="sale", evidence=evidence)
-        return {**result, "ok": True, "skipped": result["state"] == "already_posted",
-                "reason": "idempotent_duplicate" if result["state"] == "already_posted" else None}
+        return {**result, "ok": True,
+                "skipped": result["state"] in {"already_posted", "deferred"},
+                "reason": "idempotent_duplicate" if result["state"] == "already_posted" else result.get("reason")}
     provider = _norm_provider(txn)
     status = (txn.get("status") or "").lower()
     provider_id = (txn.get("provider_id") or "").strip()

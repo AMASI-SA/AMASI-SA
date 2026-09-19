@@ -11,7 +11,8 @@
     "preview_acceptance": "RETAINED_NO_REPEAT",
     "production_changed": false,
     "p02_opened": false,
-    "evidence_file": "P01-RELEASE-PREPARATION-20260920.md"
+    "evidence_file": "P01-RELEASE-PREPARATION-20260920.md",
+    "superseded_by": "write_pause_preparation_20260920; old frozen A/B retained"
   },
   "production_branch": "hotfix/prod-snap-meta-final",
   "foundation_pr": 851,
@@ -21,7 +22,7 @@
   "current_phase_file": "PHASE-01-SETTLEMENTS.md",
   "current_phase_status": "IN_PROGRESS",
   "next_allowed_action": "review_candidate_stack_and_prepare_separately_authorized_production_release_no_P02",
-  "current_blocker": "synthetic_preview_acceptance_passed_production_review_build_merge_deploy_verify_pending",
+  "current_blocker": "production_database_backup_readiness_and_owner_tax_cutover_activation_decisions_pending",
   "legacy_mezan_policy": {
     "dynamic_financial_dependency_allowed": false,
     "copy_reference_values_allowed": true,
@@ -316,5 +317,19 @@
       ],
       "whole_preview_build": "PASS"
     }
+  },
+  "write_pause_preparation_20260920": {
+    "branch": "codex/p01-write-pause-final-20260920",
+    "source_base_git_sha": "3b6bdc290bb401e41e804b46d1f29b068a50b4fa",
+    "state": "SOURCE_CHECKPOINT_FINAL_SHA_CI_AND_INTENT_RECORDED_IN_ISSUE_1006",
+    "write_stop": "OWNER_SCOPED_MONGO_TRANSACTION_BARRIER_WITH_DURABLE_INGRESS",
+    "production_database_transactions": "UNVERIFIED_NO_CONFIRMED_PRODUCTION_CONNECTION",
+    "production_unique_indexes": "UNVERIFIED_READ_ONLY_ACCESS_REQUIRED",
+    "production_backup_and_restore": "UNVERIFIED_NO_PRODUCTION_BACKUP_ADMIN_ACCESS",
+    "preview_acceptance": "RETAINED_NO_REPEAT",
+    "production_changed_by_task": false,
+    "p01": "IN_PROGRESS",
+    "p02": "LOCKED",
+    "evidence_file": "P01-WRITE-CONTROL-20260920.md"
   }
 }

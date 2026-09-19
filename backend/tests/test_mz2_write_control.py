@@ -144,9 +144,43 @@ class WriteControlTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.wait_for(writer,15)
             self.assertTrue((await asyncio.wait_for(pause,15))["paused"])
         await self.assert_balanced(1)
+        # A repeated completed operation is a read-only idempotent response.
+        # Use a different economic event to prove rejection of NEW writes.
+        await self.source("tabby")
         with self.assertRaises(HTTPException) as error:
-            await self.post_sale()
+            await execute(self.db, owner="owner", actor_id="owner",
+                actor_name="test", **self.payload("tabby"))
         self.assertEqual(error.exception.status_code,423)
+
+    async def test_pending_event_survives_client_restart_and_failed_replay(self):
+        import os
+        import ledger_core
+        from motor.motor_asyncio import AsyncIOMotorClient
+        await self.control(True)
+        payment = await self.db.payment_transactions.find_one({"user_id":"owner"})
+        await post_bnpl_sale_to_ledger(self.db,user_id="owner",txn=payment)
+        # New client/process state reads the durable pause and queue, without
+        # copying any in-memory controller state from the first instance.
+        restarted = AsyncIOMotorClient(os.environ["MZ2_TEST_MONGO_URI"])
+        try:
+            other = restarted[self.db.name]
+            self.assertTrue((await write_state(other,"owner"))["paused"])
+            await self.control(False)
+            original = ledger_core.post_ledger_entry
+            async def abort(*args, **kwargs):
+                await original(*args, **kwargs)
+                raise RuntimeError("synthetic replay interruption")
+            with patch.object(ledger_core,"post_ledger_entry",side_effect=abort):
+                result = await replay_pending(other,"owner")
+            self.assertEqual(result["pending_events"],1)
+            self.assertEqual(result["processed"],0)
+            await self.assert_balanced(0)
+            await replay_pending(other,"owner")
+            await replay_pending(self.db,"owner")
+            await self.assert_balanced(1)
+            self.assertEqual(await other.mz2_ingress_events.count_documents({"state":"pending"}),0)
+        finally:
+            restarted.close()
 
     async def test_failed_inflight_write_aborts_then_pause_and_retry(self):
         import ledger_core
