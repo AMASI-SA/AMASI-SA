@@ -1,6 +1,6 @@
 {
   "task_id": "QOYOD-404-RECOVERY-20260919",
-  "status": "FIRST_ORDER_VERIFIED_NEXT_AWAITING_USER_HANDOFF",
+  "status": "WIP_ISOLATED_RECOVERY_ENGINE_NOT_CONNECTED",
   "authorized_sequence": [
     "404",
     "COD",
@@ -23,19 +23,28 @@
   },
   "census_method": "Browser table collection using narrower order-number searches and deduplication; full unique set and status counts exactly match unfiltered 90-day server counters. Then filter business date and eligible status.",
   "display_limitation": "Backend returns first 1000 rows before frontend status filtering; payment-check button 100 is a separate check limit. Default visible 171 failures was incomplete.",
-  "processed": 1,
-  "successful_new_invoices": 1,
+  "processed": 2,
+  "successful_new_invoices": 2,
   "reconciled_existing_invoices": 0,
   "production_source_changed": false,
   "cod_sku_actions": false,
-  "next": "User confirms next prepared order once; inspect result and verify exact provider reference, amount, settlement and sent marker. No repeat after timeout. 198 remain; COD and SKU untouched.",
+  "next": "Complete production adapter, durable claim store, exact-cohort preparation and explicit user activation UI; integration-test without live credentials. Not deployable or activatable yet. Preserve both completed references and all remaining cohort members; no COD/SKU actions.",
   "findings": {
     "first_precheck": "Salla order and payment eligible; no invoice sent",
     "sample_failure": "Historical GET /products 404 before accepted release",
     "runtime": "Accepted release identity and critical hashes verified; no deployment needed",
     "quarantine": "Saved non-transient 404 quarantines are excluded by the automatic worker; deployment alone does not requeue them",
-    "financial_submission": "User confirmed first order once; agent did not resubmit. Mezan sent/reconciled verified. Next order prechecked, no provider reference in fresh snapshot; final confirmation remains user handoff.",
+    "financial_submission": "Second user-confirmed attempt verified: exact single provider reference, total and settlement match fresh Salla direct connector read, zero balance, Mezan sent/reconciled. Saved Mezan amount is stale; do not use it as live total.",
     "provider_bulk_reads": "Fresh provider snapshot completed in background despite 120-second proxy timeout; exact reference yielded one fully paid invoice, zero balance, matching total."
   },
-  "remaining": 198
+  "remaining": 197,
+  "isolated_tests": {
+    "activation": "not implemented",
+    "worker_integration": "not implemented",
+    "passed": 18,
+    "network": "none",
+    "command": "python backend/tests/test_recovery_404_isolated.py",
+    "exit_code": 0,
+    "production_adapter": "not implemented"
+  }
 }
