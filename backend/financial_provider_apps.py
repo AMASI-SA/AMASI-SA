@@ -7,6 +7,8 @@ settlement draft/review/post workflow. It never chooses a cutover instant or
 posts opening balances.
 """
 from fastapi import Depends
+from accounting_source_files import install_accounting_source_file_routes
+from accounting_receivable_routes import install_accounting_receivable_routes
 
 from financial_provider_apps_legacy import *  # noqa: F401,F403
 from financial_provider_apps_legacy import (
@@ -69,6 +71,11 @@ import settlements_import.routes as settlement_import_routes_module
 
 
 def make_financial_provider_apps_router(db, current_user):
+    from accounting_write_control import (
+        AccountingDatabase, install_write_control_routes, protect_accounting_routes,
+    )
+    db = AccountingDatabase(db)
+    from accounting_receipt_service import install_accounting_receipt_routes
     async def provider_user(user: dict = Depends(current_user)):
         fresh = await fresh_accounting_user(db, user)
         require_accounting_permission(fresh, "accounting.settlements.view")
@@ -107,4 +114,9 @@ def make_financial_provider_apps_router(db, current_user):
     install_accounting_settlement_identity_routes(router, db, current_user)
     install_accounting_settlement_register_routes(router, db, current_user)
     install_accounting_courier_bank_routes(router, db, current_user)
+    install_accounting_source_file_routes(router, db, current_user)
+    install_accounting_receivable_routes(router, db, current_user)
+    install_accounting_receipt_routes(router, db, current_user)
+    install_write_control_routes(router, db, current_user)
+    protect_accounting_routes(router, db)
     return router

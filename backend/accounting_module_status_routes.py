@@ -48,7 +48,7 @@ async def fresh_accounting_user(db, user: dict[str, Any]) -> dict[str, Any]:
 
 async def _provider_summary(db, owner_id: str) -> dict[str, int]:
     invoice_summaries = await _invoice_summaries(db, owner_id)
-    merchant_settings = await ensure_user_settings(db, owner_id)
+    merchant_settings = await db.settings.find_one({"user_id": owner_id}) or {}
     apps = build_provider_catalog(
         merchant_settings,
         invoice_summary=invoice_summaries,
