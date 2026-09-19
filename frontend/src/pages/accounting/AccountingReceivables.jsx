@@ -33,6 +33,7 @@ export default function AccountingReceivables({ accountingPermissions = [] }) {
     const [provider, setProvider] = useState("tamara");
     const [reference, setReference] = useState("");
     const [rows, setRows] = useState([]);
+    const [refundReviews, setRefundReviews] = useState([]);
     const [busy, setBusy] = useState(false);
     const [message, setMessage] = useState("");
     const manage = accountingPermissions.includes("accounting.rules.manage");
@@ -82,6 +83,8 @@ export default function AccountingReceivables({ accountingPermissions = [] }) {
                 result.push({ ...item, payload, result: proposal });
             }
             setRows(result);
+            const reviews = (await api.get(BASE + "/refunds/reviews")).data.items || [];
+            setRefundReviews(reviews.filter(item => !reference || item.order_number === reference));
             if (!result.length) setMessage("لا توجد حركات مصدر مطابقة. لا ينشئ البحث معرفات أو حركات دفع.");
         } catch (error) { setMessage(errorText(error)); }
         finally { setBusy(false); }
@@ -132,6 +135,9 @@ export default function AccountingReceivables({ accountingPermissions = [] }) {
                 onChange={e => { setReference(e.target.value); setRows([]); }} className="mx-2 rounded border p-2" /></label>
             <button disabled={busy} onClick={preview} className="rounded border px-4 py-2">معاينة المؤهل والمرفوض</button>
         </div>
+        {refundReviews.filter(item => item.state !== "reconciled").map(item => <p key={item.order_number} className="rounded border border-amber-300 p-3">
+            تحتاج مراجعة: استرداد الطلب {item.order_number} ينتظر هوية مالية مؤكدة من مزود الدفع الأصلي. تحديث حالة الطلب وحده لا ينشئ قيدًا.
+        </p>)}
         <div className="overflow-auto"><table className="w-full text-sm">
             <thead><tr>{["الطلب / الحركة", "الإجمالي", "الصافي", "الضريبة / النسبة", "الحالة والدليل", "الإجراء"].map(h => <th key={h} className="p-2 text-right">{h}</th>)}</tr></thead>
             <tbody>{rows.map((row, index) => <tr key={[row.payment_id, row.refund_id, index].join(":")} className="border-t">
