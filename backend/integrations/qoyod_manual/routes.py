@@ -103,6 +103,8 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
         prefix="/integrations/qoyod/manual",
         tags=["integrations:qoyod:manual"],
     )
+    from .recovery_routes import make_recovery_router
+    router.include_router(make_recovery_router(db, current_user))
 
     @router.get("/health")
     async def health(user=Depends(current_user)):

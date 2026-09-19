@@ -2545,6 +2545,7 @@ async def manual_send_one(
     orders_user_id: Optional[str] = None, actor: str = "manual-ui",
     allow_missing_salla_order_date: bool = False,
     allow_historical_positive_total: bool = False,
+    recovery_expected_total: Optional[str] = None,
 ) -> dict:
     """Push a single Salla order to Qoyod using the 4-step manual path.
 
@@ -2719,6 +2720,12 @@ async def manual_send_one(
     _assert_sar_currency(canon)
     resolved_total = _money_decimal(canon.get("total_amount"))
     salla_total = _q2(resolved_total) if resolved_total is not None else 0.0
+    if recovery_expected_total is not None:
+        if (manual_inv_id_existing or is_cod_family(payment_method)
+                or _money_decimal(recovery_expected_total) != _money_decimal(salla_total)):
+            raise ManualSendRefused(
+                "recovery_live_facts_changed",
+                "تغيرت بيانات التعافي أو توجد فاتورة سابقة؛ يلزم التحقق دون إعادة السداد")
     # The inbox snapshot may carry the generic/old payment alias.  Orders V2
     # is authoritative for the current payment method.
     is_cod = is_cod_family(payment_method)

@@ -1,0 +1,52 @@
+/* Isolated real React/DOM test; API module replaced at the network boundary. */
+const path = require('node:path');
+const assert = require('node:assert/strict');
+const { createRequire } = require('node:module');
+const root = path.resolve(__dirname, '../..');
+const moduleRoot = process.env.UI_TEST_MODULES || path.join(root, 'frontend');
+const req = createRequire(path.join(moduleRoot, 'package.json'));
+const esbuild = req('esbuild');
+const { JSDOM } = req('jsdom');
+const dom = new JSDOM('<div id="root"></div>', {url:'http://isolated.test'});
+global.window = dom.window; global.document = dom.window.document;
+global.HTMLElement = dom.window.HTMLElement; global.IS_REACT_ACT_ENVIRONMENT = true;
+const React = req('react');
+const {createRoot} = req('react-dom/client');
+const {act} = React;
+let data = {state:'prepared', fingerprint:'reviewed-scope', total:199, verified:2, remaining:197,
+  excluded:['synthetic-a','synthetic-b'], results:[{reference:'synthetic-c',state:'pending',reason:'awaiting_activation'}]};
+const posts = [];
+global.__recoveryApi = {get: async () => ({data}), post: async (url, body) => {
+  posts.push({url, body}); data = {...data, state:url.endsWith('/activate')?'active':'paused'}; return {data};
+}};
+(async () => {
+  const build = await esbuild.build({entryPoints:[path.join(root,'frontend/src/components/qoyod/Qoyod404Recovery.jsx')],
+    bundle:true, write:false, platform:'node', format:'cjs', jsx:'automatic',
+    external:['react','react/jsx-runtime'],
+    plugins:[{name:'isolated-api',setup(b){b.onResolve({filter:/lib\/api$/},()=>({path:'api',namespace:'test'}));
+      b.onLoad({filter:/.*/,namespace:'test'},()=>({contents:'export default globalThis.__recoveryApi',loader:'js'}));}}]});
+  const loaded = {exports:{}};
+  new Function('require','module','exports',build.outputFiles[0].text)(req,loaded,loaded.exports);
+  const Component = loaded.exports.default;
+  const container = document.getElementById('root');
+  const app = createRoot(container);
+  await act(async()=>{app.render(React.createElement(Component));});
+  assert.equal(posts.length,0,'render/refresh must not activate');
+  assert.match(container.querySelector('[data-testid="recovery-counts"]').textContent,/2 \/ 199.*197/);
+  const findButton = text => [...container.querySelectorAll('button')].find(x=>x.textContent===text);
+  const activate = findButton('تفعيل التعافي التلقائي للنطاق المحدد');
+  assert.equal(activate.disabled,true,'explicit checkbox required');
+  await act(async()=>{container.querySelector('input[type="checkbox"]').click();});
+  assert.equal(activate.disabled,false);
+  await act(async()=>{activate.click();});
+  assert.deepEqual(posts[0],{url:'/integrations/qoyod/manual/recovery-404/activate',
+    body:{fingerprint:'reviewed-scope',confirmation:'ACTIVATE_REVIEWED_404_COHORT'}});
+  assert.equal(findButton('التحقق من المحاولات غير المحسومة — دون إرسال').disabled,true);
+  await act(async()=>{findButton('إيقاف التعافي').click();});
+  await act(async()=>{findButton('التحقق من المحاولات غير المحسومة — دون إرسال').click();});
+  assert.ok(posts[2].url.endsWith('/audit'));
+  assert.equal(posts.filter(x=>x.url.endsWith('/activate')).length,1);
+  assert.match(container.textContent,/synthetic-c/,'per-order result remains visible');
+  await act(async()=>{app.unmount();});
+  console.log('PASS: real React DOM, counters, explicit fingerprint activation, pause, read-only audit, no implicit send');
+})().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>dom.window.close());

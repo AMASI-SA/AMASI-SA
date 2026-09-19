@@ -1,0 +1,57 @@
+{
+  "task_id": "QOYOD-404-RECOVERY-20260919",
+  "status": "INTEGRATED_REVIEW_CANDIDATE_NOT_DEPLOYED",
+  "authorized_sequence": [
+    "404",
+    "COD",
+    "missing_SKU"
+  ],
+  "current_phase": "404",
+  "scope": "Eligible completed/delivering/delivered orders from 2026-07-01 through 2026-09-19",
+  "source_checkpoint": "d34a278414651f122b1086306479a5ae7d38a1d6",
+  "production_deployment": "4eb3f95706cb26d0255116942a9f106c77a5514f",
+  "census_proof": {
+    "unique_90_day_rows": 6579,
+    "sent": 5729,
+    "unsent": 784,
+    "failed": 66,
+    "duplicates": 0,
+    "eligible_requested_scope": 6063,
+    "saved_404_count": 199,
+    "cod_in_404": 0,
+    "invoice_markers_in_404": 0
+  },
+  "census_method": "Browser table collection using narrower order-number searches and deduplication; full unique set and status counts exactly match unfiltered 90-day server counters. Then filter business date and eligible status.",
+  "display_limitation": "Backend returns first 1000 rows before frontend status filtering; payment-check button 100 is a separate check limit. Default visible 171 failures was incomplete.",
+  "processed": 2,
+  "successful_new_invoices": 2,
+  "reconciled_existing_invoices": 0,
+  "production_source_changed": false,
+  "cod_sku_actions": false,
+  "next": "Review source PR and CI. Follow v5 source-A/intent-B release protocol before any management-page publish. After fresh deployment proof, import exact private cohort and prepare without sending. User activation remains separate and subject to automatic review. Monitor every remaining result; no terminal/API activation bypass.",
+  "findings": {
+    "first_precheck": "Salla order and payment eligible; no invoice sent",
+    "sample_failure": "Historical GET /products 404 before accepted release",
+    "runtime": "Accepted release identity and critical hashes verified; no deployment needed",
+    "quarantine": "Saved non-transient 404 quarantines are excluded by the automatic worker; deployment alone does not requeue them",
+    "financial_submission": "Second user-confirmed attempt verified: exact single provider reference, total and settlement match fresh Salla direct connector read, zero balance, Mezan sent/reconciled. Saved Mezan amount is stale; do not use it as live total.",
+    "provider_bulk_reads": "Fresh provider snapshot completed in background despite 120-second proxy timeout; exact reference yielded one fully paid invoice, zero balance, matching total."
+  },
+  "remaining": 197,
+  "isolated_tests": {
+    "sender_and_adjacent_regressions": 138,
+    "production_adapter": "implemented and exercised with synthetic provider boundaries",
+    "activation": "explicit fingerprint-bound UI and HTTP route",
+    "network": "all provider boundaries mocked",
+    "core": 18,
+    "full_frontend_build": "not run; CI pending",
+    "live_provider_testing": "not performed",
+    "worker_integration": "one order per tick; durable claims; audit-only stale cursor",
+    "new_react_dom": "passed",
+    "existing_frontend": 8,
+    "http_mongo_worker_adapter": 19
+  },
+  "task_branch": "codex/qoyod-404-worker-20260919",
+  "reviewed_base": "4eb3f95706cb26d0255116942a9f106c77a5514f",
+  "production_activation": "not prepared or activated"
+}
