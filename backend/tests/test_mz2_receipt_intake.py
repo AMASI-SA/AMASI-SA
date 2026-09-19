@@ -2,6 +2,7 @@
 import asyncio
 import os
 import unittest
+from decimal import Decimal
 from uuid import uuid4
 from unittest.mock import patch
 from fastapi import FastAPI, APIRouter
@@ -164,8 +165,8 @@ class IntakeTests(unittest.IsolatedAsyncioTestCase):
         group = result.json()['ledger_txn_group_id']
         rows = await self.db.general_ledger.find({'txn_group_id':group}).to_list(20)
         self.assertEqual(len(rows), 6)
-        self.assertEqual(sum(r['amount'] for r in rows if r['side']=='debit'), 115)
-        self.assertEqual(sum(r['amount'] for r in rows if r['side']=='credit'), 115)
+        self.assertEqual(sum(Decimal(str(r['amount'])) for r in rows if r['side']=='debit'), 115)
+        self.assertEqual(sum(Decimal(str(r['amount'])) for r in rows if r['side']=='credit'), 115)
         self.assertEqual((await self.transition('post')).status_code, 409)
         self.assertEqual(await self.db.general_ledger.count_documents({}), 8)
         saved = await self.db.mz2_bank_receipts.find_one({'id':receipt['id']})
@@ -176,6 +177,24 @@ class IntakeTests(unittest.IsolatedAsyncioTestCase):
     def test_explicit_bank_reference_only(self):
         self.assertIsNone(bank_reference('وصل 104.65 يوم 2026-09-19 إلى حساب 123456'))
         self.assertEqual(bank_reference('مرجع: SYN-BANK-001'), 'SYN-BANK-001')
+
+    async def test_missing_reference_duplicate_is_not_guessed(self):
+        await self.receipt(bank_message='SYN amount received')
+        retry = await self.client.post(BASE + '/bank-receipts', json={
+            **self.body, 'bank_message': 'SYN another message', 'request_id': str(uuid4())})
+        self.assertEqual(retry.status_code, 409)
+        self.assertEqual(await self.db.mz2_bank_receipts.count_documents({}), 1)
+        await self.assert_no_finance()
+
+    async def test_invalid_amount_and_unverified_binding_write_nothing(self):
+        for amount in ['NaN', '-1', '0', '1.001']:
+            result = await self.client.post(BASE + '/bank-receipts', json={**self.body,'amount':amount})
+            self.assertEqual(result.status_code, 422)
+        await self.db.accounting_provider_bank_bindings_v2.update_one({}, {'$set':{'verification_status':'unverified'}})
+        result = await self.client.post(BASE + '/bank-receipts', json=self.body)
+        self.assertEqual(result.status_code, 409)
+        self.assertEqual(await self.db.mz2_bank_receipts.count_documents({}), 0)
+        await self.assert_no_finance()
 
 
 if __name__ == '__main__':
