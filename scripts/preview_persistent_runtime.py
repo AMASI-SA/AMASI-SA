@@ -45,7 +45,7 @@ def prepare():
     (SOURCE/'backend/.env').symlink_to('/app/backend/.env')
     # Install private dependencies; shared release builds may remove /app node_modules.
     tool = SOURCE/'scripts/frontend_release_toolchain.py'
-    toolenv = dict(os.environ, XDG_CACHE_HOME=str(STATE/'toolcache'))
+    toolenv = dict(os.environ, XDG_CACHE_HOME=str(STATE/'toolcache'), YARN_CACHE_FOLDER='/tmp/preview-runtime-yarn-cache-20260919')
     with (STATE/'install.log').open('w') as log:
         subprocess.run([sys.executable,str(tool),'exec','--','yarn','--cwd',str(SOURCE/'frontend'),'install','--frozen-lockfile','--non-interactive'],env=toolenv,stdout=log,stderr=subprocess.STDOUT,check=True)
     node = subprocess.check_output([sys.executable,str(tool),'exec','--','node','-p','process.execPath'],env=toolenv,text=True).strip().splitlines()[-1]
