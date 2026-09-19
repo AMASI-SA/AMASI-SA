@@ -343,3 +343,69 @@ async def test_ignored_filters_cannot_hide_product_beyond_lookup_limit(client, m
 
     monkeypatch.setattr(client, "_request", request)
     assert (await client.find_product_by_sku("TARGET"))["id"] == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("target", ["SKU-50", "ABSENT"])
+async def test_full_catalog_page_then_production_empty_sentinel(monkeypatch, target):
+    """Production returns plain-text 404 at the end of a paginated list."""
+    calls = []
+
+    class FakeHTTP:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def request(self, method, url, **kwargs):
+            assert method == "GET", "Lookup must never write to Qoyod"
+            params = kwargs["params"]
+            calls.append(params)
+            request = httpx.Request(method, url, params=params)
+            if params.get("page") == 1:
+                return httpx.Response(200, json={"products": [
+                    {"id": i, "sku": f"SKU-{i}"} for i in range(1, 51)
+                ]}, request=request)
+            return httpx.Response(404, text="We found nothing", request=request)
+
+    monkeypatch.setattr(httpx, "AsyncClient", FakeHTTP)
+    subject = ManualQoyodClient(api_key="synthetic", base_url="https://api.qoyod.com/2.0")
+    result = await subject.find_product_by_sku(target)
+    assert result == ({"id": 50, "sku": "SKU-50"} if target == "SKU-50" else None)
+    assert calls == [
+        {"q[sku_eq]": target, "limit": 5},
+        {"page": 1, "limit": 50},
+        {"page": 2, "limit": 50},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_empty_sentinel_cannot_complete_a_catalog_with_missing_declared_rows(client, monkeypatch):
+    async def request(method, path, **kwargs):
+        if kwargs["params"].get("page") == 1:
+            return {"products": [{"id": 1, "sku": "A"}], "meta": {"total": 2}}
+        raise provider_error(404, "We found nothing")
+
+    monkeypatch.setattr(client, "_request", request)
+    with pytest.raises(ManualQoyodError):
+        await client.find_product_by_sku("ABSENT")
+    assert client._product_sku_snapshot is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("excerpt", [
+    "<html>We found nothing</html>",
+    "Proxy error: We found nothing upstream",
+    "{'error': 'URL not found', 'detail': 'We found nothing'}",
+])
+async def test_empty_sentinel_must_be_an_exact_provider_message(client, monkeypatch, excerpt):
+    async def request(method, path, **kwargs):
+        raise provider_error(404, excerpt)
+
+    monkeypatch.setattr(client, "_request", request)
+    with pytest.raises(ManualQoyodError):
+        await client.find_product_by_sku("ABSENT")

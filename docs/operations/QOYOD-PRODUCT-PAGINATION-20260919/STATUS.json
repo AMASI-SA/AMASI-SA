@@ -1,0 +1,22 @@
+{
+  "task_id": "QOYOD-PRODUCT-PAGINATION-20260919",
+  "status": "PR_OPEN_CI_PENDING",
+  "source_commit": "29c219de198935fa015f6cdf6923178842594896",
+  "pull_request": "https://github.com/AMASI-SA/AMASI-SA/pull/1093",
+  "branch": "codex/qoyod-root-cause-20260919",
+  "base_commit": "1f2923f19ba503017a04677636d75caad8e4df91",
+  "production_changed": false,
+  "financial_writes": false,
+  "cod_deferred": true,
+  "root_cause": "Exact provider empty-page sentinel was accepted only on the first product catalog page.",
+  "verification": {
+    "regression_before": "5 failed, 31 passed: later-page sentinel and non-exact sentinel classification",
+    "focused_after": "79 passed: product lookup, fail-closed client, base URL",
+    "ci_and_manual_suite": "180 passed with 4 manual-send test setup failures (missing synthetic base URL)",
+    "manual_suite_after_setup_fix": "43 passed with synthetic base URL and ephemeral synthetic encryption key"
+  },
+  "remaining": [
+    "GitHub CI and review",
+    "Governed release intent, deployment verification, and separately gated live acceptance"
+  ]
+}
