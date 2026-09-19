@@ -71,6 +71,10 @@ import settlements_import.routes as settlement_import_routes_module
 
 
 def make_financial_provider_apps_router(db, current_user):
+    from accounting_write_control import (
+        AccountingDatabase, install_write_control_routes, protect_accounting_routes,
+    )
+    db = AccountingDatabase(db)
     from accounting_receipt_service import install_accounting_receipt_routes
     async def provider_user(user: dict = Depends(current_user)):
         fresh = await fresh_accounting_user(db, user)
@@ -113,4 +117,6 @@ def make_financial_provider_apps_router(db, current_user):
     install_accounting_source_file_routes(router, db, current_user)
     install_accounting_receivable_routes(router, db, current_user)
     install_accounting_receipt_routes(router, db, current_user)
+    install_write_control_routes(router, db, current_user)
+    protect_accounting_routes(router, db)
     return router

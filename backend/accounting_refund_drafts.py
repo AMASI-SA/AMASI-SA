@@ -7,9 +7,16 @@ from accounting_sales_tax import decimal_value, TaxError
 from accounting_recognition_evidence import REFUNDED
 
 
-async def observe_refund(db, *, owner, order_number, source, payload=None):
+async def observe_refund(db, *, owner, order_number, source, payload=None, _queued=False):
     if not await managed_owner(db, owner):
         return {'state':'not_managed','items':[]}
+    if not _queued:
+        from accounting_ingress import ingest
+        data = payload or {}
+        return await ingest(db, owner=owner, kind="refund_observation", evidence={
+            "order_number": str(order_number), "source": source,
+            "payload": {key: data[key] for key in ("status", "payment_actions") if key in data},
+        })
     async def write(scoped):
         originals=await scoped.mz2_recognition_events.find({'user_id':owner,'status':'posted',
             'proposal.event.kind':'sale','proposal.event.order_number':str(order_number)}).to_list(101)

@@ -59,7 +59,16 @@ class SessionDatabase:
 
 
 async def atomic_owner(db, owner, callback):
+    return await _owner_transaction(db, owner, callback)
+
+
+async def _owner_transaction(db, owner, callback, *, control=False):
+    from accounting_write_control import AccountingDatabase
+    if isinstance(db, AccountingDatabase):
+        db = db.current()
     if isinstance(db, SessionDatabase):
+        if db._owner != owner or control:
+            raise HTTPException(409, "accounting_transaction_scope_conflict")
         return await callback(db)
     hello = await db.command("hello")
     if not hello.get("setName") or hello.get("logicalSessionTimeoutMinutes") is None:
@@ -75,10 +84,17 @@ async def atomic_owner(db, owner, callback):
     async with await db.client.start_session() as session:
         async def commit_work(active_session):
             scoped = SessionDatabase(db, active_session)
+            scoped._owner = owner
             # First transactional operation serializes all Mezan 2 recognition
             # and settlement decisions for this owner. Aborts release it.
             await scoped.mz2_atomic_owners.update_one(
                 {"_id": owner}, {"$inc": {"revision": 1}})
+            state = await scoped.mz2_atomic_owners.find_one({"_id": owner})
+            if not control and state.get("writes_paused", False) is not False:
+                raise HTTPException(423, detail={
+                    "code": "mz2_writes_paused",
+                    "message": "كتابات ميزان 2 متوقفة؛ القراءة متاحة",
+                })
             result = await callback(scoped)
             for user_id, group in scoped._ledger_groups:
                 rows = await scoped.general_ledger.find({

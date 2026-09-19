@@ -21,6 +21,9 @@ def digest(value):
 
 
 async def managed_owner(db, owner):
+    controls = getattr(db, "mz2_atomic_owners", None)
+    if controls is not None and await controls.find_one({"_id": owner, "mezan2_managed": True}):
+        return True
     settings = getattr(db, "settings", None)
     if settings is None:
         return False

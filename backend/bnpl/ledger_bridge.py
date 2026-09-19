@@ -108,9 +108,12 @@ async def post_bnpl_sale_to_ledger(
     """
     from accounting_receivable_service import managed_owner, execute
     if await managed_owner(db, user_id):
-        result = await execute(db, owner=user_id, actor_id=user_id, actor_name="bnpl_bridge",
-                             provider=_norm_provider(txn), payment_id=txn.get("provider_id"),
-                             incoming=txn)
+        from accounting_ingress import ingest
+        evidence = {key: txn[key] for key in (
+            "provider_id", "currency", "amount", "order_reference_id"
+        ) if key in txn}
+        evidence["provider"] = _norm_provider(txn)
+        result = await ingest(db, owner=user_id, kind="sale", evidence=evidence)
         return {**result, "ok": True, "skipped": result["state"] == "already_posted",
                 "reason": "idempotent_duplicate" if result["state"] == "already_posted" else None}
     provider = _norm_provider(txn)

@@ -8,6 +8,7 @@ import AccountingHome from "./AccountingHome";
 import AccountingPermissionsDialog from "./AccountingPermissionsDialog";
 import AccountingSettlements from "./AccountingSettlements";
 import AccountingBankReceipts from "./AccountingBankReceipts";
+import AccountingWriteControl from "./AccountingWriteControl";
 import {
     AccessDenied,
     AccountingHeader,
@@ -89,6 +90,7 @@ export default function AccountingWorkspace() {
     return (
         <div className="space-y-5" dir="rtl" data-testid="accounting-workspace">
             <AccountingHeader page={page} canManagePermissions={access?.is_owner === true} onOpenPermissions={() => setPermissionsOpen(true)} />
+            <AccountingWriteControl />
             {content}
             <AccountingPermissionsDialog open={permissionsOpen} onClose={() => setPermissionsOpen(false)} />
         </div>
