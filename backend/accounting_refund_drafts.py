@@ -23,6 +23,8 @@ async def observe_refund(db, *, owner, order_number, source, payload=None):
                 'provider_payment_id':payment,'status':{'$in':list(REFUNDED)}}).to_list(1001)
             movements=await scoped.mz2_customer_refund_payments.find({'user_id':owner,
                 'original_key':original['_id'],'status':'posted'}).to_list(1001)
+            historical=await scoped.mz2_recognition_events.find({'user_id':owner,
+                'original_key':original['_id'],'status':'posted','proposal.event.kind':'refund'}).to_list(1001)
             bank_paid=any(x['execution_channel']=='bank' for x in movements)
             if external and bank_paid:
                 reason='provider_refund_after_bank_payment_possible_double_payment'
@@ -58,7 +60,8 @@ async def observe_refund(db, *, owner, order_number, source, payload=None):
                 key=digest([owner,'customer_refund_case',internal_reference])
                 existing=next((x for x in cases if x['id']==key),None)
                 others=[x for x in cases if x['id']!=key]
-                other_total=sum((Decimal(x['amount']) for x in others),Decimal(0))
+                other_total=sum((Decimal(x['amount']) for x in others),Decimal(0)) + sum(
+                    (Decimal(x['proposal']['tax']['gross']) for x in historical),Decimal(0))
                 # A cumulative update matching already recorded daily cases is
                 # evidence on those cases, not a second refund identity.
                 if target<=other_total:
@@ -91,6 +94,7 @@ async def observe_refund(db, *, owner, order_number, source, payload=None):
             for refund in external:
                 rid=refund.get('provider_refund_id')
                 matches=[x for x in movements if x.get('provider_refund_id')==rid and x['execution_channel']==provider] if rid else []
+                matches += [x for x in historical if x['proposal']['event']['canonical_event_id']==rid] if rid else []
                 results.append({'state':'matched_daily_movement' if len(matches)==1 else 'needs_review',
                     'reason':None if len(matches)==1 else 'awaiting_daily_refund_recording',
                     'refund_id':rid,'provider':provider})

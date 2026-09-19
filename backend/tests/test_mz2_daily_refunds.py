@@ -127,6 +127,25 @@ class DailyRefundTests(unittest.IsolatedAsyncioTestCase):
             await prepare(self.db,owner='owner',provider='tamara',payment_id='SYN-CAPTURE-tamara',refund_id='SYN-late')
         self.assertEqual(await self.db.general_ledger.count_documents({}),before)
 
+    async def test_historical_refund_does_not_become_another_pending_refund(self):
+        key=await self.setup_sale()
+        # Preserved journal from the previous approved contract, before daily
+        # movements existed. Never migrate or repost it on an order update.
+        from accounting_sales_tax import split_gross
+        tax=split_gross('50','15')
+        async def seed(scoped):
+            group=await post_txn_group(scoped,user_id='owner',actor_id='owner',actor_name='SYN history',
+                entries=[dict(entity_type='revenue',entity_id='bnpl_sales',side='debit',amount=tax['net'],entry_type='bnpl_refund'),
+                         dict(entity_type='tax',entity_id='sales_vat_payable',side='debit',amount=tax['tax'],entry_type='bnpl_refund'),
+                         dict(entity_type='payment_gateway',entity_id='tamara',sub_account='receivable',side='credit',amount=50,entry_type='bnpl_refund')],txn_type='bnpl_refund')
+            await scoped.mz2_recognition_events.insert_one(dict(_id='SYN-historical',user_id='owner',original_key=key,status='posted',
+                txn_group_id=group['txn_group_id'],proposal={'tax':tax,'event':{'kind':'refund','canonical_event_id':'SYN-historical'}}))
+        await atomic_owner(self.db,'owner',seed)
+        before=await self.db.general_ledger.count_documents({})
+        await self.notify('tamara',50)
+        self.assertEqual(await self.db.general_ledger.count_documents({}),before)
+        self.assertEqual(await self.db.mz2_customer_refunds.count_documents({}),0)
+
     async def test_viewer_owner_isolation_failure_and_recovery(self):
         await self.bank();key=await self.setup_sale();row=await self.case(key,'SYN-recovery','50')
         payment=await self.movement(key,row['case_reference'],'50')
