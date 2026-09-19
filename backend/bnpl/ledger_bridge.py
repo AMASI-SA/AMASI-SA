@@ -106,6 +106,13 @@ async def post_bnpl_sale_to_ledger(
     No-op for unsupported statuses or zero amounts. Safe to call
     after every upsert — re-runs short-circuit via the idem key.
     """
+    from accounting_receivable_service import managed_owner, execute
+    if await managed_owner(db, user_id):
+        result = await execute(db, owner=user_id, actor_id=user_id, actor_name="bnpl_bridge",
+                             provider=_norm_provider(txn), payment_id=txn.get("provider_id"),
+                             incoming=txn)
+        return {**result, "ok": True, "skipped": result["state"] == "already_posted",
+                "reason": "idempotent_duplicate" if result["state"] == "already_posted" else None}
     provider = _norm_provider(txn)
     status = (txn.get("status") or "").lower()
     provider_id = (txn.get("provider_id") or "").strip()
@@ -175,6 +182,16 @@ async def post_bnpl_refund_to_ledger(
     `refund` is a `payment_refunds` document. Idempotent on
     (provider, provider_refund_id).
     """
+    from accounting_receivable_service import managed_owner
+    if await managed_owner(db, user_id):
+        from accounting_order_refunds import process_order_refunds
+        payment = await db.payment_transactions.find_one({'user_id':user_id,
+            'provider':_norm_provider(refund),'provider_id':refund.get('provider_payment_id')})
+        reference=(payment or {}).get('order_reference_id') or (payment or {}).get('order_number')
+        result = await process_order_refunds(db,owner=user_id,order_number=str(reference or ''),
+            source={'kind':'provider_refund_sync','provider':_norm_provider(refund),
+                    'refund_id':refund.get('provider_refund_id')})
+        return {**result,'ok':True,'skipped':True,'reason':'daily_movement_approval_required'}
     provider = _norm_provider(refund)
     refund_id = (refund.get("provider_refund_id") or "").strip()
     amount = float(refund.get("amount") or 0)

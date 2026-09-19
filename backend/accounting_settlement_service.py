@@ -32,6 +32,8 @@ PROVIDER_LABELS = {
     "emkan": "إمكان",
 }
 BLOCKING_REASON_CODES = frozenset({
+    "statement_required", "bank_receipt_required", "receipt_link_invalid",
+    "receipt_scope_conflict", "receipt_amount_difference",
     "missing_bank",
     "missing_statement_reference",
     "unmatched_rows",
@@ -381,11 +383,29 @@ async def post_reviewed_settlement(
     owner_id: str,
     actor: dict[str, Any],
     draft: dict[str, Any],
-) -> dict[str, Any]:
+ ) -> dict[str, Any]:
+    from accounting_atomic import atomic_owner
+    async def commit_settlement(scoped):
+        return await _post_reviewed_settlement_transaction(
+            scoped, owner_id=owner_id, actor=actor, draft=draft)
+    return await atomic_owner(db, owner_id, commit_settlement)
+
+
+async def _post_reviewed_settlement_transaction(db, *, owner_id, actor, draft):
+    if draft.get("receipt_workflow_version") == 2 or draft.get("bank_receipt_id"):
+        from accounting_receipt_service import receipt_reasons
+        pending = await receipt_reasons(db, owner_id, draft)
+        if pending:
+            raise HTTPException(409, {"code": "settlement_receipt_blocked", "reasons": pending})
     if draft.get("status") != "reviewed":
         raise HTTPException(409, "يجب مراجعة المسودة قبل الترحيل")
     if has_blocking_reasons(draft.get("review_reasons")):
         raise HTTPException(409, "لا يمكن ترحيل مسودة تحتوي أسباب مراجعة مفتوحة")
+
+    from accounting_order_refunds import refund_review_reasons
+    refund_reasons = await refund_review_reasons(db, owner_id, draft)
+    if refund_reasons:
+        raise HTTPException(409, {"code": "refund_reconciliation_required", "reasons": refund_reasons})
 
     provider = canonical_provider(draft.get("provider"))
     bank_id = str(draft.get("bank_account_id") or "").strip()
@@ -465,6 +485,7 @@ async def post_reviewed_settlement(
         "bank_snapshot": bank_snapshot,
         "amounts": preview["amounts"],
         "refunds_are_statement_evidence_only": True,
+        "bank_receipt_id": draft.get("bank_receipt_id"),
     }
     entries = [
         {
@@ -491,6 +512,9 @@ async def post_reviewed_settlement(
         )[:500],
         metadata=metadata,
     )
+    if draft.get("bank_receipt_id"):
+        from accounting_receipt_service import consume_receipt
+        await consume_receipt(db, owner_id, draft, result["txn_group_id"])
     await write_audit(
         db,
         user_id=owner_id,
@@ -532,3 +556,4 @@ __all__ = [
     "settlement_idempotency_key",
     "statement_reference_from_file",
 ]
+

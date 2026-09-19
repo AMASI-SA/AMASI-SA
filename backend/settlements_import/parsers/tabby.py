@@ -159,12 +159,9 @@ def parse(workbook: openpyxl.Workbook) -> dict:
         if not r:
             continue
         order_no = to_str(r[cols["order_number"]] if cols["order_number"] < len(r) else "")
-        if not order_no:
-            continue
         order_no = re.sub(r"\.0+$", "", order_no)
 
-        order_label = order_no.strip().lower()
-        if order_label.startswith("payout fee"):
+        if any(str(cell or "").strip().lower().startswith("payout fee") for cell in r[:8]):
             fee = abs(to_float(
                 r[cols["total_fee"]] if cols["total_fee"] < len(r) else 0,
             ))

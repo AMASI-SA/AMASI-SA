@@ -15,8 +15,10 @@ const serviceSource = fs.readFileSync(
 );
 
 test("P01 workspace mounts a searchable settlement register under settlements", () => {
-    expect(workspaceSource).toContain('import AccountingSettlementRegister from "./AccountingSettlementRegister"');
-    expect(workspaceSource).toContain("<AccountingSettlementRegister accountingPermissions={permissions} />");
+    const settlementSource = fs.readFileSync(path.join(__dirname, "AccountingSettlements.jsx"), "utf8");
+    expect(workspaceSource).not.toContain("<AccountingSettlementRegister");
+    expect(settlementSource.match(/<AccountingSettlementRegister /g)).toHaveLength(1);
+    expect(settlementSource).not.toContain('data-testid="settlement-draft-list"');
     expect(registerSource).toContain('data-testid="accounting-settlement-register"');
     expect(registerSource).toContain('data-testid="settlement-register-filter-form"');
     expect(registerSource).toContain('data-testid="settlement-register-list"');
