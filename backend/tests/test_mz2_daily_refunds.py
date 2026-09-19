@@ -1,4 +1,4 @@
-"""Real Mongo acceptance: notifications draft, daily approval alone posts."""
+"""Real Mongo acceptance: notifications draft, entitlement accrues, daily approval pays."""
 import asyncio
 from decimal import Decimal
 import unittest
@@ -53,6 +53,11 @@ class DailyRefundTests(unittest.IsolatedAsyncioTestCase):
         return await self.post('',dict(original_key=key,case_reference=reference,amount=amount,
             recognized_at='2020-01-03T12:00:00Z',reason='SYN required refund'))
 
+    async def confirm(self, row, at='2020-01-03T12:00:00Z', evidence=None):
+        return await self.post('/'+row['id']+'/recognize',dict(amount=row['amount'],
+            recognized_at=at,reason='SYN confirmed customer right',
+            evidence_ref=evidence or 'SYN-credit-note-'+row['id']))
+
     async def notify(self,provider,amount=None,cancel=False):
         payload={'status':{'slug':'canceled' if cancel else 'partially_refunded'}}
         if amount:
@@ -71,12 +76,13 @@ class DailyRefundTests(unittest.IsolatedAsyncioTestCase):
             else:
                 row=await self.case(key,'SYN-case-'+provider,'50')
             self.assertEqual(await self.db.general_ledger.count_documents({}),before)
+            await self.confirm(row)
             for value,remaining in [('30','20.00'),('20','0.00')]:
                 payment=await self.movement(key,row['case_reference'],value)
                 before=await self.db.general_ledger.count_documents({})
                 results=await asyncio.gather(self.post('/bank-payments/'+payment['id']+'/approve'),self.post('/bank-payments/'+payment['id']+'/approve'))
                 self.assertEqual(results[0]['txn_group_id'],results[1]['txn_group_id'])
-                self.assertEqual(await self.db.general_ledger.count_documents({}),before+3)
+                self.assertEqual(await self.db.general_ledger.count_documents({}),before+2)
                 current=await self.db.mz2_customer_refunds.find_one({'id':row['id']})
                 self.assertEqual(current['remaining'],remaining)
             before=await self.db.general_ledger.count_documents({})
@@ -92,6 +98,7 @@ class DailyRefundTests(unittest.IsolatedAsyncioTestCase):
             key=await self.setup_sale(provider,'115')
             await self.notify(provider,cancel=True)
             case=await self.db.mz2_customer_refunds.find_one({'original_key':key})
+            await self.confirm(case)
             draft=dict(id='draft-'+provider,user_id='owner',provider=provider,status='draft',source_file_id='file-'+provider,amounts={})
             await self.db.accounting_settlements_v2.insert_one(draft)
             for i,value in enumerate(['23','23','69']):
@@ -111,12 +118,13 @@ class DailyRefundTests(unittest.IsolatedAsyncioTestCase):
             case=await self.db.mz2_customer_refunds.find_one({'id':case['id']})
             self.assertEqual(case['remaining'],'0.00')
             payments=await self.db.mz2_customer_refund_payments.find({'original_key':key}).to_list(10)
-            self.assertEqual(sum(Decimal(p['tax']['net']) for p in payments),Decimal('100'))
-            self.assertEqual(sum(Decimal(p['tax']['tax']) for p in payments),Decimal('15'))
+            self.assertTrue(all('tax' not in p for p in payments))
+            self.assertEqual(Decimal(case['tax']['net']),Decimal('100'))
+            self.assertEqual(Decimal(case['tax']['tax']),Decimal('15'))
 
     async def test_late_provider_conflict_and_automatic_path_denied(self):
         await self.bank();key=await self.setup_sale()
-        row=await self.case(key,'SYN-double','50');payment=await self.movement(key,row['case_reference'],'50')
+        row=await self.case(key,'SYN-double','50');await self.confirm(row);payment=await self.movement(key,row['case_reference'],'50')
         await self.post('/bank-payments/'+payment['id']+'/approve')
         await self.db.payment_refunds.insert_one(dict(user_id='owner',provider='tamara',provider_payment_id='SYN-CAPTURE-tamara',provider_refund_id='SYN-late',amount='50',currency='SAR',status='completed',refunded_at='2020-01-04T12:00:00Z'))
         before=await self.db.general_ledger.count_documents({})
@@ -148,6 +156,7 @@ class DailyRefundTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_viewer_owner_isolation_failure_and_recovery(self):
         await self.bank();key=await self.setup_sale();row=await self.case(key,'SYN-recovery','50')
+        await self.confirm(row)
         payment=await self.movement(key,row['case_reference'],'50')
         self.actor='viewer';before=await self.db.general_ledger.count_documents({})
         denial=await self.client.post(BASE+'/bank-payments/'+payment['id']+'/approve')
@@ -167,4 +176,4 @@ class DailyRefundTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.db.general_ledger.count_documents({}),before)
         self.assertNotEqual((await self.db.mz2_customer_refund_payments.find_one({'id':payment['id']}))['status'],'posted')
         await self.post('/bank-payments/'+payment['id']+'/approve')
-        self.assertEqual(await self.db.general_ledger.count_documents({}),before+3)
+        self.assertEqual(await self.db.general_ledger.count_documents({}),before+2)

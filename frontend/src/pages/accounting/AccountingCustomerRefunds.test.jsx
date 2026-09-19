@@ -22,3 +22,22 @@ test("entry permission exposes draft selection and all execution channels withou
     expect(node.querySelector('[aria-label="جهة تنفيذ الاسترداد"]').options.length).toBe(5);
     expect(node.textContent).not.toContain("اعتماد حركة الاسترداد المنفذة");expect(api.post).not.toHaveBeenCalled();
 });
+test("entitlement approval requires independent evidence and date and does not approve payment",async()=>{
+    api.get.mockResolvedValue({data:{cases:[{id:"case",case_reference:"SYN",amount:"115.00",recognized:false,state:"awaiting_execution_confirmation"}],payments:[]}});
+    api.post.mockResolvedValue({data:{}});
+    await act(async()=>root.render(<AccountingCustomerRefunds accountingPermissions={["accounting.refunds.recognize"]}/>));
+    const button=[...node.querySelectorAll('button')].find(b=>b.textContent.includes('اعتماد الاستحقاق وإثبات'));
+    expect(button.disabled).toBe(true);
+    for (const [label,value] of [['وقت استحقاق مؤكد','2020-01-31T18:00:00+03:00'],['دليل استحقاق مؤكد','SYN-CREDIT-NOTE'],['سبب اعتماد الاستحقاق','SYN confirmed']]) {
+        await act(async()=>{
+            const input=node.querySelector(`[aria-label="${label}"]`);
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,value);
+            input.dispatchEvent(new Event('input',{bubbles:true}));
+        });
+    }
+    await act(async()=>button.click());
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(api.post).toHaveBeenCalledWith(expect.stringContaining('/case/recognize'),{
+        amount:'115.00',recognized_at:'2020-01-31T18:00:00+03:00',reason:'SYN confirmed',evidence_ref:'SYN-CREDIT-NOTE'});
+    expect(node.textContent).toContain('دون تكرار المرتجع والضريبة');
+});

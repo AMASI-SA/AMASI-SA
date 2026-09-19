@@ -78,7 +78,18 @@ async def observe_refund(db, *, owner, order_number, source, payload=None, _queu
                     results.append({'state':'matched_daily_movements','case_ids':[x['id'] for x in others]})
                 else:
                     wanted=target-other_total
-                    if existing:
+                    if existing and existing.get('recognized'):
+                        # Confirmed entitlement is immutable. A later snapshot
+                        # may require a separate additional entitlement review.
+                        await scoped.mz2_customer_refunds.update_one({'_id':key},
+                            {'$addToSet':{'order_evidence':source}})
+                        if wanted > Decimal(existing['amount']):
+                            await scoped.mz2_customer_refunds.update_one({'_id':key},{'$set':{
+                                'state':'conflict','conflict_reason':'additional_entitlement_requires_review'}})
+                            results.append({'state':'needs_review','reason':'additional_entitlement_requires_review'})
+                        else:
+                            results.append({'state':'matched_confirmed_entitlement','case_id':key})
+                    elif existing:
                         # Out-of-order stale snapshots cannot shrink a draft or
                         # a previously confirmed payment.
                         wanted=max(wanted,Decimal(existing['amount']))

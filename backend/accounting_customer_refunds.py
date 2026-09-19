@@ -46,11 +46,15 @@ async def case_tax(db, owner, original, amount, exclude=None):
     prior = await db.mz2_recognition_events.find({'user_id': owner,
         'original_key': original['_id'], 'status': 'posted'}).to_list(10001)
     payments = await db.mz2_customer_refund_payments.find({'user_id': owner,
-        'original_key': original['_id'], 'status': 'posted'}).to_list(10001)
-    if len(prior) > 10000 or len(payments) > 10000:
+        'original_key': original['_id'], 'status': 'posted',
+        'entitlement_txn_group_id': {'$exists': False}}).to_list(10001)
+    entitlements = await db.mz2_customer_refunds.find({'user_id': owner,
+        'original_key': original['_id'], 'accounting_version': 2, 'recognized': True}).to_list(10001)
+    if max(len(prior), len(payments), len(entitlements)) > 10000:
         raise HTTPException(409, 'refund_history_limit')
     return refund_split(original['proposal']['tax'],
-        [r['proposal']['tax'] for r in prior] + [r['tax'] for r in payments if r.get('tax')], amount)
+        [r['proposal']['tax'] for r in prior] + [r['tax'] for r in payments if r.get('tax')]
+        + [r['tax'] for r in entitlements], amount)
 
 
 
@@ -75,7 +79,7 @@ async def create_case(db, *, owner, actor, original_key, case_reference, amount,
             original_provider=event['provider'], original_payment_id=event['provider_payment_id'],
             order_number=event['order_number'], tax_preview=tax, recognized=False,
             state='awaiting_execution_confirmation', paid='0.00', remaining=facts['amount'],
-            created_by=actor['id'], created_at=datetime.now(timezone.utc).isoformat())
+            created_by=actor['id'], created_at=datetime.now(timezone.utc).isoformat(timespec='microseconds'))
         await scoped.mz2_customer_refunds.insert_one(row)
         return public(row)
     return await atomic_owner(db, owner, write)
@@ -119,7 +123,7 @@ async def create_bank_payment(db, *, owner, actor, original_key, case_reference,
             original_provider=original['proposal']['event']['provider'],
             order_number=original['proposal']['event']['order_number'],
             bank_account_name=bank['name'] if bank else None, status='awaiting_entitlement_and_approval',
-            created_by=actor['id'], created_at=datetime.now(timezone.utc).isoformat())
+            created_by=actor['id'], created_at=datetime.now(timezone.utc).isoformat(timespec='microseconds'))
         await scoped.mz2_customer_refund_payments.insert_one(row)
         return public(row)
     return await atomic_owner(db, owner, write)
@@ -137,6 +141,10 @@ async def post_bank_payment(db, *, owner, actor, payment_id):
             raise HTTPException(409,'matching_refund_case_required')
         if row.get('state')=='conflict':
             raise HTTPException(409,'refund_execution_conflict_requires_review')
+        if not row.get('recognized') or row.get('accounting_version') != 2:
+            raise HTTPException(409,'confirmed_refund_entitlement_required')
+        if instant(payment['paid_at']) < instant(row['recognized_at']):
+            raise HTTPException(409,'payment_before_refund_entitlement')
         if Decimal(payment['amount'])>Decimal(row['remaining']):
             raise HTTPException(409,'payment_exceeds_customer_remaining')
         channel=payment['execution_channel']
@@ -163,7 +171,7 @@ async def post_bank_payment(db, *, owner, actor, payment_id):
             if prior or legacy:
                 raise HTTPException(409,'provider_refund_already_accounted')
         original=await original_sale(scoped,owner,row['original_key'])
-        tax=await case_tax(scoped,owner,original,payment['amount'])
+        await validate_date(scoped, owner, payment['paid_at'], original)
         from ledger_core import post_txn_group, compute_balance
         target_type='bank' if channel=='bank' else 'payment_gateway'
         target_id=payment['bank_account_id'] if channel=='bank' else channel
@@ -171,24 +179,25 @@ async def post_bank_payment(db, *, owner, actor, payment_id):
         balance=await compute_balance(scoped,user_id=owner,entity_type=target_type,entity_id=target_id,sub_account=target_sub)
         if Decimal(str(balance['net_balance']))<Decimal(payment['amount']):
             raise HTTPException(409,'insufficient_refund_execution_balance')
-        entries=[]
-        for entity,identifier,value in [('revenue','bnpl_sales',tax['net']),('tax','sales_vat_payable',tax['tax'])]:
-            if Decimal(value):
-                entries.append(dict(entity_type=entity,entity_id=identifier,side='debit',amount=value,entry_type='customer_refund_due'))
+        liability=await compute_balance(scoped,user_id=owner,entity_type='liability',
+            entity_id=row['id'],sub_account='customer_refund_payable')
+        if -Decimal(str(liability['net_balance'])) != Decimal(row['remaining']):
+            raise HTTPException(409,'refund_liability_reconciliation_required')
+        entries=[dict(entity_type='liability',entity_id=row['id'],sub_account='customer_refund_payable',
+            side='debit',amount=payment['amount'],entry_type='customer_refund_payment')]
         entries.append(dict(entity_type=target_type,entity_id=target_id,sub_account=target_sub,side='credit',amount=payment['amount'],entry_type='customer_refund_payment'))
         result=await post_txn_group(scoped,user_id=owner,actor_id=actor['id'],actor_name=actor.get('name',actor['id']),
             entries=entries,txn_type='customer_refund_payment',notes='Mezan 2 approved daily customer refund',
             metadata=dict(refund_case_id=row['id'],refund_payment_id=payment_id,bank_reference=payment['bank_reference'],
                 original_provider=row['original_provider'],execution_channel=channel,proof_sha256=payment['proof_sha256'],
-                paid_at=payment['paid_at'],sales_tax=tax))
+                paid_at=payment['paid_at'],accounting_at=instant(payment['paid_at']).isoformat(timespec='microseconds'),
+                operation_id='MZ2-FIN-CUTOVER-001',refund_accounting_version=2,
+                entitlement_txn_group_id=row['due_txn_group_id']))
         paid=Decimal(row['paid'])+Decimal(payment['amount']);remaining=Decimal(row['amount'])-paid
-        cumulative_tax={**tax, **{field:format(Decimal(tax[field])+Decimal((row.get('tax') or {}).get(field,'0')),'.2f') for field in ('gross','net','tax')}}
-        changes=dict(paid=format(paid,'.2f'),remaining=format(remaining,'.2f'),state='paid' if remaining==0 else 'partially_paid',
-            recognized=True,tax=cumulative_tax)
-        if not row['recognized']:
-            changes['due_txn_group_id']=result['txn_group_id']
+        changes=dict(paid=format(paid,'.2f'),remaining=format(remaining,'.2f'),state='paid' if remaining==0 else 'partially_paid')
         await scoped.mz2_customer_refunds.update_one({'_id':row['_id']},{'$set':changes})
-        changes=dict(status='posted',txn_group_id=result['txn_group_id'],approved_by=actor['id'],tax=tax)
+        changes=dict(status='posted',txn_group_id=result['txn_group_id'],approved_by=actor['id'],
+            entitlement_txn_group_id=row['due_txn_group_id'],accounting_version=2)
         await scoped.mz2_customer_refund_payments.update_one({'_id':payment['_id']},{'$set':changes})
         return public({**payment,**changes})
     return await atomic_owner(db,owner,write)

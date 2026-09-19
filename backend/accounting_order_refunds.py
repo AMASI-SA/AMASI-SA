@@ -1,6 +1,6 @@
 """Mezan 2 refund ingress: Salla is an order source, not a payment provider.
 
-Only approved daily movements create new refund journals. Order totals,
+Only explicit entitlement approval and daily payment approval create journals. Order totals,
 status, notification hashes and statement row numbers are never execution IDs.
 """
 from decimal import Decimal

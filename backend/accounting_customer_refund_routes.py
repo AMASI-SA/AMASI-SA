@@ -3,6 +3,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from accounting_customer_refunds import create_case, create_bank_payment, post_bank_payment
 from accounting_sales_tax import TaxError
 from accounting_recognition_evidence import EvidenceError
+from accounting_refund_entitlements import recognize_entitlement, period_journal
 
 
 class CaseInput(BaseModel):
@@ -26,6 +27,14 @@ class PaymentInput(BaseModel):
     bank_reference: str = Field(default='',max_length=200)
     proof_name: str = Field(default='',max_length=200)
     proof_base64: str = Field(default='',max_length=1400000)
+
+
+class EntitlementInput(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    amount: str = Field(min_length=1,max_length=30)
+    recognized_at: str = Field(min_length=1,max_length=40)
+    reason: str = Field(min_length=1,max_length=1000)
+    evidence_ref: str = Field(min_length=1,max_length=200)
 
 
 def install_customer_refund_routes(router, db, current_user, actor_for):
@@ -59,6 +68,18 @@ def install_customer_refund_routes(router, db, current_user, actor_for):
     @router.post(base)
     async def create(payload:CaseInput,user:dict=Depends(current_user)):
         return await call(create_case,user,'accounting.refunds.create',**payload.model_dump())
+
+    @router.post(base+'/{case_id}/recognize')
+    async def recognize(case_id:str,payload:EntitlementInput,user:dict=Depends(current_user)):
+        return await call(recognize_entitlement,user,'accounting.refunds.recognize',case_id=case_id,**payload.model_dump())
+
+    @router.get(base+'/journal')
+    async def journal(from_at:str,to_at:str,user:dict=Depends(current_user)):
+        _,owner=await actor_for(user,'accounting.journals_reports.view')
+        try:
+            return await period_journal(db,owner=owner,from_at=from_at,to_at=to_at)
+        except TaxError as exc:
+            raise HTTPException(422,str(exc)) from None
 
     @router.post(base+'/bank-payments')
     async def payment(payload:PaymentInput,user:dict=Depends(current_user)):

@@ -331,5 +331,16 @@
     "p01": "IN_PROGRESS",
     "p02": "LOCKED",
     "evidence_file": "P01-WRITE-CONTROL-20260920.md"
+  },
+  "refund_entitlement_review_20260920": {
+    "state": "WIP_CONFIRMED_ENTITLEMENT_ACCRUAL_ISOLATED_TESTS_PENDING",
+    "branch": "codex/p01-refund-entitlement-20260920",
+    "supersedes_pr": 1102,
+    "finding": "1102_DEFERS_ALL_REFUND_ACCOUNTING_TO_PAYMENT",
+    "change": "EXPLICIT_CONFIRMED_ENTITLEMENT_THEN_LIABILITY_SETTLEMENT",
+    "preview_acceptance": "RETAINED_EXCEPT_SUPERSEDED_DAILY_ONLY_TIMING_RULE",
+    "production_changed": false,
+    "p01": "IN_PROGRESS",
+    "p02": "LOCKED"
   }
 }
