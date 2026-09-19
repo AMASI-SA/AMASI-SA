@@ -170,6 +170,11 @@ def install_accounting_receipt_routes(router, db, current_user):
         received_on: str = Field(min_length=10, max_length=10)
         request_id: str = Field(min_length=16, max_length=100)
 
+    class RefundLinkIn(BaseModel):
+        model_config = ConfigDict(extra='forbid')
+        entry_id: str = Field(min_length=1, max_length=120)
+        refund_id: str = Field(min_length=1, max_length=200)
+
     class LinkIn(BaseModel):
         model_config = ConfigDict(extra='forbid')
         receipt_id: str = Field(min_length=1, max_length=120)
@@ -198,3 +203,14 @@ def install_accounting_receipt_routes(router, db, current_user):
     async def attach(draft_id: str, payload: LinkIn, user: dict = Depends(current_user)):
         actor, owner = await _scope(db, user, 'accounting.drafts.create')
         return await link_receipt(db, owner=owner, actor=actor, draft_id=draft_id, receipt_id=payload.receipt_id)
+
+    @router.put('/accounting-module/settlements/drafts/{draft_id}/refund-match')
+    async def attach_refund(draft_id: str, payload: RefundLinkIn, user: dict = Depends(current_user)):
+        actor, owner = await _scope(db, user, 'accounting.drafts.create')
+        from accounting_order_refunds import link_statement_refund
+        from accounting_recognition_evidence import EvidenceError
+        from accounting_sales_tax import TaxError
+        try:
+            return await link_statement_refund(db, owner=owner, actor=actor, draft_id=draft_id, **payload.model_dump())
+        except (EvidenceError, TaxError) as exc:
+            raise HTTPException(409, str(exc)) from None

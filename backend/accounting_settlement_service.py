@@ -402,6 +402,11 @@ async def _post_reviewed_settlement_transaction(db, *, owner_id, actor, draft):
     if has_blocking_reasons(draft.get("review_reasons")):
         raise HTTPException(409, "لا يمكن ترحيل مسودة تحتوي أسباب مراجعة مفتوحة")
 
+    from accounting_order_refunds import refund_review_reasons
+    refund_reasons = await refund_review_reasons(db, owner_id, draft)
+    if refund_reasons:
+        raise HTTPException(409, {"code": "refund_reconciliation_required", "reasons": refund_reasons})
+
     provider = canonical_provider(draft.get("provider"))
     bank_id = str(draft.get("bank_account_id") or "").strip()
     bank = await db.accounts.find_one(

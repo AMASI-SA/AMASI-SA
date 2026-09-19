@@ -3,6 +3,7 @@ import api from "../../lib/api";
 
 const BASE = "/financial-provider-apps/accounting-module";
 const reasons = {
+    refund_identity_required: "تحتاج مراجعة: معرف الاسترداد المالي الأصلي مفقود؛ رقم الطلب وحده لا يكفي",
     sales_tax_not_configured_for_date: "لم تُدخل نسبة ضريبة سارية في تاريخ الاعتراف",
     recognition_cutoff_not_configured: "لم يُحدد تاريخ قطع لهذا المسار",
     payment_evidence_missing: "دليل الدفع غير موجود",
@@ -68,6 +69,10 @@ export default function AccountingReceivables({ accountingPermissions = [] }) {
             ]);
             const result = [];
             for (const item of requests) {
+                if (item.label === "استرداد" && !item.refund_id) {
+                    result.push({ ...item, result: { state: "rejected", reasons: ["refund_identity_required"] } });
+                    continue;
+                }
                 if (!item.payment_id) {
                     result.push({ ...item, result: { state: "rejected", reasons: ["canonical_provider_id_required"] } });
                     continue;
@@ -121,7 +126,7 @@ export default function AccountingReceivables({ accountingPermissions = [] }) {
         <div className="my-4 flex flex-wrap gap-3">
             <label>المزود<select aria-label="مزود إثبات الذمم" value={provider}
                 onChange={e => { setProvider(e.target.value); setRows([]); }} className="mx-2 rounded border p-2">
-                <option value="tamara">تمارا</option><option value="tabby">تابي</option><option value="emkan">إمكان</option>
+                <option value="salla">سلة Pay</option><option value="tamara">تمارا</option><option value="tabby">تابي</option><option value="emkan">إمكان</option>
             </select></label>
             <label>مرجع الطلب<input aria-label="مرجع طلب الإثبات" value={reference}
                 onChange={e => { setReference(e.target.value); setRows([]); }} className="mx-2 rounded border p-2" /></label>

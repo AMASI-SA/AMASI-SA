@@ -1,3 +1,4 @@
+import SettlementRefundLink from "./SettlementRefundLink";
 import SettlementJournalDialog from "./SettlementJournalDialog";
 import SettlementOriginalFile from "./SettlementOriginalFile";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -363,6 +364,8 @@ export default function AccountingSettlementRegister({ accountingPermissions = [
                     {selectedId && !detailLoading && selectedDraft && (
                         <div className="space-y-5">
                             {operations}
+                            <SettlementRefundLink key={selectedDraft.id} draft={selectedDraft} entries={evidenceEntries}
+                                canEdit={canCreate && editable(selectedDraft.status)} onLinked={() => openDetail(selectedDraft.id)} />
                             <div className="flex flex-wrap items-start justify-between gap-3">
                                 <div>
                                     <div className="text-xs font-extrabold text-emerald-700">{selectedDraft.provider_label || selectedDraft.provider}</div>

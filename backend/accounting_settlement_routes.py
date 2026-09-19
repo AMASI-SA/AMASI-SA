@@ -347,6 +347,8 @@ async def _recomputed_draft(
     if draft.get("status") not in {"posted", "reversed"}:
         from accounting_receipt_service import receipt_reasons
         reasons.extend(await receipt_reasons(db, owner_id, draft))
+        from accounting_order_refunds import refund_review_reasons
+        reasons.extend(await refund_review_reasons(db, owner_id, draft))
     preview = None
     try:
         if bank:
