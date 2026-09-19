@@ -97,6 +97,8 @@ jobs:
         run: python -m unittest discover -s tests -p test_mz2_write_control.py -v
       - name: Test confirmed refund entitlement and cross-month payment
         run: python -m unittest discover -s tests -p test_mz2_refund_entitlements.py -v
+      - name: Test refund notifications and statement reconciliation
+        run: python -m unittest discover -s tests -p test_mz2_order_refunds.py -v
 
   backend-contract:
     name: Accounting backend contract

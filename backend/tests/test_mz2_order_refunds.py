@@ -19,6 +19,15 @@ class OrderRefundTests(unittest.IsolatedAsyncioTestCase):
         original=await self.db.mz2_recognition_events.find_one({'proposal.event.provider':provider,'proposal.event.kind':'sale'})
         case=await self.db.mz2_customer_refunds.find_one({'original_key':original['_id']})
         root='/accounting-module/customer-refunds'
+        if case.get('recognized') and Decimal(case['remaining']) < Decimal('23'):
+            answer=await self.client.post(root,json=dict(original_key=original['_id'],case_reference=rid,amount='23',
+                recognized_at='2020-01-03T12:00:00Z',reason='SYN additional confirmed return'))
+            self.assertEqual(answer.status_code,200,answer.text)
+            case=answer.json()
+        if not case.get('recognized'):
+            confirmed=await self.client.post(root+'/'+case['id']+'/recognize',json=dict(amount=case['amount'],
+                recognized_at='2020-01-03T12:00:00Z',reason='SYN confirmed return',evidence_ref='CREDIT-'+rid))
+            self.assertEqual(confirmed.status_code,200,confirmed.text)
         payment=await self.client.post(root+'/bank-payments',json=dict(original_key=original['_id'],case_reference=case['case_reference'],amount='23',paid_at='2020-01-03T12:00:00Z',execution_channel=provider,bank_reference=rid,provider_refund_id=rid))
         self.assertEqual(payment.status_code,200,payment.text)
         result=await self.client.post(root+'/bank-payments/'+payment.json()['id']+'/approve')
@@ -67,7 +76,9 @@ class OrderRefundTests(unittest.IsolatedAsyncioTestCase):
         groups += await self.db.mz2_customer_refund_payments.find({'execution_channel':provider,'status':'posted'}).to_list(10)
         self.assertEqual(len(groups), 3)
         self.assertEqual(len({x['txn_group_id'] for x in groups}), 3)
-        self.assertTrue(all((x.get('tax') or x['proposal']['tax'])['rate']=='15' for x in groups))
+        cases=await self.db.mz2_customer_refunds.find({'original_provider':provider,'recognized':True}).to_list(10)
+        self.assertTrue(all(x['tax']['rate']=='15' for x in cases))
+        self.assertTrue(all('tax' not in x for x in groups if x.get('execution_channel')))
         print('REFUND_PROOF', provider, statement_first, self.db.name, [x['txn_group_id'] for x in groups])
 
     async def test_order_first_all_actual_payment_providers(self):
@@ -97,7 +108,7 @@ class OrderRefundTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.db.mz2_statement_refund_links.count_documents({}),0)
         await link_statement_refund(self.db,owner='owner',actor={'id':'owner'},draft_id='aggregate',entry_id='aggregate-row',refund_ids=['SYN-AGG-1','SYN-AGG-2'])
         self.assertFalse(await refund_review_reasons(self.db,'owner',draft))
-        self.assertEqual(await self.db.general_ledger.count_documents({}),9)
+        self.assertEqual(await self.db.general_ledger.count_documents({}),10)
 
     async def test_missing_identity_is_review_without_financial_write(self):
         await self.preview_and_post()

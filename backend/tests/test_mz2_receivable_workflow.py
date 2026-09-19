@@ -142,13 +142,17 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
             case=await self.client.post(root,json=dict(original_key=sale['event_key'],case_reference=rid,
                 amount='57.50',recognized_at='2020-01-03T12:00:00Z',reason='Synthetic daily refund'))
             self.assertEqual(case.status_code,200,case.text)
+            confirmed=await self.client.post(root+'/'+case.json()['id']+'/recognize',json=dict(amount='57.50',
+                recognized_at='2020-01-03T12:00:00Z',reason='Synthetic confirmed right',evidence_ref=rid))
+            self.assertEqual(confirmed.status_code,200,confirmed.text)
             payment=await self.client.post(root+'/bank-payments',json=dict(original_key=sale['event_key'],case_reference=rid,
                 amount='57.50',paid_at='2020-01-03T12:00:00Z',execution_channel='tamara',bank_reference=rid,provider_refund_id=rid))
             self.assertEqual(payment.status_code,200,payment.text)
             approved=await self.client.post(root+'/bank-payments/'+payment.json()['id']+'/approve')
             self.assertEqual(approved.status_code,200,approved.text)
             result=approved.json()
-            self.assertEqual((result["tax"]["net"], result["tax"]["tax"]), ("50.00", "7.50"))
+            self.assertNotIn('tax',result)
+            self.assertEqual((confirmed.json()["tax"]["net"], confirmed.json()["tax"]["tax"]), ("50.00", "7.50"))
             before = await self.count_writes()
             row = await self.db.payment_refunds.find_one({"provider_refund_id": rid})
             again = await post_bnpl_refund_to_ledger(self.db, user_id="owner", refund=row)

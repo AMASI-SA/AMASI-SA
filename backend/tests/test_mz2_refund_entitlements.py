@@ -128,11 +128,12 @@ class EntitlementTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.db.mz2_refund_entitlements.count_documents({}),0)
         self.assertFalse((await self.db.mz2_customer_refunds.find_one({'id':row['id']}))['recognized'])
         confirmed=await self.confirm(row)
-        await self.notify('tamara',70)
+        result=await self.notify('tamara',70)
         current=await self.db.mz2_customer_refunds.find_one({'id':row['id']})
         self.assertEqual(current['amount'],'50.00')
         self.assertEqual(current['tax'],confirmed['tax'])
-        self.assertEqual(current['state'],'conflict')
+        self.assertEqual(current['state'],'due')
+        self.assertEqual(result['state'],'needs_review')
         self.assertEqual(await self.db.general_ledger.count_documents({}),before+3)
 
 

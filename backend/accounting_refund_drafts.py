@@ -84,8 +84,6 @@ async def observe_refund(db, *, owner, order_number, source, payload=None, _queu
                         await scoped.mz2_customer_refunds.update_one({'_id':key},
                             {'$addToSet':{'order_evidence':source}})
                         if wanted > Decimal(existing['amount']):
-                            await scoped.mz2_customer_refunds.update_one({'_id':key},{'$set':{
-                                'state':'conflict','conflict_reason':'additional_entitlement_requires_review'}})
                             results.append({'state':'needs_review','reason':'additional_entitlement_requires_review'})
                         else:
                             results.append({'state':'matched_confirmed_entitlement','case_id':key})
