@@ -23,6 +23,7 @@ Based on b68ac4d05cda791ee570f9044164991d65c0db33, Draft PR #1091.
 - Complete candidate frontend Vite build with Preview origin passed.
 - Local tests use Python 3.12; explicit mock-Mongo dependencies. They do not prove real Mongo concurrency, browser login persistence or deployed acceptance.
 - Existing React act/deprecation and bundle-size warnings remain. Full repository pytest has not run.
+- Initial GitHub CI passed frontend tests/build but exposed a missing cryptography dependency through BNPL package import side effects. Source qualification was moved to a pure top-level accounting module, and the isolated real-normalizer test job declares the existing application's cryptography dependency. Local recognition tests passed again; the follow-up CI result must be read separately.
 
 ## Preview recovery attempt and blocker
 The isolated saved task source still matched the checkpoint. The shared /app checkout was observed at 1f2923f19ba503017a04677636d75caad8e4df91 and clean. Initially Release Guard reported active=false and no conflicting Preview reservation was present. The task acquired only its own reservation.

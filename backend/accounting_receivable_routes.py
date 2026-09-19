@@ -6,7 +6,7 @@ from accounting_module_contract import accounting_owner_id, require_accounting_p
 from accounting_sales_tax import TaxError
 from accounting_sales_tax_service import read_policy, save_policy
 from accounting_receivable_service import prepare, execute
-from bnpl.recognition_evidence import EvidenceError
+from accounting_recognition_evidence import EvidenceError
 
 
 class TaxPolicyInput(BaseModel):

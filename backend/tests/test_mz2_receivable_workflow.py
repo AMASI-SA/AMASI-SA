@@ -12,7 +12,7 @@ from accounting_receivable_routes import install_accounting_receivable_routes
 from accounting_receivable_service import OPERATION, prepare, execute
 from accounting_sales_tax_service import save_policy
 from bnpl.ledger_bridge import post_bnpl_sale_to_ledger, post_bnpl_refund_to_ledger
-from bnpl.recognition_evidence import EvidenceError
+from accounting_recognition_evidence import EvidenceError
 
 BASE = "/accounting-module"
 WHEN = "2020-01-02T12:00:00Z"

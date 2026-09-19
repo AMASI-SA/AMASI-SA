@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from accounting_sales_tax import TaxError, refund_split
 from accounting_sales_tax_service import read_policy, sale_snapshot
-from bnpl.recognition_evidence import EvidenceError, qualify
+from accounting_recognition_evidence import EvidenceError, qualify
 
 OPERATION = "MZ2-FIN-CUTOVER-001"
 

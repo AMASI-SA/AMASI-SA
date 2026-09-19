@@ -1,4 +1,4 @@
-"""Read-only qualification of source events. Import/matching never implies recognition."""
+"""Pure Mezan 2 source qualification; no provider-router import side effects."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
