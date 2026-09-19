@@ -60,6 +60,7 @@ export const ACCOUNTING_PAGES = [
 ];
 
 export const ACCOUNTING_ACTIONS = [
+    { id: "receivable-post", label: "إثبات ذمم الطلبات المؤهلة", permission: "accounting.receivables.post" },
     { id: "draft-create", label: "إنشاء وحفظ مسودة مالية", permission: "accounting.drafts.create" },
     { id: "settlement-post", label: "اعتماد وترحيل تسوية", permission: "accounting.settlements.post" },
     { id: "rules-manage", label: "تعديل قواعد العمولات والحسابات", permission: "accounting.rules.manage" },

@@ -1,10 +1,11 @@
+import SettlementJournalDialog from "./SettlementJournalDialog";
+import SettlementOriginalFile from "./SettlementOriginalFile";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
     ArrowClockwise,
     Bank,
     CheckCircle,
     FileText,
-    LinkSimple,
     MagnifyingGlass,
     Receipt,
     WarningCircle,
@@ -481,6 +482,7 @@ export default function AccountingSettlementRegister({ accountingPermissions = [
                                         <div>عدد السطور: <span className="font-mono font-black text-slate-900" dir="ltr">{detail?.evidence?.entry_count || 0}</span></div>
                                         <div>مرجع الملف: <span className="font-mono text-[10px]" dir="ltr">{selectedDraft.source_file_id || "—"}</span></div>
                                     </div>
+                                    <SettlementOriginalFile key={selectedDraft.id} draftId={selectedDraft.id} />
                                     {!!evidenceEntries.length && (
                                         <div className="mt-3 max-h-44 overflow-y-auto rounded-lg border border-slate-100">
                                             {evidenceEntries.slice(0, 20).map((entry) => (
@@ -496,13 +498,7 @@ export default function AccountingSettlementRegister({ accountingPermissions = [
                                 <div className="rounded-xl border border-slate-200 p-3">
                                     <div className="flex items-center justify-between gap-2">
                                         <div className="flex items-center gap-2 text-sm font-black"><Receipt size={19} /> القيد المحاسبي</div>
-                                        {detail?.ledger?.journal_href && (
-                                            <a href={detail.ledger.journal_href}
-                                                className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-extrabold text-emerald-800"
-                                                data-testid="settlement-register-journal-link">
-                                                <LinkSimple size={13} /> فتح القيد
-                                            </a>
-                                        )}
+                                        <SettlementJournalDialog ledger={detail?.ledger} currency={itemCurrency} />
                                     </div>
                                     {!ledgerEntries.length && <div className="mt-4 rounded-lg border border-dashed p-5 text-center text-xs font-bold text-slate-500">لم يُرحّل قيد لهذه التسوية بعد.</div>}
                                     {!!ledgerEntries.length && (

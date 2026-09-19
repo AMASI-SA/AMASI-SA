@@ -38,6 +38,7 @@ from accounting_settlement_service import (
 )
 from excel_upload_security import read_safe_xlsx_upload
 from ledger_core import write_audit
+from accounting_atomic import atomic_owner
 from settlements_import.service import _apply_entries, import_file
 
 MAX_FILE_BYTES = 10 * 1024 * 1024
@@ -263,7 +264,7 @@ async def _draft_or_404(db, owner_id: str, draft_id: str) -> dict[str, Any]:
     )
     if not doc:
         raise HTTPException(404, "مسودة التسوية غير موجودة")
-    return doc
+    return _draft_matching_view(doc)
 
 
 async def _source_review_count(db, owner_id: str, file_id: str) -> int:
@@ -275,12 +276,24 @@ async def _source_review_count(db, owner_id: str, file_id: str) -> int:
     }))
 
 
+def _order_matching_entries(entries):
+    """Provider payout fees are evidence, not merchant orders to match."""
+    return [entry for entry in entries if entry.get("event_type") != "settlement_fee"]
+
+
+def _draft_matching_view(draft):
+    snapshot = draft.get("source_snapshot") or {}
+    return {**draft, "source_snapshot": {**snapshot, "unmatched_entries":
+        _order_matching_entries(snapshot.get("unmatched_entries") or [])}}
+
+
 async def _unmatched_entries(db, owner_id: str, file_id: str) -> list[dict[str, Any]]:
     return await db.settlement_entries.find(
         {
             "user_id": owner_id,
             "file_id": file_id,
             "matched": {"$ne": True},
+            "event_type": {"$ne": "settlement_fee"},
         },
         {
             "_id": 0,
@@ -344,6 +357,12 @@ async def _recomputed_draft(
         preview = None
     return {
         **draft,
+        "source_snapshot": {
+            **(draft.get("source_snapshot") or {}),
+            "unmatched_entries": _order_matching_entries(
+                (draft.get("source_snapshot") or {}).get("unmatched_entries") or []
+            ),
+        },
         "bank_account_id": (bank or {}).get("id"),
         "bank_account_name": (bank or {}).get("name"),
         "bank_account_type": (bank or {}).get("account_type"),
@@ -377,6 +396,8 @@ async def _create_draft_from_file(
         {"_id": 0},
     )
     if existing:
+        if not source_hash or _clean(existing.get("source_file_hash")) != source_hash:
+            raise HTTPException(409, "settlement_source_conflict")
         return {**existing, "duplicate": True}
 
     selected_bank_id = _clean(bank_account_id) or await _verified_binding_bank_id(
@@ -665,7 +686,7 @@ def install_accounting_settlement_routes(router, db, current_user):
         docs = await db.accounting_settlements_v2.find(
             query, {"_id": 0}
         ).sort("updated_at", -1).to_list(limit)
-        return {"items": docs, "count": len(docs)}
+        return {"items": [_draft_matching_view(doc) for doc in docs], "count": len(docs)}
 
     @router.get("/accounting-module/settlements/drafts/{draft_id}")
     async def get_settlement_draft(
@@ -1020,6 +1041,11 @@ def install_accounting_settlement_routes(router, db, current_user):
         actor, owner_id = await _scope(
             db, user, "accounting.settlements.post"
         )
+        async def commit_settlement(scoped):
+            return await _post_settlement_transaction(scoped, owner_id, actor, draft_id, payload)
+        return await atomic_owner(db, owner_id, commit_settlement)
+
+    async def _post_settlement_transaction(db, owner_id, actor, draft_id, payload):
         current = await _draft_or_404(db, owner_id, draft_id)
         if current.get("status") != "reviewed":
             raise HTTPException(409, "يجب مراجعة التسوية قبل ترحيلها")
@@ -1092,3 +1118,4 @@ __all__ = [
     "ensure_accounting_settlement_indexes",
     "install_accounting_settlement_routes",
 ]
+

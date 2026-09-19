@@ -130,6 +130,8 @@ def test_statement_reference_period_and_provider_aliases_are_stable():
     assert key1 == key2
 
 
+# These focused tests cover the service body; real transaction/crash behavior
+# is exercised by test_mz2_atomic_recovery.py on a replica set.
 class _Collection:
     def __init__(self, document=None):
         self.document = document
@@ -172,7 +174,7 @@ async def test_post_snapshots_bank_and_uses_one_balanced_group(monkeypatch):
     monkeypatch.setattr(service, "post_txn_group", fake_post)
     monkeypatch.setattr(service, "write_audit", fake_audit)
 
-    result = await service.post_reviewed_settlement(
+    result = await service._post_reviewed_settlement_transaction(
         db,
         owner_id="owner-1",
         actor={"id": "accountant-1", "name": "المحاسب"},
@@ -221,7 +223,7 @@ async def test_post_rejects_insufficient_canonical_provider_receivable(monkeypat
     monkeypatch.setattr(service, "compute_balance", fake_balance)
 
     with pytest.raises(HTTPException) as error:
-        await service.post_reviewed_settlement(
+        await service._post_reviewed_settlement_transaction(
             db,
             owner_id="owner-1",
             actor={"id": "accountant-1"},
@@ -259,3 +261,4 @@ def test_router_registers_full_p01_settlement_contract():
         "/financial-provider-apps/accounting-module/settlements/drafts/{draft_id}/reject",
         "/financial-provider-apps/accounting-module/settlements/drafts/{draft_id}/post",
     } <= paths
+

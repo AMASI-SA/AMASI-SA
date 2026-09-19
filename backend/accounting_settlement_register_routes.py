@@ -9,6 +9,7 @@ from fastapi import Depends, HTTPException, Query
 from accounting_module_contract import accounting_owner_id, require_accounting_permission
 from accounting_module_status_routes import fresh_accounting_user
 from accounting_settlement_service import canonical_provider
+from accounting_settlement_routes import _draft_matching_view
 
 REGISTER_STATUSES = frozenset({
     "draft",
@@ -200,7 +201,7 @@ def install_accounting_settlement_register_routes(router, db, current_user):
 
         return {
             "register_item": _register_item(draft),
-            "draft": draft,
+            "draft": _draft_matching_view(draft),
             "evidence": {
                 "file": source_file,
                 "entries": source_entries,

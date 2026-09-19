@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import AccountingReceivables from "./AccountingReceivables";
 import {
     ArrowClockwise,
     Bank,
@@ -303,6 +304,7 @@ export default function AccountingSettlements({ accountingPermissions = [] }) {
 
     return (
         <div className="space-y-5" data-testid="accounting-settlements-page">
+            <AccountingReceivables accountingPermissions={accountingPermissions} />
             <section className="rounded-2xl bg-gradient-to-l from-emerald-950 to-emerald-800 p-5 text-white shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
