@@ -49,6 +49,33 @@ class IntakeTests(unittest.IsolatedAsyncioTestCase):
         await self.client.aclose()
         self.mongo.close()
 
+    async def test_upload_concurrency_and_interruption_preserve_file_order_draft_identity(self):
+        import io
+        import openpyxl
+        workbook=openpyxl.Workbook();sheet=workbook.active
+        sheet.append(['Statement #','SYN-ATOMIC-UPLOAD'])
+        for _ in range(9):sheet.append([])
+        sheet.append(['Order Number','Sale/Refund Date','Merchant Name','Merchant Code','Product Type','Type','Currency','Order Amount','Commission Rate','Refundable Commission','Non Refundable Commission','Fixed Fee','Total Fee','VAT Amount','VAT Rate','Total Deduction','Transferred amount','Transfer Date'])
+        sheet.append(['SYN-ORDER','2026-09-19','SYN','SYN','Installments: 3 Months','sale','SAR',115,0,3,0,0,3,.45,.15,3.45,111.55,'2026-09-19'])
+        stream=io.BytesIO();workbook.save(stream);content=stream.getvalue()
+        await self.db.unified_orders.insert_one({'user_id':'owner','order_number':'SYN-ORDER'})
+        async def upload():
+            return await self.client.post(BASE+'/settlements/drafts/upload',data={'provider':'tabby','statement_date':'2026-09-19'},files={'file':('SYN.xlsx',content,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')})
+        async def fail(*args,**kwargs):raise RuntimeError('SYN interrupted after import before draft')
+        with patch('accounting_settlement_routes._create_draft_from_file',fail):
+            with self.assertRaises(RuntimeError):await upload()
+        for name in ['settlement_files','settlement_entries','accounting_source_files','accounting_settlements_v2','general_ledger']:
+            self.assertEqual(await self.db[name].count_documents({}),0,name)
+        self.assertNotIn('last_settlement_file_id',await self.db.unified_orders.find_one({'order_number':'SYN-ORDER'}))
+        answers=await asyncio.gather(upload(),upload())
+        self.assertTrue(all(a.status_code==200 for a in answers),[a.text for a in answers])
+        self.assertEqual(answers[0].json()['draft']['id'],answers[1].json()['draft']['id'])
+        file_id=answers[0].json()['draft']['source_file_id']
+        self.assertEqual((await self.db.unified_orders.find_one({'order_number':'SYN-ORDER'}))['last_settlement_file_id'],file_id)
+        for name in ['settlement_files','accounting_source_files','accounting_settlements_v2']:
+            self.assertEqual(await self.db[name].count_documents({}),1,name)
+        self.assertEqual(await self.db.general_ledger.count_documents({}),0)
+
     async def receipt(self, **changes):
         response = await self.client.post(BASE + '/bank-receipts', json={**self.body, **changes})
         self.assertEqual(response.status_code, 200, response.text)

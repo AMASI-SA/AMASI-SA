@@ -25,6 +25,11 @@ async def preserve_original(db, owner, file_id, content):
     key = hashlib.sha256((owner + ":" + file_id).encode()).hexdigest()
     record = {"_id": key, "user_id": owner, "file_id": file_id,
               "sha256": digest, "size": len(content), "content": content}
+    prior = await db.accounting_source_files.find_one({"_id": key, "user_id": owner})
+    if prior:
+        if prior["sha256"] != digest or bytes(prior["content"]) != content:
+            raise ValueError("تعارض في أصل المستند المحفوظ")
+        return digest
     try:
         await db.accounting_source_files.insert_one(record)
     except DuplicateKeyError:

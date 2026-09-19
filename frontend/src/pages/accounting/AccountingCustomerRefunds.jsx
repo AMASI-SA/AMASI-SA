@@ -46,7 +46,7 @@ export default function AccountingCustomerRefunds({ accountingPermissions = [] }
     return <section className="space-y-3 rounded-xl border p-4" dir="rtl">
         <h3 className="text-lg font-bold">استردادات العملاء والتحويلات البنكية</h3>
         <p>تعديل الطلب لا يثبت الدفع. الويبهوك ينشئ مسودة فقط. اعتماد الحركة اليومية يثبت المبلغ المنفذ بصافي المرتجع وضريبته الأصلية. التحويل البنكي لا يخفض ذمة مزود الدفع.</p>
-        <label>رقم الطلب<input aria-label="طلب استرداد العميل" value={order} onChange={e => setOrder(e.target.value)} /></label>
+        <label>رقم الطلب<input aria-label="طلب استرداد العميل" value={order} onChange={e => { setOrder(e.target.value); setOriginal(""); setReference(""); setAmount(""); setPaid(""); setBankReference(""); setProviderRefund(""); setProof(null); }} /></label>
         <button disabled={busy} onClick={() => run(async () => {})}>بحث وتحديث الاستردادات</button>
         {error && <p role="alert">{error}</p>}
         {can("create") && <label>مسودة الاسترداد<select aria-label="اختيار مسودة الاسترداد" value={reference} onChange={e => { const row = data.cases.find(x => x.case_reference === e.target.value); if (row) { setReference(row.case_reference); setOriginal(row.original_key); setAmount(row.amount); setPaid(row.remaining); } }}><option value="">اختر المسودة أو أدخل استردادًا جديدًا</option>{data.cases.map(row => <option key={row.id} value={row.case_reference}>{row.order_number} — المطلوب {row.amount} — المتبقي {row.remaining}</option>)}</select></label>}

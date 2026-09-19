@@ -386,7 +386,13 @@ async def _create_draft_from_file(
     bank_account_id: str | None = None,
     notes: str | None = None,
 ) -> dict[str, Any]:
-    await ensure_accounting_settlement_indexes(db)
+    from accounting_atomic import SessionDatabase, atomic_owner
+    if not isinstance(db, SessionDatabase):
+        await ensure_accounting_settlement_indexes(db)
+        async def create(scoped):
+            return await _create_draft_from_file(scoped, owner_id=owner_id, actor=actor,
+                file_doc=file_doc, bank_account_id=bank_account_id, notes=notes)
+        return await atomic_owner(db, owner_id, create)
     provider = canonical_provider(file_doc.get("provider"))
     statement_reference = statement_reference_from_file(file_doc)
     source_hash = _clean(file_doc.get("file_hash"))
@@ -618,37 +624,41 @@ def install_accounting_settlement_routes(router, db, current_user):
         )
         provider = canonical_provider(provider)
         content = await read_safe_xlsx_upload(file, max_bytes=MAX_FILE_BYTES)
-        try:
-            imported = await import_file(
-                db,
-                owner_id,
-                filename=file.filename or "settlement.xlsx",
-                content=content,
-                provider_hint=provider,
+        from accounting_atomic import atomic_owner
+        await ensure_accounting_settlement_indexes(db)
+        async def save_upload(scoped):
+            try:
+                imported = await import_file(
+                    scoped,
+                    owner_id,
+                    filename=file.filename or "settlement.xlsx",
+                    content=content,
+                    provider_hint=provider,
+                )
+            except ValueError as exc:
+                raise HTTPException(400, str(exc)) from exc
+            file_id = imported.get("file_id")
+            if not file_id:
+                raise HTTPException(500, "لم يرجع مستورد التسويات مرجعًا للملف")
+            if statement_date:
+                value = _clean(statement_date)[:10]
+                if not re_full_date(value):
+                    raise HTTPException(400, "صيغة تاريخ الكشف يجب أن تكون YYYY-MM-DD")
+                await scoped.settlement_files.update_one(
+                    {"id": file_id, "user_id": owner_id},
+                    {"$set": {"header.settlement_date": value}},
+                )
+            file_doc = await _file_or_404(scoped, owner_id, file_id)
+            draft = await _create_draft_from_file(
+                scoped,
+                owner_id=owner_id,
+                actor=actor,
+                file_doc=file_doc,
+                bank_account_id=bank_account_id,
+                notes=notes,
             )
-        except ValueError as exc:
-            raise HTTPException(400, str(exc)) from exc
-        file_id = imported.get("file_id")
-        if not file_id:
-            raise HTTPException(500, "لم يرجع مستورد التسويات مرجعًا للملف")
-        if statement_date:
-            value = _clean(statement_date)[:10]
-            if not re_full_date(value):
-                raise HTTPException(400, "صيغة تاريخ الكشف يجب أن تكون YYYY-MM-DD")
-            await db.settlement_files.update_one(
-                {"id": file_id, "user_id": owner_id},
-                {"$set": {"header.settlement_date": value}},
-            )
-        file_doc = await _file_or_404(db, owner_id, file_id)
-        draft = await _create_draft_from_file(
-            db,
-            owner_id=owner_id,
-            actor=actor,
-            file_doc=file_doc,
-            bank_account_id=bank_account_id,
-            notes=notes,
-        )
-        return {"import": imported, "draft": draft}
+            return {"import": imported, "draft": draft}
+        return await atomic_owner(db, owner_id, save_upload)
 
     @router.post("/accounting-module/settlements/drafts/from-file")
     async def draft_from_existing_file(
