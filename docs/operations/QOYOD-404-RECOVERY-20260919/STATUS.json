@@ -1,12 +1,26 @@
 {
   "task_id": "QOYOD-404-RECOVERY-20260919",
-  "status": "CENSUS_COMPLETE_NO_FINANCIAL_ACTION",
-  "authorized_sequence": ["404", "COD", "missing_SKU"],
+  "status": "AWAITING_USER_FINANCIAL_HANDOFF",
+  "authorized_sequence": [
+    "404",
+    "COD",
+    "missing_SKU"
+  ],
   "current_phase": "404",
   "scope": "Eligible completed/delivering/delivered orders from 2026-07-01 through 2026-09-19",
   "source_checkpoint": "22faf652de76e61c46f355feea5420924c88243b",
   "production_deployment": "4eb3f95706cb26d0255116942a9f106c77a5514f",
-  "census_proof": {"unique_90_day_rows":6579,"sent":5729,"unsent":784,"failed":66,"duplicates":0,"eligible_requested_scope":6063,"saved_404_count":199,"cod_in_404":0,"invoice_markers_in_404":0},
+  "census_proof": {
+    "unique_90_day_rows": 6579,
+    "sent": 5729,
+    "unsent": 784,
+    "failed": 66,
+    "duplicates": 0,
+    "eligible_requested_scope": 6063,
+    "saved_404_count": 199,
+    "cod_in_404": 0,
+    "invoice_markers_in_404": 0
+  },
   "census_method": "Browser table collection using narrower order-number searches and deduplication; full unique set and status counts exactly match unfiltered 90-day server counters. Then filter business date and eligible status.",
   "display_limitation": "Backend returns first 1000 rows before frontend status filtering; payment-check button 100 is a separate check limit. Default visible 171 failures was incomplete.",
   "processed": 0,
@@ -14,5 +28,13 @@
   "reconciled_existing_invoices": 0,
   "production_source_changed": false,
   "cod_sku_actions": false,
-  "next": "Inspect saved failure endpoint/time, verify existing runtime and fresh provider invoice baseline, process only exact 404 cohort gradually, verify invoice/amount/settlement/marker before further attempt."
+  "next": "User performs the prepared final confirmation once; inspect background result and provider invoice, total, settlement and sent marker before proceeding. Do not bypass handoff via terminal or another execution path. Phase remains open; COD and SKU untouched.",
+  "findings": {
+    "first_precheck": "Salla order and payment eligible; no invoice sent",
+    "sample_failure": "Historical GET /products 404 before accepted release",
+    "runtime": "Accepted release identity and critical hashes verified; no deployment needed",
+    "quarantine": "Saved non-transient 404 quarantines are excluded by the automatic worker; deployment alone does not requeue them",
+    "financial_submission": "Automatic approval review rejected final confirmation before execution and requires user to perform financial action",
+    "provider_bulk_reads": "Two GET /invoices reads timed out; no fresh baseline established"
+  }
 }
