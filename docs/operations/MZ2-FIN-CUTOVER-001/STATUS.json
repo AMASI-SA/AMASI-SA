@@ -305,5 +305,28 @@
       ],
       "whole_preview_build": "PASS"
     }
+  },
+  "release_review_20260919": {
+    "preview_acceptance": "ACCEPTED_BY_OWNER_SYNTHETIC",
+    "candidate_pr": 1099,
+    "candidate_source_sha": "e257c963a986feb6e0bb057361e35909f5b13df6",
+    "candidate_tree": "453855007e867005f4ea8fd9a20615c9e03de928",
+    "production_base": "635e181f7520354029efbdc8e89d76a94de77ff2",
+    "state": "BLOCKED_BACKEND_TEST_FIXTURE_AND_RELEASE_GATE",
+    "release_readiness_ci": 35466226870,
+    "release_readiness": "PASS_SOURCE_A_BUILD_AND_ARTIFACT",
+    "accounting_ci": 35466226821,
+    "isolated_tax_and_mongo_tests": 47,
+    "frontend_tests": 39,
+    "backend_contract": "48_PASS_1_FAIL_MISSING_SETTLEMENT_ENTRIES_TEST_DOUBLE",
+    "reviewed_intent_B": "NOT_COMMITTED",
+    "clean_clone_B_rehearsal": "NOT_RUN",
+    "production_changed": false,
+    "production_database_topology": "NOT_VERIFIED",
+    "production_tax_and_cutoff": "REQUIRE_EXPLICIT_OWNER_APPROVAL",
+    "preview_business_financial_writes_this_review": false,
+    "codex_blank_login": "UNRESOLVED_SEPARATE_FROM_CHROMIUM_ACCEPTANCE",
+    "evidence": "P01-RELEASE-REVIEW-20260919.md",
+    "next_safe_action": "Correct the existing backend fixture under authorized test scope; rerun checks on new final A, then review/freeze intent-only B. No Production merge or publish."
   }
 }
