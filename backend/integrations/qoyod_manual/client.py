@@ -17,6 +17,7 @@ This client is intentionally minimal:
 """
 from __future__ import annotations
 
+import ast
 import asyncio
 import os
 from typing import Any, Optional
@@ -47,10 +48,21 @@ def _is_confirmed_empty_list(exc: "ManualQoyodError") -> bool:
     some tenants.  Keep this deliberately narrower than a generic 404: route
     failures such as ``URL not found`` must never authorize a later create.
     """
-    return (
-        exc.status_code == 404
-        and "we found nothing" in exc.response_excerpt.casefold()
-    )
+    if exc.status_code != 404:
+        return False
+    message = exc.response_excerpt.strip()
+    # _request preserves plain-text responses and stringifies JSON bodies.
+    # Only the exact provider message is evidence of an empty page; a proxy
+    # page or a different error mentioning these words is not sufficient.
+    if message.startswith("{"):
+        try:
+            body = ast.literal_eval(message)
+        except (ValueError, SyntaxError):
+            return False
+        if not isinstance(body, dict) or set(body) != {"error"}:
+            return False
+        message = body["error"]
+    return isinstance(message, str) and message.strip().casefold() == "we found nothing"
 
 
 class ManualQoyodError(Exception):
@@ -307,12 +319,14 @@ class ManualQoyodClient:
         return node
 
     async def _load_product_sku_snapshot(self) -> dict[str, dict]:
-        """Bounded catalog scan; no HTTP error is interpreted as absence.
+        """Bounded catalog scan with an exact provider end-of-list sentinel.
 
         A short successful page completes the existing page/limit contract.
         Repeated pages, unknown bodies, a full final page at the cap, and
-        every HTTP/network failure leave absence unconfirmed. The snapshot
-        is published only after completion and lives for this client only.
+        unexpected HTTP/network failures leave absence unconfirmed. An exact
+        empty-page sentinel may end the scan only when no declared total is
+        still outstanding. The snapshot is published only after completion
+        and lives for this client only.
         """
         by_sku: dict[str, dict] = {}
         seen_ids: set[str] = set()
@@ -324,11 +338,15 @@ class ManualQoyodClient:
                     params={"page": page, "limit": _PRODUCT_SCAN_PAGE_SIZE},
                 )
             except ManualQoyodError as exc:
-                # On the first unfiltered page, Qoyod's exact empty-list
-                # sentinel confirms that the tenant currently has no
-                # products.  Every other 404 remains unknown/fail-closed.
-                if page == 1 and _is_confirmed_empty_list(exc):
-                    return {}
+                # Qoyod uses the same sentinel for an empty catalog and
+                # the page after its last full page. Keep the accumulated
+                # products: returning {} here would lose existing SKUs and
+                # permit duplicate creation. A declared but unobserved row
+                # count always overrides this sentinel and remains unknown.
+                if _is_confirmed_empty_list(exc) and (
+                    expected_count is None or len(seen_ids) == expected_count
+                ):
+                    return by_sku
                 raise
             rows = self._product_rows(body)
             meta = body.get("meta") if isinstance(body, dict) else None
