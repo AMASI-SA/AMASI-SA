@@ -1,7 +1,18 @@
 {
   "operation_id": "MZ2-FIN-CUTOVER-001",
   "plan_version": 1,
-  "last_updated_date": "2026-09-19",
+  "last_updated_date": "2026-09-20",
+  "release_preparation_20260920": {
+    "pr": 1099,
+    "resumed_remote_source": "e257c963a986feb6e0bb057361e35909f5b13df6",
+    "fixture_repair": "PASS_LOCAL_51_BACKEND_CONTRACT_TESTS_WITH_REAL_REFUND_GUARD",
+    "final_source_ci_and_intent_b": "PENDING_AT_SOURCE_CHECKPOINT_SEE_ISSUE_1006_FOR_FINAL_IDENTITIES",
+    "write_stop": "NO_DEDICATED_FLAG_COORDINATED_ALL_WRITER_MAINTENANCE_STOP_REQUIRES_OPERATIONAL_PROOF",
+    "preview_acceptance": "RETAINED_NO_REPEAT",
+    "production_changed": false,
+    "p02_opened": false,
+    "evidence_file": "P01-RELEASE-PREPARATION-20260920.md"
+  },
   "production_branch": "hotfix/prod-snap-meta-final",
   "foundation_pr": 851,
   "foundation_merge_sha": "c116d80fd375c0ddfd4acf0eb0ea7e8a8a0dd092",
