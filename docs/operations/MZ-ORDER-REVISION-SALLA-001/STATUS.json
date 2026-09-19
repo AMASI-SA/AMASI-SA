@@ -1,6 +1,6 @@
 {
   "approval_review": "Owner explicitly approved merge/publication after PR1064 validation. Base then advanced with PR1065/1066; same task rebuilt preserving both. No renewed approval needed for same scope.",
-  "branch": "release/order-tracking-console-20260918",
+  "branch": "release/order-tracking-console-20260919",
   "completed": [
     "Recovered all original P0 source without content changes; exact original local commit history preserved in the verified recovery bundle",
     "Fixed stale pre-write webhook snapshot with bounded post-write collection",
@@ -20,16 +20,16 @@
   "delivery_commit": "407634facfc4e0be07b47d21ca8b243de563f87f",
   "delivery_method": "GitHub connector; source delivery tree exactly equals the reviewed local checkpoint. Remote commit SHA differs; original remote research parent is retained.",
   "merge": "NOT_PERFORMED",
-  "next_safe_action": "Verify updated source tests and save remote Draft PR; when cloud access returns and guard active=false, build exact remote source A, freeze new intent-only B, review checks and deploy. Do not reuse 20260917 intent.",
+  "next_safe_action": "After the Qoyod owner closes its release lease, read guard status and production ref again, verify frontend tests, freeze new source-specific v5 intent, then review/merge/deploy. Never clear another task lease.",
   "p1": "BLOCKED_BY_REQUIRED_PROVIDER_EVIDENCE",
   "phase": "P0",
-  "production_baseline": "bcd7920c7831a9ccccffb6119d2455f1b2ac3a20",
+  "production_baseline": "4eb3f95706cb26d0255116942a9f106c77a5514f",
   "production_changed": false,
   "recovered_source": "684d9c9a8120d2158a02bb955500a415474b1279",
   "recovery_merge": "e9be9ebf1abefb223560477f164f746c3bdbb67f",
-  "release_intent": "Inherited current production intent; fresh source-specific build/intent required",
+  "release_intent": "Inherited current production intent; new governed build and intent-only commit still required",
   "remaining": [
-    "Fresh governed build/intent after preserving production PR1079 and PR1080, then authorized staged deployment.",
+    "Fresh frontend verification and governed v5 build/intent on production base containing Qoyod #1094, after shared lease closes; then authorized staged deployment.",
     "Configure and run actual disposable-order add/quantity/options/delete test from production browser Console.",
     "Complete provider dispatch, authoritative preparation reset, cancellation and unknown-result hold reconciliation before general editor activation."
   ],
@@ -57,9 +57,9 @@
     "backend/tests/test_salla_order_item_console.py": "6ec97ab358de1d7def71e1519c7ea7557575494f9a8167bd5eff67f09f35cf67",
     "backend/tests/test_salla_orders_v3_probe.py": "4c4266cd5ab9206ca450de30c245532bbfc4b22bb9a29443c3f07cfcc99b2fb1"
   },
-  "status": "STAGED_RELEASE_SOURCE_UPDATED_PENDING_BUILD",
+  "status": "SOURCE_VERIFIED_WAITING_FOR_SHARED_RELEASE_LEASE",
   "task_id": "MZ-ORDER-REVISION-SALLA-001",
-  "updated_at": "2026-09-18",
+  "updated_at": "2026-09-19",
   "verification": {
     "baseline_regression": "Immediate post-mutation event missing; failed before fix and passed afterward",
     "command": "PYTHONDONTWRITEBYTECODE=1 python -B -m unittest discover -s backend/tests -p 'test_salla_order_item_*.py' -q",
@@ -100,9 +100,8 @@
       "schema_validation": "PASS"
     },
     "remote_ci": {
-      "status": "PENDING_FOR_NEW_SOURCE",
-      "prior_head": "18dd90f1f8e849f640ad9ffa969ea340efb21d65",
-      "prior_result": "ALL_8_WORKFLOWS_PASS"
+      "head": "11fb1883038cb69791b1c6dae6ab03d0afc74b09",
+      "status": "7_PASS_CODEQL_IN_PROGRESS"
     },
     "adjacent_ci": {
       "Snapchat Settings Management V2": "PASS",
@@ -118,16 +117,18 @@
       "command": "PYTHONPATH=backend:. python -m pytest -q backend/tests/test_salla_orders_v3_probe.py --tb=short"
     },
     "updated_base_tests": {
+      "date": "2026-09-19",
       "revision": 132,
       "preparation_tracking": 40,
-      "frontend": 4,
       "exit_codes": [
-        0,
         0,
         0
       ],
-      "total": 176,
-      "date": "2026-09-18"
+      "frontend": "Not rerun on this base; blocked before install by active shared lease",
+      "total_fresh_backend": 172,
+      "source": "11fb1883038cb69791b1c6dae6ab03d0afc74b09",
+      "tracking_command": "PYTHONPATH=<isolated test dependencies>:backend:backend/tests:. PYTHONDONTWRITEBYTECODE=1 python -B -m pytest --noconftest -q <seven tracking/preparation test modules>",
+      "isolation": "--noconftest avoids the unrelated XLSX fixture and automatic /app/backend/.env loading; selected tests use local fakes."
     }
   },
   "test_environment_decision": {
@@ -178,9 +179,10 @@
     "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1057"
   },
   "pr": {
+    "number": 1095,
+    "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1095",
     "draft": true,
-    "state": "SUCCESSOR_PR_PENDING",
-    "supersedes": 1075
+    "supersedes": 1081
   },
   "current_policy": {
     "shipping": "No shipment API, number, courier status, or shipping status participates in Console eligibility. Historical CLI contracts unchanged.",
@@ -219,11 +221,11 @@
     ]
   },
   "release_candidate": {
-    "branch": "release/order-tracking-console-20260918",
-    "base": "bcd7920c7831a9ccccffb6119d2455f1b2ac3a20",
+    "branch": "release/order-tracking-console-20260919",
+    "base": "4eb3f95706cb26d0255116942a9f106c77a5514f",
     "scope": "Inline order tracking, CS ready-item stop confirmation, disabled unallocated-line Console bridge. Not general editor.",
     "production_changed": false,
-    "guard_preflight": "UNKNOWN: browser unavailable; last read was another task active lease; fresh status required",
-    "broader_regressions": "40 PASS on updated production base; 132 revision contracts and 4 React DOM tests also pass"
+    "guard_preflight": "ACTIVE_OTHER_TASK: codex-qoyod-1093-01a0b575-20260919; no lease acquired or cleared by orders task",
+    "broader_regressions": "132 revision and 40 tracking/preparation tests passed on 2026-09-19; frontend rerun/build pending"
   }
 }
