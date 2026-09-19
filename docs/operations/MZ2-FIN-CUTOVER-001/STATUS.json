@@ -9,8 +9,8 @@
   "current_phase": "P01",
   "current_phase_file": "PHASE-01-SETTLEMENTS.md",
   "current_phase_status": "IN_PROGRESS",
-  "next_allowed_action": "restore_preview_access_verify_whole_tree_identity_resolve_recognition_tax_policy_then_implement_operational_producer",
-  "current_blocker": "operational_receivable_workflow_pending_accounting_decision_and_preview_gateway_unavailable",
+  "next_allowed_action": "restore_preview_after_release_lease_clear_verify_candidate_then_run_real_ui_acceptance",
+  "current_blocker": "preview_502_release_lease_became_active_runtime_identity_and_ui_acceptance_unverified",
   "legacy_mezan_policy": {
     "dynamic_financial_dependency_allowed": false,
     "copy_reference_values_allowed": true,
@@ -221,5 +221,23 @@
       "blocked_by": "P07",
       "exit_gate": "LOCKED"
     }
-  ]
+  ],
+  "manual_sales_tax_resume_20260919": {
+    "base_sha": "b68ac4d05cda791ee570f9044164991d65c0db33",
+    "branch": "codex/p01-closure-integration-20260918",
+    "pr": 1091,
+    "state": "WIP_LOCAL_VERIFIED_PREVIEW_BLOCKED",
+    "decision": "MANUAL_EFFECTIVE_DATED_GROSS_INCLUSIVE_RATE_SOURCE_TAX_REVIEW_ONLY",
+    "new_backend_local_tests": 23,
+    "regression_backend_tests": 36,
+    "frontend_local_tests": 24,
+    "whole_frontend_preview_build": "PASS_LOCAL",
+    "preview_runtime": "NOT_STARTED",
+    "preview_gateway_observed_utc": "2026-09-19T10:51:23Z",
+    "preview_gateway_status": 502,
+    "new_preview_financial_writes": false,
+    "prior_settlements_reposted": false,
+    "production_changed_by_task": false,
+    "evidence_file": "P01-MANUAL-TAX-WIP-20260919.md"
+  }
 }

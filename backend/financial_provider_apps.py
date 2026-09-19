@@ -8,6 +8,7 @@ posts opening balances.
 """
 from fastapi import Depends
 from accounting_source_files import install_accounting_source_file_routes
+from accounting_receivable_routes import install_accounting_receivable_routes
 
 from financial_provider_apps_legacy import *  # noqa: F401,F403
 from financial_provider_apps_legacy import (
@@ -109,4 +110,5 @@ def make_financial_provider_apps_router(db, current_user):
     install_accounting_settlement_register_routes(router, db, current_user)
     install_accounting_courier_bank_routes(router, db, current_user)
     install_accounting_source_file_routes(router, db, current_user)
+    install_accounting_receivable_routes(router, db, current_user)
     return router
