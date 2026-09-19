@@ -20,6 +20,7 @@ ACCOUNTING_PAGES: tuple[dict[str, str], ...] = (
 )
 
 ACCOUNTING_ACTIONS: tuple[dict[str, str], ...] = (
+    {"id": "receipt-create", "label": "تسجيل مبلغ واصل من منصة", "permission": "accounting.receipts.create"},
     {"id": "receivable-post", "label": "إثبات ذمم الطلبات المؤهلة", "permission": "accounting.receivables.post"},
     {"id": "draft-create", "label": "إنشاء وحفظ مسودة مالية", "permission": "accounting.drafts.create"},
     {"id": "settlement-post", "label": "اعتماد وترحيل تسوية", "permission": "accounting.settlements.post"},

@@ -32,6 +32,8 @@ PROVIDER_LABELS = {
     "emkan": "إمكان",
 }
 BLOCKING_REASON_CODES = frozenset({
+    "statement_required", "bank_receipt_required", "receipt_link_invalid",
+    "receipt_scope_conflict", "receipt_amount_difference",
     "missing_bank",
     "missing_statement_reference",
     "unmatched_rows",
@@ -390,6 +392,11 @@ async def post_reviewed_settlement(
 
 
 async def _post_reviewed_settlement_transaction(db, *, owner_id, actor, draft):
+    if draft.get("receipt_workflow_version") == 2 or draft.get("bank_receipt_id"):
+        from accounting_receipt_service import receipt_reasons
+        pending = await receipt_reasons(db, owner_id, draft)
+        if pending:
+            raise HTTPException(409, {"code": "settlement_receipt_blocked", "reasons": pending})
     if draft.get("status") != "reviewed":
         raise HTTPException(409, "يجب مراجعة المسودة قبل الترحيل")
     if has_blocking_reasons(draft.get("review_reasons")):
@@ -473,6 +480,7 @@ async def _post_reviewed_settlement_transaction(db, *, owner_id, actor, draft):
         "bank_snapshot": bank_snapshot,
         "amounts": preview["amounts"],
         "refunds_are_statement_evidence_only": True,
+        "bank_receipt_id": draft.get("bank_receipt_id"),
     }
     entries = [
         {
@@ -499,6 +507,9 @@ async def _post_reviewed_settlement_transaction(db, *, owner_id, actor, draft):
         )[:500],
         metadata=metadata,
     )
+    if draft.get("bank_receipt_id"):
+        from accounting_receipt_service import consume_receipt
+        await consume_receipt(db, owner_id, draft, result["txn_group_id"])
     await write_audit(
         db,
         user_id=owner_id,

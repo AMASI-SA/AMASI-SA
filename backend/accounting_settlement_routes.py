@@ -344,6 +344,9 @@ async def _recomputed_draft(
         source_review_count=int(draft.get("source_review_count") or 0),
     )
     calculation = calculate_settlement_totals(draft.get("amounts") or {})
+    if draft.get("status") not in {"posted", "reversed"}:
+        from accounting_receipt_service import receipt_reasons
+        reasons.extend(await receipt_reasons(db, owner_id, draft))
     preview = None
     try:
         if bank:
@@ -416,6 +419,7 @@ async def _create_draft_from_file(
         "id": str(uuid.uuid4()),
         "user_id": owner_id,
         "operation_id": OPERATION_ID,
+        "receipt_workflow_version": 2,
         "provider": provider,
         "provider_label": provider_label(provider),
         "status": "draft",

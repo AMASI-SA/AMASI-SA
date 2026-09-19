@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import AccountingReceivables from "./AccountingReceivables";
+import { SettlementReceiptLink } from "./AccountingBankReceipts";
 import {
     ArrowClockwise,
     Bank,
@@ -430,6 +431,7 @@ export default function AccountingSettlements({ accountingPermissions = [] }) {
                                 <Badge value={selected.status} />
                             </div>
 
+                            {selected.status !== "posted" && <SettlementReceiptLink draft={selected} canLink={canCreate} onLinked={() => load()} />}
                             {!!selected.review_reasons?.length && (
                                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
                                     <div className="flex items-center gap-2 font-black text-amber-900"><WarningCircle size={20} weight="fill" /> أسباب تمنع الانتقال</div>
