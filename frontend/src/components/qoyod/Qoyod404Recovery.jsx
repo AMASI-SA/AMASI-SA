@@ -79,7 +79,7 @@ export default function Qoyod404Recovery() {
       {data.release_review_required && <button disabled={busy || data.busy || !data.can_audit} onClick={() => action("review-release", { fingerprint: data.fingerprint })}>تجهيز الاستئناف على الإصدار الحالي — دون إرسال</button>}
       {activatable && <>
         <label><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} /> أوافق على معالجة الطلبات المتبقية من هذه المجموعة فقط، مع التوقف عند نتيجة غير محسومة.</label>
-        <button disabled={!confirmed || busy} onClick={() => action("activate", { fingerprint: data.fingerprint, confirmation: "ACTIVATE_REVIEWED_404_COHORT" })}>تفعيل التعافي التلقائي للنطاق المحدد</button>
+        <button className="rounded-lg bg-blue-700 px-4 py-2 font-semibold text-white disabled:opacity-50" disabled={!confirmed || busy} onClick={() => action("activate", { fingerprint: data.fingerprint, confirmation: "ACTIVATE_REVIEWED_404_COHORT" })}>تفعيل التعافي التلقائي للنطاق المحدد</button>
       </>}
       <button disabled={busy || data.state !== "active"} onClick={() => action("pause")}>إيقاف التعافي</button>
       <button disabled={busy || data.can_audit !== true} onClick={() => action("audit")}>التحقق من المحاولات غير المحسومة — دون إرسال</button>

@@ -129,6 +129,7 @@ async def activate(db, fingerprint, owner, actor, release_identity):
         raise ValueError("unresolved_attempt_requires_read_only_audit")
     result = await db.qoyod_404_campaigns.update_one(
         {"_id": CAMPAIGN, "fingerprint": fingerprint, "busy": False, "cursor": None,
+         "lease_token": campaign.get("lease_token"),
          "state": {"$in": ["prepared", "paused"]}},
         {"$set": {"state": "active", "activated_by": actor, "activated_at": now()}})
     if not result.modified_count:
@@ -149,6 +150,7 @@ async def review_release(db, fingerprint, owner, actor, release_identity):
     new_scope = scope_from({**campaign, "release_identity": release_identity})
     result = await db.qoyod_404_campaigns.update_one(
         {"_id": CAMPAIGN, "fingerprint": fingerprint, "orders_owner": owner,
+         "lease_token": campaign.get("lease_token"),
          "state": {"$in": ["paused", "prepared", "review_complete"]}, "busy": False, "cursor": None},
         {"$set": {"release_identity": release_identity, "fingerprint": new_scope.fingerprint,
                   "state": "paused", "release_reviewed_by": actor, "release_reviewed_at": now()},
