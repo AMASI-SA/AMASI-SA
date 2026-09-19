@@ -75,13 +75,8 @@ async def create_receipt(db, *, owner, actor, provider, amount, bank_message, re
         previous = await scoped.mz2_bank_receipts.find_one({'_id': identity})
         if previous and previous['fingerprint'] != fingerprint:
             raise HTTPException(409, 'bank_receipt_identity_conflict')
-        if not previous and not reference:
-            uncertain = await scoped.mz2_bank_receipts.find_one({
-                'user_id': owner, 'bank_account_id': bank_id, 'provider': provider,
-                'amount': value, 'received_on': received_on,
-            })
-            if uncertain:
-                raise HTTPException(409, 'receipt_identity_ambiguous_supply_explicit_bank_reference')
+        # A missing bank reference is valid draft evidence. Similar amounts
+        # are candidates for explicit reconciliation, never an identity.
         if reference:
             prior_bank = await scoped.account_transactions.find_one({
                 'user_id': owner, 'account_id': bank_id, 'reference': reference,

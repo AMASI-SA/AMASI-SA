@@ -182,12 +182,14 @@ class IntakeTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(bank_reference('وصل 104.65 يوم 2026-09-19 إلى حساب 123456'))
         self.assertEqual(bank_reference('مرجع: SYN-BANK-001'), 'SYN-BANK-001')
 
-    async def test_missing_reference_duplicate_is_not_guessed(self):
+    async def test_missing_reference_saves_distinct_drafts_without_guessing(self):
         await self.receipt(bank_message='SYN amount received')
         retry = await self.client.post(BASE + '/bank-receipts', json={
             **self.body, 'bank_message': 'SYN another message', 'request_id': str(uuid4())})
-        self.assertEqual(retry.status_code, 409)
-        self.assertEqual(await self.db.mz2_bank_receipts.count_documents({}), 1)
+        self.assertEqual(retry.status_code, 200)
+        self.assertIsNone(retry.json()['bank_reference'])
+        self.assertIsNone(retry.json()['settlement_id'])
+        self.assertEqual(await self.db.mz2_bank_receipts.count_documents({}), 2)
         await self.assert_no_finance()
 
     async def test_invalid_amount_and_unverified_binding_write_nothing(self):

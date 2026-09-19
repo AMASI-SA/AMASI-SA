@@ -38,7 +38,9 @@ export default function AccountingBankReceipts({ accountingPermissions = [] }) {
         finally { setBusy(false); }
     }
     return <section dir="rtl" className="space-y-4 rounded-2xl border bg-white p-5">
-        <h2 className="text-xl font-bold">الحركات المالية اليومية — مبلغ واصل من منصة</h2>
+        <h2 className="text-xl font-bold">الحركات المالية اليومية</h2>
+        <p>سجل الداخل والخارج من البنوك والصندوق. تسوية المزود تستخدم المسار أدناه؛ بقية أنواع الحركات لها مساراتها المحاسبية المستقلة.</p>
+        <h3 className="font-bold">مبلغ واصل من منصة</h3>
         <p>يُحفظ المبلغ كمسودة تنتظر كشف المنصة. لا يتغير الرصيد إلا بعد الربط والمطابقة والاعتماد والترحيل.</p>
         {canCreate && <form onSubmit={save} className="grid gap-3 sm:grid-cols-2">
             <label>المنصة<select aria-label="منصة المبلغ الواصل" value={provider} onChange={e => setProvider(e.target.value)} className="block w-full rounded border p-2">

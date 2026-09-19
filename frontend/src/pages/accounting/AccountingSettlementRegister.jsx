@@ -112,7 +112,7 @@ function Summary({ label, value, hint, tone = "slate" }) {
     );
 }
 
-export default function AccountingSettlementRegister({ accountingPermissions = [] }) {
+export default function AccountingSettlementRegister({ accountingPermissions = [], onSelectDraft, selectedDraftId, refreshToken, operations }) {
     const [filters, setFilters] = useState(EMPTY_FILTERS);
     const [appliedFilters, setAppliedFilters] = useState(EMPTY_FILTERS);
     const [items, setItems] = useState([]);
@@ -129,7 +129,7 @@ export default function AccountingSettlementRegister({ accountingPermissions = [
 
     const canCreate = accountingPermissions.includes("accounting.drafts.create");
     const selectedDraft = detail?.draft || null;
-    const canEditBank = canCreate && editable(selectedDraft?.status);
+    const canEditBank = canCreate && editable(selectedDraft?.status) && !selectedDraft?.bank_receipt_id;
 
     const bankOptions = useMemo(() => {
         const unique = new Map();
@@ -173,6 +173,7 @@ export default function AccountingSettlementRegister({ accountingPermissions = [
         try {
             const result = await getAccountingSettlementRegisterDetail(draftId);
             setDetail(result);
+            onSelectDraft?.(result?.draft ? { ...result.draft, status: result.draft.status === "matched" ? "ready_for_review" : result.draft.status } : null);
             setBankSelection(result?.draft?.bank_transaction_id || "");
             setBankNotes(result?.draft?.bank_match_notes || "");
         } catch (error) {
@@ -181,9 +182,14 @@ export default function AccountingSettlementRegister({ accountingPermissions = [
         } finally {
             setDetailLoading(false);
         }
-    }, []);
+    }, [onSelectDraft]);
 
     useEffect(() => { loadRegister(); }, [loadRegister]);
+
+    useEffect(() => {
+        loadRegister();
+        if (selectedDraftId) openDetail(selectedDraftId);
+    }, [refreshToken]);
 
     const applyFilters = (event) => {
         event.preventDefault();
@@ -255,7 +261,7 @@ export default function AccountingSettlementRegister({ accountingPermissions = [
                         <Receipt size={25} weight="duotone" />
                     </span>
                     <div>
-                        <h3 className="text-lg font-black text-slate-950">السجل المحاسبي للتسويات</h3>
+                        <h3 className="text-lg font-black text-slate-950">سجل التسويات</h3>
                         <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
                             بحث موحد حسب المزود والفترة والحالة والبنك، مع الكشف وحركة البنك وأرجل القيد في شاشة واحدة.
                         </p>
@@ -356,6 +362,7 @@ export default function AccountingSettlementRegister({ accountingPermissions = [
 
                     {selectedId && !detailLoading && selectedDraft && (
                         <div className="space-y-5">
+                            {operations}
                             <div className="flex flex-wrap items-start justify-between gap-3">
                                 <div>
                                     <div className="text-xs font-extrabold text-emerald-700">{selectedDraft.provider_label || selectedDraft.provider}</div>
