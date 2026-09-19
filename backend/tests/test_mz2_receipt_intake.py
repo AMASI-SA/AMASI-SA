@@ -38,6 +38,8 @@ class IntakeTests(unittest.IsolatedAsyncioTestCase):
         # The first handler in the real app must be the one tested.
         install_accounting_settlement_lifecycle_routes(router, self.db, actor)
         install_accounting_settlement_routes(router, self.db, actor)
+        from accounting_settlement_bank_match_routes import install_accounting_settlement_bank_match_routes
+        install_accounting_settlement_bank_match_routes(router, self.db, actor)
         app.include_router(router)
         self.client = AsyncClient(transport=ASGITransport(app=app), base_url='http://test')
         self.body = dict(provider='tabby', amount='104.65', bank_message='SYN bank ref: SYN-RECEIPT-01',
@@ -141,6 +143,18 @@ class IntakeTests(unittest.IsolatedAsyncioTestCase):
         answers = await asyncio.gather(self.link(receipt), self.link(receipt, 'second'))
         self.assertEqual(sorted(x.status_code for x in answers), [200, 409])
         self.assertEqual(await self.db.accounting_settlements_v2.count_documents({'bank_receipt_id':receipt['id']}), 1)
+
+    async def test_receipt_and_legacy_bank_evidence_cannot_both_link(self):
+        await self.statement()
+        receipt = await self.receipt()
+        await self.link(receipt)
+        response = await self.client.put(BASE + '/settlements/drafts/draft/bank-match',
+            json={'bank_transaction_id': 'another-bank-movement', 'confirmed': True})
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()['detail'], 'settlement_already_has_receipt')
+        saved = await self.db.accounting_settlements_v2.find_one({'id': 'draft'})
+        self.assertFalse(saved.get('bank_transaction_id'))
+        await self.assert_no_finance()
 
     async def test_active_post_route_atomic_abort_and_retry(self):
         import accounting_settlement_lifecycle_routes as lifecycle
