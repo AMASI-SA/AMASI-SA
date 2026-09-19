@@ -3,6 +3,8 @@ import api from "../../lib/api";
 
 const BASE = "/financial-provider-apps/accounting-module";
 const reasons = {
+    refund_identity_required: "تحتاج مراجعة: معرف الاسترداد المالي الأصلي مفقود؛ رقم الطلب وحده لا يكفي",
+    refund_requires_daily_movement_approval: "بانتظار تسجيل الاسترداد واعتماده من الحركات المالية اليومية؛ تحديث الطلب والكشف لا يرحّلان الاسترداد",
     sales_tax_not_configured_for_date: "لم تُدخل نسبة ضريبة سارية في تاريخ الاعتراف",
     recognition_cutoff_not_configured: "لم يُحدد تاريخ قطع لهذا المسار",
     payment_evidence_missing: "دليل الدفع غير موجود",
@@ -32,6 +34,7 @@ export default function AccountingReceivables({ accountingPermissions = [] }) {
     const [provider, setProvider] = useState("tamara");
     const [reference, setReference] = useState("");
     const [rows, setRows] = useState([]);
+    const [refundReviews, setRefundReviews] = useState([]);
     const [busy, setBusy] = useState(false);
     const [message, setMessage] = useState("");
     const manage = accountingPermissions.includes("accounting.rules.manage");
@@ -68,6 +71,10 @@ export default function AccountingReceivables({ accountingPermissions = [] }) {
             ]);
             const result = [];
             for (const item of requests) {
+                if (item.label === "استرداد" && !item.refund_id) {
+                    result.push({ ...item, result: { state: "rejected", reasons: ["refund_identity_required"] } });
+                    continue;
+                }
                 if (!item.payment_id) {
                     result.push({ ...item, result: { state: "rejected", reasons: ["canonical_provider_id_required"] } });
                     continue;
@@ -77,6 +84,8 @@ export default function AccountingReceivables({ accountingPermissions = [] }) {
                 result.push({ ...item, payload, result: proposal });
             }
             setRows(result);
+            const reviews = (await api.get(BASE + "/refunds/reviews")).data.items || [];
+            setRefundReviews(reviews.filter(item => !reference || item.order_number === reference));
             if (!result.length) setMessage("لا توجد حركات مصدر مطابقة. لا ينشئ البحث معرفات أو حركات دفع.");
         } catch (error) { setMessage(errorText(error)); }
         finally { setBusy(false); }
@@ -121,12 +130,15 @@ export default function AccountingReceivables({ accountingPermissions = [] }) {
         <div className="my-4 flex flex-wrap gap-3">
             <label>المزود<select aria-label="مزود إثبات الذمم" value={provider}
                 onChange={e => { setProvider(e.target.value); setRows([]); }} className="mx-2 rounded border p-2">
-                <option value="tamara">تمارا</option><option value="tabby">تابي</option><option value="emkan">إمكان</option>
+                <option value="salla">سلة Pay</option><option value="tamara">تمارا</option><option value="tabby">تابي</option><option value="emkan">إمكان</option>
             </select></label>
             <label>مرجع الطلب<input aria-label="مرجع طلب الإثبات" value={reference}
                 onChange={e => { setReference(e.target.value); setRows([]); }} className="mx-2 rounded border p-2" /></label>
             <button disabled={busy} onClick={preview} className="rounded border px-4 py-2">معاينة المؤهل والمرفوض</button>
         </div>
+        {refundReviews.filter(item => item.state !== "reconciled").map(item => <p key={item.order_number} className="rounded border border-amber-300 p-3">
+            تحتاج مراجعة: استرداد الطلب {item.order_number} ينتظر هوية مالية مؤكدة من مزود الدفع الأصلي. تحديث حالة الطلب وحده لا ينشئ قيدًا.
+        </p>)}
         <div className="overflow-auto"><table className="w-full text-sm">
             <thead><tr>{["الطلب / الحركة", "الإجمالي", "الصافي", "الضريبة / النسبة", "الحالة والدليل", "الإجراء"].map(h => <th key={h} className="p-2 text-right">{h}</th>)}</tr></thead>
             <tbody>{rows.map((row, index) => <tr key={[row.payment_id, row.refund_id, index].join(":")} className="border-t">

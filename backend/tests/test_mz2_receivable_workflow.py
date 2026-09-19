@@ -126,7 +126,7 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(frozen["txn_group_id"], result["txn_group_id"])
 
     async def test_partial_full_refund_uses_original_rate(self):
-        await self.preview_and_post()
+        sale = await self.preview_and_post()
         await self.configure("20", 1)
         for index in (1, 2):
             rid = "SYN-REFUND-" + str(index)
@@ -136,12 +136,23 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
                 "amount": "57.50", "status": "completed", "refunded_at": "2020-01-03T12:00:00Z",
                 "source": "synthetic_refund",
             })
-            result = await self.preview_and_post(refund_id=rid)
+            rejected = await self.client.post(BASE + '/receivables/preview', json=self.payload(refund_id=rid))
+            self.assertEqual(rejected.json()['state'], 'rejected')
+            root=BASE+'/customer-refunds'
+            case=await self.client.post(root,json=dict(original_key=sale['event_key'],case_reference=rid,
+                amount='57.50',recognized_at='2020-01-03T12:00:00Z',reason='Synthetic daily refund'))
+            self.assertEqual(case.status_code,200,case.text)
+            payment=await self.client.post(root+'/bank-payments',json=dict(original_key=sale['event_key'],case_reference=rid,
+                amount='57.50',paid_at='2020-01-03T12:00:00Z',execution_channel='tamara',bank_reference=rid,provider_refund_id=rid))
+            self.assertEqual(payment.status_code,200,payment.text)
+            approved=await self.client.post(root+'/bank-payments/'+payment.json()['id']+'/approve')
+            self.assertEqual(approved.status_code,200,approved.text)
+            result=approved.json()
             self.assertEqual((result["tax"]["net"], result["tax"]["tax"]), ("50.00", "7.50"))
             before = await self.count_writes()
             row = await self.db.payment_refunds.find_one({"provider_refund_id": rid})
             again = await post_bnpl_refund_to_ledger(self.db, user_id="owner", refund=row)
-            self.assertEqual(again["state"], "already_posted")
+            self.assertEqual(again["reason"], "daily_movement_approval_required")
             self.assertEqual(await self.count_writes(), before)
         legs = await self.db.general_ledger.find({}).to_list(20)
         for entity in ("payment_gateway", "revenue", "tax"):

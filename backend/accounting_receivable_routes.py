@@ -19,7 +19,7 @@ class TaxPolicyInput(BaseModel):
 
 class RecognitionInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    provider: str = Field(pattern="^(tamara|tabby|emkan)$")
+    provider: str = Field(pattern="^(salla|tamara|tabby|emkan)$")
     payment_id: str = Field(min_length=1, max_length=200)
     refund_id: str | None = Field(default=None, max_length=200)
 
@@ -43,6 +43,9 @@ def install_accounting_receivable_routes(router, db, current_user):
         require_accounting_permission(actor, permission)
         return actor, accounting_owner_id(actor)
 
+    from accounting_customer_refund_routes import install_customer_refund_routes
+    install_customer_refund_routes(router, db, current_user, actor_for)
+
     @router.get("/accounting-module/sales-tax")
     async def get_tax(user: dict = Depends(current_user)):
         _, owner = await actor_for(user, "accounting.settlements.view")
@@ -63,7 +66,7 @@ def install_accounting_receivable_routes(router, db, current_user):
     @router.get("/accounting-module/receivables/sources")
     async def sources(provider: str, order_number: str = "", user: dict = Depends(current_user)):
         _, owner = await actor_for(user, "accounting.settlements.view")
-        if provider not in {"tamara", "tabby", "emkan"}:
+        if provider not in {"salla", "tamara", "tabby", "emkan"}:
             raise HTTPException(400, "unsupported_provider")
         query = {"user_id": owner, "provider": provider}
         if order_number:
@@ -95,3 +98,15 @@ def install_accounting_receivable_routes(router, db, current_user):
                                  actor_name=actor.get("name") or actor["id"], **payload.model_dump())
         except (EvidenceError, TaxError) as exc:
             reject(exc)
+
+    @router.get("/accounting-module/refunds/reviews")
+    async def refund_reviews(user: dict = Depends(current_user)):
+        _, owner = await actor_for(user, "accounting.settlements.view")
+        return {"items": await db.mz2_order_refund_reviews.find({"user_id":owner}, {"_id":0}).limit(100).to_list(100)}
+
+    @router.post("/accounting-module/refunds/orders/{order_number}/reconcile")
+    async def reconcile_order(order_number: str, user: dict = Depends(current_user)):
+        actor, owner = await actor_for(user, "accounting.receivables.post")
+        from accounting_order_refunds import process_order_refunds
+        return await process_order_refunds(db, owner=owner, order_number=order_number,
+            source={"kind":"accountant_refund_review", "actor_id":actor["id"]})

@@ -1,3 +1,4 @@
+import SettlementRefundLink from "./SettlementRefundLink";
 import SettlementJournalDialog from "./SettlementJournalDialog";
 import SettlementOriginalFile from "./SettlementOriginalFile";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -112,7 +113,7 @@ function Summary({ label, value, hint, tone = "slate" }) {
     );
 }
 
-export default function AccountingSettlementRegister({ accountingPermissions = [] }) {
+export default function AccountingSettlementRegister({ accountingPermissions = [], onSelectDraft, selectedDraftId, refreshToken, operations }) {
     const [filters, setFilters] = useState(EMPTY_FILTERS);
     const [appliedFilters, setAppliedFilters] = useState(EMPTY_FILTERS);
     const [items, setItems] = useState([]);
@@ -129,7 +130,7 @@ export default function AccountingSettlementRegister({ accountingPermissions = [
 
     const canCreate = accountingPermissions.includes("accounting.drafts.create");
     const selectedDraft = detail?.draft || null;
-    const canEditBank = canCreate && editable(selectedDraft?.status);
+    const canEditBank = canCreate && editable(selectedDraft?.status) && !selectedDraft?.bank_receipt_id;
 
     const bankOptions = useMemo(() => {
         const unique = new Map();
@@ -173,6 +174,7 @@ export default function AccountingSettlementRegister({ accountingPermissions = [
         try {
             const result = await getAccountingSettlementRegisterDetail(draftId);
             setDetail(result);
+            onSelectDraft?.(result?.draft ? { ...result.draft, status: result.draft.status === "matched" ? "ready_for_review" : result.draft.status } : null);
             setBankSelection(result?.draft?.bank_transaction_id || "");
             setBankNotes(result?.draft?.bank_match_notes || "");
         } catch (error) {
@@ -181,9 +183,14 @@ export default function AccountingSettlementRegister({ accountingPermissions = [
         } finally {
             setDetailLoading(false);
         }
-    }, []);
+    }, [onSelectDraft]);
 
     useEffect(() => { loadRegister(); }, [loadRegister]);
+
+    useEffect(() => {
+        loadRegister();
+        if (selectedDraftId) openDetail(selectedDraftId);
+    }, [refreshToken]);
 
     const applyFilters = (event) => {
         event.preventDefault();
@@ -255,7 +262,7 @@ export default function AccountingSettlementRegister({ accountingPermissions = [
                         <Receipt size={25} weight="duotone" />
                     </span>
                     <div>
-                        <h3 className="text-lg font-black text-slate-950">السجل المحاسبي للتسويات</h3>
+                        <h3 className="text-lg font-black text-slate-950">سجل التسويات</h3>
                         <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
                             بحث موحد حسب المزود والفترة والحالة والبنك، مع الكشف وحركة البنك وأرجل القيد في شاشة واحدة.
                         </p>
@@ -356,6 +363,9 @@ export default function AccountingSettlementRegister({ accountingPermissions = [
 
                     {selectedId && !detailLoading && selectedDraft && (
                         <div className="space-y-5">
+                            {operations}
+                            <SettlementRefundLink key={selectedDraft.id} draft={selectedDraft} entries={evidenceEntries}
+                                canEdit={canCreate && editable(selectedDraft.status)} onLinked={() => openDetail(selectedDraft.id)} />
                             <div className="flex flex-wrap items-start justify-between gap-3">
                                 <div>
                                     <div className="text-xs font-extrabold text-emerald-700">{selectedDraft.provider_label || selectedDraft.provider}</div>
@@ -382,7 +392,7 @@ export default function AccountingSettlementRegister({ accountingPermissions = [
                                 <Summary label="صافي التحويل" value={money(selectedDraft.amounts?.reported_net, itemCurrency)} tone="emerald" />
                                 <Summary label="فرق حركة البنك" value={money(selectedDraft.bank_transaction_difference, itemCurrency)}
                                     tone={Math.abs(Number(selectedDraft.bank_transaction_difference || 0)) > 0.01 ? "rose" : "slate"}
-                                    hint={selectedDraft.bank_transaction_id ? "مقارنة بالحركة المختارة" : "لم تُختر حركة بنك"} />
+                                    hint={detail?.bank_receipt ? "مقارنة بالمبلغ الواصل المرتبط" : selectedDraft.bank_transaction_id ? "مقارنة بالحركة المختارة" : "لم تُختر حركة بنك"} />
                             </div>
 
                             {!!selectedDraft.review_reasons?.length && (
@@ -423,6 +433,15 @@ export default function AccountingSettlementRegister({ accountingPermissions = [
                                     )}
                                 </div>
 
+                                {detail?.bank_receipt && (
+                                    <section aria-label="المبلغ الواصل المرتبط" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm">
+                                        <p>مرجع البنك: {detail.bank_receipt.bank_reference || "غير موجود في الرسالة"}</p>
+                                        <p>المبلغ: {money(detail.bank_receipt.amount, itemCurrency)} · التاريخ: {detail.bank_receipt.received_on}</p>
+                                        <p>مرجع الكشف: {selectedDraft.statement_reference}</p>
+                                        <p className="break-all">سجل الوصول: {detail.bank_receipt.id}</p>
+                                        <details><summary>رسالة البنك</summary><p>{detail.bank_receipt.bank_message}</p></details>
+                                    </section>
+                                )}
                                 {detail?.bank_movement && (
                                     <div className="mt-3 grid gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 sm:grid-cols-3">
                                         <div><div className="text-[10px] font-bold text-emerald-700">التاريخ</div><div className="mt-1 text-xs font-black num">{dateText(detail.bank_movement.transaction_date)}</div></div>
