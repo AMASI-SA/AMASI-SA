@@ -326,56 +326,14 @@ def _preflight_qoyod_invoice_payload(
             )
             line[field] = float(value.quantize(
                 _TWO_PLACES, rounding=ROUND_HALF_UP))
-    _align_qoyod_document_total(
-        lines, salla_total=salla_total,
-        item_line_count=len(lines), adjustment_product_id=None)
-    subtotal_raw = Decimal("0")
-    tax_raw = Decimal("0")
-    for index, line in enumerate(lines):
-        if not isinstance(line, dict):
-            raise ManualSendRefused(
-                "qoyod_preflight_payload_invalid",
-                "يوجد بند غير صالح في فاتورة قيود قبل الإرسال.",
-                {"line_index": index},
-            )
-        quantity = _strict_decimal(
-            line.get("quantity"), field=f"line_items[{index}].quantity")
-        if quantity <= 0:
-            raise ManualSendRefused(
-                "qoyod_preflight_payload_invalid",
-                "كمية بند الفاتورة يجب أن تكون أكبر من صفر.",
-                {"line_index": index, "quantity": line.get("quantity")},
-            )
-        unit_price = _strict_decimal(
-            line.get("unit_price"),
-            field=f"line_items[{index}].unit_price",
-        )
-        discount = _strict_decimal(
-            line.get("discount") or 0,
-            field=f"line_items[{index}].discount",
-        )
-        tax_percent = _strict_decimal(
-            line.get("tax_percent") or 0,
-            field=f"line_items[{index}].tax_percent",
-        )
-        line_net = (
-            quantity
-            * unit_price.quantize(_TWO_PLACES, rounding=ROUND_HALF_UP)
-            - discount.quantize(_TWO_PLACES, rounding=ROUND_HALF_UP)
-        )
-        if line_net < 0:
-            raise ManualSendRefused(
-                "qoyod_preflight_payload_invalid",
-                "خصم بند الفاتورة أكبر من قيمته.",
-                {"line_index": index},
-            )
-        subtotal_raw += line_net
-        tax_raw += line_net * tax_percent / Decimal("100")
-
-    subtotal = subtotal_raw.quantize(_TWO_PLACES, rounding=ROUND_HALF_UP)
-    tax = tax_raw.quantize(_TWO_PLACES, rounding=ROUND_HALF_UP)
-    predicted_total = (subtotal + tax).quantize(
-        _TWO_PLACES, rounding=ROUND_HALF_UP)
+    normalized = _predict_qoyod_document_total(lines)
+    # Retain the reviewed one-halalah tolerance instead of moving it across zero.
+    if not _within_amount_tolerance(normalized["predicted_total"] - salla_total):
+        _align_qoyod_document_total(
+            lines, salla_total=salla_total,
+            item_line_count=len(lines), adjustment_product_id=None)
+    prediction = _predict_qoyod_document_total(lines)
+    predicted_total = Decimal(str(prediction["predicted_total"]))
     expected = Decimal(str(_q2(salla_total)))
     difference = (predicted_total - expected).quantize(
         _TWO_PLACES, rounding=ROUND_HALF_UP)
@@ -3143,6 +3101,12 @@ async def _run_all_steps(
              "difference":             diff,
              "difference_source_hint": breakdown["difference_source_hint"],
              "breakdown":              breakdown})
+
+    # Check the final outgoing payload too; placeholder preflight is not enough.
+    final_preflight = _preflight_qoyod_invoice_payload(invoice_payload, salla_total=salla_total)
+    expected_total = final_preflight["qoyod_predicted_total"]
+    breakdown["expected_qoyod_total"] = expected_total
+    breakdown["difference"] = final_preflight["difference"]
 
     # ── 4) POST invoice ────────────────────────────────────────────
     idem_inv = f"inv-{order_number}"

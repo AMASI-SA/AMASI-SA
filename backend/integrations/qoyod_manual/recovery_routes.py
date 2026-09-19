@@ -16,12 +16,29 @@ class Activate(BaseModel):
     confirmation: str
 
 
+class ReviewRelease(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    fingerprint: str
+
+
 def make_recovery_router(db, current_user, *, identity_fn=runtime_identity,
                          external_factory=ProductionPorts, owner_fn=None):
     if owner_fn is None:
         from integrations.qoyod.orders_owner import orders_owner_id
         owner_fn = orders_owner_id
     router = APIRouter(prefix="/recovery-404")
+
+    async def public_report():
+        result = await service.report(db)
+        try:
+            identity = identity_fn()
+        except ValueError:
+            identity = None
+        result["release_review_required"] = bool(result.get("fingerprint")
+            and result.get("release_identity") != identity)
+        result["can_activate"] = bool(identity and result.get("can_activate")
+            and not result["release_review_required"])
+        return result
 
     async def require_data_owner(user):
         owner = str(owner_fn(user))
@@ -44,14 +61,15 @@ def make_recovery_router(db, current_user, *, identity_fn=runtime_identity,
     @router.get("")
     async def status(user=Depends(current_user)):
         await require_data_owner(user)
-        return await service.report(db)
+        return await public_report()
 
     @router.post("/prepare")
     async def prepare(payload: Prepare, user=Depends(current_user)):
         owner = await require_control_owner(user)
         try:
-            return await service.prepare(db, payload.order_numbers, owner,
+            await service.prepare(db, payload.order_numbers, owner,
                 str((user or {}).get("id") or "authenticated-ui"), identity_fn())
+            return await public_report()
         except ValueError as exc:
             raise HTTPException(409, str(exc)) from exc
 
@@ -64,8 +82,9 @@ def make_recovery_router(db, current_user, *, identity_fn=runtime_identity,
             campaign = await db.qoyod_404_campaigns.find_one({"_id": service.CAMPAIGN})
             if not campaign or not await external_factory(db, campaign).authorized(identity_fn()):
                 raise ValueError("worker_or_release_not_ready")
-            return await service.activate(db, payload.fingerprint, owner,
+            await service.activate(db, payload.fingerprint, owner,
                 str((user or {}).get("id") or "authenticated-ui"), identity_fn())
+            return await public_report()
         except ValueError as exc:
             raise HTTPException(409, str(exc)) from exc
 
@@ -73,13 +92,24 @@ def make_recovery_router(db, current_user, *, identity_fn=runtime_identity,
     async def pause(user=Depends(current_user)):
         await require_control_owner(user)
         await service.pause(db)
-        return await service.report(db)
+        return await public_report()
+
+    @router.post("/review-release")
+    async def review_release(payload: ReviewRelease, user=Depends(current_user)):
+        owner = await require_control_owner(user)
+        try:
+            await service.review_release(db, payload.fingerprint, owner,
+                str(user["id"]), identity_fn())
+            return await public_report()
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
 
     @router.post("/audit")
     async def audit(user=Depends(current_user)):
         await require_control_owner(user)
         try:
-            return await service.audit_pending(db, external_factory)
+            await service.audit_pending(db, external_factory)
+            return await public_report()
         except ValueError as exc:
             raise HTTPException(409, str(exc)) from exc
 

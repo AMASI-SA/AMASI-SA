@@ -1,6 +1,6 @@
 {
   "backend_runtime_source": {
-    "added_count": 4,
+    "added_count": 0,
     "deleted_count": 0,
     "file_count": 765,
     "files": [
@@ -2217,11 +2217,11 @@
         "sha256": "a98bf74853107dd2b7d9faecb5290ee0f02475b0a0f68755e67365d8ec28537c"
       },
       {
-        "bytes": 9980,
-        "git_blob": "851561e9f1acf38fa721bd2e42f0c36cf19c345f",
+        "bytes": 10455,
+        "git_blob": "795c26601674f025442d31631e3521e2cd14f70c",
         "mode": "100644",
         "path": "integrations/qoyod_manual/diagnose.py",
-        "sha256": "5c314c04647d5d190acf8d39bd3cc90b1387f88c2c7e42a3c568c34509bf7165"
+        "sha256": "58eae114df98ff71cc8e16d26a9891dc5d942127607635f2b7f4be15e1bbad7f"
       },
       {
         "bytes": 6260,
@@ -2266,11 +2266,11 @@
         "sha256": "8879515c4cea04fb09fca70e594458bd851482e6c35f06340f3879acb50da9b5"
       },
       {
-        "bytes": 11153,
-        "git_blob": "9771143ccd0a453d06e5ba86b72f0d14c6519a5b",
+        "bytes": 13564,
+        "git_blob": "beac97c1b18a8d09024b0c1e03cc222eafe92605",
         "mode": "100644",
         "path": "integrations/qoyod_manual/recovery_404.py",
-        "sha256": "e44245c3876790d016f07034998a9943f1ec263f98797a1535acd7d4c712d659"
+        "sha256": "b6d2b8ffc84e6d17cbdb031d9c256a3d83324ff7be206c60d1ab9cf771d78207"
       },
       {
         "bytes": 10451,
@@ -2280,18 +2280,18 @@
         "sha256": "2d49ce9a6b43ac6d9e85dffdc79931b0f3fe90365510cf4610e8610680496e8d"
       },
       {
-        "bytes": 11688,
-        "git_blob": "ab500240911288893e89a3ef7525c262e45cf7f1",
+        "bytes": 15175,
+        "git_blob": "4365eb2657074bae4c59bb74b1571fb453b920ae",
         "mode": "100644",
         "path": "integrations/qoyod_manual/recovery_campaign.py",
-        "sha256": "9ab3885d71e9aae4144a8db6b79ffb3957d5d0072791d0de8fd876f5503c9746"
+        "sha256": "cacc0bceb9a792d3654ca521c8244d781958c5df0402300744a2d1417d5b2235"
       },
       {
-        "bytes": 3512,
-        "git_blob": "c9df1dca002ec0ad80929a6425a7d291b2b2797a",
+        "bytes": 4612,
+        "git_blob": "5ac399319177bddbf69fff72231968c0af57cbea",
         "mode": "100644",
         "path": "integrations/qoyod_manual/recovery_routes.py",
-        "sha256": "6163e8db4e6c29b903aa3205d404eabcfd8e89f4e22411dfedb052a7098a3e44"
+        "sha256": "b92abb6b1f22475c6250c82fa11658d6a63a27ba04ea4c6ba01e91bdfeaf908c"
       },
       {
         "bytes": 11173,
@@ -2322,11 +2322,11 @@
         "sha256": "f2b9e527b5790b6d22311d18d5d3847c11ee69e719a41cf7d244aa92f6761e37"
       },
       {
-        "bytes": 146125,
-        "git_blob": "0bec5901b55504b6aad19894ae7bc3d636aac446",
+        "bytes": 144868,
+        "git_blob": "278a15a0df817ed95abf89a7a72e84528f617b29",
         "mode": "100644",
         "path": "integrations/qoyod_manual/send.py",
-        "sha256": "8252d62764c5957c86c3a4792a16f00b08feb5362fc5d5e49740b17763fb1668"
+        "sha256": "04ede56477bc282dd49240d35b1962480f99c2da1188ae57caf95ed7e8b45f72"
       },
       {
         "bytes": 13939,
@@ -5360,20 +5360,20 @@
         "sha256": "67eb563ce5ecd1f7a686a77baa5de187541deefcf85ed29625ca10a9bf8c4001"
       }
     ],
-    "manifest_sha256": "6c76ae24fd7d9e0c1fdb6a752a3cb95e3e6a76fdb51ceab5d087a5be3bdc845f",
-    "modified_count": 3,
-    "projection_tree_oid": "bb2179b027d0b6a405afe360214602e29a06c0c0",
+    "manifest_sha256": "928cc98c172a3f8d4ee93ccaa0b0e6a68ab818faf96fdcc15c7a155b1e53bdad",
+    "modified_count": 5,
+    "projection_tree_oid": "6b53f36105ad73534b2c3f9e0f0104bda3e6e7ae",
     "scope": "backend_runtime_package_v1",
-    "scope_tree_oid": "928c34909ddc9d5852b71bb9f9f4cadc7954d0c3",
-    "source_base_git_sha": "4eb3f95706cb26d0255116942a9f106c77a5514f",
-    "source_base_root_tree_oid": "6cdf1c2d86faa450f1e59d8985f5b41562724d05",
-    "source_base_scope_tree_oid": "105ec5183a8554f27eb894e1efa8fe72f6e3933e",
-    "source_git_sha": "06a7b0b4d63ed59d2c0f0ab78d43d947fc6cfc49",
-    "source_root_tree_oid": "8e4b19072e7aa1510746953b3058f103bede69ae",
+    "scope_tree_oid": "55e613c0107e1f06e0f090b919a850195b96c14a",
+    "source_base_git_sha": "635e181f7520354029efbdc8e89d76a94de77ff2",
+    "source_base_root_tree_oid": "765e5afeb82b17241f8e5142132c1cd51ac562ab",
+    "source_base_scope_tree_oid": "928c34909ddc9d5852b71bb9f9f4cadc7954d0c3",
+    "source_git_sha": "9c3bd29af74ff21f86730de530d1346e556be6af",
+    "source_root_tree_oid": "cf009ae9ab42ea7d5b89b19347b691ce232adf35",
     "tombstone_count": 0,
     "tombstones": [],
     "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "tree_sha256": "473353a3c2bcfeebfd4dd706ca837f1923499c253a1c2f0c194e5e2f2df47721"
+    "tree_sha256": "8cdd000a153200d73dbc65e2580cf667bf605891d48062e086ec23cd8e3c3caa"
   },
   "branch": "hotfix/prod-snap-meta-final",
   "client_environment": {
@@ -5385,18 +5385,18 @@
   "critical_file_hashes": {
     "frontend_build_identity.py": "7896dfa2c9b4fea8c426b47c5b75e331380c0a4a3f947028aa4f5afa101f9d87",
     "integrations/qoyod_manual/routes.py": "f2b9e527b5790b6d22311d18d5d3847c11ee69e719a41cf7d244aa92f6761e37",
-    "integrations/qoyod_manual/send.py": "8252d62764c5957c86c3a4792a16f00b08feb5362fc5d5e49740b17763fb1668",
+    "integrations/qoyod_manual/send.py": "04ede56477bc282dd49240d35b1962480f99c2da1188ae57caf95ed7e8b45f72",
     "release_identity.py": "ee4c098266722c10f6d973927f25de3602081c4923f9992f1de85d71775fca4d",
     "release_protocol_v5.py": "1961ac18a5363ec425ceec4f98f96f611d378b09e19380d4756bd6776987d8ef",
     "server.py": "a96f8ca519bc8e5ab1a8cd928c7ee9aaa27c4d5865bf0800c66824674dcfc692"
   },
   "frontend_build": {
-    "artifact_tree_sha256": "d0ad8246e6451ba3d11c6fc89ea831fc7ce7fa1adeeddf67ba8babec54da4201",
+    "artifact_tree_sha256": "db07c1b687e07928ce9f76b78c1fdb58c5181a43f086508ab0377ecdbb1b8a9f",
     "assets": [
       {
         "bytes": 19087,
-        "path": "assets/ChartDashboard-CUrWBld6.js",
-        "sha256": "06540feb30ce44a6adf058433fc34d99a9e661966018bb3f904a93098e50152f"
+        "path": "assets/ChartDashboard-ChqoUuWd.js",
+        "sha256": "858001916638cb80c64f6755f6d7f24e60141fa0fb7c209586c8171d6083235f"
       },
       {
         "bytes": 435694,
@@ -5404,31 +5404,31 @@
         "sha256": "01c20db866a77cba389fc397e9abf160764d525bad3bf95996be6c2ea218fd39"
       },
       {
-        "bytes": 6318015,
-        "path": "assets/index-DOFsqlGj.js",
-        "sha256": "df3308c910e2193f5757d81c4c287cacfad3ccb4be2bef5fb4bcda0dc08ff288"
-      },
-      {
         "bytes": 202139,
         "path": "assets/index-DQFvrHr_.css",
         "sha256": "6990e96b73fd7e2a9a200cecea89602919ea65bf6ca141a98d582044069129c0"
+      },
+      {
+        "bytes": 6319533,
+        "path": "assets/index-z1_j0klT.js",
+        "sha256": "f2488cab26da7d51c5ac8fe15cb15a512a274bca70d1658a7559ee91717dbd09"
       }
     ],
     "build_meta": {
       "bytes": 197518,
       "path": "build-meta.json",
-      "sha256": "e7c1e8f785b698452ced6739ff0af91cf37053de157567726cb2d1f9855e88bd"
+      "sha256": "228c2397c9b4f7167a54cfe025c33f4e61b6edc7ec13809a6d37d999f6d8d79f"
     },
     "entrypoints": [
-      {
-        "bytes": 6318015,
-        "path": "assets/index-DOFsqlGj.js",
-        "sha256": "df3308c910e2193f5757d81c4c287cacfad3ccb4be2bef5fb4bcda0dc08ff288"
-      },
       {
         "bytes": 202139,
         "path": "assets/index-DQFvrHr_.css",
         "sha256": "6990e96b73fd7e2a9a200cecea89602919ea65bf6ca141a98d582044069129c0"
+      },
+      {
+        "bytes": 6319533,
+        "path": "assets/index-z1_j0klT.js",
+        "sha256": "f2488cab26da7d51c5ac8fe15cb15a512a274bca70d1658a7559ee91717dbd09"
       }
     ],
     "environment": {
@@ -5448,11 +5448,11 @@
         }
       }
     },
-    "git_sha": "06a7b0b4d63ed59d2c0f0ab78d43d947fc6cfc49",
+    "git_sha": "9c3bd29af74ff21f86730de530d1346e556be6af",
     "index": {
       "bytes": 3253,
       "path": "index.html",
-      "sha256": "2fd070be6e7fd166a10c4dcc5d675dd60804051f967c5cfca2f28ef6a246ceb8"
+      "sha256": "1fd67d1360c78f0aef028a5e9ea876ee90b61e9470f63b6e0afd21aa65b6cbce"
     },
     "public_files": [
       {
@@ -5467,8 +5467,8 @@
       },
       {
         "bytes": 19087,
-        "path": "assets/ChartDashboard-CUrWBld6.js",
-        "sha256": "06540feb30ce44a6adf058433fc34d99a9e661966018bb3f904a93098e50152f"
+        "path": "assets/ChartDashboard-ChqoUuWd.js",
+        "sha256": "858001916638cb80c64f6755f6d7f24e60141fa0fb7c209586c8171d6083235f"
       },
       {
         "bytes": 435694,
@@ -5476,14 +5476,14 @@
         "sha256": "01c20db866a77cba389fc397e9abf160764d525bad3bf95996be6c2ea218fd39"
       },
       {
-        "bytes": 6318015,
-        "path": "assets/index-DOFsqlGj.js",
-        "sha256": "df3308c910e2193f5757d81c4c287cacfad3ccb4be2bef5fb4bcda0dc08ff288"
-      },
-      {
         "bytes": 202139,
         "path": "assets/index-DQFvrHr_.css",
         "sha256": "6990e96b73fd7e2a9a200cecea89602919ea65bf6ca141a98d582044069129c0"
+      },
+      {
+        "bytes": 6319533,
+        "path": "assets/index-z1_j0klT.js",
+        "sha256": "f2488cab26da7d51c5ac8fe15cb15a512a274bca70d1658a7559ee91717dbd09"
       },
       {
         "bytes": 1049,
@@ -5493,7 +5493,7 @@
       {
         "bytes": 3253,
         "path": "index.html",
-        "sha256": "2fd070be6e7fd166a10c4dcc5d675dd60804051f967c5cfca2f28ef6a246ceb8"
+        "sha256": "1fd67d1360c78f0aef028a5e9ea876ee90b61e9470f63b6e0afd21aa65b6cbce"
       },
       {
         "bytes": 574,
@@ -5509,9 +5509,9 @@
     "schema_version": 1,
     "source": {
       "file_count": 702,
-      "git_tree_oid": "d2f69b8d75434cac2bdd3e1c36ed2ed1266804cb",
+      "git_tree_oid": "bbbe79b06b397ef53a9980fa515602a6453eb73e",
       "scope": "git_head_frontend_tree_v1",
-      "tree_sha256": "37d309c58f5c560298d11b6c318f98792cc77fc3daf468b59a95353429ed8e9b"
+      "tree_sha256": "221382a40e8c373d5a072fc3ab10c2983d7bd88fb0f1a7eb55a7803c4fcc45ef"
     },
     "toolchain": {
       "node": "22.23.2",
@@ -5537,24 +5537,24 @@
         }
       }
     },
-    "git_sha": "06a7b0b4d63ed59d2c0f0ab78d43d947fc6cfc49",
+    "git_sha": "9c3bd29af74ff21f86730de530d1346e556be6af",
     "kind": "frontend_two_clean_builds_v1",
     "passes": [
       {
-        "artifact_tree_sha256": "d0ad8246e6451ba3d11c6fc89ea831fc7ce7fa1adeeddf67ba8babec54da4201",
+        "artifact_tree_sha256": "db07c1b687e07928ce9f76b78c1fdb58c5181a43f086508ab0377ecdbb1b8a9f",
         "build_meta": {
           "bytes": 197518,
           "path": "build-meta.json",
-          "sha256": "e7c1e8f785b698452ced6739ff0af91cf37053de157567726cb2d1f9855e88bd"
+          "sha256": "228c2397c9b4f7167a54cfe025c33f4e61b6edc7ec13809a6d37d999f6d8d79f"
         },
         "ordinal": 1
       },
       {
-        "artifact_tree_sha256": "d0ad8246e6451ba3d11c6fc89ea831fc7ce7fa1adeeddf67ba8babec54da4201",
+        "artifact_tree_sha256": "db07c1b687e07928ce9f76b78c1fdb58c5181a43f086508ab0377ecdbb1b8a9f",
         "build_meta": {
           "bytes": 197518,
           "path": "build-meta.json",
-          "sha256": "e7c1e8f785b698452ced6739ff0af91cf37053de157567726cb2d1f9855e88bd"
+          "sha256": "228c2397c9b4f7167a54cfe025c33f4e61b6edc7ec13809a6d37d999f6d8d79f"
         },
         "ordinal": 2
       }
@@ -5562,15 +5562,15 @@
     "proof_file": {
       "bytes": 1520,
       "path": "frontend/.release/reproducible-build.json",
-      "sha256": "3c243d3abd5eb450099f49794d2d43094df15d7211eedd6fe4a990933d0264b0"
+      "sha256": "5d14d42c011e9f836341d98d099d0e5a37d941974c86e560fa539298f03b18c6"
     },
     "retained_pass": 2,
     "schema_version": 1,
     "source": {
       "file_count": 702,
-      "git_tree_oid": "d2f69b8d75434cac2bdd3e1c36ed2ed1266804cb",
+      "git_tree_oid": "bbbe79b06b397ef53a9980fa515602a6453eb73e",
       "scope": "git_head_frontend_tree_v1",
-      "tree_sha256": "37d309c58f5c560298d11b6c318f98792cc77fc3daf468b59a95353429ed8e9b"
+      "tree_sha256": "221382a40e8c373d5a072fc3ab10c2983d7bd88fb0f1a7eb55a7803c4fcc45ef"
     },
     "toolchain": {
       "node": "22.23.2",
@@ -5799,11 +5799,11 @@
         "sha256": "4a2b0f1bdc5e55740e7a281d166b939a5d5dbe78e9e67a68515742bc1f6a07a3"
       },
       {
-        "bytes": 5206,
-        "git_blob": "3a6a566c89d45dfa65997f6ca1d6613b95859a46",
+        "bytes": 6745,
+        "git_blob": "e985807bad3f7332456da95ce76423e91173480e",
         "mode": "100644",
         "path": "scripts/test-qoyod-404-ui.cjs",
-        "sha256": "7e1168c95ec448e24bb53ef25df439633d3ee90c67cc80db9583f3726845db52"
+        "sha256": "7d4e0d4a89ec454a5097ac9fe3f5957e59431f35b642a3512337198c382d46f8"
       },
       {
         "bytes": 1113,
@@ -7276,11 +7276,11 @@
         "sha256": "c399ec5ee32a50ccf9ecebcaa712a4d2b866b125d8d5207f413c6eabe9fa5ca1"
       },
       {
-        "bytes": 7271,
-        "git_blob": "55855b13ef1e9cafe3578a3110047cdfc4331e61",
+        "bytes": 8624,
+        "git_blob": "314cc7db34a8d84387db5d4b3045a9859eb86265",
         "mode": "100644",
         "path": "src/components/qoyod/Qoyod404Recovery.jsx",
-        "sha256": "26be4693d6b32a164defcf510c5d88a38c2046ad0e1d30b97d38bac978a92c29"
+        "sha256": "10a3da786cec84e8cc4d721a508ecfa2bfe5f23ff7b382d40131d0238a3ff1ba"
       },
       {
         "bytes": 4701,
@@ -10496,9 +10496,9 @@
         "sha256": "f0b4e5fe18ac87b7d3ada7a7da2906ee86c42814348f30e8083a046f261525c4"
       }
     ],
-    "git_tree_oid": "d2f69b8d75434cac2bdd3e1c36ed2ed1266804cb",
+    "git_tree_oid": "bbbe79b06b397ef53a9980fa515602a6453eb73e",
     "scope": "git_head_frontend_tree_v1",
-    "tree_sha256": "37d309c58f5c560298d11b6c318f98792cc77fc3daf468b59a95353429ed8e9b"
+    "tree_sha256": "221382a40e8c373d5a072fc3ab10c2983d7bd88fb0f1a7eb55a7803c4fcc45ef"
   },
   "kind": "mezan_emergent_release_intent_v1",
   "protocol_version": 5,
@@ -11306,16 +11306,16 @@
         "sha256": "3e13134f185136486ce15e0a2be70bb27cc1f85670eedd451c73a836463f8046"
       }
     ],
-    "manifest_sha256": "56d399cca25e5b2229058811f83764281042910736f23f97f60ecdd17141a155",
+    "manifest_sha256": "43bdfcf4c60576be6f40681ad09cc2b13998b78839ea1221934a829615caace0",
     "modified_count": 0,
     "projection_tree_oid": "63574274340c6d9e97f597d84d3fdb6a20e22802",
     "scope": "release_control_source_v1",
     "scope_tree_oid": "63574274340c6d9e97f597d84d3fdb6a20e22802",
-    "source_base_git_sha": "4eb3f95706cb26d0255116942a9f106c77a5514f",
-    "source_base_root_tree_oid": "6cdf1c2d86faa450f1e59d8985f5b41562724d05",
+    "source_base_git_sha": "635e181f7520354029efbdc8e89d76a94de77ff2",
+    "source_base_root_tree_oid": "765e5afeb82b17241f8e5142132c1cd51ac562ab",
     "source_base_scope_tree_oid": "63574274340c6d9e97f597d84d3fdb6a20e22802",
-    "source_git_sha": "06a7b0b4d63ed59d2c0f0ab78d43d947fc6cfc49",
-    "source_root_tree_oid": "8e4b19072e7aa1510746953b3058f103bede69ae",
+    "source_git_sha": "9c3bd29af74ff21f86730de530d1346e556be6af",
+    "source_root_tree_oid": "cf009ae9ab42ea7d5b89b19347b691ce232adf35",
     "tombstone_count": 0,
     "tombstones": [],
     "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -11323,7 +11323,7 @@
   },
   "runtime_identity": {
     "backend_runtime_source": {
-      "added_count": 4,
+      "added_count": 0,
       "deleted_count": 0,
       "file_count": 765,
       "files": [
@@ -13540,11 +13540,11 @@
           "sha256": "a98bf74853107dd2b7d9faecb5290ee0f02475b0a0f68755e67365d8ec28537c"
         },
         {
-          "bytes": 9980,
-          "git_blob": "851561e9f1acf38fa721bd2e42f0c36cf19c345f",
+          "bytes": 10455,
+          "git_blob": "795c26601674f025442d31631e3521e2cd14f70c",
           "mode": "100644",
           "path": "integrations/qoyod_manual/diagnose.py",
-          "sha256": "5c314c04647d5d190acf8d39bd3cc90b1387f88c2c7e42a3c568c34509bf7165"
+          "sha256": "58eae114df98ff71cc8e16d26a9891dc5d942127607635f2b7f4be15e1bbad7f"
         },
         {
           "bytes": 6260,
@@ -13589,11 +13589,11 @@
           "sha256": "8879515c4cea04fb09fca70e594458bd851482e6c35f06340f3879acb50da9b5"
         },
         {
-          "bytes": 11153,
-          "git_blob": "9771143ccd0a453d06e5ba86b72f0d14c6519a5b",
+          "bytes": 13564,
+          "git_blob": "beac97c1b18a8d09024b0c1e03cc222eafe92605",
           "mode": "100644",
           "path": "integrations/qoyod_manual/recovery_404.py",
-          "sha256": "e44245c3876790d016f07034998a9943f1ec263f98797a1535acd7d4c712d659"
+          "sha256": "b6d2b8ffc84e6d17cbdb031d9c256a3d83324ff7be206c60d1ab9cf771d78207"
         },
         {
           "bytes": 10451,
@@ -13603,18 +13603,18 @@
           "sha256": "2d49ce9a6b43ac6d9e85dffdc79931b0f3fe90365510cf4610e8610680496e8d"
         },
         {
-          "bytes": 11688,
-          "git_blob": "ab500240911288893e89a3ef7525c262e45cf7f1",
+          "bytes": 15175,
+          "git_blob": "4365eb2657074bae4c59bb74b1571fb453b920ae",
           "mode": "100644",
           "path": "integrations/qoyod_manual/recovery_campaign.py",
-          "sha256": "9ab3885d71e9aae4144a8db6b79ffb3957d5d0072791d0de8fd876f5503c9746"
+          "sha256": "cacc0bceb9a792d3654ca521c8244d781958c5df0402300744a2d1417d5b2235"
         },
         {
-          "bytes": 3512,
-          "git_blob": "c9df1dca002ec0ad80929a6425a7d291b2b2797a",
+          "bytes": 4612,
+          "git_blob": "5ac399319177bddbf69fff72231968c0af57cbea",
           "mode": "100644",
           "path": "integrations/qoyod_manual/recovery_routes.py",
-          "sha256": "6163e8db4e6c29b903aa3205d404eabcfd8e89f4e22411dfedb052a7098a3e44"
+          "sha256": "b92abb6b1f22475c6250c82fa11658d6a63a27ba04ea4c6ba01e91bdfeaf908c"
         },
         {
           "bytes": 11173,
@@ -13645,11 +13645,11 @@
           "sha256": "f2b9e527b5790b6d22311d18d5d3847c11ee69e719a41cf7d244aa92f6761e37"
         },
         {
-          "bytes": 146125,
-          "git_blob": "0bec5901b55504b6aad19894ae7bc3d636aac446",
+          "bytes": 144868,
+          "git_blob": "278a15a0df817ed95abf89a7a72e84528f617b29",
           "mode": "100644",
           "path": "integrations/qoyod_manual/send.py",
-          "sha256": "8252d62764c5957c86c3a4792a16f00b08feb5362fc5d5e49740b17763fb1668"
+          "sha256": "04ede56477bc282dd49240d35b1962480f99c2da1188ae57caf95ed7e8b45f72"
         },
         {
           "bytes": 13939,
@@ -16683,37 +16683,37 @@
           "sha256": "67eb563ce5ecd1f7a686a77baa5de187541deefcf85ed29625ca10a9bf8c4001"
         }
       ],
-      "manifest_sha256": "6c76ae24fd7d9e0c1fdb6a752a3cb95e3e6a76fdb51ceab5d087a5be3bdc845f",
-      "modified_count": 3,
-      "projection_tree_oid": "bb2179b027d0b6a405afe360214602e29a06c0c0",
+      "manifest_sha256": "928cc98c172a3f8d4ee93ccaa0b0e6a68ab818faf96fdcc15c7a155b1e53bdad",
+      "modified_count": 5,
+      "projection_tree_oid": "6b53f36105ad73534b2c3f9e0f0104bda3e6e7ae",
       "scope": "backend_runtime_package_v1",
-      "scope_tree_oid": "928c34909ddc9d5852b71bb9f9f4cadc7954d0c3",
-      "source_base_git_sha": "4eb3f95706cb26d0255116942a9f106c77a5514f",
-      "source_base_root_tree_oid": "6cdf1c2d86faa450f1e59d8985f5b41562724d05",
-      "source_base_scope_tree_oid": "105ec5183a8554f27eb894e1efa8fe72f6e3933e",
-      "source_git_sha": "06a7b0b4d63ed59d2c0f0ab78d43d947fc6cfc49",
-      "source_root_tree_oid": "8e4b19072e7aa1510746953b3058f103bede69ae",
+      "scope_tree_oid": "55e613c0107e1f06e0f090b919a850195b96c14a",
+      "source_base_git_sha": "635e181f7520354029efbdc8e89d76a94de77ff2",
+      "source_base_root_tree_oid": "765e5afeb82b17241f8e5142132c1cd51ac562ab",
+      "source_base_scope_tree_oid": "928c34909ddc9d5852b71bb9f9f4cadc7954d0c3",
+      "source_git_sha": "9c3bd29af74ff21f86730de530d1346e556be6af",
+      "source_root_tree_oid": "cf009ae9ab42ea7d5b89b19347b691ce232adf35",
       "tombstone_count": 0,
       "tombstones": [],
       "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "tree_sha256": "473353a3c2bcfeebfd4dd706ca837f1923499c253a1c2f0c194e5e2f2df47721"
+      "tree_sha256": "8cdd000a153200d73dbc65e2580cf667bf605891d48062e086ec23cd8e3c3caa"
     },
     "branch": "hotfix/prod-snap-meta-final",
     "critical_file_hashes": {
       "frontend_build_identity.py": "7896dfa2c9b4fea8c426b47c5b75e331380c0a4a3f947028aa4f5afa101f9d87",
       "integrations/qoyod_manual/routes.py": "f2b9e527b5790b6d22311d18d5d3847c11ee69e719a41cf7d244aa92f6761e37",
-      "integrations/qoyod_manual/send.py": "8252d62764c5957c86c3a4792a16f00b08feb5362fc5d5e49740b17763fb1668",
+      "integrations/qoyod_manual/send.py": "04ede56477bc282dd49240d35b1962480f99c2da1188ae57caf95ed7e8b45f72",
       "release_identity.py": "ee4c098266722c10f6d973927f25de3602081c4923f9992f1de85d71775fca4d",
       "release_protocol_v5.py": "1961ac18a5363ec425ceec4f98f96f611d378b09e19380d4756bd6776987d8ef",
       "server.py": "a96f8ca519bc8e5ab1a8cd928c7ee9aaa27c4d5865bf0800c66824674dcfc692"
     },
     "frontend_build": {
-      "artifact_tree_sha256": "d0ad8246e6451ba3d11c6fc89ea831fc7ce7fa1adeeddf67ba8babec54da4201",
+      "artifact_tree_sha256": "db07c1b687e07928ce9f76b78c1fdb58c5181a43f086508ab0377ecdbb1b8a9f",
       "assets": [
         {
           "bytes": 19087,
-          "path": "assets/ChartDashboard-CUrWBld6.js",
-          "sha256": "06540feb30ce44a6adf058433fc34d99a9e661966018bb3f904a93098e50152f"
+          "path": "assets/ChartDashboard-ChqoUuWd.js",
+          "sha256": "858001916638cb80c64f6755f6d7f24e60141fa0fb7c209586c8171d6083235f"
         },
         {
           "bytes": 435694,
@@ -16721,31 +16721,31 @@
           "sha256": "01c20db866a77cba389fc397e9abf160764d525bad3bf95996be6c2ea218fd39"
         },
         {
-          "bytes": 6318015,
-          "path": "assets/index-DOFsqlGj.js",
-          "sha256": "df3308c910e2193f5757d81c4c287cacfad3ccb4be2bef5fb4bcda0dc08ff288"
-        },
-        {
           "bytes": 202139,
           "path": "assets/index-DQFvrHr_.css",
           "sha256": "6990e96b73fd7e2a9a200cecea89602919ea65bf6ca141a98d582044069129c0"
+        },
+        {
+          "bytes": 6319533,
+          "path": "assets/index-z1_j0klT.js",
+          "sha256": "f2488cab26da7d51c5ac8fe15cb15a512a274bca70d1658a7559ee91717dbd09"
         }
       ],
       "build_meta": {
         "bytes": 197518,
         "path": "build-meta.json",
-        "sha256": "e7c1e8f785b698452ced6739ff0af91cf37053de157567726cb2d1f9855e88bd"
+        "sha256": "228c2397c9b4f7167a54cfe025c33f4e61b6edc7ec13809a6d37d999f6d8d79f"
       },
       "entrypoints": [
-        {
-          "bytes": 6318015,
-          "path": "assets/index-DOFsqlGj.js",
-          "sha256": "df3308c910e2193f5757d81c4c287cacfad3ccb4be2bef5fb4bcda0dc08ff288"
-        },
         {
           "bytes": 202139,
           "path": "assets/index-DQFvrHr_.css",
           "sha256": "6990e96b73fd7e2a9a200cecea89602919ea65bf6ca141a98d582044069129c0"
+        },
+        {
+          "bytes": 6319533,
+          "path": "assets/index-z1_j0klT.js",
+          "sha256": "f2488cab26da7d51c5ac8fe15cb15a512a274bca70d1658a7559ee91717dbd09"
         }
       ],
       "environment": {
@@ -16765,11 +16765,11 @@
           }
         }
       },
-      "git_sha": "06a7b0b4d63ed59d2c0f0ab78d43d947fc6cfc49",
+      "git_sha": "9c3bd29af74ff21f86730de530d1346e556be6af",
       "index": {
         "bytes": 3253,
         "path": "index.html",
-        "sha256": "2fd070be6e7fd166a10c4dcc5d675dd60804051f967c5cfca2f28ef6a246ceb8"
+        "sha256": "1fd67d1360c78f0aef028a5e9ea876ee90b61e9470f63b6e0afd21aa65b6cbce"
       },
       "public_files": [
         {
@@ -16784,8 +16784,8 @@
         },
         {
           "bytes": 19087,
-          "path": "assets/ChartDashboard-CUrWBld6.js",
-          "sha256": "06540feb30ce44a6adf058433fc34d99a9e661966018bb3f904a93098e50152f"
+          "path": "assets/ChartDashboard-ChqoUuWd.js",
+          "sha256": "858001916638cb80c64f6755f6d7f24e60141fa0fb7c209586c8171d6083235f"
         },
         {
           "bytes": 435694,
@@ -16793,14 +16793,14 @@
           "sha256": "01c20db866a77cba389fc397e9abf160764d525bad3bf95996be6c2ea218fd39"
         },
         {
-          "bytes": 6318015,
-          "path": "assets/index-DOFsqlGj.js",
-          "sha256": "df3308c910e2193f5757d81c4c287cacfad3ccb4be2bef5fb4bcda0dc08ff288"
-        },
-        {
           "bytes": 202139,
           "path": "assets/index-DQFvrHr_.css",
           "sha256": "6990e96b73fd7e2a9a200cecea89602919ea65bf6ca141a98d582044069129c0"
+        },
+        {
+          "bytes": 6319533,
+          "path": "assets/index-z1_j0klT.js",
+          "sha256": "f2488cab26da7d51c5ac8fe15cb15a512a274bca70d1658a7559ee91717dbd09"
         },
         {
           "bytes": 1049,
@@ -16810,7 +16810,7 @@
         {
           "bytes": 3253,
           "path": "index.html",
-          "sha256": "2fd070be6e7fd166a10c4dcc5d675dd60804051f967c5cfca2f28ef6a246ceb8"
+          "sha256": "1fd67d1360c78f0aef028a5e9ea876ee90b61e9470f63b6e0afd21aa65b6cbce"
         },
         {
           "bytes": 574,
@@ -16826,9 +16826,9 @@
       "schema_version": 1,
       "source": {
         "file_count": 702,
-        "git_tree_oid": "d2f69b8d75434cac2bdd3e1c36ed2ed1266804cb",
+        "git_tree_oid": "bbbe79b06b397ef53a9980fa515602a6453eb73e",
         "scope": "git_head_frontend_tree_v1",
-        "tree_sha256": "37d309c58f5c560298d11b6c318f98792cc77fc3daf468b59a95353429ed8e9b"
+        "tree_sha256": "221382a40e8c373d5a072fc3ab10c2983d7bd88fb0f1a7eb55a7803c4fcc45ef"
       },
       "toolchain": {
         "node": "22.23.2",
@@ -16854,24 +16854,24 @@
           }
         }
       },
-      "git_sha": "06a7b0b4d63ed59d2c0f0ab78d43d947fc6cfc49",
+      "git_sha": "9c3bd29af74ff21f86730de530d1346e556be6af",
       "kind": "frontend_two_clean_builds_v1",
       "passes": [
         {
-          "artifact_tree_sha256": "d0ad8246e6451ba3d11c6fc89ea831fc7ce7fa1adeeddf67ba8babec54da4201",
+          "artifact_tree_sha256": "db07c1b687e07928ce9f76b78c1fdb58c5181a43f086508ab0377ecdbb1b8a9f",
           "build_meta": {
             "bytes": 197518,
             "path": "build-meta.json",
-            "sha256": "e7c1e8f785b698452ced6739ff0af91cf37053de157567726cb2d1f9855e88bd"
+            "sha256": "228c2397c9b4f7167a54cfe025c33f4e61b6edc7ec13809a6d37d999f6d8d79f"
           },
           "ordinal": 1
         },
         {
-          "artifact_tree_sha256": "d0ad8246e6451ba3d11c6fc89ea831fc7ce7fa1adeeddf67ba8babec54da4201",
+          "artifact_tree_sha256": "db07c1b687e07928ce9f76b78c1fdb58c5181a43f086508ab0377ecdbb1b8a9f",
           "build_meta": {
             "bytes": 197518,
             "path": "build-meta.json",
-            "sha256": "e7c1e8f785b698452ced6739ff0af91cf37053de157567726cb2d1f9855e88bd"
+            "sha256": "228c2397c9b4f7167a54cfe025c33f4e61b6edc7ec13809a6d37d999f6d8d79f"
           },
           "ordinal": 2
         }
@@ -16879,15 +16879,15 @@
       "proof_file": {
         "bytes": 1520,
         "path": "frontend/.release/reproducible-build.json",
-        "sha256": "3c243d3abd5eb450099f49794d2d43094df15d7211eedd6fe4a990933d0264b0"
+        "sha256": "5d14d42c011e9f836341d98d099d0e5a37d941974c86e560fa539298f03b18c6"
       },
       "retained_pass": 2,
       "schema_version": 1,
       "source": {
         "file_count": 702,
-        "git_tree_oid": "d2f69b8d75434cac2bdd3e1c36ed2ed1266804cb",
+        "git_tree_oid": "bbbe79b06b397ef53a9980fa515602a6453eb73e",
         "scope": "git_head_frontend_tree_v1",
-        "tree_sha256": "37d309c58f5c560298d11b6c318f98792cc77fc3daf468b59a95353429ed8e9b"
+        "tree_sha256": "221382a40e8c373d5a072fc3ab10c2983d7bd88fb0f1a7eb55a7803c4fcc45ef"
       },
       "toolchain": {
         "node": "22.23.2",
@@ -16901,26 +16901,26 @@
       "added_count": 0,
       "deleted_count": 0,
       "file_count": 114,
-      "manifest_sha256": "56d399cca25e5b2229058811f83764281042910736f23f97f60ecdd17141a155",
+      "manifest_sha256": "43bdfcf4c60576be6f40681ad09cc2b13998b78839ea1221934a829615caace0",
       "modified_count": 0,
       "projection_tree_oid": "63574274340c6d9e97f597d84d3fdb6a20e22802",
       "scope": "release_control_source_v1",
       "scope_tree_oid": "63574274340c6d9e97f597d84d3fdb6a20e22802",
-      "source_base_git_sha": "4eb3f95706cb26d0255116942a9f106c77a5514f",
-      "source_base_root_tree_oid": "6cdf1c2d86faa450f1e59d8985f5b41562724d05",
+      "source_base_git_sha": "635e181f7520354029efbdc8e89d76a94de77ff2",
+      "source_base_root_tree_oid": "765e5afeb82b17241f8e5142132c1cd51ac562ab",
       "source_base_scope_tree_oid": "63574274340c6d9e97f597d84d3fdb6a20e22802",
-      "source_git_sha": "06a7b0b4d63ed59d2c0f0ab78d43d947fc6cfc49",
-      "source_root_tree_oid": "8e4b19072e7aa1510746953b3058f103bede69ae",
+      "source_git_sha": "9c3bd29af74ff21f86730de530d1346e556be6af",
+      "source_root_tree_oid": "cf009ae9ab42ea7d5b89b19347b691ce232adf35",
       "tombstone_count": 0,
       "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "tree_sha256": "d4f408a97266be24712b02e36a5da91f8664b307e958d698577863e3ef257de0"
     },
-    "release_id": "rg5-f31b0ec6fd1858873b5b4961950a500f20182d4e0f882994f2e446fd34397aa5",
+    "release_id": "rg5-d3670721dbe3759b7beb931aaa41dfabc2a1f7660063418d33269fbbdc3902b8",
     "schema_version": 2,
-    "source_base_git_sha": "4eb3f95706cb26d0255116942a9f106c77a5514f",
-    "source_git_sha": "06a7b0b4d63ed59d2c0f0ab78d43d947fc6cfc49"
+    "source_base_git_sha": "635e181f7520354029efbdc8e89d76a94de77ff2",
+    "source_git_sha": "9c3bd29af74ff21f86730de530d1346e556be6af"
   },
   "schema_version": 2,
-  "source_base_git_sha": "4eb3f95706cb26d0255116942a9f106c77a5514f",
-  "source_git_sha": "06a7b0b4d63ed59d2c0f0ab78d43d947fc6cfc49"
+  "source_base_git_sha": "635e181f7520354029efbdc8e89d76a94de77ff2",
+  "source_git_sha": "9c3bd29af74ff21f86730de530d1346e556be6af"
 }

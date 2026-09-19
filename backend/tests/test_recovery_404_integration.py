@@ -123,7 +123,7 @@ class Integration(unittest.IsolatedAsyncioTestCase):
             {"id": "", "role": "owner"},
             {"id": "other-store", "role": "owner"},
         ]
-        payloads = {"prepare": {"order_numbers": REFS}, "activate": {
+        payloads = {"prepare": {"order_numbers": REFS}, "review-release": {"fingerprint": doc["fingerprint"]}, "activate": {
             "fingerprint": doc["fingerprint"], "confirmation": "ACTIVATE_REVIEWED_404_COHORT"},
             "pause": {}, "audit": {}}
         with patch.object(c, "prepare", AsyncMock(return_value={})) as prepare, \
@@ -173,6 +173,57 @@ class Integration(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(doc["counts"]["verified_existing"], 1)
         self.assertEqual((self.provider.invoice_posts, self.provider.payment_posts), (0, 0))
         self.assertEqual(self.provider.markers[TARGET], "existing")
+
+    async def test_rounding_isolation_resumes_all_other_eligible_without_resending(self):
+        await self.activate()
+        self.provider.invoices[TARGET] = [Invoice(TARGET, "existing", "403.12", "403.11", "0.01", "SAR")]
+        claim = {"_id": f"main:{TARGET}", "reference": TARGET, "fingerprint": "original-attempt"}
+        await self.db.qoyod_404_attempts.insert_one(claim)
+        await c.tick(self.db, self.factory)
+        doc = await c.report(self.db)
+        self.assertEqual(doc["state"], "active")
+        self.assertEqual((doc["verified"], doc["remaining"], doc["rounding_unsettled"]), (2, 197, 1))
+        result = next(r for r in doc["results"] if r["reference"] == TARGET)
+        self.assertEqual((result["invoice_total"], result["paid_amount"], result["remaining"]), ("403.12", "403.11", "0.01"))
+        self.assertEqual((self.provider.invoice_posts, self.provider.payment_posts), (0, 0))
+        for _ in range(197):
+            await c.tick(self.db, self.factory)
+        doc = await c.report(self.db)
+        self.assertEqual((doc["state"], doc["verified"], doc["remaining"]), ("review_complete", 198, 1))
+        self.assertEqual((self.provider.invoice_posts, self.provider.payment_posts), (196, 196))
+        self.assertEqual(await self.db.qoyod_404_attempts.find_one({"_id": claim["_id"]}), claim)
+        self.assertEqual(self.provider.invoices[TARGET][0].remaining, "0.01")
+
+    async def test_release_review_is_local_only_explicit_and_preserves_scope_and_claims(self):
+        original = await self.prepare()
+        await c.pause(self.db)
+        claim = {"_id": f"main:{TARGET}", "reference": TARGET, "fingerprint": "old-claim"}
+        await self.db.qoyod_404_attempts.insert_one(claim)
+        await c.review_release(self.db, original["fingerprint"], "store", "store", "old-runtime")
+        response = await self.http.get(BASE)
+        self.assertTrue(response.json()["release_review_required"])
+        self.assertFalse(response.json()["can_activate"])
+        rebound = await self.http.post(BASE + "/review-release", json={"fingerprint": response.json()["fingerprint"]})
+        self.assertEqual(rebound.status_code, 200, rebound.text)
+        self.assertEqual(rebound.json()["state"], "paused")
+        self.assertFalse(rebound.json()["release_review_required"])
+        self.assertEqual(rebound.json()["references"], original["references"])
+        self.assertEqual(rebound.json()["excluded"], original["excluded"])
+        self.assertEqual(rebound.json()["fingerprint"], original["fingerprint"])
+        self.assertEqual(await self.db.qoyod_404_attempts.find_one({"_id": claim["_id"]}), claim)
+        self.assertEqual((self.provider.invoice_posts, self.provider.payment_posts), (0, 0))
+
+    async def test_release_review_rejects_busy_changed_scope_and_old_fingerprint(self):
+        doc = await self.prepare()
+        for changes in ({"busy": True}, {"cursor": TARGET}, {"references": REFS[:-1]}, {"state": "active"}):
+            before = await self.db.qoyod_404_campaigns.find_one({"_id": c.CAMPAIGN})
+            await self.db.qoyod_404_campaigns.update_one({"_id": c.CAMPAIGN}, {"$set": changes})
+            response = await self.http.post(BASE + "/review-release", json={"fingerprint": doc["fingerprint"]})
+            self.assertEqual(response.status_code, 409, changes)
+            await self.db.qoyod_404_campaigns.replace_one({"_id": c.CAMPAIGN}, before)
+        response = await self.http.post(BASE + "/review-release", json={"fingerprint": "wrong"})
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual((self.provider.invoice_posts, self.provider.payment_posts), (0, 0))
 
     async def test_response_loss_and_restart_audit_never_repeat_invoice_or_payment(self):
         await self.activate(); self.provider.timeout = True

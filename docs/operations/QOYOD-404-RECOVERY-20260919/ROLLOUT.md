@@ -1,5 +1,43 @@
 # Closed 404 recovery — review and rollout
 
+## One-halalah continuation correction (PR #1100)
+
+The owner permits a 0.01 SAR rounding difference, without changing actual
+collection or inventing a receipt. A fresh complete lookup must prove exactly
+one matching SAR invoice with total = refreshed Salla total + 0.01, paid =
+refreshed Salla total, remaining = 0.01 and consistent identity. Only then a
+read-only second audit may isolate it as `rounding_review` and allow other
+eligible rows to proceed. This is not completion or settlement in Qoyod.
+The invoice ID, invoice total, paid amount, Salla total and balance remain
+visible. Permanent claims and open quarantine are retained; the worker only
+selects pending rows. COD/SKU and the two completed exclusions remain untouched.
+Timeouts, duplicate invoices, unknown evidence and other settlement differences
+still pause the campaign. The tolerance is not permission to retry a payment.
+
+The runtime LRM wrapper could rebuild a three-decimal discount after the base
+builder, while preflight normalized only a temporary placeholder payload.
+The sender now runs the same normalization/predictor on the actual outgoing
+payload. Diagnosis uses that same predictor. A sanitized numeric reproduction
+has a 21.508 discount and an optimistic 161.11 legacy total; supported 2dp
+normalization yields discount 21.51 and document total 161.12. Actual collection
+remains 161.11. The approved tolerance is reported rather than hidden.
+
+After verified deployment, audit the paused attempt, then use the owner-only
+**تجهيز الاستئناف على الإصدار الحالي — دون إرسال** control. It checks the same
+closed digest, dates, exclusions and outcome reference set, records release
+review history, preserves preparation time and financial claims, and remains
+paused. Activation is separate and rejects unresolved evidence. Both mutations
+bind their CAS to the observed audit lease token so a completed concurrent
+audit cannot invalidate the evidence and still allow stale activation.
+
+For a real accounting adjustment, Qoyod documents creating a credit note and
+allocating it to an invoice with source ID, date and amount:
+[Qoyod allocation documentation](https://www.qoyod.com/en/knowledge-base/how-to-allocate-a-debit-note-or-credit-note-to-an-invoice-us/).
+This identifies a supported linked accounting mechanism, not proof that a
+0.01 note is available or authorized for this invoice/account. No note,
+allocation, payment or invoice update is included in this change. The balance
+stays unresolved until a separately approved provider adjustment is verified.
+
 The closed cohort contains 199 references. Two previously verified orders are
 excluded from all financial actions; 197 remain. The full private cohort file
 is imported in the UI. The server validates its exact count and SHA-256 digest;

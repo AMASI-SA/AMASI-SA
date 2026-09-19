@@ -13,12 +13,12 @@ global.HTMLElement = dom.window.HTMLElement; global.IS_REACT_ACT_ENVIRONMENT = t
 const React = req('react');
 const {createRoot} = req('react-dom/client');
 const {act} = React;
-let data = {state:'prepared', can_audit:true, fingerprint:'reviewed-scope', total:199, verified:2, remaining:197,
+let data = {state:'prepared', can_audit:true, can_activate:true, fingerprint:'reviewed-scope', total:199, verified:2, remaining:197,
   excluded:['synthetic-a','synthetic-b'], results:[{reference:'synthetic-c',state:'pending',reason:'awaiting_activation'}]};
 const posts = [];
 global.__recoveryApi = {get: async () => ({data}), post: async (url, body) => {
   posts.push({url, body}); data = {...data, state:url.endsWith('/activate')?'active':'paused',
-    can_audit:!url.endsWith('/activate')}; return {data};
+    can_activate:false, can_audit:!url.endsWith('/activate')}; return {data};
 }};
 (async () => {
   const build = await esbuild.build({entryPoints:[path.join(root,'frontend/src/components/qoyod/Qoyod404Recovery.jsx')],
@@ -72,6 +72,23 @@ global.__recoveryApi = {get: async () => ({data}), post: async (url, body) => {
   await show({state:'paused',busy:false,can_audit:undefined});
   assert.equal(findButton(auditText).disabled,true,'missing server eligibility fails closed');
   assert.equal(posts.filter(x=>x.url.endsWith('/activate')).length,1,'audit never reactivates');
+  await show({state:'paused',busy:false,can_audit:true,can_activate:true,counts:{rounding_review:1,pending:196},
+    rounding_unsettled:1,verified:2,remaining:197,results:[{reference:'synthetic-c',state:'rounding_review',
+      reason:'existing_invoice_rounding_requires_settlement',invoice_id:'existing',salla_total:'161.11',
+      invoice_total:'161.12',paid_amount:'161.11',remaining:'0.01'}]});
+  assert.match(container.textContent,/فاتورة موجودة — فرق تقريب يحتاج تسوية/);
+  assert.match(container.textContent,/161.12/);
+  assert.match(container.textContent,/0.01/);
+  assert.match(container.querySelector('[data-testid="recovery-counts"]').textContent,/2 \/ 199.*197/);
+  assert.ok(findButton('تفعيل التعافي التلقائي للنطاق المحدد'),'isolated rounding permits explicit resume');
+  assert.equal(posts.filter(x=>x.url.endsWith('/activate')).length,1,'isolation does not auto activate');
+  await show({release_review_required:true,can_activate:false});
+  assert.equal(findButton('تفعيل التعافي التلقائي للنطاق المحدد'),undefined);
+  const prep = findButton('تجهيز الاستئناف على الإصدار الحالي — دون إرسال');
+  assert.ok(prep);
+  await act(async()=>{prep.click();});
+  assert.equal(posts.at(-1).url,'/integrations/qoyod/manual/recovery-404/review-release');
+  assert.equal(posts.filter(x=>x.url.endsWith('/activate')).length,1,'release review never activates');
   await act(async()=>{app.unmount();});
   console.log('PASS: real React DOM, counters, explicit fingerprint activation, pause, read-only audit, no implicit send');
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>dom.window.close());

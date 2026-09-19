@@ -13,7 +13,7 @@ from typing import Any, Optional
 from integrations.qoyod_manual.pending import _salla_order_created_date
 from integrations.qoyod_manual.order_source import get_order_payment_facts
 from integrations.qoyod_manual.send import (
-    _build_invoice_payload, _q2, _riyadh_today_iso,
+    _build_invoice_payload, _preflight_qoyod_invoice_payload, _q2, _riyadh_today_iso,
     _find_historical_positive_canon, _money_decimal,
     _normalized_recovery_items,
     _overlay_order_engine_facts, _prepare_sar_invoice_canon_from_inbox,
@@ -108,6 +108,13 @@ async def diagnose_totals(db, *, user_id: str,
             line_resolutions=line_resolutions,
             settings=settings,
             send_date_iso=_riyadh_today_iso())
+        # LRM can rebuild three-decimal lines. Display the same normalized
+        # outgoing amount that the sender and recovery preflight will use.
+        checked = _preflight_qoyod_invoice_payload(
+            _invoice, salla_total=_q2(canon.get("total_amount")))
+        expected_total = checked["qoyod_predicted_total"]
+        breakdown["expected_qoyod_total"] = expected_total
+        breakdown["difference"] = checked["difference"]
     except ManualSendRefused as exc:
         extra = exc.extra or {}
         breakdown = extra.get("breakdown") or {}
