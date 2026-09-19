@@ -58,8 +58,7 @@ class AtomicRecoveryTests(unittest.IsolatedAsyncioTestCase):
         balance = await compute_balance(self.db, user_id="owner",
             entity_type="payment_gateway", entity_id="tamara", sub_account="receivable")
         self.assertEqual(balance["net_balance"], 115)
-        print({"database": self.db.name, "group": rows[0]["txn_group_id"],
-               "legs": 3, "receivable_before": 0, "receivable_after": 115})
+        print("Synthetic journal: one balanced group; expected receivable delta verified")
 
     async def test_process_death_after_first_leg_then_restart_retry(self):
         self.assertEqual(await self.crash_worker("first_leg"), 77)
@@ -140,7 +139,58 @@ class AtomicRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.db,owner_id="owner",actor={"id":"owner"},draft=draft)
         balance = await compute_balance(self.db,user_id="owner",entity_type="bank",entity_id="SYN-BANK")
         self.assertEqual(balance["net_balance"],115)
-        print({"settlement_group":result["txn_group_id"],"bank_before":0,"bank_after":115})
+        print("Synthetic settlement: rollback and expected bank delta verified")
+
+
+
+    async def test_post_endpoint_aborts_then_retries_once(self):
+        from fastapi import APIRouter
+        import accounting_settlement_routes as routes
+        router = APIRouter()
+        async def actor():
+            return {"id": self.actor}
+        routes.install_accounting_settlement_routes(router, self.db, actor)
+        self.app.include_router(router)
+        await self.preview_and_post()
+        await self.db.accounts.insert_one({
+            "user_id":"owner","id":"SYN-BANK","name":"Synthetic bank","account_type":"bank"})
+        await self.db.accounting_settlements_v2.insert_one({
+            "id":"SYN-ROUTE","user_id":"owner","status":"reviewed","provider":"tamara",
+            "bank_account_id":"SYN-BANK","statement_reference":"SYN-ROUTE",
+            "idempotency_key":"SYN-ROUTE","review_reasons":[],
+            "amounts":{"gross_sales":115,"reported_net":115}})
+        url = "/accounting-module/settlements/drafts/SYN-ROUTE/post"
+        original = routes.post_reviewed_settlement
+        async def fail_after_journal(*args, **kwargs):
+            await original(*args, **kwargs)
+            raise RuntimeError("route interrupted after journal")
+        before = await self.count_writes()
+        with patch.object(routes, "post_reviewed_settlement", side_effect=fail_after_journal):
+            with self.assertRaisesRegex(RuntimeError, "route interrupted"):
+                await self.client.post(url, json={})
+        self.assertEqual(await self.count_writes(), before)
+        self.assertEqual((await self.db.accounting_settlements_v2.find_one({"id":"SYN-ROUTE"}))["status"],"reviewed")
+        response = await self.client.post(url, json={})
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertEqual(response.json()["status"],"posted")
+        before = await self.count_writes()
+        again = await self.client.post(url,json={})
+        self.assertEqual(again.status_code,409,again.text)
+        self.assertEqual(await self.count_writes(),before)
+
+    async def test_one_cent_imbalance_cannot_commit(self):
+        from ledger_core import post_txn_group
+        async def callback(scoped):
+            return await post_txn_group(scoped,user_id="owner",actor_id="owner",actor_name="synthetic",
+                txn_type="bnpl_sale", entries=[
+                    {"entity_type":"payment_gateway","entity_id":"tamara","side":"debit","amount":1,
+                     "entry_type":"bnpl_sale"},
+                    {"entity_type":"revenue","entity_id":"bnpl_sales","side":"credit","amount":0.99,
+                     "entry_type":"bnpl_sale"}])
+        with self.assertRaises(HTTPException):
+            await atomic_owner(self.db,"owner",callback)
+        self.assertEqual(await self.db.general_ledger.count_documents({}),0)
+        self.assertEqual(await self.db.accounting_audit_log.count_documents({}),0)
 
 
 if __name__ == "__main__":

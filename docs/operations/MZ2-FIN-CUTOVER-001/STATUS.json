@@ -9,8 +9,8 @@
   "current_phase": "P01",
   "current_phase_file": "PHASE-01-SETTLEMENTS.md",
   "current_phase_status": "IN_PROGRESS",
-  "next_allowed_action": "restore_preview_after_release_lease_clear_verify_candidate_then_run_real_ui_acceptance",
-  "current_blocker": "preview_502_release_lease_became_active_runtime_identity_and_ui_acceptance_unverified",
+  "next_allowed_action": "restore_access_read_current_guard_and_own_reservation_then_verify_isolated_transactional_mongo_and_matching_candidate_runtimes",
+  "current_blocker": "preview_access_and_current_release_lease_unverified_runtime_identity_ui_acceptance_pending",
   "legacy_mezan_policy": {
     "dynamic_financial_dependency_allowed": false,
     "copy_reference_values_allowed": true,
@@ -239,5 +239,24 @@
     "prior_settlements_reposted": false,
     "production_changed_by_task": false,
     "evidence_file": "P01-MANUAL-TAX-WIP-20260919.md"
+  },
+  "atomic_recovery_20260919": {
+    "state": "REAL_ISOLATED_MONGO_VERIFIED_PREVIEW_PENDING",
+    "prior_candidate": "18144cb44f1abdb5c27e54eeed4427cf99e75b3f",
+    "tested_code_commit": "631e8d9bd7f32c1290a9cc8178ec73d2a615af7c",
+    "pr": 1091,
+    "transaction_boundary": "recognition_event_all_ledger_legs_counters_audit_and_settlement_draft_status",
+    "database": "MongoDB 8.0.12 dedicated replica set in CI; standalone fail-closed tested",
+    "actual_mongo_recognition_tests": 12,
+    "actual_mongo_recovery_tests": 5,
+    "ci_run": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/35442683637",
+    "additional_endpoint_and_exact_balance_tests": "added_pending_followup_CI",
+    "preview_database_capabilities": "not_read_access_unavailable",
+    "preview_runtime_sha": "unverified",
+    "preview_financial_writes": false,
+    "production_changed": false,
+    "own_reservation": "/tmp/mz2-p01-operational-preview.lock; ownership must be reread before release",
+    "existing_three_settlements": "untouched_by_task",
+    "evidence_file": "P01-ATOMIC-RECOVERY-20260919.md"
   }
 }
