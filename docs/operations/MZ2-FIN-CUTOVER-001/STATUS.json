@@ -268,7 +268,15 @@
     "decision": "REFUND_JOURNAL_ONLY_FROM_DAILY_MOVEMENT_APPROVAL",
     "pr": 1097,
     "runtime_sha": "405636f70588f2933d04ed17fef014d873f8df1e",
-    "state": "PREVIEW_DAILY_APPROVAL_VERIFIED_REMAINING_ACCEPTANCE_IN_PROGRESS",
+    "state": "OPEN_PREVIEW_FINAL_CANDIDATE_BLOCKED_BY_OTHER_RELEASE_LEASE",
+    "final_tested_candidate": "080953eb1669987b53d2474a8f52c42e951e2178",
+    "final_isolated_mongo_tests": 34,
+    "final_frontend_tests": 31,
+    "final_full_frontend_build": "PASS",
+    "final_candidate_active_on_preview": false,
+    "upload_concurrency": "LIVE_FAILURE_FIXED_IN_CANDIDATE_PREVIEW_RETEST_PENDING",
+    "protected_baseline_comparison": "ALL_UNCHANGED",
+    "other_release_actor": "codex-qoyod-404-1098-20260919",
     "frontend_tests": 16,
     "automatic_order_webhook_statement_posting": "DISABLED_FOR_MEZAN2_NEW_REFUNDS",
     "evidence": "PRIVATE_RUNTIME_REFUND_LIVE_EVIDENCE",
@@ -284,7 +292,8 @@
         "statement_reconciliation_under_latest_contract",
         "browser_viewer_relogin",
         "browser_saved_xlsx",
-        "updated_regression_suite"
+        "activate_final_candidate_after_other_release_lease_closes",
+        "repair_synthetic_import_attribution_and_retest_concurrent_upload"
       ],
       "whole_preview_build": "PASS"
     }
