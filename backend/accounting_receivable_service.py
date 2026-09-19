@@ -87,6 +87,8 @@ async def prepare(db, *, owner, provider, payment_id, refund_id=None, incoming=N
             raise EvidenceError("previous_post_result_requires_recovery")
         return {**prior["proposal"], "state": "already_posted",
                 "txn_group_id": prior["txn_group_id"]}
+    if refund is not None:
+        raise EvidenceError("refund_requires_daily_movement_approval")
     # Detect both the canonical bridge id and other recorded revenue/order
     # paths. Never silently reclassify an existing gross or tax journal.
     alternatives = [{"metadata.idempotency_key": event["idempotency_key"]}]

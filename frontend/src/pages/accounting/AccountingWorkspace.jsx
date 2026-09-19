@@ -6,8 +6,8 @@ import { getAccountingAccess, getAccountingModuleStatus } from "../../services/a
 import AccountingCourierBankBindings from "./AccountingCourierBankBindings";
 import AccountingHome from "./AccountingHome";
 import AccountingPermissionsDialog from "./AccountingPermissionsDialog";
-import AccountingSettlementRegister from "./AccountingSettlementRegister";
 import AccountingSettlements from "./AccountingSettlements";
+import AccountingBankReceipts from "./AccountingBankReceipts";
 import {
     AccessDenied,
     AccountingHeader,
@@ -75,10 +75,11 @@ export default function AccountingWorkspace() {
         content = (
             <div className="space-y-5">
                 <AccountingSettlements accountingPermissions={permissions} />
-                <AccountingSettlementRegister accountingPermissions={permissions} />
                 <AccountingCourierBankBindings accountingPermissions={permissions} />
             </div>
         );
+    } else if (page.id === "financial-movements") {
+        content = <AccountingBankReceipts accountingPermissions={permissions} />;
     } else if (page.id === "opening-balances") {
         content = statusLoading ? <LoadingBlock /> : <OpeningBalancesBlocked status={status} />;
     } else {

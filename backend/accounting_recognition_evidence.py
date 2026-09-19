@@ -7,6 +7,7 @@ import hashlib
 import json
 
 PROVIDERS = {
+    "salla": {"salla", "salla_pay", "mada", "credit_card", "apple_pay", "مدى", "البطاقة الائتمانية"},
     "tamara": {"tamara", "تمارا"},
     "tabby": {"tabby", "تابي"},
     "emkan": {"emkan", "imkan", "emkaninstallment", "إمكان", "امكان"},

@@ -14,6 +14,12 @@ on:
       - "backend/accounting_sales_tax*.py"
       - "backend/accounting_receivable*.py"
       - "backend/accounting_atomic.py"
+      - "backend/accounting_receipt_service.py"
+      - "backend/accounting_customer_refund*.py"
+      - "backend/accounting_refund_drafts.py"
+      - "backend/accounting_order_refunds.py"
+      - "backend/tests/test_mz2_daily_refunds.py"
+      - "backend/tests/test_mz2_receipt_intake.py"
       - "backend/tests/test_mz2_atomic_recovery.py"
       - "backend/accounting_recognition_evidence.py"
       - "backend/bnpl/ledger_bridge.py"
@@ -78,6 +84,10 @@ jobs:
         run: python -m unittest discover -s tests -p test_mz2_receivable_workflow.py
       - name: Test process death, restart, concurrent ingress and atomic settlement
         run: python -m unittest discover -s tests -p test_mz2_atomic_recovery.py -v
+      - name: Test non-ledger receipts and the authoritative lifecycle
+        run: python -m unittest discover -s tests -p test_mz2_receipt_intake.py -v
+      - name: Test daily-only refund approval and non-financial webhook drafts
+        run: python -m unittest discover -s tests -p test_mz2_daily_refunds.py -v
 
   backend-contract:
     name: Accounting backend contract
@@ -142,6 +152,7 @@ jobs:
           --watchAll=false
           --runInBand
           src/pages/accounting/AccountingReceivables.test.jsx
+          src/pages/accounting/AccountingBankReceipts.test.jsx
           src/pages/accounting/accountingPages.test.js
           src/pages/accounting/AccountingSettlements.test.jsx
           src/pages/accounting/AccountingSettlementRegister.test.jsx
