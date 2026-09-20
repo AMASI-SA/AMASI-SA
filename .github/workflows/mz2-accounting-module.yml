@@ -185,6 +185,7 @@ jobs:
           --watchAll=false
           --runInBand
           src/pages/accounting/AccountingOpeningBalances.test.jsx
+          src/pages/accounting/AccountingDailyMovements.test.jsx
           src/pages/accounting/AccountingWriteControl.test.jsx
           src/pages/accounting/AccountingReports.test.jsx
           src/pages/accounting/AccountingWorkspaceReports.test.jsx
