@@ -13,7 +13,7 @@ const workspaceSource = fs.readFileSync(
 test("daily accounting is the primary simple surface", () => {
     expect(dailySource).toContain("المحاسبة اليومية");
     expect(dailySource).toContain("إضافة حركة مالية");
-    expect(dailySource).toContain("مبلغ وصل إلى البنك");
+    expect(dailySource).toContain("رفع كشف البنك");
     expect(dailySource).toContain("رفع ملف تسوية");
     expect(dailySource).toContain("يحتاج منك");
     expect(dailySource).toContain("آخر العمليات");
@@ -28,9 +28,10 @@ test("dangerous operational controls are no longer rendered globally", () => {
     expect(dailySource).toContain("advancedOpen");
 });
 
-test("daily write forms reuse accepted P01 endpoints instead of inventing accounting logic", () => {
+test("daily write forms reuse accepted P01 paths and do not fall back to legacy writers", () => {
     expect(dailySource).toContain('api.post(BASE + "/bank-receipts"');
     expect(dailySource).toContain("uploadAccountingSettlementDraft");
-    expect(dailySource).toContain("<UnifiedEntryScreen />");
-    expect(dailySource).toContain("استيراد كشف البنك الجماعي لم يُربط بعد بمسار MZ2");
+    expect(dailySource).not.toContain("UnifiedEntryScreen");
+    expect(dailySource).not.toContain('api.get("/financial-movements"');
+    expect(dailySource).toContain("لن نستخدم شاشات ميزان القديم");
 });
