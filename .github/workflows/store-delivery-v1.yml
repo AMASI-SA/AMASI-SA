@@ -37,6 +37,7 @@ jobs:
         run: >-
           pip install
           pytest
+          mongomock_motor
           fastapi==0.140.0
           pydantic
           pymongo
@@ -47,7 +48,7 @@ jobs:
       - name: Compile delivery modules
         run: python -m py_compile store_delivery_*.py order_engine/__init__.py
       - name: Run delivery tests
-        run: pytest -q tests/test_store_delivery_domain.py tests/test_store_delivery_driver_security.py tests/test_store_delivery_handover_routes.py tests/test_store_delivery_payment_evidence.py tests/test_store_delivery_reminders.py
+        run: pytest -q tests/test_store_delivery_accounting.py tests/test_store_delivery_domain.py tests/test_store_delivery_driver_security.py tests/test_store_delivery_handover_routes.py tests/test_store_delivery_payment_evidence.py tests/test_store_delivery_reminders.py
 
   frontend:
     name: Store Delivery Frontend Build
