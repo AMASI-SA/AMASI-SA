@@ -18,10 +18,21 @@ test("registers the owner-only customer cohort report in marketing navigation", 
 test("keeps the page aggregate-only and visibly fail-closed for partial data", () => {
     expect(page).toContain('data-testid="customer-cohort-report-page"');
     expect(page).toContain("قراءة فقط");
-    expect(page).toContain("غير محسوم");
-    expect(page).toContain("المبلغ الناقص يبقى غير معلوم");
+    expect(page).toContain("مصدره غير معروف");
+    expect(page).toContain("غير متوفر");
+    expect(page).toContain("بدل رقم صفر مضلل");
     expect(page).toContain('data-testid="customer-cohort-truncated"');
     expect(page).not.toContain("customer_name");
     expect(page).not.toContain("customer_mobile");
     expect(page).not.toContain("customer_email");
+});
+
+test("explains the report in plain Arabic without overlapping-window ambiguity", () => {
+    expect(page).toContain("الخلاصة ببساطة");
+    expect(page).toContain("أرقام آخر 30 يومًا جزء من أرقام آخر 60 يومًا");
+    expect(page).toContain("يشمل آخر 30 يومًا");
+    expect(page).toContain("الجدول يعرض من بدأوا الشراء خلال آخر 60 يومًا فقط");
+    expect(page).toContain("مصدر أول طلب غير معروف لجميع العملاء");
+    expect(page).not.toContain('label="عائدون خلال 30 يومًا"');
+    expect(page).not.toContain("اكتمال {value.coverage_pct}%");
 });
