@@ -128,7 +128,7 @@ def protect_accounting_routes(router, db):
         path = route.path
         if not route.methods.intersection({"POST", "PUT", "PATCH", "DELETE"}):
             continue
-        if "/write-control" in path or path.endswith(("/accounting-module/periods", "/receivables/preview", "/drafts/upload")):
+        if "/write-control" in path or path.endswith(("/accounting-module/periods", "/receivables/preview", "/drafts/upload", "/daily-movements/upload")):
             continue
         original = route.dependant.call
         def wrap(endpoint):
