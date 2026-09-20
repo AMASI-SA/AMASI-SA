@@ -52,8 +52,8 @@ posted snapshot محمي؛ مراجعات لاحقة append-only adjustment بت
 تنسيق أرسل إلى عامل P01 في task المحاسبه 20\\9 بتاريخ 2026-09-20 لطلب مراجعة هذه seams/account mappings/permissions. ذلك طلب مراجعة عقد لا طلب تغيير المصدر، ولا موافقة مستنتجة من الإرسال. قبول النواة موثق لاحقًا إذا وصل.
 
 ## عقد النقل مع مهمة الشحن
-تأكيد مقابل من عامل الشحن 2026-09-20: موافق على الحد التالي؛ المرجع المخطط
-`parallel/shipping/INTEGRATION-CONTRACTS.md` على `codex/mz2-shipping-prep-20260920`، نفس base وP01 contract SHA. هذا اتفاق تحضيري، لا تنفيذ.
+مرجع فعلي مقروء من [Draft PR #1108](https://github.com/AMASI-SA/AMASI-SA/pull/1108)، SHA `7ee877a0b19e12b997d2f7e5fe484b0ede9b86ff`: [INTEGRATION-CONTRACTS.md — التنسيق مع تحضير المخزون P03](https://github.com/AMASI-SA/AMASI-SA/blob/7ee877a0b19e12b997d2f7e5fe484b0ede9b86ff/docs/operations/MZ2-FIN-CUTOVER-001/parallel/shipping/INTEGRATION-CONTRACTS.md).
+مطابقة الجزء المشترك فقط أكدت cost_origin_key داخل المالك، الغرض الحصري، حفظ مجموع التخصيصات، وربط النقل باستلام فعلي دون تكرار AP/bank/VAT. مثال الشحن30+4.50 مقسم20/10 يطابق نفس الفصل في مثال المخزون100+15 مقسم60/40. ليست مراجعة أو اعتمادًا كاملًا لمهمة الشحن، ولا موافقة P01، ولا تحققًا تشغيليًا. لا تعديل لملفات الشحن.
 
 cost_origin_key ثابت=(owner, transport evidence issuer, original document, original line). purpose=inbound_acquisition/outbound_customer_delivery/needs_review حصري. اسم شركة النقل لا يحدد الغرض.
 - الشحن يوثق **سطر النقل فقط**: دليل/التزام/دفع، والنواة تملك القيد الوحيد. لا تملك مهمة الشحن كل تكاليف المورد.
@@ -61,7 +61,7 @@ cost_origin_key ثابت=(owner, transport evidence issuer, original document, o
 - mixed line: child allocations sum exactly to original net/tax/gross (integer halalas، rounding residue صريح). كل allocation claimed مرة واحدة في النواة. outbound ينتهي بمصروف توصيل؛ inbound أصل مؤهل؛ unknown review.
 - debit inventory/clearing route vs expense delivery mutually exclusive لنفس الجزء؛ reject dual consumer/conflicting purpose. نفس دليل الضريبة يستخدم eligible allocation لا full VAT عند كل مستهلك.
 - نقل متأخر بعد البيع يتطلب adjustment traced بين on-hand/WIP/COGS وفق السياسة المعتمدة؛ لا تغيير snapshots.
-- اختبار proof: line net100+eligibleVAT15 split inbound60/outbound40 → Dr acquisition clearing60 + Dr delivery expense40 + Dr VAT15 / Cr transport payable115؛ allocation receipt Dr inventory60 / Cr clearing60. دفع115 = Dr payable115 / Cr bank115 فقط.
+- مثال مصطنع مصحح R1: استلام جديد freight-goods-receipt-001 بمستند مصطنع، Dr inventory200 / Cr GRNI200 و10 وحدات/قيمة200. ثم line net100+eligibleVAT15 split inbound60/outbound40 → Dr acquisition clearing60 + Dr delivery expense40 + Dr VAT15 / Cr transport payable115. allocation بهوية مستقلة يربط cost_origin_key بأصل النقل والاستلام: Dr inventory60 / Cr clearing60، وحركة stock مقدارها quantity=0,value=60. النهائي10 وحدات/260/متوسط26؛ outbound40 خارج قيمة المخزون. دفع115 = Dr payable115 / Cr bank115 فقط. مطابقة حسابية منفذة في الفاحص، لا إثبات idempotency في Mongo؛ فرضية الضريبة مصطنعة والقرارات أدناه بلا تغيير.
 
 ## القرارات والتبعيات قبل التنفيذ
 | ID | القرار المطلوب | الجهة/الحالة |

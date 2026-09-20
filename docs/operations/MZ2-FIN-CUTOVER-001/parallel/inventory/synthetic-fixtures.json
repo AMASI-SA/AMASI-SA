@@ -55,7 +55,8 @@
             {
               "account": "inventory",
               "side": "debit",
-              "amount": "80"
+              "amount": "80",
+              "cost_pool": "synthetic-owner-A:invoice_partial_payment_receipts:goods"
             },
             {
               "account": "clearing",
@@ -67,7 +68,8 @@
             {
               "item": "goods",
               "quantity": "4",
-              "value": "80"
+              "value": "80",
+              "cost_pool": "synthetic-owner-A:invoice_partial_payment_receipts:goods"
             }
           ]
         },
@@ -77,7 +79,8 @@
             {
               "account": "inventory",
               "side": "debit",
-              "amount": "120"
+              "amount": "120",
+              "cost_pool": "synthetic-owner-A:invoice_partial_payment_receipts:goods"
             },
             {
               "account": "clearing",
@@ -89,7 +92,8 @@
             {
               "item": "goods",
               "quantity": "6",
-              "value": "120"
+              "value": "120",
+              "cost_pool": "synthetic-owner-A:invoice_partial_payment_receipts:goods"
             }
           ]
         }
@@ -106,6 +110,12 @@
           "quantity": "10",
           "value": "200"
         }
+      },
+      "stock_mapping": {
+        "goods": {
+          "cost_pool": "synthetic-owner-A:invoice_partial_payment_receipts:goods",
+          "account": "inventory"
+        }
       }
     },
     {
@@ -117,7 +127,8 @@
             {
               "account": "materials",
               "side": "debit",
-              "amount": "200"
+              "amount": "200",
+              "cost_pool": "synthetic-owner-A:weighted_receipts_after_issue:fabric"
             },
             {
               "account": "GRNI",
@@ -129,7 +140,8 @@
             {
               "item": "fabric",
               "quantity": "10",
-              "value": "200"
+              "value": "200",
+              "cost_pool": "synthetic-owner-A:weighted_receipts_after_issue:fabric"
             }
           ]
         },
@@ -144,14 +156,16 @@
             {
               "account": "materials",
               "side": "credit",
-              "amount": "80"
+              "amount": "80",
+              "cost_pool": "synthetic-owner-A:weighted_receipts_after_issue:fabric"
             }
           ],
           "stock": [
             {
               "item": "fabric",
               "quantity": "-4",
-              "value": "-80"
+              "value": "-80",
+              "cost_pool": "synthetic-owner-A:weighted_receipts_after_issue:fabric"
             }
           ]
         },
@@ -161,7 +175,8 @@
             {
               "account": "materials",
               "side": "debit",
-              "amount": "300"
+              "amount": "300",
+              "cost_pool": "synthetic-owner-A:weighted_receipts_after_issue:fabric"
             },
             {
               "account": "GRNI",
@@ -173,7 +188,8 @@
             {
               "item": "fabric",
               "quantity": "10",
-              "value": "300"
+              "value": "300",
+              "cost_pool": "synthetic-owner-A:weighted_receipts_after_issue:fabric"
             }
           ]
         }
@@ -189,6 +205,12 @@
           "value": "420",
           "average": "26.25"
         }
+      },
+      "stock_mapping": {
+        "fabric": {
+          "cost_pool": "synthetic-owner-A:weighted_receipts_after_issue:fabric",
+          "account": "materials"
+        }
       }
     },
     {
@@ -200,7 +222,8 @@
             {
               "account": "inventory",
               "side": "debit",
-              "amount": "120"
+              "amount": "120",
+              "cost_pool": "synthetic-owner-A:receipt_first:goods"
             },
             {
               "account": "GRNI",
@@ -212,7 +235,8 @@
             {
               "item": "goods",
               "quantity": "3",
-              "value": "120"
+              "value": "120",
+              "cost_pool": "synthetic-owner-A:receipt_first:goods"
             }
           ]
         },
@@ -248,6 +272,12 @@
         "goods": {
           "quantity": "3",
           "value": "120"
+        }
+      },
+      "stock_mapping": {
+        "goods": {
+          "cost_pool": "synthetic-owner-A:receipt_first:goods",
+          "account": "inventory"
         }
       }
     },
@@ -313,7 +343,8 @@
             {
               "account": "inventory",
               "side": "debit",
-              "amount": "100"
+              "amount": "100",
+              "cost_pool": "synthetic-owner-A:supplier_advance:goods"
             },
             {
               "account": "clearing",
@@ -325,7 +356,8 @@
             {
               "item": "goods",
               "quantity": "5",
-              "value": "100"
+              "value": "100",
+              "cost_pool": "synthetic-owner-A:supplier_advance:goods"
             }
           ]
         }
@@ -342,6 +374,12 @@
         "goods": {
           "quantity": "5",
           "value": "100"
+        }
+      },
+      "stock_mapping": {
+        "goods": {
+          "cost_pool": "synthetic-owner-A:supplier_advance:goods",
+          "account": "inventory"
         }
       }
     },
@@ -375,7 +413,8 @@
             {
               "account": "inventory",
               "side": "debit",
-              "amount": "100"
+              "amount": "100",
+              "cost_pool": "synthetic-owner-A:paid_return_credit_refund:goods"
             },
             {
               "account": "clearing",
@@ -387,7 +426,8 @@
             {
               "item": "goods",
               "quantity": "5",
-              "value": "100"
+              "value": "100",
+              "cost_pool": "synthetic-owner-A:paid_return_credit_refund:goods"
             }
           ]
         },
@@ -418,14 +458,16 @@
             {
               "account": "inventory",
               "side": "credit",
-              "amount": "40"
+              "amount": "40",
+              "cost_pool": "synthetic-owner-A:paid_return_credit_refund:goods"
             }
           ],
           "stock": [
             {
               "item": "goods",
               "quantity": "-2",
-              "value": "-40"
+              "value": "-40",
+              "cost_pool": "synthetic-owner-A:paid_return_credit_refund:goods"
             }
           ]
         },
@@ -481,6 +523,12 @@
           "quantity": "3",
           "value": "60"
         }
+      },
+      "stock_mapping": {
+        "goods": {
+          "cost_pool": "synthetic-owner-A:paid_return_credit_refund:goods",
+          "account": "inventory"
+        }
       }
     },
     {
@@ -508,7 +556,8 @@
             {
               "account": "materials",
               "side": "debit",
-              "amount": "250"
+              "amount": "250",
+              "cost_pool": "synthetic-owner-A:made_to_order:fabric_m"
             },
             {
               "account": "clearing",
@@ -520,7 +569,8 @@
             {
               "item": "fabric_m",
               "quantity": "10",
-              "value": "250"
+              "value": "250",
+              "cost_pool": "synthetic-owner-A:made_to_order:fabric_m"
             }
           ]
         },
@@ -535,14 +585,16 @@
             {
               "account": "materials",
               "side": "credit",
-              "amount": "100"
+              "amount": "100",
+              "cost_pool": "synthetic-owner-A:made_to_order:fabric_m"
             }
           ],
           "stock": [
             {
               "item": "fabric_m",
               "quantity": "-4",
-              "value": "-100"
+              "value": "-100",
+              "cost_pool": "synthetic-owner-A:made_to_order:fabric_m"
             }
           ]
         },
@@ -552,7 +604,8 @@
             {
               "account": "materials",
               "side": "debit",
-              "amount": "15"
+              "amount": "15",
+              "cost_pool": "synthetic-owner-A:made_to_order:fabric_m"
             },
             {
               "account": "WIP",
@@ -564,7 +617,8 @@
             {
               "item": "fabric_m",
               "quantity": "0.6",
-              "value": "15"
+              "value": "15",
+              "cost_pool": "synthetic-owner-A:made_to_order:fabric_m"
             }
           ]
         },
@@ -606,7 +660,8 @@
             {
               "account": "FG",
               "side": "debit",
-              "amount": "105"
+              "amount": "105",
+              "cost_pool": "synthetic-owner-A:made_to_order:custom_piece"
             },
             {
               "account": "WIP",
@@ -618,7 +673,8 @@
             {
               "item": "custom_piece",
               "quantity": "1",
-              "value": "105"
+              "value": "105",
+              "cost_pool": "synthetic-owner-A:made_to_order:custom_piece"
             }
           ]
         },
@@ -633,14 +689,16 @@
             {
               "account": "FG",
               "side": "credit",
-              "amount": "105"
+              "amount": "105",
+              "cost_pool": "synthetic-owner-A:made_to_order:custom_piece"
             }
           ],
           "stock": [
             {
               "item": "custom_piece",
               "quantity": "-1",
-              "value": "-105"
+              "value": "-105",
+              "cost_pool": "synthetic-owner-A:made_to_order:custom_piece"
             }
           ]
         }
@@ -664,11 +722,48 @@
           "quantity": "0",
           "value": "0"
         }
+      },
+      "stock_mapping": {
+        "fabric_m": {
+          "cost_pool": "synthetic-owner-A:made_to_order:fabric_m",
+          "account": "materials"
+        },
+        "custom_piece": {
+          "cost_pool": "synthetic-owner-A:made_to_order:custom_piece",
+          "account": "FG"
+        }
       }
     },
     {
       "id": "freight_split",
       "events": [
+        {
+          "id": "freight-goods-receipt-001",
+          "kind": "receipt",
+          "valuation_status": "accepted",
+          "evidence_ref": "synthetic-delivery-note-001",
+          "legs": [
+            {
+              "account": "inventory",
+              "side": "debit",
+              "amount": "200",
+              "cost_pool": "synthetic-owner-A:freight_split:freight_goods"
+            },
+            {
+              "account": "GRNI",
+              "side": "credit",
+              "amount": "200"
+            }
+          ],
+          "stock": [
+            {
+              "item": "freight_goods",
+              "quantity": "10",
+              "value": "200",
+              "cost_pool": "synthetic-owner-A:freight_split:freight_goods"
+            }
+          ]
+        },
         {
           "id": "source_invoice",
           "legs": [
@@ -693,7 +788,15 @@
               "amount": "115"
             }
           ],
-          "stock": []
+          "stock": [],
+          "cost_origin": {
+            "key": "synthetic-owner-A:transport-supplier:INV-F001:line-1",
+            "evidence_ref": "synthetic-freight-invoice-001",
+            "net": "100",
+            "tax": "15",
+            "inbound_eligible_value": "60",
+            "outbound_value": "40"
+          }
         },
         {
           "id": "inbound_allocation",
@@ -701,7 +804,8 @@
             {
               "account": "inventory",
               "side": "debit",
-              "amount": "60"
+              "amount": "60",
+              "cost_pool": "synthetic-owner-A:freight_split:freight_goods"
             },
             {
               "account": "acquisition_clearing",
@@ -709,7 +813,28 @@
               "amount": "60"
             }
           ],
-          "stock": []
+          "stock": [
+            {
+              "item": "freight_goods",
+              "quantity": "0",
+              "value": "60",
+              "receipt_event_id": "freight-goods-receipt-001",
+              "allocation_id": "synthetic-freight-allocation-001",
+              "cost_origin_key": "synthetic-owner-A:transport-supplier:INV-F001:line-1",
+              "cost_pool": "synthetic-owner-A:freight_split:freight_goods"
+            }
+          ],
+          "kind": "cost_allocation",
+          "allocation": {
+            "id": "synthetic-freight-allocation-001",
+            "cost_origin_key": "synthetic-owner-A:transport-supplier:INV-F001:line-1",
+            "source_event_id": "source_invoice",
+            "receipt_event_id": "freight-goods-receipt-001",
+            "item": "freight_goods",
+            "cost_pool": "synthetic-owner-A:freight_split:freight_goods",
+            "purpose": "inbound_acquisition",
+            "value": "60"
+          }
         },
         {
           "id": "payment",
@@ -733,10 +858,28 @@
         "delivery_expense": "40",
         "vat": "15",
         "freight_AP": "0",
-        "inventory": "60",
-        "bank": "-115"
+        "inventory": "260",
+        "bank": "-115",
+        "GRNI": "-200"
       },
-      "expected_stock": {}
+      "expected_stock": {
+        "freight_goods": {
+          "quantity": "10",
+          "value": "260",
+          "average": "26"
+        }
+      },
+      "stock_mapping": {
+        "freight_goods": {
+          "cost_pool": "synthetic-owner-A:freight_split:freight_goods",
+          "account": "inventory"
+        }
+      }
     }
+  ],
+  "inventory_accounts": [
+    "inventory",
+    "materials",
+    "FG"
   ]
 }

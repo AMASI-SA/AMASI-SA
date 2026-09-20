@@ -17,7 +17,7 @@
 | A11 | نفس الأصل مدفوع بالكامل قبل المرتجع | return مثل A10؛ credit Dr refund receivable46/Cr clearing40+VAT6؛ refund Dr bank46/Cr refund receivable46. AP0، لا شراء أو VAT عند refund |
 | A12 | نفس SKU بخيارين | blue Q2×20=40، black Q3×30=90؛ pool منفصل، لا avg26 عابر للخيارات؛ خطأ variant→product409/404 بلا writes |
 | A13 | manufactured-to-order | الرحلة أدناه: materials Q6.6/V165، WIP0، FG0 بعد التسليم، COGS105، loss20، AP250، direct payable40؛ bank delta0 |
-| A14 | نقل100+15 مقسم60/40 | قيد مصدر Dr clearing60 + delivery expense40 + VAT15 / Cr freight AP115؛ P03 Dr inventory60/Cr clearing60 مرة؛ دفع115 لا cost/tax جديدة |
+| A14 | استلام جديد10×20 ثم نقل100+15 مقسم60/40 | receipt مصطنع Dr inventory200/Cr GRNI200، stock10/200؛ أصل النقل Dr acquisition clearing60 + delivery expense40 + VAT15 / Cr freight AP115؛ allocation مرتبط بالأصل والاستلام Dr inventory60/Cr acquisition clearing60 وstock quantity0/value60. النهائي10/260/avg26؛ outbound40 مصروف منفصل. دفع115 لا cost/tax جديدة |
 | A15 | فاتورة بلا أهلية tax مثبتة | draft/needs_review بلا claimed input VAT؛ لا اعتماد full recovery. بعد سياسة nonrecoverable معتمدة فقط تستبعد eligible tax وتضاف تكلفة مؤهلة حسب allocation |
 | A16 | تغير سعر مادة/خدمة لاحقًا | لا تغيير posted issue80 في A07 أو COGS105 في A13 ولا original tax. فرق مثبت بمستند جديد لا $set للتاريخ |
 | A17 | SAR فقط | USD أو currency missing/conflicting حسب schema يرفض قبل ترحيل؛ لا FX ولا تحويل ضمني |
@@ -53,7 +53,7 @@ Conservation: 250+40=165+105+20. Gross issued4=2.6 used+0.6 returned+0.8 waste.
 ## طبقات التنفيذ المستقبلية — لا تختلط
 | الطبقة | المطلوب | حالة هذا التسليم |
 |---|---|---|
-| Pure/contract | identities, decimals, journal previews, caps, examples | فحص fixture arithmetic وتشخيص helper فقط منفذ أدناه؛ ليس تنفيذ عقد P03 |
+| Pure/contract | identities, decimals, journal previews, caps, examples | الحسابات ومطابقة GL/detail وحالات الرفض المحددة أدناه منفذة؛ بقية العقود مخططة، لا تنفيذ P03 |
 | HTTP | authenticated ASGI/live isolated endpoints، duplicate409/pause423/permission403/owner404، payload/schema/readback | NOT RUN؛ لا endpoints P03 موصولة |
 | Isolated integration | dedicated throwaway Mongo replica، الحقيقي P01 atomic boundary/events/GL/counters/fault injection + legacy denylist | NOT RUN؛ لا DB اتصال |
 | Frontend component | separate actions/state، permission stale، original attachment، partial receipt/payment rendering | NOT RUN |
@@ -62,5 +62,8 @@ Conservation: 250+40=165+105+20. Gross issued4=2.6 used+0.6 returned+0.8 waste.
 
 ## الأدلة المنفذة في هذه المهمة
 - قراءة static للملفات في INVENTORY وP01 contract بواسطة git show؛ لا اختبار تشغيلي.
-- `verify-preparation.py` يستخدم Python standard library، يتحقق بيانات JSON وتوازن كل قيد ومجاميع السيناريو، ويستخرج AST للدوال المحددة من financial_movements_routes.py فقط إلى in-memory fake products. لا import للتطبيق/.env/Mongo، ولا شبكة أو database. Probe يبين cost_avg=6.5 بعد invoices بلا receipts، وإعادة helper تضيف history مرة أخرى؛ تشخيص محدود لا اختبار production route.
-- النتائج والأوامر الفعلية تسجل في VERIFICATION.md بعد التشغيل. ملفات tests الموجودة جرى فحصها فقط، ومنها test_iter250b_phase4_product_cost_update.py؛ لا نسب نتائجها إلى هذه المهمة أو P03.
+- **الحسابات المنفذة بعد R1–R3:** سبعة سيناريوهات،31 قيدًا متوازنًا، إجماليات وأرصدة وتفاصيل كميات/قيم متوقعة بدقة Decimal؛ A14 النهائي10 وحدات/260/متوسط26. يبدأ من استلام جديد لا افتتاحية ولا بيانات قديمة.
+- **المطابقة المنفذة:** stock_mapping يربط item→cost_pool/account، وكل inventory GL leg يحمل pool، وكل stock row يحمل item/pool. الفاحص يقارن signed GL delta بقيمة detail لنفس account/pool لكل حدث قبل فحص التوقعات؛16 حدثًا مطابقًا. لا يكفي نجاح كل جدول مستقلًا. تخصيص النقل يفحص أصلًا سابقًا موثقًا ومؤهلًا واستلامًا سابقًا accepted من نفس الصنف/pool، وهوية allocation، وحد القيمة، وحركة قيمة بلا كمية، وعدم تكرار AP/bank/VAT في أرجل الرسملة.
+- **رفض سلبي منفذ:** حذف stock من inbound_allocation مع إبقاء GL متوازنًا يخرج1 inventory_detail_mismatch؛ إفساد مرجع الاستلام يخرج1 invalid_allocation_receipt؛ إفساد أصل النقل يخرج1 invalid_cost_origin. اختبار --negative-tests يثبت هذه الأسباب بالضبط ثم نجاح النسخة الصحيحة بخروج0. تعديلات الحالات السلبية في الذاكرة فقط.
+- الحسابات والفحوص عبر Python standard library بلا تطبيق/.env/Mongo أو شبكة. التشخيص القديم للدالة محفوظ كدليل تاريخي عند45d8f949، ولم يُعد تشغيله لهذا التصحيح؛ أصبح اختياريًا عبر --legacy-helper-probe.
+- **لم ينفذ:** HTTP، الواجهة، Mongo/منع التكرار/التعافي، والاستقلال التشغيلي عند تعطيل القديم. النتائج والأوامر في VERIFICATION.md، ولا تُنسب إلى قبول P03. D01–D11 باقية دون حسم.
