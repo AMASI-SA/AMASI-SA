@@ -1,0 +1,742 @@
+{
+  "synthetic_only": true,
+  "currency": "SAR",
+  "monetary_unit": "SAR_decimal_strings",
+  "tax_policy": "synthetic eligible 15 percent where explicit; not production",
+  "scenarios": [
+    {
+      "id": "invoice_partial_payment_receipts",
+      "events": [
+        {
+          "id": "draft",
+          "legs": [],
+          "stock": []
+        },
+        {
+          "id": "invoice",
+          "legs": [
+            {
+              "account": "clearing",
+              "side": "debit",
+              "amount": "200"
+            },
+            {
+              "account": "vat",
+              "side": "debit",
+              "amount": "30"
+            },
+            {
+              "account": "AP",
+              "side": "credit",
+              "amount": "230"
+            }
+          ],
+          "stock": []
+        },
+        {
+          "id": "payment100",
+          "legs": [
+            {
+              "account": "AP",
+              "side": "debit",
+              "amount": "100"
+            },
+            {
+              "account": "bank",
+              "side": "credit",
+              "amount": "100"
+            }
+          ],
+          "stock": []
+        },
+        {
+          "id": "receipt4",
+          "legs": [
+            {
+              "account": "inventory",
+              "side": "debit",
+              "amount": "80"
+            },
+            {
+              "account": "clearing",
+              "side": "credit",
+              "amount": "80"
+            }
+          ],
+          "stock": [
+            {
+              "item": "goods",
+              "quantity": "4",
+              "value": "80"
+            }
+          ]
+        },
+        {
+          "id": "receipt6",
+          "legs": [
+            {
+              "account": "inventory",
+              "side": "debit",
+              "amount": "120"
+            },
+            {
+              "account": "clearing",
+              "side": "credit",
+              "amount": "120"
+            }
+          ],
+          "stock": [
+            {
+              "item": "goods",
+              "quantity": "6",
+              "value": "120"
+            }
+          ]
+        }
+      ],
+      "expected_balances": {
+        "clearing": "0",
+        "vat": "30",
+        "AP": "-130",
+        "bank": "-100",
+        "inventory": "200"
+      },
+      "expected_stock": {
+        "goods": {
+          "quantity": "10",
+          "value": "200"
+        }
+      }
+    },
+    {
+      "id": "weighted_receipts_after_issue",
+      "events": [
+        {
+          "id": "r1",
+          "legs": [
+            {
+              "account": "materials",
+              "side": "debit",
+              "amount": "200"
+            },
+            {
+              "account": "GRNI",
+              "side": "credit",
+              "amount": "200"
+            }
+          ],
+          "stock": [
+            {
+              "item": "fabric",
+              "quantity": "10",
+              "value": "200"
+            }
+          ]
+        },
+        {
+          "id": "issue4",
+          "legs": [
+            {
+              "account": "WIP",
+              "side": "debit",
+              "amount": "80"
+            },
+            {
+              "account": "materials",
+              "side": "credit",
+              "amount": "80"
+            }
+          ],
+          "stock": [
+            {
+              "item": "fabric",
+              "quantity": "-4",
+              "value": "-80"
+            }
+          ]
+        },
+        {
+          "id": "r2",
+          "legs": [
+            {
+              "account": "materials",
+              "side": "debit",
+              "amount": "300"
+            },
+            {
+              "account": "GRNI",
+              "side": "credit",
+              "amount": "300"
+            }
+          ],
+          "stock": [
+            {
+              "item": "fabric",
+              "quantity": "10",
+              "value": "300"
+            }
+          ]
+        }
+      ],
+      "expected_balances": {
+        "materials": "420",
+        "GRNI": "-500",
+        "WIP": "80"
+      },
+      "expected_stock": {
+        "fabric": {
+          "quantity": "16",
+          "value": "420",
+          "average": "26.25"
+        }
+      }
+    },
+    {
+      "id": "receipt_first",
+      "events": [
+        {
+          "id": "r3",
+          "legs": [
+            {
+              "account": "inventory",
+              "side": "debit",
+              "amount": "120"
+            },
+            {
+              "account": "GRNI",
+              "side": "credit",
+              "amount": "120"
+            }
+          ],
+          "stock": [
+            {
+              "item": "goods",
+              "quantity": "3",
+              "value": "120"
+            }
+          ]
+        },
+        {
+          "id": "invoice",
+          "legs": [
+            {
+              "account": "GRNI",
+              "side": "debit",
+              "amount": "120"
+            },
+            {
+              "account": "vat",
+              "side": "debit",
+              "amount": "18"
+            },
+            {
+              "account": "AP",
+              "side": "credit",
+              "amount": "138"
+            }
+          ],
+          "stock": []
+        }
+      ],
+      "expected_balances": {
+        "inventory": "120",
+        "GRNI": "0",
+        "vat": "18",
+        "AP": "-138"
+      },
+      "expected_stock": {
+        "goods": {
+          "quantity": "3",
+          "value": "120"
+        }
+      }
+    },
+    {
+      "id": "supplier_advance",
+      "events": [
+        {
+          "id": "advance",
+          "legs": [
+            {
+              "account": "advance",
+              "side": "debit",
+              "amount": "60"
+            },
+            {
+              "account": "bank",
+              "side": "credit",
+              "amount": "60"
+            }
+          ],
+          "stock": []
+        },
+        {
+          "id": "invoice",
+          "legs": [
+            {
+              "account": "clearing",
+              "side": "debit",
+              "amount": "100"
+            },
+            {
+              "account": "vat",
+              "side": "debit",
+              "amount": "15"
+            },
+            {
+              "account": "AP",
+              "side": "credit",
+              "amount": "115"
+            }
+          ],
+          "stock": []
+        },
+        {
+          "id": "apply_advance",
+          "legs": [
+            {
+              "account": "AP",
+              "side": "debit",
+              "amount": "60"
+            },
+            {
+              "account": "advance",
+              "side": "credit",
+              "amount": "60"
+            }
+          ],
+          "stock": []
+        },
+        {
+          "id": "receipt",
+          "legs": [
+            {
+              "account": "inventory",
+              "side": "debit",
+              "amount": "100"
+            },
+            {
+              "account": "clearing",
+              "side": "credit",
+              "amount": "100"
+            }
+          ],
+          "stock": [
+            {
+              "item": "goods",
+              "quantity": "5",
+              "value": "100"
+            }
+          ]
+        }
+      ],
+      "expected_balances": {
+        "advance": "0",
+        "bank": "-60",
+        "clearing": "0",
+        "vat": "15",
+        "AP": "-55",
+        "inventory": "100"
+      },
+      "expected_stock": {
+        "goods": {
+          "quantity": "5",
+          "value": "100"
+        }
+      }
+    },
+    {
+      "id": "paid_return_credit_refund",
+      "events": [
+        {
+          "id": "invoice",
+          "legs": [
+            {
+              "account": "clearing",
+              "side": "debit",
+              "amount": "100"
+            },
+            {
+              "account": "vat",
+              "side": "debit",
+              "amount": "15"
+            },
+            {
+              "account": "AP",
+              "side": "credit",
+              "amount": "115"
+            }
+          ],
+          "stock": []
+        },
+        {
+          "id": "receipt",
+          "legs": [
+            {
+              "account": "inventory",
+              "side": "debit",
+              "amount": "100"
+            },
+            {
+              "account": "clearing",
+              "side": "credit",
+              "amount": "100"
+            }
+          ],
+          "stock": [
+            {
+              "item": "goods",
+              "quantity": "5",
+              "value": "100"
+            }
+          ]
+        },
+        {
+          "id": "pay",
+          "legs": [
+            {
+              "account": "AP",
+              "side": "debit",
+              "amount": "115"
+            },
+            {
+              "account": "bank",
+              "side": "credit",
+              "amount": "115"
+            }
+          ],
+          "stock": []
+        },
+        {
+          "id": "return2",
+          "legs": [
+            {
+              "account": "return_clearing",
+              "side": "debit",
+              "amount": "40"
+            },
+            {
+              "account": "inventory",
+              "side": "credit",
+              "amount": "40"
+            }
+          ],
+          "stock": [
+            {
+              "item": "goods",
+              "quantity": "-2",
+              "value": "-40"
+            }
+          ]
+        },
+        {
+          "id": "credit_note",
+          "legs": [
+            {
+              "account": "refund_receivable",
+              "side": "debit",
+              "amount": "46"
+            },
+            {
+              "account": "return_clearing",
+              "side": "credit",
+              "amount": "40"
+            },
+            {
+              "account": "vat",
+              "side": "credit",
+              "amount": "6"
+            }
+          ],
+          "stock": []
+        },
+        {
+          "id": "refund",
+          "legs": [
+            {
+              "account": "bank",
+              "side": "debit",
+              "amount": "46"
+            },
+            {
+              "account": "refund_receivable",
+              "side": "credit",
+              "amount": "46"
+            }
+          ],
+          "stock": []
+        }
+      ],
+      "expected_balances": {
+        "clearing": "0",
+        "vat": "9",
+        "AP": "0",
+        "inventory": "60",
+        "bank": "-69",
+        "return_clearing": "0",
+        "refund_receivable": "0"
+      },
+      "expected_stock": {
+        "goods": {
+          "quantity": "3",
+          "value": "60"
+        }
+      }
+    },
+    {
+      "id": "made_to_order",
+      "events": [
+        {
+          "id": "invoice",
+          "legs": [
+            {
+              "account": "clearing",
+              "side": "debit",
+              "amount": "250"
+            },
+            {
+              "account": "AP",
+              "side": "credit",
+              "amount": "250"
+            }
+          ],
+          "stock": []
+        },
+        {
+          "id": "receive10m",
+          "legs": [
+            {
+              "account": "materials",
+              "side": "debit",
+              "amount": "250"
+            },
+            {
+              "account": "clearing",
+              "side": "credit",
+              "amount": "250"
+            }
+          ],
+          "stock": [
+            {
+              "item": "fabric_m",
+              "quantity": "10",
+              "value": "250"
+            }
+          ]
+        },
+        {
+          "id": "issue4m",
+          "legs": [
+            {
+              "account": "WIP",
+              "side": "debit",
+              "amount": "100"
+            },
+            {
+              "account": "materials",
+              "side": "credit",
+              "amount": "100"
+            }
+          ],
+          "stock": [
+            {
+              "item": "fabric_m",
+              "quantity": "-4",
+              "value": "-100"
+            }
+          ]
+        },
+        {
+          "id": "unused_return_06m",
+          "legs": [
+            {
+              "account": "materials",
+              "side": "debit",
+              "amount": "15"
+            },
+            {
+              "account": "WIP",
+              "side": "credit",
+              "amount": "15"
+            }
+          ],
+          "stock": [
+            {
+              "item": "fabric_m",
+              "quantity": "0.6",
+              "value": "15"
+            }
+          ]
+        },
+        {
+          "id": "abnormal_waste_08m",
+          "legs": [
+            {
+              "account": "waste",
+              "side": "debit",
+              "amount": "20"
+            },
+            {
+              "account": "WIP",
+              "side": "credit",
+              "amount": "20"
+            }
+          ],
+          "stock": []
+        },
+        {
+          "id": "direct_service",
+          "legs": [
+            {
+              "account": "WIP",
+              "side": "debit",
+              "amount": "40"
+            },
+            {
+              "account": "direct_payable",
+              "side": "credit",
+              "amount": "40"
+            }
+          ],
+          "stock": []
+        },
+        {
+          "id": "completion",
+          "legs": [
+            {
+              "account": "FG",
+              "side": "debit",
+              "amount": "105"
+            },
+            {
+              "account": "WIP",
+              "side": "credit",
+              "amount": "105"
+            }
+          ],
+          "stock": [
+            {
+              "item": "custom_piece",
+              "quantity": "1",
+              "value": "105"
+            }
+          ]
+        },
+        {
+          "id": "delivery",
+          "legs": [
+            {
+              "account": "COGS",
+              "side": "debit",
+              "amount": "105"
+            },
+            {
+              "account": "FG",
+              "side": "credit",
+              "amount": "105"
+            }
+          ],
+          "stock": [
+            {
+              "item": "custom_piece",
+              "quantity": "-1",
+              "value": "-105"
+            }
+          ]
+        }
+      ],
+      "expected_balances": {
+        "clearing": "0",
+        "AP": "-250",
+        "materials": "165",
+        "WIP": "0",
+        "waste": "20",
+        "direct_payable": "-40",
+        "FG": "0",
+        "COGS": "105"
+      },
+      "expected_stock": {
+        "fabric_m": {
+          "quantity": "6.6",
+          "value": "165"
+        },
+        "custom_piece": {
+          "quantity": "0",
+          "value": "0"
+        }
+      }
+    },
+    {
+      "id": "freight_split",
+      "events": [
+        {
+          "id": "source_invoice",
+          "legs": [
+            {
+              "account": "acquisition_clearing",
+              "side": "debit",
+              "amount": "60"
+            },
+            {
+              "account": "delivery_expense",
+              "side": "debit",
+              "amount": "40"
+            },
+            {
+              "account": "vat",
+              "side": "debit",
+              "amount": "15"
+            },
+            {
+              "account": "freight_AP",
+              "side": "credit",
+              "amount": "115"
+            }
+          ],
+          "stock": []
+        },
+        {
+          "id": "inbound_allocation",
+          "legs": [
+            {
+              "account": "inventory",
+              "side": "debit",
+              "amount": "60"
+            },
+            {
+              "account": "acquisition_clearing",
+              "side": "credit",
+              "amount": "60"
+            }
+          ],
+          "stock": []
+        },
+        {
+          "id": "payment",
+          "legs": [
+            {
+              "account": "freight_AP",
+              "side": "debit",
+              "amount": "115"
+            },
+            {
+              "account": "bank",
+              "side": "credit",
+              "amount": "115"
+            }
+          ],
+          "stock": []
+        }
+      ],
+      "expected_balances": {
+        "acquisition_clearing": "0",
+        "delivery_expense": "40",
+        "vat": "15",
+        "freight_AP": "0",
+        "inventory": "60",
+        "bank": "-115"
+      },
+      "expected_stock": {}
+    }
+  ]
+}
