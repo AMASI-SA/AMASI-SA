@@ -12,12 +12,13 @@ import AccountingBankReceipts from "./AccountingBankReceipts";
 import AccountingWriteControl from "./AccountingWriteControl";
 import AccountingPeriods from "./AccountingPeriods";
 import AccountingCustomerAdvances from "./AccountingCustomerAdvances";
+import AccountingOpeningBalances from "./AccountingOpeningBalances";
 import {
     AccessDenied,
     AccountingHeader,
     LoadingBlock,
 } from "./AccountingShared";
-import { OpeningBalancesBlocked, PartialWorkflowPage } from "./AccountingWorkflowPages";
+import { PartialWorkflowPage } from "./AccountingWorkflowPages";
 import { accountingPageFromSearchParams, userCanAccessAccounting } from "./accountingPages";
 
 export default function AccountingWorkspace() {
@@ -87,7 +88,7 @@ export default function AccountingWorkspace() {
     } else if (page.id === "journals-reports") {
         content = <AccountingReports />;
     } else if (page.id === "opening-balances") {
-        content = statusLoading ? <LoadingBlock /> : <OpeningBalancesBlocked status={status} />;
+        content = statusLoading ? <LoadingBlock /> : <AccountingOpeningBalances />;
     } else {
         content = <PartialWorkflowPage page={page} />;
     }
