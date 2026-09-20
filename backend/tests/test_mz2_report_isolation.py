@@ -175,7 +175,7 @@ class ReportIsolationTests(unittest.IsolatedAsyncioTestCase):
         for as_of in (None, "2020-08-31"):
             report = await mz2_financial_position(self.db, owner="owner", as_of=as_of)
             self.assertEqual(report["status"], "needs_opening_balance")
-            self.assertIn("unapproved-bank", report["missing_accounts"])
+            self.assertIn("bank/unapproved-bank/main", report["missing_accounts"])
             self.assertIsNone(report["assets"])
             self.assertIsNone(report["totals"])
 
@@ -207,3 +207,99 @@ class ReportIsolationTests(unittest.IsolatedAsyncioTestCase):
             blocked = await mz2_financial_position(self.db, owner="owner")
             self.assertNotEqual(blocked["status"], "available", changed)
             self.assertIsNone(blocked["totals"])
+
+    async def test_home_uses_same_gate_and_ignores_caller_date_and_legacy(self):
+        from accounting_module_ledger import ledger_only_home_balances
+        self.assertIsNone(await ledger_only_home_balances(self.db, user_id="owner", cutover_at="1900-01-01T00:00:00Z"))
+        await provision_report_opening(self.db)
+        await self.setup_sale(gross="115")
+        before = await ledger_only_home_balances(self.db, user_id="owner", cutover_at="2020-01-01T00:00:00Z")
+        self.assertEqual(before["banks"], 1000)
+        self.assertEqual(before["providers"], 115)
+        await self.legacy_sentinels()
+        after = await ledger_only_home_balances(self.db, user_id="owner", cutover_at="1900-01-01T00:00:00Z")
+        self.assertEqual(after, before)
+        await self.db.settings.update_one({"user_id": "owner"}, {"$set": {"mezan2_financial_cutover.opening_balance_approved_by": ""}})
+        self.assertIsNone(await ledger_only_home_balances(self.db, user_id="owner", cutover_at="2020-01-01T00:00:00Z"))
+
+    async def test_refund_period_journal_shares_gate_dates_and_current_horizon(self):
+        from accounting_refund_entitlements import period_journal
+        params = dict(owner="owner", from_at="2020-08-01T00:00:00+03:00", to_at="2020-09-01T00:00:00+03:00")
+        blocked = await period_journal(self.db, **params)
+        self.assertNotEqual(blocked["status"], "available")
+        self.assertEqual(blocked["items"], [])
+        await provision_report_opening(self.db)
+        key = await self.setup_sale(gross="115")
+        row = await self.case(key, "SYN-PERIOD-GATE", "115")
+        await self.confirm(row, "2020-08-31T23:30:00+03:00")
+        august = await period_journal(self.db, **params)
+        self.assertEqual(len(august["items"]), 3)
+        self.assertEqual({(r["entity_type"], r["side"]): r["amount"] for r in august["items"]},
+            {("revenue", "debit"): 100, ("tax", "debit"): 15, ("liability", "credit"): 115})
+        await self.legacy_sentinels()
+        self.assertEqual(await period_journal(self.db, **params), august)
+        # Explicit future economic dates cannot be pulled into the current
+        # committed report simply by widening requested period boundaries.
+        group = "SYN-FUTURE-DUE"
+        future = []
+        for original in august["items"]:
+            future.append({**original, "id": uuid4().hex, "txn_group_id": group,
+                "metadata": {**original["metadata"], "accounting_at": "2100-08-31T20:30:00Z", "recognized_at": "2100-08-31T20:30:00Z"}})
+        await self.db.general_ledger.insert_many(future)
+        future_period = await period_journal(self.db, owner="owner", from_at="2100-08-01T00:00:00Z", to_at="2100-09-01T00:00:00Z")
+        self.assertEqual(future_period["items"], [])
+        self.assertEqual(await period_journal(self.db, **params), august)
+        await self.db.settings.update_one({"user_id": "owner"}, {"$set": {"mezan2_financial_cutover.status": "pending"}})
+        blocked = await period_journal(self.db, **params)
+        self.assertEqual(blocked["status"], "not_ready")
+        self.assertEqual(blocked["items"], [])
+
+    async def test_settlement_detail_hides_ledger_when_central_readiness_is_blocked(self):
+        from accounting_settlement_register_routes import install_accounting_settlement_register_routes
+        router = APIRouter()
+        async def actor(): return {"id": self.actor}
+        install_accounting_settlement_register_routes(router, self.db, actor)
+        self.app.include_router(router)
+        group = "SYN-SETTLEMENT-DETAIL"
+        await self.db.accounting_settlements_v2.insert_one({"id": "SYN-DETAIL", "user_id": "owner", "provider": "tamara",
+            "status": "posted", "ledger_txn_group_id": group, "statement_reference": "SYN-DETAIL"})
+        # Legacy rows matching the draft's group cannot bypass the central gate.
+        await self.db.general_ledger.insert_one({"id": uuid4().hex, "user_id": "owner", "txn_group_id": group,
+            "status": "posted", "entry_type": "settlement", "entity_type": "bank", "entity_id": "bank",
+            "sub_account": "main", "side": "debit", "amount": 999999, "created_at": "2020-01-02T00:00:00Z"})
+        response = await self.client.get("/accounting-module/settlements/register/SYN-DETAIL")
+        self.assertEqual(response.status_code, 200, response.text)
+        ledger = response.json()["ledger"]
+        self.assertNotEqual(ledger["status"], "available")
+        self.assertEqual(ledger["entries"], [])
+        self.assertEqual(ledger["entry_count"], 0)
+
+    async def test_reversed_mz2_group_requires_review_instead_of_changed_history(self):
+        await provision_report_opening(self.db)
+        await self.setup_sale(gross="115")
+        await self.db.general_ledger.update_many({"entry_type": "bnpl_sale"}, {"$set": {"status": "reversed"}})
+        for as_of in (None, "2020-08-31"):
+            report = await mz2_financial_position(self.db, owner="owner", as_of=as_of)
+            self.assertEqual(report["status"], "not_ready")
+            self.assertEqual(report["reason"], "reversed_mz2_group_requires_review")
+            self.assertIsNone(report["totals"])
+
+    async def test_zero_attestation_cannot_contradict_posted_opening(self):
+        group = await provision_report_opening(self.db)
+        contradiction = {"entity_type": "bank", "entity_id": "bank", "sub_account": "main", "evidence_ref": "SYN-CONTRADICTS-1000",
+            "accounting_at": "2020-01-01T00:00:00Z", "opening_balance_txn_group_id": group}
+        await self.db.settings.update_one({"user_id": "owner"}, {"$push": {"mezan2_financial_cutover.opening_balance_zero_accounts": contradiction}})
+        report = await mz2_financial_position(self.db, owner="owner")
+        self.assertNotEqual(report["status"], "available")
+        self.assertIsNone(report["totals"])
+
+    async def test_corrupt_entity_shapes_block_without_uncaught_report_error(self):
+        await provision_report_opening(self.db)
+        await self.setup_sale(gross="115")
+        original = await self.db.general_ledger.find_one({"entry_type": "bnpl_sale", "entity_type": "payment_gateway"})
+        for field, value in (("entity_id", {"bad": "shape"}), ("entity_type", None), ("sub_account", ["receivable"])):
+            await self.db.general_ledger.update_one({"_id": original["_id"]}, {"$set": {field: value}})
+            report = await mz2_financial_position(self.db, owner="owner")
+            self.assertEqual(report["status"], "not_ready", field)
+            self.assertIsNone(report["totals"])
+            await self.db.general_ledger.update_one({"_id": original["_id"]}, {"$set": {field: original.get(field)}})

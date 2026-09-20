@@ -56,6 +56,11 @@ def _balanced(rows):
     try:
         dates = set()
         for row in rows:
+            if any(not isinstance(row.get(key), str) or not row[key].strip()
+                   for key in ("entity_type", "entity_id")):
+                return False
+            if row.get("sub_account") is not None and not isinstance(row["sub_account"], str):
+                return False
             value = Decimal(str(row.get("amount")))
             if not value.is_finite() or value < 0 or row.get("side") not in sides:
                 return False
@@ -118,6 +123,8 @@ async def read_mz2_ledger(db, *, owner, as_of=None):
             return blocked("mz2_accounting_date_invalid")
         if at < cut_at or at >= upper:
             continue
+        if row.get("status") == "reversed":
+            return blocked("reversed_mz2_group_requires_review")
         if not _producer(row):
             return blocked("unsupported_mz2_journal_source")
         eligible.append(row)
@@ -142,7 +149,10 @@ async def read_mz2_ledger(db, *, owner, as_of=None):
                 or zero.get("entity_type") not in {"bank", "payment_gateway"}
                 or not str(zero.get("entity_id") or "").strip()):
             return blocked("approved_zero_opening_evidence_invalid")
-        covered.add((zero["entity_type"], str(zero["entity_id"]), zero.get("sub_account") or ""))
+        key = (zero["entity_type"], str(zero["entity_id"]), zero.get("sub_account") or "")
+        if not isinstance(key[2], str) or key in covered:
+            return blocked("approved_zero_opening_evidence_invalid")
+        covered.add(key)
     accounts = await db.accounts.find({"user_id": owner, "status": {"$ne": "hidden"},
         "account_type": {"$in": ["bank", "cash", "payment_platform"]}},
         {"_id": 0, "id": 1, "account_type": 1}).to_list(MAX_REPORT_LEGS + 1)

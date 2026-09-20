@@ -11,6 +11,9 @@ on:
       - ready_for_review
     paths:
       - "backend/accounting_module_*.py"
+      - "backend/accounting_mz2_reports.py"
+      - "backend/tests/test_mz2_report_isolation.py"
+      - "backend/tests/mz2_report_fixtures.py"
       - "backend/accounting_sales_tax*.py"
       - "backend/accounting_receivable*.py"
       - "backend/accounting_atomic.py"
@@ -174,6 +177,8 @@ jobs:
           --runInBand
           src/pages/accounting/AccountingWriteControl.test.jsx
           src/pages/accounting/AccountingReports.test.jsx
+          src/pages/accounting/AccountingWorkspaceReports.test.jsx
+          src/pages/accounting/SettlementJournalDialog.test.jsx
           src/pages/accounting/AccountingPeriods.test.jsx
           src/pages/accounting/AccountingCustomerAdvances.test.jsx
           src/pages/accounting/AccountingCustomerRefunds.test.jsx
