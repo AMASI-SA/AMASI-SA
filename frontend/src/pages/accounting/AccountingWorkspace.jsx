@@ -9,6 +9,7 @@ import AccountingReports from "./AccountingReports";
 import AccountingPermissionsDialog from "./AccountingPermissionsDialog";
 import AccountingSettlements from "./AccountingSettlements";
 import AccountingBankReceipts from "./AccountingBankReceipts";
+import AccountingDailyMovements from "./AccountingDailyMovements";
 import AccountingWriteControl from "./AccountingWriteControl";
 import AccountingPeriods from "./AccountingPeriods";
 import AccountingCustomerAdvances from "./AccountingCustomerAdvances";
@@ -84,7 +85,7 @@ export default function AccountingWorkspace() {
             </div>
         );
     } else if (page.id === "financial-movements") {
-        content = <><AccountingBankReceipts accountingPermissions={permissions} /><AccountingCustomerAdvances accountingPermissions={permissions} /></>;
+        content = <><AccountingDailyMovements accountingPermissions={permissions} /><AccountingBankReceipts accountingPermissions={permissions} /><AccountingCustomerAdvances accountingPermissions={permissions} /></>;
     } else if (page.id === "journals-reports") {
         content = <AccountingReports />;
     } else if (page.id === "opening-balances") {
