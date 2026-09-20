@@ -199,7 +199,7 @@ export default function AccountingPayroll({ accountingPermissions = [] }) {
         try {
             const result = await accrueAccountingPayroll({
                 period,
-                accrued_at: date + "T15:00:00+03:00",
+                accrued_at: date + "T00:00:00+03:00",
                 reason: reason.trim(),
             });
             if (result.posted === 0 && result.already_posted > 0) {
