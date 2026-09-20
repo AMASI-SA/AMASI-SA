@@ -21,8 +21,8 @@
   "current_phase": "P01",
   "current_phase_file": "PHASE-01-SETTLEMENTS.md",
   "current_phase_status": "IN_PROGRESS",
-  "next_allowed_action": "review_candidate_stack_and_prepare_separately_authorized_production_release_no_P02",
-  "current_blocker": "production_database_backup_readiness_and_owner_tax_cutover_activation_decisions_pending",
+  "next_allowed_action": "review_and_fix_preview_findings_then_new_source_A_and_intent_B; no_merge_or_production_deployment",
+  "current_blocker": "PR1103_preview_failed_customer_refund_report_closed_period_guard_and_tabby_fee_rebate_upload; advances_workflow_gap; independent_production_readiness_and_owner_decisions_pending",
   "legacy_mezan_policy": {
     "dynamic_financial_dependency_allowed": false,
     "copy_reference_values_allowed": true,
@@ -344,5 +344,22 @@
     "p02": "LOCKED",
     "pr": 1103,
     "evidence_file": "P01-REFUND-ENTITLEMENT-20260920.md"
+  },
+  "pr1103_preview_verification_20260920": {
+    "pr": 1103,
+    "source_a": "2c46a85711545d398abbc738c1ea7c56437c5676",
+    "intent_b": "84d83fca7770e475dd5ae763e315b993feb53149",
+    "verdict": "NOT_READY",
+    "ui_entitlement_partial_payment_repeat_permission_pause_resume": "PASS_WITH_REPORT_GAP",
+    "financial_position_refund_liability": "FAIL_OMITTED_115_SHOWN_ZERO",
+    "closed_period_control": "FAIL_MISSING_REQUIRED_CONTROL",
+    "tabby_documented_fee_rebate_upload": "FAIL_HTTP_500_NEGATIVE_NET_FEES",
+    "pre_revenue_advance_cancellation": "FUNCTIONAL_GAP_SALES_RETURN_BLOCKED",
+    "real_mongo_affected_tests": "21_PASS",
+    "previous_preview_data_hashes": "UNCHANGED",
+    "source_modified": false,
+    "production_changed": false,
+    "p02_opened": false,
+    "evidence_file": "P01-PR1103-PREVIEW-20260920.md"
   }
 }
