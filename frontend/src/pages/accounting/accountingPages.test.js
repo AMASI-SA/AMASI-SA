@@ -57,6 +57,7 @@ test("all non-owner roles are denied until dedicated accounting assignment arriv
 test("sensitive actions remain separate from page access", () => {
     const actionPermissions = ACCOUNTING_ACTIONS.map((action) => action.permission);
     expect(actionPermissions).toContain("accounting.opening_balances.approve");
+    expect(actionPermissions).toContain("accounting.movements.import");
     expect(actionPermissions).toContain("accounting.journals.manual_create");
     expect(actionPermissions).toContain("accounting.journals.reverse");
     expect(actionPermissions).not.toContain("accounting.opening_balances.view");
