@@ -1,6 +1,6 @@
 {
   "task_id": "QOYOD-404-RECOVERY-20260919",
-  "status": "AUDIT_DIAGNOSTICS_TESTED_PENDING_RELEASE",
+  "status": "AUDIT_SUCCEEDED_ROUNDING_ISOLATED_AWAITING_OPERATOR_ACTIVATION",
   "authorized_sequence": [
     "404",
     "COD",
@@ -9,7 +9,7 @@
   "current_phase": "404",
   "scope": "Eligible completed/delivering/delivered orders from 2026-07-01 through 2026-09-19",
   "source_checkpoint": "c6708cf446bc447234a5f753a5b453f578415b54",
-  "production_deployment": "3b6bdc290bb401e41e804b46d1f29b068a50b4fa",
+  "production_deployment": "dd73ae13ae8c644c6b6469e76cccaabf285aaa3c",
   "census_proof": {
     "unique_90_day_rows": 6579,
     "sent": 5729,
@@ -28,7 +28,7 @@
   "reconciled_existing_invoices": 0,
   "production_source_changed": true,
   "cod_sku_actions": false,
-  "next": "Review and release bounded read diagnostics; capture actual failed production read before choosing a fix. Do not retry invoice6472 or payment; campaign paused2/197.",
+  "next": "Operator checks scope confirmation and clicks automatic recovery activation once. Review actual outcomes for196 pending. Existing invoice6472 remains incomplete with0.01 balance and cannot resend. Historical unknown cause not reproduced; bounded diagnostics now deployed. Linked payment allocation breakdown not yet independently surfaced.",
   "findings": {
     "first_precheck": "Salla order and payment eligible; no invoice sent",
     "sample_failure": "Historical GET /products 404 before accepted release",
@@ -55,7 +55,7 @@
   },
   "task_branch": "codex/qoyod-404-audit-diagnostics-20260920",
   "reviewed_base": "635e181f7520354029efbdc8e89d76a94de77ff2",
-  "production_activation": "paused after existing invoice rounding residual",
+  "production_activation": "Paused; release review prepared without sending on verified1104 identity; UI exposes unchecked scope confirmation and activation button",
   "review_fixes": {
     "owner_authority": "All control POSTs require authenticated nonempty actor id, owner role and campaign ownership; GET visibility unchanged",
     "expired_audit": "Server can_audit and audit_block_reason; server recheck and atomic lease retained; financial claims unchanged",
@@ -71,12 +71,15 @@
     "ci": "Five workflows passed on c6708cf44 including full Frontend build twice/reproducibility verification. Final source SHA CI pending; not inferred from prior SHA.",
     "release_blocker": "Cloud code-server disconnected then Preview Unavailable; cannot run /app release guard status. Local Windows has no WSL; no supported Linux release environment yet. No lease created or cleared; no publish, financial activation or paid Emergent chat."
   },
-  "pull_request": 1100,
+  "pull_request": 1104,
   "audit_diagnostics": {
     "base": "3b6bdc290bb401e41e804b46d1f29b068a50b4fa",
     "known": "Two readonly audits returned review/outcome_unknown. Actual exception not established; pagination and health timeouts are not proof of cause.",
     "change": "Capture fixed stage, allowlisted error/cause type, HTTP status, page, elapsed milliseconds and approved code-file line. No exception messages, bodies, URLs, keys, customer data or financial actions.",
-    "tests": "58 core/HTTP/Mongo/worker/diagnostic tests and real React DOM passed fresh; full build/CI pending",
-    "live": "2 excluded completed,196 pending,1 unresolved review.6472 historic total161.12/paid161.11/balance0.01; new live stored calculation accepts0.01, not fresh provider proof."
+    "tests": "58 core/HTTP/Mongo/worker/diagnostic tests and real React DOM passed fresh. All five final-B workflows passed; readiness35506157321 includes reproducible full frontend and Host20 clean-clone adapter. Independent review noP1/P2.",
+    "live": "Fresh readonly Production audit succeeded after deployment: unique invoice6472, fresh Salla161.11, provider total161.12, paid161.11, remaining0.01. State rounding_review, not completed;196pending,2excludedcompleted. No failed diagnostic reproduced; historical cause remains unproven, not assumed timeout/pagination. No invoice/payment writes.",
+    "release": "SourceA0f2417701ab888488856d662db6cdc73964b4517; intentB4a6334c2905514be78ce9c0ad6947b0da18aa236; runtime rg5-149c8297f47af69a21c766eb8bd062cac82d2e9e0c52b9df4931aacfb90df5a2. Admin new Live0d77213 and Deployment finished Sep20 02:20PM. Official verify exited0, verified=true/checks3; guardinactive. No literal Succeeded label shown.",
+    "result_counts": {"previously_verified_complete":2,"verified_sent":0,"verified_existing":0,"verified_audit":0,"rounding_unsettled":1,"pending":196,"remaining":197},
+    "continuity_note": "Earlier checkpoints above are historical; this entry supersedes their pending build/deployment/blocker state. Subsequent documentation-only checkpoint must not be deployed or treated as new sourceA."
   }
 }
