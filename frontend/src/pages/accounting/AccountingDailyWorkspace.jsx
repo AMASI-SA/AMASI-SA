@@ -39,6 +39,17 @@ const STATUS_LABELS = {
     rejected: "تحتاج معالجة",
 };
 
+function dailyFriendlyReference(value, fallback) {
+    const text = String(value || "").trim();
+    if (!text) return fallback;
+    const technical =
+        text.length > 28
+        || text.includes(":")
+        || /^SYN[-_:]/i.test(text)
+        || /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(text);
+    return technical ? fallback : text;
+}
+
 function todayRiyadh() {
     return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Riyadh" }).format(new Date());
 }
@@ -250,7 +261,7 @@ function SettlementUploadForm({ context, permissions, onSaved }) {
     );
 }
 
-function ExceptionList({ status, drafts, receipts }) {
+function ExceptionList({ status, drafts, receipts, totalReviewCount = 0 }) {
     const taskItems = (status?.tasks || []).slice(0, 8).map((task) => {
         const page = ACCOUNTING_PAGES.find((row) => row.id === task.page) || ACCOUNTING_PAGES[0];
         return { id: "task:" + task.id, title: task.title, detail: task.detail, to: page.to, informational: false };
@@ -276,10 +287,17 @@ function ExceptionList({ status, drafts, receipts }) {
             <div className="flex items-center justify-between gap-3">
                 <div>
                     <h2 className="text-lg font-black text-slate-950">يحتاج منك</h2>
-                    <p className="mt-1 text-xs font-semibold text-slate-500">العمليات السليمة تختفي من قائمة العمل؛ تظهر الاستثناءات فقط.</p>
+                    <p className="mt-1 text-xs font-semibold text-slate-500">
+                        العمليات السليمة تختفي من قائمة العمل؛ تظهر الاستثناءات فقط.
+                        {totalReviewCount > items.length && (
+                            <span className="mt-1 block font-extrabold text-amber-800" data-testid="daily-accounting-exceptions-limit-note">
+                                هذه قائمة مختصرة: نعرض أول {items.length.toLocaleString("en-US")} عناصر من إجمالي {totalReviewCount.toLocaleString("en-US")} تحتاج قرارك.
+                            </span>
+                        )}
+                    </p>
                 </div>
                 <span className="rounded-full bg-amber-100 px-3 py-1 font-mono text-xs font-black text-amber-900" dir="ltr">
-                    {items.filter((item) => !item.informational).length}
+                    {totalReviewCount.toLocaleString("en-US")}
                 </span>
             </div>
             <div className="mt-4 space-y-2">
@@ -309,7 +327,10 @@ function RecentActivity({ drafts, receipts }) {
             id: "draft:" + row.id,
             at: row.updated_at || row.created_at || "",
             title: (PROVIDERS[row.provider] || row.provider || "تسوية") + " — " + (STATUS_LABELS[row.status] || row.status),
-            detail: row.statement_reference || row.source_snapshot?.filename || "ملف تسوية",
+            detail: dailyFriendlyReference(
+                row.statement_reference,
+                dailyFriendlyReference(row.source_snapshot?.filename, "ملف تسوية"),
+            ),
             tone: row.status === "posted" ? "ok" : REVIEW_STATUSES.has(row.status) ? "warn" : "neutral",
         })),
         ...receipts.map((row) => ({
@@ -324,7 +345,7 @@ function RecentActivity({ drafts, receipts }) {
     return (
         <section className="rounded-2xl border border-slate-200 bg-white p-5" data-testid="daily-accounting-recent">
             <h2 className="text-lg font-black text-slate-950">آخر العمليات</h2>
-            <p className="mt-1 text-xs font-semibold text-slate-500">مختصر لما فعله النظام مؤخرًا، بدون تفاصيل دفتر الأستاذ.</p>
+            <p className="mt-1 text-xs font-semibold text-slate-500">مختصر لما فعله النظام مؤخرًا، بدون المراجع التقنية أو تفاصيل دفتر الأستاذ. التفاصيل الكاملة موجودة في التسويات التفصيلية.</p>
             <div className="mt-4 divide-y divide-slate-100">
                 {events.length === 0 ? (
                     <div className="py-6 text-center text-xs font-semibold text-slate-400">لا توجد عمليات حديثة.</div>
@@ -450,7 +471,7 @@ export default function AccountingDailyWorkspace({ status, user, accountingPermi
             </section>
 
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,.9fr)]">
-                <ExceptionList status={status} drafts={drafts} receipts={receipts} />
+                <ExceptionList status={status} drafts={drafts} receipts={receipts} totalReviewCount={pending} />
                 <RecentActivity drafts={drafts} receipts={receipts} />
             </div>
 
