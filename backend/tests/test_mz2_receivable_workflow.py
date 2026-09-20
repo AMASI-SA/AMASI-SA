@@ -291,6 +291,8 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
         from ledger_core import compute_balance
         await self.db.accounts.insert_one({"id": "SYN-BANK", "user_id": "owner",
                                            "account_type": "bank", "name": "Synthetic bank"})
+        from mz2_report_fixtures import provision_write_opening
+        await provision_write_opening(self.db, bank_zero_ids=('SYN-BANK',))
         draft = {"id": "SYN-NEW-DRAFT", "status": "reviewed", "provider": "tamara",
                  "bank_account_id": "SYN-BANK", "statement_reference": "SYN-NEW-SETTLEMENT",
                  "source_file_id": "SYN-STATEMENT", "source_file_hash": "synthetic-local-test",

@@ -6,6 +6,8 @@ Previously booked cash/tax requires reconciliation, not a second capture.
 from datetime import datetime, timezone
 from decimal import Decimal
 import re
+import base64
+import hashlib
 
 from fastapi import Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
@@ -138,9 +140,10 @@ async def cancel_advance(db, *, owner, actor, advance_id, accounting_at, evidenc
             return public(row)
         order, _, _ = await source_documents(scoped, owner, row['provider'], row['payment_id'])
         require(str(order.get('order_status') or '').lower() in CANCELLED, 'confirmed_order_cancellation_required')
-        from ledger_core import compute_balance
-        balance = await compute_balance(scoped, user_id=owner, entity_type='liability', entity_id=advance_id, sub_account='customer_advance')
-        require(-Decimal(str(balance['net_balance'])) == Decimal(row['amount']), 'advance_balance_requires_reconciliation')
+        from accounting_mz2_balances import read_mz2_write_balances
+        balances = await read_mz2_write_balances(scoped, owner=owner)
+        balance = balances.net_balance(entity_type='liability', entity_id=advance_id, sub_account='customer_advance')
+        require(-balance == Decimal(row['amount']), 'advance_balance_requires_reconciliation')
         kind = 'customer_advance_cancellation'
         result = await post_group(scoped, owner, current, row, kind, at, [
             leg('liability', advance_id, 'customer_advance', 'debit', row['amount'], kind),
@@ -152,8 +155,16 @@ async def cancel_advance(db, *, owner, actor, advance_id, accounting_at, evidenc
 
 
 async def pay_advance(db, *, owner, actor, advance_id, amount, paid_at, execution_channel,
-                      execution_reference, bank_account_id='', provider_refund_id=''):
+                      execution_reference, bank_account_id='', provider_refund_id='',
+                      proof_name='', proof_base64=''):
     value, reference = money(amount), evidence(execution_reference)
+    try:
+        proof = base64.b64decode(proof_base64 or '', validate=True)
+    except (ValueError, TypeError):
+        raise HTTPException(422, 'invalid_payment_proof') from None
+    if len(proof) > 1024 * 1024 or (proof and not proof_name.strip()):
+        raise HTTPException(422, 'payment_proof_required_max_1mb')
+    proof_hash = hashlib.sha256(proof).hexdigest() if proof else ''
     require(execution_channel in {'bank', *PROVIDERS}, 'unsupported_refund_execution_channel')
     if execution_channel != 'bank':
         provider_refund_id = canonical_identity(provider_refund_id)
@@ -169,6 +180,8 @@ async def pay_advance(db, *, owner, actor, advance_id, amount, paid_at, executio
         key = digest([owner, 'advance_payment', channel, bank_account_id if channel == 'bank' else '', identity])
         facts = dict(advance_id=advance_id, amount=value, paid_at=at, execution_channel=channel,
             execution_reference=reference, bank_account_id=bank_account_id, provider_refund_id=provider_refund_id)
+        if proof:
+            facts.update(proof_name=proof_name.strip(), proof_sha256=proof_hash)
         prior = await scoped.mz2_customer_advance_payments.find_one({'_id': key})
         if prior:
             require(prior['facts'] == facts, 'advance_payment_identity_conflict')
@@ -180,6 +193,7 @@ async def pay_advance(db, *, owner, actor, advance_id, amount, paid_at, executio
         confirmed = await scoped.payment_refunds.find({'user_id': owner, 'provider': row['provider'],
             'provider_payment_id': row['payment_id'], 'status': {'$in': list(REFUNDED)}}).to_list(1001)
         require(len(confirmed) <= 1000, 'advance_refund_evidence_limit')
+        executor_payment_id = None
         if channel == 'bank':
             from accounting_settlement_routes import _find_bank
             bank = await _find_bank(scoped, owner, bank_account_id)
@@ -192,37 +206,58 @@ async def pay_advance(db, *, owner, actor, advance_id, amount, paid_at, executio
             require(not recorded and not recorded_ledger, 'bank_reference_already_recorded')
             duplicate = {'execution_channel': 'bank', 'bank_account_id': bank_account_id, 'bank_reference': reference_match}
         else:
-            require(channel == row['provider'], 'execution_provider_differs_from_original_requires_review')
-            matching = [r for r in confirmed if r.get('provider_refund_id') == provider_refund_id]
-            require(len(matching) == 1, 'confirmed_provider_refund_required')
-            refund = matching[0]
-            require(not refund.get('synthesised') and refund.get('currency') == 'SAR'
-                and decimal_value(refund.get('amount')) == Decimal(value)
-                and timestamp(refund.get('refunded_at')) == timestamp(at), 'provider_refund_evidence_conflict')
+            if channel != row['provider']:
+                # The approved attachment associates THIS customer's advance
+                # with a distinct executor's payment. Provider IDs are never
+                # assumed interchangeable between the original and executor.
+                require(bool(proof), 'different_provider_execution_document_required')
+                require(not confirmed, 'original_provider_execution_conflicts_with_different_provider')
+                matching = await scoped.payment_refunds.find({'user_id': owner, 'provider': channel,
+                    'provider_refund_id': provider_refund_id}).to_list(2)
+            else:
+                matching = [r for r in confirmed if r.get('provider_refund_id') == provider_refund_id]
+            require(len(matching) <= 1 and (channel != row['provider'] or len(matching) == 1),
+                    'confirmed_provider_refund_required')
+            if matching:
+                refund = matching[0]
+                require(refund.get('status') in REFUNDED and not refund.get('synthesised')
+                    and refund.get('currency') == 'SAR'
+                    and decimal_value(refund.get('amount')) == Decimal(value)
+                    and timestamp(refund.get('refunded_at')) == timestamp(at), 'provider_refund_evidence_conflict')
+                if channel != row['provider']:
+                    require(bool(refund.get('source') or refund.get('status_source'))
+                        and not (refund.get('raw') or {}).get('_fetch_error'), 'provider_refund_provenance_required')
+                    executor_payment_id = canonical_identity(refund.get('provider_payment_id'))
             duplicate = {'execution_channel': channel, 'provider_refund_id': provider_refund_id}
             legacy = await scoped.mz2_recognition_events.find_one({'user_id': owner,
                 'proposal.event.provider': channel, 'proposal.event.canonical_event_id': provider_refund_id})
             require(not legacy, 'provider_refund_already_accounted')
         require(not await scoped.mz2_customer_refund_payments.find_one({'user_id': owner, 'status': 'posted', **duplicate}),
                 'refund_execution_already_accounted')
-        from ledger_core import compute_balance
+        from accounting_mz2_balances import read_mz2_write_balances
         target, identifier, sub = ('bank', bank_account_id, 'main') if channel == 'bank' else ('payment_gateway', channel, 'receivable')
-        balance = await compute_balance(scoped, user_id=owner, entity_type=target, entity_id=identifier, sub_account=sub)
-        payable = await compute_balance(scoped, user_id=owner, entity_type='liability', entity_id=advance_id, sub_account='customer_refund_payable')
-        require(Decimal(str(balance['net_balance'])) >= Decimal(value), 'insufficient_refund_execution_balance')
-        require(-Decimal(str(payable['net_balance'])) == Decimal(row['remaining']), 'advance_payable_requires_reconciliation')
+        balances = await read_mz2_write_balances(scoped, owner=owner,
+            required_accounts=[(target, identifier, sub)])
+        balance = balances.net_balance(entity_type=target, entity_id=identifier, sub_account=sub)
+        payable = balances.net_balance(entity_type='liability', entity_id=advance_id, sub_account='customer_refund_payable')
+        require(balance >= Decimal(value), 'insufficient_refund_execution_balance')
+        require(-payable == Decimal(row['remaining']), 'advance_payable_requires_reconciliation')
         kind = 'customer_advance_payment'
         result = await post_group(scoped, owner, current, row, kind, at, [
             leg('liability', advance_id, 'customer_refund_payable', 'debit', value, kind),
             leg(target, identifier, sub, 'credit', value, kind)], reference,
             dict(bank_reference=reference if channel == 'bank' else '', provider_refund_id=provider_refund_id,
-                 execution_channel=channel))
+                 execution_channel=channel, execution_payment_id=executor_payment_id,
+                 execution_proof_sha256=proof_hash))
         paid = Decimal(row['paid']) + Decimal(value)
         remaining = Decimal(row['amount']) - paid
         await scoped.mz2_customer_advances.update_one({'_id': advance_id}, {'$set': dict(
             paid=format(paid, '.2f'), remaining=format(remaining, '.2f'), state='paid' if not remaining else 'partially_paid')})
         payment = dict(_id=key, id=key, user_id=owner, **facts, facts=facts,
             bank_reference=reference if channel == 'bank' else '', status='posted', txn_group_id=result['txn_group_id'])
+        if proof:
+            payment.update(proof_bytes=proof, execution_payment_id=executor_payment_id,
+                original_provider=row['provider'], original_payment_id=row['payment_id'], approved_by=current['id'])
         await scoped.mz2_customer_advance_payments.insert_one(payment)
         return public(payment)
     return await atomic_owner(db, owner, write)
@@ -251,6 +286,8 @@ class AdvancePaymentInput(BaseModel):
     execution_reference: str = Field(min_length=1, max_length=200)
     bank_account_id: str = Field(default='', max_length=100)
     provider_refund_id: str = Field(default='', max_length=200)
+    proof_name: str = Field(default='', max_length=200)
+    proof_base64: str = Field(default='', max_length=1400000)
 
 
 def install_customer_advance_routes(router, db, current_user):
@@ -271,7 +308,7 @@ def install_customer_advance_routes(router, db, current_user):
     async def read(user: dict = Depends(current_user)):
         _, owner = await scope(user, 'accounting.movements.view')
         rows = await db.mz2_customer_advances.find({'user_id': owner}, {'_id': 0}).sort('created_at', -1).to_list(200)
-        payments = await db.mz2_customer_advance_payments.find({'user_id': owner}, {'_id': 0}).to_list(1000)
+        payments = await db.mz2_customer_advance_payments.find({'user_id': owner}, {'_id': 0, 'proof_bytes': 0}).to_list(1000)
         banks = await db.accounts.find({'user_id': owner, 'account_type': 'bank'},
             {'_id': 0, 'id': 1, 'name': 1}).limit(100).to_list(100)
         return dict(items=rows, payments=payments, banks=banks)

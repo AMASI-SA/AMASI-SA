@@ -118,6 +118,8 @@ class AtomicRecoveryTests(unittest.IsolatedAsyncioTestCase):
         await self.preview_and_post()
         await self.db.accounts.insert_one({
             "user_id":"owner","id":"SYN-BANK","name":"Synthetic bank","account_type":"bank"})
+        from mz2_report_fixtures import provision_write_opening
+        await provision_write_opening(self.db, bank_zero_ids=('SYN-BANK',))
         draft = {"id":"SYN-DRAFT","user_id":"owner","status":"reviewed","provider":"tamara",
             "bank_account_id":"SYN-BANK","statement_reference":"SYN-ATOMIC",
             "idempotency_key":"SYN-ATOMIC","review_reasons":[],
@@ -156,6 +158,8 @@ class AtomicRecoveryTests(unittest.IsolatedAsyncioTestCase):
         await self.preview_and_post()
         await self.db.accounts.insert_one({
             "user_id":"owner","id":"SYN-BANK","name":"Synthetic bank","account_type":"bank"})
+        from mz2_report_fixtures import provision_write_opening
+        await provision_write_opening(self.db, bank_zero_ids=('SYN-BANK',))
         await self.db.accounting_settlements_v2.insert_one({
             "id":"SYN-ROUTE","user_id":"owner","status":"reviewed","provider":"tamara",
             "bank_account_id":"SYN-BANK","statement_reference":"SYN-ROUTE",

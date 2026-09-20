@@ -11,14 +11,27 @@ function AdvanceActions({ row, run, busy, banks = [] }) {
     const [channel, setChannel] = useState(row.provider);
     const [bank, setBank] = useState("");
     const [refund, setRefund] = useState("");
+    const [proof, setProof] = useState(null);
+    const [proofError, setProofError] = useState("");
+    const differentProvider = channel !== "bank" && channel !== row.provider;
+    async function readProof(file) {
+        setProof(null); setProofError("");
+        if (!file) return;
+        if (file.size > 1024 * 1024) { setProofError("الحد الأقصى للمستند 1 ميغابايت"); return; }
+        try {
+            const content = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(file); });
+            setProof({ proof_name: file.name, proof_base64: String(content).split(",")[1] });
+        } catch { setProofError("تعذر قراءة المستند"); }
+    }
     return <div className="space-y-2">
         <label>تاريخ الحدث المحاسبي مع المنطقة الزمنية<input aria-label={`تاريخ التحصيل المقدم ${row.order_number}`} value={at} onChange={e => setAt(e.target.value)} placeholder="YYYY-MM-DDTHH:mm:ss+03:00" /></label>
         <label>مرجع مستند الإلغاء أو التنفيذ<input aria-label={`دليل التحصيل المقدم ${row.order_number}`} value={evidence} onChange={e => setEvidence(e.target.value)} /></label>
         {!row.cancellation ? <button disabled={busy || !at || !evidence} onClick={() => run(() => api.post(`${base}/${row.id}/cancel`, { accounting_at: at, evidence_ref: evidence }))}>اعتماد إلغاء التحصيل المقدم وإثبات التزام الرد</button> : row.state !== "paid" && <>
             <label>مبلغ الرد المنفذ<input aria-label={`مبلغ رد المقدم ${row.order_number}`} value={amount} onChange={e => setAmount(e.target.value)} type="number" min="0.01" step="0.01" /></label>
-            <label>جهة التنفيذ<select aria-label={`جهة رد المقدم ${row.order_number}`} value={channel} onChange={e => setChannel(e.target.value)}><option value={row.provider}>{row.provider}</option><option value="bank">البنك</option></select></label>
+            <label>جهة التنفيذ<select aria-label={`جهة رد المقدم ${row.order_number}`} value={channel} onChange={e => { setChannel(e.target.value); setProof(null); setProofError(""); }}>{providers.map(p => <option key={p} value={p}>{p}</option>)}<option value="bank">البنك</option></select></label>
             {channel === "bank" ? <label>البنك<select aria-label={`بنك رد المقدم ${row.order_number}`} value={bank} onChange={e => setBank(e.target.value)}><option value="">اختر البنك</option>{banks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></label> : <label>معرّف الاسترداد المؤكد لدى المزود<input aria-label={`استرداد المزود للمقدم ${row.order_number}`} value={refund} onChange={e => setRefund(e.target.value)} /></label>}
-            <button disabled={busy || !at || !evidence || !amount || (channel === "bank" ? !bank : !refund)} onClick={() => run(() => api.post(`${base}/${row.id}/payments`, { amount, paid_at: at, execution_channel: channel, execution_reference: evidence, bank_account_id: channel === "bank" ? bank : "", provider_refund_id: channel === "bank" ? "" : refund }))}>اعتماد رد التحصيل المقدم المنفذ</button>
+            {differentProvider && <div><p>قبل الاعتماد تحقّق أن مستند التنفيذ يربط العميل والطلب ومبلغ الرد وتاريخه ومعرّف الاسترداد بالمزود المنفذ المختلف.</p><label>مستند التنفيذ الموثق<input type="file" aria-label={`مستند رد المقدم ${row.order_number}`} onChange={e => readProof(e.target.files?.[0])} /></label>{proofError && <p role="alert">{proofError}</p>}</div>}
+            <button disabled={busy || !at || !evidence || !amount || (channel === "bank" ? !bank : !refund) || (differentProvider && !proof)} onClick={() => run(() => api.post(`${base}/${row.id}/payments`, { amount, paid_at: at, execution_channel: channel, execution_reference: evidence, bank_account_id: channel === "bank" ? bank : "", provider_refund_id: channel === "bank" ? "" : refund, ...(differentProvider ? proof : {}) }))}>اعتماد رد التحصيل المقدم المنفذ</button>
         </>}
     </div>;
 }

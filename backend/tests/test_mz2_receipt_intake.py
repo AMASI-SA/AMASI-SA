@@ -195,6 +195,9 @@ class IntakeTests(unittest.IsolatedAsyncioTestCase):
                  entity_id='tabby',sub_account='receivable',side='debit',amount=115,status='posted'),
             dict(id='sale-c',user_id='owner',txn_group_id='sale',entity_type='revenue',
                  entity_id='sales',side='credit',amount=115,status='posted')])
+        from mz2_report_fixtures import provision_write_opening
+        await provision_write_opening(self.db, existing_group_id='sale', bank_zero_ids=('bank',),
+            providers=('salla', 'tamara', 'emkan'))
         original = lifecycle._audit_state
         async def fail(*args, **kwargs):
             await original(*args, **kwargs)

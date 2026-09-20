@@ -9,6 +9,7 @@ from accounting_atomic import atomic_owner
 from accounting_receivable_service import prepare
 from accounting_recognition_evidence import EvidenceError
 from ledger_core import post_txn_group, compute_balance
+from mz2_report_fixtures import provision_write_opening
 
 BASE='/accounting-module/customer-refunds'
 ACTOR={'id':'owner'}
@@ -42,7 +43,8 @@ class DailyRefundTests(unittest.IsolatedAsyncioTestCase):
             return await post_txn_group(scoped,user_id='owner',actor_id='owner',actor_name='SYN',
                 entries=[dict(entity_type='bank',entity_id='bank',sub_account='main',side='debit',amount=1000,entry_type='bank_transfer'),
                          dict(entity_type='equity',entity_id='SYN',side='credit',amount=1000,entry_type='bank_transfer')],txn_type='bank_transfer')
-        await atomic_owner(self.db,'owner',write)
+        opening = await atomic_owner(self.db,'owner',write)
+        await provision_write_opening(self.db, existing_group_id=opening['txn_group_id'])
 
     async def movement(self,key,reference,amount,channel='bank',rid=None):
         return await self.post('/bank-payments',dict(original_key=key,case_reference=reference,
@@ -94,6 +96,7 @@ class DailyRefundTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await compute_balance(self.db,user_id='owner',entity_type='bank',entity_id='bank',sub_account='main'))['net_balance'],800)
 
     async def test_full_and_partial_provider_daily_approval_and_statement_order(self):
+        await provision_write_opening(self.db)
         for provider in ['salla','tamara','tabby','emkan']:
             key=await self.setup_sale(provider,'115')
             await self.notify(provider,cancel=True)

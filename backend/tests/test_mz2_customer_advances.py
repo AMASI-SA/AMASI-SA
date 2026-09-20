@@ -1,11 +1,14 @@
 """Real Mongo/ASGI cancellation of an independently captured, untaxed advance."""
 import asyncio
+import base64
+import hashlib
 import unittest
 from unittest.mock import patch
 from fastapi import APIRouter
 from accounting_customer_advances import install_customer_advance_routes
 from accounting_write_control import set_write_state
 import test_mz2_receivable_workflow as workflow
+from mz2_report_fixtures import provision_write_opening
 
 BASE = '/accounting-module/customer-advances'
 
@@ -19,6 +22,9 @@ class AdvanceTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
         await workflow.WorkflowTests.asyncSetUp(self)
+        await provision_write_opening(self.db, bank_zero_ids=('bank',))
+        self.opening_rows = 2
+        self.assertEqual(await self.db.general_ledger.count_documents({}), self.opening_rows)
         await self.db.orders_db.update_many({}, {'$set': {'order_status': 'pending'}, '$unset': {'delivered_at': ''}})
         router = APIRouter()
         async def authenticated():
@@ -67,7 +73,7 @@ class AdvanceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual((await self.db.mz2_customer_advances.find_one({}))['remaining'], '0.00')
         entries = await self.db.general_ledger.find({}).to_list(100)
-        self.assertEqual(len(entries), 8)
+        self.assertEqual(len(entries), self.opening_rows + 8)
         self.assertFalse(any(e['entity_type'] in {'tax', 'revenue'} for e in entries))
         from decimal import Decimal
         for group in {e['txn_group_id'] for e in entries}:
@@ -94,7 +100,7 @@ class AdvanceTests(unittest.IsolatedAsyncioTestCase):
         await set_write_state(self.db, owner='owner', actor_id='owner', paused=False, revision=1, reason='test')
         await self.db.payment_transactions.update_many({}, {'$set': {'status': 'authorized'}})
         self.assertEqual((await self.client.post(BASE, json=self.capture_body())).status_code, 409)
-        self.assertEqual(await self.db.general_ledger.count_documents({}), 0)
+        self.assertEqual(await self.db.general_ledger.count_documents({}), self.opening_rows + 0)
         self.assertEqual(await self.db.mz2_customer_advances.count_documents({}), 0)
 
     async def test_existing_sale_cannot_be_recaptured_and_advance_blocks_later_sale(self):
@@ -121,7 +127,7 @@ class AdvanceTests(unittest.IsolatedAsyncioTestCase):
             execution_reference='NO-CONFIRMATION', provider_refund_id='MISSING')
         denied = await self.client.post(BASE+'/'+row['id']+'/payments', json=payload)
         self.assertEqual(denied.status_code, 409)
-        self.assertEqual(await self.db.general_ledger.count_documents({}), 4)
+        self.assertEqual(await self.db.general_ledger.count_documents({}), self.opening_rows + 4)
 
     async def test_mid_post_failure_rolls_back_capture_then_retry_once(self):
         from ledger_core import post_txn_group
@@ -131,10 +137,10 @@ class AdvanceTests(unittest.IsolatedAsyncioTestCase):
         with patch('ledger_core.post_txn_group', failed):
             with self.assertRaisesRegex(RuntimeError, 'synthetic failure'):
                 await self.client.post(BASE, json=self.capture_body())
-        self.assertEqual(await self.db.general_ledger.count_documents({}), 0)
+        self.assertEqual(await self.db.general_ledger.count_documents({}), self.opening_rows + 0)
         self.assertEqual(await self.db.mz2_customer_advances.count_documents({}), 0)
         await self.capture()
-        self.assertEqual(await self.db.general_ledger.count_documents({}), 2)
+        self.assertEqual(await self.db.general_ledger.count_documents({}), self.opening_rows + 2)
 
     async def test_closed_capture_cancellation_and_payment_have_no_partial_effect(self):
         from accounting_periods import set_period, PeriodChange
@@ -145,7 +151,7 @@ class AdvanceTests(unittest.IsolatedAsyncioTestCase):
         denied = await self.client.post(BASE, json=self.capture_body())
         self.assertEqual(denied.status_code, 409, denied.text)
         self.assertIn('accounting_period_closed', denied.text)
-        self.assertEqual(await self.db.general_ledger.count_documents({}), 0)
+        self.assertEqual(await self.db.general_ledger.count_documents({}), self.opening_rows + 0)
         self.assertEqual(await self.db.mz2_customer_advances.count_documents({}), 0)
         # Explicit owner test action; the rejected operation never reopens or redates.
         await close('2020-01', False, 1)
@@ -155,7 +161,7 @@ class AdvanceTests(unittest.IsolatedAsyncioTestCase):
         cancel = dict(accounting_at='2020-01-31T23:00:00+03:00', evidence_ref='SYN-CANCELLATION')
         denied = await self.client.post(BASE+'/'+row['id']+'/cancel', json=cancel)
         self.assertEqual(denied.status_code, 409, denied.text)
-        self.assertEqual(await self.db.general_ledger.count_documents({}), 2)
+        self.assertEqual(await self.db.general_ledger.count_documents({}), self.opening_rows + 2)
         self.assertNotIn('cancellation', await self.db.mz2_customer_advances.find_one({}))
         await close('2020-01', False, 3)
         row = await self.cancel(row)
@@ -163,7 +169,7 @@ class AdvanceTests(unittest.IsolatedAsyncioTestCase):
         body = await self.refund_evidence('SYN-CLOSED-PAY', '40', '2020-02-02T10:00:00+03:00')
         denied = await self.client.post(BASE+'/'+row['id']+'/payments', json=body)
         self.assertEqual(denied.status_code, 409, denied.text)
-        self.assertEqual(await self.db.general_ledger.count_documents({}), 4)
+        self.assertEqual(await self.db.general_ledger.count_documents({}), self.opening_rows + 4)
         self.assertEqual(await self.db.mz2_customer_advance_payments.count_documents({}), 0)
         self.assertEqual((await self.db.mz2_customer_advances.find_one({}))['remaining'], '115.00')
         self.assertTrue((await self.db.mz2_accounting_periods.find_one({'month': '2020-02'}))['closed'])
@@ -178,5 +184,74 @@ class AdvanceTests(unittest.IsolatedAsyncioTestCase):
             execution_reference='syn-already-paid'))
         self.assertEqual(denied.status_code, 409, denied.text)
         self.assertIn('refund_execution_already_accounted', denied.text)
-        self.assertEqual(await self.db.general_ledger.count_documents({}), 4)
+        self.assertEqual(await self.db.general_ledger.count_documents({}), self.opening_rows + 4)
         self.assertEqual(await self.db.mz2_customer_advance_payments.count_documents({}), 0)
+
+    async def test_documented_different_provider_manual_execution_and_dedup(self):
+        row = await self.cancel(await self.capture())
+        await self.source('tabby'); await self.preview_and_post('tabby')
+        document = b'SYN accountant-reviewed order/customer execution document'
+        payload = dict(amount='40', paid_at='2020-02-02T10:00:00+03:00', execution_channel='tabby',
+            execution_reference='SYN-EXECUTION-DOC', provider_refund_id='SYN-OTHER-EXECUTION',
+            proof_name='SYN-execution.txt', proof_base64=base64.b64encode(document).decode())
+        url = BASE+'/'+row['id']+'/payments'
+        before = await self.db.general_ledger.count_documents({})
+        denied = await self.client.post(url, json={**payload, 'proof_base64': ''})
+        self.assertEqual(denied.status_code, 409, denied.text)
+        self.assertIn('different_provider_execution_document_required', denied.text)
+        self.assertEqual(await self.db.general_ledger.count_documents({}), before)
+        result = await self.client.post(url, json=payload)
+        self.assertEqual(result.status_code, 200, result.text)
+        self.assertNotIn('proof_bytes', result.json())
+        group = result.json()['txn_group_id']
+        self.assertEqual((await self.client.post(url, json=payload)).json()['txn_group_id'], group)
+        self.assertEqual(await self.db.general_ledger.count_documents({}), before+2)
+        journal = await self.db.general_ledger.find({'txn_group_id': group}).to_list(10)
+        self.assertEqual({(r['entity_type'], r['entity_id'], r['side']): r['amount'] for r in journal},
+            {('liability', row['id'], 'debit'): 40, ('payment_gateway', 'tabby', 'credit'): 40})
+        self.assertTrue(all(r['metadata']['execution_proof_sha256']==hashlib.sha256(document).hexdigest() for r in journal))
+        stored = await self.db.mz2_customer_advance_payments.find_one({})
+        self.assertEqual(stored['original_provider'], 'tamara')
+        self.assertEqual(stored['original_payment_id'], 'SYN-CAPTURE-tamara')
+        self.assertEqual(stored['proof_bytes'], document)
+        self.assertEqual(stored['approved_by'], 'owner')
+        self.assertNotIn('proof_bytes', (await self.client.get(BASE)).json()['payments'][0])
+        changed = await self.client.post(url, json={**payload, 'proof_base64': base64.b64encode(b'different document').decode()})
+        self.assertEqual(changed.status_code, 409)
+        original_channel = await self.refund_evidence('SYN-TRY-MIXED', '10', '2020-02-03T10:00:00+03:00')
+        denied = await self.client.post(url, json=original_channel)
+        self.assertEqual(denied.status_code, 409)
+        self.assertIn('mixed_execution_channels', denied.text)
+        self.assertEqual(await self.db.general_ledger.count_documents({}), before+2)
+
+    async def test_other_provider_known_evidence_must_match_and_original_execution_blocks(self):
+        row = await self.cancel(await self.capture())
+        await self.source('tabby'); await self.preview_and_post('tabby')
+        payload = dict(amount='40', paid_at='2020-02-02T10:00:00+03:00', execution_channel='tabby',
+            execution_reference='SYN-EXECUTION-DOC', provider_refund_id='SYN-KNOWN-OTHER',
+            proof_name='SYN.txt', proof_base64=base64.b64encode(b'SYN reviewed association').decode())
+        known = dict(user_id='owner', provider='tabby', provider_refund_id='SYN-KNOWN-OTHER',
+            provider_payment_id='SYN-EXECUTOR-OWN-PAYMENT', source='synthetic_provider_document', status='completed',
+            amount='40', currency='SAR', refunded_at=payload['paid_at'], synthesised=False)
+        await self.db.payment_refunds.insert_one(dict(known))
+        url = BASE+'/'+row['id']+'/payments'; before = await self.db.general_ledger.count_documents({})
+        for changed in ({'amount':'41'}, {'currency':'USD'}, {'refunded_at':'2020-02-03T10:00:00+03:00'},
+                        {'synthesised': True}, {'status':'pending'}, {'source':''}):
+            await self.db.payment_refunds.update_one({'provider_refund_id':'SYN-KNOWN-OTHER'}, {'$set': {**known, **changed}})
+            denied = await self.client.post(url, json=payload)
+            self.assertEqual(denied.status_code, 409, denied.text)
+            self.assertEqual(await self.db.general_ledger.count_documents({}), before)
+            self.assertEqual(await self.db.mz2_customer_advance_payments.count_documents({}), 0)
+        await self.db.payment_refunds.update_one({'provider_refund_id':'SYN-KNOWN-OTHER'}, {'$set': {**known, 'synthesised':False}})
+        await self.refund_evidence('SYN-ORIGINAL-CONFLICT', '40', payload['paid_at'])
+        denied = await self.client.post(url, json=payload)
+        self.assertEqual(denied.status_code, 409, denied.text)
+        self.assertIn('original_provider_execution_conflicts', denied.text)
+        # Remove only this newly seeded synthetic conflict to exercise the
+        # separately documented valid executor evidence, whose payment ID differs.
+        await self.db.payment_refunds.delete_one({'provider_refund_id':'SYN-ORIGINAL-CONFLICT'})
+        result = await self.client.post(url, json=payload)
+        self.assertEqual(result.status_code, 200, result.text)
+        stored = await self.db.mz2_customer_advance_payments.find_one({})
+        self.assertEqual(stored['execution_payment_id'], 'SYN-EXECUTOR-OWN-PAYMENT')
+        self.assertEqual(await self.db.general_ledger.count_documents({}), before+2)

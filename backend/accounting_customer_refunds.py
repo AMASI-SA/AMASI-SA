@@ -157,11 +157,36 @@ async def post_bank_payment(db, *, owner, actor, payment_id):
             advance_identity['provider_refund_id'] = payment.get('provider_refund_id')
         if await scoped.mz2_customer_advance_payments.find_one(advance_identity):
             raise HTTPException(409, 'refund_execution_already_accounted_as_advance')
-        if channel!='bank' and channel!=row['original_provider']:
-            raise HTTPException(409,'execution_provider_differs_from_original_requires_review')
+        different_provider = channel != 'bank' and channel != row['original_provider']
+        if different_provider:
+            proof = payment.get('proof_bytes')
+            if (not proof or not payment.get('proof_name', '').strip()
+                    or not payment.get('bank_reference', '').strip()
+                    or not str(payment.get('provider_refund_id') or '').strip()
+                    or hashlib.sha256(proof).hexdigest() != payment.get('proof_sha256')):
+                raise HTTPException(409,'documented_execution_provider_proof_required')
         from accounting_recognition_evidence import REFUNDED
         confirmed=await scoped.payment_refunds.find({'user_id':owner,'provider':row['original_provider'],
             'provider_payment_id':row['original_payment_id'],'status':{'$in':list(REFUNDED)}}).to_list(1001)
+        if different_provider and confirmed:
+            raise HTTPException(409,'original_provider_execution_conflicts_with_documented_payment')
+        if different_provider:
+            execution = await scoped.payment_refunds.find({'user_id':owner, 'provider':channel,
+                'provider_refund_id':payment['provider_refund_id']}).to_list(2)
+            if execution:
+                evidence = execution[0]
+                try:
+                    matches = (len(execution) == 1 and not evidence.get('synthesised')
+                        and evidence.get('status') in REFUNDED
+                        and bool(evidence.get('source') or evidence.get('status_source'))
+                        and not (evidence.get('raw') or {}).get('_fetch_error')
+                        and evidence.get('currency') == 'SAR'
+                        and decimal_value(evidence.get('amount')) == Decimal(payment['amount'])
+                        and instant(evidence.get('refunded_at')) == instant(payment['paid_at']))
+                except (ValueError, TypeError, HTTPException):
+                    matches = False
+                if not matches:
+                    raise HTTPException(409,'documented_provider_execution_evidence_conflict')
         if channel=='bank' and confirmed:
             raise HTTPException(409,'provider_execution_evidence_conflicts_with_bank_payment')
         if channel!='bank' and confirmed:
@@ -181,16 +206,19 @@ async def post_bank_payment(db, *, owner, actor, payment_id):
                 raise HTTPException(409,'provider_refund_already_accounted')
         original=await original_sale(scoped,owner,row['original_key'])
         await validate_date(scoped, owner, payment['paid_at'], original)
-        from ledger_core import post_txn_group, compute_balance
+        from ledger_core import post_txn_group
+        from accounting_mz2_balances import read_mz2_write_balances
         target_type='bank' if channel=='bank' else 'payment_gateway'
         target_id=payment['bank_account_id'] if channel=='bank' else channel
         target_sub='main' if channel=='bank' else 'receivable'
-        balance=await compute_balance(scoped,user_id=owner,entity_type=target_type,entity_id=target_id,sub_account=target_sub)
-        if Decimal(str(balance['net_balance']))<Decimal(payment['amount']):
+        balances=await read_mz2_write_balances(scoped,owner=owner,
+            required_accounts=[(target_type,target_id,target_sub)])
+        balance=balances.net_balance(entity_type=target_type,entity_id=target_id,sub_account=target_sub)
+        if balance<Decimal(payment['amount']):
             raise HTTPException(409,'insufficient_refund_execution_balance')
-        liability=await compute_balance(scoped,user_id=owner,entity_type='liability',
+        liability=balances.net_balance(entity_type='liability',
             entity_id=row['id'],sub_account='customer_refund_payable')
-        if -Decimal(str(liability['net_balance'])) != Decimal(row['remaining']):
+        if -liability != Decimal(row['remaining']):
             raise HTTPException(409,'refund_liability_reconciliation_required')
         entries=[dict(entity_type='liability',entity_id=row['id'],sub_account='customer_refund_payable',
             side='debit',amount=payment['amount'],entry_type='customer_refund_payment')]
@@ -199,6 +227,8 @@ async def post_bank_payment(db, *, owner, actor, payment_id):
             entries=entries,txn_type='customer_refund_payment',notes='Mezan 2 approved daily customer refund',
             metadata=dict(refund_case_id=row['id'],refund_payment_id=payment_id,bank_reference=payment['bank_reference'],
                 original_provider=row['original_provider'],execution_channel=channel,proof_sha256=payment['proof_sha256'],
+                provider_refund_id=payment.get('provider_refund_id'),
+                execution_evidence_basis='accountant_reviewed_provider_document' if different_provider else 'existing_execution_contract',
                 paid_at=payment['paid_at'],accounting_at=instant(payment['paid_at']).isoformat(timespec='microseconds'),
                 operation_id='MZ2-FIN-CUTOVER-001',refund_accounting_version=2,
                 entitlement_txn_group_id=row['due_txn_group_id']))

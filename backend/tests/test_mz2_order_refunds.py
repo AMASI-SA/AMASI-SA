@@ -5,6 +5,7 @@ from decimal import Decimal
 from fastapi import HTTPException
 import test_mz2_receivable_workflow as fixtures
 from accounting_order_refunds import process_order_refunds, link_statement_refund, refund_review_reasons
+from mz2_report_fixtures import provision_write_opening
 
 
 class OrderRefundTests(unittest.IsolatedAsyncioTestCase):
@@ -16,6 +17,8 @@ class OrderRefundTests(unittest.IsolatedAsyncioTestCase):
     preview_and_post = fixtures.WorkflowTests.preview_and_post
 
     async def daily_post(self, provider, rid):
+        if not ((await self.db.settings.find_one({'user_id': 'owner'})) or {}).get('mezan2_financial_cutover', {}).get('opening_balance_txn_group_id'):
+            await provision_write_opening(self.db)
         original=await self.db.mz2_recognition_events.find_one({'proposal.event.provider':provider,'proposal.event.kind':'sale'})
         case=await self.db.mz2_customer_refunds.find_one({'original_key':original['_id']})
         root='/accounting-module/customer-refunds'

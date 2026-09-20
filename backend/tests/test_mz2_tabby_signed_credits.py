@@ -77,7 +77,10 @@ class SignedCreditMongoTests(unittest.IsolatedAsyncioTestCase):
                 entries=[dict(entity_type="payment_gateway", entity_id="tabby", sub_account="receivable", side="debit", amount=85, entry_type="opening_balance"),
                          dict(entity_type="revenue", entity_id="fixture", side="credit", amount=85, entry_type="opening_balance")],
                 txn_type="synthetic_opening", reason_code="fixture", metadata={"accounting_at": "2026-08-01T00:00:00Z"})
-        await atomic_owner(self.db, "owner", opening)
+        opening_group = await atomic_owner(self.db, "owner", opening)
+        from mz2_report_fixtures import provision_write_opening
+        await provision_write_opening(self.db, existing_group_id=opening_group['txn_group_id'],
+            bank_zero_ids=('b',), providers=('salla', 'tamara', 'emkan'))
         from settlements_import.service import import_file
         out = io.BytesIO(); statement().save(out); self.content = out.getvalue()
         async def upload(scoped):

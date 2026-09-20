@@ -15,7 +15,8 @@ from typing import Any
 from fastapi import HTTPException
 
 from accounting_module_contract import OPERATION_ID
-from ledger_core import compute_balance, post_txn_group, write_audit
+from ledger_core import post_txn_group, write_audit
+from accounting_mz2_balances import read_mz2_write_balances
 
 MONEY = Decimal("0.01")
 PROVIDERS = ("salla", "tamara", "tabby", "emkan")
@@ -502,14 +503,10 @@ async def _post_reviewed_settlement_transaction(db, *, owner_id, actor, draft):
     if not preview["balanced"]:
         raise HTTPException(400, "معاينة القيد غير متوازنة")
 
-    balance = await compute_balance(
-        db,
-        user_id=owner_id,
-        entity_type="payment_gateway",
-        entity_id=provider,
-        sub_account="receivable",
-    )
-    available = _money(max(float(balance.get("net_balance") or 0), 0))
+    balances = await read_mz2_write_balances(db, owner=owner_id,
+        required_accounts=[("payment_gateway", provider, "receivable")])
+    balance = balances.net_balance(entity_type="payment_gateway", entity_id=provider, sub_account="receivable")
+    available = _money(max(balance, 0))
     required = preview["amounts"]["provider_receivable_close"]
     if required > available + 0.01:
         raise HTTPException(

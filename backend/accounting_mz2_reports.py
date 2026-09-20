@@ -76,7 +76,7 @@ async def _cutover(db, owner):
     return (row or {}).get("mezan2_financial_cutover") or {}
 
 
-async def read_mz2_ledger(db, *, owner, as_of=None):
+async def read_mz2_ledger(db, *, owner, as_of=None, required_accounts=()):
     upper = report_cutoff(as_of) if as_of is not None else datetime.now(timezone.utc)
     state = await _cutover(db, owner)
     result = dict(status="not_ready", reason="cutover_not_approved", operation_id=OPERATION_ID,
@@ -159,6 +159,9 @@ async def read_mz2_ledger(db, *, owner, as_of=None):
     if len(accounts) > MAX_REPORT_LEGS:
         return blocked("account_scope_too_large")
     required = {("bank", str(a.get("id")), "main") for a in accounts}
+    # Internal write callers may need a never-used provider account. Its zero
+    # must still be explicitly approved; this argument never widens GL scope.
+    required.update(required_accounts)
     required.update((r.get("entity_type"), str(r.get("entity_id")), r.get("sub_account") or "")
                     for r in eligible if r.get("entity_type") in {"bank", "payment_gateway"})
     missing = ["/".join(key) for key in sorted(required - covered)]

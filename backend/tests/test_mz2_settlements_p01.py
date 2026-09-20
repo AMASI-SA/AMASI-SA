@@ -1,4 +1,5 @@
 import pytest
+from types import SimpleNamespace
 from fastapi import HTTPException
 
 import accounting_settlement_service as service
@@ -182,7 +183,9 @@ async def test_post_snapshots_bank_and_uses_one_balanced_group(monkeypatch, link
     captured = {}
 
     async def fake_balance(*_args, **_kwargs):
-        return {"net_balance": 900}
+        assert _kwargs['owner'] == 'owner-1'
+        assert _kwargs['required_accounts'] == [('payment_gateway', 'salla', 'receivable')]
+        return SimpleNamespace(net_balance=lambda **scope: 900)
 
     async def fake_post(*_args, **kwargs):
         captured.update(kwargs)
@@ -196,7 +199,7 @@ async def test_post_snapshots_bank_and_uses_one_balanced_group(monkeypatch, link
     async def fake_audit(*_args, **_kwargs):
         return "audit-1"
 
-    monkeypatch.setattr(service, "compute_balance", fake_balance)
+    monkeypatch.setattr(service, "read_mz2_write_balances", fake_balance)
     monkeypatch.setattr(service, "post_txn_group", fake_post)
     monkeypatch.setattr(service, "write_audit", fake_audit)
 
@@ -253,9 +256,11 @@ async def test_post_rejects_insufficient_canonical_provider_receivable(monkeypat
     })
 
     async def fake_balance(*_args, **_kwargs):
-        return {"net_balance": 100}
+        assert _kwargs['owner'] == 'owner-1'
+        assert _kwargs['required_accounts'] == [('payment_gateway', 'salla', 'receivable')]
+        return SimpleNamespace(net_balance=lambda **scope: 100)
 
-    monkeypatch.setattr(service, "compute_balance", fake_balance)
+    monkeypatch.setattr(service, "read_mz2_write_balances", fake_balance)
 
     with pytest.raises(HTTPException) as error:
         await service._post_reviewed_settlement_transaction(

@@ -80,6 +80,7 @@ export default function AccountingCustomerRefunds({ accountingPermissions = [] }
             <label>تاريخ ووقت التنفيذ مع المنطقة الزمنية<input aria-label="وقت تنفيذ الاسترداد" value={paidAt} onChange={e=>setPaidAt(e.target.value)} placeholder="YYYY-MM-DDTHH:mm:ss+03:00" /></label>
             <label>مرجع التحويل<input aria-label="مرجع تحويل الاسترداد" value={bankReference} onChange={e => setBankReference(e.target.value)} /></label>
             <label>إثبات التحويل<input aria-label="إثبات تحويل الاسترداد" type="file" onChange={e => readProof(e.target.files[0])} /></label>
+            {channel !== "bank" && <p>عند التنفيذ من مزود مختلف عن مزود البيع، يلزم مستند التنفيذ المرفوع ومرجعه ومعرّف استرداد المزود. يتحقق المحاسب من مطابقة المستند للعميل والطلب والمبلغ ووقت التنفيذ قبل الاعتماد.</p>}
             <button disabled={busy || !original || !reference || (channel === "bank" && !bank) || !paid || !paidAt.trim() || (!bankReference && !proof)} onClick={() => run(() => api.post(base + "/bank-payments", { original_key: original, case_reference: reference, bank_account_id: channel === "bank" ? bank : "", execution_channel: channel, provider_refund_id: providerRefund || null, amount: paid, paid_at: paidAt, bank_reference: bankReference, ...proof }))}>حفظ حركة الاسترداد كمسودة دون قيد</button>
         </div>}
         {data.cases.map(row => <article key={row.id} className="rounded border p-3">

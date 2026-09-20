@@ -24,3 +24,14 @@ test("capture never defaults the reviewed original VAT to zero", async () => {
     expect(node.textContent).toContain("الحالات الضريبية معلقة لمراجعة المحاسب");
     expect(node.textContent).not.toContain("اعتماد رد التحصيل المقدم المنفذ");
 });
+
+test("different executor requires a reviewed document and exposes all provider choices", async () => {
+    await act(async () => root.render(<AccountingCustomerAdvances accountingPermissions={["accounting.advances.refund"]} />));
+    const select = node.querySelector('[aria-label="جهة رد المقدم SYN-ORDER"]');
+    expect([...select.options].map(o => o.value)).toEqual(["salla", "tamara", "tabby", "emkan", "bank"]);
+    await act(async () => { select.value = "tabby"; select.dispatchEvent(new Event("change", { bubbles: true })); });
+    expect(node.querySelector('[aria-label="مستند رد المقدم SYN-ORDER"]')).not.toBeNull();
+    expect(node.textContent).toContain("يربط العميل والطلب ومبلغ الرد وتاريخه ومعرّف الاسترداد");
+    expect([...node.querySelectorAll("button")].find(b => b.textContent === "اعتماد رد التحصيل المقدم المنفذ").disabled).toBe(true);
+    expect(api.post).not.toHaveBeenCalled();
+});
