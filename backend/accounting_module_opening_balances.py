@@ -687,6 +687,24 @@ async def opening_state(db, *, owner: str) -> dict[str, Any]:
             {"_id": 0},
         )
     verified = await opening_posted_is_verified(db, user_id=owner, cutover=state)
+    accounts = await db.accounts.find(
+        {
+            "user_id": owner,
+            "status": {"$ne": "hidden"},
+            "account_type": {"$in": ["bank", "cash"]},
+        },
+        {"_id": 0, "id": 1, "name": 1, "account_type": 1},
+    ).sort([("account_type", 1), ("name", 1)]).to_list(MAX_OPENING_LINES)
+    employees = await db.operating_salaries.find(
+        {
+            "user_id": owner,
+            "archived": {"$ne": True},
+            "is_archived": {"$ne": True},
+            "deleted": {"$ne": True},
+            "is_deleted": {"$ne": True},
+        },
+        {"_id": 0, "id": 1, "employee_id": 1, "name": 1, "status": 1},
+    ).sort([("name", 1)]).to_list(MAX_OPENING_LINES)
     return {
         "operation_id": OPERATION_ID,
         "cutover": state,
@@ -697,6 +715,16 @@ async def opening_state(db, *, owner: str) -> dict[str, Any]:
             for key, value in CATEGORY_CATALOG.items()
         ],
         "providers": list(PROVIDERS),
+        "accounts": accounts,
+        "employees": [
+            {
+                "id": str(row.get("id") or row.get("employee_id") or ""),
+                "name": row.get("name") or "",
+                "status": row.get("status") or "active",
+            }
+            for row in employees
+            if row.get("id") or row.get("employee_id")
+        ],
     }
 
 
