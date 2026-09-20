@@ -41,7 +41,7 @@ export const ACCOUNTING_PAGES = [
         label: "الرواتب والالتزامات",
         permission: "accounting.payroll.view",
         to: "/integrations-v2?workspace=financial&page=payroll-obligations",
-        implementationStatus: "partial_existing_workflows",
+        implementationStatus: "implemented",
     },
     {
         id: "opening-balances",
