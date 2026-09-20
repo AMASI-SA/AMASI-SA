@@ -35,3 +35,20 @@ test("daily write forms reuse accepted P01 paths and do not fall back to legacy 
     expect(dailySource).not.toContain('api.get("/financial-movements"');
     expect(dailySource).toContain("لن نستخدم شاشات ميزان القديم");
 });
+
+
+test("daily review count explains that the visible list is capped", () => {
+    expect(dailySource).toContain("daily-accounting-exceptions-limit-note");
+    expect(dailySource).toContain("القائمة مختصرة إلى");
+    expect(dailySource).toContain("إجمالي ما يحتاج قرارك");
+    expect(dailySource).toContain("totalReviewCount={pending}");
+});
+
+test("recent activity hides technical synthetic references from the simple surface", () => {
+    expect(dailySource).toContain("function dailyFriendlyReference");
+    expect(dailySource).toContain("text.length > 28");
+    expect(dailySource).toContain("text.includes(\":\")");
+    expect(dailySource).toContain("/^SYN[-_:]/i");
+    expect(dailySource).toContain("بدون المراجع التقنية");
+    expect(dailySource).toContain("التسويات التفصيلية");
+});
