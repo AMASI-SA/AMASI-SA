@@ -221,3 +221,30 @@ export async function getAccountingSettlementRegisterDetail(draftId) {
     );
     return data;
 }
+
+
+export async function getAccountingOpeningBalances() {
+    const { data } = await api.get(`${BASE}/opening-balances`);
+    return data;
+}
+
+export async function previewAccountingOpeningBalances(payload) {
+    const { data } = await api.post(`${BASE}/opening-balances/preview`, payload);
+    return data;
+}
+
+export async function approveAccountingOpeningBalances(previewId) {
+    const { data } = await api.post(`${BASE}/opening-balances/approve`, {
+        preview_id: previewId,
+        confirmation: "APPROVE_OPENING_BALANCE",
+    });
+    return data;
+}
+
+export async function activateAccountingP01(activationRef) {
+    const { data } = await api.post(`${BASE}/opening-balances/activate`, {
+        activation_ref: activationRef,
+        confirmation: "ACTIVATE_MZ2_P01",
+    });
+    return data;
+}
