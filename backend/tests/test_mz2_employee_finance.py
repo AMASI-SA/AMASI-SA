@@ -235,7 +235,7 @@ class MZ2EmployeeFinanceTests(unittest.IsolatedAsyncioTestCase):
     async def test_salary_accrual_is_period_idempotent_and_reportable(self):
         payload = PayrollAccrualIn(
             period="2026-09",
-            accrued_at="2026-09-21T15:00:00+03:00",
+            accrued_at="2026-09-21T00:30:00+03:00",
             employee_id=self.employee,
             reason="SYN September payroll",
         )
