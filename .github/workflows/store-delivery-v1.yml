@@ -37,6 +37,7 @@ jobs:
         run: >-
           pip install
           pytest
+          pytest-asyncio
           mongomock_motor
           fastapi==0.140.0
           pydantic
