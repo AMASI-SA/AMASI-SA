@@ -95,3 +95,44 @@ class ClosedPeriodTests(unittest.IsolatedAsyncioTestCase):
         legs = await self.db.general_ledger.find({"txn_group_id": group["txn_group_id"]}).to_list(None)
         self.assertEqual(len(legs), 2)
         self.assertEqual(sum(r["amount"] if r["side"] == "debit" else -r["amount"] for r in legs), 0)
+
+    async def test_insert_many_closed_period_and_append_only_mutations_rollback(self):
+        from fastapi import HTTPException
+        from pymongo import UpdateOne
+        await self.change("2020-01")
+        before = await self.snapshot()
+        async def bulk_insert(scoped):
+            await scoped.general_ledger.insert_many([
+                {"user_id": "owner", "txn_group_id": "SYN-MANY", "status": "posted", "entity_type": entity,
+                 "entity_id": "SYN", "entry_type": "bank_transfer", "side": side, "amount": 10,
+                 "metadata": {"accounting_at": "2020-01-05T12:00:00Z"}}
+                for entity, side in (("bank", "debit"), ("equity", "credit"))])
+        with self.assertRaises(HTTPException) as closed:
+            await atomic_owner(self.db, "owner", bulk_insert)
+        self.assertEqual(closed.exception.detail["code"], "accounting_period_closed")
+        self.assertEqual(await self.snapshot(), before)
+        for method in ("update_one", "bulk_write"):
+            async def mutate(scoped):
+                await scoped.mz2_accounting_period_audit.insert_one({"test": "must rollback"})
+                if method == "update_one":
+                    await scoped.general_ledger.update_one({}, {"$set": {"amount": 999}})
+                else:
+                    await scoped.general_ledger.bulk_write([UpdateOne({}, {"$set": {"amount": 999}})])
+            with self.assertRaises(HTTPException) as denied:
+                await atomic_owner(self.db, "owner", mutate)
+            self.assertEqual(denied.exception.detail, "posted_accounting_journals_are_append_only")
+            self.assertEqual(await self.snapshot(), before)
+
+    async def test_legacy_single_leg_reversal_cannot_bypass_mz2_period_control(self):
+        from fastapi import HTTPException
+        from ledger_core import reverse_entry
+        await self.setup_sale(gross="115")
+        await self.change("2020-01")
+        original = await self.db.general_ledger.find_one({"metadata.operation_id": "MZ2-FIN-CUTOVER-001"})
+        self.assertIsNotNone(original)
+        before = await self.snapshot()
+        with self.assertRaises(HTTPException) as denied:
+            await reverse_entry(self.db, user_id="owner", actor_id="owner", actor_name="SYN",
+                entry_id=original["id"], reason_code="platform_correction")
+        self.assertEqual(denied.exception.detail, "mz2_balanced_correction_workflow_required")
+        self.assertEqual(await self.snapshot(), before)

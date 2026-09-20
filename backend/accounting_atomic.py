@@ -22,10 +22,11 @@ class SessionCollection:
         "find_one_and_replace", "find_one_and_delete", "bulk_write",
     })
 
-    def __init__(self, collection, session, ledger_groups):
+    def __init__(self, collection, session, ledger_groups, owner):
         self._collection = collection
         self._session = session
         self._ledger_groups = ledger_groups
+        self._owner = owner
 
     def __getattr__(self, name):
         if name not in self._operations:
@@ -35,6 +36,8 @@ class SessionCollection:
                 documents = [document] if name == "insert_one" else list(document)
                 groups = set()
                 for leg in documents:
+                    if leg.get('user_id') != self._owner:
+                        raise HTTPException(409, "accounting_journal_owner_scope_conflict")
                     group = leg.get("txn_group_id")
                     if not group or leg.get("status") != "posted":
                         raise HTTPException(409, "atomic_journal_group_required")
@@ -58,7 +61,7 @@ class SessionDatabase:
         self._ledger_groups = set()
 
     def __getitem__(self, name):
-        return SessionCollection(self._db[name], self._session, self._ledger_groups)
+        return SessionCollection(self._db[name], self._session, self._ledger_groups, self._owner)
 
     def __getattr__(self, name):
         if name.startswith("_"):
