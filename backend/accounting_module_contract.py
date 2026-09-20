@@ -26,6 +26,7 @@ ACCOUNTING_ACTIONS: tuple[dict[str, str], ...] = (
     {"id": "refund-recognize", "label": "اعتماد استحقاق العميل وإثبات التزام الاسترداد", "permission": "accounting.refunds.recognize"},
     {"id": "refund-payment-post", "label": "اعتماد حركة استرداد منفذة", "permission": "accounting.refunds.pay"},
     {"id": "receipt-create", "label": "تسجيل مبلغ واصل من منصة", "permission": "accounting.receipts.create"},
+    {"id": "movement-import", "label": "رفع كشف البنك والحركات اليومية", "permission": "accounting.movements.import"},
     {"id": "receivable-post", "label": "إثبات ذمم الطلبات المؤهلة", "permission": "accounting.receivables.post"},
     {"id": "draft-create", "label": "إنشاء وحفظ مسودة مالية", "permission": "accounting.drafts.create"},
     {"id": "settlement-post", "label": "اعتماد وترحيل تسوية", "permission": "accounting.settlements.post"},
