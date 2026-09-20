@@ -25,6 +25,10 @@ class WriteBalanceIsolationTests(unittest.IsolatedAsyncioTestCase):
         await daily.DailyRefundTests.asyncSetUp(self)
         await provision_report_opening(self.db, amount=10)
         await self.db.accounts.update_one({"user_id": "owner", "id": "bank"}, {"$set": {"name": "SYN isolated bank"}})
+        # The durable coordination row is initialized outside Mongo's business
+        # transaction. Provision it before rollback baselines so comparisons
+        # measure financial state, audits, counters and row revision changes.
+        await self.db.mz2_atomic_owners.update_one({"_id": "owner"}, {"$setOnInsert": {"revision": 0}}, upsert=True)
 
     async def snapshot(self):
         result = {}
@@ -253,6 +257,24 @@ class WriteBalanceIsolationTests(unittest.IsolatedAsyncioTestCase):
         documented = await self.post("/bank-payments", {**common, "bank_reference": "SYN-TABBY-DOC-40",
             "provider_refund_id": "SYN-TABBY-REFUND-40", "proof_name": "SYN-tabby-execution.txt",
             "proof_base64": base64.b64encode(b"SYN provider Tabby execution40 for original Tamara case SYN-TAMARA-TABBY").decode()})
+        canonical = dict(user_id="owner", provider="tabby", provider_refund_id="SYN-TABBY-REFUND-40",
+            status="completed", source="synthetic_provider_document", currency="SAR", amount="40",
+            refunded_at="2020-01-04T12:00:00Z")
+        for change in ({"status": "pending"}, {"status": "failed"}, {"status": "cancelled"},
+                       {"status": "unknown"}, {"amount": "41"}, {"amount": "not-money"},
+                       {"refunded_at": "2020-01-05T12:00:00Z"}, {"refunded_at": "bad-date"},
+                       {"currency": "USD"}, {"synthesised": True}, {"source": ""},
+                       {"raw": {"_fetch_error": "SYN unavailable"}}):
+            inserted = await self.db.payment_refunds.insert_one({**canonical, **change})
+            await self.assert_denied_without_writes(documented, "documented_provider_execution_evidence_conflict")
+            await self.db.payment_refunds.delete_one({"_id": inserted.inserted_id})
+        duplicate_evidence = await self.db.payment_refunds.insert_many([dict(canonical), dict(canonical)])
+        await self.assert_denied_without_writes(documented, "documented_provider_execution_evidence_conflict")
+        await self.db.payment_refunds.delete_many({"_id": {"$in": duplicate_evidence.inserted_ids}})
+        original_execution = await self.db.payment_refunds.insert_one({**canonical, "provider": "tamara",
+            "provider_payment_id": "SYN-CAPTURE-tamara", "provider_refund_id": "SYN-ORIGINAL-EXECUTED"})
+        await self.assert_denied_without_writes(documented, "original_provider_execution_conflicts_with_documented_payment")
+        await self.db.payment_refunds.delete_one({"_id": original_execution.inserted_id})
         await self.sentinel("payment_gateway", "tabby", "receivable", "debit")
         await self.assert_denied_without_writes(documented)
         await self.setup_sale(provider="tabby", gross="115")
@@ -271,3 +293,28 @@ class WriteBalanceIsolationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.db.general_ledger.count_documents({}), count_before + 2)
         current = await self.db.mz2_customer_refunds.find_one({"id": row["id"]})
         self.assertEqual(current["remaining"], "75.00")
+
+    async def test_provider_identity_whitespace_cannot_create_second_execution(self):
+        key = await self.setup_sale(gross="115")
+        row = await self.case(key, "SYN-CANONICAL-REFUND", "115")
+        await self.confirm(row)
+        common = dict(original_key=key, case_reference=row["case_reference"], amount="40",
+            paid_at="2020-01-04T12:00:00Z", execution_channel="tamara")
+        first = await self.post("/bank-payments", {**common, "bank_reference": "SYN-DOC-A",
+            "provider_refund_id": "SYN-CANONICAL-PROVIDER-40"})
+        second = await self.post("/bank-payments", {**common, "bank_reference": "SYN-DOC-B",
+            "provider_refund_id": "  SYN-CANONICAL-PROVIDER-40  "})
+        self.assertEqual(second["provider_refund_id"], "SYN-CANONICAL-PROVIDER-40")
+        self.assertNotEqual(first["id"], second["id"])
+        before = await self.db.general_ledger.count_documents({})
+        result = await self.approve(first)
+        self.assertEqual(result.status_code, 200, result.text)
+        self.assertEqual(await self.db.general_ledger.count_documents({}), before+2)
+        await self.assert_denied_without_writes(second, "provider_refund_already_accounted")
+        self.assertEqual((await self.db.mz2_customer_refunds.find_one({"id": row["id"]}))["remaining"], "75.00")
+
+    async def test_existing_noncanonical_pending_provider_identity_requires_review(self):
+        _, payment = await self.refund(channel="tamara")
+        await self.db.mz2_customer_refund_payments.update_one({"id": payment["id"]},
+            {"$set": {"provider_refund_id": "  SYN-HISTORICAL-NONCANONICAL  "}})
+        await self.assert_denied_without_writes(payment, "provider_refund_identity_requires_canonical_draft")

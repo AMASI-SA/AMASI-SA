@@ -100,6 +100,12 @@ async def create_bank_payment(db, *, owner, actor, original_key, case_reference,
         raise HTTPException(422, 'payment_proof_required_max_1mb')
     if execution_channel not in {'bank','salla','tamara','tabby','emkan'}:
         raise HTTPException(422,'unsupported_refund_execution_channel')
+    if execution_channel != 'bank' and provider_refund_id is not None:
+        from accounting_recognition_evidence import canonical_identity, EvidenceError
+        try:
+            provider_refund_id = canonical_identity(provider_refund_id)
+        except EvidenceError as exc:
+            raise HTTPException(422, str(exc)) from exc
     identity = reference or hashlib.sha256(proof).hexdigest()
     key = digest([owner, bank_account_id if execution_channel=='bank' else execution_channel, 'customer_refund_payment', identity.upper()])
     facts = dict(original_key=original_key, case_reference=case_reference.strip(),
@@ -149,12 +155,22 @@ async def post_bank_payment(db, *, owner, actor, payment_id):
         if Decimal(payment['amount'])>Decimal(row['remaining']):
             raise HTTPException(409,'payment_exceeds_customer_remaining')
         channel=payment['execution_channel']
+        if channel != 'bank' and payment.get('provider_refund_id'):
+            from accounting_recognition_evidence import canonical_identity, EvidenceError
+            try:
+                canonical = canonical_identity(payment['provider_refund_id'])
+            except EvidenceError as exc:
+                raise HTTPException(409, str(exc)) from exc
+            if canonical != payment['provider_refund_id']:
+                raise HTTPException(409, 'provider_refund_identity_requires_canonical_draft')
+        provider_identity = ({'$regex': r'^\s*' + re.escape(payment['provider_refund_id']) + r'\s*$'}
+            if payment.get('provider_refund_id') else None)
         advance_identity = {'user_id':owner, 'status':'posted', 'execution_channel':channel}
         if channel == 'bank':
             advance_identity.update(bank_account_id=payment['bank_account_id'],
                 bank_reference={'$regex': '^' + re.escape(payment['bank_reference']) + '$', '$options':'i'})
         else:
-            advance_identity['provider_refund_id'] = payment.get('provider_refund_id')
+            advance_identity['provider_refund_id'] = provider_identity
         if await scoped.mz2_customer_advance_payments.find_one(advance_identity):
             raise HTTPException(409, 'refund_execution_already_accounted_as_advance')
         different_provider = channel != 'bank' and channel != row['original_provider']
@@ -172,7 +188,7 @@ async def post_bank_payment(db, *, owner, actor, payment_id):
             raise HTTPException(409,'original_provider_execution_conflicts_with_documented_payment')
         if different_provider:
             execution = await scoped.payment_refunds.find({'user_id':owner, 'provider':channel,
-                'provider_refund_id':payment['provider_refund_id']}).to_list(2)
+                'provider_refund_id':provider_identity}).to_list(2)
             if execution:
                 evidence = execution[0]
                 try:
@@ -190,7 +206,7 @@ async def post_bank_payment(db, *, owner, actor, payment_id):
         if channel=='bank' and confirmed:
             raise HTTPException(409,'provider_execution_evidence_conflicts_with_bank_payment')
         if channel!='bank' and confirmed:
-            matching=[r for r in confirmed if r.get('provider_refund_id')==payment.get('provider_refund_id')]
+            matching=[r for r in confirmed if str(r.get('provider_refund_id') or '').strip()==payment.get('provider_refund_id')]
             if len(matching)!=1 or Decimal(str(matching[0]['amount']))!=Decimal(payment['amount']):
                 raise HTTPException(409,'provider_refund_identity_or_amount_requires_review')
         other=await scoped.mz2_customer_refund_payments.find_one({'user_id':owner,'case_id':row['id'],
@@ -199,9 +215,9 @@ async def post_bank_payment(db, *, owner, actor, payment_id):
             raise HTTPException(409,'mixed_execution_channels_require_review')
         if payment.get('provider_refund_id'):
             prior=await scoped.mz2_customer_refund_payments.find_one({'user_id':owner,'status':'posted',
-                'execution_channel':channel,'provider_refund_id':payment['provider_refund_id']})
+                'execution_channel':channel,'provider_refund_id':provider_identity})
             legacy=await scoped.mz2_recognition_events.find_one({'user_id':owner,'status':'posted',
-                'proposal.event.provider':channel,'proposal.event.canonical_event_id':payment['provider_refund_id']})
+                'proposal.event.provider':channel,'proposal.event.canonical_event_id':provider_identity})
             if prior or legacy:
                 raise HTTPException(409,'provider_refund_already_accounted')
         original=await original_sale(scoped,owner,row['original_key'])

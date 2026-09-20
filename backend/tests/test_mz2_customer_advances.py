@@ -236,7 +236,9 @@ class AdvanceTests(unittest.IsolatedAsyncioTestCase):
         await self.db.payment_refunds.insert_one(dict(known))
         url = BASE+'/'+row['id']+'/payments'; before = await self.db.general_ledger.count_documents({})
         for changed in ({'amount':'41'}, {'currency':'USD'}, {'refunded_at':'2020-02-03T10:00:00+03:00'},
-                        {'synthesised': True}, {'status':'pending'}, {'source':''}):
+                        {'synthesised': True}, {'status':'pending'}, {'source':''},
+                        {'amount':'NaN'}, {'amount':None}, {'refunded_at':'not-a-date'},
+                        {'refunded_at':'2020-02-02T10:00:00'}):
             await self.db.payment_refunds.update_one({'provider_refund_id':'SYN-KNOWN-OTHER'}, {'$set': {**known, **changed}})
             denied = await self.client.post(url, json=payload)
             self.assertEqual(denied.status_code, 409, denied.text)
@@ -250,6 +252,23 @@ class AdvanceTests(unittest.IsolatedAsyncioTestCase):
         # Remove only this newly seeded synthetic conflict to exercise the
         # separately documented valid executor evidence, whose payment ID differs.
         await self.db.payment_refunds.delete_one({'provider_refund_id':'SYN-ORIGINAL-CONFLICT'})
+        # Old raw identities with whitespace cannot evade an existing approved
+        # execution in the sales-refund path, even with a valid new attachment.
+        await self.db.mz2_customer_refund_payments.insert_one(dict(id='SYN-OLD-PAID', user_id='owner',
+            status='posted', execution_channel='tabby', provider_refund_id='  SYN-KNOWN-OTHER\t'))
+        denied = await self.client.post(url, json=payload)
+        self.assertEqual(denied.status_code, 409, denied.text)
+        self.assertIn('refund_execution_already_accounted', denied.text)
+        self.assertEqual(await self.db.general_ledger.count_documents({}), before)
+        await self.db.mz2_customer_refund_payments.delete_one({'id':'SYN-OLD-PAID'})
+        # The chosen executor's ingested record may also carry old whitespace.
+        # It must still be validated, not mistaken for an absent/manual record.
+        await self.db.payment_refunds.update_one({'provider_refund_id':'SYN-KNOWN-OTHER'},
+            {'$set': {'provider_refund_id':' SYN-KNOWN-OTHER ', 'amount':'41'}})
+        denied = await self.client.post(url, json=payload)
+        self.assertEqual(denied.status_code, 409, denied.text)
+        self.assertEqual(await self.db.general_ledger.count_documents({}), before)
+        await self.db.payment_refunds.update_one({'provider_refund_id':' SYN-KNOWN-OTHER '}, {'$set': {'amount':'40'}})
         result = await self.client.post(url, json=payload)
         self.assertEqual(result.status_code, 200, result.text)
         stored = await self.db.mz2_customer_advance_payments.find_one({})

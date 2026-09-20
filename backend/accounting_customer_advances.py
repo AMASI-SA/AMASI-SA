@@ -206,6 +206,7 @@ async def pay_advance(db, *, owner, actor, advance_id, amount, paid_at, executio
             require(not recorded and not recorded_ledger, 'bank_reference_already_recorded')
             duplicate = {'execution_channel': 'bank', 'bank_account_id': bank_account_id, 'bank_reference': reference_match}
         else:
+            refund_identity_match = {'$regex': r'^\s*' + re.escape(provider_refund_id) + r'\s*$'}
             if channel != row['provider']:
                 # The approved attachment associates THIS customer's advance
                 # with a distinct executor's payment. Provider IDs are never
@@ -213,9 +214,9 @@ async def pay_advance(db, *, owner, actor, advance_id, amount, paid_at, executio
                 require(bool(proof), 'different_provider_execution_document_required')
                 require(not confirmed, 'original_provider_execution_conflicts_with_different_provider')
                 matching = await scoped.payment_refunds.find({'user_id': owner, 'provider': channel,
-                    'provider_refund_id': provider_refund_id}).to_list(2)
+                    'provider_refund_id': refund_identity_match}).to_list(2)
             else:
-                matching = [r for r in confirmed if r.get('provider_refund_id') == provider_refund_id]
+                matching = [r for r in confirmed if str(r.get('provider_refund_id') or '').strip() == provider_refund_id]
             require(len(matching) <= 1 and (channel != row['provider'] or len(matching) == 1),
                     'confirmed_provider_refund_required')
             if matching:
@@ -228,9 +229,9 @@ async def pay_advance(db, *, owner, actor, advance_id, amount, paid_at, executio
                     require(bool(refund.get('source') or refund.get('status_source'))
                         and not (refund.get('raw') or {}).get('_fetch_error'), 'provider_refund_provenance_required')
                     executor_payment_id = canonical_identity(refund.get('provider_payment_id'))
-            duplicate = {'execution_channel': channel, 'provider_refund_id': provider_refund_id}
+            duplicate = {'execution_channel': channel, 'provider_refund_id': refund_identity_match}
             legacy = await scoped.mz2_recognition_events.find_one({'user_id': owner,
-                'proposal.event.provider': channel, 'proposal.event.canonical_event_id': provider_refund_id})
+                'proposal.event.provider': channel, 'proposal.event.canonical_event_id': refund_identity_match})
             require(not legacy, 'provider_refund_already_accounted')
         require(not await scoped.mz2_customer_refund_payments.find_one({'user_id': owner, 'status': 'posted', **duplicate}),
                 'refund_execution_already_accounted')

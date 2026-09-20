@@ -4,7 +4,7 @@ Status: static source audit, not runtime acceptance. P01 remains IN_PROGRESS; P0
 
 ## Scope and reproducibility
 
-Frozen accepted report source: `163874f5ffcab10a5f3dc883a1c2acd56c414bf9` (#1110 A). Its A/B and evidence are preserved. This index captures the WIP source **after** replacing the three P01 consumers with `accounting_mz2_balances.read_mz2_write_balances`; it is not a new frozen release identity. The CSV includes a SHA-256 per indexed file. Re-run the census after integration onto the freshly fetched Production J; do not treat this checkpoint index as evidence of an uninspected future tree.
+Frozen accepted report source: `163874f5ffcab10a5f3dc883a1c2acd56c414bf9` (#1110 A). Its A/B and evidence are preserved. This refreshed index captures the WIP source after checkpoint `3141ddf82`, including documented cross-provider execution changes and updated fixtures, **after** replacing the three P01 consumers with `accounting_mz2_balances.read_mz2_write_balances`; it is not a new frozen release identity. The CSV includes a SHA-256 per indexed file. Re-run the census after integration onto the freshly fetched Production J; do not treat this checkpoint index as evidence of an uninspected future tree.
 
 Search roots: `backend`, `frontend/src`, `scripts`; source extensions `.py`, `.js`, `.jsx`, `.cjs`, `.mjs`, `.ts`, `.tsx`. The literal expression is `compute_balance|compute_balances_bulk|account_balance_ssot|current_balance`. Comments/imports, exact symbols, substring-only hits (for example `_recompute_balance`), and test fixtures are retained rather than silently discarded. Documentation/generated outputs are not executable source. Python function attribution comes from the smallest enclosing AST function; JS/JSX attribution is module-level and exact line numbers remain available.
 
@@ -21,7 +21,7 @@ Full occurrence index: [CSV](P01-WRITE-BALANCE-CENSUS-20260920.csv). One record 
 | `accounting_customer_advances.pay_advance` / nested `write` | 210 | Bank/provider execution funds | Transactional MZ2 snapshot; required now |
 | Same | 211 | Advance refund case payable equals remaining due | `net_balance(liability, advance_id, customer_refund_payable)`; required now |
 
-The old imports at refund184, advance141/208, settlement18 are part of these call-site replacements, not extra decisions. The helper asserts `SessionDatabase`, owner identity and an active Mongo transaction, then calls the accepted `read_mz2_ledger` with that same scoped database. Non-available readiness produces HTTP409; no separate raw database read, legacy fallback, current_balance read, or copied report eligibility algorithm is introduced. This is static verification only; sentinel results belong in the coordinator's runtime evidence.
+The old imports at refund184, advance141/208, settlement18 are part of these call-site replacements, not extra decisions. The helper asserts `SessionDatabase`, owner identity and an active Mongo transaction, then calls the accepted `read_mz2_ledger` with that same scoped database. The execution account is passed through `required_accounts`, so a previously unused bank/provider still needs the same approved opening/zero evidence before its balance can authorize payment. Non-available readiness produces HTTP409; no separate raw database read, legacy fallback, current_balance read, or copied report eligibility algorithm is introduced. This is static verification only; sentinel results belong in the coordinator's runtime evidence.
 
 ## MZ2 report reads already covered by #1110
 
@@ -112,4 +112,4 @@ All rows below other than the explicit P02 row are legacy/unrelated and remain u
 | `frontend/src/pages/ShippingTransfers.jsx` | `<module/JS source>`: 48,149 | legacy_unrelated — Existing legacy/shared page balance presentation or transaction input; not MZ2 isolated report |
 | `frontend/src/pages/Transfers.jsx` | `<module/JS source>`: 39,63,132,138,161,168,363 | legacy_unrelated — Existing legacy/shared page balance presentation or transaction input; not MZ2 isolated report |
 
-Counts for this WIP snapshot: MZ2_shipping_P02_outside_P01=3 matched lines, legacy_unrelated=524 matched lines, test_only=244 matched lines; production-source files=66; total CSV records=771.
+Counts for this WIP snapshot: MZ2_shipping_P02_outside_P01=3 matched lines, legacy_unrelated=524 matched lines, test_only=242 matched lines; production-source files=66; total CSV records=769.
