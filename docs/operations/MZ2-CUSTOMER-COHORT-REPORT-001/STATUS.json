@@ -1,0 +1,61 @@
+{
+  "task_id": "MZ2-CUSTOMER-COHORT-REPORT-001",
+  "updated_at": "2026-09-20T00:00:00Z",
+  "status": "IMPLEMENTED_LOCAL_VERIFIED",
+  "scope": "Owner-only read-only customer acquisition and repeat-purchase cohort report from financially included matched Salla orders.",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "feat/customer-cohort-profit-report-20260920",
+  "base_sha": "ebf92e6606a810a1e3f0a0e2026984a5482f71bc",
+  "implementation_commit_sha": "7c50cf227ac8036db5057d70482ff2cd781c5b61",
+  "changed_behavior": [
+    "Adds owner-only GET /api/orders-v2/mezan-attribution-v1/customer-cohorts.",
+    "Groups customers by first purchase 0-30 and 31-60 days as of the selected Riyadh date.",
+    "Reports returning customers and later orders in the latest 30-day and 60-day windows.",
+    "Separates first-order source into confirmed ad, explicit non-ad, and unresolved.",
+    "Reports confirmed first acquisition cost and later-order contribution profit only with complete source facts.",
+    "Returns aggregate data only and never returns customer names, phone numbers, email addresses, or identity keys.",
+    "Adds owner-only Mezan 2 UI at /ads-manager/customer-cohorts under Marketing > Customer cohorts."
+  ],
+  "financial_definition": {
+    "first_acquisition_cost": "Allocated ad spend on the first order, only when attribution is confirmed and decision-safe.",
+    "later_order_contribution_profit": "Revenue minus product cost minus allocated ad spend; remains unknown unless all three facts are known.",
+    "unknown_is_zero": false
+  },
+  "verification": [
+    {
+      "command": "/workspace/scratch/3d81ccb6cbd3/snap30-venv/bin/python -m pytest backend/tests/test_customer_cohort_profit_report.py backend/tests/test_mezan_attribution_owner_routes.py backend/tests/test_mezan_attribution_order_ledger.py backend/tests/test_mezan_attribution_ledger_sync.py backend/tests/test_mezan_attribution_profit_bridge.py -q",
+      "exit_code": 0,
+      "result": "32 passed; 2 unrelated Pydantic deprecation warnings."
+    },
+    {
+      "command": "react-scripts test --watchAll=false --runInBand customer cohort + Mezan V2 navigation suites",
+      "exit_code": 0,
+      "result": "4 suites passed; 19 tests passed."
+    },
+    {
+      "command": "vite build",
+      "exit_code": 0,
+      "result": "Production frontend bundle built successfully; existing CSS import-order and chunk-size warnings remain."
+    },
+    {
+      "command": "pytest backend/tests/test_order_engine_routes.py backend/tests/test_customer_history_route.py backend/tests/test_customer_history_complete_lookup.py -q",
+      "exit_code": 1,
+      "result": "2 passed and 9 failed outside this change: eight failures require missing PyMuPDF/fitz in the reused test environment; one existing order_engine.routes contract assertion detects direct Mongo attributes."
+    }
+  ],
+  "privacy_and_safety": {
+    "aggregate_only": true,
+    "owner_only": true,
+    "external_writes": false,
+    "production_changed": false,
+    "merged": false,
+    "deployed": false
+  },
+  "remaining": [
+    "Push the task branch and open a Draft PR.",
+    "Run CI in the repository-owned environment with complete Backend dependencies.",
+    "Deploy to Preview only after review, then compare report totals with a bounded sample of matched Salla orders.",
+    "Do not merge or publish Production without a separate explicit authorization."
+  ],
+  "next_safe_action": "Push feat/customer-cohort-profit-report-20260920 and open a Draft PR; no deployment."
+}
