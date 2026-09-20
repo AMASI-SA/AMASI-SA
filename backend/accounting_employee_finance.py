@@ -67,10 +67,10 @@ def _movement_accounting_at(movement_date: str) -> datetime:
         day = datetime.strptime(movement_date, "%Y-%m-%d").date()
     except ValueError:
         raise HTTPException(409, "daily_movement_date_invalid") from None
-    # Bank statements often carry day precision only. Noon Riyadh is a stable
-    # intra-day instant and preserves the economic date without pretending
-    # that the bank supplied an exact timestamp.
-    return datetime(day.year, day.month, day.day, 12, 0, tzinfo=RIYADH).astimezone(timezone.utc)
+    # Bank statements carry day precision only. Use Saudi midnight so a row
+    # is immediately visible to same-day reports without inventing a later
+    # clock time that the bank never supplied.
+    return datetime(day.year, day.month, day.day, 0, 0, tzinfo=RIYADH).astimezone(timezone.utc)
 
 
 async def _actor_scope(db, user: dict[str, Any], permission: str) -> tuple[dict[str, Any], str]:
@@ -331,8 +331,19 @@ async def accrue_payroll_period(
                 raise HTTPException(409, "employee_identity_missing")
 
     results = []
+    skipped = []
     for employee in employees:
-        monthly = _money(employee.get("monthly_amount") or 0)
+        try:
+            monthly = _money(employee.get("monthly_amount") or 0)
+        except HTTPException:
+            if payload.employee_id:
+                raise HTTPException(409, "employee_monthly_salary_required") from None
+            skipped.append({
+                "employee_id": employee["canonical_id"],
+                "employee_name": employee.get("name") or "",
+                "reason": "monthly_salary_missing_or_zero",
+            })
+            continue
         amount = payload.amount if payload.employee_id and payload.amount is not None else monthly
         amount = _money(amount)
         if payload.employee_id and payload.amount is not None and amount != monthly and len(payload.reason) < 3:
@@ -347,11 +358,15 @@ async def accrue_payroll_period(
             amount=amount,
             reason=payload.reason,
         ))
+    if not results:
+        raise HTTPException(409, "no_employees_with_salary")
 
     return {
         "period": payload.period,
         "accounting_at": accounting_at,
         "employee_count": len(results),
+        "skipped_count": len(skipped),
+        "skipped": skipped,
         "posted": sum(1 for item in results if item.get("state") != "already_posted"),
         "already_posted": sum(1 for item in results if item.get("state") == "already_posted"),
         "items": results,
