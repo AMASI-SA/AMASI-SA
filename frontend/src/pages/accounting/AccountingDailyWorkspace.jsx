@@ -291,7 +291,7 @@ function ExceptionList({ status, drafts, receipts, totalReviewCount = 0 }) {
                         العمليات السليمة تختفي من قائمة العمل؛ تظهر الاستثناءات فقط.
                         {totalReviewCount > items.length && (
                             <span className="mt-1 block font-extrabold text-amber-800" data-testid="daily-accounting-exceptions-limit-note">
-                                هذه قائمة مختصرة: نعرض أول {items.length.toLocaleString("en-US")} عناصر من إجمالي {totalReviewCount.toLocaleString("en-US")} تحتاج قرارك.
+                                القائمة مختصرة إلى {items.length.toLocaleString("en-US")} عناصر ظاهرة كحد أقصى؛ إجمالي ما يحتاج قرارك {totalReviewCount.toLocaleString("en-US")}.
                             </span>
                         )}
                     </p>
