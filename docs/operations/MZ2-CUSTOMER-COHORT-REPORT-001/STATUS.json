@@ -1,12 +1,12 @@
 {
   "task_id": "MZ2-CUSTOMER-COHORT-REPORT-001",
-  "updated_at": "2026-09-20T00:00:00Z",
-  "status": "IMPLEMENTED_LOCAL_VERIFIED",
+  "updated_at": "2026-09-20T15:10:42Z",
+  "status": "REMOTE_BRANCH_PUSHED_VERIFIED",
   "scope": "Owner-only read-only customer acquisition and repeat-purchase cohort report from financially included matched Salla orders.",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "feat/customer-cohort-profit-report-20260920",
   "base_sha": "ebf92e6606a810a1e3f0a0e2026984a5482f71bc",
-  "implementation_commit_sha": "7c50cf227ac8036db5057d70482ff2cd781c5b61",
+  "implementation_commit_sha": "b5aa08037d8393b573a6d238a35783839c8f0dd9",
   "changed_behavior": [
     "Adds owner-only GET /api/orders-v2/mezan-attribution-v1/customer-cohorts.",
     "Groups customers by first purchase 0-30 and 31-60 days as of the selected Riyadh date.",
@@ -41,6 +41,21 @@
       "command": "pytest backend/tests/test_order_engine_routes.py backend/tests/test_customer_history_route.py backend/tests/test_customer_history_complete_lookup.py -q",
       "exit_code": 1,
       "result": "2 passed and 9 failed outside this change: eight failures require missing PyMuPDF/fitz in the reused test environment; one existing order_engine.routes contract assertion detects direct Mongo attributes."
+    },
+    {
+      "command": "yarn --cwd frontend test --watchAll=false --runInBand --runTestsByPath src/pages/CustomerCohortReport.test.jsx src/services/customerCohortReport.test.js src/components/MezanV2NavigationShell.test.jsx",
+      "exit_code": 0,
+      "result": "3 suites passed; 17 tests passed in /app."
+    },
+    {
+      "command": "yarn --cwd frontend vite build",
+      "exit_code": 0,
+      "result": "Vite build passed in /app with existing chunk-size and dynamic-import warnings."
+    },
+    {
+      "command": "python -m pytest focused Backend suites",
+      "exit_code": 1,
+      "result": "Not runnable in /app because pytest is not installed; prior complete local run remains 32 passed."
     }
   ],
   "privacy_and_safety": {
@@ -52,10 +67,11 @@
     "deployed": false
   },
   "remaining": [
-    "Push the task branch and open a Draft PR.",
-    "Run CI in the repository-owned environment with complete Backend dependencies.",
-    "Deploy to Preview only after review, then compare report totals with a bounded sample of matched Salla orders.",
-    "Do not merge or publish Production without a separate explicit authorization."
+    "Create the Pull Request after action-time confirmation.",
+    "Wait for repository CI and fix only failures attributable to this change.",
+    "Complete Preview verification, freeze Protocol v5 source/intent commits, merge without squash or rebase, then publish Production only through Release Guard v5.",
+    "Verify Production with three consecutive probes and close the lease."
   ],
-  "next_safe_action": "Push feat/customer-cohort-profit-report-20260920 and open a Draft PR; no deployment."
-}
+  "next_safe_action": "Create a PR from feat/customer-cohort-profit-report-20260920 to hotfix/prod-snap-meta-final after user confirmation; Production remains unchanged.",
+  "checkpoint_commit_sha": "9af4d9533705e52b48d97a04fb261daa6b8f2e56"
+}\n
