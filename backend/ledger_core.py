@@ -83,6 +83,9 @@ REASON_CODES: dict[str, str] = {
 }
 
 ENTRY_TYPES = (
+    "customer_advance_capture",
+    "customer_advance_cancellation",
+    "customer_advance_payment",
     "customer_refund_due",
     "customer_refund_payment",
     # Generic

@@ -361,5 +361,14 @@
     "production_changed": false,
     "p02_opened": false,
     "evidence_file": "P01-PR1103-PREVIEW-20260920.md"
+  },
+  "gap_fixes_20260920": {
+    "state": "WIP_IMPLEMENTED_LOCAL_PURE_TESTS_PASSED_PREVIEW_PENDING",
+    "branch": "codex/p01-pr1103-gap-fixes-20260920",
+    "reviewed_base": "ebf92e6606a810a1e3f0a0e2026984a5482f71bc",
+    "local_affected_tests": 15,
+    "production_changed": false,
+    "tax_advance_decision": "TAX_CASES_HELD_FOR_ACCOUNTANT_REVIEW",
+    "next_action": "Run new isolated Mongo tests, Preview UI evidence, fix findings, freeze new A/B and clean-clone rehearsal"
   }
 }

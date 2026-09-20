@@ -100,6 +100,13 @@ jobs:
         run: python -m unittest discover -s tests -p test_mz2_refund_entitlements.py -v
       - name: Test refund notifications and statement reconciliation
         run: python -m unittest discover -s tests -p test_mz2_order_refunds.py -v
+      - name: Test historical financial position, closed periods, provider credits and advances
+        run: |
+          python -m unittest discover -s tests -p test_mz2_report_dates.py -v
+          python -m unittest discover -s tests -p test_mz2_historical_position.py -v
+          python -m unittest discover -s tests -p test_mz2_closed_periods.py -v
+          python -m unittest discover -s tests -p test_mz2_tabby_signed_credits.py -v
+          python -m unittest discover -s tests -p test_mz2_customer_advances.py -v
 
   backend-contract:
     name: Accounting backend contract
@@ -164,6 +171,8 @@ jobs:
           --watchAll=false
           --runInBand
           src/pages/accounting/AccountingWriteControl.test.jsx
+          src/pages/accounting/AccountingPeriods.test.jsx
+          src/pages/accounting/AccountingCustomerAdvances.test.jsx
           src/pages/accounting/AccountingCustomerRefunds.test.jsx
           src/pages/accounting/AccountingReceivables.test.jsx
           src/pages/accounting/AccountingBankReceipts.test.jsx

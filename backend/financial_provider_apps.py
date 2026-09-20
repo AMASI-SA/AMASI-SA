@@ -118,5 +118,9 @@ def make_financial_provider_apps_router(db, current_user):
     install_accounting_receivable_routes(router, db, current_user)
     install_accounting_receipt_routes(router, db, current_user)
     install_write_control_routes(router, db, current_user)
+    from accounting_periods import install_period_routes
+    install_period_routes(router, db, current_user)
+    from accounting_customer_advances import install_customer_advance_routes
+    install_customer_advance_routes(router, db, current_user)
     protect_accounting_routes(router, db)
     return router

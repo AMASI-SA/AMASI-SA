@@ -30,15 +30,23 @@ class SessionCollection:
     def __getattr__(self, name):
         if name not in self._operations:
             raise AttributeError(f"unsupported transactional collection operation: {name}")
-        if self._collection.name == "general_ledger" and name == "insert_one":
+        if self._collection.name == "general_ledger" and name in {"insert_one", "insert_many"}:
             async def insert_leg(document, **kwargs):
-                group = document.get("txn_group_id")
-                if not group or document.get("status") != "posted":
-                    raise HTTPException(409, "atomic_journal_group_required")
-                result = await self._collection.insert_one(document, session=self._session, **kwargs)
-                self._ledger_groups.add((document["user_id"], group))
+                documents = [document] if name == "insert_one" else list(document)
+                groups = set()
+                for leg in documents:
+                    group = leg.get("txn_group_id")
+                    if not group or leg.get("status") != "posted":
+                        raise HTTPException(409, "atomic_journal_group_required")
+                    groups.add((leg["user_id"], group))
+                result = await getattr(self._collection, name)(
+                    document if name == "insert_one" else documents, session=self._session, **kwargs)
+                self._ledger_groups.update(groups)
                 return result
             return insert_leg
+        if self._collection.name == "general_ledger" and name not in {
+                "find", "find_one", "aggregate", "count_documents", "distinct"}:
+            raise HTTPException(409, "posted_accounting_journals_are_append_only")
         return partial(getattr(self._collection, name), session=self._session)
 
 
@@ -100,6 +108,8 @@ async def _owner_transaction(db, owner, callback, *, control=False):
                 rows = await scoped.general_ledger.find({
                     "user_id": user_id, "txn_group_id": group,
                 }).to_list(1000)
+                from accounting_periods import assert_open_journal_periods
+                await assert_open_journal_periods(scoped, user_id, rows)
                 debit = sum((Decimal(str(r["amount"])) for r in rows if r["side"] == "debit"), Decimal(0))
                 credit = sum((Decimal(str(r["amount"])) for r in rows if r["side"] == "credit"), Decimal(0))
                 if len(rows) < 2 or debit <= 0 or debit != credit or any(r["status"] != "posted" for r in rows):

@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import hashlib
 import re
-from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
@@ -129,6 +130,8 @@ def amounts_from_settlement_file(file_doc: dict[str, Any]) -> dict[str, float]:
         "refund_partial": totals.get("refund_partial"),
         "commission": totals.get("fees"),
         "commission_vat": totals.get("fees_vat"),
+        "commission_credit": totals.get("fee_credits"),
+        "commission_vat_credit": totals.get("fee_vat_credits"),
         "settlement_fee": totals.get("settlement_fee"),
         "settlement_fee_vat": totals.get("settlement_fee_vat"),
         "wallet_purchases": totals.get("salla_purchases_total"),
@@ -149,6 +152,8 @@ _AMOUNT_KEYS = (
     "refund_partial",
     "commission",
     "commission_vat",
+    "commission_credit",
+    "commission_vat_credit",
     "settlement_fee",
     "settlement_fee_vat",
     "wallet_purchases",
@@ -167,6 +172,8 @@ def normalize_amounts(values: dict[str, Any] | None) -> dict[str, float]:
     source = values or {}
     normalized = {key: _money(source.get(key)) for key in _AMOUNT_KEYS}
     nonnegative = set(_AMOUNT_KEYS) - {
+        "commission", "commission_vat",
+        "commission_credit", "commission_vat_credit",
         "reported_net",
         "rounding_adjustment",
         "statement_net_difference",
@@ -174,6 +181,9 @@ def normalize_amounts(values: dict[str, Any] | None) -> dict[str, float]:
     for key in nonnegative:
         if normalized[key] < 0:
             raise ValueError(f"{key} لا يقبل قيمة سالبة")
+    for key in ("commission_credit", "commission_vat_credit"):
+        if normalized[key] > 0:
+            raise ValueError(f"{key} must retain the provider credit sign")
     return normalized
 
 
@@ -321,6 +331,10 @@ def build_journal_preview(
             "entry_type": "settlement",
         })
 
+    if provider != "tabby" and any(calc[k] < 0 for k in (
+            "commission", "commission_vat", "commission_credit", "commission_vat_credit")):
+        raise ValueError("documented_tabby_fee_credit_required")
+
     expense_legs = (
         ("commission", "provider_commission", "عمولة المزود"),
         ("commission_vat", "provider_commission_vat", "ضريبة عمولة المزود"),
@@ -331,6 +345,22 @@ def build_journal_preview(
     )
     for key, entity_id, label in expense_legs:
         amount = calc[key]
+        if key in {"commission", "commission_vat"}:
+            credit = calc[key + "_credit"]
+            # Older signed-net documents retain their direction as a credit.
+            if not credit and amount < 0:
+                credit = amount
+            amount = _money(amount - credit)
+            if amount < 0:
+                raise ValueError("fee_credit_components_conflict")
+            if credit < 0:
+                entries.append({
+                    "role": key + "_credit", "label": "رد موثق: " + label,
+                    "entity_type": "expense", "entity_id": entity_id,
+                    "sub_account": provider, "side": "credit",
+                    "amount": -credit, "source_signed_amount": credit,
+                    "entry_type": "settlement",
+                })
         if amount <= 0:
             continue
         entries.append({
@@ -436,6 +466,33 @@ async def _post_reviewed_settlement_transaction(db, *, owner_id, actor, draft):
             f"التسوية مرحّلة مسبقًا ضمن القيد {existing.get('txn_group_id')}",
         )
 
+    fee_credit_evidence = []
+    signed_keys = ("commission", "commission_vat", "commission_credit", "commission_vat_credit")
+    signed_amounts = normalize_amounts(draft.get("amounts"))
+    source = None
+    source_amounts = {}
+    if provider == "tabby" and draft.get("source_file_id"):
+        source = await db.settlement_files.find_one({
+            "user_id": owner_id, "id": draft["source_file_id"], "provider": "tabby"})
+        if source:
+            source_amounts = amounts_from_settlement_file(source)
+    if any(signed_amounts[key] < 0 or source_amounts.get(key, 0) < 0 for key in signed_keys):
+        if not source or provider != "tabby" or not draft.get("statement_date"):
+            raise HTTPException(409, "documented_tabby_fee_credit_required")
+        rows = await db.settlement_entries.find({
+            "user_id": owner_id, "file_id": source["id"]}).to_list(10001)
+        if len(rows) > 10000:
+            raise HTTPException(409, "fee_credit_evidence_limit")
+        fee_credit_evidence = [{key: row.get(key) for key in (
+            "id", "order_number", "event_date", "settlement_date", "source_event_type",
+            "actual_payment_fee", "actual_payment_vat", "settlement_reference")}
+            for row in rows if _money(row.get("actual_payment_fee")) < 0
+            or _money(row.get("actual_payment_vat")) < 0]
+        if not fee_credit_evidence:
+            raise HTTPException(409, "documented_tabby_fee_credit_required")
+        if any(signed_amounts[key] != source_amounts[key] for key in signed_keys):
+            raise HTTPException(409, "tabby_fee_credit_source_conflict")
+
     preview = build_journal_preview(
         provider=provider,
         bank_account_id=bank["id"],
@@ -480,11 +537,15 @@ async def _post_reviewed_settlement_transaction(db, *, owner_id, actor, draft):
         "period_from": draft.get("period_from"),
         "period_to": draft.get("period_to"),
         "statement_date": draft.get("statement_date"),
+        "accounting_at": (datetime.fromisoformat(draft["statement_date"])
+            .replace(tzinfo=ZoneInfo("Asia/Riyadh")).astimezone(timezone.utc).isoformat()
+            if draft.get("statement_date") else datetime.now(timezone.utc).isoformat()),
         "source_file_id": draft.get("source_file_id"),
         "source_file_hash": draft.get("source_file_hash"),
         "bank_snapshot": bank_snapshot,
         "amounts": preview["amounts"],
         "refunds_are_statement_evidence_only": True,
+        "fee_credit_evidence": fee_credit_evidence,
         "bank_receipt_id": draft.get("bank_receipt_id"),
     }
     entries = [
@@ -495,7 +556,9 @@ async def _post_reviewed_settlement_transaction(db, *, owner_id, actor, draft):
             "side": row["side"],
             "amount": row["amount"],
             "entry_type": row["entry_type"],
-            "metadata": {"role": row["role"], "label": row["label"]},
+            "metadata": {"role": row["role"], "label": row["label"],
+                **({"source_signed_amount": row["source_signed_amount"]}
+                   if "source_signed_amount" in row else {})},
         }
         for row in preview["entries"]
     ]

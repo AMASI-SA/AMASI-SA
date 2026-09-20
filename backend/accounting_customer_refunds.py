@@ -8,6 +8,7 @@ from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 import base64
 import hashlib
+import re
 from fastapi import HTTPException
 from accounting_atomic import atomic_owner
 from accounting_receivable_service import digest, cutoff_for
@@ -148,6 +149,14 @@ async def post_bank_payment(db, *, owner, actor, payment_id):
         if Decimal(payment['amount'])>Decimal(row['remaining']):
             raise HTTPException(409,'payment_exceeds_customer_remaining')
         channel=payment['execution_channel']
+        advance_identity = {'user_id':owner, 'status':'posted', 'execution_channel':channel}
+        if channel == 'bank':
+            advance_identity.update(bank_account_id=payment['bank_account_id'],
+                bank_reference={'$regex': '^' + re.escape(payment['bank_reference']) + '$', '$options':'i'})
+        else:
+            advance_identity['provider_refund_id'] = payment.get('provider_refund_id')
+        if await scoped.mz2_customer_advance_payments.find_one(advance_identity):
+            raise HTTPException(409, 'refund_execution_already_accounted_as_advance')
         if channel!='bank' and channel!=row['original_provider']:
             raise HTTPException(409,'execution_provider_differs_from_original_requires_review')
         from accounting_recognition_evidence import REFUNDED
