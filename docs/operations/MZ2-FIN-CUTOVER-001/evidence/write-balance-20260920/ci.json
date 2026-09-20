@@ -1,0 +1,1266 @@
+{
+  "task_id": "MZ2-FIN-CUTOVER-001",
+  "repo_full_name": "AMASI-SA/AMASI-SA",
+  "pr_number": 1113,
+  "observed_at_utc": "2026-09-20 17:44:34 UTC",
+  "source_git_sha": "e8818bb67d84ccd0487e126a06f5e9c3e09702c7",
+  "deployment_git_sha": "c66dec17f9defbd50518b90561ca1a350a631608",
+  "read_only_observation": true,
+  "production_changed": false,
+  "summary": {
+    "source_workflows": "9/9 success",
+    "deployment_workflows": "9/9 success",
+    "clean_clone_job_id": 106119598149,
+    "clean_clone_conclusion": "success",
+    "manual_deployment": "skipped; not authorized"
+  },
+  "source": {
+    "workflow_runs_response": {
+      "workflow_runs": [
+        {
+          "id": 35526202751,
+          "name": "Snapchat Settings Management V2",
+          "status": "completed",
+          "conclusion": "success",
+          "run_number": 342,
+          "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526202751/jobs",
+          "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526202751/logs",
+          "workflow_id": 344971566
+        },
+        {
+          "id": 35526202848,
+          "name": "Snapchat CAPI Purchases",
+          "status": "completed",
+          "conclusion": "success",
+          "run_number": 146,
+          "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526202848/jobs",
+          "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526202848/logs",
+          "workflow_id": 325110303
+        },
+        {
+          "id": 35526202747,
+          "name": "Salla Abandoned Cart Webhooks",
+          "status": "completed",
+          "conclusion": "success",
+          "run_number": 52,
+          "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526202747/jobs",
+          "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526202747/logs",
+          "workflow_id": 331082003
+        },
+        {
+          "id": 35526202733,
+          "name": "Qoyod Payment Freshness",
+          "status": "completed",
+          "conclusion": "success",
+          "run_number": 937,
+          "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526202733/jobs",
+          "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526202733/logs",
+          "workflow_id": 320915169
+        },
+        {
+          "id": 35526202752,
+          "name": "Salla Orders V3 acceptance",
+          "status": "completed",
+          "conclusion": "success",
+          "run_number": 35,
+          "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526202752/jobs",
+          "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526202752/logs",
+          "workflow_id": 359816949
+        },
+        {
+          "id": 35526202774,
+          "name": "Mezan Release Readiness",
+          "status": "completed",
+          "conclusion": "success",
+          "run_number": 1958,
+          "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526202774/jobs",
+          "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526202774/logs",
+          "workflow_id": 330739464
+        },
+        {
+          "id": 35526202732,
+          "name": "Security Gate",
+          "status": "completed",
+          "conclusion": "success",
+          "run_number": 1611,
+          "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526202732/jobs",
+          "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526202732/logs",
+          "workflow_id": 335759269
+        },
+        {
+          "id": 35526202722,
+          "name": "MZ2 Accounting Module",
+          "status": "completed",
+          "conclusion": "success",
+          "run_number": 75,
+          "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526202722/jobs",
+          "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526202722/logs",
+          "workflow_id": 340804677
+        },
+        {
+          "id": 35526202750,
+          "name": "CodeQL",
+          "status": "completed",
+          "conclusion": "success",
+          "run_number": 1589,
+          "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526202750/jobs",
+          "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526202750/logs",
+          "workflow_id": 335797767
+        }
+      ]
+    },
+    "accounting_jobs_response": {
+      "jobs": [
+        {
+          "id": 106118677652,
+          "name": "Manual tax and atomic recovery (real isolated Mongo)",
+          "status": "completed",
+          "conclusion": "success",
+          "run_id": 35526202722,
+          "logs_url": null,
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2
+            },
+            {
+              "name": "Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3
+            },
+            {
+              "name": "Install isolated test dependencies",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 4
+            },
+            {
+              "name": "Start dedicated real Mongo fixtures",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 5
+            },
+            {
+              "name": "Test manual tax calculations and immutable policy",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 6
+            },
+            {
+              "name": "Test accountant API through bridge and ledger to settlement",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 7
+            },
+            {
+              "name": "Test process death, restart, concurrent ingress and atomic settlement",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 8
+            },
+            {
+              "name": "Test non-ledger receipts and the authoritative lifecycle",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 9
+            },
+            {
+              "name": "Test entitlement settlement and non-financial webhook drafts",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 10
+            },
+            {
+              "name": "Test write pause, transaction drain and durable replay",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 11
+            },
+            {
+              "name": "Test confirmed refund entitlement and cross-month payment",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 12
+            },
+            {
+              "name": "Test refund notifications and statement reconciliation",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 13
+            },
+            {
+              "name": "Test historical financial position, closed periods, provider credits and advances",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 14
+            },
+            {
+              "name": "Test MZ2 report isolation against legacy sentinels",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 15
+            },
+            {
+              "name": "Test transaction-bound MZ2 write balances and documented execution",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 16
+            },
+            {
+              "name": "Post Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 31
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 32
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 33
+            }
+          ]
+        },
+        {
+          "id": 106118677824,
+          "name": "Accounting frontend contract",
+          "status": "completed",
+          "conclusion": "success",
+          "run_id": 35526202722,
+          "logs_url": null,
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2
+            },
+            {
+              "name": "Run actions/setup-node@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3
+            },
+            {
+              "name": "Enable Yarn Classic",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 4
+            },
+            {
+              "name": "Install frontend dependencies",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 5
+            },
+            {
+              "name": "Run focused accounting tests",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 6
+            },
+            {
+              "name": "Build frontend",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 7
+            },
+            {
+              "name": "Post Run actions/setup-node@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 13
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 14
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 15
+            }
+          ]
+        },
+        {
+          "id": 106118677825,
+          "name": "Accounting backend contract",
+          "status": "completed",
+          "conclusion": "success",
+          "run_id": 35526202722,
+          "logs_url": null,
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2
+            },
+            {
+              "name": "Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3
+            },
+            {
+              "name": "Install focused backend dependencies",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 4
+            },
+            {
+              "name": "Compile accounting modules",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 5
+            },
+            {
+              "name": "Run accounting contract tests",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 6
+            },
+            {
+              "name": "Post Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 11
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 12
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 13
+            }
+          ]
+        }
+      ]
+    },
+    "release_jobs_response": {
+      "jobs": [
+        {
+          "id": 106118678002,
+          "name": "Frontend build",
+          "status": "completed",
+          "conclusion": "success",
+          "run_id": 35526202774,
+          "logs_url": null,
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2
+            },
+            {
+              "name": "Run actions/setup-node@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3
+            },
+            {
+              "name": "Enable Yarn Classic",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 4
+            },
+            {
+              "name": "Record governed frontend toolchain",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 5
+            },
+            {
+              "name": "Install frontend dependencies",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 6
+            },
+            {
+              "name": "Test governed frontend build contract",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 7
+            },
+            {
+              "name": "Classify reviewed B or source candidate A",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 8
+            },
+            {
+              "name": "Build production frontend twice and retain verified build B",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 9
+            },
+            {
+              "name": "Verify retained frontend artifact and reproducibility proof",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 10
+            },
+            {
+              "name": "Freeze a candidate reviewed intent from the source commit",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 11
+            },
+            {
+              "name": "Retain the candidate reviewed intent",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 12
+            },
+            {
+              "name": "Prove install and build leave the worktree clean",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 13
+            },
+            {
+              "name": "Post Run actions/setup-node@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 25
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 26
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 27
+            }
+          ]
+        },
+        {
+          "id": 106118678155,
+          "name": "Backend preflight",
+          "status": "completed",
+          "conclusion": "success",
+          "run_id": 35526202774,
+          "logs_url": null,
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2
+            },
+            {
+              "name": "Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3
+            },
+            {
+              "name": "Compile backend Python sources",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 4
+            },
+            {
+              "name": "Run frontend identity and release guard unit suites",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 5
+            },
+            {
+              "name": "Post Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 9
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 10
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 11
+            }
+          ]
+        },
+        {
+          "id": 106118807181,
+          "name": "Emergent Host Node 20 clean-clone adapter rehearsal",
+          "status": "completed",
+          "conclusion": "skipped",
+          "run_id": 35526202774,
+          "logs_url": null,
+          "steps": null
+        },
+        {
+          "id": 106118807542,
+          "name": "Emergent manual redeploy required",
+          "status": "completed",
+          "conclusion": "skipped",
+          "run_id": 35526202774,
+          "logs_url": null,
+          "steps": null
+        }
+      ]
+    },
+    "release_artifacts_response": {
+      "artifacts": [
+        {
+          "id": 10609512697,
+          "name": "release-v5-reviewed-intent-candidate",
+          "size_in_bytes": 193920,
+          "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/10609512697",
+          "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/10609512697/zip",
+          "expired": false,
+          "created_at": "2026-09-20T17:33:37Z",
+          "expires_at": "2026-09-22T17:33:37Z",
+          "updated_at": "2026-09-20T17:33:37Z",
+          "digest": "sha256:745d4c37bfe95e2e1592e595973d3313c3165ede380948685361fbeaa834f0e3",
+          "workflow_run": {
+            "id": 35526202774,
+            "repository_id": 1250664189,
+            "head_repository_id": 1250664189,
+            "head_branch": "codex/p01-write-balance-release-20260920",
+            "head_sha": "e8818bb67d84ccd0487e126a06f5e9c3e09702c7"
+          }
+        }
+      ]
+    }
+  },
+  "deployment": {
+    "workflow_runs_response": {
+      "workflow_runs": [
+        {
+          "id": 35526499572,
+          "name": "Snapchat Settings Management V2",
+          "status": "completed",
+          "conclusion": "success",
+          "run_number": 343,
+          "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526499572/jobs",
+          "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526499572/logs",
+          "workflow_id": 344971566
+        },
+        {
+          "id": 35526499568,
+          "name": "Salla Orders V3 acceptance",
+          "status": "completed",
+          "conclusion": "success",
+          "run_number": 36,
+          "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526499568/jobs",
+          "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526499568/logs",
+          "workflow_id": 359816949
+        },
+        {
+          "id": 35526499565,
+          "name": "Security Gate",
+          "status": "completed",
+          "conclusion": "success",
+          "run_number": 1612,
+          "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526499565/jobs",
+          "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526499565/logs",
+          "workflow_id": 335759269
+        },
+        {
+          "id": 35526499581,
+          "name": "Salla Abandoned Cart Webhooks",
+          "status": "completed",
+          "conclusion": "success",
+          "run_number": 53,
+          "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526499581/jobs",
+          "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526499581/logs",
+          "workflow_id": 331082003
+        },
+        {
+          "id": 35526499576,
+          "name": "Qoyod Payment Freshness",
+          "status": "completed",
+          "conclusion": "success",
+          "run_number": 938,
+          "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526499576/jobs",
+          "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526499576/logs",
+          "workflow_id": 320915169
+        },
+        {
+          "id": 35526499580,
+          "name": "Snapchat CAPI Purchases",
+          "status": "completed",
+          "conclusion": "success",
+          "run_number": 147,
+          "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526499580/jobs",
+          "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526499580/logs",
+          "workflow_id": 325110303
+        },
+        {
+          "id": 35526499560,
+          "name": "MZ2 Accounting Module",
+          "status": "completed",
+          "conclusion": "success",
+          "run_number": 76,
+          "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526499560/jobs",
+          "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526499560/logs",
+          "workflow_id": 340804677
+        },
+        {
+          "id": 35526499584,
+          "name": "Mezan Release Readiness",
+          "status": "completed",
+          "conclusion": "success",
+          "run_number": 1959,
+          "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526499584/jobs",
+          "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526499584/logs",
+          "workflow_id": 330739464
+        },
+        {
+          "id": 35526499571,
+          "name": "CodeQL",
+          "status": "completed",
+          "conclusion": "success",
+          "run_number": 1590,
+          "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526499571/jobs",
+          "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35526499571/logs",
+          "workflow_id": 335797767
+        }
+      ]
+    },
+    "accounting_jobs_response": {
+      "jobs": [
+        {
+          "id": 106119472922,
+          "name": "Manual tax and atomic recovery (real isolated Mongo)",
+          "status": "completed",
+          "conclusion": "success",
+          "run_id": 35526499560,
+          "logs_url": null,
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2
+            },
+            {
+              "name": "Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3
+            },
+            {
+              "name": "Install isolated test dependencies",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 4
+            },
+            {
+              "name": "Start dedicated real Mongo fixtures",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 5
+            },
+            {
+              "name": "Test manual tax calculations and immutable policy",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 6
+            },
+            {
+              "name": "Test accountant API through bridge and ledger to settlement",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 7
+            },
+            {
+              "name": "Test process death, restart, concurrent ingress and atomic settlement",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 8
+            },
+            {
+              "name": "Test non-ledger receipts and the authoritative lifecycle",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 9
+            },
+            {
+              "name": "Test entitlement settlement and non-financial webhook drafts",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 10
+            },
+            {
+              "name": "Test write pause, transaction drain and durable replay",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 11
+            },
+            {
+              "name": "Test confirmed refund entitlement and cross-month payment",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 12
+            },
+            {
+              "name": "Test refund notifications and statement reconciliation",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 13
+            },
+            {
+              "name": "Test historical financial position, closed periods, provider credits and advances",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 14
+            },
+            {
+              "name": "Test MZ2 report isolation against legacy sentinels",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 15
+            },
+            {
+              "name": "Test transaction-bound MZ2 write balances and documented execution",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 16
+            },
+            {
+              "name": "Post Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 31
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 32
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 33
+            }
+          ]
+        },
+        {
+          "id": 106119473038,
+          "name": "Accounting backend contract",
+          "status": "completed",
+          "conclusion": "success",
+          "run_id": 35526499560,
+          "logs_url": null,
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2
+            },
+            {
+              "name": "Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3
+            },
+            {
+              "name": "Install focused backend dependencies",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 4
+            },
+            {
+              "name": "Compile accounting modules",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 5
+            },
+            {
+              "name": "Run accounting contract tests",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 6
+            },
+            {
+              "name": "Post Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 11
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 12
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 13
+            }
+          ]
+        },
+        {
+          "id": 106119473046,
+          "name": "Accounting frontend contract",
+          "status": "completed",
+          "conclusion": "success",
+          "run_id": 35526499560,
+          "logs_url": null,
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2
+            },
+            {
+              "name": "Run actions/setup-node@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3
+            },
+            {
+              "name": "Enable Yarn Classic",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 4
+            },
+            {
+              "name": "Install frontend dependencies",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 5
+            },
+            {
+              "name": "Run focused accounting tests",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 6
+            },
+            {
+              "name": "Build frontend",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 7
+            },
+            {
+              "name": "Post Run actions/setup-node@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 13
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 14
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 15
+            }
+          ]
+        }
+      ]
+    },
+    "release_jobs_response": {
+      "jobs": [
+        {
+          "id": 106119473260,
+          "name": "Frontend build",
+          "status": "completed",
+          "conclusion": "success",
+          "run_id": 35526499584,
+          "logs_url": null,
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2
+            },
+            {
+              "name": "Run actions/setup-node@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3
+            },
+            {
+              "name": "Enable Yarn Classic",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 4
+            },
+            {
+              "name": "Record governed frontend toolchain",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 5
+            },
+            {
+              "name": "Install frontend dependencies",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 6
+            },
+            {
+              "name": "Test governed frontend build contract",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 7
+            },
+            {
+              "name": "Classify reviewed B or source candidate A",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 8
+            },
+            {
+              "name": "Build production frontend twice and retain verified build B",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 9
+            },
+            {
+              "name": "Verify retained frontend artifact and reproducibility proof",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 10
+            },
+            {
+              "name": "Freeze a candidate reviewed intent from the source commit",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 11
+            },
+            {
+              "name": "Retain the candidate reviewed intent",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 12
+            },
+            {
+              "name": "Prove install and build leave the worktree clean",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 13
+            },
+            {
+              "name": "Post Run actions/setup-node@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 25
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 26
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 27
+            }
+          ]
+        },
+        {
+          "id": 106119473319,
+          "name": "Backend preflight",
+          "status": "completed",
+          "conclusion": "success",
+          "run_id": 35526499584,
+          "logs_url": null,
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2
+            },
+            {
+              "name": "Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3
+            },
+            {
+              "name": "Compile backend Python sources",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 4
+            },
+            {
+              "name": "Run frontend identity and release guard unit suites",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 5
+            },
+            {
+              "name": "Post Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 9
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 10
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 11
+            }
+          ]
+        },
+        {
+          "id": 106119598149,
+          "name": "Emergent Host Node 20 clean-clone adapter rehearsal",
+          "status": "completed",
+          "conclusion": "success",
+          "run_id": 35526499584,
+          "logs_url": null,
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2
+            },
+            {
+              "name": "Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3
+            },
+            {
+              "name": "Run actions/setup-node@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 4
+            },
+            {
+              "name": "Select an isolated release toolchain cache",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 5
+            },
+            {
+              "name": "Enable the runtime-observed Host Yarn version",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 6
+            },
+            {
+              "name": "Create a clean tracked-source clone",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 7
+            },
+            {
+              "name": "Prove generated release inputs are absent",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 8
+            },
+            {
+              "name": "Record sanitized Host-20 adapter evidence",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 9
+            },
+            {
+              "name": "Rehearse a conservative outer Host-20 frozen install",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 10
+            },
+            {
+              "name": "Emulate a Cloud Build checkout without Git metadata",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 11
+            },
+            {
+              "name": "Invoke the Emergent package adapter under Host Node 20",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 12
+            },
+            {
+              "name": "Verify artifact, proof, identity, and package boundaries",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 13
+            },
+            {
+              "name": "Prove the governed runtime returns build metadata as JSON",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 14
+            },
+            {
+              "name": "Retain sanitized rehearsal evidence",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 15
+            },
+            {
+              "name": "Post Run actions/setup-node@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 28
+            },
+            {
+              "name": "Post Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 29
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 30
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 31
+            }
+          ]
+        },
+        {
+          "id": 106119996659,
+          "name": "Emergent manual redeploy required",
+          "status": "completed",
+          "conclusion": "skipped",
+          "run_id": 35526499584,
+          "logs_url": null,
+          "steps": null
+        }
+      ]
+    },
+    "release_artifacts_response": {
+      "artifacts": [
+        {
+          "id": 10610081405,
+          "name": "release-v5-clean-clone-evidence",
+          "size_in_bytes": 5044,
+          "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/10610081405",
+          "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/10610081405/zip",
+          "expired": false,
+          "created_at": "2026-09-20T17:41:55Z",
+          "expires_at": "2026-10-04T17:41:54Z",
+          "updated_at": "2026-09-20T17:41:55Z",
+          "digest": "sha256:13facc20f4376a5efa284a2807d0f64256267c5a572d1db50bfb7289dcc95846",
+          "workflow_run": {
+            "id": 35526499584,
+            "repository_id": 1250664189,
+            "head_repository_id": 1250664189,
+            "head_branch": "codex/p01-write-balance-release-20260920",
+            "head_sha": "c66dec17f9defbd50518b90561ca1a350a631608"
+          }
+        }
+      ]
+    }
+  }
+}

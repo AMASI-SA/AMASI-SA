@@ -1,0 +1,7 @@
+yarn run v1.22.22
+$ node scripts/start-governed-runtime.cjs
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vite.config.js:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+  ➜  Local:   http://localhost:3000/
+  ➜  Network: http://10.1.0.245:3000/  eth0
