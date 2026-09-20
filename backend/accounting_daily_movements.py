@@ -457,6 +457,16 @@ async def import_daily_movement_file(
     await db.mz2_daily_movement_files.insert_one(file_doc)
     if docs:
         await db.mz2_daily_movements.insert_many(docs)
+    await db.mz2_daily_movement_audit.insert_one({
+        "user_id": owner,
+        "action": "file_imported",
+        "file_id": file_id,
+        "file_hash": content_hash,
+        "bank_account_id": bank_account_id,
+        "row_count": len(docs),
+        "actor_id": actor["id"],
+        "at": now,
+    })
 
     auto_created = 0
     for movement in docs:
@@ -522,6 +532,15 @@ async def confirm_daily_movement_provider(
             "confirmed_provider": payload.provider,
         }},
     )
+    await db.mz2_daily_movement_audit.insert_one({
+        "user_id": owner,
+        "action": "provider_confirmed",
+        "movement_id": movement_id,
+        "provider": payload.provider,
+        "reason": payload.reason.strip(),
+        "actor_id": actor["id"],
+        "at": datetime.now(timezone.utc).isoformat(),
+    })
     current = await db.mz2_daily_movements.find_one(
         {"user_id": owner, "id": movement_id},
         {"_id": 0},
@@ -589,6 +608,13 @@ def install_daily_movement_routes(router, db, current_user) -> None:
             parsed = parse_daily_movement_xlsx(content)
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
+        if parsed["errors"]:
+            raise HTTPException(422, detail={
+                "code": "daily_movement_rows_invalid",
+                "error_count": len(parsed["errors"]),
+                "errors": parsed["errors"][:50],
+                "message": "لم يُستورد الملف لأن بعض صفوف كشف البنك غير صالحة",
+            })
 
         async def save(scoped):
             return await import_daily_movement_file(
