@@ -3,7 +3,7 @@ export const ACCOUNTING_OPERATION_ID = "MZ2-FIN-CUTOVER-001";
 export const ACCOUNTING_PAGES = [
     {
         id: "home",
-        label: "الرئيسية المحاسبية",
+        label: "المحاسبة اليومية",
         permission: "accounting.home.view",
         to: "/integrations-v2?workspace=financial&page=home",
         implementationStatus: "implemented",
