@@ -20,6 +20,13 @@ ACCOUNTING_PAGES: tuple[dict[str, str], ...] = (
 )
 
 ACCOUNTING_ACTIONS: tuple[dict[str, str], ...] = (
+    {"id": "advance-recognize", "label": "إثبات تحصيل مقدم موثق قبل الإيراد", "permission": "accounting.advances.recognize"},
+    {"id": "advance-refund", "label": "اعتماد إلغاء وسداد تحصيل مقدم", "permission": "accounting.advances.refund"},
+    {"id": "refund-create", "label": "تسجيل مستحق وتحويل استرداد كمسودة", "permission": "accounting.refunds.create"},
+    {"id": "refund-recognize", "label": "اعتماد استحقاق العميل وإثبات التزام الاسترداد", "permission": "accounting.refunds.recognize"},
+    {"id": "refund-payment-post", "label": "اعتماد حركة استرداد منفذة", "permission": "accounting.refunds.pay"},
+    {"id": "receipt-create", "label": "تسجيل مبلغ واصل من منصة", "permission": "accounting.receipts.create"},
+    {"id": "receivable-post", "label": "إثبات ذمم الطلبات المؤهلة", "permission": "accounting.receivables.post"},
     {"id": "draft-create", "label": "إنشاء وحفظ مسودة مالية", "permission": "accounting.drafts.create"},
     {"id": "settlement-post", "label": "اعتماد وترحيل تسوية", "permission": "accounting.settlements.post"},
     {"id": "rules-manage", "label": "تعديل قواعد العمولات والحسابات", "permission": "accounting.rules.manage"},

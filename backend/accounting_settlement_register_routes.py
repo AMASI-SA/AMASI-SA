@@ -9,6 +9,7 @@ from fastapi import Depends, HTTPException, Query
 from accounting_module_contract import accounting_owner_id, require_accounting_permission
 from accounting_module_status_routes import fresh_accounting_user
 from accounting_settlement_service import canonical_provider
+from accounting_settlement_routes import _draft_matching_view
 
 REGISTER_STATUSES = frozenset({
     "draft",
@@ -188,6 +189,10 @@ def install_accounting_settlement_register_routes(router, db, current_user):
                 },
                 {"_id": 0},
             ).sort("created_at", 1).to_list(1000)
+        for entry in source_entries:
+            if float(entry.get('actual_refund_amount') or 0) + float(entry.get('actual_partial_refund_amount') or 0) > 0:
+                entry['refund_links'] = await db.mz2_statement_refund_links.find(
+                    {'user_id': owner_id, 'draft_id': draft_id, 'entry_id': entry['id']}, {'_id': 0}).to_list(100)
         ledger_entries = []
         if draft.get("ledger_txn_group_id"):
             ledger_entries = await db.general_ledger.find(
@@ -198,9 +203,13 @@ def install_accounting_settlement_register_routes(router, db, current_user):
                 {"_id": 0},
             ).sort("created_at", 1).to_list(100)
 
+        receipt = None
+        if draft.get("bank_receipt_id"):
+            receipt = await db.mz2_bank_receipts.find_one(
+                {"id": draft["bank_receipt_id"], "user_id": owner_id}, {"_id": 0})
         return {
             "register_item": _register_item(draft),
-            "draft": draft,
+            "draft": _draft_matching_view(draft),
             "evidence": {
                 "file": source_file,
                 "entries": source_entries,
@@ -208,6 +217,7 @@ def install_accounting_settlement_register_routes(router, db, current_user):
                 "file_locked": True,
             },
             "bank_movement": draft.get("bank_transaction_snapshot"),
+            "bank_receipt": receipt,
             "ledger": {
                 "txn_group_id": draft.get("ledger_txn_group_id"),
                 "entries": ledger_entries,

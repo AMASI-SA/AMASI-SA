@@ -83,6 +83,11 @@ REASON_CODES: dict[str, str] = {
 }
 
 ENTRY_TYPES = (
+    "customer_advance_capture",
+    "customer_advance_cancellation",
+    "customer_advance_payment",
+    "customer_refund_due",
+    "customer_refund_payment",
     # Generic
     "spend", "topup", "payment", "adjustment", "reversal",
     "settlement", "writeoff", "accrual", "opening_balance",
@@ -436,6 +441,11 @@ async def reverse_entry(
     )
     if not orig:
         raise HTTPException(404, "القيد غير موجود")
+    if str((orig.get("metadata") or {}).get("operation_id") or "").startswith("MZ2-"):
+        # A single-leg legacy reversal bypasses the owner barrier and would
+        # invalidate refund/payment evidence. MZ2 corrections require an
+        # explicitly reviewed balanced workflow; that phase is not enabled.
+        raise HTTPException(409, "mz2_balanced_correction_workflow_required")
     if orig.get("status") != "posted":
         raise HTTPException(
             400, "يمكن عكس القيود المعتمدة فقط (status=posted)",
