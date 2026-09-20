@@ -210,7 +210,6 @@ export default function AccountingOpeningBalances() {
     const categories = data?.categories || [];
     const committed = Boolean(data?.cutover?.opening_balance_txn_group_id);
     const active = data?.cutover?.status === "active";
-    const canPreview = !committed && !active;
 
     const normalizedLines = useMemo(() => lines.map(({ local_id, ...line }) => ({
         ...line,
