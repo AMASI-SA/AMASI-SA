@@ -279,3 +279,22 @@ export async function confirmAccountingDailyMovementProvider(movementId, provide
     );
     return data;
 }
+
+
+export async function getAccountingPayrollContext() {
+    const { data } = await api.get(`${BASE}/payroll/context`);
+    return data;
+}
+
+export async function accrueAccountingPayroll(payload) {
+    const { data } = await api.post(`${BASE}/payroll/accrue`, payload);
+    return data;
+}
+
+export async function classifyAccountingEmployeeMovement(movementId, payload) {
+    const { data } = await api.post(
+        `${BASE}/payroll/movements/${encodeURIComponent(movementId)}/classify`,
+        payload,
+    );
+    return data;
+}
