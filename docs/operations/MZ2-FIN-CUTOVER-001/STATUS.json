@@ -21,8 +21,8 @@
   "current_phase": "P01",
   "current_phase_file": "PHASE-01-SETTLEMENTS.md",
   "current_phase_status": "IN_PROGRESS",
-  "next_allowed_action": "run_new_isolated_Mongo_report_sentinels_and_affected_frontend; then Preview and new A/B governed package",
-  "current_blocker": "MZ2_report_isolation_under_verification; production_database_backup_and_owner_configuration_gates_remain",
+  "next_allowed_action": "review_frozen_PR1110_A_B_and_satisfy_independent_production_gates_no_merge_or_publish_without_separate_authorization",
+  "current_blocker": "Independent_production_database_backup_restore_evidence_owner_tax_cutover_opening_permissions_activation_decisions_and_release_authorization",
   "legacy_mezan_policy": {
     "dynamic_financial_dependency_allowed": false,
     "copy_reference_values_allowed": true,
@@ -373,13 +373,21 @@
     "evidence_file": "P01-GAP-FIXES-20260920.md"
   },
   "report_isolation_20260920": {
-    "status": "SOURCE_VERIFIED_FINAL_RELEASE_GATES_TRACKED_IN_ISSUE_1006",
+    "status": "SCOPED_REPORT_ACCEPTANCE_PASS_RELEASE_GATES_REMAIN",
     "source_parent_A": "f1bb92adeb3a835f032fb4cd7ddbf6e9447331fd",
     "preserved_B": "3d73591d15472df39922dc28270374934c1f8d88",
     "branch": "codex/p01-report-isolation-20260920",
-    "local_verification": "16 real isolated Mongo report tests; 5 refund integration; 17 focused backend; 17 existing/new report frontend PASS. Extra navigation/dialog integration being finalized. Final exact A/B and Preview evidence in Issue1006.",
-    "evidence_file": "P01-REPORT-ISOLATION-20260920.md",
+    "local_verification": "16 new real Mongo; 5 refund; 17 backend unit; 24 focused frontend PASS",
+    "evidence_file": "P01-REPORT-ISOLATION-ACCEPTANCE-20260920.md",
     "production_changed": false,
-    "pr": 1110
+    "pr": 1110,
+    "source_A": "163874f5ffcab10a5f3dc883a1c2acd56c414bf9",
+    "intent_B": "3ef3cdf23d9f1f7f1d4f3dea4fd56c23f169b045",
+    "preview_source_A": "163874f5ffcab10a5f3dc883a1c2acd56c414bf9",
+    "sentinels": "A_B_C_D_E_PASS",
+    "all_A_B_workflows": "9_PLUS_9_SUCCESS",
+    "clean_clone_run": 35519516789,
+    "production_release_active": false,
+    "own_preview_reservation_released": true
   }
 }

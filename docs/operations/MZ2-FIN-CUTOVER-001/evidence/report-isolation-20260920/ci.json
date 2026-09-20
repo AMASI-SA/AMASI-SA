@@ -1,0 +1,188 @@
+{
+  "source_A": "163874f5ffcab10a5f3dc883a1c2acd56c414bf9",
+  "intent_B": "3ef3cdf23d9f1f7f1d4f3dea4fd56c23f169b045",
+  "A": [
+    {
+      "id": 35519227575,
+      "name": "Snapchat Settings Management V2",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 337,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519227575/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519227575/logs",
+      "workflow_id": 344971566
+    },
+    {
+      "id": 35519227425,
+      "name": "Salla Abandoned Cart Webhooks",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 50,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519227425/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519227425/logs",
+      "workflow_id": 331082003
+    },
+    {
+      "id": 35519227604,
+      "name": "Snapchat CAPI Purchases",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 144,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519227604/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519227604/logs",
+      "workflow_id": 325110303
+    },
+    {
+      "id": 35519227494,
+      "name": "Qoyod Payment Freshness",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 932,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519227494/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519227494/logs",
+      "workflow_id": 320915169
+    },
+    {
+      "id": 35519227503,
+      "name": "Salla Orders V3 acceptance",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 33,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519227503/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519227503/logs",
+      "workflow_id": 359816949
+    },
+    {
+      "id": 35519227483,
+      "name": "Mezan Release Readiness",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 1951,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519227483/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519227483/logs",
+      "workflow_id": 330739464
+    },
+    {
+      "id": 35519227475,
+      "name": "Security Gate",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 1604,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519227475/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519227475/logs",
+      "workflow_id": 335759269
+    },
+    {
+      "id": 35519227471,
+      "name": "MZ2 Accounting Module",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 72,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519227471/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519227471/logs",
+      "workflow_id": 340804677
+    },
+    {
+      "id": 35519227495,
+      "name": "CodeQL",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 1582,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519227495/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519227495/logs",
+      "workflow_id": 335797767
+    }
+  ],
+  "B": [
+    {
+      "id": 35519516858,
+      "name": "Snapchat CAPI Purchases",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 145,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519516858/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519516858/logs",
+      "workflow_id": 325110303
+    },
+    {
+      "id": 35519516827,
+      "name": "Qoyod Payment Freshness",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 933,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519516827/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519516827/logs",
+      "workflow_id": 320915169
+    },
+    {
+      "id": 35519516814,
+      "name": "Salla Orders V3 acceptance",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 34,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519516814/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519516814/logs",
+      "workflow_id": 359816949
+    },
+    {
+      "id": 35519516793,
+      "name": "Snapchat Settings Management V2",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 338,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519516793/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519516793/logs",
+      "workflow_id": 344971566
+    },
+    {
+      "id": 35519516788,
+      "name": "Salla Abandoned Cart Webhooks",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 51,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519516788/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519516788/logs",
+      "workflow_id": 331082003
+    },
+    {
+      "id": 35519516794,
+      "name": "Security Gate",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 1605,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519516794/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519516794/logs",
+      "workflow_id": 335759269
+    },
+    {
+      "id": 35519516791,
+      "name": "MZ2 Accounting Module",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 73,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519516791/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519516791/logs",
+      "workflow_id": 340804677
+    },
+    {
+      "id": 35519516789,
+      "name": "Mezan Release Readiness",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 1952,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519516789/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519516789/logs",
+      "workflow_id": 330739464
+    },
+    {
+      "id": 35519516807,
+      "name": "CodeQL",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 1583,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519516807/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/35519516807/logs",
+      "workflow_id": 335797767
+    }
+  ]
+}

@@ -1,0 +1,515 @@
+{
+  "current_and_historical_before_after_identical": true,
+  "current_trial_total_credits": 1345.0,
+  "current_trial_total_debits": 1345.0,
+  "database": "mz2_report_isolation_preview_20260920",
+  "journal_groups": {
+    "54462bd7-928c-4441-84b9-8d20c386a17f": {
+      "accounting_at": "2020-01-01T00:00:00Z",
+      "entry_type": "opening_balance",
+      "legs": [
+        {
+          "amount": 1000.0,
+          "entity_id": "bank",
+          "entity_type": "bank",
+          "side": "debit",
+          "sub_account": "main"
+        },
+        {
+          "amount": 1000.0,
+          "entity_id": "SYN",
+          "entity_type": "equity",
+          "side": "credit",
+          "sub_account": null
+        }
+      ]
+    },
+    "660013ad-c9ae-4a08-8877-f8d623ff55c5": {
+      "accounting_at": "2026-09-05T09:00:00.000000+00:00",
+      "entry_type": "customer_refund_payment",
+      "legs": [
+        {
+          "amount": 75.0,
+          "entity_id": "49df13ca1ab7c75dc888d45344d83f57b301ded6359f592deeab5609188b4009",
+          "entity_type": "liability",
+          "side": "debit",
+          "sub_account": "customer_refund_payable"
+        },
+        {
+          "amount": 75.0,
+          "entity_id": "bank",
+          "entity_type": "bank",
+          "side": "credit",
+          "sub_account": "main"
+        }
+      ]
+    },
+    "a0a08b65-5ca3-46d7-b9c0-1de1785bf198": {
+      "accounting_at": "2026-09-02T09:00:00.000000+00:00",
+      "entry_type": "customer_refund_payment",
+      "legs": [
+        {
+          "amount": 40.0,
+          "entity_id": "bank",
+          "entity_type": "bank",
+          "side": "credit",
+          "sub_account": "main"
+        },
+        {
+          "amount": 40.0,
+          "entity_id": "49df13ca1ab7c75dc888d45344d83f57b301ded6359f592deeab5609188b4009",
+          "entity_type": "liability",
+          "side": "debit",
+          "sub_account": "customer_refund_payable"
+        }
+      ]
+    },
+    "bfff7414-391e-47ca-b4ba-9e57baf4243d": {
+      "accounting_at": "2026-08-31T20:30:00.000000+00:00",
+      "entry_type": "customer_refund_due",
+      "legs": [
+        {
+          "amount": 100.0,
+          "entity_id": "bnpl_sales",
+          "entity_type": "revenue",
+          "side": "debit",
+          "sub_account": null
+        },
+        {
+          "amount": 15.0,
+          "entity_id": "sales_vat_payable",
+          "entity_type": "tax",
+          "side": "debit",
+          "sub_account": null
+        },
+        {
+          "amount": 115.0,
+          "entity_id": "49df13ca1ab7c75dc888d45344d83f57b301ded6359f592deeab5609188b4009",
+          "entity_type": "liability",
+          "side": "credit",
+          "sub_account": "customer_refund_payable"
+        }
+      ]
+    },
+    "d36f3e39-a91f-4773-809f-ca4166ea0345": {
+      "accounting_at": "2020-01-02T12:00:00+00:00",
+      "entry_type": "bnpl_sale",
+      "legs": [
+        {
+          "amount": 115.0,
+          "entity_id": "tamara",
+          "entity_type": "payment_gateway",
+          "side": "debit",
+          "sub_account": "receivable"
+        },
+        {
+          "amount": 100.0,
+          "entity_id": "bnpl_sales",
+          "entity_type": "revenue",
+          "side": "credit",
+          "sub_account": null
+        },
+        {
+          "amount": 15.0,
+          "entity_id": "sales_vat_payable",
+          "entity_type": "tax",
+          "side": "credit",
+          "sub_account": null
+        }
+      ]
+    }
+  },
+  "legacy_current_balance": 987654321,
+  "legacy_group_ids": [
+    "SYN-UNTAGGED-7d9dbac615864151b14b44fdb3bd4e94",
+    "SYN-UNTAGGED-8c020e9311a24bc38d7b4f126645c25f",
+    "SYN-UNTAGGED-cebed8a177d945a2ac097b7c9b6d56c8"
+  ],
+  "legacy_orphan_flag_present": false,
+  "preview_url": "https://salla-analytics.preview.emergentagent.com",
+  "previous_acceptance_data_unchanged": true,
+  "previous_collections": {
+    "accounts": {
+      "count": 1,
+      "sha256": "7476b25d55400b2212a61c5dc4c1084a9b6e07db21f9762e589e95778aa3cc88"
+    },
+    "general_ledger": {
+      "count": 41,
+      "sha256": "57cf4cb67d8d5d274aa2f9905e3a8140923f408fce27b97f5fe987ed9680fee9"
+    },
+    "mz2_customer_refund_payments": {
+      "count": 3,
+      "sha256": "1c32f1d18e50cfd49dff548b16cd45d871496e5418c8d2515b3f204872d2e4e4"
+    },
+    "mz2_customer_refunds": {
+      "count": 2,
+      "sha256": "541c0f42497dbe235e5430d601d3fc076525ea5867134844ab91dc2480c38b28"
+    },
+    "settings": {
+      "count": 1,
+      "sha256": "1d800edcfbf89bf2f1d8e67927336c38301c5b798eccaae34ede634131a998fd"
+    }
+  },
+  "replica_set": "p01acceptance",
+  "reports": {
+    "2026-08-31": {
+      "as_of": "2026-08-31",
+      "assets": {
+        "banks": 1000.0,
+        "input_vat": 0.0,
+        "payment_platforms_remaining": 115.0
+      },
+      "cutover_at": "2020-01-01T00:00:00+00:00",
+      "ledger_only": true,
+      "legacy_financial_data_included": false,
+      "liabilities": {
+        "customer_advance": 0.0,
+        "customer_refund_payable": 115.0,
+        "sales_vat_payable": 0.0
+      },
+      "missing_accounts": [],
+      "opening_balance_txn_group_id": "54462bd7-928c-4441-84b9-8d20c386a17f",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "reason": "approved_opening_and_post_cutover_mz2_only",
+      "status": "available",
+      "timezone": "Asia/Riyadh",
+      "totals": {
+        "net_position": 1000.0,
+        "total_assets": 1115.0,
+        "total_liabilities": 115.0
+      }
+    },
+    "2026-09-02": {
+      "as_of": "2026-09-02",
+      "assets": {
+        "banks": 960.0,
+        "input_vat": 0.0,
+        "payment_platforms_remaining": 115.0
+      },
+      "cutover_at": "2020-01-01T00:00:00+00:00",
+      "ledger_only": true,
+      "legacy_financial_data_included": false,
+      "liabilities": {
+        "customer_advance": 0.0,
+        "customer_refund_payable": 75.0,
+        "sales_vat_payable": 0.0
+      },
+      "missing_accounts": [],
+      "opening_balance_txn_group_id": "54462bd7-928c-4441-84b9-8d20c386a17f",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "reason": "approved_opening_and_post_cutover_mz2_only",
+      "status": "available",
+      "timezone": "Asia/Riyadh",
+      "totals": {
+        "net_position": 1000.0,
+        "total_assets": 1075.0,
+        "total_liabilities": 75.0
+      }
+    },
+    "2026-09-05": {
+      "as_of": "2026-09-05",
+      "assets": {
+        "banks": 885.0,
+        "input_vat": 0.0,
+        "payment_platforms_remaining": 115.0
+      },
+      "cutover_at": "2020-01-01T00:00:00+00:00",
+      "ledger_only": true,
+      "legacy_financial_data_included": false,
+      "liabilities": {
+        "customer_advance": 0.0,
+        "customer_refund_payable": 0.0,
+        "sales_vat_payable": 0.0
+      },
+      "missing_accounts": [],
+      "opening_balance_txn_group_id": "54462bd7-928c-4441-84b9-8d20c386a17f",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "reason": "approved_opening_and_post_cutover_mz2_only",
+      "status": "available",
+      "timezone": "Asia/Riyadh",
+      "totals": {
+        "net_position": 1000.0,
+        "total_assets": 1000.0,
+        "total_liabilities": 0.0
+      }
+    },
+    "None": {
+      "as_of": null,
+      "assets": {
+        "banks": 885.0,
+        "input_vat": 0.0,
+        "payment_platforms_remaining": 115.0
+      },
+      "cutover_at": "2020-01-01T00:00:00+00:00",
+      "ledger_only": true,
+      "legacy_financial_data_included": false,
+      "liabilities": {
+        "customer_advance": 0.0,
+        "customer_refund_payable": 0.0,
+        "sales_vat_payable": 0.0
+      },
+      "missing_accounts": [],
+      "opening_balance_txn_group_id": "54462bd7-928c-4441-84b9-8d20c386a17f",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "reason": "approved_opening_and_post_cutover_mz2_only",
+      "status": "available",
+      "timezone": "Asia/Riyadh",
+      "totals": {
+        "net_position": 1000.0,
+        "total_assets": 1000.0,
+        "total_liabilities": 0.0
+      }
+    }
+  },
+  "runtime_proof": {
+    "adapter_sha256": "407d4d17daad8cf70bf6451b92c251cac679ef99bedd2a3e832ae792d55c6bd5",
+    "authentication": "email_password",
+    "base_release_unchanged": false,
+    "environment": "preview",
+    "second_factor_required": false,
+    "session_signing": "preview_only",
+    "source_git_sha": "163874f5ffcab10a5f3dc883a1c2acd56c414bf9"
+  },
+  "source_A": "163874f5ffcab10a5f3dc883a1c2acd56c414bf9",
+  "ui": [
+    {
+      "case": "A_missing_opening_current",
+      "visible_lines": [
+        "    - paragraph: \"حالة التقرير: بانتظار رصيد افتتاحي معتمد\"",
+        "    - paragraph: \"تاريخ التقرير: الحالي\""
+      ]
+    },
+    {
+      "case": "A_missing_opening_historical",
+      "visible_lines": [
+        "    - paragraph: \"حالة التقرير: بانتظار رصيد افتتاحي معتمد\"",
+        "    - paragraph: \"تاريخ التقرير: 2026-08-31 — نهاية اليوم بتوقيت الرياض\""
+      ]
+    },
+    {
+      "case": "C_approved_opening_august_before_GL_sentinels",
+      "visible_lines": [
+        "    - paragraph: \"حالة التقرير: متاح\"",
+        "    - paragraph: \"تاريخ التقرير: 2026-08-31 — نهاية اليوم بتوقيت الرياض\"",
+        "    - term: البنوك والصناديق",
+        "    - definition: 1,000.00 ر.س",
+        "    - term: ذمم مزودي الدفع",
+        "    - definition: 115.00 ر.س",
+        "    - term: ضريبة مدخلات",
+        "    - definition: 0.00 ر.س",
+        "    - term: التزام استرداد العميل",
+        "    - definition: 115.00 ر.س",
+        "    - term: تحصيلات العملاء المقدمة",
+        "    - definition: 0.00 ر.س",
+        "    - term: ضريبة المبيعات المستحقة",
+        "    - definition: 0.00 ر.س",
+        "    - term: إجمالي الأصول",
+        "    - definition: 1,115.00 ر.س",
+        "    - term: إجمالي الالتزامات",
+        "    - definition: 115.00 ر.س",
+        "    - term: صافي المركز المالي",
+        "    - definition: 1,000.00 ر.س"
+      ]
+    },
+    {
+      "case": "C_current_before_GL_sentinels",
+      "visible_lines": [
+        "    - paragraph: \"حالة التقرير: متاح\"",
+        "    - paragraph: \"تاريخ التقرير: الحالي\"",
+        "    - term: البنوك والصناديق",
+        "    - definition: 885.00 ر.س",
+        "    - term: ذمم مزودي الدفع",
+        "    - definition: 115.00 ر.س",
+        "    - term: ضريبة مدخلات",
+        "    - definition: 0.00 ر.س",
+        "    - term: التزام استرداد العميل",
+        "    - definition: 0.00 ر.س",
+        "    - term: تحصيلات العملاء المقدمة",
+        "    - definition: 0.00 ر.س",
+        "    - term: ضريبة المبيعات المستحقة",
+        "    - definition: 0.00 ر.س",
+        "    - term: إجمالي الأصول",
+        "    - definition: 1,000.00 ر.س",
+        "    - term: إجمالي الالتزامات",
+        "    - definition: 0.00 ر.س",
+        "    - term: صافي المركز المالي",
+        "    - definition: 1,000.00 ر.س"
+      ]
+    },
+    {
+      "case": "B_current_after_GL_sentinels",
+      "visible_lines": [
+        "    - paragraph: \"حالة التقرير: متاح\"",
+        "    - paragraph: \"تاريخ التقرير: الحالي\"",
+        "    - term: البنوك والصناديق",
+        "    - definition: 885.00 ر.س",
+        "    - term: ذمم مزودي الدفع",
+        "    - definition: 115.00 ر.س",
+        "    - term: ضريبة مدخلات",
+        "    - definition: 0.00 ر.س",
+        "    - term: التزام استرداد العميل",
+        "    - definition: 0.00 ر.س",
+        "    - term: تحصيلات العملاء المقدمة",
+        "    - definition: 0.00 ر.س",
+        "    - term: ضريبة المبيعات المستحقة",
+        "    - definition: 0.00 ر.س",
+        "    - term: إجمالي الأصول",
+        "    - definition: 1,000.00 ر.س",
+        "    - term: إجمالي الالتزامات",
+        "    - definition: 0.00 ر.س",
+        "    - term: صافي المركز المالي",
+        "    - definition: 1,000.00 ر.س"
+      ]
+    },
+    {
+      "case": "D_august_after_GL_sentinels",
+      "visible_lines": [
+        "    - paragraph: \"حالة التقرير: متاح\"",
+        "    - paragraph: \"تاريخ التقرير: 2026-08-31 — نهاية اليوم بتوقيت الرياض\"",
+        "    - term: البنوك والصناديق",
+        "    - definition: 1,000.00 ر.س",
+        "    - term: ذمم مزودي الدفع",
+        "    - definition: 115.00 ر.س",
+        "    - term: ضريبة مدخلات",
+        "    - definition: 0.00 ر.س",
+        "    - term: التزام استرداد العميل",
+        "    - definition: 115.00 ر.س",
+        "    - term: تحصيلات العملاء المقدمة",
+        "    - definition: 0.00 ر.س",
+        "    - term: ضريبة المبيعات المستحقة",
+        "    - definition: 0.00 ر.س",
+        "    - term: إجمالي الأصول",
+        "    - definition: 1,115.00 ر.س",
+        "    - term: إجمالي الالتزامات",
+        "    - definition: 115.00 ر.س",
+        "    - term: صافي المركز المالي",
+        "    - definition: 1,000.00 ر.س"
+      ]
+    },
+    {
+      "case": "D_partial_payment_September2",
+      "visible_lines": [
+        "    - paragraph: \"حالة التقرير: متاح\"",
+        "    - paragraph: \"تاريخ التقرير: 2026-09-02 — نهاية اليوم بتوقيت الرياض\"",
+        "    - term: البنوك والصناديق",
+        "    - definition: 960.00 ر.س",
+        "    - term: ذمم مزودي الدفع",
+        "    - definition: 115.00 ر.س",
+        "    - term: ضريبة مدخلات",
+        "    - definition: 0.00 ر.س",
+        "    - term: التزام استرداد العميل",
+        "    - definition: 75.00 ر.س",
+        "    - term: تحصيلات العملاء المقدمة",
+        "    - definition: 0.00 ر.س",
+        "    - term: ضريبة المبيعات المستحقة",
+        "    - definition: 0.00 ر.س",
+        "    - term: إجمالي الأصول",
+        "    - definition: 1,075.00 ر.س",
+        "    - term: إجمالي الالتزامات",
+        "    - definition: 75.00 ر.س",
+        "    - term: صافي المركز المالي",
+        "    - definition: 1,000.00 ر.س"
+      ]
+    },
+    {
+      "case": "D_final_payment_September5",
+      "visible_lines": [
+        "    - paragraph: \"حالة التقرير: متاح\"",
+        "    - paragraph: \"تاريخ التقرير: 2026-09-05 — نهاية اليوم بتوقيت الرياض\"",
+        "    - term: البنوك والصناديق",
+        "    - definition: 885.00 ر.س",
+        "    - term: ذمم مزودي الدفع",
+        "    - definition: 115.00 ر.س",
+        "    - term: ضريبة مدخلات",
+        "    - definition: 0.00 ر.س",
+        "    - term: التزام استرداد العميل",
+        "    - definition: 0.00 ر.س",
+        "    - term: تحصيلات العملاء المقدمة",
+        "    - definition: 0.00 ر.س",
+        "    - term: ضريبة المبيعات المستحقة",
+        "    - definition: 0.00 ر.س",
+        "    - term: إجمالي الأصول",
+        "    - definition: 1,000.00 ر.س",
+        "    - term: إجمالي الالتزامات",
+        "    - definition: 0.00 ر.س",
+        "    - term: صافي المركز المالي",
+        "    - definition: 1,000.00 ر.س"
+      ]
+    },
+    {
+      "case": "D_August_reread_after_September",
+      "visible_lines": [
+        "    - paragraph: \"حالة التقرير: متاح\"",
+        "    - paragraph: \"تاريخ التقرير: 2026-08-31 — نهاية اليوم بتوقيت الرياض\"",
+        "    - term: البنوك والصناديق",
+        "    - definition: 1,000.00 ر.س",
+        "    - term: ذمم مزودي الدفع",
+        "    - definition: 115.00 ر.س",
+        "    - term: ضريبة مدخلات",
+        "    - definition: 0.00 ر.س",
+        "    - term: التزام استرداد العميل",
+        "    - definition: 115.00 ر.س",
+        "    - term: تحصيلات العملاء المقدمة",
+        "    - definition: 0.00 ر.س",
+        "    - term: ضريبة المبيعات المستحقة",
+        "    - definition: 0.00 ر.س",
+        "    - term: إجمالي الأصول",
+        "    - definition: 1,115.00 ر.س",
+        "    - term: إجمالي الالتزامات",
+        "    - definition: 115.00 ر.س",
+        "    - term: صافي المركز المالي",
+        "    - definition: 1,000.00 ر.س"
+      ]
+    },
+    {
+      "case": "R5_trial_balance_august",
+      "visible_lines": [
+        "    - paragraph: \"حالة التقرير: متاح\"",
+        "    - paragraph: \"تاريخ التقرير: 2026-08-31 — نهاية اليوم بتوقيت الرياض\"",
+        "        - row \"الحساب المعرف الحساب الفرعي مدين دائن الصافي\":",
+        "        - row \"bank bank main 1,000.00 ر.س 0.00 ر.س 1,000.00 ر.س\":",
+        "        - row \"equity SYN — 0.00 ر.س 1,000.00 ر.س -1,000.00 ر.س\":",
+        "        - row \"liability 49df13ca1ab7c75dc888d45344d83f57b301ded6359f592deeab5609188b4009 التزام استرداد العميل 0.00 ر.س 115.00 ر.س -115.00 ر.س\":",
+        "        - row \"payment_gateway tamara receivable 115.00 ر.س 0.00 ر.س 115.00 ر.س\":",
+        "        - row \"revenue bnpl_sales — 100.00 ر.س 100.00 ر.س 0.00 ر.س\":",
+        "        - row \"tax sales_vat_payable — 15.00 ر.س 15.00 ر.س 0.00 ر.س\":"
+      ]
+    },
+    {
+      "case": "R5_journals_august",
+      "visible_lines": [
+        "    - paragraph: \"حالة التقرير: متاح\"",
+        "    - paragraph: \"تاريخ التقرير: 2026-08-31 — نهاية اليوم بتوقيت الرياض\"",
+        "        - row \"التاريخ المحاسبي مجموعة القيد الحساب مدين دائن\":",
+        "        - row \"2020-01-01T00:00:00Z 54462bd7-928c-4441-84b9-8d20c386a17f main — bank 1,000.00 ر.س —\":",
+        "        - row \"2020-01-01T00:00:00Z 54462bd7-928c-4441-84b9-8d20c386a17f equity — SYN — 1,000.00 ر.س\":",
+        "        - row \"2020-01-02T12:00:00+00:00 d36f3e39-a91f-4773-809f-ca4166ea0345 receivable — tamara 115.00 ر.س —\":",
+        "        - row \"2020-01-02T12:00:00+00:00 d36f3e39-a91f-4773-809f-ca4166ea0345 revenue — bnpl_sales — 100.00 ر.س\":",
+        "        - row \"2020-01-02T12:00:00+00:00 d36f3e39-a91f-4773-809f-ca4166ea0345 tax — sales_vat_payable — 15.00 ر.س\":",
+        "        - row \"2026-08-31T20:30:00.000000+00:00 bfff7414-391e-47ca-b4ba-9e57baf4243d revenue — bnpl_sales 100.00 ر.س —\":",
+        "        - row \"2026-08-31T20:30:00.000000+00:00 bfff7414-391e-47ca-b4ba-9e57baf4243d tax — sales_vat_payable 15.00 ر.س —\":",
+        "        - row \"2026-08-31T20:30:00.000000+00:00 bfff7414-391e-47ca-b4ba-9e57baf4243d التزام استرداد العميل — 49df13ca1ab7c75dc888d45344d83f57b301ded6359f592deeab5609188b4009 — 115.00 ر.س\":"
+      ]
+    },
+    {
+      "case": "R5_journals_current",
+      "visible_lines": [
+        "    - paragraph: \"حالة التقرير: متاح\"",
+        "    - paragraph: \"تاريخ التقرير: الحالي\"",
+        "        - row \"التاريخ المحاسبي مجموعة القيد الحساب مدين دائن\":",
+        "        - row \"2020-01-01T00:00:00Z 54462bd7-928c-4441-84b9-8d20c386a17f main — bank 1,000.00 ر.س —\":",
+        "        - row \"2020-01-01T00:00:00Z 54462bd7-928c-4441-84b9-8d20c386a17f equity — SYN — 1,000.00 ر.س\":",
+        "        - row \"2020-01-02T12:00:00+00:00 d36f3e39-a91f-4773-809f-ca4166ea0345 receivable — tamara 115.00 ر.س —\":",
+        "        - row \"2020-01-02T12:00:00+00:00 d36f3e39-a91f-4773-809f-ca4166ea0345 revenue — bnpl_sales — 100.00 ر.س\":",
+        "        - row \"2020-01-02T12:00:00+00:00 d36f3e39-a91f-4773-809f-ca4166ea0345 tax — sales_vat_payable — 15.00 ر.س\":",
+        "        - row \"2026-08-31T20:30:00.000000+00:00 bfff7414-391e-47ca-b4ba-9e57baf4243d revenue — bnpl_sales 100.00 ر.س —\":",
+        "        - row \"2026-08-31T20:30:00.000000+00:00 bfff7414-391e-47ca-b4ba-9e57baf4243d tax — sales_vat_payable 15.00 ر.س —\":",
+        "        - row \"2026-08-31T20:30:00.000000+00:00 bfff7414-391e-47ca-b4ba-9e57baf4243d التزام استرداد العميل — 49df13ca1ab7c75dc888d45344d83f57b301ded6359f592deeab5609188b4009 — 115.00 ر.س\":",
+        "        - row \"2026-09-02T09:00:00.000000+00:00 a0a08b65-5ca3-46d7-b9c0-1de1785bf198 main — bank — 40.00 ر.س\":",
+        "        - row \"2026-09-02T09:00:00.000000+00:00 a0a08b65-5ca3-46d7-b9c0-1de1785bf198 التزام استرداد العميل — 49df13ca1ab7c75dc888d45344d83f57b301ded6359f592deeab5609188b4009 40.00 ر.س —\":",
+        "        - row \"2026-09-05T09:00:00.000000+00:00 660013ad-c9ae-4a08-8877-f8d623ff55c5 التزام استرداد العميل — 49df13ca1ab7c75dc888d45344d83f57b301ded6359f592deeab5609188b4009 75.00 ر.س —\":",
+        "        - row \"2026-09-05T09:00:00.000000+00:00 660013ad-c9ae-4a08-8877-f8d623ff55c5 main — bank — 75.00 ر.س\":"
+      ]
+    }
+  ]
+}
