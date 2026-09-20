@@ -14,6 +14,7 @@ import AccountingWriteControl from "./AccountingWriteControl";
 import AccountingPeriods from "./AccountingPeriods";
 import AccountingCustomerAdvances from "./AccountingCustomerAdvances";
 import AccountingOpeningBalances from "./AccountingOpeningBalances";
+import AccountingPayroll from "./AccountingPayroll";
 import {
     AccessDenied,
     AccountingHeader,
@@ -88,6 +89,8 @@ export default function AccountingWorkspace() {
         content = <><AccountingDailyMovements accountingPermissions={permissions} /><AccountingBankReceipts accountingPermissions={permissions} /><AccountingCustomerAdvances accountingPermissions={permissions} /></>;
     } else if (page.id === "journals-reports") {
         content = <AccountingReports />;
+    } else if (page.id === "payroll-obligations") {
+        content = <AccountingPayroll accountingPermissions={permissions} />;
     } else if (page.id === "opening-balances") {
         content = statusLoading ? <LoadingBlock /> : <AccountingOpeningBalances />;
     } else {
