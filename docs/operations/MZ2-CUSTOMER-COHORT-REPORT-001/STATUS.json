@@ -1,0 +1,77 @@
+{
+  "task_id": "MZ2-CUSTOMER-COHORT-REPORT-001",
+  "updated_at": "2026-09-20T15:10:42Z",
+  "status": "REMOTE_BRANCH_PUSHED_VERIFIED",
+  "scope": "Owner-only read-only customer acquisition and repeat-purchase cohort report from financially included matched Salla orders.",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "feat/customer-cohort-profit-report-20260920",
+  "base_sha": "ebf92e6606a810a1e3f0a0e2026984a5482f71bc",
+  "implementation_commit_sha": "b5aa08037d8393b573a6d238a35783839c8f0dd9",
+  "changed_behavior": [
+    "Adds owner-only GET /api/orders-v2/mezan-attribution-v1/customer-cohorts.",
+    "Groups customers by first purchase 0-30 and 31-60 days as of the selected Riyadh date.",
+    "Reports returning customers and later orders in the latest 30-day and 60-day windows.",
+    "Separates first-order source into confirmed ad, explicit non-ad, and unresolved.",
+    "Reports confirmed first acquisition cost and later-order contribution profit only with complete source facts.",
+    "Returns aggregate data only and never returns customer names, phone numbers, email addresses, or identity keys.",
+    "Adds owner-only Mezan 2 UI at /ads-manager/customer-cohorts under Marketing > Customer cohorts."
+  ],
+  "financial_definition": {
+    "first_acquisition_cost": "Allocated ad spend on the first order, only when attribution is confirmed and decision-safe.",
+    "later_order_contribution_profit": "Revenue minus product cost minus allocated ad spend; remains unknown unless all three facts are known.",
+    "unknown_is_zero": false
+  },
+  "verification": [
+    {
+      "command": "/workspace/scratch/3d81ccb6cbd3/snap30-venv/bin/python -m pytest backend/tests/test_customer_cohort_profit_report.py backend/tests/test_mezan_attribution_owner_routes.py backend/tests/test_mezan_attribution_order_ledger.py backend/tests/test_mezan_attribution_ledger_sync.py backend/tests/test_mezan_attribution_profit_bridge.py -q",
+      "exit_code": 0,
+      "result": "32 passed; 2 unrelated Pydantic deprecation warnings."
+    },
+    {
+      "command": "react-scripts test --watchAll=false --runInBand customer cohort + Mezan V2 navigation suites",
+      "exit_code": 0,
+      "result": "4 suites passed; 19 tests passed."
+    },
+    {
+      "command": "vite build",
+      "exit_code": 0,
+      "result": "Production frontend bundle built successfully; existing CSS import-order and chunk-size warnings remain."
+    },
+    {
+      "command": "pytest backend/tests/test_order_engine_routes.py backend/tests/test_customer_history_route.py backend/tests/test_customer_history_complete_lookup.py -q",
+      "exit_code": 1,
+      "result": "2 passed and 9 failed outside this change: eight failures require missing PyMuPDF/fitz in the reused test environment; one existing order_engine.routes contract assertion detects direct Mongo attributes."
+    },
+    {
+      "command": "yarn --cwd frontend test --watchAll=false --runInBand --runTestsByPath src/pages/CustomerCohortReport.test.jsx src/services/customerCohortReport.test.js src/components/MezanV2NavigationShell.test.jsx",
+      "exit_code": 0,
+      "result": "3 suites passed; 17 tests passed in /app."
+    },
+    {
+      "command": "yarn --cwd frontend vite build",
+      "exit_code": 0,
+      "result": "Vite build passed in /app with existing chunk-size and dynamic-import warnings."
+    },
+    {
+      "command": "python -m pytest focused Backend suites",
+      "exit_code": 1,
+      "result": "Not runnable in /app because pytest is not installed; prior complete local run remains 32 passed."
+    }
+  ],
+  "privacy_and_safety": {
+    "aggregate_only": true,
+    "owner_only": true,
+    "external_writes": false,
+    "production_changed": false,
+    "merged": false,
+    "deployed": false
+  },
+  "remaining": [
+    "Create the Pull Request after action-time confirmation.",
+    "Wait for repository CI and fix only failures attributable to this change.",
+    "Complete Preview verification, freeze Protocol v5 source/intent commits, merge without squash or rebase, then publish Production only through Release Guard v5.",
+    "Verify Production with three consecutive probes and close the lease."
+  ],
+  "next_safe_action": "Create a PR from feat/customer-cohort-profit-report-20260920 to hotfix/prod-snap-meta-final after user confirmation; Production remains unchanged.",
+  "checkpoint_commit_sha": "9af4d9533705e52b48d97a04fb261daa6b8f2e56"
+}\n

@@ -92,6 +92,7 @@ export const MEZAN_V2_NAV_SECTIONS = [
         items: [
             { to: "/ads-manager", label: "جميع المنصات", exactSearch: true },
             { to: "/ads-manager/recommendations", label: "توصيات الحملات", exactSearch: true },
+            { to: "/ads-manager/customer-cohorts", label: "أفواج العملاء", exactSearch: true },
             { to: "/snapchat-accounts", label: "سناب شات", exactSearch: true },
             { to: "/ads-manager?provider=tiktok", label: "تيك توك" },
             { to: "/ads-manager?provider=meta", label: "ميتا" },
