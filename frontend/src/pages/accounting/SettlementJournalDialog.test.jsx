@@ -2,6 +2,21 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { act } from "react-dom/test-utils";
 import SettlementJournalDialog from "./SettlementJournalDialog";
+// Keep the real Radix dialog. Jest 27 cannot resolve this new conditional
+// subpath export, so read the installed package's own CommonJS declaration.
+jest.mock("@radix-ui/primitive/is-development", () => {
+    const path = require("path");
+    const packagePath = require.resolve("@radix-ui/primitive/package.json");
+    let target = require(packagePath).exports["./is-development"];
+    while (target && typeof target === "object") {
+        target = target.require || target.node || target.default;
+    }
+    if (typeof target !== "string") throw new Error("Radix development CommonJS export missing");
+    return require(path.resolve(path.dirname(packagePath), target));
+}, { virtual: true });
+// Match the application Vite alias without changing global Jest configuration.
+jest.mock("@/lib/utils", () => require("../../lib/utils"), { virtual: true });
+
 let root, container;
 beforeEach(() => {
     global.IS_REACT_ACT_ENVIRONMENT = true;

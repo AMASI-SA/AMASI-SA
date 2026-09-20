@@ -6,6 +6,19 @@ import { useOptionalAuth } from "../../context/AuthContext";
 import { getAccountingAccess, getAccountingModuleStatus } from "../../services/accountingModule";
 import AccountingWorkspace from "./AccountingWorkspace";
 
+// Jest 27 predates conditional subpath exports. Resolve the installed package's
+// declared CommonJS target while keeping the actual router and navigation.
+jest.mock("react-router/dom", () => {
+    const path = require("path");
+    const packagePath = require.resolve("react-router/package.json");
+    let target = require(packagePath).exports["./dom"];
+    while (target && typeof target === "object") {
+        target = target.require || target.node || target.default;
+    }
+    if (typeof target !== "string") throw new Error("react-router/dom CommonJS export missing");
+    return require(path.resolve(path.dirname(packagePath), target));
+}, { virtual: true });
+
 jest.mock("../../lib/api", () => ({ get: jest.fn() }));
 jest.mock("../../context/AuthContext", () => ({ useOptionalAuth: jest.fn() }));
 jest.mock("../../services/accountingModule", () => ({
