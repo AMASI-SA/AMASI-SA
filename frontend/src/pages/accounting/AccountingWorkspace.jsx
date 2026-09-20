@@ -4,13 +4,11 @@ import { toast } from "sonner";
 import { useOptionalAuth } from "../../context/AuthContext";
 import { getAccountingAccess, getAccountingModuleStatus } from "../../services/accountingModule";
 import AccountingCourierBankBindings from "./AccountingCourierBankBindings";
-import AccountingHome from "./AccountingHome";
+import AccountingDailyWorkspace from "./AccountingDailyWorkspace";
 import AccountingReports from "./AccountingReports";
 import AccountingPermissionsDialog from "./AccountingPermissionsDialog";
 import AccountingSettlements from "./AccountingSettlements";
 import AccountingBankReceipts from "./AccountingBankReceipts";
-import AccountingWriteControl from "./AccountingWriteControl";
-import AccountingPeriods from "./AccountingPeriods";
 import AccountingCustomerAdvances from "./AccountingCustomerAdvances";
 import {
     AccessDenied,
@@ -74,7 +72,15 @@ export default function AccountingWorkspace() {
     if (page.id === "home") {
         content = statusLoading
             ? <LoadingBlock />
-            : <AccountingHome status={status} user={user} accountingPermissions={permissions} />;
+            : (
+                <AccountingDailyWorkspace
+                    status={status}
+                    user={user}
+                    accountingPermissions={permissions}
+                    canManagePermissions={access?.is_owner === true}
+                    onOpenPermissions={() => setPermissionsOpen(true)}
+                />
+            );
     } else if (page.id === "settlements") {
         content = (
             <div className="space-y-5">
@@ -94,9 +100,13 @@ export default function AccountingWorkspace() {
 
     return (
         <div className="space-y-5" dir="rtl" data-testid="accounting-workspace">
-            <AccountingHeader page={page} canManagePermissions={access?.is_owner === true} onOpenPermissions={() => setPermissionsOpen(true)} />
-            <AccountingWriteControl />
-            <AccountingPeriods />
+            {page.id !== "home" && (
+                <AccountingHeader
+                    page={page}
+                    canManagePermissions={access?.is_owner === true}
+                    onOpenPermissions={() => setPermissionsOpen(true)}
+                />
+            )}
             {content}
             <AccountingPermissionsDialog open={permissionsOpen} onClose={() => setPermissionsOpen(false)} />
         </div>
