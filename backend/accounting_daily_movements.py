@@ -82,7 +82,10 @@ OUT_DIRECTIONS = {"out", "debit", "withdrawal", "outflow", "صادر", "سحب",
 
 
 def _clean(value: Any) -> str:
-    return " ".join(str(value or "").strip().split())
+    # Preserve numeric zero; it is a valid debit/credit cell value.
+    if value is None:
+        return ""
+    return " ".join(str(value).strip().split())
 
 
 def _header(value: Any) -> str:
