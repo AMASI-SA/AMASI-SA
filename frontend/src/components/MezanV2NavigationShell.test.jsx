@@ -240,6 +240,7 @@ test("marketing report and cost routes are separate from app integration routes"
     expect(section.items.map((item) => item.to)).toEqual([
         "/ads-manager",
         "/ads-manager/recommendations",
+        "/ads-manager/customer-cohorts",
         "/snapchat-accounts",
         "/ads-manager?provider=tiktok",
         "/ads-manager?provider=meta",
@@ -262,6 +263,7 @@ test("opening marketing selects a visible secondary rail outside the primary scr
     expect(state.visibleSection.items.map((item) => item.label)).toEqual([
         "جميع المنصات",
         "توصيات الحملات",
+        "أفواج العملاء",
         "سناب شات",
         "تيك توك",
         "ميتا",

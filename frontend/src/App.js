@@ -92,6 +92,7 @@ import FinancialMovementsListPage from "./pages/FinancialMovementsListPage";
 import LegacyUsageReportPage from "./pages/LegacyUsageReportPage";
 import SuppliersReportPage from "./pages/SuppliersReportPage";
 import AdsCostSettingsV2 from "./pages/AdsCostSettingsV2";
+import CustomerCohortReport from "./pages/CustomerCohortReport";
 import SallaSettlements from "./pages/SallaSettlements";
 import SettlementsOverview from "./pages/SettlementsOverview";
 import AlertsPage from "./pages/AlertsPage";
@@ -419,6 +420,16 @@ function AppRoutes() {
                     <ProtectedRoute>
                         <OwnerOnlyRoute>
                             <Layout><AdsCostSettingsV2 /></Layout>
+                        </OwnerOnlyRoute>
+                    </ProtectedRoute>
+                }
+            />
+            <Route
+                path="/ads-manager/customer-cohorts"
+                element={
+                    <ProtectedRoute>
+                        <OwnerOnlyRoute>
+                            <Layout><CustomerCohortReport /></Layout>
                         </OwnerOnlyRoute>
                     </ProtectedRoute>
                 }

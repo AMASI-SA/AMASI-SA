@@ -23,6 +23,7 @@ from pymongo.errors import DuplicateKeyError
 from mezan_attribution_ledger_sync import safe_sync_order_to_attribution_ledger
 from mezan_attribution_order_ledger import LEDGER_COLLECTION
 from mezan_attribution_profit_bridge import build_attribution_profit_bridge
+from customer_cohort_profit_report import build_customer_cohort_report
 from warehouse_location_routes import _merchant_user_id, _text
 
 BACKFILL_STATE_COLLECTION = "mezan_attribution_backfill_state_v1"
@@ -291,6 +292,43 @@ def make_mezan_attribution_owner_router(
             from_date=from_date,
             to_date=to_date,
             limit=limit,
+        )
+        return {
+            "ok": True,
+            "user_id": user_id,
+            "report": report,
+            "external_writes": False,
+        }
+
+    @router.get("/customer-cohorts")
+    async def customer_cohorts(
+        as_of: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+        max_orders: int = Query(default=100_000, ge=1, le=100_000),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        actor = require_owner(user)
+        user_id = _merchant_user_id(actor)
+        try:
+            report_date = (
+                datetime.fromisoformat(as_of).date()
+                if as_of
+                else datetime.now(timezone(timedelta(hours=3))).date()
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={"code": "invalid_as_of", "message": "تاريخ التقرير غير صالح."},
+            ) from exc
+
+        from auth import ensure_user_settings
+
+        settings = await ensure_user_settings(db, user_id)
+        report = await build_customer_cohort_report(
+            db,
+            user_id,
+            as_of=report_date,
+            included_statuses=settings.get("report_included_statuses") or [],
+            max_orders=max_orders,
         )
         return {
             "ok": True,
