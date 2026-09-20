@@ -48,7 +48,7 @@ export const ACCOUNTING_PAGES = [
         label: "الأرصدة الافتتاحية",
         permission: "accounting.opening_balances.view",
         to: "/integrations-v2?workspace=financial&page=opening-balances",
-        implementationStatus: "blocked_not_implemented",
+        implementationStatus: "implemented",
     },
     {
         id: "journals-reports",
