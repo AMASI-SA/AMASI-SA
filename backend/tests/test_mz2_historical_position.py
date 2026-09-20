@@ -20,7 +20,8 @@ class HistoricalPositionTests(unittest.IsolatedAsyncioTestCase):
         await self.bank()
         # Fixture opening is explicitly dated; immutable accounting date differs
         # from today's audit timestamp just as historical migrated openings do.
-        await self.db.general_ledger.update_many({}, {"$set": {"metadata.accounting_at": "2020-01-01T00:00:00+03:00"}})
+        # Same approved cutover instant, expressed in the report's local zone.
+        await self.db.general_ledger.update_many({}, {"$set": {"metadata.accounting_at": "2020-01-01T03:00:00+03:00"}})
         key = await self.setup_sale(gross="115")
         row = await self.case(key, "SYN-HISTORICAL", "115")
         await self.confirm(row, "2020-08-31T23:30:00+03:00")

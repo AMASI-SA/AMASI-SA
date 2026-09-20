@@ -126,6 +126,8 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(frozen["txn_group_id"], result["txn_group_id"])
 
     async def test_partial_full_refund_uses_original_rate(self):
+        from mz2_report_fixtures import provision_write_opening
+        await provision_write_opening(self.db)
         sale = await self.preview_and_post()
         await self.configure("20", 1)
         for index in (1, 2):
