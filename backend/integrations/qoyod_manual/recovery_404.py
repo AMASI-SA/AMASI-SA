@@ -241,7 +241,8 @@ async def recover_one(scope: Scope, reference: str, ports: Ports) -> Outcome:
                 # Even local audit persistence failure is not permission to
                 # continue. Keep the original conservative pause behavior.
                 pass
-        result = Outcome(reference, "unknown" if sent else "blocked", reason)
+        result = Outcome(reference, "unknown" if sent else "blocked", reason,
+                         read_diagnostic=getattr(exc, "_recovery_read_diagnostic", None))
         # Pause before finish: a local persistence failure must not permit more sends.
         await ports.pause(reason)
         await ports.finish(result)

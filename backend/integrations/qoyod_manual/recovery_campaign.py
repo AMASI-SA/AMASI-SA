@@ -287,10 +287,10 @@ async def audit_pending(db, external_factory):
     scope = scope_from(campaign)
     ports = DurablePorts(db, campaign, external_factory(db, campaign))
     try:
-        rows = [row async for row in db.qoyod_404_outcomes.find(
-            {"campaign": CAMPAIGN, "$or": [
-                {"state": {"$in": ["unknown", "running", "review", "rounding_review"]}},
-                {"state": "blocked", "reason": "provider_settlement_incomplete"}]} )]
+        # Use the same unresolved predicate that blocks activation. A worker
+        # read failure before send is `blocked`, but still requires audit.
+        rows = [row async for row in db.qoyod_404_outcomes.find({"campaign": CAMPAIGN})
+                if unresolved_attempt(row) or row["state"] == "rounding_review"]
         for row in rows:
             await audit_one(scope, row["reference"], ports)
     finally:
