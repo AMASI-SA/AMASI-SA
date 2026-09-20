@@ -12,6 +12,7 @@ on:
     paths:
       - "backend/accounting_module_*.py"
       - "backend/accounting_daily_movements.py"
+      - "backend/accounting_employee_finance.py"
       - "backend/accounting_mz2_reports.py"
       - "backend/tests/test_mz2_report_isolation.py"
       - "backend/tests/mz2_report_fixtures.py"
@@ -22,6 +23,7 @@ on:
       - "backend/accounting_ingress.py"
       - "backend/tests/test_mz2_write_control.py"
       - "backend/tests/test_mz2_daily_movements.py"
+      - "backend/tests/test_mz2_employee_finance.py"
       - "backend/accounting_receipt_service.py"
       - "backend/accounting_customer_refund*.py"
       - "backend/accounting_refund_drafts.py"
@@ -109,6 +111,8 @@ jobs:
         run: python -m unittest discover -s tests -p test_mz2_opening_balances.py -v
       - name: Test MZ2 bank-statement and daily movement intake
         run: python -m unittest discover -s tests -p test_mz2_daily_movements.py -v
+      - name: Test MZ2 payroll advances and custody
+        run: python -m unittest discover -s tests -p test_mz2_employee_finance.py -v
       - name: Test historical financial position, closed periods, provider credits and advances
         run: |
           python -m unittest discover -s tests -p test_mz2_report_dates.py -v
@@ -149,6 +153,7 @@ jobs:
           python -m py_compile
           accounting_module_*.py
           accounting_daily_movements.py
+          accounting_employee_finance.py
           accounting_settlement_*.py
           accounting_courier_bank_routes.py
           financial_provider_apps.py
