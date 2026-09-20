@@ -21,8 +21,8 @@
   "current_phase": "P01",
   "current_phase_file": "PHASE-01-SETTLEMENTS.md",
   "current_phase_status": "IN_PROGRESS",
-  "next_allowed_action": "activate_prepared_exact_A_only_on_isolated_Preview_then_complete_write_report_smoke_and_evidence; preserve_P01_open_P02_locked",
-  "current_blocker": "PR1113_final_Preview_runtime_and_acceptance_pending; Production_database_backup_and_owner_activation_decisions_remain_independent",
+  "next_allowed_action": "review_PR1113_frozen_A_B_and_HTTP_evidence; browser_UI_retest_unverified; resolve_independent_Production_readiness_and_owner_decisions_without_merge_or_deploy",
+  "current_blocker": "Production_database_backup_restore_and_owner_activation_decisions_unverified; browser_UI_retest_blocked; P01_remains_open_P02_locked",
   "legacy_mezan_policy": {
     "dynamic_financial_dependency_allowed": false,
     "copy_reference_values_allowed": true,
@@ -398,7 +398,7 @@
   },
   "write_balance_acceptance_20260920": {
     "pr": 1113,
-    "status": "EXACT_A_VERIFIED_FINAL_PREVIEW_PENDING",
+    "status": "EXACT_A_PACKAGE_AND_PREVIEW_HTTP_PASS_UI_RETEST_UNVERIFIED",
     "source_base_j": "6365a042dfcb125e81e5e198ea1ff1537373ce51",
     "source_a": "e8818bb67d84ccd0487e126a06f5e9c3e09702c7",
     "intent_b": "c66dec17f9defbd50518b90561ca1a350a631608",
@@ -414,8 +414,16 @@
     "source_a_ci": "9_OF_9_PASS",
     "intent_b_ci": "9_OF_9_PASS",
     "final_clean_clone_rehearsal": "PASS_FOUR_RAW_PROOF_FILES_DOWNLOADED_AND_VERIFIED",
-    "final_preview": "PENDING_ACTIVATION_AND_ACCEPTANCE",
-    "preview_journal_groups": [],
+    "final_preview": "PASS_ACTUAL_HTTP_29_STEPS_3_ATOMIC_DENIALS",
+    "preview_journal_groups": [
+      "b8fd924b-2ff8-4208-8891-223f30c3e602",
+      "d6701b2a-f9a9-47db-a273-2581f404fe06",
+      "fdd84634-0dbf-4672-a2fe-0f07aa6b3c93",
+      "195cf836-4fc9-4d35-8f5e-c778bd7c8eb5",
+      "7f0bb85b-0023-48ce-83cc-2a9e2fc6b7cc",
+      "e937770f-2368-422b-8672-d36495ce9f57",
+      "0d906071-4098-4fe8-bdff-6fbd989a0140"
+    ],
     "prior_acceptance_preserved": true,
     "production_changed": false,
     "production_database_backup_restore": "UNVERIFIED_SEPARATE_AUTHORIZED_ACCESS_REQUIRED",
@@ -432,6 +440,32 @@
     "preview_prepared_database": "mz2_write_balance_preview_20260920",
     "preview_prepared_replica": "p01writepreview",
     "preview_prepared_port": 27038,
-    "preview_activated": false
+    "preview_activated": true,
+    "preview_http_steps": 29,
+    "preview_no_partial_write_denials": 3,
+    "preview_runtime_source_verified": true,
+    "preview_ui_retest": "UNVERIFIED_BROWSER_ERR_BLOCKED_BY_CLIENT",
+    "prior_acceptance_databases_accessed": false,
+    "prior_acceptance_database_hash_verification": "NOT_PERFORMED_PRIOR_MONGO_UNAVAILABLE",
+    "preview_report_checkpoint": {
+      "scope": "AFTER_MAIN_PAYMENTS_BEFORE_INDEPENDENT_SECOND_CASE",
+      "refund_payable_by_date": {
+        "2026-08-31": 115,
+        "2026-09-02": 75,
+        "2026-09-05": 0
+      },
+      "bank_by_date": {
+        "2026-08-31": 10,
+        "2026-09-02": 85,
+        "2026-09-05": 10
+      }
+    },
+    "preview_final_snapshot": {
+      "ledger_rows": 35,
+      "journal_groups_including_sentinels": 15,
+      "sha256": "ba5df09c73b571cfb1a49a5e1882decddf305c905b2a14442c020a4236403f72"
+    },
+    "preview_raw_evidence": "evidence/write-balance-20260920/preview-http-acceptance.json",
+    "FGH_evidence": "ISOLATED_MONGO_102_SUITE_NOT_REPEATED_ON_PREVIEW"
   }
 }
