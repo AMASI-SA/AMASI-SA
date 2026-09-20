@@ -107,6 +107,8 @@ jobs:
           python -m unittest discover -s tests -p test_mz2_closed_periods.py -v
           python -m unittest discover -s tests -p test_mz2_tabby_signed_credits.py -v
           python -m unittest discover -s tests -p test_mz2_customer_advances.py -v
+      - name: Test MZ2 report isolation against legacy sentinels
+        run: python -m unittest discover -s tests -p test_mz2_report_isolation.py -v
 
   backend-contract:
     name: Accounting backend contract
@@ -171,6 +173,7 @@ jobs:
           --watchAll=false
           --runInBand
           src/pages/accounting/AccountingWriteControl.test.jsx
+          src/pages/accounting/AccountingReports.test.jsx
           src/pages/accounting/AccountingPeriods.test.jsx
           src/pages/accounting/AccountingCustomerAdvances.test.jsx
           src/pages/accounting/AccountingCustomerRefunds.test.jsx

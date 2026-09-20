@@ -66,11 +66,13 @@ async def period_journal(db, *, owner, from_at, to_at):
         raise HTTPException(422, 'increasing_period_required')
     # Accounting date is distinct from the real insertion/audit timestamp.
     # Half-open periods avoid counting a midnight entry in both months.
-    rows = await db.general_ledger.find({'user_id':owner,'status':'posted',
-        'metadata.operation_id':OPERATION,'metadata.refund_accounting_version':2,
-        'metadata.accounting_at':{'$gte':start.isoformat(timespec='microseconds'),'$lt':end.isoformat(timespec='microseconds')}},
-        {'_id':0}).sort([('metadata.accounting_at',1),('entry_no',1)]).limit(10001).to_list(10001)
-    if len(rows)>10000:
-        raise HTTPException(409, 'refund_period_too_large')
+    from accounting_mz2_reports import read_mz2_ledger
+    from accounting_report_dates import accounting_instant
+    scope = await read_mz2_ledger(db, owner=owner)
+    if scope['status'] != 'available':
+        return {**scope, 'from_at': start.isoformat(), 'to_at': end.isoformat()}
+    rows = [row for row in scope['items']
+            if (row.get('metadata') or {}).get('refund_accounting_version') == 2
+            and start <= accounting_instant(row) < end]
     return dict(from_at=start.isoformat(timespec='microseconds'),to_at=end.isoformat(timespec='microseconds'),items=rows,
         scope='confirmed_refund_entitlements_and_payments_v2')

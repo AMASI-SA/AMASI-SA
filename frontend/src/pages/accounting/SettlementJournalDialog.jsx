@@ -2,6 +2,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 
 export default function SettlementJournalDialog({ ledger, currency = "SAR" }) {
     const entries = ledger?.entries || [];
+    if (ledger?.txn_group_id && ledger?.status && ledger.status !== "available") {
+        return <p role="status" className="text-sm text-amber-800">عرض القيد غير جاهز: يلزم اعتماد افتتاحية ميزان 2 وتوقيت القطع والتحقق من نطاق القيد.</p>;
+    }
     if (!ledger?.txn_group_id || !entries.length) return null;
     const amount = (value) => Number(value || 0).toLocaleString("en-US", {
         minimumFractionDigits: 2, maximumFractionDigits: 2,

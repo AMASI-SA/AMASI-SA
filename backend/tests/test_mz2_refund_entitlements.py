@@ -28,6 +28,9 @@ class EntitlementTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_month_end_entitlement_next_month_payment_dates_and_no_repeat_tax(self):
         await self.bank()
+        from mz2_report_fixtures import provision_report_opening
+        opening = await self.db.general_ledger.find_one({'entity_type': 'bank'})
+        await provision_report_opening(self.db, existing_group_id=opening['txn_group_id'])
         key = await self.setup_sale(gross='115')
         draft = await self.case(key,'MONTH-END','115')
         before = await self.db.general_ledger.count_documents({})

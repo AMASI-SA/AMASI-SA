@@ -85,7 +85,7 @@ def _register_item(document: dict[str, Any]) -> dict[str, Any]:
         "source_filename": (out.get("source_snapshot") or {}).get("filename"),
         "ledger_txn_group_id": out.get("ledger_txn_group_id"),
         "journal_href": (
-            f"/transactions?txn_group_id={out.get('ledger_txn_group_id')}"
+            "/integrations-v2?workspace=financial&page=journals-reports"
             if out.get("ledger_txn_group_id") else None
         ),
         "created_at": out.get("created_at"),
@@ -95,7 +95,8 @@ def _register_item(document: dict[str, Any]) -> dict[str, Any]:
 
 
 async def _scope(db, user: dict[str, Any]) -> tuple[dict[str, Any], str]:
-    actor = await fresh_accounting_user(db, user)
+    from accounting_write_control import fresh_actor
+    actor = await fresh_actor(db, user)
     require_accounting_permission(actor, "accounting.settlements.view")
     owner_id = accounting_owner_id(actor)
     if not owner_id:
@@ -194,14 +195,12 @@ def install_accounting_settlement_register_routes(router, db, current_user):
                 entry['refund_links'] = await db.mz2_statement_refund_links.find(
                     {'user_id': owner_id, 'draft_id': draft_id, 'entry_id': entry['id']}, {'_id': 0}).to_list(100)
         ledger_entries = []
+        ledger_scope = {"status": "not_ready", "reason": "settlement_not_posted"}
         if draft.get("ledger_txn_group_id"):
-            ledger_entries = await db.general_ledger.find(
-                {
-                    "txn_group_id": draft.get("ledger_txn_group_id"),
-                    "user_id": owner_id,
-                },
-                {"_id": 0},
-            ).sort("created_at", 1).to_list(100)
+            from accounting_mz2_reports import read_mz2_ledger
+            ledger_scope = await read_mz2_ledger(db, owner=owner_id)
+            ledger_entries = [row for row in ledger_scope["items"]
+                              if row.get("txn_group_id") == draft["ledger_txn_group_id"]]
 
         receipt = None
         if draft.get("bank_receipt_id"):
@@ -219,11 +218,13 @@ def install_accounting_settlement_register_routes(router, db, current_user):
             "bank_movement": draft.get("bank_transaction_snapshot"),
             "bank_receipt": receipt,
             "ledger": {
+                "status": ledger_scope["status"],
+                "reason": ledger_scope["reason"],
                 "txn_group_id": draft.get("ledger_txn_group_id"),
                 "entries": ledger_entries,
                 "entry_count": len(ledger_entries),
                 "journal_href": (
-                    f"/transactions?txn_group_id={draft.get('ledger_txn_group_id')}"
+                    "/integrations-v2?workspace=financial&page=journals-reports"
                     if draft.get("ledger_txn_group_id") else None
                 ),
             },

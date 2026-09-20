@@ -21,8 +21,8 @@
   "current_phase": "P01",
   "current_phase_file": "PHASE-01-SETTLEMENTS.md",
   "current_phase_status": "IN_PROGRESS",
-  "next_allowed_action": "freeze_new_A_B_after_required_CI_clean_clone; verify_pending_TabBy_UI_post_and_duplicate; no_production",
-  "current_blocker": "PR1103_preview_failed_customer_refund_report_closed_period_guard_and_tabby_fee_rebate_upload; advances_workflow_gap; independent_production_readiness_and_owner_decisions_pending",
+  "next_allowed_action": "run_new_isolated_Mongo_report_sentinels_and_affected_frontend; then Preview and new A/B governed package",
+  "current_blocker": "MZ2_report_isolation_under_verification; production_database_backup_and_owner_configuration_gates_remain",
   "legacy_mezan_policy": {
     "dynamic_financial_dependency_allowed": false,
     "copy_reference_values_allowed": true,
@@ -371,5 +371,14 @@
     "tax_advance_decision": "TAX_CASES_HELD_FOR_ACCOUNTANT_REVIEW",
     "next_action": "Run new isolated Mongo tests, Preview UI evidence, fix findings, freeze new A/B and clean-clone rehearsal",
     "evidence_file": "P01-GAP-FIXES-20260920.md"
+  },
+  "report_isolation_20260920": {
+    "status": "WIP_NOT_RELEASE_READY",
+    "source_parent_A": "f1bb92adeb3a835f032fb4cd7ddbf6e9447331fd",
+    "preserved_B": "3d73591d15472df39922dc28270374934c1f8d88",
+    "branch": "codex/p01-report-isolation-20260920",
+    "local_verification": "17 focused unit tests PASS; real Mongo and frontend pending",
+    "evidence_file": "P01-REPORT-ISOLATION-20260920.md",
+    "production_changed": false
   }
 }

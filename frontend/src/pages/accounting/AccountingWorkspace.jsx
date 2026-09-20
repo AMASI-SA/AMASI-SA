@@ -5,6 +5,7 @@ import { useOptionalAuth } from "../../context/AuthContext";
 import { getAccountingAccess, getAccountingModuleStatus } from "../../services/accountingModule";
 import AccountingCourierBankBindings from "./AccountingCourierBankBindings";
 import AccountingHome from "./AccountingHome";
+import AccountingReports from "./AccountingReports";
 import AccountingPermissionsDialog from "./AccountingPermissionsDialog";
 import AccountingSettlements from "./AccountingSettlements";
 import AccountingBankReceipts from "./AccountingBankReceipts";
@@ -83,6 +84,8 @@ export default function AccountingWorkspace() {
         );
     } else if (page.id === "financial-movements") {
         content = <><AccountingBankReceipts accountingPermissions={permissions} /><AccountingCustomerAdvances accountingPermissions={permissions} /></>;
+    } else if (page.id === "journals-reports") {
+        content = <AccountingReports />;
     } else if (page.id === "opening-balances") {
         content = statusLoading ? <LoadingBlock /> : <OpeningBalancesBlocked status={status} />;
     } else {

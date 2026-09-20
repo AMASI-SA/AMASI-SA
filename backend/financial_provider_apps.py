@@ -103,6 +103,8 @@ def make_financial_provider_apps_router(db, current_user):
 
     router = _legacy_router(db, provider_user)
     install_accounting_status_routes(router, db, current_user)
+    from accounting_mz2_reports import install_mz2_report_routes
+    install_mz2_report_routes(router, db, current_user)
     install_accounting_permission_routes(router, db, current_user)
 
     # Lifecycle handlers are registered before compatibility handlers. Starlette

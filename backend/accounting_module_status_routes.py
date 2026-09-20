@@ -85,7 +85,8 @@ def install_accounting_status_routes(router, db, current_user: Callable):
         page: str = Query(default="home", pattern="^(home|opening-balances)$"),
         user: dict = Depends(current_user),
     ):
-        fresh = await fresh_accounting_user(db, user)
+        from accounting_write_control import fresh_actor
+        fresh = await fresh_actor(db, user)
         required = (
             "accounting.opening_balances.view"
             if page == "opening-balances"
