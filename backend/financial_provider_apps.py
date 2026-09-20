@@ -3,8 +3,8 @@
 The legacy provider catalogue remains preserved in
 ``financial_provider_apps_legacy``. This wrapper owns the accounting home,
 independent permissions, fail-closed cutover readiness, and the P01 unified
-settlement draft/review/post workflow. It never chooses a cutover instant or
-posts opening balances.
+settlement draft/review/post workflow. Opening balances are available only
+through the guarded MZ2-native preview/approve/activate workflow.
 """
 from fastapi import Depends
 from accounting_source_files import install_accounting_source_file_routes
@@ -27,6 +27,7 @@ from accounting_module_contract import (  # noqa: F401
     require_accounting_permission,
 )
 from accounting_module_ledger import summarize_accounting_home_ledger  # noqa: F401
+from accounting_module_opening_balances import install_opening_balance_routes
 from accounting_module_permission_routes import install_accounting_permission_routes
 from accounting_module_readiness import build_accounting_module_status  # noqa: F401
 from accounting_module_status_routes import (
@@ -106,6 +107,7 @@ def make_financial_provider_apps_router(db, current_user):
     from accounting_mz2_reports import install_mz2_report_routes
     install_mz2_report_routes(router, db, current_user)
     install_accounting_permission_routes(router, db, current_user)
+    install_opening_balance_routes(router, db, current_user)
 
     # Lifecycle handlers are registered before compatibility handlers. Starlette
     # dispatches the first matching route, so ``matched`` and bank-evidence
