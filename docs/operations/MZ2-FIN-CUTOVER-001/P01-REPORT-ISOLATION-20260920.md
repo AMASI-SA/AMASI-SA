@@ -1,4 +1,4 @@
-# P01 MZ2 report isolation — WIP, not release approval
+# P01 MZ2 report isolation — source verification, not release approval
 
 This source branch starts at A `f1bb92adeb3a835f032fb4cd7ddbf6e9447331fd`,
 not its intent child B `3d73591d15472df39922dc28270374934c1f8d88`.
@@ -49,8 +49,10 @@ isolated by this evidence.
 ## Verification checkpoint
 
 - 17 focused local accounting module, settlement register and date tests pass.
-- New real-Mongo legacy sentinel/refund/employee tests: pending execution.
-- New report frontend tests and affected consumer tests: pending execution.
+- 16 real-Mongo legacy sentinel/refund/employee/consumer/corrupt-data tests PASS.
+- 5 affected refund-entitlement integration tests PASS.
+- 17 report/register/page frontend tests PASS; real dialog tests 5 PASS.
+- Additional real-router navigation verification and final exact identities are recorded in Issue #1006.
 - New isolated Preview current/historical acceptance: pending.
 - New final source A, direct intent-only B, governed CI and clean clone: pending.
 

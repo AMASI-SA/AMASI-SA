@@ -9,6 +9,10 @@ import AccountingWorkspace from "./AccountingWorkspace";
 // Jest 27 predates conditional subpath exports. Resolve the installed package's
 // declared CommonJS target while keeping the actual router and navigation.
 jest.mock("react-router/dom", () => {
+    // jsdom 16 lacks the browser encoding globals used by React Router 7.
+    const { TextEncoder, TextDecoder } = require("util");
+    if (!global.TextEncoder) global.TextEncoder = TextEncoder;
+    if (!global.TextDecoder) global.TextDecoder = TextDecoder;
     const path = require("path");
     const packagePath = require.resolve("react-router/package.json");
     let target = require(packagePath).exports["./dom"];

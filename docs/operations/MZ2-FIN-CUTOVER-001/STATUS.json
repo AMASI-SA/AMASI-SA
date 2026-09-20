@@ -373,12 +373,13 @@
     "evidence_file": "P01-GAP-FIXES-20260920.md"
   },
   "report_isolation_20260920": {
-    "status": "WIP_NOT_RELEASE_READY",
+    "status": "SOURCE_VERIFIED_FINAL_RELEASE_GATES_TRACKED_IN_ISSUE_1006",
     "source_parent_A": "f1bb92adeb3a835f032fb4cd7ddbf6e9447331fd",
     "preserved_B": "3d73591d15472df39922dc28270374934c1f8d88",
     "branch": "codex/p01-report-isolation-20260920",
-    "local_verification": "17 focused unit tests PASS; real Mongo and frontend pending",
+    "local_verification": "16 real isolated Mongo report tests; 5 refund integration; 17 focused backend; 17 existing/new report frontend PASS. Extra navigation/dialog integration being finalized. Final exact A/B and Preview evidence in Issue1006.",
     "evidence_file": "P01-REPORT-ISOLATION-20260920.md",
-    "production_changed": false
+    "production_changed": false,
+    "pr": 1110
   }
 }
