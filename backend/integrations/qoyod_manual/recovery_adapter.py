@@ -2,6 +2,7 @@
 from datetime import date, datetime, timezone
 
 from .recovery_404 import Facts, Invoice, Observation, EvidenceError, money
+from .recovery_diagnostics import diagnosed, reading
 
 
 def runtime_identity():
@@ -58,12 +59,14 @@ class ProductionPorts:
         return (runtime_identity() == release and is_armed(settings)
                 and settings.get(UNIFIED_CANDIDATE_AUTO_FLAG) is True)
 
+    @diagnosed("facts")
     async def facts(self, reference):
         from salla_integration.sync import resync_single_order, _salla_order_to_doc
         from integrations.qoyod.candidate_orders import eligible_status_key, payment_eligibility, PAYMENT_ELIGIBLE
         from integrations.qoyod.payment_methods import is_cod_family
         from .send import _find_unified_salla_accounting_canon, _preflight_qoyod_invoice
-        refreshed = await resync_single_order(self.db, self.owner, reference)
+        with reading("salla_refresh"):
+            refreshed = await resync_single_order(self.db, self.owner, reference)
         if not refreshed.get("ok") or not refreshed.get("found"):
             raise EvidenceError("salla_refresh_failed")
         stored = await self.db.unified_orders.find_one(
@@ -77,8 +80,9 @@ class ProductionPorts:
         if not raw:
             raise EvidenceError("fresh_salla_reference_unverified")
         doc = _salla_order_to_doc(raw)
-        canon = await _find_unified_salla_accounting_canon(
-            self.db, unified_owner_id=self.owner, order_number=reference)
+        with reading("salla_accounting"):
+            canon = await _find_unified_salla_accounting_canon(
+                self.db, unified_owner_id=self.owner, order_number=reference)
         if not canon:
             raise EvidenceError("fresh_salla_accounting_unverified")
         total = str(doc.get("total_amount"))
@@ -90,7 +94,8 @@ class ProductionPorts:
         settings = await self.db.qoyod_settings.find_one({"user_id": "main"}) or {}
         expected = total
         if skus and not cod:
-            preflight = _preflight_qoyod_invoice(canon=canon, settings=settings, salla_total=float(total))
+            with reading("preflight"):
+                preflight = _preflight_qoyod_invoice(canon=canon, settings=settings, salla_total=float(total))
             expected = str(preflight["qoyod_predicted_total"])
         q = await self.db.qoyod_manual_auto_quarantines.find_one(
             {"_id": f"main:{reference}"}) or {}
@@ -119,6 +124,7 @@ class ProductionPorts:
         self.latest_facts[reference] = facts
         return facts
 
+    @diagnosed("observe")
     async def observe(self, reference):
         from integrations.qoyod.credentials import get_api_key
         from .client import ManualQoyodClient, ManualQoyodError, _is_confirmed_empty_list
@@ -132,7 +138,8 @@ class ProductionPorts:
         # first-match reference cache is not sufficient as completion proof.
         for page in range(1, 201):
             try:
-                body = await client._request("GET", "/invoices", params={"page": page, "limit": 50})
+                with reading("provider_page", page=page):
+                    body = await client._request("GET", "/invoices", params={"page": page, "limit": 50})
             except ManualQoyodError as exc:
                 if _is_confirmed_empty_list(exc):
                     complete = True
@@ -148,10 +155,12 @@ class ProductionPorts:
                 seen.add(identity)
                 if str(row.get("reference") or "") == reference:
                     # Read persisted values, not create-response/local projections.
-                    shown = await client.get_invoice(int(identity))
+                    with reading("provider_invoice", page=page):
+                        shown = await client.get_invoice(int(identity))
                     if str(shown.get("id") or "") != identity or str(shown.get("reference") or "") != reference:
                         raise EvidenceError("provider_invoice_identity_mismatch")
-                    matches.append(invoice_evidence(shown))
+                    with reading("invoice_parse", page=page):
+                        matches.append(invoice_evidence(shown))
             if len(rows) < 50:
                 complete = True
                 break

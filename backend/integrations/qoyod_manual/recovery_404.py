@@ -108,6 +108,7 @@ class Outcome:
     paid_amount: str | None = None
     remaining: str | None = None
     salla_total: str | None = None
+    read_diagnostic: dict | None = None
 
 
 class Ports(Protocol):
@@ -296,7 +297,7 @@ async def audit_one(scope: Scope, reference: str, ports: Ports) -> Outcome:
                          "invoice_amount_settlement_and_marker_verified", invoice.invoice_id)
     except Exception as exc:
         result = Outcome(reference, "review",
-                         safe_reason(exc))
+                         safe_reason(exc), read_diagnostic=getattr(exc, "_recovery_read_diagnostic", None))
     await ports.finish(result)
     return result
 
