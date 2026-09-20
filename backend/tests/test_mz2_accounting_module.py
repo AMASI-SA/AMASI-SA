@@ -204,5 +204,9 @@ def test_router_registers_readiness_and_permission_contract_paths():
         "/financial-provider-apps/accounting-module/opening-balances/preview",
         "/financial-provider-apps/accounting-module/opening-balances/approve",
         "/financial-provider-apps/accounting-module/opening-balances/activate",
+        "/financial-provider-apps/accounting-module/daily-movements/context",
+        "/financial-provider-apps/accounting-module/daily-movements",
+        "/financial-provider-apps/accounting-module/daily-movements/upload",
+        "/financial-provider-apps/accounting-module/daily-movements/{movement_id}/confirm-provider",
     }
     assert expected <= {path for path, _methods in routes}
