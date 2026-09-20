@@ -107,6 +107,36 @@ class Integration(unittest.IsolatedAsyncioTestCase):
         bad = await self.http.post(BASE + "/prepare", json={"order_numbers": REFS[:-1]})
         self.assertEqual(bad.status_code, 409)
 
+    async def test_audit_includes_blocked_unknown_without_retry_or_claim_removal(self):
+        await self.prepare()
+        await self.db.qoyod_404_outcomes.update_one(
+            {"reference": TARGET}, {"$set": {"state": "blocked", "reason": "outcome_unknown"}})
+        await self.db.qoyod_404_attempts.insert_one({"_id": f"main:{TARGET}", "proof": "keep"})
+        failure = RuntimeError("private provider message")
+        failure._recovery_read_diagnostic = {"stage": "observe", "error_type": "RuntimeError"}
+        with patch.object(self.provider, "observe", AsyncMock(side_effect=failure)) as observe:
+            result = await self.http.post(BASE + "/audit", json={})
+        self.assertEqual(result.status_code, 200)
+        observe.assert_awaited_once_with(TARGET)
+        row = next(r for r in result.json()["results"] if r["reference"] == TARGET)
+        self.assertEqual((row["state"], row["reason"]), ("review", "outcome_unknown"))
+        self.assertEqual(row["read_diagnostic"]["stage"], "observe")
+        self.assertFalse(result.json()["can_activate"])
+        self.assertEqual((self.provider.invoice_posts, self.provider.payment_posts), (0, 0))
+        self.assertEqual((await self.db.qoyod_404_attempts.find_one({"_id": f"main:{TARGET}"}))["proof"], "keep")
+
+    async def test_worker_preserves_read_diagnostic_before_financial_attempt(self):
+        await self.activate()
+        failure = RuntimeError("private provider message")
+        failure._recovery_read_diagnostic = {"stage": "observe", "error_type": "RuntimeError"}
+        with patch.object(self.provider, "observe", AsyncMock(side_effect=failure)):
+            await c.tick(self.db, self.factory)
+        row = await self.db.qoyod_404_outcomes.find_one({"reference": TARGET})
+        self.assertEqual((row["state"], row["reason"]), ("blocked", "outcome_unknown"))
+        self.assertEqual(row["read_diagnostic"]["stage"], "observe")
+        self.assertEqual((self.provider.invoice_posts, self.provider.payment_posts), (0, 0))
+        self.assertEqual(await self.db.qoyod_404_attempts.count_documents({}), 0)
+
     async def test_activation_binds_scope_and_explicit_confirmation(self):
         doc = await self.prepare()
         for confirmation, fingerprint in [("", doc["fingerprint"]), ("ACTIVATE_REVIEWED_404_COHORT", "wrong")]:

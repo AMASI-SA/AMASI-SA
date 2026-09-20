@@ -1,6 +1,16 @@
 {
   "task_id": "QOYOD-404-RECOVERY-20260919",
-  "status": "AUDIT_DIAGNOSTICS_TESTED_PENDING_RELEASE",
+  "status": "BLOCKED_UNKNOWN_AUDIT_SELECTION_FIXED_PENDING_RELEASE",
+  "latest_checkpoint": {
+    "branch": "codex/qoyod-404-blocked-audit-20260920",
+    "base": "dd73ae13ae8c644c6b6469e76cccaabf285aaa3c",
+    "live": "User activated once. Worker progressed past isolated6472 then paused with blocked/outcome_unknown on282829315.2complete,1rounding_unsettled,1blocked_unknown,195pending;197remaining. No new verified completion.",
+    "root_cause": "Audit selector excluded blocked/outcome_unknown although unresolved_attempt prevents activation for it. Worker catch also omitted read diagnostics. Underlying provider read exception still unproven.",
+    "fix": "Readonly audit uses activation's unresolved predicate; worker preserves existing bounded read diagnostics. No claim removal, retry, financial write or activation added.",
+    "validation": "Both new integration regressions fail baseline for intended causes; all60 recovery tests pass after fix. CI/governed build/independent review pending.",
+    "next": "Review sourceA, governed CI artifact then intent-onlyB, authorized guarded release, readonly audit282829315, handle actual evidence. Do not resend6472 or fake payment; keep exclusions/COD/SKU.",
+    "historical_note": "Entries below are historical. #1104 was deployed and verify3 passed before user activation; do not repeat its completed release. Documentation checkpoint a73ae224ad46ca245af9bb669dc91aa609dfdecb records that handoff."
+  },
   "authorized_sequence": [
     "404",
     "COD",
@@ -9,7 +19,7 @@
   "current_phase": "404",
   "scope": "Eligible completed/delivering/delivered orders from 2026-07-01 through 2026-09-19",
   "source_checkpoint": "c6708cf446bc447234a5f753a5b453f578415b54",
-  "production_deployment": "3b6bdc290bb401e41e804b46d1f29b068a50b4fa",
+  "production_deployment": "dd73ae13ae8c644c6b6469e76cccaabf285aaa3c",
   "census_proof": {
     "unique_90_day_rows": 6579,
     "sent": 5729,
