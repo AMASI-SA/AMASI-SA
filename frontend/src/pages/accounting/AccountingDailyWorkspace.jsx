@@ -21,7 +21,6 @@ import {
     getAccountingSettlementDrafts,
     uploadAccountingSettlementDraft,
 } from "../../services/accountingModule";
-import UnifiedEntryScreen from "../UnifiedEntryScreen";
 import AccountingPeriods from "./AccountingPeriods";
 import AccountingWriteControl from "./AccountingWriteControl";
 import { formatMoney, SummaryCard } from "./AccountingShared";
@@ -61,15 +60,19 @@ function guessProvider(filename) {
     return "";
 }
 
-function ActionCard({ title, detail, Icon, onClick }) {
+function ActionCard({ title, detail, Icon, onClick, disabled = false, badge = "" }) {
     return (
         <button
             type="button"
             onClick={onClick}
-            className="group flex min-h-32 w-full items-start justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 text-right shadow-sm transition hover:border-emerald-300 hover:shadow-md"
+            disabled={disabled}
+            className="group flex min-h-32 w-full items-start justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 text-right shadow-sm transition hover:border-emerald-300 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-55"
         >
             <div>
-                <div className="text-base font-black text-slate-950">{title}</div>
+                <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-base font-black text-slate-950">{title}</span>
+                    {badge && <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-extrabold text-slate-600">{badge}</span>}
+                </div>
                 <p className="mt-2 text-xs font-semibold leading-6 text-slate-500">{detail}</p>
             </div>
             <span className="shrink-0 rounded-2xl bg-emerald-50 p-3 text-emerald-800 transition group-hover:bg-emerald-100">
@@ -300,7 +303,7 @@ function ExceptionList({ status, drafts, receipts }) {
     );
 }
 
-function RecentActivity({ drafts, receipts, movements }) {
+function RecentActivity({ drafts, receipts }) {
     const events = [
         ...drafts.map((row) => ({
             id: "draft:" + row.id,
@@ -315,13 +318,6 @@ function RecentActivity({ drafts, receipts, movements }) {
             title: "مبلغ واصل — " + (PROVIDERS[row.provider] || row.provider),
             detail: formatMoney(row.amount) + " · " + (row.status === "posted" ? "تمت تسويته" : row.status === "linked" ? "تمت مطابقته" : "بانتظار كشف المنصة"),
             tone: row.status === "posted" ? "ok" : "neutral",
-        })),
-        ...movements.map((row) => ({
-            id: "movement:" + row.id,
-            at: row.created_at || row.doc_date || "",
-            title: row.description || row.notes || "حركة مالية",
-            detail: formatMoney(row.total_amount || row.amount),
-            tone: row.posting_status === "posted_failed" ? "warn" : row.posting_status === "posted_to_gl" ? "ok" : "neutral",
         })),
     ].sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 8);
 
@@ -350,7 +346,6 @@ export default function AccountingDailyWorkspace({ status, user, accountingPermi
     const [context, setContext] = useState(null);
     const [drafts, setDrafts] = useState([]);
     const [receipts, setReceipts] = useState([]);
-    const [movements, setMovements] = useState([]);
     const [loading, setLoading] = useState(true);
     const [activeAction, setActiveAction] = useState("");
     const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -361,12 +356,10 @@ export default function AccountingDailyWorkspace({ status, user, accountingPermi
             getAccountingSettlementContext(),
             getAccountingSettlementDrafts({ limit: 30 }),
             api.get(BASE + "/bank-receipts"),
-            api.get("/financial-movements", { params: { limit: 20 } }),
         ]);
         if (results[0].status === "fulfilled") setContext(results[0].value);
         if (results[1].status === "fulfilled") setDrafts(results[1].value?.items || []);
         if (results[2].status === "fulfilled") setReceipts(results[2].value?.data?.items || []);
-        if (results[3].status === "fulfilled") setMovements(results[3].value?.data?.items || []);
         setLoading(false);
     }, []);
 
@@ -430,19 +423,35 @@ export default function AccountingDailyWorkspace({ status, user, accountingPermi
                     <p className="mt-1 text-xs font-semibold text-slate-500">ثلاثة مداخل أساسية بدل التنقل بين صفحات المحاسبة.</p>
                 </div>
                 <div className="grid gap-3 lg:grid-cols-3">
-                    <ActionCard title="إضافة حركة مالية" detail="مصروف، فاتورة مورد، تحويل، راتب أو أي حركة تشغيلية. يفتح النموذج داخل نفس الشاشة." Icon={Wallet} onClick={() => setActiveAction("movement")} />
-                    <ActionCard title="مبلغ وصل إلى البنك" detail="أدخل المبلغ والرسالة فقط؛ البنك مرتبط مسبقًا والمنصة تُطابق لاحقًا مع كشفها." Icon={Bank} onClick={() => setActiveAction("receipt")} />
-                    <ActionCard title="رفع ملف تسوية" detail="ارفع ملف سلة أو تمارا أو تابي أو إمكان، ويبدأ ميزان القراءة والمطابقة تلقائيًا." Icon={UploadSimple} onClick={() => setActiveAction("settlement")} />
+                    <ActionCard
+                        title="إضافة حركة مالية"
+                        detail="في P01 الآمن: سجل المبلغ الذي وصل فعليًا من سلة أو تمارا أو تابي أو إمكان. لا تختار مدين/دائن."
+                        Icon={Wallet}
+                        onClick={() => setActiveAction("movement")}
+                    />
+                    <ActionCard
+                        title="رفع كشف البنك"
+                        detail="سيقرأ ميزان كشف البنك ويقترح المطابقات تلقائيًا. لن نربطه بمسار ميزان القديم."
+                        Icon={Bank}
+                        disabled
+                        badge="الخطوة التالية"
+                    />
+                    <ActionCard
+                        title="رفع ملف تسوية"
+                        detail="ارفع ملف سلة أو تمارا أو تابي أو إمكان، ويبدأ ميزان القراءة والمطابقة تلقائيًا."
+                        Icon={UploadSimple}
+                        onClick={() => setActiveAction("settlement")}
+                    />
                 </div>
                 <div className="mt-3 flex items-center gap-2 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-600">
                     <WarningCircle size={18} className="shrink-0 text-slate-500" />
-                    استيراد كشف البنك الجماعي لم يُربط بعد بمسار MZ2؛ لن نعرض زرًا وهميًا قبل بناء استيراد آمن ومطابقة قابلة للتدقيق.
+                    لن نستخدم شاشات ميزان القديم لإكمال النواقص. إدخال المصروفات العامة وكشف البنك الجماعي سيُبنيان كمسارات MZ2 مستقلة قبل تفعيلهما هنا.
                 </div>
             </section>
 
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,.9fr)]">
                 <ExceptionList status={status} drafts={drafts} receipts={receipts} />
-                <RecentActivity drafts={drafts} receipts={receipts} movements={movements} />
+                <RecentActivity drafts={drafts} receipts={receipts} />
             </div>
 
             <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4" data-testid="daily-accounting-advanced">
@@ -477,12 +486,7 @@ export default function AccountingDailyWorkspace({ status, user, accountingPermi
             </section>
 
             {activeAction === "movement" && (
-                <Modal title="إضافة حركة مالية" subtitle="النموذج الحالي يظهر داخل نفس مساحة المحاسبة؛ سنبسّط حقوله في المرحلة التالية." onClose={() => setActiveAction("")} testid="daily-accounting-movement-modal">
-                    <UnifiedEntryScreen />
-                </Modal>
-            )}
-            {activeAction === "receipt" && (
-                <Modal title="مبلغ وصل إلى البنك" subtitle="أدخل الواقع البنكي فقط، واترك القيد والمطابقة لميزان." onClose={() => setActiveAction("")} testid="daily-accounting-receipt-modal">
+                <Modal title="إضافة حركة مالية" subtitle="أدخل الواقع البنكي فقط، واترك القيد والمطابقة لميزان 2." onClose={() => setActiveAction("")} testid="daily-accounting-movement-modal">
                     <ReceiptForm context={context} permissions={accountingPermissions} onSaved={load} />
                 </Modal>
             )}
