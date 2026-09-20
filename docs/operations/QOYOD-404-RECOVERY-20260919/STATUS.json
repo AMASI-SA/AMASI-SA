@@ -1,6 +1,16 @@
 {
   "task_id": "QOYOD-404-RECOVERY-20260919",
-  "status": "SOURCE_TESTED_RELEASE_BLOCKED_PREVIEW_UNAVAILABLE",
+  "status": "BLOCKED_UNKNOWN_AUDIT_SELECTION_FIXED_PENDING_RELEASE",
+  "latest_checkpoint": {
+    "branch": "codex/qoyod-404-blocked-audit-20260920",
+    "base": "dd73ae13ae8c644c6b6469e76cccaabf285aaa3c",
+    "live": "User activated once. Worker progressed past isolated6472 then paused with blocked/outcome_unknown on282829315.2complete,1rounding_unsettled,1blocked_unknown,195pending;197remaining. No new verified completion.",
+    "root_cause": "Audit selector excluded blocked/outcome_unknown although unresolved_attempt prevents activation for it. Worker catch also omitted read diagnostics. Underlying provider read exception still unproven.",
+    "fix": "Readonly audit uses activation's unresolved predicate; worker preserves existing bounded read diagnostics. No claim removal, retry, financial write or activation added.",
+    "validation": "Both new integration regressions fail baseline for intended causes; all60 recovery tests pass after fix. CI/governed build/independent review pending.",
+    "next": "Review sourceA, governed CI artifact then intent-onlyB, authorized guarded release, readonly audit282829315, handle actual evidence. Do not resend6472 or fake payment; keep exclusions/COD/SKU.",
+    "historical_note": "Entries below are historical. #1104 was deployed and verify3 passed before user activation; do not repeat its completed release. Documentation checkpoint a73ae224ad46ca245af9bb669dc91aa609dfdecb records that handoff."
+  },
   "authorized_sequence": [
     "404",
     "COD",
@@ -9,7 +19,7 @@
   "current_phase": "404",
   "scope": "Eligible completed/delivering/delivered orders from 2026-07-01 through 2026-09-19",
   "source_checkpoint": "c6708cf446bc447234a5f753a5b453f578415b54",
-  "production_deployment": "635e181f7520354029efbdc8e89d76a94de77ff2",
+  "production_deployment": "dd73ae13ae8c644c6b6469e76cccaabf285aaa3c",
   "census_proof": {
     "unique_90_day_rows": 6579,
     "sent": 5729,
@@ -26,9 +36,9 @@
   "processed": 2,
   "successful_new_invoices": 2,
   "reconciled_existing_invoices": 0,
-  "production_source_changed": false,
+  "production_source_changed": true,
   "cod_sku_actions": false,
-  "next": "Verify final source CI and independent review. Restore /app access; run guard status and continue only inactive. Follow governed source A/intent B and management-only deployment, three probes. Then read-only audit and release review, user activation once; inspect all199 outcomes.",
+  "next": "Review and release bounded read diagnostics; capture actual failed production read before choosing a fix. Do not retry invoice6472 or payment; campaign paused2/197.",
   "findings": {
     "first_precheck": "Salla order and payment eligible; no invoice sent",
     "sample_failure": "Historical GET /products 404 before accepted release",
@@ -53,7 +63,7 @@
     "fresh_backend_total": 178,
     "fresh_subtests": 35
   },
-  "task_branch": "codex/qoyod-404-rounding-20260919",
+  "task_branch": "codex/qoyod-404-audit-diagnostics-20260920",
   "reviewed_base": "635e181f7520354029efbdc8e89d76a94de77ff2",
   "production_activation": "paused after existing invoice rounding residual",
   "review_fixes": {
@@ -71,5 +81,12 @@
     "ci": "Five workflows passed on c6708cf44 including full Frontend build twice/reproducibility verification. Final source SHA CI pending; not inferred from prior SHA.",
     "release_blocker": "Cloud code-server disconnected then Preview Unavailable; cannot run /app release guard status. Local Windows has no WSL; no supported Linux release environment yet. No lease created or cleared; no publish, financial activation or paid Emergent chat."
   },
-  "pull_request": 1100
+  "pull_request": 1100,
+  "audit_diagnostics": {
+    "base": "3b6bdc290bb401e41e804b46d1f29b068a50b4fa",
+    "known": "Two readonly audits returned review/outcome_unknown. Actual exception not established; pagination and health timeouts are not proof of cause.",
+    "change": "Capture fixed stage, allowlisted error/cause type, HTTP status, page, elapsed milliseconds and approved code-file line. No exception messages, bodies, URLs, keys, customer data or financial actions.",
+    "tests": "58 core/HTTP/Mongo/worker/diagnostic tests and real React DOM passed fresh; full build/CI pending",
+    "live": "2 excluded completed,196 pending,1 unresolved review.6472 historic total161.12/paid161.11/balance0.01; new live stored calculation accepts0.01, not fresh provider proof."
+  }
 }

@@ -89,6 +89,12 @@ global.__recoveryApi = {get: async () => ({data}), post: async (url, body) => {
   await act(async()=>{prep.click();});
   assert.equal(posts.at(-1).url,'/integrations/qoyod/manual/recovery-404/review-release');
   assert.equal(posts.filter(x=>x.url.endsWith('/activate')).length,1,'release review never activates');
+  await show({can_activate:false,results:[{reference:'synthetic-c',state:'review',reason:'outcome_unknown',
+    read_diagnostic:{stage:'provider_invoice',error_type:'ManualQoyodError',http_status:0,
+      cause_type:'ReadTimeout',page:7,elapsed_ms:25001,location:'client.py:147'}}]});
+  const diagnostic = container.querySelector('[data-testid="recovery-read-diagnostic"]').textContent;
+  assert.match(diagnostic,/provider_invoice.*ReadTimeout.*page 7.*25001/);
+  assert.equal(findButton('تفعيل التعافي التلقائي للنطاق المحدد'),undefined,'diagnostics never authorize unknown');
   await act(async()=>{app.unmount();});
   console.log('PASS: real React DOM, counters, explicit fingerprint activation, pause, read-only audit, no implicit send');
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>dom.window.close());

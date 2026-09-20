@@ -88,7 +88,9 @@ export default function Qoyod404Recovery() {
     <button disabled={busy} onClick={refresh}>تحديث حالة التعافي</button>
     {data?.results?.length > 0 && <details><summary>نتيجة كل طلب ({data.results.length})</summary>
       <table className="w-full"><thead><tr><th>الطلب</th><th>النتيجة</th><th>السبب</th><th>الفاتورة</th><th>إجمالي سلة</th><th>إجمالي قيود</th><th>المدفوع الفعلي</th><th>المتبقي في قيود</th></tr></thead>
-        <tbody>{data.results.map(row => <tr key={row.reference}><td>{row.reference}</td><td>{LABELS[row.state] || row.state}</td><td>{REASONS[row.reason] || row.reason}</td><td>{row.invoice_id || "—"}</td><td>{row.salla_total ?? "—"}</td><td>{row.invoice_total ?? "—"}</td><td>{row.paid_amount ?? "—"}</td><td>{row.remaining ?? "—"}</td></tr>)}</tbody>
+        <tbody>{data.results.map(row => <tr key={row.reference}><td>{row.reference}</td><td>{LABELS[row.state] || row.state}</td><td>{REASONS[row.reason] || row.reason}
+          {row.read_diagnostic && <p dir="ltr" data-testid="recovery-read-diagnostic">{row.read_diagnostic.stage} · {row.read_diagnostic.error_type} · HTTP {row.read_diagnostic.http_status ?? "—"} · {row.read_diagnostic.cause_type || "—"} · page {row.read_diagnostic.page ?? "—"} · {row.read_diagnostic.elapsed_ms} ms · {row.read_diagnostic.location || "—"}</p>}
+        </td><td>{row.invoice_id || "—"}</td><td>{row.salla_total ?? "—"}</td><td>{row.invoice_total ?? "—"}</td><td>{row.paid_amount ?? "—"}</td><td>{row.remaining ?? "—"}</td></tr>)}</tbody>
       </table></details>}
   </section>;
 }

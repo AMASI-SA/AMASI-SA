@@ -108,6 +108,7 @@ class Outcome:
     paid_amount: str | None = None
     remaining: str | None = None
     salla_total: str | None = None
+    read_diagnostic: dict | None = None
 
 
 class Ports(Protocol):
@@ -240,7 +241,8 @@ async def recover_one(scope: Scope, reference: str, ports: Ports) -> Outcome:
                 # Even local audit persistence failure is not permission to
                 # continue. Keep the original conservative pause behavior.
                 pass
-        result = Outcome(reference, "unknown" if sent else "blocked", reason)
+        result = Outcome(reference, "unknown" if sent else "blocked", reason,
+                         read_diagnostic=getattr(exc, "_recovery_read_diagnostic", None))
         # Pause before finish: a local persistence failure must not permit more sends.
         await ports.pause(reason)
         await ports.finish(result)
@@ -296,7 +298,7 @@ async def audit_one(scope: Scope, reference: str, ports: Ports) -> Outcome:
                          "invoice_amount_settlement_and_marker_verified", invoice.invoice_id)
     except Exception as exc:
         result = Outcome(reference, "review",
-                         safe_reason(exc))
+                         safe_reason(exc), read_diagnostic=getattr(exc, "_recovery_read_diagnostic", None))
     await ports.finish(result)
     return result
 
