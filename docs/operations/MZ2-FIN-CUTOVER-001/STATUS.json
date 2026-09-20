@@ -383,12 +383,12 @@
     "pr": 1110
   },
   "write_balance_isolation_20260920": {
-    "status": "WIP_SOURCE_PENDING_REAL_MONGO",
+    "status": "WIP_SENTINEL_13_PASS_AFFECTED_RECHECK_PENDING",
     "branch": "codex/p01-write-balance-wip-20260920",
     "parent_source": "163874f5ffcab10a5f3dc883a1c2acd56c414bf9",
     "accepted_pair_1110_unchanged": true,
     "changes": "Transaction-bound shared eligible balance helper; settlement/refund/advance readers; documented cross-provider execution approved by user; fixtures and sentinel tests",
-    "verification": "AST 63 PASS; 9 settlement unit tests PASS; Mongo and UI unverified",
+    "verification": "Real Mongo p01write isolated ports27028/27029 sentinel13PASS at a3048a8d28b9414162d2685c7cc66a7465575cb0; 9settlementunitPASS; reportdates3PASS; first affected run invalidated by old Mongo stopping plus one opening fixture count corrected",
     "preview_blocker": "Active lease owned by codex-customer-cohort-clarity-20260920 for 6365a042dfcb125e81e5e198ea1ff1537373ce51; do not alter /app until inactive",
     "next": "Run isolated Mongo sentinel and affected suites after lease inactive, then fresh fetch Production J and port to new branch; freeze new A/B only after verification",
     "production_changed": false,

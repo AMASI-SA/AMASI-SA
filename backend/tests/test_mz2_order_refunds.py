@@ -111,7 +111,11 @@ class OrderRefundTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.db.mz2_statement_refund_links.count_documents({}),0)
         await link_statement_refund(self.db,owner='owner',actor={'id':'owner'},draft_id='aggregate',entry_id='aggregate-row',refund_ids=['SYN-AGG-1','SYN-AGG-2'])
         self.assertFalse(await refund_review_reasons(self.db,'owner',draft))
-        self.assertEqual(await self.db.general_ledger.count_documents({}),10)
+        # Ten operation legs remain unchanged: sale 3 + entitlement 3 +
+        # two repayments of 2. The explicit approved opening adds two legs.
+        self.assertEqual(await self.db.general_ledger.count_documents({'entry_type':'opening_balance'}),2)
+        self.assertEqual(await self.db.general_ledger.count_documents({'entry_type':{'$ne':'opening_balance'}}),10)
+        self.assertEqual(await self.db.general_ledger.count_documents({}),12)
 
     async def test_missing_identity_is_review_without_financial_write(self):
         await self.preview_and_post()
