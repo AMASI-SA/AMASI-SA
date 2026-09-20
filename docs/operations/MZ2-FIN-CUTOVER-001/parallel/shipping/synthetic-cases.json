@@ -244,7 +244,9 @@
       "expected_fee": "20.00",
       "expected_fee_vat": "3.00",
       "rate_version": "fixture-tiers-v1",
-      "tax_recoverability": "ASSUMED_SYNTHETIC_ONLY"
+      "tax_recoverability": "ASSUMED_SYNTHETIC_ONLY",
+      "fee_event_key": "cod-fee:S05",
+      "counterparty_id": "C1"
     },
     {
       "id": "S06",
@@ -276,7 +278,9 @@
       "expected_fee": "30.00",
       "expected_fee_vat": "4.50",
       "rate_version": "fixture-tiers-v1",
-      "tax_recoverability": "ASSUMED_SYNTHETIC_ONLY"
+      "tax_recoverability": "ASSUMED_SYNTHETIC_ONLY",
+      "fee_event_key": "cod-fee:S06",
+      "counterparty_id": "C1"
     },
     {
       "id": "S07",
@@ -308,7 +312,9 @@
       "expected_fee": "90.00",
       "expected_fee_vat": "13.50",
       "rate_version": "fixture-tiers-v1",
-      "tax_recoverability": "ASSUMED_SYNTHETIC_ONLY"
+      "tax_recoverability": "ASSUMED_SYNTHETIC_ONLY",
+      "fee_event_key": "cod-fee:S07",
+      "counterparty_id": "C1"
     },
     {
       "id": "S08",
@@ -340,7 +346,9 @@
       "expected_fee": "155.00",
       "expected_fee_vat": "23.25",
       "rate_version": "fixture-tiers-v1",
-      "tax_recoverability": "ASSUMED_SYNTHETIC_ONLY"
+      "tax_recoverability": "ASSUMED_SYNTHETIC_ONLY",
+      "fee_event_key": "cod-fee:S08",
+      "counterparty_id": "C1"
     },
     {
       "id": "S09",
@@ -372,7 +380,9 @@
       "expected_fee": "305.00",
       "expected_fee_vat": "45.75",
       "rate_version": "fixture-tiers-v1",
-      "tax_recoverability": "ASSUMED_SYNTHETIC_ONLY"
+      "tax_recoverability": "ASSUMED_SYNTHETIC_ONLY",
+      "fee_event_key": "cod-fee:S09",
+      "counterparty_id": "C1"
     },
     {
       "id": "S10",
@@ -523,7 +533,13 @@
       "gross_cod_cleared": "1000.00",
       "fee_offset": "20.00",
       "bank_received": "980.00",
-      "no_expense_legs": true
+      "no_expense_legs": true,
+      "settlement_event_key": "net:S14",
+      "counterparty_id": "D1",
+      "settlement_type": "net_inflow",
+      "statement_ref": "ST-S14",
+      "bank_reference": "BANK-S14",
+      "bank_account_id": "B1"
     },
     {
       "id": "S15",
@@ -557,7 +573,12 @@
       "bank_receipt_id": null,
       "bank_received": "0.00",
       "no_bank_legs": true,
-      "no_expense_legs": true
+      "no_expense_legs": true,
+      "settlement_event_key": "offset:ST-S15",
+      "counterparty_id": "C1",
+      "settlement_type": "explicit_offset",
+      "gross_cod_cleared": "19.55",
+      "fee_offset": "19.55"
     },
     {
       "id": "S16",
@@ -599,7 +620,14 @@
       "no_expense_legs": true,
       "no_tax_legs": true,
       "statement_ref": "ST-S16",
-      "bank_reference": "BANK-S16"
+      "bank_reference": "BANK-S16",
+      "settlement_event_key": "net:ST-S16",
+      "counterparty_id": "C1",
+      "settlement_type": "net_inflow",
+      "gross_cod_cleared": "115.00",
+      "fee_offset": "19.55",
+      "bank_received": "95.45",
+      "bank_account_id": "B1"
     },
     {
       "id": "S17",
@@ -947,7 +975,9 @@
           },
           "credits": {
             "payable:C1": "34.50"
-          }
+          },
+          "cost_origin_key": "fixture-owner-A:invoice-S30:line-1",
+          "contract_role": "shipping_cost_origin"
         },
         {
           "event_key": "inventory-allocation:TRANSPORT-S30:inbound",
@@ -957,7 +987,10 @@
           },
           "credits": {
             "acquisition:clearing": "20.00"
-          }
+          },
+          "cost_origin_key": "fixture-owner-A:invoice-S30:line-1",
+          "contract_role": "external_consumer_expectation",
+          "consumer": "P03"
         }
       ],
       "expected_balances": {
@@ -971,7 +1004,11 @@
       "purpose_allocations": {
         "inbound_acquisition": "20.00",
         "outbound_customer_delivery": "10.00"
-      }
+      },
+      "source_net_cost": "30.00",
+      "source_transport_vat": "4.50",
+      "counterparty_id": "C1",
+      "source_charge_event_key": "charge:TRANSPORT-S30"
     },
     {
       "id": "S31",
