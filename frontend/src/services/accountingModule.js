@@ -248,3 +248,34 @@ export async function activateAccountingP01(activationRef) {
     });
     return data;
 }
+
+
+export async function getAccountingDailyMovementContext() {
+    const { data } = await api.get(`${BASE}/daily-movements/context`);
+    return data;
+}
+
+export async function getAccountingDailyMovements(params = {}) {
+    const { data } = await api.get(`${BASE}/daily-movements`, {
+        params: compactParams(params),
+    });
+    return data;
+}
+
+export async function uploadAccountingDailyMovements({ bankAccountId, file }) {
+    const form = new FormData();
+    form.append("bank_account_id", bankAccountId);
+    form.append("file", file);
+    const { data } = await api.post(`${BASE}/daily-movements/upload`, form, {
+        headers: { "Content-Type": "multipart/form-data" },
+    });
+    return data;
+}
+
+export async function confirmAccountingDailyMovementProvider(movementId, provider, reason) {
+    const { data } = await api.post(
+        `${BASE}/daily-movements/${encodeURIComponent(movementId)}/confirm-provider`,
+        { provider, reason },
+    );
+    return data;
+}
