@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import api from "../../lib/api";
 import { useOptionalAuth } from "../../context/AuthContext";
-import { getAccountingAccess, getAccountingModuleStatus } from "../../services/accountingModule";
+import {\n    getAccountingAccess,\n    getAccountingModuleStatus,\n    getAccountingSettlementContext,\n    getAccountingSettlementDrafts,\n} from "../../services/accountingModule";
 import AccountingWorkspace from "./AccountingWorkspace";
 
 // Jest 27 predates conditional subpath exports. Resolve the installed package's
@@ -36,7 +36,7 @@ jest.mock("./AccountingSettlements", () => () => null);
 jest.mock("./AccountingBankReceipts", () => () => null);
 jest.mock("./AccountingWriteControl", () => () => null);
 jest.mock("./AccountingPeriods", () => () => null);
-jest.mock("./AccountingCustomerAdvances", () => () => null);
+jest.mock("./AccountingCustomerAdvances", () => () => null);\njest.mock("../UnifiedEntryScreen", () => () => null);
 
 let root, node;
 beforeEach(() => {
