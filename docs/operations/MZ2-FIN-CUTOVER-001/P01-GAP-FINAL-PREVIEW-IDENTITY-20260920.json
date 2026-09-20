@@ -1,0 +1,10 @@
+{
+  "isolated_database": "mz2_pr1103_preview_20260920",
+  "services": "BACKEND_FRONTEND_RUNNING_AFTER_WAKE",
+  "environment": "preview",
+  "source_manifest": "PASS",
+  "adapter_sha256": "d18202c1a3548eb550f57e2f3575b20579344b6359d3206c98f6a9ff4cba0941",
+  "preview_url": "https://salla-analytics.preview.emergentagent.com",
+  "source_git_sha": "f1bb92adeb3a835f032fb4cd7ddbf6e9447331fd",
+  "production_changed": false
+}

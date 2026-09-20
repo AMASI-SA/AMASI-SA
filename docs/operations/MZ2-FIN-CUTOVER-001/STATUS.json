@@ -363,13 +363,27 @@
     "evidence_file": "P01-PR1103-PREVIEW-20260920.md"
   },
   "gap_fixes_20260920": {
-    "state": "SOURCE_READY_REAL_MONGO22_PASS_UI_REPORTS_AND_ADVANCES_PASS_TABBY_FINAL_UI_READBACK_PENDING",
-    "branch": "codex/p01-gap-release-20260920",
+    "p02": "LOCKED",
+    "evidence_branch": "codex/p01-gap-evidence-20260920",
     "reviewed_base": "ebf92e6606a810a1e3f0a0e2026984a5482f71bc",
-    "local_affected_tests": 15,
-    "production_changed": false,
+    "required_workflows_b": "9_PASS",
+    "release_run": 35515885034,
+    "p01": "IN_PROGRESS",
+    "frontend_tests": 54,
+    "required_workflows_a": "9_PASS",
+    "state": "PREVIEW_GAPS_ACCEPTED_FINAL_A_B_AND_CLEAN_CLONE_PASS_P01_OPEN",
+    "evidence_file": "P01-GAP-FINAL-ACCEPTANCE-20260920.md",
     "tax_advance_decision": "TAX_CASES_HELD_FOR_ACCOUNTANT_REVIEW",
-    "next_action": "Run new isolated Mongo tests, Preview UI evidence, fix findings, freeze new A/B and clean-clone rehearsal",
-    "evidence_file": "P01-GAP-FIXES-20260920.md"
+    "production_changed": false,
+    "next_action": "Owner decisions and confirmed read-only Production database/backup/restore readiness; no merge/deploy without separate authorization",
+    "source_a": "f1bb92adeb3a835f032fb4cd7ddbf6e9447331fd",
+    "isolated_mongo_gap_tests": 22,
+    "pr": 1109,
+    "clean_clone_rehearsal": "PASS_HOST20_NO_GIT_GOVERNED22",
+    "branch": "codex/p01-gap-release-20260920",
+    "intent_b": "3d73591d15472df39922dc28270374934c1f8d88",
+    "preview_runtime_source_a": "f1bb92adeb3a835f032fb4cd7ddbf6e9447331fd",
+    "old_data_preservation": "PASS_12_LEDGER_LEGS_1_REFUND_CASE_2_PAYMENTS_UNCHANGED",
+    "final_balanced_groups": 11
   }
 }
