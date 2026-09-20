@@ -367,6 +367,34 @@ async def _required_zero_scope(db, owner: str, compiled: list[dict[str, Any]], e
                 "sub_account": "receivable",
                 "evidence_ref": evidence_refs["providers"],
             })
+
+    employees = await db.operating_salaries.find(
+        {
+            "user_id": owner,
+            "category": "employee",
+            "status": {"$ne": "inactive"},
+            "archived": {"$ne": True},
+            "is_archived": {"$ne": True},
+            "deleted": {"$ne": True},
+            "is_deleted": {"$ne": True},
+        },
+        {"_id": 0, "id": 1, "employee_id": 1},
+    ).to_list(MAX_OPENING_LINES + 1)
+    if len(employees) > MAX_OPENING_LINES:
+        raise HTTPException(409, "opening_employee_scope_too_large")
+    for employee in employees:
+        employee_id = str(employee.get("id") or employee.get("employee_id") or "").strip()
+        if not employee_id:
+            raise HTTPException(409, "opening_employee_identity_missing")
+        for sub_account in ("advance", "custody", "salary_payable"):
+            key = ("employee", employee_id, sub_account)
+            if key not in covered:
+                zero.append({
+                    "entity_type": "employee",
+                    "entity_id": employee_id,
+                    "sub_account": sub_account,
+                    "evidence_ref": evidence_refs["payroll_obligations"],
+                })
     return sorted(zero, key=lambda row: (row["entity_type"], row["entity_id"], row["sub_account"]))
 
 
