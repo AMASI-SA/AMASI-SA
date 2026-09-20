@@ -46,6 +46,11 @@ def _producer(row):
         return meta.get("refund_accounting_version") == 2
     if kind in {"customer_advance_capture", "customer_advance_cancellation", "customer_advance_payment"}:
         return bool(meta.get("customer_advance_id"))
+    if kind in {
+        "salary_accrual", "salary_payment", "advance_grant", "advance_settle",
+        "advance_repay_cash", "custody_grant", "custody_return",
+    }:
+        return meta.get("source") == "accounting_payroll_p01" and bool(meta.get("payroll_event_id"))
     return False
 
 
