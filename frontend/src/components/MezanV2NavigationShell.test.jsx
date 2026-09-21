@@ -195,7 +195,7 @@ test("accounting owns exactly the approved eight pages and is removed from apps"
     const accounting = MEZAN_V2_NAV_SECTIONS.find((section) => section.id === "accounting");
     expect(accounting.label).toBe("المحاسبة");
     expect(accounting.items.map((item) => item.label)).toEqual([
-        "الرئيسية المحاسبية",
+        "المحاسبة اليومية",
         "التسويات",
         "الشحن والتحصيل",
         "المخزون والمشتريات",
