@@ -245,6 +245,11 @@ def choose_inventory_rows(
                     "receipt_id": row.get("receipt_id"),
                     "lot_id": row.get("lot_id"),
                     "configuration_key": row.get("configuration_key"),
+                    "preparation_state": row.get("preparation_state"),
+                    "specifications": row.get("specifications") or {},
+                    "salla_variant_id": row.get("salla_variant_id"),
+                    "product_name": row.get("product_name"),
+                    "sku": row.get("sku"),
                     "quantity": take,
                 })
             if needed <= 0:
