@@ -18,6 +18,7 @@ test("full UAT daily workspace keeps all routine inputs on one simple surface", 
     expect(dailySource).toContain("المحاسبة اليومية");
     expect(dailySource).toContain("رفع طلبات سلة");
     expect(dailySource).toContain("رفع كشف البنك");
+    expect(dailySource).toContain("مراجعة إيصالات التحويل");
     expect(dailySource).toContain("رفع ملف تسوية");
     expect(dailySource).toContain("مبلغ واصل يدويًا");
     expect(dailySource).toContain("الرواتب والسلف");
@@ -33,6 +34,7 @@ test("Salla upload automatically scopes recognition to the uploaded file", () =>
     expect(serviceSource).toContain("file_id");
     expect(serviceSource).toContain("/order-recognition/recognize-ready");
     expect(serviceSource).toContain("/order-evidence/upload");
+    expect(dailySource).toContain("convertAccountingDeliveredBankTransfers");
 });
 
 test("bank statement is enabled through the native MZ2 movement workspace", () => {
