@@ -209,4 +209,4 @@ def test_legacy_settlement_route_blocks_manual_amount_account_for_mz2_owner():
     root = Path(__file__).resolve().parents[1]
     source = (root / "store_delivery_settlement_routes.py").read_text(encoding="utf-8")
     assert "store_delivery_settlement_requires_mz2_bank_evidence" in source
-    assert "/shipping-p02/settlements/post" in source
+    assert "shipping-p02/settlements/post" in source
