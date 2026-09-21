@@ -220,5 +220,7 @@ def test_router_registers_readiness_and_permission_contract_paths():
         "/financial-provider-apps/accounting-module/shipping-p02/courier-fee",
         "/financial-provider-apps/accounting-module/shipping-p02/store-driver-cod/{assignment_id}/preview",
         "/financial-provider-apps/accounting-module/shipping-p02/store-driver-cod",
+        "/financial-provider-apps/accounting-module/shipping-p02/settlements/preview",
+        "/financial-provider-apps/accounting-module/shipping-p02/settlements/post",
     }
     assert expected <= {path for path, _methods in routes}
