@@ -40,6 +40,7 @@ jest.mock("./AccountingCourierBankBindings", () => () => null);
 jest.mock("./AccountingPermissionsDialog", () => () => null);
 jest.mock("./AccountingSettlements", () => () => null);
 jest.mock("./AccountingBankReceipts", () => () => null);
+jest.mock("./AccountingBankTransferReviews", () => () => null);
 jest.mock("./AccountingDailyMovements", () => () => null);
 jest.mock("./AccountingCustomerAdvances", () => () => null);
 jest.mock("./AccountingPayroll", () => () => null);
