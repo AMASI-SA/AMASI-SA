@@ -20,7 +20,7 @@ export const ACCOUNTING_PAGES = [
         label: "الشحن والتحصيل",
         permission: "accounting.shipping.view",
         to: "/integrations-v2?workspace=financial&page=shipping-cod",
-        implementationStatus: "partial_existing_workflows",
+        implementationStatus: "implemented",
     },
     {
         id: "inventory-purchases",
