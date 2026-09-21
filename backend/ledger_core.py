@@ -119,6 +119,8 @@ ENTRY_TYPES = (
     # Mezan 2 store drivers — individual driver sub-ledgers.
     "store_delivery_accrual",    # توصيل ناجح: عهدة COD + أجرة الموصل
     "store_delivery_settlement", # توريد COD / دفع الأجرة / المقاصة الصريحة
+    "cod_sale",                  # بيع COD مثبت من دليل تحصيل P02
+    "shipping_fee_accrual",      # استحقاق شحن/أجرة مستقل بلا إيراد
     # ── Phase 3 (Iter-196) — manual employee correction ──
     "correction",           # تصحيح: نقل أثر بين كيانَين دون مساس بالبنك/الصندوق
     # ── Iter-219 — BNPL bridge (Tabby/Tamara) ──
