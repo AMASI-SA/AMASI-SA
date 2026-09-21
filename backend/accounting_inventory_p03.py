@@ -1236,7 +1236,7 @@ async def post_supplier_invoice(
             "liability_created": True,
             "payable_posted_at": now,
             "ledger_txn_group_id": result["txn_group_id"],
-            "ledger_entry_ids": result.get("entry_ids") or [],
+            "ledger_entry_ids": [row.get("id") for row in result.get("entries") or [] if row.get("id")],
             "p03_accounting_event_id": proposal["event_id"],
             "p03_accounting_source": SOURCE,
             "updated_at": now,
