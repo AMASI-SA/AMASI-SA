@@ -23,6 +23,9 @@ on:
       - "backend/supplier_receiving_routes.py"
       - "backend/product_inventory_receipt_routes.py"
       - "backend/fulfillment_v2_routes.py"
+      - "backend/tests/test_return_decision_engine.py"
+      - "backend/return_decision_routes.py"
+      - "backend/return_decision_engine.py"
       - "backend/purchase_invoices_routes.py"
       - "backend/tests/test_mz2_inventory_p03.py"
       - "backend/accounting_mz2_reports.py"
@@ -187,6 +190,7 @@ jobs:
           accounting_shipping_settlements.py
           accounting_inventory_p03.py
           accounting_inventory_p03_gate.py
+          return_decision_engine.py
           purchase_invoices_routes.py
           accounting_settlement_*.py
           accounting_courier_bank_routes.py
