@@ -211,6 +211,7 @@ jobs:
           --runInBand
           src/pages/accounting/AccountingOpeningBalances.test.jsx
           src/pages/accounting/AccountingDailyWorkspace.test.jsx
+          src/pages/accounting/AccountingBankTransferReviews.test.jsx
           src/pages/accounting/AccountingShippingP02.test.jsx
           src/pages/accounting/AccountingDailyMovements.test.jsx
           src/pages/accounting/AccountingPayroll.test.jsx
