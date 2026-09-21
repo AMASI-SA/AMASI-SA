@@ -19,6 +19,7 @@ on:
       - "backend/accounting_shipping_p02.py"
       - "backend/accounting_shipping_settlements.py"
       - "backend/accounting_inventory_p03.py"
+      - "backend/accounting_inventory_p03_gate.py"
       - "backend/supplier_receiving_routes.py"
       - "backend/product_inventory_receipt_routes.py"
       - "backend/tests/test_mz2_inventory_p03.py"
@@ -183,6 +184,7 @@ jobs:
           accounting_shipping_p02.py
           accounting_shipping_settlements.py
           accounting_inventory_p03.py
+          accounting_inventory_p03_gate.py
           accounting_settlement_*.py
           accounting_courier_bank_routes.py
           financial_provider_apps.py
