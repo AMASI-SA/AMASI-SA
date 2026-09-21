@@ -9,11 +9,15 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from accounting_atomic import atomic_owner
 from accounting_inventory_p03 import (
     P03ActivateIn,
+    P03OpeningInventoryCostApproveIn,
+    P03OpeningInventoryCostLineIn,
     P03PurchaseInvoiceCreateIn,
     P03PurchaseLineIn,
     activate_p03,
+    approve_opening_inventory_cost_snapshot,
     create_p03_purchase_invoice,
     inventory_p03_workspace,
+    opening_inventory_cost_workspace,
     post_inventory_cogs,
     post_inventory_receipt,
     post_supplier_invoice,
@@ -129,6 +133,110 @@ class MZ2InventoryP03PhaseTests(unittest.IsolatedAsyncioTestCase):
             ),
         ))
 
+    async def activate_p03_with_opening_inventory(
+        self,
+        *,
+        opening_amount="300.00",
+        quantity=3,
+        unit_cost="100.00",
+        lot_id="opening-lot-1",
+    ):
+        await self.db.warehouse_locations.insert_one({
+            "id": "LOC-OPENING",
+            "code": "OPEN-01",
+            "warehouse_id": "WH-OPENING",
+            "user_id": self.owner,
+            "state": "occupied",
+            "occupancy": {
+                "total_quantity": quantity,
+                "items": [{
+                    "receipt_id": None,
+                    "product_id": "SALLA-OPENING",
+                    "mezan_product_id": "MZP-OPENING",
+                    "product_name": "Opening inventory product",
+                    "sku": "SKU-OPENING",
+                    "quantity": quantity,
+                    "lot_id": lot_id,
+                    "configuration_key": "opening-default",
+                    "placed_at": "2026-09-19T18:00:00+00:00",
+                }],
+            },
+        })
+        preview = await self.tx(lambda scoped: create_opening_preview(
+            scoped,
+            owner=self.owner,
+            actor=self.actor,
+            payload=self.opening(extra_lines=[
+                OpeningLineIn(
+                    category="inventory_asset",
+                    entity_id="inventory",
+                    amount=opening_amount,
+                ),
+            ]),
+        ))
+        await self.tx(lambda scoped: approve_opening_preview(
+            scoped,
+            owner=self.owner,
+            actor=self.actor,
+            payload=OpeningApproveIn(
+                preview_id=preview["id"],
+                confirmation="APPROVE_OPENING_BALANCE",
+            ),
+        ))
+        await self.tx(lambda scoped: activate_p01(
+            scoped,
+            owner=self.owner,
+            actor=self.actor,
+            payload=OpeningActivateIn(
+                activation_ref="SYN-P01-OPENING-INVENTORY",
+                confirmation="ACTIVATE_MZ2_P01",
+            ),
+        ))
+        await self.tx(lambda scoped: activate_p02(
+            scoped,
+            owner=self.owner,
+            actor=self.actor,
+            payload=P02ActivateIn(
+                activation_ref="SYN-P02-OPENING-INVENTORY",
+                confirmation="ACTIVATE_MZ2_P02",
+            ),
+        ))
+        workspace = await opening_inventory_cost_workspace(
+            self.db,
+            owner=self.owner,
+        )
+        self.assertEqual(workspace["blockers"], [])
+        self.assertEqual(workspace["opening_inventory_amount"], opening_amount)
+        self.assertEqual(workspace["target_count"], 1)
+        self.assertEqual(workspace["targets"][0]["target_key"], "lot:" + lot_id)
+        approved = await self.tx(lambda scoped: approve_opening_inventory_cost_snapshot(
+            scoped,
+            owner=self.owner,
+            actor=self.actor,
+            payload=P03OpeningInventoryCostApproveIn(
+                inventory_fingerprint=workspace["inventory_fingerprint"],
+                evidence_ref="SYN-OPENING-INVENTORY-COST-SHEET",
+                reason="Opening inventory lot cost evidence",
+                lines=[
+                    P03OpeningInventoryCostLineIn(
+                        target_key="lot:" + lot_id,
+                        unit_cost=unit_cost,
+                    ),
+                ],
+            ),
+        ))
+        self.assertEqual(approved["state"], "approved")
+        await self.tx(lambda scoped: activate_p03(
+            scoped,
+            owner=self.owner,
+            actor=self.actor,
+            payload=P03ActivateIn(
+                activation_ref="SYN-P03-OPENING-INVENTORY",
+                confirmation="ACTIVATE_MZ2_P03",
+            ),
+        ))
+        return workspace, approved
+
     async def create_purchase_invoice(
         self,
         *,
@@ -199,6 +307,9 @@ class MZ2InventoryP03PhaseTests(unittest.IsolatedAsyncioTestCase):
         order_number,
         receipt_id,
         quantity,
+        lot_id=None,
+        location_id="LOC-1",
+        item_index=0,
         consumed_at="2026-09-21T14:00:00+00:00",
     ):
         await self.db.mezan_inventory_consumption_events_v2.insert_one({
@@ -208,9 +319,10 @@ class MZ2InventoryP03PhaseTests(unittest.IsolatedAsyncioTestCase):
             "batch_id": "batch-cogs-1",
             "status": "consumed",
             "allocations": [{
-                "location_id": "LOC-1",
+                "location_id": location_id,
                 "receipt_id": receipt_id,
-                "item_index": 0,
+                "lot_id": lot_id,
+                "item_index": item_index,
                 "quantity": quantity,
                 "product_id": "SALLA-1",
                 "mezan_product_id": "MZP-1",
@@ -1129,7 +1241,7 @@ class MZ2InventoryP03PhaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(preview["state"], "waiting")
         self.assertEqual(
             preview["reasons"],
-            ["inventory_cost_basis_missing_for_non_receipt_stock"],
+            ["inventory_cost_basis_missing"],
         )
         before = await self.db.general_ledger.count_documents({
             "entry_type": "inventory_cogs",
@@ -1149,6 +1261,173 @@ class MZ2InventoryP03PhaseTests(unittest.IsolatedAsyncioTestCase):
                 "entry_type": "inventory_cogs",
             }),
             before,
+        )
+
+
+    async def test_opening_inventory_snapshot_must_equal_gl_and_drives_cogs(self):
+        workspace, approved = await self.activate_p03_with_opening_inventory()
+        self.assertEqual(workspace["opening_inventory_halalas"], 30000)
+        self.assertEqual(approved["total_cost_halalas"], 30000)
+
+        await self.add_inventory_consumption(
+            event_id="consume-opening-lot",
+            order_number="ORD-OPENING-LOT",
+            receipt_id=None,
+            lot_id="opening-lot-1",
+            location_id="LOC-OPENING",
+            item_index=0,
+            quantity=1,
+        )
+        await self.db.product_costs.insert_one({
+            "user_id": self.owner,
+            "sku": "SKU-OPENING",
+            "product_name": "Mutable catalogue cost",
+            "cost_price": 999,
+            "currency": "SAR",
+            "is_active": True,
+        })
+        sale = await self.recognize_synthetic_sale(
+            order_number="ORD-OPENING-LOT",
+        )
+        preview = await prepare_inventory_cogs_post(
+            self.db,
+            owner=self.owner,
+            consumption_event_id="consume-opening-lot",
+        )
+        self.assertEqual(preview["state"], "eligible")
+        self.assertEqual(preview["facts"]["total_cost"], "100.00")
+        self.assertEqual(
+            preview["facts"]["cost_allocations"][0]["source_kind"],
+            "opening_inventory_snapshot",
+        )
+        self.assertEqual(
+            preview["facts"]["cost_allocations"][0]["target_key"],
+            "lot:opening-lot-1",
+        )
+        self.assertEqual(
+            preview["facts"]["cost_allocations"][0]["evidence_ref"],
+            "SYN-OPENING-INVENTORY-COST-SHEET",
+        )
+        self.assertEqual(
+            preview["facts"]["sale_txn_group_id"],
+            sale["txn_group_id"],
+        )
+
+        posted = await self.tx(lambda scoped: post_inventory_cogs(
+            scoped,
+            owner=self.owner,
+            actor=self.actor,
+            consumption_event_id="consume-opening-lot",
+            reason="Opening lot COGS matched to recognized sale",
+        ))
+        self.assertEqual(posted["facts"]["total_cost"], "100.00")
+        position = await mz2_financial_position(self.db, owner=self.owner)
+        self.assertAlmostEqual(position["assets"]["inventory"], 200.0)
+
+    async def test_opening_inventory_snapshot_rejects_total_not_equal_to_gl(self):
+        await self.db.warehouse_locations.insert_one({
+            "id": "LOC-OPENING-BAD",
+            "code": "OPEN-BAD",
+            "warehouse_id": "WH-OPENING",
+            "user_id": self.owner,
+            "state": "occupied",
+            "occupancy": {
+                "total_quantity": 3,
+                "items": [{
+                    "receipt_id": None,
+                    "product_id": "SALLA-OPENING",
+                    "mezan_product_id": "MZP-OPENING",
+                    "product_name": "Opening inventory product",
+                    "sku": "SKU-OPENING",
+                    "quantity": 3,
+                    "lot_id": "opening-lot-bad",
+                    "configuration_key": "opening-default",
+                    "placed_at": "2026-09-19T18:00:00+00:00",
+                }],
+            },
+        })
+        preview = await self.tx(lambda scoped: create_opening_preview(
+            scoped,
+            owner=self.owner,
+            actor=self.actor,
+            payload=self.opening(extra_lines=[
+                OpeningLineIn(
+                    category="inventory_asset",
+                    entity_id="inventory",
+                    amount="300.00",
+                ),
+            ]),
+        ))
+        await self.tx(lambda scoped: approve_opening_preview(
+            scoped,
+            owner=self.owner,
+            actor=self.actor,
+            payload=OpeningApproveIn(
+                preview_id=preview["id"],
+                confirmation="APPROVE_OPENING_BALANCE",
+            ),
+        ))
+        await self.tx(lambda scoped: activate_p01(
+            scoped,
+            owner=self.owner,
+            actor=self.actor,
+            payload=OpeningActivateIn(
+                activation_ref="SYN-P01-BAD-OPENING-COST",
+                confirmation="ACTIVATE_MZ2_P01",
+            ),
+        ))
+        await self.tx(lambda scoped: activate_p02(
+            scoped,
+            owner=self.owner,
+            actor=self.actor,
+            payload=P02ActivateIn(
+                activation_ref="SYN-P02-BAD-OPENING-COST",
+                confirmation="ACTIVATE_MZ2_P02",
+            ),
+        ))
+        workspace = await opening_inventory_cost_workspace(
+            self.db,
+            owner=self.owner,
+        )
+        with self.assertRaises(HTTPException) as ctx:
+            await self.tx(lambda scoped: approve_opening_inventory_cost_snapshot(
+                scoped,
+                owner=self.owner,
+                actor=self.actor,
+                payload=P03OpeningInventoryCostApproveIn(
+                    inventory_fingerprint=workspace["inventory_fingerprint"],
+                    evidence_ref="SYN-BAD-COST-SHEET",
+                    reason="Mismatch must fail",
+                    lines=[
+                        P03OpeningInventoryCostLineIn(
+                            target_key="lot:opening-lot-bad",
+                            unit_cost="90.00",
+                        ),
+                    ],
+                ),
+            ))
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertEqual(
+            ctx.exception.detail["code"],
+            "p03_opening_inventory_cost_total_mismatch",
+        )
+        self.assertEqual(ctx.exception.detail["opening_inventory_halalas"], 30000)
+        self.assertEqual(ctx.exception.detail["snapshot_total_halalas"], 27000)
+
+        with self.assertRaises(HTTPException) as activation:
+            await self.tx(lambda scoped: activate_p03(
+                scoped,
+                owner=self.owner,
+                actor=self.actor,
+                payload=P03ActivateIn(
+                    activation_ref="SYN-P03-MUST-NOT-ACTIVATE",
+                    confirmation="ACTIVATE_MZ2_P03",
+                ),
+            ))
+        self.assertEqual(activation.exception.status_code, 409)
+        self.assertEqual(
+            activation.exception.detail["code"],
+            "p03_activation_opening_inventory_cost_snapshot_required",
         )
 
 
