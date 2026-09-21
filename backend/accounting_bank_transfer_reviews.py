@@ -60,14 +60,18 @@ def _hash(value: Any) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-def _money(value: Any) -> Decimal:
+def _amount(value: Any, *, positive: bool = False) -> Decimal:
     try:
         result = Decimal(str(value)).quantize(Decimal("0.01"))
     except (InvalidOperation, TypeError, ValueError):
         raise BankTransferReviewError("bank_transfer_amount_invalid") from None
-    if not result.is_finite() or result <= 0:
+    if not result.is_finite() or result < 0 or (positive and result <= 0):
         raise BankTransferReviewError("bank_transfer_amount_invalid")
     return result
+
+
+def _money(value: Any) -> Decimal:
+    return _amount(value, positive=True)
 
 
 def _bank_day(value: str) -> datetime:
@@ -125,7 +129,6 @@ async def _movement_candidates(
                 {"accounting_event_id": None},
                 {"accounting_event_id": ""},
             ],
-            "$or_provider": {"$exists": False},
         },
         {"_id": 0},
     ).sort([("movement_date", -1), ("row_no", -1)]).limit(MAX_MOVEMENT_SCAN).to_list(
@@ -168,7 +171,7 @@ async def _review_row(db, *, owner: str, evidence: dict[str, Any]) -> dict[str, 
         reasons.append("order_evidence_conflict")
     if evidence.get("accounting_provider") != "bank_transfer":
         reasons.append("order_is_not_bank_transfer")
-    if _money(evidence.get("refunded_sar") or "0.01") != Decimal("0.00"):
+    if _amount(evidence.get("refunded_sar") or "0.00") != Decimal("0.00"):
         reasons.append("bank_transfer_refund_requires_review")
     if evidence.get("order_status") != "تم التوصيل" or not evidence.get(
         "delivery_source_text"
