@@ -518,15 +518,25 @@ class RecognizeBatchIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     limit: int = Field(default=100, ge=1, le=500)
     dry_run: bool = True
+    file_id: str | None = Field(default=None, max_length=200)
 
 
-async def recognition_queue(db, *, owner: str, limit: int = 100) -> dict[str, Any]:
+async def recognition_queue(
+    db,
+    *,
+    owner: str,
+    limit: int = 100,
+    file_id: str | None = None,
+) -> dict[str, Any]:
+    query: dict[str, Any] = {
+        "user_id": owner,
+        "status": {"$in": list(READY_STATES)},
+        "conflict": {"$ne": True},
+    }
+    if file_id:
+        query["latest_file_id"] = file_id
     candidates = await db.mz2_salla_order_evidence.find(
-        {
-            "user_id": owner,
-            "status": {"$in": list(READY_STATES)},
-            "conflict": {"$ne": True},
-        },
+        query,
         {"_id": 0},
     ).sort([("updated_source_text", 1), ("order_number", 1)]).limit(limit).to_list(limit)
 
@@ -576,10 +586,16 @@ async def recognize_batch(
     actor: dict[str, Any],
     limit: int,
     dry_run: bool,
+    file_id: str | None = None,
 ) -> dict[str, Any]:
-    queue = await recognition_queue(db, owner=owner, limit=limit)
+    queue = await recognition_queue(
+        db,
+        owner=owner,
+        limit=limit,
+        file_id=file_id,
+    )
     if dry_run:
-        return {**queue, "dry_run": True, "posted_count": 0}
+        return {**queue, "dry_run": True, "posted_count": 0, "file_id": file_id}
 
     results = []
     for item in queue["items"]:
@@ -618,6 +634,7 @@ async def recognize_batch(
         "already_posted_count": sum(1 for item in results if item["state"] == "already_posted"),
         "blocked_count": sum(1 for item in results if item["state"] in {"waiting", "blocked"}),
         "items": results,
+        "file_id": file_id,
     }
 
 
@@ -635,7 +652,11 @@ def install_order_recognition_routes(router, db, current_user) -> None:
     @router.get(base + "/queue")
     async def queue(limit: int = 100, user: dict = Depends(current_user)):
         _, owner = await scope(user, "accounting.settlements.view")
-        return await recognition_queue(db, owner=owner, limit=min(max(limit, 1), 500))
+        return await recognition_queue(
+            db,
+            owner=owner,
+            limit=min(max(limit, 1), 500),
+        )
 
     @router.post(base + "/recognize-ready")
     async def recognize(payload: RecognizeBatchIn, user: dict = Depends(current_user)):
@@ -649,4 +670,5 @@ def install_order_recognition_routes(router, db, current_user) -> None:
             actor=actor,
             limit=payload.limit,
             dry_run=payload.dry_run,
+            file_id=(payload.file_id or "").strip() or None,
         )
