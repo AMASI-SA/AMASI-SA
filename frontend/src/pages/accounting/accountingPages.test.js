@@ -8,7 +8,7 @@ import {
 
 test("accounting module exposes the exact approved eight pages in order", () => {
     expect(ACCOUNTING_PAGES.map((page) => page.label)).toEqual([
-        "الرئيسية المحاسبية",
+        "المحاسبة اليومية",
         "التسويات",
         "الشحن والتحصيل",
         "المخزون والمشتريات",
@@ -26,7 +26,7 @@ test("P01 home, settlements and opening balances are implemented", () => {
     const implemented = ACCOUNTING_PAGES
         .filter((page) => page.implementationStatus === "implemented")
         .map((page) => page.id);
-    expect(implemented).toEqual(["home", "settlements", "payroll-obligations", "opening-balances"]);
+    expect(implemented).toEqual(["home", "settlements", "financial-movements", "payroll-obligations", "opening-balances"]);
     expect(ACCOUNTING_PAGES.find((page) => page.id === "shipping-cod")?.implementationStatus)
         .toBe("partial_existing_workflows");
     expect(ACCOUNTING_PAGES.find((page) => page.id === "opening-balances")?.implementationStatus)
