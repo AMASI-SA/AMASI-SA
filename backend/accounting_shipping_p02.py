@@ -582,6 +582,21 @@ async def prepare_store_driver_cod(
         raise ShippingAccountingError("order_evidence_conflict")
     if evidence.get("accounting_provider") != "cod":
         raise ShippingAccountingError("order_is_not_cod")
+
+    event_id = _hash([owner, "store_driver_cod", assignment_id])
+    prior = await _event_record(db, owner, event_id)
+    if prior:
+        if prior.get("status") == "posted":
+            return {
+                "state": "already_posted",
+                "event_id": event_id,
+                "facts": prior.get("facts") or {},
+                "sale_txn_group_id": prior.get("sale_txn_group_id"),
+                "fee_txn_group_id": prior.get("fee_txn_group_id"),
+                "tax": prior.get("sales_tax"),
+            }
+        raise ShippingAccountingError("shipping_event_requires_recovery")
+
     if evidence.get("recognition_txn_group_id"):
         raise ShippingAccountingError("cod_order_already_recognized_elsewhere")
     if _money(evidence.get("refunded_sar")) != Decimal("0.00"):
@@ -593,7 +608,6 @@ async def prepare_store_driver_cod(
     if _instant(collection.get("collected_at")) > datetime.now(timezone.utc):
         raise ShippingAccountingError("shipping_event_in_future")
 
-    event_id = _hash([owner, "store_driver_cod", assignment_id])
     facts = {
         "event_id": event_id,
         "assignment_id": assignment_id,
@@ -608,21 +622,6 @@ async def prepare_store_driver_cod(
         "accounting_at": accounting_at,
     }
     economic_hash = _hash(facts)
-    prior = await _event_record(db, owner, event_id)
-    if prior:
-        if prior.get("economic_hash") != economic_hash:
-            raise ShippingAccountingError("shipping_event_source_conflict")
-        if prior.get("status") == "posted":
-            return {
-                "state": "already_posted",
-                "event_id": event_id,
-                "facts": facts,
-                "sale_txn_group_id": prior.get("sale_txn_group_id"),
-                "fee_txn_group_id": prior.get("fee_txn_group_id"),
-                "tax": prior.get("sales_tax"),
-            }
-        raise ShippingAccountingError("shipping_event_requires_recovery")
-
     return {
         "state": "eligible",
         "event_id": event_id,
