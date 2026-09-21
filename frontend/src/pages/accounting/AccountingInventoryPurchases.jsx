@@ -171,8 +171,12 @@ export default function AccountingInventoryPurchases({
             unit_cost: openingCostValues[row.target_key],
         }));
         if (!lines.length) return toast.error("لا توجد lots مخزون افتتاحي لاعتماد تكلفتها");
-        if (lines.some((row) => !(Number(row.unit_cost) > 0))) {
-            return toast.error("أدخل تكلفة وحدة أكبر من صفر لكل lot افتتاحي");
+        if (lines.some((row) => (
+            row.unit_cost === ""
+            || !Number.isFinite(Number(row.unit_cost))
+            || Number(row.unit_cost) < 0
+        ))) {
+            return toast.error("أدخل تكلفة وحدة صفر أو أكبر لكل lot افتتاحي");
         }
         setBusy("opening-costs");
         try {
@@ -360,8 +364,12 @@ export default function AccountingInventoryPurchases({
         if (reason.length < 3) return toast.error("اكتب سبب اعتماد تكلفة البضاعة المباعة");
         setBusy("post-cogs:" + row.id);
         try {
-            await postAccountingP03Cogs(row.id, reason);
-            toast.success("تم إثبات تكلفة البضاعة المباعة وخفض رصيد المخزون من تكلفة الـlot الأصلية.");
+            const result = await postAccountingP03Cogs(row.id, reason);
+            toast.success(
+                result?.state === "posted_zero_cost"
+                    ? "تم إغلاق COGS بتكلفة صفر موثقة دون إنشاء قيد مالي صفري."
+                    : "تم إثبات تكلفة البضاعة المباعة وخفض رصيد المخزون من تكلفة الـlot الأصلية.",
+            );
             await refresh();
         } catch (error) {
             toast.error(errorText(error, "تعذر ترحيل تكلفة البضاعة المباعة"), { duration: 8000 });
@@ -484,7 +492,7 @@ export default function AccountingInventoryPurchases({
                                 <div className="text-xs font-black text-slate-700">كمية {row.quantity}</div>
                                 <input
                                     type="number"
-                                    min="0.01"
+                                    min="0"
                                     step="0.01"
                                     value={openingCostValues[row.target_key] || ""}
                                     onChange={(event) => updateOpeningCost(row.target_key, event.target.value)}
