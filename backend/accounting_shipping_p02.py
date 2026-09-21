@@ -868,6 +868,169 @@ async def post_store_driver_cod(
     return await atomic_owner(db, owner, commit)
 
 
+async def shipping_workspace_context(
+    db,
+    *,
+    owner: str,
+) -> dict[str, Any]:
+    """Read-only accountant work queue over the isolated MZ2 P02 sources."""
+    policy = dict(await read_shipping_policy(db, owner))
+    policy.pop("_id", None)
+
+    courier_candidates = await db.mz2_salla_order_evidence.find(
+        {
+            "user_id": owner,
+            "conflict": {"$ne": True},
+            "delivery_source_text": {"$nin": [None, ""]},
+            "shipping_company": {"$nin": [None, ""]},
+            "waybill": {"$nin": [None, ""]},
+            "shipping_fee_event_id": {"$in": [None, ""]},
+        },
+        {
+            "_id": 0,
+            "id": 1,
+            "order_number": 1,
+            "delivery_source_text": 1,
+            "shipping_company": 1,
+            "waybill": 1,
+            "shipping_cost_source": 1,
+            "current_net_sar": 1,
+        },
+    ).sort("delivery_source_text", -1).limit(200).to_list(200)
+
+    drivers = await db[STORE_DRIVERS].find(
+        {
+            "user_id": owner,
+            "status": {"$ne": "inactive"},
+        },
+        {"_id": 0, "id": 1, "name": 1, "delivery_fee": 1, "status": 1},
+    ).sort("name", 1).to_list(500)
+    driver_names = {
+        str(row.get("id")): row.get("name") or str(row.get("id"))
+        for row in drivers
+        if row.get("id")
+    }
+    driver_candidates = await db[DRIVER_COLLECTIONS].find(
+        {
+            "user_id": owner,
+            "payment_method": "cash",
+            "assignment_id": {"$nin": [None, ""]},
+            "mz2_p02_accounting_status": {"$ne": "posted"},
+        },
+        {
+            "_id": 0,
+            "id": 1,
+            "assignment_id": 1,
+            "order_number": 1,
+            "driver_id": 1,
+            "amount": 1,
+            "cod_custody_amount": 1,
+            "review_status": 1,
+            "collected_at": 1,
+            "mz2_p02_accounting_status": 1,
+        },
+    ).sort("collected_at", -1).limit(200).to_list(200)
+    for row in driver_candidates:
+        row["driver_name"] = driver_names.get(
+            str(row.get("driver_id") or ""),
+            str(row.get("driver_id") or ""),
+        )
+
+    bank_movements = await db.mz2_daily_movements.find(
+        {
+            "user_id": owner,
+            "status": "unclassified",
+            "direction": {"$in": ["in", "out"]},
+            "receipt_id": {"$in": [None, ""]},
+            "confirmed_provider": {"$in": [None, ""]},
+            "explicit_provider": {"$in": [None, ""]},
+            "suggested_provider": {"$in": [None, ""]},
+        },
+        {
+            "_id": 0,
+            "id": 1,
+            "movement_date": 1,
+            "direction": 1,
+            "amount": 1,
+            "description": 1,
+            "reference": 1,
+            "bank_account_id": 1,
+            "bank_account_name": 1,
+        },
+    ).sort([("movement_date", -1), ("created_at", -1)]).limit(200).to_list(200)
+
+    latest_rate_by_courier: dict[str, dict[str, Any]] = {}
+    for version in policy.get("versions") or []:
+        if version.get("verification_status") != "approved":
+            continue
+        courier_id = str(version.get("courier_id") or "").strip()
+        if not courier_id:
+            continue
+        current = latest_rate_by_courier.get(courier_id)
+        key = (
+            str(version.get("effective_at") or ""),
+            int(version.get("revision") or 0),
+        )
+        current_key = (
+            str((current or {}).get("effective_at") or ""),
+            int((current or {}).get("revision") or 0),
+        )
+        if current is None or key >= current_key:
+            latest_rate_by_courier[courier_id] = version
+
+    counterparties = [
+        {
+            "type": "courier",
+            "id": courier_id,
+            "name": row.get("name") or courier_id,
+        }
+        for courier_id, row in sorted(
+            latest_rate_by_courier.items(),
+            key=lambda item: str(item[1].get("name") or item[0]),
+        )
+    ] + [
+        {
+            "type": "store_driver",
+            "id": str(row["id"]),
+            "name": row.get("name") or str(row["id"]),
+        }
+        for row in drivers
+        if row.get("id")
+    ]
+
+    events = await db.mz2_shipping_accounting_events.find(
+        {"user_id": owner},
+        {
+            "_id": 0,
+            "id": 1,
+            "kind": 1,
+            "status": 1,
+            "facts": 1,
+            "txn_group_id": 1,
+            "sale_txn_group_id": 1,
+            "fee_txn_group_id": 1,
+            "posted_at": 1,
+            "created_at": 1,
+        },
+    ).sort("created_at", -1).limit(50).to_list(50)
+
+    return {
+        "rate_policy": policy,
+        "latest_rates": list(latest_rate_by_courier.values()),
+        "courier_candidates": courier_candidates,
+        "driver_candidates": driver_candidates,
+        "bank_movements": bank_movements,
+        "counterparties": counterparties,
+        "recent_events": events,
+        "limits": {
+            "courier_candidates": 200,
+            "driver_candidates": 200,
+            "bank_movements": 200,
+            "recent_events": 50,
+        },
+    }
+
+
 class CourierFeePostIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     evidence_id: str = Field(min_length=1, max_length=200)
@@ -888,6 +1051,11 @@ def install_shipping_p02_routes(router, db, current_user) -> None:
         if not owner:
             raise HTTPException(403, "accounting_owner_scope_missing")
         return actor, owner
+
+    @router.get(base + "/workspace")
+    async def workspace(user: dict = Depends(current_user)):
+        _, owner = await scope(user, "accounting.shipping.view")
+        return await shipping_workspace_context(db, owner=owner)
 
     @router.get(base + "/rates")
     async def rates(user: dict = Depends(current_user)):
