@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import api from "../../lib/api";
 import { useOptionalAuth } from "../../context/AuthContext";
-import { getAccountingAccess, getAccountingModuleStatus } from "../../services/accountingModule";
+import {\n    getAccountingAccess,\n    getAccountingModuleStatus,\n    getAccountingSettlementContext,\n    getAccountingSettlementDrafts,\n} from "../../services/accountingModule";
 import AccountingWorkspace from "./AccountingWorkspace";
 
 // Jest 27 predates conditional subpath exports. Resolve the installed package's
@@ -36,7 +36,7 @@ jest.mock("./AccountingSettlements", () => () => null);
 jest.mock("./AccountingBankReceipts", () => () => null);
 jest.mock("./AccountingWriteControl", () => () => null);
 jest.mock("./AccountingPeriods", () => () => null);
-jest.mock("./AccountingCustomerAdvances", () => () => null);
+jest.mock("./AccountingCustomerAdvances", () => () => null);\njest.mock("./AccountingDailyAutomationActions", () => () => null);\njest.mock("./AccountingDailyAutomationStatus", () => ({ status }) => (\n    <a href="/integrations-v2?workspace=financial&page=journals-reports">{status?.tasks?.[0]?.title || "reports"}</a>\n));
 
 let root, node;
 beforeEach(() => {
@@ -47,7 +47,14 @@ beforeEach(() => {
         permissions: ["accounting.home.view", "accounting.journals_reports.view"] });
     getAccountingModuleStatus.mockResolvedValue({ tasks: [{ id: "review-reports", page: "journals-reports",
         title: "Synthetic report review", detail: "Synthetic fixture" }] });
-    api.get.mockResolvedValue({ data: { status: "needs_opening_balance", reason: "approved_opening_required" } });
+    getAccountingSettlementContext.mockResolvedValue({ bindings: [], banks: [] });
+    getAccountingSettlementDrafts.mockResolvedValue({ items: [] });
+    api.get.mockImplementation((url) => {
+        if (String(url).includes("/reports/financial-position")) {
+            return Promise.resolve({ data: { status: "needs_opening_balance", reason: "approved_opening_required" } });
+        }
+        return Promise.resolve({ data: { items: [] } });
+    });
 });
 afterEach(() => { act(() => root.unmount()); node.remove(); });
 
