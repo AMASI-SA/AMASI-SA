@@ -6,8 +6,10 @@ import {
     activateAccountingP03,
     createAccountingP03PurchaseInvoice,
     getAccountingInventoryP03Workspace,
+    postAccountingP03Cogs,
     postAccountingP03InventoryReceipt,
     postAccountingP03SupplierInvoice,
+    previewAccountingP03Cogs,
     previewAccountingP03InventoryReceipt,
     previewAccountingP03SupplierInvoice,
 } from "../../services/accountingModule";
@@ -35,6 +37,13 @@ function PreviewState({ preview }) {
             </div>
         );
     }
+    if (preview.state === "waiting") {
+        return (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-900">
+                بانتظار دليل إضافي: {preview?.reasons?.join("، ") || "غير مكتمل"}
+            </div>
+        );
+    }
     return (
         <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-bold text-rose-900">
             {preview?.reasons?.join("، ") || "غير مؤهل للترحيل"}
@@ -58,6 +67,7 @@ export default function AccountingInventoryPurchases({
     const [busy, setBusy] = useState("");
     const [activationRef, setActivationRef] = useState("");
     const [receiptState, setReceiptState] = useState({});
+    const [cogsState, setCogsState] = useState({});
     const [supplierState, setSupplierState] = useState({});
     const [purchase, setPurchase] = useState({
         supplier_id: "",
@@ -227,6 +237,44 @@ export default function AccountingInventoryPurchases({
             await refresh();
         } catch (error) {
             toast.error(errorText(error, "تعذر ترحيل استلام المخزون"), { duration: 8000 });
+        } finally {
+            setBusy("");
+        }
+    }
+
+    function updateCogs(eventId, patch) {
+        setCogsState((current) => ({
+            ...current,
+            [eventId]: { ...(current[eventId] || {}), ...patch },
+        }));
+    }
+
+    async function previewCogs(row) {
+        setBusy("preview-cogs:" + row.id);
+        try {
+            const preview = await previewAccountingP03Cogs(row.id);
+            updateCogs(row.id, { preview });
+        } catch (error) {
+            toast.error(errorText(error, "تعذر معاينة تكلفة البضاعة المباعة"), { duration: 8000 });
+        } finally {
+            setBusy("");
+        }
+    }
+
+    async function postCogs(row) {
+        const state = cogsState[row.id] || {};
+        const reason = String(state.reason || "").trim();
+        if (!p03Active) return toast.error("P03 ما زال مقفلاً");
+        if (!canPost) return toast.error("لا تملك صلاحية ترحيل المشتريات");
+        if (state.preview?.state !== "eligible") return toast.error("نفّذ المعاينة أولًا وتأكد من وجود قيد البيع");
+        if (reason.length < 3) return toast.error("اكتب سبب اعتماد تكلفة البضاعة المباعة");
+        setBusy("post-cogs:" + row.id);
+        try {
+            await postAccountingP03Cogs(row.id, reason);
+            toast.success("تم إثبات تكلفة البضاعة المباعة وخفض رصيد المخزون من تكلفة الـlot الأصلية.");
+            await refresh();
+        } catch (error) {
+            toast.error(errorText(error, "تعذر ترحيل تكلفة البضاعة المباعة"), { duration: 8000 });
         } finally {
             setBusy("");
         }
