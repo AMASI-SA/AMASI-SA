@@ -3,7 +3,7 @@ export const ACCOUNTING_OPERATION_ID = "MZ2-FIN-CUTOVER-001";
 export const ACCOUNTING_PAGES = [
     {
         id: "home",
-        label: "الرئيسية المحاسبية",
+        label: "المحاسبة اليومية",
         permission: "accounting.home.view",
         to: "/integrations-v2?workspace=financial&page=home",
         implementationStatus: "implemented",
@@ -34,7 +34,7 @@ export const ACCOUNTING_PAGES = [
         label: "الحركات المالية",
         permission: "accounting.movements.view",
         to: "/integrations-v2?workspace=financial&page=financial-movements",
-        implementationStatus: "partial_existing_workflows",
+        implementationStatus: "implemented",
     },
     {
         id: "payroll-obligations",
