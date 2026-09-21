@@ -373,3 +373,22 @@ export async function processAccountingCourierPending({ limit = 100, dryRun = tr
     });
     return data;
 }
+
+
+export async function getAccountingBankTransferReviews(limit = 100) {
+    const { data } = await api.get(`${BASE}/bank-transfer-reviews`, {
+        params: { limit },
+    });
+    return data;
+}
+
+export async function approveAccountingBankTransferReview(evidenceId, movementId) {
+    const { data } = await api.post(
+        `${BASE}/bank-transfer-reviews/${encodeURIComponent(evidenceId)}/approve`,
+        {
+            movement_id: movementId,
+            confirmation: "APPROVE_BANK_TRANSFER_RECEIPT",
+        },
+    );
+    return data;
+}
