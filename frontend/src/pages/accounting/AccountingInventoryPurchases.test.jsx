@@ -61,6 +61,12 @@ test("P03 opening inventory snapshot must match GL before activation", () => {
     expect(source).toContain("openingSnapshotApproved");
 });
 
+test("opening inventory may carry evidenced zero cost without a zero-value journal", () => {
+    expect(source).toContain("تكلفة وحدة صفر أو أكبر لكل lot افتتاحي");
+    expect(source).toContain("posted_zero_cost");
+    expect(source).toContain("دون إنشاء قيد مالي صفري");
+});
+
 test("COGS waits for sale recognition and uses receipt-lot cost evidence", () => {
     expect(serviceSource).toContain("/inventory-p03/inventory-consumptions/");
     expect(serviceSource).toContain("/cogs-preview");
