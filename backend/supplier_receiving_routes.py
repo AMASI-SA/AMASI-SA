@@ -23,7 +23,7 @@ from pymongo.errors import DuplicateKeyError
 from component_edit_policy import component_cost_metadata
 from fulfillment_v2_routes import _actor_context as _base_actor_context, _require_permission
 from mezan_supplier_management_routes import MEZAN_SUPPLIERS_V2
-from accounting_inventory_p03 import p01_controls_purchase_accounting
+from accounting_inventory_p03_gate import p01_controls_purchase_accounting
 from mobile_app_permissions import MOBILE_APP_CLIENT, mobile_app_access_for_user
 from order_option_cost_snapshot_routes import (
     MEZAN_V2_COST_SOURCES,
