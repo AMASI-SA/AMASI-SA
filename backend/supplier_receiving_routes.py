@@ -4134,7 +4134,7 @@ def make_supplier_receiving_router(
                 "approved_at": now,
                 "created_at": now,
                 "updated_at": now,
-                "financial_invoice_created": invoice["financial_invoice_created"],
+                "financial_invoice_created": not is_experiment,
                 "liability_created": (
                     not is_experiment and not mz2_controls_accounting
                 ),
@@ -4582,6 +4582,8 @@ def make_supplier_receiving_router(
                 "next_step": (
                     "experiment_completed_without_financial_writes"
                     if is_experiment
+                    else "supplier_invoice_awaiting_p03_accounting"
+                    if mz2_controls_accounting
                     else "supplier_invoice_payable_posted"
                 ),
                 "share_next_step": (
