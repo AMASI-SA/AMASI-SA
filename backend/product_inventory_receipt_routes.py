@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from pymongo import ASCENDING, DESCENDING
 from pymongo.errors import DuplicateKeyError
 
+from accounting_inventory_p03_gate import p01_controls_purchase_accounting
 from fulfillment_v2_routes import (
     INVENTORY_RESERVATIONS,
     _actor_context,
@@ -49,6 +50,7 @@ from warehouse_room_routes import ROOMS
 
 PURCHASE_INVOICES = "purchase_invoices"
 INVENTORY_RECEIPTS = "mezan_inventory_receipts_v2"
+P03_ACCOUNTING_AUTHORITY = "accounting_inventory_p03"
 
 
 def _now() -> str:
@@ -424,13 +426,36 @@ async def ensure_inventory_receipt_indexes(db: Any) -> None:
     )
 
 
+def purchase_invoice_receivable_after_p01(
+    invoice: dict[str, Any],
+    *,
+    p01_controls_accounting: bool,
+) -> bool:
+    if not p01_controls_accounting:
+        return True
+    return bool(
+        invoice.get("accounting_authority") == P03_ACCOUNTING_AUTHORITY
+        and invoice.get("source") == P03_ACCOUNTING_AUTHORITY
+    )
+
+
 async def _purchase_catalog(
     db: Any,
     *,
     merchant_id: str,
 ) -> list[dict[str, Any]]:
+    mz2_controls = await p01_controls_purchase_accounting(
+        db,
+        owner=merchant_id,
+    )
+    invoice_query: dict[str, Any] = {"user_id": merchant_id}
+    if mz2_controls:
+        invoice_query.update({
+            "accounting_authority": P03_ACCOUNTING_AUTHORITY,
+            "source": P03_ACCOUNTING_AUTHORITY,
+        })
     invoices = await db[PURCHASE_INVOICES].find(
-        {"user_id": merchant_id},
+        invoice_query,
         {
             "_id": 0,
             "id": 1,
@@ -516,6 +541,24 @@ async def _resolve_purchase_receiving_selection(
         raise HTTPException(
             status_code=404,
             detail={"code": "purchase_invoice_not_found"},
+        )
+    mz2_controls = await p01_controls_purchase_accounting(
+        db,
+        owner=merchant_id,
+    )
+    if not purchase_invoice_receivable_after_p01(
+        invoice,
+        p01_controls_accounting=mz2_controls,
+    ):
+        raise HTTPException(
+            status_code=423,
+            detail={
+                "code": "legacy_purchase_receipt_locked_after_p01",
+                "message": (
+                    "بعد تفعيل MZ2 P01 يُستلم المخزون فقط من "
+                    "فاتورة شراء P03 أصلية"
+                ),
+            },
         )
     invoice_line = next(
         (
@@ -1457,6 +1500,7 @@ __all__ = [
     "INVENTORY_RECEIPTS",
     "InventorySpecification",
     "PurchaseInventoryReceiptRequest",
+    "purchase_invoice_receivable_after_p01",
     "build_inventory_health_rows",
     "ensure_inventory_receipt_indexes",
     "make_product_inventory_receipt_router",
