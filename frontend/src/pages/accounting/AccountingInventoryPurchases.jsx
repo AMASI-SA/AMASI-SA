@@ -17,10 +17,30 @@ import {
 } from "../../services/accountingModule";
 import { formatMoney } from "./AccountingShared";
 
+const P03_ERRORS = {
+    p03_opening_inventory_cost_total_mismatch: "إجمالي تكلفة الـlots لا يساوي رصيد المخزون الافتتاحي في GL.",
+    p03_opening_inventory_changed_refresh_required: "المخزون الفعلي تغير؛ أعد تحميل Snapshot وراجعه من جديد.",
+    p03_opening_inventory_snapshot_blocked: "لا يمكن اعتماد Snapshot بعد حدوث حركة مخزون تالية للقطع.",
+    p03_activation_opening_inventory_cost_snapshot_required: "اعتمد Snapshot تكلفة المخزون الافتتاحي المطابق للـGL قبل تفعيل P03.",
+    p03_activation_opening_inventory_not_ready: "المخزون الافتتاحي غير جاهز لتفعيل P03 بسبب حركة أو تغيير بعد يوم القطع.",
+    p03_input_vat_evidence_required: "ضريبة المدخلات القابلة للاسترداد تحتاج مرجع فاتورة أو دليل ضريبي.",
+    p03_cogs_not_eligible: "COGS غير جاهز؛ يجب اكتمال قيد البيع ودليل تكلفة المخزون أولًا.",
+    inventory_cost_basis_missing: "لا توجد تكلفة lot معتمدة لهذا المخزون.",
+};
+
 function errorText(error, fallback) {
     const detail = error?.response?.data?.detail;
-    if (typeof detail === "string") return detail;
-    return detail?.message || detail?.code || fallback;
+    if (typeof detail === "string") return P03_ERRORS[detail] || detail;
+    const code = detail?.code;
+    let text = detail?.message || P03_ERRORS[code] || code || fallback;
+    if (code === "p03_opening_inventory_cost_total_mismatch") {
+        const difference = Number(detail?.difference_halalas || 0) / 100;
+        text += ` الفرق: ${formatMoney(difference)}.`;
+    }
+    if (Array.isArray(detail?.blockers) && detail.blockers.length) {
+        text += ` — ${detail.blockers.join("، ")}`;
+    }
+    return text;
 }
 
 function PreviewState({ preview }) {
