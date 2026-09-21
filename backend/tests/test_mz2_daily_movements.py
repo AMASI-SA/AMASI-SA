@@ -103,7 +103,7 @@ class DailyMovementTests(unittest.IsolatedAsyncioTestCase):
             OpeningLineIn(category="bank", entity_id="bank-inma", amount="10000"),
         ]
         if supplier_payable is not None:
-            await self.db.suppliers.insert_one({
+            await self.db.mezan_suppliers_v2.insert_one({
                 "id": "supplier-1",
                 "user_id": "owner",
                 "company_name": "Synthetic supplier",
