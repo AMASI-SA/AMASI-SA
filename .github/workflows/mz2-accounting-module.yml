@@ -130,6 +130,8 @@ jobs:
         run: python -m unittest discover -s tests -p test_mz2_bank_transfer_receipts.py -v
       - name: Test isolated MZ2 shipping and COD accounting
         run: python -m unittest discover -s tests -p test_mz2_shipping_p02.py -v
+      - name: Test fail-closed MZ2 P03 inventory and purchases
+        run: python -m unittest discover -s tests -p test_mz2_inventory_p03.py -v
       - name: Test historical financial position, closed periods, provider credits and advances
         run: |
           python -m unittest discover -s tests -p test_mz2_report_dates.py -v
