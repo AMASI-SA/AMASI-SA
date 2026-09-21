@@ -79,6 +79,17 @@ test("COGS waits for sale recognition and uses receipt-lot cost evidence", () =>
     expect(source).toContain("اعتماد COGS");
 });
 
+test("physical restock creates a separate reviewed COGS reversal queue", () => {
+    expect(serviceSource).toContain("/inventory-p03/return-restocks/");
+    expect(serviceSource).toContain("/cogs-reversal-preview");
+    expect(serviceSource).toContain("/cogs-reversal-post");
+    expect(source).toContain("مرتجعات المخزون — عكس COGS");
+    expect(source).toContain("قطعة صالحة عادت فعليًا إلى Inventory V2");
+    expect(source).toContain("التكلفة التاريخية الأصلية");
+    expect(source).toContain("معاينة العكس");
+    expect(source).toContain("اعتماد عكس COGS");
+});
+
 test("refunds and inspection never reverse COGS without physical restock", () => {
     expect(source).toContain("الاسترداد المالي أو فحص المرتجع وحده لا يعكس COGS");
     expect(source).toContain("العكس يتطلب Restock فعليًا للمخزون");
