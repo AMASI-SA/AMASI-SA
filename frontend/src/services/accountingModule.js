@@ -277,6 +277,19 @@ export async function createAccountingManualIncomingMovement(payload) {
     return data;
 }
 
+export async function createAccountingManualOutgoingMovement(payload) {
+    const { data } = await api.post(`${BASE}/daily-movements/manual-outgoing`, payload);
+    return data;
+}
+
+export async function classifyAccountingOutgoingMovement(movementId, payload) {
+    const { data } = await api.post(
+        `${BASE}/daily-movements/${encodeURIComponent(movementId)}/classify-outgoing`,
+        payload,
+    );
+    return data;
+}
+
 export async function confirmAccountingDailyMovementProvider(movementId, provider, reason) {
     const { data } = await api.post(
         `${BASE}/daily-movements/${encodeURIComponent(movementId)}/confirm-provider`,
