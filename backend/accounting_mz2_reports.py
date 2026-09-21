@@ -244,6 +244,88 @@ async def mz2_trial_balance(db, *, owner, as_of=None):
     return {**scope, "items": _sums(scope["items"]) if scope["status"] == "available" else []}
 
 
+def _statement_accounts(rows, *, entity_type):
+    accounts = defaultdict(
+        lambda: {"debits": Decimal(0), "credits": Decimal(0)}
+    )
+    for row in rows:
+        if row.get("entity_type") != entity_type:
+            continue
+        account_id = str(row.get("entity_id") or "").strip()
+        if not account_id:
+            continue
+        amount = Decimal(str(row.get("amount")))
+        if row.get("side") == "debit":
+            accounts[account_id]["debits"] += amount
+        else:
+            accounts[account_id]["credits"] += amount
+
+    result = {}
+    for account_id in sorted(accounts):
+        values = accounts[account_id]
+        if entity_type == "revenue":
+            net = values["credits"] - values["debits"]
+        else:
+            net = values["debits"] - values["credits"]
+        result[account_id] = {
+            "debits": float(values["debits"]),
+            "credits": float(values["credits"]),
+            "net": float(net),
+        }
+    return result
+
+
+async def mz2_income_statement(db, *, owner, as_of=None):
+    scope = await read_mz2_ledger(
+        db,
+        owner=owner,
+        as_of=as_of,
+    )
+    base = {key: value for key, value in scope.items() if key != "items"}
+    if scope["status"] != "available":
+        return {
+            **base,
+            "revenues": None,
+            "expenses": None,
+            "totals": None,
+        }
+
+    revenues = _statement_accounts(
+        scope["items"],
+        entity_type="revenue",
+    )
+    expenses = _statement_accounts(
+        scope["items"],
+        entity_type="expense",
+    )
+    net_revenue = sum(
+        (Decimal(str(row["net"])) for row in revenues.values()),
+        Decimal(0),
+    )
+    total_expenses = sum(
+        (Decimal(str(row["net"])) for row in expenses.values()),
+        Decimal(0),
+    )
+    cogs = Decimal(str((expenses.get("cogs") or {}).get("net") or 0))
+    operating_expenses = total_expenses - cogs
+    gross_profit = net_revenue - cogs
+    net_profit = net_revenue - total_expenses
+
+    return {
+        **base,
+        "revenues": revenues,
+        "expenses": expenses,
+        "totals": {
+            "net_revenue": float(net_revenue),
+            "cogs": float(cogs),
+            "gross_profit": float(gross_profit),
+            "operating_expenses": float(operating_expenses),
+            "total_expenses": float(total_expenses),
+            "net_profit": float(net_profit),
+        },
+    }
+
+
 async def mz2_financial_position(db, *, owner, as_of=None):
     scope = await read_mz2_ledger(db, owner=owner, as_of=as_of)
     base = {k: v for k, v in scope.items() if k != "items"}
@@ -297,5 +379,6 @@ def install_mz2_report_routes(router, db, current_user):
                 raise HTTPException(422, str(exc)) from exc
         router.add_api_route("/accounting-module/reports/" + path, report, methods=["GET"])
     install("financial-position", mz2_financial_position)
+    install("income-statement", mz2_income_statement)
     install("trial-balance", mz2_trial_balance)
     install("journals", read_mz2_ledger)
