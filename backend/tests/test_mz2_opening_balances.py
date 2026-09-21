@@ -63,6 +63,12 @@ class OpeningBalanceTests(unittest.IsolatedAsyncioTestCase):
                 "status": "active",
             },
         ])
+        await self.db.mezan_suppliers_v2.insert_one({
+            "id": "supplier-1",
+            "user_id": "owner",
+            "company_name": "Synthetic supplier V2",
+            "status": "active",
+        })
         await self.db.operating_salaries.insert_one({
             "id": "employee-1",
             "user_id": "owner",
