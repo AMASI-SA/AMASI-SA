@@ -9,7 +9,7 @@ const REPORTS = [
     ["journals", "القيود اليومية"],
 ];
 const LABELS = {
-    banks: "البنوك والصناديق", payment_platforms_remaining: "ذمم مزودي الدفع", input_vat: "ضريبة مدخلات",
+    banks: "البنوك والصناديق", payment_platforms_remaining: "ذمم مزودي الدفع", inventory: "المخزون بالتكلفة", input_vat: "ضريبة مدخلات",
     customer_refund_payable: "التزام استرداد العميل", customer_advance: "تحصيلات العملاء المقدمة",
     sales_vat_payable: "ضريبة المبيعات المستحقة", employee_advance: "سلف الموظفين", employee_custody: "عهد الموظفين",
     external_receivable: "ذمم مدينة أخرى", courier_cod_receivable: "تحصيلات شركات الشحن", store_driver_cod_receivable: "تحصيلات موصلي المتجر",
