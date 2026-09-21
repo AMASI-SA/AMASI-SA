@@ -272,6 +272,11 @@ export async function uploadAccountingDailyMovements({ bankAccountId, file }) {
     return data;
 }
 
+export async function createAccountingManualIncomingMovement(payload) {
+    const { data } = await api.post(`${BASE}/daily-movements/manual-incoming`, payload);
+    return data;
+}
+
 export async function confirmAccountingDailyMovementProvider(movementId, provider, reason) {
     const { data } = await api.post(
         `${BASE}/daily-movements/${encodeURIComponent(movementId)}/confirm-provider`,
