@@ -45,6 +45,9 @@ test("P03 UI exposes explicit purchase tax treatment", () => {
     expect(source).toContain("تضاف إلى تكلفة المخزون");
     expect(source).toContain("recoverable_input_vat");
     expect(source).toContain("included_in_inventory_cost");
+    expect(source).toContain("مرجع الدليل الضريبي");
+    expect(source).toContain("رقم/مرجع الفاتورة الضريبية");
+    expect(source).toContain("أدخل مرجع الفاتورة أو الدليل الضريبي");
 });
 
 test("Inventory V2 remains the operational receiving source", () => {
