@@ -42,9 +42,13 @@ from accounting_sales_tax_service import read_policy, sale_snapshot
 from accounting_sales_tax import TaxError
 from ledger_core import post_txn_group
 from store_delivery_accounting import require_p02_shipping_financial_writes
-from store_delivery_driver_app_routes import DRIVER_COLLECTIONS, DRIVER_EARNINGS
-from store_delivery_driver_routes import STORE_DRIVERS
 
+
+# Collection names are data contracts, not router dependencies.  Keep this
+# accounting module import-safe in the focused backend test environment.
+STORE_DRIVERS = "store_drivers"
+DRIVER_COLLECTIONS = "store_delivery_collections"
+DRIVER_EARNINGS = "store_delivery_driver_earnings"
 
 RIYADH = ZoneInfo("Asia/Riyadh")
 MONEY = Decimal("0.01")
