@@ -962,6 +962,21 @@ async def inventory_p03_workspace(db: Any, *, owner: str) -> dict[str, Any]:
         },
     ).sort([("invoice_date", -1), ("created_at", -1)]).limit(300).to_list(300)
 
+    products = await db[MEZAN_PRODUCTS_V2].find(
+        {
+            "user_id": owner,
+            "archived": {"$ne": True},
+        },
+        {
+            "_id": 0,
+            "mezan_product_id": 1,
+            "salla_product_id": 1,
+            "name": 1,
+            "sku": 1,
+            "variants_count": 1,
+        },
+    ).sort("name", 1).limit(5000).to_list(5000)
+
     supplier_invoices = await db[MEZAN_SUPPLIER_INVOICES_V2].find(
         {
             "user_id": owner,
@@ -986,10 +1001,12 @@ async def inventory_p03_workspace(db: Any, *, owner: str) -> dict[str, Any]:
         },
     ).sort("approved_at", -1).limit(300).to_list(300)
 
+    purchase_ids = [row["id"] for row in purchase_invoices if row.get("id")]
     inventory_receipts = await db[INVENTORY_RECEIPTS_V2].find(
         {
             "user_id": owner,
             "status": "posted",
+            "purchase_invoice_id": {"$in": purchase_ids},
         },
         {
             "_id": 0,
@@ -1021,6 +1038,7 @@ async def inventory_p03_workspace(db: Any, *, owner: str) -> dict[str, Any]:
             "inventory_v2_remains_operational_stock_authority": True,
         },
         "suppliers": suppliers,
+        "products": products,
         "supplier_invoices": supplier_invoices,
         "purchase_invoices": purchase_invoices,
         "inventory_receipts": inventory_receipts,
