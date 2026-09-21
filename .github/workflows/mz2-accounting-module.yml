@@ -15,6 +15,7 @@ on:
       - "backend/accounting_employee_finance.py"
       - "backend/accounting_salla_order_evidence.py"
       - "backend/accounting_order_recognition.py"
+      - "backend/accounting_bank_transfer_receipts.py"
       - "backend/accounting_shipping_p02.py"
       - "backend/accounting_shipping_settlements.py"
       - "backend/accounting_mz2_reports.py"
@@ -30,6 +31,7 @@ on:
       - "backend/tests/test_mz2_employee_finance.py"
       - "backend/tests/test_mz2_salla_order_evidence.py"
       - "backend/tests/test_mz2_order_recognition.py"
+      - "backend/tests/test_mz2_bank_transfer_receipts.py"
       - "backend/tests/test_mz2_shipping_p02.py"
       - "backend/accounting_receipt_service.py"
       - "backend/accounting_customer_refund*.py"
@@ -124,6 +126,8 @@ jobs:
         run: python -m unittest discover -s tests -p test_mz2_salla_order_evidence.py -v
       - name: Test MZ2 Salla evidence sale recognition
         run: python -m unittest discover -s tests -p test_mz2_order_recognition.py -v
+      - name: Test MZ2 customer bank-transfer receipt review
+        run: python -m unittest discover -s tests -p test_mz2_bank_transfer_receipts.py -v
       - name: Test isolated MZ2 shipping and COD accounting
         run: python -m unittest discover -s tests -p test_mz2_shipping_p02.py -v
       - name: Test historical financial position, closed periods, provider credits and advances
@@ -169,6 +173,7 @@ jobs:
           accounting_employee_finance.py
           accounting_salla_order_evidence.py
           accounting_order_recognition.py
+          accounting_bank_transfer_receipts.py
           accounting_shipping_p02.py
           accounting_shipping_settlements.py
           accounting_settlement_*.py
@@ -208,6 +213,7 @@ jobs:
           --runInBand
           src/pages/accounting/AccountingOpeningBalances.test.jsx
           src/pages/accounting/AccountingDailyWorkspace.test.jsx
+          src/pages/accounting/AccountingBankTransferReceipts.test.jsx
           src/pages/accounting/AccountingDailyMovements.test.jsx
           src/pages/accounting/AccountingPayroll.test.jsx
           src/pages/accounting/AccountingWriteControl.test.jsx
