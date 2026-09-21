@@ -6,6 +6,7 @@ from fulfillment_v2_routes import (
     _inventory_rows,
     _inventory_reservation_blockers,
     _inventory_consumption_targets,
+    _inventory_consumption_event_rows,
     _reserve_inventory_for_line,
     _ready_order_allowed,
     _satisfy_preparation_with_ready_stock,
@@ -70,6 +71,90 @@ def _instant_line(**overrides):
     }
     row.update(overrides)
     return row
+
+
+def test_inventory_consumption_evidence_preserves_order_and_receipt_lot():
+    events = _inventory_consumption_event_rows(
+        [
+            {
+                "id": "res-1",
+                "order_number": "ORD-COGS-1",
+                "product_id": "SALLA-1",
+                "mezan_product_id": "MZP-1",
+                "sku": "SKU-1",
+                "allocations": [
+                    {
+                        "location_id": "loc-1",
+                        "receipt_id": "receipt-1",
+                        "item_index": 0,
+                        "quantity": 1,
+                    },
+                    {
+                        "location_id": "loc-1",
+                        "receipt_id": "receipt-1",
+                        "item_index": 0,
+                        "quantity": 1,
+                    },
+                ],
+            },
+            {
+                "id": "res-2",
+                "order_number": "ORD-COGS-2",
+                "product_id": "SALLA-2",
+                "mezan_product_id": "MZP-2",
+                "sku": "SKU-2",
+                "allocations": [
+                    {
+                        "location_id": "loc-2",
+                        "receipt_id": "receipt-2",
+                        "item_index": 0,
+                        "quantity": 3,
+                    },
+                ],
+            },
+        ],
+        user_id="owner",
+        batch_id="batch-1",
+    )
+    assert [row["order_number"] for row in events] == [
+        "ORD-COGS-1",
+        "ORD-COGS-2",
+    ]
+    first = events[0]
+    assert first["reservation_ids"] == ["res-1"]
+    assert first["allocations"] == [{
+        "location_id": "loc-1",
+        "receipt_id": "receipt-1",
+        "item_index": 0,
+        "quantity": 2.0,
+        "product_id": "SALLA-1",
+        "mezan_product_id": "MZP-1",
+        "sku": "SKU-1",
+    }]
+    assert first["economic_hash"]
+    replay = _inventory_consumption_event_rows(
+        [
+            {
+                "id": "res-1",
+                "order_number": "ORD-COGS-1",
+                "product_id": "SALLA-1",
+                "mezan_product_id": "MZP-1",
+                "sku": "SKU-1",
+                "allocations": [
+                    {
+                        "location_id": "loc-1",
+                        "receipt_id": "receipt-1",
+                        "item_index": 0,
+                        "quantity": 2,
+                    },
+                ],
+            },
+        ],
+        user_id="owner",
+        batch_id="batch-1",
+    )[0]
+    assert replay["id"] == first["id"]
+    assert replay["economic_hash"] == first["economic_hash"]
 
 
 def test_explicit_preparation_service_overrides_instant_product():
