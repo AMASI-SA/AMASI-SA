@@ -88,6 +88,16 @@ def _producer(row):
             and bool(meta.get("sale_recognition_txn_group_id"))
             and bool(meta.get("order_reference_id"))
         )
+    if kind == "inventory_cogs_reversal":
+        return (
+            meta.get("source") == "accounting_inventory_p03"
+            and meta.get("p03_kind") == "inventory_cogs_reversal"
+            and bool(meta.get("p03_event_id"))
+            and bool(meta.get("return_restock_id"))
+            and bool(meta.get("return_case_id"))
+            and bool(meta.get("inventory_receipt_id"))
+            and bool(meta.get("order_reference_id"))
+        )
     return False
 
 
