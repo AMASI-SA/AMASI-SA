@@ -71,6 +71,8 @@ export default function AccountingDailyMovements({ accountingPermissions = [] })
     const [manualNotes, setManualNotes] = useState("");
     const manualRequest = useRef(null);
     const canImport = accountingPermissions.includes("accounting.movements.import");
+    const canPostExpense = accountingPermissions.includes("accounting.journals.manual_create");
+    const canPostSupplierPayment = accountingPermissions.includes("accounting.settlements.post");
 
     async function refresh() {
         const [nextContext, nextRows] = await Promise.all([
@@ -196,6 +198,8 @@ export default function AccountingDailyMovements({ accountingPermissions = [] })
         const action = draft.action || "";
         const reason = String(draft.reason || "").trim();
         if (!action) return toast.error("اختر نوع الصرف");
+        if (action === "expense" && !canPostExpense) return toast.error("لا تملك صلاحية ترحيل المصروفات");
+        if (action === "supplier_payment" && !canPostSupplierPayment) return toast.error("لا تملك صلاحية ترحيل سداد المورد");
         if (action === "expense" && !draft.expense_category) return toast.error("اختر فئة المصروف");
         if (action === "supplier_payment" && !draft.supplier_id) return toast.error("اختر المورد");
         if (reason.length < 3) return toast.error("اكتب سببًا واضحًا للترحيل");
@@ -436,7 +440,11 @@ export default function AccountingDailyMovements({ accountingPermissions = [] })
                                             <button
                                                 type="button"
                                                 onClick={() => classifyOutgoing(row)}
-                                                disabled={!canImport || busy === "outgoing:" + row.id}
+                                                disabled={
+                                                    busy === "outgoing:" + row.id
+                                                    || (outgoingById[row.id]?.action === "expense" && !canPostExpense)
+                                                    || (outgoingById[row.id]?.action === "supplier_payment" && !canPostSupplierPayment)
+                                                }
                                                 className="min-h-9 rounded-lg bg-violet-800 px-3 text-[11px] font-extrabold text-white disabled:opacity-40"
                                             >
                                                 {busy === "outgoing:" + row.id ? "جاري الترحيل…" : "اعتماد الصرف"}
