@@ -59,7 +59,14 @@ def _text(value: Any) -> str:
 
 def _aware(value: Any) -> datetime | None:
     if isinstance(value, datetime):
-        parsed = value
+        # PyMongo/Motor returns BSON datetimes as naive UTC unless the client
+        # is configured tz_aware=True. Only persisted datetime objects receive
+        # this UTC interpretation; timezone-less strings remain invalid.
+        parsed = (
+            value.replace(tzinfo=timezone.utc)
+            if value.tzinfo is None or value.utcoffset() is None
+            else value
+        )
     else:
         text = _text(value)
         if not text:
@@ -68,8 +75,8 @@ def _aware(value: Any) -> datetime | None:
             parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
         except ValueError:
             return None
-    if parsed.tzinfo is None or parsed.utcoffset() is None:
-        return None
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            return None
     return parsed.astimezone(timezone.utc)
 
 
