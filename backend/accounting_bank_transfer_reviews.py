@@ -164,7 +164,21 @@ async def _review_row(db, *, owner: str, evidence: dict[str, Any]) -> dict[str, 
     amount = _money(evidence.get("current_net_sar"))
     order = await _operational_order(db, owner, evidence["order_number"])
     operational = _safe_order_view(order)
-    candidates = await _movement_candidates(db, owner=owner, amount=amount)
+    all_candidates = await _movement_candidates(db, owner=owner, amount=amount)
+    candidates = all_candidates
+    late_candidates = []
+    if evidence.get("delivery_source_text"):
+        delivered_at = _source_time(evidence.get("delivery_source_text"))
+        candidates = []
+        for candidate in all_candidates:
+            try:
+                bank_at = _bank_day(candidate.get("movement_date"))
+            except BankTransferReviewError:
+                continue
+            if bank_at <= delivered_at:
+                candidates.append(candidate)
+            else:
+                late_candidates.append(candidate)
 
     reasons = []
     if evidence.get("conflict"):
@@ -182,7 +196,11 @@ async def _review_row(db, *, owner: str, evidence: dict[str, Any]) -> dict[str, 
     if not operational["receiving_bank_name"]:
         reasons.append("receiving_bank_name_missing")
     if not candidates:
-        reasons.append("matching_bank_movement_missing")
+        reasons.append(
+            "bank_transfer_after_delivery_requires_receivable_workflow"
+            if late_candidates
+            else "matching_bank_movement_missing"
+        )
 
     prior = await db.mz2_bank_transfer_reviews.find_one(
         {"user_id": owner, "order_number": evidence["order_number"]},
@@ -198,6 +216,7 @@ async def _review_row(db, *, owner: str, evidence: dict[str, Any]) -> dict[str, 
         "order_status": evidence.get("order_status"),
         "delivery_source_text": evidence.get("delivery_source_text"),
         "bank_movements": candidates,
+        "late_bank_movements": late_candidates,
         "review": prior,
         "state": "approved"
         if prior and prior.get("status") == "posted"
