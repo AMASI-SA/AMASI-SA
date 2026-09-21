@@ -826,10 +826,14 @@ async def get_return_restock_options(
                     "configuration_key": clean_text(
                         allocation.get("configuration_key")
                     ) or None,
+                    "preparation_state": allocation.get("preparation_state"),
+                    "specifications": allocation.get("specifications") or {},
+                    "salla_variant_id": allocation.get("salla_variant_id"),
+                    "product_name": allocation.get("product_name"),
                     "allocated_quantity": 0,
                     "product_id": reservation.get("product_id"),
                     "mezan_product_id": reservation.get("mezan_product_id"),
-                    "sku": reservation.get("sku"),
+                    "sku": allocation.get("sku") or reservation.get("sku"),
                     "reservation_id": reservation.get("id"),
                 })
                 row["allocated_quantity"] += int(
@@ -871,16 +875,21 @@ async def get_return_restock_options(
                 "configuration_key": configuration_key or None,
                 "preparation_state": (
                     (source_item or {}).get("preparation_state")
+                    or row.get("preparation_state")
                     or "ready_complete"
                 ),
                 "specifications": (
-                    (source_item or {}).get("specifications") or {}
+                    (source_item or {}).get("specifications")
+                    or row.get("specifications")
+                    or {}
                 ),
                 "salla_variant_id": (
                     (source_item or {}).get("salla_variant_id")
+                    or row.get("salla_variant_id")
                 ),
                 "product_name": (
                     (source_item or {}).get("product_name")
+                    or row.get("product_name")
                     or selected.get("name")
                 ),
                 "already_restocked_quantity": prior_qty,
