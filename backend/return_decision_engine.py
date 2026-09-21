@@ -589,6 +589,11 @@ async def ensure_return_indexes(db: Any) -> None:
         partialFilterExpression={"idempotency_key": {"$type": "string"}},
     )
     await db[RETURN_RESTOCKS].create_index(
+        [("user_id", 1), ("id", 1)],
+        unique=True,
+        name="uq_return_restock_id",
+    )
+    await db[RETURN_RESTOCKS].create_index(
         [("user_id", 1), ("return_case_id", 1), ("restocked_at", -1)],
         name="ix_return_restock_case",
     )
@@ -1171,6 +1176,33 @@ async def restock_return_inventory(
             }},
         )
         raise RuntimeError("return_restock_location_changed")
+
+    refreshed_expected_barcode = clean_text(
+        refreshed_location.get("barcode_value")
+        or refreshed_location.get("code")
+    ).upper()
+    if refreshed_expected_barcode != facts["scanned_barcode"]:
+        await db.return_cases.update_one(
+            {
+                "user_id": user_id,
+                "id": clean_text(case_id),
+                "return_restock_active_request_id": request_key,
+            },
+            {"$set": {
+                "execution_gates.inventory": options["inventory_gate"],
+                "return_restock_active_request_id": None,
+                "updated_at": utc_now(),
+            }},
+        )
+        await db[RETURN_RESTOCK_REQUESTS].update_one(
+            {"user_id": user_id, "request_id": request_key},
+            {"$set": {
+                "status": "failed",
+                "failure_code": "return_restock_location_barcode_changed",
+                "updated_at": utc_now(),
+            }},
+        )
+        raise RuntimeError("return_restock_location_barcode_mismatch")
 
     receipt_id = str(uuid.uuid5(
         uuid.NAMESPACE_URL,
