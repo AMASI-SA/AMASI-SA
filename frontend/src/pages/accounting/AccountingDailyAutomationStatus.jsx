@@ -137,7 +137,7 @@ export default function AccountingDailyAutomationStatus({
         for (const row of shipping?.items || []) {
             if (!["waiting", "blocked"].includes(row.state)) continue;
             items.push({
-                id: "shipping:" + String(row.assignment_id || row.order_number || Math.random()),
+                id: "shipping:" + String(row.assignment_id || row.order_number || "pending"),
                 title: "شحن/COD للطلب " + (row.order_number || "—"),
                 detail: row.state === "waiting"
                     ? "ينتظر دليلًا وسيعاد تلقائيًا عند اكتماله."
