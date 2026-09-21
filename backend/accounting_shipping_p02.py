@@ -523,6 +523,186 @@ async def post_courier_fee(
     return await atomic_owner(db, owner, commit)
 
 
+async def prepare_store_driver_fee(
+    db,
+    *,
+    owner: str,
+    assignment_id: str,
+) -> dict[str, Any]:
+    earning = await db[DRIVER_EARNINGS].find_one(
+        {"user_id": owner, "assignment_id": assignment_id},
+        {"_id": 0},
+    )
+    if not earning:
+        raise ShippingAccountingError("store_driver_earning_missing")
+    driver_id = str(earning.get("driver_id") or "").strip()
+    order_number = str(earning.get("order_number") or "").strip()
+    if not driver_id or not order_number:
+        raise ShippingAccountingError("store_driver_earning_identity_missing")
+    driver = await db[STORE_DRIVERS].find_one(
+        {
+            "user_id": owner,
+            "id": driver_id,
+            "status": {"$ne": "inactive"},
+        },
+        {"_id": 0, "id": 1, "name": 1},
+    )
+    if not driver:
+        raise ShippingAccountingError("store_driver_missing")
+    fee = _money(earning.get("amount"))
+    if fee <= 0:
+        return {
+            "state": "not_required",
+            "event_id": None,
+            "facts": {
+                "assignment_id": assignment_id,
+                "earning_id": earning.get("id"),
+                "order_number": order_number,
+                "driver_id": driver_id,
+                "delivery_fee": "0.00",
+            },
+        }
+    accounting_at = _instant(earning.get("earned_at")).isoformat()
+    if _instant(earning.get("earned_at")) > datetime.now(timezone.utc):
+        raise ShippingAccountingError("shipping_event_in_future")
+    event_id = _hash([owner, "store_driver_fee", assignment_id])
+    facts = {
+        "event_id": event_id,
+        "assignment_id": assignment_id,
+        "earning_id": earning.get("id"),
+        "order_number": order_number,
+        "driver_id": driver_id,
+        "driver_name": driver.get("name") or "",
+        "delivery_fee": format(fee, ".2f"),
+        "accounting_at": accounting_at,
+    }
+    economic_hash = _hash(facts)
+    prior = await _event_record(db, owner, event_id)
+    if prior:
+        if prior.get("economic_hash") != economic_hash:
+            raise ShippingAccountingError("shipping_event_source_conflict")
+        if prior.get("status") == "posted":
+            return {
+                "state": "already_posted",
+                "event_id": event_id,
+                "facts": facts,
+                "txn_group_id": prior.get("txn_group_id"),
+            }
+        raise ShippingAccountingError("shipping_event_requires_recovery")
+    return {
+        "state": "eligible",
+        "event_id": event_id,
+        "facts": facts,
+        "economic_hash": economic_hash,
+    }
+
+
+async def post_store_driver_fee(
+    db,
+    *,
+    owner: str,
+    actor: dict[str, Any],
+    assignment_id: str,
+) -> dict[str, Any]:
+    async def commit(scoped):
+        proposal = await prepare_store_driver_fee(
+            scoped,
+            owner=owner,
+            assignment_id=assignment_id,
+        )
+        if proposal["state"] in {"already_posted", "not_required"}:
+            return proposal
+        facts = proposal["facts"]
+        await require_p02_shipping_financial_writes(
+            scoped,
+            user_id=owner,
+            event_at=facts["accounting_at"],
+        )
+        await read_mz2_write_balances(
+            scoped,
+            owner=owner,
+            required_accounts=[
+                ("store_driver", facts["driver_id"], "delivery_fee_payable"),
+            ],
+        )
+        await _insert_event_posting(
+            scoped,
+            owner=owner,
+            event_id=proposal["event_id"],
+            kind="store_driver_fee",
+            economic_hash=proposal["economic_hash"],
+            facts=facts,
+            actor_id=actor["id"],
+        )
+        result = await post_txn_group(
+            scoped,
+            user_id=owner,
+            actor_id=actor["id"],
+            actor_name=actor.get("name") or actor.get("email") or actor["id"],
+            txn_type="mz2_store_driver_fee_accrual",
+            notes=(
+                f"أجرة موصل المتجر — {facts['order_number']} — "
+                f"{facts['driver_name']}"
+            ),
+            metadata={
+                "operation_id": OPERATION_ID,
+                "source": SOURCE,
+                "shipping_event_id": proposal["event_id"],
+                "shipping_event_kind": "store_driver_fee",
+                "accounting_at": facts["accounting_at"],
+                "order_reference_id": facts["order_number"],
+                "assignment_id": facts["assignment_id"],
+                "earning_id": facts["earning_id"],
+                "driver_id": facts["driver_id"],
+                "fee_snapshot_source": "store_delivery_driver_earnings",
+            },
+            entries=[
+                {
+                    "entity_type": "expense",
+                    "entity_id": "store_delivery",
+                    "side": "debit",
+                    "amount": facts["delivery_fee"],
+                    "entry_type": "shipping_fee_accrual",
+                },
+                {
+                    "entity_type": "store_driver",
+                    "entity_id": facts["driver_id"],
+                    "sub_account": "delivery_fee_payable",
+                    "side": "credit",
+                    "amount": facts["delivery_fee"],
+                    "entry_type": "shipping_fee_accrual",
+                },
+            ],
+        )
+        now = datetime.now(timezone.utc).isoformat()
+        await scoped.mz2_shipping_accounting_events.update_one(
+            {
+                "_id": proposal["event_id"],
+                "user_id": owner,
+                "status": "posting",
+            },
+            {"$set": {
+                "status": "posted",
+                "txn_group_id": result["txn_group_id"],
+                "posted_at": now,
+            }},
+        )
+        await scoped[DRIVER_EARNINGS].update_one(
+            {"user_id": owner, "assignment_id": assignment_id},
+            {"$set": {
+                "mz2_p02_accounting_status": "posted",
+                "mz2_p02_fee_event_id": proposal["event_id"],
+                "mz2_p02_fee_txn_group_id": result["txn_group_id"],
+            }},
+        )
+        return {
+            **proposal,
+            "state": "posted",
+            "txn_group_id": result["txn_group_id"],
+        }
+    return await atomic_owner(db, owner, commit)
+
+
 async def prepare_store_driver_cod(
     db,
     *,
@@ -878,6 +1058,11 @@ class DriverCodPostIn(BaseModel):
     assignment_id: str = Field(min_length=1, max_length=200)
 
 
+class DriverFeePostIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    assignment_id: str = Field(min_length=1, max_length=200)
+
+
 def install_shipping_p02_routes(router, db, current_user) -> None:
     base = "/accounting-module/shipping-p02"
 
@@ -931,6 +1116,37 @@ def install_shipping_p02_routes(router, db, current_user) -> None:
                 owner=owner,
                 actor=actor,
                 evidence_id=payload.evidence_id,
+            )
+        except ShippingAccountingError as exc:
+            raise HTTPException(
+                409, detail={"code": str(exc), "message": str(exc)}
+            ) from None
+
+    @router.get(base + "/store-driver-fee/{assignment_id}/preview")
+    async def driver_fee_preview(
+        assignment_id: str,
+        user: dict = Depends(current_user),
+    ):
+        _, owner = await scope(user, "accounting.shipping.view")
+        try:
+            return await prepare_store_driver_fee(
+                db, owner=owner, assignment_id=assignment_id
+            )
+        except ShippingAccountingError as exc:
+            return {"state": "rejected", "reasons": [str(exc)]}
+
+    @router.post(base + "/store-driver-fee")
+    async def driver_fee_post(
+        payload: DriverFeePostIn,
+        user: dict = Depends(current_user),
+    ):
+        actor, owner = await scope(user, "accounting.settlements.post")
+        try:
+            return await post_store_driver_fee(
+                db,
+                owner=owner,
+                actor=actor,
+                assignment_id=payload.assignment_id,
             )
         except ShippingAccountingError as exc:
             raise HTTPException(
