@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import {
+    activateAccountingP02,
     getAccountingShippingWorkspace,
     postAccountingCourierFee,
     postAccountingShippingSettlement,
@@ -46,8 +47,12 @@ function StateBox({ result }) {
     return <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-bold text-rose-900">{rejected(result)}</div>;
 }
 
-export default function AccountingShippingCod({ accountingPermissions = [] }) {
+export default function AccountingShippingCod({
+    accountingPermissions = [],
+    isOwner = false,
+}) {
     const [workspace, setWorkspace] = useState(null);
+    const [activationRef, setActivationRef] = useState("");
     const [busy, setBusy] = useState("");
     const [previewByKey, setPreviewByKey] = useState({});
     const [settlementById, setSettlementById] = useState({});
@@ -62,6 +67,8 @@ export default function AccountingShippingCod({ accountingPermissions = [] }) {
     });
     const canPost = accountingPermissions.includes("accounting.settlements.post");
     const canManageRules = accountingPermissions.includes("accounting.rules.manage");
+    const phase = workspace?.phase || {};
+    const p02Active = phase.p02_shipping_cod_enabled === true;
 
     async function refresh() {
         const next = await getAccountingShippingWorkspace();
@@ -80,6 +87,23 @@ export default function AccountingShippingCod({ accountingPermissions = [] }) {
         () => (workspace?.counterparties || []).filter((row) => row.type === "store_driver"),
         [workspace],
     );
+
+    async function activateP02() {
+        if (!isOwner) return toast.error("تفعيل P02 متاح لمالك ميزان فقط");
+        if (!canManageRules) return toast.error("لا تملك صلاحية قواعد المحاسبة");
+        if (activationRef.trim().length < 3) return toast.error("أدخل مرجع اعتماد P02");
+        setBusy("activate-p02");
+        try {
+            await activateAccountingP02(activationRef.trim());
+            toast.success("تم تفعيل P02 للشحن والتحصيل في MZ2.");
+            setActivationRef("");
+            await refresh();
+        } catch (error) {
+            toast.error(message(error, "تعذر تفعيل P02"), { duration: 8000 });
+        } finally {
+            setBusy("");
+        }
+    }
 
     async function saveRate(event) {
         event.preventDefault();
@@ -240,6 +264,38 @@ export default function AccountingShippingCod({ accountingPermissions = [] }) {
 
     return (
         <div className="space-y-5" dir="rtl" data-testid="accounting-shipping-cod">
+            <section className={`rounded-2xl border p-5 ${p02Active ? "border-emerald-200 bg-emerald-50/60" : "border-amber-200 bg-amber-50/60"}`}>
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                        <h2 className="text-lg font-black text-slate-950">P02 — الشحن والتحصيل</h2>
+                        <p className="mt-1 max-w-3xl text-xs font-semibold leading-6 text-slate-700">
+                            الكتابة المالية تبقى مقفلة حتى يعتمد المالك P02 صراحة. عند التفعيل يتحقق ميزان أن شركات الشحن والموصلين الحاليين داخل نطاق الأرصدة الافتتاحية المعتمد.
+                        </p>
+                    </div>
+                    <span className={`rounded-full border bg-white px-3 py-1 text-xs font-black ${p02Active ? "border-emerald-300 text-emerald-800" : "border-amber-300 text-amber-800"}`}>
+                        {p02Active ? "P02 مفعّل" : "P02 مقفل"}
+                    </span>
+                </div>
+                {!p02Active && (
+                    <div className="mt-4 grid gap-2 border-t border-amber-200 pt-4 md:grid-cols-[1fr_auto]">
+                        <input
+                            value={activationRef}
+                            onChange={(event) => setActivationRef(event.target.value)}
+                            placeholder="مرجع اعتماد P02 — Preview/UAT"
+                            className="min-h-11 rounded-xl border border-amber-200 bg-white px-3 text-sm"
+                        />
+                        <button
+                            type="button"
+                            onClick={activateP02}
+                            disabled={!isOwner || !canManageRules || busy === "activate-p02"}
+                            className="min-h-11 rounded-xl bg-amber-800 px-5 text-sm font-black text-white disabled:opacity-40"
+                        >
+                            {busy === "activate-p02" ? "جاري التفعيل…" : "تفعيل P02"}
+                        </button>
+                    </div>
+                )}
+            </section>
+
             <section className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-5">
                 <h2 className="text-lg font-black text-emerald-950">أسعار شركات الشحن المعتمدة — MZ2</h2>
                 <p className="mt-1 text-xs font-semibold leading-6 text-emerald-900">
@@ -291,7 +347,7 @@ export default function AccountingShippingCod({ accountingPermissions = [] }) {
                                 </div>
                                 <div className="flex gap-2">
                                     <button type="button" onClick={() => previewCourier(row)} disabled={busy === key} className="min-h-9 rounded-lg border border-slate-300 px-3 text-[11px] font-black">معاينة</button>
-                                    <button type="button" onClick={() => postCourier(row)} disabled={!canPost || preview?.state !== "eligible" || busy === "post:" + key} className="min-h-9 rounded-lg bg-emerald-800 px-3 text-[11px] font-black text-white disabled:opacity-40">اعتماد التكلفة</button>
+                                    <button type="button" onClick={() => postCourier(row)} disabled={!canPost || !p02Active || preview?.state !== "eligible" || busy === "post:" + key} className="min-h-9 rounded-lg bg-emerald-800 px-3 text-[11px] font-black text-white disabled:opacity-40">اعتماد التكلفة</button>
                                 </div>
                             </div>
                         );
@@ -382,7 +438,7 @@ export default function AccountingShippingCod({ accountingPermissions = [] }) {
                                 </div>
                                 <div className="mt-3 flex flex-wrap items-center gap-2">
                                     <button type="button" onClick={() => previewSettlement(row)} disabled={busy === "settlement:" + row.id} className="min-h-9 rounded-lg border border-violet-300 px-3 text-[11px] font-black text-violet-900">معاينة التسوية</button>
-                                    <button type="button" onClick={() => postSettlement(row)} disabled={!canPost || draft.preview?.state !== "eligible" || busy === "post:settlement:" + row.id} className="min-h-9 rounded-lg bg-violet-800 px-3 text-[11px] font-black text-white disabled:opacity-40">اعتماد التسوية</button>
+                                    <button type="button" onClick={() => postSettlement(row)} disabled={!canPost || !p02Active || draft.preview?.state !== "eligible" || busy === "post:settlement:" + row.id} className="min-h-9 rounded-lg bg-violet-800 px-3 text-[11px] font-black text-white disabled:opacity-40">اعتماد التسوية</button>
                                     <StateBox result={draft.preview} />
                                 </div>
                             </div>
