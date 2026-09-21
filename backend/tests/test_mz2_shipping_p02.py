@@ -23,6 +23,8 @@ from accounting_shipping_p02 import (
     ShippingRateInput,
     post_courier_fee,
     post_store_driver_cod,
+    post_store_driver_fee,
+    process_pending_store_driver_accounting,
     save_shipping_rate,
 )
 from accounting_shipping_settlements import (
@@ -815,6 +817,166 @@ class MZ2ShippingP02Tests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(movement["status"], "unclassified")
         self.assertFalse(movement.get("accounting_event_id"))
+
+
+    async def test_non_cash_delivery_posts_fee_only_without_salla_order_or_revenue(self):
+        await self.db.store_delivery_collections.insert_one({
+            "id": "COLL-NONCASH",
+            "user_id": self.owner,
+            "assignment_id": "ASSIGN-NONCASH",
+            "order_id": "ORD-NONCASH",
+            "order_number": "ORD-NONCASH",
+            "driver_id": "driver-1",
+            "amount": 200,
+            "amount_source": "unified_orders.remaining_amount",
+            "payment_method": "card_terminal",
+            "cod_custody_amount": 0,
+            "review_status": "pending_accountant_review",
+            "accounting_status": "pending",
+            "collected_at": "2026-09-21T10:00:00+00:00",
+        })
+        await self.db.store_delivery_driver_earnings.insert_one({
+            "id": "EARN-NONCASH",
+            "user_id": self.owner,
+            "assignment_id": "ASSIGN-NONCASH",
+            "order_id": "ORD-NONCASH",
+            "order_number": "ORD-NONCASH",
+            "driver_id": "driver-1",
+            "amount": 20,
+            "status": "due",
+            "accounting_status": "pending",
+            "earned_at": "2026-09-21T10:00:00+00:00",
+        })
+        before_revenue = await self.db.general_ledger.count_documents({
+            "entity_type": "revenue",
+        })
+        result = await post_store_driver_fee(
+            self.db,
+            owner=self.owner,
+            actor=self.actor,
+            assignment_id="ASSIGN-NONCASH",
+        )
+        self.assertEqual(result["state"], "posted")
+        legs = await self.db.general_ledger.find(
+            {"txn_group_id": result["txn_group_id"]},
+            {"_id": 0},
+        ).to_list(10)
+        self.assertEqual(
+            {(row["entity_type"], row["entity_id"], row.get("sub_account"), row["side"], row["amount"])
+             for row in legs},
+            {
+                ("expense", "store_delivery", None, "debit", 20.0),
+                ("store_driver", "driver-1", "delivery_fee_payable", "credit", 20.0),
+            },
+        )
+        self.assertEqual(
+            await self.db.general_ledger.count_documents({"entity_type": "revenue"}),
+            before_revenue,
+        )
+        self.assertEqual(
+            await self.db.general_ledger.count_documents({
+                "txn_group_id": result["txn_group_id"],
+                "entity_type": "tax",
+            }),
+            0,
+        )
+
+    async def test_pending_processor_waits_for_cod_order_evidence_then_posts_idempotently(self):
+        assignment = "ASSIGN-PENDING-COD"
+        order = "ORD-PENDING-COD"
+        await self.db.store_delivery_collections.insert_one({
+            "id": "COLL-" + assignment,
+            "user_id": self.owner,
+            "assignment_id": assignment,
+            "order_id": order,
+            "order_number": order,
+            "driver_id": "driver-1",
+            "amount": 115,
+            "amount_source": "unified_orders.remaining_amount",
+            "payment_method": "cash",
+            "cod_custody_amount": 115,
+            "review_status": "not_required",
+            "accounting_status": "pending",
+            "mz2_p02_accounting_status": "pending_evidence",
+            "collected_at": "2026-09-21T10:00:00+00:00",
+        })
+        await self.db.store_delivery_driver_earnings.insert_one({
+            "id": "EARN-" + assignment,
+            "user_id": self.owner,
+            "assignment_id": assignment,
+            "order_id": order,
+            "order_number": order,
+            "driver_id": "driver-1",
+            "amount": 20,
+            "status": "due",
+            "accounting_status": "pending",
+            "mz2_p02_accounting_status": "pending_evidence",
+            "earned_at": "2026-09-21T10:00:00+00:00",
+        })
+
+        dry = await process_pending_store_driver_accounting(
+            self.db,
+            owner=self.owner,
+            actor=self.actor,
+            limit=20,
+            dry_run=True,
+        )
+        row = next(item for item in dry["items"] if item["assignment_id"] == assignment)
+        self.assertEqual(row["state"], "waiting")
+        self.assertEqual(row["reasons"], ["unique_cod_order_evidence_required"])
+        self.assertEqual(
+            await self.db.general_ledger.count_documents({
+                "metadata.assignment_id": assignment,
+            }),
+            0,
+        )
+
+        evidence_id = "E-" + order
+        await self.db.mz2_salla_order_evidence.insert_one({
+            "_id": evidence_id,
+            "id": evidence_id,
+            "user_id": self.owner,
+            "order_number": order,
+            "conflict": False,
+            "accounting_provider": "cod",
+            "status": "waiting_p02_cod",
+            "current_net_sar": "115.00",
+            "refunded_sar": "0.00",
+            "source_tax_sar": "8.52",
+            "source": "salla_orders_export",
+        })
+
+        executed = await process_pending_store_driver_accounting(
+            self.db,
+            owner=self.owner,
+            actor=self.actor,
+            limit=20,
+            dry_run=False,
+        )
+        row = next(item for item in executed["items"] if item["assignment_id"] == assignment)
+        self.assertEqual(row["state"], "posted")
+        self.assertTrue(row["sale_txn_group_id"])
+        self.assertTrue(row["fee_txn_group_id"])
+
+        again = await process_pending_store_driver_accounting(
+            self.db,
+            owner=self.owner,
+            actor=self.actor,
+            limit=20,
+            dry_run=False,
+        )
+        self.assertFalse(any(
+            item["assignment_id"] == assignment
+            and item["state"] == "posted"
+            for item in again["items"]
+        ))
+        self.assertEqual(
+            await self.db.general_ledger.count_documents({
+                "metadata.assignment_id": assignment,
+                "entity_type": "revenue",
+            }),
+            1,
+        )
 
 
 if __name__ == "__main__":
