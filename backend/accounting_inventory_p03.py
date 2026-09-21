@@ -1504,6 +1504,8 @@ async def prepare_inventory_cogs_post(
                 "accounting_inventory_cost_halalas": 1,
                 "source_target_key": 1,
                 "order_number": 1,
+                "product_name": 1,
+                "sku": 1,
             },
         ).to_list(len(receipt_ids) + 1)
         if receipt_ids
@@ -1562,8 +1564,8 @@ async def prepare_inventory_cogs_post(
                         "accounting_inventory_cost_halalas"
                     ) or 0
                 ),
-                "product_name": "",
-                "sku": "",
+                "product_name": return_restock.get("product_name") or "",
+                "sku": return_restock.get("sku") or "",
                 "evidence_ref": return_restock.get("id"),
             }
             continue
@@ -2493,6 +2495,8 @@ async def inventory_p03_workspace(db: Any, *, owner: str) -> dict[str, Any]:
             "order_number": 1,
             "order_item_id": 1,
             "source_target_key": 1,
+            "product_name": 1,
+            "sku": 1,
             "quantity": 1,
             "inventory_receipt_id": 1,
             "restock_lot_id": 1,
