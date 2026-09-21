@@ -1027,6 +1027,96 @@ class DriverPendingProcessIn(BaseModel):
     dry_run: bool = True
 
 
+class CourierPendingProcessIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    limit: int = Field(default=100, ge=1, le=500)
+    dry_run: bool = True
+
+
+async def process_pending_courier_accounting(
+    db,
+    *,
+    owner: str,
+    actor: dict[str, Any],
+    limit: int = 100,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    policy = await read_shipping_policy(db, owner)
+    approved_aliases = {
+        alias
+        for version in (policy.get("versions") or [])
+        if isinstance(version, dict)
+        and version.get("verification_status") == "approved"
+        for alias in (version.get("aliases_normalized") or [])
+    }
+    rows = await db.mz2_salla_order_evidence.find(
+        {
+            "user_id": owner,
+            "conflict": {"$ne": True},
+            "delivery_source_text": {"$nin": [None, ""]},
+            "shipping_company": {"$nin": [None, ""]},
+            "waybill": {"$nin": [None, ""]},
+            "shipping_fee_txn_group_id": {"$exists": False},
+        },
+        {"_id": 0, "id": 1, "order_number": 1, "shipping_company": 1},
+    ).sort([("delivery_source_text", 1), ("order_number", 1)]).limit(limit * 3).to_list(limit * 3)
+
+    candidates = [
+        row for row in rows
+        if _norm(row.get("shipping_company")) in approved_aliases
+    ][:limit]
+    items = []
+    for row in candidates:
+        try:
+            proposal = (
+                await prepare_courier_fee(
+                    db, owner=owner, evidence_id=row["id"]
+                )
+                if dry_run
+                else await post_courier_fee(
+                    db,
+                    owner=owner,
+                    actor=actor,
+                    evidence_id=row["id"],
+                )
+            )
+            items.append({
+                "evidence_id": row["id"],
+                "order_number": row.get("order_number"),
+                "shipping_company": row.get("shipping_company"),
+                "state": proposal.get("state"),
+                "txn_group_id": proposal.get("txn_group_id"),
+                "reasons": [],
+            })
+        except ShippingAccountingError as exc:
+            items.append({
+                "evidence_id": row["id"],
+                "order_number": row.get("order_number"),
+                "shipping_company": row.get("shipping_company"),
+                "state": "waiting",
+                "reasons": [str(exc)],
+            })
+        except HTTPException as exc:
+            detail = exc.detail
+            code = detail.get("code") if isinstance(detail, dict) else str(detail)
+            items.append({
+                "evidence_id": row["id"],
+                "order_number": row.get("order_number"),
+                "shipping_company": row.get("shipping_company"),
+                "state": "blocked",
+                "reasons": [code],
+            })
+    return {
+        "dry_run": dry_run,
+        "candidate_count": len(candidates),
+        "posted_count": sum(1 for item in items if item["state"] == "posted"),
+        "already_posted_count": sum(1 for item in items if item["state"] == "already_posted"),
+        "waiting_count": sum(1 for item in items if item["state"] == "waiting"),
+        "blocked_count": sum(1 for item in items if item["state"] == "blocked"),
+        "items": items,
+    }
+
+
 async def process_pending_store_driver_accounting(
     db,
     *,
@@ -1273,6 +1363,25 @@ def install_shipping_p02_routes(router, db, current_user) -> None:
             raise HTTPException(
                 409, detail={"code": str(exc), "message": str(exc)}
             ) from None
+
+    @router.post(base + "/courier/process-pending")
+    async def process_courier_pending(
+        payload: CourierPendingProcessIn,
+        user: dict = Depends(current_user),
+    ):
+        actor, owner = await scope(
+            user,
+            "accounting.shipping.view"
+            if payload.dry_run
+            else "accounting.settlements.post",
+        )
+        return await process_pending_courier_accounting(
+            db,
+            owner=owner,
+            actor=actor,
+            limit=payload.limit,
+            dry_run=payload.dry_run,
+        )
 
     @router.post(base + "/store-driver/process-pending")
     async def process_driver_pending(
