@@ -181,9 +181,17 @@ class P03PurchaseLineIn(BaseModel):
     quantity: int = Field(ge=1, le=100000)
     unit_price: Decimal
 
-    @field_validator("product_id", "product_name", "sku")
+    @field_validator("product_name")
     @classmethod
-    def clean_line_text(cls, value):
+    def clean_product_name(cls, value: str) -> str:
+        cleaned = _text(value)
+        if not cleaned:
+            raise ValueError("p03_purchase_product_name_required")
+        return cleaned
+
+    @field_validator("product_id", "sku")
+    @classmethod
+    def clean_optional_line_text(cls, value):
         if value is None:
             return None
         cleaned = _text(value)
@@ -208,9 +216,10 @@ class P03PurchaseInvoiceCreateIn(BaseModel):
         "recoverable_input_vat",
         "included_in_inventory_cost",
     ] = "recoverable_input_vat"
+    tax_evidence_ref: str | None = Field(default=None, max_length=500)
     notes: str = Field(default="", max_length=2000)
 
-    @field_validator("supplier_id", "invoice_number", "notes")
+    @field_validator("supplier_id", "invoice_number", "tax_evidence_ref", "notes")
     @classmethod
     def clean_purchase_text(cls, value):
         if value is None:
@@ -391,6 +400,22 @@ async def create_p03_purchase_invoice(
         })
     subtotal = subtotal.quantize(MONEY, rounding=ROUND_HALF_UP)
     tax = _money(payload.tax_amount, allow_zero=True)
+    tax_evidence_ref = _text(payload.tax_evidence_ref) or None
+    if (
+        tax > 0
+        and payload.tax_treatment == "recoverable_input_vat"
+        and not tax_evidence_ref
+    ):
+        raise HTTPException(
+            422,
+            detail={
+                "code": "p03_input_vat_evidence_required",
+                "message": (
+                    "ضريبة المدخلات القابلة للاسترداد تتطلب مرجع "
+                    "فاتورة أو دليل ضريبي"
+                ),
+            },
+        )
     total = (subtotal + tax).quantize(MONEY, rounding=ROUND_HALF_UP)
     if subtotal <= 0 or total <= 0:
         raise HTTPException(422, "p03_purchase_total_required")
@@ -431,6 +456,7 @@ async def create_p03_purchase_invoice(
         "tax_amount": format(tax, ".2f"),
         "total": format(total, ".2f"),
         "tax_treatment": payload.tax_treatment,
+        "tax_evidence_ref": tax_evidence_ref,
         "notes": payload.notes or "",
     }
     request_key = _digest([owner, "p03_purchase_request", payload.request_id])
@@ -471,6 +497,7 @@ async def create_p03_purchase_invoice(
         "tax_halalas": _halalas(tax),
         "total_halalas": _halalas(total),
         "tax_treatment": payload.tax_treatment,
+        "tax_evidence_ref": tax_evidence_ref,
         "notes": payload.notes or "",
         "status": "open_for_receiving",
         "payment_status": "not_recognized_until_received",
@@ -513,6 +540,7 @@ async def create_p03_purchase_invoice(
         "tax_amount": format(tax, ".2f"),
         "total": format(total, ".2f"),
         "tax_treatment": payload.tax_treatment,
+        "tax_evidence_ref": tax_evidence_ref,
     })
     return invoice
 
@@ -664,6 +692,7 @@ async def prepare_inventory_receipt_post(
         "tax_amount": format(Decimal(tax_halalas) / Decimal(100), ".2f"),
         "gross_amount": format(Decimal(gross_halalas) / Decimal(100), ".2f"),
         "tax_treatment": tax_treatment,
+        "tax_evidence_ref": _text(invoice.get("tax_evidence_ref")) or None,
         "accounting_at": event_at.isoformat(),
     }
     return {
@@ -783,6 +812,7 @@ async def post_inventory_receipt(
             "supplier_id": facts["supplier_id"],
             "accounting_at": facts["accounting_at"],
             "tax_treatment": facts["tax_treatment"],
+            "tax_evidence_ref": facts["tax_evidence_ref"],
             "reason": reason,
         },
         entries=entries,
@@ -930,6 +960,7 @@ async def inventory_p03_workspace(db: Any, *, owner: str) -> dict[str, Any]:
             "tax_amount": 1,
             "total": 1,
             "tax_treatment": 1,
+            "tax_evidence_ref": 1,
             "status": 1,
             "recognized_payable": 1,
             "recognized_payable_halalas": 1,
