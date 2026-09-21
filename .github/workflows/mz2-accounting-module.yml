@@ -34,6 +34,7 @@ on:
       - "backend/accounting_sales_tax*.py"
       - "backend/accounting_receivable*.py"
       - "backend/accounting_atomic.py"
+      - "backend/ledger_core.py"
       - "backend/accounting_write_control.py"
       - "backend/accounting_ingress.py"
       - "backend/tests/test_mz2_write_control.py"
@@ -190,6 +191,7 @@ jobs:
           accounting_shipping_settlements.py
           accounting_inventory_p03.py
           accounting_inventory_p03_gate.py
+          ledger_core.py
           return_decision_engine.py
           purchase_invoices_routes.py
           accounting_settlement_*.py
