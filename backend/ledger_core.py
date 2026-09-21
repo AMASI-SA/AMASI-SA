@@ -121,6 +121,7 @@ ENTRY_TYPES = (
     "store_delivery_settlement", # توريد COD / دفع الأجرة / المقاصة الصريحة
     "cod_sale",                  # بيع COD مثبت من دليل تحصيل P02
     "shipping_fee_accrual",      # استحقاق شحن/أجرة مستقل بلا إيراد
+    "shipping_settlement",       # سداد/توريد/مقاصة شحن من دليل بنك MZ2
     # ── Phase 3 (Iter-196) — manual employee correction ──
     "correction",           # تصحيح: نقل أثر بين كيانَين دون مساس بالبنك/الصندوق
     # ── Iter-219 — BNPL bridge (Tabby/Tamara) ──
