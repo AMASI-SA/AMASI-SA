@@ -39,6 +39,7 @@ from accounting_receivable_service import digest
 from accounting_recognition_evidence import EvidenceError, qualify
 from accounting_sales_tax import TaxError
 from accounting_sales_tax_service import read_policy, sale_snapshot
+from accounting_salla_order_evidence import classify_salla_order_row
 from ledger_core import post_txn_group
 
 
@@ -250,6 +251,9 @@ async def prepare_order_recognition(
 
     if evidence.get("status") not in READY_STATES:
         raise EvidenceError("order_evidence_not_ready")
+    source_state, _source_reasons = classify_salla_order_row(evidence)
+    if source_state != evidence.get("status") or source_state not in READY_STATES:
+        raise EvidenceError("order_evidence_classification_changed")
 
     provider = str(evidence.get("accounting_provider") or "")
     if provider not in PROVIDERS:
