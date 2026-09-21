@@ -22,6 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pymongo.errors import DuplicateKeyError
 
 from accounting_atomic import atomic_owner
+from accounting_inventory_p03_gate import p01_controls_purchase_accounting
 from accounting_module_contract import (
     OPERATION_ID,
     accounting_owner_id,
@@ -135,31 +136,6 @@ async def read_p03_phase(db: Any, owner: str) -> dict[str, Any]:
             "p03_inventory_purchases_activated_by"
         ),
     }
-
-
-async def p01_controls_purchase_accounting(
-    db: Any,
-    *,
-    owner: str,
-    mongo_session: Any = None,
-) -> bool:
-    """True once MZ2 P01 owns post-cutover financial journals.
-
-    Operational receiving may still proceed, but it must stop using its
-    historical direct general-ledger writer from this point forward.
-    """
-    row = await db.settings.find_one(
-        {"user_id": owner},
-        {"_id": 0, "mezan2_financial_cutover": 1},
-        session=mongo_session,
-    )
-    state = dict((row or {}).get("mezan2_financial_cutover") or {})
-    return bool(
-        state.get("operation_id") == OPERATION_ID
-        and state.get("status") == "active"
-        and state.get("opening_balance_txn_group_id")
-        and _aware(state.get("cutover_at"))
-    )
 
 
 def p03_phase_ready(phase: dict[str, Any], *, event_at: Any = None) -> bool:
