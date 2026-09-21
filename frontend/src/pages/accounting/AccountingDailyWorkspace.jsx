@@ -23,6 +23,8 @@ import {
 } from "../../services/accountingModule";
 import AccountingPeriods from "./AccountingPeriods";
 import AccountingWriteControl from "./AccountingWriteControl";
+import AccountingDailyAutomationActions from "./AccountingDailyAutomationActions";
+import AccountingDailyAutomationStatus from "./AccountingDailyAutomationStatus";
 import { formatMoney, SummaryCard } from "./AccountingShared";
 import { ACCOUNTING_PAGES } from "./accountingPages";
 
@@ -368,8 +370,8 @@ export default function AccountingDailyWorkspace({ status, user, accountingPermi
     const [drafts, setDrafts] = useState([]);
     const [receipts, setReceipts] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [activeAction, setActiveAction] = useState("");
     const [advancedOpen, setAdvancedOpen] = useState(false);
+    const [automationRefreshToken, setAutomationRefreshToken] = useState(0);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -438,42 +440,21 @@ export default function AccountingDailyWorkspace({ status, user, accountingPermi
                 <SummaryCard label="يحتاج قرارك" value={pending.toLocaleString("en-US")} hint="أدلة ناقصة أو تعارضات فقط" Icon={ClipboardText} tone={pending ? "rose" : "emerald"} testid="daily-summary-review" />
             </div>
 
-            <section data-testid="daily-accounting-actions">
-                <div className="mb-3">
-                    <h2 className="text-lg font-black text-slate-950">ماذا حدث اليوم؟</h2>
-                    <p className="mt-1 text-xs font-semibold text-slate-500">ثلاثة مداخل أساسية بدل التنقل بين صفحات المحاسبة.</p>
-                </div>
-                <div className="grid gap-3 lg:grid-cols-3">
-                    <ActionCard
-                        title="إضافة حركة مالية"
-                        detail="في P01 الآمن: سجل المبلغ الذي وصل فعليًا من سلة أو تمارا أو تابي أو إمكان. لا تختار مدين/دائن."
-                        Icon={Wallet}
-                        onClick={() => setActiveAction("movement")}
-                    />
-                    <ActionCard
-                        title="رفع كشف البنك"
-                        detail="سيقرأ ميزان كشف البنك ويقترح المطابقات تلقائيًا. لن نربطه بمسار ميزان القديم."
-                        Icon={Bank}
-                        disabled
-                        badge="الخطوة التالية"
-                    />
-                    <ActionCard
-                        title="رفع ملف تسوية"
-                        detail="ارفع ملف سلة أو تمارا أو تابي أو إمكان، ويبدأ ميزان القراءة والمطابقة تلقائيًا."
-                        Icon={UploadSimple}
-                        onClick={() => setActiveAction("settlement")}
-                    />
-                </div>
-                <div className="mt-3 flex items-center gap-2 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-600">
-                    <WarningCircle size={18} className="shrink-0 text-slate-500" />
-                    لن نستخدم شاشات ميزان القديم لإكمال النواقص. إدخال المصروفات العامة وكشف البنك الجماعي سيُبنيان كمسارات MZ2 مستقلة قبل تفعيلهما هنا.
-                </div>
-            </section>
+            <AccountingDailyAutomationActions
+                settlementContext={context}
+                permissions={accountingPermissions}
+                onSaved={async () => {
+                    await load();
+                    setAutomationRefreshToken((value) => value + 1);
+                }}
+            />
 
-            <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,.9fr)]">
-                <ExceptionList status={status} drafts={drafts} receipts={receipts} totalReviewCount={pending} />
-                <RecentActivity drafts={drafts} receipts={receipts} />
-            </div>
+            <AccountingDailyAutomationStatus
+                status={status}
+                drafts={drafts}
+                receipts={receipts}
+                refreshToken={automationRefreshToken}
+            />
 
             <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4" data-testid="daily-accounting-advanced">
                 <button type="button" onClick={() => setAdvancedOpen((value) => !value)} className="flex w-full items-center justify-between gap-3 text-right">
@@ -506,16 +487,6 @@ export default function AccountingDailyWorkspace({ status, user, accountingPermi
                 )}
             </section>
 
-            {activeAction === "movement" && (
-                <Modal title="إضافة حركة مالية" subtitle="أدخل الواقع البنكي فقط، واترك القيد والمطابقة لميزان 2." onClose={() => setActiveAction("")} testid="daily-accounting-movement-modal">
-                    <ReceiptForm context={context} permissions={accountingPermissions} onSaved={load} />
-                </Modal>
-            )}
-            {activeAction === "settlement" && (
-                <Modal title="رفع ملف تسوية" subtitle="الملف الأصلي يكفي؛ لا تحتاج إدخال مكونات القيد يدويًا." onClose={() => setActiveAction("")} testid="daily-accounting-settlement-modal">
-                    <SettlementUploadForm context={context} permissions={accountingPermissions} onSaved={load} />
-                </Modal>
-            )}
         </div>
     );
 }
