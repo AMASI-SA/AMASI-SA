@@ -73,6 +73,11 @@ test("COGS waits for sale recognition and uses receipt-lot cost evidence", () =>
     expect(source).toContain("اعتماد COGS");
 });
 
+test("refunds and inspection never reverse COGS without physical restock", () => {
+    expect(source).toContain("الاسترداد المالي أو فحص المرتجع وحده لا يعكس COGS");
+    expect(source).toContain("العكس يتطلب Restock فعليًا للمخزون");
+});
+
 test("Inventory V2 remains the operational receiving source", () => {
     expect(source).toContain('to="/inventory-receiving-v2"');
     expect(source).toContain("Inventory V2");
