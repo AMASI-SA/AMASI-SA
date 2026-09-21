@@ -152,6 +152,14 @@ async def prepare_shipping_settlement(
         raise ShippingAccountingError("daily_movement_already_consumed")
     if movement.get("status") not in {"unclassified", "accounting_posted"}:
         raise ShippingAccountingError("daily_movement_not_available")
+    if movement.get("status") == "accounting_posted":
+        expected_action = "shipping_" + payload.settlement_type
+        if (
+            movement.get("accounting_action") != expected_action
+            or movement.get("accounting_counterparty_type") != payload.counterparty_type
+            or movement.get("accounting_counterparty_id") != payload.counterparty_id
+        ):
+            raise ShippingAccountingError("daily_movement_already_consumed")
 
     bank_account_id = str(movement.get("bank_account_id") or "").strip()
     if not bank_account_id:
