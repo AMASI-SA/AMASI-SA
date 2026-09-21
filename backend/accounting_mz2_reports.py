@@ -64,6 +64,13 @@ def _producer(row):
             and bool(meta.get("outgoing_event_id"))
             and bool(meta.get("daily_movement_id"))
         )
+    if kind == "supplier_invoice":
+        return (
+            meta.get("source") == "accounting_inventory_p03"
+            and meta.get("p03_kind") == "supplier_invoice"
+            and bool(meta.get("p03_event_id"))
+            and bool(meta.get("supplier_invoice_v2_id"))
+        )
     return False
 
 
