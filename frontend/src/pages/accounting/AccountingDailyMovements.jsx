@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
     ArrowClockwise,
     Bank,
@@ -10,6 +10,7 @@ import { toast } from "sonner";
 
 import {
     confirmAccountingDailyMovementProvider,
+    createAccountingManualIncomingMovement,
     getAccountingDailyMovementContext,
     getAccountingDailyMovements,
     uploadAccountingDailyMovements,
@@ -57,6 +58,13 @@ export default function AccountingDailyMovements({ accountingPermissions = [] })
     const [fileKey, setFileKey] = useState(0);
     const [busy, setBusy] = useState("");
     const [reasonById, setReasonById] = useState({});
+    const [manualBankAccountId, setManualBankAccountId] = useState("");
+    const [manualAmount, setManualAmount] = useState("");
+    const [manualSender, setManualSender] = useState("");
+    const [manualDate, setManualDate] = useState(() => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Riyadh" }).format(new Date()));
+    const [manualReference, setManualReference] = useState("");
+    const [manualNotes, setManualNotes] = useState("");
+    const manualRequest = useRef(null);
     const canImport = accountingPermissions.includes("accounting.movements.import");
 
     async function refresh() {
@@ -67,6 +75,7 @@ export default function AccountingDailyMovements({ accountingPermissions = [] })
         setContext(nextContext);
         setItems(nextRows?.items || []);
         setBankAccountId((current) => current || nextContext?.banks?.[0]?.id || "");
+        setManualBankAccountId((current) => current || nextContext?.banks?.find((bank) => bank.account_type === "bank")?.id || "");
     }
 
     useEffect(() => {
@@ -81,6 +90,48 @@ export default function AccountingDailyMovements({ accountingPermissions = [] })
         () => items.filter((row) => row.status === "provider_receipt_created").length,
         [items],
     );
+
+    async function saveManual(event) {
+        event.preventDefault();
+        if (!canImport) return toast.error("لا تملك صلاحية إضافة حركة مالية");
+        if (!manualBankAccountId) return toast.error("اختر البنك");
+        if (!(Number(manualAmount) > 0)) return toast.error("أدخل مبلغ التحويل");
+        if (!manualSender.trim()) return toast.error("أدخل اسم المحوّل");
+        const facts = {
+            bank_account_id: manualBankAccountId,
+            amount: manualAmount,
+            sender_name: manualSender.trim(),
+            movement_date: manualDate,
+            reference: manualReference.trim(),
+            notes: manualNotes.trim(),
+        };
+        const fingerprint = JSON.stringify(facts);
+        if (manualRequest.current?.fingerprint !== fingerprint) {
+            manualRequest.current = { fingerprint, id: crypto.randomUUID() };
+        }
+        setBusy("manual");
+        try {
+            const result = await createAccountingManualIncomingMovement({
+                ...facts,
+                request_id: manualRequest.current.id,
+            });
+            if (result?.duplicate) {
+                toast.info("هذه الحركة محفوظة مسبقًا؛ لم تتكرر.");
+            } else {
+                toast.success("تم حفظ التحويل البنكي كحركة MZ2. سيبقى دليلًا حتى يُصنّف أو يُربط بالعملية المناسبة.");
+            }
+            setManualAmount("");
+            setManualSender("");
+            setManualReference("");
+            setManualNotes("");
+            manualRequest.current = null;
+            await refresh();
+        } catch (error) {
+            toast.error(errorText(error, "تعذر حفظ التحويل البنكي"), { duration: 8000 });
+        } finally {
+            setBusy("");
+        }
+    }
 
     async function upload(event) {
         event.preventDefault();
@@ -157,6 +208,51 @@ export default function AccountingDailyMovements({ accountingPermissions = [] })
                 </div>
             </div>
 
+            <form onSubmit={saveManual} className="space-y-4 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4" data-testid="manual-incoming-movement-form">
+                <div>
+                    <h3 className="text-sm font-black text-emerald-950">إضافة تحويل بنكي يدوي</h3>
+                    <p className="mt-1 text-xs font-semibold leading-6 text-emerald-900">
+                        سجّل الواقع فقط: البنك، المبلغ، اسم المحوّل والتاريخ. لا تختار مدين/دائن. إذا رُفع كشف البنك لاحقًا بنفس المرجع والمبلغ والتاريخ، يعتبره ميزان تأكيدًا لنفس الحركة ولا يكررها.
+                    </p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    <label className="text-xs font-extrabold text-slate-700">
+                        البنك
+                        <select value={manualBankAccountId} onChange={(event) => setManualBankAccountId(event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3">
+                            <option value="">اختر البنك</option>
+                            {(context?.banks || []).filter((bank) => bank.account_type === "bank").map((bank) => (
+                                <option key={bank.id} value={bank.id}>{bank.name}</option>
+                            ))}
+                        </select>
+                    </label>
+                    <label className="text-xs font-extrabold text-slate-700">
+                        المبلغ
+                        <input type="number" min="0.01" step="0.01" required value={manualAmount} onChange={(event) => setManualAmount(event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-left font-mono" dir="ltr" />
+                    </label>
+                    <label className="text-xs font-extrabold text-slate-700">
+                        اسم المحوّل
+                        <input required value={manualSender} onChange={(event) => setManualSender(event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3" placeholder="مثال: أحمد محمد / شركة تابي" />
+                    </label>
+                    <label className="text-xs font-extrabold text-slate-700">
+                        التاريخ
+                        <input type="date" required value={manualDate} onChange={(event) => setManualDate(event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3" />
+                    </label>
+                    <label className="text-xs font-extrabold text-slate-700">
+                        مرجع التحويل <span className="font-semibold text-slate-400">اختياري</span>
+                        <input value={manualReference} onChange={(event) => setManualReference(event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 font-mono" dir="ltr" />
+                    </label>
+                    <label className="text-xs font-extrabold text-slate-700">
+                        ملاحظة <span className="font-semibold text-slate-400">اختيارية</span>
+                        <input value={manualNotes} onChange={(event) => setManualNotes(event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3" />
+                    </label>
+                </div>
+                <div className="flex justify-end">
+                    <button disabled={!canImport || !manualBankAccountId || !(Number(manualAmount) > 0) || !manualSender.trim() || busy === "manual"} className="min-h-11 rounded-xl bg-emerald-800 px-5 text-sm font-black text-white disabled:opacity-40">
+                        {busy === "manual" ? "جاري الحفظ…" : "حفظ التحويل"}
+                    </button>
+                </div>
+            </form>
+
             <form onSubmit={upload} className="grid gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 lg:grid-cols-[1fr_1.5fr_auto] lg:items-end" data-testid="daily-movement-upload-form">
                 <label className="text-xs font-extrabold text-slate-700">
                     البنك / الصندوق
@@ -204,7 +300,7 @@ export default function AccountingDailyMovements({ accountingPermissions = [] })
                     </thead>
                     <tbody>
                         {items.length === 0 ? (
-                            <tr><td colSpan={6} className="p-8 text-center font-semibold text-slate-400">لم يُرفع كشف بنك MZ2 بعد.</td></tr>
+                            <tr><td colSpan={6} className="p-8 text-center font-semibold text-slate-400">لا توجد حركات MZ2 محفوظة بعد.</td></tr>
                         ) : items.map((row) => (
                             <tr key={row.id} className="border-t border-slate-100 align-top">
                                 <td className="p-3 font-mono">{row.movement_date}</td>
