@@ -191,6 +191,7 @@ jobs:
           accounting_shipping_settlements.py
           accounting_inventory_p03.py
           accounting_inventory_p03_gate.py
+          accounting_mz2_reports.py
           ledger_core.py
           return_decision_engine.py
           purchase_invoices_routes.py
