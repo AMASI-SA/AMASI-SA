@@ -359,6 +359,19 @@ export async function activateAccountingP03(activationRef) {
     return data;
 }
 
+export async function getAccountingP03OpeningInventoryCosts() {
+    const { data } = await api.get(`${BASE}/inventory-p03/opening-inventory-costs`);
+    return data;
+}
+
+export async function approveAccountingP03OpeningInventoryCosts(payload) {
+    const { data } = await api.post(
+        `${BASE}/inventory-p03/opening-inventory-costs/approve`,
+        payload,
+    );
+    return data;
+}
+
 export async function createAccountingP03PurchaseInvoice(payload) {
     const { data } = await api.post(`${BASE}/inventory-p03/purchase-invoices`, payload);
     return data;
