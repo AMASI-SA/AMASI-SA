@@ -353,6 +353,7 @@ async def bank_transfer_queue(db, *, owner: str, limit: int = 300) -> dict[str, 
                 or bank_selected_from_order(evidence.get("payment_method_raw"))
             )
             bank = await _resolve_order_bank(db, owner, selected_bank)
+            expected_amount = format(_expected_amount(evidence), ".2f")
             error = None
         except BankTransferError as exc:
             selected_bank = evidence.get("bank_selected_from_order") or ""
@@ -363,6 +364,7 @@ async def bank_transfer_queue(db, *, owner: str, limit: int = 300) -> dict[str, 
                 "bank_account_name": None,
                 "resolution": "error",
             }
+            expected_amount = None
             error = str(exc)
         review_id = str(evidence.get("bank_transfer_receipt_review_id") or "")
         review = None
@@ -375,7 +377,7 @@ async def bank_transfer_queue(db, *, owner: str, limit: int = 300) -> dict[str, 
             "evidence_id": evidence["id"],
             "order_number": evidence.get("order_number"),
             "order_status": evidence.get("order_status"),
-            "expected_amount": format(_expected_amount(evidence), ".2f"),
+            "expected_amount": expected_amount,
             "delivery_source_text": evidence.get("delivery_source_text"),
             "selected_bank": bank.get("selected_bank") or selected_bank,
             "bank_resolution": bank,
