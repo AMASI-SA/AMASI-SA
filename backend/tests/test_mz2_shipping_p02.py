@@ -404,7 +404,7 @@ class MZ2ShippingP02Tests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(fp["assets"]["store_driver_cod_receivable"], 150.0)
         self.assertEqual(fp["liabilities"]["store_driver_payable"], 20.0)
 
-    async def test_non_cash_or_mismatched_cod_never_posts(self):
+    async def test_non_cash_or_mismatched_cod_never_posts_sale_but_fee_is_independent(self):
         await self.add_driver_cod(
             assignment="ASSIGN-BLOCK-1",
             order="ORD-BLOCK-1",
@@ -418,7 +418,13 @@ class MZ2ShippingP02Tests(unittest.IsolatedAsyncioTestCase):
                 "review_status": "pending_accountant_review",
             }},
         )
-        before = await self.db.general_ledger.count_documents({})
+        revenue_before = await self.db.general_ledger.count_documents({
+            "entity_type": "revenue",
+        })
+        cod_before = await self.db.general_ledger.count_documents({
+            "entity_type": "store_driver",
+            "sub_account": "cod_receivable",
+        })
         with self.assertRaises(ShippingAccountingError):
             await post_store_driver_cod(
                 self.db,
@@ -426,7 +432,24 @@ class MZ2ShippingP02Tests(unittest.IsolatedAsyncioTestCase):
                 actor=self.actor,
                 assignment_id="ASSIGN-BLOCK-1",
             )
-        self.assertEqual(await self.db.general_ledger.count_documents({}), before)
+        self.assertEqual(
+            await self.db.general_ledger.count_documents({"entity_type": "revenue"}),
+            revenue_before,
+        )
+        self.assertEqual(
+            await self.db.general_ledger.count_documents({
+                "entity_type": "store_driver",
+                "sub_account": "cod_receivable",
+            }),
+            cod_before,
+        )
+        self.assertEqual(
+            await self.db.general_ledger.count_documents({
+                "metadata.assignment_id": "ASSIGN-BLOCK-1",
+                "entry_type": "shipping_fee_accrual",
+            }),
+            2,
+        )
 
         await self.add_driver_cod(
             assignment="ASSIGN-BLOCK-2",
@@ -444,7 +467,24 @@ class MZ2ShippingP02Tests(unittest.IsolatedAsyncioTestCase):
                 actor=self.actor,
                 assignment_id="ASSIGN-BLOCK-2",
             )
-        self.assertEqual(await self.db.general_ledger.count_documents({}), before)
+        self.assertEqual(
+            await self.db.general_ledger.count_documents({"entity_type": "revenue"}),
+            revenue_before,
+        )
+        self.assertEqual(
+            await self.db.general_ledger.count_documents({
+                "entity_type": "store_driver",
+                "sub_account": "cod_receivable",
+            }),
+            cod_before,
+        )
+        self.assertEqual(
+            await self.db.general_ledger.count_documents({
+                "metadata.assignment_id": "ASSIGN-BLOCK-2",
+                "entry_type": "shipping_fee_accrual",
+            }),
+            2,
+        )
 
     async def test_p02_lock_blocks_financial_write_without_partial_event(self):
         await self.add_courier_order(
