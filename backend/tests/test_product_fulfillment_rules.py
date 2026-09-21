@@ -125,6 +125,7 @@ def test_inventory_consumption_evidence_preserves_order_and_receipt_lot():
     assert first["allocations"] == [{
         "location_id": "loc-1",
         "receipt_id": "receipt-1",
+        "lot_id": None,
         "item_index": 0,
         "quantity": 2.0,
         "product_id": "SALLA-1",
@@ -144,6 +145,7 @@ def test_inventory_consumption_evidence_preserves_order_and_receipt_lot():
                     {
                         "location_id": "loc-1",
                         "receipt_id": "receipt-1",
+                        "lot_id": None,
                         "item_index": 0,
                         "quantity": 2,
                     },
