@@ -378,7 +378,7 @@ export default function AccountingShippingCod({
                                 </div>
                                 <div className="flex gap-2">
                                     <button type="button" onClick={() => previewDriver(row)} disabled={busy === key} className="min-h-9 rounded-lg border border-slate-300 px-3 text-[11px] font-black">معاينة</button>
-                                    <button type="button" onClick={() => postDriver(row)} disabled={!canPost || preview?.state !== "eligible" || busy === "post:" + key} className="min-h-9 rounded-lg bg-emerald-800 px-3 text-[11px] font-black text-white disabled:opacity-40">اعتماد COD</button>
+                                    <button type="button" onClick={() => postDriver(row)} disabled={!canPost || !p02Active || preview?.state !== "eligible" || busy === "post:" + key} className="min-h-9 rounded-lg bg-emerald-800 px-3 text-[11px] font-black text-white disabled:opacity-40">اعتماد COD</button>
                                 </div>
                             </div>
                         );
