@@ -50,6 +50,17 @@ test("P03 UI exposes explicit purchase tax treatment", () => {
     expect(source).toContain("أدخل مرجع الفاتورة أو الدليل الضريبي");
 });
 
+test("P03 opening inventory snapshot must match GL before activation", () => {
+    expect(serviceSource).toContain("/inventory-p03/opening-inventory-costs");
+    expect(serviceSource).toContain("/opening-inventory-costs/approve");
+    expect(source).toContain("Snapshot تكلفة المخزون الافتتاحي");
+    expect(source).toContain("مجموع التكلفة يجب أن يساوي رصيد المخزون الافتتاحي في GL بالهللة");
+    expect(source).toContain("لا تُستخدم تكلفة الكتالوج الحالية لحساب COGS");
+    expect(source).toContain("اعتماد Snapshot المخزون");
+    expect(source).toContain("اعتمد Snapshot تكلفة المخزون الافتتاحي أولًا");
+    expect(source).toContain("openingSnapshotApproved");
+});
+
 test("COGS waits for sale recognition and uses receipt-lot cost evidence", () => {
     expect(serviceSource).toContain("/inventory-p03/inventory-consumptions/");
     expect(serviceSource).toContain("/cogs-preview");
