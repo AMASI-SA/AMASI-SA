@@ -15,6 +15,7 @@ on:
       - "backend/accounting_employee_finance.py"
       - "backend/accounting_salla_order_evidence.py"
       - "backend/accounting_order_recognition.py"
+      - "backend/accounting_bank_transfer_reviews.py"
       - "backend/accounting_shipping_p02.py"
       - "backend/accounting_shipping_settlements.py"
       - "backend/accounting_mz2_reports.py"
@@ -169,6 +170,7 @@ jobs:
           accounting_employee_finance.py
           accounting_salla_order_evidence.py
           accounting_order_recognition.py
+          accounting_bank_transfer_reviews.py
           accounting_shipping_p02.py
           accounting_shipping_settlements.py
           accounting_settlement_*.py
