@@ -43,5 +43,5 @@ test("accountant can add a manual incoming bank transfer without debit-credit fi
     expect(source).toContain("مرجع التحويل");
     expect(source).toContain("createAccountingManualIncomingMovement");
     expect(serviceSource).toContain("/daily-movements/manual-incoming");
-    expect(source).not.toContain("مدين/دائن");
+    expect(source).toContain("لا تختار مدين/دائن");
 });
