@@ -610,6 +610,29 @@ async def _post_sale_from_advance(
         raise BankTransferError("future_delivery_event")
 
     amount = Decimal(review["received_amount"])
+    receipt_group_id = str(review.get("receipt_txn_group_id") or "").strip()
+    if not receipt_group_id:
+        raise BankTransferError("confirmed_bank_receipt_group_required")
+    receipt_legs = await db.general_ledger.find({
+        "user_id": owner,
+        "txn_group_id": receipt_group_id,
+        "status": "posted",
+    }).to_list(10)
+    advance_credit = sum(
+        (
+            Decimal(str(row.get("amount") or "0"))
+            for row in receipt_legs
+            if row.get("entity_type") == "liability"
+            and row.get("entity_id") == review["advance_id"]
+            and row.get("sub_account") == "customer_advance"
+            and row.get("side") == "credit"
+            and (row.get("metadata") or {}).get("bank_transfer_review_id") == review["id"]
+        ),
+        Decimal("0"),
+    )
+    if advance_credit != amount:
+        raise BankTransferError("customer_advance_receipt_balance_conflict")
+
     event = _tax_event(evidence, amount, delivered)
     tax = sale_snapshot(
         await read_policy(db, owner),
@@ -864,6 +887,7 @@ async def approve_receipt(
             "transfer_date": transfer_date,
             "bank_reference": bank_reference or None,
             "bank_movement_id": movement_id,
+            "receipt_txn_group_id": receipt_group_id,
         }
         if (
             evidence.get("order_status") == "تم التوصيل"
