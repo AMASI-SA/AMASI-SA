@@ -22,12 +22,14 @@ test("accounting module exposes the exact approved eight pages in order", () => 
     expect(accountingNavItems().every((item) => item.to.includes("workspace=financial"))).toBe(true);
 });
 
-test("P01 home, settlements and opening balances are implemented", () => {
+test("implemented accounting pages include P03 inventory purchases", () => {
     const implemented = ACCOUNTING_PAGES
         .filter((page) => page.implementationStatus === "implemented")
         .map((page) => page.id);
-    expect(implemented).toEqual(["home", "settlements", "shipping-cod", "financial-movements", "payroll-obligations", "opening-balances"]);
+    expect(implemented).toEqual(["home", "settlements", "shipping-cod", "inventory-purchases", "financial-movements", "payroll-obligations", "opening-balances"]);
     expect(ACCOUNTING_PAGES.find((page) => page.id === "shipping-cod")?.implementationStatus)
+        .toBe("implemented");
+    expect(ACCOUNTING_PAGES.find((page) => page.id === "inventory-purchases")?.implementationStatus)
         .toBe("implemented");
     expect(ACCOUNTING_PAGES.find((page) => page.id === "opening-balances")?.implementationStatus)
         .toBe("implemented");

@@ -1,0 +1,103 @@
+import fs from "fs";
+import path from "path";
+
+const source = fs.readFileSync(
+    path.join(__dirname, "AccountingInventoryPurchases.jsx"),
+    "utf8",
+);
+const serviceSource = fs.readFileSync(
+    path.join(__dirname, "../../services/accountingModule.js"),
+    "utf8",
+);
+const workspaceSource = fs.readFileSync(
+    path.join(__dirname, "AccountingWorkspace.jsx"),
+    "utf8",
+);
+
+test("P03 page is native and wired into the accounting workspace", () => {
+    expect(source).toContain("P03 — المخزون والمشتريات");
+    expect(source).toContain("فاتورة شراء للمخزون");
+    expect(source).toContain("استلامات المخزون الفعلية الجاهزة للمحاسبة");
+    expect(workspaceSource).toContain('import AccountingInventoryPurchases from "./AccountingInventoryPurchases"');
+    expect(workspaceSource).toContain("<AccountingInventoryPurchases");
+});
+
+test("P03 requires explicit phase activation and accountant posting", () => {
+    expect(serviceSource).toContain("/inventory-p03/activate");
+    expect(source).not.toContain("ACTIVATE_MZ2_P03");
+    expect(source).toContain("P03 مقفل");
+    expect(source).toContain("تفعيل P03");
+    expect(source).toContain('accounting.purchases.post');
+});
+
+test("purchase invoice is receipt-driven and never uses the legacy liability API", () => {
+    expect(serviceSource).toContain("/inventory-p03/purchase-invoices");
+    expect(serviceSource).toContain("/inventory-p03/inventory-receipts/");
+    expect(source).toContain("الذمة وتكلفة المخزون تُثبت فقط عند استلام الكمية فعليًا");
+    expect(source).not.toContain("/purchase-invoices");
+    expect(source).not.toContain("/liabilities");
+    expect(source).not.toContain("مدين");
+    expect(source).not.toContain("دائن");
+});
+
+test("P03 UI exposes explicit purchase tax treatment", () => {
+    expect(source).toContain("ضريبة مدخلات قابلة للاسترداد");
+    expect(source).toContain("تضاف إلى تكلفة المخزون");
+    expect(source).toContain("recoverable_input_vat");
+    expect(source).toContain("included_in_inventory_cost");
+    expect(source).toContain("مرجع الدليل الضريبي");
+    expect(source).toContain("رقم/مرجع الفاتورة الضريبية");
+    expect(source).toContain("أدخل مرجع الفاتورة أو الدليل الضريبي");
+});
+
+test("P03 opening inventory snapshot must match GL before activation", () => {
+    expect(serviceSource).toContain("/inventory-p03/opening-inventory-costs");
+    expect(serviceSource).toContain("/opening-inventory-costs/approve");
+    expect(source).toContain("Snapshot تكلفة المخزون الافتتاحي");
+    expect(source).toContain("مجموع التكلفة يجب أن يساوي رصيد المخزون الافتتاحي في GL بالهللة");
+    expect(source).toContain("لا تُستخدم تكلفة الكتالوج الحالية لحساب COGS");
+    expect(source).toContain("اعتماد Snapshot المخزون");
+    expect(source).toContain("اعتمد Snapshot تكلفة المخزون الافتتاحي أولًا");
+    expect(source).toContain("openingSnapshotApproved");
+});
+
+test("opening inventory may carry evidenced zero cost without a zero-value journal", () => {
+    expect(source).toContain("تكلفة وحدة صفر أو أكبر لكل lot افتتاحي");
+    expect(source).toContain("posted_zero_cost");
+    expect(source).toContain("دون إنشاء قيد مالي صفري");
+});
+
+test("COGS waits for sale recognition and uses receipt-lot cost evidence", () => {
+    expect(serviceSource).toContain("/inventory-p03/inventory-consumptions/");
+    expect(serviceSource).toContain("/cogs-preview");
+    expect(serviceSource).toContain("/cogs-post");
+    expect(source).toContain("تكلفة البضاعة المباعة — COGS");
+    expect(source).toContain("لا يُرحّل COGS حتى يظهر قيد بيع MZ2 لنفس الطلب");
+    expect(source).toContain("تكلفة الاستلام الأصلية");
+    expect(source).toContain("لا تُستخدم تكلفة الكتالوج الحالية");
+    expect(source).toContain("معاينة COGS");
+    expect(source).toContain("اعتماد COGS");
+});
+
+test("physical restock creates a separate reviewed COGS reversal queue", () => {
+    expect(serviceSource).toContain("/inventory-p03/return-restocks/");
+    expect(serviceSource).toContain("/cogs-reversal-preview");
+    expect(serviceSource).toContain("/cogs-reversal-post");
+    expect(source).toContain("مرتجعات المخزون — عكس COGS");
+    expect(source).toContain("قطعة صالحة عادت فعليًا إلى Inventory V2");
+    expect(source).toContain("التكلفة التاريخية الأصلية");
+    expect(source).toContain("معاينة العكس");
+    expect(source).toContain("اعتماد عكس COGS");
+});
+
+test("refunds and inspection never reverse COGS without physical restock", () => {
+    expect(source).toContain("الاسترداد المالي أو فحص المرتجع وحده لا يعكس COGS");
+    expect(source).toContain("العكس يتطلب Restock فعليًا للمخزون");
+});
+
+test("Inventory V2 remains the operational receiving source", () => {
+    expect(source).toContain('to="/inventory-receiving-v2"');
+    expect(source).toContain("Inventory V2");
+    expect(source).toContain("معاينة");
+    expect(source).toContain("اعتماد الاستلام");
+});

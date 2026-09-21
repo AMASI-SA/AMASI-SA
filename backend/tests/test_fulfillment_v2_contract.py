@@ -258,3 +258,27 @@ def test_operational_item_can_be_renamed_or_unlinked_before_review_completion():
     assert 'unlinkOrderReviewOperationalItem' in service_source
     assert 'order-review-operational-item-unlink' in frontend_source
     assert 'إلغاء الربط وإرجاع القيم' in frontend_source
+
+def test_return_restock_requires_inspection_source_lot_and_physical_location_scan():
+    engine_source = (
+        ROOT / "backend/return_decision_engine.py"
+    ).read_text(encoding="utf-8")
+    routes_source = (
+        ROOT / "backend/return_decision_routes.py"
+    ).read_text(encoding="utf-8")
+    frontend_source = (
+        ROOT / "frontend/src/components/orders/ReturnDecisionCard.jsx"
+    ).read_text(encoding="utf-8")
+
+    assert '"/cases/{case_id}/restock-options"' in routes_source
+    assert '"/cases/{case_id}/restock"' in routes_source
+    assert '"ready_for_sellable_quantity_movement"' in engine_source
+    assert '"restock_posting"' in engine_source
+    assert '"restocked_sellable_inventory"' in engine_source
+    assert "source_target_key" in engine_source
+    assert "scanned_barcode" in engine_source
+    assert "place_inventory_receipt(" in engine_source
+    assert '"accounting_status": "waiting_cogs_reversal"' in engine_source
+    assert "5. إعادة الكمية الصالحة فعليًا للمخزون" in frontend_source
+    assert "تثبيت Restock الفعلي" in frontend_source
+

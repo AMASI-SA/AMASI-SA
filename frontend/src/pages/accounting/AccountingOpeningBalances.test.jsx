@@ -45,3 +45,13 @@ test("user supplies evidence and balances while debit credit is derived by backe
     expect(source).toContain("حقوق الملكية تُحسب تلقائيًا");
     expect(source).not.toContain('name="side"');
 });
+
+test("P03 opening identities are selected or fixed instead of free-form", () => {
+    expect(source).toContain('const SUPPLIER_CATEGORIES = new Set(["supplier_payable"])');
+    expect(source).toContain('inventory_asset: "inventory"');
+    expect(source).toContain('input_vat: "input_vat"');
+    expect(source).toContain('sales_vat_payable: "sales_vat_payable"');
+    expect(source).toContain("اختر المورد من دليل ميزان 2");
+    expect(source).toContain('readOnly');
+});
+

@@ -45,6 +45,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, validator
 
 from auth import get_current_user_from_db
+from accounting_inventory_p03_gate import p01_controls_purchase_accounting
 
 
 def _now() -> str:
@@ -165,12 +166,30 @@ def attach_purchase_invoice_routes(parent_router: APIRouter, db) -> None:
 
     router = APIRouter(prefix="/purchase-invoices", tags=["purchase-invoices"])
 
+    async def require_legacy_purchase_writer_unlocked(user: dict) -> None:
+        owner = str(user.get("id") or "").strip()
+        if owner and await p01_controls_purchase_accounting(
+            db,
+            owner=owner,
+        ):
+            raise HTTPException(
+                status_code=423,
+                detail={
+                    "code": "legacy_purchase_invoice_writer_locked",
+                    "message": (
+                        "بعد تفعيل MZ2 P01 تُنشأ وتُرحّل المشتريات "
+                        "من مسار المخزون والمشتريات MZ2 فقط"
+                    ),
+                },
+            )
+
     # ── POST / ────────────────────────────────────────────────────────
     @router.post("")
     async def create_invoice(
         payload: PurchaseInvoiceCreate,
         user: dict = Depends(current_user),
     ):
+        await require_legacy_purchase_writer_unlocked(user)
         # 1) Resolve supplier from counterparties
         cp = await db.counterparties.find_one(
             {"id": payload.supplier_counterparty_id, "user_id": user["id"],
@@ -255,7 +274,7 @@ def attach_purchase_invoice_routes(parent_router: APIRouter, db) -> None:
         limit: int = Query(200, ge=1, le=2000),
         user: dict = Depends(current_user),
     ):
-        q: dict = {"user_id": user["id"]}
+        q: dict = {"user_id": user["id"], "accounting_authority": {"$ne": "accounting_inventory_p03"}}
         if supplier_id:
             q["supplier_counterparty_id"] = supplier_id
         if from_date:
@@ -278,7 +297,12 @@ def attach_purchase_invoice_routes(parent_router: APIRouter, db) -> None:
     @router.get("/{inv_id}")
     async def get_invoice(inv_id: str, user: dict = Depends(current_user)):
         doc = await db.purchase_invoices.find_one(
-            {"id": inv_id, "user_id": user["id"]}, {"_id": 0},
+            {
+                "id": inv_id,
+                "user_id": user["id"],
+                "accounting_authority": {"$ne": "accounting_inventory_p03"},
+            },
+            {"_id": 0},
         )
         if not doc:
             raise HTTPException(404, "الفاتورة غير موجودة")
@@ -290,8 +314,14 @@ def attach_purchase_invoice_routes(parent_router: APIRouter, db) -> None:
         inv_id: str, payload: PurchaseInvoiceUpdate,
         user: dict = Depends(current_user),
     ):
+        await require_legacy_purchase_writer_unlocked(user)
         existing = await db.purchase_invoices.find_one(
-            {"id": inv_id, "user_id": user["id"]}, {"_id": 0},
+            {
+                "id": inv_id,
+                "user_id": user["id"],
+                "accounting_authority": {"$ne": "accounting_inventory_p03"},
+            },
+            {"_id": 0},
         )
         if not existing:
             raise HTTPException(404, "الفاتورة غير موجودة")
@@ -351,15 +381,26 @@ def attach_purchase_invoice_routes(parent_router: APIRouter, db) -> None:
             )
 
         fresh = await db.purchase_invoices.find_one(
-            {"id": inv_id, "user_id": user["id"]}, {"_id": 0},
+            {
+                "id": inv_id,
+                "user_id": user["id"],
+                "accounting_authority": {"$ne": "accounting_inventory_p03"},
+            },
+            {"_id": 0},
         )
         return await _enrich_with_liability(db, user["id"], fresh)
 
     # ── DELETE /{id} ──────────────────────────────────────────────────
     @router.delete("/{inv_id}")
     async def delete_invoice(inv_id: str, user: dict = Depends(current_user)):
+        await require_legacy_purchase_writer_unlocked(user)
         doc = await db.purchase_invoices.find_one(
-            {"id": inv_id, "user_id": user["id"]}, {"_id": 0},
+            {
+                "id": inv_id,
+                "user_id": user["id"],
+                "accounting_authority": {"$ne": "accounting_inventory_p03"},
+            },
+            {"_id": 0},
         )
         if not doc:
             raise HTTPException(404, "الفاتورة غير موجودة")
@@ -404,7 +445,11 @@ def attach_purchase_invoice_routes(parent_router: APIRouter, db) -> None:
         total_invoiced = 0.0
         total_paid = 0.0
         async for d in db.purchase_invoices.find(
-            {"user_id": user["id"], "supplier_counterparty_id": cp_id},
+            {
+                "user_id": user["id"],
+                "supplier_counterparty_id": cp_id,
+                "accounting_authority": {"$ne": "accounting_inventory_p03"},
+            },
             {"_id": 0},
         ).sort([("invoice_date", -1)]):
             enriched = await _enrich_with_liability(db, user["id"], d)

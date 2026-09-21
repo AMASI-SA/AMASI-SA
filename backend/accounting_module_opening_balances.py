@@ -269,6 +269,18 @@ def compile_opening_lines(lines: list[OpeningLineIn], evidence_refs: dict[str, s
                 "code": "opening_provider_unsupported",
                 "provider": entity_id,
             })
+        canonical_ids = {
+            "inventory_asset": "inventory",
+            "input_vat": "input_vat",
+            "sales_vat_payable": "sales_vat_payable",
+        }
+        expected_id = canonical_ids.get(item.category)
+        if expected_id and entity_id != expected_id:
+            raise HTTPException(400, detail={
+                "code": "opening_canonical_account_required",
+                "category": item.category,
+                "entity_id": expected_id,
+            })
         key = (rule["entity_type"], entity_id, rule["sub_account"])
         if key in covered:
             raise HTTPException(409, detail={
@@ -396,6 +408,59 @@ async def _required_zero_scope(db, owner: str, compiled: list[dict[str, Any]], e
                     "evidence_ref": evidence_refs["payroll_obligations"],
                 })
 
+    # P03 supplier/payable and stock accounts must be part of the approved
+    # opening scope even when their actual opening amount is zero.  This lets
+    # the transaction-bound MZ2 balance reader distinguish a legitimate new
+    # payable/asset from an account that was never approved at cutover.
+    suppliers = await db.mezan_suppliers_v2.find(
+        {
+            "user_id": owner,
+            "status": {"$ne": "inactive"},
+        },
+        {"_id": 0, "id": 1},
+    ).to_list(MAX_OPENING_LINES + 1)
+    if len(suppliers) > MAX_OPENING_LINES:
+        raise HTTPException(409, "opening_supplier_scope_too_large")
+    for supplier in suppliers:
+        supplier_id = str(supplier.get("id") or "").strip()
+        if not supplier_id:
+            raise HTTPException(409, "opening_supplier_identity_missing")
+        key = ("supplier", supplier_id, "payable")
+        if key not in covered:
+            zero.append({
+                "entity_type": "supplier",
+                "entity_id": supplier_id,
+                "sub_account": "payable",
+                "evidence_ref": evidence_refs["suppliers"],
+            })
+
+    inventory_accounts = [
+        row for row in compiled
+        if row["entity_type"] == "asset"
+        and row.get("entity_id") == "inventory"
+        and row.get("sub_account") == "inventory"
+    ]
+    if not inventory_accounts:
+        zero.append({
+            "entity_type": "asset",
+            "entity_id": "inventory",
+            "sub_account": "inventory",
+            "evidence_ref": evidence_refs["inventory"],
+        })
+    input_vat_accounts = [
+        row for row in compiled
+        if row["entity_type"] == "tax"
+        and row.get("entity_id") == "input_vat"
+        and row.get("sub_account") == "input_vat"
+    ]
+    if not input_vat_accounts:
+        zero.append({
+            "entity_type": "tax",
+            "entity_id": "input_vat",
+            "sub_account": "input_vat",
+            "evidence_ref": evidence_refs["equity"],
+        })
+
     # P02 UAT can only use shipping counterparties whose opening state was
     # explicitly approved during P01 cutover.  Active store drivers and
     # approved MZ2 courier-rate identities are therefore part of the opening
@@ -468,6 +533,23 @@ async def _validate_preview_entities(db, owner: str, compiled: list[dict[str, An
                 raise HTTPException(409, detail={"code": "opening_bank_account_invalid", "entity_id": row["entity_id"]})
             if row["category"] == "cash" and by_id.get(row["entity_id"]) != "cash":
                 raise HTTPException(409, detail={"code": "opening_cash_account_invalid", "entity_id": row["entity_id"]})
+
+    supplier_ids = {
+        row["entity_id"] for row in compiled
+        if row["entity_type"] == "supplier" and row.get("sub_account") == "payable"
+    }
+    if supplier_ids:
+        supplier_rows = await db.mezan_suppliers_v2.find(
+            {"user_id": owner, "id": {"$in": sorted(supplier_ids)}},
+            {"_id": 0, "id": 1},
+        ).to_list(len(supplier_ids) + 1)
+        found = {str(row.get("id") or "") for row in supplier_rows}
+        missing = sorted(supplier_ids - found)
+        if missing:
+            raise HTTPException(409, detail={
+                "code": "opening_supplier_missing",
+                "supplier_ids": missing,
+            })
 
     employees = {
         row["entity_id"] for row in compiled
@@ -787,6 +869,13 @@ async def opening_state(db, *, owner: str) -> dict[str, Any]:
         },
         {"_id": 0, "id": 1, "employee_id": 1, "name": 1, "status": 1},
     ).sort([("name", 1)]).to_list(MAX_OPENING_LINES)
+    suppliers = await db.mezan_suppliers_v2.find(
+        {
+            "user_id": owner,
+            "status": {"$ne": "inactive"},
+        },
+        {"_id": 0, "id": 1, "company_name": 1, "status": 1},
+    ).sort([("company_name", 1)]).to_list(MAX_OPENING_LINES)
     return {
         "operation_id": OPERATION_ID,
         "cutover": state,
@@ -807,6 +896,20 @@ async def opening_state(db, *, owner: str) -> dict[str, Any]:
             for row in employees
             if row.get("id") or row.get("employee_id")
         ],
+        "suppliers": [
+            {
+                "id": str(row.get("id") or ""),
+                "name": row.get("company_name") or str(row.get("id") or ""),
+                "status": row.get("status") or "active",
+            }
+            for row in suppliers
+            if row.get("id")
+        ],
+        "canonical_accounts": {
+            "inventory_asset": "inventory",
+            "input_vat": "input_vat",
+            "sales_vat_payable": "sales_vat_payable",
+        },
     }
 
 

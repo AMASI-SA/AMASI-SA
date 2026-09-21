@@ -27,7 +27,7 @@ export const ACCOUNTING_PAGES = [
         label: "المخزون والمشتريات",
         permission: "accounting.inventory.view",
         to: "/integrations-v2?workspace=financial&page=inventory-purchases",
-        implementationStatus: "partial_existing_workflows",
+        implementationStatus: "implemented",
     },
     {
         id: "financial-movements",

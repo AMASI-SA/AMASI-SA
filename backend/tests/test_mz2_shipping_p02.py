@@ -19,8 +19,10 @@ from accounting_mz2_reports import mz2_financial_position, read_mz2_ledger
 from accounting_periods import PeriodChange, set_period
 from accounting_sales_tax_service import save_policy
 from accounting_shipping_p02 import (
+    P02ActivateIn,
     ShippingAccountingError,
     ShippingRateInput,
+    activate_p02,
     post_courier_fee,
     post_store_driver_cod,
     save_shipping_rate,
@@ -106,13 +108,15 @@ class MZ2ShippingP02Tests(unittest.IsolatedAsyncioTestCase):
             revision=0,
             reason="Synthetic UAT sales tax",
         )
-        await self.db.settings.update_one(
-            {"user_id": self.owner},
-            {"$set": {
-                "mezan2_financial_cutover.p02_shipping_cod_enabled": True,
-                "mezan2_financial_cutover.p02_shipping_cod_activation_ref": "SYN-P02-UAT",
-            }},
-        )
+        await self.tx(lambda scoped: activate_p02(
+            scoped,
+            owner=self.owner,
+            actor=self.actor,
+            payload=P02ActivateIn(
+                activation_ref="SYN-P02-UAT",
+                confirmation="ACTIVATE_MZ2_P02",
+            ),
+        ))
 
     async def asyncTearDown(self):
         await self.mongo.drop_database(self.db.name)
@@ -885,6 +889,91 @@ class MZ2ShippingP02Tests(unittest.IsolatedAsyncioTestCase):
             {row["assignment_id"] for row in refreshed["driver_candidates"]},
         )
         self.assertGreaterEqual(len(refreshed["recent_events"]), 2)
+
+
+    async def test_p02_activation_is_explicit_idempotent_and_visible_in_workspace(self):
+        context = await shipping_workspace_context(self.db, owner=self.owner)
+        self.assertTrue(context["phase"]["p02_shipping_cod_enabled"])
+        self.assertEqual(
+            context["phase"]["p02_shipping_cod_activation_ref"],
+            "SYN-P02-UAT",
+        )
+        again = await self.tx(lambda scoped: activate_p02(
+            scoped,
+            owner=self.owner,
+            actor=self.actor,
+            payload=P02ActivateIn(
+                activation_ref="IGNORED-DUPLICATE",
+                confirmation="ACTIVATE_MZ2_P02",
+            ),
+        ))
+        self.assertEqual(again["state"], "already_active")
+        self.assertEqual(
+            again["p02_shipping_cod_activation_ref"],
+            "SYN-P02-UAT",
+        )
+        self.assertEqual(
+            await self.db.mz2_shipping_p02_phase_audit.count_documents({
+                "user_id": self.owner,
+                "action": "p02_activated",
+            }),
+            1,
+        )
+
+    async def test_p02_activation_rejects_counterparty_added_after_opening_scope(self):
+        await self.db.settings.update_one(
+            {"user_id": self.owner},
+            {
+                "$set": {
+                    "mezan2_financial_cutover.p02_shipping_cod_enabled": False,
+                },
+                "$unset": {
+                    "mezan2_financial_cutover.p02_shipping_cod_activation_ref": "",
+                },
+            },
+        )
+        await save_shipping_rate(
+            self.db,
+            owner=self.owner,
+            actor=self.actor,
+            payload=ShippingRateInput(
+                courier_id="aramex",
+                name="Aramex",
+                aliases=["أرامكس", "Aramex"],
+                total_fee="18.00",
+                effective_at="2026-09-01T00:00:00+03:00",
+                evidence_ref="SYN-ARAMEX-CONTRACT",
+                revision=2,
+                reason="Added only after approved opening scope",
+            ),
+        )
+        with self.assertRaises(HTTPException) as denied:
+            await self.tx(lambda scoped: activate_p02(
+                scoped,
+                owner=self.owner,
+                actor=self.actor,
+                payload=P02ActivateIn(
+                    activation_ref="SYN-P02-REOPEN",
+                    confirmation="ACTIVATE_MZ2_P02",
+                ),
+            ))
+        self.assertEqual(denied.exception.status_code, 409)
+        self.assertEqual(
+            denied.exception.detail["code"],
+            "p02_activation_opening_scope_incomplete",
+        )
+        missing = set(denied.exception.detail["missing_accounts"])
+        self.assertIn("courier/aramex/payable", missing)
+        self.assertIn("courier/aramex/cod_receivable", missing)
+        state = await self.db.settings.find_one(
+            {"user_id": self.owner},
+            {"_id": 0, "mezan2_financial_cutover": 1},
+        )
+        self.assertFalse(
+            state["mezan2_financial_cutover"].get(
+                "p02_shipping_cod_enabled"
+            )
+        )
 
 
 if __name__ == "__main__":

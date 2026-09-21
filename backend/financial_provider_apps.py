@@ -16,6 +16,7 @@ from accounting_order_recognition import install_order_recognition_routes
 from accounting_bank_transfer_receipts import install_bank_transfer_receipt_routes
 from accounting_shipping_p02 import install_shipping_p02_routes
 from accounting_shipping_settlements import install_shipping_settlement_routes
+from accounting_inventory_p03 import install_inventory_p03_routes
 
 from financial_provider_apps_legacy import *  # noqa: F401,F403
 from financial_provider_apps_legacy import (
@@ -135,6 +136,7 @@ def make_financial_provider_apps_router(db, current_user):
     install_bank_transfer_receipt_routes(router, db, current_user)
     install_shipping_p02_routes(router, db, current_user)
     install_shipping_settlement_routes(router, db, current_user)
+    install_inventory_p03_routes(router, db, current_user)
     install_write_control_routes(router, db, current_user)
     from accounting_periods import install_period_routes
     install_period_routes(router, db, current_user)

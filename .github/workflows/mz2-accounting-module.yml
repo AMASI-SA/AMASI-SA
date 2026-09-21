@@ -18,12 +18,23 @@ on:
       - "backend/accounting_bank_transfer_receipts.py"
       - "backend/accounting_shipping_p02.py"
       - "backend/accounting_shipping_settlements.py"
+      - "backend/accounting_inventory_p03.py"
+      - "backend/accounting_inventory_p03_gate.py"
+      - "backend/supplier_receiving_routes.py"
+      - "backend/product_inventory_receipt_routes.py"
+      - "backend/fulfillment_v2_routes.py"
+      - "backend/tests/test_return_decision_engine.py"
+      - "backend/return_decision_routes.py"
+      - "backend/return_decision_engine.py"
+      - "backend/purchase_invoices_routes.py"
+      - "backend/tests/test_mz2_inventory_p03.py"
       - "backend/accounting_mz2_reports.py"
       - "backend/tests/test_mz2_report_isolation.py"
       - "backend/tests/mz2_report_fixtures.py"
       - "backend/accounting_sales_tax*.py"
       - "backend/accounting_receivable*.py"
       - "backend/accounting_atomic.py"
+      - "backend/ledger_core.py"
       - "backend/accounting_write_control.py"
       - "backend/accounting_ingress.py"
       - "backend/tests/test_mz2_write_control.py"
@@ -130,6 +141,8 @@ jobs:
         run: python -m unittest discover -s tests -p test_mz2_bank_transfer_receipts.py -v
       - name: Test isolated MZ2 shipping and COD accounting
         run: python -m unittest discover -s tests -p test_mz2_shipping_p02.py -v
+      - name: Test fail-closed MZ2 P03 inventory and purchases
+        run: python -m unittest discover -s tests -p test_mz2_inventory_p03.py -v
       - name: Test historical financial position, closed periods, provider credits and advances
         run: |
           python -m unittest discover -s tests -p test_mz2_report_dates.py -v
@@ -176,6 +189,11 @@ jobs:
           accounting_bank_transfer_receipts.py
           accounting_shipping_p02.py
           accounting_shipping_settlements.py
+          accounting_inventory_p03.py
+          accounting_inventory_p03_gate.py
+          ledger_core.py
+          return_decision_engine.py
+          purchase_invoices_routes.py
           accounting_settlement_*.py
           accounting_courier_bank_routes.py
           financial_provider_apps.py
@@ -216,6 +234,7 @@ jobs:
           src/pages/accounting/AccountingBankTransferReceipts.test.jsx
           src/pages/accounting/AccountingDailyMovements.test.jsx
           src/pages/accounting/AccountingShippingCod.test.jsx
+          src/pages/accounting/AccountingInventoryPurchases.test.jsx
           src/pages/accounting/AccountingPayroll.test.jsx
           src/pages/accounting/AccountingWriteControl.test.jsx
           src/pages/accounting/AccountingReports.test.jsx

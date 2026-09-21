@@ -12,8 +12,10 @@ import {
 import {
   approveReturnCase,
   createReturnCase,
+  getReturnRestockOptions,
   getReturnWorkspace,
   inspectReturnCase,
+  restockReturnInventory,
 } from "../../services/returnDecisionEngine";
 
 const REASONS = [
@@ -52,6 +54,9 @@ const GATE_LABELS = {
   blocked_until_accepted_return: "متوقف حتى قبول المرتجع",
   blocked_until_settled_transaction: "متوقف حتى وجود عملية دفع مسوّاة",
   ready_for_sellable_quantity_movement: "جاهز لحركة مخزون الكمية الصالحة",
+  restock_posting: "جاري تثبيت Restock الفعلي",
+  restock_in_progress: "Restock جزئي؛ توجد كمية صالحة متبقية",
+  restocked_sellable_inventory: "أُعيدت الكمية الصالحة فعليًا للمخزون",
   no_sellable_inventory: "لا توجد كمية صالحة للمخزون",
   ready_for_financial_review: "جاهز للمراجعة المالية",
   not_applicable: "غير منطبق",
@@ -138,6 +143,8 @@ export default function ReturnDecisionCard({
   });
   const [inspection, setInspection] = useState({});
   const [inspectionNote, setInspectionNote] = useState("");
+  const [restockOptions, setRestockOptions] = useState(null);
+  const [restockDrafts, setRestockDrafts] = useState({});
 
   const load = async () => {
     setLoading(true);
@@ -145,6 +152,26 @@ export default function ReturnDecisionCard({
     try {
       const value = await getReturnWorkspace(orderNumber);
       setWorkspace(value);
+      const latest = value?.cases?.[0] || null;
+      const inventoryGate = latest?.execution_gates?.inventory;
+      if (
+        latest?.status === "inspected"
+        && [
+          "ready_for_sellable_quantity_movement",
+          "restock_in_progress",
+          "restock_posting",
+          "restocked_sellable_inventory",
+        ].includes(inventoryGate)
+      ) {
+        try {
+          setRestockOptions(await getReturnRestockOptions(latest.id));
+        } catch (restockError) {
+          setRestockOptions(null);
+          setError(restockError.message);
+        }
+      } else {
+        setRestockOptions(null);
+      }
       if (!form.shipment_id && value.shipments.length) {
         setForm((current) => ({
           ...current,
@@ -348,12 +375,80 @@ export default function ReturnDecisionCard({
     }
   };
 
+  const updateRestock = (key, patch) =>
+    setRestockDrafts((current) => ({
+      ...current,
+      [key]: {
+        ...(current[key] || {}),
+        ...patch,
+        request_id: patch.request_id !== undefined
+          ? patch.request_id
+          : "",
+      },
+    }));
+
+  const submitRestock = async (item, source) => {
+    const key = `${item.order_item_id}|${source.source_target_key}`;
+    const draft = restockDrafts[key] || {};
+    const quantity = Math.trunc(Number(draft.quantity || 0));
+    if (!(quantity > 0)) return setError("أدخل كمية Restock.");
+    if (!draft.location_id) return setError("اختر خانة التخزين الدائم.");
+    if (!String(draft.scanned_barcode || "").trim())
+      return setError("امسح باركود الخانة المختارة.");
+    if (String(draft.employee_note || "").trim().length < 3)
+      return setError("اكتب ملاحظة Restock.");
+    const fingerprint = JSON.stringify({
+      quantity,
+      location_id: draft.location_id,
+      scanned_barcode: String(draft.scanned_barcode || "").trim(),
+      employee_note: String(draft.employee_note || "").trim(),
+    });
+    let requestId = draft.request_id;
+    if (!requestId || draft.request_fingerprint !== fingerprint) {
+      requestId = crypto.randomUUID();
+      setRestockDrafts((current) => ({
+        ...current,
+        [key]: {
+          ...(current[key] || {}),
+          request_id: requestId,
+          request_fingerprint: fingerprint,
+        },
+      }));
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await restockReturnInventory(latestCase.id, {
+        request_id: requestId,
+        expected_version: restockOptions.version,
+        order_item_id: item.order_item_id,
+        source_target_key: source.source_target_key,
+        quantity,
+        location_id: draft.location_id,
+        scanned_barcode: String(draft.scanned_barcode || "").trim(),
+        employee_note: String(draft.employee_note || "").trim(),
+      });
+      setRestockDrafts((current) => {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
+      await load();
+    } catch (restockError) {
+      setError(restockError.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const startAnother = () => {
     setWorkspace((current) => (current ? { ...current, cases: [] } : current));
     setSelected({});
     setApproval({ selected_option: "", employee_note: "" });
     setInspection({});
     setInspectionNote("");
+    setRestockOptions(null);
+    setRestockDrafts({});
     setError("");
   };
 
@@ -1110,6 +1205,160 @@ export default function ReturnDecisionCard({
                   حفظ الفحص
                 </button>
               </form>
+            )}
+
+          {latestCase.status === "inspected" &&
+            restockOptions &&
+            !restockOptions.complete && (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                <div className="flex items-center gap-2">
+                  <CheckCircle
+                    size={21}
+                    weight="fill"
+                    className="text-emerald-700"
+                  />
+                  <h4 className="font-extrabold text-emerald-950">
+                    5. إعادة الكمية الصالحة فعليًا للمخزون
+                  </h4>
+                </div>
+                <p className="mt-1 text-xs leading-6 text-emerald-800">
+                  اختر الـlot الذي خرجت منه القطعة، ثم خانة تخزين دائم وامسح
+                  باركودها. إذا خرج السطر من أكثر من lot تظهر المصادر منفصلة
+                  ولا يختار ميزان واحدًا تلقائيًا.
+                </p>
+                <div className="mt-4 space-y-4">
+                  {(restockOptions.items || [])
+                    .filter((item) => item.remaining_sellable_quantity > 0)
+                    .map((item) => (
+                      <div
+                        key={item.order_item_id}
+                        className="rounded-xl border border-emerald-200 bg-white p-4"
+                      >
+                        <div className="font-extrabold text-slate-900">
+                          {item.name || item.sku || item.order_item_id}
+                        </div>
+                        <div className="mt-1 text-xs font-bold text-slate-500">
+                          صالح: <span className="num">{item.sellable_quantity}</span>
+                          {" · "}أُعيد: <span className="num">{item.already_restocked_quantity}</span>
+                          {" · "}متبقي: <span className="num">{item.remaining_sellable_quantity}</span>
+                        </div>
+                        {!item.source_evidence_complete && (
+                          <div className="mt-2 rounded-lg border border-rose-200 bg-rose-50 p-2 text-xs font-bold text-rose-700">
+                            مصدر المخزون الأصلي غير مكتمل؛ لا تنفذ Restock قبل
+                            مراجعة حجز Fulfillment.
+                          </div>
+                        )}
+                        <div className="mt-3 space-y-3">
+                          {(item.sources || [])
+                            .filter((source) => source.remaining_source_quantity > 0)
+                            .map((source) => {
+                              const key = `${item.order_item_id}|${source.source_target_key}`;
+                              const draft = restockDrafts[key] || {};
+                              return (
+                                <div
+                                  key={source.source_target_key}
+                                  className="rounded-lg border border-slate-200 p-3"
+                                >
+                                  <div className="text-xs font-extrabold text-slate-700">
+                                    المصدر: <span dir="ltr">{source.source_target_key}</span>
+                                    {" · "}متاح من المصدر:{" "}
+                                    <span className="num">{source.remaining_source_quantity}</span>
+                                  </div>
+                                  <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                                    <Field label="الكمية">
+                                      <input
+                                        type="number"
+                                        min="1"
+                                        max={Math.min(
+                                          item.remaining_sellable_quantity,
+                                          source.remaining_source_quantity,
+                                        )}
+                                        value={draft.quantity || ""}
+                                        onChange={(event) =>
+                                          updateRestock(key, {
+                                            quantity: event.target.value,
+                                          })
+                                        }
+                                        className={inputClass}
+                                      />
+                                    </Field>
+                                    <Field label="خانة التخزين">
+                                      <select
+                                        value={draft.location_id || ""}
+                                        onChange={(event) =>
+                                          updateRestock(key, {
+                                            location_id: event.target.value,
+                                          })
+                                        }
+                                        className={inputClass}
+                                      >
+                                        <option value="">اختر الخانة</option>
+                                        {(source.compatible_locations || []).map(
+                                          (location) => (
+                                            <option
+                                              key={location.id}
+                                              value={location.id}
+                                            >
+                                              {location.code || location.id}
+                                              {" · "}
+                                              {location.cabinet_name || location.cabinet_code || "خزانة"}
+                                            </option>
+                                          ),
+                                        )}
+                                      </select>
+                                    </Field>
+                                    <Field label="باركود الخانة">
+                                      <input
+                                        value={draft.scanned_barcode || ""}
+                                        onChange={(event) =>
+                                          updateRestock(key, {
+                                            scanned_barcode: event.target.value,
+                                          })
+                                        }
+                                        className={inputClass}
+                                        placeholder="امسح الباركود"
+                                      />
+                                    </Field>
+                                    <Field label="ملاحظة Restock">
+                                      <input
+                                        value={draft.employee_note || ""}
+                                        onChange={(event) =>
+                                          updateRestock(key, {
+                                            employee_note: event.target.value,
+                                          })
+                                        }
+                                        className={inputClass}
+                                      />
+                                    </Field>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    disabled={
+                                      saving ||
+                                      !item.source_evidence_complete ||
+                                      !(source.compatible_locations || []).length
+                                    }
+                                    onClick={() => submitRestock(item, source)}
+                                    className="mt-3 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-extrabold text-white disabled:opacity-40"
+                                  >
+                                    تثبيت Restock الفعلي
+                                  </button>
+                                </div>
+                              );
+                            })}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
+          {latestCase.status === "inspected" &&
+            restockOptions?.complete && (
+              <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-sm font-extrabold text-emerald-900">
+                اكتمل Restock الفعلي لكل الكمية الصالحة. أصبح لدى P03 دليل
+                مخزون يسمح بمراجعة عكس COGS.
+              </div>
             )}
 
           <div>

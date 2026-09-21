@@ -64,6 +64,40 @@ def _producer(row):
             and bool(meta.get("outgoing_event_id"))
             and bool(meta.get("daily_movement_id"))
         )
+    if kind == "supplier_invoice":
+        return (
+            meta.get("source") == "accounting_inventory_p03"
+            and meta.get("p03_kind") == "supplier_invoice"
+            and bool(meta.get("p03_event_id"))
+            and bool(meta.get("supplier_invoice_v2_id"))
+        )
+    if kind == "inventory_purchase_receipt":
+        return (
+            meta.get("source") == "accounting_inventory_p03"
+            and meta.get("p03_kind") == "inventory_receipt"
+            and bool(meta.get("p03_event_id"))
+            and bool(meta.get("inventory_receipt_v2_id"))
+            and bool(meta.get("purchase_invoice_id"))
+        )
+    if kind == "inventory_cogs":
+        return (
+            meta.get("source") == "accounting_inventory_p03"
+            and meta.get("p03_kind") == "inventory_cogs"
+            and bool(meta.get("p03_event_id"))
+            and bool(meta.get("inventory_consumption_event_id"))
+            and bool(meta.get("sale_recognition_txn_group_id"))
+            and bool(meta.get("order_reference_id"))
+        )
+    if kind == "inventory_cogs_reversal":
+        return (
+            meta.get("source") == "accounting_inventory_p03"
+            and meta.get("p03_kind") == "inventory_cogs_reversal"
+            and bool(meta.get("p03_event_id"))
+            and bool(meta.get("return_restock_id"))
+            and bool(meta.get("return_case_id"))
+            and bool(meta.get("inventory_receipt_id"))
+            and bool(meta.get("order_reference_id"))
+        )
     return False
 
 
@@ -164,7 +198,10 @@ async def read_mz2_ledger(db, *, owner, as_of=None, required_accounts=()):
         at = _aware_utc_iso(zero.get("accounting_at"))
         if (zero.get("opening_balance_txn_group_id") != group or at != cut
                 or not str(zero.get("evidence_ref") or "").strip()
-                or zero.get("entity_type") not in {"bank", "payment_gateway", "employee", "courier", "store_driver"}
+                or zero.get("entity_type") not in {
+                    "bank", "payment_gateway", "employee", "courier",
+                    "store_driver", "supplier", "asset", "tax",
+                }
                 or not str(zero.get("entity_id") or "").strip()):
             return blocked("approved_zero_opening_evidence_invalid")
         key = (zero["entity_type"], str(zero["entity_id"]), zero.get("sub_account") or "")

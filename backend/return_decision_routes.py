@@ -9,10 +9,13 @@ from return_decision_engine import (
     ReturnCaseApproval,
     ReturnCaseCreate,
     ReturnInspection,
+    ReturnRestockRequest,
     approve_return_case,
     create_return_case,
+    get_return_restock_options,
     get_return_workspace,
     inspect_return_case,
+    restock_return_inventory,
 )
 
 
@@ -121,6 +124,39 @@ def make_return_decision_router(
         owner = _require_owner(user)
         try:
             return await inspect_return_case(
+                db,
+                user_id=str(owner["id"]),
+                user=owner,
+                case_id=case_id,
+                request=request,
+            )
+        except Exception as exc:
+            _raise_engine_error(exc)
+
+    @router.get("/cases/{case_id}/restock-options")
+    async def restock_options(
+        case_id: str,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        owner = _require_owner(user)
+        try:
+            return await get_return_restock_options(
+                db,
+                user_id=str(owner["id"]),
+                case_id=case_id,
+            )
+        except Exception as exc:
+            _raise_engine_error(exc)
+
+    @router.post("/cases/{case_id}/restock")
+    async def restock_case_inventory(
+        case_id: str,
+        request: ReturnRestockRequest,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        owner = _require_owner(user)
+        try:
+            return await restock_return_inventory(
                 db,
                 user_id=str(owner["id"]),
                 user=owner,

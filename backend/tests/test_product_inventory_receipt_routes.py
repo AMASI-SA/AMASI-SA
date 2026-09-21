@@ -8,6 +8,7 @@ from product_inventory_receipt_routes import (
     build_inventory_health_rows,
     rank_purchase_receiving_locations,
     resolve_default_receiving_warehouse,
+    purchase_invoice_receivable_after_p01,
 )
 
 
@@ -28,6 +29,35 @@ def _payload(**overrides):
     }
     value.update(overrides)
     return PurchaseInventoryReceiptRequest(**value)
+
+
+def test_legacy_purchase_invoice_stays_receivable_before_p01_only():
+    legacy = {
+        "id": "legacy-invoice",
+        "user_id": "merchant",
+        "supplier_counterparty_id": "legacy-supplier",
+    }
+    assert purchase_invoice_receivable_after_p01(
+        legacy,
+        p01_controls_accounting=False,
+    ) is True
+    assert purchase_invoice_receivable_after_p01(
+        legacy,
+        p01_controls_accounting=True,
+    ) is False
+
+
+def test_native_p03_purchase_invoice_is_receivable_after_p01():
+    native = {
+        "id": "mz2-invoice",
+        "user_id": "merchant",
+        "accounting_authority": "accounting_inventory_p03",
+        "source": "accounting_inventory_p03",
+    }
+    assert purchase_invoice_receivable_after_p01(
+        native,
+        p01_controls_accounting=True,
+    ) is True
 
 
 def test_receipt_fingerprint_is_stable_for_specification_order():

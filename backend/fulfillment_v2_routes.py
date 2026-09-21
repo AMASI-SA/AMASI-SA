@@ -1,7 +1,9 @@
 """Ready-to-ship routing, employee claiming and print batches for Mezan V2."""
 from __future__ import annotations
 
+import hashlib
 import io
+import json
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable
@@ -46,6 +48,7 @@ WORKFLOWS = "order_review_workflows"
 BATCHES = "mezan_fulfillment_batches_v2"
 EVENTS = "mezan_fulfillment_events_v2"
 INVENTORY_RESERVATIONS = "mezan_inventory_reservations_v2"
+INVENTORY_CONSUMPTION_EVENTS = "mezan_inventory_consumption_events_v2"
 TERMINAL_WORKFLOW_STAGES = {
     "completed",
     "delivering",
@@ -127,6 +130,18 @@ async def ensure_fulfillment_indexes(db: Any) -> None:
         unique=True,
         name="uq_inventory_reservation_order_line_v2",
     )
+    await db[INVENTORY_CONSUMPTION_EVENTS].create_index(
+        [
+            ("user_id", ASCENDING),
+            ("order_number", ASCENDING),
+            ("consumed_at", DESCENDING),
+        ],
+        name="ix_inventory_consumption_order_v2",
+    )
+    await db[INVENTORY_CONSUMPTION_EVENTS].create_index(
+        [("user_id", ASCENDING), ("batch_id", ASCENDING)],
+        name="ix_inventory_consumption_batch_v2",
+    )
     await db[INVENTORY_RESERVATIONS].create_index(
         [
             ("user_id", ASCENDING),
@@ -182,6 +197,10 @@ def _inventory_rows(locations: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "salla_variant_id": (
                     _text(item.get("salla_variant_id")) or None
                 ),
+                "product_id": _text(item.get("product_id")) or None,
+                "mezan_product_id": _text(item.get("mezan_product_id")) or None,
+                "product_name": item.get("product_name"),
+                "sku": _text(item.get("sku")) or None,
                 "preparation_state": item.get("preparation_state"),
                 "specifications": item.get("specifications") or {},
                 "configuration_key": item.get("configuration_key"),
@@ -348,6 +367,179 @@ async def _persist_order_inventory_reservations(
     return reservation_ids
 
 
+def _inventory_consumption_event_rows(
+    reservations: list[dict[str, Any]],
+    *,
+    user_id: str,
+    batch_id: str,
+) -> list[dict[str, Any]]:
+    by_order: dict[str, dict[tuple[str, str, str], dict[str, Any]]] = {}
+    reservation_ids: dict[str, list[str]] = {}
+    for reservation in reservations:
+        order_number = _text(reservation.get("order_number"))
+        if not order_number:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "inventory_consumption_order_missing"},
+            )
+        reservation_id = _text(reservation.get("id"))
+        if reservation_id:
+            reservation_ids.setdefault(order_number, []).append(reservation_id)
+        targets = by_order.setdefault(order_number, {})
+        for allocation in reservation.get("allocations") or []:
+            location_id = _text(allocation.get("location_id"))
+            receipt_id = _text(allocation.get("receipt_id"))
+            lot_id = _text(allocation.get("lot_id"))
+            item_index = allocation.get("item_index")
+            if not location_id or (not receipt_id and item_index is None):
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "inventory_reservation_target_missing",
+                        "reservation_id": reservation.get("id"),
+                    },
+                )
+            target_type = "receipt" if receipt_id else "index"
+            target_value = receipt_id or str(item_index)
+            key = (location_id, target_type, target_value)
+            target = targets.setdefault(key, {
+                "location_id": location_id,
+                "receipt_id": receipt_id or None,
+                "lot_id": lot_id or None,
+                "item_index": item_index,
+                "quantity": 0.0,
+                "product_id": reservation.get("product_id"),
+                "mezan_product_id": reservation.get("mezan_product_id"),
+                "sku": reservation.get("sku"),
+            })
+            target["quantity"] += float(allocation.get("quantity") or 0)
+
+    events = []
+    for order_number in sorted(by_order):
+        allocations = sorted(
+            by_order[order_number].values(),
+            key=lambda row: (
+                _text(row.get("location_id")),
+                _text(row.get("receipt_id")),
+                str(row.get("item_index")),
+            ),
+        )
+        facts = {
+            "order_number": order_number,
+            "batch_id": batch_id,
+            "reservation_ids": sorted(set(reservation_ids.get(order_number) or [])),
+            "allocations": allocations,
+        }
+        raw = json.dumps(
+            facts,
+            sort_keys=True,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            default=str,
+        )
+        economic_hash = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+        event_id = str(uuid.uuid5(
+            uuid.NAMESPACE_URL,
+            f"mezan-inventory-consumption:{user_id}:{batch_id}:{order_number}",
+        ))
+        events.append({
+            "id": event_id,
+            "user_id": user_id,
+            "order_number": order_number,
+            "batch_id": batch_id,
+            "reservation_ids": facts["reservation_ids"],
+            "allocations": allocations,
+            "economic_hash": economic_hash,
+        })
+    return events
+
+
+async def _prepare_inventory_consumption_evidence(
+    db: Any,
+    *,
+    events: list[dict[str, Any]],
+    actor_id: str,
+) -> None:
+    now = _now()
+    for event in events:
+        existing = await db[INVENTORY_CONSUMPTION_EVENTS].find_one(
+            {
+                "user_id": event["user_id"],
+                "id": event["id"],
+            },
+            {"_id": 0},
+        )
+        if existing:
+            if existing.get("economic_hash") != event["economic_hash"]:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "inventory_consumption_evidence_conflict",
+                        "order_number": event["order_number"],
+                    },
+                )
+            if existing.get("status") in {"prepared", "consumed"}:
+                continue
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "inventory_consumption_evidence_requires_review",
+                    "order_number": event["order_number"],
+                },
+            )
+        await db[INVENTORY_CONSUMPTION_EVENTS].insert_one({
+            **event,
+            "status": "prepared",
+            "prepared_at": now,
+            "prepared_by": actor_id,
+            "accounting_status": "waiting_sale_recognition",
+            "created_at": now,
+            "updated_at": now,
+        })
+
+
+async def _finalize_inventory_consumption_evidence(
+    db: Any,
+    *,
+    events: list[dict[str, Any]],
+    actor_id: str,
+) -> None:
+    now = _now()
+    for event in events:
+        result = await db[INVENTORY_CONSUMPTION_EVENTS].update_one(
+            {
+                "user_id": event["user_id"],
+                "id": event["id"],
+                "economic_hash": event["economic_hash"],
+                "status": "prepared",
+            },
+            {"$set": {
+                "status": "consumed",
+                "consumed_at": now,
+                "consumed_by": actor_id,
+                "accounting_status": "waiting_sale_recognition",
+                "updated_at": now,
+            }},
+        )
+        if result.modified_count != 1:
+            existing = await db[INVENTORY_CONSUMPTION_EVENTS].find_one(
+                {"user_id": event["user_id"], "id": event["id"]},
+                {"_id": 0, "status": 1, "economic_hash": 1},
+            )
+            if not (
+                existing
+                and existing.get("status") == "consumed"
+                and existing.get("economic_hash") == event["economic_hash"]
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "inventory_consumption_evidence_finalize_conflict",
+                        "order_number": event["order_number"],
+                    },
+                )
+
+
 async def _consume_order_inventory_reservations(
     db: Any,
     *,
@@ -365,6 +557,16 @@ async def _consume_order_inventory_reservations(
         },
         {"_id": 0},
     ).to_list(length=10000)
+    events = _inventory_consumption_event_rows(
+        reservations,
+        user_id=user_id,
+        batch_id=batch_id,
+    )
+    await _prepare_inventory_consumption_evidence(
+        db,
+        events=events,
+        actor_id=actor_id,
+    )
     targets = _inventory_consumption_targets(reservations)
 
     location_ids = sorted({
@@ -492,6 +694,11 @@ async def _consume_order_inventory_reservations(
                 "updated_at": now,
             },
         },
+    )
+    await _finalize_inventory_consumption_evidence(
+        db,
+        events=events,
+        actor_id=actor_id,
     )
     return len(reservations)
 
@@ -2014,5 +2221,7 @@ __all__ = [
     "build_order_fulfillment_decision",
     "ensure_fulfillment_indexes",
     "INVENTORY_RESERVATIONS",
+    "INVENTORY_CONSUMPTION_EVENTS",
+    "_inventory_consumption_event_rows",
     "make_fulfillment_v2_router",
 ]
