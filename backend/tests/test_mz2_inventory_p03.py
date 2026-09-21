@@ -1735,6 +1735,75 @@ class MZ2InventoryP03PhaseTests(unittest.IsolatedAsyncioTestCase):
             restock["inventory_receipt_id"],
         )
 
+        # Simulate a response/process interruption after the physical Restock
+        # and event were stored but before the request/case gate were finalized.
+        await self.db.mezan_return_inventory_restock_requests_v2.update_one(
+            {
+                "user_id": self.owner,
+                "request_id": "REQ-RETURN-RESTOCK-COGS",
+            },
+            {
+                "$set": {"status": "posting"},
+                "$unset": {"posted_at": ""},
+            },
+        )
+        await self.db.return_cases.update_one(
+            {"user_id": self.owner, "id": "return-case-cogs"},
+            {"$set": {
+                "execution_gates.inventory": "restock_posting",
+                "return_restock_active_request_id": (
+                    "REQ-RETURN-RESTOCK-COGS"
+                ),
+            }},
+        )
+        replay = await restock_return_inventory(
+            self.db,
+            user_id=self.owner,
+            user=self.actor,
+            case_id="return-case-cogs",
+            request=ReturnRestockRequest(
+                request_id="REQ-RETURN-RESTOCK-COGS",
+                expected_version=3,
+                order_item_id="ITEM-RETURN-1",
+                source_target_key="receipt:receipt-return-cogs",
+                quantity=1,
+                location_id="LOC-RETURN-DEST",
+                scanned_barcode="RET-DEST",
+                employee_note="قطعة سليمة عادت للمخزون",
+            ),
+        )
+        self.assertTrue(replay["duplicate"])
+        destination_after_replay = await self.db.warehouse_locations.find_one(
+            {"id": "LOC-RETURN-DEST"},
+            {"_id": 0},
+        )
+        self.assertEqual(
+            destination_after_replay["occupancy"]["total_quantity"],
+            1,
+        )
+        recovered_case = await self.db.return_cases.find_one(
+            {"id": "return-case-cogs"},
+            {"_id": 0},
+        )
+        self.assertEqual(
+            recovered_case["execution_gates"]["inventory"],
+            "restocked_sellable_inventory",
+        )
+        self.assertIsNone(
+            recovered_case.get("return_restock_active_request_id")
+        )
+        recovered_request = (
+            await self.db.mezan_return_inventory_restock_requests_v2.find_one(
+                {
+                    "user_id": self.owner,
+                    "request_id": "REQ-RETURN-RESTOCK-COGS",
+                },
+                {"_id": 0},
+            )
+        )
+        self.assertEqual(recovered_request["status"], "posted")
+        self.assertEqual(recovered_request["restock_id"], restock["id"])
+
         preview = await prepare_inventory_cogs_reversal(
             self.db,
             owner=self.owner,
