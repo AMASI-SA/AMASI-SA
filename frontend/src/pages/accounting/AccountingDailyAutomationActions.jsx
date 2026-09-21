@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import api from "../../lib/api";
 import {
     getAccountingDailyMovementContext,
+    processAccountingCourierPending,
     processAccountingStoreDriverPending,
     recognizeAccountingReadyOrders,
     uploadAccountingDailyMovements,
@@ -116,15 +117,22 @@ function OrdersForm({ permissions, onSaved }) {
                 toast.info("هذا الملف مرفوع مسبقًا؛ لم تتكرر الطلبات أو القيود.");
             } else {
                 const recognition = await recognizeAccountingReadyOrders({ limit: 500, dryRun: false });
-                let shipping = null;
+                let driverShipping = null;
+                let courierShipping = null;
                 if (permissions.includes("accounting.settlements.post")) {
-                    shipping = await processAccountingStoreDriverPending({ limit: 500, dryRun: false });
+                    [driverShipping, courierShipping] = await Promise.all([
+                        processAccountingStoreDriverPending({ limit: 500, dryRun: false }),
+                        processAccountingCourierPending({ limit: 500, dryRun: false }),
+                    ]);
                 }
+                const shippingPosted =
+                    Number(driverShipping?.posted_count || 0)
+                    + Number(courierShipping?.posted_count || 0);
                 const message =
                     "تم حفظ " + Number(imported?.file?.row_count || 0).toLocaleString("en-US")
                     + " طلبًا · رُحّل " + Number(recognition?.posted_count || 0).toLocaleString("en-US") + " بيعًا آمنًا"
                     + (Number(recognition?.blocked_count || 0) ? " · " + Number(recognition.blocked_count).toLocaleString("en-US") + " بانتظار دليل" : "")
-                    + (Number(shipping?.posted_count || 0) ? " · " + Number(shipping.posted_count).toLocaleString("en-US") + " شحن/COD" : "");
+                    + (shippingPosted ? " · " + shippingPosted.toLocaleString("en-US") + " شحن/COD" : "");
                 toast.success(message, { duration: 9000 });
             }
             setFile(null);
