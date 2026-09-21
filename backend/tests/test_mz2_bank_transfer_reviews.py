@@ -288,6 +288,7 @@ class MZ2BankTransferReviewTests(unittest.IsolatedAsyncioTestCase):
         )
         await self.add_case(
             order="ORD-AMOUNT-MISMATCH",
+            amount=117,
             movement_id="MOVE-AMOUNT-MISMATCH",
             movement_amount=114,
         )
