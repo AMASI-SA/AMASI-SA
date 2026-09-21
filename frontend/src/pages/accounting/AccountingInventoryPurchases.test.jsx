@@ -50,6 +50,18 @@ test("P03 UI exposes explicit purchase tax treatment", () => {
     expect(source).toContain("أدخل مرجع الفاتورة أو الدليل الضريبي");
 });
 
+test("COGS waits for sale recognition and uses receipt-lot cost evidence", () => {
+    expect(serviceSource).toContain("/inventory-p03/inventory-consumptions/");
+    expect(serviceSource).toContain("/cogs-preview");
+    expect(serviceSource).toContain("/cogs-post");
+    expect(source).toContain("تكلفة البضاعة المباعة — COGS");
+    expect(source).toContain("لا يُرحّل COGS حتى يظهر قيد بيع MZ2 لنفس الطلب");
+    expect(source).toContain("تكلفة الاستلام الأصلية");
+    expect(source).toContain("لا تُستخدم تكلفة الكتالوج الحالية");
+    expect(source).toContain("معاينة COGS");
+    expect(source).toContain("اعتماد COGS");
+});
+
 test("Inventory V2 remains the operational receiving source", () => {
     expect(source).toContain('to="/inventory-receiving-v2"');
     expect(source).toContain("Inventory V2");
