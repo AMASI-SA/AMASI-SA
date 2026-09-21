@@ -424,7 +424,9 @@ async def _required_zero_scope(db, owner: str, compiled: list[dict[str, Any]], e
 
     inventory_accounts = [
         row for row in compiled
-        if row["entity_type"] == "asset" and row.get("sub_account") == "inventory"
+        if row["entity_type"] == "asset"
+        and row.get("entity_id") == "inventory"
+        and row.get("sub_account") == "inventory"
     ]
     if not inventory_accounts:
         zero.append({
@@ -435,7 +437,9 @@ async def _required_zero_scope(db, owner: str, compiled: list[dict[str, Any]], e
         })
     input_vat_accounts = [
         row for row in compiled
-        if row["entity_type"] == "tax" and row.get("sub_account") == "input_vat"
+        if row["entity_type"] == "tax"
+        and row.get("entity_id") == "input_vat"
+        and row.get("sub_account") == "input_vat"
     ]
     if not input_vat_accounts:
         zero.append({
