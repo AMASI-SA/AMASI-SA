@@ -229,6 +229,25 @@ async def prepare_order_recognition(
         raise EvidenceError("order_evidence_missing")
     if evidence.get("conflict"):
         raise EvidenceError("order_evidence_conflict")
+
+    # Idempotent retries remain valid after the current evidence row has moved
+    # from a ready state to recognized.  Resolve the committed recognition
+    # before applying the ready-state guard.
+    prior_key = str(evidence.get("recognition_event_key") or "").strip()
+    if prior_key:
+        prior = await db.mz2_recognition_events.find_one(
+            {"_id": prior_key, "user_id": owner}
+        )
+        if prior and prior.get("status") == "posted":
+            proposal = dict(prior.get("proposal") or {})
+            return {
+                **proposal,
+                "state": "already_posted",
+                "txn_group_id": prior.get("txn_group_id"),
+                "evidence_status": evidence.get("status"),
+            }
+        raise EvidenceError("previous_post_result_requires_recovery")
+
     if evidence.get("status") not in READY_STATES:
         raise EvidenceError("order_evidence_not_ready")
 
