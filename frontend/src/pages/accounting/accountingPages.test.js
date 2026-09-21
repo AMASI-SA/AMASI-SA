@@ -8,7 +8,7 @@ import {
 
 test("accounting module exposes the exact approved eight pages in order", () => {
     expect(ACCOUNTING_PAGES.map((page) => page.label)).toEqual([
-        "الرئيسية المحاسبية",
+        "المحاسبة اليومية",
         "التسويات",
         "الشحن والتحصيل",
         "المخزون والمشتريات",
