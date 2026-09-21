@@ -12,6 +12,9 @@ never an accounting authority for MZ2.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from decimal import Decimal, ROUND_HALF_UP
+import hashlib
+import json
 from typing import Any, Callable, Literal
 
 from fastapi import Depends, HTTPException
@@ -25,6 +28,8 @@ from accounting_module_contract import (
     require_owner,
 )
 from accounting_module_status_routes import fresh_accounting_user
+from accounting_mz2_balances import read_mz2_write_balances
+from ledger_core import post_txn_group
 
 
 SOURCE = "accounting_inventory_p03"
@@ -34,6 +39,8 @@ MEZAN_SUPPLIERS_V2 = "mezan_suppliers_v2"
 MEZAN_SUPPLIER_INVOICES_V2 = "mezan_supplier_invoices_v2"
 INVENTORY_RECEIPTS_V2 = "mezan_inventory_receipts_v2"
 P03_AUDIT = "mz2_inventory_p03_audit"
+P03_EVENTS = "mz2_inventory_p03_events"
+MONEY = Decimal("0.01")
 
 
 def _text(value: Any) -> str:
@@ -51,6 +58,27 @@ def _aware(value: Any) -> datetime | None:
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         return None
     return parsed.astimezone(timezone.utc)
+
+
+def _money_from_halalas(value: Any) -> Decimal:
+    try:
+        halalas = int(value)
+    except (TypeError, ValueError):
+        raise HTTPException(422, "p03_invoice_total_invalid") from None
+    if halalas <= 0:
+        raise HTTPException(422, "p03_invoice_total_required")
+    return (Decimal(halalas) / Decimal(100)).quantize(MONEY, rounding=ROUND_HALF_UP)
+
+
+def _digest(value: Any) -> str:
+    raw = json.dumps(
+        value,
+        sort_keys=True,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        default=str,
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 async def read_p03_phase(db: Any, owner: str) -> dict[str, Any]:
@@ -79,6 +107,31 @@ async def read_p03_phase(db: Any, owner: str) -> dict[str, Any]:
             "p03_inventory_purchases_activated_by"
         ),
     }
+
+
+async def p01_controls_purchase_accounting(
+    db: Any,
+    *,
+    owner: str,
+    mongo_session: Any = None,
+) -> bool:
+    """True once MZ2 P01 owns post-cutover financial journals.
+
+    Operational receiving may still proceed, but it must stop using its
+    historical direct general-ledger writer from this point forward.
+    """
+    row = await db.settings.find_one(
+        {"user_id": owner},
+        {"_id": 0, "mezan2_financial_cutover": 1},
+        session=mongo_session,
+    )
+    state = dict((row or {}).get("mezan2_financial_cutover") or {})
+    return bool(
+        state.get("operation_id") == OPERATION_ID
+        and state.get("status") == "active"
+        and state.get("opening_balance_txn_group_id")
+        and _aware(state.get("cutover_at"))
+    )
 
 
 def p03_phase_ready(phase: dict[str, Any], *, event_at: Any = None) -> bool:
@@ -286,6 +339,243 @@ async def inventory_p03_workspace(db: Any, *, owner: str) -> dict[str, Any]:
     }
 
 
+class P03PostReasonIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reason: str = Field(min_length=3, max_length=500)
+
+    @field_validator("reason")
+    @classmethod
+    def clean_reason(cls, value: str) -> str:
+        return value.strip()
+
+
+async def prepare_supplier_invoice_post(
+    db: Any,
+    *,
+    owner: str,
+    invoice_id: str,
+) -> dict[str, Any]:
+    invoice = await db[MEZAN_SUPPLIER_INVOICES_V2].find_one(
+        {"user_id": owner, "id": invoice_id},
+        {"_id": 0},
+    )
+    if not invoice:
+        raise HTTPException(404, "p03_supplier_invoice_not_found")
+    if invoice.get("experiment_mode") is True:
+        raise HTTPException(409, "p03_experiment_invoice_not_postable")
+
+    supplier_id = _text(invoice.get("supplier_id"))
+    supplier = await db[MEZAN_SUPPLIERS_V2].find_one(
+        {"user_id": owner, "id": supplier_id},
+        {"_id": 0, "id": 1, "company_name": 1, "status": 1},
+    )
+    if not supplier:
+        raise HTTPException(409, "p03_supplier_identity_missing")
+
+    event_at = _aware(invoice.get("approved_at"))
+    if not event_at:
+        raise HTTPException(409, "p03_supplier_invoice_date_invalid")
+    amount = _money_from_halalas(invoice.get("total_halalas"))
+    event_id = _digest([owner, "supplier_invoice_v2", invoice_id])
+    facts = {
+        "invoice_id": invoice_id,
+        "invoice_number": _text(invoice.get("invoice_number")),
+        "supplier_id": supplier_id,
+        "supplier_name": _text(supplier.get("company_name")) or supplier_id,
+        "amount": format(amount, ".2f"),
+        "accounting_at": event_at.isoformat(),
+        "source_session_id": _text(invoice.get("session_id")) or None,
+        "cost_treatment": "supplier_fulfillment_expense",
+    }
+    economic_hash = _digest(facts)
+
+    prior = await db[P03_EVENTS].find_one(
+        {"_id": event_id, "user_id": owner},
+        {"_id": 0},
+    )
+    if prior:
+        if prior.get("economic_hash") != economic_hash:
+            raise HTTPException(409, "p03_supplier_invoice_economic_conflict")
+        if prior.get("status") == "posted":
+            return {
+                "state": "already_posted",
+                "event_id": event_id,
+                "facts": facts,
+                "txn_group_id": prior.get("txn_group_id"),
+            }
+        raise HTTPException(409, "p03_supplier_invoice_requires_recovery")
+
+    existing_group = _text(invoice.get("ledger_txn_group_id"))
+    if existing_group:
+        return {
+            "state": "blocked",
+            "event_id": event_id,
+            "facts": facts,
+            "reasons": ["supplier_invoice_existing_non_p03_ledger"],
+            "existing_txn_group_id": existing_group,
+        }
+
+    return {
+        "state": "eligible",
+        "event_id": event_id,
+        "facts": facts,
+        "economic_hash": economic_hash,
+    }
+
+
+async def post_supplier_invoice(
+    db: Any,
+    *,
+    owner: str,
+    actor: dict[str, Any],
+    invoice_id: str,
+    reason: str,
+) -> dict[str, Any]:
+    proposal = await prepare_supplier_invoice_post(
+        db,
+        owner=owner,
+        invoice_id=invoice_id,
+    )
+    if proposal["state"] == "already_posted":
+        return proposal
+    if proposal["state"] != "eligible":
+        raise HTTPException(
+            409,
+            detail={
+                "code": "p03_supplier_invoice_not_eligible",
+                "reasons": proposal.get("reasons") or [],
+            },
+        )
+
+    facts = proposal["facts"]
+    await require_p03_inventory_financial_writes(
+        db,
+        owner=owner,
+        event_at=facts["accounting_at"],
+    )
+    await read_mz2_write_balances(
+        db,
+        owner=owner,
+        required_accounts=[
+            ("supplier", facts["supplier_id"], "payable"),
+        ],
+    )
+
+    now = datetime.now(timezone.utc).isoformat()
+    event = {
+        "_id": proposal["event_id"],
+        "id": proposal["event_id"],
+        "user_id": owner,
+        "kind": "supplier_invoice",
+        "status": "posting",
+        "economic_hash": proposal["economic_hash"],
+        "facts": facts,
+        "reason": reason,
+        "created_at": now,
+        "created_by": actor["id"],
+    }
+    await db[P03_EVENTS].insert_one(event)
+
+    result = await post_txn_group(
+        db,
+        user_id=owner,
+        actor_id=actor["id"],
+        actor_name=actor.get("name") or actor.get("email") or actor["id"],
+        txn_type="mz2_supplier_invoice",
+        notes=f"فاتورة مورد MZ2 — {facts['invoice_number']} — {facts['supplier_name']}",
+        metadata={
+            "operation_id": OPERATION_ID,
+            "source": SOURCE,
+            "p03_event_id": proposal["event_id"],
+            "p03_kind": "supplier_invoice",
+            "supplier_invoice_v2_id": facts["invoice_id"],
+            "supplier_id": facts["supplier_id"],
+            "supplier_receiving_session_id": facts["source_session_id"],
+            "accounting_at": facts["accounting_at"],
+            "cost_treatment": facts["cost_treatment"],
+            "reason": reason,
+        },
+        entries=[
+            {
+                "entity_type": "expense",
+                "entity_id": "supplier_fulfillment",
+                "side": "debit",
+                "amount": facts["amount"],
+                "entry_type": "supplier_invoice",
+            },
+            {
+                "entity_type": "supplier",
+                "entity_id": facts["supplier_id"],
+                "sub_account": "payable",
+                "side": "credit",
+                "amount": facts["amount"],
+                "entry_type": "supplier_invoice",
+            },
+        ],
+    )
+
+    changed = await db[MEZAN_SUPPLIER_INVOICES_V2].update_one(
+        {
+            "user_id": owner,
+            "id": facts["invoice_id"],
+            "$or": [
+                {"ledger_txn_group_id": {"$exists": False}},
+                {"ledger_txn_group_id": None},
+                {"ledger_txn_group_id": ""},
+            ],
+        },
+        {"$set": {
+            "status": "payable_posted",
+            "payment_status": "unpaid",
+            "outstanding_halalas": int(
+                (Decimal(facts["amount"]) * Decimal(100)).to_integral_value()
+            ),
+            "financial_invoice_created": True,
+            "liability_created": True,
+            "payable_posted_at": now,
+            "ledger_txn_group_id": result["txn_group_id"],
+            "ledger_entry_ids": result.get("entry_ids") or [],
+            "p03_accounting_event_id": proposal["event_id"],
+            "p03_accounting_source": SOURCE,
+            "updated_at": now,
+        }},
+    )
+    if changed.modified_count != 1:
+        raise HTTPException(409, "p03_supplier_invoice_concurrent_post")
+
+    await db[P03_EVENTS].update_one(
+        {
+            "_id": proposal["event_id"],
+            "user_id": owner,
+            "status": "posting",
+        },
+        {"$set": {
+            "status": "posted",
+            "txn_group_id": result["txn_group_id"],
+            "posted_at": now,
+            "posted_by": actor["id"],
+        }},
+    )
+    await db[P03_AUDIT].insert_one({
+        "user_id": owner,
+        "action": "supplier_invoice_posted",
+        "actor_id": actor["id"],
+        "at": now,
+        "invoice_id": facts["invoice_id"],
+        "supplier_id": facts["supplier_id"],
+        "event_id": proposal["event_id"],
+        "txn_group_id": result["txn_group_id"],
+        "amount": facts["amount"],
+        "reason": reason,
+    })
+    return {
+        "state": "posted",
+        "event_id": proposal["event_id"],
+        "txn_group_id": result["txn_group_id"],
+        "facts": facts,
+    }
+
+
 def install_inventory_p03_routes(
     router: Any,
     db: Any,
@@ -305,6 +595,37 @@ def install_inventory_p03_routes(
     async def workspace(user: dict = Depends(current_user)):
         _, owner = await actor_scope(user, "accounting.inventory.view")
         return await inventory_p03_workspace(db, owner=owner)
+
+    @router.get(base + "/supplier-invoices/{invoice_id}/preview")
+    async def supplier_invoice_preview(
+        invoice_id: str,
+        user: dict = Depends(current_user),
+    ):
+        _, owner = await actor_scope(user, "accounting.inventory.view")
+        return await prepare_supplier_invoice_post(
+            db,
+            owner=owner,
+            invoice_id=invoice_id,
+        )
+
+    @router.post(base + "/supplier-invoices/{invoice_id}/post")
+    async def supplier_invoice_post(
+        invoice_id: str,
+        payload: P03PostReasonIn,
+        user: dict = Depends(current_user),
+    ):
+        actor, owner = await actor_scope(user, "accounting.purchases.post")
+
+        async def commit(scoped):
+            return await post_supplier_invoice(
+                scoped,
+                owner=owner,
+                actor=actor,
+                invoice_id=invoice_id,
+                reason=payload.reason,
+            )
+
+        return await atomic_owner(db, owner, commit)
 
     @router.post(base + "/activate")
     async def activate(
