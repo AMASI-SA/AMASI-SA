@@ -9,9 +9,14 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from accounting_atomic import atomic_owner
 from accounting_inventory_p03 import (
     P03ActivateIn,
+    P03PurchaseInvoiceCreateIn,
+    P03PurchaseLineIn,
     activate_p03,
+    create_p03_purchase_invoice,
     inventory_p03_workspace,
+    post_inventory_receipt,
     post_supplier_invoice,
+    prepare_inventory_receipt_post,
     prepare_supplier_invoice_post,
     require_p03_inventory_financial_writes,
 )
@@ -58,6 +63,15 @@ class MZ2InventoryP03PhaseTests(unittest.IsolatedAsyncioTestCase):
             "user_id": self.owner,
             "company_name": "Synthetic supplier V2",
             "status": "active",
+        })
+        await self.db.mezan_products_v2.insert_one({
+            "id": "product-row-1",
+            "mezan_product_id": "MZP-1",
+            "salla_product_id": "SALLA-1",
+            "user_id": self.owner,
+            "name": "Synthetic inventory product",
+            "sku": "SKU-1",
+            "archived": False,
         })
 
     async def asyncTearDown(self):
@@ -108,6 +122,64 @@ class MZ2InventoryP03PhaseTests(unittest.IsolatedAsyncioTestCase):
                 confirmation="ACTIVATE_MZ2_P03",
             ),
         ))
+
+    async def create_purchase_invoice(
+        self,
+        *,
+        request_id="REQ-P03-PURCHASE-001",
+        tax_treatment="recoverable_input_vat",
+    ):
+        payload = P03PurchaseInvoiceCreateIn(
+            request_id=request_id,
+            supplier_id="msv2-supplier-1",
+            invoice_number="PINV-P03-001",
+            invoice_date="2026-09-21",
+            due_date="2026-10-21",
+            lines=[
+                P03PurchaseLineIn(
+                    product_id="MZP-1",
+                    product_name="Synthetic inventory product",
+                    sku="SKU-1",
+                    quantity=3,
+                    unit_price="100.00",
+                ),
+            ],
+            tax_amount="45.00",
+            tax_treatment=tax_treatment,
+            notes="Synthetic P03 purchase",
+        )
+        return await self.tx(lambda scoped: create_p03_purchase_invoice(
+            scoped,
+            owner=self.owner,
+            actor=self.actor,
+            payload=payload,
+        ))
+
+    async def add_inventory_receipt(
+        self,
+        *,
+        receipt_id,
+        purchase_invoice_id,
+        line_id,
+        quantity,
+        posted_at,
+    ):
+        await self.db.mezan_inventory_receipts_v2.insert_one({
+            "id": receipt_id,
+            "user_id": self.owner,
+            "status": "posted",
+            "purchase_invoice_id": purchase_invoice_id,
+            "purchase_invoice_line_id": line_id,
+            "invoice_number": "PINV-P03-001",
+            "supplier_name": "Synthetic supplier V2",
+            "mezan_product_id": "MZP-1",
+            "product_name": "Synthetic inventory product",
+            "sku": "SKU-1",
+            "quantity": quantity,
+            "warehouse_id": "WH-1",
+            "location_id": "LOC-1",
+            "posted_at": posted_at,
+        })
 
     async def add_supplier_invoice(self, *, invoice_id="msiv2-post-1", total_halalas=25000):
         await self.db.mezan_supplier_invoices_v2.insert_one({
@@ -458,6 +530,245 @@ class MZ2InventoryP03PhaseTests(unittest.IsolatedAsyncioTestCase):
             preview["reasons"],
             ["supplier_invoice_existing_non_p03_ledger"],
         )
+
+
+    async def test_native_purchase_invoice_is_idempotent_and_never_creates_legacy_liability(self):
+        first = await self.create_purchase_invoice()
+        self.assertEqual(first["supplier_id"], "msv2-supplier-1")
+        self.assertEqual(first["accounting_authority"], "accounting_inventory_p03")
+        self.assertFalse(first["legacy_liability_used"])
+        self.assertIsNone(first["liability_id"])
+        self.assertEqual(first["subtotal_halalas"], 30000)
+        self.assertEqual(first["tax_halalas"], 4500)
+        self.assertEqual(first["total_halalas"], 34500)
+        self.assertEqual(first["lines"][0]["line_tax_halalas"], 4500)
+        self.assertEqual(await self.db.liabilities.count_documents({}), 0)
+
+        duplicate = await self.create_purchase_invoice()
+        self.assertTrue(duplicate["duplicate"])
+        self.assertEqual(duplicate["id"], first["id"])
+        self.assertEqual(
+            await self.db.purchase_invoices.count_documents({
+                "user_id": self.owner,
+                "accounting_authority": "accounting_inventory_p03",
+            }),
+            1,
+        )
+
+    async def test_partial_inventory_receipts_post_cost_input_vat_and_supplier_payable(self):
+        await self.activate_full_p03()
+        invoice = await self.create_purchase_invoice()
+        line_id = invoice["lines"][0]["id"]
+        await self.add_inventory_receipt(
+            receipt_id="receipt-p03-1",
+            purchase_invoice_id=invoice["id"],
+            line_id=line_id,
+            quantity=1,
+            posted_at="2026-09-21T09:00:00+00:00",
+        )
+        await self.add_inventory_receipt(
+            receipt_id="receipt-p03-2",
+            purchase_invoice_id=invoice["id"],
+            line_id=line_id,
+            quantity=2,
+            posted_at="2026-09-21T10:00:00+00:00",
+        )
+
+        first_preview = await prepare_inventory_receipt_post(
+            self.db,
+            owner=self.owner,
+            receipt_id="receipt-p03-1",
+        )
+        self.assertEqual(first_preview["state"], "eligible")
+        self.assertEqual(first_preview["facts"]["net_halalas"], 10000)
+        self.assertEqual(first_preview["facts"]["tax_halalas"], 1500)
+        self.assertEqual(first_preview["facts"]["gross_halalas"], 11500)
+
+        first = await self.tx(lambda scoped: post_inventory_receipt(
+            scoped,
+            owner=self.owner,
+            actor=self.actor,
+            receipt_id="receipt-p03-1",
+            reason="استلام الدفعة الأولى",
+        ))
+        first_legs = await self.db.general_ledger.find(
+            {"txn_group_id": first["txn_group_id"]},
+            {"_id": 0},
+        ).to_list(10)
+        self.assertEqual(
+            {
+                (
+                    row["entity_type"],
+                    row["entity_id"],
+                    row.get("sub_account"),
+                    row["side"],
+                    round(float(row["amount"]), 2),
+                )
+                for row in first_legs
+            },
+            {
+                ("asset", "inventory", "inventory", "debit", 100.00),
+                ("tax", "input_vat", "input_vat", "debit", 15.00),
+                ("supplier", "msv2-supplier-1", "payable", "credit", 115.00),
+            },
+        )
+
+        second_preview = await prepare_inventory_receipt_post(
+            self.db,
+            owner=self.owner,
+            receipt_id="receipt-p03-2",
+        )
+        self.assertEqual(second_preview["facts"]["net_halalas"], 20000)
+        self.assertEqual(second_preview["facts"]["tax_halalas"], 3000)
+        self.assertEqual(second_preview["facts"]["gross_halalas"], 23000)
+
+        second = await self.tx(lambda scoped: post_inventory_receipt(
+            scoped,
+            owner=self.owner,
+            actor=self.actor,
+            receipt_id="receipt-p03-2",
+            reason="استلام الدفعة الثانية",
+        ))
+        self.assertNotEqual(first["txn_group_id"], second["txn_group_id"])
+
+        duplicate = await self.tx(lambda scoped: post_inventory_receipt(
+            scoped,
+            owner=self.owner,
+            actor=self.actor,
+            receipt_id="receipt-p03-1",
+            reason="إعادة آمنة",
+        ))
+        self.assertEqual(duplicate["state"], "already_posted")
+        self.assertEqual(duplicate["txn_group_id"], first["txn_group_id"])
+
+        stored_invoice = await self.db.purchase_invoices.find_one(
+            {"id": invoice["id"]},
+            {"_id": 0},
+        )
+        self.assertEqual(stored_invoice["status"], "fully_received")
+        self.assertEqual(stored_invoice["recognized_payable_halalas"], 34500)
+
+        position = await mz2_financial_position(self.db, owner=self.owner)
+        self.assertEqual(position["status"], "available")
+        self.assertAlmostEqual(position["assets"]["inventory"], 300.0)
+        self.assertAlmostEqual(position["assets"]["input_vat"], 45.0)
+        self.assertAlmostEqual(position["liabilities"]["supplier_payable"], 345.0)
+
+    async def test_tax_can_be_capitalized_into_inventory_cost(self):
+        await self.activate_full_p03()
+        invoice = await self.create_purchase_invoice(
+            request_id="REQ-P03-CAPITALIZE-001",
+            tax_treatment="included_in_inventory_cost",
+        )
+        line_id = invoice["lines"][0]["id"]
+        await self.add_inventory_receipt(
+            receipt_id="receipt-capitalized",
+            purchase_invoice_id=invoice["id"],
+            line_id=line_id,
+            quantity=3,
+            posted_at="2026-09-21T11:00:00+00:00",
+        )
+        result = await self.tx(lambda scoped: post_inventory_receipt(
+            scoped,
+            owner=self.owner,
+            actor=self.actor,
+            receipt_id="receipt-capitalized",
+            reason="ضريبة غير مستردة تضاف للتكلفة",
+        ))
+        legs = await self.db.general_ledger.find(
+            {"txn_group_id": result["txn_group_id"]},
+            {"_id": 0},
+        ).to_list(10)
+        self.assertEqual(len(legs), 2)
+        self.assertEqual(
+            {
+                (
+                    row["entity_type"],
+                    row["entity_id"],
+                    row.get("sub_account"),
+                    row["side"],
+                    round(float(row["amount"]), 2),
+                )
+                for row in legs
+            },
+            {
+                ("asset", "inventory", "inventory", "debit", 345.00),
+                ("supplier", "msv2-supplier-1", "payable", "credit", 345.00),
+            },
+        )
+
+    async def test_legacy_purchase_invoice_is_never_posted_by_p03(self):
+        await self.activate_full_p03()
+        await self.db.purchase_invoices.insert_one({
+            "id": "legacy-purchase-1",
+            "user_id": self.owner,
+            "supplier_name": "Legacy supplier",
+            "lines": [{
+                "id": "legacy-line-1",
+                "quantity": 1,
+                "unit_price": 100,
+            }],
+        })
+        await self.add_inventory_receipt(
+            receipt_id="receipt-legacy",
+            purchase_invoice_id="legacy-purchase-1",
+            line_id="legacy-line-1",
+            quantity=1,
+            posted_at="2026-09-21T12:00:00+00:00",
+        )
+        before = await self.db.general_ledger.count_documents({})
+        with self.assertRaises(HTTPException) as ctx:
+            await prepare_inventory_receipt_post(
+                self.db,
+                owner=self.owner,
+                receipt_id="receipt-legacy",
+            )
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertEqual(ctx.exception.detail, "p03_purchase_invoice_not_mz2_native")
+        self.assertEqual(await self.db.general_ledger.count_documents({}), before)
+
+    async def test_closed_period_rolls_back_inventory_receipt_accounting(self):
+        await self.activate_full_p03()
+        invoice = await self.create_purchase_invoice(
+            request_id="REQ-P03-CLOSED-001",
+        )
+        line_id = invoice["lines"][0]["id"]
+        await self.add_inventory_receipt(
+            receipt_id="receipt-closed",
+            purchase_invoice_id=invoice["id"],
+            line_id=line_id,
+            quantity=1,
+            posted_at="2026-09-21T13:00:00+00:00",
+        )
+        await set_period(
+            self.db,
+            self.owner,
+            self.owner,
+            PeriodChange(
+                month="2026-09",
+                closed=True,
+                revision=0,
+                reason="SYN P03 close",
+                evidence_ref="SYN P03 close approval",
+            ),
+        )
+        before = await self.db.general_ledger.count_documents({})
+        with self.assertRaises(HTTPException) as ctx:
+            await self.tx(lambda scoped: post_inventory_receipt(
+                scoped,
+                owner=self.owner,
+                actor=self.actor,
+                receipt_id="receipt-closed",
+                reason="اختبار إقفال P03",
+            ))
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertEqual(ctx.exception.detail["code"], "accounting_period_closed")
+        self.assertEqual(await self.db.general_ledger.count_documents({}), before)
+        receipt = await self.db.mezan_inventory_receipts_v2.find_one(
+            {"id": "receipt-closed"},
+            {"_id": 0},
+        )
+        self.assertFalse(receipt.get("accounting_event_id"))
 
 
 if __name__ == "__main__":
