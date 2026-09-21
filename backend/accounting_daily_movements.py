@@ -61,6 +61,7 @@ GENERAL_EXPENSE_CATEGORIES = {
     "operating_supplies": "مشتريات تشغيلية بسيطة",
     "other": "أخرى",
 }
+MEZAN_SUPPLIERS_V2 = "mezan_suppliers_v2"
 RESERVED_EXPENSE_CODES = {
     "salary", "shipping", "inventory", "tamara_fees", "tabby_fees",
     "gateway_fees", "cod_fees",
@@ -907,7 +908,7 @@ async def _supplier(db, owner: str, supplier_id: str) -> dict[str, str]:
     supplier_id = _clean(supplier_id)
     if not supplier_id:
         raise HTTPException(422, "supplier_required")
-    row = await db.suppliers.find_one(
+    row = await db[MEZAN_SUPPLIERS_V2].find_one(
         {
             "user_id": owner,
             "id": supplier_id,
@@ -1268,7 +1269,7 @@ async def daily_movement_context(db, owner: str) -> dict[str, Any]:
                 "source": "stored",
             }
 
-    suppliers = await db.suppliers.find(
+    suppliers = await db[MEZAN_SUPPLIERS_V2].find(
         {
             "user_id": owner,
             "status": {"$nin": ["inactive", "archived", "deleted"]},
