@@ -19,6 +19,13 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pymongo import ReturnDocument
+from pymongo.errors import DuplicateKeyError
+
+from inventory_receipt_service import (
+    InventoryLocationCapacityError,
+    place_inventory_receipt,
+)
+from warehouse_location_routes import CABINETS, LOCATIONS
 
 
 ReturnReason = Literal[
@@ -49,6 +56,10 @@ ReturnCaseStatus = Literal[
     "rejected",
     "cancelled",
 ]
+
+INVENTORY_RESERVATIONS = "mezan_inventory_reservations_v2"
+RETURN_RESTOCKS = "mezan_return_inventory_restocks_v2"
+RETURN_RESTOCK_REQUESTS = "mezan_return_inventory_restock_requests_v2"
 
 
 def utc_now() -> datetime:
@@ -217,6 +228,35 @@ class ReturnInspection(BaseModel):
         item_ids = [clean_text(item.order_item_id) for item in self.items]
         if len(item_ids) != len(set(item_ids)):
             raise ValueError("duplicate_inspection_item")
+        return self
+
+
+class ReturnRestockRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str = Field(min_length=8, max_length=160)
+    expected_version: int = Field(ge=1)
+    order_item_id: str = Field(min_length=1, max_length=240)
+    source_target_key: str = Field(min_length=3, max_length=500)
+    quantity: int = Field(ge=1, le=100000)
+    location_id: str = Field(min_length=1, max_length=160)
+    scanned_barcode: str = Field(min_length=1, max_length=200)
+    employee_note: str = Field(min_length=3, max_length=2000)
+
+    @model_validator(mode="after")
+    def clean_restock_text(self) -> "ReturnRestockRequest":
+        for field in (
+            "request_id",
+            "order_item_id",
+            "source_target_key",
+            "location_id",
+            "scanned_barcode",
+            "employee_note",
+        ):
+            value = clean_text(getattr(self, field))
+            if not value:
+                raise ValueError(f"{field}_required")
+            setattr(self, field, value)
         return self
 
 
@@ -548,6 +588,649 @@ async def ensure_return_indexes(db: Any) -> None:
         unique=True,
         partialFilterExpression={"idempotency_key": {"$type": "string"}},
     )
+    await db[RETURN_RESTOCKS].create_index(
+        [("user_id", 1), ("return_case_id", 1), ("restocked_at", -1)],
+        name="ix_return_restock_case",
+    )
+    await db[RETURN_RESTOCK_REQUESTS].create_index(
+        [("user_id", 1), ("request_id", 1)],
+        unique=True,
+        name="uq_return_restock_request",
+    )
+
+
+def _restock_source_target_key(allocation: dict[str, Any]) -> str:
+    receipt_id = clean_text(allocation.get("receipt_id"))
+    if receipt_id:
+        return "receipt:" + receipt_id
+    lot_id = clean_text(allocation.get("lot_id"))
+    if lot_id:
+        return "lot:" + lot_id
+    location_id = clean_text(allocation.get("location_id"))
+    item_index = allocation.get("item_index")
+    if location_id and item_index is not None:
+        return f"location:{location_id}:item:{item_index}"
+    return ""
+
+
+async def _source_inventory_item(
+    db: Any,
+    *,
+    user_id: str,
+    allocation: dict[str, Any],
+) -> dict[str, Any] | None:
+    location_id = clean_text(allocation.get("location_id"))
+    if not location_id:
+        return None
+    location = await db[LOCATIONS].find_one(
+        {"user_id": user_id, "id": location_id},
+        {"_id": 0, "occupancy.items": 1},
+    )
+    items = list(((location or {}).get("occupancy") or {}).get("items") or [])
+    receipt_id = clean_text(allocation.get("receipt_id"))
+    if receipt_id:
+        return next(
+            (
+                item for item in items
+                if clean_text(item.get("receipt_id")) == receipt_id
+            ),
+            None,
+        )
+    item_index = allocation.get("item_index")
+    if isinstance(item_index, int) and 0 <= item_index < len(items):
+        return items[item_index]
+    return None
+
+
+async def _permanent_restock_locations(
+    db: Any,
+    *,
+    user_id: str,
+    configuration_key: str,
+    quantity: int,
+) -> list[dict[str, Any]]:
+    locations = await db[LOCATIONS].find(
+        {
+            "user_id": user_id,
+            "state": {"$ne": "disabled"},
+        },
+        {
+            "_id": 0,
+            "id": 1,
+            "code": 1,
+            "barcode_value": 1,
+            "warehouse_id": 1,
+            "cabinet_id": 1,
+            "purpose": 1,
+            "max_items": 1,
+            "occupancy": 1,
+        },
+    ).to_list(20000)
+    cabinet_ids = {
+        clean_text(row.get("cabinet_id"))
+        for row in locations
+        if clean_text(row.get("cabinet_id"))
+    }
+    cabinets = await db[CABINETS].find(
+        {
+            "user_id": user_id,
+            "id": {"$in": sorted(cabinet_ids)},
+        },
+        {"_id": 0, "id": 1, "purpose": 1, "name": 1, "code": 1},
+    ).to_list(max(1, len(cabinet_ids)))
+    cabinet_map = {
+        clean_text(row.get("id")): row
+        for row in cabinets
+        if clean_text(row.get("id"))
+    }
+    result = []
+    for location in locations:
+        cabinet = cabinet_map.get(clean_text(location.get("cabinet_id"))) or {}
+        purpose = clean_text(
+            location.get("purpose") or cabinet.get("purpose")
+        )
+        if purpose != "permanent_storage":
+            continue
+        occupancy = location.get("occupancy") or {}
+        current_quantity = int(occupancy.get("total_quantity") or 0)
+        max_items = location.get("max_items")
+        if (
+            max_items is not None
+            and current_quantity + quantity > int(max_items)
+        ):
+            continue
+        items = [
+            item
+            for item in occupancy.get("items") or []
+            if int(item.get("quantity") or 0) > 0
+        ]
+        if items:
+            if not configuration_key:
+                continue
+            item_keys = {
+                clean_text(item.get("configuration_key"))
+                for item in items
+            }
+            if item_keys != {configuration_key}:
+                continue
+        result.append({
+            "id": location.get("id"),
+            "code": location.get("code"),
+            "barcode_value": (
+                location.get("barcode_value") or location.get("code")
+            ),
+            "warehouse_id": location.get("warehouse_id"),
+            "cabinet_id": location.get("cabinet_id"),
+            "cabinet_name": cabinet.get("name"),
+            "cabinet_code": cabinet.get("code"),
+            "current_quantity": current_quantity,
+            "remaining_capacity": (
+                None
+                if max_items is None
+                else max(0, int(max_items) - current_quantity)
+            ),
+        })
+    return result
+
+
+async def get_return_restock_options(
+    db: Any,
+    *,
+    user_id: str,
+    case_id: str,
+) -> dict[str, Any]:
+    await ensure_return_indexes(db)
+    case = await db.return_cases.find_one(
+        {"user_id": user_id, "id": clean_text(case_id)},
+        {"_id": 0},
+    )
+    if not case:
+        raise LookupError("return_case_not_found")
+    if case.get("status") != "inspected":
+        raise ValueError("return_case_not_inspected")
+    gate = (case.get("execution_gates") or {}).get("inventory")
+    if gate not in {
+        "ready_for_sellable_quantity_movement",
+        "restock_in_progress",
+        "restock_posting",
+        "restocked_sellable_inventory",
+    }:
+        raise ValueError("return_inventory_not_ready_for_restock")
+
+    inspection_by_item = {
+        clean_text(row.get("order_item_id")): row
+        for row in ((case.get("inspection") or {}).get("items") or [])
+        if clean_text(row.get("order_item_id"))
+    }
+    selected_by_item = {
+        clean_text(row.get("order_item_id")): row
+        for row in case.get("selected_items") or []
+        if clean_text(row.get("order_item_id"))
+    }
+    item_ids = sorted(inspection_by_item)
+    reservations = await db[INVENTORY_RESERVATIONS].find(
+        {
+            "user_id": user_id,
+            "order_number": case.get("order_number"),
+            "status": "consumed",
+            "line_key": {"$in": item_ids},
+        },
+        {"_id": 0},
+    ).to_list(10000)
+    prior = await db[RETURN_RESTOCKS].find(
+        {
+            "user_id": user_id,
+            "return_case_id": case.get("id"),
+            "status": "posted",
+        },
+        {"_id": 0},
+    ).to_list(10000)
+
+    prior_by_item: dict[str, int] = {}
+    prior_by_source: dict[tuple[str, str], int] = {}
+    for row in prior:
+        item_id = clean_text(row.get("order_item_id"))
+        source_key = clean_text(row.get("source_target_key"))
+        quantity = int(row.get("quantity") or 0)
+        prior_by_item[item_id] = prior_by_item.get(item_id, 0) + quantity
+        prior_by_source[(item_id, source_key)] = (
+            prior_by_source.get((item_id, source_key), 0) + quantity
+        )
+
+    reservations_by_item: dict[str, list[dict[str, Any]]] = {}
+    for reservation in reservations:
+        reservations_by_item.setdefault(
+            clean_text(reservation.get("line_key")),
+            [],
+        ).append(reservation)
+
+    items = []
+    for item_id in item_ids:
+        inspection = inspection_by_item[item_id]
+        sellable = int(inspection.get("sellable_quantity") or 0)
+        restocked = prior_by_item.get(item_id, 0)
+        remaining_sellable = max(0, sellable - restocked)
+        selected = selected_by_item.get(item_id) or {}
+        source_map: dict[str, dict[str, Any]] = {}
+        for reservation in reservations_by_item.get(item_id, []):
+            for allocation in reservation.get("allocations") or []:
+                source_key = _restock_source_target_key(allocation)
+                if not source_key:
+                    continue
+                row = source_map.setdefault(source_key, {
+                    "source_target_key": source_key,
+                    "source_location_id": allocation.get("location_id"),
+                    "source_warehouse_id": allocation.get("warehouse_id"),
+                    "receipt_id": clean_text(allocation.get("receipt_id")) or None,
+                    "lot_id": clean_text(allocation.get("lot_id")) or None,
+                    "configuration_key": clean_text(
+                        allocation.get("configuration_key")
+                    ) or None,
+                    "allocated_quantity": 0,
+                    "product_id": reservation.get("product_id"),
+                    "mezan_product_id": reservation.get("mezan_product_id"),
+                    "sku": reservation.get("sku"),
+                    "reservation_id": reservation.get("id"),
+                })
+                row["allocated_quantity"] += int(
+                    float(allocation.get("quantity") or 0)
+                )
+        sources = []
+        for source_key in sorted(source_map):
+            row = source_map[source_key]
+            prior_qty = prior_by_source.get((item_id, source_key), 0)
+            remaining_source = max(
+                0,
+                int(row["allocated_quantity"]) - prior_qty,
+            )
+            source_item = None
+            source_reservations = reservations_by_item.get(item_id, [])
+            for reservation in source_reservations:
+                for allocation in reservation.get("allocations") or []:
+                    if _restock_source_target_key(allocation) == source_key:
+                        source_item = await _source_inventory_item(
+                            db,
+                            user_id=user_id,
+                            allocation=allocation,
+                        )
+                        break
+                if source_item:
+                    break
+            configuration_key = (
+                clean_text((source_item or {}).get("configuration_key"))
+                or clean_text(row.get("configuration_key"))
+            )
+            compatible_locations = await _permanent_restock_locations(
+                db,
+                user_id=user_id,
+                configuration_key=configuration_key,
+                quantity=max(1, min(remaining_sellable, remaining_source)),
+            )
+            sources.append({
+                **row,
+                "configuration_key": configuration_key or None,
+                "preparation_state": (
+                    (source_item or {}).get("preparation_state")
+                    or "ready_complete"
+                ),
+                "specifications": (
+                    (source_item or {}).get("specifications") or {}
+                ),
+                "salla_variant_id": (
+                    (source_item or {}).get("salla_variant_id")
+                ),
+                "product_name": (
+                    (source_item or {}).get("product_name")
+                    or selected.get("name")
+                ),
+                "already_restocked_quantity": prior_qty,
+                "remaining_source_quantity": remaining_source,
+                "compatible_locations": compatible_locations,
+            })
+        items.append({
+            "order_item_id": item_id,
+            "name": selected.get("name"),
+            "sku": selected.get("sku"),
+            "sellable_quantity": sellable,
+            "already_restocked_quantity": restocked,
+            "remaining_sellable_quantity": remaining_sellable,
+            "sources": sources,
+            "source_evidence_complete": (
+                sum(int(row["allocated_quantity"]) for row in sources)
+                >= sellable
+            ),
+        })
+    return {
+        "case_id": case.get("id"),
+        "order_number": case.get("order_number"),
+        "version": int(case.get("version") or 0),
+        "inventory_gate": gate,
+        "items": items,
+        "complete": all(
+            int(row["remaining_sellable_quantity"]) == 0
+            for row in items
+        ),
+    }
+
+
+async def restock_return_inventory(
+    db: Any,
+    *,
+    user_id: str,
+    user: dict[str, Any],
+    case_id: str,
+    request: ReturnRestockRequest,
+) -> dict[str, Any]:
+    await ensure_return_indexes(db)
+    request_key = clean_text(request.request_id)
+    facts = {
+        "case_id": clean_text(case_id),
+        "order_item_id": clean_text(request.order_item_id),
+        "source_target_key": clean_text(request.source_target_key),
+        "quantity": int(request.quantity),
+        "location_id": clean_text(request.location_id),
+        "scanned_barcode": clean_text(request.scanned_barcode).upper(),
+        "employee_note": clean_text(request.employee_note),
+    }
+    existing_request = await db[RETURN_RESTOCK_REQUESTS].find_one(
+        {"user_id": user_id, "request_id": request_key},
+        {"_id": 0},
+    )
+    if existing_request:
+        if existing_request.get("facts") != facts:
+            raise RuntimeError("return_restock_request_conflict")
+        if existing_request.get("status") == "posted":
+            return {**existing_request, "duplicate": True}
+
+    options = await get_return_restock_options(
+        db,
+        user_id=user_id,
+        case_id=case_id,
+    )
+    item = next(
+        (
+            row for row in options["items"]
+            if row["order_item_id"] == request.order_item_id
+        ),
+        None,
+    )
+    if not item:
+        raise ValueError("return_restock_item_not_found")
+    source = next(
+        (
+            row for row in item["sources"]
+            if row["source_target_key"] == request.source_target_key
+        ),
+        None,
+    )
+    if not source:
+        raise ValueError("return_restock_source_not_found")
+    if request.quantity > int(item["remaining_sellable_quantity"]):
+        raise ValueError("return_restock_exceeds_sellable_quantity")
+    if request.quantity > int(source["remaining_source_quantity"]):
+        raise ValueError("return_restock_exceeds_source_quantity")
+    location = next(
+        (
+            row for row in source["compatible_locations"]
+            if clean_text(row.get("id")) == request.location_id
+        ),
+        None,
+    )
+    if not location:
+        raise ValueError("return_restock_location_not_compatible")
+    expected_barcode = clean_text(
+        location.get("barcode_value") or location.get("code")
+    ).upper()
+    if expected_barcode != facts["scanned_barcode"]:
+        raise ValueError("return_restock_location_barcode_mismatch")
+
+    case = await db.return_cases.find_one(
+        {"user_id": user_id, "id": clean_text(case_id)},
+        {"_id": 0},
+    )
+    if not case:
+        raise LookupError("return_case_not_found")
+    if int(case.get("version") or 0) != request.expected_version:
+        if not (
+            existing_request
+            and case.get("return_restock_active_request_id") == request_key
+        ):
+            raise RuntimeError("version_conflict")
+
+    now = utc_now()
+    actor = _actor(user)
+    if not existing_request:
+        prepared = {
+            "user_id": user_id,
+            "request_id": request_key,
+            "return_case_id": clean_text(case_id),
+            "order_number": case.get("order_number"),
+            "status": "prepared",
+            "facts": facts,
+            "created_at": now,
+            "created_by": actor,
+        }
+        try:
+            await db[RETURN_RESTOCK_REQUESTS].insert_one(prepared)
+        except DuplicateKeyError:
+            existing_request = await db[RETURN_RESTOCK_REQUESTS].find_one(
+                {"user_id": user_id, "request_id": request_key},
+                {"_id": 0},
+            )
+            if not existing_request or existing_request.get("facts") != facts:
+                raise RuntimeError("return_restock_request_conflict")
+
+    if case.get("return_restock_active_request_id") != request_key:
+        claimed = await db.return_cases.find_one_and_update(
+            {
+                "user_id": user_id,
+                "id": clean_text(case_id),
+                "version": request.expected_version,
+                "status": "inspected",
+                "execution_gates.inventory": {
+                    "$in": [
+                        "ready_for_sellable_quantity_movement",
+                        "restock_in_progress",
+                    ]
+                },
+                "$or": [
+                    {"return_restock_active_request_id": {"$exists": False}},
+                    {"return_restock_active_request_id": None},
+                    {"return_restock_active_request_id": ""},
+                ],
+            },
+            {
+                "$set": {
+                    "execution_gates.inventory": "restock_posting",
+                    "return_restock_active_request_id": request_key,
+                    "updated_at": now,
+                },
+                "$inc": {"version": 1},
+            },
+            return_document=ReturnDocument.AFTER,
+        )
+        if not claimed:
+            raise RuntimeError("version_conflict")
+        case = claimed
+
+    await db[RETURN_RESTOCK_REQUESTS].update_one(
+        {"user_id": user_id, "request_id": request_key},
+        {"$set": {
+            "status": "posting",
+            "claimed_case_version": case.get("version"),
+            "updated_at": now,
+        }},
+    )
+
+    receipt_id = str(uuid.uuid5(
+        uuid.NAMESPACE_URL,
+        f"mezan-return-restock:{user_id}:{request_key}",
+    ))
+    inventory_item = {
+        "receipt_id": receipt_id,
+        "product_id": source.get("product_id"),
+        "mezan_product_id": source.get("mezan_product_id"),
+        "salla_variant_id": source.get("salla_variant_id"),
+        "product_name": source.get("product_name"),
+        "sku": source.get("sku"),
+        "quantity": int(request.quantity),
+        "preparation_state": "ready_complete",
+        "specifications": source.get("specifications") or {},
+        "configuration_key": source.get("configuration_key"),
+        "lot_id": f"return:{case_id}:{request.order_item_id}:{receipt_id}",
+        "source_type": "customer_return",
+        "source_id": clean_text(case_id),
+        "source_line_id": request.order_item_id,
+        "return_source_target_key": request.source_target_key,
+        "original_receipt_id": source.get("receipt_id"),
+        "original_lot_id": source.get("lot_id"),
+        "placed_at": now,
+        "placed_by": clean_text(actor.get("id")),
+    }
+    try:
+        duplicate_inventory = await place_inventory_receipt(
+            db,
+            merchant_id=user_id,
+            location_id=request.location_id,
+            receipt_id=receipt_id,
+            inventory_item=inventory_item,
+            quantity=int(request.quantity),
+            scanned_barcode=facts["scanned_barcode"],
+            occurred_at=now,
+        )
+    except InventoryLocationCapacityError as exc:
+        await db.return_cases.update_one(
+            {
+                "user_id": user_id,
+                "id": clean_text(case_id),
+                "return_restock_active_request_id": request_key,
+            },
+            {"$set": {
+                "execution_gates.inventory": "restock_in_progress",
+                "return_restock_active_request_id": None,
+                "updated_at": utc_now(),
+            }},
+        )
+        await db[RETURN_RESTOCK_REQUESTS].update_one(
+            {"user_id": user_id, "request_id": request_key},
+            {"$set": {
+                "status": "failed",
+                "failure_code": "inventory_location_capacity_exceeded",
+                "updated_at": utc_now(),
+            }},
+        )
+        raise RuntimeError("inventory_location_capacity_exceeded") from exc
+
+    restock_id = str(uuid.uuid5(
+        uuid.NAMESPACE_URL,
+        f"mezan-return-restock-event:{user_id}:{request_key}",
+    ))
+    restock = {
+        "id": restock_id,
+        "user_id": user_id,
+        "status": "posted",
+        "return_case_id": clean_text(case_id),
+        "order_number": case.get("order_number"),
+        "order_item_id": request.order_item_id,
+        "source_target_key": request.source_target_key,
+        "source_receipt_id": source.get("receipt_id"),
+        "source_lot_id": source.get("lot_id"),
+        "source_configuration_key": source.get("configuration_key"),
+        "quantity": int(request.quantity),
+        "inventory_receipt_id": receipt_id,
+        "restock_lot_id": inventory_item["lot_id"],
+        "destination_location_id": request.location_id,
+        "destination_location_code": location.get("code"),
+        "destination_warehouse_id": location.get("warehouse_id"),
+        "location_scan_verified": True,
+        "employee_note": request.employee_note,
+        "restocked_at": now,
+        "restocked_by": actor,
+        "accounting_status": "waiting_cogs_reversal",
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db[RETURN_RESTOCKS].replace_one(
+        {"user_id": user_id, "id": restock_id},
+        restock,
+        upsert=True,
+    )
+    await db[RETURN_RESTOCK_REQUESTS].update_one(
+        {"user_id": user_id, "request_id": request_key},
+        {"$set": {
+            "status": "posted",
+            "restock_id": restock_id,
+            "inventory_receipt_id": receipt_id,
+            "duplicate_inventory_receipt": bool(duplicate_inventory),
+            "posted_at": now,
+            "updated_at": now,
+        }},
+    )
+
+    all_restocked = await db[RETURN_RESTOCKS].find(
+        {
+            "user_id": user_id,
+            "return_case_id": clean_text(case_id),
+            "status": "posted",
+        },
+        {"_id": 0, "order_item_id": 1, "quantity": 1},
+    ).to_list(10000)
+    restocked_by_item: dict[str, int] = {}
+    for row in all_restocked:
+        key = clean_text(row.get("order_item_id"))
+        restocked_by_item[key] = (
+            restocked_by_item.get(key, 0)
+            + int(row.get("quantity") or 0)
+        )
+    inspection_items = (
+        (case.get("inspection") or {}).get("items") or []
+    )
+    complete = all(
+        restocked_by_item.get(clean_text(row.get("order_item_id")), 0)
+        >= int(row.get("sellable_quantity") or 0)
+        for row in inspection_items
+    )
+    next_gate = (
+        "restocked_sellable_inventory"
+        if complete
+        else "restock_in_progress"
+    )
+    finalized_at = utc_now()
+    await db.return_cases.update_one(
+        {
+            "user_id": user_id,
+            "id": clean_text(case_id),
+            "return_restock_active_request_id": request_key,
+        },
+        {
+            "$set": {
+                "execution_gates.inventory": next_gate,
+                "return_restock_active_request_id": None,
+                "return_restock_last_at": finalized_at,
+                "updated_at": finalized_at,
+            },
+            "$push": {
+                "events": {
+                    "type": "return_inventory_restocked",
+                    "at": finalized_at,
+                    "actor": actor,
+                    "version": case.get("version"),
+                    "restock_id": restock_id,
+                    "order_item_id": request.order_item_id,
+                    "source_target_key": request.source_target_key,
+                    "quantity": int(request.quantity),
+                    "inventory_receipt_id": receipt_id,
+                    "destination_location_id": request.location_id,
+                }
+            },
+        },
+    )
+    return {
+        **restock,
+        "duplicate": bool(existing_request),
+        "inventory_gate_after": next_gate,
+        "case_version": case.get("version"),
+    }
 
 
 async def get_return_workspace(
