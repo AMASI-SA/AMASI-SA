@@ -193,7 +193,6 @@ export default function AccountingDailyMovements({ accountingPermissions = [] })
     }
 
     async function classifyOutgoing(row) {
-        if (!canImport) return toast.error("لا تملك صلاحية ترحيل الحركة");
         const draft = outgoingById[row.id] || {};
         const action = draft.action || "";
         const reason = String(draft.reason || "").trim();
