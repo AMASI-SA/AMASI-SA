@@ -207,6 +207,7 @@ def test_router_registers_readiness_and_permission_contract_paths():
         "/financial-provider-apps/accounting-module/daily-movements/context",
         "/financial-provider-apps/accounting-module/daily-movements",
         "/financial-provider-apps/accounting-module/daily-movements/upload",
+        "/financial-provider-apps/accounting-module/daily-movements/manual-incoming",
         "/financial-provider-apps/accounting-module/daily-movements/{movement_id}/confirm-provider",
         "/financial-provider-apps/accounting-module/payroll/context",
         "/financial-provider-apps/accounting-module/payroll/accrue",
