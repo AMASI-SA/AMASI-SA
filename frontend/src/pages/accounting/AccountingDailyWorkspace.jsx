@@ -11,6 +11,7 @@ import {
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
+import api from "../../lib/api";
 import {
     getAccountingSettlementContext,
     getAccountingSettlementDrafts,
@@ -22,6 +23,7 @@ import AccountingDailyAutomationStatus from "./AccountingDailyAutomationStatus";
 import { formatMoney, SummaryCard } from "./AccountingShared";
 import { ACCOUNTING_PAGES } from "./accountingPages";
 
+const BASE = "/financial-provider-apps/accounting-module";
 const REVIEW_STATUSES = new Set(["needs_review", "ready_for_review", "reviewed", "rejected"]);
 
 function todayRiyadh() {
@@ -64,7 +66,7 @@ export default function AccountingDailyWorkspace({ status, user, accountingPermi
     const safeActive = status?.cutover?.safe_active === true;
     const pending = Math.max(reviewCount, settlementsNeedReview);
     const stateLabel = safeActive
-        ? (pending > 0 ? "محدثة · " + pending + " تحتاج منك" : "محدثة · لا توجد مراجعات")
+        ? (pending > 0 ? "محدثة · " + pending + " ملاحظات جاهزية" : "محدثة · لا توجد ملاحظات جاهزية")
         : "قيد التجهيز قبل التفعيل";
 
     return (
@@ -129,12 +131,14 @@ export default function AccountingDailyWorkspace({ status, user, accountingPermi
                 </button>
                 {advancedOpen && (
                     <div className="mt-4 space-y-4 border-t border-slate-200 pt-4">
-                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                             {[
                                 ["settlements", "التسويات التفصيلية"],
-                                ["financial-movements", "الحركات والاستردادات"],
-                                ["journals-reports", "القيود والتقارير"],
+                                ["financial-movements", "الحركات البنكية والاستردادات"],
+                                ["shipping-cod", "الشحن والتحصيل"],
+                                ["payroll-obligations", "الرواتب والسلف والعهد"],
                                 ["opening-balances", "الأرصدة الافتتاحية"],
+                                ["journals-reports", "القيود والتقارير"],
                             ].map(([id, label]) => {
                                 const page = ACCOUNTING_PAGES.find((item) => item.id === id);
                                 return <Link key={id} to={page.to} className="rounded-xl border border-slate-200 bg-white p-3 text-xs font-extrabold text-slate-700 hover:border-emerald-300">{label}</Link>;
