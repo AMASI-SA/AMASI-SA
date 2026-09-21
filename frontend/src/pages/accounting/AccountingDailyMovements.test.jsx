@@ -35,3 +35,13 @@ test("provider inference is presented as a review suggestion, not automatic iden
     expect(source).toContain("يعرضه ميزان كاقتراح ولا يعتمد عليه تلقائيًا");
     expect(source).toContain("عمود «المنصة» الصريح");
 });
+
+
+test("accountant can add a manual incoming bank transfer without debit-credit fields", () => {
+    expect(source).toContain("إضافة تحويل بنكي يدوي");
+    expect(source).toContain("اسم المحوّل");
+    expect(source).toContain("مرجع التحويل");
+    expect(source).toContain("createAccountingManualIncomingMovement");
+    expect(serviceSource).toContain("/daily-movements/manual-incoming");
+    expect(source).not.toContain("مدين/دائن");
+});
