@@ -290,6 +290,54 @@ export async function classifyAccountingOutgoingMovement(movementId, payload) {
     return data;
 }
 
+export async function getAccountingShippingWorkspace() {
+    const { data } = await api.get(`${BASE}/shipping-p02/workspace`);
+    return data;
+}
+
+export async function saveAccountingShippingRate(payload) {
+    const { data } = await api.put(`${BASE}/shipping-p02/rates`, payload);
+    return data;
+}
+
+export async function previewAccountingCourierFee(evidenceId) {
+    const { data } = await api.get(
+        `${BASE}/shipping-p02/courier-fee/${encodeURIComponent(evidenceId)}/preview`,
+    );
+    return data;
+}
+
+export async function postAccountingCourierFee(evidenceId) {
+    const { data } = await api.post(`${BASE}/shipping-p02/courier-fee`, {
+        evidence_id: evidenceId,
+    });
+    return data;
+}
+
+export async function previewAccountingStoreDriverCod(assignmentId) {
+    const { data } = await api.get(
+        `${BASE}/shipping-p02/store-driver-cod/${encodeURIComponent(assignmentId)}/preview`,
+    );
+    return data;
+}
+
+export async function postAccountingStoreDriverCod(assignmentId) {
+    const { data } = await api.post(`${BASE}/shipping-p02/store-driver-cod`, {
+        assignment_id: assignmentId,
+    });
+    return data;
+}
+
+export async function previewAccountingShippingSettlement(payload) {
+    const { data } = await api.post(`${BASE}/shipping-p02/settlements/preview`, payload);
+    return data;
+}
+
+export async function postAccountingShippingSettlement(payload) {
+    const { data } = await api.post(`${BASE}/shipping-p02/settlements/post`, payload);
+    return data;
+}
+
 export async function confirmAccountingDailyMovementProvider(movementId, provider, reason) {
     const { data } = await api.post(
         `${BASE}/daily-movements/${encodeURIComponent(movementId)}/confirm-provider`,
