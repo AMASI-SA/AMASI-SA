@@ -58,6 +58,12 @@ def _producer(row):
         )
     if kind in {"cod_sale", "shipping_fee_accrual", "shipping_settlement"}:
         return meta.get("source") == "accounting_shipping_p02" and bool(meta.get("shipping_event_id"))
+    if kind in {"expense_record", "supplier_payment"}:
+        return (
+            meta.get("source") == "accounting_daily_outgoing_p01"
+            and bool(meta.get("outgoing_event_id"))
+            and bool(meta.get("daily_movement_id"))
+        )
     return False
 
 
