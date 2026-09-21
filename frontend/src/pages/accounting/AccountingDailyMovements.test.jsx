@@ -38,7 +38,7 @@ test("provider inference is presented as a review suggestion, not automatic iden
 
 
 test("accountant can add a manual incoming bank transfer without debit-credit fields", () => {
-    expect(source).toContain("إضافة تحويل بنكي يدوي");
+    expect(source).toContain("إضافة حركة بنكية يدوية");
     expect(source).toContain("اسم المحوّل");
     expect(source).toContain("مرجع التحويل");
     expect(source).toContain("createAccountingManualIncomingMovement");
