@@ -25,6 +25,8 @@ on:
       - "backend/carrier_handoff.py"
       - "backend/fulfillment_carrier_label.py"
       - "backend/fulfillment_v2_routes.py"
+      - "backend/product_inventory_receipt_routes.py"
+      - "backend/tests/test_product_inventory_receipt_routes.py"
       - "backend/salla_integration/sync.py"
       - "backend/order_engine/__init__.py"
       - "backend/order_engine/mapper.py"
@@ -288,6 +290,7 @@ jobs:
           tests/test_customer_history_complete_lookup.py
           tests/test_customer_history_route.py
           tests/test_fulfillment_v2_contract.py
+          tests/test_product_inventory_receipt_routes.py
           tests/test_carrier_handoff.py
           tests/test_fulfillment_carrier_label.py
           -q --tb=short
