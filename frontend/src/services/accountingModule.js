@@ -324,3 +324,63 @@ export async function recognizeAccountingReadyOrders({ limit = 100, dryRun = tru
     });
     return data;
 }
+
+
+export async function getAccountingBankTransferReviews(params = {}) {
+    const { data } = await api.get(`${BASE}/bank-transfer-receipts`, {
+        params: compactParams(params),
+    });
+    return data;
+}
+
+export async function uploadAccountingBankTransferReceipt(evidenceId, file, notes = "") {
+    const form = new FormData();
+    form.append("file", file);
+    if (notes) form.append("notes", notes);
+    const { data } = await api.post(
+        `${BASE}/bank-transfer-receipts/${encodeURIComponent(evidenceId)}/receipt`,
+        form,
+        { headers: { "Content-Type": "multipart/form-data" } },
+    );
+    return data;
+}
+
+export async function getAccountingBankTransferCandidates(reviewId, params = {}) {
+    const { data } = await api.get(
+        `${BASE}/bank-transfer-receipts/${encodeURIComponent(reviewId)}/bank-candidates`,
+        { params: compactParams(params) },
+    );
+    return data;
+}
+
+export async function getAccountingBankTransferReceiptFile(reviewId) {
+    const { data } = await api.get(
+        `${BASE}/bank-transfer-receipts/${encodeURIComponent(reviewId)}/receipt`,
+        { responseType: "blob" },
+    );
+    return data;
+}
+
+export async function approveAccountingBankTransferReceipt(reviewId, movementId) {
+    const { data } = await api.post(
+        `${BASE}/bank-transfer-receipts/${encodeURIComponent(reviewId)}/approve`,
+        {
+            movement_id: movementId,
+            confirmation: "CONFIRM_BANK_TRANSFER_RECEIPT",
+        },
+    );
+    return data;
+}
+
+export async function convertAccountingDeliveredBankTransfers({
+    fileId = "",
+    limit = 300,
+    dryRun = true,
+} = {}) {
+    const { data } = await api.post(`${BASE}/bank-transfer-receipts/convert-delivered`, {
+        file_id: fileId || null,
+        limit,
+        dry_run: dryRun,
+    });
+    return data;
+}
