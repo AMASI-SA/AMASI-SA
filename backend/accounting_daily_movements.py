@@ -1358,7 +1358,13 @@ def install_daily_movement_routes(router, db, current_user) -> None:
         payload: OutgoingMovementClassifyIn,
         user: dict = Depends(current_user),
     ):
-        actor, owner = await _actor_scope(db, user, "accounting.movements.import")
+        actor, owner = await _actor_scope(db, user, "accounting.movements.view")
+        require_accounting_permission(
+            actor,
+            "accounting.journals.manual_create"
+            if payload.action == "expense"
+            else "accounting.settlements.post",
+        )
 
         async def post(scoped):
             return await classify_outgoing_movement(
