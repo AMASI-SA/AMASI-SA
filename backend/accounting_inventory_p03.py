@@ -591,7 +591,7 @@ async def approve_opening_inventory_cost_snapshot(
             prior.get("status") == "approved"
             and prior.get("inventory_fingerprint")
             == snapshot["inventory_fingerprint"]
-            and int(prior.get("total_cost_halalas") or -1)
+            and int(prior["total_cost_halalas"]) if prior.get("total_cost_halalas") is not None else -1
             == total_halalas
             and prior.get("lines") == approved_lines
         )
@@ -680,7 +680,7 @@ async def activate_p03(
             != phase.get("opening_balance_txn_group_id")
             or snapshot.get("inventory_fingerprint")
             != opening_costs["inventory_fingerprint"]
-            or int(snapshot.get("total_cost_halalas") or -1)
+            or int(snapshot["total_cost_halalas"]) if snapshot.get("total_cost_halalas") is not None else -1
             != int(opening_costs["opening_inventory_halalas"])
         ):
             raise HTTPException(
