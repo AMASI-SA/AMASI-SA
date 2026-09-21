@@ -24,8 +24,10 @@ from accounting_shipping_p02 import (
     post_courier_fee,
     post_store_driver_cod,
     post_store_driver_fee,
+    process_pending_courier_accounting,
     process_pending_store_driver_accounting,
     save_shipping_rate,
+    shipping_p02_context,
 )
 from accounting_shipping_settlements import (
     ShippingSettlementIn,
@@ -1017,6 +1019,92 @@ class MZ2ShippingP02Tests(unittest.IsolatedAsyncioTestCase):
             }),
             1,
         )
+
+
+    async def test_shipping_context_exposes_only_native_counterparty_configuration(self):
+        context = await shipping_p02_context(self.db, owner=self.owner)
+        self.assertTrue(context["p02_enabled"])
+        self.assertTrue(context["p02_activation_ref_present"])
+        self.assertEqual(
+            {row["id"] for row in context["couriers"]},
+            {"imile", "smsa"},
+        )
+        self.assertEqual(
+            {row["id"] for row in context["drivers"]},
+            {"driver-1"},
+        )
+        self.assertEqual(
+            {row["id"]: row["total_fee"] for row in context["couriers"]},
+            {"imile": "17.25", "smsa": "17.25"},
+        )
+
+    async def test_pending_courier_processor_posts_only_approved_aliases_without_revenue(self):
+        await self.add_courier_order(
+            order="ORD-COURIER-AUTO",
+            evidence_id="E-COURIER-AUTO",
+            waybill="WB-COURIER-AUTO",
+            company="iMile للتوصيل",
+            salla_shipping_charge="24.07",
+        )
+        await self.add_courier_order(
+            order="ORD-DRIVER-NOT-COURIER",
+            evidence_id="E-DRIVER-NOT-COURIER",
+            waybill="WB-DRIVER-NOT-COURIER",
+            company="مندوب الرياض",
+            salla_shipping_charge="23.15",
+        )
+        revenue_before = await self.db.general_ledger.count_documents({
+            "entity_type": "revenue",
+        })
+
+        dry = await process_pending_courier_accounting(
+            self.db,
+            owner=self.owner,
+            actor=self.actor,
+            limit=50,
+            dry_run=True,
+        )
+        self.assertEqual(dry["candidate_count"], 1)
+        self.assertEqual(dry["items"][0]["order_number"], "ORD-COURIER-AUTO")
+        self.assertEqual(dry["items"][0]["state"], "eligible")
+
+        posted = await process_pending_courier_accounting(
+            self.db,
+            owner=self.owner,
+            actor=self.actor,
+            limit=50,
+            dry_run=False,
+        )
+        self.assertEqual(posted["posted_count"], 1)
+        self.assertEqual(
+            await self.db.general_ledger.count_documents({
+                "metadata.order_reference_id": "ORD-COURIER-AUTO",
+                "entry_type": "shipping_fee_accrual",
+            }),
+            2,
+        )
+        self.assertEqual(
+            await self.db.general_ledger.count_documents({
+                "metadata.order_reference_id": "ORD-DRIVER-NOT-COURIER",
+            }),
+            0,
+        )
+        self.assertEqual(
+            await self.db.general_ledger.count_documents({
+                "entity_type": "revenue",
+            }),
+            revenue_before,
+        )
+
+        again = await process_pending_courier_accounting(
+            self.db,
+            owner=self.owner,
+            actor=self.actor,
+            limit=50,
+            dry_run=False,
+        )
+        self.assertEqual(again["candidate_count"], 0)
+        self.assertEqual(again["posted_count"], 0)
 
 
 if __name__ == "__main__":
