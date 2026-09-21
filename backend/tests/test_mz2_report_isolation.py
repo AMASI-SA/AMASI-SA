@@ -271,7 +271,7 @@ class ReportIsolationTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(attack.json()["operation_id"], OPERATION_ID)
         for update in ({"accounting_permissions": []}, {"accounting_permissions": ["accounting.journals_reports.view"], "disabled": True}):
             await self.db.users.update_one({"id": "viewer"}, {"$set": update})
-            for path in ("financial-position", "trial-balance", "journals"):
+            for path in ("financial-position", "income-statement", "trial-balance", "journals"):
                 denied = await self.client.get("/accounting-module/reports/"+path)
                 self.assertEqual(denied.status_code, 403, denied.text)
 
