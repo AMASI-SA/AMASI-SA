@@ -269,6 +269,18 @@ def compile_opening_lines(lines: list[OpeningLineIn], evidence_refs: dict[str, s
                 "code": "opening_provider_unsupported",
                 "provider": entity_id,
             })
+        canonical_ids = {
+            "inventory_asset": "inventory",
+            "input_vat": "input_vat",
+            "sales_vat_payable": "sales_vat_payable",
+        }
+        expected_id = canonical_ids.get(item.category)
+        if expected_id and entity_id != expected_id:
+            raise HTTPException(400, detail={
+                "code": "opening_canonical_account_required",
+                "category": item.category,
+                "entity_id": expected_id,
+            })
         key = (rule["entity_type"], entity_id, rule["sub_account"])
         if key in covered:
             raise HTTPException(409, detail={
@@ -857,6 +869,13 @@ async def opening_state(db, *, owner: str) -> dict[str, Any]:
         },
         {"_id": 0, "id": 1, "employee_id": 1, "name": 1, "status": 1},
     ).sort([("name", 1)]).to_list(MAX_OPENING_LINES)
+    suppliers = await db.mezan_suppliers_v2.find(
+        {
+            "user_id": owner,
+            "status": {"$ne": "inactive"},
+        },
+        {"_id": 0, "id": 1, "company_name": 1, "status": 1},
+    ).sort([("company_name", 1)]).to_list(MAX_OPENING_LINES)
     return {
         "operation_id": OPERATION_ID,
         "cutover": state,
@@ -877,6 +896,20 @@ async def opening_state(db, *, owner: str) -> dict[str, Any]:
             for row in employees
             if row.get("id") or row.get("employee_id")
         ],
+        "suppliers": [
+            {
+                "id": str(row.get("id") or ""),
+                "name": row.get("company_name") or str(row.get("id") or ""),
+                "status": row.get("status") or "active",
+            }
+            for row in suppliers
+            if row.get("id")
+        ],
+        "canonical_accounts": {
+            "inventory_asset": "inventory",
+            "input_vat": "input_vat",
+            "sales_vat_payable": "sales_vat_payable",
+        },
     }
 
 
