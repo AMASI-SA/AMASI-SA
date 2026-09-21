@@ -215,5 +215,10 @@ def test_router_registers_readiness_and_permission_contract_paths():
         "/financial-provider-apps/accounting-module/order-evidence/upload",
         "/financial-provider-apps/accounting-module/order-recognition/queue",
         "/financial-provider-apps/accounting-module/order-recognition/recognize-ready",
+        "/financial-provider-apps/accounting-module/shipping-p02/rates",
+        "/financial-provider-apps/accounting-module/shipping-p02/courier-fee/{evidence_id}/preview",
+        "/financial-provider-apps/accounting-module/shipping-p02/courier-fee",
+        "/financial-provider-apps/accounting-module/shipping-p02/store-driver-cod/{assignment_id}/preview",
+        "/financial-provider-apps/accounting-module/shipping-p02/store-driver-cod",
     }
     assert expected <= {path for path, _methods in routes}
