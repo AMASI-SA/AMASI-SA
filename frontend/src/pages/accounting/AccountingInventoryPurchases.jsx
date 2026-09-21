@@ -9,9 +9,11 @@ import {
     getAccountingInventoryP03Workspace,
     getAccountingP03OpeningInventoryCosts,
     postAccountingP03Cogs,
+    postAccountingP03CogsReversal,
     postAccountingP03InventoryReceipt,
     postAccountingP03SupplierInvoice,
     previewAccountingP03Cogs,
+    previewAccountingP03CogsReversal,
     previewAccountingP03InventoryReceipt,
     previewAccountingP03SupplierInvoice,
 } from "../../services/accountingModule";
@@ -94,6 +96,7 @@ export default function AccountingInventoryPurchases({
     const [activationRef, setActivationRef] = useState("");
     const [receiptState, setReceiptState] = useState({});
     const [cogsState, setCogsState] = useState({});
+    const [cogsReversalState, setCogsReversalState] = useState({});
     const [supplierState, setSupplierState] = useState({});
     const [purchase, setPurchase] = useState({
         supplier_id: "",
@@ -393,6 +396,50 @@ export default function AccountingInventoryPurchases({
             await refresh();
         } catch (error) {
             toast.error(errorText(error, "تعذر ترحيل تكلفة البضاعة المباعة"), { duration: 8000 });
+        } finally {
+            setBusy("");
+        }
+    }
+
+    function updateCogsReversal(restockId, patch) {
+        setCogsReversalState((current) => ({
+            ...current,
+            [restockId]: { ...(current[restockId] || {}), ...patch },
+        }));
+    }
+
+    async function previewCogsReversal(row) {
+        setBusy("preview-cogs-reversal:" + row.id);
+        try {
+            const preview = await previewAccountingP03CogsReversal(row.id);
+            updateCogsReversal(row.id, { preview });
+        } catch (error) {
+            toast.error(errorText(error, "تعذر معاينة عكس COGS"), { duration: 8000 });
+        } finally {
+            setBusy("");
+        }
+    }
+
+    async function postCogsReversal(row) {
+        const state = cogsReversalState[row.id] || {};
+        const reason = String(state.reason || "").trim();
+        if (!p03Active) return toast.error("P03 ما زال مقفلاً");
+        if (!canPost) return toast.error("لا تملك صلاحية ترحيل المشتريات");
+        if (state.preview?.state !== "eligible") {
+            return toast.error("نفّذ المعاينة أولًا وتأكد من وجود COGS أصلي للطلب");
+        }
+        if (reason.length < 3) return toast.error("اكتب سبب عكس COGS للمرتجع");
+        setBusy("post-cogs-reversal:" + row.id);
+        try {
+            const result = await postAccountingP03CogsReversal(row.id, reason);
+            toast.success(
+                result?.state === "posted_zero_cost"
+                    ? "تم إغلاق عكس COGS بتكلفة صفر موثقة دون قيد مالي صفري."
+                    : "تمت إعادة التكلفة التاريخية إلى أصل المخزون وعكس COGS.",
+            );
+            await refresh();
+        } catch (error) {
+            toast.error(errorText(error, "تعذر ترحيل عكس COGS"), { duration: 8000 });
         } finally {
             setBusy("");
         }
@@ -773,6 +820,77 @@ export default function AccountingInventoryPurchases({
                     {!(workspace.inventory_consumptions || []).length && (
                         <div className="rounded-xl bg-white p-4 text-xs font-bold text-orange-700">
                             لا توجد أحداث استهلاك مخزون من Fulfillment V2 حتى الآن.
+                        </div>
+                    )}
+                </div>
+            </section>
+
+            <section className="rounded-2xl border border-teal-200 bg-teal-50/50 p-5">
+                <div>
+                    <h2 className="text-lg font-black text-teal-950">مرتجعات المخزون — عكس COGS</h2>
+                    <p className="mt-1 text-xs font-semibold leading-6 text-teal-900">
+                        لا يظهر هنا Refund أو فحص فقط. كل صف أدناه يعني أن قطعة صالحة عادت فعليًا إلى Inventory V2 بخانة وباركود، وعند الاعتماد يعيد ميزان التكلفة التاريخية الأصلية إلى المخزون ويخفض COGS.
+                    </p>
+                </div>
+                <div className="mt-4 space-y-3">
+                    {(workspace.return_restocks || []).map((row) => {
+                        const state = cogsReversalState[row.id] || {};
+                        const posted = Boolean(row.cogs_reversal_event_id);
+                        return (
+                            <div key={row.id} className="rounded-xl border border-teal-200 bg-white p-3">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div>
+                                        <div className="font-black text-slate-900">
+                                            طلب {row.order_number} · كمية {row.quantity}
+                                        </div>
+                                        <div className="mt-1 text-[11px] font-semibold text-slate-500">
+                                            المصدر {row.source_target_key} · Restock {String(row.restocked_at || "").slice(0, 16)}
+                                        </div>
+                                    </div>
+                                    {posted && (
+                                        <span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-800">
+                                            عكس COGS مرحّل {row.accounting_inventory_cost_amount ? "· " + formatMoney(row.accounting_inventory_cost_amount) : ""}
+                                        </span>
+                                    )}
+                                </div>
+                                {!posted && (
+                                    <div className="mt-3 grid gap-2 md:grid-cols-[1fr_auto_auto]">
+                                        <input
+                                            value={state.reason || ""}
+                                            onChange={(event) => updateCogsReversal(row.id, { reason: event.target.value })}
+                                            placeholder="سبب عكس COGS بعد Restock"
+                                            className="min-h-9 rounded-lg border border-slate-200 px-2 text-xs"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => previewCogsReversal(row)}
+                                            disabled={busy === "preview-cogs-reversal:" + row.id}
+                                            className="min-h-9 rounded-lg border border-teal-300 px-3 text-xs font-black text-teal-900"
+                                        >
+                                            معاينة العكس
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => postCogsReversal(row)}
+                                            disabled={!canPost || !p03Active || state.preview?.state !== "eligible" || busy === "post-cogs-reversal:" + row.id}
+                                            className="min-h-9 rounded-lg bg-teal-800 px-3 text-xs font-black text-white disabled:opacity-40"
+                                        >
+                                            اعتماد عكس COGS
+                                        </button>
+                                    </div>
+                                )}
+                                {state.preview?.facts && (
+                                    <div className="mt-2 text-xs font-black text-teal-900">
+                                        سيعود للمخزون {formatMoney(state.preview.facts.total_cost)} · التكلفة من COGS الأصلي للطلب
+                                    </div>
+                                )}
+                                <div className="mt-2"><PreviewState preview={state.preview} /></div>
+                            </div>
+                        );
+                    })}
+                    {!(workspace.return_restocks || []).length && (
+                        <div className="rounded-xl bg-white p-4 text-xs font-bold text-teal-700">
+                            لا توجد Restock فعلية لقطع مرتجعة حتى الآن.
                         </div>
                     )}
                 </div>
