@@ -274,7 +274,7 @@ def attach_purchase_invoice_routes(parent_router: APIRouter, db) -> None:
         limit: int = Query(200, ge=1, le=2000),
         user: dict = Depends(current_user),
     ):
-        q: dict = {"user_id": user["id"]}
+        q: dict = {"user_id": user["id"], "accounting_authority": {"$ne": "accounting_inventory_p03"}}
         if supplier_id:
             q["supplier_counterparty_id"] = supplier_id
         if from_date:
@@ -297,7 +297,12 @@ def attach_purchase_invoice_routes(parent_router: APIRouter, db) -> None:
     @router.get("/{inv_id}")
     async def get_invoice(inv_id: str, user: dict = Depends(current_user)):
         doc = await db.purchase_invoices.find_one(
-            {"id": inv_id, "user_id": user["id"]}, {"_id": 0},
+            {
+                "id": inv_id,
+                "user_id": user["id"],
+                "accounting_authority": {"$ne": "accounting_inventory_p03"},
+            },
+            {"_id": 0},
         )
         if not doc:
             raise HTTPException(404, "الفاتورة غير موجودة")
@@ -311,7 +316,12 @@ def attach_purchase_invoice_routes(parent_router: APIRouter, db) -> None:
     ):
         await require_legacy_purchase_writer_unlocked(user)
         existing = await db.purchase_invoices.find_one(
-            {"id": inv_id, "user_id": user["id"]}, {"_id": 0},
+            {
+                "id": inv_id,
+                "user_id": user["id"],
+                "accounting_authority": {"$ne": "accounting_inventory_p03"},
+            },
+            {"_id": 0},
         )
         if not existing:
             raise HTTPException(404, "الفاتورة غير موجودة")
@@ -371,7 +381,12 @@ def attach_purchase_invoice_routes(parent_router: APIRouter, db) -> None:
             )
 
         fresh = await db.purchase_invoices.find_one(
-            {"id": inv_id, "user_id": user["id"]}, {"_id": 0},
+            {
+                "id": inv_id,
+                "user_id": user["id"],
+                "accounting_authority": {"$ne": "accounting_inventory_p03"},
+            },
+            {"_id": 0},
         )
         return await _enrich_with_liability(db, user["id"], fresh)
 
@@ -425,7 +440,11 @@ def attach_purchase_invoice_routes(parent_router: APIRouter, db) -> None:
         total_invoiced = 0.0
         total_paid = 0.0
         async for d in db.purchase_invoices.find(
-            {"user_id": user["id"], "supplier_counterparty_id": cp_id},
+            {
+                "user_id": user["id"],
+                "supplier_counterparty_id": cp_id,
+                "accounting_authority": {"$ne": "accounting_inventory_p03"},
+            },
             {"_id": 0},
         ).sort([("invoice_date", -1)]):
             enriched = await _enrich_with_liability(db, user["id"], d)
