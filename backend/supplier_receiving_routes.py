@@ -23,6 +23,7 @@ from pymongo.errors import DuplicateKeyError
 from component_edit_policy import component_cost_metadata
 from fulfillment_v2_routes import _actor_context as _base_actor_context, _require_permission
 from mezan_supplier_management_routes import MEZAN_SUPPLIERS_V2
+from accounting_inventory_p03 import p01_controls_purchase_accounting
 from mobile_app_permissions import MOBILE_APP_CLIENT, mobile_app_access_for_user
 from order_option_cost_snapshot_routes import (
     MEZAN_V2_COST_SOURCES,
@@ -4066,6 +4067,15 @@ def make_supplier_receiving_router(
                     detail={"code": "supplier_receiving_experiment_mode_mismatch"},
                 )
             is_experiment = bool(experiment_run_id)
+            mz2_controls_accounting = (
+                False
+                if is_experiment
+                else await p01_controls_purchase_accounting(
+                    db,
+                    owner=merchant_id,
+                    mongo_session=mongo_session,
+                )
+            )
             service_catalog = await _supplier_service_catalog(
                 db,
                 user_id=merchant_id,
@@ -4095,19 +4105,39 @@ def make_supplier_receiving_router(
                 "session_reference": _text(fresh_session.get("reference")),
                 "supplier_id": _text(supplier.get("id")),
                 "supplier_snapshot": supplier,
-                "status": "experiment_completed" if is_experiment else "payable_posted",
-                "payment_status": "not_applicable" if is_experiment else "unpaid",
+                "status": (
+                    "experiment_completed"
+                    if is_experiment
+                    else "awaiting_accounting"
+                    if mz2_controls_accounting
+                    else "payable_posted"
+                ),
+                "payment_status": (
+                    "not_applicable"
+                    if is_experiment
+                    else "unposted"
+                    if mz2_controls_accounting
+                    else "unpaid"
+                ),
                 "paid_halalas": 0,
-                "outstanding_halalas": 0 if is_experiment else int(draft["total_halalas"]),
+                "outstanding_halalas": (
+                    0
+                    if is_experiment or mz2_controls_accounting
+                    else int(draft["total_halalas"])
+                ),
                 "supplier_approved_at": now,
                 "supplier_approved_by": context["actor_id"],
                 "supplier_approved_by_name": _actor_name(user),
-                "payable_posted_at": None if is_experiment else now,
+                "payable_posted_at": (
+                    None if is_experiment or mz2_controls_accounting else now
+                ),
                 "approved_at": now,
                 "created_at": now,
                 "updated_at": now,
-                "financial_invoice_created": not is_experiment,
-                "liability_created": not is_experiment,
+                "financial_invoice_created": invoice["financial_invoice_created"],
+                "liability_created": (
+                    not is_experiment and not mz2_controls_accounting
+                ),
                 "share_required": not is_experiment,
                 "share_status": "not_required" if is_experiment else "pending",
                 "share_confirmed": bool(is_experiment),
@@ -4116,7 +4146,17 @@ def make_supplier_receiving_router(
                 "salla_updated": False,
                 "experiment_mode": is_experiment,
                 "experiment_run_id": experiment_run_id,
-                "financial_writes_allowed": not is_experiment,
+                "financial_writes_allowed": (
+                    not is_experiment and not mz2_controls_accounting
+                ),
+                "mz2_p03_required": bool(mz2_controls_accounting),
+                "mz2_p03_status": (
+                    "not_applicable"
+                    if is_experiment
+                    else "awaiting_accounting"
+                    if mz2_controls_accounting
+                    else "pre_cutover_legacy_posted"
+                ),
             }
             if is_experiment:
                 invoice["price_changes"] = [
@@ -4143,15 +4183,23 @@ def make_supplier_receiving_router(
                     mongo_session=mongo_session,
                 )
                 invoice["price_updates_applied"] = True
-                ledger = await _post_supplier_invoice_ledger(
-                    db,
-                    user_id=merchant_id,
-                    actor=user,
-                    invoice=invoice,
-                    mongo_session=mongo_session,
-                )
-                invoice["ledger_txn_group_id"] = ledger["txn_group_id"]
-                invoice["ledger_entry_ids"] = ledger["entry_ids"]
+                if mz2_controls_accounting:
+                    # P01 now owns the accounting namespace. Operational
+                    # receiving remains atomic, but the financial payable waits
+                    # for explicit P03 accountant review/posting.
+                    ledger = None
+                    invoice["ledger_txn_group_id"] = None
+                    invoice["ledger_entry_ids"] = []
+                else:
+                    ledger = await _post_supplier_invoice_ledger(
+                        db,
+                        user_id=merchant_id,
+                        actor=user,
+                        invoice=invoice,
+                        mongo_session=mongo_session,
+                    )
+                    invoice["ledger_txn_group_id"] = ledger["txn_group_id"]
+                    invoice["ledger_entry_ids"] = ledger["entry_ids"]
             if is_experiment:
                 invoice["added_product_services"] = [
                     {
@@ -4336,8 +4384,8 @@ def make_supplier_receiving_router(
                     "supplier_invoice_number": invoice_number,
                     "recorded_services": list(line.get("services") or []),
                     "supplier_service_link_status": "service_recorded",
-                    "financial_invoice_created": not is_experiment,
-                    "liability_created": not is_experiment,
+                    "financial_invoice_created": invoice["financial_invoice_created"],
+                    "liability_created": invoice["liability_created"],
                     "experiment_mode": is_experiment,
                     "experiment_run_id": experiment_run_id,
                     "finalized_at": now,
@@ -4377,7 +4425,7 @@ def make_supplier_receiving_router(
             invoice_summary = {
                 "id": invoice_id,
                 "invoice_number": invoice_number,
-                "status": "experiment_completed" if is_experiment else "payable_posted",
+                "status": invoice["status"],
                 "currency": "SAR",
                 "piece_count": invoice["piece_count"],
                 "line_count": invoice["line_count"],
@@ -4386,6 +4434,8 @@ def make_supplier_receiving_router(
                 "price_change_count": len(invoice.get("price_changes") or []),
                 "approved_at": now,
                 "ledger_txn_group_id": ledger["txn_group_id"] if ledger else None,
+                "mz2_p03_required": invoice["mz2_p03_required"],
+                "mz2_p03_status": invoice["mz2_p03_status"],
                 "share_required": not is_experiment,
                 "share_status": "not_required" if is_experiment else "pending",
                 "share_confirmed": bool(is_experiment),
@@ -4412,8 +4462,8 @@ def make_supplier_receiving_router(
                         ),
                         "supplier_invoice_id": invoice_id,
                         "supplier_invoice": invoice_summary,
-                        "financial_invoice_created": not is_experiment,
-                        "liability_created": not is_experiment,
+                        "financial_invoice_created": invoice["financial_invoice_created"],
+                        "liability_created": invoice["liability_created"],
                         "experiment_mode": is_experiment,
                         "experiment_run_id": experiment_run_id,
                         "updated_at": now,
@@ -4453,8 +4503,8 @@ def make_supplier_receiving_router(
                 ),
                 "supplier_invoice_id": invoice_id,
                 "supplier_invoice": invoice_summary,
-                "financial_invoice_created": not is_experiment,
-                "liability_created": not is_experiment,
+                "financial_invoice_created": invoice["financial_invoice_created"],
+                "liability_created": invoice["liability_created"],
                 "experiment_mode": is_experiment,
                 "experiment_run_id": experiment_run_id,
                 "mezan_only": True,
@@ -4540,8 +4590,8 @@ def make_supplier_receiving_router(
                     else "share_invoice_with_supplier_and_upload_evidence"
                 ),
                 "supplier_service_link_applied": not is_experiment,
-                "financial_invoice_created": not is_experiment,
-                "liability_created": not is_experiment,
+                "financial_invoice_created": invoice["financial_invoice_created"],
+                "liability_created": invoice["liability_created"],
                 "experiment_mode": is_experiment,
                 "experiment_run_id": experiment_run_id,
                 "salla_updated": False,
