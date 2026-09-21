@@ -126,7 +126,9 @@ jobs:
         run: python -m unittest discover -s tests -p test_mz2_salla_order_evidence.py -v
       - name: Test MZ2 Salla evidence sale recognition
         run: python -m unittest discover -s tests -p test_mz2_order_recognition.py -v
-      - name: Test reviewed Salla bank transfers\n        run: python -m unittest discover -s tests -p test_mz2_bank_transfer_reviews.py -v\n      - name: Test isolated MZ2 shipping and COD accounting
+      - name: Test reviewed Salla bank transfers
+        run: python -m unittest discover -s tests -p test_mz2_bank_transfer_reviews.py -v
+      - name: Test isolated MZ2 shipping and COD accounting
         run: python -m unittest discover -s tests -p test_mz2_shipping_p02.py -v
       - name: Test historical financial position, closed periods, provider credits and advances
         run: |
