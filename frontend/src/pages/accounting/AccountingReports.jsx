@@ -5,6 +5,7 @@ import { formatMoney } from "./AccountingShared";
 const BASE = "/financial-provider-apps/accounting-module/reports";
 const REPORTS = [
     ["financial-position", "المركز المالي"],
+    ["income-statement", "قائمة الدخل"],
     ["trial-balance", "ميزان المراجعة"],
     ["journals", "القيود اليومية"],
 ];
@@ -16,7 +17,10 @@ const LABELS = {
     salaries_unpaid: "رواتب مستحقة", supplier_payable: "مستحقات الموردين", courier_payable: "مستحقات الشحن",
     store_driver_payable: "مستحقات الموصلين", external_payable: "ذمم دائنة أخرى", ad_accounts_unpaid: "مستحقات الإعلانات",
     total_assets: "إجمالي الأصول", total_liabilities: "إجمالي الالتزامات", net_position: "صافي المركز المالي",
-    cogs: "تكلفة البضاعة المباعة", supplier_fulfillment: "تكلفة المورد والتجهيز", shipping: "تكلفة الشحن",
+    bnpl_sales: "مبيعات بوابات الدفع", cogs: "تكلفة البضاعة المباعة", supplier_fulfillment: "تكلفة المورد والتجهيز",
+    shipping: "تكلفة الشحن", store_delivery: "تكلفة توصيل المتجر", rent: "إيجار",
+    net_revenue: "صافي الإيراد", gross_profit: "مجمل الربح", operating_expenses: "مصروفات التشغيل",
+    total_expenses: "إجمالي المصروفات", net_profit: "صافي الربح",
 };
 const statusLabel = status => ({ available: "متاح", needs_opening_balance: "بانتظار رصيد افتتاحي معتمد", not_ready: "غير جاهز" }[status] || "غير جاهز");
 function AmountList({ title, values }) {
@@ -24,6 +28,23 @@ function AmountList({ title, values }) {
         <dl>{Object.entries(values || {}).map(([key, value]) => <div key={key} className="flex justify-between gap-4 py-2">
             <dt>{LABELS[key] || key}</dt><dd dir="ltr">{formatMoney(value)}</dd>
         </div>)}</dl></section>;
+}
+function StatementAccountList({ title, values }) {
+    return <section className="rounded-xl border p-4">
+        <h3 className="font-bold">{title}</h3>
+        <div className="mt-3 overflow-auto">
+            <table className="w-full text-right" aria-label={title}>
+                <thead><tr>{["الحساب", "مدين", "دائن", "الصافي"].map(label => <th key={label}>{label}</th>)}</tr></thead>
+                <tbody>{Object.entries(values || {}).map(([key, value]) => <tr key={key}>
+                    <td>{LABELS[key] || key}</td>
+                    <td>{formatMoney(value.debits)}</td>
+                    <td>{formatMoney(value.credits)}</td>
+                    <td>{formatMoney(value.net)}</td>
+                </tr>)}</tbody>
+            </table>
+            {!Object.keys(values || {}).length && <p>لا توجد حركة ضمن هذا القسم.</p>}
+        </div>
+    </section>;
 }
 export default function AccountingReports() {
     const [report, setReport] = useState("financial-position");
@@ -68,6 +89,11 @@ export default function AccountingReports() {
         {ready && report === "financial-position" && <div className="grid gap-4 md:grid-cols-2" data-testid="accounting-financial-position">
             <AmountList title="الأصول" values={data.assets} /><AmountList title="الالتزامات" values={data.liabilities} />
             <AmountList title="الإجماليات" values={data.totals} />
+        </div>}
+        {ready && report === "income-statement" && <div className="grid gap-4 xl:grid-cols-2" data-testid="accounting-income-statement">
+            <StatementAccountList title="الإيرادات" values={data.revenues} />
+            <StatementAccountList title="المصروفات" values={data.expenses} />
+            <div className="xl:col-span-2"><AmountList title="إجماليات قائمة الدخل" values={data.totals} /></div>
         </div>}
         {ready && report === "trial-balance" && <div className="overflow-auto"><table className="w-full text-right" aria-label="ميزان مراجعة ميزان 2">
             <thead><tr>{["الحساب", "المعرف", "الحساب الفرعي", "مدين", "دائن", "الصافي"].map(label => <th key={label}>{label}</th>)}</tr></thead>
