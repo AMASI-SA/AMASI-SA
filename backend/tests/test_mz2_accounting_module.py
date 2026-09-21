@@ -213,5 +213,7 @@ def test_router_registers_readiness_and_permission_contract_paths():
         "/financial-provider-apps/accounting-module/payroll/movements/{movement_id}/classify",
         "/financial-provider-apps/accounting-module/order-evidence",
         "/financial-provider-apps/accounting-module/order-evidence/upload",
+        "/financial-provider-apps/accounting-module/order-recognition/queue",
+        "/financial-provider-apps/accounting-module/order-recognition/recognize-ready",
     }
     assert expected <= {path for path, _methods in routes}
