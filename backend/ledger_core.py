@@ -108,6 +108,10 @@ ENTRY_TYPES = (
     # Suppliers
     "supplier_invoice",     # فاتورة مورد: مصروف/مخزون + زيادة supplier.payable
     "supplier_payment",     # سداد مورد: نقص payable + نقص bank
+    # MZ2 P03 inventory / COGS
+    "inventory_purchase_receipt", # استلام شراء: مخزون/ضريبة مدخلات + ذمة مورد
+    "inventory_cogs",             # بيع مخزون: COGS + خفض أصل المخزون
+    "inventory_cogs_reversal",    # Restock فعلي لمرتجع: إعادة المخزون + عكس COGS
     # Iter-246d — Fixed-asset purchase via the unified-movement form.
     "fixed_asset_purchase", # شراء أصل ثابت: زيادة fixed_asset + نقص bank/زيادة payable
     # External persons
