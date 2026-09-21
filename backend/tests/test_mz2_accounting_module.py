@@ -224,6 +224,7 @@ def test_router_registers_readiness_and_permission_contract_paths():
         "/financial-provider-apps/accounting-module/bank-transfer-receipts/{review_id}/receipt",
         "/financial-provider-apps/accounting-module/bank-transfer-receipts/{review_id}/approve",
         "/financial-provider-apps/accounting-module/bank-transfer-receipts/convert-delivered",
+        "/financial-provider-apps/accounting-module/shipping-p02/workspace",
         "/financial-provider-apps/accounting-module/shipping-p02/rates",
         "/financial-provider-apps/accounting-module/shipping-p02/courier-fee/{evidence_id}/preview",
         "/financial-provider-apps/accounting-module/shipping-p02/courier-fee",
