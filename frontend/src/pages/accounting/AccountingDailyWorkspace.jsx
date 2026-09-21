@@ -533,7 +533,7 @@ export default function AccountingDailyWorkspace({ status, user, accountingPermi
                     <ActionCard title="رفع كشف البنك" detail="يقرأ الحركات ويحفظها كدليل؛ لا يخمّن نوع الحركة غير الواضحة." Icon={Bank} badge="MZ2" onClick={() => setActiveAction("bank")} />
                     <ActionCard title="مراجعة إيصالات التحويل" detail="يعرض بنك الطلب ومبلغه؛ راجع الإيصال والحركة التي وصلت للبنك ثم اعتمد." Icon={Receipt} onClick={() => setActiveAction("bank-transfer-review")} />
                     <ActionCard title="رفع ملف تسوية" detail="سلة/تمارا/تابي/إمكان؛ المطابقة والترحيل عند اكتمال الدليل." Icon={UploadSimple} onClick={() => setActiveAction("settlement")} />
-                    <ActionCard title="مبلغ واصل يدويًا" detail="للتحويل المنفرد عندما لا ترفع كشف البنك الكامل." Icon={Wallet} onClick={() => setActiveAction("movement")} />
+                    <ActionCard title="إضافة حركة مالية" detail="سجّل تحويلًا واردًا بالمبلغ واسم المحوّل والتاريخ والبنك؛ بدون مدين/دائن." Icon={Wallet} onClick={() => setActiveAction("movement")} />
                     <ActionCard title="الرواتب والسلف" detail="استحقاق الرواتب وربط الصرف والسلف والعهد بحركات البنك." Icon={UsersThree} onClick={() => setActiveAction("payroll")} />
                 </div>
             </section>
@@ -591,8 +591,8 @@ export default function AccountingDailyWorkspace({ status, user, accountingPermi
                 </Modal>
             )}
             {activeAction === "movement" && (
-                <Modal title="مبلغ واصل يدويًا" subtitle="أدخل الواقع البنكي فقط، واترك القيد والمطابقة لميزان 2." onClose={() => setActiveAction("")} testid="daily-accounting-movement-modal">
-                    <ReceiptForm context={context} permissions={accountingPermissions} onSaved={load} />
+                <Modal title="إضافة حركة مالية" subtitle="أدخل البنك والمبلغ واسم المحوّل والتاريخ فقط؛ ميزان يحفظها كدليل ويصنّفها لاحقًا." onClose={() => setActiveAction("")} testid="daily-accounting-movement-modal">
+                    <AccountingDailyMovements accountingPermissions={accountingPermissions} />
                 </Modal>
             )}
             {activeAction === "settlement" && (
