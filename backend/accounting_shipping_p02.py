@@ -585,19 +585,10 @@ async def prepare_store_driver_cod(
 
     event_id = _hash([owner, "store_driver_cod", assignment_id])
     prior = await _event_record(db, owner, event_id)
-    if prior:
-        if prior.get("status") == "posted":
-            return {
-                "state": "already_posted",
-                "event_id": event_id,
-                "facts": prior.get("facts") or {},
-                "sale_txn_group_id": prior.get("sale_txn_group_id"),
-                "fee_txn_group_id": prior.get("fee_txn_group_id"),
-                "tax": prior.get("sales_tax"),
-            }
+    if prior and prior.get("status") != "posted":
         raise ShippingAccountingError("shipping_event_requires_recovery")
 
-    if evidence.get("recognition_txn_group_id"):
+    if evidence.get("recognition_txn_group_id") and not prior:
         raise ShippingAccountingError("cod_order_already_recognized_elsewhere")
     if _money(evidence.get("refunded_sar")) != Decimal("0.00"):
         raise ShippingAccountingError("cod_refund_requires_review")
@@ -622,6 +613,17 @@ async def prepare_store_driver_cod(
         "accounting_at": accounting_at,
     }
     economic_hash = _hash(facts)
+    if prior:
+        if prior.get("economic_hash") != economic_hash:
+            raise ShippingAccountingError("shipping_event_source_conflict")
+        return {
+            "state": "already_posted",
+            "event_id": event_id,
+            "facts": facts,
+            "sale_txn_group_id": prior.get("sale_txn_group_id"),
+            "fee_txn_group_id": prior.get("fee_txn_group_id"),
+            "tax": prior.get("sales_tax"),
+        }
     return {
         "state": "eligible",
         "event_id": event_id,
