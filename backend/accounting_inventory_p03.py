@@ -511,7 +511,7 @@ async def approve_opening_inventory_cost_snapshot(
                     "target_key": line.target_key,
                 },
             )
-        supplied[line.target_key] = _money(line.unit_cost)
+        supplied[line.target_key] = _money(line.unit_cost, allow_zero=True)
     missing = sorted(set(target_map) - set(supplied))
     extra = sorted(set(supplied) - set(target_map))
     if missing or extra:
