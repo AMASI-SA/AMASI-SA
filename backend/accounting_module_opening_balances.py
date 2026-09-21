@@ -395,6 +395,60 @@ async def _required_zero_scope(db, owner: str, compiled: list[dict[str, Any]], e
                     "sub_account": sub_account,
                     "evidence_ref": evidence_refs["payroll_obligations"],
                 })
+
+    # P02 UAT can only use shipping counterparties whose opening state was
+    # explicitly approved during P01 cutover.  Active store drivers and
+    # approved MZ2 courier-rate identities are therefore part of the opening
+    # zero-evidence scope even when their balance is genuinely zero.
+    drivers = await db.store_drivers.find(
+        {
+            "user_id": owner,
+            "status": {"$ne": "inactive"},
+            "archived": {"$ne": True},
+            "deleted": {"$ne": True},
+        },
+        {"_id": 0, "id": 1},
+    ).to_list(MAX_OPENING_LINES + 1)
+    if len(drivers) > MAX_OPENING_LINES:
+        raise HTTPException(409, "opening_store_driver_scope_too_large")
+    for driver in drivers:
+        driver_id = str(driver.get("id") or "").strip()
+        if not driver_id:
+            raise HTTPException(409, "opening_store_driver_identity_missing")
+        for sub_account in ("cod_receivable", "delivery_fee_payable"):
+            key = ("store_driver", driver_id, sub_account)
+            if key not in covered:
+                zero.append({
+                    "entity_type": "store_driver",
+                    "entity_id": driver_id,
+                    "sub_account": sub_account,
+                    "evidence_ref": evidence_refs["couriers_cod"],
+                })
+
+    shipping_policy = await db.mz2_shipping_rate_policies.find_one(
+        {"_id": owner, "user_id": owner},
+        {"_id": 0, "versions": 1},
+    ) or {}
+    versions = shipping_policy.get("versions") or []
+    if not isinstance(versions, list) or len(versions) > MAX_OPENING_LINES:
+        raise HTTPException(409, "opening_courier_policy_scope_invalid")
+    courier_ids = sorted({
+        str(version.get("courier_id") or "").strip()
+        for version in versions
+        if isinstance(version, dict)
+        and version.get("verification_status") == "approved"
+        and str(version.get("courier_id") or "").strip()
+    })
+    for courier_id in courier_ids:
+        for sub_account in ("cod_receivable", "payable"):
+            key = ("courier", courier_id, sub_account)
+            if key not in covered:
+                zero.append({
+                    "entity_type": "courier",
+                    "entity_id": courier_id,
+                    "sub_account": sub_account,
+                    "evidence_ref": evidence_refs["couriers_cod"],
+                })
     return sorted(zero, key=lambda row: (row["entity_type"], row["entity_id"], row["sub_account"]))
 
 
