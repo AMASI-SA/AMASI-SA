@@ -79,6 +79,15 @@ def _producer(row):
             and bool(meta.get("inventory_receipt_v2_id"))
             and bool(meta.get("purchase_invoice_id"))
         )
+    if kind == "inventory_cogs":
+        return (
+            meta.get("source") == "accounting_inventory_p03"
+            and meta.get("p03_kind") == "inventory_cogs"
+            and bool(meta.get("p03_event_id"))
+            and bool(meta.get("inventory_consumption_event_id"))
+            and bool(meta.get("sale_recognition_txn_group_id"))
+            and bool(meta.get("order_reference_id"))
+        )
     return False
 
 
