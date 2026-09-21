@@ -23,7 +23,18 @@ test("shipping and COD page is MZ2-native instead of a legacy-link placeholder",
     expect(source).not.toContain("/couriers-ledger");
     expect(source).not.toContain("/bank-transfer-review");
     expect(workspaceSource).toContain('import AccountingShippingCod from "./AccountingShippingCod"');
-    expect(workspaceSource).toContain("<AccountingShippingCod accountingPermissions={permissions} />");
+    expect(workspaceSource).toContain("<AccountingShippingCod");
+    expect(workspaceSource).toContain("isOwner={access?.is_owner === true}");
+});
+
+test("P02 activation is explicit, owner-gated, and precedes all financial posts", () => {
+    expect(serviceSource).toContain("/shipping-p02/activate");
+    expect(serviceSource).toContain("ACTIVATE_MZ2_P02");
+    expect(source).toContain("P02 — الشحن والتحصيل");
+    expect(source).toContain("P02 مقفل");
+    expect(source).toContain("تفعيل P02");
+    expect(source).not.toContain("ACTIVATE_MZ2_P02");
+    expect((source.match(/!p02Active/g) || []).length).toBeGreaterThanOrEqual(3);
 });
 
 test("shipping page uses isolated P02 endpoints and review-before-post actions", () => {
