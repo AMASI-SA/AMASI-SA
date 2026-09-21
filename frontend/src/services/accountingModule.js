@@ -407,6 +407,21 @@ export async function postAccountingP03Cogs(eventId, reason) {
     return data;
 }
 
+export async function previewAccountingP03CogsReversal(restockId) {
+    const { data } = await api.get(
+        `${BASE}/inventory-p03/return-restocks/${encodeURIComponent(restockId)}/cogs-reversal-preview`,
+    );
+    return data;
+}
+
+export async function postAccountingP03CogsReversal(restockId, reason) {
+    const { data } = await api.post(
+        `${BASE}/inventory-p03/return-restocks/${encodeURIComponent(restockId)}/cogs-reversal-post`,
+        { reason },
+    );
+    return data;
+}
+
 export async function previewAccountingP03SupplierInvoice(invoiceId) {
     const { data } = await api.get(
         `${BASE}/inventory-p03/supplier-invoices/${encodeURIComponent(invoiceId)}/preview`,
