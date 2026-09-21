@@ -10,8 +10,10 @@ from openpyxl import Workbook
 
 from accounting_atomic import atomic_owner
 from accounting_daily_movements import (
+    ManualIncomingMovementIn,
     ProviderConfirmIn,
     confirm_daily_movement_provider,
+    create_manual_incoming_movement,
     import_daily_movement_file,
     parse_daily_movement_xlsx,
 )
@@ -248,6 +250,160 @@ class DailyMovementTests(unittest.IsolatedAsyncioTestCase):
         parsed_bad = parse_daily_movement_xlsx(bad)
         self.assertEqual(parsed_bad["rows"], [])
         self.assertEqual(parsed_bad["errors"][0]["code"], "movement_credit_debit_conflict")
+
+
+    async def test_manual_incoming_transfer_keeps_bank_amount_sender_and_date_without_gl(self):
+        payload = ManualIncomingMovementIn(
+            bank_account_id="bank-inma",
+            amount="750.25",
+            sender_name="أحمد محمد",
+            movement_date="2026-09-21",
+            reference="manual-ref-001",
+            notes="تحويل عميل",
+            request_id="REQ-MANUAL-001",
+        )
+        first = await self.tx(lambda scoped: create_manual_incoming_movement(
+            scoped,
+            owner="owner",
+            actor=self.actor,
+            payload=payload,
+        ))
+        self.assertEqual(first["bank_account_id"], "bank-inma")
+        self.assertEqual(first["amount"], "750.25")
+        self.assertEqual(first["sender_name"], "أحمد محمد")
+        self.assertEqual(first["movement_date"], "2026-09-21")
+        self.assertEqual(first["reference"], "MANUAL-REF-001")
+        self.assertEqual(first["direction"], "in")
+        self.assertEqual(first["source"], "manual_accountant")
+        self.assertEqual(first["status"], "unclassified")
+        self.assertEqual(await self.db.general_ledger.count_documents({}), 0)
+
+        duplicate = await self.tx(lambda scoped: create_manual_incoming_movement(
+            scoped,
+            owner="owner",
+            actor=self.actor,
+            payload=payload,
+        ))
+        self.assertTrue(duplicate["duplicate"])
+        self.assertEqual(duplicate["id"], first["id"])
+        self.assertEqual(await self.db.mz2_daily_movements.count_documents({}), 1)
+
+        changed = payload.model_copy(update={"amount": "751.25"})
+        with self.assertRaises(HTTPException) as ctx:
+            await self.tx(lambda scoped: create_manual_incoming_movement(
+                scoped,
+                owner="owner",
+                actor=self.actor,
+                payload=changed,
+            ))
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertEqual(ctx.exception.detail, "manual_movement_request_conflict")
+        self.assertEqual(await self.db.general_ledger.count_documents({}), 0)
+
+    async def test_manual_platform_sender_can_follow_same_provider_receipt_flow(self):
+        payload = ManualIncomingMovementIn(
+            bank_account_id="bank-inma",
+            amount="2300.00",
+            sender_name="شركة تابي",
+            movement_date="2026-09-21",
+            reference="TBY-MANUAL-001",
+            notes="تحويل تسوية",
+            request_id="REQ-MANUAL-TABBY",
+        )
+        movement = await self.tx(lambda scoped: create_manual_incoming_movement(
+            scoped,
+            owner="owner",
+            actor=self.actor,
+            payload=payload,
+        ))
+        self.assertEqual(movement["status"], "needs_review")
+        self.assertEqual(movement["suggested_provider"], "tabby")
+        self.assertEqual(await self.db.mz2_bank_receipts.count_documents({}), 0)
+
+        confirmed = await self.tx(lambda scoped: confirm_daily_movement_provider(
+            scoped,
+            owner="owner",
+            actor=self.actor,
+            movement_id=movement["id"],
+            payload=ProviderConfirmIn(
+                provider="tabby",
+                reason="اسم المحول وتفاصيل البنك تؤكد تابي",
+            ),
+        ))
+        self.assertEqual(confirmed["status"], "provider_receipt_created")
+        self.assertEqual(confirmed["confirmed_provider"], "tabby")
+        self.assertEqual(confirmed["receipt"]["amount"], "2300.00")
+        self.assertEqual(await self.db.general_ledger.count_documents({}), 0)
+
+    async def test_later_statement_confirms_same_manual_reference_without_duplicate_row(self):
+        payload = ManualIncomingMovementIn(
+            bank_account_id="bank-inma",
+            amount="510.00",
+            sender_name="عميل تجريبي",
+            movement_date="2026-09-21",
+            reference="BANK-MANUAL-RECON",
+            notes="",
+            request_id="REQ-MANUAL-RECON",
+        )
+        manual = await self.tx(lambda scoped: create_manual_incoming_movement(
+            scoped,
+            owner="owner",
+            actor=self.actor,
+            payload=payload,
+        ))
+        self.assertEqual(await self.db.mz2_daily_movements.count_documents({}), 1)
+
+        content = workbook_bytes([
+            ["2026-09-21", 510, 0, "Incoming customer transfer", "BANK-MANUAL-RECON", ""],
+        ])
+        result = await self.import_file(content, "later-statement.xlsx")
+        self.assertEqual(result["status"], "imported")
+        self.assertEqual(await self.db.mz2_daily_movements.count_documents({}), 1)
+        self.assertEqual(len(result["items"]), 1)
+        self.assertEqual(result["items"][0]["id"], manual["id"])
+        self.assertEqual(result["items"][0]["source"], "manual_reconciled_bank_statement")
+        self.assertEqual(
+            set(result["items"][0]["evidence_sources"]),
+            {"manual_accountant", "bank_statement_import"},
+        )
+        self.assertEqual(result["items"][0]["sender_name"], "عميل تجريبي")
+        self.assertEqual(await self.db.general_ledger.count_documents({}), 0)
+
+    async def test_later_statement_with_same_manual_reference_but_changed_amount_fails_closed(self):
+        payload = ManualIncomingMovementIn(
+            bank_account_id="bank-inma",
+            amount="510.00",
+            sender_name="عميل تجريبي",
+            movement_date="2026-09-21",
+            reference="BANK-MANUAL-CONFLICT",
+            notes="",
+            request_id="REQ-MANUAL-CONFLICT",
+        )
+        await self.tx(lambda scoped: create_manual_incoming_movement(
+            scoped,
+            owner="owner",
+            actor=self.actor,
+            payload=payload,
+        ))
+        content = workbook_bytes([
+            ["2026-09-21", 511, 0, "Changed bank amount", "BANK-MANUAL-CONFLICT", ""],
+        ])
+        parsed = parse_daily_movement_xlsx(content)
+        with self.assertRaises(HTTPException) as ctx:
+            await self.tx(lambda scoped: import_daily_movement_file(
+                scoped,
+                owner="owner",
+                actor=self.actor,
+                bank_account_id="bank-inma",
+                filename="conflict.xlsx",
+                content=content,
+                parsed=parsed,
+            ))
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertEqual(ctx.exception.detail["code"], "manual_movement_bank_statement_conflict")
+        self.assertEqual(await self.db.mz2_daily_movements.count_documents({}), 1)
+        self.assertEqual(await self.db.mz2_daily_movement_files.count_documents({}), 0)
+        self.assertEqual(await self.db.general_ledger.count_documents({}), 0)
 
 
 if __name__ == "__main__":
