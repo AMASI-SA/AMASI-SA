@@ -14,6 +14,7 @@ from accounting_employee_finance import install_employee_finance_routes
 from accounting_salla_order_evidence import install_salla_order_evidence_routes
 from accounting_order_recognition import install_order_recognition_routes
 from accounting_shipping_p02 import install_shipping_p02_routes
+from accounting_shipping_settlements import install_shipping_settlement_routes
 
 from financial_provider_apps_legacy import *  # noqa: F401,F403
 from financial_provider_apps_legacy import (
@@ -131,6 +132,7 @@ def make_financial_provider_apps_router(db, current_user):
     install_salla_order_evidence_routes(router, db, current_user)
     install_order_recognition_routes(router, db, current_user)
     install_shipping_p02_routes(router, db, current_user)
+    install_shipping_settlement_routes(router, db, current_user)
     install_write_control_routes(router, db, current_user)
     from accounting_periods import install_period_routes
     install_period_routes(router, db, current_user)
