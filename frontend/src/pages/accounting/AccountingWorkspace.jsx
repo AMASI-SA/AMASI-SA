@@ -95,7 +95,12 @@ export default function AccountingWorkspace() {
             </div>
         );
     } else if (page.id === "shipping-cod") {
-        content = <AccountingShippingCod accountingPermissions={permissions} />;
+        content = (
+            <AccountingShippingCod
+                accountingPermissions={permissions}
+                isOwner={access?.is_owner === true}
+            />
+        );
     } else if (page.id === "inventory-purchases") {
         content = (
             <AccountingInventoryPurchases
