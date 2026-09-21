@@ -350,6 +350,56 @@ RECOGNITION_FIELDS = (
 )
 
 
+BANK_TRANSFER_FIELDS = (
+    "bank_selected_from_order",
+    "bank_transfer_receipt_review_id",
+    "bank_transfer_receipt_status",
+    "bank_transfer_advance_id",
+    "bank_transfer_receipt_txn_group_id",
+    "bank_transfer_sale_txn_group_id",
+)
+
+
+def _preserve_bank_transfer_state(
+    prior: dict[str, Any],
+    current: dict[str, Any],
+) -> tuple[dict[str, Any], str | None]:
+    if not prior.get("bank_transfer_receipt_review_id"):
+        return current, None
+    for field in BANK_TRANSFER_FIELDS:
+        if field in prior:
+            current[field] = prior[field]
+    if current.get("conflict"):
+        return current, None
+
+    reason = None
+    if current.get("accounting_provider") != "bank_transfer":
+        reason = "bank_transfer_payment_method_changed"
+    elif str(prior.get("current_net_sar") or "") != str(current.get("current_net_sar") or ""):
+        reason = "bank_transfer_order_amount_changed"
+    elif Decimal(str(current.get("refunded_sar") or "0")) != Decimal("0"):
+        reason = "bank_transfer_refund_requires_review"
+    else:
+        state = prior.get("bank_transfer_receipt_status")
+        if state == "recognized":
+            current["status"] = "recognized_bank_transfer"
+            current["review_reasons"] = []
+        elif state == "confirmed_waiting_delivery":
+            current["status"] = "bank_transfer_confirmed_waiting_delivery"
+            current["review_reasons"] = []
+        elif state == "pending_approval":
+            current["status"] = "needs_bank_transfer_evidence"
+            current["review_reasons"] = []
+
+    if reason:
+        current["conflict"] = True
+        current["status"] = "needs_review"
+        current["review_reasons"] = sorted(set(
+            list(current.get("review_reasons") or []) + [reason]
+        ))
+    return current, reason
+
+
 def _preserve_recognized_state(prior: dict[str, Any], current: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
     """Keep a posted sale attached when a newer Salla export arrives.
 
@@ -488,6 +538,16 @@ async def import_salla_order_evidence(
                     "prior_snapshot_id": prior.get("latest_snapshot_id"),
                     "incoming_snapshot_id": snapshot_id,
                     "recognition_txn_group_id": prior.get("recognition_txn_group_id"),
+                })
+        if prior and prior.get("bank_transfer_receipt_review_id"):
+            current, bank_conflict = _preserve_bank_transfer_state(prior, current)
+            if bank_conflict:
+                conflicts.append({
+                    "order_number": row["order_number"],
+                    "code": bank_conflict,
+                    "prior_snapshot_id": prior.get("latest_snapshot_id"),
+                    "incoming_snapshot_id": snapshot_id,
+                    "bank_transfer_receipt_review_id": prior.get("bank_transfer_receipt_review_id"),
                 })
         current_updates.append(current)
 
