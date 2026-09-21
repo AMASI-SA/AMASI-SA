@@ -295,6 +295,14 @@ export async function getAccountingShippingWorkspace() {
     return data;
 }
 
+export async function activateAccountingP02(activationRef) {
+    const { data } = await api.post(`${BASE}/shipping-p02/activate`, {
+        activation_ref: activationRef,
+        confirmation: "ACTIVATE_MZ2_P02",
+    });
+    return data;
+}
+
 export async function saveAccountingShippingRate(payload) {
     const { data } = await api.put(`${BASE}/shipping-p02/rates`, payload);
     return data;
