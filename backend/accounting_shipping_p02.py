@@ -1021,6 +1021,140 @@ class DriverFeePostIn(BaseModel):
     assignment_id: str = Field(min_length=1, max_length=200)
 
 
+class DriverPendingProcessIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    limit: int = Field(default=100, ge=1, le=500)
+    dry_run: bool = True
+
+
+async def process_pending_store_driver_accounting(
+    db,
+    *,
+    owner: str,
+    actor: dict[str, Any],
+    limit: int = 100,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    rows = await db[DRIVER_EARNINGS].find(
+        {
+            "user_id": owner,
+            "$or": [
+                {"mz2_p02_accounting_status": {"$ne": "posted"}},
+                {"mz2_p02_accounting_status": {"$exists": False}},
+            ],
+        },
+        {"_id": 0, "assignment_id": 1, "order_number": 1, "driver_id": 1},
+    ).sort([("earned_at", 1), ("assignment_id", 1)]).limit(limit).to_list(limit)
+
+    items = []
+    for row in rows:
+        assignment_id = str(row.get("assignment_id") or "").strip()
+        if not assignment_id:
+            items.append({
+                "assignment_id": None,
+                "state": "waiting",
+                "reasons": ["store_driver_earning_identity_missing"],
+            })
+            continue
+        collection = await db[DRIVER_COLLECTIONS].find_one(
+            {"user_id": owner, "assignment_id": assignment_id},
+            {"_id": 0},
+        )
+        cash_cod = bool(
+            collection
+            and collection.get("payment_method") == "cash"
+            and _money(collection.get("cod_custody_amount")) > 0
+        )
+        kind = "cod_and_fee" if cash_cod else "fee"
+        try:
+            if dry_run:
+                proposal = (
+                    await prepare_store_driver_cod(
+                        db, owner=owner, assignment_id=assignment_id
+                    )
+                    if cash_cod
+                    else await prepare_store_driver_fee(
+                        db, owner=owner, assignment_id=assignment_id
+                    )
+                )
+            else:
+                proposal = (
+                    await post_store_driver_cod(
+                        db,
+                        owner=owner,
+                        actor=actor,
+                        assignment_id=assignment_id,
+                    )
+                    if cash_cod
+                    else await post_store_driver_fee(
+                        db,
+                        owner=owner,
+                        actor=actor,
+                        assignment_id=assignment_id,
+                    )
+                )
+            items.append({
+                "assignment_id": assignment_id,
+                "order_number": row.get("order_number"),
+                "driver_id": row.get("driver_id"),
+                "kind": kind,
+                "state": proposal.get("state"),
+                "sale_txn_group_id": proposal.get("sale_txn_group_id"),
+                "fee_txn_group_id": (
+                    proposal.get("fee_txn_group_id")
+                    or proposal.get("txn_group_id")
+                ),
+                "reasons": [],
+            })
+        except ShippingAccountingError as exc:
+            items.append({
+                "assignment_id": assignment_id,
+                "order_number": row.get("order_number"),
+                "driver_id": row.get("driver_id"),
+                "kind": kind,
+                "state": "waiting",
+                "reasons": [str(exc)],
+            })
+        except TaxError as exc:
+            items.append({
+                "assignment_id": assignment_id,
+                "order_number": row.get("order_number"),
+                "driver_id": row.get("driver_id"),
+                "kind": kind,
+                "state": "waiting",
+                "reasons": [str(exc)],
+            })
+        except HTTPException as exc:
+            detail = exc.detail
+            code = detail.get("code") if isinstance(detail, dict) else str(detail)
+            items.append({
+                "assignment_id": assignment_id,
+                "order_number": row.get("order_number"),
+                "driver_id": row.get("driver_id"),
+                "kind": kind,
+                "state": "blocked",
+                "reasons": [code],
+            })
+
+    return {
+        "dry_run": dry_run,
+        "candidate_count": len(rows),
+        "posted_count": sum(
+            1 for item in items if item["state"] == "posted"
+        ),
+        "already_posted_count": sum(
+            1 for item in items if item["state"] == "already_posted"
+        ),
+        "waiting_count": sum(
+            1 for item in items if item["state"] == "waiting"
+        ),
+        "blocked_count": sum(
+            1 for item in items if item["state"] == "blocked"
+        ),
+        "items": items,
+    }
+
+
 def install_shipping_p02_routes(router, db, current_user) -> None:
     base = "/accounting-module/shipping-p02"
 
@@ -1079,6 +1213,25 @@ def install_shipping_p02_routes(router, db, current_user) -> None:
             raise HTTPException(
                 409, detail={"code": str(exc), "message": str(exc)}
             ) from None
+
+    @router.post(base + "/store-driver/process-pending")
+    async def process_driver_pending(
+        payload: DriverPendingProcessIn,
+        user: dict = Depends(current_user),
+    ):
+        actor, owner = await scope(
+            user,
+            "accounting.shipping.view"
+            if payload.dry_run
+            else "accounting.settlements.post",
+        )
+        return await process_pending_store_driver_accounting(
+            db,
+            owner=owner,
+            actor=actor,
+            limit=payload.limit,
+            dry_run=payload.dry_run,
+        )
 
     @router.get(base + "/store-driver-fee/{assignment_id}/preview")
     async def driver_fee_preview(
