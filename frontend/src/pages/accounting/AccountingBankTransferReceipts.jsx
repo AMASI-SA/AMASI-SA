@@ -266,7 +266,7 @@ function ReviewCard({ item, permissions, onDone }) {
                             </label>
                             <div className="flex justify-end">
                                 <button type="button" onClick={approve} disabled={!selectedMovement || !canApprove || busy === "approve"} className="min-h-11 rounded-xl bg-emerald-800 px-5 text-sm font-black text-white disabled:opacity-40">
-                                    {busy === "approve" ? "جاري الاعتماد…" : "اعتماد وصول التحويل"}
+                                    {busy === "approve" ? "جاري الاعتماد…" : "موافق — اعتماد وصول التحويل"}
                                 </button>
                             </div>
                         </>
