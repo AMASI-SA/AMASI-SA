@@ -1115,16 +1115,18 @@ def install_bank_transfer_receipt_routes(router, db, current_user) -> None:
         actor, owner = await scope(user, "accounting.movements.import")
         content = await file.read(MAX_RECEIPT_BYTES + 1)
         try:
-            return await save_receipt_draft(
-                db,
-                owner=owner,
-                actor=actor,
-                evidence_id=evidence_id,
-                filename=file.filename or "receipt",
-                content_type=file.content_type or "",
-                content=content,
-                notes=notes,
-            )
+            async def commit(scoped):
+                return await save_receipt_draft(
+                    scoped,
+                    owner=owner,
+                    actor=actor,
+                    evidence_id=evidence_id,
+                    filename=file.filename or "receipt",
+                    content_type=file.content_type or "",
+                    content=content,
+                    notes=notes,
+                )
+            return await atomic_owner(db, owner, commit)
         except BankTransferError as exc:
             raise HTTPException(409, detail={"code": str(exc), "message": str(exc)}) from None
 
