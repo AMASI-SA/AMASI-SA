@@ -22,6 +22,7 @@ on:
       - "backend/accounting_inventory_p03_gate.py"
       - "backend/supplier_receiving_routes.py"
       - "backend/product_inventory_receipt_routes.py"
+      - "backend/purchase_invoices_routes.py"
       - "backend/tests/test_mz2_inventory_p03.py"
       - "backend/accounting_mz2_reports.py"
       - "backend/tests/test_mz2_report_isolation.py"
@@ -185,6 +186,7 @@ jobs:
           accounting_shipping_settlements.py
           accounting_inventory_p03.py
           accounting_inventory_p03_gate.py
+          purchase_invoices_routes.py
           accounting_settlement_*.py
           accounting_courier_bank_routes.py
           financial_provider_apps.py
