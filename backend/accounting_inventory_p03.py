@@ -40,6 +40,7 @@ P03_GATE_REF_FIELD = "p03_inventory_purchases_activation_ref"
 MEZAN_SUPPLIERS_V2 = "mezan_suppliers_v2"
 MEZAN_SUPPLIER_INVOICES_V2 = "mezan_supplier_invoices_v2"
 INVENTORY_RECEIPTS_V2 = "mezan_inventory_receipts_v2"
+INVENTORY_CONSUMPTION_EVENTS = "mezan_inventory_consumption_events_v2"
 PURCHASE_INVOICES = "purchase_invoices"
 MEZAN_PRODUCTS_V2 = "mezan_products_v2"
 P03_PURCHASE_REQUESTS = "mz2_inventory_p03_purchase_requests"
@@ -837,6 +838,11 @@ async def post_inventory_receipt(
             "accounting_net_amount": facts["net_amount"],
             "accounting_tax_amount": facts["tax_amount"],
             "accounting_gross_amount": facts["gross_amount"],
+            "accounting_inventory_cost_halalas": inventory_debit_halalas,
+            "accounting_inventory_cost_amount": format(
+                Decimal(inventory_debit_halalas) / Decimal(100),
+                ".2f",
+            ),
             "accounting_posted_at": now,
             "accounting_posted_by": actor["id"],
             "updated_at": now,
@@ -915,6 +921,429 @@ async def post_inventory_receipt(
         "net_amount": facts["net_amount"],
         "tax_amount": facts["tax_amount"],
         "gross_amount": facts["gross_amount"],
+        "reason": reason,
+    })
+    return {
+        "state": "posted",
+        "event_id": proposal["event_id"],
+        "txn_group_id": result["txn_group_id"],
+        "facts": facts,
+    }
+
+
+async def prepare_inventory_cogs_post(
+    db: Any,
+    *,
+    owner: str,
+    consumption_event_id: str,
+) -> dict[str, Any]:
+    consumption = await db[INVENTORY_CONSUMPTION_EVENTS].find_one(
+        {
+            "user_id": owner,
+            "id": consumption_event_id,
+            "status": "consumed",
+        },
+        {"_id": 0},
+    )
+    if not consumption:
+        raise HTTPException(404, "p03_inventory_consumption_not_found")
+
+    order_number = _text(consumption.get("order_number"))
+    if not order_number:
+        raise HTTPException(409, "p03_inventory_consumption_order_missing")
+
+    sales = await db.mz2_salla_order_evidence.find(
+        {
+            "user_id": owner,
+            "order_number": order_number,
+            "recognition_txn_group_id": {"$nin": [None, ""]},
+            "recognized_at": {"$nin": [None, ""]},
+        },
+        {
+            "_id": 0,
+            "id": 1,
+            "recognition_txn_group_id": 1,
+            "recognized_at": 1,
+            "recognized_provider": 1,
+            "status": 1,
+        },
+    ).limit(2).to_list(2)
+    if len(sales) != 1:
+        return {
+            "state": "waiting",
+            "consumption_event_id": consumption_event_id,
+            "order_number": order_number,
+            "reasons": [
+                "sale_recognition_required"
+                if not sales
+                else "unique_sale_recognition_required"
+            ],
+        }
+    sale = sales[0]
+    accounting_at = _aware(sale.get("recognized_at"))
+    if not accounting_at:
+        raise HTTPException(409, "p03_cogs_sale_date_invalid")
+
+    allocations = consumption.get("allocations") or []
+    by_receipt: dict[str, Decimal] = {}
+    missing_receipt_targets = []
+    for allocation in allocations:
+        quantity = Decimal(str(allocation.get("quantity") or 0))
+        receipt_id = _text(allocation.get("receipt_id"))
+        if quantity <= 0:
+            raise HTTPException(409, "p03_cogs_consumption_quantity_invalid")
+        if not receipt_id:
+            missing_receipt_targets.append({
+                "location_id": allocation.get("location_id"),
+                "item_index": allocation.get("item_index"),
+                "quantity": str(quantity),
+            })
+            continue
+        by_receipt[receipt_id] = by_receipt.get(
+            receipt_id, Decimal(0)
+        ) + quantity
+
+    if missing_receipt_targets:
+        return {
+            "state": "waiting",
+            "consumption_event_id": consumption_event_id,
+            "order_number": order_number,
+            "reasons": ["inventory_cost_basis_missing_for_non_receipt_stock"],
+            "missing_cost_targets": missing_receipt_targets,
+        }
+    if not by_receipt:
+        return {
+            "state": "waiting",
+            "consumption_event_id": consumption_event_id,
+            "order_number": order_number,
+            "reasons": ["inventory_consumption_has_no_costed_receipts"],
+        }
+
+    receipts = await db[INVENTORY_RECEIPTS_V2].find(
+        {
+            "user_id": owner,
+            "id": {"$in": sorted(by_receipt)},
+        },
+        {
+            "_id": 0,
+            "id": 1,
+            "quantity": 1,
+            "product_name": 1,
+            "sku": 1,
+            "accounting_source": 1,
+            "accounting_event_id": 1,
+            "accounting_inventory_cost_halalas": 1,
+        },
+    ).to_list(len(by_receipt) + 1)
+    receipt_map = {
+        _text(row.get("id")): row for row in receipts if _text(row.get("id"))
+    }
+    missing = sorted(set(by_receipt) - set(receipt_map))
+    if missing:
+        return {
+            "state": "waiting",
+            "consumption_event_id": consumption_event_id,
+            "order_number": order_number,
+            "reasons": ["inventory_receipt_evidence_missing"],
+            "receipt_ids": missing,
+        }
+
+    prior_rows = await db[P03_EVENTS].find(
+        {
+            "user_id": owner,
+            "kind": "inventory_cogs",
+            "status": "posted",
+            "facts.cost_allocations.receipt_id": {"$in": sorted(by_receipt)},
+        },
+        {"_id": 0, "facts.cost_allocations": 1},
+    ).to_list(10000)
+    prior_by_receipt: dict[str, dict[str, Decimal | int]] = {}
+    for row in prior_rows:
+        for allocation in (row.get("facts") or {}).get("cost_allocations") or []:
+            receipt_id = _text(allocation.get("receipt_id"))
+            if not receipt_id:
+                continue
+            state = prior_by_receipt.setdefault(
+                receipt_id,
+                {"quantity": Decimal(0), "cost_halalas": 0},
+            )
+            state["quantity"] = Decimal(str(state["quantity"])) + Decimal(
+                str(allocation.get("quantity") or 0)
+            )
+            state["cost_halalas"] = int(state["cost_halalas"]) + int(
+                allocation.get("cost_halalas") or 0
+            )
+
+    cost_allocations = []
+    total_cost_halalas = 0
+    for receipt_id in sorted(by_receipt):
+        receipt = receipt_map[receipt_id]
+        if (
+            receipt.get("accounting_source") != SOURCE
+            or not _text(receipt.get("accounting_event_id"))
+        ):
+            return {
+                "state": "waiting",
+                "consumption_event_id": consumption_event_id,
+                "order_number": order_number,
+                "reasons": ["inventory_receipt_accounting_required"],
+                "receipt_ids": [receipt_id],
+            }
+        receipt_qty = Decimal(str(receipt.get("quantity") or 0))
+        receipt_cost_halalas = int(
+            receipt.get("accounting_inventory_cost_halalas") or 0
+        )
+        consume_qty = by_receipt[receipt_id]
+        if receipt_qty <= 0 or receipt_cost_halalas <= 0:
+            raise HTTPException(409, "p03_cogs_receipt_cost_invalid")
+        prior = prior_by_receipt.get(
+            receipt_id,
+            {"quantity": Decimal(0), "cost_halalas": 0},
+        )
+        prior_qty = Decimal(str(prior["quantity"]))
+        prior_cost = int(prior["cost_halalas"])
+        remaining_qty = receipt_qty - prior_qty
+        remaining_cost = receipt_cost_halalas - prior_cost
+        if consume_qty > remaining_qty or remaining_cost < 0:
+            raise HTTPException(
+                409,
+                detail={
+                    "code": "p03_cogs_exceeds_receipt_cost_basis",
+                    "receipt_id": receipt_id,
+                    "remaining_quantity": str(max(Decimal(0), remaining_qty)),
+                },
+            )
+        if consume_qty == remaining_qty:
+            cost_halalas = remaining_cost
+        else:
+            proportional = (
+                Decimal(receipt_cost_halalas)
+                * consume_qty
+                / receipt_qty
+            ).quantize(HALALA, rounding=ROUND_HALF_UP)
+            cost_halalas = min(int(proportional), remaining_cost)
+        if cost_halalas <= 0:
+            raise HTTPException(409, "p03_cogs_cost_must_be_positive")
+        total_cost_halalas += cost_halalas
+        cost_allocations.append({
+            "receipt_id": receipt_id,
+            "quantity": str(consume_qty),
+            "cost_halalas": cost_halalas,
+            "cost_amount": format(
+                Decimal(cost_halalas) / Decimal(100),
+                ".2f",
+            ),
+            "product_name": receipt.get("product_name") or "",
+            "sku": receipt.get("sku") or "",
+        })
+
+    event_id = _digest([
+        owner,
+        "inventory_cogs",
+        consumption_event_id,
+        sale["recognition_txn_group_id"],
+    ])
+    facts = {
+        "consumption_event_id": consumption_event_id,
+        "batch_id": _text(consumption.get("batch_id")) or None,
+        "order_number": order_number,
+        "sale_evidence_id": sale.get("id"),
+        "sale_txn_group_id": sale["recognition_txn_group_id"],
+        "recognized_provider": sale.get("recognized_provider"),
+        "accounting_at": accounting_at.isoformat(),
+        "cost_allocations": cost_allocations,
+        "total_cost_halalas": total_cost_halalas,
+        "total_cost": format(
+            Decimal(total_cost_halalas) / Decimal(100),
+            ".2f",
+        ),
+    }
+    prior_event = await db[P03_EVENTS].find_one(
+        {"_id": event_id, "user_id": owner},
+        {"_id": 0},
+    )
+    economic_hash = _digest(facts)
+    if prior_event:
+        if prior_event.get("economic_hash") != economic_hash:
+            raise HTTPException(409, "p03_cogs_economic_conflict")
+        if prior_event.get("status") == "posted":
+            return {
+                "state": "already_posted",
+                "event_id": event_id,
+                "facts": facts,
+                "txn_group_id": prior_event.get("txn_group_id"),
+            }
+        raise HTTPException(409, "p03_cogs_requires_recovery")
+
+    return {
+        "state": "eligible",
+        "event_id": event_id,
+        "facts": facts,
+        "economic_hash": economic_hash,
+    }
+
+
+async def post_inventory_cogs(
+    db: Any,
+    *,
+    owner: str,
+    actor: dict[str, Any],
+    consumption_event_id: str,
+    reason: str,
+) -> dict[str, Any]:
+    proposal = await prepare_inventory_cogs_post(
+        db,
+        owner=owner,
+        consumption_event_id=consumption_event_id,
+    )
+    if proposal["state"] == "already_posted":
+        return proposal
+    if proposal["state"] != "eligible":
+        raise HTTPException(
+            409,
+            detail={
+                "code": "p03_cogs_not_eligible",
+                "state": proposal.get("state"),
+                "reasons": proposal.get("reasons") or [],
+            },
+        )
+    facts = proposal["facts"]
+    await require_p03_inventory_financial_writes(
+        db,
+        owner=owner,
+        event_at=facts["accounting_at"],
+    )
+    balances = await read_mz2_write_balances(
+        db,
+        owner=owner,
+        required_accounts=[("asset", "inventory", "inventory")],
+    )
+    available_inventory = balances.net_balance(
+        entity_type="asset",
+        entity_id="inventory",
+        sub_account="inventory",
+    )
+    required_cost = Decimal(facts["total_cost"])
+    if required_cost > available_inventory:
+        raise HTTPException(
+            409,
+            detail={
+                "code": "p03_cogs_exceeds_mz2_inventory_balance",
+                "available": format(
+                    max(available_inventory, Decimal(0)),
+                    ".2f",
+                ),
+                "required": format(required_cost, ".2f"),
+            },
+        )
+
+    now = datetime.now(timezone.utc).isoformat()
+    await db[P03_EVENTS].insert_one({
+        "_id": proposal["event_id"],
+        "id": proposal["event_id"],
+        "user_id": owner,
+        "kind": "inventory_cogs",
+        "status": "posting",
+        "economic_hash": proposal["economic_hash"],
+        "facts": facts,
+        "reason": reason,
+        "created_at": now,
+        "created_by": actor["id"],
+    })
+    result = await post_txn_group(
+        db,
+        user_id=owner,
+        actor_id=actor["id"],
+        actor_name=actor.get("name") or actor.get("email") or actor["id"],
+        txn_type="mz2_inventory_cogs",
+        notes=f"تكلفة بضاعة مباعة — طلب {facts['order_number']}",
+        metadata={
+            "operation_id": OPERATION_ID,
+            "source": SOURCE,
+            "p03_event_id": proposal["event_id"],
+            "p03_kind": "inventory_cogs",
+            "inventory_consumption_event_id": facts["consumption_event_id"],
+            "fulfillment_batch_id": facts["batch_id"],
+            "order_reference_id": facts["order_number"],
+            "sale_recognition_txn_group_id": facts["sale_txn_group_id"],
+            "accounting_at": facts["accounting_at"],
+            "cost_basis": "inventory_receipt_lot",
+            "reason": reason,
+        },
+        entries=[
+            {
+                "entity_type": "expense",
+                "entity_id": "cogs",
+                "side": "debit",
+                "amount": facts["total_cost"],
+                "entry_type": "inventory_cogs",
+            },
+            {
+                "entity_type": "asset",
+                "entity_id": "inventory",
+                "sub_account": "inventory",
+                "side": "credit",
+                "amount": facts["total_cost"],
+                "entry_type": "inventory_cogs",
+            },
+        ],
+    )
+    entry_ids = [
+        row.get("id")
+        for row in result.get("entries") or []
+        if row.get("id")
+    ]
+    updated = await db[INVENTORY_CONSUMPTION_EVENTS].update_one(
+        {
+            "user_id": owner,
+            "id": facts["consumption_event_id"],
+            "status": "consumed",
+            "$or": [
+                {"cogs_event_id": {"$exists": False}},
+                {"cogs_event_id": None},
+                {"cogs_event_id": ""},
+            ],
+        },
+        {"$set": {
+            "accounting_status": "cogs_posted",
+            "cogs_event_id": proposal["event_id"],
+            "cogs_txn_group_id": result["txn_group_id"],
+            "cogs_entry_ids": entry_ids,
+            "cogs_amount": facts["total_cost"],
+            "cogs_posted_at": now,
+            "cogs_posted_by": actor["id"],
+            "updated_at": now,
+        }},
+    )
+    if updated.modified_count != 1:
+        raise HTTPException(409, "p03_cogs_concurrent_post")
+
+    await db[P03_EVENTS].update_one(
+        {
+            "_id": proposal["event_id"],
+            "user_id": owner,
+            "status": "posting",
+        },
+        {"$set": {
+            "status": "posted",
+            "txn_group_id": result["txn_group_id"],
+            "entry_ids": entry_ids,
+            "posted_at": now,
+            "posted_by": actor["id"],
+        }},
+    )
+    await db[P03_AUDIT].insert_one({
+        "user_id": owner,
+        "action": "inventory_cogs_posted",
+        "actor_id": actor["id"],
+        "at": now,
+        "event_id": proposal["event_id"],
+        "consumption_event_id": facts["consumption_event_id"],
+        "order_number": facts["order_number"],
+        "sale_txn_group_id": facts["sale_txn_group_id"],
+        "txn_group_id": result["txn_group_id"],
+        "amount": facts["total_cost"],
+        "cost_allocations": facts["cost_allocations"],
         "reason": reason,
     })
     return {
@@ -1031,8 +1460,29 @@ async def inventory_p03_workspace(db: Any, *, owner: str) -> dict[str, Any]:
             "posted_at": 1,
             "accounting_event_id": 1,
             "accounting_txn_group_id": 1,
+            "accounting_inventory_cost_amount": 1,
+            "accounting_inventory_cost_halalas": 1,
         },
     ).sort("posted_at", -1).limit(300).to_list(300)
+
+    inventory_consumptions = await db[INVENTORY_CONSUMPTION_EVENTS].find(
+        {
+            "user_id": owner,
+            "status": "consumed",
+        },
+        {
+            "_id": 0,
+            "id": 1,
+            "order_number": 1,
+            "batch_id": 1,
+            "allocations": 1,
+            "consumed_at": 1,
+            "accounting_status": 1,
+            "cogs_event_id": 1,
+            "cogs_txn_group_id": 1,
+            "cogs_amount": 1,
+        },
+    ).sort("consumed_at", -1).limit(300).to_list(300)
 
     return {
         "phase": phase,
@@ -1049,11 +1499,17 @@ async def inventory_p03_workspace(db: Any, *, owner: str) -> dict[str, Any]:
         "supplier_invoices": supplier_invoices,
         "purchase_invoices": purchase_invoices,
         "inventory_receipts": inventory_receipts,
+        "inventory_consumptions": inventory_consumptions,
         "summary": {
             "active_suppliers": len(suppliers),
             "supplier_invoices": len(supplier_invoices),
             "purchase_invoices": len(purchase_invoices),
             "posted_inventory_receipts": len(inventory_receipts),
+            "inventory_consumptions": len(inventory_consumptions),
+            "inventory_consumptions_without_cogs": sum(
+                1 for row in inventory_consumptions
+                if not row.get("cogs_event_id")
+            ),
             "supplier_invoices_with_existing_ledger": sum(
                 1 for row in supplier_invoices if row.get("ledger_txn_group_id")
             ),
@@ -1366,6 +1822,37 @@ def install_inventory_p03_routes(
                 owner=owner,
                 actor=actor,
                 receipt_id=receipt_id,
+                reason=payload.reason,
+            )
+
+        return await atomic_owner(db, owner, commit)
+
+    @router.get(base + "/inventory-consumptions/{event_id}/cogs-preview")
+    async def inventory_cogs_preview(
+        event_id: str,
+        user: dict = Depends(current_user),
+    ):
+        _, owner = await actor_scope(user, "accounting.inventory.view")
+        return await prepare_inventory_cogs_post(
+            db,
+            owner=owner,
+            consumption_event_id=event_id,
+        )
+
+    @router.post(base + "/inventory-consumptions/{event_id}/cogs-post")
+    async def inventory_cogs_post(
+        event_id: str,
+        payload: P03PostReasonIn,
+        user: dict = Depends(current_user),
+    ):
+        actor, owner = await actor_scope(user, "accounting.purchases.post")
+
+        async def commit(scoped):
+            return await post_inventory_cogs(
+                scoped,
+                owner=owner,
+                actor=actor,
+                consumption_event_id=event_id,
                 reason=payload.reason,
             )
 
