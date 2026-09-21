@@ -41,7 +41,11 @@ from accounting_module_status_routes import fresh_accounting_user
 from accounting_sales_tax_service import read_policy, sale_snapshot
 from accounting_sales_tax import TaxError
 from ledger_core import post_txn_group
-from store_delivery_accounting import require_p02_shipping_financial_writes
+from store_delivery_accounting import (
+    P02_SHIPPING_GATE_EVIDENCE_FIELD,
+    P02_SHIPPING_GATE_FIELD,
+    require_p02_shipping_financial_writes,
+)
 
 
 # Collection names are data contracts, not router dependencies.  Keep this
@@ -55,6 +59,7 @@ MONEY = Decimal("0.01")
 SOURCE = "accounting_shipping_p02"
 RATE_TREATMENT = "gross_expense_no_input_vat"
 MAX_POLICY_VERSIONS = 1000
+P02_PHASE_AUDIT = "mz2_shipping_p02_phase_audit"
 
 
 class ShippingAccountingError(ValueError):
@@ -130,6 +135,219 @@ def _event_date_from_salla(value: Any) -> str:
 
 def _public(row: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in row.items() if key != "_id"}
+
+
+async def read_p02_phase(db, owner: str) -> dict[str, Any]:
+    row = await db.settings.find_one(
+        {"user_id": owner},
+        {"_id": 0, "mezan2_financial_cutover": 1},
+    )
+    state = dict((row or {}).get("mezan2_financial_cutover") or {})
+    return {
+        "operation_id": state.get("operation_id"),
+        "p01_status": state.get("status"),
+        "cutover_at": state.get("cutover_at"),
+        "opening_balance_txn_group_id": state.get(
+            "opening_balance_txn_group_id"
+        ),
+        "p02_shipping_cod_enabled": state.get(P02_SHIPPING_GATE_FIELD) is True,
+        "p02_shipping_cod_activation_ref": str(
+            state.get(P02_SHIPPING_GATE_EVIDENCE_FIELD) or ""
+        ).strip() or None,
+        "p02_shipping_cod_activated_at": state.get(
+            "p02_shipping_cod_activated_at"
+        ),
+        "p02_shipping_cod_activated_by": state.get(
+            "p02_shipping_cod_activated_by"
+        ),
+        "p03_inventory_purchases_enabled": (
+            state.get("p03_inventory_purchases_enabled") is True
+        ),
+    }
+
+
+async def _p02_required_opening_accounts(
+    db,
+    *,
+    owner: str,
+) -> set[tuple[str, str, str]]:
+    policy = await read_shipping_policy(db, owner)
+    courier_ids = {
+        str(version.get("courier_id") or "").strip()
+        for version in (policy.get("versions") or [])
+        if isinstance(version, dict)
+        and version.get("verification_status") == "approved"
+        and str(version.get("courier_id") or "").strip()
+    }
+    drivers = await db[STORE_DRIVERS].find(
+        {
+            "user_id": owner,
+            "status": {"$ne": "inactive"},
+            "archived": {"$ne": True},
+            "deleted": {"$ne": True},
+        },
+        {"_id": 0, "id": 1},
+    ).to_list(5000)
+    driver_ids = {
+        str(row.get("id") or "").strip()
+        for row in drivers
+        if str(row.get("id") or "").strip()
+    }
+    required = set()
+    for courier_id in courier_ids:
+        required.add(("courier", courier_id, "payable"))
+        required.add(("courier", courier_id, "cod_receivable"))
+    for driver_id in driver_ids:
+        required.add(("store_driver", driver_id, "cod_receivable"))
+        required.add(("store_driver", driver_id, "delivery_fee_payable"))
+    return required
+
+
+async def _p02_opening_covered_accounts(
+    db,
+    *,
+    owner: str,
+    phase: dict[str, Any],
+) -> set[tuple[str, str, str]]:
+    group = str(phase.get("opening_balance_txn_group_id") or "").strip()
+    if not group:
+        return set()
+    opening = await db.general_ledger.find(
+        {
+            "user_id": owner,
+            "txn_group_id": group,
+            "entry_type": "opening_balance",
+            "status": "posted",
+            "metadata.operation_id": OPERATION_ID,
+        },
+        {
+            "_id": 0,
+            "entity_type": 1,
+            "entity_id": 1,
+            "sub_account": 1,
+        },
+    ).to_list(10000)
+    covered = {
+        (
+            str(row.get("entity_type") or ""),
+            str(row.get("entity_id") or ""),
+            str(row.get("sub_account") or ""),
+        )
+        for row in opening
+        if row.get("entity_type") and row.get("entity_id")
+    }
+    settings = await db.settings.find_one(
+        {"user_id": owner},
+        {"_id": 0, "mezan2_financial_cutover.opening_balance_zero_accounts": 1},
+    )
+    state = (settings or {}).get("mezan2_financial_cutover") or {}
+    for row in state.get("opening_balance_zero_accounts") or []:
+        if not isinstance(row, dict):
+            continue
+        entity_type = str(row.get("entity_type") or "").strip()
+        entity_id = str(row.get("entity_id") or "").strip()
+        sub_account = str(row.get("sub_account") or "")
+        if entity_type and entity_id:
+            covered.add((entity_type, entity_id, sub_account))
+    return covered
+
+
+class P02ActivateIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    activation_ref: str = Field(min_length=3, max_length=500)
+    confirmation: Literal["ACTIVATE_MZ2_P02"]
+
+    @field_validator("activation_ref")
+    @classmethod
+    def activation_ref_valid(cls, value: str) -> str:
+        return value.strip()
+
+
+async def activate_p02(
+    db,
+    *,
+    owner: str,
+    actor: dict[str, Any],
+    payload: P02ActivateIn,
+) -> dict[str, Any]:
+    require_owner(actor)
+    require_accounting_permission(actor, "accounting.rules.manage")
+    phase = await read_p02_phase(db, owner)
+    if (
+        phase.get("p02_shipping_cod_enabled")
+        and phase.get("p02_shipping_cod_activation_ref")
+    ):
+        return {**phase, "state": "already_active"}
+
+    missing = []
+    if phase.get("operation_id") != OPERATION_ID:
+        missing.append("operation_id")
+    if phase.get("p01_status") != "active":
+        missing.append("p01_active")
+    if not phase.get("cutover_at"):
+        missing.append("cutover_at")
+    if not phase.get("opening_balance_txn_group_id"):
+        missing.append("opening_balance")
+    if phase.get("p03_inventory_purchases_enabled"):
+        missing.append("p03_must_not_precede_p02")
+    if missing:
+        raise HTTPException(
+            409,
+            detail={"code": "p02_activation_not_ready", "missing": missing},
+        )
+
+    required = await _p02_required_opening_accounts(db, owner=owner)
+    covered = await _p02_opening_covered_accounts(
+        db,
+        owner=owner,
+        phase=phase,
+    )
+    missing_accounts = sorted(required - covered)
+    if missing_accounts:
+        raise HTTPException(
+            409,
+            detail={
+                "code": "p02_activation_opening_scope_incomplete",
+                "missing_accounts": [
+                    "/".join(account) for account in missing_accounts
+                ],
+            },
+        )
+
+    now = datetime.now(timezone.utc).isoformat()
+    await db.settings.update_one(
+        {"user_id": owner},
+        {"$set": {
+            f"mezan2_financial_cutover.{P02_SHIPPING_GATE_FIELD}": True,
+            (
+                "mezan2_financial_cutover."
+                + P02_SHIPPING_GATE_EVIDENCE_FIELD
+            ): payload.activation_ref,
+            "mezan2_financial_cutover.p02_shipping_cod_activated_at": now,
+            "mezan2_financial_cutover.p02_shipping_cod_activated_by": actor["id"],
+        }},
+    )
+    await db[P02_PHASE_AUDIT].insert_one({
+        "user_id": owner,
+        "action": "p02_activated",
+        "actor_id": actor["id"],
+        "at": now,
+        "activation_ref": payload.activation_ref,
+        "opening_balance_txn_group_id": phase.get(
+            "opening_balance_txn_group_id"
+        ),
+        "required_opening_accounts": [
+            "/".join(account) for account in sorted(required)
+        ],
+    })
+    return {
+        **phase,
+        "state": "active",
+        "p02_shipping_cod_enabled": True,
+        "p02_shipping_cod_activation_ref": payload.activation_ref,
+        "p02_shipping_cod_activated_at": now,
+        "p02_shipping_cod_activated_by": actor["id"],
+    }
 
 
 class ShippingRateInput(BaseModel):
@@ -1014,7 +1232,9 @@ async def shipping_workspace_context(
         },
     ).sort("created_at", -1).limit(50).to_list(50)
 
+    phase = await read_p02_phase(db, owner)
     return {
+        "phase": phase,
         "rate_policy": policy,
         "latest_rates": list(latest_rate_by_courier.values()),
         "courier_candidates": courier_candidates,
@@ -1056,6 +1276,23 @@ def install_shipping_p02_routes(router, db, current_user) -> None:
     async def workspace(user: dict = Depends(current_user)):
         _, owner = await scope(user, "accounting.shipping.view")
         return await shipping_workspace_context(db, owner=owner)
+
+    @router.post(base + "/activate")
+    async def activate(
+        payload: P02ActivateIn,
+        user: dict = Depends(current_user),
+    ):
+        actor, owner = await scope(user, "accounting.rules.manage")
+
+        async def commit(scoped):
+            return await activate_p02(
+                scoped,
+                owner=owner,
+                actor=actor,
+                payload=payload,
+            )
+
+        return await atomic_owner(db, owner, commit)
 
     @router.get(base + "/rates")
     async def rates(user: dict = Depends(current_user)):
