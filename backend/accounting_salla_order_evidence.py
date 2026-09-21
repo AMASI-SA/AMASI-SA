@@ -302,6 +302,7 @@ def parse_salla_order_xlsx(content: bytes) -> dict[str, Any]:
                     ) or None,
                     "shipping_cost_source": format(shipping_cost, ".2f"),
                     "cod_fee_source": format(cod_fee, ".2f"),
+                    "source_tax_sar": format(_money(_cell(raw, mapping, "الضريبة")), ".2f"),
                     "waybill": _clean(_cell(raw, mapping, "رقم البوليصة")) or None,
                 }
                 state, reasons = classify_salla_order_row(row)
@@ -314,7 +315,7 @@ def parse_salla_order_xlsx(content: bytes) -> dict[str, Any]:
                         "refunded_sar", "original_amount", "original_currency",
                         "order_date_source_text", "updated_source_text",
                         "delivery_source_text", "shipping_company",
-                        "shipping_cost_source", "cod_fee_source", "waybill",
+                        "shipping_cost_source", "cod_fee_source", "source_tax_sar", "waybill",
                     )
                 })
                 rows.append(row)
