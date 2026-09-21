@@ -329,9 +329,6 @@ def _opening_inventory_target_key(
     receipt_id = _text(item.get("receipt_id"))
     if receipt_id:
         return "receipt:" + receipt_id
-    lot_id = _text(item.get("lot_id"))
-    if lot_id:
-        return "lot:" + lot_id
     return f"location:{location_id}:item:{item_index}"
 
 
@@ -1390,86 +1387,162 @@ async def prepare_inventory_cogs_post(
         raise HTTPException(409, "p03_cogs_sale_date_invalid")
 
     allocations = consumption.get("allocations") or []
-    by_receipt: dict[str, Decimal] = {}
-    missing_receipt_targets = []
+    requested_by_target: dict[str, dict[str, Any]] = {}
     for allocation in allocations:
         quantity = Decimal(str(allocation.get("quantity") or 0))
         receipt_id = _text(allocation.get("receipt_id"))
+        location_id = _text(allocation.get("location_id"))
+        item_index = allocation.get("item_index")
         if quantity <= 0:
             raise HTTPException(409, "p03_cogs_consumption_quantity_invalid")
-        if not receipt_id:
-            missing_receipt_targets.append({
-                "location_id": allocation.get("location_id"),
-                "item_index": allocation.get("item_index"),
-                "quantity": str(quantity),
-            })
-            continue
-        by_receipt[receipt_id] = by_receipt.get(
-            receipt_id, Decimal(0)
-        ) + quantity
+        if receipt_id:
+            target_key = "receipt:" + receipt_id
+        elif location_id and item_index is not None:
+            target_key = f"location:{location_id}:item:{item_index}"
+        else:
+            return {
+                "state": "waiting",
+                "consumption_event_id": consumption_event_id,
+                "order_number": order_number,
+                "reasons": ["inventory_cost_basis_target_missing"],
+            }
+        target = requested_by_target.setdefault(target_key, {
+            "target_key": target_key,
+            "receipt_id": receipt_id or None,
+            "location_id": location_id or None,
+            "item_index": item_index,
+            "quantity": Decimal(0),
+        })
+        target["quantity"] = Decimal(str(target["quantity"])) + quantity
 
-    if missing_receipt_targets:
+    if not requested_by_target:
         return {
             "state": "waiting",
             "consumption_event_id": consumption_event_id,
             "order_number": order_number,
-            "reasons": ["inventory_cost_basis_missing_for_non_receipt_stock"],
-            "missing_cost_targets": missing_receipt_targets,
-        }
-    if not by_receipt:
-        return {
-            "state": "waiting",
-            "consumption_event_id": consumption_event_id,
-            "order_number": order_number,
-            "reasons": ["inventory_consumption_has_no_costed_receipts"],
+            "reasons": ["inventory_consumption_has_no_cost_basis_targets"],
         }
 
-    receipts = await db[INVENTORY_RECEIPTS_V2].find(
-        {
-            "user_id": owner,
-            "id": {"$in": sorted(by_receipt)},
-        },
-        {
-            "_id": 0,
-            "id": 1,
-            "quantity": 1,
-            "product_name": 1,
-            "sku": 1,
-            "accounting_source": 1,
-            "accounting_event_id": 1,
-            "accounting_inventory_cost_halalas": 1,
-        },
-    ).to_list(len(by_receipt) + 1)
+    receipt_ids = sorted({
+        row["receipt_id"]
+        for row in requested_by_target.values()
+        if row.get("receipt_id")
+    })
+    receipts = (
+        await db[INVENTORY_RECEIPTS_V2].find(
+            {
+                "user_id": owner,
+                "id": {"$in": receipt_ids},
+            },
+            {
+                "_id": 0,
+                "id": 1,
+                "quantity": 1,
+                "product_name": 1,
+                "sku": 1,
+                "accounting_source": 1,
+                "accounting_event_id": 1,
+                "accounting_inventory_cost_halalas": 1,
+            },
+        ).to_list(len(receipt_ids) + 1)
+        if receipt_ids
+        else []
+    )
     receipt_map = {
-        _text(row.get("id")): row for row in receipts if _text(row.get("id"))
+        _text(row.get("id")): row
+        for row in receipts
+        if _text(row.get("id"))
     }
-    missing = sorted(set(by_receipt) - set(receipt_map))
-    if missing:
+    opening_snapshot = await db[P03_OPENING_COST_SNAPSHOT].find_one(
+        {
+            "_id": owner,
+            "user_id": owner,
+            "status": "approved",
+        },
+        {"_id": 0},
+    ) or {}
+    opening_cost_map = {
+        _text(row.get("target_key")): row
+        for row in (opening_snapshot.get("lines") or [])
+        if _text(row.get("target_key"))
+    }
+
+    cost_basis: dict[str, dict[str, Any]] = {}
+    unresolved = []
+    for target_key, requested in requested_by_target.items():
+        receipt_id = requested.get("receipt_id")
+        receipt = receipt_map.get(receipt_id) if receipt_id else None
+        if (
+            receipt
+            and receipt.get("accounting_source") == SOURCE
+            and _text(receipt.get("accounting_event_id"))
+            and int(receipt.get("accounting_inventory_cost_halalas") or 0) > 0
+        ):
+            cost_basis[target_key] = {
+                "source_kind": "p03_inventory_receipt",
+                "target_key": target_key,
+                "receipt_id": receipt_id,
+                "quantity": Decimal(str(receipt.get("quantity") or 0)),
+                "total_cost_halalas": int(
+                    receipt.get("accounting_inventory_cost_halalas") or 0
+                ),
+                "product_name": receipt.get("product_name") or "",
+                "sku": receipt.get("sku") or "",
+                "evidence_ref": None,
+            }
+            continue
+        opening = opening_cost_map.get(target_key)
+        if opening:
+            cost_basis[target_key] = {
+                "source_kind": "opening_inventory_snapshot",
+                "target_key": target_key,
+                "receipt_id": receipt_id,
+                "quantity": Decimal(str(opening.get("quantity") or 0)),
+                "total_cost_halalas": int(
+                    opening.get("total_cost_halalas") or 0
+                ),
+                "product_name": opening.get("product_name") or "",
+                "sku": opening.get("sku") or "",
+                "evidence_ref": opening_snapshot.get("evidence_ref"),
+            }
+            continue
+        unresolved.append({
+            "target_key": target_key,
+            "receipt_id": receipt_id,
+            "location_id": requested.get("location_id"),
+            "item_index": requested.get("item_index"),
+            "quantity": str(requested.get("quantity")),
+        })
+
+    if unresolved:
         return {
             "state": "waiting",
             "consumption_event_id": consumption_event_id,
             "order_number": order_number,
-            "reasons": ["inventory_receipt_evidence_missing"],
-            "receipt_ids": missing,
+            "reasons": ["inventory_cost_basis_missing"],
+            "missing_cost_targets": unresolved,
         }
 
+    target_keys = sorted(requested_by_target)
     prior_rows = await db[P03_EVENTS].find(
         {
             "user_id": owner,
             "kind": "inventory_cogs",
             "status": "posted",
-            "facts.cost_allocations.receipt_id": {"$in": sorted(by_receipt)},
+            "facts.cost_allocations.target_key": {"$in": target_keys},
         },
         {"_id": 0, "facts.cost_allocations": 1},
     ).to_list(10000)
-    prior_by_receipt: dict[str, dict[str, Decimal | int]] = {}
+    prior_by_target: dict[str, dict[str, Decimal | int]] = {}
     for row in prior_rows:
-        for allocation in (row.get("facts") or {}).get("cost_allocations") or []:
-            receipt_id = _text(allocation.get("receipt_id"))
-            if not receipt_id:
+        for allocation in (row.get("facts") or {}).get(
+            "cost_allocations"
+        ) or []:
+            target_key = _text(allocation.get("target_key"))
+            if not target_key:
                 continue
-            state = prior_by_receipt.setdefault(
-                receipt_id,
+            state = prior_by_target.setdefault(
+                target_key,
                 {"quantity": Decimal(0), "cost_halalas": 0},
             )
             state["quantity"] = Decimal(str(state["quantity"])) + Decimal(
@@ -1481,65 +1554,65 @@ async def prepare_inventory_cogs_post(
 
     cost_allocations = []
     total_cost_halalas = 0
-    for receipt_id in sorted(by_receipt):
-        receipt = receipt_map[receipt_id]
-        if (
-            receipt.get("accounting_source") != SOURCE
-            or not _text(receipt.get("accounting_event_id"))
-        ):
-            return {
-                "state": "waiting",
-                "consumption_event_id": consumption_event_id,
-                "order_number": order_number,
-                "reasons": ["inventory_receipt_accounting_required"],
-                "receipt_ids": [receipt_id],
-            }
-        receipt_qty = Decimal(str(receipt.get("quantity") or 0))
-        receipt_cost_halalas = int(
-            receipt.get("accounting_inventory_cost_halalas") or 0
+    for target_key in target_keys:
+        basis = cost_basis[target_key]
+        basis_qty = Decimal(str(basis.get("quantity") or 0))
+        basis_cost_halalas = int(basis.get("total_cost_halalas") or 0)
+        consume_qty = Decimal(
+            str(requested_by_target[target_key]["quantity"])
         )
-        consume_qty = by_receipt[receipt_id]
-        if receipt_qty <= 0 or receipt_cost_halalas <= 0:
-            raise HTTPException(409, "p03_cogs_receipt_cost_invalid")
-        prior = prior_by_receipt.get(
-            receipt_id,
+        if basis_qty <= 0 or basis_cost_halalas <= 0:
+            raise HTTPException(
+                409,
+                detail={
+                    "code": "p03_cogs_cost_basis_invalid",
+                    "target_key": target_key,
+                },
+            )
+        prior = prior_by_target.get(
+            target_key,
             {"quantity": Decimal(0), "cost_halalas": 0},
         )
         prior_qty = Decimal(str(prior["quantity"]))
         prior_cost = int(prior["cost_halalas"])
-        remaining_qty = receipt_qty - prior_qty
-        remaining_cost = receipt_cost_halalas - prior_cost
+        remaining_qty = basis_qty - prior_qty
+        remaining_cost = basis_cost_halalas - prior_cost
         if consume_qty > remaining_qty or remaining_cost < 0:
             raise HTTPException(
                 409,
                 detail={
-                    "code": "p03_cogs_exceeds_receipt_cost_basis",
-                    "receipt_id": receipt_id,
-                    "remaining_quantity": str(max(Decimal(0), remaining_qty)),
+                    "code": "p03_cogs_exceeds_cost_basis",
+                    "target_key": target_key,
+                    "remaining_quantity": str(
+                        max(Decimal(0), remaining_qty)
+                    ),
                 },
             )
         if consume_qty == remaining_qty:
             cost_halalas = remaining_cost
         else:
             proportional = (
-                Decimal(receipt_cost_halalas)
+                Decimal(basis_cost_halalas)
                 * consume_qty
-                / receipt_qty
+                / basis_qty
             ).quantize(HALALA, rounding=ROUND_HALF_UP)
             cost_halalas = min(int(proportional), remaining_cost)
         if cost_halalas <= 0:
             raise HTTPException(409, "p03_cogs_cost_must_be_positive")
         total_cost_halalas += cost_halalas
         cost_allocations.append({
-            "receipt_id": receipt_id,
+            "target_key": target_key,
+            "source_kind": basis["source_kind"],
+            "receipt_id": basis.get("receipt_id"),
             "quantity": str(consume_qty),
             "cost_halalas": cost_halalas,
             "cost_amount": format(
                 Decimal(cost_halalas) / Decimal(100),
                 ".2f",
             ),
-            "product_name": receipt.get("product_name") or "",
-            "sku": receipt.get("sku") or "",
+            "product_name": basis.get("product_name") or "",
+            "sku": basis.get("sku") or "",
+            "evidence_ref": basis.get("evidence_ref"),
         })
 
     event_id = _digest([
