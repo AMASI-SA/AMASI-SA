@@ -298,3 +298,29 @@ export async function classifyAccountingEmployeeMovement(movementId, payload) {
     );
     return data;
 }
+
+
+export async function uploadAccountingOrderEvidence(file) {
+    const form = new FormData();
+    form.append("file", file);
+    const { data } = await api.post(`${BASE}/order-evidence/upload`, form, {
+        headers: { "Content-Type": "multipart/form-data" },
+    });
+    return data;
+}
+
+export async function getAccountingOrderRecognitionQueue(params = {}) {
+    const { data } = await api.get(`${BASE}/order-recognition/queue`, {
+        params: compactParams(params),
+    });
+    return data;
+}
+
+export async function recognizeAccountingReadyOrders({ limit = 100, dryRun = true, fileId = "" } = {}) {
+    const { data } = await api.post(`${BASE}/order-recognition/recognize-ready`, {
+        limit,
+        dry_run: dryRun,
+        ...(fileId ? { file_id: fileId } : {}),
+    });
+    return data;
+}
