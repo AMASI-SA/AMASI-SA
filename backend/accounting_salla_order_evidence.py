@@ -337,6 +337,66 @@ def parse_salla_order_xlsx(content: bytes) -> dict[str, Any]:
         workbook.close()
 
 
+RECOGNITION_FIELDS = (
+    "recognition_event_key",
+    "recognition_txn_group_id",
+    "recognized_at",
+    "recognized_provider",
+    "recognized_gross_sar",
+    "recognized_tax_sar",
+    "recognized_net_sar",
+    "recognized_by",
+    "recognition_posted_at",
+)
+
+
+def _preserve_recognized_state(prior: dict[str, Any], current: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
+    """Keep a posted sale attached when a newer Salla export arrives.
+
+    Shipping/display changes are allowed.  A later, reconciled refund moves the
+    row to refund-pending.  Changes to the already-posted payment identity,
+    gross amount, or delivery accounting source date become review conflicts
+    instead of silently rewriting history.
+    """
+    if not prior.get("recognition_txn_group_id"):
+        return current, None
+    for field in RECOGNITION_FIELDS:
+        if field in prior:
+            current[field] = prior[field]
+
+    reason = None
+    old_payment = prior.get("payment_reference") or {}
+    new_payment = current.get("payment_reference") or {}
+    if (
+        prior.get("recognized_provider") != current.get("accounting_provider")
+        or old_payment.get("reference") != new_payment.get("reference")
+        or str(old_payment.get("amount") or "") != str(new_payment.get("amount") or "")
+    ):
+        reason = "recognized_payment_identity_changed"
+    elif prior.get("delivery_source_text") != current.get("delivery_source_text"):
+        reason = "recognized_delivery_timestamp_changed"
+    else:
+        gross = Decimal(str(prior.get("recognized_gross_sar") or "0"))
+        refunded = Decimal(str(current.get("refunded_sar") or "0"))
+        current_net = Decimal(str(current.get("current_net_sar") or "0"))
+        if refunded > 0 and gross - refunded == current_net:
+            current["status"] = "recognized_refund_pending_evidence"
+            current["review_reasons"] = ["refund_provider_identity_required"]
+        elif refunded == 0 and gross == current_net:
+            current["status"] = "recognized"
+            current["review_reasons"] = []
+        else:
+            reason = "recognized_amount_changed"
+
+    if reason:
+        current["conflict"] = True
+        current["status"] = "needs_review"
+        current["review_reasons"] = sorted(set(
+            list(current.get("review_reasons") or []) + [reason]
+        ))
+    return current, reason
+
+
 async def import_salla_order_evidence(
     db,
     *,
@@ -417,6 +477,16 @@ async def import_salla_order_evidence(
             current["review_reasons"] = sorted(set(
                 list(current.get("review_reasons") or []) + ["same_source_version_changed"]
             ))
+        if prior and prior.get("recognition_txn_group_id"):
+            current, recognized_conflict = _preserve_recognized_state(prior, current)
+            if recognized_conflict:
+                conflicts.append({
+                    "order_number": row["order_number"],
+                    "code": recognized_conflict,
+                    "prior_snapshot_id": prior.get("latest_snapshot_id"),
+                    "incoming_snapshot_id": snapshot_id,
+                    "recognition_txn_group_id": prior.get("recognition_txn_group_id"),
+                })
         current_updates.append(current)
 
     if snapshots:
