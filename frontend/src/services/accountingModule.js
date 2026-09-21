@@ -358,3 +358,9 @@ export async function postAccountingShippingSettlement(payload) {
     const { data } = await api.post(`${BASE}/shipping-p02/settlements/post`, payload);
     return data;
 }
+
+
+export async function getAccountingShippingContext() {
+    const { data } = await api.get(`${BASE}/shipping-p02/context`);
+    return data;
+}
