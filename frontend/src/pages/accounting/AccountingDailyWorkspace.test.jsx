@@ -20,7 +20,8 @@ test("full UAT daily workspace keeps all routine inputs on one simple surface", 
     expect(dailySource).toContain("رفع كشف البنك");
     expect(dailySource).toContain("مراجعة إيصالات التحويل");
     expect(dailySource).toContain("رفع ملف تسوية");
-    expect(dailySource).toContain("مبلغ واصل يدويًا");
+    expect(dailySource).toContain("إضافة حركة مالية");
+    expect(dailySource).toContain("سجّل تحويلًا واردًا بالمبلغ واسم المحوّل والتاريخ والبنك");
     expect(dailySource).toContain("الرواتب والسلف");
     expect(dailySource).toContain("يحتاج منك");
     expect(dailySource).toContain("آخر العمليات");
