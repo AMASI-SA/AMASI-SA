@@ -363,6 +363,8 @@ def _preserve_recognized_state(prior: dict[str, Any], current: dict[str, Any]) -
     for field in RECOGNITION_FIELDS:
         if field in prior:
             current[field] = prior[field]
+    if current.get("conflict"):
+        return current, None
 
     reason = None
     old_payment = prior.get("payment_reference") or {}
