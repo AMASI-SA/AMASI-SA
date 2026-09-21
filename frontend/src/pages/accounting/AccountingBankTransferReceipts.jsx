@@ -217,25 +217,47 @@ function ReviewCard({ item, permissions, onDone }) {
                             </div>
                             {!candidates ? (
                                 <button type="button" onClick={loadCandidates} className="min-h-10 rounded-xl border border-slate-200 px-4 text-xs font-extrabold">تحميل حركات البنك</button>
-                            ) : exactCandidates.length === 0 ? (
+                            ) : (candidates?.items || []).length === 0 ? (
                                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs font-bold leading-6 text-amber-900">
-                                    لا توجد حركة واردة مطابقة الآن. ارفع كشف البنك أولًا أو انتظر ظهور التحويل، ثم ارجع واضغط تحديث.
+                                    لا توجد حركة واردة في هذا البنك بعد. ارفع كشف البنك أولًا أو انتظر ظهور التحويل، ثم ارجع واضغط تحديث.
                                 </div>
                             ) : (
                                 <div className="space-y-2">
-                                    {exactCandidates.map((movement) => (
-                                        <label key={movement.id} className={"flex cursor-pointer items-start gap-3 rounded-xl border p-3 " + (selectedMovement === movement.id ? "border-emerald-400 bg-emerald-50" : "border-slate-200 bg-white")}>
-                                            <input type="radio" name={"movement-" + review.id} value={movement.id} checked={selectedMovement === movement.id} onChange={() => setSelectedMovement(movement.id)} className="mt-1" />
+                                    {(candidates?.items || []).map((movement) => (
+                                        <label key={movement.id} className={"flex items-start gap-3 rounded-xl border p-3 " + (
+                                            movement.amount_matches
+                                                ? selectedMovement === movement.id
+                                                    ? "cursor-pointer border-emerald-400 bg-emerald-50"
+                                                    : "cursor-pointer border-slate-200 bg-white"
+                                                : "cursor-not-allowed border-rose-200 bg-rose-50"
+                                        )}>
+                                            <input
+                                                type="radio"
+                                                name={"movement-" + review.id}
+                                                value={movement.id}
+                                                checked={selectedMovement === movement.id}
+                                                disabled={!movement.amount_matches}
+                                                onChange={() => movement.amount_matches && setSelectedMovement(movement.id)}
+                                                className="mt-1"
+                                            />
                                             <div className="min-w-0 flex-1">
                                                 <div className="flex flex-wrap items-center gap-2">
-                                                    <span className="font-mono text-sm font-black text-emerald-900">{formatMoney(movement.amount)}</span>
+                                                    <span className={"font-mono text-sm font-black " + (movement.amount_matches ? "text-emerald-900" : "text-rose-900")}>{formatMoney(movement.amount)}</span>
                                                     <span className="text-xs font-bold text-slate-600">{movement.movement_date}</span>
+                                                    {!movement.amount_matches && (
+                                                        <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-extrabold text-rose-800">المبلغ لا يطابق الطلب</span>
+                                                    )}
                                                 </div>
                                                 <div className="mt-1 text-xs font-semibold text-slate-600">{movement.description || "حركة واردة"}</div>
                                                 {movement.reference && <div className="mt-1 font-mono text-[10px] text-slate-400" dir="ltr">{movement.reference}</div>}
                                             </div>
                                         </label>
                                     ))}
+                                    {exactCandidates.length === 0 && (
+                                        <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-bold text-rose-900">
+                                            توجد حركة/حركات واردة، لكن لا يوجد مبلغ مطابق للطلب؛ لا يمكن الاعتماد حتى تتضح الحالة.
+                                        </div>
+                                    )}
                                 </div>
                             )}
                             <label className="flex items-start gap-2 rounded-xl border border-violet-200 bg-violet-50 p-3 text-xs font-extrabold leading-6 text-violet-950">
