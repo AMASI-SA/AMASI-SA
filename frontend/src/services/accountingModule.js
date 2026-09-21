@@ -364,3 +364,12 @@ export async function getAccountingShippingContext() {
     const { data } = await api.get(`${BASE}/shipping-p02/context`);
     return data;
 }
+
+
+export async function processAccountingCourierPending({ limit = 100, dryRun = true } = {}) {
+    const { data } = await api.post(`${BASE}/shipping-p02/courier/process-pending`, {
+        limit,
+        dry_run: dryRun,
+    });
+    return data;
+}
