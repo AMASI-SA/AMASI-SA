@@ -247,6 +247,39 @@ class MZ2InventoryP03PhaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn(("asset", "inventory", "inventory"), zeros)
         self.assertIn(("tax", "input_vat", "input_vat"), zeros)
 
+    async def test_p03_canonical_opening_account_ids_are_enforced(self):
+        for line, expected in [
+            (
+                OpeningLineIn(
+                    category="inventory_asset",
+                    entity_id="inventory-main",
+                    amount="100",
+                ),
+                "inventory",
+            ),
+            (
+                OpeningLineIn(
+                    category="input_vat",
+                    entity_id="vat-input-custom",
+                    amount="15",
+                ),
+                "input_vat",
+            ),
+        ]:
+            with self.assertRaises(HTTPException) as ctx:
+                await self.tx(lambda scoped, line=line: create_opening_preview(
+                    scoped,
+                    owner=self.owner,
+                    actor=self.actor,
+                    payload=self.opening(extra_lines=[line]),
+                ))
+            self.assertEqual(ctx.exception.status_code, 400)
+            self.assertEqual(
+                ctx.exception.detail["code"],
+                "opening_canonical_account_required",
+            )
+            self.assertEqual(ctx.exception.detail["entity_id"], expected)
+
     async def test_supplier_opening_requires_mezan_v2_supplier_identity(self):
         with self.assertRaises(HTTPException) as ctx:
             await self.tx(lambda scoped: create_opening_preview(
