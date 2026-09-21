@@ -101,7 +101,7 @@ export default function AccountingInventoryPurchases({
             openingCosts?.snapshot?.status === "approved"
             && openingCosts?.snapshot?.inventory_fingerprint
                 === openingCosts?.inventory_fingerprint
-            && Number(openingCosts?.snapshot?.total_cost_halalas || -1)
+            && Number(openingCosts?.snapshot?.total_cost_halalas ?? -1)
                 === Number(openingCosts?.opening_inventory_halalas || 0)
         )
     );
