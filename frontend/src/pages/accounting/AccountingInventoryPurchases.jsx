@@ -19,6 +19,13 @@ import {
 } from "../../services/accountingModule";
 import { formatMoney } from "./AccountingShared";
 
+const P03_REASONS = {
+    sale_recognition_required: "بانتظار ترحيل قيد البيع لنفس الطلب.",
+    unique_sale_recognition_required: "يوجد أكثر من قيد بيع محتمل ويحتاج مراجعة.",
+    inventory_cost_basis_missing: "تكلفة الـlot غير معتمدة بعد.",
+    original_cogs_required_before_reversal: "بانتظار ترحيل COGS الأصلي للطلب قبل عكسه.",
+};
+
 const P03_ERRORS = {
     p03_opening_inventory_cost_total_mismatch: "إجمالي تكلفة الـlots لا يساوي رصيد المخزون الافتتاحي في GL.",
     p03_opening_inventory_changed_refresh_required: "المخزون الفعلي تغير؛ أعد تحميل Snapshot وراجعه من جديد.",
@@ -64,13 +71,13 @@ function PreviewState({ preview }) {
     if (preview.state === "waiting") {
         return (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-900">
-                بانتظار دليل إضافي: {preview?.reasons?.join("، ") || "غير مكتمل"}
+                بانتظار دليل إضافي: {(preview?.reasons || []).map((reason) => P03_REASONS[reason] || reason).join("، ") || "غير مكتمل"}
             </div>
         );
     }
     return (
         <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-bold text-rose-900">
-            {preview?.reasons?.join("، ") || "غير مؤهل للترحيل"}
+            {(preview?.reasons || []).map((reason) => P03_REASONS[reason] || reason).join("، ") || "غير مؤهل للترحيل"}
         </div>
     );
 }
