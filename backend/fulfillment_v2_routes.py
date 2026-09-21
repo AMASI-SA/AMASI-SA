@@ -197,6 +197,10 @@ def _inventory_rows(locations: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "salla_variant_id": (
                     _text(item.get("salla_variant_id")) or None
                 ),
+                "product_id": _text(item.get("product_id")) or None,
+                "mezan_product_id": _text(item.get("mezan_product_id")) or None,
+                "product_name": item.get("product_name"),
+                "sku": _text(item.get("sku")) or None,
                 "preparation_state": item.get("preparation_state"),
                 "specifications": item.get("specifications") or {},
                 "configuration_key": item.get("configuration_key"),
