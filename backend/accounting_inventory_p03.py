@@ -58,13 +58,16 @@ def _text(value: Any) -> str:
 
 
 def _aware(value: Any) -> datetime | None:
-    text = _text(value)
-    if not text:
-        return None
-    try:
-        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
-    except ValueError:
-        return None
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        text = _text(value)
+        if not text:
+            return None
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return None
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         return None
     return parsed.astimezone(timezone.utc)
