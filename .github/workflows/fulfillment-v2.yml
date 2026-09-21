@@ -25,6 +25,8 @@ on:
       - "backend/carrier_handoff.py"
       - "backend/fulfillment_carrier_label.py"
       - "backend/fulfillment_v2_routes.py"
+      - "backend/product_inventory_rules.py"
+      - "backend/tests/test_product_inventory_rules.py"
       - "backend/product_inventory_receipt_routes.py"
       - "backend/tests/test_return_decision_engine.py"
       - "backend/return_decision_routes.py"
@@ -297,6 +299,7 @@ jobs:
           tests/test_customer_history_route.py
           tests/test_fulfillment_v2_contract.py
           tests/test_product_inventory_receipt_routes.py
+          tests/test_product_inventory_rules.py
           tests/test_return_decision_engine.py
           tests/test_carrier_handoff.py
           tests/test_fulfillment_carrier_label.py
