@@ -8,6 +8,7 @@ import AccountingDailyWorkspace from "./AccountingDailyWorkspace";
 import AccountingReports from "./AccountingReports";
 import AccountingPermissionsDialog from "./AccountingPermissionsDialog";
 import AccountingSettlements from "./AccountingSettlements";
+import AccountingShippingCod from "./AccountingShippingCod";
 import AccountingBankReceipts from "./AccountingBankReceipts";
 import AccountingBankTransferReceipts from "./AccountingBankTransferReceipts";
 import AccountingDailyMovements from "./AccountingDailyMovements";
@@ -92,6 +93,8 @@ export default function AccountingWorkspace() {
                 <AccountingCourierBankBindings accountingPermissions={permissions} />
             </div>
         );
+    } else if (page.id === "shipping-cod") {
+        content = <AccountingShippingCod accountingPermissions={permissions} />;
     } else if (page.id === "financial-movements") {
         content = <><AccountingDailyMovements accountingPermissions={permissions} /><AccountingBankTransferReceipts accountingPermissions={permissions} /><AccountingBankReceipts accountingPermissions={permissions} /><AccountingCustomerAdvances accountingPermissions={permissions} /></>;
     } else if (page.id === "journals-reports") {
