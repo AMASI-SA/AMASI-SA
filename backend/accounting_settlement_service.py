@@ -381,7 +381,15 @@ async def post_reviewed_settlement(
     owner_id: str,
     actor: dict[str, Any],
     draft: dict[str, Any],
-) -> dict[str, Any]:
+ ) -> dict[str, Any]:
+    from accounting_atomic import atomic_owner
+    async def commit_settlement(scoped):
+        return await _post_reviewed_settlement_transaction(
+            scoped, owner_id=owner_id, actor=actor, draft=draft)
+    return await atomic_owner(db, owner_id, commit_settlement)
+
+
+async def _post_reviewed_settlement_transaction(db, *, owner_id, actor, draft):
     if draft.get("status") != "reviewed":
         raise HTTPException(409, "يجب مراجعة المسودة قبل الترحيل")
     if has_blocking_reasons(draft.get("review_reasons")):
@@ -532,3 +540,4 @@ __all__ = [
     "settlement_idempotency_key",
     "statement_reference_from_file",
 ]
+
