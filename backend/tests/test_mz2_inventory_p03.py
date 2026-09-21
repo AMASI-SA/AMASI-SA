@@ -1431,5 +1431,115 @@ class MZ2InventoryP03PhaseTests(unittest.IsolatedAsyncioTestCase):
         )
 
 
+    async def test_evidenced_zero_cost_opening_lot_closes_cogs_without_zero_journal(self):
+        await self.db.warehouse_locations.insert_one({
+            "id": "LOC-ZERO-COST",
+            "code": "ZERO-01",
+            "warehouse_id": "WH-OPENING",
+            "user_id": self.owner,
+            "state": "occupied",
+            "occupancy": {
+                "total_quantity": 2,
+                "items": [{
+                    "receipt_id": None,
+                    "product_id": "SALLA-ZERO",
+                    "mezan_product_id": "MZP-ZERO",
+                    "product_name": "Free sample",
+                    "sku": "SKU-ZERO",
+                    "quantity": 2,
+                    "lot_id": "opening-lot-zero",
+                    "configuration_key": "opening-zero",
+                    "placed_at": "2026-09-19T18:00:00+00:00",
+                }],
+            },
+        })
+        await self.activate_p01_only()
+        await self.tx(lambda scoped: activate_p02(
+            scoped,
+            owner=self.owner,
+            actor=self.actor,
+            payload=P02ActivateIn(
+                activation_ref="SYN-P02-ZERO-COST",
+                confirmation="ACTIVATE_MZ2_P02",
+            ),
+        ))
+        workspace = await opening_inventory_cost_workspace(
+            self.db,
+            owner=self.owner,
+        )
+        self.assertEqual(workspace["opening_inventory_halalas"], 0)
+        self.assertEqual(workspace["target_count"], 1)
+        approved = await self.tx(lambda scoped: approve_opening_inventory_cost_snapshot(
+            scoped,
+            owner=self.owner,
+            actor=self.actor,
+            payload=P03OpeningInventoryCostApproveIn(
+                inventory_fingerprint=workspace["inventory_fingerprint"],
+                evidence_ref="SYN-ZERO-COST-EVIDENCE",
+                reason="Free sample has evidenced zero carrying cost",
+                lines=[
+                    P03OpeningInventoryCostLineIn(
+                        target_key="lot:opening-lot-zero",
+                        unit_cost="0.00",
+                    ),
+                ],
+            ),
+        ))
+        self.assertEqual(approved["total_cost_halalas"], 0)
+        await self.tx(lambda scoped: activate_p03(
+            scoped,
+            owner=self.owner,
+            actor=self.actor,
+            payload=P03ActivateIn(
+                activation_ref="SYN-P03-ZERO-COST",
+                confirmation="ACTIVATE_MZ2_P03",
+            ),
+        ))
+
+        await self.add_inventory_consumption(
+            event_id="consume-zero-cost",
+            order_number="ORD-ZERO-COST",
+            receipt_id=None,
+            lot_id="opening-lot-zero",
+            location_id="LOC-ZERO-COST",
+            item_index=0,
+            quantity=1,
+        )
+        await self.recognize_synthetic_sale(
+            order_number="ORD-ZERO-COST",
+        )
+        preview = await prepare_inventory_cogs_post(
+            self.db,
+            owner=self.owner,
+            consumption_event_id="consume-zero-cost",
+        )
+        self.assertEqual(preview["state"], "eligible")
+        self.assertEqual(preview["facts"]["total_cost_halalas"], 0)
+        before = await self.db.general_ledger.count_documents({
+            "entry_type": "inventory_cogs",
+        })
+        posted = await self.tx(lambda scoped: post_inventory_cogs(
+            scoped,
+            owner=self.owner,
+            actor=self.actor,
+            consumption_event_id="consume-zero-cost",
+            reason="Close evidenced zero-cost COGS",
+        ))
+        self.assertEqual(posted["state"], "posted_zero_cost")
+        self.assertIsNone(posted["txn_group_id"])
+        self.assertEqual(
+            await self.db.general_ledger.count_documents({
+                "entry_type": "inventory_cogs",
+            }),
+            before,
+        )
+        event = await self.db.mezan_inventory_consumption_events_v2.find_one(
+            {"id": "consume-zero-cost"},
+            {"_id": 0},
+        )
+        self.assertEqual(event["accounting_status"], "cogs_zero_cost_recorded")
+        self.assertEqual(event["cogs_amount"], "0.00")
+
+
 if __name__ == "__main__":
     unittest.main()
