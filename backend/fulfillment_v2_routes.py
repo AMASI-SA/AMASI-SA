@@ -385,6 +385,7 @@ def _inventory_consumption_event_rows(
         for allocation in reservation.get("allocations") or []:
             location_id = _text(allocation.get("location_id"))
             receipt_id = _text(allocation.get("receipt_id"))
+            lot_id = _text(allocation.get("lot_id"))
             item_index = allocation.get("item_index")
             if not location_id or (not receipt_id and item_index is None):
                 raise HTTPException(
@@ -400,6 +401,7 @@ def _inventory_consumption_event_rows(
             target = targets.setdefault(key, {
                 "location_id": location_id,
                 "receipt_id": receipt_id or None,
+                "lot_id": lot_id or None,
                 "item_index": item_index,
                 "quantity": 0.0,
                 "product_id": reservation.get("product_id"),
