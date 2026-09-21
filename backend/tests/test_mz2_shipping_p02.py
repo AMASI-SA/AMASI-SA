@@ -24,6 +24,7 @@ from accounting_shipping_p02 import (
     post_courier_fee,
     post_store_driver_cod,
     save_shipping_rate,
+    shipping_workspace_context,
 )
 from accounting_shipping_settlements import (
     ShippingSettlementIn,
@@ -815,6 +816,75 @@ class MZ2ShippingP02Tests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(movement["status"], "unclassified")
         self.assertFalse(movement.get("accounting_event_id"))
+
+
+    async def test_shipping_workspace_lists_only_pending_mz2_sources(self):
+        await self.add_courier_order(
+            order="ORD-WORKSPACE",
+            evidence_id="E-WORKSPACE",
+            waybill="WB-WORKSPACE",
+        )
+        await self.add_driver_cod(
+            assignment="ASSIGN-WORKSPACE",
+            order="ORD-COD-WORKSPACE",
+            amount=150,
+            fee=20,
+        )
+        await self.add_movement(
+            movement_id="MOVE-WORKSPACE",
+            direction="in",
+            amount=130,
+            reference="WORKSPACE-SETTLEMENT",
+        )
+        context = await shipping_workspace_context(self.db, owner=self.owner)
+        self.assertEqual(context["rate_policy"]["revision"], 2)
+        self.assertEqual(
+            {row["courier_id"] for row in context["latest_rates"]},
+            {"imile", "smsa"},
+        )
+        self.assertIn(
+            "E-WORKSPACE",
+            {row["id"] for row in context["courier_candidates"]},
+        )
+        self.assertIn(
+            "ASSIGN-WORKSPACE",
+            {row["assignment_id"] for row in context["driver_candidates"]},
+        )
+        self.assertIn(
+            "MOVE-WORKSPACE",
+            {row["id"] for row in context["bank_movements"]},
+        )
+        self.assertIn(
+            ("courier", "imile"),
+            {(row["type"], row["id"]) for row in context["counterparties"]},
+        )
+        self.assertIn(
+            ("store_driver", "driver-1"),
+            {(row["type"], row["id"]) for row in context["counterparties"]},
+        )
+
+        await post_courier_fee(
+            self.db,
+            owner=self.owner,
+            actor=self.actor,
+            evidence_id="E-WORKSPACE",
+        )
+        await post_store_driver_cod(
+            self.db,
+            owner=self.owner,
+            actor=self.actor,
+            assignment_id="ASSIGN-WORKSPACE",
+        )
+        refreshed = await shipping_workspace_context(self.db, owner=self.owner)
+        self.assertNotIn(
+            "E-WORKSPACE",
+            {row["id"] for row in refreshed["courier_candidates"]},
+        )
+        self.assertNotIn(
+            "ASSIGN-WORKSPACE",
+            {row["assignment_id"] for row in refreshed["driver_candidates"]},
+        )
+        self.assertGreaterEqual(len(refreshed["recent_events"]), 2)
 
 
 if __name__ == "__main__":
