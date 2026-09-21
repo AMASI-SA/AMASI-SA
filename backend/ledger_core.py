@@ -88,6 +88,8 @@ ENTRY_TYPES = (
     "customer_advance_payment",
     "customer_refund_due",
     "customer_refund_payment",
+    "bank_transfer_advance",
+    "bank_transfer_sale",
     # Generic
     "spend", "topup", "payment", "adjustment", "reversal",
     "settlement", "writeoff", "accrual", "opening_balance",
