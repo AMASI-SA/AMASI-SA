@@ -149,6 +149,11 @@ class MZ2InventoryP03PhaseTests(unittest.IsolatedAsyncioTestCase):
             ],
             tax_amount="45.00",
             tax_treatment=tax_treatment,
+            tax_evidence_ref=(
+                "SYN-TAX-INVOICE-001"
+                if tax_treatment == "recoverable_input_vat"
+                else None
+            ),
             notes="Synthetic P03 purchase",
         )
         return await self.tx(lambda scoped: create_p03_purchase_invoice(
@@ -807,6 +812,45 @@ class MZ2InventoryP03PhaseTests(unittest.IsolatedAsyncioTestCase):
             {"_id": 0},
         )
         self.assertFalse(receipt.get("accounting_event_id"))
+
+
+    async def test_recoverable_input_vat_requires_tax_evidence(self):
+        with self.assertRaises(HTTPException) as ctx:
+            await self.tx(lambda scoped: create_p03_purchase_invoice(
+                scoped,
+                owner=self.owner,
+                actor=self.actor,
+                payload=P03PurchaseInvoiceCreateIn(
+                    request_id="REQ-P03-NO-VAT-EVIDENCE",
+                    supplier_id="msv2-supplier-1",
+                    invoice_number="PINV-NO-EVIDENCE",
+                    invoice_date="2026-09-21",
+                    lines=[
+                        P03PurchaseLineIn(
+                            product_id="MZP-1",
+                            product_name="Synthetic inventory product",
+                            sku="SKU-1",
+                            quantity=1,
+                            unit_price="100.00",
+                        ),
+                    ],
+                    tax_amount="15.00",
+                    tax_treatment="recoverable_input_vat",
+                    tax_evidence_ref=None,
+                ),
+            ))
+        self.assertEqual(ctx.exception.status_code, 422)
+        self.assertEqual(
+            ctx.exception.detail["code"],
+            "p03_input_vat_evidence_required",
+        )
+        self.assertEqual(
+            await self.db.purchase_invoices.count_documents({
+                "user_id": self.owner,
+                "invoice_number": "PINV-NO-EVIDENCE",
+            }),
+            0,
+        )
 
 
 if __name__ == "__main__":
