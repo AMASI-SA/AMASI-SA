@@ -22,6 +22,7 @@ from accounting_inventory_p03 import (
 )
 from accounting_mz2_reports import mz2_financial_position, read_mz2_ledger
 from accounting_periods import PeriodChange, set_period
+from accounting_shipping_p02 import P02ActivateIn, activate_p02
 from accounting_module_opening_balances import (
     OpeningActivateIn,
     OpeningApproveIn,
@@ -106,13 +107,15 @@ class MZ2InventoryP03PhaseTests(unittest.IsolatedAsyncioTestCase):
 
     async def activate_full_p03(self):
         await self.activate_p01_only()
-        await self.db.settings.update_one(
-            {"user_id": self.owner},
-            {"$set": {
-                "mezan2_financial_cutover.p02_shipping_cod_enabled": True,
-                "mezan2_financial_cutover.p02_shipping_cod_activation_ref": "SYN-P02-UAT",
-            }},
-        )
+        await self.tx(lambda scoped: activate_p02(
+            scoped,
+            owner=self.owner,
+            actor=self.actor,
+            payload=P02ActivateIn(
+                activation_ref="SYN-P02-UAT",
+                confirmation="ACTIVATE_MZ2_P02",
+            ),
+        ))
         await self.tx(lambda scoped: activate_p03(
             scoped,
             owner=self.owner,
@@ -288,13 +291,15 @@ class MZ2InventoryP03PhaseTests(unittest.IsolatedAsyncioTestCase):
             "p03_inventory_purchases_locked",
         )
 
-        await self.db.settings.update_one(
-            {"user_id": self.owner},
-            {"$set": {
-                "mezan2_financial_cutover.p02_shipping_cod_enabled": True,
-                "mezan2_financial_cutover.p02_shipping_cod_activation_ref": "SYN-P02-UAT",
-            }},
-        )
+        await self.tx(lambda scoped: activate_p02(
+            scoped,
+            owner=self.owner,
+            actor=self.actor,
+            payload=P02ActivateIn(
+                activation_ref="SYN-P02-UAT",
+                confirmation="ACTIVATE_MZ2_P02",
+            ),
+        ))
         result = await self.tx(lambda scoped: activate_p03(
             scoped,
             owner=self.owner,
