@@ -66,6 +66,7 @@ export default function AccountingInventoryPurchases({
         due_date: "",
         tax_amount: "0",
         tax_treatment: "recoverable_input_vat",
+        tax_evidence_ref: "",
         notes: "",
     });
     const [lines, setLines] = useState([emptyLine()]);
@@ -147,8 +148,16 @@ export default function AccountingInventoryPurchases({
             lines: normalizedLines,
             tax_amount: purchase.tax_amount || "0",
             tax_treatment: purchase.tax_treatment,
+            tax_evidence_ref: purchase.tax_evidence_ref.trim() || null,
             notes: purchase.notes.trim(),
         };
+        if (
+            Number(facts.tax_amount) > 0
+            && facts.tax_treatment === "recoverable_input_vat"
+            && !facts.tax_evidence_ref
+        ) {
+            return toast.error("أدخل مرجع الفاتورة أو الدليل الضريبي لاسترداد ضريبة المدخلات");
+        }
         const fingerprint = JSON.stringify(facts);
         if (purchaseRequest.current?.fingerprint !== fingerprint) {
             purchaseRequest.current = {
@@ -172,6 +181,7 @@ export default function AccountingInventoryPurchases({
                 invoice_number: "",
                 due_date: "",
                 tax_amount: "0",
+                tax_evidence_ref: "",
                 notes: "",
             }));
             setLines([emptyLine()]);
@@ -374,7 +384,16 @@ export default function AccountingInventoryPurchases({
                                 <option value="included_in_inventory_cost">تضاف إلى تكلفة المخزون</option>
                             </select>
                         </label>
-                        <label className="text-xs font-black text-slate-700 xl:col-span-2">
+                        <label className="text-xs font-black text-slate-700">
+                            مرجع الدليل الضريبي
+                            <input
+                                value={purchase.tax_evidence_ref}
+                                onChange={(e) => { setPurchase((x) => ({ ...x, tax_evidence_ref: e.target.value })); purchaseRequest.current = null; }}
+                                placeholder="رقم/مرجع الفاتورة الضريبية"
+                                className="mt-1 min-h-10 w-full rounded-xl border border-slate-200 px-3"
+                            />
+                        </label>
+                        <label className="text-xs font-black text-slate-700">
                             ملاحظة
                             <input value={purchase.notes} onChange={(e) => { setPurchase((x) => ({ ...x, notes: e.target.value })); purchaseRequest.current = null; }} className="mt-1 min-h-10 w-full rounded-xl border border-slate-200 px-3" />
                         </label>
