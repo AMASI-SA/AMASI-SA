@@ -51,6 +51,8 @@ def _producer(row):
         "advance_repay_cash", "custody_grant", "custody_return",
     }:
         return meta.get("source") == "accounting_payroll_p01" and bool(meta.get("payroll_event_id"))
+    if kind in {"cod_sale", "shipping_fee_accrual"}:
+        return meta.get("source") == "accounting_shipping_p02" and bool(meta.get("shipping_event_id"))
     return False
 
 
@@ -151,7 +153,7 @@ async def read_mz2_ledger(db, *, owner, as_of=None, required_accounts=()):
         at = _aware_utc_iso(zero.get("accounting_at"))
         if (zero.get("opening_balance_txn_group_id") != group or at != cut
                 or not str(zero.get("evidence_ref") or "").strip()
-                or zero.get("entity_type") not in {"bank", "payment_gateway", "employee"}
+                or zero.get("entity_type") not in {"bank", "payment_gateway", "employee", "courier", "store_driver"}
                 or not str(zero.get("entity_id") or "").strip()):
             return blocked("approved_zero_opening_evidence_invalid")
         key = (zero["entity_type"], str(zero["entity_id"]), zero.get("sub_account") or "")
