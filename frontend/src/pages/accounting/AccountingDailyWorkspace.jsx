@@ -6,6 +6,7 @@ import {
     CheckCircle,
     ClipboardText,
     FileArrowUp,
+    Receipt,
     GearSix,
     ShoppingCart,
     UploadSimple,
@@ -27,6 +28,7 @@ import {
     uploadAccountingSettlementDraft,
 } from "../../services/accountingModule";
 import AccountingDailyMovements from "./AccountingDailyMovements";
+import AccountingBankTransferReceipts from "./AccountingBankTransferReceipts";
 import AccountingPayroll from "./AccountingPayroll";
 import AccountingPeriods from "./AccountingPeriods";
 import AccountingWriteControl from "./AccountingWriteControl";
@@ -519,9 +521,10 @@ export default function AccountingDailyWorkspace({ status, user, accountingPermi
                     <h2 className="text-lg font-black text-slate-950">إدخالات اليوم</h2>
                     <p className="mt-1 text-xs font-semibold text-slate-500">كل ما تحتاجه للتشغيل اليومي من شاشة واحدة.</p>
                 </div>
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                     <ActionCard title="رفع طلبات سلة" detail="يحفظ الدليل ثم يرحل المبيعات الآمنة والضريبة والذمم تلقائيًا." Icon={ShoppingCart} badge="تلقائي" onClick={() => setActiveAction("orders")} />
                     <ActionCard title="رفع كشف البنك" detail="يقرأ الحركات ويحفظها كدليل؛ لا يخمّن نوع الحركة غير الواضحة." Icon={Bank} badge="MZ2" onClick={() => setActiveAction("bank")} />
+                    <ActionCard title="مراجعة إيصالات التحويل" detail="يعرض بنك الطلب ومبلغه؛ راجع الإيصال والحركة التي وصلت للبنك ثم اعتمد." Icon={Receipt} onClick={() => setActiveAction("bank-transfer-review")} />
                     <ActionCard title="رفع ملف تسوية" detail="سلة/تمارا/تابي/إمكان؛ المطابقة والترحيل عند اكتمال الدليل." Icon={UploadSimple} onClick={() => setActiveAction("settlement")} />
                     <ActionCard title="مبلغ واصل يدويًا" detail="للتحويل المنفرد عندما لا ترفع كشف البنك الكامل." Icon={Wallet} onClick={() => setActiveAction("movement")} />
                     <ActionCard title="الرواتب والسلف" detail="استحقاق الرواتب وربط الصرف والسلف والعهد بحركات البنك." Icon={UsersThree} onClick={() => setActiveAction("payroll")} />
@@ -573,6 +576,11 @@ export default function AccountingDailyWorkspace({ status, user, accountingPermi
             {activeAction === "bank" && (
                 <Modal title="رفع كشف البنك" subtitle="كل صف يبقى دليلًا؛ الحالات الواضحة فقط تنتقل للمسار المناسب." onClose={() => setActiveAction("")} testid="daily-accounting-bank-modal">
                     <AccountingDailyMovements accountingPermissions={accountingPermissions} />
+                </Modal>
+            )}
+            {activeAction === "bank-transfer-review" && (
+                <Modal title="مراجعة إيصالات التحويل البنكي" subtitle="البنك والمبلغ من الطلب؛ راجع الإيصال والحركة البنكية الفعلية ثم اعتمد فقط." onClose={() => setActiveAction("")} testid="daily-accounting-bank-transfer-review-modal">
+                    <AccountingBankTransferReceipts accountingPermissions={accountingPermissions} />
                 </Modal>
             )}
             {activeAction === "movement" && (
