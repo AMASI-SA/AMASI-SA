@@ -31,6 +31,8 @@ test("Salla upload automatically scopes recognition to the uploaded file", () =>
     expect(dailySource).toContain("fileId");
     expect(dailySource).toContain("رفع ومعالجة تلقائيًا");
     expect(serviceSource).toContain("file_id");
+    expect(serviceSource).toContain("/order-recognition/recognize-ready");
+    expect(serviceSource).toContain("/order-evidence/upload");
 });
 
 test("bank statement is enabled through the native MZ2 movement workspace", () => {
