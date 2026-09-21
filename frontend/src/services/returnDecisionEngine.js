@@ -30,6 +30,8 @@ function errorMessage(error, fallback) {
       return_restock_exceeds_source_quantity: "كمية Restock تتجاوز الكمية التي خرجت من هذا الـlot.",
       return_restock_location_not_compatible: "الخانة لا تقبل نفس المنتج/التجهيز أو لا توجد بها سعة كافية.",
       return_restock_location_barcode_mismatch: "باركود الخانة لا يطابق الخانة المختارة.",
+      return_restock_location_changed: "الخانة تغيرت أو لم تعد متوافقة؛ حدّث الخيارات واختر من جديد.",
+      inventory_location_capacity_exceeded: "الخانة لم تعد تملك سعة كافية؛ اختر خانة أخرى.",
       return_restock_request_conflict: "معرف Restock استُخدم سابقًا ببيانات مختلفة.",
     };
     if (messages[detail.code]) return messages[detail.code];
