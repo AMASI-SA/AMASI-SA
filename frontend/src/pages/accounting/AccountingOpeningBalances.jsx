@@ -35,6 +35,12 @@ const PROVIDER_LABELS = {
 };
 
 const ACCOUNT_CATEGORIES = new Set(["bank", "cash"]);
+const SUPPLIER_CATEGORIES = new Set(["supplier_payable"]);
+const CANONICAL_ENTITY_IDS = {
+    inventory_asset: "inventory",
+    input_vat: "input_vat",
+    sales_vat_payable: "sales_vat_payable",
+};
 const EMPLOYEE_CATEGORIES = new Set([
     "employee_advance",
     "employee_custody",
@@ -71,7 +77,7 @@ function newLine(category = "bank") {
     return {
         local_id: crypto.randomUUID(),
         category,
-        entity_id: "",
+        entity_id: CANONICAL_ENTITY_IDS[category] || "",
         label: "",
         amount: "",
         direction: "normal",
@@ -101,6 +107,16 @@ function MoneyTotals({ totals }) {
 }
 
 function EntityInput({ line, data, onChange }) {
+    if (CANONICAL_ENTITY_IDS[line.category]) {
+        return (
+            <input
+                value={CANONICAL_ENTITY_IDS[line.category]}
+                readOnly
+                className="min-h-10 w-full rounded-lg border border-emerald-200 bg-emerald-50 px-2 text-xs font-bold text-emerald-900"
+                aria-label="حساب ميزان الثابت"
+            />
+        );
+    }
     if (ACCOUNT_CATEGORIES.has(line.category)) {
         const wanted = line.category === "bank" ? "bank" : "cash";
         const accounts = (data?.accounts || []).filter((item) => item.account_type === wanted);
@@ -127,6 +143,21 @@ function EntityInput({ line, data, onChange }) {
                 <option value="">اختر المزود</option>
                 {(data?.providers || []).map((provider) => (
                     <option key={provider} value={provider}>{PROVIDER_LABELS[provider] || provider}</option>
+                ))}
+            </select>
+        );
+    }
+    if (SUPPLIER_CATEGORIES.has(line.category)) {
+        return (
+            <select
+                value={line.entity_id}
+                onChange={(event) => onChange({ entity_id: event.target.value })}
+                className="min-h-10 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs"
+                aria-label="المورد"
+            >
+                <option value="">اختر المورد من دليل ميزان 2</option>
+                {(data?.suppliers || []).map((item) => (
+                    <option key={item.id} value={item.id}>{item.name || item.id}</option>
                 ))}
             </select>
         );
@@ -221,7 +252,7 @@ export default function AccountingOpeningBalances() {
             if (line.local_id !== localId) return line;
             const next = { ...line, ...patch };
             if (patch.category) {
-                next.entity_id = "";
+                next.entity_id = CANONICAL_ENTITY_IDS[patch.category] || "";
                 next.label = "";
             }
             return next;
