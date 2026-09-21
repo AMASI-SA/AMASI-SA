@@ -1,0 +1,55 @@
+name: P02 isolated source inspection
+
+on:
+  push:
+    branches:
+      - chatgpt/mz2-p02-shipping-cod-ledger-20260921
+    paths:
+      - .github/workflows/mz2-p02-source-inspection.yml
+
+permissions:
+  contents: read
+
+jobs:
+  source-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Package tracked source only (no runtime, credentials, or business data)
+        run: |
+          python - <<'PY'
+          import hashlib, json, pathlib, subprocess, zipfile
+          allowed_roots = {'backend', 'frontend', 'scripts', 'tests', 'docs', '.github'}
+          allowed_suffixes = {'.py', '.js', '.jsx', '.ts', '.tsx', '.cjs', '.mjs', '.css', '.scss', '.html', '.md', '.json', '.yaml', '.yml', '.toml', '.txt', '.lock', '.sh', '.ini', '.cfg', '.svg'}
+          root_files = {'AGENTS.md', 'README.md', '.gitignore', 'design_guidelines.json'}
+          blocked = {'node_modules', '__pycache__', '.venv', 'venv', 'build', 'uploads', 'exports', 'backups', 'secrets', 'credentials', 'test_reports', 'reports', '.git'}
+          names = subprocess.check_output(['git', 'ls-files', '-z']).decode().split('\0')
+          manifest = {'source_sha': subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode().strip(), 'files': {}}
+          with zipfile.ZipFile('/tmp/p02-source.zip', 'w', zipfile.ZIP_DEFLATED) as archive:
+              for name in sorted(filter(None, names)):
+                  path = pathlib.Path(name)
+                  if path.is_symlink() or not path.is_file():
+                      continue
+                  if any(part.lower() in blocked or part.lower().startswith('.env') for part in path.parts):
+                      continue
+                  if any(term in path.name.lower() for term in ('credential', 'secret', '.pem', '.key')):
+                      continue
+                  if name not in root_files and (path.parts[0] not in allowed_roots or path.suffix not in allowed_suffixes):
+                      continue
+                  data = path.read_bytes()
+                  if len(data) > 4_000_000:
+                      continue
+                  archive.writestr(name, data)
+                  manifest['files'][name] = hashlib.sha256(data).hexdigest()
+              archive.writestr('P02_SOURCE_MANIFEST.json', json.dumps(manifest, indent=2))
+          print('Tracked source files packaged:', len(manifest['files']))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: p02-isolated-source
+          path: /tmp/p02-source.zip
+          retention-days: 1
+          if-no-files-found: error
