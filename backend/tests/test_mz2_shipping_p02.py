@@ -25,6 +25,10 @@ from accounting_shipping_p02 import (
     post_store_driver_cod,
     save_shipping_rate,
 )
+from accounting_shipping_settlements import (
+    ShippingSettlementIn,
+    post_shipping_settlement,
+)
 from accounting_atomic import atomic_owner
 
 
@@ -245,6 +249,38 @@ class MZ2ShippingP02Tests(unittest.IsolatedAsyncioTestCase):
             "earned_at": collected_at,
         })
         return evidence_id
+
+    async def add_movement(
+        self,
+        *,
+        movement_id,
+        direction,
+        amount,
+        reference,
+        movement_date="2026-09-21",
+    ):
+        await self.db.mz2_daily_movements.insert_one({
+            "_id": "ROW-" + movement_id,
+            "id": movement_id,
+            "user_id": self.owner,
+            "file_id": "SYN-BANK-FILE",
+            "file_hash": "SYN-HASH",
+            "row_no": 1,
+            "movement_date": movement_date,
+            "direction": direction,
+            "amount": f"{amount:.2f}",
+            "currency": "SAR",
+            "description": reference,
+            "reference": reference,
+            "bank_account_id": "bank-main",
+            "bank_account_name": "Synthetic bank",
+            "explicit_provider": None,
+            "suggested_provider": None,
+            "status": "unclassified",
+            "receipt_id": None,
+            "created_at": "2026-09-21T10:00:00+00:00",
+            "source": "bank_statement_import",
+        })
 
     async def test_external_courier_fee_uses_verified_rate_not_salla_charge_and_no_revenue(self):
         await self.add_courier_order()
@@ -511,6 +547,274 @@ class MZ2ShippingP02Tests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(str(conflict.exception), "shipping_event_source_conflict")
         self.assertEqual(await self.db.general_ledger.count_documents({}), before)
         self.assertTrue(first["sale_txn_group_id"])
+
+    async def test_driver_net_settlement_uses_one_inbound_bank_row_and_clears_both_balances(self):
+        await self.add_driver_cod(
+            assignment="ASSIGN-NET",
+            order="ORD-NET",
+            amount=150,
+            fee=20,
+        )
+        cod = await post_store_driver_cod(
+            self.db,
+            owner=self.owner,
+            actor=self.actor,
+            assignment_id="ASSIGN-NET",
+        )
+        revenue_before = await self.db.general_ledger.count_documents({
+            "entity_type": "revenue",
+        })
+        expense_before = await self.db.general_ledger.count_documents({
+            "entity_type": "expense",
+        })
+        await self.add_movement(
+            movement_id="MOVE-NET",
+            direction="in",
+            amount=130,
+            reference="DRIVER-NET-130",
+        )
+        payload = ShippingSettlementIn(
+            movement_id="MOVE-NET",
+            counterparty_type="store_driver",
+            counterparty_id="driver-1",
+            settlement_type="net_settlement",
+            offset_amount="20",
+            reason="Synthetic driver net COD settlement",
+        )
+        settled = await post_shipping_settlement(
+            self.db,
+            owner=self.owner,
+            actor=self.actor,
+            payload=payload,
+        )
+        self.assertEqual(settled["state"], "posted")
+        self.assertEqual(settled["gross_cod_cleared"], "150.00")
+        self.assertEqual(settled["payable_cleared"], "20.00")
+
+        legs = await self.db.general_ledger.find(
+            {"txn_group_id": settled["txn_group_id"]},
+            {"_id": 0},
+        ).to_list(10)
+        self.assertEqual(
+            {(row["entity_type"], row["entity_id"], row.get("sub_account"), row["side"], row["amount"])
+             for row in legs},
+            {
+                ("bank", "bank-main", "main", "debit", 130.0),
+                ("store_driver", "driver-1", "delivery_fee_payable", "debit", 20.0),
+                ("store_driver", "driver-1", "cod_receivable", "credit", 150.0),
+            },
+        )
+        self.assertEqual(
+            await self.db.general_ledger.count_documents({"entity_type": "revenue"}),
+            revenue_before,
+        )
+        self.assertEqual(
+            await self.db.general_ledger.count_documents({"entity_type": "expense"}),
+            expense_before,
+        )
+        fp = await mz2_financial_position(self.db, owner=self.owner)
+        self.assertEqual(fp["assets"]["banks"], 1130.0)
+        self.assertEqual(fp["assets"]["store_driver_cod_receivable"], 0.0)
+        self.assertEqual(fp["liabilities"]["store_driver_payable"], 0.0)
+
+        retry = await post_shipping_settlement(
+            self.db,
+            owner=self.owner,
+            actor=self.actor,
+            payload=payload,
+        )
+        self.assertEqual(retry["state"], "already_posted")
+        self.assertEqual(retry["txn_group_id"], settled["txn_group_id"])
+        self.assertTrue(cod["sale_txn_group_id"])
+
+    async def test_courier_fee_payment_consumes_outbound_bank_row_without_second_expense(self):
+        await self.add_courier_order(
+            order="ORD-COURIER-PAY",
+            evidence_id="E-COURIER-PAY",
+            waybill="WB-COURIER-PAY",
+        )
+        accrual = await post_courier_fee(
+            self.db,
+            owner=self.owner,
+            actor=self.actor,
+            evidence_id="E-COURIER-PAY",
+        )
+        expense_before = await self.db.general_ledger.count_documents({
+            "entity_type": "expense",
+        })
+        await self.add_movement(
+            movement_id="MOVE-COURIER-PAY",
+            direction="out",
+            amount=17.25,
+            reference="IMILE-INVOICE-PAYMENT",
+        )
+        payload = ShippingSettlementIn(
+            movement_id="MOVE-COURIER-PAY",
+            counterparty_type="courier",
+            counterparty_id="imile",
+            settlement_type="fee_payment",
+            reason="Synthetic iMile invoice payment",
+        )
+        settled = await post_shipping_settlement(
+            self.db,
+            owner=self.owner,
+            actor=self.actor,
+            payload=payload,
+        )
+        self.assertEqual(settled["state"], "posted")
+        legs = await self.db.general_ledger.find(
+            {"txn_group_id": settled["txn_group_id"]},
+            {"_id": 0},
+        ).to_list(10)
+        self.assertEqual(
+            {(row["entity_type"], row["entity_id"], row.get("sub_account"), row["side"], row["amount"])
+             for row in legs},
+            {
+                ("courier", "imile", "payable", "debit", 17.25),
+                ("bank", "bank-main", "main", "credit", 17.25),
+            },
+        )
+        self.assertEqual(
+            await self.db.general_ledger.count_documents({"entity_type": "expense"}),
+            expense_before,
+        )
+        fp = await mz2_financial_position(self.db, owner=self.owner)
+        self.assertEqual(fp["liabilities"]["courier_payable"], 0.0)
+        self.assertEqual(fp["assets"]["banks"], 982.75)
+        self.assertTrue(accrual["txn_group_id"])
+
+    async def test_shipping_movement_cannot_be_consumed_twice_or_over_settle(self):
+        await self.add_driver_cod(
+            assignment="ASSIGN-DOUBLE",
+            order="ORD-DOUBLE",
+            amount=100,
+            fee=20,
+        )
+        await post_store_driver_cod(
+            self.db,
+            owner=self.owner,
+            actor=self.actor,
+            assignment_id="ASSIGN-DOUBLE",
+        )
+        await self.add_movement(
+            movement_id="MOVE-DOUBLE",
+            direction="in",
+            amount=80,
+            reference="DRIVER-NET-80",
+        )
+        first_payload = ShippingSettlementIn(
+            movement_id="MOVE-DOUBLE",
+            counterparty_type="store_driver",
+            counterparty_id="driver-1",
+            settlement_type="net_settlement",
+            offset_amount="20",
+            reason="Synthetic driver net settlement",
+        )
+        await post_shipping_settlement(
+            self.db,
+            owner=self.owner,
+            actor=self.actor,
+            payload=first_payload,
+        )
+        other_payload = ShippingSettlementIn(
+            movement_id="MOVE-DOUBLE",
+            counterparty_type="courier",
+            counterparty_id="imile",
+            settlement_type="cod_remittance",
+            reason="Try reusing consumed bank evidence",
+        )
+        with self.assertRaises(ShippingAccountingError) as consumed:
+            await post_shipping_settlement(
+                self.db,
+                owner=self.owner,
+                actor=self.actor,
+                payload=other_payload,
+            )
+        self.assertEqual(str(consumed.exception), "daily_movement_already_consumed")
+
+        await self.add_movement(
+            movement_id="MOVE-OVER",
+            direction="in",
+            amount=1,
+            reference="OVER-SETTLE",
+        )
+        over_payload = ShippingSettlementIn(
+            movement_id="MOVE-OVER",
+            counterparty_type="store_driver",
+            counterparty_id="driver-1",
+            settlement_type="cod_remittance",
+            reason="Try excess remittance after COD cleared",
+        )
+        with self.assertRaises(HTTPException) as over:
+            await post_shipping_settlement(
+                self.db,
+                owner=self.owner,
+                actor=self.actor,
+                payload=over_payload,
+            )
+        self.assertEqual(
+            over.exception.detail["code"],
+            "shipping_cod_remittance_exceeds_receivable",
+        )
+        move = await self.db.mz2_daily_movements.find_one(
+            {"id": "MOVE-OVER"},
+            {"_id": 0},
+        )
+        self.assertEqual(move["status"], "unclassified")
+
+    async def test_closed_period_rolls_back_shipping_payment_and_bank_evidence_consumption(self):
+        await self.add_courier_order(
+            order="ORD-CLOSED-PAY",
+            evidence_id="E-CLOSED-PAY",
+            waybill="WB-CLOSED-PAY",
+        )
+        await post_courier_fee(
+            self.db,
+            owner=self.owner,
+            actor=self.actor,
+            evidence_id="E-CLOSED-PAY",
+        )
+        await self.add_movement(
+            movement_id="MOVE-CLOSED-PAY",
+            direction="out",
+            amount=17.25,
+            reference="CLOSED-COURIER-PAY",
+        )
+        await set_period(
+            self.db,
+            self.owner,
+            self.owner,
+            PeriodChange(
+                month="2026-09",
+                closed=True,
+                revision=0,
+                reason="Synthetic close before courier payment",
+                evidence_ref="Synthetic close approval",
+            ),
+        )
+        before = await self.db.general_ledger.count_documents({})
+        payload = ShippingSettlementIn(
+            movement_id="MOVE-CLOSED-PAY",
+            counterparty_type="courier",
+            counterparty_id="imile",
+            settlement_type="fee_payment",
+            reason="Payment in closed month",
+        )
+        with self.assertRaises(HTTPException) as denied:
+            await post_shipping_settlement(
+                self.db,
+                owner=self.owner,
+                actor=self.actor,
+                payload=payload,
+            )
+        self.assertEqual(denied.exception.detail["code"], "accounting_period_closed")
+        self.assertEqual(await self.db.general_ledger.count_documents({}), before)
+        movement = await self.db.mz2_daily_movements.find_one(
+            {"id": "MOVE-CLOSED-PAY"},
+            {"_id": 0},
+        )
+        self.assertEqual(movement["status"], "unclassified")
+        self.assertFalse(movement.get("accounting_event_id"))
 
 
 if __name__ == "__main__":
