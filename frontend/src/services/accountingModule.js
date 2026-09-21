@@ -298,3 +298,63 @@ export async function classifyAccountingEmployeeMovement(movementId, payload) {
     );
     return data;
 }
+
+
+export async function getAccountingOrderEvidence(params = {}) {
+    const { data } = await api.get(`${BASE}/order-evidence`, {
+        params: compactParams(params),
+    });
+    return data;
+}
+
+export async function uploadAccountingOrderEvidence(file) {
+    const form = new FormData();
+    form.append("file", file);
+    const { data } = await api.post(`${BASE}/order-evidence/upload`, form, {
+        headers: { "Content-Type": "multipart/form-data" },
+    });
+    return data;
+}
+
+export async function getAccountingOrderRecognitionQueue(limit = 100) {
+    const { data } = await api.get(`${BASE}/order-recognition/queue`, {
+        params: { limit },
+    });
+    return data;
+}
+
+export async function recognizeAccountingReadyOrders({ limit = 100, dryRun = true } = {}) {
+    const { data } = await api.post(`${BASE}/order-recognition/recognize-ready`, {
+        limit,
+        dry_run: dryRun,
+    });
+    return data;
+}
+
+export async function getAccountingShippingRates() {
+    const { data } = await api.get(`${BASE}/shipping-p02/rates`);
+    return data;
+}
+
+export async function saveAccountingShippingRate(payload) {
+    const { data } = await api.put(`${BASE}/shipping-p02/rates`, payload);
+    return data;
+}
+
+export async function processAccountingStoreDriverPending({ limit = 100, dryRun = true } = {}) {
+    const { data } = await api.post(`${BASE}/shipping-p02/store-driver/process-pending`, {
+        limit,
+        dry_run: dryRun,
+    });
+    return data;
+}
+
+export async function previewAccountingShippingSettlement(payload) {
+    const { data } = await api.post(`${BASE}/shipping-p02/settlements/preview`, payload);
+    return data;
+}
+
+export async function postAccountingShippingSettlement(payload) {
+    const { data } = await api.post(`${BASE}/shipping-p02/settlements/post`, payload);
+    return data;
+}
