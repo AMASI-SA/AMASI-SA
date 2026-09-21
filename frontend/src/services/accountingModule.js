@@ -379,6 +379,21 @@ export async function postAccountingP03InventoryReceipt(receiptId, reason) {
     return data;
 }
 
+export async function previewAccountingP03Cogs(eventId) {
+    const { data } = await api.get(
+        `${BASE}/inventory-p03/inventory-consumptions/${encodeURIComponent(eventId)}/cogs-preview`,
+    );
+    return data;
+}
+
+export async function postAccountingP03Cogs(eventId, reason) {
+    const { data } = await api.post(
+        `${BASE}/inventory-p03/inventory-consumptions/${encodeURIComponent(eventId)}/cogs-post`,
+        { reason },
+    );
+    return data;
+}
+
 export async function previewAccountingP03SupplierInvoice(invoiceId) {
     const { data } = await api.get(
         `${BASE}/inventory-p03/supplier-invoices/${encodeURIComponent(invoiceId)}/preview`,
