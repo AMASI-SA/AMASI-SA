@@ -20,6 +20,7 @@ import { toast } from "sonner";
 
 import api from "../../lib/api";
 import {
+    convertAccountingDeliveredBankTransfers,
     getAccountingOrderRecognitionQueue,
     getAccountingSettlementContext,
     getAccountingSettlementDrafts,
@@ -289,10 +290,16 @@ function SallaOrdersUploadForm({ permissions, onSaved }) {
                 dryRun: false,
                 fileId,
             });
-            setResult({ imported, recognized });
+            const bankTransfers = await convertAccountingDeliveredBankTransfers({
+                limit,
+                dryRun: false,
+                fileId,
+            });
+            setResult({ imported, recognized, bankTransfers });
             const posted = Number(recognized?.posted_count || 0);
-            const waiting = Number(recognized?.blocked_count || 0);
-            toast.success(`تمت معالجة الملف: ${posted} طلبًا آمنًا رُحّل تلقائيًا، و${waiting} ينتظر دليلًا أو مراجعة.`, { duration: 8000 });
+            const converted = Number(bankTransfers?.posted_count || 0);
+            const waiting = Number(recognized?.blocked_count || 0) + Number(bankTransfers?.blocked_count || 0);
+            toast.success(`تمت معالجة الملف: ${posted + converted} طلبًا آمنًا رُحّل تلقائيًا، و${waiting} ينتظر دليلًا أو مراجعة.`, { duration: 8000 });
             setFile(null);
             setFileKey((value) => value + 1);
             await onSaved();
@@ -322,8 +329,8 @@ function SallaOrdersUploadForm({ permissions, onSaved }) {
             {result && (
                 <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:grid-cols-4" data-testid="salla-order-upload-result">
                     <div><div className="text-[10px] font-bold text-slate-500">صفوف الملف</div><div className="mt-1 text-lg font-black">{Number(result.imported?.file?.row_count || 0).toLocaleString("en-US")}</div></div>
-                    <div><div className="text-[10px] font-bold text-emerald-700">رُحّل تلقائيًا</div><div className="mt-1 text-lg font-black text-emerald-900">{Number(result.recognized?.posted_count || 0).toLocaleString("en-US")}</div></div>
-                    <div><div className="text-[10px] font-bold text-amber-700">ينتظر دليلًا/مراجعة</div><div className="mt-1 text-lg font-black text-amber-900">{Number(result.recognized?.blocked_count || 0).toLocaleString("en-US")}</div></div>
+                    <div><div className="text-[10px] font-bold text-emerald-700">رُحّل تلقائيًا</div><div className="mt-1 text-lg font-black text-emerald-900">{(Number(result.recognized?.posted_count || 0) + Number(result.bankTransfers?.posted_count || 0)).toLocaleString("en-US")}</div></div>
+                    <div><div className="text-[10px] font-bold text-amber-700">ينتظر دليلًا/مراجعة</div><div className="mt-1 text-lg font-black text-amber-900">{(Number(result.recognized?.blocked_count || 0) + Number(result.bankTransfers?.blocked_count || 0)).toLocaleString("en-US")}</div></div>
                     <div><div className="text-[10px] font-bold text-slate-500">تعارضات الملف</div><div className="mt-1 text-lg font-black">{Number(result.imported?.file?.conflict_count || 0).toLocaleString("en-US")}</div></div>
                 </div>
             )}
