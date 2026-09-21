@@ -259,7 +259,7 @@ class P03OpeningInventoryCostLineIn(BaseModel):
     @field_validator("unit_cost")
     @classmethod
     def valid_unit_cost(cls, value: Decimal) -> Decimal:
-        return _money(value)
+        return _money(value, allow_zero=True)
 
 
 class P03OpeningInventoryCostApproveIn(BaseModel):
@@ -1569,7 +1569,7 @@ async def prepare_inventory_cogs_post(
         consume_qty = Decimal(
             str(requested_by_target[target_key]["quantity"])
         )
-        if basis_qty <= 0 or basis_cost_halalas <= 0:
+        if basis_qty <= 0 or basis_cost_halalas < 0:
             raise HTTPException(
                 409,
                 detail={
@@ -1605,8 +1605,8 @@ async def prepare_inventory_cogs_post(
                 / basis_qty
             ).quantize(HALALA, rounding=ROUND_HALF_UP)
             cost_halalas = min(int(proportional), remaining_cost)
-        if cost_halalas <= 0:
-            raise HTTPException(409, "p03_cogs_cost_must_be_positive")
+        if cost_halalas < 0:
+            raise HTTPException(409, "p03_cogs_cost_must_not_be_negative")
         total_cost_halalas += cost_halalas
         cost_allocations.append({
             "target_key": target_key,
@@ -1699,6 +1699,69 @@ async def post_inventory_cogs(
         owner=owner,
         event_at=facts["accounting_at"],
     )
+    if int(facts["total_cost_halalas"]) == 0:
+        now = datetime.now(timezone.utc).isoformat()
+        await db[P03_EVENTS].insert_one({
+            "_id": proposal["event_id"],
+            "id": proposal["event_id"],
+            "user_id": owner,
+            "kind": "inventory_cogs",
+            "status": "posted",
+            "economic_hash": proposal["economic_hash"],
+            "facts": facts,
+            "reason": reason,
+            "zero_cost": True,
+            "txn_group_id": None,
+            "entry_ids": [],
+            "created_at": now,
+            "created_by": actor["id"],
+            "posted_at": now,
+            "posted_by": actor["id"],
+        })
+        updated = await db[INVENTORY_CONSUMPTION_EVENTS].update_one(
+            {
+                "user_id": owner,
+                "id": facts["consumption_event_id"],
+                "status": "consumed",
+                "$or": [
+                    {"cogs_event_id": {"$exists": False}},
+                    {"cogs_event_id": None},
+                    {"cogs_event_id": ""},
+                ],
+            },
+            {"$set": {
+                "accounting_status": "cogs_zero_cost_recorded",
+                "cogs_event_id": proposal["event_id"],
+                "cogs_txn_group_id": None,
+                "cogs_entry_ids": [],
+                "cogs_amount": "0.00",
+                "cogs_posted_at": now,
+                "cogs_posted_by": actor["id"],
+                "updated_at": now,
+            }},
+        )
+        if updated.modified_count != 1:
+            raise HTTPException(409, "p03_cogs_concurrent_post")
+        await db[P03_AUDIT].insert_one({
+            "user_id": owner,
+            "action": "inventory_cogs_zero_cost_recorded",
+            "actor_id": actor["id"],
+            "at": now,
+            "event_id": proposal["event_id"],
+            "consumption_event_id": facts["consumption_event_id"],
+            "order_number": facts["order_number"],
+            "sale_txn_group_id": facts["sale_txn_group_id"],
+            "amount": "0.00",
+            "cost_allocations": facts["cost_allocations"],
+            "reason": reason,
+        })
+        return {
+            "state": "posted_zero_cost",
+            "event_id": proposal["event_id"],
+            "txn_group_id": None,
+            "facts": facts,
+        }
+
     balances = await read_mz2_write_balances(
         db,
         owner=owner,
