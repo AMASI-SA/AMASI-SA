@@ -739,19 +739,6 @@ async def prepare_store_driver_cod(
     if not driver:
         raise ShippingAccountingError("store_driver_missing")
 
-    earning = await db[DRIVER_EARNINGS].find_one(
-        {
-            "user_id": owner,
-            "assignment_id": assignment_id,
-            "driver_id": driver_id,
-            "order_number": order_number,
-        },
-        {"_id": 0},
-    )
-    if not earning:
-        raise ShippingAccountingError("store_driver_earning_missing")
-    delivery_fee = _money(earning.get("amount"))
-
     orders = await db.mz2_salla_order_evidence.find(
         {
             "user_id": owner,
@@ -787,13 +774,11 @@ async def prepare_store_driver_cod(
         "event_id": event_id,
         "assignment_id": assignment_id,
         "collection_id": collection.get("id"),
-        "earning_id": earning.get("id"),
         "order_evidence_id": evidence["id"],
         "order_number": order_number,
         "driver_id": driver_id,
         "driver_name": driver.get("name") or "",
         "gross": format(gross, ".2f"),
-        "delivery_fee": format(delivery_fee, ".2f"),
         "accounting_at": accounting_at,
     }
     economic_hash = _hash(facts)
@@ -824,6 +809,16 @@ async def post_store_driver_cod(
     actor: dict[str, Any],
     assignment_id: str,
 ) -> dict[str, Any]:
+    # Delivery fee is its own economic event.  Post/verify it first so a
+    # missing Salla COD source can never suppress a real earned delivery fee.
+    # It is idempotent and can therefore be retried independently.
+    fee_result = await post_store_driver_fee(
+        db,
+        owner=owner,
+        actor=actor,
+        assignment_id=assignment_id,
+    )
+
     async def commit(scoped):
         proposal = await prepare_store_driver_cod(
             scoped,
@@ -842,10 +837,6 @@ async def post_store_driver_cod(
         required = [
             ("store_driver", facts["driver_id"], "cod_receivable"),
         ]
-        if Decimal(facts["delivery_fee"]) > 0:
-            required.append(
-                ("store_driver", facts["driver_id"], "delivery_fee_payable")
-            )
         await read_mz2_write_balances(
             scoped,
             owner=owner,
@@ -953,43 +944,7 @@ async def post_store_driver_cod(
             ],
         )
 
-        fee_group_id = None
-        fee = Decimal(facts["delivery_fee"])
-        if fee > 0:
-            fee_group = await post_txn_group(
-                scoped,
-                user_id=owner,
-                actor_id=actor["id"],
-                actor_name=actor.get("name") or actor.get("email") or actor["id"],
-                txn_type="mz2_store_driver_fee_accrual",
-                notes=(
-                    f"أجرة موصل المتجر — {facts['order_number']} — "
-                    f"{facts['driver_name']}"
-                ),
-                metadata={
-                    **base_meta,
-                    "earning_id": facts["earning_id"],
-                    "fee_snapshot_source": "store_delivery_driver_earnings",
-                },
-                entries=[
-                    {
-                        "entity_type": "expense",
-                        "entity_id": "store_delivery",
-                        "side": "debit",
-                        "amount": facts["delivery_fee"],
-                        "entry_type": "shipping_fee_accrual",
-                    },
-                    {
-                        "entity_type": "store_driver",
-                        "entity_id": facts["driver_id"],
-                        "sub_account": "delivery_fee_payable",
-                        "side": "credit",
-                        "amount": facts["delivery_fee"],
-                        "entry_type": "shipping_fee_accrual",
-                    },
-                ],
-            )
-            fee_group_id = fee_group["txn_group_id"]
+        fee_group_id = fee_result.get("txn_group_id")
 
         now = datetime.now(timezone.utc).isoformat()
         await scoped.mz2_shipping_accounting_events.update_one(
@@ -1006,19 +961,18 @@ async def post_store_driver_cod(
                 "posted_at": now,
             }},
         )
-        for collection_name in (DRIVER_COLLECTIONS, DRIVER_EARNINGS):
-            await scoped[collection_name].update_one(
-                {
-                    "user_id": owner,
-                    "assignment_id": assignment_id,
-                },
-                {"$set": {
-                    "mz2_p02_accounting_status": "posted",
-                    "mz2_p02_event_id": proposal["event_id"],
-                    "mz2_p02_sale_txn_group_id": sale["txn_group_id"],
-                    "mz2_p02_fee_txn_group_id": fee_group_id,
-                }},
-            )
+        await scoped[DRIVER_COLLECTIONS].update_one(
+            {
+                "user_id": owner,
+                "assignment_id": assignment_id,
+            },
+            {"$set": {
+                "mz2_p02_accounting_status": "posted",
+                "mz2_p02_event_id": proposal["event_id"],
+                "mz2_p02_sale_txn_group_id": sale["txn_group_id"],
+                "mz2_p02_fee_txn_group_id": fee_group_id,
+            }},
+        )
         await scoped.mz2_salla_order_evidence.update_one(
             {
                 "user_id": owner,
@@ -1045,7 +999,11 @@ async def post_store_driver_cod(
             "tax": tax,
         }
 
-    return await atomic_owner(db, owner, commit)
+    result = await atomic_owner(db, owner, commit)
+    if result.get("fee_txn_group_id") is None:
+        result["fee_txn_group_id"] = fee_result.get("txn_group_id")
+    result["fee_state"] = fee_result.get("state")
+    return result
 
 
 class CourierFeePostIn(BaseModel):
