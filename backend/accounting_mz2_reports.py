@@ -171,7 +171,10 @@ async def read_mz2_ledger(db, *, owner, as_of=None, required_accounts=()):
         at = _aware_utc_iso(zero.get("accounting_at"))
         if (zero.get("opening_balance_txn_group_id") != group or at != cut
                 or not str(zero.get("evidence_ref") or "").strip()
-                or zero.get("entity_type") not in {"bank", "payment_gateway", "employee", "courier", "store_driver"}
+                or zero.get("entity_type") not in {
+                    "bank", "payment_gateway", "employee", "courier",
+                    "store_driver", "supplier", "asset", "tax",
+                }
                 or not str(zero.get("entity_id") or "").strip()):
             return blocked("approved_zero_opening_evidence_invalid")
         key = (zero["entity_type"], str(zero["entity_id"]), zero.get("sub_account") or "")
