@@ -19,15 +19,22 @@ from accounting_inventory_p03 import (
     inventory_p03_workspace,
     opening_inventory_cost_workspace,
     post_inventory_cogs,
+    post_inventory_cogs_reversal,
     post_inventory_receipt,
     post_supplier_invoice,
     prepare_inventory_cogs_post,
+    prepare_inventory_cogs_reversal,
     prepare_inventory_receipt_post,
     prepare_supplier_invoice_post,
     require_p03_inventory_financial_writes,
 )
 from accounting_mz2_reports import mz2_financial_position, read_mz2_ledger
 from accounting_periods import PeriodChange, set_period
+from return_decision_engine import (
+    ReturnRestockRequest,
+    get_return_restock_options,
+    restock_return_inventory,
+)
 from ledger_core import post_txn_group
 from accounting_shipping_p02 import P02ActivateIn, activate_p02
 from accounting_module_opening_balances import (
@@ -1539,6 +1546,277 @@ class MZ2InventoryP03PhaseTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(event["accounting_status"], "cogs_zero_cost_recorded")
         self.assertEqual(event["cogs_amount"], "0.00")
+
+
+    async def test_physical_return_restock_reverses_cogs_and_preserves_future_cost_basis(self):
+        await self.activate_full_p03()
+        invoice = await self.create_purchase_invoice(
+            request_id="REQ-P03-RETURN-COGS",
+        )
+        line_id = invoice["lines"][0]["id"]
+        await self.add_inventory_receipt(
+            receipt_id="receipt-return-cogs",
+            purchase_invoice_id=invoice["id"],
+            line_id=line_id,
+            quantity=3,
+            posted_at="2026-09-21T09:00:00+00:00",
+        )
+        await self.tx(lambda scoped: post_inventory_receipt(
+            scoped,
+            owner=self.owner,
+            actor=self.actor,
+            receipt_id="receipt-return-cogs",
+            reason="استلام مخزون لاختبار المرتجع",
+        ))
+
+        await self.db.warehouse_locations.insert_many([
+            {
+                "id": "LOC-SOURCE-RETURN",
+                "code": "SRC-RET",
+                "barcode_value": "SRC-RET",
+                "warehouse_id": "WH-1",
+                "user_id": self.owner,
+                "state": "occupied",
+                "purpose": "permanent_storage",
+                "occupancy": {
+                    "total_quantity": 2,
+                    "items": [{
+                        "receipt_id": "receipt-return-cogs",
+                        "product_id": "SALLA-1",
+                        "mezan_product_id": "MZP-1",
+                        "product_name": "Synthetic inventory product",
+                        "sku": "SKU-1",
+                        "quantity": 2,
+                        "preparation_state": "ready_complete",
+                        "specifications": {},
+                        "configuration_key": "CFG-RET-1",
+                        "lot_id": "purchase:return:cogs",
+                    }],
+                },
+            },
+            {
+                "id": "LOC-RETURN-DEST",
+                "code": "RET-DEST",
+                "barcode_value": "RET-DEST",
+                "warehouse_id": "WH-1",
+                "user_id": self.owner,
+                "state": "empty",
+                "purpose": "permanent_storage",
+                "max_items": 100,
+                "occupancy": {
+                    "total_quantity": 0,
+                    "items": [],
+                },
+            },
+        ])
+        await self.db.mezan_inventory_reservations_v2.insert_one({
+            "id": "reservation-return-cogs",
+            "user_id": self.owner,
+            "order_number": "ORD-RETURN-COGS",
+            "line_key": "ITEM-RETURN-1",
+            "status": "consumed",
+            "quantity": 1,
+            "product_id": "SALLA-1",
+            "mezan_product_id": "MZP-1",
+            "sku": "SKU-1",
+            "configuration_keys": ["CFG-RET-1"],
+            "allocations": [{
+                "inventory_row_key": "receipt:receipt-return-cogs",
+                "location_id": "LOC-SOURCE-RETURN",
+                "item_index": 0,
+                "warehouse_id": "WH-1",
+                "receipt_id": "receipt-return-cogs",
+                "lot_id": "purchase:return:cogs",
+                "configuration_key": "CFG-RET-1",
+                "quantity": 1,
+            }],
+            "consumed_at": "2026-09-21T10:00:00+00:00",
+        })
+        await self.add_inventory_consumption(
+            event_id="consume-return-cogs",
+            order_number="ORD-RETURN-COGS",
+            receipt_id="receipt-return-cogs",
+            lot_id="purchase:return:cogs",
+            location_id="LOC-SOURCE-RETURN",
+            item_index=0,
+            quantity=1,
+            consumed_at="2026-09-21T10:00:00+00:00",
+        )
+        await self.recognize_synthetic_sale(
+            order_number="ORD-RETURN-COGS",
+            recognized_at="2026-09-21T11:00:00+00:00",
+        )
+        original_cogs = await self.tx(lambda scoped: post_inventory_cogs(
+            scoped,
+            owner=self.owner,
+            actor=self.actor,
+            consumption_event_id="consume-return-cogs",
+            reason="COGS للبيع الأصلي قبل المرتجع",
+        ))
+        self.assertEqual(original_cogs["facts"]["total_cost"], "100.00")
+
+        await self.db.return_cases.insert_one({
+            "id": "return-case-cogs",
+            "user_id": self.owner,
+            "order_number": "ORD-RETURN-COGS",
+            "status": "inspected",
+            "version": 3,
+            "selected_items": [{
+                "order_item_id": "ITEM-RETURN-1",
+                "product_id": "SALLA-1",
+                "sku": "SKU-1",
+                "name": "Synthetic inventory product",
+                "quantity_ordered": 1,
+                "quantity_return": 1,
+            }],
+            "inspection": {
+                "items": [{
+                    "order_item_id": "ITEM-RETURN-1",
+                    "received_quantity": 1,
+                    "accepted_quantity": 1,
+                    "sellable_quantity": 1,
+                    "damaged_quantity": 0,
+                }],
+                "sellable_quantity": 1,
+                "accepted_quantity": 1,
+                "damaged_quantity": 0,
+            },
+            "execution_gates": {
+                "inventory": "ready_for_sellable_quantity_movement",
+                "credit_note": "ready_for_financial_review",
+            },
+        })
+
+        options = await get_return_restock_options(
+            self.db,
+            user_id=self.owner,
+            case_id="return-case-cogs",
+        )
+        item = options["items"][0]
+        self.assertEqual(item["remaining_sellable_quantity"], 1)
+        self.assertEqual(
+            item["sources"][0]["source_target_key"],
+            "receipt:receipt-return-cogs",
+        )
+        self.assertTrue(any(
+            row["id"] == "LOC-RETURN-DEST"
+            for row in item["sources"][0]["compatible_locations"]
+        ))
+
+        restock = await restock_return_inventory(
+            self.db,
+            user_id=self.owner,
+            user=self.actor,
+            case_id="return-case-cogs",
+            request=ReturnRestockRequest(
+                request_id="REQ-RETURN-RESTOCK-COGS",
+                expected_version=3,
+                order_item_id="ITEM-RETURN-1",
+                source_target_key="receipt:receipt-return-cogs",
+                quantity=1,
+                location_id="LOC-RETURN-DEST",
+                scanned_barcode="RET-DEST",
+                employee_note="قطعة سليمة عادت للمخزون",
+            ),
+        )
+        self.assertEqual(restock["inventory_gate_after"], "restocked_sellable_inventory")
+        stored_restock = await self.db.mezan_return_inventory_restocks_v2.find_one(
+            {"id": restock["id"]},
+            {"_id": 0},
+        )
+        self.assertEqual(stored_restock["accounting_status"], "waiting_cogs_reversal")
+        destination = await self.db.warehouse_locations.find_one(
+            {"id": "LOC-RETURN-DEST"},
+            {"_id": 0},
+        )
+        self.assertEqual(destination["occupancy"]["total_quantity"], 1)
+        self.assertEqual(
+            destination["occupancy"]["items"][0]["receipt_id"],
+            restock["inventory_receipt_id"],
+        )
+
+        preview = await prepare_inventory_cogs_reversal(
+            self.db,
+            owner=self.owner,
+            restock_id=restock["id"],
+        )
+        self.assertEqual(preview["state"], "eligible")
+        self.assertEqual(preview["facts"]["total_cost"], "100.00")
+        self.assertEqual(
+            preview["facts"]["source_target_key"],
+            "receipt:receipt-return-cogs",
+        )
+
+        reversal = await self.tx(lambda scoped: post_inventory_cogs_reversal(
+            scoped,
+            owner=self.owner,
+            actor=self.actor,
+            restock_id=restock["id"],
+            reason="Restock فعلي لقطعة صالحة",
+        ))
+        reversal_legs = await self.db.general_ledger.find(
+            {"txn_group_id": reversal["txn_group_id"]},
+            {"_id": 0},
+        ).to_list(10)
+        self.assertEqual(
+            {
+                (
+                    row["entity_type"],
+                    row["entity_id"],
+                    row.get("sub_account"),
+                    row["side"],
+                    round(float(row["amount"]), 2),
+                )
+                for row in reversal_legs
+            },
+            {
+                ("asset", "inventory", "inventory", "debit", 100.00),
+                ("expense", "cogs", None, "credit", 100.00),
+            },
+        )
+        stored_restock = await self.db.mezan_return_inventory_restocks_v2.find_one(
+            {"id": restock["id"]},
+            {"_id": 0},
+        )
+        self.assertEqual(stored_restock["accounting_status"], "cogs_reversed")
+        self.assertEqual(stored_restock["accounting_inventory_cost_halalas"], 10000)
+
+        # Re-sale consumes the return receipt itself and must reuse the
+        # historical 100 SAR cost restored by the reversal.
+        await self.add_inventory_consumption(
+            event_id="consume-return-resale",
+            order_number="ORD-RETURN-RESALE",
+            receipt_id=restock["inventory_receipt_id"],
+            lot_id=restock["restock_lot_id"],
+            location_id="LOC-RETURN-DEST",
+            item_index=0,
+            quantity=1,
+            consumed_at="2026-09-21T12:00:00+00:00",
+        )
+        await self.recognize_synthetic_sale(
+            order_number="ORD-RETURN-RESALE",
+            recognized_at="2026-09-21T13:00:00+00:00",
+        )
+        resale_preview = await prepare_inventory_cogs_post(
+            self.db,
+            owner=self.owner,
+            consumption_event_id="consume-return-resale",
+        )
+        self.assertEqual(resale_preview["state"], "eligible")
+        self.assertEqual(resale_preview["facts"]["total_cost"], "100.00")
+        self.assertEqual(
+            resale_preview["facts"]["cost_allocations"][0]["source_kind"],
+            "return_inventory_restock",
+        )
+        await self.tx(lambda scoped: post_inventory_cogs(
+            scoped,
+            owner=self.owner,
+            actor=self.actor,
+            consumption_event_id="consume-return-resale",
+            reason="COGS لإعادة بيع القطعة المرتجعة",
+        ))
+        position = await mz2_financial_position(self.db, owner=self.owner)
+        self.assertAlmostEqual(position["assets"]["inventory"], 200.0)
 
 
 if __name__ == "__main__":
