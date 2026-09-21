@@ -24,7 +24,7 @@ test("P03 page is native and wired into the accounting workspace", () => {
 
 test("P03 requires explicit phase activation and accountant posting", () => {
     expect(serviceSource).toContain("/inventory-p03/activate");
-    expect(source).toContain("ACTIVATE_MZ2_P03") === false;
+    expect(source).not.toContain("ACTIVATE_MZ2_P03");
     expect(source).toContain("P03 مقفل");
     expect(source).toContain("تفعيل P03");
     expect(source).toContain('accounting.purchases.post');
