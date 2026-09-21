@@ -51,6 +51,11 @@ def _producer(row):
         "advance_repay_cash", "custody_grant", "custody_return",
     }:
         return meta.get("source") == "accounting_payroll_p01" and bool(meta.get("payroll_event_id"))
+    if kind in {"bank_transfer_advance", "bank_transfer_sale"}:
+        return (
+            meta.get("source") == "accounting_bank_transfer_receipt_p01"
+            and bool(meta.get("bank_transfer_review_id"))
+        )
     if kind in {"cod_sale", "shipping_fee_accrual", "shipping_settlement"}:
         return meta.get("source") == "accounting_shipping_p02" and bool(meta.get("shipping_event_id"))
     return False
