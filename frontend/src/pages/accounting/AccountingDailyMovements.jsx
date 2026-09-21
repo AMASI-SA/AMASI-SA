@@ -9,8 +9,10 @@ import {
 import { toast } from "sonner";
 
 import {
+    classifyAccountingOutgoingMovement,
     confirmAccountingDailyMovementProvider,
     createAccountingManualIncomingMovement,
+    createAccountingManualOutgoingMovement,
     getAccountingDailyMovementContext,
     getAccountingDailyMovements,
     uploadAccountingDailyMovements,
@@ -29,6 +31,7 @@ const STATUS = {
     needs_review: ["يحتاج منك", "bg-amber-50 text-amber-900 border-amber-200"],
     unclassified: ["بانتظار نوع حركة MZ2", "bg-slate-50 text-slate-700 border-slate-200"],
     pending_provider_receipt: ["جاري إنشاء مسودة", "bg-sky-50 text-sky-800 border-sky-200"],
+    accounting_posted: ["مرحّل محاسبيًا", "bg-emerald-50 text-emerald-900 border-emerald-300"],
 };
 
 function errorText(error, fallback) {
@@ -58,6 +61,8 @@ export default function AccountingDailyMovements({ accountingPermissions = [] })
     const [fileKey, setFileKey] = useState(0);
     const [busy, setBusy] = useState("");
     const [reasonById, setReasonById] = useState({});
+    const [outgoingById, setOutgoingById] = useState({});
+    const [manualDirection, setManualDirection] = useState("in");
     const [manualBankAccountId, setManualBankAccountId] = useState("");
     const [manualAmount, setManualAmount] = useState("");
     const [manualSender, setManualSender] = useState("");
@@ -96,29 +101,38 @@ export default function AccountingDailyMovements({ accountingPermissions = [] })
         if (!canImport) return toast.error("لا تملك صلاحية إضافة حركة مالية");
         if (!manualBankAccountId) return toast.error("اختر البنك");
         if (!(Number(manualAmount) > 0)) return toast.error("أدخل مبلغ التحويل");
-        if (!manualSender.trim()) return toast.error("أدخل اسم المحوّل");
-        const facts = {
+        if (!manualSender.trim()) {
+            return toast.error(manualDirection === "in" ? "أدخل اسم المحوّل" : "أدخل اسم المستفيد");
+        }
+        const common = {
             bank_account_id: manualBankAccountId,
             amount: manualAmount,
-            sender_name: manualSender.trim(),
             movement_date: manualDate,
             reference: manualReference.trim(),
             notes: manualNotes.trim(),
         };
-        const fingerprint = JSON.stringify(facts);
+        const facts = manualDirection === "in"
+            ? { ...common, sender_name: manualSender.trim() }
+            : { ...common, payee_name: manualSender.trim() };
+        const fingerprint = JSON.stringify({ direction: manualDirection, ...facts });
         if (manualRequest.current?.fingerprint !== fingerprint) {
             manualRequest.current = { fingerprint, id: crypto.randomUUID() };
         }
         setBusy("manual");
         try {
-            const result = await createAccountingManualIncomingMovement({
+            const createMovement = manualDirection === "in"
+                ? createAccountingManualIncomingMovement
+                : createAccountingManualOutgoingMovement;
+            const result = await createMovement({
                 ...facts,
                 request_id: manualRequest.current.id,
             });
             if (result?.duplicate) {
                 toast.info("هذه الحركة محفوظة مسبقًا؛ لم تتكرر.");
+            } else if (manualDirection === "out") {
+                toast.success("تم حفظ الحركة الخارجة كدليل MZ2. صنّفها أدناه كمصروف عام أو سداد مورد قبل الترحيل.");
             } else {
-                toast.success("تم حفظ التحويل البنكي كحركة MZ2. سيبقى دليلًا حتى يُصنّف أو يُربط بالعملية المناسبة.");
+                toast.success("تم حفظ التحويل الوارد كحركة MZ2. سيبقى دليلًا حتى يُصنّف أو يُربط بالعملية المناسبة.");
             }
             setManualAmount("");
             setManualSender("");
@@ -127,7 +141,7 @@ export default function AccountingDailyMovements({ accountingPermissions = [] })
             manualRequest.current = null;
             await refresh();
         } catch (error) {
-            toast.error(errorText(error, "تعذر حفظ التحويل البنكي"), { duration: 8000 });
+            toast.error(errorText(error, "تعذر حفظ الحركة البنكية"), { duration: 8000 });
         } finally {
             setBusy("");
         }
@@ -176,6 +190,42 @@ export default function AccountingDailyMovements({ accountingPermissions = [] })
         }
     }
 
+    async function classifyOutgoing(row) {
+        if (!canImport) return toast.error("لا تملك صلاحية ترحيل الحركة");
+        const draft = outgoingById[row.id] || {};
+        const action = draft.action || "";
+        const reason = String(draft.reason || "").trim();
+        if (!action) return toast.error("اختر نوع الصرف");
+        if (action === "expense" && !draft.expense_category) return toast.error("اختر فئة المصروف");
+        if (action === "supplier_payment" && !draft.supplier_id) return toast.error("اختر المورد");
+        if (reason.length < 3) return toast.error("اكتب سببًا واضحًا للترحيل");
+
+        setBusy("outgoing:" + row.id);
+        try {
+            await classifyAccountingOutgoingMovement(row.id, {
+                action,
+                expense_category: action === "expense" ? draft.expense_category : "",
+                supplier_id: action === "supplier_payment" ? draft.supplier_id : "",
+                reason,
+            });
+            toast.success(action === "expense"
+                ? "تم ترحيل المصروف من حركة البنك نفسها."
+                : "تم سداد الذمة القائمة للمورد من حركة البنك نفسها.");
+            await refresh();
+        } catch (error) {
+            toast.error(errorText(error, "تعذر ترحيل الحركة الخارجة"), { duration: 8000 });
+        } finally {
+            setBusy("");
+        }
+    }
+
+    function updateOutgoing(id, patch) {
+        setOutgoingById((current) => ({
+            ...current,
+            [id]: { ...(current[id] || {}), ...patch },
+        }));
+    }
+
     return (
         <section className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5" dir="rtl" data-testid="accounting-daily-movements">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -208,14 +258,21 @@ export default function AccountingDailyMovements({ accountingPermissions = [] })
                 </div>
             </div>
 
-            <form onSubmit={saveManual} className="space-y-4 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4" data-testid="manual-incoming-movement-form">
+            <form onSubmit={saveManual} className="space-y-4 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4" data-testid="manual-bank-movement-form">
                 <div>
-                    <h3 className="text-sm font-black text-emerald-950">إضافة تحويل بنكي يدوي</h3>
+                    <h3 className="text-sm font-black text-emerald-950">إضافة حركة بنكية يدوية</h3>
                     <p className="mt-1 text-xs font-semibold leading-6 text-emerald-900">
-                        سجّل الواقع فقط: البنك، المبلغ، اسم المحوّل والتاريخ. لا تختار مدين/دائن. إذا رُفع كشف البنك لاحقًا بنفس المرجع والمبلغ والتاريخ، يعتبره ميزان تأكيدًا لنفس الحركة ولا يكررها.
+                        سجّل الواقع فقط: داخل/خارج، البنك، المبلغ، الطرف والتاريخ. لا تختار مدين/دائن. إذا رُفع كشف البنك لاحقًا بنفس المرجع والمبلغ والتاريخ والاتجاه، يعتبره ميزان تأكيدًا لنفس الحركة ولا يكررها.
                     </p>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    <label className="text-xs font-extrabold text-slate-700">
+                        اتجاه الحركة
+                        <select value={manualDirection} onChange={(event) => { setManualDirection(event.target.value); manualRequest.current = null; }} className="mt-1 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3">
+                            <option value="in">وارد إلى البنك</option>
+                            <option value="out">خارج من البنك</option>
+                        </select>
+                    </label>
                     <label className="text-xs font-extrabold text-slate-700">
                         البنك
                         <select value={manualBankAccountId} onChange={(event) => setManualBankAccountId(event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3">
@@ -230,8 +287,14 @@ export default function AccountingDailyMovements({ accountingPermissions = [] })
                         <input type="number" min="0.01" step="0.01" required value={manualAmount} onChange={(event) => setManualAmount(event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-left font-mono" dir="ltr" />
                     </label>
                     <label className="text-xs font-extrabold text-slate-700">
-                        اسم المحوّل
-                        <input required value={manualSender} onChange={(event) => setManualSender(event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3" placeholder="مثال: أحمد محمد / شركة تابي" />
+                        {manualDirection === "in" ? "اسم المحوّل" : "المستفيد / الجهة المدفوع لها"}
+                        <input
+                            required
+                            value={manualSender}
+                            onChange={(event) => setManualSender(event.target.value)}
+                            className="mt-1 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3"
+                            placeholder={manualDirection === "in" ? "مثال: أحمد محمد / شركة تابي" : "مثال: مالك العقار / المورد"}
+                        />
                     </label>
                     <label className="text-xs font-extrabold text-slate-700">
                         التاريخ
@@ -241,14 +304,14 @@ export default function AccountingDailyMovements({ accountingPermissions = [] })
                         مرجع التحويل <span className="font-semibold text-slate-400">اختياري</span>
                         <input value={manualReference} onChange={(event) => setManualReference(event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 font-mono" dir="ltr" />
                     </label>
-                    <label className="text-xs font-extrabold text-slate-700">
+                    <label className="text-xs font-extrabold text-slate-700 xl:col-span-2">
                         ملاحظة <span className="font-semibold text-slate-400">اختيارية</span>
                         <input value={manualNotes} onChange={(event) => setManualNotes(event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3" />
                     </label>
                 </div>
                 <div className="flex justify-end">
                     <button disabled={!canImport || !manualBankAccountId || !(Number(manualAmount) > 0) || !manualSender.trim() || busy === "manual"} className="min-h-11 rounded-xl bg-emerald-800 px-5 text-sm font-black text-white disabled:opacity-40">
-                        {busy === "manual" ? "جاري الحفظ…" : "حفظ التحويل"}
+                        {busy === "manual" ? "جاري الحفظ…" : "حفظ الحركة"}
                     </button>
                 </div>
             </form>
@@ -286,6 +349,10 @@ export default function AccountingDailyMovements({ accountingPermissions = [] })
                 إذا ظهر اسم تمارا/تابي/سلة/إمكان في نص البنك فقط، يعرضه ميزان كاقتراح ولا يعتمد عليه تلقائيًا. عمود «المنصة» الصريح في الملف يمكنه إنشاء مسودة مبلغ واصل تلقائيًا إذا كان البنك مربوطًا بالمزود.
             </div>
 
+            <div className="rounded-xl border border-violet-200 bg-violet-50 p-3 text-xs font-semibold leading-6 text-violet-950">
+                للحركة الخارجة: «مصروف عام» يسجل المصروف مقابل البنك مباشرة. «سداد مورد قائم» يخفض ذمة مورد موجودة فقط ولا ينشئ فاتورة شراء أو مخزونًا جديدًا؛ إنشاء المشتريات والمخزون يبقى ضمن P03.
+            </div>
+
             <div className="overflow-x-auto rounded-xl border border-slate-200">
                 <table className="min-w-full text-xs">
                     <thead className="bg-slate-50 text-slate-600">
@@ -318,8 +385,64 @@ export default function AccountingDailyMovements({ accountingPermissions = [] })
                                     )}
                                 </td>
                                 <td className="p-3"><Badge status={row.status} /></td>
-                                <td className="min-w-56 p-3">
-                                    {row.status === "needs_review" && row.suggested_provider ? (
+                                <td className="min-w-64 p-3">
+                                    {row.status === "accounting_posted" ? (
+                                        <span className="inline-flex items-center gap-1 font-bold text-emerald-700"><CheckCircle size={16} weight="fill" /> تم ترحيل الحركة مرة واحدة</span>
+                                    ) : row.direction === "out" && row.status === "unclassified" ? (
+                                        <div className="space-y-2" data-testid={`outgoing-classify-${row.id}`}>
+                                            <select
+                                                value={outgoingById[row.id]?.action || ""}
+                                                onChange={(event) => updateOutgoing(row.id, {
+                                                    action: event.target.value,
+                                                    expense_category: "",
+                                                    supplier_id: "",
+                                                })}
+                                                className="min-h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-[11px] font-bold"
+                                            >
+                                                <option value="">اختر نوع الصرف</option>
+                                                <option value="expense">مصروف عام</option>
+                                                <option value="supplier_payment">سداد مورد قائم</option>
+                                            </select>
+                                            {outgoingById[row.id]?.action === "expense" && (
+                                                <select
+                                                    value={outgoingById[row.id]?.expense_category || ""}
+                                                    onChange={(event) => updateOutgoing(row.id, { expense_category: event.target.value })}
+                                                    className="min-h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-[11px]"
+                                                >
+                                                    <option value="">اختر فئة المصروف</option>
+                                                    {(context?.expense_categories || []).map((category) => (
+                                                        <option key={category.code} value={category.code}>{category.name}</option>
+                                                    ))}
+                                                </select>
+                                            )}
+                                            {outgoingById[row.id]?.action === "supplier_payment" && (
+                                                <select
+                                                    value={outgoingById[row.id]?.supplier_id || ""}
+                                                    onChange={(event) => updateOutgoing(row.id, { supplier_id: event.target.value })}
+                                                    className="min-h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-[11px]"
+                                                >
+                                                    <option value="">اختر المورد</option>
+                                                    {(context?.suppliers || []).map((supplier) => (
+                                                        <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
+                                                    ))}
+                                                </select>
+                                            )}
+                                            <input
+                                                value={outgoingById[row.id]?.reason || ""}
+                                                onChange={(event) => updateOutgoing(row.id, { reason: event.target.value })}
+                                                placeholder="سبب الترحيل / وصف المصروف"
+                                                className="min-h-9 w-full rounded-lg border border-slate-200 px-2 text-[11px]"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => classifyOutgoing(row)}
+                                                disabled={!canImport || busy === "outgoing:" + row.id}
+                                                className="min-h-9 rounded-lg bg-violet-800 px-3 text-[11px] font-extrabold text-white disabled:opacity-40"
+                                            >
+                                                {busy === "outgoing:" + row.id ? "جاري الترحيل…" : "اعتماد الصرف"}
+                                            </button>
+                                        </div>
+                                    ) : row.status === "needs_review" && row.suggested_provider ? (
                                         <div className="space-y-2">
                                             <input
                                                 value={reasonById[row.id] || ""}
@@ -335,7 +458,7 @@ export default function AccountingDailyMovements({ accountingPermissions = [] })
                                         <span className="inline-flex items-center gap-1 font-bold text-emerald-700"><CheckCircle size={16} weight="fill" /> ينتظر كشف المنصة/المطابقة</span>
                                     ) : (
                                         <span className="text-[10px] font-semibold text-slate-500">
-                                            ستظهر إجراءات المصروف/راتب/سلفة وغيرها عند اكتمال مسارات MZ2 الأصلية.
+                                            ستظهر إجراءات الراتب/السلفة/العهدة في مسار الموظفين المخصص.
                                         </span>
                                     )}
                                 </td>
