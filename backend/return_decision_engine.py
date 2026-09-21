@@ -946,6 +946,10 @@ async def restock_return_inventory(
         "scanned_barcode": clean_text(request.scanned_barcode).upper(),
         "employee_note": clean_text(request.employee_note),
     }
+    restock_id = str(uuid.uuid5(
+        uuid.NAMESPACE_URL,
+        f"mezan-return-restock-event:{user_id}:{request_key}",
+    ))
     existing_request = await db[RETURN_RESTOCK_REQUESTS].find_one(
         {"user_id": user_id, "request_id": request_key},
         {"_id": 0},
@@ -953,73 +957,89 @@ async def restock_return_inventory(
     if existing_request:
         if existing_request.get("facts") != facts:
             raise RuntimeError("return_restock_request_conflict")
-        if existing_request.get("status") == "posted":
-            restock = await db[RETURN_RESTOCKS].find_one(
+        persisted_restock = await db[RETURN_RESTOCKS].find_one(
+            {
+                "user_id": user_id,
+                "id": restock_id,
+                "status": "posted",
+            },
+            {"_id": 0},
+        )
+        if persisted_restock:
+            await db[RETURN_RESTOCK_REQUESTS].update_one(
+                {"user_id": user_id, "request_id": request_key},
+                {"$set": {
+                    "status": "posted",
+                    "restock_id": restock_id,
+                    "inventory_receipt_id": persisted_restock.get(
+                        "inventory_receipt_id"
+                    ),
+                    "posted_at": (
+                        existing_request.get("posted_at")
+                        or persisted_restock.get("restocked_at")
+                        or utc_now()
+                    ),
+                    "updated_at": utc_now(),
+                }},
+            )
+            case = await db.return_cases.find_one(
                 {
                     "user_id": user_id,
-                    "id": existing_request.get("restock_id"),
+                    "id": clean_text(case_id),
                 },
                 {"_id": 0},
             )
-            if restock:
-                case = await db.return_cases.find_one(
+            if (
+                case
+                and case.get("return_restock_active_request_id")
+                == request_key
+            ):
+                all_restocked = await db[RETURN_RESTOCKS].find(
+                    {
+                        "user_id": user_id,
+                        "return_case_id": clean_text(case_id),
+                        "status": "posted",
+                    },
+                    {"_id": 0, "order_item_id": 1, "quantity": 1},
+                ).to_list(10000)
+                totals: dict[str, int] = {}
+                for row in all_restocked:
+                    key = clean_text(row.get("order_item_id"))
+                    totals[key] = totals.get(key, 0) + int(
+                        row.get("quantity") or 0
+                    )
+                inspection_items = (
+                    (case.get("inspection") or {}).get("items") or []
+                )
+                complete = all(
+                    totals.get(
+                        clean_text(row.get("order_item_id")),
+                        0,
+                    )
+                    >= int(row.get("sellable_quantity") or 0)
+                    for row in inspection_items
+                )
+                await db.return_cases.update_one(
                     {
                         "user_id": user_id,
                         "id": clean_text(case_id),
+                        "return_restock_active_request_id": request_key,
                     },
-                    {"_id": 0},
+                    {"$set": {
+                        "execution_gates.inventory": (
+                            "restocked_sellable_inventory"
+                            if complete
+                            else "restock_in_progress"
+                        ),
+                        "return_restock_active_request_id": None,
+                        "updated_at": utc_now(),
+                    }},
                 )
-                if (
-                    case
-                    and (
-                        case.get("return_restock_active_request_id")
-                        == request_key
-                        or (case.get("execution_gates") or {}).get("inventory")
-                        == "restock_posting"
-                    )
-                ):
-                    all_restocked = await db[RETURN_RESTOCKS].find(
-                        {
-                            "user_id": user_id,
-                            "return_case_id": clean_text(case_id),
-                            "status": "posted",
-                        },
-                        {"_id": 0, "order_item_id": 1, "quantity": 1},
-                    ).to_list(10000)
-                    totals: dict[str, int] = {}
-                    for row in all_restocked:
-                        key = clean_text(row.get("order_item_id"))
-                        totals[key] = totals.get(key, 0) + int(
-                            row.get("quantity") or 0
-                        )
-                    inspection_items = (
-                        (case.get("inspection") or {}).get("items") or []
-                    )
-                    complete = all(
-                        totals.get(
-                            clean_text(row.get("order_item_id")),
-                            0,
-                        )
-                        >= int(row.get("sellable_quantity") or 0)
-                        for row in inspection_items
-                    )
-                    await db.return_cases.update_one(
-                        {
-                            "user_id": user_id,
-                            "id": clean_text(case_id),
-                        },
-                        {"$set": {
-                            "execution_gates.inventory": (
-                                "restocked_sellable_inventory"
-                                if complete
-                                else "restock_in_progress"
-                            ),
-                            "return_restock_active_request_id": None,
-                            "updated_at": utc_now(),
-                        }},
-                    )
-                return {**restock, "duplicate": True}
-            raise RuntimeError("return_restock_posted_request_missing_event")
+            return {**persisted_restock, "duplicate": True}
+        if existing_request.get("status") == "posted":
+            raise RuntimeError(
+                "return_restock_posted_request_missing_event"
+            )
 
     options = await get_return_restock_options(
         db,
@@ -1263,10 +1283,6 @@ async def restock_return_inventory(
         )
         raise RuntimeError("inventory_location_capacity_exceeded") from exc
 
-    restock_id = str(uuid.uuid5(
-        uuid.NAMESPACE_URL,
-        f"mezan-return-restock-event:{user_id}:{request_key}",
-    ))
     restock = {
         "id": restock_id,
         "user_id": user_id,
