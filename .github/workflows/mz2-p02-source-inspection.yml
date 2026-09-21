@@ -1,55 +1,39 @@
-name: P02 isolated source inspection
+name: P02 disposable offline test tools
 
 on:
   push:
-    branches:
-      - chatgpt/mz2-p02-shipping-cod-ledger-20260921
-    paths:
-      - .github/workflows/mz2-p02-source-inspection.yml
-
+    branches: [chatgpt/mz2-p02-shipping-cod-ledger-20260921]
+    paths: [.github/workflows/mz2-p02-source-inspection.yml]
 permissions:
   contents: read
-
 jobs:
-  source-only:
+  test-tools:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          persist-credentials: false
-      - name: Package tracked source only (no runtime, credentials, or business data)
+          python-version: '3.11'
+      - name: Download public pinned test dependencies, no application or runtime data
         run: |
-          python - <<'PY'
-          import hashlib, json, pathlib, subprocess, zipfile
-          allowed_roots = {'backend', 'frontend', 'scripts', 'tests', 'docs', '.github'}
-          allowed_suffixes = {'.py', '.js', '.jsx', '.ts', '.tsx', '.cjs', '.mjs', '.css', '.scss', '.html', '.md', '.json', '.yaml', '.yml', '.toml', '.txt', '.lock', '.sh', '.ini', '.cfg', '.svg'}
-          root_files = {'AGENTS.md', 'README.md', '.gitignore', 'design_guidelines.json'}
-          blocked = {'node_modules', '__pycache__', '.venv', 'venv', 'build', 'uploads', 'exports', 'backups', 'secrets', 'credentials', 'test_reports', 'reports', '.git'}
-          names = subprocess.check_output(['git', 'ls-files', '-z']).decode().split('\0')
-          manifest = {'source_sha': subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode().strip(), 'files': {}}
-          with zipfile.ZipFile('/tmp/p02-source.zip', 'w', zipfile.ZIP_DEFLATED) as archive:
-              for name in sorted(filter(None, names)):
-                  path = pathlib.Path(name)
-                  if path.is_symlink() or not path.is_file():
-                      continue
-                  if any(part.lower() in blocked or part.lower().startswith('.env') for part in path.parts):
-                      continue
-                  if any(term in path.name.lower() for term in ('credential', 'secret', '.pem', '.key')):
-                      continue
-                  if name not in root_files and (path.parts[0] not in allowed_roots or path.suffix not in allowed_suffixes):
-                      continue
-                  data = path.read_bytes()
-                  if len(data) > 4_000_000:
-                      continue
-                  archive.writestr(name, data)
-                  manifest['files'][name] = hashlib.sha256(data).hexdigest()
-              archive.writestr('P02_SOURCE_MANIFEST.json', json.dumps(manifest, indent=2))
-          print('Tracked source files packaged:', len(manifest['files']))
-          PY
+          mkdir -p /tmp/p02-test-tools/wheels /tmp/p02-test-tools/mongo
+          python -m pip download --only-binary=:all: --dest /tmp/p02-test-tools/wheels \
+            mongomock-motor==0.0.36 pymongo==4.18.1 \
+            fastapi==0.141.1 pydantic==2.13.5 httpx==0.28.1 \
+            bcrypt==4.1.3 PyJWT==2.13.0 openpyxl==3.1.5 \
+            python-multipart==0.0.20 python-dotenv==1.2.3 \
+            cryptography==50.0.0 pytest==9.0.3 pytest-asyncio email-validator
+          curl --fail --show-error --silent --location --retry 2 \
+            https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-ubuntu2204-8.0.12.tgz \
+            --output /tmp/mongo.tgz
+          tar -xzf /tmp/mongo.tgz --strip-components=1 -C /tmp/p02-test-tools/mongo
+          cd /tmp/p02-test-tools
+          find . -type f -exec sha256sum '{}' + > /tmp/P02-TOOLS-SHA256.txt
+          cp /tmp/P02-TOOLS-SHA256.txt .
+          tar -czf /tmp/p02-test-tools.tgz .
       - uses: actions/upload-artifact@v4
         with:
-          name: p02-isolated-source
-          path: /tmp/p02-source.zip
+          name: p02-disposable-test-tools
+          path: /tmp/p02-test-tools.tgz
           retention-days: 1
           if-no-files-found: error
