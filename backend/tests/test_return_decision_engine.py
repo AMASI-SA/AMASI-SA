@@ -5,6 +5,8 @@ from pydantic import ValidationError
 from return_decision_engine import (
     ReturnDecisionInput,
     ReturnItemSelection,
+    ReturnRestockRequest,
+    _restock_source_target_key,
     build_return_decision_report,
     extract_salla_return_shipments,
 )
@@ -27,6 +29,42 @@ def item(**overrides):
     }
     values.update(overrides)
     return ReturnItemSelection(**values)
+
+
+def test_restock_source_identity_prefers_receipt_then_lot_then_location():
+    assert _restock_source_target_key({
+        "receipt_id": "receipt-1",
+        "lot_id": "lot-1",
+        "location_id": "loc-1",
+        "item_index": 0,
+    }) == "receipt:receipt-1"
+    assert _restock_source_target_key({
+        "receipt_id": None,
+        "lot_id": "lot-1",
+        "location_id": "loc-1",
+        "item_index": 0,
+    }) == "lot:lot-1"
+    assert _restock_source_target_key({
+        "location_id": "loc-1",
+        "item_index": 0,
+    }) == "location:loc-1:item:0"
+    assert _restock_source_target_key({}) == ""
+
+
+def test_restock_request_is_one_source_and_one_destination_per_action():
+    request = ReturnRestockRequest(
+        request_id="REQ-RETURN-001",
+        expected_version=3,
+        order_item_id="item-1",
+        source_target_key="receipt:receipt-1",
+        quantity=1,
+        location_id="loc-return",
+        scanned_barcode="RET-01",
+        employee_note="قطعة سليمة",
+    )
+    assert request.quantity == 1
+    assert request.source_target_key == "receipt:receipt-1"
+    assert request.location_id == "loc-return"
 
 
 def test_partial_return_keeps_unselected_quantity_immutable():
