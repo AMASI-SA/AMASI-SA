@@ -153,6 +153,9 @@ async def prepare_shipping_settlement(
     if movement.get("status") not in {"unclassified", "accounting_posted"}:
         raise ShippingAccountingError("daily_movement_not_available")
 
+    bank_account_id = str(movement.get("bank_account_id") or "").strip()
+    if not bank_account_id:
+        raise ShippingAccountingError("daily_movement_bank_missing")
     amount = _money(movement.get("amount"))
     if amount <= 0:
         raise ShippingAccountingError("shipping_settlement_amount_required")
@@ -175,7 +178,7 @@ async def prepare_shipping_settlement(
         "event_id": event_id,
         "movement_id": payload.movement_id,
         "movement_file_id": movement.get("file_id"),
-        "bank_account_id": movement.get("bank_account_id"),
+        "bank_account_id": bank_account_id,
         "bank_reference": movement.get("reference"),
         "movement_date": movement.get("movement_date"),
         "movement_amount": format(amount, ".2f"),
