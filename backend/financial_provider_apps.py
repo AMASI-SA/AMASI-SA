@@ -13,6 +13,7 @@ from accounting_daily_movements import install_daily_movement_routes
 from accounting_employee_finance import install_employee_finance_routes
 from accounting_salla_order_evidence import install_salla_order_evidence_routes
 from accounting_order_recognition import install_order_recognition_routes
+from accounting_bank_transfer_receipts import install_bank_transfer_receipt_routes
 from accounting_shipping_p02 import install_shipping_p02_routes
 from accounting_shipping_settlements import install_shipping_settlement_routes
 
@@ -131,6 +132,7 @@ def make_financial_provider_apps_router(db, current_user):
     install_employee_finance_routes(router, db, current_user)
     install_salla_order_evidence_routes(router, db, current_user)
     install_order_recognition_routes(router, db, current_user)
+    install_bank_transfer_receipt_routes(router, db, current_user)
     install_shipping_p02_routes(router, db, current_user)
     install_shipping_settlement_routes(router, db, current_user)
     install_write_control_routes(router, db, current_user)
