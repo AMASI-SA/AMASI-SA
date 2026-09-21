@@ -511,6 +511,75 @@ export default function AccountingInventoryPurchases({
                 </div>
             </section>
 
+            <section className="rounded-2xl border border-orange-200 bg-orange-50/50 p-5">
+                <div>
+                    <h2 className="text-lg font-black text-orange-950">تكلفة البضاعة المباعة — COGS</h2>
+                    <p className="mt-1 text-xs font-semibold leading-6 text-orange-900">
+                        Fulfillment V2 يحفظ الـlot الذي خرج فعليًا من المخزون. لا يُرحّل COGS حتى يظهر قيد بيع MZ2 لنفس الطلب، ثم تُستخدم تكلفة الاستلام الأصلية للـreceipt ولا تُستخدم تكلفة الكتالوج الحالية.
+                    </p>
+                </div>
+                <div className="mt-4 space-y-3">
+                    {(workspace.inventory_consumptions || []).map((row) => {
+                        const state = cogsState[row.id] || {};
+                        const posted = Boolean(row.cogs_event_id);
+                        return (
+                            <div key={row.id} className="rounded-xl border border-orange-200 bg-white p-3">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div>
+                                        <div className="font-black text-slate-900">طلب {row.order_number} · دفعة {row.batch_id || "—"}</div>
+                                        <div className="mt-1 text-[11px] font-semibold text-slate-500">
+                                            استهلاك فعلي {String(row.consumed_at || "").slice(0, 16)} · {(row.allocations || []).length} مصدر مخزون
+                                        </div>
+                                    </div>
+                                    {posted && (
+                                        <span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-800">
+                                            COGS مرحّل {row.cogs_amount ? "· " + formatMoney(row.cogs_amount) : ""}
+                                        </span>
+                                    )}
+                                </div>
+                                {!posted && (
+                                    <div className="mt-3 grid gap-2 md:grid-cols-[1fr_auto_auto]">
+                                        <input
+                                            value={state.reason || ""}
+                                            onChange={(e) => updateCogs(row.id, { reason: e.target.value })}
+                                            placeholder="سبب اعتماد COGS"
+                                            className="min-h-9 rounded-lg border border-slate-200 px-2 text-xs"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => previewCogs(row)}
+                                            disabled={busy === "preview-cogs:" + row.id}
+                                            className="min-h-9 rounded-lg border border-orange-300 px-3 text-xs font-black text-orange-900"
+                                        >
+                                            معاينة COGS
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => postCogs(row)}
+                                            disabled={!canPost || !p03Active || state.preview?.state !== "eligible" || busy === "post-cogs:" + row.id}
+                                            className="min-h-9 rounded-lg bg-orange-800 px-3 text-xs font-black text-white disabled:opacity-40"
+                                        >
+                                            اعتماد COGS
+                                        </button>
+                                    </div>
+                                )}
+                                {state.preview?.facts && (
+                                    <div className="mt-2 text-xs font-black text-orange-900">
+                                        تكلفة البضاعة المباعة {formatMoney(state.preview.facts.total_cost)} · تاريخ القيد هو تاريخ الاعتراف بالبيع
+                                    </div>
+                                )}
+                                <div className="mt-2"><PreviewState preview={state.preview} /></div>
+                            </div>
+                        );
+                    })}
+                    {!(workspace.inventory_consumptions || []).length && (
+                        <div className="rounded-xl bg-white p-4 text-xs font-bold text-orange-700">
+                            لا توجد أحداث استهلاك مخزون من Fulfillment V2 حتى الآن.
+                        </div>
+                    )}
+                </div>
+            </section>
+
             <section className="rounded-2xl border border-sky-200 bg-sky-50/50 p-5">
                 <h2 className="text-lg font-black text-sky-950">فواتير المورد من مسار التجهيز والخدمات</h2>
                 <p className="mt-1 text-xs font-semibold leading-6 text-sky-900">
