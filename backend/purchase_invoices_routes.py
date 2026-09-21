@@ -395,7 +395,12 @@ def attach_purchase_invoice_routes(parent_router: APIRouter, db) -> None:
     async def delete_invoice(inv_id: str, user: dict = Depends(current_user)):
         await require_legacy_purchase_writer_unlocked(user)
         doc = await db.purchase_invoices.find_one(
-            {"id": inv_id, "user_id": user["id"]}, {"_id": 0},
+            {
+                "id": inv_id,
+                "user_id": user["id"],
+                "accounting_authority": {"$ne": "accounting_inventory_p03"},
+            },
+            {"_id": 0},
         )
         if not doc:
             raise HTTPException(404, "الفاتورة غير موجودة")
