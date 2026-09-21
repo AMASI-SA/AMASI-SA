@@ -1753,7 +1753,12 @@ async def post_inventory_cogs(
             "order_reference_id": facts["order_number"],
             "sale_recognition_txn_group_id": facts["sale_txn_group_id"],
             "accounting_at": facts["accounting_at"],
-            "cost_basis": "inventory_receipt_lot",
+            "cost_basis": "lot_cost_evidence",
+            "cost_basis_sources": sorted({
+                row.get("source_kind")
+                for row in facts["cost_allocations"]
+                if row.get("source_kind")
+            }),
             "reason": reason,
         },
         entries=[
