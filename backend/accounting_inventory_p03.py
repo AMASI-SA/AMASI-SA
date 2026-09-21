@@ -44,6 +44,8 @@ INVENTORY_CONSUMPTION_EVENTS = "mezan_inventory_consumption_events_v2"
 PURCHASE_INVOICES = "purchase_invoices"
 MEZAN_PRODUCTS_V2 = "mezan_products_v2"
 P03_PURCHASE_REQUESTS = "mz2_inventory_p03_purchase_requests"
+P03_OPENING_COST_SNAPSHOT = "mz2_inventory_opening_cost_snapshot"
+WAREHOUSE_LOCATIONS = "warehouse_locations"
 P03_AUDIT = "mz2_inventory_p03_audit"
 P03_EVENTS = "mz2_inventory_p03_events"
 MONEY = Decimal("0.01")
@@ -244,6 +246,38 @@ class P03PurchaseInvoiceCreateIn(BaseModel):
         return _money(value, allow_zero=True)
 
 
+class P03OpeningInventoryCostLineIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    target_key: str = Field(min_length=3, max_length=500)
+    unit_cost: Decimal
+
+    @field_validator("target_key")
+    @classmethod
+    def clean_target_key(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("unit_cost")
+    @classmethod
+    def valid_unit_cost(cls, value: Decimal) -> Decimal:
+        return _money(value)
+
+
+class P03OpeningInventoryCostApproveIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    inventory_fingerprint: str = Field(min_length=32, max_length=128)
+    evidence_ref: str = Field(min_length=3, max_length=500)
+    reason: str = Field(min_length=3, max_length=1000)
+    lines: list[P03OpeningInventoryCostLineIn] = Field(
+        min_length=1,
+        max_length=20000,
+    )
+
+    @field_validator("inventory_fingerprint", "evidence_ref", "reason")
+    @classmethod
+    def clean_snapshot_text(cls, value: str) -> str:
+        return value.strip()
+
+
 class P03ActivateIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     activation_ref: str = Field(min_length=3, max_length=500)
@@ -253,6 +287,340 @@ class P03ActivateIn(BaseModel):
     @classmethod
     def clean_ref(cls, value: str) -> str:
         return value.strip()
+
+
+async def _opening_inventory_balance_halalas(
+    db: Any,
+    *,
+    owner: str,
+    phase: dict[str, Any],
+) -> int:
+    group = _text(phase.get("opening_balance_txn_group_id"))
+    if not group:
+        return 0
+    rows = await db.general_ledger.find(
+        {
+            "user_id": owner,
+            "txn_group_id": group,
+            "entry_type": "opening_balance",
+            "status": "posted",
+            "entity_type": "asset",
+            "entity_id": "inventory",
+            "sub_account": "inventory",
+            "metadata.operation_id": OPERATION_ID,
+        },
+        {"_id": 0, "side": 1, "amount": 1},
+    ).to_list(10)
+    net = Decimal(0)
+    for row in rows:
+        amount = _money(row.get("amount"), allow_zero=True)
+        net += amount if row.get("side") == "debit" else -amount
+    if net < 0:
+        raise HTTPException(409, "p03_opening_inventory_balance_negative")
+    return _halalas(net)
+
+
+def _opening_inventory_target_key(
+    *,
+    location_id: str,
+    item_index: int,
+    item: dict[str, Any],
+) -> str:
+    receipt_id = _text(item.get("receipt_id"))
+    if receipt_id:
+        return "receipt:" + receipt_id
+    lot_id = _text(item.get("lot_id"))
+    if lot_id:
+        return "lot:" + lot_id
+    return f"location:{location_id}:item:{item_index}"
+
+
+async def opening_inventory_cost_workspace(
+    db: Any,
+    *,
+    owner: str,
+) -> dict[str, Any]:
+    phase = await read_p03_phase(db, owner)
+    cutover_at = _aware(phase.get("cutover_at"))
+    opening_halalas = await _opening_inventory_balance_halalas(
+        db,
+        owner=owner,
+        phase=phase,
+    )
+    locations = await db[WAREHOUSE_LOCATIONS].find(
+        {
+            "user_id": owner,
+            "state": {"$ne": "disabled"},
+            "occupancy.items.0": {"$exists": True},
+        },
+        {
+            "_id": 0,
+            "id": 1,
+            "code": 1,
+            "warehouse_id": 1,
+            "occupancy.items": 1,
+        },
+    ).sort("id", 1).to_list(20000)
+
+    targets = []
+    placed_after_cutover = []
+    seen_keys = set()
+    for location in locations:
+        location_id = _text(location.get("id"))
+        for item_index, item in enumerate(
+            (location.get("occupancy") or {}).get("items") or []
+        ):
+            quantity = Decimal(str(item.get("quantity") or 0))
+            if quantity <= 0:
+                continue
+            target_key = _opening_inventory_target_key(
+                location_id=location_id,
+                item_index=item_index,
+                item=item,
+            )
+            if target_key in seen_keys:
+                raise HTTPException(
+                    409,
+                    detail={
+                        "code": "p03_opening_inventory_target_duplicate",
+                        "target_key": target_key,
+                    },
+                )
+            seen_keys.add(target_key)
+            placed_at = _aware(item.get("placed_at"))
+            if cutover_at and placed_at and placed_at > cutover_at:
+                placed_after_cutover.append(target_key)
+            targets.append({
+                "target_key": target_key,
+                "location_id": location_id,
+                "location_code": location.get("code"),
+                "warehouse_id": location.get("warehouse_id"),
+                "item_index": item_index,
+                "receipt_id": _text(item.get("receipt_id")) or None,
+                "lot_id": _text(item.get("lot_id")) or None,
+                "quantity": str(quantity),
+                "product_id": _text(item.get("product_id")) or None,
+                "mezan_product_id": _text(item.get("mezan_product_id")) or None,
+                "salla_variant_id": _text(item.get("salla_variant_id")) or None,
+                "product_name": _text(item.get("product_name")) or None,
+                "sku": _text(item.get("sku")) or None,
+                "configuration_key": _text(item.get("configuration_key")) or None,
+                "placed_at": item.get("placed_at"),
+            })
+    targets.sort(key=lambda row: row["target_key"])
+    inventory_fingerprint = _digest([
+        {
+            "target_key": row["target_key"],
+            "quantity": row["quantity"],
+            "location_id": row["location_id"],
+            "receipt_id": row["receipt_id"],
+            "lot_id": row["lot_id"],
+            "sku": row["sku"],
+            "configuration_key": row["configuration_key"],
+        }
+        for row in targets
+    ])
+
+    blockers = []
+    if phase.get("p03_inventory_purchases_enabled"):
+        blockers.append("p03_already_active")
+    if placed_after_cutover:
+        blockers.append("inventory_placed_after_cutover_before_snapshot")
+    if cutover_at:
+        post_cutover_receipts = await db[INVENTORY_RECEIPTS_V2].count_documents({
+            "user_id": owner,
+            "status": "posted",
+            "posted_at": {"$gt": cutover_at.isoformat()},
+        })
+        if post_cutover_receipts:
+            blockers.append("inventory_receipts_exist_after_cutover")
+        post_cutover_consumptions = await db[INVENTORY_CONSUMPTION_EVENTS].count_documents({
+            "user_id": owner,
+            "status": "consumed",
+            "consumed_at": {"$gt": cutover_at.isoformat()},
+        })
+        if post_cutover_consumptions:
+            blockers.append("inventory_consumption_exists_after_cutover")
+
+    snapshot = await db[P03_OPENING_COST_SNAPSHOT].find_one(
+        {"_id": owner, "user_id": owner},
+        {"_id": 0},
+    )
+    return {
+        "phase": phase,
+        "opening_inventory_halalas": opening_halalas,
+        "opening_inventory_amount": format(
+            Decimal(opening_halalas) / Decimal(100),
+            ".2f",
+        ),
+        "inventory_fingerprint": inventory_fingerprint,
+        "targets": targets,
+        "target_count": len(targets),
+        "placed_after_cutover_targets": placed_after_cutover,
+        "blockers": blockers,
+        "snapshot": snapshot,
+        "rules": {
+            "total_cost_must_equal_opening_inventory": True,
+            "mutable_product_catalog_cost_is_forbidden": True,
+            "snapshot_must_precede_p03_activation": True,
+        },
+    }
+
+
+async def approve_opening_inventory_cost_snapshot(
+    db: Any,
+    *,
+    owner: str,
+    actor: dict[str, Any],
+    payload: P03OpeningInventoryCostApproveIn,
+) -> dict[str, Any]:
+    require_owner(actor)
+    require_accounting_permission(actor, "accounting.purchases.post")
+    workspace = await opening_inventory_cost_workspace(db, owner=owner)
+    if workspace["blockers"]:
+        raise HTTPException(
+            409,
+            detail={
+                "code": "p03_opening_inventory_snapshot_blocked",
+                "blockers": workspace["blockers"],
+            },
+        )
+    if payload.inventory_fingerprint != workspace["inventory_fingerprint"]:
+        raise HTTPException(
+            409,
+            "p03_opening_inventory_changed_refresh_required",
+        )
+    target_map = {
+        row["target_key"]: row for row in workspace["targets"]
+    }
+    supplied = {}
+    for line in payload.lines:
+        if line.target_key in supplied:
+            raise HTTPException(
+                409,
+                detail={
+                    "code": "p03_opening_inventory_cost_duplicate",
+                    "target_key": line.target_key,
+                },
+            )
+        if line.target_key not in target_map:
+            raise HTTPException(
+                409,
+                detail={
+                    "code": "p03_opening_inventory_target_missing",
+                    "target_key": line.target_key,
+                },
+            )
+        supplied[line.target_key] = _money(line.unit_cost)
+    missing = sorted(set(target_map) - set(supplied))
+    extra = sorted(set(supplied) - set(target_map))
+    if missing or extra:
+        raise HTTPException(
+            409,
+            detail={
+                "code": "p03_opening_inventory_cost_scope_incomplete",
+                "missing": missing,
+                "extra": extra,
+            },
+        )
+
+    approved_lines = []
+    total_halalas = 0
+    for target_key in sorted(target_map):
+        target = target_map[target_key]
+        quantity = Decimal(str(target["quantity"]))
+        unit_cost = supplied[target_key]
+        total = (quantity * unit_cost).quantize(
+            MONEY,
+            rounding=ROUND_HALF_UP,
+        )
+        line_halalas = _halalas(total)
+        total_halalas += line_halalas
+        approved_lines.append({
+            **target,
+            "unit_cost": format(unit_cost, ".2f"),
+            "unit_cost_halalas": _halalas(unit_cost),
+            "total_cost": format(total, ".2f"),
+            "total_cost_halalas": line_halalas,
+        })
+
+    if total_halalas != int(workspace["opening_inventory_halalas"]):
+        raise HTTPException(
+            409,
+            detail={
+                "code": "p03_opening_inventory_cost_total_mismatch",
+                "opening_inventory_halalas": int(
+                    workspace["opening_inventory_halalas"]
+                ),
+                "snapshot_total_halalas": total_halalas,
+                "difference_halalas": (
+                    total_halalas
+                    - int(workspace["opening_inventory_halalas"])
+                ),
+            },
+        )
+
+    now = datetime.now(timezone.utc).isoformat()
+    phase = workspace["phase"]
+    snapshot = {
+        "_id": owner,
+        "user_id": owner,
+        "status": "approved",
+        "operation_id": OPERATION_ID,
+        "cutover_at": phase.get("cutover_at"),
+        "opening_balance_txn_group_id": phase.get(
+            "opening_balance_txn_group_id"
+        ),
+        "inventory_fingerprint": workspace["inventory_fingerprint"],
+        "opening_inventory_halalas": int(
+            workspace["opening_inventory_halalas"]
+        ),
+        "total_cost_halalas": total_halalas,
+        "evidence_ref": payload.evidence_ref,
+        "reason": payload.reason,
+        "lines": approved_lines,
+        "approved_at": now,
+        "approved_by": actor["id"],
+    }
+    prior = await db[P03_OPENING_COST_SNAPSHOT].find_one(
+        {"_id": owner, "user_id": owner},
+        {"_id": 0},
+    )
+    if prior:
+        same = (
+            prior.get("status") == "approved"
+            and prior.get("inventory_fingerprint")
+            == snapshot["inventory_fingerprint"]
+            and int(prior.get("total_cost_halalas") or -1)
+            == total_halalas
+            and prior.get("lines") == approved_lines
+        )
+        if same:
+            return {**prior, "state": "already_approved"}
+    await db[P03_OPENING_COST_SNAPSHOT].replace_one(
+        {"_id": owner, "user_id": owner},
+        snapshot,
+        upsert=True,
+    )
+    await db[P03_AUDIT].insert_one({
+        "user_id": owner,
+        "action": "opening_inventory_cost_snapshot_approved",
+        "actor_id": actor["id"],
+        "at": now,
+        "opening_balance_txn_group_id": snapshot[
+            "opening_balance_txn_group_id"
+        ],
+        "inventory_fingerprint": snapshot["inventory_fingerprint"],
+        "opening_inventory_halalas": snapshot[
+            "opening_inventory_halalas"
+        ],
+        "evidence_ref": payload.evidence_ref,
+        "reason": payload.reason,
+    })
+    return {
+        **{key: value for key, value in snapshot.items() if key != "_id"},
+        "state": "approved",
+    }
 
 
 async def activate_p03(
@@ -288,6 +656,43 @@ async def activate_p03(
             409,
             detail={"code": "p03_activation_not_ready", "missing": missing},
         )
+
+    opening_costs = await opening_inventory_cost_workspace(
+        db,
+        owner=owner,
+    )
+    if opening_costs["blockers"]:
+        raise HTTPException(
+            409,
+            detail={
+                "code": "p03_activation_opening_inventory_not_ready",
+                "blockers": opening_costs["blockers"],
+            },
+        )
+    if (
+        opening_costs["target_count"] > 0
+        or int(opening_costs["opening_inventory_halalas"]) > 0
+    ):
+        snapshot = opening_costs.get("snapshot") or {}
+        if (
+            snapshot.get("status") != "approved"
+            or snapshot.get("opening_balance_txn_group_id")
+            != phase.get("opening_balance_txn_group_id")
+            or snapshot.get("inventory_fingerprint")
+            != opening_costs["inventory_fingerprint"]
+            or int(snapshot.get("total_cost_halalas") or -1)
+            != int(opening_costs["opening_inventory_halalas"])
+        ):
+            raise HTTPException(
+                409,
+                detail={
+                    "code": "p03_activation_opening_inventory_cost_snapshot_required",
+                    "opening_inventory_halalas": int(
+                        opening_costs["opening_inventory_halalas"]
+                    ),
+                    "target_count": opening_costs["target_count"],
+                },
+            )
 
     now = datetime.now(timezone.utc).isoformat()
     await db.settings.update_one(
@@ -1778,6 +2183,36 @@ def install_inventory_p03_routes(
     async def workspace(user: dict = Depends(current_user)):
         _, owner = await actor_scope(user, "accounting.inventory.view")
         return await inventory_p03_workspace(db, owner=owner)
+
+    @router.get(base + "/opening-inventory-costs")
+    async def opening_inventory_costs(
+        user: dict = Depends(current_user),
+    ):
+        _, owner = await actor_scope(user, "accounting.inventory.view")
+        return await opening_inventory_cost_workspace(
+            db,
+            owner=owner,
+        )
+
+    @router.post(base + "/opening-inventory-costs/approve")
+    async def approve_opening_inventory_costs(
+        payload: P03OpeningInventoryCostApproveIn,
+        user: dict = Depends(current_user),
+    ):
+        actor, owner = await actor_scope(
+            user,
+            "accounting.purchases.post",
+        )
+
+        async def commit(scoped):
+            return await approve_opening_inventory_cost_snapshot(
+                scoped,
+                owner=owner,
+                actor=actor,
+                payload=payload,
+            )
+
+        return await atomic_owner(db, owner, commit)
 
     @router.post(base + "/purchase-invoices")
     async def create_purchase_invoice(
