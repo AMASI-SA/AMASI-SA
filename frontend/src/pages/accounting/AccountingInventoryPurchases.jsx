@@ -4,8 +4,10 @@ import { toast } from "sonner";
 
 import {
     activateAccountingP03,
+    approveAccountingP03OpeningInventoryCosts,
     createAccountingP03PurchaseInvoice,
     getAccountingInventoryP03Workspace,
+    getAccountingP03OpeningInventoryCosts,
     postAccountingP03Cogs,
     postAccountingP03InventoryReceipt,
     postAccountingP03SupplierInvoice,
@@ -64,6 +66,10 @@ export default function AccountingInventoryPurchases({
     isOwner = false,
 }) {
     const [workspace, setWorkspace] = useState(null);
+    const [openingCosts, setOpeningCosts] = useState(null);
+    const [openingCostValues, setOpeningCostValues] = useState({});
+    const [openingCostEvidence, setOpeningCostEvidence] = useState("");
+    const [openingCostReason, setOpeningCostReason] = useState("");
     const [busy, setBusy] = useState("");
     const [activationRef, setActivationRef] = useState("");
     const [receiptState, setReceiptState] = useState({});
@@ -85,10 +91,51 @@ export default function AccountingInventoryPurchases({
     const canPost = accountingPermissions.includes("accounting.purchases.post");
     const phase = workspace?.phase || {};
     const p03Active = phase.p03_inventory_purchases_enabled === true;
+    const openingSnapshotRequired = Boolean(
+        (openingCosts?.target_count || 0) > 0
+        || Number(openingCosts?.opening_inventory_halalas || 0) > 0
+    );
+    const openingSnapshotApproved = Boolean(
+        !openingSnapshotRequired
+        || (
+            openingCosts?.snapshot?.status === "approved"
+            && openingCosts?.snapshot?.inventory_fingerprint
+                === openingCosts?.inventory_fingerprint
+            && Number(openingCosts?.snapshot?.total_cost_halalas || -1)
+                === Number(openingCosts?.opening_inventory_halalas || 0)
+        )
+    );
+    const openingCostInputTotal = (openingCosts?.targets || []).reduce(
+        (total, row) => total
+            + (Number(row.quantity || 0) * Number(openingCostValues[row.target_key] || 0)),
+        0,
+    );
 
     async function refresh() {
-        const next = await getAccountingInventoryP03Workspace();
+        const [next, opening] = await Promise.all([
+            getAccountingInventoryP03Workspace(),
+            getAccountingP03OpeningInventoryCosts(),
+        ]);
         setWorkspace(next);
+        setOpeningCosts(opening);
+        const approvedByKey = Object.fromEntries(
+            (opening?.snapshot?.lines || []).map((row) => [
+                row.target_key,
+                row.unit_cost || "",
+            ]),
+        );
+        setOpeningCostValues(Object.fromEntries(
+            (opening?.targets || []).map((row) => [
+                row.target_key,
+                approvedByKey[row.target_key] || "",
+            ]),
+        ));
+        if (opening?.snapshot?.evidence_ref) {
+            setOpeningCostEvidence(opening.snapshot.evidence_ref);
+        }
+        if (opening?.snapshot?.reason) {
+            setOpeningCostReason(opening.snapshot.reason);
+        }
     }
 
     useEffect(() => {
@@ -103,9 +150,52 @@ export default function AccountingInventoryPurchases({
         [workspace],
     );
 
+    function updateOpeningCost(targetKey, value) {
+        setOpeningCostValues((current) => ({
+            ...current,
+            [targetKey]: value,
+        }));
+    }
+
+    async function approveOpeningCosts() {
+        if (!isOwner) return toast.error("اعتماد تكلفة المخزون الافتتاحي متاح للمالك فقط");
+        if (!canPost) return toast.error("لا تملك صلاحية المشتريات");
+        if (!openingCosts?.inventory_fingerprint) return toast.error("أعد تحميل Snapshot المخزون");
+        if ((openingCosts?.blockers || []).length) {
+            return toast.error("يوجد مانع يمنع اعتماد Snapshot المخزون الافتتاحي");
+        }
+        if (openingCostEvidence.trim().length < 3) return toast.error("أدخل مرجع دليل تكلفة المخزون الافتتاحي");
+        if (openingCostReason.trim().length < 3) return toast.error("أدخل سبب اعتماد Snapshot");
+        const lines = (openingCosts.targets || []).map((row) => ({
+            target_key: row.target_key,
+            unit_cost: openingCostValues[row.target_key],
+        }));
+        if (!lines.length) return toast.error("لا توجد lots مخزون افتتاحي لاعتماد تكلفتها");
+        if (lines.some((row) => !(Number(row.unit_cost) > 0))) {
+            return toast.error("أدخل تكلفة وحدة أكبر من صفر لكل lot افتتاحي");
+        }
+        setBusy("opening-costs");
+        try {
+            await approveAccountingP03OpeningInventoryCosts({
+                inventory_fingerprint: openingCosts.inventory_fingerprint,
+                evidence_ref: openingCostEvidence.trim(),
+                reason: openingCostReason.trim(),
+                lines,
+            });
+            toast.success("تم اعتماد تكلفة المخزون الافتتاحي ومطابقتها مع GL بالهللة.");
+            await refresh();
+        } catch (error) {
+            toast.error(errorText(error, "تعذر اعتماد تكلفة المخزون الافتتاحي"), { duration: 8000 });
+        } finally {
+            setBusy("");
+        }
+    }
+
     async function activate() {
         if (!isOwner) return toast.error("تفعيل P03 متاح لمالك ميزان فقط");
         if (!canPost) return toast.error("لا تملك صلاحية المشتريات");
+        if (!openingSnapshotApproved) return toast.error("اعتمد Snapshot تكلفة المخزون الافتتاحي أولًا");
+        if ((openingCosts?.blockers || []).length) return toast.error("أزل موانع Snapshot المخزون قبل تفعيل P03");
         if (activationRef.trim().length < 3) return toast.error("أدخل مرجع اعتماد P03");
         setBusy("activate");
         try {
@@ -351,7 +441,7 @@ export default function AccountingInventoryPurchases({
                         <button
                             type="button"
                             onClick={activate}
-                            disabled={!isOwner || !canPost || busy === "activate"}
+                            disabled={!isOwner || !canPost || !openingSnapshotApproved || (openingCosts?.blockers || []).length > 0 || busy === "activate"}
                             className="min-h-11 rounded-xl bg-amber-800 px-5 text-sm font-black text-white disabled:opacity-40"
                         >
                             {busy === "activate" ? "جاري التفعيل…" : "تفعيل P03"}
@@ -359,6 +449,86 @@ export default function AccountingInventoryPurchases({
                     </div>
                 )}
             </section>
+
+            {!p03Active && openingCosts && openingSnapshotRequired && (
+                <section className="rounded-2xl border border-cyan-200 bg-cyan-50/50 p-5">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <h2 className="text-lg font-black text-cyan-950">Snapshot تكلفة المخزون الافتتاحي</h2>
+                            <p className="mt-1 max-w-3xl text-xs font-semibold leading-6 text-cyan-900">
+                                هذا الجدول يثبت تكلفة الـlots الموجودة يوم القطع فقط. مجموع التكلفة يجب أن يساوي رصيد المخزون الافتتاحي في GL بالهللة؛ وبعد الاعتماد لا تُستخدم تكلفة الكتالوج الحالية لحساب COGS.
+                            </p>
+                        </div>
+                        <div className="rounded-xl border border-cyan-200 bg-white px-4 py-2 text-xs font-black text-cyan-900">
+                            GL: {formatMoney(Number(openingCosts.opening_inventory_halalas || 0) / 100)}
+                            {" · "}
+                            المدخل: {formatMoney(openingCostInputTotal)}
+                        </div>
+                    </div>
+
+                    {(openingCosts.blockers || []).length > 0 && (
+                        <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-bold text-rose-800">
+                            لا يمكن الاعتماد الآن: {(openingCosts.blockers || []).join("، ")}
+                        </div>
+                    )}
+
+                    <div className="mt-4 space-y-2">
+                        {(openingCosts.targets || []).map((row) => (
+                            <div key={row.target_key} className="grid gap-2 rounded-xl border border-cyan-200 bg-white p-3 md:grid-cols-[1.5fr_.6fr_.8fr_1fr] md:items-center">
+                                <div>
+                                    <div className="font-black text-slate-900">{row.product_name || row.sku || row.target_key}</div>
+                                    <div className="mt-1 text-[10px] font-semibold text-slate-500">
+                                        {row.target_key} · {row.location_code || row.location_id} · {row.sku || "بلا SKU"}
+                                    </div>
+                                </div>
+                                <div className="text-xs font-black text-slate-700">كمية {row.quantity}</div>
+                                <input
+                                    type="number"
+                                    min="0.01"
+                                    step="0.01"
+                                    value={openingCostValues[row.target_key] || ""}
+                                    onChange={(event) => updateOpeningCost(row.target_key, event.target.value)}
+                                    placeholder="تكلفة الوحدة"
+                                    className="min-h-10 rounded-lg border border-cyan-200 px-2 text-xs"
+                                />
+                                <div className="text-xs font-black text-cyan-900">
+                                    إجمالي {formatMoney(Number(row.quantity || 0) * Number(openingCostValues[row.target_key] || 0))}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="mt-4 grid gap-3 md:grid-cols-2">
+                        <input
+                            value={openingCostEvidence}
+                            onChange={(event) => setOpeningCostEvidence(event.target.value)}
+                            placeholder="مرجع جرد/تكلفة المخزون يوم القطع"
+                            className="min-h-10 rounded-xl border border-cyan-200 bg-white px-3 text-xs"
+                        />
+                        <input
+                            value={openingCostReason}
+                            onChange={(event) => setOpeningCostReason(event.target.value)}
+                            placeholder="سبب اعتماد Snapshot"
+                            className="min-h-10 rounded-xl border border-cyan-200 bg-white px-3 text-xs"
+                        />
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                        <div className="text-xs font-bold text-slate-600">
+                            {openingSnapshotApproved
+                                ? "Snapshot معتمد ومطابق للرصيد الافتتاحي."
+                                : "يجب الاعتماد قبل تفعيل P03."}
+                        </div>
+                        <button
+                            type="button"
+                            onClick={approveOpeningCosts}
+                            disabled={!isOwner || !canPost || busy === "opening-costs" || (openingCosts.blockers || []).length > 0}
+                            className="min-h-10 rounded-xl bg-cyan-800 px-5 text-xs font-black text-white disabled:opacity-40"
+                        >
+                            {busy === "opening-costs" ? "جاري الاعتماد…" : "اعتماد Snapshot المخزون"}
+                        </button>
+                    </div>
+                </section>
+            )}
 
             <section className="rounded-2xl border border-slate-200 bg-white p-5">
                 <div className="flex flex-wrap items-end justify-between gap-3">
