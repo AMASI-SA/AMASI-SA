@@ -23,6 +23,7 @@ from accounting_order_recognition import (
     execute_order_recognition,
     prepare_order_recognition,
     recognition_queue,
+    recognize_batch,
 )
 from accounting_periods import PeriodChange, set_period
 from accounting_recognition_evidence import EvidenceError
@@ -521,6 +522,48 @@ class MZ2OrderRecognitionTests(unittest.IsolatedAsyncioTestCase):
             by_order["ORD-Q-TAMARA"]["reasons"],
             ["provider_payment_evidence_missing"],
         )
+
+
+    async def test_file_scoped_batch_only_posts_latest_rows_from_uploaded_file(self):
+        first = await self.import_rows([
+            sale_row("ORD-FILE-A", payment_id="PAY-FILE-A", updated="2026-09-21 10:05"),
+        ], "file-a.xlsx")
+        second = await self.import_rows([
+            sale_row("ORD-FILE-B", payment_id="PAY-FILE-B", updated="2026-09-21 10:06"),
+        ], "file-b.xlsx")
+
+        result = await recognize_batch(
+            self.db,
+            owner=self.owner,
+            actor=self.actor,
+            limit=100,
+            dry_run=False,
+            file_id=second["file"]["id"],
+        )
+        self.assertEqual(result["file_id"], second["file"]["id"])
+        self.assertEqual(result["candidate_count"], 1)
+        self.assertEqual(result["posted_count"], 1)
+        self.assertEqual(result["items"][0]["order_number"], "ORD-FILE-B")
+
+        a = await self.current("ORD-FILE-A")
+        b = await self.current("ORD-FILE-B")
+        self.assertEqual(a["status"], "ready_for_provider_resolution")
+        self.assertEqual(b["status"], "recognized")
+        self.assertFalse(a.get("recognition_txn_group_id"))
+        self.assertTrue(b.get("recognition_txn_group_id"))
+
+        preview = await recognize_batch(
+            self.db,
+            owner=self.owner,
+            actor=self.actor,
+            limit=100,
+            dry_run=True,
+            file_id=first["file"]["id"],
+        )
+        self.assertEqual(preview["candidate_count"], 1)
+        self.assertEqual(preview["ready_count"], 1)
+        self.assertEqual(preview["posted_count"], 0)
+        self.assertEqual(await self.db.mz2_recognition_events.count_documents({}), 1)
 
 
 if __name__ == "__main__":
