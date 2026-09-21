@@ -602,6 +602,25 @@ class MZ2InventoryP03PhaseTests(unittest.IsolatedAsyncioTestCase):
             "experiment_mode": False,
             "approved_at": "2026-09-21T08:00:00+00:00",
         })
+        await self.db.purchase_invoices.insert_one({
+            "id": "purchase-1",
+            "user_id": self.owner,
+            "supplier_id": "msv2-supplier-1",
+            "supplier_name": "Synthetic supplier V2",
+            "invoice_number": "PINV-WORKSPACE-1",
+            "invoice_date": "2026-09-21",
+            "status": "receiving",
+            "accounting_authority": "accounting_inventory_p03",
+            "source": "accounting_inventory_p03",
+            "lines": [{
+                "id": "line-1",
+                "product_id": "MZP-1",
+                "product_name": "Synthetic inventory product",
+                "sku": "SKU-1",
+                "quantity": 5,
+                "unit_price": 100,
+            }],
+        })
         await self.db.mezan_inventory_receipts_v2.insert_one({
             "id": "receipt-1",
             "user_id": self.owner,
