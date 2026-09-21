@@ -41,6 +41,7 @@ MEZAN_SUPPLIERS_V2 = "mezan_suppliers_v2"
 MEZAN_SUPPLIER_INVOICES_V2 = "mezan_supplier_invoices_v2"
 INVENTORY_RECEIPTS_V2 = "mezan_inventory_receipts_v2"
 INVENTORY_CONSUMPTION_EVENTS = "mezan_inventory_consumption_events_v2"
+RETURN_RESTOCKS = "mezan_return_inventory_restocks_v2"
 PURCHASE_INVOICES = "purchase_invoices"
 MEZAN_PRODUCTS_V2 = "mezan_products_v2"
 P03_PURCHASE_REQUESTS = "mz2_inventory_p03_purchase_requests"
@@ -1482,6 +1483,37 @@ async def prepare_inventory_cogs_post(
         for row in (opening_snapshot.get("lines") or [])
         if _text(row.get("target_key"))
     }
+    return_restock_rows = (
+        await db[RETURN_RESTOCKS].find(
+            {
+                "user_id": owner,
+                "status": "posted",
+                "inventory_receipt_id": {"$in": receipt_ids},
+                "accounting_status": {
+                    "$in": [
+                        "cogs_reversed",
+                        "cogs_zero_cost_reversed",
+                    ]
+                },
+            },
+            {
+                "_id": 0,
+                "id": 1,
+                "inventory_receipt_id": 1,
+                "quantity": 1,
+                "accounting_inventory_cost_halalas": 1,
+                "source_target_key": 1,
+                "order_number": 1,
+            },
+        ).to_list(len(receipt_ids) + 1)
+        if receipt_ids
+        else []
+    )
+    return_restock_map = {
+        _text(row.get("inventory_receipt_id")): row
+        for row in return_restock_rows
+        if _text(row.get("inventory_receipt_id"))
+    }
 
     cost_basis: dict[str, dict[str, Any]] = {}
     unresolved = []
@@ -1505,6 +1537,34 @@ async def prepare_inventory_cogs_post(
                 "product_name": receipt.get("product_name") or "",
                 "sku": receipt.get("sku") or "",
                 "evidence_ref": None,
+            }
+            continue
+        return_restock = (
+            return_restock_map.get(receipt_id)
+            if receipt_id
+            else None
+        )
+        if (
+            return_restock
+            and return_restock.get(
+                "accounting_inventory_cost_halalas"
+            ) is not None
+        ):
+            cost_basis[target_key] = {
+                "source_kind": "return_inventory_restock",
+                "target_key": target_key,
+                "receipt_id": receipt_id,
+                "quantity": Decimal(str(
+                    return_restock.get("quantity") or 0
+                )),
+                "total_cost_halalas": int(
+                    return_restock.get(
+                        "accounting_inventory_cost_halalas"
+                    ) or 0
+                ),
+                "product_name": "",
+                "sku": "",
+                "evidence_ref": return_restock.get("id"),
             }
             continue
         opening = opening_cost_map.get(target_key)
@@ -1675,6 +1735,399 @@ async def prepare_inventory_cogs_post(
         "event_id": event_id,
         "facts": facts,
         "economic_hash": economic_hash,
+    }
+
+
+async def prepare_inventory_cogs_reversal(
+    db: Any,
+    *,
+    owner: str,
+    restock_id: str,
+) -> dict[str, Any]:
+    restock = await db[RETURN_RESTOCKS].find_one(
+        {
+            "user_id": owner,
+            "id": restock_id,
+            "status": "posted",
+        },
+        {"_id": 0},
+    )
+    if not restock:
+        raise HTTPException(404, "p03_return_restock_not_found")
+    if (
+        restock.get("cogs_reversal_event_id")
+        and restock.get("accounting_status")
+        in {"cogs_reversed", "cogs_zero_cost_reversed"}
+    ):
+        return {
+            "state": "already_posted",
+            "event_id": restock.get("cogs_reversal_event_id"),
+            "txn_group_id": restock.get("cogs_reversal_txn_group_id"),
+            "facts": {
+                "restock_id": restock_id,
+                "order_number": restock.get("order_number"),
+                "quantity": int(restock.get("quantity") or 0),
+                "total_cost": format(
+                    Decimal(
+                        int(
+                            restock.get(
+                                "accounting_inventory_cost_halalas"
+                            )
+                            or 0
+                        )
+                    )
+                    / Decimal(100),
+                    ".2f",
+                ),
+            },
+        }
+
+    order_number = _text(restock.get("order_number"))
+    source_target_key = _text(restock.get("source_target_key"))
+    quantity = Decimal(str(restock.get("quantity") or 0))
+    event_at = _aware(restock.get("restocked_at"))
+    if not order_number or not source_target_key or quantity <= 0:
+        raise HTTPException(409, "p03_return_restock_identity_invalid")
+    if not event_at:
+        raise HTTPException(409, "p03_return_restock_date_invalid")
+
+    cogs_events = await db[P03_EVENTS].find(
+        {
+            "user_id": owner,
+            "kind": "inventory_cogs",
+            "status": "posted",
+            "facts.order_number": order_number,
+            "facts.cost_allocations.target_key": source_target_key,
+        },
+        {"_id": 0, "id": 1, "facts": 1},
+    ).sort("posted_at", 1).to_list(1000)
+    original_qty = Decimal(0)
+    original_cost_halalas = 0
+    original_event_ids = []
+    for row in cogs_events:
+        matched = False
+        for allocation in (row.get("facts") or {}).get(
+            "cost_allocations"
+        ) or []:
+            if _text(allocation.get("target_key")) != source_target_key:
+                continue
+            original_qty += Decimal(str(allocation.get("quantity") or 0))
+            original_cost_halalas += int(
+                allocation.get("cost_halalas") or 0
+            )
+            matched = True
+        if matched and row.get("id"):
+            original_event_ids.append(row["id"])
+
+    if original_qty <= 0:
+        return {
+            "state": "waiting",
+            "restock_id": restock_id,
+            "order_number": order_number,
+            "reasons": ["original_cogs_required_before_reversal"],
+            "source_target_key": source_target_key,
+        }
+
+    prior_reversals = await db[P03_EVENTS].find(
+        {
+            "user_id": owner,
+            "kind": "inventory_cogs_reversal",
+            "status": "posted",
+            "facts.order_number": order_number,
+            "facts.source_target_key": source_target_key,
+        },
+        {
+            "_id": 0,
+            "facts.quantity": 1,
+            "facts.total_cost_halalas": 1,
+        },
+    ).to_list(1000)
+    prior_qty = sum(
+        (
+            Decimal(str((row.get("facts") or {}).get("quantity") or 0))
+            for row in prior_reversals
+        ),
+        Decimal(0),
+    )
+    prior_cost = sum(
+        int((row.get("facts") or {}).get("total_cost_halalas") or 0)
+        for row in prior_reversals
+    )
+    remaining_qty = original_qty - prior_qty
+    remaining_cost = original_cost_halalas - prior_cost
+    if quantity > remaining_qty or remaining_cost < 0:
+        raise HTTPException(
+            409,
+            detail={
+                "code": "p03_cogs_reversal_exceeds_original_cogs",
+                "source_target_key": source_target_key,
+                "remaining_quantity": str(
+                    max(Decimal(0), remaining_qty)
+                ),
+            },
+        )
+    if quantity == remaining_qty:
+        cost_halalas = remaining_cost
+    else:
+        raw = (
+            Decimal(original_cost_halalas)
+            * quantity
+            / original_qty
+        ).quantize(HALALA, rounding=ROUND_HALF_UP)
+        cost_halalas = min(int(raw), remaining_cost)
+    if cost_halalas < 0:
+        raise HTTPException(409, "p03_cogs_reversal_cost_invalid")
+
+    event_id = _digest([
+        owner,
+        "inventory_cogs_reversal",
+        restock_id,
+        source_target_key,
+    ])
+    facts = {
+        "restock_id": restock_id,
+        "return_case_id": restock.get("return_case_id"),
+        "inventory_receipt_id": restock.get("inventory_receipt_id"),
+        "restock_lot_id": restock.get("restock_lot_id"),
+        "order_number": order_number,
+        "order_item_id": restock.get("order_item_id"),
+        "source_target_key": source_target_key,
+        "original_cogs_event_ids": sorted(set(original_event_ids)),
+        "quantity": str(quantity),
+        "total_cost_halalas": cost_halalas,
+        "total_cost": format(
+            Decimal(cost_halalas) / Decimal(100),
+            ".2f",
+        ),
+        "accounting_at": event_at.isoformat(),
+        "cost_basis": "historical_original_cogs",
+    }
+    prior_event = await db[P03_EVENTS].find_one(
+        {"_id": event_id, "user_id": owner},
+        {"_id": 0},
+    )
+    economic_hash = _digest(facts)
+    if prior_event:
+        if prior_event.get("economic_hash") != economic_hash:
+            raise HTTPException(409, "p03_cogs_reversal_economic_conflict")
+        if prior_event.get("status") == "posted":
+            return {
+                "state": "already_posted",
+                "event_id": event_id,
+                "txn_group_id": prior_event.get("txn_group_id"),
+                "facts": facts,
+            }
+        raise HTTPException(409, "p03_cogs_reversal_requires_recovery")
+    return {
+        "state": "eligible",
+        "event_id": event_id,
+        "facts": facts,
+        "economic_hash": economic_hash,
+    }
+
+
+async def post_inventory_cogs_reversal(
+    db: Any,
+    *,
+    owner: str,
+    actor: dict[str, Any],
+    restock_id: str,
+    reason: str,
+) -> dict[str, Any]:
+    proposal = await prepare_inventory_cogs_reversal(
+        db,
+        owner=owner,
+        restock_id=restock_id,
+    )
+    if proposal["state"] == "already_posted":
+        return proposal
+    if proposal["state"] != "eligible":
+        raise HTTPException(
+            409,
+            detail={
+                "code": "p03_cogs_reversal_not_eligible",
+                "reasons": proposal.get("reasons") or [],
+            },
+        )
+    facts = proposal["facts"]
+    await require_p03_inventory_financial_writes(
+        db,
+        owner=owner,
+        event_at=facts["accounting_at"],
+    )
+    now = datetime.now(timezone.utc).isoformat()
+    if int(facts["total_cost_halalas"]) == 0:
+        await db[P03_EVENTS].insert_one({
+            "_id": proposal["event_id"],
+            "id": proposal["event_id"],
+            "user_id": owner,
+            "kind": "inventory_cogs_reversal",
+            "status": "posted",
+            "economic_hash": proposal["economic_hash"],
+            "facts": facts,
+            "reason": reason,
+            "zero_cost": True,
+            "txn_group_id": None,
+            "entry_ids": [],
+            "created_at": now,
+            "created_by": actor["id"],
+            "posted_at": now,
+            "posted_by": actor["id"],
+        })
+        updated = await db[RETURN_RESTOCKS].update_one(
+            {
+                "user_id": owner,
+                "id": restock_id,
+                "status": "posted",
+                "$or": [
+                    {"cogs_reversal_event_id": {"$exists": False}},
+                    {"cogs_reversal_event_id": None},
+                    {"cogs_reversal_event_id": ""},
+                ],
+            },
+            {"$set": {
+                "accounting_status": "cogs_zero_cost_reversed",
+                "cogs_reversal_event_id": proposal["event_id"],
+                "cogs_reversal_txn_group_id": None,
+                "accounting_inventory_cost_halalas": 0,
+                "accounting_inventory_cost_amount": "0.00",
+                "cogs_reversed_at": now,
+                "cogs_reversed_by": actor["id"],
+                "updated_at": now,
+            }},
+        )
+        if updated.modified_count != 1:
+            raise HTTPException(409, "p03_cogs_reversal_concurrent_post")
+        return {
+            "state": "posted_zero_cost",
+            "event_id": proposal["event_id"],
+            "txn_group_id": None,
+            "facts": facts,
+        }
+
+    await read_mz2_write_balances(
+        db,
+        owner=owner,
+        required_accounts=[("asset", "inventory", "inventory")],
+    )
+    await db[P03_EVENTS].insert_one({
+        "_id": proposal["event_id"],
+        "id": proposal["event_id"],
+        "user_id": owner,
+        "kind": "inventory_cogs_reversal",
+        "status": "posting",
+        "economic_hash": proposal["economic_hash"],
+        "facts": facts,
+        "reason": reason,
+        "created_at": now,
+        "created_by": actor["id"],
+    })
+    result = await post_txn_group(
+        db,
+        user_id=owner,
+        actor_id=actor["id"],
+        actor_name=actor.get("name") or actor.get("email") or actor["id"],
+        txn_type="mz2_inventory_cogs_reversal",
+        notes=f"عكس COGS لمرتجع طلب {facts['order_number']}",
+        metadata={
+            "operation_id": OPERATION_ID,
+            "source": SOURCE,
+            "p03_event_id": proposal["event_id"],
+            "p03_kind": "inventory_cogs_reversal",
+            "return_restock_id": facts["restock_id"],
+            "return_case_id": facts["return_case_id"],
+            "inventory_receipt_id": facts["inventory_receipt_id"],
+            "order_reference_id": facts["order_number"],
+            "source_target_key": facts["source_target_key"],
+            "original_cogs_event_ids": facts["original_cogs_event_ids"],
+            "accounting_at": facts["accounting_at"],
+            "cost_basis": facts["cost_basis"],
+            "reason": reason,
+        },
+        entries=[
+            {
+                "entity_type": "asset",
+                "entity_id": "inventory",
+                "sub_account": "inventory",
+                "side": "debit",
+                "amount": facts["total_cost"],
+                "entry_type": "inventory_cogs_reversal",
+            },
+            {
+                "entity_type": "expense",
+                "entity_id": "cogs",
+                "side": "credit",
+                "amount": facts["total_cost"],
+                "entry_type": "inventory_cogs_reversal",
+            },
+        ],
+    )
+    entry_ids = [
+        row.get("id")
+        for row in result.get("entries") or []
+        if row.get("id")
+    ]
+    updated = await db[RETURN_RESTOCKS].update_one(
+        {
+            "user_id": owner,
+            "id": restock_id,
+            "status": "posted",
+            "$or": [
+                {"cogs_reversal_event_id": {"$exists": False}},
+                {"cogs_reversal_event_id": None},
+                {"cogs_reversal_event_id": ""},
+            ],
+        },
+        {"$set": {
+            "accounting_status": "cogs_reversed",
+            "cogs_reversal_event_id": proposal["event_id"],
+            "cogs_reversal_txn_group_id": result["txn_group_id"],
+            "cogs_reversal_entry_ids": entry_ids,
+            "accounting_inventory_cost_halalas": int(
+                facts["total_cost_halalas"]
+            ),
+            "accounting_inventory_cost_amount": facts["total_cost"],
+            "cogs_reversed_at": now,
+            "cogs_reversed_by": actor["id"],
+            "updated_at": now,
+        }},
+    )
+    if updated.modified_count != 1:
+        raise HTTPException(409, "p03_cogs_reversal_concurrent_post")
+    await db[P03_EVENTS].update_one(
+        {
+            "_id": proposal["event_id"],
+            "user_id": owner,
+            "status": "posting",
+        },
+        {"$set": {
+            "status": "posted",
+            "txn_group_id": result["txn_group_id"],
+            "entry_ids": entry_ids,
+            "posted_at": now,
+            "posted_by": actor["id"],
+        }},
+    )
+    await db[P03_AUDIT].insert_one({
+        "user_id": owner,
+        "action": "inventory_cogs_reversal_posted",
+        "actor_id": actor["id"],
+        "at": now,
+        "event_id": proposal["event_id"],
+        "restock_id": restock_id,
+        "return_case_id": facts["return_case_id"],
+        "order_number": facts["order_number"],
+        "source_target_key": facts["source_target_key"],
+        "quantity": facts["quantity"],
+        "amount": facts["total_cost"],
+        "txn_group_id": result["txn_group_id"],
+        "reason": reason,
+    })
+    return {
+        "state": "posted",
+        "event_id": proposal["event_id"],
+        "txn_group_id": result["txn_group_id"],
+        "facts": facts,
     }
 
 
@@ -2028,6 +2481,31 @@ async def inventory_p03_workspace(db: Any, *, owner: str) -> dict[str, Any]:
         },
     ).sort("posted_at", -1).limit(300).to_list(300)
 
+    return_restocks = await db[RETURN_RESTOCKS].find(
+        {
+            "user_id": owner,
+            "status": "posted",
+        },
+        {
+            "_id": 0,
+            "id": 1,
+            "return_case_id": 1,
+            "order_number": 1,
+            "order_item_id": 1,
+            "source_target_key": 1,
+            "quantity": 1,
+            "inventory_receipt_id": 1,
+            "restock_lot_id": 1,
+            "destination_location_id": 1,
+            "restocked_at": 1,
+            "accounting_status": 1,
+            "cogs_reversal_event_id": 1,
+            "cogs_reversal_txn_group_id": 1,
+            "accounting_inventory_cost_amount": 1,
+            "accounting_inventory_cost_halalas": 1,
+        },
+    ).sort("restocked_at", -1).limit(300).to_list(300)
+
     inventory_consumptions = await db[INVENTORY_CONSUMPTION_EVENTS].find(
         {
             "user_id": owner,
@@ -2066,6 +2544,7 @@ async def inventory_p03_workspace(db: Any, *, owner: str) -> dict[str, Any]:
         "purchase_invoices": purchase_invoices,
         "inventory_receipts": inventory_receipts,
         "inventory_consumptions": inventory_consumptions,
+        "return_restocks": return_restocks,
         "summary": {
             "active_suppliers": len(suppliers),
             "supplier_invoices": len(supplier_invoices),
@@ -2075,6 +2554,11 @@ async def inventory_p03_workspace(db: Any, *, owner: str) -> dict[str, Any]:
             "inventory_consumptions_without_cogs": sum(
                 1 for row in inventory_consumptions
                 if not row.get("cogs_event_id")
+            ),
+            "return_restocks": len(return_restocks),
+            "return_restocks_without_cogs_reversal": sum(
+                1 for row in return_restocks
+                if not row.get("cogs_reversal_event_id")
             ),
             "supplier_invoices_with_existing_ledger": sum(
                 1 for row in supplier_invoices if row.get("ledger_txn_group_id")
@@ -2449,6 +2933,37 @@ def install_inventory_p03_routes(
                 owner=owner,
                 actor=actor,
                 consumption_event_id=event_id,
+                reason=payload.reason,
+            )
+
+        return await atomic_owner(db, owner, commit)
+
+    @router.get(base + "/return-restocks/{restock_id}/cogs-reversal-preview")
+    async def inventory_cogs_reversal_preview(
+        restock_id: str,
+        user: dict = Depends(current_user),
+    ):
+        _, owner = await actor_scope(user, "accounting.inventory.view")
+        return await prepare_inventory_cogs_reversal(
+            db,
+            owner=owner,
+            restock_id=restock_id,
+        )
+
+    @router.post(base + "/return-restocks/{restock_id}/cogs-reversal-post")
+    async def inventory_cogs_reversal_post(
+        restock_id: str,
+        payload: P03PostReasonIn,
+        user: dict = Depends(current_user),
+    ):
+        actor, owner = await actor_scope(user, "accounting.purchases.post")
+
+        async def commit(scoped):
+            return await post_inventory_cogs_reversal(
+                scoped,
+                owner=owner,
+                actor=actor,
+                restock_id=restock_id,
                 reason=payload.reason,
             )
 
