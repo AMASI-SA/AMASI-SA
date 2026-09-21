@@ -45,6 +45,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, validator
 
 from auth import get_current_user_from_db
+from accounting_inventory_p03_gate import p01_controls_purchase_accounting
 
 
 def _now() -> str:
@@ -165,12 +166,30 @@ def attach_purchase_invoice_routes(parent_router: APIRouter, db) -> None:
 
     router = APIRouter(prefix="/purchase-invoices", tags=["purchase-invoices"])
 
+    async def require_legacy_purchase_writer_unlocked(user: dict) -> None:
+        owner = str(user.get("id") or "").strip()
+        if owner and await p01_controls_purchase_accounting(
+            db,
+            owner=owner,
+        ):
+            raise HTTPException(
+                status_code=423,
+                detail={
+                    "code": "legacy_purchase_invoice_writer_locked",
+                    "message": (
+                        "بعد تفعيل MZ2 P01 تُنشأ وتُرحّل المشتريات "
+                        "من مسار المخزون والمشتريات MZ2 فقط"
+                    ),
+                },
+            )
+
     # ── POST / ────────────────────────────────────────────────────────
     @router.post("")
     async def create_invoice(
         payload: PurchaseInvoiceCreate,
         user: dict = Depends(current_user),
     ):
+        await require_legacy_purchase_writer_unlocked(user)
         # 1) Resolve supplier from counterparties
         cp = await db.counterparties.find_one(
             {"id": payload.supplier_counterparty_id, "user_id": user["id"],
@@ -290,6 +309,7 @@ def attach_purchase_invoice_routes(parent_router: APIRouter, db) -> None:
         inv_id: str, payload: PurchaseInvoiceUpdate,
         user: dict = Depends(current_user),
     ):
+        await require_legacy_purchase_writer_unlocked(user)
         existing = await db.purchase_invoices.find_one(
             {"id": inv_id, "user_id": user["id"]}, {"_id": 0},
         )
@@ -358,6 +378,7 @@ def attach_purchase_invoice_routes(parent_router: APIRouter, db) -> None:
     # ── DELETE /{id} ──────────────────────────────────────────────────
     @router.delete("/{inv_id}")
     async def delete_invoice(inv_id: str, user: dict = Depends(current_user)):
+        await require_legacy_purchase_writer_unlocked(user)
         doc = await db.purchase_invoices.find_one(
             {"id": inv_id, "user_id": user["id"]}, {"_id": 0},
         )
