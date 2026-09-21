@@ -45,3 +45,18 @@ test("accountant can add a manual incoming bank transfer without debit-credit fi
     expect(serviceSource).toContain("/daily-movements/manual-incoming");
     expect(source).toContain("لا تختار مدين/دائن");
 });
+
+test("accountant can enter and classify outgoing bank movements without debit-credit fields", () => {
+    expect(source).toContain("إضافة حركة بنكية يدوية");
+    expect(source).toContain("وارد إلى البنك");
+    expect(source).toContain("خارج من البنك");
+    expect(source).toContain("createAccountingManualOutgoingMovement");
+    expect(serviceSource).toContain("/daily-movements/manual-outgoing");
+    expect(source).toContain("مصروف عام");
+    expect(source).toContain("سداد مورد قائم");
+    expect(source).toContain("classifyAccountingOutgoingMovement");
+    expect(serviceSource).toContain("/classify-outgoing");
+    expect(source).toContain("لا تختار مدين/دائن");
+    expect(source).toContain("إنشاء المشتريات والمخزون يبقى ضمن P03");
+});
+
