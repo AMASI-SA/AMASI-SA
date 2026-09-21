@@ -1391,12 +1391,15 @@ async def prepare_inventory_cogs_post(
     for allocation in allocations:
         quantity = Decimal(str(allocation.get("quantity") or 0))
         receipt_id = _text(allocation.get("receipt_id"))
+        lot_id = _text(allocation.get("lot_id"))
         location_id = _text(allocation.get("location_id"))
         item_index = allocation.get("item_index")
         if quantity <= 0:
             raise HTTPException(409, "p03_cogs_consumption_quantity_invalid")
         if receipt_id:
             target_key = "receipt:" + receipt_id
+        elif lot_id:
+            target_key = "lot:" + lot_id
         elif location_id and item_index is not None:
             target_key = f"location:{location_id}:item:{item_index}"
         else:
@@ -1409,6 +1412,7 @@ async def prepare_inventory_cogs_post(
         target = requested_by_target.setdefault(target_key, {
             "target_key": target_key,
             "receipt_id": receipt_id or None,
+            "lot_id": lot_id or None,
             "location_id": location_id or None,
             "item_index": item_index,
             "quantity": Decimal(0),
@@ -1509,6 +1513,7 @@ async def prepare_inventory_cogs_post(
         unresolved.append({
             "target_key": target_key,
             "receipt_id": receipt_id,
+            "lot_id": requested.get("lot_id"),
             "location_id": requested.get("location_id"),
             "item_index": requested.get("item_index"),
             "quantity": str(requested.get("quantity")),
