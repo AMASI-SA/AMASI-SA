@@ -407,9 +407,38 @@ async def import_daily_movement_file(
             seen_reference_keys.add(identity)
             prior_reference = await db.mz2_daily_movements.find_one(
                 {"_id": identity, "user_id": owner},
-                {"_id": 0, "id": 1, "file_id": 1},
             )
             if prior_reference:
+                if prior_reference.get("source") in {
+                    "manual_accountant",
+                    "manual_reconciled_bank_statement",
+                }:
+                    same_economics = (
+                        prior_reference.get("bank_account_id") == bank_account_id
+                        and prior_reference.get("direction") == row["direction"]
+                        and str(prior_reference.get("amount")) == row["amount"]
+                        and prior_reference.get("movement_date") == row["date"]
+                    )
+                    if not same_economics:
+                        raise HTTPException(409, detail={
+                            "code": "manual_movement_bank_statement_conflict",
+                            "reference": reference,
+                            "movement_id": prior_reference["id"],
+                        })
+                    await db.mz2_daily_movements.update_one(
+                        {"_id": identity, "user_id": owner},
+                        {"$set": {
+                            "file_id": file_id,
+                            "file_hash": content_hash,
+                            "row_no": row["row_no"],
+                            "bank_statement_description": row["description"],
+                            "source": "manual_reconciled_bank_statement",
+                            "bank_statement_confirmed_at": now,
+                        }, "$addToSet": {
+                            "evidence_sources": "bank_statement_import",
+                        }},
+                    )
+                    continue
                 raise HTTPException(409, detail={
                     "code": "bank_reference_already_imported",
                     "reference": reference,
@@ -496,6 +525,157 @@ async def import_daily_movement_file(
         "needs_review": sum(1 for row in items if row["status"] == "needs_review"),
         "unclassified": sum(1 for row in items if row["status"] == "unclassified"),
     }
+
+
+class ManualIncomingMovementIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    bank_account_id: str = Field(min_length=1, max_length=200)
+    amount: Decimal
+    sender_name: str = Field(min_length=1, max_length=300)
+    movement_date: str = Field(min_length=10, max_length=40)
+    reference: str = Field(default="", max_length=200)
+    notes: str = Field(default="", max_length=1000)
+    request_id: str = Field(min_length=8, max_length=200)
+
+
+async def create_manual_incoming_movement(
+    db,
+    *,
+    owner: str,
+    actor: dict[str, Any],
+    payload: ManualIncomingMovementIn,
+) -> dict[str, Any]:
+    bank = await _bank_or_409(db, owner, payload.bank_account_id)
+    if bank.get("account_type") != "bank":
+        raise HTTPException(409, "manual_bank_transfer_requires_bank_account")
+
+    amount = _money(payload.amount)
+    movement_date = _date(payload.movement_date)
+    sender = _clean(payload.sender_name)
+    reference = _clean(payload.reference).upper()
+    notes = _clean(payload.notes)
+    if not sender:
+        raise HTTPException(422, "manual_transfer_sender_required")
+
+    facts = {
+        "bank_account_id": payload.bank_account_id,
+        "amount": format(amount, ".2f"),
+        "movement_date": movement_date,
+        "direction": "in",
+        "sender_name": sender,
+        "reference": reference or None,
+        "notes": notes,
+    }
+    request_key = _hash([owner, "manual_movement_request", payload.request_id])
+    prior_request = await db.mz2_manual_movement_requests.find_one(
+        {"_id": request_key, "user_id": owner}
+    )
+    if prior_request:
+        if prior_request.get("facts") != facts:
+            raise HTTPException(409, "manual_movement_request_conflict")
+        existing = await db.mz2_daily_movements.find_one(
+            {"user_id": owner, "id": prior_request["movement_id"]},
+            {"_id": 0},
+        )
+        if not existing:
+            raise HTTPException(409, "manual_movement_result_requires_recovery")
+        return {**existing, "duplicate": True}
+
+    identity = (
+        _hash([owner, payload.bank_account_id, "reference", reference])
+        if reference
+        else _hash([owner, "manual_movement", payload.request_id])
+    )
+    existing = await db.mz2_daily_movements.find_one(
+        {"_id": identity, "user_id": owner}
+    )
+    if existing:
+        existing_facts = {
+            "bank_account_id": existing.get("bank_account_id"),
+            "amount": str(existing.get("amount")),
+            "movement_date": existing.get("movement_date"),
+            "direction": existing.get("direction"),
+            "sender_name": existing.get("sender_name") or "",
+            "reference": existing.get("reference"),
+            "notes": existing.get("manual_notes") or "",
+        }
+        if (
+            existing.get("bank_account_id") != facts["bank_account_id"]
+            or str(existing.get("amount")) != facts["amount"]
+            or existing.get("movement_date") != facts["movement_date"]
+            or existing.get("direction") != "in"
+        ):
+            raise HTTPException(409, "manual_movement_reference_conflict")
+        await db.mz2_manual_movement_requests.insert_one({
+            "_id": request_key,
+            "user_id": owner,
+            "movement_id": existing["id"],
+            "facts": facts,
+            "created_by": actor["id"],
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        return {**{k: v for k, v in existing.items() if k != "_id"}, "duplicate": True}
+
+    suggestion = _suggest_provider(" ".join(filter(None, [sender, reference, notes])))
+    suggestion_valid = bool(
+        suggestion
+        and await _provider_is_confirmable(
+            db, owner, payload.bank_account_id, suggestion
+        )
+    )
+    movement_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    description = f"تحويل وارد — {sender}"
+    if notes:
+        description += " — " + notes
+    movement = {
+        "_id": identity,
+        "id": movement_id,
+        "user_id": owner,
+        "file_id": None,
+        "file_hash": None,
+        "row_no": None,
+        "movement_date": movement_date,
+        "direction": "in",
+        "amount": format(amount, ".2f"),
+        "currency": "SAR",
+        "description": description,
+        "reference": reference or None,
+        "bank_account_id": payload.bank_account_id,
+        "bank_account_name": bank.get("name") or "",
+        "sender_name": sender,
+        "manual_notes": notes,
+        "explicit_provider": None,
+        "suggested_provider": suggestion if suggestion_valid else None,
+        "status": "needs_review" if suggestion_valid else "unclassified",
+        "receipt_id": None,
+        "created_at": now,
+        "created_by": actor["id"],
+        "source": "manual_accountant",
+        "evidence_sources": ["manual_accountant"],
+        "request_id": payload.request_id,
+    }
+    await db.mz2_daily_movements.insert_one(movement)
+    await db.mz2_manual_movement_requests.insert_one({
+        "_id": request_key,
+        "user_id": owner,
+        "movement_id": movement_id,
+        "facts": facts,
+        "created_by": actor["id"],
+        "created_at": now,
+    })
+    await db.mz2_daily_movement_audit.insert_one({
+        "user_id": owner,
+        "action": "manual_incoming_transfer_created",
+        "movement_id": movement_id,
+        "bank_account_id": payload.bank_account_id,
+        "amount": format(amount, ".2f"),
+        "sender_name": sender,
+        "reference": reference or None,
+        "actor_id": actor["id"],
+        "at": now,
+    })
+    return {k: v for k, v in movement.items() if k != "_id"}
 
 
 class ProviderConfirmIn(BaseModel):
@@ -598,6 +778,22 @@ def install_daily_movement_routes(router, db, current_user) -> None:
             query, {"_id": 0}
         ).sort([("movement_date", -1), ("created_at", -1)]).limit(min(max(limit, 1), 500)).to_list(500)
         return {"items": rows}
+
+    @router.post(base + "/manual-incoming")
+    async def manual_incoming(
+        payload: ManualIncomingMovementIn,
+        user: dict = Depends(current_user),
+    ):
+        actor, owner = await _actor_scope(db, user, "accounting.movements.import")
+
+        async def save(scoped):
+            return await create_manual_incoming_movement(
+                scoped,
+                owner=owner,
+                actor=actor,
+                payload=payload,
+            )
+        return await atomic_owner(db, owner, save)
 
     @router.post(base + "/upload")
     async def upload(
