@@ -1155,6 +1155,61 @@ async def process_pending_store_driver_accounting(
     }
 
 
+async def shipping_p02_context(db, *, owner: str) -> dict[str, Any]:
+    settings = await db.settings.find_one(
+        {"user_id": owner},
+        {"_id": 0, "mezan2_financial_cutover": 1},
+    )
+    cutover = (settings or {}).get("mezan2_financial_cutover") or {}
+    drivers = await db[STORE_DRIVERS].find(
+        {
+            "user_id": owner,
+            "status": {"$ne": "inactive"},
+            "archived": {"$ne": True},
+            "deleted": {"$ne": True},
+        },
+        {"_id": 0, "id": 1, "name": 1, "status": 1, "delivery_fee": 1},
+    ).sort("name", 1).to_list(500)
+    policy = await read_shipping_policy(db, owner)
+    latest: dict[str, dict[str, Any]] = {}
+    for version in policy.get("versions") or []:
+        if not isinstance(version, dict) or version.get("verification_status") != "approved":
+            continue
+        courier_id = str(version.get("courier_id") or "").strip()
+        if not courier_id:
+            continue
+        prior = latest.get(courier_id)
+        key = (str(version.get("effective_at") or ""), int(version.get("revision") or 0))
+        prior_key = (
+            str(prior.get("effective_at") or ""),
+            int(prior.get("revision") or 0),
+        ) if prior else ("", -1)
+        if prior is None or key > prior_key:
+            latest[courier_id] = version
+    couriers = [
+        {
+            "id": courier_id,
+            "name": version.get("name") or courier_id,
+            "total_fee": version.get("total_fee"),
+            "effective_at": version.get("effective_at"),
+            "rate_version_id": version.get("id"),
+            "evidence_ref": version.get("evidence_ref"),
+            "tax_treatment": version.get("tax_treatment"),
+        }
+        for courier_id, version in sorted(latest.items())
+    ]
+    return {
+        "operation_id": OPERATION_ID,
+        "p02_enabled": cutover.get("p02_shipping_cod_enabled") is True,
+        "p02_activation_ref_present": bool(
+            str(cutover.get("p02_shipping_cod_activation_ref") or "").strip()
+        ),
+        "drivers": drivers,
+        "couriers": couriers,
+        "rate_revision": policy.get("revision", 0),
+    }
+
+
 def install_shipping_p02_routes(router, db, current_user) -> None:
     base = "/accounting-module/shipping-p02"
 
@@ -1165,6 +1220,11 @@ def install_shipping_p02_routes(router, db, current_user) -> None:
         if not owner:
             raise HTTPException(403, "accounting_owner_scope_missing")
         return actor, owner
+
+    @router.get(base + "/context")
+    async def context(user: dict = Depends(current_user)):
+        _, owner = await scope(user, "accounting.shipping.view")
+        return await shipping_p02_context(db, owner=owner)
 
     @router.get(base + "/rates")
     async def rates(user: dict = Depends(current_user)):
