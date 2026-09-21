@@ -685,7 +685,7 @@ export default function AccountingInventoryPurchases({
                 <div>
                     <h2 className="text-lg font-black text-orange-950">تكلفة البضاعة المباعة — COGS</h2>
                     <p className="mt-1 text-xs font-semibold leading-6 text-orange-900">
-                        Fulfillment V2 يحفظ الـlot الذي خرج فعليًا من المخزون. لا يُرحّل COGS حتى يظهر قيد بيع MZ2 لنفس الطلب، ثم تُستخدم تكلفة الاستلام الأصلية للـreceipt ولا تُستخدم تكلفة الكتالوج الحالية.
+                        Fulfillment V2 يحفظ الـlot الذي خرج فعليًا من المخزون. لا يُرحّل COGS حتى يظهر قيد بيع MZ2 لنفس الطلب، ثم تُستخدم تكلفة الاستلام الأصلية أو Snapshot يوم القطع. الاسترداد المالي أو فحص المرتجع وحده لا يعكس COGS؛ العكس يتطلب Restock فعليًا للمخزون.
                     </p>
                 </div>
                 <div className="mt-4 space-y-3">
