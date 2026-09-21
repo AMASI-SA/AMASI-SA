@@ -14,14 +14,17 @@ from accounting_inventory_p03 import (
     activate_p03,
     create_p03_purchase_invoice,
     inventory_p03_workspace,
+    post_inventory_cogs,
     post_inventory_receipt,
     post_supplier_invoice,
+    prepare_inventory_cogs_post,
     prepare_inventory_receipt_post,
     prepare_supplier_invoice_post,
     require_p03_inventory_financial_writes,
 )
 from accounting_mz2_reports import mz2_financial_position, read_mz2_ledger
 from accounting_periods import PeriodChange, set_period
+from ledger_core import post_txn_group
 from accounting_shipping_p02 import P02ActivateIn, activate_p02
 from accounting_module_opening_balances import (
     OpeningActivateIn,
@@ -188,6 +191,93 @@ class MZ2InventoryP03PhaseTests(unittest.IsolatedAsyncioTestCase):
             "location_id": "LOC-1",
             "posted_at": posted_at,
         })
+
+    async def add_inventory_consumption(
+        self,
+        *,
+        event_id,
+        order_number,
+        receipt_id,
+        quantity,
+        consumed_at="2026-09-21T14:00:00+00:00",
+    ):
+        await self.db.mezan_inventory_consumption_events_v2.insert_one({
+            "id": event_id,
+            "user_id": self.owner,
+            "order_number": order_number,
+            "batch_id": "batch-cogs-1",
+            "status": "consumed",
+            "allocations": [{
+                "location_id": "LOC-1",
+                "receipt_id": receipt_id,
+                "item_index": 0,
+                "quantity": quantity,
+                "product_id": "SALLA-1",
+                "mezan_product_id": "MZP-1",
+                "sku": "SKU-1",
+            }],
+            "reservation_ids": ["reservation-cogs-1"],
+            "economic_hash": "synthetic-consumption",
+            "prepared_at": consumed_at,
+            "consumed_at": consumed_at,
+            "accounting_status": "waiting_sale_recognition",
+        })
+
+    async def recognize_synthetic_sale(
+        self,
+        *,
+        order_number,
+        recognized_at="2026-09-21T15:00:00+00:00",
+    ):
+        result = await self.tx(lambda scoped: post_txn_group(
+            scoped,
+            user_id=self.owner,
+            actor_id=self.owner,
+            actor_name="Synthetic owner",
+            txn_type="synthetic_bnpl_sale_for_cogs",
+            notes=f"Synthetic sale {order_number}",
+            metadata={
+                "operation_id": "MZ2-FIN-CUTOVER-001",
+                "recognition_event_key": f"sale:{order_number}",
+                "recognized_at": recognized_at,
+                "accounting_at": recognized_at,
+                "order_reference_id": order_number,
+            },
+            entries=[
+                {
+                    "entity_type": "payment_gateway",
+                    "entity_id": "tabby",
+                    "sub_account": "receivable",
+                    "side": "debit",
+                    "amount": "115.00",
+                    "entry_type": "bnpl_sale",
+                },
+                {
+                    "entity_type": "revenue",
+                    "entity_id": "bnpl_sales",
+                    "side": "credit",
+                    "amount": "100.00",
+                    "entry_type": "bnpl_sale",
+                },
+                {
+                    "entity_type": "tax",
+                    "entity_id": "sales_vat_payable",
+                    "side": "credit",
+                    "amount": "15.00",
+                    "entry_type": "bnpl_sale",
+                },
+            ],
+        ))
+        await self.db.mz2_salla_order_evidence.insert_one({
+            "id": f"evidence-{order_number}",
+            "user_id": self.owner,
+            "order_number": order_number,
+            "status": "recognized",
+            "recognition_txn_group_id": result["txn_group_id"],
+            "recognized_provider": "tabby",
+            "recognized_at": recognized_at,
+        })
+        return result
 
     async def add_supplier_invoice(self, *, invoice_id="msiv2-post-1", total_halalas=25000):
         await self.db.mezan_supplier_invoices_v2.insert_one({
@@ -850,6 +940,215 @@ class MZ2InventoryP03PhaseTests(unittest.IsolatedAsyncioTestCase):
                 "invoice_number": "PINV-NO-EVIDENCE",
             }),
             0,
+        )
+
+
+    async def test_cogs_waits_for_sale_then_uses_original_receipt_cost_basis(self):
+        await self.activate_full_p03()
+        invoice = await self.create_purchase_invoice(
+            request_id="REQ-P03-COGS-001",
+        )
+        line_id = invoice["lines"][0]["id"]
+        await self.add_inventory_receipt(
+            receipt_id="receipt-cogs-1",
+            purchase_invoice_id=invoice["id"],
+            line_id=line_id,
+            quantity=3,
+            posted_at="2026-09-21T10:00:00+00:00",
+        )
+        await self.tx(lambda scoped: post_inventory_receipt(
+            scoped,
+            owner=self.owner,
+            actor=self.actor,
+            receipt_id="receipt-cogs-1",
+            reason="إثبات مخزون COGS",
+        ))
+        receipt = await self.db.mezan_inventory_receipts_v2.find_one(
+            {"id": "receipt-cogs-1"},
+            {"_id": 0},
+        )
+        self.assertEqual(receipt["accounting_inventory_cost_halalas"], 30000)
+
+        await self.add_inventory_consumption(
+            event_id="consume-cogs-1",
+            order_number="ORD-COGS-1",
+            receipt_id="receipt-cogs-1",
+            quantity=1,
+        )
+        waiting = await prepare_inventory_cogs_post(
+            self.db,
+            owner=self.owner,
+            consumption_event_id="consume-cogs-1",
+        )
+        self.assertEqual(waiting["state"], "waiting")
+        self.assertEqual(waiting["reasons"], ["sale_recognition_required"])
+
+        sale = await self.recognize_synthetic_sale(order_number="ORD-COGS-1")
+        ready = await prepare_inventory_cogs_post(
+            self.db,
+            owner=self.owner,
+            consumption_event_id="consume-cogs-1",
+        )
+        self.assertEqual(ready["state"], "eligible")
+        self.assertEqual(ready["facts"]["total_cost_halalas"], 10000)
+        self.assertEqual(ready["facts"]["total_cost"], "100.00")
+        self.assertEqual(
+            ready["facts"]["sale_txn_group_id"],
+            sale["txn_group_id"],
+        )
+
+        result = await self.tx(lambda scoped: post_inventory_cogs(
+            scoped,
+            owner=self.owner,
+            actor=self.actor,
+            consumption_event_id="consume-cogs-1",
+            reason="مطابقة تكلفة البضاعة المباعة مع البيع",
+        ))
+        legs = await self.db.general_ledger.find(
+            {"txn_group_id": result["txn_group_id"]},
+            {"_id": 0},
+        ).to_list(10)
+        self.assertEqual(
+            {
+                (
+                    row["entity_type"],
+                    row["entity_id"],
+                    row.get("sub_account"),
+                    row["side"],
+                    round(float(row["amount"]), 2),
+                )
+                for row in legs
+            },
+            {
+                ("expense", "cogs", None, "debit", 100.00),
+                ("asset", "inventory", "inventory", "credit", 100.00),
+            },
+        )
+        self.assertTrue(all(
+            (row.get("metadata") or {}).get("sale_recognition_txn_group_id")
+            == sale["txn_group_id"]
+            for row in legs
+        ))
+        duplicate = await self.tx(lambda scoped: post_inventory_cogs(
+            scoped,
+            owner=self.owner,
+            actor=self.actor,
+            consumption_event_id="consume-cogs-1",
+            reason="إعادة آمنة",
+        ))
+        self.assertEqual(duplicate["state"], "already_posted")
+        self.assertEqual(duplicate["txn_group_id"], result["txn_group_id"])
+
+        position = await mz2_financial_position(self.db, owner=self.owner)
+        self.assertAlmostEqual(position["assets"]["inventory"], 200.0)
+
+    async def test_cogs_allocates_final_receipt_remainder_without_overstating_cost(self):
+        await self.activate_full_p03()
+        invoice = await self.create_purchase_invoice(
+            request_id="REQ-P03-COGS-REMAINDER",
+        )
+        line_id = invoice["lines"][0]["id"]
+        await self.add_inventory_receipt(
+            receipt_id="receipt-cogs-r",
+            purchase_invoice_id=invoice["id"],
+            line_id=line_id,
+            quantity=3,
+            posted_at="2026-09-21T10:00:00+00:00",
+        )
+        await self.tx(lambda scoped: post_inventory_receipt(
+            scoped,
+            owner=self.owner,
+            actor=self.actor,
+            receipt_id="receipt-cogs-r",
+            reason="إثبات مخزون لاختبار توزيع COGS",
+        ))
+        costs = []
+        for index, quantity in enumerate((1, 2), start=1):
+            order_number = f"ORD-COGS-R-{index}"
+            event_id = f"consume-cogs-r-{index}"
+            await self.add_inventory_consumption(
+                event_id=event_id,
+                order_number=order_number,
+                receipt_id="receipt-cogs-r",
+                quantity=quantity,
+                consumed_at=f"2026-09-21T1{index}:00:00+00:00",
+            )
+            await self.recognize_synthetic_sale(
+                order_number=order_number,
+                recognized_at=f"2026-09-21T1{index+2}:00:00+00:00",
+            )
+            preview = await prepare_inventory_cogs_post(
+                self.db,
+                owner=self.owner,
+                consumption_event_id=event_id,
+            )
+            costs.append(preview["facts"]["total_cost_halalas"])
+            await self.tx(lambda scoped, event_id=event_id: post_inventory_cogs(
+                scoped,
+                owner=self.owner,
+                actor=self.actor,
+                consumption_event_id=event_id,
+                reason="توزيع تكلفة الدفعة",
+            ))
+        self.assertEqual(costs, [10000, 20000])
+        self.assertEqual(sum(costs), 30000)
+        position = await mz2_financial_position(self.db, owner=self.owner)
+        self.assertAlmostEqual(position["assets"]["inventory"], 0.0)
+
+    async def test_cogs_refuses_mutable_catalog_cost_and_waits_for_receipt_cost_basis(self):
+        await self.activate_full_p03()
+        await self.db.mezan_inventory_consumption_events_v2.insert_one({
+            "id": "consume-no-receipt",
+            "user_id": self.owner,
+            "order_number": "ORD-NO-RECEIPT",
+            "batch_id": "batch-no-receipt",
+            "status": "consumed",
+            "allocations": [{
+                "location_id": "LOC-OPENING",
+                "receipt_id": None,
+                "item_index": 0,
+                "quantity": 1,
+                "sku": "SKU-OPENING",
+            }],
+            "consumed_at": "2026-09-21T14:00:00+00:00",
+        })
+        await self.db.product_costs.insert_one({
+            "user_id": self.owner,
+            "sku": "SKU-OPENING",
+            "product_name": "Mutable current cost must not be used",
+            "cost_price": 999,
+            "currency": "SAR",
+            "is_active": True,
+        })
+        await self.recognize_synthetic_sale(order_number="ORD-NO-RECEIPT")
+        preview = await prepare_inventory_cogs_post(
+            self.db,
+            owner=self.owner,
+            consumption_event_id="consume-no-receipt",
+        )
+        self.assertEqual(preview["state"], "waiting")
+        self.assertEqual(
+            preview["reasons"],
+            ["inventory_cost_basis_missing_for_non_receipt_stock"],
+        )
+        before = await self.db.general_ledger.count_documents({
+            "entry_type": "inventory_cogs",
+        })
+        with self.assertRaises(HTTPException) as ctx:
+            await self.tx(lambda scoped: post_inventory_cogs(
+                scoped,
+                owner=self.owner,
+                actor=self.actor,
+                consumption_event_id="consume-no-receipt",
+                reason="يجب ألا يستخدم تكلفة الكتالوج الحالية",
+            ))
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertEqual(ctx.exception.detail["code"], "p03_cogs_not_eligible")
+        self.assertEqual(
+            await self.db.general_ledger.count_documents({
+                "entry_type": "inventory_cogs",
+            }),
+            before,
         )
 
 
