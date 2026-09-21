@@ -338,6 +338,54 @@ export async function postAccountingShippingSettlement(payload) {
     return data;
 }
 
+export async function getAccountingInventoryP03Workspace() {
+    const { data } = await api.get(`${BASE}/inventory-p03/workspace`);
+    return data;
+}
+
+export async function activateAccountingP03(activationRef) {
+    const { data } = await api.post(`${BASE}/inventory-p03/activate`, {
+        activation_ref: activationRef,
+        confirmation: "ACTIVATE_MZ2_P03",
+    });
+    return data;
+}
+
+export async function createAccountingP03PurchaseInvoice(payload) {
+    const { data } = await api.post(`${BASE}/inventory-p03/purchase-invoices`, payload);
+    return data;
+}
+
+export async function previewAccountingP03InventoryReceipt(receiptId) {
+    const { data } = await api.get(
+        `${BASE}/inventory-p03/inventory-receipts/${encodeURIComponent(receiptId)}/preview`,
+    );
+    return data;
+}
+
+export async function postAccountingP03InventoryReceipt(receiptId, reason) {
+    const { data } = await api.post(
+        `${BASE}/inventory-p03/inventory-receipts/${encodeURIComponent(receiptId)}/post`,
+        { reason },
+    );
+    return data;
+}
+
+export async function previewAccountingP03SupplierInvoice(invoiceId) {
+    const { data } = await api.get(
+        `${BASE}/inventory-p03/supplier-invoices/${encodeURIComponent(invoiceId)}/preview`,
+    );
+    return data;
+}
+
+export async function postAccountingP03SupplierInvoice(invoiceId, reason) {
+    const { data } = await api.post(
+        `${BASE}/inventory-p03/supplier-invoices/${encodeURIComponent(invoiceId)}/post`,
+        { reason },
+    );
+    return data;
+}
+
 export async function confirmAccountingDailyMovementProvider(movementId, provider, reason) {
     const { data } = await api.post(
         `${BASE}/daily-movements/${encodeURIComponent(movementId)}/confirm-provider`,
