@@ -275,7 +275,7 @@ export default function AccountingInventoryPurchases({
                     <div>
                         <h2 className="text-lg font-black text-slate-950">P03 — المخزون والمشتريات</h2>
                         <p className="mt-1 max-w-3xl text-xs font-semibold leading-6 text-slate-700">
-                            Inventory V2 يبقى مصدر الاستلام والمخزون التشغيلي. MZ2 يثبت الأثر المالي فقط بعد الاستلام الفعلي، ولا يستخدم liabilities أو موردين Legacy.
+                            Inventory V2 يبقى مصدر الاستلام والمخزون التشغيلي. MZ2 يثبت الأثر المالي فقط بعد الاستلام الفعلي، ولا يستخدم ذمم ميزان القديمة أو هويات الموردين القديمة.
                         </p>
                     </div>
                     <span className={`rounded-full border px-3 py-1 text-xs font-black ${p03Active ? "border-emerald-300 bg-white text-emerald-800" : "border-amber-300 bg-white text-amber-800"}`}>
