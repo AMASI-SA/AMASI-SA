@@ -246,5 +246,9 @@ def test_router_registers_readiness_and_permission_contract_paths():
         "/financial-provider-apps/accounting-module/inventory-p03/inventory-consumptions/{event_id}/cogs-post",
         "/financial-provider-apps/accounting-module/inventory-p03/return-restocks/{restock_id}/cogs-reversal-preview",
         "/financial-provider-apps/accounting-module/inventory-p03/return-restocks/{restock_id}/cogs-reversal-post",
+        "/financial-provider-apps/accounting-module/reports/financial-position",
+        "/financial-provider-apps/accounting-module/reports/income-statement",
+        "/financial-provider-apps/accounting-module/reports/trial-balance",
+        "/financial-provider-apps/accounting-module/reports/journals",
     }
     assert expected <= {path for path, _methods in routes}

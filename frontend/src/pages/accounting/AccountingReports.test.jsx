@@ -40,6 +40,40 @@ test("current report uses only MZ2 endpoint and shows customer liabilities and s
     expect(api.get).toHaveBeenCalledTimes(1);
 });
 
+test("income statement shows signed revenue, COGS reversal and profit totals", async () => {
+    api.get.mockResolvedValueOnce({ data: ready });
+    await act(async () => root.render(<AccountingReports />));
+    api.get.mockResolvedValueOnce({ data: {
+        ...ready,
+        revenues: {
+            bnpl_sales: { debits: 20, credits: 100, net: 80 },
+        },
+        expenses: {
+            cogs: { debits: 60, credits: 20, net: 40 },
+            shipping: { debits: 17.25, credits: 0, net: 17.25 },
+        },
+        totals: {
+            net_revenue: 80,
+            cogs: 40,
+            gross_profit: 40,
+            operating_expenses: 17.25,
+            total_expenses: 57.25,
+            net_profit: 22.75,
+        },
+    } });
+    await click("قائمة الدخل");
+    expect(api.get).toHaveBeenLastCalledWith(`${BASE}/income-statement`, { params: {} });
+    expect(node.querySelector('[data-testid="accounting-income-statement"]')).not.toBeNull();
+    expect(node.querySelector('table[aria-label="الإيرادات"]')).not.toBeNull();
+    expect(node.querySelector('table[aria-label="المصروفات"]')).not.toBeNull();
+    expect(node.textContent).toContain("مبيعات بوابات الدفع");
+    expect(node.textContent).toContain("تكلفة البضاعة المباعة");
+    expect(node.textContent).toContain("مجمل الربح");
+    expect(node.textContent).toContain("صافي الربح");
+    expect(node.textContent).toContain("80.00");
+    expect(node.textContent).toContain("22.75");
+});
+
 test("historical selection is explicit and only as_of is sent; current clears it", async () => {
     api.get.mockResolvedValue({ data: ready });
     await act(async () => root.render(<AccountingReports />));

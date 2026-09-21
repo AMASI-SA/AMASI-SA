@@ -5,7 +5,13 @@ from fastapi import APIRouter
 import test_mz2_daily_refunds as daily
 from mz2_report_fixtures import provision_report_opening
 from accounting_module_contract import OPERATION_ID
-from accounting_mz2_reports import read_mz2_ledger, mz2_financial_position, mz2_trial_balance, install_mz2_report_routes
+from accounting_mz2_reports import (
+    read_mz2_ledger,
+    mz2_financial_position,
+    mz2_income_statement,
+    mz2_trial_balance,
+    install_mz2_report_routes,
+)
 
 class ReportIsolationTests(unittest.IsolatedAsyncioTestCase):
     asyncSetUp = daily.DailyRefundTests.asyncSetUp
@@ -33,6 +39,11 @@ class ReportIsolationTests(unittest.IsolatedAsyncioTestCase):
         for as_of in (None, "2020-08-31"):
             report = await mz2_financial_position(self.db, owner="owner", as_of=as_of)
             self.assertIn(report["status"], {"not_ready", "needs_opening_balance"})
+            income = await mz2_income_statement(self.db, owner="owner", as_of=as_of)
+            self.assertIn(income["status"], {"not_ready", "needs_opening_balance"})
+            self.assertIsNone(income["revenues"])
+            self.assertIsNone(income["expenses"])
+            self.assertIsNone(income["totals"])
             for key in ("assets", "liabilities", "totals"):
                 self.assertIsNone(report[key])
             self.assertNotEqual((await read_mz2_ledger(self.db, owner="owner", as_of=as_of))["status"], "available")
@@ -71,6 +82,139 @@ class ReportIsolationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual({(r["entity_type"], r["entity_id"]): r["net"] for r in trial_after["items"]},
             {("bank", "bank"): 1000, ("equity", "SYN"): -1000, ("payment_gateway", "tamara"): 115,
              ("revenue", "bnpl_sales"): -100, ("tax", "sales_vat_payable"): -15})
+
+    async def test_income_statement_signed_revenue_cogs_reversal_and_operating_expenses(self):
+        await provision_report_opening(self.db)
+        await self.setup_sale(gross="115")
+
+        async def group(entry_type, at, metadata, entries):
+            group_id = uuid4().hex
+            docs = []
+            for entity_type, entity_id, sub_account, side, amount in entries:
+                docs.append({
+                    "id": uuid4().hex,
+                    "user_id": "owner",
+                    "status": "posted",
+                    "txn_group_id": group_id,
+                    "entry_type": entry_type,
+                    "entity_type": entity_type,
+                    "entity_id": entity_id,
+                    "sub_account": sub_account,
+                    "side": side,
+                    "amount": amount,
+                    "metadata": {
+                        "operation_id": OPERATION_ID,
+                        "accounting_at": at,
+                        **metadata,
+                    },
+                    "posted_at": at,
+                    "created_at": at,
+                })
+            await self.db.general_ledger.insert_many(docs)
+
+        await group(
+            "inventory_cogs",
+            "2020-01-03T12:00:00Z",
+            {
+                "source": "accounting_inventory_p03",
+                "p03_kind": "inventory_cogs",
+                "p03_event_id": "cogs-1",
+                "inventory_consumption_event_id": "consume-1",
+                "sale_recognition_txn_group_id": "sale-1",
+                "order_reference_id": "ORDER-1",
+            },
+            [
+                ("expense", "cogs", None, "debit", 60),
+                ("asset", "inventory", "inventory", "credit", 60),
+            ],
+        )
+        await group(
+            "customer_refund_due",
+            "2020-01-04T12:00:00Z",
+            {"refund_accounting_version": 2},
+            [
+                ("revenue", "bnpl_sales", None, "debit", 20),
+                ("tax", "sales_vat_payable", None, "debit", 3),
+                ("liability", "refund-1", "customer_refund_payable", "credit", 23),
+            ],
+        )
+        await group(
+            "inventory_cogs_reversal",
+            "2020-01-05T12:00:00Z",
+            {
+                "source": "accounting_inventory_p03",
+                "p03_kind": "inventory_cogs_reversal",
+                "p03_event_id": "cogs-reversal-1",
+                "return_restock_id": "restock-1",
+                "return_case_id": "return-1",
+                "inventory_receipt_id": "return-receipt-1",
+                "order_reference_id": "ORDER-1",
+            },
+            [
+                ("asset", "inventory", "inventory", "debit", 20),
+                ("expense", "cogs", None, "credit", 20),
+            ],
+        )
+        await group(
+            "expense_record",
+            "2020-01-06T12:00:00Z",
+            {
+                "source": "accounting_daily_outgoing_p01",
+                "outgoing_event_id": "expense-1",
+                "daily_movement_id": "movement-1",
+            },
+            [
+                ("expense", "rent", None, "debit", 10),
+                ("bank", "bank", "main", "credit", 10),
+            ],
+        )
+        await group(
+            "shipping_fee_accrual",
+            "2020-01-07T12:00:00Z",
+            {
+                "source": "accounting_shipping_p02",
+                "shipping_event_id": "shipping-1",
+            },
+            [
+                ("expense", "shipping", None, "debit", 17.25),
+                ("courier", "smsa", "payable", "credit", 17.25),
+            ],
+        )
+
+        report = await mz2_income_statement(
+            self.db,
+            owner="owner",
+            as_of="2020-08-31",
+        )
+        self.assertEqual(report["status"], "available", report)
+        self.assertEqual(
+            report["revenues"]["bnpl_sales"],
+            {"debits": 20.0, "credits": 100.0, "net": 80.0},
+        )
+        self.assertEqual(
+            report["expenses"]["cogs"],
+            {"debits": 60.0, "credits": 20.0, "net": 40.0},
+        )
+        self.assertEqual(report["expenses"]["rent"]["net"], 10.0)
+        self.assertEqual(report["expenses"]["shipping"]["net"], 17.25)
+        self.assertEqual(report["totals"], {
+            "net_revenue": 80.0,
+            "cogs": 40.0,
+            "gross_profit": 40.0,
+            "operating_expenses": 27.25,
+            "total_expenses": 67.25,
+            "net_profit": 12.75,
+        })
+
+        await self.legacy_sentinels()
+        self.assertEqual(
+            await mz2_income_statement(
+                self.db,
+                owner="owner",
+                as_of="2020-08-31",
+            ),
+            report,
+        )
 
     async def test_actual_refund_month_end_partial_and_final_payment_with_legacy_sentinels(self):
         await self.bank()
@@ -127,7 +271,7 @@ class ReportIsolationTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(attack.json()["operation_id"], OPERATION_ID)
         for update in ({"accounting_permissions": []}, {"accounting_permissions": ["accounting.journals_reports.view"], "disabled": True}):
             await self.db.users.update_one({"id": "viewer"}, {"$set": update})
-            for path in ("financial-position", "trial-balance", "journals"):
+            for path in ("financial-position", "income-statement", "trial-balance", "journals"):
                 denied = await self.client.get("/accounting-module/reports/"+path)
                 self.assertEqual(denied.status_code, 403, denied.text)
 
