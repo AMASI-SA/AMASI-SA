@@ -335,7 +335,7 @@ export default function AccountingShippingCod({ accountingPermissions = [] }) {
                 <div>
                     <h2 className="text-lg font-black text-violet-950">تسويات شركات الشحن والمندوبين مع البنك</h2>
                     <p className="mt-1 text-xs font-semibold leading-6 text-violet-900">
-                        اختر حركة البنك الفعلية ثم الطرف ونوع التسوية. التحصيل الوارد يخفض COD المستحق، والسداد الخارج يخفض الذمة الدائنة، والتسوية الصافية تجمع الاثنين دون إنشاء مصروف جديد.
+                        اختر حركة البنك الفعلية ثم الطرف ونوع التسوية. التحصيل الوارد يخفض COD المستحق، والسداد الخارج يخفض المبلغ المستحق للطرف، والتسوية الصافية تجمع الاثنين دون إنشاء مصروف جديد.
                     </p>
                 </div>
                 <div className="mt-4 space-y-3">
