@@ -329,6 +329,9 @@ def _opening_inventory_target_key(
     receipt_id = _text(item.get("receipt_id"))
     if receipt_id:
         return "receipt:" + receipt_id
+    lot_id = _text(item.get("lot_id"))
+    if lot_id:
+        return "lot:" + lot_id
     return f"location:{location_id}:item:{item_index}"
 
 
