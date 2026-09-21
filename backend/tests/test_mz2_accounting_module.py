@@ -234,5 +234,7 @@ def test_router_registers_readiness_and_permission_contract_paths():
         "/financial-provider-apps/accounting-module/shipping-p02/settlements/post",
         "/financial-provider-apps/accounting-module/inventory-p03/workspace",
         "/financial-provider-apps/accounting-module/inventory-p03/activate",
+        "/financial-provider-apps/accounting-module/inventory-p03/supplier-invoices/{invoice_id}/preview",
+        "/financial-provider-apps/accounting-module/inventory-p03/supplier-invoices/{invoice_id}/post",
     }
     assert expected <= {path for path, _methods in routes}
