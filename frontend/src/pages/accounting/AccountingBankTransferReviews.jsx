@@ -23,6 +23,7 @@ const REASON_LABELS = {
     customer_transfer_receipt_missing: "صورة إيصال التحويل غير موجودة في طلب سلة.",
     receiving_bank_name_missing: "اسم البنك المستلم غير موجود في طلب سلة.",
     matching_bank_movement_missing: "لم تصل بعد حركة بنك مطابقة للمبلغ.",
+    bank_transfer_after_delivery_requires_receivable_workflow: "التحويل البنكي وصل بعد تاريخ التسليم؛ يحتاج معالجة ذمم مستقلة قبل الترحيل.",
 };
 
 function reasonText(code) {
