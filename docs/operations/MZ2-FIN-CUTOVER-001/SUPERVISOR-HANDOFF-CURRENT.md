@@ -723,3 +723,76 @@ admin metadata بقي:
 إذا كانت النتيجة `PATCH1130_V4_APPLY_CHECK_PASS_ONLY` فهي تثبت قابلية التطبيق فقط ولا تفوض التطبيق أو الاختبارات أو Commit/Push.
 
 الحواجز مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`.
+
+
+---
+
+## نقطة التحقق SUP-20260922-13 — V4 check-only لـ PR #1130 اجتاز الهدف الأصلي
+
+التاريخ: 2026-09-22. هذه النقطة توثق المخرجات الفعلية من طرفية Emergent الأصلية بعد استرجاع worktree والتحقق الدلالي من index.
+
+### هوية GitHub عند القرار
+
+- #1130: مفتوح، Draft، غير مدموج. Base `5292a87a476a140ae8c3c78e88dfba7d8c83f035`، Head `20400fffb03594af8a38d6b4750c170233bd5f37`.
+- #1131: Head `29e4cd940b195df0164fe7bc74b07c77a0a02bfc`.
+- #1132: Head `405883c34f81c5d17625083b11e3c608662023af`، Base SHA في PR `ab3ef10c5aedfe5e2190bc57bb8ed26afc1347f2`.
+- #1133 قبل كتابة هذه النقطة: Head `db1d3dfdf479057f2059c159fb8f5492d0d63142`.
+
+### نتيجة V4 check-only الفعلية
+
+النتيجة:
+`PATCH1130_V4_APPLY_CHECK_PASS_ONLY`
+
+الهوية داخل التقرير:
+- worktree `/tmp/mz2-p02-stage1.ZMgPW8/worktree`
+- Base `5292a87a476a140ae8c3c78e88dfba7d8c83f035`
+- Head `20400fffb03594af8a38d6b4750c170233bd5f37`
+- branch `refs/heads/local/p02-stage1-ZMgPW8`
+- patch SHA-256 `14156ef2a45ae489df1d4afcda4c65f4b0804a737837ffbe93cc86f5e7b21d4a`
+- merge-base = Base نفسه
+- origin = `AMASI-SA/AMASI-SA`
+
+أوامر الفحص الثلاثة:
+- `git apply --check -` -> exit 0
+- `git apply --stat -` -> exit 0
+- `git apply --numstat -` -> exit 0
+
+النطاق الفعلي:
+- 8 ملفات
+- 1641 إضافة
+- 4 حذف
+- numstat مطابق للمسارات والأعداد المعلنة.
+
+### ثبات الحالة
+
+`app_and_worktree_unchanged=true`.
+
+حالة /app قبل وبعد بقيت:
+`?? .worktrees_p02_runtime.py`
+
+حالة worktree قبل وبعد بقيت بالضبط:
+- ` M backend/tests/test_courier_cod_fee_tiers_v2.py`
+- `?? backend/accounting_shipping_contracts.py`
+- `?? backend/tests/test_mz2_shipping_contracts.py`
+
+بصمات CONTRACT_SLICE الثلاثة قبل وبعد متطابقة:
+- `9f25d896d9835dc36a29e91f2dab90de2cf8f1a4c2cec18f01d9fb097863b7c8`
+- `61168e55eb400da907f8d0fb795f7c28155e968d22ff4f5b45eae14b8b83f0b2`
+- `ff35204aaaecfb897869341c82b9c86b82d7580ce70fb397c617edfd76933f9c`
+
+لم يطبق شيء: `applied=false`; الاختبارات `NOT_RUN`; لا Commit/Push/PR edit.
+
+### الحكم
+
+`V4_TARGET_APPLY_CHECK_PASS / READY_FOR_CONTROLLED_ISOLATED_APPLY`
+
+هذا يلغي فقط مانع قابلية التطبيق السابق `CHANGES_REQUIRED_NOT_READY_TO_APPLY` الخاص بـV4. لا يفتح P02 ولا يثبت نجاح الاختبارات أو التكامل.
+
+يُسمح بالخطوة التالية فقط:
+- تطبيق **Patch #1130 V4 نفسه وبصمته نفسها** على worktree المعزول نفسه.
+- لا تطبيق Patch #1126 في هذه الخطوة.
+- لا تشغيل اختبارات في خطوة التطبيق.
+- بعد التطبيق: تحقق من Head/branch/status، بصمات CONTRACT_SLICE، وأن التغيير الإضافي يقتصر على مسارات V4 الثمانية فوق الحالة التاريخية الثلاثية.
+- لا Commit/Push/PR edit قبل مراجعة نتيجة التطبيق.
+
+الحواجز العامة مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`. لا Merge/Deploy/Preview/Production mutation أو كتابة مالية.
