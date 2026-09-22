@@ -1363,3 +1363,73 @@ V4 نفسها تشير إلى 43 اختبارًا سابقًا لعقد الشح
 لا Commit/Push/PR edit في هذه العملية. لا #1126، لا Merge/Deploy/Preview/Production mutation أو كتابة مالية.
 
 الحواجز مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`.
+
+
+---
+
+## نقطة التحقق SUP-20260922-26 — تجهيز Runner واحد يعيد البناء ويشغّل 88 اختبارًا قبل فقدان /tmp
+
+التاريخ: 2026-09-22. بعد إثبات أن admin/index/branch محفوظة وأن المسار المادي فقط هو المفقود، جُهزت وسيلة استرجاع/اختبار واحدة لتجنب الاعتماد على بقاء `/tmp` بين الرسائل.
+
+### Artifact نقل CONTRACT_SLICE
+
+أُنشئ تعليق نقل في Issue #1006:
+- comment id: `5783487472`
+
+يحمل Base64 للبصمات التاريخية الثلاثة فقط:
+- `backend/accounting_shipping_contracts.py`
+  SHA-256 `9f25d896d9835dc36a29e91f2dab90de2cf8f1a4c2cec18f01d9fb097863b7c8`
+  bytes `10380`.
+- `backend/tests/test_mz2_shipping_contracts.py`
+  SHA-256 `61168e55eb400da907f8d0fb795f7c28155e968d22ff4f5b45eae14b8b83f0b2`
+  bytes `12961`.
+- `backend/tests/test_courier_cod_fee_tiers_v2.py`
+  SHA-256 `ff35204aaaecfb897869341c82b9c86b82d7580ce70fb397c617edfd76933f9c`
+  bytes `3211`.
+
+Patch V4 يبقى من تعليقات النقل الموثقة:
+`5782817671`, `5782818225`, `5782818706`
+وبصمة Patch:
+`14156ef2a45ae489df1d4afcda4c65f4b0804a737837ffbe93cc86f5e7b21d4a`.
+
+### Runner الجديد
+
+المسار على فرع التوثيق فقط:
+`docs/operations/MZ2-FIN-CUTOVER-001/P02-1130-RECONSTRUCT-AND-88.sh`
+
+تم إنشاؤه في commit:
+`0c0d846b5334f90e67b206f43c37258c5428fd1b`
+
+Git blob SHA:
+`3cc23b4a8c7ddcd591a2f8ee2a8a8992440fb31a`
+
+الحجم النصي: 13503 حرفًا / 324 سطرًا. لم يُنفذ بعد.
+
+### سلوك Runner
+
+1. يتحقق من admin/index/branch/lock و/app قبل أي كتابة.
+2. يشترط غياب parent القديم حتى لا يكتب فوق حالة موجودة.
+3. يعيد tracked tree من Head نفسه عبر `git archive`، دون staging/commit.
+4. يستعيد CONTRACT_SLICE من تعليق النقل ويتحقق من الحجم وSHA-256 لكل ملف.
+5. يستعيد Patch V4 من تعليقات النقل ويتحقق من 89921 بايت وبصمة Patch المعتمدة.
+6. يشغّل `git apply --check` ثم `git apply` على worktree المعزول فقط.
+7. يتحقق من status النهائي وبصمات جميع 11 ملفًا في الحالة المجمعة.
+8. ينشئ CPython 3.13.15 مؤقتًا عبر uv تحت `/tmp`.
+9. يشغّل في نفس العملية جميع الاختبارات:
+   - V4 isolation: 32
+   - V4 payment evidence: 13
+   - calculator regression: 13
+   - contract regression: 25
+   - legacy COD tiers: 5
+   - الإجمالي: 88
+10. يقارن status/files/index و/app قبل/بعد الاختبارات.
+11. لا يعمل git add/commit/push/PR edit، ولا #1126، ولا Merge/Deploy/Preview/Production أو كتابة مالية.
+
+نتيجة النجاح المستهدفة:
+`RESULT=RECONSTRUCTED_EXACT_88_OF_88_PASS_ONLY`
+
+### الحكم
+
+`EXACT_RECONSTRUCT_AND_88_RUNNER_PREPARED_NOT_EXECUTED`
+
+الحواجز مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`.
