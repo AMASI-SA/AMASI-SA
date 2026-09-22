@@ -1025,3 +1025,47 @@ status بعد التطبيق يتكون من الحالة التاريخية + �
 لا اختبارات قبل اجتياز هذا التحقق القصير. لا Commit/Push/PR edit.
 
 الحواجز مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`. لا Merge/Deploy/Preview/Production mutation أو كتابة مالية.
+
+
+---
+
+## نقطة التحقق SUP-20260922-19 — تحقق ما بعد التطبيق واجتياز بوابة البايتات
+
+التاريخ: 2026-09-22. هذه النقطة توثق الفحص الفعلي بعد تطبيق V4 المعزول.
+
+### النتائج الفعلية من طرفية Emergent
+
+- HEAD: `20400fffb03594af8a38d6b4750c170233bd5f37`.
+- branch: `refs/heads/local/p02-stage1-ZMgPW8`.
+- `git diff --cached --name-status HEAD`: فارغ.
+- `git diff --check`: بلا مخرجات/أخطاء.
+- تحققت SHA-256 لمسارات V4 الثمانية مباشرة على target، وكلها `OK` ومطابقة للبصمات المشتقة من Patch/Base في SUP-20260922-18:
+  - accounting_module_contract.py
+  - accounting_shipping_contract_gate.py
+  - accounting_shipping_contract_service.py
+  - accounting_shipping_evidence.py
+  - accounting_shipping_payment_evidence.py
+  - test_mz2_shipping_contract_isolation.py
+  - test_mz2_shipping_payment_evidence.py
+  - P02-1130-V4-ISOLATION-REVIEW.md
+- status بعد التحقق يتكون من V4 المتوقع + CONTRACT_SLICE التاريخي فقط.
+- `/app` بقي عند `6365a042dfcb125e81e5e198ea1ff1537373ce51` / `refs/heads/hotfix/prod-snap-meta-final` مع `?? .worktrees_p02_runtime.py`.
+
+### الحكم
+
+`V4_APPLIED_AND_BYTES_VERIFIED / V4_ISOLATED_TEST_GATE_AUTHORIZED`
+
+أصبحت خطوة الاختبار المعزول مسموحة. نطاق الاختبار التالي هو **اختبارات V4 الجديدة فقط**:
+- `backend/tests/test_mz2_shipping_contract_isolation.py` — 32 حالة مكتوبة.
+- `backend/tests/test_mz2_shipping_payment_evidence.py` — 13 حالة مكتوبة.
+- الإجمالي المتوقع: 45 حالة.
+
+لا يُطبق Patch #1126، ولا تُعاد اختبارات CONTRACT_SLICE التاريخية في هذه الدفعة؛ بايتاتها لم تتغير وقد سبق تثبيت هويتها. لا Mongo حقيقي ولا HTTP/Frontend/UAT في هذه البوابة.
+
+بسبب فقد مجلد `/tmp` السابق، لا تُفترض بيئة Python القديمة. الاختبار يجب أن يستخدم بيئة مؤقتة معزولة خارج worktree، مع حزم الاختبار المحددة في workflow التاريخي لـ#1130، و`PYTHONDONTWRITEBYTECODE=1` وHOME/TMP معزولين، دون كتابة إلى /app أو قاعدة بيانات.
+
+لا Commit/Push/PR edit قبل مراجعة نتائج الاختبار.
+
+تحقق GitHub قبل القرار: #1130 ما زال Draft وغير مدموج عند Head `20400fffb03594af8a38d6b4750c170233bd5f37`; لا نقل قبول إلى Head آخر.
+
+الحواجز مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`.
