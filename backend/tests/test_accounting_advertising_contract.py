@@ -36,7 +36,7 @@ def invoice(value="100", **kw):
 
 
 def payment(positions, allocations, **kw):
-    args = dict(source_ref="actual-bank-not-default", movement_ref="movement-1", evidence_ref="proof-1", bank_principal_sar="40")
+    args = dict(payment_mode="postpaid", source_ref="actual-bank-not-default", movement_ref="movement-1", evidence_ref="proof-1", bank_principal_sar="40")
     args.update(kw)
     return c.payment_preview("owner-a", positions, allocations, **args)
 
@@ -334,6 +334,38 @@ class ContractTests(unittest.TestCase):
         self.assertLessEqual(imports, {"__future__", "dataclasses", "datetime", "decimal", "hashlib", "json", "typing", "zoneinfo"})
         self.assertNotIn("post_txn_group", source)
         self.assertNotIn("APIRouter", source)
+
+    def test_negative_journal_leg_rejected(self):
+        self.error("INVALID_AMOUNT", c.PreviewLeg, "bank", "ref", D("0"), D("-1"))
+
+    def test_two_sided_or_fractional_sar_leg_rejected(self):
+        self.error("INVALID_PREVIEW", c.PreviewLeg, "bank", "ref", D("1"), D("1"))
+        self.error("INVALID_PREVIEW", c.PreviewLeg, "bank", "ref", D("0.001"))
+
+    def test_inexact_paid_carrying_value_rejected(self):
+        self.error("INVALID_PAID_POSITION", c.InvoicePosition, invoice(), D("1"), D("1.001"))
+
+    def test_review_flag_must_be_explicit_boolean(self):
+        self.assertEqual(c.InvoicePosition(invoice()).status(DAY, reviewed="false"), "draft")
+
+    def test_invoice_accrual_cannot_emit_daily_posted_adjustment(self):
+        self.error("NON_ACCRUING_DAILY_SOURCE", c.revise_daily, daily(state="POSTED", accrual="invoice"), daily("120", revision=2, accrual="invoice"), accounted_total_sar="100")
+
+    def test_revision_does_not_trust_a_spoofed_key(self):
+        fresh = daily(revision=2)
+        fresh = replace(fresh, evidence=replace(fresh.evidence, economic_date=date(2026, 9, 20)))
+        self.error("SOURCE_SCOPE_MISMATCH", c.revise_daily, daily(), fresh)
+
+    def test_payment_mode_cannot_be_wallet_or_direct_debit(self):
+        inv = invoice()
+        for mode in ("prepaid_wallet", "direct_debit"):
+            self.error("PAYMENT_MODE_MISMATCH", payment, [c.InvoicePosition(inv)], [(inv.key, "40")], payment_mode=mode)
+
+    def test_invoice_billing_currency_can_differ_from_ad_account(self):
+        inv = invoice(fx=fx("100", "USD", rate="3.75"))
+        self.assertEqual(inv.account.currency, "SAR")
+        self.assertEqual(inv.fx.original_currency, "USD")
+        self.assertEqual(inv.fx.value_sar, D("375"))
 
     def test_preview_cannot_turn_on_posting(self):
         self.error("INVALID_PREVIEW", c.JournalPreview, (), True)

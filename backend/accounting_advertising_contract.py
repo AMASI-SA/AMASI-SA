@@ -246,6 +246,10 @@ def revise_daily(current: DailyDraft, fresh: DailyDraft, *, accounted_total_sar=
     old, new = current.evidence, fresh.evidence
     if old.fx is None or new.fx is None or new.complete is not True:
         raise ContractError("INCOMPLETE_DATA")
+    if (old.account_identity, old.economic_date) != (new.account_identity, new.economic_date):
+        raise ContractError("SOURCE_SCOPE_MISMATCH")
+    if current.state == "POSTED" and current.accrual_source != "daily_spend":
+        raise ContractError("NON_ACCRUING_DAILY_SOURCE")
     if current.state not in DAY_STATES or current.source_key != fresh.source_key:
         raise ContractError("SOURCE_SCOPE_MISMATCH")
     if (old.timezone_name, current.payment_mode, current.accrual_source) != (new.timezone_name, fresh.payment_mode, fresh.accrual_source):
@@ -300,8 +304,6 @@ class InvoiceDraft:
             raise ContractError("INVALID_INVOICE_DATE")
         if self.source not in {"api", "upload", "manual"} or (self.source == "manual" and not self.manual_note.strip()):
             raise ContractError("INVOICE_EVIDENCE_REQUIRED")
-        if self.fx.original_currency != self.account.currency:
-            raise ContractError("SOURCE_CURRENCY_MISMATCH")
 
     @property
     def key(self) -> str:
@@ -317,6 +319,8 @@ class InvoicePosition:
     def __post_init__(self):
         object.__setattr__(self, "paid_original", amount(self.paid_original))
         object.__setattr__(self, "paid_carrying_sar", amount(self.paid_carrying_sar))
+        if self.paid_carrying_sar != sar(self.paid_carrying_sar):
+            raise ContractError("INVALID_PAID_POSITION")
         if self.paid_original > self.invoice.fx.original_amount or self.paid_carrying_sar > self.invoice.fx.value_sar:
             raise ContractError("ALLOCATION_EXCEEDS_REMAINING")
         if self.paid_original == ZERO and self.paid_carrying_sar != ZERO:
@@ -333,7 +337,7 @@ class InvoicePosition:
         return self.invoice.fx.value_sar - self.paid_carrying_sar
 
     def status(self, as_of: date, *, reviewed: bool = False) -> str:
-        if not reviewed:
+        if reviewed is not True:
             return "draft"
         if self.remaining_original == ZERO:
             return "paid"
@@ -375,6 +379,15 @@ class PreviewLeg:
     reference: str | None
     debit: Decimal = ZERO
     credit: Decimal = ZERO
+
+    def __post_init__(self):
+        object.__setattr__(self, "debit", amount(self.debit))
+        object.__setattr__(self, "credit", amount(self.credit))
+        if self.debit != sar(self.debit) or self.credit != sar(self.credit) or (self.debit and self.credit):
+            raise ContractError("INVALID_PREVIEW")
+        token(self.role)
+        if self.reference is not None:
+            token(self.reference)
 
 
 @dataclass(frozen=True)
@@ -433,7 +446,9 @@ class PaymentPreview:
 
 def payment_preview(owner: str, positions: Sequence[InvoicePosition], allocations: Sequence[tuple[str, str]],
                     *, source_ref: str, movement_ref: str, evidence_ref: str,
-                    bank_principal_sar, bank_fee_sar="0") -> PaymentPreview:
+                    bank_principal_sar, payment_mode: str, bank_fee_sar="0") -> PaymentPreview:
+    if payment_mode != "postpaid":
+        raise ContractError("PAYMENT_MODE_MISMATCH")
     for ref in (owner, source_ref, movement_ref, evidence_ref):
         token(ref)
     by_key = {p.invoice.key: p for p in positions}
