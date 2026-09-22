@@ -945,3 +945,83 @@ SHA-256:
 `PATCH_TRANSFER_ARTIFACT_READY / CONTROLLED_APPLY_PENDING`
 
 الحواجز مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`.
+
+
+---
+
+## نقطة التحقق SUP-20260922-18 — تطبيق V4 المعزول نجح فعليًا على worktree #1130
+
+التاريخ: 2026-09-22. هذه النقطة توثق تنفيذ التطبيق المعزول الفعلي من طرفية Emergent الأصلية بعد نقل Patch V4 والتحقق من بصمته.
+
+### نتيجة النقل والتطبيق
+
+نجح نقل Patch V4 إلى:
+`/tmp/p02-1130-isolated-review-v4.patch`
+
+والتحقق المباشر أعاد:
+- الحجم: `89921` بايت.
+- SHA-256: `14156ef2a45ae489df1d4afcda4c65f4b0804a737837ffbe93cc86f5e7b21d4a`.
+
+قبل التطبيق:
+- HEAD `20400fffb03594af8a38d6b4750c170233bd5f37`.
+- الحالة التاريخية الثلاثية فقط:
+  - ` M backend/tests/test_courier_cod_fee_tiers_v2.py`
+  - `?? backend/accounting_shipping_contracts.py`
+  - `?? backend/tests/test_mz2_shipping_contracts.py`
+- بصمات CONTRACT_SLICE الثلاثة مطابقة للقيم المعتمدة.
+
+`git apply --check` نجح، ثم نُفذ `git apply` للـPatch نفسه، وخرج المشغّل:
+`RESULT=V4_APPLIED_ISOLATED_PENDING_REVIEW`
+مع `P02_APPLY_RC=0`.
+
+### الحالة بعد التطبيق
+
+HEAD بقي `20400fffb03594af8a38d6b4750c170233bd5f37`; لا Commit.
+
+status بعد التطبيق يتكون من الحالة التاريخية + نطاق V4 المتوقع:
+- tracked modified: `backend/accounting_module_contract.py`
+- tracked modified التاريخي: `backend/tests/test_courier_cod_fee_tiers_v2.py`
+- V4 untracked الجديدة:
+  - `backend/accounting_shipping_contract_gate.py`
+  - `backend/accounting_shipping_contract_service.py`
+  - `backend/accounting_shipping_evidence.py`
+  - `backend/accounting_shipping_payment_evidence.py`
+  - `backend/tests/test_mz2_shipping_contract_isolation.py`
+  - `backend/tests/test_mz2_shipping_payment_evidence.py`
+  - `docs/operations/MZ2-FIN-CUTOVER-001/P02-1130-V4-ISOLATION-REVIEW.md`
+- CONTRACT_SLICE untracked التاريخيان بقيا موجودين.
+
+بصمات CONTRACT_SLICE الثلاثة بعد التطبيق بقيت مطابقة تمامًا للبصمات قبل التطبيق.
+
+`/app` بقي عند `6365a042dfcb125e81e5e198ea1ff1537373ce51` / `refs/heads/hotfix/prod-snap-meta-final` مع `?? .worktrees_p02_runtime.py`.
+
+لا اختبارات، لا staging، لا Commit/Push، لا PR edit.
+
+### تحقق مستقل من البايتات المتوقعة لـV4
+
+أعاد المشرف تطبيق Patch V4 ذي البصمة نفسها خارج Emergent على نسخة Base الموثقة من `backend/accounting_module_contract.py`، وحسب SHA-256 المتوقعة لمسارات V4 الثمانية:
+
+- `backend/accounting_module_contract.py` -> `d802ea261a9bc64e624cc309a48c02c9c9fe76ea954fb99f4917a393bd559c8f`
+- `backend/accounting_shipping_contract_gate.py` -> `f78310e35cffc0ba5589d36c4d1fb8d0bd7b0fd6f39e5a2eae274ca40872b79e`
+- `backend/accounting_shipping_contract_service.py` -> `e9d1b88fee748a43271a7e5070c55215c5e9aea2d1634cf8bbb9045134674528`
+- `backend/accounting_shipping_evidence.py` -> `805cb4eaa8d592d67e1daec9cc9a41a3cbd7789266047a68f97c56e6677a598f`
+- `backend/accounting_shipping_payment_evidence.py` -> `904d98f2711913dc763ac3663e9f3e00a4b2640d26c4403dc0ac67b9a1381052`
+- `backend/tests/test_mz2_shipping_contract_isolation.py` -> `0153e5996cb64388a8085df8fe2664bbce0ff6b2f01a8b23bc9f1dd745ba5012`
+- `backend/tests/test_mz2_shipping_payment_evidence.py` -> `abc030ae1544799bdf3721364f5a7d8f7a9bd40091c23b98fb93e2768d2dd224`
+- `docs/operations/MZ2-FIN-CUTOVER-001/P02-1130-V4-ISOLATION-REVIEW.md` -> `cd1495b5f708904d516635fbb3cd7b4e8f0e8b868ba58d6f6f342f76b33ca356`
+
+هذه بصمات متوقعة مشتقة من Patch المعتمد وBase GitHub، وليست بعد قراءة مباشرة لملفات target بعد التطبيق.
+
+### الحكم
+
+`V4_APPLIED_ISOLATED / POST_APPLY_BYTE_VERIFICATION_REQUIRED`
+
+الخطوة التالية الآمنة هي قراءة فقط:
+- SHA-256 لمسارات V4 الثمانية ومقارنتها بالقيم أعلاه.
+- `git diff --check`.
+- `git diff --cached --name-status HEAD` للتأكد أن لا staged changes.
+- إعادة status وHEAD.
+
+لا اختبارات قبل اجتياز هذا التحقق القصير. لا Commit/Push/PR edit.
+
+الحواجز مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`. لا Merge/Deploy/Preview/Production mutation أو كتابة مالية.
