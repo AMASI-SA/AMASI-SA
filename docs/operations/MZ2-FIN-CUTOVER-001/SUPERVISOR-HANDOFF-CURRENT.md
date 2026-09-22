@@ -581,3 +581,25 @@ SHA-256:
 الخطوة الآمنة التالية هي تشغيل هذا المشغّل وحده في طرفية Emergent الأصلية، ومراجعة `P02_WORKTREE_RECOVERY_RESULT` قبل العودة إلى V4 check-only.
 
 الحواجز مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`.
+
+
+---
+
+## نقطة التحقق SUP-20260922-10 — محاولة تشغيل مشغّل الاسترجاع انتهت بـ exit 1 دون سبب ظاهر
+
+التاريخ: 2026-09-22. أرسل المستخدم لقطة من طرفية Emergent تُظهر فقط:
+
+`The terminal process "/bin/bash" terminated with exit code: 1.`
+
+لا تحتوي اللقطة على سطر `RESULT=` أو كتلة `P02_WORKTREE_RECOVERY_RESULT`، لذلك لا يمكن تحديد هل التوقف حدث قبل أي كتابة أم بعد إنشاء جزء من الشجرة المادية. لا يُعاد تشغيل المشغّل قبل فحص الحالة الحالية قراءة فقط.
+
+تحقق GitHub عند هذه النقطة:
+- #1130 ما زال مفتوحًا وDraft وغير مدموج عند Base `5292a87a476a140ae8c3c78e88dfba7d8c83f035` وHead `20400fffb03594af8a38d6b4750c170233bd5f37`.
+- #1133 قبل هذا التحديث عند Head `cb22d557e04f74d8ff70831b3a844c73ee522ff4`.
+
+الحكم:
+`RECOVERY_ATTEMPT_EXIT_1 / CURRENT_RECOVERY_STATE_UNKNOWN`
+
+الخطوة الآمنة التالية: فحص قراءة فقط لوجود `/tmp/mz2-p02-stage1.ZMgPW8/worktree`، HEAD/branch/status إن وجد، بصمات الملفات الثلاثة إن وجدت، وبقاء index/admin metadata و/app دون تغيير. لا إعادة تشغيل ولا تنظيف ولا repair/prune/unlock/remove/apply قبل هذه المشاهدة.
+
+الحواجز مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`.
