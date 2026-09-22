@@ -533,3 +533,51 @@
 - لا يشغّل اختبارات ولا يطبق V4 في خطوة الاسترجاع نفسها.
 
 الحواجز مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`. لا Merge/Deploy/Preview/Production mutation أو كتابة مالية.
+
+
+---
+
+## نقطة التحقق SUP-20260922-09 — إعداد مشغّل استرجاع worktree #1130 دون تنفيذ
+
+التاريخ: 2026-09-22. بعد إثبات أن بايتات CONTRACT_SLICE الثلاثة قابلة للاسترجاع حتميًا، أُعد خارج Emergent مشغّل استرجاع محلي باسم:
+
+`p02-1130-recover-original-worktree-only.sh`
+
+SHA-256:
+`e41bb9d797d11765c6342f3455e82b7f9285af74411ac40bae58e1409894b2f9`
+
+حجمه 41610 بايت، ونجح `bash -n` عليه. المشغّل **لم يُنفذ**.
+
+### حدود المشغّل
+
+قبل أي كتابة يتحقق من:
+- /app HEAD `6365a042dfcb125e81e5e198ea1ff1537373ce51` والفرع `hotfix/prod-snap-meta-final`.
+- status المتوقع لـ/app: `?? .worktrees_p02_runtime.py`.
+- admin gitdir `/app/.git/worktrees/worktree`.
+- local branch `refs/heads/local/p02-stage1-ZMgPW8` عند `20400fffb03594af8a38d6b4750c170233bd5f37`.
+- admin HEAD/commondir/locked، وindex SHA-256 `e99e4d2a19781ee5bffe7c04956e9b72b795034458da5dadee05c59f754cd1de`.
+- أن المسار `/tmp/mz2-p02-stage1.ZMgPW8` ما زال غير موجود.
+
+إذا اجتازت الحواجز، ينشئ فقط الشجرة المادية المفقودة ويربط `.git` بنفس admin gitdir، ثم يستخدم `checkout-index -a -f` لإخراج الملفات المتتبعة من الـindex المحفوظ إلى شجرة عمل فارغة؛ لا يغير index أو ref أو branch.
+
+بعد ذلك يعيد فقط بايتات CONTRACT_SLICE الثلاثة المثبتة:
+- `backend/accounting_shipping_contracts.py` -> `9f25d896d9835dc36a29e91f2dab90de2cf8f1a4c2cec18f01d9fb097863b7c8`.
+- `backend/tests/test_mz2_shipping_contracts.py` -> `61168e55eb400da907f8d0fb795f7c28155e968d22ff4f5b45eae14b8b83f0b2`.
+- `backend/tests/test_courier_cod_fee_tiers_v2.py` -> `ff35204aaaecfb897869341c82b9c86b82d7580ce70fb397c617edfd76933f9c`.
+
+ويتحقق من أن status النهائي يتكون فقط من نفس الحالات التاريخية الثلاث بغض النظر عن ترتيب العرض:
+- modified غير staged للملف المتتبع.
+- untracked للملفين الجديدين.
+
+كما يعيد التحقق من index SHA و/app بعد الاسترجاع.
+
+### ما لا يفعله
+
+لا `git add`, لا reset/clean/prune/unlock/remove/repair، لا checkout/switch للفرع، لا Patch V4، لا اختبارات، لا Commit/Push/PR edit، لا Preview/Production ولا كتابة مالية.
+
+الحكم:
+`RECOVERY_RUNNER_PREPARED_NOT_EXECUTED`
+
+الخطوة الآمنة التالية هي تشغيل هذا المشغّل وحده في طرفية Emergent الأصلية، ومراجعة `P02_WORKTREE_RECOVERY_RESULT` قبل العودة إلى V4 check-only.
+
+الحواجز مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`.
