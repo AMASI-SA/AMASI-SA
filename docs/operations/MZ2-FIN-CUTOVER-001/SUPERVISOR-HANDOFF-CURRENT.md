@@ -603,3 +603,75 @@ SHA-256:
 الخطوة الآمنة التالية: فحص قراءة فقط لوجود `/tmp/mz2-p02-stage1.ZMgPW8/worktree`، HEAD/branch/status إن وجد، بصمات الملفات الثلاثة إن وجدت، وبقاء index/admin metadata و/app دون تغيير. لا إعادة تشغيل ولا تنظيف ولا repair/prune/unlock/remove/apply قبل هذه المشاهدة.
 
 الحواجز مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`.
+
+
+---
+
+## نقطة التحقق SUP-20260922-11 — الاسترجاع أعاد الشجرة والـCONTRACT_SLICE بدقة، مع تغير بصمة index البايتية
+
+التاريخ: 2026-09-22. هذه النقطة توثق فحص ما بعد محاولة الاسترجاع التي انتهت سابقًا بـ exit 1.
+
+### ما تحقق مباشرة من مخرجات طرفية Emergent
+
+المسار المادي عاد موجودًا:
+
+`/tmp/mz2-p02-stage1.ZMgPW8/worktree`
+
+وهو يقرأ:
+- HEAD `20400fffb03594af8a38d6b4750c170233bd5f37`
+- branch `refs/heads/local/p02-stage1-ZMgPW8`
+
+وحالة worktree الحالية بالضبط:
+- ` M backend/tests/test_courier_cod_fee_tiers_v2.py`
+- `?? backend/accounting_shipping_contracts.py`
+- `?? backend/tests/test_mz2_shipping_contracts.py`
+
+البصمات الفعلية بعد الاسترجاع:
+- `backend/accounting_shipping_contracts.py` -> `9f25d896d9835dc36a29e91f2dab90de2cf8f1a4c2cec18f01d9fb097863b7c8`
+- `backend/tests/test_mz2_shipping_contracts.py` -> `61168e55eb400da907f8d0fb795f7c28155e968d22ff4f5b45eae14b8b83f0b2`
+- `backend/tests/test_courier_cod_fee_tiers_v2.py` -> `ff35204aaaecfb897869341c82b9c86b82d7580ce70fb397c617edfd76933f9c`
+
+وهي مطابقة تمامًا للبصمات التاريخية المعتمدة.
+
+admin metadata بقي:
+- HEAD -> `refs/heads/local/p02-stage1-ZMgPW8`
+- gitdir -> المسار المستعاد
+- commondir -> `../..`
+- lock -> `P02 PR1130 isolated stage1; preserve`
+
+أما SHA-256 لملف index فقد أصبح:
+`faed3c238a093b90ff7a29e741a55b89abd344693820ed098ee02c98a808d0f5`
+
+بدل البصمة السابقة:
+`e99e4d2a19781ee5bffe7c04956e9b72b795034458da5dadee05c59f754cd1de`
+
+### تفسير exit 1
+
+مراجعة مشغّل الاسترجاع تثبت أن آخر حاجز قبل طباعة `CONTRACT_SLICE_WORKTREE_RECOVERED_EXACTLY` يقارن SHA-256 البايتية لملف index بالبصمة القديمة. بما أن الشجرة والملفات الثلاثة والحالة وصلت إلى القيم المتوقعة، ثم ظهرت بصمة index الجديدة، فالخروج 1 يتفق مع توقف المشغّل عند حاجز `BLOCKED_INDEX_CHANGED_AFTER_RECOVERY`.
+
+لا يُعتبر تغير البصمة البايتية وحده staged change أو تغيرًا منطقيًا في index؛ يلزم تحقق قراءة فقط من `git diff --cached HEAD` وentries الحالية قبل متابعة V4.
+
+### /app
+
+بقي:
+- HEAD `6365a042dfcb125e81e5e198ea1ff1537373ce51`
+- branch `refs/heads/hotfix/prod-snap-meta-final`
+- status `?? .worktrees_p02_runtime.py`
+
+### الحكم
+
+`WORKTREE_AND_CONTRACT_SLICE_RECOVERED_EXACTLY / INDEX_BYTE_HASH_CHANGED / SEMANTIC_INDEX_CHECK_REQUIRED`
+
+#1130 ما زال `CHANGES_REQUIRED_NOT_READY_TO_APPLY`، وV4 check-only لم يُعد تشغيله بعد.
+
+### الخطوة الآمنة التالية
+
+فحص قراءة فقط للـindex بعد الاسترجاع:
+- `git diff --cached --name-status HEAD`
+- `git diff --cached --stat HEAD`
+- `git ls-files --stage` لمسارات CONTRACT_SLICE.
+- لا reset/add/checkout/prune/unlock/remove/repair/apply.
+
+إذا ظل cached diff فارغًا ولم توجد staged entries مختلفة، تُعامل بصمة index الجديدة كاختلاف تمثيل/metadata لا اختلاف محتوى، ثم يمكن إعادة تشغيل V4 check-only نفسه على worktree المستعاد.
+
+الحواجز لم تتغير: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`. لا Merge/Deploy/Preview/Production mutation أو كتابة مالية.
