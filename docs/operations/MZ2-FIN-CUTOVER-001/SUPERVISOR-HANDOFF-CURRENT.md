@@ -877,3 +877,41 @@ SHA-256:
 لا يعاد لصق المشغّل الضخم. الخطوة التالية الآمنة هي استخدام ملف Patch V4 نفسه بعد رفعه إلى بيئة Emergent، والتحقق من SHA-256 ثم `git apply --check` ثم `git apply` بأوامر قصيرة، مع فحص status والبصمات بعدها.
 
 الحواجز مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`. لا اختبارات أو Commit/Push/PR edit أو Merge/Deploy أو Preview/Production mutation أو كتابة مالية قبل مراجعة نتيجة التطبيق.
+
+
+---
+
+## نقطة التحقق SUP-20260922-16 — محاولة file-based apply لم تبدأ لأن ملف Patch غير موجود
+
+التاريخ: 2026-09-22. نفّذ المستخدم أوامر التطبيق القصيرة في طرفية Emergent، لكن المسار المتوقع للـPatch:
+
+`/tmp/p02-1130-isolated-review-v4.patch`
+
+لم يكن موجودًا.
+
+### النتيجة المتحققة
+
+- `sha256sum` أعاد: `No such file or directory`.
+- `git apply --check` لم يعمل لأن ملف Patch غير موجود.
+- `git apply` لم يعمل للسبب نفسه.
+- worktree HEAD بقي `20400fffb03594af8a38d6b4750c170233bd5f37`.
+- الحالة بقيت بالضبط:
+  - ` M backend/tests/test_courier_cod_fee_tiers_v2.py`
+  - `?? backend/accounting_shipping_contracts.py`
+  - `?? backend/tests/test_mz2_shipping_contracts.py`
+- بصمات CONTRACT_SLICE الثلاثة بقيت مطابقة للقيم المعتمدة.
+- `git diff --stat` بعد المحاولة أظهر فقط تعديل الملف المتتبع التاريخي: 7 إضافات / 6 حذوفات، ولا توجد مسارات V4 مطبقة.
+
+تحقق GitHub عند التوثيق:
+- #1130 ما زال مفتوحًا وDraft وغير مدموج عند Base `5292a87a476a140ae8c3c78e88dfba7d8c83f035` وHead `20400fffb03594af8a38d6b4750c170233bd5f37`.
+- #1133 قبل كتابة هذه النقطة عند Head `c39ecc0df9746d54047da14d9e0714913c024185`.
+
+### الحكم
+
+`PATCH_TRANSFER_MISSING / NO_APPLY_EFFECT`
+
+لا توجد حاجة لأي rollback أو استرجاع جديد. V4 ما زال جاهزًا للتطبيق المعزول بمجرد نقل بايتات Patch الصحيحة إلى Emergent.
+
+الخطوة الآمنة التالية: نقل Patch V4 إلى `/tmp` بطريقة قصيرة ومتحققة من SHA-256، ثم تنفيذ apply-check والتطبيق. لا اختبارات أو Commit/Push قبل مراجعة نتيجة التطبيق.
+
+الحواجز مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`.
