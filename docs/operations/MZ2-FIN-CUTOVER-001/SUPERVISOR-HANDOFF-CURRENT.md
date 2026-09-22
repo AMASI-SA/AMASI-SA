@@ -1199,3 +1199,70 @@ status بعد التطبيق يتكون من الحالة التاريخية + �
 لا تثبيت نظامي، لا تعديل دائم لـPATH/HOME، لا كتابة إلى /app، لا #1126، ولا Commit/Push.
 
 الحواجز: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`.
+
+
+---
+
+## نقطة التحقق SUP-20260922-23 — V4: نجاح 45/45 اختبارًا معزولًا على CPython 3.13.15
+
+التاريخ: 2026-09-22. هذه النقطة توثق نتيجة التشغيل الفعلية التي أرسلها المستخدم من طرفية Emergent.
+
+### بيئة الاختبار
+
+- uv: `0.12.17 (aarch64-unknown-linux-gnu)`.
+- runtime: `CPython 3.13.15`.
+- venv: `/tmp/mz2-p02-v4-uv.yu9C05/venv`.
+- target HEAD: `20400fffb03594af8a38d6b4750c170233bd5f37`.
+- target branch: `refs/heads/local/p02-stage1-ZMgPW8`.
+
+### النتائج
+
+اختبار V4 الأول:
+`backend/tests/test_mz2_shipping_contract_isolation.py`
+- `Ran 32 tests`
+- `OK`
+- exit 0.
+
+اختبار V4 الثاني:
+`backend/tests/test_mz2_shipping_payment_evidence.py`
+- `Ran 13 tests`
+- `OK`
+- exit 0.
+
+ملخص المشغّل:
+- `PYTHON=3.13.15`
+- `ISOLATION_EXIT=0`
+- `ISOLATION_32=PASS`
+- `PAYMENT_EXIT=0`
+- `PAYMENT_13=PASS`
+- `STATUS_UNCHANGED=PASS`
+- `FILES_UNCHANGED=PASS`
+- `DIFF_CHECK_EXIT=0`
+- `COMMIT=NONE`
+- `PUSH=NONE`
+- `P02=LOCKED`
+- `RESULT=V4_45_ISOLATED_TESTS_PASS_ONLY`
+- `P02_V4_TEST_RC=0`.
+
+### تفسير النتيجة
+
+هذه بوابة PASS فعلية لـ45 اختبار V4 الجديد على الـHead المستهدف وحالة worktree الحالية. لا توجد كتابة مالية أو قاعدة بيانات حقيقية أو HTTP/Frontend/UAT في هذه البوابة.
+
+V4 نفسها تشير إلى 43 اختبارًا سابقًا لعقد الشحن/الحاسبة/legacy (13 + 25 + 5)، ليصبح إجمالي المجموعات المكتوبة 88 عند جمعها مع 45 الجديدة. نتيجة الـ45 لا تُنقل تلقائيًا إلى الـ43 القديمة ولا تحل محل إعادة regression على الشجرة المجمعة قبل Commit.
+
+### الحكم
+
+`V4_45_ISOLATED_TESTS_PASS / COMBINED_43_REGRESSION_GATE_NEXT`
+
+الخطوة الآمنة التالية قبل أي Commit/Push:
+- إعادة تشغيل اختبارات CONTRACT_SLICE التاريخية الثلاثة على **الشجرة الحالية بعد V4**:
+  1. calculator: 13 tests
+  2. contracts: 25 tests
+  3. legacy COD tiers: 5 pytest cases
+- استخدام نفس CPython 3.13.15/venv الحالية إن بقيت متاحة.
+- حفظ status/bytes قبل وبعد والتأكد أن V4 وCONTRACT_SLICE لم يتغيرا.
+- لا تطبيق #1126 في هذه الدفعة.
+
+إذا اجتازت 43/43 مع ثبات الحالة، يصبح الدليل الحالي 88/88 isolated/regression على نفس worktree، وعندها يمكن تقييم بوابة Commit/Push مستقلة.
+
+الحواجز العامة مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`. لا Merge/Deploy/Preview/Production mutation أو كتابة مالية.
