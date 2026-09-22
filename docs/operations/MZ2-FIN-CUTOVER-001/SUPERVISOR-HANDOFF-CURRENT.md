@@ -675,3 +675,51 @@ admin metadata بقي:
 إذا ظل cached diff فارغًا ولم توجد staged entries مختلفة، تُعامل بصمة index الجديدة كاختلاف تمثيل/metadata لا اختلاف محتوى، ثم يمكن إعادة تشغيل V4 check-only نفسه على worktree المستعاد.
 
 الحواجز لم تتغير: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`. لا Merge/Deploy/Preview/Production mutation أو كتابة مالية.
+
+
+---
+
+## نقطة التحقق SUP-20260922-12 — تحقق دلالي من index بعد استرجاع worktree #1130
+
+التاريخ: 2026-09-22. هذه النقطة توثق فحص القراءة فقط بعد استرجاع الشجرة المادية.
+
+### النتيجة المتحققة من طرفية Emergent
+
+- `git diff --cached --name-status HEAD`: فارغ.
+- `git diff --cached --stat HEAD`: فارغ.
+- مدخل CONTRACT_SLICE المتتبع في index ما زال:
+  `100644 b0044e15a48ee15b3669e42f94e7b57f336187c4 0 backend/tests/test_courier_cod_fee_tiers_v2.py`.
+- SHA-256 البايتية الحالية لملف index:
+  `faed3c238a093b90ff7a29e741a55b89abd344693820ed098ee02c98a808d0f5`.
+- حالة worktree ما زالت بالضبط:
+  - ` M backend/tests/test_courier_cod_fee_tiers_v2.py`
+  - `?? backend/accounting_shipping_contracts.py`
+  - `?? backend/tests/test_mz2_shipping_contracts.py`
+- `/app` بقي عند HEAD `6365a042dfcb125e81e5e198ea1ff1537373ce51` / `refs/heads/hotfix/prod-snap-meta-final` مع `?? .worktrees_p02_runtime.py`.
+
+### الحكم
+
+`INDEX_SEMANTICALLY_UNCHANGED / RECOVERED_WORKTREE_READY_FOR_V4_CHECK_ONLY`
+
+اختلاف SHA لملف index عن البصمة السابقة لا يمثل staged content change؛ الـcached diff فارغ ومدخل الملف المتتبع ما زال Blob HEAD نفسه. لا حاجة لإعادة تشغيل recovery ولا لتعديل index.
+
+### هوية GitHub عند القرار
+
+- #1130: مفتوح، Draft، غير مدموج، Base `5292a87a476a140ae8c3c78e88dfba7d8c83f035`، Head `20400fffb03594af8a38d6b4750c170233bd5f37`.
+- #1131: Head `29e4cd940b195df0164fe7bc74b07c77a0a02bfc`.
+- #1132: Head `405883c34f81c5d17625083b11e3c608662023af`، Base SHA المعلن في PR ما زال `ab3ef10c5aedfe5e2190bc57bb8ed26afc1347f2`.
+- #1133 قبل كتابة هذه النقطة: Head `c42d4a99b0f9acd317c0c40000acc95d9ddf1a5d`.
+
+### الخطوة الآمنة التالية
+
+تشغيل **نفس** مشغّل V4 check-only المراجع سابقًا، SHA-256:
+`c6fa5d8eed7d4ec4b061e0f2b63b24237dce1e2096671c2dffbf16fe1a21d8cb`
+
+على worktree المستعاد. لا تشغيل recovery مرة أخرى، ولا تطبيق Patch، ولا اختبارات. المطلوب فقط نتيجة:
+- `git status --short` قبل/بعد لـ/app والـworktree.
+- `P02_1130_V4_CHECK_ONLY_RESULT`.
+- `git apply --stat` و`git apply --numstat`.
+
+إذا كانت النتيجة `PATCH1130_V4_APPLY_CHECK_PASS_ONLY` فهي تثبت قابلية التطبيق فقط ولا تفوض التطبيق أو الاختبارات أو Commit/Push.
+
+الحواجز مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`.
