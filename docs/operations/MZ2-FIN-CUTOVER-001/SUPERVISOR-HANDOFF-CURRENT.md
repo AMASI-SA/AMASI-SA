@@ -301,3 +301,60 @@
 - لم يُعدل كود #1130 أو #1131 أو #1132، ولم يُطبق Patch، ولم تُشغّل اختبارات.
 - لا Merge، لا Deploy، لا Preview/Production mutation، ولا كتابة مالية.
 - `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`.
+
+
+---
+
+## نقطة التحقق SUP-20260922-04 — نتيجة تشغيل V4 check-only في Emergent
+
+التاريخ: 2026-09-22. هذه النقطة توثق تشغيل المستخدم لمشغّل V4 المراجع داخل طرفية Emergent الأصلية، دون تطبيق أو اختبار.
+
+### هوية GitHub عند التوثيق
+
+- #1130 ما زال مفتوحًا وDraft وغير مدموج: Base `5292a87a476a140ae8c3c78e88dfba7d8c83f035`، Head `20400fffb03594af8a38d6b4750c170233bd5f37`.
+- #1133 قبل كتابة هذه النقطة عند Head `1a7a3a40f89ad7b73dd9f7a4b6a707a32dd6c7e1`.
+
+### نتيجة التشغيل الفعلية المرسلة من طرفية Emergent
+
+المشغّل وصل إلى `/app` ونجح في أخذ snapshot له، لكنه لم يجد المسار المثبت للـworktree:
+
+`/tmp/mz2-p02-stage1.ZMgPW8/worktree`
+
+والنتيجة الفعلية:
+
+`BLOCKED_EMERGENT_WORKTREE_ACCESS`
+
+المشاهدات المهمة:
+
+- `/app` قبل وبعد:
+  - HEAD `6365a042dfcb125e81e5e198ea1ff1537373ce51`
+  - branch `refs/heads/hotfix/prod-snap-meta-final`
+  - `git status --short`: `?? .worktrees_p02_runtime.py`
+  - index SHA-256 `42e67fc54cff66a9641f67bbdc0b3c0c8d07cb0860cf2fb5fb2eb850ec5bc5c0`
+  - content manifest SHA-256 `e7d7bb4bad9b91296b3f0e6d2043ff0b262d823868c5c8898471542605330a19`
+  - file count 2757
+- snapshot قبل وبعد لـ`/app` متطابق في البيانات المرسلة.
+- worktree snapshot قبل وبعد: unavailable/null.
+- `git apply --check` و`--stat` و`--numstat`: لم تُشغّل.
+- `commands` فارغة، `applied=false`, `tests=NOT_RUN`, `commit=NONE`, `push=NONE`, `pr_edited=false`.
+- Preview وProduction معلنان unchanged by this check؛ لم يُستخدم أي مسار تطبيق أو كتابة مالية.
+
+### الحكم
+
+`TARGET_WORKTREE_MISSING / CHECK_NOT_RUN`
+
+ويظل الحكم التشغيلي:
+
+`CHANGES_REQUIRED_NOT_READY_TO_APPLY`
+
+لا يوجد PASS لقابلية التطبيق بعد. ثبات `/app` لا يعوض غياب الـworktree الهدف.
+
+### الخطوة الآمنة التالية
+
+تشخيص قراءة فقط لمواقع worktrees المسجلة في Git، دون إنشاء أو حذف أو prune أو reset أو checkout:
+
+- `git -C /app worktree list --porcelain`
+- فحص وجود المسار القديم ودليل الأب فقط.
+- لا يُنشأ worktree جديد ولا يُعاد استخدام مسار مختلف حتى يراجع المشرف هوية HEAD/branch/common-dir ويقرر الخطوة التالية.
+
+الحواجز لم تتغير: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`. لا Merge/Deploy/Preview/Production mutation ولا كتابة مالية.
