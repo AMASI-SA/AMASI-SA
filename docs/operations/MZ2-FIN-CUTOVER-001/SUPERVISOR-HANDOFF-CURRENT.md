@@ -1498,3 +1498,61 @@ Git blob SHA:
 لا Commit/Push/PR edit أو #1126 أو Merge/Deploy/Preview/Production mutation أو كتابة مالية قبل مراجعة نتيجة الـ88.
 
 الحواجز مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`.
+
+
+---
+
+## نقطة التحقق SUP-20260922-28 — تجهيز Runner اختبار 88 على الحالة المجمعة الحالية بحارس index دلالي
+
+التاريخ: 2026-09-22. بعد إثبات أن الحاجز السابق ناتج من SHA خام لملف index، جُهز Runner جديد **لا يعيد البناء** ولا يعتمد على raw index bytes. يفترض فقط أن worktree المجمعة التي أعادها SUP-27 ما زالت موجودة.
+
+### Artifact الجديد
+
+المسار:
+`docs/operations/MZ2-FIN-CUTOVER-001/P02-1130-RESUME-EXACT-88.sh`
+
+commit:
+`e588fcc7770a408f4070f1f478d85304639f62de`
+
+Git blob:
+`65920c66d9b4f6f727626f289837f6d32911409a`
+
+البصمة المحلية SHA-256:
+`0a94fc9c9c7aef5333fb85325aa4453846e8ea93da889ac2464741fd9e3a7ab0`
+
+تم فحصه محليًا بـ`bash -n`: PASS. كما أن `git hash-object` المحلي أعاد نفس Git blob `65920c66...` الموجود على GitHub، ما يثبت تطابق البايتات المرفوعة.
+
+### سلوك Runner
+
+- لا يكتب CONTRACT_SLICE أو V4 ولا يعيد تطبيق Patch.
+- يشترط وجود worktree الحالية عند Head `20400ff...` والفرع المحلي الصحيح.
+- يتحقق من /app كما هو.
+- يتحقق من status النهائي المتوقع.
+- يتحقق من SHA-256 لجميع ملفات الحالة المجمعة الـ11.
+- يتحقق أن:
+  - `git diff --cached --name-status HEAD` فارغ.
+  - `git ls-files --unmerged` فارغ.
+- يسجل semantic index manifest من `git ls-files --stage` ويقارن قبل/بعد الاختبارات.
+- يسجل raw index SHA للمعلومات فقط ولا يستخدمه كحارس.
+- ينشئ CPython 3.13.15 مؤقتًا عبر uv.
+- يشغّل 88:
+  - V4 isolation 32
+  - V4 payment 13
+  - calculator 13
+  - contracts 25
+  - legacy 5
+- يتحقق بعد الاختبارات من ثبات status/files/semantic-index/app و`git diff --check`.
+- لا git add/commit/push/PR edit، ولا #1126، ولا Merge/Deploy/Preview/Production أو كتابة مالية.
+
+نتيجة النجاح المستهدفة:
+`RESULT=EXACT_COMBINED_88_OF_88_PASS_ONLY`
+
+### GitHub identity عند القرار
+
+- #1130 ما زال open/Draft/unmerged عند Base `5292a87...` وHead `20400ff...`.
+- #1133 قبل هذه النقطة عند Head `e588fcc7770a408f4070f1f478d85304639f62de`.
+
+الحكم:
+`EXACT_COMBINED_WORKTREE_READY_FOR_SEMANTIC_INDEX_88_GATE`
+
+الحواجز مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`.
