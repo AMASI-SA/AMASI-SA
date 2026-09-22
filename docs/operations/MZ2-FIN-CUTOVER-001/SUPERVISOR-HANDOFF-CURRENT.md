@@ -1668,3 +1668,64 @@ V4 الحالية تثبت إغلاق المسار غير المتكامل؛ ل�
 - إعداد مساعد قراءة فقط محلي `/mnt/data/mz2-preview-review/preview-preflight-readonly.sh`، 2420 بايت؛ SHA-256 `74718493da9f66a1624b1f7289a624089e4f22c7bba96f7c08f5800a0e9b7573`. نجح `bash -n` وتحليل Python المضمّن عبر AST؛ لم يُنفذ المساعد على Emergent، ولم تُشغّل اختبارات التطبيق.
 - لا تغيير لمصدر #1130 أو فرع Production أو أي إعداد خدمة أو قاعدة بيانات في هذه المراجعة. تحديث Issue #1006 والقراءة البعيدة بعد الحفظ يوثقان بعد تأكيد الأداة.
 - `PREVIEW_DEPLOYED=false`, `PRODUCTION_DEPLOYED=false`, `FINANCIAL_WRITES=NONE`, `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`.
+
+
+---
+
+## نقطة التحقق SUP-20260923-30 — مراجعة عقد #1131 قبل تفويض Preview-first
+
+التاريخ: 2026-09-23. راجع المشرف الملف الذي أرسله المالك بعنوان `تم لصق markdown(20260922-211354).md`، وهو تقرير تحديث عقد #1131، ثم أعاد قراءة أحدث هويات #1124/#1130/#1131/#1132 من GitHub.
+
+### ما يثبته ملف #1131
+
+الوثيقة تؤكد أن #1131 عند Head:
+`29e4cd940b195df0164fe7bc74b07c77a0a02bfc`
+
+وتثبت خمس قرارات تعاقدية مستهدفة:
+1. صفحة `financial-accounts` صفحة محاسبية تاسعة مستقلة، مع `accounting.financial_accounts.view/manage`.
+2. الافتتاحيات الموحدة تبقى شاملة للأقسام السبعة وفئات العملاء/الضرائب/الذمم، ولا تُحصر في أنواع الحسابات المالية الخمسة.
+3. مفاتيح مستقلة لمسودة الافتتاحية والمراجعة والترحيل، وعدم إعادة تفسير `accounting.opening_balances.approve`.
+4. حفظ الأصل عبر `accounting_source_files.py::preserve_original` مع امتداد اعتماد أدلة افتتاحية وحماية النسخة المعتمدة؛ الوثيقة تصرح أن هذا الامتداد غير منفذ.
+5. هدف التخزين والترحيل هو `accounting_ledger_v2` مع تكييف #1116 وحماية #1124، وحاجز انتقال `legacy_active -> transition_blocked -> v2_active` دون GL ثالث أو fallback.
+
+الوثيقة نفسها تصرح:
+- Backend = NOT_STARTED
+- Frontend = NOT_STARTED
+- Tests = NOT_RUN
+- CI = NOT_RUN
+- Preview = UNCHANGED
+- Production = UNCHANGED
+- IMPLEMENTATION_GATE_BLOCKED
+
+إذًا #1131 **مواصفة معمارية ملزمة وليست وظيفة قابلة للنشر حاليًا**.
+
+### أحدث هوية GitHub عند القرار
+
+- #1124: open/Draft/unmerged، Head `5292a87a476a140ae8c3c78e88dfba7d8c83f035`.
+- #1130: open/Draft/unmerged، Head `20400fffb03594af8a38d6b4750c170233bd5f37`; دليل 88/88 يخص working tree مركبة غير منشورة بعد.
+- #1131: open/Draft/unmerged، Head `29e4cd940b195df0164fe7bc74b07c77a0a02bfc`; توثيق فقط.
+- #1132: open/Draft/unmerged، Head `405883c34f81c5d17625083b11e3c608662023af`; R1–R5 ما زالت غير منشورة وفق آخر مراجعة، وBase المعلن في PR أقدم من Head #1131 الحالي.
+
+### قرار خطة Preview
+
+طلب المالك أصبح:
+**حفظ المصدر، إكمال المحاسبة على Preview، ثم اختبار المرشح لمدة أسبوع قبل أي قرار Production.**
+
+هذا يغير ترتيب التنفيذ الآمن:
+1. لا يُنشر #1130 وحده ويُسمى «المحاسبة المكتملة».
+2. يُحفظ أولًا مصدر #1130 المختبر في فرعه Draft، ثم تُراجع CI الجديدة.
+3. يُنفذ عقد #1131 فعليًا في مصدر مضبوط ومتكامل مع #1124/V2، مع Backend/Frontend/permissions/evidence/transition/tests.
+4. إذا كان نطاق «المحاسبة الكاملة» يشمل الحسابات الإعلانية، فلا تُعد #1132 مكتملة أو جاهزة للدمج حتى نشر R1–R5 ومراجعتها على Base الحالي.
+5. يُبنى Preview candidate من رؤوس مصدر محددة ومراجعة، لا من ملفات /tmp أو خلط PRs غير متحقق.
+6. Preview يجب أن يبقى معزول البيانات والاتصالات عن Production وأن يستخدم topology معاملات مناسبة للاختبارات المالية.
+7. يبدأ أسبوع UAT فقط بعد تثبيت candidate SHA وإكمال السيناريوهات الأساسية المطلوبة؛ أي تعديل خلال الأسبوع يوثق وقد يتطلب إعادة الاختبارات المتأثرة.
+8. انتهاء أسبوع لا يفوض Production. Production يحتاج مراجعة وقبول وتفويض مستقل لاحقًا.
+
+### الحكم
+
+`PR1131_CONTRACT_REVIEWED / IMPLEMENTATION_REQUIRED_BEFORE_COMPLETE_PREVIEW_UAT`
+
+لا يوجد مانع من بدء **التطوير والنشر إلى Preview** بعد حفظ المصدر والتحقق من العزل، لكن يمنع وصف Preview بأنها محاسبة مكتملة إذا بقيت #1131 غير منفذة أو بقيت وظائف مطلوبة BLOCKED.
+
+الحواجز:
+`P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`, `PRODUCTION_DEPLOY=NOT_AUTHORIZED`.
