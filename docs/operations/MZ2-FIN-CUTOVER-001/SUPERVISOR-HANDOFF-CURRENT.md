@@ -1113,3 +1113,50 @@ status بعد التطبيق يتكون من الحالة التاريخية + �
 إذا وُجد runtime 3.13 موثوق، تُعاد نفس بوابة الاختبارات فقط. إذا لم يوجد، يُقرر لاحقًا بين runtime مؤقت معزول مثبت ببصمة أو تشغيل CI بعد تفويض مستقل؛ لا downgrade غير معلن إلى 3.11 كقبول.
 
 الحواجز مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`. لا Commit/Push/PR edit أو Merge/Deploy أو Preview/Production mutation أو كتابة مالية.
+
+
+---
+
+## نقطة التحقق SUP-20260922-21 — مسار Python 3.13.15 المؤقت عبر uv
+
+التاريخ: 2026-09-22. بعد حاجز غياب Python 3.13، نفذ المستخدم تشخيصًا قراءة فقط.
+
+### البيئة الفعلية في Emergent
+
+- `python3.13`: غير موجود.
+- `python3.12`: غير موجود.
+- `python3.11`: `/usr/local/bin/python3.11`.
+- `python3 --version`: `Python 3.11.16`.
+- `uv`: موجود في `/opt/bin/uv`.
+- `pyenv`, `mise`, `asdf`: غير موجودة.
+- `docker`, `podman`: غير موجودة.
+- البحث المحدود لم يجد runtime Python 3.13 جاهزًا.
+- worktree بقي عند Head `20400fffb03594af8a38d6b4750c170233bd5f37` وبنطاق V4 + CONTRACT_SLICE المتوقع.
+
+### تحقق مستقل من GitHub Actions التاريخي
+
+راجع المشرف run `35653351758` / job `106510834586` الخاص بـ`P02 disposable offline test tools`.
+
+سجل `actions/setup-python@v5` يثبت أن الطلب `python-version: 3.13` حُل فعليًا إلى:
+
+`CPython 3.13.15`
+
+ومساره على runner كان:
+`/opt/hostedtoolcache/Python/3.13.15/x64`.
+
+هذا يحدد runtime الاختبار المرجعي بدقة لهذه البوابة.
+
+### الحكم
+
+`PYTHON_31315_REFERENCE_VERIFIED / UV_TEMP_RUNTIME_AUTHORIZED`
+
+الخطوة التالية المسموحة:
+- استخدام `/opt/bin/uv` لجلب CPython **3.13.15 بالضبط** إلى دليل مؤقت تحت `/tmp`.
+- تعيين `UV_PYTHON_INSTALL_DIR` و`UV_CACHE_DIR` إلى أدلة مؤقتة خاصة بالاختبار.
+- إنشاء venv مؤقت واستخدام `uv pip` لتثبيت حزم الاختبار المحددة سابقًا.
+- التحقق من `Python 3.13.15` قبل تشغيل أي test.
+- ثم تشغيل ملفي V4 الجديدين فقط (32 + 13).
+
+لا apt/system install، لا تعديل PATH دائم، لا كتابة داخل /app، لا #1126، لا Commit/Push/PR edit.
+
+الحواجز مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`.
