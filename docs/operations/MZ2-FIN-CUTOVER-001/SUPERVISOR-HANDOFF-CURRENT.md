@@ -448,3 +448,33 @@
 لا كتابة أو تنظيف أو استرجاع في هذه الخطوة.
 
 الحواجز مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`. لا Patch apply ولا Tests ولا Merge/Deploy ولا Preview/Production mutation ولا كتابة مالية.
+
+
+---
+
+## نقطة التحقق SUP-20260922-07 — index worktree #1130 مطابق لـHEAD ولا توجد عملية Git عالقة
+
+التاريخ: 2026-09-22. هذه النقطة توثق مخرجات فحص القراءة فقط للـindex الإداري الخاص بالـworktree المفقود.
+
+### النتيجة المتحققة
+
+- admin gitdir: `/app/.git/worktrees/worktree` موجود.
+- HEAD الإداري والفرع المحلي كلاهما يشيران إلى `20400fffb03594af8a38d6b4750c170233bd5f37` / `refs/heads/local/p02-stage1-ZMgPW8`.
+- `git diff --cached --name-status HEAD`: فارغ.
+- `git diff --cached --stat HEAD`: فارغ.
+- لا توجد `MERGE_HEAD`, `CHERRY_PICK_HEAD`, `REVERT_HEAD`, `REBASE_HEAD`, `BISECT_START`, ولا أدلة `rebase-merge`, `rebase-apply`, `sequencer`.
+- index SHA-256 أعيد التحقق منه وبقي `e99e4d2a19781ee5bffe7c04956e9b72b795034458da5dadee05c59f754cd1de`.
+- ضمن المسارات الثلاثة للـCONTRACT_SLICE، الـindex يحتوي فقط الملف المتتبع `backend/tests/test_courier_cod_fee_tiers_v2.py` عند blob `b0044e15a48ee15b3669e42f94e7b57f336187c4`. الملفان الآخران كانا untracked في الحالة التاريخية، ولذلك غيابهما من الـindex متوقع ولا يثبت فقد بايتاتهما نهائيًا.
+- `/app` بقي عند `6365a042dfcb125e81e5e198ea1ff1537373ce51` على `refs/heads/hotfix/prod-snap-meta-final` مع `?? .worktrees_p02_runtime.py`.
+
+### الحكم
+
+`INDEX_MATCHES_HEAD / NO_GIT_OPERATION_IN_PROGRESS / WORKING_TREE_ONLY_STATE_UNRESOLVED`
+
+الـindex لا يحمل staged changes تحتاج إنقاذًا، لكن الحالة التاريخية للـworktree كانت تحتوي ملفًا متتبعًا معدلًا وملفين untracked للـCONTRACT_SLICE. هذه البايتات ليست ممثلة في الـindex، لذلك لا يُعاد إنشاء أو إصلاح worktree قبل محاولة العثور على نسخها المحفوظة قراءة فقط.
+
+### الخطوة الآمنة التالية
+
+بحث قراءة فقط عن نسخ CONTRACT_SLICE أو بصماتها في `/app` وملف المساعدة `.worktrees_p02_runtime.py`، وفحص نسخة HEAD للملف المتتبع لمقارنة SHA-256 مع البصمة التاريخية. لا `worktree add/repair/prune/unlock/remove` ولا checkout/reset/apply.
+
+الحواجز مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`. لا تطبيق أو اختبارات أو Merge/Deploy أو Preview/Production mutation أو كتابة مالية.
