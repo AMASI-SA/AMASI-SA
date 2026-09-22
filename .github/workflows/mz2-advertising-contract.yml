@@ -1,0 +1,58 @@
+name: MZ2 Advertising Isolated Contracts
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - "backend/accounting_advertising_contract.py"
+      - "backend/tests/test_accounting_advertising_contract.py"
+      - "frontend/src/pages/accounting/AdvertisingAccountsDraft*"
+      - "frontend/src/pages/accounting/advertisingAccountsDraftContract*"
+      - ".github/workflows/mz2-advertising-contract.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  advertising-backend-contract:
+    name: Advertising pure backend contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Synthetic pure contracts only - no DB or endpoints
+        env:
+          PYTHONPATH: backend
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python -m unittest discover -s backend/tests -p test_accounting_advertising_contract.py -v
+
+  advertising-frontend-contract:
+    name: Advertising isolated frontend contracts and DOM
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.23.2"
+      - name: Pure display contract tests
+        run: node --test frontend/src/pages/accounting/advertisingAccountsDraftContract.node.test.mjs
+      - name: Enable governed Yarn version
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install existing locked frontend dependencies
+        working-directory: frontend
+        run: yarn install --frozen-lockfile --non-interactive
+      - name: Actual isolated React DOM tests
+        working-directory: frontend
+        env:
+          CI: "true"
+        run: yarn test --watchAll=false --runInBand src/pages/accounting/AdvertisingAccountsDraft.test.jsx
