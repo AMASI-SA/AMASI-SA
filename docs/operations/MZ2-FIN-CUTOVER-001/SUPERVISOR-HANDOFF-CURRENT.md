@@ -358,3 +358,48 @@
 - لا يُنشأ worktree جديد ولا يُعاد استخدام مسار مختلف حتى يراجع المشرف هوية HEAD/branch/common-dir ويقرر الخطوة التالية.
 
 الحواجز لم تتغير: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`. لا Merge/Deploy/Preview/Production mutation ولا كتابة مالية.
+
+
+---
+
+## نقطة التحقق SUP-20260922-05 — اكتشاف worktree #1130 المفقود ماديًا
+
+التاريخ: 2026-09-22. هذه النقطة توثق مخرجات فحص القراءة فقط التي أرسلها المستخدم من طرفية Emergent الأصلية بعد SUP-20260922-04.
+
+### النتيجة المتحققة من المخرجات
+
+`git -C /app worktree list --porcelain` ما زال يسجل worktree خاص #1130:
+
+- path: `/tmp/mz2-p02-stage1.ZMgPW8/worktree`
+- HEAD: `20400fffb03594af8a38d6b4750c170233bd5f37`
+- branch: `refs/heads/local/p02-stage1-ZMgPW8`
+- lock reason: `P02 PR1130 isolated stage1; preserve`
+
+لكن الفحص المباشر للمسار أعاد `No such file or directory` لكل من دليل الأب والـworktree نفسه. أي أن سجل Git الإداري ما زال موجودًا ومقفولًا، بينما شجرة العمل المادية في `/tmp` اختفت.
+
+`/app` بقي عند:
+
+- HEAD `6365a042dfcb125e81e5e198ea1ff1537373ce51`
+- branch `refs/heads/hotfix/prod-snap-meta-final`
+- status الوحيد الظاهر: `?? .worktrees_p02_runtime.py`
+
+### الحكم
+
+`LOCKED_WORKTREE_REGISTRATION_PRESENT / WORKTREE_DIRECTORY_MISSING`
+
+لا يجوز اعتبار المسار prunable أو حذفه تلقائيًا لأن Git يعرضه مقفولًا صراحةً بسبب `preserve`. لا `git worktree prune` ولا `unlock` ولا `remove` ولا إنشاء worktree بديل قبل فحص metadata الإدارية والمرجع المحلي قراءة فقط.
+
+يبقى #1130 عند `CHANGES_REQUIRED_NOT_READY_TO_APPLY`; `git apply --check` لم يُشغّل بعد.
+
+### الخطوة الآمنة التالية
+
+فحص قراءة فقط لهوية metadata الخاصة بالـworktree المقفول والفرع المحلي، بما يشمل:
+
+- common git dir وworktrees admin dir.
+- مرجع `refs/heads/local/p02-stage1-ZMgPW8` وقيمته.
+- ملفات metadata المطابقة التي تشير إلى `/tmp/mz2-p02-stage1.ZMgPW8/worktree`.
+- محتوى `gitdir`, `HEAD`, `commondir`, `locked` وبصمة/حجم `index` إن وجدت.
+
+لا تعديل أو حذف للـmetadata في هذه الخطوة.
+
+الحواجز لم تتغير: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`. لا تطبيق أو اختبارات أو Merge/Deploy أو Preview/Production mutation أو كتابة مالية.
