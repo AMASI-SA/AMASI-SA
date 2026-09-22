@@ -403,3 +403,48 @@
 لا تعديل أو حذف للـmetadata في هذه الخطوة.
 
 الحواجز لم تتغير: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`. لا تطبيق أو اختبارات أو Merge/Deploy أو Preview/Production mutation أو كتابة مالية.
+
+
+---
+
+## نقطة التحقق SUP-20260922-06 — metadata worktree #1130 محفوظة والـindex متاح
+
+التاريخ: 2026-09-22. هذه النقطة توثق مخرجات فحص metadata القراءة فقط من طرفية Emergent الأصلية.
+
+### الهوية المتحققة
+
+- #1130 ما زال مفتوحًا وDraft وغير مدموج عند Base `5292a87a476a140ae8c3c78e88dfba7d8c83f035` وHead `20400fffb03594af8a38d6b4750c170233bd5f37`.
+- سجل worktree الإداري المطابق موجود في `.git/worktrees/worktree`.
+- `gitdir`: `/tmp/mz2-p02-stage1.ZMgPW8/worktree/.git`.
+- `HEAD` داخل metadata: `ref: refs/heads/local/p02-stage1-ZMgPW8`.
+- المرجع المحلي `refs/heads/local/p02-stage1-ZMgPW8` ما زال يشير إلى `20400fffb03594af8a38d6b4750c170233bd5f37`.
+- `commondir`: `../..`.
+- lock reason: `P02 PR1130 isolated stage1; preserve`.
+- ملف index الإداري موجود: size `325797`, mode `600`, SHA-256 `e99e4d2a19781ee5bffe7c04956e9b72b795034458da5dadee05c59f754cd1de`.
+
+### /app
+
+- HEAD `6365a042dfcb125e81e5e198ea1ff1537373ce51`.
+- branch `refs/heads/hotfix/prod-snap-meta-final`.
+- status الوحيد المرسل: `?? .worktrees_p02_runtime.py`.
+
+### الحكم
+
+`WORKTREE_ADMIN_METADATA_INTACT / PHYSICAL_TREE_MISSING / INDEX_PRESERVED`
+
+لا يوجد بعد دليل أن محتوى الـindex مطابق تمامًا لـHEAD أو يحتوي staged changes. كذلك الـindex لا يثبت أو يستعيد تلقائيًا أي ملفات untracked أو تعديلات working-tree غير staged كانت موجودة قبل اختفاء مجلد `/tmp`.
+
+لذلك لا يُنشأ worktree جديد ولا يُعمل prune/unlock/remove/repair قبل فحص الفرق بين الـindex المحفوظ وHEAD قراءة فقط.
+
+### الخطوة الآمنة التالية
+
+تشغيل تشخيص قراءة فقط على gitdir الإداري `.git/worktrees/worktree`:
+
+- `git diff --cached --name-status HEAD`
+- `git diff --cached --stat HEAD`
+- `git status` غير مطلوب لأن شجرة العمل المادية مفقودة.
+- فحص ملفات حالة Git الإدارية مثل `MERGE_HEAD`, `CHERRY_PICK_HEAD`, `REBASE_HEAD` ووجود أدلة rebase/merge دون تعديل.
+
+لا كتابة أو تنظيف أو استرجاع في هذه الخطوة.
+
+الحواجز مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`. لا Patch apply ولا Tests ولا Merge/Deploy ولا Preview/Production mutation ولا كتابة مالية.
