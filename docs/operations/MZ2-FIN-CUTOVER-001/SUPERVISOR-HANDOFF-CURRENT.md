@@ -796,3 +796,55 @@ admin metadata بقي:
 - لا Commit/Push/PR edit قبل مراجعة نتيجة التطبيق.
 
 الحواجز العامة مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`. لا Merge/Deploy/Preview/Production mutation أو كتابة مالية.
+
+
+---
+
+## نقطة التحقق SUP-20260922-14 — إعداد مشغّل تطبيق V4 المعزول فقط
+
+التاريخ: 2026-09-22. بعد قبول `PATCH1130_V4_APPLY_CHECK_PASS_ONLY`، أُعد خارج Emergent مشغّل تطبيق واحد مقيد باسم:
+
+`p02-1130-v4-apply-only.sh`
+
+SHA-256:
+`dcd64ff12b32b6d53f4f6d8d18c426e02e8d3819b8f03630b6c77fe3bf80d86a`
+
+الحجم: 129394 بايت. `bash -n`: PASS. المشغّل لم يُنفذ بعد.
+
+### حدود المشغّل
+
+قبل التطبيق يعيد التحقق من:
+- /app HEAD/branch/status.
+- worktree `/tmp/mz2-p02-stage1.ZMgPW8/worktree`.
+- Head `20400fffb03594af8a38d6b4750c170233bd5f37` والفرع `refs/heads/local/p02-stage1-ZMgPW8`.
+- Base/merge-base وorigin.
+- عدم وجود staged changes.
+- الحالة التاريخية الثلاثية فقط.
+- بصمات CONTRACT_SLICE الثلاثة.
+- Blob وworking bytes لـ`backend/accounting_module_contract.py`.
+- عدم وجود مسارات V4 الجديدة مسبقًا.
+- SHA-256 للـPatch المضمّن `14156ef2a45ae489df1d4afcda4c65f4b0804a737837ffbe93cc86f5e7b21d4a`.
+- `git apply --check -` مرة أخيرة قبل التطبيق.
+
+بعد ذلك ينفذ فقط:
+`git apply -`
+على الـworktree المعزول نفسه.
+
+بعد التطبيق يتحقق من:
+- Head/branch لم يتغيرا.
+- index لا يحمل staged changes وبصمته البايتية لم تتغير خلال التطبيق.
+- /app لم يتغير.
+- CONTRACT_SLICE الثلاثة لم تتغير.
+- status النهائي يتكون فقط من الحالة التاريخية الثلاثية + تعديل registry + سبعة مسارات V4 الجديدة.
+- يطبع SHA-256 لكل مسار V4 بعد التطبيق.
+
+### ما لا يفعله
+
+لا Patch #1126، لا اختبارات، لا `git add`، لا Commit، لا Push، لا PR edit، لا Merge/Deploy، لا Preview/Production أو كتابة مالية. لا ينظف أو يعمل rollback إذا وجد اختلافًا بعد التطبيق؛ يتوقف ويحفظ الحالة للمراجعة.
+
+الحكم:
+`V4_APPLY_RUNNER_PREPARED_NOT_EXECUTED`
+
+الخطوة الآمنة التالية: تشغيل هذا المشغّل وحده في طرفية Emergent الأصلية، ثم مراجعة `P02_1130_V4_APPLY_ONLY_RESULT` قبل أي اختبار.
+
+الحواجز مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`.
