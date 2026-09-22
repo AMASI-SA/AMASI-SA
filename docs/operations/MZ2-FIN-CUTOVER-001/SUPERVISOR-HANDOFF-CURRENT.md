@@ -1315,3 +1315,51 @@ V4 نفسها تشير إلى 43 اختبارًا سابقًا لعقد الشح
 إذا بقي admin/index والفرع محفوظين كما في الاسترجاع السابق، يمكن إعادة بناء نفس الحالة المجمعة بدقة من HEAD + CONTRACT_SLICE الموثق + Patch V4 الموثق، ثم تحقق البايتات قبل إعادة بوابة 43.
 
 الحواجز مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`. لا Commit/Push/PR edit أو Merge/Deploy أو Preview/Production mutation أو كتابة مالية.
+
+
+---
+
+## نقطة التحقق SUP-20260922-25 — admin/index/branch محفوظة بعد فقدان /tmp للمرة الثانية
+
+التاريخ: 2026-09-22. هذه النقطة توثق الفحص القراءة فقط بعد اختفاء worktree قبل تشغيل بوابة regression 43.
+
+### المشاهدات المباشرة
+
+- Git ما زال يسجل worktree:
+  - path: `/tmp/mz2-p02-stage1.ZMgPW8/worktree`
+  - HEAD: `20400fffb03594af8a38d6b4750c170233bd5f37`
+  - branch: `refs/heads/local/p02-stage1-ZMgPW8`
+  - lock: `P02 PR1130 isolated stage1; preserve`
+- المسار المادي `/tmp/mz2-p02-stage1.ZMgPW8` غير موجود.
+- admin directory `/app/.git/worktrees/worktree` موجود وسليم بنيويًا.
+- admin HEAD ما زال يشير إلى `refs/heads/local/p02-stage1-ZMgPW8`.
+- admin gitdir ما زال يشير إلى worktree المفقود.
+- admin index موجود، الحجم `325797` وبصمة SHA-256:
+  `faed3c238a093b90ff7a29e741a55b89abd344693820ed098ee02c98a808d0f5`
+  وهي نفس بصمة index التي ثُبتت بعد الاسترجاع السابق.
+- local branch ref = `20400fffb03594af8a38d6b4750c170233bd5f37`.
+- لا MERGE_HEAD/CHERRY_PICK_HEAD/REVERT_HEAD/REBASE_HEAD/BISECT_START ولا rebase/sequencer markers ظهرت.
+- محاولة cached diff من admin فشلت فقط لأن parent `/tmp/mz2-p02-stage1.ZMgPW8` غير موجود.
+- بيئة uv/venv السابقة وملف Patch المؤقت اختفت أيضًا.
+- `/app` ما زال HEAD `6365a042dfcb125e81e5e198ea1ff1537373ce51` والفرع `refs/heads/hotfix/prod-snap-meta-final` والحالة `?? .worktrees_p02_runtime.py`.
+
+### هوية GitHub عند القرار
+
+- #1130: مفتوح، Draft، غير مدموج، Base `5292a87a476a140ae8c3c78e88dfba7d8c83f035`، Head `20400fffb03594af8a38d6b4750c170233bd5f37`.
+- #1133 قبل هذه النقطة: Head `1859116608ad7408db5b215189d555988aaf8dd7`.
+
+### الحكم
+
+`WORKTREE_STORAGE_LOST / GIT_ADMIN_INDEX_BRANCH_PRESERVED_EXACTLY`
+
+الحالة قابلة لإعادة البناء دون بدء من الصفر. الاستراتيجية التالية يجب أن تتجنب الاعتماد على بقاء /tmp بين الرسائل:
+1. إعادة بناء tracked tree من HEAD دون staging/commit.
+2. استعادة CONTRACT_SLICE الثلاثة من بايتات النقل الموثقة.
+3. إعادة تطبيق Patch V4 ذي SHA-256 المعتمد.
+4. تحقق SHA-256 لكل ملفات CONTRACT_SLICE + V4.
+5. إنشاء CPython 3.13.15 مؤقت عبر uv.
+6. تشغيل **جميع 88 اختبارًا** (45 V4 + 43 regression) في نفس عملية الاسترجاع/الاختبار، ثم التوقف للمراجعة.
+
+لا Commit/Push/PR edit في هذه العملية. لا #1126، لا Merge/Deploy/Preview/Production mutation أو كتابة مالية.
+
+الحواجز مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`.
