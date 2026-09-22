@@ -1160,3 +1160,42 @@ status بعد التطبيق يتكون من الحالة التاريخية + �
 لا apt/system install، لا تعديل PATH دائم، لا كتابة داخل /app، لا #1126، لا Commit/Push/PR edit.
 
 الحواجز مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`.
+
+
+---
+
+## نقطة التحقق SUP-20260922-22 — قفل نسخة runtime وحزم الاختبار من سجل P02 التاريخي
+
+التاريخ: 2026-09-22. استُكملت مراجعة job `106510834586` من run `35653351758`.
+
+### runtime المرجعي
+
+`actions/setup-python@v5` جهز:
+`CPython 3.13.15`.
+
+### الحزم المباشرة كما استُخدمت في workflow
+
+- mongomock-motor 0.0.36
+- pymongo 4.18.1
+- fastapi 0.141.1
+- pydantic 2.13.5
+- httpx 0.28.1
+- bcrypt 4.1.3
+- PyJWT 2.13.0
+- openpyxl 3.1.5
+- python-multipart 0.0.20
+- python-dotenv 1.2.3
+- cryptography 50.0.0
+- pytest 9.0.3
+- pytest-asyncio حُل إلى 1.4.0
+- email-validator حُل إلى 2.3.0
+
+كما يثبت log تنزيل wheels المتوافقة مع CPython 3.13، ومنها `pymongo-4.18.1-cp313...` و`pydantic_core-2.46.5-cp313...` و`cffi-2.1.1-cp313...`.
+
+### القرار
+
+بوابة الاختبار القادمة تستخدم `uv` الموجود في `/opt/bin/uv` لإنشاء runtime/venv مؤقتين تحت `/tmp` فقط، مع CPython 3.13.15 بالضبط والحزم المباشرة بالإصدارات الفعلية أعلاه. أي فشل تنزيل/إنشاء يُعامل كحاجز بيئة لا كفشل V4.
+
+لا تثبيت نظامي، لا تعديل دائم لـPATH/HOME، لا كتابة إلى /app، لا #1126، ولا Commit/Push.
+
+الحواجز: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`.
