@@ -1433,3 +1433,68 @@ Git blob SHA:
 `EXACT_RECONSTRUCT_AND_88_RUNNER_PREPARED_NOT_EXECUTED`
 
 الحواجز مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`.
+
+
+---
+
+## نقطة التحقق SUP-20260922-27 — إعادة البناء الدقيقة نجحت؛ توقف كاذب عند بصمة index البايتية قبل الاختبارات
+
+التاريخ: 2026-09-22. هذه النقطة توثق تنفيذ المشغّل السابق بعد فقدان /tmp.
+
+### ما تحقق فعليًا
+
+المشغّل نجح في:
+- جلب نفسه من GitHub عند blob `3cc23b4a8c7ddcd591a2f8ee2a8a8992440fb31a`.
+- إعادة tracked tree على Head `20400fffb03594af8a38d6b4750c170233bd5f37`.
+- استعادة CONTRACT_SLICE الثلاثة بالحجوم والبصمات الموثقة:
+  - module: 10380 bytes / `9f25d896...`
+  - tests: 12961 bytes / `61168e55...`
+  - legacy: 3211 bytes / `ff35204a...`
+- استعادة Patch V4 بالضبط:
+  - 89921 bytes
+  - SHA-256 `14156ef2a45ae489df1d4afcda4c65f4b0804a737837ffbe93cc86f5e7b21d4a`
+- التحقق من بصمات الحالة المجمعة لجميع المسارات الـ11؛ كلها `OK`.
+- اجتياز `git diff --cached --name-status HEAD` كفارغ قبل حاجز index.
+- اجتياز `git diff --check` قبل حاجز index.
+
+ثم توقف عند:
+`RESULT=BLOCKED_INDEX_CHANGED`
+
+ولم يصل إلى إنشاء Python 3.13.15 أو أي اختبار من الـ88. النتيجة:
+`P02_RECONSTRUCT_88_RC=1`.
+
+### تفسير الحاجز
+
+الحارس الذي قارن SHA-256 الخام لملف `.git/worktrees/worktree/index` بالقيمة التاريخية أصبح أضيق من المطلوب. Git قد يعيد كتابة stat-cache/metadata داخل ملف index عند فحص working tree المعاد إنشاؤها، حتى مع بقاء **المحتوى الدلالي للـindex دون staged changes**. في هذه المحاولة ثبت مباشرة قبل الحاجز أن cached diff فارغ وأن كل بايتات العمل المستهدفة مطابقة.
+
+الحكم:
+`EXACT_COMBINED_TREE_RECONSTRUCTED / RAW_INDEX_BYTE_GUARD_FALSE_BLOCKER / 88_TESTS_NOT_RUN`
+
+هذا لا يمنح PASS للـ88 ولا يلغي PASS الـ45 السابق. الحالة الحالية بعد المحاولة هي أفضل نقطة للاستئناف: worktree المجمعة موجودة ببصماتها الصحيحة، ولا حاجة لإعادة reconstruction ما دامت لم تختف.
+
+### إجراء تصحيحي على فرع التوثيق فقط
+
+المشغّل القديم:
+`docs/operations/MZ2-FIN-CUTOVER-001/P02-1130-RECONSTRUCT-AND-88.sh`
+
+تم **تعطيله صراحة** حتى لا يعاد تشغيل حارس raw-index الخاطئ:
+- deprecation commit: `ffa1b53016c4715fbac354e25e7639ed3872bf2a`
+- current blob: `d2e80494f0c607a1ea875d17dfcdf8259c23cee2`
+
+أي نسخة سابقة منه لا تُستخدم.
+
+### الخطوة الآمنة التالية
+
+على worktree الحالية فقط:
+1. تحقق Head/branch/status.
+2. تحقق exact 11 SHA-256.
+3. تحقق `git diff --cached --name-status HEAD` فارغ و`git ls-files --unmerged` فارغ.
+4. سجّل semantic index manifest من `git ls-files --stage` قبل الاختبارات.
+5. أنشئ CPython 3.13.15 مؤقتًا عبر uv.
+6. شغّل 32 + 13 + 13 + 25 + 5 = 88 في نفس العملية.
+7. بعد الاختبارات: status/files/app unchanged، cached diff/unmerged ما زالا فارغين، وsemantic index manifest لم يتغير.
+8. لا تعتمد raw index file SHA كحارس قبول.
+
+لا Commit/Push/PR edit أو #1126 أو Merge/Deploy/Preview/Production mutation أو كتابة مالية قبل مراجعة نتيجة الـ88.
+
+الحواجز مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`.
