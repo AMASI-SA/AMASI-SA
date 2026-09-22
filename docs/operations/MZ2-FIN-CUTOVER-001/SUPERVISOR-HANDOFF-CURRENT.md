@@ -1,6 +1,6 @@
 # تسليم المشرف الحالي — MZ2-FIN-CUTOVER-001
 
-> أحدث مرجع للحالة هو قسم «نقطة التحقق SUP-20260923-31» في نهاية هذا الملف. الأقسام السابقة محفوظة كسجل الاستئناف التاريخي؛ لا تنقل حالتها القديمة إلى رؤوس أحدث.
+> أحدث مرجع للحالة هو قسم «نقطة التحقق SUP-20260923-32» في نهاية هذا الملف. الأقسام السابقة محفوظة كسجل الاستئناف التاريخي؛ لا تنقل حالتها القديمة إلى رؤوس أحدث.
 
 آخر تحديث إشرافي: 2026-09-23  
 المالك: عرفات — متجر أماسي  
@@ -1777,4 +1777,76 @@ V4 الحالية تثبت إغلاق المسار غير المتكامل؛ ل�
 4. الحسابات الإعلانية والمديونيات (#1132/R1–R5) تبقى بعد #1131 حسب ترتيب المالك.
 
 الحالة الملزمة:
+`P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`, `PRODUCTION_DEPLOY=NOT_AUTHORIZED`.
+
+
+---
+
+## نقطة التحقق SUP-20260923-32 — مراجعة تقرير التنفيذ الجزئي لـ#1131 قبل أول Commit/Push
+
+التاريخ: 2026-09-23. استلم المشرف تقرير التنفيذ المحلي لـ#1131 فوق #1130 الجديد، ثم أعاد قراءة أحدث هويات GitHub.
+
+### هوية GitHub المتحققة
+
+- #1130 ما زال open/Draft/unmerged عند Head:
+  `37a5ab60a8c42736c63be37457ae9e7019e82415`.
+- #1131 ما زال open/Draft/unmerged عند Head البعيد:
+  `29e4cd940b195df0164fe7bc74b07c77a0a02bfc`.
+  لا يوجد تنفيذ #1131 منشور بعد.
+- #1133 قبل هذه النقطة عند Head:
+  `932af21af93f6afc024624622cc1300bdd3240cb`.
+
+### تقرير المنفذ المحلي — غير متحقق منه مستقلًا عبر الطرفية
+
+أفاد المنفذ أن الشجرة المعزولة لـ#1131 مبنية فوق:
+`PR1131_BASE=37a5ab60a8c42736c63be37457ae9e7019e82415`
+
+وأن Local Head هو:
+`6ed7c3cccdd148ef8a8f820278be8c8fc944a4f2`
+
+والتغييرات المحلية غير مرحّلة ولا Commit/Push، في خمسة مسارات:
+- `backend/accounting_financial_accounts.py`
+- `backend/accounting_module_contract.py`
+- `backend/financial_provider_apps.py`
+- `backend/tests/test_financial_accounts.py`
+- `frontend/src/pages/accounting/FinancialAccountsPage.jsx`
+
+التنفيذ المبلغ عنه ما زال **جزئيًا**:
+- Backend: تعريف الحسابات، مسودات الأرصدة، الأدلة، الصلاحيات وحاجز الانتقال موجودة.
+- Frontend: مكوّن الصفحة موجود، لكن الربط النهائي بالتنقل/AccountingWorkspace غير مكتمل.
+- Post/Reverse للمسودة الجديدة غير موصولين بعد بالكاتب الحقيقي `accounting_ledger_v2`.
+- Real Mongo وHTTP لم يُشغلا.
+- 3 اختبارات Backend جديدة PASS.
+- 6 اختبارات قائمة BLOCKED بسبب غياب `MZ2_TEST_MONGO_URI`، وليست فشلًا وظيفيًا مثبتًا.
+- 5 اختبارات Frontend قائمة PASS؛ اختبار الصفحة الجديدة غير مكتمل.
+- Frontend build تعطل لأن worktree لا يحتوي `frontend/public` المستقل.
+- لا Preview/Production/financial writes حسب تقرير المنفذ.
+
+### الحكم
+
+`PR1131_PARTIAL_IMPLEMENTATION_REVIEWED / COMMIT_PUSH_NOT_AUTHORIZED_YET`
+
+الأسباب:
+1. الصفحة الجديدة غير موصولة نهائيًا.
+2. Post/Reverse غير مرتبطين بالكاتب الوحيد V2.
+3. الصلاحيات الجديدة لم تُثبت عبر HTTP.
+4. الأدلة وحاجز الانتقال لم يُثبتا عبر Real Mongo/HTTP.
+5. Build الواجهة غير مكتمل.
+6. لا يجوز حفظ checkpoint تنفيذي على أنه جاهز قبل اكتمال هذه الحدود، ما دام المنفذ نفسه أعلن أنه جزئي.
+
+### الخطوة الآمنة التالية
+
+يكمل المنفذ #1131 في نفس الشجرة المعزولة فقط، دون Commit/Push الآن:
+- إكمال ربط Post/Reverse بـ`accounting_ledger_v2` الحقيقي، بلا writer موازٍ أو fallback legacy.
+- إكمال Route/navigation/AccountingWorkspace لصفحة `financial-accounts`.
+- إضافة اختبارات الصفحة الجديدة نفسها، لا الاكتفاء باختبارات صفحات قائمة.
+- تشغيل Backend unit المتعلق بالنطاق.
+- تشغيل Frontend test/build من شجرة كاملة صالحة؛ لا يُقبل فشل `frontend/public` كحالة نهائية.
+- توفير Real-Mongo test topology مع transactions، أو إن تعذر رفع blocker صريح قبل الادعاء بالاكتمال.
+- تشغيل HTTP tests للصلاحيات view/manage/drafts/review/post/reverse، ولـtransition gate والأدلة وPost/Reverse.
+- إعادة تقرير مراجعة مكتمل قبل أول Commit/Push.
+
+لا #1132، لا Preview Candidate، لا أسبوع UAT حتى إغلاق هذه البوابة.
+
+الحالة:
 `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`, `PRODUCTION_DEPLOY=NOT_AUTHORIZED`.
