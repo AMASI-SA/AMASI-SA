@@ -848,3 +848,32 @@ SHA-256:
 الخطوة الآمنة التالية: تشغيل هذا المشغّل وحده في طرفية Emergent الأصلية، ثم مراجعة `P02_1130_V4_APPLY_ONLY_RESULT` قبل أي اختبار.
 
 الحواجز مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`.
+
+
+---
+
+## نقطة التحقق SUP-20260922-15 — إلغاء لصق مشغّل التطبيق دون أثر
+
+التاريخ: 2026-09-22. بعد توقف لصق مشغّل التطبيق الضخم داخل طرفية Emergent وظهور موجه `>`، أوقف المستخدم الإدخال ثم نفذ فحصًا قراءة فقط.
+
+### النتيجة المتحققة
+
+- worktree HEAD ما زال `20400fffb03594af8a38d6b4750c170233bd5f37`.
+- status ما زال بالضبط CONTRACT_SLICE التاريخي:
+  - ` M backend/tests/test_courier_cod_fee_tiers_v2.py`
+  - `?? backend/accounting_shipping_contracts.py`
+  - `?? backend/tests/test_mz2_shipping_contracts.py`
+- كل مسارات V4 الجديدة السبعة التي فُحصت غير موجودة.
+- لم يظهر أي أثر لتطبيق جزئي لـV4.
+
+تحقق GitHub:
+- #1130 ما زال مفتوحًا وDraft وغير مدموج عند Base `5292a87a476a140ae8c3c78e88dfba7d8c83f035` وHead `20400fffb03594af8a38d6b4750c170233bd5f37`.
+- #1133 قبل كتابة هذه النقطة عند Head `51c9c73a60683a60059c129d040325512b75c20a`.
+
+### الحكم
+
+`ABORTED_PASTE_NO_APPLY_EFFECT / READY_FOR_FILE_BASED_ISOLATED_APPLY`
+
+لا يعاد لصق المشغّل الضخم. الخطوة التالية الآمنة هي استخدام ملف Patch V4 نفسه بعد رفعه إلى بيئة Emergent، والتحقق من SHA-256 ثم `git apply --check` ثم `git apply` بأوامر قصيرة، مع فحص status والبصمات بعدها.
+
+الحواجز مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`. لا اختبارات أو Commit/Push/PR edit أو Merge/Deploy أو Preview/Production mutation أو كتابة مالية قبل مراجعة نتيجة التطبيق.
