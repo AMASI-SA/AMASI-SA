@@ -1266,3 +1266,52 @@ V4 نفسها تشير إلى 43 اختبارًا سابقًا لعقد الشح
 إذا اجتازت 43/43 مع ثبات الحالة، يصبح الدليل الحالي 88/88 isolated/regression على نفس worktree، وعندها يمكن تقييم بوابة Commit/Push مستقلة.
 
 الحواجز العامة مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`. لا Merge/Deploy/Preview/Production mutation أو كتابة مالية.
+
+
+---
+
+## نقطة التحقق SUP-20260922-24 — محاولة 43 regression لم تبدأ بسبب اختفاء worktree المؤقت مجددًا
+
+التاريخ: 2026-09-22. بعد نجاح 45/45 اختبار V4، حاول المستخدم بدء بوابة regression التاريخية 43 حالة.
+
+### النتيجة الفعلية
+
+أول فحص للهدف أعاد:
+
+`fatal: cannot change to '/tmp/mz2-p02-stage1.ZMgPW8/worktree': No such file or directory`
+
+ثم:
+`P02_REGRESSION43_RC=1`.
+
+لم يصل المشغّل إلى فحص Python، ولم يبدأ:
+- calculator 13
+- contracts 25
+- legacy 5
+
+ولا توجد نتيجة PASS/FAIL لأي من الـ43.
+
+### تفسير الحالة
+
+هذا حاجز فقدان لمسار `/tmp`، وليس فشلًا في كود V4 أو regression. نتيجة V4 السابقة 45/45 تبقى موثقة عند نفس Head والبايتات التي اختُبرت قبل اختفاء المسار، ولا تُحوّل هذه المحاولة إلى نتيجة جديدة.
+
+تحقق GitHub عند التوثيق:
+- #1130 ما زال مفتوحًا وDraft وغير مدموج عند Base `5292a87a476a140ae8c3c78e88dfba7d8c83f035` وHead `20400fffb03594af8a38d6b4750c170233bd5f37`.
+- #1133 قبل هذه النقطة عند Head `d8cff29c2a9283c5626b78a03038108af390a8e3`.
+
+### الحكم
+
+`COMBINED_43_REGRESSION_NOT_RUN / TARGET_WORKTREE_MISSING_AGAIN`
+
+الخطوة الآمنة التالية هي فحص قراءة فقط:
+- `git worktree list --porcelain`
+- admin metadata تحت `/app/.git/worktrees/worktree`
+- local branch ref
+- index SHA وcached diff من admin إن أمكن
+- وجود/غياب parent وworktree وvenv المؤقت
+- /app HEAD/status
+
+لا prune/unlock/remove/repair/reset/clean/add/apply قبل هذا الفحص.
+
+إذا بقي admin/index والفرع محفوظين كما في الاسترجاع السابق، يمكن إعادة بناء نفس الحالة المجمعة بدقة من HEAD + CONTRACT_SLICE الموثق + Patch V4 الموثق، ثم تحقق البايتات قبل إعادة بوابة 43.
+
+الحواجز مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`. لا Commit/Push/PR edit أو Merge/Deploy أو Preview/Production mutation أو كتابة مالية.
