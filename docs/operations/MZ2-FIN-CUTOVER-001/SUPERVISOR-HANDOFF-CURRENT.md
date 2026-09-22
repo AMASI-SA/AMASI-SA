@@ -478,3 +478,58 @@
 بحث قراءة فقط عن نسخ CONTRACT_SLICE أو بصماتها في `/app` وملف المساعدة `.worktrees_p02_runtime.py`، وفحص نسخة HEAD للملف المتتبع لمقارنة SHA-256 مع البصمة التاريخية. لا `worktree add/repair/prune/unlock/remove` ولا checkout/reset/apply.
 
 الحواجز مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`. لا تطبيق أو اختبارات أو Merge/Deploy أو Preview/Production mutation أو كتابة مالية.
+
+
+---
+
+## نقطة التحقق SUP-20260922-08 — CONTRACT_SLICE قابل للاسترجاع بايتًا-ببايت من الأثر المعتمد
+
+التاريخ: 2026-09-22. هذه النقطة تكمّل فحص الاسترجاع دون أي كتابة إلى Emergent.
+
+### نتيجة البحث في /app و/tmp المرسلة من المستخدم
+
+- الفرع المحلي بقي عند `20400fffb03594af8a38d6b4750c170233bd5f37`.
+- نسخة HEAD والـindex من `backend/tests/test_courier_cod_fee_tiers_v2.py` لها SHA-256 `5d497abe2697fa23187e9d91dbae4fd628b79fcdce316815efceb5b9c64984c4`، وليست البصمة التاريخية المعدلة.
+- البحث في `/app` و`/tmp` لم يجد أي ملف يطابق البصمات التاريخية الثلاث؛ النسخ الموجودة من الملف المتتبع كلها عند SHA-256 `5d497a...`.
+- `/app/.worktrees_p02_runtime.py` موجود ببصمة `322b6018f17f2de0229c303264e95961fb3cc251568e3caca1671dc2a76c9d4e` لكنه لم يظهر في grep كمصدر للملفات الثلاثة.
+
+### الاسترجاع المستقل من آثار ChatGPT المحفوظة
+
+عُثر في المكتبة على `p02-contract-slice-verified-runner.txt`، وهو المشغّل المقيد سابقًا ببصمة الملف المعتمد `p02-stage1-contracts(1).txt`. تم materialize للقراءة البرمجية فقط خارج Emergent؛ لم يُشغّل.
+
+المشغّل يحتوي:
+- المصدر الكامل `MODULE` للملف `backend/accounting_shipping_contracts.py`.
+- المصدر الكامل `TESTS` للملف `backend/tests/test_mz2_shipping_contracts.py`.
+- خوارزمية حتمية تولد النسخة المعدلة من `backend/tests/test_courier_cod_fee_tiers_v2.py` من Blob HEAD المثبت `b0044e15a48ee15b3669e42f94e7b57f336187c4`.
+
+تحقق المشرف حسابيًا من البايتات دون تنفيذ شيفرة التطبيق:
+
+1. `MODULE.encode()`:
+   SHA-256 `9f25d896d9835dc36a29e91f2dab90de2cf8f1a4c2cec18f01d9fb097863b7c8`.
+2. `TESTS.encode()`:
+   SHA-256 `61168e55eb400da907f8d0fb795f7c28155e968d22ff4f5b45eae14b8b83f0b2`.
+3. جُلب ملف HEAD الحقيقي من GitHub عند #1130، Blob `b0044e15a48ee15b3669e42f94e7b57f336187c4`; SHA-256 بايتاته يطابق نتيجة الطرفية المرسلة `5d497abe2697fa23187e9d91dbae4fd628b79fcdce316815efceb5b9c64984c4`. بعد تطبيق تحويلات النص الحتمية نفسها الواردة في المشغّل، أعادت النسخة الناتجة:
+   SHA-256 `ff35204aaaecfb897869341c82b9c86b82d7580ce70fb397c617edfd76933f9c`.
+
+إذن البصمات الثلاث التاريخية ليست مجرد تقارير؛ بايتاتها قابلة لإعادة البناء بصورة حتمية من أثر معتمد محفوظ + Blob GitHub مثبت.
+
+### الحكم
+
+`CONTRACT_SLICE_BYTES_RECOVERABLE_EXACTLY / WORKTREE_RECONSTRUCTION_CAN_BE_PLANNED`
+
+لا يعني هذا أن worktree أُعيد بناؤه؛ لم تحدث أي كتابة في Emergent بعد. لا يزال `git apply --check` لـV4 غير منفذ.
+
+### قيد الاسترجاع
+
+أي استرجاع لاحق يجب:
+- يعيد نفس المسار الإداري والفرع المحلي وHEAD فقط.
+- لا يغير الـindex المحفوظ ولا refs.
+- يعيد tracked files من الـindex/HEAD إلى شجرة عمل جديدة فارغة.
+- يعيد الملفات الثلاثة فقط إلى البصمات التاريخية المثبتة.
+- يتحقق بعد الكتابة من status المتوقع بالضبط:
+  ` M backend/tests/test_courier_cod_fee_tiers_v2.py`
+  `?? backend/accounting_shipping_contracts.py`
+  `?? backend/tests/test_mz2_shipping_contracts.py`
+- لا يشغّل اختبارات ولا يطبق V4 في خطوة الاسترجاع نفسها.
+
+الحواجز مستمرة: `P01=IN_PROGRESS`, `P02=LOCKED`, `P03=LOCKED`. لا Merge/Deploy/Preview/Production mutation أو كتابة مالية.
