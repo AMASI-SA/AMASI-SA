@@ -1,5 +1,10 @@
+import os
+import uuid
+
 import pytest
+import pytest_asyncio
 from fastapi import HTTPException
+from motor.motor_asyncio import AsyncIOMotorClient
 
 mongomock_motor = pytest.importorskip("mongomock_motor")
 
@@ -12,6 +17,25 @@ from store_delivery_accounting import (
     post_settlement_journal,
     store_driver_ledger_balances,
 )
+
+
+@pytest_asyncio.fixture
+async def transactional_db():
+    """Use a disposable replica-set database for the financial writer path."""
+    uri = os.environ.get("MZ2_TEST_MONGO_URI")
+    if not uri:
+        pytest.skip("MZ2_TEST_MONGO_URI is required for transactional delivery accounting")
+    client = AsyncIOMotorClient(uri, serverSelectionTimeoutMS=5000)
+    database_name = f"store_delivery_accounting_{uuid.uuid4().hex}"
+    db = client[database_name]
+    try:
+        hello = await db.command("hello")
+        if not hello.get("setName") or hello.get("logicalSessionTimeoutMinutes") is None:
+            pytest.skip("transactional Mongo replica set is required")
+        yield db
+    finally:
+        await client.drop_database(database_name)
+        client.close()
 
 
 def _driver():
@@ -156,9 +180,10 @@ async def test_p02_financial_writers_are_locked_by_default_without_ledger_delta(
 
 
 @pytest.mark.asyncio
-async def test_driver_delivery_and_net_settlement_reach_ledger_and_financial_position():
-    client = mongomock_motor.AsyncMongoMockClient()
-    db = client.test_store_delivery_accounting
+async def test_driver_delivery_and_net_settlement_reach_ledger_and_financial_position(
+    transactional_db,
+):
+    db = transactional_db
     user_id = "merchant-1"
     await _activate_p02(db, user_id)
 
