@@ -1,8 +1,12 @@
 # MZ2-FIN-CUTOVER-001 — نقطة الاستكمال الحالية
 
+> **الحالة الأحدث — 2026-09-23:** العمل الجاري هو Draft PR #1131 للصناديق والحسابات المالية والأرصدة الافتتاحية على V2. اقرأ أولًا [سجل استئناف #1131 الحالي](MZ2-FIN-CUTOVER-001/PR1131-HANDOFF-CURRENT.md). الحالة الملزمة: `P01=IN_PROGRESS`، و`P02=LOCKED`، و`P03=LOCKED`، وPreview/Production دون تغيير. لا تبدأ #1132 أو Preview Candidate أو Merge/Deploy من السجل التاريخي أدناه.
+
+## سجل تاريخي — 2026-09-18
+
 اقرأ AGENTS.md، ثم وثيقة العملية، وREADME وSTATUS.json وPHASE-01-SETTLEMENTS.md، ثم [تدقيق الإغلاق](MZ2-FIN-CUTOVER-001/P01-CLOSURE-AUDIT-20260918.md).
 
-## الحالة الحالية — 2026-09-18
+### الحالة المسجلة حينها
 
 P01: **IN_PROGRESS / PREVIEW_PARTIAL_RELEASE_PENDING**. P02 إلى P08 مقفلة.
 
