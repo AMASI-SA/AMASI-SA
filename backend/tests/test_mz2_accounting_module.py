@@ -1,3 +1,4 @@
+from accounting_module_contract import ACCOUNTING_EXPLICIT_GRANT_KEYS
 from financial_provider_apps import (
     ACCOUNTING_ACTIONS,
     ACCOUNTING_PAGES,
@@ -36,9 +37,10 @@ def _complete_cutover(**overrides):
     return state
 
 
-def test_accounting_module_has_exact_eight_pages_and_sensitive_actions():
+def test_accounting_module_has_exact_nine_pages_and_sensitive_actions():
     assert [row["label"] for row in ACCOUNTING_PAGES] == [
         "الرئيسية المحاسبية",
+        "الصناديق والحسابات المالية",
         "التسويات",
         "الشحن والتحصيل",
         "المخزون والمشتريات",
@@ -47,8 +49,12 @@ def test_accounting_module_has_exact_eight_pages_and_sensitive_actions():
         "الأرصدة الافتتاحية",
         "القيود والتقارير",
     ]
-    assert len({row["permission"] for row in ACCOUNTING_PAGES}) == 8
+    assert len({row["permission"] for row in ACCOUNTING_PAGES}) == 9
     action_keys = {row["permission"] for row in ACCOUNTING_ACTIONS}
+    assert "accounting.financial_accounts.manage" in action_keys
+    assert "accounting.opening_balances.drafts.manage" in action_keys
+    assert "accounting.opening_balances.review" in action_keys
+    assert "accounting.opening_balances.post" in action_keys
     assert "accounting.opening_balances.approve" in action_keys
     assert "accounting.journals.manual_create" in action_keys
     assert "accounting.journals.reverse" in action_keys
@@ -83,9 +89,15 @@ def test_permissions_are_independent_from_legacy_role_permissions():
         "accounting.home.view",
         "accounting.settlements.view",
     ]
-    assert len(accounting_permissions_for_user({"role": "owner"})) == len(
-        ACCOUNTING_PERMISSION_KEYS
-    )
+    owner_defaults = set(accounting_permissions_for_user({"role": "owner"}))
+    assert owner_defaults == ACCOUNTING_PERMISSION_KEYS - ACCOUNTING_EXPLICIT_GRANT_KEYS
+    assert not (owner_defaults & ACCOUNTING_EXPLICIT_GRANT_KEYS)
+
+    explicitly_granted_owner = {
+        "role": "owner",
+        "accounting_permissions": list(ACCOUNTING_EXPLICIT_GRANT_KEYS),
+    }
+    assert set(accounting_permissions_for_user(explicitly_granted_owner)) == ACCOUNTING_PERMISSION_KEYS
 
 
 def test_status_never_invents_balances_or_cutover_readiness():
