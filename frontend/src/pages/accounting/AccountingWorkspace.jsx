@@ -4,16 +4,23 @@ import { toast } from "sonner";
 import { useOptionalAuth } from "../../context/AuthContext";
 import { getAccountingAccess, getAccountingModuleStatus } from "../../services/accountingModule";
 import AccountingCourierBankBindings from "./AccountingCourierBankBindings";
-import AccountingHome from "./AccountingHome";
+import AccountingDailyWorkspace from "./AccountingDailyWorkspace";
+import AccountingReports from "./AccountingReports";
 import AccountingPermissionsDialog from "./AccountingPermissionsDialog";
-import AccountingSettlementRegister from "./AccountingSettlementRegister";
 import AccountingSettlements from "./AccountingSettlements";
+import AccountingShippingCod from "./AccountingShippingCod";
+import AccountingBankReceipts from "./AccountingBankReceipts";
+import AccountingBankTransferReceipts from "./AccountingBankTransferReceipts";
+import AccountingDailyMovements from "./AccountingDailyMovements";
+import AccountingCustomerAdvances from "./AccountingCustomerAdvances";
+import AccountingOpeningBalances from "./AccountingOpeningBalances";
+import AccountingPayroll from "./AccountingPayroll";
 import {
     AccessDenied,
     AccountingHeader,
     LoadingBlock,
 } from "./AccountingShared";
-import { OpeningBalancesBlocked, PartialWorkflowPage } from "./AccountingWorkflowPages";
+import { PartialWorkflowPage } from "./AccountingWorkflowPages";
 import { accountingPageFromSearchParams, userCanAccessAccounting } from "./accountingPages";
 
 export default function AccountingWorkspace() {
@@ -70,24 +77,45 @@ export default function AccountingWorkspace() {
     if (page.id === "home") {
         content = statusLoading
             ? <LoadingBlock />
-            : <AccountingHome status={status} user={user} accountingPermissions={permissions} />;
+            : (
+                <AccountingDailyWorkspace
+                    status={status}
+                    user={user}
+                    accountingPermissions={permissions}
+                    canManagePermissions={access?.is_owner === true}
+                    onOpenPermissions={() => setPermissionsOpen(true)}
+                />
+            );
     } else if (page.id === "settlements") {
         content = (
             <div className="space-y-5">
                 <AccountingSettlements accountingPermissions={permissions} />
-                <AccountingSettlementRegister accountingPermissions={permissions} />
                 <AccountingCourierBankBindings accountingPermissions={permissions} />
             </div>
         );
+    } else if (page.id === "shipping-cod") {
+        content = <AccountingShippingCod accountingPermissions={permissions} />;
+    } else if (page.id === "financial-movements") {
+        content = <><AccountingDailyMovements accountingPermissions={permissions} /><AccountingBankTransferReceipts accountingPermissions={permissions} /><AccountingBankReceipts accountingPermissions={permissions} /><AccountingCustomerAdvances accountingPermissions={permissions} /></>;
+    } else if (page.id === "journals-reports") {
+        content = <AccountingReports />;
+    } else if (page.id === "payroll-obligations") {
+        content = <AccountingPayroll accountingPermissions={permissions} />;
     } else if (page.id === "opening-balances") {
-        content = statusLoading ? <LoadingBlock /> : <OpeningBalancesBlocked status={status} />;
+        content = statusLoading ? <LoadingBlock /> : <AccountingOpeningBalances />;
     } else {
         content = <PartialWorkflowPage page={page} />;
     }
 
     return (
         <div className="space-y-5" dir="rtl" data-testid="accounting-workspace">
-            <AccountingHeader page={page} canManagePermissions={access?.is_owner === true} onOpenPermissions={() => setPermissionsOpen(true)} />
+            {page.id !== "home" && (
+                <AccountingHeader
+                    page={page}
+                    canManagePermissions={access?.is_owner === true}
+                    onOpenPermissions={() => setPermissionsOpen(true)}
+                />
+            )}
             {content}
             <AccountingPermissionsDialog open={permissionsOpen} onClose={() => setPermissionsOpen(false)} />
         </div>

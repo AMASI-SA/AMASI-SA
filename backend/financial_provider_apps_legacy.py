@@ -358,7 +358,7 @@ def make_financial_provider_apps_router(db, current_user) -> APIRouter:
             raise HTTPException(status_code=403, detail="هذه العملية متاحة للمالك فقط")
 
     async def _known_provider(user_id: str, provider_id: str) -> dict:
-        settings = await ensure_user_settings(db, user_id)
+        settings = await db.settings.find_one({"user_id": user_id}) or {}
         catalog = build_provider_catalog(settings)
         provider = next((row for row in catalog if row["provider_id"] == provider_id), None)
         if not provider:
@@ -367,7 +367,7 @@ def make_financial_provider_apps_router(db, current_user) -> APIRouter:
 
     @router.get("")
     async def list_provider_apps(user: dict = Depends(current_user)):
-        settings = await ensure_user_settings(db, user["id"])
+        settings = await db.settings.find_one({"user_id": user["id"]}) or {}
         summaries = await _invoice_summaries(db, user["id"])
         apps = build_provider_catalog(settings, invoice_summary=summaries)
         return {
