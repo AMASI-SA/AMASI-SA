@@ -63,6 +63,9 @@ class FakePorts:
             self.active = False
         return True
 
+    async def has_claim(self, reference):
+        return reference in self.claims
+
     async def send_guarded(self, reference):
         self.sends += 1
         self.invoices = (INVOICE,)
@@ -169,9 +172,21 @@ class RecoveryTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_audit_absence_does_not_authorize_resend(self):
         p = FakePorts(); p.active = False
-        result = await r.audit_one(SCOPE, "100", p)
+        p.claims.add("100")
+        result = await r.audit_one(
+            SCOPE, "100", p, allow_preclaim_requeue=True
+        )
         self.assertEqual(result.reason, "submitted_invoice_not_found_do_not_retry")
         self.assertEqual(p.sends, 0)
+
+    async def test_pre_send_read_failure_returns_to_pending_after_complete_audit(self):
+        p = FakePorts(); p.active = False
+        result = await r.audit_one(
+            SCOPE, "100", p, allow_preclaim_requeue=True
+        )
+        self.assertEqual((result.state, result.reason),
+                         ("pending", "pre_send_read_recovered"))
+        self.assertEqual((p.sends, p.repairs, len(p.claims)), (0, 0, 0))
 
     async def test_sent_marker_does_not_override_wrong_paid_invoice_total(self):
         p = FakePorts(); p.marker = INVOICE.invoice_id

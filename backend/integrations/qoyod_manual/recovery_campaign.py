@@ -194,6 +194,11 @@ class DurablePorts:
             raise
         return result.upserted_id is not None
 
+    async def has_claim(self, reference):
+        return await self.db.qoyod_404_attempts.find_one(
+            {"_id": f"main:{reference}"}, {"_id": 1}
+        ) is not None
+
     async def send_guarded(self, reference):
         await self.external.send_guarded(reference)
 
@@ -292,7 +297,19 @@ async def audit_pending(db, external_factory):
         rows = [row async for row in db.qoyod_404_outcomes.find({"campaign": CAMPAIGN})
                 if unresolved_attempt(row) or row["state"] == "rounding_review"]
         for row in rows:
-            await audit_one(scope, row["reference"], ports)
+            diagnostic = row.get("read_diagnostic") or {}
+            preclaim_page_404 = (
+                row.get("state") in {"blocked", "review"}
+                and row.get("reason") == "outcome_unknown"
+                and diagnostic.get("stage") == "provider_page"
+                and diagnostic.get("http_status") == 404
+            )
+            await audit_one(
+                scope,
+                row["reference"],
+                ports,
+                allow_preclaim_requeue=preclaim_page_404,
+            )
     finally:
         await db.qoyod_404_campaigns.update_one({"_id": CAMPAIGN, "lease_token": token},
             {"$set": {"cursor": None, "busy": False}})

@@ -125,6 +125,7 @@ class Ports(Protocol):
     async def facts(self, reference: str) -> Facts: ...
     async def observe(self, reference: str) -> Observation: ...
     async def claim_once(self, reference: str, fingerprint: str) -> bool: ...
+    async def has_claim(self, reference: str) -> bool: ...
     async def send_guarded(self, reference: str) -> None: ...
     async def reconcile_marker(self, reference: str, invoice_id: str) -> None: ...
     async def finish(self, outcome: Outcome) -> None: ...
@@ -249,11 +250,19 @@ async def recover_one(scope: Scope, reference: str, ports: Ports) -> Outcome:
         return result
 
 
-async def audit_one(scope: Scope, reference: str, ports: Ports) -> Outcome:
-    """Read-only reconciliation of a submitted attempt, even while paused.
+async def audit_one(
+    scope: Scope,
+    reference: str,
+    ports: Ports,
+    *,
+    allow_preclaim_requeue: bool = False,
+) -> Outcome:
+    """Read-only reconciliation of a submitted or pre-claim read failure.
 
     Never calls claim/send/marker repair and never treats absence as retry
-    permission. This is the path for a timeout, restart, or inconsistent UI.
+    permission unless the caller proves the persisted failure is the narrow
+    pre-claim provider-page 404 case and no durable claim exists. This is the
+    path for a timeout, restart, or inconsistent UI.
     """
     if reference not in scope.references:
         return Outcome(reference, "excluded", "outside_recovery_scope")
@@ -291,7 +300,16 @@ async def audit_one(scope: Scope, reference: str, ports: Ports) -> Outcome:
             await ports.finish(result)
             return result
         if invoice is None:
-            raise EvidenceError("submitted_invoice_not_found_do_not_retry")
+            # A failed provider read before claim_once cannot have sent an
+            # invoice.  Once a fresh, complete provider scan proves absence,
+            # return that row to the closed campaign's pending queue.  A
+            # durable claim means a write may have been attempted, so absence
+            # remains non-retryable exactly as before.
+            if not allow_preclaim_requeue or await ports.has_claim(reference):
+                raise EvidenceError("submitted_invoice_not_found_do_not_retry")
+            result = Outcome(reference, "pending", "pre_send_read_recovered")
+            await ports.finish(result)
+            return result
         if not evidence.mezan_sent_reconciled or evidence.mezan_invoice_id != invoice.invoice_id:
             raise EvidenceError("mezan_marker_unverified")
         result = Outcome(reference, "verified_audit",
