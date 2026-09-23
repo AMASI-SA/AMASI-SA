@@ -1335,6 +1335,10 @@ def install_financial_account_routes(router: Any, db: Any, current_user: Any) ->
         actor, owner = await actor_for(user, "accounts_view", "transition")
 
         async def advance(scoped):
+            state = await advance_transition(
+                scoped, owner=owner, actor_id=str(actor["id"]), target=payload.target,
+                expected_revision=payload.expected_revision, activation_ref=payload.activation_ref,
+            )
             reviewed = None
             if payload.target == "v2_active":
                 reviewed = await scoped.mz2_opening_balance_drafts.find_one({
@@ -1355,10 +1359,6 @@ def install_financial_account_routes(router: Any, db: Any, current_user: Any) ->
                     )
                 except AccountingLedgerV2Error as error:
                     raise _http_from_ledger(error) from error
-            state = await advance_transition(
-                scoped, owner=owner, actor_id=str(actor["id"]), target=payload.target,
-                expected_revision=payload.expected_revision, activation_ref=payload.activation_ref,
-            )
             if reviewed:
                 await scoped.settings.update_one({"user_id": owner}, {"$set": {
                     "mezan2_financial_cutover.operation_id": OPERATION_ID,

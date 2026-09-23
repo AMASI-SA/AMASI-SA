@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import runpy
 from copy import deepcopy
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -1405,7 +1406,10 @@ def test_v2_collection_names_are_absent_from_other_backend_production_modules():
 
 
 def test_raw_access_guard_rejects_alias_reflection_and_private_writers(tmp_path):
-    from scripts.check_accounting_ledger_v2_access import _violations
+    guard = runpy.run_path(
+        str(Path(__file__).resolve().parents[2] / "scripts" / "check_accounting_ledger_v2_access.py")
+    )
+    _violations = guard["_violations"]
 
     source = tmp_path / "unsafe_consumer.py"
     source.write_text(

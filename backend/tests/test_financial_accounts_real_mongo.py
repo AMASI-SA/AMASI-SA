@@ -777,18 +777,27 @@ async def test_evidence_mismatch_fails_closed(api, mismatch):
         return
 
     previewed = await _preview(api, draft, key="preview-version-0001")
-    reviewed = await _review(api, previewed, key="review-version-0001")
+    await _review(api, previewed, key="review-version-0001")
     await api.db.mz2_opening_balance_drafts.update_one(
         {"id": draft["id"]}, {"$set": {"evidence_snapshot.0.approval_version": 999}}
     )
-    await _activate_v2(api)
+    blocked = await api.client.post(
+        BASE + "/transition",
+        headers=_headers("full"),
+        json={"target": "transition_blocked", "expected_revision": 0, "activation_ref": "freeze-ref"},
+    )
+    assert blocked.status_code == 200, blocked.text
     response = await api.client.post(
-        f"{OPENING}/drafts/{draft['id']}/post",
-        headers=_headers("poster"),
-        json=_post_payload(reviewed["version"], key="post-version-0001"),
+        BASE + "/transition",
+        headers=_headers("full"),
+        json={"target": "v2_active", "expected_revision": 1, "activation_ref": "activation-1131"},
     )
     assert response.status_code == 409
     assert _detail_code(response) == "opening_evidence_approval_mismatch"
+    state = await api.client.get(BASE + "/transition", headers=_headers("viewer"))
+    assert state.status_code == 200
+    assert state.json()["state"] == "transition_blocked"
+    assert state.json()["state_revision"] == 1
     assert await api.db.accounting_journal_groups_v2.count_documents({}) == 0
 
 
