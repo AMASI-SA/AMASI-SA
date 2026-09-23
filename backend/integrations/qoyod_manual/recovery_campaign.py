@@ -3,12 +3,14 @@
 No prepare/read operation sends money. Activation is separate, fingerprint
 bound, disabled by default, and never invoked by deployment or migration.
 """
+import asyncio
+from contextlib import suppress
 from dataclasses import asdict
 from datetime import date, datetime, timedelta, timezone
 import hashlib
 import uuid
 
-from .recovery_404 import Scope, Outcome, recover_one, audit_one
+from .recovery_404 import EvidenceError, Scope, Outcome, recover_one, audit_one
 
 CAMPAIGN = "main:product-404-20260919"
 COHORT_DIGEST = "1d15938ee89692b1d14f4ef7cfb6c57fb3205f84d92383ad4b0613af4a694011"
@@ -17,6 +19,8 @@ COMPLETED_DIGESTS = frozenset({
     "ed876815d85b1d99ee8b65621b63769fc9d9ddfc6e599acefb3da59ac79301e3",
 })
 VERIFIED = {"verified_sent", "verified_existing", "verified_audit", "excluded_completed"}
+LEASE_TTL = timedelta(minutes=10)
+LEASE_HEARTBEAT_SECONDS = 60.0
 
 
 def now():
@@ -166,14 +170,73 @@ async def pause(db, reason="operator_pause"):
         {"$set": {"state": "paused", "pause_reason": reason}})
 
 
+async def renew_lease(db, token):
+    """Extend only the lease still owned by this worker."""
+    renewed_at = now()
+    result = await db.qoyod_404_campaigns.update_one(
+        {"_id": CAMPAIGN, "lease_token": token, "busy": True},
+        {"$set": {"lease_until": renewed_at + LEASE_TTL,
+                  "lease_heartbeat_at": renewed_at}},
+    )
+    return bool(result.matched_count)
+
+
+async def lease_heartbeat(db, token):
+    while True:
+        await asyncio.sleep(LEASE_HEARTBEAT_SECONDS)
+        if not await renew_lease(db, token):
+            raise EvidenceError("recovery_lease_fencing_lost")
+
+
+async def run_with_lease_heartbeat(db, token, operation):
+    """Run work while renewing its fence; stop work if ownership is lost."""
+    work = asyncio.create_task(operation)
+    heartbeat = asyncio.create_task(lease_heartbeat(db, token))
+    try:
+        done, _ = await asyncio.wait(
+            {work, heartbeat}, return_when=asyncio.FIRST_COMPLETED)
+        if heartbeat in done:
+            error = heartbeat.exception()
+            if not work.done():
+                work.cancel()
+                with suppress(asyncio.CancelledError):
+                    await work
+            if error is not None:
+                raise error
+            raise EvidenceError("recovery_lease_heartbeat_stopped")
+        return await work
+    finally:
+        if not heartbeat.done():
+            heartbeat.cancel()
+        with suppress(asyncio.CancelledError):
+            await heartbeat
+        if not work.done():
+            work.cancel()
+            with suppress(asyncio.CancelledError):
+                await work
+
+
 class DurablePorts:
     """Persistence boundary plus a narrow provider adapter; claims never expire."""
-    def __init__(self, db, campaign, external):
+    def __init__(self, db, campaign, external, lease_token=None):
         self.db, self.campaign, self.external = db, campaign, external
+        self.lease_token = lease_token
+
+    async def require_lease(self):
+        if self.lease_token is None:
+            return
+        row = await self.db.qoyod_404_campaigns.find_one(
+            {"_id": CAMPAIGN, "lease_token": self.lease_token, "busy": True},
+            {"_id": 1},
+        )
+        if row is None:
+            raise EvidenceError("recovery_lease_fencing_lost")
 
     async def authorized(self, fingerprint):
         row = await self.db.qoyod_404_campaigns.find_one({"_id": CAMPAIGN})
         return bool(row and row["state"] == "active" and row["fingerprint"] == fingerprint
+                    and (self.lease_token is None
+                         or (row.get("lease_token") == self.lease_token and row.get("busy")))
                     and await self.external.authorized(row["release_identity"]))
 
     async def facts(self, reference):
@@ -183,6 +246,7 @@ class DurablePorts:
         return await self.external.observe(reference)
 
     async def claim_once(self, reference, fingerprint):
+        await self.require_lease()
         try:
             result = await self.db.qoyod_404_attempts.update_one(
                 {"_id": f"main:{reference}"}, {"$setOnInsert": {
@@ -200,12 +264,15 @@ class DurablePorts:
         ) is not None
 
     async def send_guarded(self, reference):
+        await self.require_lease()
         await self.external.send_guarded(reference)
 
     async def reconcile_marker(self, reference, invoice_id):
+        await self.require_lease()
         await self.external.reconcile_marker(reference, invoice_id)
 
     async def finish(self, outcome):
+        await self.require_lease()
         await self.db.qoyod_404_outcomes.update_one(
             {"_id": f"{CAMPAIGN}:{outcome.reference}"},
             {"$set": {**asdict(outcome), "updated_at": now()}}, upsert=False)
@@ -216,14 +283,57 @@ class DurablePorts:
                           "resolved_invoice_id": outcome.invoice_id, "resolved_at": now()}})
 
     async def pause(self, reason):
-        await pause(self.db, reason)
+        if self.lease_token is None:
+            await pause(self.db, reason)
+            return
+        result = await self.db.qoyod_404_campaigns.update_one(
+            {"_id": CAMPAIGN, "lease_token": self.lease_token, "busy": True},
+            {"$set": {"state": "paused", "pause_reason": reason}},
+        )
+        if not result.matched_count:
+            raise EvidenceError("recovery_lease_fencing_lost")
+
+
+async def process_tick(db, external_factory, token):
+    campaign = await db.qoyod_404_campaigns.find_one({"_id": CAMPAIGN})
+    scope = scope_from(campaign)
+    external = external_factory(db, campaign)
+    ports = DurablePorts(db, campaign, external, lease_token=token)
+    ref = campaign.get("cursor")
+    audit = bool(ref)
+    if not ref:
+        row = await db.qoyod_404_outcomes.find_one(
+            {"campaign": CAMPAIGN, "state": "pending"}, sort=[("reference", 1)])
+        if not row:
+            await db.qoyod_404_campaigns.update_one({"_id": CAMPAIGN, "lease_token": token},
+                {"$set": {"state": "review_complete"}})
+            return
+        ref = row["reference"]
+        await db.qoyod_404_campaigns.update_one({"_id": CAMPAIGN, "lease_token": token},
+            {"$set": {"cursor": ref}})
+        await db.qoyod_404_outcomes.update_one({"_id": f"{CAMPAIGN}:{ref}"},
+            {"$set": {"state": "running", "reason": "refreshing_salla"}})
+    outcome = await (audit_one(scope, ref, ports) if audit else recover_one(scope, ref, ports))
+    if outcome.state == "disabled":
+        # Authorization was refused before a claim/write. Do not invent an
+        # ambiguous financial attempt or strand this row behind audit.
+        await ports.finish(Outcome(ref, "pending", outcome.reason))
+        await ports.pause(outcome.reason)
+        await db.qoyod_404_campaigns.update_one({"_id": CAMPAIGN, "lease_token": token},
+            {"$set": {"cursor": None}})
+    elif outcome.state in {"unknown", "review"}:
+        await ports.pause(outcome.reason)
+    else:
+        await db.qoyod_404_campaigns.update_one({"_id": CAMPAIGN, "lease_token": token},
+            {"$set": {"cursor": None}})
 
 
 async def tick(db, external_factory):
     """One order per worker tick; stale in-flight work is audited, never resent.
 
-    A ten-minute lock is scheduling only. Financial claims are permanent.
-    If a process dies with a cursor, another process only audits that cursor.
+    The worker renews its fenced scheduling lease while alive. Financial
+    claims are permanent. If a process dies with a cursor, another process
+    only audits that cursor after the renewed lease expires.
     """
     campaign = await db.qoyod_404_campaigns.find_one({"_id": CAMPAIGN})
     if not campaign or campaign["state"] != "active":
@@ -233,43 +343,16 @@ async def tick(db, external_factory):
         {"_id": CAMPAIGN, "state": "active", "$or": [
             {"busy": False}, {"lease_until": {"$lt": now()}}]},
         {"$set": {"busy": True, "lease_token": token,
-                  "lease_until": now() + timedelta(minutes=10)}})
+                  "lease_until": now() + LEASE_TTL}})
     if not acquired.modified_count:
         return True
     try:
-        campaign = await db.qoyod_404_campaigns.find_one({"_id": CAMPAIGN})
-        scope = scope_from(campaign)
-        external = external_factory(db, campaign)
-        ports = DurablePorts(db, campaign, external)
-        ref = campaign.get("cursor")
-        audit = bool(ref)
-        if not ref:
-            row = await db.qoyod_404_outcomes.find_one(
-                {"campaign": CAMPAIGN, "state": "pending"}, sort=[("reference", 1)])
-            if not row:
-                await db.qoyod_404_campaigns.update_one({"_id": CAMPAIGN, "lease_token": token},
-                    {"$set": {"state": "review_complete"}})
-                return True
-            ref = row["reference"]
-            await db.qoyod_404_campaigns.update_one({"_id": CAMPAIGN, "lease_token": token},
-                {"$set": {"cursor": ref}})
-            await db.qoyod_404_outcomes.update_one({"_id": f"{CAMPAIGN}:{ref}"},
-                {"$set": {"state": "running", "reason": "refreshing_salla"}})
-        outcome = await (audit_one(scope, ref, ports) if audit else recover_one(scope, ref, ports))
-        if outcome.state == "disabled":
-            # Authorization was refused before a claim/write. Do not invent an
-            # ambiguous financial attempt or strand this row behind audit.
-            await ports.finish(Outcome(ref, "pending", outcome.reason))
-            await pause(db, outcome.reason)
-            await db.qoyod_404_campaigns.update_one({"_id": CAMPAIGN, "lease_token": token},
-                {"$set": {"cursor": None}})
-        elif outcome.state in {"unknown", "review"}:
-            await pause(db, outcome.reason)
-        else:
-            await db.qoyod_404_campaigns.update_one({"_id": CAMPAIGN, "lease_token": token},
-                {"$set": {"cursor": None}})
+        await run_with_lease_heartbeat(db, token, process_tick(db, external_factory, token))
     except Exception:
-        await pause(db, "worker_interrupted_requires_audit")
+        await db.qoyod_404_campaigns.update_one(
+            {"_id": CAMPAIGN, "lease_token": token, "busy": True},
+            {"$set": {"state": "paused", "pause_reason": "worker_interrupted_requires_audit"}},
+        )
         raise
     finally:
         await db.qoyod_404_campaigns.update_one({"_id": CAMPAIGN, "lease_token": token},
@@ -286,30 +369,33 @@ async def audit_pending(db, external_factory):
         {"_id": CAMPAIGN, "state": {"$ne": "active"}, "$or": [
             {"busy": False}, {"lease_until": {"$lt": now()}}]},
         {"$set": {"busy": True, "lease_token": token,
-                  "lease_until": now() + timedelta(minutes=10)}})
+                  "lease_until": now() + LEASE_TTL}})
     if not acquired.modified_count:
         raise ValueError("audit_already_running")
     scope = scope_from(campaign)
-    ports = DurablePorts(db, campaign, external_factory(db, campaign))
+    ports = DurablePorts(db, campaign, external_factory(db, campaign), lease_token=token)
     try:
-        # Use the same unresolved predicate that blocks activation. A worker
-        # read failure before send is `blocked`, but still requires audit.
-        rows = [row async for row in db.qoyod_404_outcomes.find({"campaign": CAMPAIGN})
-                if unresolved_attempt(row) or row["state"] == "rounding_review"]
-        for row in rows:
-            diagnostic = row.get("read_diagnostic") or {}
-            preclaim_page_404 = (
-                row.get("state") in {"blocked", "review"}
-                and row.get("reason") == "outcome_unknown"
-                and diagnostic.get("stage") == "provider_page"
-                and diagnostic.get("http_status") == 404
-            )
-            await audit_one(
-                scope,
-                row["reference"],
-                ports,
-                allow_preclaim_requeue=preclaim_page_404,
-            )
+        async def process_audit():
+            # Use the same unresolved predicate that blocks activation. A worker
+            # read failure before send is `blocked`, but still requires audit.
+            rows = [row async for row in db.qoyod_404_outcomes.find({"campaign": CAMPAIGN})
+                    if unresolved_attempt(row) or row["state"] == "rounding_review"]
+            for row in rows:
+                diagnostic = row.get("read_diagnostic") or {}
+                preclaim_page_404 = (
+                    row.get("state") in {"blocked", "review"}
+                    and row.get("reason") == "outcome_unknown"
+                    and diagnostic.get("stage") == "provider_page"
+                    and diagnostic.get("http_status") == 404
+                )
+                await audit_one(
+                    scope,
+                    row["reference"],
+                    ports,
+                    allow_preclaim_requeue=preclaim_page_404,
+                )
+
+        await run_with_lease_heartbeat(db, token, process_audit())
     finally:
         await db.qoyod_404_campaigns.update_one({"_id": CAMPAIGN, "lease_token": token},
             {"$set": {"cursor": None, "busy": False}})

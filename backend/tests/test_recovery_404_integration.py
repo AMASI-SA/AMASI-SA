@@ -326,6 +326,115 @@ class Integration(unittest.IsolatedAsyncioTestCase):
         self.provider.hold.set(); await first
         self.assertEqual(self.provider.payment_posts, 1)
 
+    async def test_live_worker_renews_lease_before_original_deadline(self):
+        await self.activate(); self.provider.hold = asyncio.Event()
+        clock = [c.now()]
+        with patch.object(c, "now", side_effect=lambda: clock[0]), \
+             patch.object(c, "LEASE_HEARTBEAT_SECONDS", 0.001, create=True):
+            first = asyncio.create_task(c.tick(self.db, self.factory))
+            try:
+                for _ in range(50):
+                    if self.provider.invoice_posts:
+                        break
+                    await asyncio.sleep(0)
+                self.assertEqual(self.provider.invoice_posts, 1)
+                original = await self.db.qoyod_404_campaigns.find_one({"_id": c.CAMPAIGN})
+                original_token = original["lease_token"]
+
+                # Move beyond the originally acquired ten-minute lease while
+                # the provider call is still alive. The heartbeat must renew
+                # the same fenced token before another worker can take over.
+                clock[0] += timedelta(minutes=11)
+                for _ in range(50):
+                    current = await self.db.qoyod_404_campaigns.find_one({"_id": c.CAMPAIGN})
+                    if current["lease_until"] > clock[0]:
+                        break
+                    await asyncio.sleep(0.001)
+
+                await c.tick(self.db, self.factory)
+                during = await self.db.qoyod_404_campaigns.find_one({"_id": c.CAMPAIGN})
+                self.assertEqual(during["lease_token"], original_token)
+                self.assertGreater(during["lease_until"], clock[0])
+                self.assertEqual(self.provider.invoice_posts, 1)
+            finally:
+                self.provider.hold.set()
+                await first
+        self.assertEqual((self.provider.invoice_posts, self.provider.payment_posts), (1, 1))
+
+    async def test_worker_stops_without_stale_persistence_after_fence_loss(self):
+        from integrations.qoyod_manual.recovery_404 import EvidenceError
+
+        await self.activate(); self.provider.hold = asyncio.Event()
+        with patch.object(c, "LEASE_HEARTBEAT_SECONDS", 0.001):
+            worker = asyncio.create_task(c.tick(self.db, self.factory))
+            try:
+                for _ in range(50):
+                    if self.provider.invoice_posts:
+                        break
+                    await asyncio.sleep(0)
+                self.assertEqual(self.provider.invoice_posts, 1)
+                await self.db.qoyod_404_campaigns.update_one(
+                    {"_id": c.CAMPAIGN},
+                    {"$set": {"lease_token": "replacement-worker",
+                              "lease_until": c.now() + timedelta(minutes=10)}},
+                )
+                with self.assertRaisesRegex(EvidenceError, "recovery_lease_fencing_lost"):
+                    await worker
+            finally:
+                self.provider.hold.set()
+                if not worker.done():
+                    worker.cancel()
+                    with self.assertRaises(asyncio.CancelledError):
+                        await worker
+
+        campaign = await self.db.qoyod_404_campaigns.find_one({"_id": c.CAMPAIGN})
+        row = await self.db.qoyod_404_outcomes.find_one({"reference": TARGET})
+        self.assertEqual(campaign["lease_token"], "replacement-worker")
+        self.assertEqual(campaign["state"], "active")
+        self.assertEqual(row["state"], "running")
+        self.assertEqual((self.provider.invoice_posts, self.provider.payment_posts), (1, 1))
+
+    async def test_live_audit_renews_lease_before_original_deadline(self):
+        await self.prepare()
+        await self.db.qoyod_404_outcomes.update_one(
+            {"reference": TARGET}, {"$set": {"state": "review", "reason": "outcome_unknown"}})
+        release = asyncio.Event()
+        original_facts = self.provider.facts
+
+        async def hold_facts(ref):
+            await release.wait()
+            return await original_facts(ref)
+
+        self.provider.facts = hold_facts
+        clock = [c.now()]
+        with patch.object(c, "now", side_effect=lambda: clock[0]), \
+             patch.object(c, "LEASE_HEARTBEAT_SECONDS", 0.001, create=True):
+            auditing = asyncio.create_task(c.audit_pending(self.db, self.factory))
+            try:
+                for _ in range(50):
+                    current = await self.db.qoyod_404_campaigns.find_one({"_id": c.CAMPAIGN})
+                    if current.get("busy"):
+                        break
+                    await asyncio.sleep(0)
+                original_token = current["lease_token"]
+
+                clock[0] += timedelta(minutes=11)
+                for _ in range(50):
+                    current = await self.db.qoyod_404_campaigns.find_one({"_id": c.CAMPAIGN})
+                    if current["lease_until"] > clock[0]:
+                        break
+                    await asyncio.sleep(0.001)
+
+                state = await c.report(self.db)
+                self.assertEqual(state["lease_token"], original_token)
+                self.assertGreater(state["lease_until"], clock[0])
+                self.assertFalse(state["can_audit"])
+                self.assertEqual(state["audit_block_reason"], "operation_in_progress")
+            finally:
+                release.set()
+                await auditing
+        self.assertEqual((self.provider.invoice_posts, self.provider.payment_posts), (0, 0))
+
     async def test_cod_sku_cancelled_or_unpaid_have_specific_results_and_no_send(self):
         await self.activate()
         changes = [dict(is_cod=True), dict(skus_complete=False), dict(status="cancelled"), dict(payment_eligible=False)]
