@@ -290,3 +290,7 @@ frontend/node_modules/.cache/default-development/123.pack
 .worktrees/p01-intake-runtime-20260919/standalone-test/data/journal/WiredTigerLog.0000000001
 .worktrees/p01-intake-runtime-20260919/standalone-test/data/journal/WiredTigerPreplog.0000000002
 .worktrees/preview-runtime-state-20260919/toolcache/mezan-release-toolchains/v1/node-v22.23.2-yarn-1.22.22-linux-arm64/node/bin/node
+.worktrees/p01-write-final-preview-20260920/mongo/journal/WiredTigerLog.0000000001
+.worktrees/p01-write-final-preview-20260920/mongo/journal/WiredTigerPreplog.0000000001
+.worktrees/p01-write-final-preview-20260920/mongo/journal/WiredTigerPreplog.0000000002
+.worktrees/p01-acceptance-state-20260919/mongo/journal/WiredTigerLog.0000000971
