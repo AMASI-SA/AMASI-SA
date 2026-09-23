@@ -2,6 +2,7 @@ import api from "../lib/api";
 
 const BASE = "/financial-provider-apps/accounting-module";
 const SETTLEMENTS = `${BASE}/settlements`;
+const FINANCIAL_ACCOUNTS = `${BASE}/financial-accounts`;
 
 function compactParams(params = {}) {
     return Object.fromEntries(
@@ -247,6 +248,93 @@ export async function activateAccountingP01(activationRef) {
         confirmation: "ACTIVATE_MZ2_P01",
     });
     return data;
+}
+
+export async function getFinancialAccountDefinitions() {
+    const { data } = await api.get(`${FINANCIAL_ACCOUNTS}/definitions`);
+    return data;
+}
+
+export async function getFinancialAccounts() {
+    const { data } = await api.get(FINANCIAL_ACCOUNTS);
+    return data;
+}
+
+export async function createFinancialAccount(payload) {
+    const { data } = await api.post(FINANCIAL_ACCOUNTS, payload);
+    return data;
+}
+
+export async function updateFinancialAccount(accountId, payload) {
+    const { data } = await api.patch(
+        `${FINANCIAL_ACCOUNTS}/accounts/${encodeURIComponent(accountId)}`,
+        payload,
+    );
+    return data;
+}
+
+export async function archiveFinancialAccount(accountId, payload) {
+    const { data } = await api.delete(
+        `${FINANCIAL_ACCOUNTS}/accounts/${encodeURIComponent(accountId)}`,
+        { data: payload },
+    );
+    return data;
+}
+
+export async function getFinancialAccountsTransition() {
+    const { data } = await api.get(`${FINANCIAL_ACCOUNTS}/transition`);
+    return data;
+}
+
+export async function advanceFinancialAccountsTransition(payload) {
+    const { data } = await api.post(`${FINANCIAL_ACCOUNTS}/transition`, payload);
+    return data;
+}
+
+export async function uploadOpeningBalanceEvidence({ sectionId, file }) {
+    const form = new FormData();
+    form.append("purpose", "opening_balance");
+    form.append("section_id", sectionId);
+    form.append("file", file);
+    const { data } = await api.post(
+        `${FINANCIAL_ACCOUNTS}/opening-balances/evidence`,
+        form,
+        { headers: { "Content-Type": "multipart/form-data" } },
+    );
+    return data;
+}
+
+export async function getOpeningBalanceDrafts() {
+    const { data } = await api.get(`${FINANCIAL_ACCOUNTS}/opening-balances/drafts`);
+    return data;
+}
+
+export async function createOpeningBalanceDraft(payload) {
+    const { data } = await api.post(
+        `${FINANCIAL_ACCOUNTS}/opening-balances/drafts`,
+        payload,
+    );
+    return data;
+}
+
+async function runOpeningBalanceDraftAction(draftId, action, payload) {
+    const { data } = await api.post(
+        `${FINANCIAL_ACCOUNTS}/opening-balances/drafts/${encodeURIComponent(draftId)}/${action}`,
+        payload,
+    );
+    return data;
+}
+
+export function reviewOpeningBalanceDraft(draftId, payload) {
+    return runOpeningBalanceDraftAction(draftId, "review", payload);
+}
+
+export function postOpeningBalanceDraft(draftId, payload) {
+    return runOpeningBalanceDraftAction(draftId, "post", payload);
+}
+
+export function reverseOpeningBalanceDraft(draftId, payload) {
+    return runOpeningBalanceDraftAction(draftId, "reverse", payload);
 }
 
 

@@ -16,10 +16,11 @@ const serviceSource = fs.readFileSync(
     "utf8",
 );
 
-test("P01 settlements page is marked implemented without changing the eight-page order", () => {
-    expect(ACCOUNTING_PAGES).toHaveLength(8);
+test("P01 settlements page remains implemented in the nine-page order", () => {
+    expect(ACCOUNTING_PAGES).toHaveLength(9);
     expect(ACCOUNTING_PAGES.map((page) => page.id)).toEqual([
         "home",
+        "financial-accounts",
         "settlements",
         "shipping-cod",
         "inventory-purchases",

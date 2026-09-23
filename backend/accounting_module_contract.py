@@ -10,6 +10,7 @@ OPERATION_ID = "MZ2-FIN-CUTOVER-001"
 
 ACCOUNTING_PAGES: tuple[dict[str, str], ...] = (
     {"id": "home", "label": "الرئيسية المحاسبية", "permission": "accounting.home.view"},
+    {"id": "financial-accounts", "label": "الصناديق والحسابات المالية", "permission": "accounting.financial_accounts.view"},
     {"id": "settlements", "label": "التسويات", "permission": "accounting.settlements.view"},
     {"id": "shipping-cod", "label": "الشحن والتحصيل", "permission": "accounting.shipping.view"},
     {"id": "inventory-purchases", "label": "المخزون والمشتريات", "permission": "accounting.inventory.view"},
@@ -31,6 +32,10 @@ ACCOUNTING_ACTIONS: tuple[dict[str, str], ...] = (
     {"id": "draft-create", "label": "إنشاء وحفظ مسودة مالية", "permission": "accounting.drafts.create"},
     {"id": "settlement-post", "label": "اعتماد وترحيل تسوية", "permission": "accounting.settlements.post"},
     {"id": "rules-manage", "label": "تعديل قواعد العمولات والحسابات", "permission": "accounting.rules.manage"},
+    {"id": "financial-accounts-manage", "label": "إدارة الصناديق والحسابات المالية", "permission": "accounting.financial_accounts.manage"},
+    {"id": "opening-drafts-manage", "label": "إدارة مسودات الأرصدة الافتتاحية", "permission": "accounting.opening_balances.drafts.manage"},
+    {"id": "opening-review", "label": "مراجعة الأرصدة الافتتاحية", "permission": "accounting.opening_balances.review"},
+    {"id": "opening-post", "label": "ترحيل الأرصدة الافتتاحية", "permission": "accounting.opening_balances.post"},
     # Owner-approved registry key; every user still needs an explicit grant.
     {"id": "shipping-contract-review", "label": "مراجعة واعتماد عقد شركة الشحن", "permission": "accounting.shipping.contracts.review"},
     {"id": "purchase-post", "label": "ترحيل فاتورة شراء وتحديث المخزون", "permission": "accounting.purchases.post"},
@@ -54,8 +59,19 @@ SHIPPING_CONTRACT_PERMISSIONS = {
     "post": "accounting.settlements.post",
 }
 
-# This new authority is never added implicitly, including to owners.
-ACCOUNTING_EXPLICIT_GRANT_KEYS = frozenset({SHIPPING_CONTRACT_PERMISSIONS["review"]})
+# These authorities are never added implicitly, including to owners.  The
+# legacy ``opening_balances.approve`` key is intentionally not an alias for
+# any part of the new draft/review/post workflow.
+ACCOUNTING_EXPLICIT_GRANT_KEYS = frozenset({
+    SHIPPING_CONTRACT_PERMISSIONS["review"],
+    "accounting.financial_accounts.view",
+    "accounting.financial_accounts.manage",
+    "accounting.opening_balances.view",
+    "accounting.opening_balances.drafts.manage",
+    "accounting.opening_balances.review",
+    "accounting.opening_balances.post",
+    "accounting.journals.reverse",
+})
 
 EVIDENCE_SECTIONS: tuple[dict[str, str], ...] = (
     {"id": "banks_cash", "label": "البنوك والصندوق"},

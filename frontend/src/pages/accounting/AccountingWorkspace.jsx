@@ -5,6 +5,7 @@ import { useOptionalAuth } from "../../context/AuthContext";
 import { getAccountingAccess, getAccountingModuleStatus } from "../../services/accountingModule";
 import AccountingCourierBankBindings from "./AccountingCourierBankBindings";
 import AccountingDailyWorkspace from "./AccountingDailyWorkspace";
+import AccountingFinancialAccounts from "./AccountingFinancialAccounts";
 import AccountingReports from "./AccountingReports";
 import AccountingPermissionsDialog from "./AccountingPermissionsDialog";
 import AccountingSettlements from "./AccountingSettlements";
@@ -93,6 +94,8 @@ export default function AccountingWorkspace() {
                 <AccountingCourierBankBindings accountingPermissions={permissions} />
             </div>
         );
+    } else if (page.id === "financial-accounts") {
+        content = <AccountingFinancialAccounts accountingPermissions={permissions} />;
     } else if (page.id === "shipping-cod") {
         content = <AccountingShippingCod accountingPermissions={permissions} />;
     } else if (page.id === "financial-movements") {

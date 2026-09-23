@@ -9,6 +9,13 @@ export const ACCOUNTING_PAGES = [
         implementationStatus: "implemented",
     },
     {
+        id: "financial-accounts",
+        label: "الصناديق والحسابات المالية",
+        permission: "accounting.financial_accounts.view",
+        to: "/integrations-v2?workspace=financial&page=financial-accounts",
+        implementationStatus: "implemented",
+    },
+    {
         id: "settlements",
         label: "التسويات",
         permission: "accounting.settlements.view",
@@ -67,12 +74,26 @@ export const ACCOUNTING_ACTIONS = [
     { id: "draft-create", label: "إنشاء وحفظ مسودة مالية", permission: "accounting.drafts.create" },
     { id: "settlement-post", label: "اعتماد وترحيل تسوية", permission: "accounting.settlements.post" },
     { id: "rules-manage", label: "تعديل قواعد العمولات والحسابات", permission: "accounting.rules.manage" },
+    { id: "financial-accounts-manage", label: "إدارة الصناديق والحسابات المالية", permission: "accounting.financial_accounts.manage" },
+    { id: "opening-drafts-manage", label: "إدارة مسودات الأرصدة الافتتاحية", permission: "accounting.opening_balances.drafts.manage" },
+    { id: "opening-review", label: "مراجعة الأرصدة الافتتاحية", permission: "accounting.opening_balances.review" },
+    { id: "opening-post", label: "ترحيل الأرصدة الافتتاحية", permission: "accounting.opening_balances.post" },
     { id: "purchase-post", label: "ترحيل فاتورة شراء وتحديث المخزون", permission: "accounting.purchases.post" },
     { id: "payroll-post", label: "اعتماد وترحيل الرواتب والالتزامات", permission: "accounting.payroll.post" },
     { id: "opening-approve", label: "اعتماد القيد الافتتاحي", permission: "accounting.opening_balances.approve" },
     { id: "manual-journal", label: "إنشاء قيد يدوي", permission: "accounting.journals.manual_create" },
     { id: "journal-reverse", label: "عكس قيد مرحّل", permission: "accounting.journals.reverse" },
 ];
+
+export const ACCOUNTING_EXPLICIT_GRANT_PERMISSIONS = new Set([
+    "accounting.financial_accounts.view",
+    "accounting.financial_accounts.manage",
+    "accounting.opening_balances.view",
+    "accounting.opening_balances.drafts.manage",
+    "accounting.opening_balances.review",
+    "accounting.opening_balances.post",
+    "accounting.journals.reverse",
+]);
 
 export function accountingPageById(pageId) {
     return ACCOUNTING_PAGES.find((page) => page.id === pageId) || ACCOUNTING_PAGES[0];
@@ -84,9 +105,9 @@ export function accountingPageFromSearchParams(searchParams) {
 
 export function userCanAccessAccounting(user, permission, assignedPermissions = []) {
     if (!user || !permission) return false;
-    return user.is_owner === true
-        || String(user.role || "").toLowerCase() === "owner"
-        || (Array.isArray(assignedPermissions) && assignedPermissions.includes(permission));
+    if (Array.isArray(assignedPermissions) && assignedPermissions.includes(permission)) return true;
+    if (ACCOUNTING_EXPLICIT_GRANT_PERMISSIONS.has(permission)) return false;
+    return user.is_owner === true || String(user.role || "").toLowerCase() === "owner";
 }
 
 export function accountingNavItems() {

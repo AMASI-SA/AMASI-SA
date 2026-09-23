@@ -48,6 +48,11 @@ jest.mock("./AccountingWriteControl", () => () => null);
 jest.mock("./AccountingPeriods", () => () => null);
 jest.mock("./AccountingCustomerAdvances", () => () => null);
 jest.mock("./AccountingOpeningBalances", () => () => null);
+jest.mock("./AccountingFinancialAccounts", () => ({ accountingPermissions = [] }) => (
+    <div data-testid="financial-accounts-workspace-binding">
+        {accountingPermissions.join(",")}
+    </div>
+));
 
 let root, node;
 beforeEach(() => {
@@ -122,4 +127,23 @@ test("a member without report permission never fetches financial report data", a
     expect(node.querySelector('[data-testid="accounting-page-journals-reports"]')).toBeNull();
     expect(api.get).not.toHaveBeenCalled();
     expect(getAccountingModuleStatus).not.toHaveBeenCalled();
+});
+
+test("financial-accounts query binds the dedicated page without aliasing an old page", async () => {
+    getAccountingAccess.mockResolvedValue({
+        is_owner: false,
+        permissions: [
+            "accounting.financial_accounts.view",
+            "accounting.financial_accounts.manage",
+        ],
+    });
+    await act(async () => root.render(
+        <MemoryRouter initialEntries={["/integrations-v2?workspace=financial&page=financial-accounts"]}>
+            <AccountingWorkspace />
+        </MemoryRouter>,
+    ));
+    const page = node.querySelector('[data-testid="financial-accounts-workspace-binding"]');
+    expect(page).not.toBeNull();
+    expect(page.textContent).toContain("accounting.financial_accounts.manage");
+    expect(node.querySelector('[data-testid="accounting-home-page"]')).toBeNull();
 });

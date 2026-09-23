@@ -1264,6 +1264,14 @@ async def _post_supplier_invoice_ledger(
     mongo_session: Any,
 ) -> dict[str, Any]:
     """Post the balanced payable legs inside the caller's Mongo transaction."""
+    from accounting_writer_transition import assert_writer_allowed
+
+    await assert_writer_allowed(
+        db,
+        user_id,
+        "legacy",
+        mongo_session=mongo_session,
+    )
     amount = round(int(invoice["total_halalas"]) / 100, 2)
     if amount <= 0:
         raise HTTPException(

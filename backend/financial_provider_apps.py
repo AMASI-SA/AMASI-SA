@@ -19,8 +19,15 @@ from accounting_shipping_settlements import install_shipping_settlement_routes
 
 from financial_provider_apps_legacy import *  # noqa: F401,F403
 from financial_provider_apps_legacy import (
+    ensure_financial_provider_app_indexes as _ensure_legacy_financial_provider_app_indexes,
     make_financial_provider_apps_router as _legacy_router,
 )
+
+from accounting_financial_accounts import (
+    ensure_financial_account_indexes,
+    install_financial_account_routes,
+)
+from accounting_ledger_v2 import ensure_accounting_ledger_v2_indexes
 
 from accounting_courier_bank_routes import install_accounting_courier_bank_routes
 from accounting_module_contract import (  # noqa: F401
@@ -78,6 +85,13 @@ from accounting_settlement_service import (  # noqa: F401
 import settlements_import.routes as settlement_import_routes_module
 
 
+async def ensure_financial_provider_app_indexes(db):
+    """Install legacy provider and dedicated V2 accounting indexes together."""
+    await _ensure_legacy_financial_provider_app_indexes(db)
+    await ensure_accounting_ledger_v2_indexes(db)
+    await ensure_financial_account_indexes(db)
+
+
 def make_financial_provider_apps_router(db, current_user):
     from accounting_write_control import (
         AccountingDatabase, install_write_control_routes, protect_accounting_routes,
@@ -115,6 +129,7 @@ def make_financial_provider_apps_router(db, current_user):
     install_mz2_report_routes(router, db, current_user)
     install_accounting_permission_routes(router, db, current_user)
     install_opening_balance_routes(router, db, current_user)
+    install_financial_account_routes(router, db, current_user)
 
     # Lifecycle handlers are registered before compatibility handlers. Starlette
     # dispatches the first matching route, so ``matched`` and bank-evidence

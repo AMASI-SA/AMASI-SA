@@ -33,6 +33,13 @@ class SessionCollection:
             raise AttributeError(f"unsupported transactional collection operation: {name}")
         if self._collection.name == "general_ledger" and name in {"insert_one", "insert_many"}:
             async def insert_leg(document, **kwargs):
+                from accounting_writer_transition import assert_writer_allowed
+                await assert_writer_allowed(
+                    self._collection.database,
+                    self._owner,
+                    "legacy",
+                    mongo_session=self._session,
+                )
                 documents = [document] if name == "insert_one" else list(document)
                 groups = set()
                 for leg in documents:
@@ -123,4 +130,3 @@ async def _owner_transaction(db, owner, callback, *, control=False):
             write_concern=WriteConcern("majority", j=True),
             read_preference=ReadPreference.PRIMARY,
         )
-

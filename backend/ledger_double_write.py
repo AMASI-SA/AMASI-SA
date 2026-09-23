@@ -68,6 +68,12 @@ async def mirror_account_txn_to_ledger(
 
     Returns: { "skipped": bool, "txn_group_id": str, "reason"?: str }
     """
+    from accounting_writer_transition import assert_writer_allowed
+
+    # Manual movements and retries reach the legacy ledger through this
+    # helper.  Fence every invocation before its idempotency read so the
+    # transition state has the same meaning for every ingress channel.
+    await assert_writer_allowed(db, user_id, "legacy")
     if not account_transaction_id or amount is None or amount == 0:
         return {"skipped": True, "reason": "missing id or zero amount"}
 

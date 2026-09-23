@@ -241,6 +241,8 @@ async def post_ledger_entry(
         the same business event (mandatory for grouped operations
         posted via post_txn_group).
     """
+    from accounting_writer_transition import assert_writer_allowed
+    await assert_writer_allowed(db, user_id, "legacy")
     if entry_type not in ENTRY_TYPES:
         raise HTTPException(400, f"entry_type غير صحيح: {entry_type}")
     if side not in SIDES:
@@ -388,6 +390,8 @@ async def post_txn_group(
         "credit_total": float,
     }
     """
+    from accounting_writer_transition import assert_writer_allowed
+    await assert_writer_allowed(db, user_id, "legacy")
     if not entries or len(entries) < 2:
         raise HTTPException(400, "كل حركة محاسبية تحتاج قيدين على الأقل")
     debit_total = round(sum(float(e["amount"]) for e in entries
