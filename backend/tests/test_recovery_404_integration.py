@@ -125,6 +125,42 @@ class Integration(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((self.provider.invoice_posts, self.provider.payment_posts), (0, 0))
         self.assertEqual((await self.db.qoyod_404_attempts.find_one({"_id": f"main:{TARGET}"}))["proof"], "keep")
 
+    async def test_audit_requeues_only_preclaim_provider_page_404(self):
+        await self.prepare()
+        await self.db.qoyod_404_outcomes.update_one(
+            {"reference": TARGET},
+            {"$set": {
+                "state": "review",
+                "reason": "outcome_unknown",
+                "read_diagnostic": {
+                    "stage": "provider_page",
+                    "error_type": "ManualQoyodError",
+                    "http_status": 404,
+                    "page": 65,
+                },
+            }},
+        )
+
+        result = await self.http.post(BASE + "/audit", json={})
+
+        self.assertEqual(result.status_code, 200, result.text)
+        row = next(
+            item for item in result.json()["results"]
+            if item["reference"] == TARGET
+        )
+        self.assertEqual(
+            (row["state"], row["reason"]),
+            ("pending", "pre_send_read_recovered"),
+        )
+        self.assertTrue(result.json()["can_activate"])
+        self.assertEqual(
+            await self.db.qoyod_404_attempts.count_documents({}), 0
+        )
+        self.assertEqual(
+            (self.provider.invoice_posts, self.provider.payment_posts),
+            (0, 0),
+        )
+
     async def test_worker_preserves_read_diagnostic_before_financial_attempt(self):
         await self.activate()
         failure = RuntimeError("private provider message")

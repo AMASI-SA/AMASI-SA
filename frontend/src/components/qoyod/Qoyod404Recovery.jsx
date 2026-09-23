@@ -31,6 +31,7 @@ const REASONS = {
   campaign_active: "أوقف التعافي قبل التدقيق",
   operation_in_progress: "توجد عملية بحجز سارٍ؛ انتظر انتهاءها ثم حدّث الحالة",
   existing_invoice_rounding_requires_settlement: "فرق هللة مثبت؛ لا يُعاد الإرسال أو السداد، ويبقى غير مكتمل حتى تسويته في قيود",
+  pre_send_read_recovered: "اكتمل التدقيق ولم تبدأ محاولة إرسال؛ أُعيد الطلب إلى الانتظار الآمن",
 };
 
 export default function Qoyod404Recovery() {
