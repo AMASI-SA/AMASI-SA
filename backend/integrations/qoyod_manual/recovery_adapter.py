@@ -141,7 +141,14 @@ class ProductionPorts:
                 with reading("provider_page", page=page):
                     body = await client._request("GET", "/invoices", params={"page": page, "limit": 50})
             except ManualQoyodError as exc:
-                if _is_confirmed_empty_list(exc):
+                # Match the production sender's established complete-scan
+                # contract: after at least one successful full page, Qoyod
+                # uses HTTP 404 for the page beyond the invoice list.  This
+                # recovery scan preserves duplicate references, so it cannot
+                # directly reuse the sender's reference dictionary.
+                if _is_confirmed_empty_list(exc) or (
+                    exc.status_code == 404 and page > 1
+                ):
                     complete = True
                     break
                 raise

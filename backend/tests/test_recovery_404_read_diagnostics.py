@@ -48,6 +48,54 @@ class ReadDiagnostics(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((d['stage'],d['http_status'],d['page']),('provider_invoice',503,1))
         self.assertNotIn(SECRET,json.dumps(d))
 
+    async def test_real_adapter_accepts_404_after_a_full_invoice_page_as_end(self):
+        db = AsyncMongoMockClient().db
+        port = ProductionPorts(db, {"orders_owner": "synthetic-store"})
+        calls = []
+
+        async def request(client, method, path, **kwargs):
+            page = kwargs.get("params", {}).get("page")
+            calls.append((method, path, page))
+            if page == 1:
+                return {"invoices": [
+                    {"id": value, "reference": str(900000000 + value)}
+                    for value in range(1, 51)
+                ]}
+            raise ManualQoyodError(
+                status_code=404,
+                endpoint="GET /invoices",
+                response_excerpt="URL not found",
+            )
+
+        with (patch('integrations.qoyod.credentials.get_api_key', AsyncMock(return_value='synthetic')),
+              patch.dict('os.environ', {'QOYOD_API_BASE':'https://qoyod.invalid'}),
+              patch.object(ManualQoyodClient, '_request', request)):
+            observed = await port.observe('100')
+
+        self.assertTrue(observed.complete_reference_lookup)
+        self.assertEqual(observed.invoices, ())
+        self.assertEqual(calls, [
+            ("GET", "/invoices", 1),
+            ("GET", "/invoices", 2),
+        ])
+
+    async def test_real_adapter_keeps_first_invoice_page_generic_404_unknown(self):
+        db = AsyncMongoMockClient().db
+        port = ProductionPorts(db, {"orders_owner": "synthetic-store"})
+
+        async def request(client, method, path, **kwargs):
+            raise ManualQoyodError(
+                status_code=404,
+                endpoint="GET /invoices",
+                response_excerpt="URL not found",
+            )
+
+        with (patch('integrations.qoyod.credentials.get_api_key', AsyncMock(return_value='synthetic')),
+              patch.dict('os.environ', {'QOYOD_API_BASE':'https://qoyod.invalid'}),
+              patch.object(ManualQoyodClient, '_request', request)):
+            with self.assertRaises(ManualQoyodError):
+                await port.observe('100')
+
     def test_programming_error_has_code_location_without_exception_text(self):
         try:
             with reading('facts'):
