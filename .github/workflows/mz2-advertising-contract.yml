@@ -1,0 +1,128 @@
+name: MZ2 Advertising Isolated Contracts
+
+on:
+  pull_request:
+    # Deliberately no base-branch filter: this task is reviewed in a movable stack.
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+    paths:
+      - "backend/accounting_advertising_contract.py"
+      - "backend/tests/test_accounting_advertising_contract*.py"
+      - "frontend/src/pages/accounting/AdvertisingAccountsDraft*"
+      - "frontend/src/pages/accounting/advertisingAccountsDraftContract*"
+      - ".github/workflows/mz2-advertising-contract.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  advertising-contracts:
+    # Description-only edits need no new run; a retargeted base does.
+    if: github.event.action != 'edited' || github.event.changes.base != null
+    name: Advertising contracts (${{ matrix.context }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        context: [head, base-merge]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.context == 'head' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify exact source and current review-base parents
+        env:
+          TEST_CONTEXT: ${{ matrix.context }}
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+          EXPECTED_BASE: ${{ github.event.pull_request.base.sha }}
+          EXPECTED_MERGE: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          python - <<'PY'
+          import json, os, pathlib, subprocess
+          def git(*args):
+              return subprocess.check_output(['git', *args], text=True).strip()
+          actual = git('rev-parse', 'HEAD')
+          context = os.environ['TEST_CONTEXT']
+          head, base = os.environ['EXPECTED_HEAD'], os.environ['EXPECTED_BASE']
+          if context == 'head':
+              assert actual == head, 'head checkout mismatch'
+              parents = []
+          else:
+              assert actual == os.environ['EXPECTED_MERGE'], 'merge checkout mismatch'
+              parents = git('show', '-s', '--format=%P', 'HEAD').split()
+              assert parents == [base, head], 'review base/head parents mismatch'
+          result = dict(context=context, source_head=head, review_base=base,
+                        checkout=actual, parents=parents, tree=git('rev-parse', 'HEAD^{tree}'))
+          pathlib.Path('evidence/context.json').write_text(json.dumps(result, indent=2) + '\n')
+          print(json.dumps(result, indent=2))
+          PY
+      - name: Synthetic pure backend contracts - no DB or endpoints
+        env:
+          PYTHONPATH: backend
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s backend/tests -p 'test_accounting_advertising_contract*.py' -v 2>&1 | tee evidence/backend.log
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.23.2"
+      - name: Pure display contract tests
+        run: |
+          set -euo pipefail
+          node --test frontend/src/pages/accounting/advertisingAccountsDraftContract.node.test.mjs 2>&1 | tee evidence/node.log
+      - name: Enable governed Yarn version
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install existing locked frontend dependencies
+        working-directory: frontend
+        run: yarn install --frozen-lockfile --non-interactive
+      - name: Actual isolated React DOM tests
+        working-directory: frontend
+        env:
+          CI: "true"
+        run: |
+          set -euo pipefail
+          yarn test --watchAll=false --runInBand src/pages/accounting/AdvertisingAccountsDraft.test.jsx 2>&1 | tee ../evidence/react.log
+      - name: Retain allowlisted tracked source and test identities
+        if: always()
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib, json, pathlib, subprocess
+          patterns = [
+              'AGENTS.md', '**/AGENTS.md', '.github/workflows/*.yml',
+              'backend/accounting_advertising_contract.py',
+              'backend/tests/test_accounting_advertising_contract*.py',
+              'frontend/src/pages/accounting/AdvertisingAccountsDraft*',
+              'frontend/src/pages/accounting/advertisingAccountsDraftContract*',
+              'docs/operations/MZ2-FIN-CUTOVER-001/ADVERTISING-ACCOUNTS*.md',
+              'frontend/package.json', 'frontend/yarn.lock',
+          ]
+          names = subprocess.check_output(['git', 'ls-files', '-z', '--', *patterns]).decode().split('\0')
+          root = pathlib.Path('evidence/source')
+          manifest = {}
+          for name in sorted(set(filter(None, names))):
+              data = subprocess.check_output(['git', 'show', 'HEAD:' + name])
+              target = root / name
+              target.parent.mkdir(parents=True, exist_ok=True)
+              target.write_bytes(data)
+              manifest[name] = dict(sha256=hashlib.sha256(data).hexdigest(),
+                  git_blob=hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest())
+          pathlib.Path('evidence/source-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mz2-advertising-${{ matrix.context }}-${{ github.event.pull_request.head.sha }}
+          path: evidence/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
