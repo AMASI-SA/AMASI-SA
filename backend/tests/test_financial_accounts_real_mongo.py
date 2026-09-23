@@ -391,6 +391,29 @@ async def test_permissions_are_separate_and_legacy_key_or_owner_do_not_grant(api
         )
     ).status_code == 403
 
+    reversal_upload = await api.client.post(
+        OPENING + "/evidence",
+        headers=_headers("reverser"),
+        data={"purpose": "opening_reversal_reason"},
+        files={"file": ("reason.pdf", b"approved-reversal-reason", "application/pdf")},
+    )
+    assert reversal_upload.status_code == 200, reversal_upload.text
+    assert reversal_upload.json()["purpose"] == "opening_reversal_reason"
+    forbidden_draft_evidence = await api.client.post(
+        OPENING + "/evidence",
+        headers=_headers("reverser"),
+        data={"purpose": "opening_balance", "section_id": "banks_cash"},
+        files={"file": ("opening.xlsx", b"not-allowed", "application/octet-stream")},
+    )
+    assert forbidden_draft_evidence.status_code == 403
+    forbidden_reversal_evidence = await api.client.post(
+        OPENING + "/evidence",
+        headers=_headers("manager"),
+        data={"purpose": "opening_reversal_reason"},
+        files={"file": ("reason.pdf", b"not-allowed", "application/pdf")},
+    )
+    assert forbidden_reversal_evidence.status_code == 403
+
 
 @pytest.mark.asyncio
 async def test_opening_replacement_and_evidence_is_immutable(api):
@@ -447,7 +470,8 @@ async def test_http_review_post_concurrency_retry_and_append_only_reverse(api):
     evidence = sections["banks_cash"]
     account = await _create_opening_account(api, key="opening-account-lifecycle")
     reversal_evidence = await _upload(
-        api, content=b"opening-reversal-reason", purpose="opening_reversal_reason", section_id=None,
+        api, user="reverser", content=b"opening-reversal-reason",
+        purpose="opening_reversal_reason", section_id=None,
     )
     draft = await _draft(api, sections, cutover, account["id"])
     previewed = await _preview(api, draft)
@@ -663,6 +687,7 @@ async def test_zero_opening_can_be_reversed_then_replaced_by_first_v2_journal(ap
     account = await _create_opening_account(api, key="opening-account-zero-root")
     reversal_evidence = await _upload(
         api,
+        user="reverser",
         content=b"zero-opening-reversal-reason",
         purpose="opening_reversal_reason",
         section_id=None,

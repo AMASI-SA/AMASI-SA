@@ -869,10 +869,11 @@ def install_financial_account_routes(router: Any, db: Any, current_user: Any) ->
         purpose: str = Form(...), section_id: str = Form(""),
         file: UploadFile = File(...), user: dict = Depends(current_user),
     ):
-        actor, owner = await actor_for(user, "opening_view", "drafts_manage")
+        actor, owner = await actor_for(user, "opening_view")
         normalized_section = str(section_id or "").strip() or None
         if purpose not in OPENING_PURPOSES:
             raise HTTPException(422, detail={"code": "opening_evidence_purpose_invalid"})
+        _require(actor, "reverse" if purpose == "opening_reversal_reason" else "drafts_manage")
         if purpose in {"opening_balance", "fx_rate"}:
             if normalized_section not in EVIDENCE_SECTION_IDS:
                 raise HTTPException(422, detail={"code": "opening_evidence_section_invalid"})
