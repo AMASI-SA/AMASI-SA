@@ -10,6 +10,7 @@ import {
     getFinancialAccountsTransition,
     getOpeningBalanceDrafts,
     postOpeningBalanceDraft,
+    previewOpeningBalanceDraft,
     reverseOpeningBalanceDraft,
     reviewOpeningBalanceDraft,
     updateFinancialAccount,
@@ -62,14 +63,16 @@ describe("financial accounts API contract", () => {
         expect(api.post).toHaveBeenNthCalledWith(2, `${BASE}/transition`, transitionPayload);
     });
 
-    test("keeps draft, review, post, and reverse as separate endpoints", async () => {
+    test("keeps draft, preview, review, post, and reverse as separate endpoints", async () => {
         const draftPayload = { idempotency_key: "opening-draft-1", lines: [] };
+        const previewPayload = { version: 1, idempotency_key: "preview-request-1", note: "معاينة" };
         const reviewPayload = { version: 1, idempotency_key: "review-request-1", note: "مراجعة" };
         const postPayload = { version: 2, idempotency_key: "post-request-1", note: "ترحيل" };
         const reversePayload = { version: 3, idempotency_key: "reverse-request-1", note: "عكس" };
 
         await getOpeningBalanceDrafts();
         await createOpeningBalanceDraft(draftPayload);
+        await previewOpeningBalanceDraft("draft/id", previewPayload);
         await reviewOpeningBalanceDraft("draft/id", reviewPayload);
         await postOpeningBalanceDraft("draft/id", postPayload);
         await reverseOpeningBalanceDraft("draft/id", reversePayload);
@@ -77,15 +80,16 @@ describe("financial accounts API contract", () => {
         const drafts = `${BASE}/opening-balances/drafts`;
         expect(api.get).toHaveBeenCalledWith(drafts);
         expect(api.post).toHaveBeenNthCalledWith(1, drafts, draftPayload);
-        expect(api.post).toHaveBeenNthCalledWith(2, `${drafts}/draft%2Fid/review`, reviewPayload);
-        expect(api.post).toHaveBeenNthCalledWith(3, `${drafts}/draft%2Fid/post`, postPayload);
-        expect(api.post).toHaveBeenNthCalledWith(4, `${drafts}/draft%2Fid/reverse`, reversePayload);
+        expect(api.post).toHaveBeenNthCalledWith(2, `${drafts}/draft%2Fid/preview`, previewPayload);
+        expect(api.post).toHaveBeenNthCalledWith(3, `${drafts}/draft%2Fid/review`, reviewPayload);
+        expect(api.post).toHaveBeenNthCalledWith(4, `${drafts}/draft%2Fid/post`, postPayload);
+        expect(api.post).toHaveBeenNthCalledWith(5, `${drafts}/draft%2Fid/reverse`, reversePayload);
     });
 
     test("classifies uploaded evidence as an opening-balance source file", async () => {
         const file = new File(["evidence"], "opening.pdf", { type: "application/pdf" });
 
-        await uploadOpeningBalanceEvidence({ sectionId: "banks_cash", file });
+        await uploadOpeningBalanceEvidence({ purpose: "opening_balance", sectionId: "banks_cash", file });
 
         expect(api.post).toHaveBeenCalledTimes(1);
         const [url, form, options] = api.post.mock.calls[0];

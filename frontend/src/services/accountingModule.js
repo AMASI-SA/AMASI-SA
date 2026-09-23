@@ -291,10 +291,10 @@ export async function advanceFinancialAccountsTransition(payload) {
     return data;
 }
 
-export async function uploadOpeningBalanceEvidence({ sectionId, file }) {
+export async function uploadOpeningBalanceEvidence({ purpose, sectionId, file }) {
     const form = new FormData();
-    form.append("purpose", "opening_balance");
-    form.append("section_id", sectionId);
+    form.append("purpose", purpose);
+    if (sectionId) form.append("section_id", sectionId);
     form.append("file", file);
     const { data } = await api.post(
         `${FINANCIAL_ACCOUNTS}/opening-balances/evidence`,
@@ -327,6 +327,10 @@ async function runOpeningBalanceDraftAction(draftId, action, payload) {
 
 export function reviewOpeningBalanceDraft(draftId, payload) {
     return runOpeningBalanceDraftAction(draftId, "review", payload);
+}
+
+export function previewOpeningBalanceDraft(draftId, payload) {
+    return runOpeningBalanceDraftAction(draftId, "preview", payload);
 }
 
 export function postOpeningBalanceDraft(draftId, payload) {

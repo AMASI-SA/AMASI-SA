@@ -46,9 +46,8 @@ class SessionCollection:
                     if leg.get('user_id') != self._owner:
                         raise HTTPException(409, "accounting_journal_owner_scope_conflict")
                     group = leg.get("txn_group_id")
-                    if not group or leg.get("status") != "posted":
-                        raise HTTPException(409, "atomic_journal_group_required")
-                    groups.add((leg["user_id"], group))
+                    if leg.get("status") == "posted" and group:
+                        groups.add((leg["user_id"], group))
                 result = await getattr(self._collection, name)(
                     document if name == "insert_one" else documents, session=self._session, **kwargs)
                 self._ledger_groups.update(groups)

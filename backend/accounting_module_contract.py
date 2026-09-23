@@ -36,6 +36,11 @@ ACCOUNTING_ACTIONS: tuple[dict[str, str], ...] = (
     {"id": "opening-drafts-manage", "label": "إدارة مسودات الأرصدة الافتتاحية", "permission": "accounting.opening_balances.drafts.manage"},
     {"id": "opening-review", "label": "مراجعة الأرصدة الافتتاحية", "permission": "accounting.opening_balances.review"},
     {"id": "opening-post", "label": "ترحيل الأرصدة الافتتاحية", "permission": "accounting.opening_balances.post"},
+    {
+        "id": "ledger-transition-manage",
+        "label": "إدارة انتقال الدفتر المحاسبي",
+        "permission": "accounting.ledger_transition.manage",
+    },
     # Owner-approved registry key; every user still needs an explicit grant.
     {"id": "shipping-contract-review", "label": "مراجعة واعتماد عقد شركة الشحن", "permission": "accounting.shipping.contracts.review"},
     {"id": "purchase-post", "label": "ترحيل فاتورة شراء وتحديث المخزون", "permission": "accounting.purchases.post"},
@@ -71,6 +76,7 @@ ACCOUNTING_EXPLICIT_GRANT_KEYS = frozenset({
     "accounting.opening_balances.review",
     "accounting.opening_balances.post",
     "accounting.journals.reverse",
+    "accounting.ledger_transition.manage",
 })
 
 EVIDENCE_SECTIONS: tuple[dict[str, str], ...] = (

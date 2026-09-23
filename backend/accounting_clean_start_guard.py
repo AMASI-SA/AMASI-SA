@@ -69,15 +69,21 @@ def reject_accounting_v2_bypass() -> NoReturn:
 
 
 async def accounting_safe_active(db, *, user_id: str) -> bool:
-    """Stay closed until P07 supplies an authoritative activation verifier.
+    """Verify the persisted V2 transition and its active opening reference."""
+    from accounting_ledger_v2 import verify_active_opening_v2
+    from accounting_writer_transition import transition_state
 
-    Phase A deliberately has no activation path.  Existing settings and
-    balanced ``opening_balance`` rows are legacy/untrusted inputs and therefore
-    cannot unlock the book.  P07 must replace this function with verification
-    of its operation marker and approved preview hash as one atomic change.
-    """
-    del db, user_id
-    return False
+    transition = await transition_state(db, user_id)
+    if transition["state"] != "v2_active":
+        return False
+    settings = await db.settings.find_one(
+        {"user_id": user_id}, {"_id": 0, "mezan2_financial_cutover": 1},
+    )
+    cutover = (settings or {}).get("mezan2_financial_cutover") or {}
+    return bool(
+        cutover.get("status") == "active"
+        and await verify_active_opening_v2(db, user_id=user_id, cutover=cutover)
+    )
 
 
 async def require_accounting_safe_active(db, *, user_id: str) -> None:

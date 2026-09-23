@@ -19,10 +19,13 @@ from accounting_financial_accounts import (
     ensure_financial_account_indexes,
     install_financial_account_routes,
 )
+from accounting_module_contract import EVIDENCE_SECTIONS
 from accounting_ledger_v2 import (
     AccountingLedgerV2Error,
     ensure_accounting_ledger_v2_indexes,
+    post_journal_v2,
 )
+from accounting_mz2_reports import mz2_financial_position, read_mz2_ledger
 from accounting_source_files import preserve_original
 from accounting_writer_transition import assert_writer_allowed
 from ledger_core import post_txn_group
@@ -114,44 +117,91 @@ async def api(mongo_db):
         yield SimpleNamespace(db=mongo_db, client=client)
 
 
-async def _upload(api, *, user: str = "manager", content: bytes = b"opening-evidence-v1"):
+async def _upload(
+    api,
+    *,
+    user: str = "manager",
+    content: bytes = b"opening-evidence-v1",
+    purpose: str = "opening_balance",
+    section_id: str | None = "banks_cash",
+):
+    data = {"purpose": purpose}
+    if section_id is not None:
+        data["section_id"] = section_id
     response = await api.client.post(
         OPENING + "/evidence",
         headers=_headers(user),
-        data={"purpose": "opening_balance", "section_id": "banks_cash"},
+        data=data,
         files={"file": ("opening.xlsx", content, "application/octet-stream")},
     )
     assert response.status_code == 200, response.text
     return response.json()
 
 
-def _draft_payload(file_id: str, *, key: str, replaces: str | None = None):
+async def _evidence_set(api, *, prefix: str = "opening"):
+    sections = {}
+    for section in EVIDENCE_SECTIONS:
+        section_id = section["id"]
+        sections[section_id] = await _upload(
+            api,
+            content=f"{prefix}:{section_id}".encode(),
+            purpose="opening_balance",
+            section_id=section_id,
+        )
+    cutover = await _upload(
+        api,
+        content=f"{prefix}:cutover".encode(),
+        purpose="cutover",
+        section_id=None,
+    )
+    return sections, cutover
+
+
+async def _create_opening_account(api, *, key: str = "opening-account-key-0001"):
+    response = await api.client.post(
+        BASE,
+        headers=_headers("manager"),
+        json={
+            "name": "بنك الافتتاحية",
+            "account_type": "bank",
+            "currency": "SAR",
+            "external_ref": "OPENING-BANK",
+            "idempotency_key": key,
+        },
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def _draft_payload(
+    sections: dict[str, dict],
+    cutover: dict,
+    account_id: str,
+    *,
+    key: str,
+    replaces: str | None = None,
+    amount: str = "115.00",
+    meaning: str = "available_to_us",
+):
     payload = {
         "idempotency_key": key,
         "cutover_at": "2026-09-15T00:00:00+03:00",
+        "cutover_timezone": "Asia/Riyadh",
+        "cutover_evidence_file_id": cutover["source_file_id"],
+        "section_evidence_file_ids": {
+            section_id: evidence["source_file_id"]
+            for section_id, evidence in sections.items()
+        },
         "lines": [
             {
-                "category": "banks_cash",
-                "entity_type": "bank",
-                "entity_id": "bank-main",
-                "sub_account": "main",
-                "side": "debit",
-                "amount": "115.00",
-                "currency": "SAR",
-                "sar_amount": "115.00",
-                "fx_rate": "1.00",
-                "evidence_file_id": file_id,
-            },
-            {
-                "category": "equity",
-                "entity_type": "equity",
-                "entity_id": "opening-equity",
-                "side": "credit",
-                "amount": "115.00",
-                "currency": "SAR",
-                "sar_amount": "115.00",
-                "fx_rate": "1.00",
-                "evidence_file_id": file_id,
+                "category": "financial_account",
+                "financial_account_id": account_id,
+                "label": "بنك الافتتاحية",
+                "meaning": meaning,
+                "original_amount": amount,
+                "original_currency": "SAR",
+                "fx_rate_to_sar": "1",
+                "evidence_file_id": sections["banks_cash"]["source_file_id"],
             },
         ],
     }
@@ -160,11 +210,34 @@ def _draft_payload(file_id: str, *, key: str, replaces: str | None = None):
     return payload
 
 
-async def _draft(api, file_id: str, *, key: str = "draft-key-0001", replaces: str | None = None):
+async def _draft(
+    api,
+    sections: dict[str, dict],
+    cutover: dict,
+    account_id: str,
+    *,
+    key: str = "draft-key-0001",
+    replaces: str | None = None,
+    amount: str = "115.00",
+    meaning: str = "available_to_us",
+):
     response = await api.client.post(
         OPENING + "/drafts",
         headers=_headers("manager"),
-        json=_draft_payload(file_id, key=key, replaces=replaces),
+        json=_draft_payload(
+            sections, cutover, account_id,
+            key=key, replaces=replaces, amount=amount, meaning=meaning,
+        ),
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+async def _preview(api, draft: dict, *, key: str = "preview-key-0001"):
+    response = await api.client.post(
+        f"{OPENING}/drafts/{draft['id']}/preview",
+        headers=_headers("manager"),
+        json={"version": draft["version"], "idempotency_key": key, "note": "معاينة موثقة"},
     )
     assert response.status_code == 200, response.text
     return response.json()
@@ -183,13 +256,13 @@ async def _review(api, draft: dict, *, key: str = "review-key-0001"):
 async def _activate_v2(api):
     blocked = await api.client.post(
         BASE + "/transition",
-        headers=_headers("manager"),
+        headers=_headers("full"),
         json={"target": "transition_blocked", "expected_revision": 0, "activation_ref": "freeze-ref"},
     )
     assert blocked.status_code == 200, blocked.text
     active = await api.client.post(
         BASE + "/transition",
-        headers=_headers("manager"),
+        headers=_headers("full"),
         json={"target": "v2_active", "expected_revision": 1, "activation_ref": "activation-1131"},
     )
     assert active.status_code == 200, active.text
@@ -200,12 +273,13 @@ def _post_payload(version: int, *, key: str = "post-key-0001", note: str = "تر
     return {"version": version, "idempotency_key": key, "note": note}
 
 
-def _reverse_payload(version: int, *, key: str = "reverse-key-0001"):
+def _reverse_payload(version: int, evidence_file_id: str, *, key: str = "reverse-key-0001"):
     return {
         "version": version,
         "idempotency_key": key,
         "note": "عكس إلحاقي موثق",
-        "effective_at": "2026-09-16T10:00:00+03:00",
+        "effective_at": "2026-09-15T00:00:00+03:00",
+        "evidence_file_id": evidence_file_id,
     }
 
 
@@ -310,11 +384,19 @@ async def test_permissions_are_separate_and_legacy_key_or_owner_do_not_grant(api
     assert (
         await api.client.post(f"{OPENING}/drafts/missing/review", headers=_headers("legacy-approve"), json=action)
     ).status_code == 403
+    assert (
+        await api.client.post(
+            BASE + "/transition", headers=_headers("manager"),
+            json={"target": "transition_blocked", "expected_revision": 0, "activation_ref": "freeze"},
+        )
+    ).status_code == 403
 
 
 @pytest.mark.asyncio
 async def test_opening_replacement_and_evidence_is_immutable(api):
-    evidence = await _upload(api)
+    sections, cutover = await _evidence_set(api, prefix="replace")
+    evidence = sections["banks_cash"]
+    account = await _create_opening_account(api, key="opening-account-replace")
     source = await api.db.accounting_source_files.find_one({"file_id": evidence["source_file_id"]})
     assert source["user_id"] == OWNER
     assert source["sha256"] == hashlib.sha256(bytes(source["content"])).hexdigest()
@@ -322,18 +404,20 @@ async def test_opening_replacement_and_evidence_is_immutable(api):
     with pytest.raises(ValueError):
         await preserve_original(api.db, OWNER, evidence["source_file_id"], b"different-bytes")
 
-    first = await _draft(api, evidence["source_file_id"], key="draft-replace-0001")
+    first = await _draft(api, sections, cutover, account["id"], key="draft-replace-0001")
     rejected = await api.client.post(
         OPENING + "/drafts",
         headers=_headers("manager"),
-        json=_draft_payload(evidence["source_file_id"], key="draft-replace-0002"),
+        json=_draft_payload(sections, cutover, account["id"], key="draft-replace-0002"),
     )
     assert rejected.status_code == 409
     assert _detail_code(rejected) == "opening_draft_replacement_required"
 
     second = await _draft(
         api,
-        evidence["source_file_id"],
+        sections,
+        cutover,
+        account["id"],
         key="draft-replace-0002",
         replaces=first["id"],
     )
@@ -347,7 +431,9 @@ async def test_opening_replacement_and_evidence_is_immutable(api):
 
     replay = await _draft(
         api,
-        evidence["source_file_id"],
+        sections,
+        cutover,
+        account["id"],
         key="draft-replace-0002",
         replaces=first["id"],
     )
@@ -357,11 +443,20 @@ async def test_opening_replacement_and_evidence_is_immutable(api):
 
 @pytest.mark.asyncio
 async def test_http_review_post_concurrency_retry_and_append_only_reverse(api):
-    evidence = await _upload(api)
-    draft = await _draft(api, evidence["source_file_id"])
-    reviewed = await _review(api, draft)
+    sections, cutover = await _evidence_set(api, prefix="lifecycle")
+    evidence = sections["banks_cash"]
+    account = await _create_opening_account(api, key="opening-account-lifecycle")
+    reversal_evidence = await _upload(
+        api, content=b"opening-reversal-reason", purpose="opening_reversal_reason", section_id=None,
+    )
+    draft = await _draft(api, sections, cutover, account["id"])
+    previewed = await _preview(api, draft)
+    reviewed = await _review(api, previewed)
     assert reviewed["status"] == "reviewed"
-    snapshot = reviewed["evidence_snapshot"][0]
+    snapshot = next(
+        item for item in reviewed["evidence_snapshot"]
+        if item["source_file_id"] == evidence["source_file_id"]
+    )
     assert snapshot["owner_id"] == OWNER
     assert snapshot["source_file_id"] == evidence["source_file_id"]
     assert snapshot["purpose"] == "opening_balance"
@@ -383,7 +478,7 @@ async def test_http_review_post_concurrency_retry_and_append_only_reverse(api):
 
     blocked = await api.client.post(
         BASE + "/transition",
-        headers=_headers("manager"),
+        headers=_headers("full"),
         json={"target": "transition_blocked", "expected_revision": 0, "activation_ref": "freeze-ref"},
     )
     assert blocked.status_code == 200
@@ -398,7 +493,7 @@ async def test_http_review_post_concurrency_retry_and_append_only_reverse(api):
 
     active = await api.client.post(
         BASE + "/transition",
-        headers=_headers("manager"),
+        headers=_headers("full"),
         json={"target": "v2_active", "expected_revision": 1, "activation_ref": "activation-1131"},
     )
     assert active.status_code == 200
@@ -433,7 +528,7 @@ async def test_http_review_post_concurrency_retry_and_append_only_reverse(api):
     reversed_response = await api.client.post(
         reverse_url,
         headers=_headers("reverser"),
-        json=_reverse_payload(posted["version"]),
+        json=_reverse_payload(posted["version"], reversal_evidence["source_file_id"]),
     )
     assert reversed_response.status_code == 200, reversed_response.text
     reversed_draft = reversed_response.json()
@@ -448,18 +543,211 @@ async def test_http_review_post_concurrency_retry_and_append_only_reverse(api):
     reverse_replay = await api.client.post(
         reverse_url,
         headers=_headers("reverser"),
-        json=_reverse_payload(posted["version"]),
+        json=_reverse_payload(posted["version"], reversal_evidence["source_file_id"]),
     )
     assert reverse_replay.status_code == 200
     assert reverse_replay.json()["reversal_txn_group_id"] == reversed_draft["reversal_txn_group_id"]
     assert reverse_replay.json()["existing"] is True
 
+    replacement = await _draft(
+        api, sections, cutover, account["id"],
+        key="draft-replacement-after-reversal", replaces=draft["id"], amount="120.00",
+    )
+    assert replacement["opening_revision"] == 2
+    replacement_preview = await _preview(
+        api, replacement, key="preview-replacement-after-reversal",
+    )
+    replacement_review = await _review(
+        api, replacement_preview, key="review-replacement-after-reversal",
+    )
+    replacement_post = await api.client.post(
+        f"{OPENING}/drafts/{replacement['id']}/post",
+        headers=_headers("poster"),
+        json=_post_payload(
+            replacement_review["version"], key="post-replacement-after-reversal",
+        ),
+    )
+    assert replacement_post.status_code == 200, replacement_post.text
+    replacement_row = replacement_post.json()
+    assert replacement_row["status"] == "posted"
+    assert replacement_row["opening_root_txn_group_id"] == posted["txn_group_id"]
+    assert replacement_row["txn_group_id"] not in {
+        posted["txn_group_id"], reversed_draft["reversal_txn_group_id"],
+    }
+    assert await api.db.accounting_journal_groups_v2.count_documents({"user_id": OWNER}) == 3
+    assert await api.db.accounting_general_ledger_v2.count_documents({"user_id": OWNER}) == 6
+    settings = await api.db.settings.find_one({"user_id": OWNER})
+    state = settings["mezan2_financial_cutover"]
+    assert state["opening_active_txn_group_id"] == replacement_row["txn_group_id"]
+    assert state["opening_root_txn_group_id"] == posted["txn_group_id"]
+    assert state["opening_revision"] == 2
+
+    await api.db.general_ledger.insert_one({
+        "id": "legacy-sentinel-after-v2",
+        "user_id": OWNER,
+        "txn_group_id": "legacy-sentinel-group",
+        "status": "posted",
+        "entry_type": "opening_balance",
+        "entity_type": "bank",
+        "entity_id": account["id"],
+        "sub_account": "main",
+        "side": "debit",
+        "amount": 999999,
+        "metadata": {
+            "operation_id": financial_accounts.OPERATION_ID,
+            "accounting_at": "2026-09-14T21:00:00Z",
+        },
+    })
+    journal = await read_mz2_ledger(api.db, owner=OWNER, as_of="2026-09-16")
+    assert journal["status"] == "available", journal
+    assert journal["ledger_backend"] == "v2"
+    assert len(journal["items"]) == 6
+    position = await mz2_financial_position(api.db, owner=OWNER, as_of="2026-09-16")
+    assert position["status"] == "available", position
+    assert position["assets"]["banks"] == 120
+
+    uncovered_id = "uncovered-bank-after-opening"
+    await api.db.mz2_financial_accounts.insert_one({
+        "_id": f"{OWNER}:{uncovered_id}",
+        "id": uncovered_id,
+        "user_id": OWNER,
+        "name": "بنك أضيف بعد القطع",
+        "account_type": "bank",
+        "currency": "SAR",
+        "status": "active",
+        "version": 1,
+    })
+    async def post_uncovered_activity(scoped):
+        return await post_journal_v2(
+            scoped._db,
+            user_id=OWNER,
+            actor_id="full",
+            actor_name="Full User",
+            idempotency_key="uncovered-bank-activity-0001",
+            txn_type="bank_transfer",
+            source="test_financial_accounts_real_mongo",
+            effective_at="2026-09-15T12:00:00Z",
+            entries=[
+                {
+                    "leg_key": "uncovered-bank",
+                    "entity_type": "bank",
+                    "entity_id": uncovered_id,
+                    "sub_account": "main",
+                    "entry_type": "bank_transfer",
+                    "amount": "10.00",
+                    "side": "debit",
+                },
+                {
+                    "leg_key": "uncovered-equity",
+                    "entity_type": "equity",
+                    "entity_id": "transfer_counterpart",
+                    "sub_account": "main",
+                    "entry_type": "bank_transfer",
+                    "amount": "10.00",
+                    "side": "credit",
+                },
+            ],
+            mongo_session=scoped._session,
+        )
+
+    await atomic_owner(api.db, OWNER, post_uncovered_activity)
+    missing = await mz2_financial_position(api.db, owner=OWNER, as_of="2026-09-16")
+    assert missing["status"] == "needs_opening_balance"
+    assert f"bank/{uncovered_id}/main" in missing["missing_accounts"]
+    assert missing["assets"] is None
+
+
+@pytest.mark.asyncio
+async def test_zero_opening_can_be_reversed_then_replaced_by_first_v2_journal(api):
+    sections, cutover = await _evidence_set(api, prefix="zero-root")
+    account = await _create_opening_account(api, key="opening-account-zero-root")
+    reversal_evidence = await _upload(
+        api,
+        content=b"zero-opening-reversal-reason",
+        purpose="opening_reversal_reason",
+        section_id=None,
+    )
+    draft = await _draft(
+        api,
+        sections,
+        cutover,
+        account["id"],
+        key="draft-zero-root-0001",
+        amount="0.00",
+        meaning="zero",
+    )
+    previewed = await _preview(api, draft, key="preview-zero-root-0001")
+    reviewed = await _review(api, previewed, key="review-zero-root-0001")
+    await _activate_v2(api)
+    posted_response = await api.client.post(
+        f"{OPENING}/drafts/{draft['id']}/post",
+        headers=_headers("poster"),
+        json=_post_payload(reviewed["version"], key="post-zero-root-0001"),
+    )
+    assert posted_response.status_code == 200, posted_response.text
+    posted = posted_response.json()
+    assert posted["txn_group_id"] == f"zero:{draft['id']}"
+    assert posted["opening_root_txn_group_id"] == posted["txn_group_id"]
+    assert await api.db.accounting_journal_groups_v2.count_documents({}) == 0
+
+    reversed_response = await api.client.post(
+        f"{OPENING}/drafts/{draft['id']}/reverse",
+        headers=_headers("reverser"),
+        json=_reverse_payload(
+            posted["version"],
+            reversal_evidence["source_file_id"],
+            key="reverse-zero-root-0001",
+        ),
+    )
+    assert reversed_response.status_code == 200, reversed_response.text
+    reversed_draft = reversed_response.json()
+    assert reversed_draft["status"] == "reversed"
+    assert reversed_draft["reversal_txn_group_id"] == f"zero-reversal:{draft['id']}"
+
+    replacement = await _draft(
+        api,
+        sections,
+        cutover,
+        account["id"],
+        key="draft-after-zero-root",
+        replaces=draft["id"],
+        amount="75.00",
+    )
+    assert replacement["opening_revision"] == 2
+    assert replacement["ledger_opening_revision"] == 1
+    assert replacement["replaces_txn_group_id"] is None
+    replacement_preview = await _preview(
+        api, replacement, key="preview-after-zero-root",
+    )
+    replacement_review = await _review(
+        api, replacement_preview, key="review-after-zero-root",
+    )
+    replacement_response = await api.client.post(
+        f"{OPENING}/drafts/{replacement['id']}/post",
+        headers=_headers("poster"),
+        json=_post_payload(
+            replacement_review["version"], key="post-after-zero-root",
+        ),
+    )
+    assert replacement_response.status_code == 200, replacement_response.text
+    replacement_posted = replacement_response.json()
+    assert not replacement_posted["txn_group_id"].startswith("zero:")
+    assert replacement_posted["opening_root_txn_group_id"] == replacement_posted["txn_group_id"]
+    assert await api.db.accounting_journal_groups_v2.count_documents({}) == 1
+    position = await mz2_financial_position(api.db, owner=OWNER, as_of="2026-09-16")
+    assert position["status"] == "available", position
+    assert position["assets"]["banks"] == 75
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("mismatch", ["owner", "hash", "size", "version"])
 async def test_evidence_mismatch_fails_closed(api, mismatch):
-    evidence = await _upload(api, content=b"immutable-evidence")
-    draft = await _draft(api, evidence["source_file_id"], key=f"draft-mismatch-{mismatch}")
+    sections, cutover = await _evidence_set(api, prefix=f"mismatch-{mismatch}")
+    evidence = sections["banks_cash"]
+    account = await _create_opening_account(api, key=f"opening-account-mismatch-{mismatch}")
+    draft = await _draft(
+        api, sections, cutover, account["id"], key=f"draft-mismatch-{mismatch}",
+    )
 
     if mismatch == "owner":
         await api.db.mz2_opening_evidence.update_one(
@@ -476,9 +764,9 @@ async def test_evidence_mismatch_fails_closed(api, mismatch):
 
     if mismatch != "version":
         response = await api.client.post(
-            f"{OPENING}/drafts/{draft['id']}/review",
-            headers=_headers("reviewer"),
-            json={"version": 1, "idempotency_key": f"review-{mismatch}-0001", "note": "مراجعة مرفوضة"},
+            f"{OPENING}/drafts/{draft['id']}/preview",
+            headers=_headers("manager"),
+            json={"version": 1, "idempotency_key": f"preview-{mismatch}-0001", "note": "معاينة مرفوضة"},
         )
         assert response.status_code == 409
         assert _detail_code(response) in {
@@ -488,7 +776,8 @@ async def test_evidence_mismatch_fails_closed(api, mismatch):
         assert await api.db.accounting_journal_groups_v2.count_documents({}) == 0
         return
 
-    reviewed = await _review(api, draft, key="review-version-0001")
+    previewed = await _preview(api, draft, key="preview-version-0001")
+    reviewed = await _review(api, previewed, key="review-version-0001")
     await api.db.mz2_opening_balance_drafts.update_one(
         {"id": draft["id"]}, {"$set": {"evidence_snapshot.0.approval_version": 999}}
     )
@@ -505,9 +794,11 @@ async def test_evidence_mismatch_fails_closed(api, mismatch):
 
 @pytest.mark.asyncio
 async def test_closed_period_fails_before_any_journal(api):
-    evidence = await _upload(api)
-    draft = await _draft(api, evidence["source_file_id"], key="draft-closed-0001")
-    reviewed = await _review(api, draft, key="review-closed-0001")
+    sections, cutover = await _evidence_set(api, prefix="closed")
+    account = await _create_opening_account(api, key="opening-account-closed")
+    draft = await _draft(api, sections, cutover, account["id"], key="draft-closed-0001")
+    previewed = await _preview(api, draft, key="preview-closed-0001")
+    reviewed = await _review(api, previewed, key="review-closed-0001")
     await _activate_v2(api)
     await api.db.mz2_accounting_periods.insert_one({
         "_id": f"{OWNER}:2026-09",
@@ -529,9 +820,11 @@ async def test_closed_period_fails_before_any_journal(api):
 
 @pytest.mark.asyncio
 async def test_post_failure_rolls_back_and_never_falls_back_to_legacy(api, monkeypatch):
-    evidence = await _upload(api)
-    draft = await _draft(api, evidence["source_file_id"], key="draft-rollback-0001")
-    reviewed = await _review(api, draft, key="review-rollback-0001")
+    sections, cutover = await _evidence_set(api, prefix="rollback")
+    account = await _create_opening_account(api, key="opening-account-rollback")
+    draft = await _draft(api, sections, cutover, account["id"], key="draft-rollback-0001")
+    previewed = await _preview(api, draft, key="preview-rollback-0001")
+    reviewed = await _review(api, previewed, key="review-rollback-0001")
     await _activate_v2(api)
     real_post = financial_accounts.post_opening_journal_v2
 
@@ -567,7 +860,7 @@ async def test_post_failure_rolls_back_and_never_falls_back_to_legacy(api, monke
 async def test_transition_gate_blocks_all_channels_and_invalid_revision(api):
     blocked = await api.client.post(
         BASE + "/transition",
-        headers=_headers("manager"),
+        headers=_headers("full"),
         json={"target": "transition_blocked", "expected_revision": 0, "activation_ref": "freeze-ref"},
     )
     assert blocked.status_code == 200
@@ -607,14 +900,18 @@ async def test_transition_gate_blocks_all_channels_and_invalid_revision(api):
     assert await api.db.general_ledger.count_documents({}) == 0
     wrong_revision = await api.client.post(
         BASE + "/transition",
-        headers=_headers("manager"),
+        headers=_headers("full"),
         json={"target": "v2_active", "expected_revision": 0, "activation_ref": "activation"},
     )
     assert wrong_revision.status_code == 409
     assert _detail_code(wrong_revision) == "accounting_transition_revision_mismatch"
 
-    await api.db.mz2_writer_transition.update_one(
-        {"_id": OWNER}, {"$set": {"contract_revision": 999, "state": "v2_active", "activation_ref": "bad"}}
+    await api.db.mz2_atomic_owners.update_one(
+        {"_id": OWNER}, {"$set": {
+            "ledger_backend_contract_revision": 999,
+            "ledger_backend_state": "v2_active",
+            "ledger_backend_activation_ref": "bad",
+        }}
     )
     invalid = await api.client.get(BASE + "/transition", headers=_headers("viewer"))
     assert invalid.status_code == 423
@@ -623,8 +920,9 @@ async def test_transition_gate_blocks_all_channels_and_invalid_revision(api):
 
 @pytest.mark.asyncio
 async def test_unknown_tenant_and_opening_draft_are_isolated(api):
-    evidence = await _upload(api)
-    draft = await _draft(api, evidence["source_file_id"], key="draft-isolation-0001")
+    sections, cutover = await _evidence_set(api, prefix="isolation")
+    account = await _create_opening_account(api, key="opening-account-isolation")
+    draft = await _draft(api, sections, cutover, account["id"], key="draft-isolation-0001")
     await api.db.mz2_opening_balance_drafts.update_one(
         {"id": draft["id"]}, {"$set": {"user_id": "other-owner"}}
     )
@@ -636,9 +934,11 @@ async def test_unknown_tenant_and_opening_draft_are_isolated(api):
 
 @pytest.mark.asyncio
 async def test_ledger_error_does_not_trigger_legacy_fallback(api, monkeypatch):
-    evidence = await _upload(api)
-    draft = await _draft(api, evidence["source_file_id"], key="draft-v2-failure-0001")
-    reviewed = await _review(api, draft, key="review-v2-failure-0001")
+    sections, cutover = await _evidence_set(api, prefix="v2-failure")
+    account = await _create_opening_account(api, key="opening-account-v2-failure")
+    draft = await _draft(api, sections, cutover, account["id"], key="draft-v2-failure-0001")
+    previewed = await _preview(api, draft, key="preview-v2-failure-0001")
+    reviewed = await _review(api, previewed, key="review-v2-failure-0001")
     await _activate_v2(api)
 
     async def fail_v2(*_args, **_kwargs):

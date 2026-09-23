@@ -78,6 +78,7 @@ export const ACCOUNTING_ACTIONS = [
     { id: "opening-drafts-manage", label: "إدارة مسودات الأرصدة الافتتاحية", permission: "accounting.opening_balances.drafts.manage" },
     { id: "opening-review", label: "مراجعة الأرصدة الافتتاحية", permission: "accounting.opening_balances.review" },
     { id: "opening-post", label: "ترحيل الأرصدة الافتتاحية", permission: "accounting.opening_balances.post" },
+    { id: "ledger-transition-manage", label: "إدارة انتقال الدفتر المحاسبي", permission: "accounting.ledger_transition.manage" },
     { id: "purchase-post", label: "ترحيل فاتورة شراء وتحديث المخزون", permission: "accounting.purchases.post" },
     { id: "payroll-post", label: "اعتماد وترحيل الرواتب والالتزامات", permission: "accounting.payroll.post" },
     { id: "opening-approve", label: "اعتماد القيد الافتتاحي", permission: "accounting.opening_balances.approve" },
@@ -93,6 +94,7 @@ export const ACCOUNTING_EXPLICIT_GRANT_PERMISSIONS = new Set([
     "accounting.opening_balances.review",
     "accounting.opening_balances.post",
     "accounting.journals.reverse",
+    "accounting.ledger_transition.manage",
 ]);
 
 export function accountingPageById(pageId) {

@@ -1,4 +1,9 @@
-"""Fail-closed transition gate between the legacy and Mezan 2 ledgers."""
+"""Fail-closed transition gate between the legacy and Mezan 2 ledgers.
+
+The gate is persisted on the same permanent ``mz2_atomic_owners`` row that
+serializes every owner transaction.  A transition and a compliant financial
+writer therefore cannot pass one another between a read and a later write.
+"""
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -7,10 +12,15 @@ from typing import Any, Literal
 from fastapi import HTTPException
 
 
-COLLECTION = "mz2_writer_transition"
+COLLECTION = "mz2_atomic_owners"
 CONTRACT_REVISION = 1
 STATES = frozenset({"legacy_active", "transition_blocked", "v2_active"})
 Writer = Literal["legacy", "v2"]
+
+STATE_FIELD = "ledger_backend_state"
+REVISION_FIELD = "ledger_backend_revision"
+CONTRACT_FIELD = "ledger_backend_contract_revision"
+ACTIVATION_FIELD = "ledger_backend_activation_ref"
 
 
 def _now() -> str:
@@ -34,7 +44,12 @@ def _collection(db: Any):
 
 
 def _validate(owner: str, row: dict[str, Any] | None) -> dict[str, Any]:
-    if row is None:
+    # A coordination row predates this contract and may contain only the
+    # atomic revision or write-pause fields.  Absence of *all* transition
+    # fields is the one supported legacy default.  Partial state fails closed.
+    fields = {STATE_FIELD, REVISION_FIELD, CONTRACT_FIELD, ACTIVATION_FIELD}
+    present = fields & set(row or {})
+    if row is None or not present:
         return {
             "owner_id": owner,
             "state": "legacy_active",
@@ -42,13 +57,13 @@ def _validate(owner: str, row: dict[str, Any] | None) -> dict[str, Any]:
             "contract_revision": CONTRACT_REVISION,
             "activation_ref": None,
         }
-    state = row.get("state")
-    revision = row.get("state_revision")
-    contract = row.get("contract_revision")
-    activation_ref = row.get("activation_ref")
+    state = row.get(STATE_FIELD)
+    revision = row.get(REVISION_FIELD)
+    contract = row.get(CONTRACT_FIELD)
+    activation_ref = row.get(ACTIVATION_FIELD)
     if (
         row.get("_id") != owner
-        or row.get("user_id") != owner
+        or present != fields
         or state not in STATES
         or type(revision) is not int
         or revision < 1
@@ -68,8 +83,8 @@ def _validate(owner: str, row: dict[str, Any] | None) -> dict[str, Any]:
         "state_revision": revision,
         "contract_revision": contract,
         "activation_ref": activation_ref,
-        "updated_at": row.get("updated_at"),
-        "updated_by": row.get("updated_by"),
+        "updated_at": row.get("ledger_backend_updated_at"),
+        "updated_by": row.get("ledger_backend_updated_by"),
     }
 
 
@@ -143,13 +158,22 @@ async def advance_transition(
             status=422,
         )
     document = {
-        "user_id": owner,
-        "state": target,
-        "state_revision": expected_revision + 1,
-        "contract_revision": CONTRACT_REVISION,
-        "activation_ref": reference or None,
-        "updated_at": _now(),
-        "updated_by": actor_id,
+        STATE_FIELD: target,
+        REVISION_FIELD: expected_revision + 1,
+        CONTRACT_FIELD: CONTRACT_REVISION,
+        ACTIVATION_FIELD: reference or None,
+        "ledger_backend_updated_at": _now(),
+        "ledger_backend_updated_by": actor_id,
     }
-    await db[COLLECTION].update_one({"_id": owner}, {"$set": document}, upsert=True)
+    result = await db[COLLECTION].update_one(
+        {"_id": owner},
+        {"$set": document},
+        upsert=current["state_revision"] == 0,
+    )
+    if not (getattr(result, "matched_count", 0) or getattr(result, "upserted_id", None)):
+        _error(
+            "accounting_transition_revision_mismatch",
+            "تغيرت حالة الانتقال؛ حدّث الصفحة قبل المتابعة",
+            status=409,
+        )
     return _validate(owner, {"_id": owner, **document})

@@ -60,7 +60,7 @@ _REQUIRED_LEG_FIELDS = frozenset({
     "amount",
     "side",
 })
-_RESERVED_PUBLIC_TXN_TYPES = frozenset({"opening_balance", "reversal"})
+_RESERVED_PUBLIC_TXN_TYPES = frozenset({"opening_balance", "opening_replacement", "reversal"})
 _OPERATIONAL_WRITE_MODE = object()
 _OPENING_WRITE_MODE = object()
 _REVERSAL_WRITE_MODE = object()
@@ -422,11 +422,30 @@ def _validate_prepared_write_mode(prepared: Mapping[str, Any], mode: object) -> 
         )
     elif mode is _OPENING_WRITE_MODE:
         metadata = prepared.get("metadata") or {}
-        valid = (
+        opening_kind = txn_type in {"opening_balance", "opening_replacement"}
+        lineage_valid = (
             txn_type == "opening_balance"
+            and metadata.get("opening_revision") == 1
+            and metadata.get("opening_root_txn_group_id") is None
+            and metadata.get("replaces_txn_group_id") is None
+            and metadata.get("reversal_txn_group_id") is None
+        ) or (
+            txn_type == "opening_replacement"
+            and isinstance(metadata.get("opening_root_txn_group_id"), str)
+            and bool(metadata.get("opening_root_txn_group_id"))
+            and isinstance(metadata.get("replaces_txn_group_id"), str)
+            and bool(metadata.get("replaces_txn_group_id"))
+            and isinstance(metadata.get("reversal_txn_group_id"), str)
+            and bool(metadata.get("reversal_txn_group_id"))
+            and isinstance(metadata.get("opening_revision"), int)
+            and metadata.get("opening_revision") > 1
+        )
+        valid = (
+            opening_kind
             and reversal_of is None
             and prepared.get("source") == "accounting_opening_balances_v2"
-            and entry_types == {"opening_balance"}
+            and entry_types == {txn_type}
+            and lineage_valid
             and isinstance(metadata.get("opening_operation_id"), str)
             and bool(metadata.get("opening_operation_id"))
             and isinstance(metadata.get("approved_preview_hash"), str)
@@ -548,6 +567,34 @@ async def _insert_prepared_journal(
                 "accounting_v2_opening_already_exists",
                 "This Accounting V2 book already has an opening journal",
                 txn_group_id=opening.get("txn_group_id"),
+            )
+    elif prepared["txn_type"] == "opening_replacement":
+        metadata = prepared["metadata"]
+        duplicate_revision = await db[GROUPS_COLLECTION].find_one(
+            {
+                "user_id": owner,
+                "operation_id": OPERATION_ID,
+                "txn_type": "opening_replacement",
+                "metadata.opening_root_txn_group_id": metadata["opening_root_txn_group_id"],
+                "metadata.opening_revision": metadata["opening_revision"],
+            },
+            session=session,
+        )
+        duplicate_target = await db[GROUPS_COLLECTION].find_one(
+            {
+                "user_id": owner,
+                "operation_id": OPERATION_ID,
+                "txn_type": "opening_replacement",
+                "metadata.replaces_txn_group_id": metadata["replaces_txn_group_id"],
+            },
+            session=session,
+        )
+        if duplicate_revision or duplicate_target:
+            existing_replacement = duplicate_revision or duplicate_target
+            _fail(
+                "accounting_v2_opening_replacement_conflict",
+                "This opening revision or replacement target already has a different journal",
+                txn_group_id=existing_replacement.get("txn_group_id"),
             )
 
     first_entry_no = await _reserve_entry_numbers(
@@ -684,21 +731,56 @@ async def _require_opening_gate(
     effective_at: str,
     session: Any,
 ) -> dict[str, Any]:
-    openings = await db[GROUPS_COLLECTION].find(
-        {
-            "user_id": user_id,
-            "operation_id": OPERATION_ID,
-            "txn_type": "opening_balance",
-        },
+    settings = await db["settings"].find_one(
+        {"user_id": user_id},
+        {"_id": 0, "mezan2_financial_cutover": 1},
         session=session,
-    ).limit(2).to_list(2)
-    if len(openings) != 1:
+    )
+    cutover = (settings or {}).get("mezan2_financial_cutover") or {}
+    if cutover.get("operation_id") != OPERATION_ID or cutover.get("status") != "active":
         _fail(
             "accounting_v2_verified_opening_required",
-            "Exactly one verified opening journal is required before operational posting",
-            opening_count=len(openings),
+            "An active, verified Accounting V2 opening is required before operational posting",
         )
-    opening_id = openings[0].get("txn_group_id")
+    opening_id = str(cutover.get("opening_active_txn_group_id") or "").strip()
+    if not opening_id:
+        _fail(
+            "accounting_v2_verified_opening_required",
+            "The active opening reference is missing",
+        )
+    cutover_at = _utc_iso(cutover.get("cutover_at"), field="cutover_at")
+    if opening_id.startswith("zero:"):
+        draft_id = opening_id.split(":", 1)[1]
+        zero = await db["mz2_opening_balance_drafts"].find_one(
+            {
+                "user_id": user_id,
+                "id": draft_id,
+                "status": "posted",
+                "zero_only": True,
+                "txn_group_id": opening_id,
+            },
+            session=session,
+        )
+        if (
+            not zero
+            or not zero.get("evidence_snapshot")
+            or zero.get("cutover_at") != cutover_at
+            or zero.get("opening_root_txn_group_id")
+            != str(cutover.get("opening_root_txn_group_id") or "").strip()
+        ):
+            _fail(
+                "accounting_v2_zero_opening_integrity_failure",
+                "The active zero-opening manifest failed verification",
+            )
+        if effective_at < cutover_at:
+            _fail(
+                "accounting_v2_effective_before_cutover",
+                "Journal effective_at cannot be earlier than the opening cutover",
+                cutover_at=cutover_at,
+                effective_at=effective_at,
+            )
+        return {"group": {"txn_group_id": opening_id, "effective_at": cutover_at}, "entries": [], "audit": []}
+
     opening = await _load_journal(
         db,
         user_id=user_id,
@@ -712,6 +794,25 @@ async def _require_opening_gate(
             "The Accounting V2 opening journal failed verification",
             txn_group_id=opening_id,
             errors=verification["errors"],
+        )
+    assert opening is not None
+    group = opening["group"]
+    if group.get("txn_type") not in {"opening_balance", "opening_replacement"}:
+        _fail(
+            "accounting_v2_opening_integrity_failure",
+            "The active opening reference is not an opening journal",
+            txn_group_id=opening_id,
+        )
+    root_id = str(cutover.get("opening_root_txn_group_id") or "").strip()
+    if group.get("txn_type") == "opening_balance":
+        valid_lineage = root_id == opening_id
+    else:
+        valid_lineage = (group.get("metadata") or {}).get("opening_root_txn_group_id") == root_id
+    if not valid_lineage:
+        _fail(
+            "accounting_v2_opening_lineage_failure",
+            "The active opening journal is not part of the configured opening lineage",
+            txn_group_id=opening_id,
         )
     reversed_opening = await db[GROUPS_COLLECTION].find_one(
         {
@@ -728,13 +829,11 @@ async def _require_opening_gate(
             opening_txn_group_id=opening_id,
             reversal_txn_group_id=reversed_opening.get("txn_group_id"),
         )
-    assert opening is not None
-    opening_effective_at = opening["group"]["effective_at"]
-    if effective_at < opening_effective_at:
+    if effective_at < cutover_at:
         _fail(
             "accounting_v2_effective_before_cutover",
             "Journal effective_at cannot be earlier than the opening cutover",
-            cutover_at=opening_effective_at,
+            cutover_at=cutover_at,
             effective_at=effective_at,
         )
     return opening
@@ -1187,9 +1286,13 @@ async def post_opening_journal_v2(
     approved_preview_hash: str,
     effective_at: str,
     entries: Sequence[Mapping[str, Any]],
+    opening_root_txn_group_id: str | None = None,
+    replaces_txn_group_id: str | None = None,
+    reversal_txn_group_id: str | None = None,
+    opening_revision: int = 1,
     mongo_session: Any = None,
 ) -> dict[str, Any]:
-    """Append the book's sole opening group without activating the book.
+    """Append the root opening or one reviewed replacement in the same book.
 
     P07 must independently validate the persisted approval and pass its Mongo
     transaction here.  This function only binds the supplied approval identity
@@ -1216,25 +1319,80 @@ async def post_opening_journal_v2(
             "approved_preview_hash_invalid",
             "Approved opening preview hash must be a SHA-256 hex digest",
         )
+    replacement = opening_revision > 1
+    if isinstance(opening_revision, bool) or not isinstance(opening_revision, int) or opening_revision < 1:
+        _fail("opening_revision_invalid", "Opening revision must be a positive integer")
+    lineage = [opening_root_txn_group_id, replaces_txn_group_id, reversal_txn_group_id]
+    if replacement and any(not isinstance(value, str) or not value.strip() for value in lineage):
+        _fail(
+            "opening_replacement_lineage_required",
+            "A replacement requires its root, replaced journal, and reversal identities",
+        )
+    if not replacement and any(value is not None for value in lineage):
+        _fail(
+            "opening_root_lineage_invalid",
+            "The root opening cannot carry replacement lineage",
+        )
+    txn_type = "opening_replacement" if replacement else "opening_balance"
+    normalized_opening_entries: list[dict[str, Any]] = []
     for entry in entries:
         if not isinstance(entry, Mapping) or entry.get("entry_type") != "opening_balance":
             _fail(
                 "opening_entry_type_required",
                 "Every opening journal leg must use opening_balance",
             )
+        normalized_opening_entries.append({**dict(entry), "entry_type": txn_type})
+    if replacement:
+        root = await db[GROUPS_COLLECTION].find_one(
+            {
+                "user_id": owner,
+                "operation_id": OPERATION_ID,
+                "txn_group_id": opening_root_txn_group_id,
+                "txn_type": "opening_balance",
+            },
+            session=mongo_session,
+        )
+        replaced = await db[GROUPS_COLLECTION].find_one(
+            {
+                "user_id": owner,
+                "operation_id": OPERATION_ID,
+                "txn_group_id": replaces_txn_group_id,
+                "txn_type": {"$in": ["opening_balance", "opening_replacement"]},
+            },
+            session=mongo_session,
+        )
+        reversal = await db[GROUPS_COLLECTION].find_one(
+            {
+                "user_id": owner,
+                "operation_id": OPERATION_ID,
+                "txn_group_id": reversal_txn_group_id,
+                "txn_type": "reversal",
+                "reversal_of_txn_group_id": replaces_txn_group_id,
+            },
+            session=mongo_session,
+        )
+        if not root or not replaced or not reversal:
+            _fail(
+                "opening_replacement_lineage_invalid",
+                "The replacement lineage could not be verified",
+            )
     prepared = _prepare_journal(
         user_id=owner,
         idempotency_key=f"opening:{opening_id}",
-        txn_type="opening_balance",
+        txn_type=txn_type,
         source="accounting_opening_balances_v2",
         effective_at=effective_at,
-        entries=entries,
-        notes="Accounting V2 opening journal",
+        entries=normalized_opening_entries,
+        notes="Accounting V2 opening replacement" if replacement else "Accounting V2 opening journal",
         metadata={
             "opening_operation_id": opening_id,
             "approved_preview_hash": preview_hash,
             "historical_import": False,
             "legacy_financial_data_included": False,
+            "opening_root_txn_group_id": opening_root_txn_group_id,
+            "replaces_txn_group_id": replaces_txn_group_id,
+            "reversal_txn_group_id": reversal_txn_group_id,
+            "opening_revision": opening_revision,
         },
     )
     return await _post_prepared_v2(
@@ -1256,6 +1414,7 @@ async def reverse_journal_v2(
     original_txn_group_id: str,
     effective_at: str,
     reason: str,
+    evidence_snapshot: Sequence[Mapping[str, Any]] | None = None,
     mongo_session: Any = None,
 ) -> dict[str, Any]:
     """Append exactly one opposite group; never update the original group."""
@@ -1281,9 +1440,11 @@ async def reverse_journal_v2(
             session=session,
         )
         if existing_reversal:
+            stored_evidence = (existing_reversal.get("metadata") or {}).get("reason_evidence")
             if (
                 existing_reversal.get("effective_at") != normalized_effective
                 or existing_reversal.get("notes") != normalized_reason
+                or stored_evidence != _canonical_value(list(evidence_snapshot or []), path="reason_evidence")
             ):
                 _fail(
                     "accounting_v2_reversal_conflict",
@@ -1316,6 +1477,13 @@ async def reverse_journal_v2(
             _fail(
                 "accounting_v2_reversal_before_original",
                 "A reversal cannot be effective before its original journal",
+            )
+        is_opening = original_group.get("txn_type") in {"opening_balance", "opening_replacement"}
+        normalized_evidence = _canonical_value(list(evidence_snapshot or []), path="reason_evidence")
+        if is_opening and not normalized_evidence:
+            _fail(
+                "opening_reversal_evidence_required",
+                "Reversing an opening journal requires approved immutable reason evidence",
             )
         await _require_opening_gate(
             db,
@@ -1351,6 +1519,7 @@ async def reverse_journal_v2(
             metadata={
                 "reason": normalized_reason,
                 "original_content_hash": original_group["content_hash"],
+                "reason_evidence": normalized_evidence,
             },
             reversal_of_txn_group_id=original_id,
         )
@@ -1466,6 +1635,165 @@ async def query_entries_v2(
             )
         result.append(_public(row))
     return result
+
+
+async def read_reporting_entries_v2(
+    db: Any,
+    *,
+    user_id: str,
+    effective_before: str,
+    limit: int = MAX_JOURNAL_LEGS,
+    mongo_session: Any = None,
+) -> list[dict[str, Any]]:
+    """Return a bounded, group-verified V2 reporting snapshot.
+
+    Consumers never receive a leg whose complete immutable group and audit do
+    not verify.  The optional session keeps write decisions on the caller's
+    owner snapshot.
+    """
+    owner = _required_text(user_id, field="user_id")
+    upper = _utc_iso(effective_before, field="effective_before")
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= MAX_JOURNAL_LEGS:
+        _fail("report_limit_invalid", "Reporting limit is invalid")
+    kwargs = {"session": mongo_session} if mongo_session is not None else {}
+    rows = await db[GENERAL_LEDGER_COLLECTION].find(
+        {
+            "user_id": owner,
+            "operation_id": OPERATION_ID,
+            "status": "posted",
+            "effective_at": {"$lt": upper},
+        },
+        **kwargs,
+    ).sort("entry_no", 1).limit(limit + 1).to_list(limit + 1)
+    if len(rows) > limit:
+        _fail("accounting_v2_report_scope_too_large", "Accounting V2 report scope is too large")
+    groups = sorted({str(row.get("txn_group_id") or "") for row in rows})
+    if any(not group_id for group_id in groups):
+        _fail("accounting_v2_journal_integrity_failure", "A reporting leg has no journal identity")
+    verified_entries: dict[str, dict[str, Any]] = {}
+    for group_id in groups:
+        journal = await _load_journal(
+            db, user_id=owner, txn_group_id=group_id, session=mongo_session,
+        )
+        verification = _verify_loaded(journal)
+        if not verification["verified"]:
+            _fail(
+                "accounting_v2_journal_integrity_failure",
+                "A reporting journal failed immutable verification",
+                txn_group_id=group_id,
+                errors=verification["errors"],
+            )
+        assert journal is not None
+        for entry in journal["entries"]:
+            verified_entries[str(entry["id"])] = entry
+    if set(verified_entries) != {str(row.get("id")) for row in rows}:
+        _fail(
+            "accounting_v2_reporting_snapshot_incomplete",
+            "The reporting snapshot does not contain complete verified journal groups",
+        )
+    return [_public(verified_entries[str(row["id"])]) for row in rows]
+
+
+async def verify_active_opening_v2(
+    db: Any,
+    *,
+    user_id: str,
+    cutover: Mapping[str, Any],
+    mongo_session: Any = None,
+) -> bool:
+    """Verify the active opening pointer, including the explicit-zero case."""
+    owner = _required_text(user_id, field="user_id")
+    if cutover.get("operation_id") != OPERATION_ID:
+        return False
+    active_id = str(cutover.get("opening_active_txn_group_id") or "").strip()
+    root_id = str(cutover.get("opening_root_txn_group_id") or "").strip()
+    try:
+        cutover_at = _utc_iso(cutover.get("cutover_at"), field="cutover_at")
+    except AccountingLedgerV2Error:
+        return False
+    kwargs = {"session": mongo_session} if mongo_session is not None else {}
+    if active_id.startswith("zero:"):
+        draft_id = active_id.split(":", 1)[1]
+        manifest = await db["mz2_opening_balance_drafts"].find_one(
+            {
+                "user_id": owner, "id": draft_id, "status": "posted",
+                "txn_group_id": active_id, "zero_only": True,
+                "cutover_at": cutover_at,
+            },
+            **kwargs,
+        )
+        return bool(
+            manifest
+            and manifest.get("preview_hash")
+            and manifest.get("approval_hash")
+            and manifest.get("evidence_snapshot")
+            and manifest.get("opening_root_txn_group_id") == root_id
+        )
+    if not active_id or not root_id:
+        return False
+    journal = await _load_journal(
+        db, user_id=owner, txn_group_id=active_id, session=mongo_session,
+    )
+    verification = _verify_loaded(journal)
+    if not verification["verified"] or journal is None:
+        return False
+    group = journal["group"]
+    metadata = group.get("metadata") or {}
+    if group.get("txn_type") == "opening_balance":
+        lineage_ok = active_id == root_id and group.get("effective_at") == cutover_at
+    elif group.get("txn_type") == "opening_replacement":
+        replaced_id = str(metadata.get("replaces_txn_group_id") or "").strip()
+        reversal_id = str(metadata.get("reversal_txn_group_id") or "").strip()
+        root = await db[GROUPS_COLLECTION].find_one(
+            {
+                "user_id": owner,
+                "operation_id": OPERATION_ID,
+                "txn_group_id": root_id,
+                "txn_type": "opening_balance",
+                "effective_at": cutover_at,
+            },
+            **kwargs,
+        )
+        replaced = await db[GROUPS_COLLECTION].find_one(
+            {
+                "user_id": owner,
+                "operation_id": OPERATION_ID,
+                "txn_group_id": replaced_id,
+                "txn_type": {"$in": ["opening_balance", "opening_replacement"]},
+                "effective_at": cutover_at,
+            },
+            **kwargs,
+        )
+        linked_reversal = await db[GROUPS_COLLECTION].find_one(
+            {
+                "user_id": owner,
+                "operation_id": OPERATION_ID,
+                "txn_group_id": reversal_id,
+                "txn_type": "reversal",
+                "reversal_of_txn_group_id": replaced_id,
+                "effective_at": cutover_at,
+            },
+            **kwargs,
+        )
+        lineage_ok = bool(
+            group.get("effective_at") == cutover_at
+            and metadata.get("opening_root_txn_group_id") == root_id
+            and replaced_id
+            and reversal_id
+            and root
+            and replaced
+            and linked_reversal
+        )
+    else:
+        return False
+    reversal = await db[GROUPS_COLLECTION].find_one(
+        {
+            "user_id": owner, "operation_id": OPERATION_ID,
+            "reversal_of_txn_group_id": active_id,
+        },
+        **kwargs,
+    )
+    return bool(lineage_ok and not reversal)
 
 
 async def aggregate_balances_v2(
@@ -1795,6 +2123,27 @@ async def ensure_accounting_ledger_v2_indexes(db: Any) -> None:
         name="uq_accounting_v2_opening",
     )
     await groups.create_index(
+        [
+            ("user_id", 1),
+            ("operation_id", 1),
+            ("metadata.opening_root_txn_group_id", 1),
+            ("metadata.opening_revision", 1),
+        ],
+        unique=True,
+        partialFilterExpression={"txn_type": "opening_replacement"},
+        name="uq_accounting_v2_opening_replacement_revision",
+    )
+    await groups.create_index(
+        [
+            ("user_id", 1),
+            ("operation_id", 1),
+            ("metadata.replaces_txn_group_id", 1),
+        ],
+        unique=True,
+        partialFilterExpression={"txn_type": "opening_replacement"},
+        name="uq_accounting_v2_opening_replacement_target",
+    )
+    await groups.create_index(
         [("user_id", 1), ("operation_id", 1), ("effective_at", -1)],
         name="ix_accounting_v2_groups_effective",
     )
@@ -1868,7 +2217,9 @@ __all__ = [
     "post_journal_v2",
     "post_opening_journal_v2",
     "query_entries_v2",
+    "read_reporting_entries_v2",
     "reverse_journal_v2",
     "scan_mz2_rows_in_legacy_ledger",
+    "verify_active_opening_v2",
     "verify_journal_v2",
 ]

@@ -241,6 +241,21 @@ async def post_ledger_entry(
         the same business event (mandatory for grouped operations
         posted via post_txn_group).
     """
+    from accounting_atomic import SessionDatabase, atomic_owner
+    from accounting_write_control import AccountingDatabase
+    current_db = db.current() if isinstance(db, AccountingDatabase) else db
+    if not isinstance(current_db, SessionDatabase):
+        async def operation(scoped):
+            return await post_ledger_entry(
+                scoped,
+                user_id=user_id, actor_id=actor_id, actor_name=actor_name,
+                entity_type=entity_type, entity_id=entity_id,
+                entry_type=entry_type, amount=amount, side=side,
+                sub_account=sub_account, txn_group_id=txn_group_id,
+                reason_code=reason_code, notes=notes, metadata=metadata,
+                status=status, reverses_entry_id=reverses_entry_id,
+            )
+        return await atomic_owner(db, user_id, operation)
     from accounting_writer_transition import assert_writer_allowed
     await assert_writer_allowed(db, user_id, "legacy")
     if entry_type not in ENTRY_TYPES:
@@ -390,6 +405,18 @@ async def post_txn_group(
         "credit_total": float,
     }
     """
+    from accounting_atomic import SessionDatabase, atomic_owner
+    from accounting_write_control import AccountingDatabase
+    current_db = db.current() if isinstance(db, AccountingDatabase) else db
+    if not isinstance(current_db, SessionDatabase):
+        async def operation(scoped):
+            return await post_txn_group(
+                scoped,
+                user_id=user_id, actor_id=actor_id, actor_name=actor_name,
+                entries=entries, txn_type=txn_type, reason_code=reason_code,
+                notes=notes, metadata=metadata,
+            )
+        return await atomic_owner(db, user_id, operation)
     from accounting_writer_transition import assert_writer_allowed
     await assert_writer_allowed(db, user_id, "legacy")
     if not entries or len(entries) < 2:

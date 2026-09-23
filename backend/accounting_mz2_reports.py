@@ -27,6 +27,11 @@ def mz2_query(owner):
 
 def _date(row):
     meta = row.get("metadata") or {}
+    if row.get("effective_at"):
+        value = _aware_utc_iso(row.get("effective_at"))
+        if not value:
+            raise ValueError("mz2_accounting_date_required")
+        return datetime.fromisoformat(value)
     # No insertion/audit timestamp fallback at this boundary.
     if "accounting_at" not in meta and not (
         row.get("entry_type") == "bnpl_sale" and "recognized_at" in meta
@@ -94,7 +99,7 @@ async def _cutover(db, owner):
     return (row or {}).get("mezan2_financial_cutover") or {}
 
 
-async def read_mz2_ledger(db, *, owner, as_of=None, required_accounts=()):
+async def _read_legacy_mz2_ledger(db, *, owner, as_of=None, required_accounts=()):
     upper = report_cutoff(as_of) if as_of is not None else datetime.now(timezone.utc)
     state = await _cutover(db, owner)
     result = dict(status="not_ready", reason="cutover_not_approved", operation_id=OPERATION_ID,
@@ -192,6 +197,136 @@ async def read_mz2_ledger(db, *, owner, as_of=None, required_accounts=()):
     return {**result, "status": "available", "reason": "approved_opening_and_post_cutover_mz2_only", "items": eligible}
 
 
+async def _read_v2_mz2_ledger(db, *, owner, as_of=None, required_accounts=()):
+    from accounting_ledger_v2 import (
+        AccountingLedgerV2Error,
+        read_reporting_entries_v2,
+        verify_active_opening_v2,
+    )
+
+    upper = report_cutoff(as_of) if as_of is not None else datetime.now(timezone.utc)
+    state = await _cutover(db, owner)
+    active_id = str(state.get("opening_active_txn_group_id") or "").strip()
+    result = dict(
+        status="not_ready", reason="cutover_not_approved", operation_id=OPERATION_ID,
+        legacy_financial_data_included=False, ledger_only=True, ledger_backend="v2",
+        cutover_at=None, opening_balance_txn_group_id=active_id or None,
+        as_of=as_of, timezone="Asia/Riyadh", items=[], missing_accounts=[],
+    )
+
+    def blocked(reason, status="not_ready"):
+        return {**result, "status": status, "reason": reason, "items": []}
+
+    cut = _aware_utc_iso(state.get("cutover_at"))
+    if state.get("operation_id") != OPERATION_ID or not cut:
+        return result
+    result["cutover_at"] = cut
+    if state.get("status") != "active" or not active_id:
+        return blocked("approved_opening_group_required", "needs_opening_balance")
+    if not await verify_active_opening_v2(db, user_id=owner, cutover=state):
+        return blocked("approved_opening_group_invalid", "needs_opening_balance")
+    readiness = build_accounting_module_status(
+        {**state, "ledger_source": "accounting_v2_operation_scoped"},
+        opening_posted_verified=True,
+    )
+    if not readiness["cutover"]["safe_active"]:
+        return blocked("cutover_evidence_or_approval_incomplete")
+    cut_at = datetime.fromisoformat(cut)
+    if upper <= cut_at:
+        return blocked("report_before_cutover")
+    try:
+        rows = await read_reporting_entries_v2(
+            db,
+            user_id=owner,
+            effective_before=upper.isoformat(),
+            limit=MAX_REPORT_LEGS,
+            mongo_session=getattr(db, "_session", None),
+        )
+    except AccountingLedgerV2Error as error:
+        return blocked(error.code)
+    eligible = [row for row in rows if _date(row) >= cut_at]
+    # Coverage is an opening fact, never something later operational activity
+    # can manufacture.  A newly active account must therefore appear in the
+    # currently active opening (or its explicit-zero manifest), not merely in
+    # an arbitrary post-cutover journal.
+    covered = {
+        (row.get("entity_type"), str(row.get("entity_id")), row.get("sub_account") or "")
+        for row in eligible
+        if row.get("txn_group_id") == active_id
+        and row.get("entry_type") in {"opening_balance", "opening_replacement"}
+    }
+    zero_accounts = state.get("opening_balance_zero_accounts") or []
+    if not isinstance(zero_accounts, list):
+        return blocked("approved_zero_opening_evidence_invalid")
+    for zero in zero_accounts:
+        if not isinstance(zero, dict):
+            return blocked("approved_zero_opening_evidence_invalid")
+        at = _aware_utc_iso(zero.get("accounting_at"))
+        if (
+            zero.get("opening_balance_txn_group_id") != active_id
+            or at != cut
+            or not str(zero.get("evidence_ref") or "").strip()
+            or not str(zero.get("entity_type") or "").strip()
+            or not str(zero.get("entity_id") or "").strip()
+        ):
+            return blocked("approved_zero_opening_evidence_invalid")
+        covered.add((zero["entity_type"], str(zero["entity_id"]), zero.get("sub_account") or ""))
+    accounts = await db.mz2_financial_accounts.find(
+        {"user_id": owner, "status": "active"},
+        {"_id": 0, "id": 1, "account_type": 1},
+    ).to_list(MAX_REPORT_LEGS + 1)
+    if len(accounts) > MAX_REPORT_LEGS:
+        return blocked("account_scope_too_large")
+    rules = {
+        "bank": ("bank", "main"), "cash": ("bank", "main"),
+        "ad_prepaid_wallet": ("ad_account", "balance"),
+        "ad_payable": ("ad_account", "debt"),
+        "overdraft": ("liability", "bank_overdraft"),
+    }
+    required = {
+        (rules[row["account_type"]][0], str(row["id"]), rules[row["account_type"]][1])
+        for row in accounts if row.get("account_type") in rules
+    }
+    required.update(required_accounts)
+    missing = ["/".join(key) for key in sorted(required - covered)]
+    if missing:
+        result["missing_accounts"] = missing
+        return blocked("accounts_require_approved_opening", "needs_opening_balance")
+    if state != await _cutover(db, owner):
+        return blocked("cutover_changed_refresh_required")
+    eligible.sort(key=lambda row: (_date(row), int(row.get("entry_no") or 0)))
+    return {
+        **result,
+        "status": "available",
+        "reason": "approved_v2_opening_and_operation_scoped_ledger_only",
+        "items": eligible,
+    }
+
+
+async def read_mz2_ledger(db, *, owner, as_of=None, required_accounts=()):
+    """Select exactly one ledger backend; never combine or fall back."""
+    from accounting_writer_transition import transition_state
+
+    transition = await transition_state(
+        db, owner, mongo_session=getattr(db, "_session", None),
+    )
+    if transition["state"] == "legacy_active":
+        return await _read_legacy_mz2_ledger(
+            db, owner=owner, as_of=as_of, required_accounts=required_accounts,
+        )
+    if transition["state"] == "v2_active":
+        return await _read_v2_mz2_ledger(
+            db, owner=owner, as_of=as_of, required_accounts=required_accounts,
+        )
+    return {
+        "status": "not_ready", "reason": "accounting_transition_blocked",
+        "operation_id": OPERATION_ID, "legacy_financial_data_included": False,
+        "ledger_only": True, "ledger_backend": None, "cutover_at": None,
+        "opening_balance_txn_group_id": None, "as_of": as_of,
+        "timezone": "Asia/Riyadh", "items": [], "missing_accounts": [],
+    }
+
+
 def _sums(rows):
     groups = defaultdict(lambda: {"debits": Decimal(0), "credits": Decimal(0)})
     for row in rows:
@@ -215,7 +350,10 @@ async def mz2_financial_position(db, *, owner, as_of=None):
     assets = {"banks": Decimal(0), "payment_platforms_remaining": Decimal(0), "input_vat": Decimal(0)}
     liabilities = {"customer_refund_payable": Decimal(0), "customer_advance": Decimal(0), "sales_vat_payable": Decimal(0)}
     accounts = await db.accounts.find({"user_id": owner}, {"_id": 0, "id": 1, "account_type": 1}).to_list(MAX_REPORT_LEGS + 1)
-    types = {a.get("id"): a.get("account_type") for a in accounts}
+    financial_accounts = await db.mz2_financial_accounts.find(
+        {"user_id": owner}, {"_id": 0, "id": 1, "account_type": 1},
+    ).to_list(MAX_REPORT_LEGS + 1)
+    types = {a.get("id"): a.get("account_type") for a in [*accounts, *financial_accounts]}
     asset_map = {("payment_gateway", "receivable"): "payment_platforms_remaining", ("tax", "input_vat"): "input_vat",
                  ("tax", "recoverable"): "input_vat", ("employee", "advance"): "employee_advance",
                  ("employee", "custody"): "employee_custody", ("external_person", "receivable"): "external_receivable",

@@ -28,6 +28,7 @@ from accounting_module_contract import (
 from accounting_module_ledger import opening_posted_is_verified
 from accounting_module_readiness import build_accounting_module_status
 from accounting_write_control import fresh_actor
+from accounting_writer_transition import assert_writer_allowed
 from ledger_core import post_txn_group
 
 
@@ -499,6 +500,7 @@ async def _validate_preview_entities(db, owner: str, compiled: list[dict[str, An
 
 
 async def create_opening_preview(db, *, owner: str, actor: dict[str, Any], payload: OpeningPreviewIn) -> dict[str, Any]:
+    await assert_writer_allowed(db, owner, "legacy")
     require_accounting_permission(actor, "accounting.opening_balances.approve")
     state = await _cutover(db, owner)
     if state.get("status") == "active" or state.get("opening_balance_txn_group_id"):
@@ -585,6 +587,7 @@ async def create_opening_preview(db, *, owner: str, actor: dict[str, Any], paylo
 
 
 async def approve_opening_preview(db, *, owner: str, actor: dict[str, Any], payload: OpeningApproveIn) -> dict[str, Any]:
+    await assert_writer_allowed(db, owner, "legacy")
     require_owner(actor)
     require_accounting_permission(actor, "accounting.opening_balances.approve")
     state = await _cutover(db, owner)
@@ -709,6 +712,7 @@ async def approve_opening_preview(db, *, owner: str, actor: dict[str, Any], payl
 
 
 async def activate_p01(db, *, owner: str, actor: dict[str, Any], payload: OpeningActivateIn) -> dict[str, Any]:
+    await assert_writer_allowed(db, owner, "legacy")
     require_owner(actor)
     require_accounting_permission(actor, "accounting.opening_balances.approve")
     state = await _cutover(db, owner)

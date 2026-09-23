@@ -48,6 +48,13 @@ def summarize_accounting_home_ledger(
 
 
 async def opening_posted_is_verified(db, *, user_id: str, cutover: dict[str, Any]) -> bool:
+    from accounting_writer_transition import transition_state
+    transition = await transition_state(db, user_id)
+    if transition["state"] == "v2_active":
+        from accounting_ledger_v2 import verify_active_opening_v2
+        return await verify_active_opening_v2(db, user_id=user_id, cutover=cutover)
+    if transition["state"] != "legacy_active":
+        return False
     group_id = str(cutover.get("opening_balance_txn_group_id") or "").strip()
     if not group_id:
         return False
@@ -77,5 +84,8 @@ async def ledger_only_home_balances(db, *, user_id: str, cutover_at: str) -> dic
     account_types = {}
     async for account in db.accounts.find({"user_id": user_id},
             {"_id": 0, "id": 1, "account_type": 1}):
+        account_types[str(account.get("id") or "")] = str(account.get("account_type") or "")
+    async for account in db.mz2_financial_accounts.find(
+            {"user_id": user_id}, {"_id": 0, "id": 1, "account_type": 1}):
         account_types[str(account.get("id") or "")] = str(account.get("account_type") or "")
     return summarize_accounting_home_ledger(_sums(scope["items"]), account_types=account_types)

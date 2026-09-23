@@ -66,6 +66,7 @@ test("new financial authorities require explicit grants even for owners", () => 
         "accounting.opening_balances.review",
         "accounting.opening_balances.post",
         "accounting.journals.reverse",
+        "accounting.ledger_transition.manage",
     ];
     expect([...ACCOUNTING_EXPLICIT_GRANT_PERMISSIONS]).toEqual(exact);
     exact.forEach((permission) => {
@@ -104,5 +105,6 @@ test("sensitive actions remain separate from page access", () => {
     expect(actionPermissions).toContain("accounting.opening_balances.drafts.manage");
     expect(actionPermissions).toContain("accounting.opening_balances.review");
     expect(actionPermissions).toContain("accounting.opening_balances.post");
+    expect(actionPermissions).toContain("accounting.ledger_transition.manage");
     expect(actionPermissions).not.toContain("accounting.opening_balances.view");
 });

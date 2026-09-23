@@ -205,14 +205,13 @@ class _Collection:
         return kwargs.get("name") or "index"
 
     async def find_one(self, query, projection=None, **_kwargs):
-        if self.name == "mz2_writer_transition" and query.get("_id") == "owner-1":
+        if self.name == "mz2_atomic_owners" and query.get("_id") == "owner-1":
             return {
                 "_id": "owner-1",
-                "user_id": "owner-1",
-                "state": "v2_active",
-                "state_revision": 2,
-                "contract_revision": 1,
-                "activation_ref": "unit-test-v2",
+                "ledger_backend_state": "v2_active",
+                "ledger_backend_revision": 2,
+                "ledger_backend_contract_revision": 1,
+                "ledger_backend_activation_ref": "unit-test-v2",
             }
         for row in self.rows:
             if _matches(row, query):
@@ -450,7 +449,7 @@ def _entries(amount: str = "125.50") -> list[dict]:
 
 
 async def _open(db: _DB):
-    return await _atomic(
+    result = await _atomic(
         db,
         lambda session: post_opening_journal_v2(
             db,
@@ -481,6 +480,27 @@ async def _open(db: _DB):
             mongo_session=session,
         ),
     )
+    _set_opening_state(db, result)
+    return result
+
+
+def _set_opening_state(db: _DB, result: dict) -> None:
+    group_id = result["group"]["txn_group_id"]
+    state = {
+        "operation_id": OPERATION_ID,
+        "ledger_source": "accounting_v2_operation_scoped",
+        "status": "active",
+        "cutover_at": result["group"]["effective_at"],
+        "opening_balance_txn_group_id": group_id,
+        "opening_active_txn_group_id": group_id,
+        "opening_root_txn_group_id": group_id,
+    }
+    rows = db.rows.setdefault("settings", [])
+    existing = next((row for row in rows if row.get("user_id") == "owner-1"), None)
+    if existing is None:
+        rows.append({"user_id": "owner-1", "mezan2_financial_cutover": state})
+    else:
+        existing["mezan2_financial_cutover"] = state
 
 
 async def _atomic(db: _DB, callback):
@@ -717,7 +737,8 @@ async def test_fixed_width_effective_time_orders_fractional_cutover_correctly():
             mongo_session=session,
         )
 
-    await _atomic(db, fractional_opening)
+    opening = await _atomic(db, fractional_opening)
+    _set_opening_state(db, opening)
     with pytest.raises(AccountingLedgerV2Error) as exc:
         await _atomic(
             db,
@@ -771,6 +792,7 @@ async def test_operational_post_rejects_corrupt_or_reversed_opening_but_retries_
         original_txn_group_id=opening["group"]["txn_group_id"],
         effective_at="2026-09-13T00:00:00Z",
         reason="Owner-approved opening correction",
+        evidence_snapshot=[{"source_file_id": "reason-evidence", "sha256": "a" * 64}],
     )
     retry_reversal = await _reverse(
         db,
@@ -780,6 +802,7 @@ async def test_operational_post_rejects_corrupt_or_reversed_opening_but_retries_
         original_txn_group_id=opening["group"]["txn_group_id"],
         effective_at="2026-09-13T00:00:00Z",
         reason="Owner-approved opening correction",
+        evidence_snapshot=[{"source_file_id": "reason-evidence", "sha256": "a" * 64}],
     )
     assert retry_reversal == reversal
 
