@@ -616,15 +616,15 @@ function InProgressView({ data, loading, error, onRefresh, onBack }) {
 
 export function ReceivedView({ data, loading, error, onRefresh, onBack }) {
     const receivedProducts = (data?.files || []).flatMap((file) => (file?.products || [])
-        .filter((product) => Number(product?.received_quantity || 0) > 0)
+        .filter((product) => Number(product?.supplier_received_quantity ?? product?.received_quantity ?? 0) > 0)
         .map((product) => ({ ...product, file_number: file.file_number })));
     return (
         <div className="space-y-5" data-testid="preparation-products-received">
-            <SectionHeader title="تم الاستلام" description="ما استلمه موظف التجهيز من المورد ولم يُسلّمه لموظف الاستلام بالفرع." onBack={onBack} onRefresh={onRefresh} loading={loading} />
-            <div className="grid grid-cols-2 gap-3"><SummaryCard value={data?.summary?.received_orders_awaiting_branch_handoff} label="الطلبات" detail="بانتظار التسليم للفرع" tone="emerald" /><SummaryCard value={data?.summary?.received_pieces_awaiting_branch_handoff} label="القطع المستلمة" detail="لم تُسلّم للفرع" tone="violet" /></div>
+            <SectionHeader title="تم الاستلام" description="القطع المستلمة من المورد، بما فيها القطع التي تنتظر استكمال خدمات أخرى." onBack={onBack} onRefresh={onRefresh} loading={loading} />
+            <div className="grid grid-cols-2 gap-3"><SummaryCard value={data?.summary?.supplier_received_orders_awaiting_handoff ?? data?.summary?.received_orders_awaiting_branch_handoff} label="الطلبات" detail="مستلمة من المورد" tone="emerald" /><SummaryCard value={data?.summary?.supplier_received_pieces_awaiting_handoff ?? data?.summary?.received_pieces_awaiting_branch_handoff} label="القطع المستلمة" detail="تشمل القطع التي تنتظر خدمات أخرى" tone="violet" /></div>
             {error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-bold text-rose-900">{error}</div>}
-            {!receivedProducts.length && !error ? <div className="rounded-2xl border border-dashed border-slate-300 p-9 text-center"><CheckCircle size={36} className="mx-auto text-emerald-600" /><div className="mt-3 font-black text-slate-800">لا توجد قطع مستلمة بانتظار التسليم للفرع</div></div> : <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{receivedProducts.map((product) => <article key={`${product.file_number}:${product.group_key}`} className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3"><ProductImage product={product} /><h4 className="mt-2 line-clamp-2 text-sm font-black text-slate-950">{product.product_name}</h4><div className="mt-1 text-xs font-bold text-emerald-800">{product.received_quantity} قطعة مستلمة</div><div className="mt-1 truncate text-[10px] font-bold text-slate-500">ملف {product.file_number}</div></article>)}</div>}
-            <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold leading-6 text-amber-900"><WarningCircle size={19} className="mt-0.5 shrink-0" />إنقاص هذا العدد سيتم فقط في مرحلة تسليم القطع لموظف الاستلام بالفرع بالباركود، وهي بوابة التنفيذ التالية.</div>
+            {!receivedProducts.length && !error ? <div className="rounded-2xl border border-dashed border-slate-300 p-9 text-center"><CheckCircle size={36} className="mx-auto text-emerald-600" /><div className="mt-3 font-black text-slate-800">لا توجد قطع مستلمة من المورد</div></div> : <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{receivedProducts.map((product) => <article key={`${product.file_number}:${product.group_key}`} className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3"><ProductImage product={product} /><h4 className="mt-2 line-clamp-2 text-sm font-black text-slate-950">{product.product_name}</h4><div className="mt-1 text-xs font-bold text-emerald-800">{product.supplier_received_quantity ?? product.received_quantity} قطعة مستلمة من المورد</div><div className="mt-1 text-xs font-bold text-slate-600">{Number(product.received_quantity || 0) ? "جاهزة للتسليم للفرع" : "بانتظار استكمال خدمات أخرى"}</div><div className="mt-1 truncate text-[10px] font-bold text-slate-500">ملف {product.file_number}</div></article>)}</div>}
+            <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold leading-6 text-amber-900"><WarningCircle size={19} className="mt-0.5 shrink-0" />القطعة التي تنتظر خدمات أخرى تظهر ضمن المستلم من المورد، ولا تصبح جاهزة لتسليم الفرع حتى اكتمال خدماتها.</div>
         </div>
     );
 }
@@ -652,7 +652,7 @@ export function MyProductsOverview({ data, onOpen }) {
         .filter((account) => (
             Number(account?.sent_quantity || 0)
             + Number(account?.ready_quantity || 0)
-            + Number(account?.received_quantity || 0)
+            + Number(account?.supplier_received_quantity ?? account?.received_quantity ?? 0)
         ) > 0)
         .slice(0, 3);
     const supplierInvoiceCount = supplierAccounts.reduce(
@@ -682,8 +682,8 @@ export function MyProductsOverview({ data, onOpen }) {
         {
             key: "received",
             label: "تم الاستلام",
-            value: data?.summary?.received_pieces_awaiting_branch_handoff,
-            detail: "قطعة لم تُسلّم للفرع",
+            value: data?.summary?.supplier_received_pieces_awaiting_handoff ?? data?.summary?.received_pieces_awaiting_branch_handoff,
+            detail: "قطعة مستلمة من المورد",
             Icon: CheckCircle,
             tone: "emerald",
             onClick: () => onOpen("received"),
@@ -723,16 +723,20 @@ export function MyProductsOverview({ data, onOpen }) {
 
     const fileProgress = (file) => {
         const total = Math.max(0, Number(file?.piece_count || 0));
-        const received = Math.max(0, Number(file?.received_quantity || 0));
+        const received = Math.max(0, Number(file?.supplier_received_quantity ?? file?.received_quantity ?? 0));
         return total ? Math.min(100, Math.round((received / total) * 100)) : 0;
     };
 
     const fileStatus = (file) => {
         const executionStatus = String(file?.execution_status || "assigned");
         const total = Math.max(0, Number(file?.piece_count || 0));
-        const received = Math.max(0, Number(file?.received_quantity || 0));
+        const received = Math.max(0, Number(file?.supplier_received_quantity ?? file?.received_quantity ?? 0));
         if (total > 0 && received >= total) {
-            return { label: "تم الاستلام", className: "text-emerald-700" };
+            return {
+                label: Number(file?.received_quantity || 0) >= total
+                    ? "تم الاستلام" : "بانتظار استكمال الخدمات",
+                className: "text-emerald-700",
+            };
         }
         if (executionStatus === "in_progress") {
             return { label: "قيد التنفيذ", className: "text-blue-600" };
@@ -816,7 +820,7 @@ export function MyProductsOverview({ data, onOpen }) {
             {normalizedSearch && (
                 <section className="rounded-xl border border-emerald-100 bg-emerald-50/30 p-3" aria-live="polite">
                     <div className="mb-2 text-xs font-black text-emerald-900">نتائج البحث</div>
-                    {matches.length ? <div className="grid gap-2 sm:grid-cols-2">{matches.map((product) => <div key={`${product.file_number}:${product.group_key}`} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3"><ProductImage product={product} compact /><div className="min-w-0"><div className="text-sm font-black text-slate-950">{product.product_name}</div><div className="mt-1 text-[11px] font-bold text-slate-500">ملف {product.file_number} · متاح {product.available_quantity} · عند المورد {Number(product.sent_quantity || 0) + Number(product.ready_quantity || 0)} · مستلم {product.received_quantity}</div></div></div>)}</div> : <div className="text-xs font-bold text-slate-500">لا توجد منتجات مسندة إليك لهذا الطلب.</div>}
+                    {matches.length ? <div className="grid gap-2 sm:grid-cols-2">{matches.map((product) => <div key={`${product.file_number}:${product.group_key}`} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3"><ProductImage product={product} compact /><div className="min-w-0"><div className="text-sm font-black text-slate-950">{product.product_name}</div><div className="mt-1 text-[11px] font-bold text-slate-500">ملف {product.file_number} · متاح {product.available_quantity} · عند المورد {Number(product.sent_quantity || 0) + Number(product.ready_quantity || 0)} · مستلم من المورد {product.supplier_received_quantity ?? product.received_quantity}</div></div></div>)}</div> : <div className="text-xs font-bold text-slate-500">لا توجد منتجات مسندة إليك لهذا الطلب.</div>}
                 </section>
             )}
 
@@ -831,7 +835,7 @@ export function MyProductsOverview({ data, onOpen }) {
                                 <article key={file.file_number} className="min-w-0 rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm sm:p-4" data-testid="my-products-latest-file">
                                     <div className="truncate text-[10px] font-black text-slate-950 sm:text-sm">{file.file_title || file.file_number}</div>
                                     <div className="mt-1 text-[9px] font-bold text-slate-600 sm:text-xs">{Number(file.piece_count || 0)} قطعة</div>
-                                    <div className="mt-1 text-[9px] font-bold text-slate-500 sm:text-xs">{Number(file.received_quantity || 0)} مستلمة</div>
+                                    <div className="mt-1 text-[9px] font-bold text-slate-500 sm:text-xs">{Number(file.supplier_received_quantity ?? file.received_quantity ?? 0)} مستلمة من المورد</div>
                                     <div className="mt-2 flex items-center gap-2" dir="ltr"><span className="text-[9px] font-black text-slate-700 sm:text-xs">{progress}%</span><span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-slate-200"><span className="block h-full rounded-full bg-emerald-700" style={{ width: `${progress}%` }} /></span></div>
                                     <div className={`mt-2 text-[9px] font-black sm:text-xs ${status.className}`}>{status.label}</div>
                                 </article>

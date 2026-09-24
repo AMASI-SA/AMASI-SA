@@ -715,6 +715,29 @@ def test_branch_handoff_removes_piece_from_received_awaiting_branch_cards():
     }
 
 
+def test_supplier_invoice_three_pieces_counts_all_receipts_but_one_ready():
+    pieces = [
+        _piece("ready", status="received", supplier_dispatch_status="received"),
+        _piece("pending-1", status="in_progress", supplier_dispatch_status="partial_received"),
+        _piece("pending-2", status="in_progress", supplier_dispatch_status="partial_received"),
+    ]
+    rows = _piece_products(pieces)
+    summary = employee_workspace_summary([{
+        "is_new": False,
+        "available_quantity": 0,
+        "sent_quantity": 0,
+        "ready_quantity": 0,
+        "received_quantity": 1,
+        "products": rows,
+    }], pieces)
+
+    assert sum(row["supplier_received_quantity"] for row in rows) == 3
+    assert sum(row["received_quantity"] for row in rows) == 1
+    assert summary["supplier_received_pieces_awaiting_handoff"] == 3
+    assert summary["received_pieces_awaiting_branch_handoff"] == 1
+    assert summary["supplier_received_orders_awaiting_handoff"] == 1
+
+
 @pytest.mark.asyncio
 async def test_employee_workspace_queries_only_pieces_assigned_to_that_employee():
     class EmptyCursor:
