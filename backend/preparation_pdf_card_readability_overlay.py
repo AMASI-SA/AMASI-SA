@@ -1,8 +1,7 @@
 """Readability overlay for the merchant-approved Amasi A4 product card.
 
-Keeps the locked A4 / 3x5 geometry while correcting operational option order,
-wrapping long values, compacting verbose customer-question labels, and enlarging
-the product image / QR pair equally.
+Keeps the locked A4 / 3x5 geometry and enlarges the product image / QR pair
+equally. The A4 renderer handles original option order and full text wrapping.
 """
 from __future__ import annotations
 
@@ -75,27 +74,11 @@ def install_preparation_pdf_card_readability_overlay() -> None:
 
     import preparation_pdf_amasi_a4_layout as layout
 
-    original_spec_rows = layout._spec_rows
-
-    def readable_spec_rows(line):
-        # Reverse source projection: size last and customer name immediately
-        # above it. Each long value gets a continuation row inside the same
-        # customer-options column.
-        rows = list(reversed(original_spec_rows(line)))
-        rendered: list[tuple[str, str]] = []
-        for label, value in rows:
-            wrapped = _wrap_value(value)
-            if not wrapped:
-                continue
-            rendered.append((_compact_label(label), wrapped[0]))
-            for continuation in wrapped[1:]:
-                rendered.append(("", continuation))
-        return rendered
-
     # Both media blocks remain identical for visual balance and QR scanning.
+    # The A4 renderer wraps full labels and values itself. Preserve the source
+    # snapshot order here; reversing and abbreviating it loses Salla's order.
     layout.MEDIA_SIZE = 24.0 * mm
     layout.MEDIA_GAP = 1.4 * mm
-    layout._spec_rows = readable_spec_rows
     _INSTALLED = True
 
 
