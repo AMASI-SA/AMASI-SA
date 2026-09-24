@@ -1644,14 +1644,12 @@ async def resync_single_order(db, user_id: str, order_number: str) -> dict:
             {
                 "_id": 0,
                 "order_status": 1,
-                "sold_products_completed_at": 1,
                 "payment_status": 1,
                 "total_amount": 1,
                 "payment_method": 1,
                 "updated_at": 1,
                 "products": 1,
                 "total_product_cost": 1,
-                "order_status_slug": 1,
             },
         )
 
@@ -1779,7 +1777,6 @@ async def resync_single_order(db, user_id: str, order_number: str) -> dict:
                 "products": 1,
                 "total_amount": 1,
                 "total_product_cost": 1,
-                "order_status": 1,
             },
         )
 
@@ -1964,13 +1961,6 @@ async def _record_order_adjustment(
         "items_changed": items_changed,
         "total_changed": total_changed,
         "items_diff": items_diff,
-        # Only an already observed completed state proves that the removed
-        # products had reached execution. Older adjustments have no snapshot.
-        "removal_stage": (
-            "after" if before.get("sold_products_completed_at")
-            or str(before.get("order_status") or "").strip() in {"تم التنفيذ", "completed"}
-            else "unknown"
-        ),
         "created_at": _now(),
     }
     await db.order_adjustments.insert_one(row)
