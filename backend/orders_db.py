@@ -961,11 +961,6 @@ async def upsert_order(db, user_id: str, order_number: str, incoming: dict,
         {"user_id": user_id, "order_number": order_number}
     ) or {}
     merged = _merge_into(existing, incoming, source)
-    # Retain the first observed execution transition even when Salla later
-    # changes the current status to cancelled/refunded.
-    from sold_product_reversals import _is_completed
-    if _is_completed(merged.get("order_status")) or (not merged.get("order_status") and _is_completed(merged.get("order_status_slug"))):
-        merged.setdefault("sold_products_completed_at", _now())
     merged["user_id"] = user_id
     merged["order_number"] = order_number
     if raw is not None:
