@@ -9,6 +9,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import AdvancedDashboard from "./pages/AdvancedDashboard";
+import SoldProducts from "./pages/SoldProducts";
 const ChartDashboard = lazy(() => import("./pages/ChartDashboard"));
 import CampaignRecommendations from "./pages/CampaignRecommendations";
 import UploadExcel from "./pages/UploadExcel";
@@ -336,6 +337,7 @@ function AppRoutes() {
                     </ProtectedRoute>
                 }
             />
+            <Route path="/products-v2/sold" element={<ProtectedRoute><OwnerOnlyRoute><Layout><SoldProducts /></Layout></OwnerOnlyRoute></ProtectedRoute>} />
             <Route
                 path="/employees-v2"
                 element={
