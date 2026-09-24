@@ -59,7 +59,10 @@ from salla_marketing_attribution import (
     SALLA_RAW_ATTRIBUTION_PROJECTION,
     attach_projected_salla_attribution,
 )
-from sold_products_report_v2 import SELECTABLE_STATUSES, load_sold_products, order_matches_status, summarize
+from sold_products_report_v2 import (
+    SELECTABLE_STATUSES, load_sold_products, order_matches_observed_status,
+    order_matches_status, parse_observed_statuses, summarize,
+)
 from salla_integration.abandoned_carts import (
     AbandonedCartScopeError,
     parse_salla_datetime,
@@ -1896,6 +1899,7 @@ def make_dashboard_v2_router(
         from_date: str = Query(...),
         to_date: str = Query(...),
         statuses: str = Query("default"),
+        status_names: str | None = Query(None),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         current = owner(user)
@@ -1910,6 +1914,12 @@ def make_dashboard_v2_router(
                 or ("default" in selected and selected != ["default"])
                 or any(part != "default" and part not in SELECTABLE_STATUSES for part in selected)):
             raise HTTPException(status_code=422, detail="حالة طلب غير مدعومة")
+        try:
+            observed_names = parse_observed_statuses(status_names)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="حالات الطلب غير صالحة") from exc
+        if observed_names is not None and selected != ["default"]:
+            raise HTTPException(status_code=422, detail="اختر نوعًا واحدًا لتصفية الحالات")
         uid = str(current["id"])
         settings = await ensure_user_settings(db, uid)
         query: dict[str, Any] = {
@@ -1920,12 +1930,14 @@ def make_dashboard_v2_router(
         orders = await db.unified_orders.find(
             query, {"_id": 0, "products": 1, "order_status": 1, "order_status_slug": 1},
         ).to_list(length=100000)
-        orders = [order for order in orders if order_matches_status(
-            order, selected, settings.get("report_included_statuses") or [],
+        orders = [order for order in orders if (
+            order_matches_observed_status(order, observed_names) if observed_names is not None
+            else order_matches_status(order, selected, settings.get("report_included_statuses") or [])
         )]
         rows = await load_sold_products(db, uid, orders)
         return {
-            "range": {"from_date": from_date, "to_date": to_date, "statuses": selected},
+            "range": {"from_date": from_date, "to_date": to_date, "statuses": selected,
+                      "status_names": observed_names},
             "items": rows, "count": len(rows),
             "incomplete_count": sum(row["cost_status"] != "complete" for row in rows),
             "totals": summarize(rows),

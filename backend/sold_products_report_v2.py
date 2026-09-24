@@ -6,6 +6,7 @@ then Salla's registered fallback; optional components are excluded.
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
+import json
 from typing import Any
 import unicodedata
 
@@ -56,6 +57,25 @@ def order_matches_status(order: dict, selected: list[str], configured: list[str]
     else:
         allowed = {_normalized(value) for key in selected for value in SELECTABLE_STATUSES[key]}
     return status in allowed or slug in allowed
+
+
+def parse_observed_statuses(value: str | None) -> list[str] | None:
+    """Decode exact, tenant-observed status names supplied by the report picker."""
+    if value is None:
+        return None
+    try:
+        names = json.loads(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("invalid_status_names") from exc
+    if (not isinstance(names, list) or not 1 <= len(names) <= 100
+            or any(not isinstance(name, str) or not name.strip() or len(name) > 120 for name in names)):
+        raise ValueError("invalid_status_names")
+    return names
+
+
+def order_matches_observed_status(order: dict, names: list[str]) -> bool:
+    allowed = {_normalized(name) for name in names}
+    return _normalized(order.get("order_status")) in allowed
 
 
 def _decimal(value: Any) -> Decimal | None:
