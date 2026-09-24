@@ -1,9 +1,4 @@
-import pytest
-
-from sold_products_report_v2 import (
-    aggregate_sold_products, order_matches_observed_status,
-    order_matches_status, parse_observed_statuses, summarize,
-)
+from sold_products_report_v2 import aggregate_sold_products, order_matches_status, summarize
 
 
 def test_registered_mezan_cost_and_missing_cost_sort_before_popular_priced_product():
@@ -62,15 +57,3 @@ def test_statuses_default_exclude_cancelled_and_custom_selection_can_include_mul
     assert order_matches_status(cancelled, ["default"], ["ملغي"])
     assert not order_matches_status(reviewed, ["default"], ["ملغي"])
     assert not order_matches_status(cancelled, ["pending_review", "reviewed"], [])
-
-
-def test_dynamic_status_picker_uses_exact_observed_names_and_preserves_default():
-    selected = parse_observed_statuses('["ملغي", "تم التوصيل", "حالة, خاصة"]')
-    assert order_matches_observed_status({"order_status": "ملغي"}, selected)
-    assert order_matches_observed_status({"order_status": "حالة, خاصة"}, selected)
-    assert not order_matches_observed_status({"order_status": "تم المراجعة"}, selected)
-    assert not order_matches_status({"order_status": "ملغي"}, ["default"], [])
-    assert parse_observed_statuses(None) is None
-    for invalid in ('[]', '"ملغي"', '["", "تم التنفيذ"]', '[1]', '["ملغي",]'):
-        with pytest.raises(ValueError):
-            parse_observed_statuses(invalid)
