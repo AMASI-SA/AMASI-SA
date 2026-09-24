@@ -112,8 +112,8 @@ export default function MezanProductsWorkspace() {
     const [selectedId, setSelectedId] = useState(initialSelectedProduct);
     const [selected, setSelected] = useState(null);
     const [costs, setCosts] = useState({ base_cost: "", variant_costs: {}, notes: "" });
-    const [query, setQuery] = useState("");
-    const [appliedQuery, setAppliedQuery] = useState("");
+    const [query, setQuery] = useState(() => new URLSearchParams(window.location.search).get("lookup_sku") || "");
+    const [appliedQuery, setAppliedQuery] = useState(() => new URLSearchParams(window.location.search).get("lookup_sku") || "");
     const [status, setStatus] = useState("");
     const [sort, setSort] = useState("newest");
     const [missingSku, setMissingSku] = useState(false);

@@ -59,6 +59,7 @@ from salla_marketing_attribution import (
     SALLA_RAW_ATTRIBUTION_PROJECTION,
     attach_projected_salla_attribution,
 )
+from sold_products_report_v2 import SELECTABLE_STATUSES, load_sold_products, order_matches_status, summarize
 from salla_integration.abandoned_carts import (
     AbandonedCartScopeError,
     parse_salla_datetime,
@@ -1887,6 +1888,48 @@ def make_dashboard_v2_router(
             "breakdown": month["breakdown"],
             "source_contract": month["source_contract"],
             "source_only": True,
+        }
+
+    @router.get("/dashboard-v2/sold-products")
+    @_heavy_dashboard_stage("sold_products_report")
+    async def sold_products_report(
+        from_date: str = Query(...),
+        to_date: str = Query(...),
+        statuses: str = Query("default"),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        current = owner(user)
+        try:
+            first, last = date.fromisoformat(from_date), date.fromisoformat(to_date)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="تاريخ غير صالح") from exc
+        if first.isoformat() != from_date or last.isoformat() != to_date or first > last:
+            raise HTTPException(status_code=422, detail="نطاق التاريخ غير صالح")
+        selected = [part.strip() for part in statuses.split(",")]
+        if (not selected or any(not part for part in selected)
+                or ("default" in selected and selected != ["default"])
+                or any(part != "default" and part not in SELECTABLE_STATUSES for part in selected)):
+            raise HTTPException(status_code=422, detail="حالة طلب غير مدعومة")
+        uid = str(current["id"])
+        settings = await ensure_user_settings(db, uid)
+        query: dict[str, Any] = {
+            "user_id": uid, "order_date": {"$gte": from_date, "$lte": to_date},
+        }
+        if settings.get("hide_inferred_date_orders"):
+            query["order_date_inferred"] = {"$ne": True}
+        orders = await db.unified_orders.find(
+            query, {"_id": 0, "products": 1, "order_status": 1, "order_status_slug": 1},
+        ).to_list(length=100000)
+        orders = [order for order in orders if order_matches_status(
+            order, selected, settings.get("report_included_statuses") or [],
+        )]
+        rows = await load_sold_products(db, uid, orders)
+        return {
+            "range": {"from_date": from_date, "to_date": to_date, "statuses": selected},
+            "items": rows, "count": len(rows),
+            "incomplete_count": sum(row["cost_status"] != "complete" for row in rows),
+            "totals": summarize(rows),
+            "source": "unified_orders.quantity + mezan_v2_then_salla_registered_base_cost",
         }
 
     @router.get("/dashboard-v2/snapchat-accounts-summary")
