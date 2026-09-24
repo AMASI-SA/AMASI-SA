@@ -68,26 +68,34 @@ def _decimal(value: Any) -> Decimal | None:
 
 def summarize(rows: list[dict]) -> dict:
     units = sum((_decimal(row["units_sold"]) or Decimal(0) for row in rows), Decimal(0))
+    cost_units = sum((_decimal(row["units_sold"] + row["units_returned_after"] + row["units_unclassified"]) or Decimal(0) for row in rows), Decimal(0))
     costed = [row for row in rows if row["total_cost"] is not None]
     known = sum((_decimal(row["total_cost"]) or Decimal(0) for row in costed), Decimal(0))
-    missing = len(costed) != len(rows)
+    missing = any(row["total_cost"] is None and row["units_sold"] + row["units_returned_after"] + row["units_unclassified"] for row in rows)
     return {
         "units_sold": float(units),
-        "average_unit_cost": round(float(known / units), 2) if units and not missing else None,
+        "units_costed": float(cost_units),
+        "average_unit_cost": round(float(known / cost_units), 2) if cost_units and not missing else None,
         "total_cost": round(float(known), 2) if not missing else None,
         "known_cost_total": round(float(known), 2),
-        "known_cost_units": sum(row["units_sold"] for row in costed),
+        "known_cost_units": sum(row["units_sold"] + row["units_returned_after"] + row["units_unclassified"] for row in costed),
+        "uncertain_cost_total": round(sum(row["uncertain_cost"] or 0 for row in rows), 2)
+        if all(row["uncertain_cost"] is not None for row in rows) else None,
     }
 
 
 def aggregate_sold_products(
     orders: list[dict], products: list[dict], profiles: list[dict],
+    reversals: list[dict] | None = None,
 ) -> list[dict]:
     by_id, by_variant, by_sku = index_current_catalog_products(products)
     profile_map = {str(row.get("salla_product_id")): row for row in profiles}
     aggregated: dict[str, dict] = {}
-    for order in orders:
-        for item in order.get("products") or []:
+    entries = [(item, item.get("quantity"), "sold") for order in orders
+               for item in order.get("products") or [] if isinstance(item, dict)]
+    entries.extend((row.get("item"), row.get("quantity"), row.get("stage"))
+                   for row in reversals or [])
+    for item, amount, stage in entries:
             if not isinstance(item, dict):
                 continue
             product = resolve_current_catalog_line_product(
@@ -103,7 +111,7 @@ def aggregate_sold_products(
             key = f"{identity}:{variant or sku.casefold()}" if identity else sku.casefold() or name.casefold()
             if not key:
                 continue
-            quantity = _decimal(item.get("quantity"))
+            quantity = _decimal(amount)
             if quantity is None or quantity <= 0:
                 continue
             cost = classify_base_unit_cost(item, profile_map.get(str((product or {}).get("salla_product_id") or "")), product)
@@ -114,19 +122,39 @@ def aggregate_sold_products(
                 "catalog_product_found": bool(product),
                 "image_url": (product or {}).get("main_image") or item.get("image_url") or item.get("image") or "",
                 "units_sold": Decimal(0), "_known_cost": Decimal(0),
+                "_uncertain_cost": Decimal(0), "_missing_included_cost": False,
+                "_missing_uncertain_cost": False,
+                "units_cancelled_before": Decimal(0), "units_returned_after": Decimal(0),
+                "units_unclassified": Decimal(0),
                 "unit_cost": None, "cost_status": "complete", "cost_source": "",
             })
-            row["units_sold"] += quantity
+            if stage != "sold":
+                field = {"before": "units_cancelled_before", "after": "units_returned_after"}.get(stage, "units_unclassified")
+                row[field] += quantity
+            else:
+                row["units_sold"] += quantity
             if unit is None:
-                row["cost_status"] = "incomplete"
+                if stage != "before":
+                    row["cost_status"] = "incomplete"
+                    row["_missing_included_cost"] = True
+                if stage not in {"sold", "before", "after"}:
+                    row["_missing_uncertain_cost"] = True
             else:
                 row["unit_cost"] = round(float(unit), 2)
                 row["cost_source"] = "mezan" if cost["mezan_cost_complete"] else "salla"
-                row["_known_cost"] += unit * quantity
+                if stage != "before":
+                    row["_known_cost"] += unit * quantity
+                if stage not in {"sold", "before", "after"}:
+                    row["_uncertain_cost"] += unit * quantity
     rows = list(aggregated.values())
     for row in rows:
         row["units_sold"] = float(row["units_sold"])
-        row["total_cost"] = round(float(row.pop("_known_cost")), 2) if row["cost_status"] == "complete" else None
+        for field in ("units_cancelled_before", "units_returned_after", "units_unclassified"):
+            row[field] = float(row[field])
+        row["total_cost"] = round(float(row.pop("_known_cost")), 2) if not row.pop("_missing_included_cost") else None
+        row["uncertain_cost"] = round(float(row.pop("_uncertain_cost")), 2) if not row.pop("_missing_uncertain_cost") else None
+        if row["unit_cost"] is None:
+            row["cost_status"] = "incomplete"
         if row["cost_status"] != "complete":
             row["unit_cost"] = None
             row["cost_source"] = "missing"
@@ -134,10 +162,10 @@ def aggregate_sold_products(
     return rows
 
 
-async def load_sold_products(db: Any, user_id: str, orders: list[dict]) -> list[dict]:
+async def load_sold_products(db: Any, user_id: str, orders: list[dict], reversals: list[dict] | None = None) -> list[dict]:
     products = await db[PRODUCTS].find({"user_id": user_id}, CATALOG_FIELDS).to_list(length=100000)
     ids = [str(row.get("salla_product_id")) for row in products if row.get("salla_product_id")]
     profiles = await db[COST_PROFILES].find(
         {"user_id": user_id, "salla_product_id": {"$in": ids}}, {"_id": 0},
     ).to_list(length=max(1, len(ids)))
-    return aggregate_sold_products(orders, products, profiles)
+    return aggregate_sold_products(orders, products, profiles, reversals)
