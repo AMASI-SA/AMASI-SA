@@ -639,12 +639,163 @@ async def test_assembly_search_keeps_completed_order_as_read_only_history():
     assert result["carrier_label"]["store_courier_assignee_name"] == (
         "مندوب الرياض"
     )
-    workflow_query = workflows.find_one_queries[0]
-    history_query = workflow_query["$or"][1]
-    assert history_query["assembly_status"] == "completed"
-    assert history_query["stage"]["$in"] == [
-        "completed",
-        "delivering",
-        "delivered",
-    ]
-    assert "carrier_label_print_confirmed" not in history_query
+    assert workflows.find_one_queries[0] == {
+        "user_id": "merchant-1", "order_number": "276628330",
+    }
+
+
+@pytest.mark.asyncio
+async def test_received_piece_can_enter_assembly_before_other_order_pieces():
+    piece_id = "0123456789abcdef0123456789abcdef"
+    received = {
+        "piece_id": piece_id,
+        "order_number": "10452",
+        "status": PIECE_STATUS_READY_FOR_ASSEMBLY,
+        "preparation_receipt_status": "received",
+    }
+    waiting = {
+        "piece_id": "a" * 32,
+        "order_number": "10452",
+        "status": PIECE_STATUS_IN_PROGRESS,
+    }
+    workflows = _AssemblySearchCollection(row={
+        "order_number": "10452",
+        "stage": "in_progress",
+        "preparation_receipt_status": "partial",
+    })
+    pieces = _AssemblySearchCollection(row=received, rows=[received, waiting])
+
+    result = await _assembly_search(
+        {WORKFLOWS: workflows, PIECES: pieces},
+        user_id="merchant-1",
+        query=piece_id.upper(),
+    )
+
+    assert result["pieces"][0]["piece_id"] == piece_id
+    assert result["pieces"][0]["can_mark_ready"] is True
+    assert result["pieces"][1]["can_mark_ready"] is False
+    assert result["summary"]["all_ready"] is False
+    assert result["stage"] == "in_progress"
+
+
+@pytest.mark.asyncio
+async def test_partial_order_can_mark_received_piece_ready(monkeypatch):
+    from unittest.mock import AsyncMock, MagicMock
+    import preparation_piece_operations as operations
+
+    piece_id = "0123456789abcdef0123456789abcdef"
+    piece = {
+        "piece_id": piece_id,
+        "order_number": "10452",
+        "status": PIECE_STATUS_READY_FOR_ASSEMBLY,
+        "preparation_receipt_status": "received",
+    }
+    db = {
+        PIECES: MagicMock(),
+        WORKFLOWS: MagicMock(),
+        operations.PIECE_EVENTS: MagicMock(),
+    }
+    collection = db[PIECES]
+    collection.find_one = AsyncMock(side_effect=[piece, {**piece, "assembly_status": "ready"}])
+    collection.update_one = AsyncMock(return_value=SimpleNamespace(modified_count=1))
+    db[WORKFLOWS].find_one = AsyncMock(return_value={
+        "stage": "in_progress", "preparation_receipt_status": "partial",
+    })
+    db[operations.PIECE_EVENTS].insert_one = AsyncMock()
+    monkeypatch.setattr(operations, "enforce_stage_instructions", AsyncMock())
+    monkeypatch.setattr(operations, "_assembly_progress", AsyncMock(return_value={
+        "ready_count": 1,
+        "total_count": 3,
+        "order_completed": False,
+        "stage": "in_progress",
+        "print_batch_id": None,
+    }))
+
+    result = await operations._mark_assembly_piece_ready(
+        db,
+        user_id="merchant-1",
+        piece_id=piece_id,
+        client_request_id="client-request-1",
+        actor_id="assembly-worker",
+        actor_name="موظف التجميع",
+    )
+
+    assert result["idempotent"] is False
+    assert result["piece"]["assembly_ready"] is True
+    assert result["progress"]["order_completed"] is False
+    assert db[WORKFLOWS].find_one.call_args.args[0]["$or"][1] == {
+        "stage": "in_progress",
+    }
+    collection.update_one.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("second_assembly_status,ready_count", [
+    ("pending", 1), ("ready", 2),
+])
+async def test_assembly_stays_open_without_shipment_while_preparation_is_partial(
+    second_assembly_status, ready_count,
+):
+    from unittest.mock import AsyncMock, MagicMock
+    from preparation_piece_operations import SHIPPING_BATCHES
+
+    workflow = {"stage": "in_progress", "preparation_receipt_status": "partial"}
+    pieces = _AssemblySearchCollection(rows=[
+        {"piece_id": "first", "assembly_status": "ready"},
+        {"piece_id": "second", "assembly_status": second_assembly_status},
+    ])
+    workflow_collection = _AssemblySearchCollection(row=workflow)
+    workflow_collection.update_one = AsyncMock()
+    db = {
+        WORKFLOWS: workflow_collection,
+        PIECES: pieces,
+        SHIPPING_BATCHES: MagicMock(),
+    }
+
+    progress = await _assembly_progress(
+        db,
+        user_id="merchant-1",
+        order_number="10452",
+        actor_id="assembly-worker",
+        actor_name="موظف التجميع",
+        now=datetime.now(timezone.utc),
+    )
+
+    assert progress["ready_count"] == ready_count
+    assert progress["total_count"] == 2
+    assert progress["order_completed"] is False
+    assert progress["stage"] == "in_progress"
+    assert progress["print_batch_id"] is None
+    assert db[SHIPPING_BATCHES].update_one.call_count == 0
+    assert workflow_collection.update_one.call_args.args[0]["$or"][1] == {
+        "stage": "in_progress",
+    }
+
+
+@pytest.mark.asyncio
+async def test_all_assembly_pieces_enable_shipment_after_full_preparation_receipt():
+    from unittest.mock import AsyncMock, MagicMock
+    from preparation_piece_operations import SHIPPING_BATCHES
+
+    workflows = _AssemblySearchCollection(row={"stage": "ready_to_ship"})
+    workflows.update_one = AsyncMock()
+    pieces = _AssemblySearchCollection(rows=[
+        {"piece_id": "first", "assembly_status": "ready"},
+        {"piece_id": "second", "assembly_status": "ready"},
+    ])
+    shipping_batches = MagicMock()
+    shipping_batches.update_one = AsyncMock()
+
+    progress = await _assembly_progress(
+        {WORKFLOWS: workflows, PIECES: pieces, SHIPPING_BATCHES: shipping_batches},
+        user_id="merchant-1",
+        order_number="10452",
+        actor_id="assembly-worker",
+        actor_name="موظف التجميع",
+        now=datetime.now(timezone.utc),
+    )
+
+    assert progress["order_completed"] is True
+    assert progress["stage"] == "completed"
+    assert progress["print_batch_id"] == _assembly_batch_id("merchant-1", "10452")
+    shipping_batches.update_one.assert_awaited_once()

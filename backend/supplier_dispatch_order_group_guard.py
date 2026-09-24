@@ -1,9 +1,7 @@
-"""Keep same-order pieces of the same product together in supplier dispatches.
+"""Preview the exact physical pieces requested for a supplier dispatch.
 
-A quantity boundary must never split a customer's multiple pieces of the same
-product across supplier files.  The native app gets a read-only preview before
-sending; the server also expands the canonical dispatch request so a stale or
-bypassing client cannot silently split an order.
+The quantity chosen by an employee is authoritative, even when another piece
+of the same product belongs to the same customer order.
 """
 from __future__ import annotations
 
@@ -28,65 +26,6 @@ class SupplierDispatchOrderGroupPreviewRequest(BaseModel):
 
 def _text(value: Any) -> str:
     return str(value or "").strip()
-
-
-def _product_identity(piece: dict[str, Any]) -> str:
-    product_id = _text(piece.get("product_id"))
-    if product_id:
-        return f"id:{product_id}"
-    sku = _text(piece.get("sku")).casefold()
-    if sku:
-        return f"sku:{sku}"
-    name = " ".join(_text(piece.get("product_name")).casefold().split())
-    return f"name:{name}" if name else f"piece:{_text(piece.get('piece_id'))}"
-
-
-def _order_identity(piece: dict[str, Any]) -> str:
-    order_number = _text(piece.get("order_number"))
-    if order_number:
-        return order_number
-    # Never combine unrelated legacy pieces when an order number is missing.
-    return f"piece:{_text(piece.get('piece_id') or piece.get('id'))}"
-
-
-def _piece_identity(piece: dict[str, Any]) -> str:
-    return _text(piece.get("piece_id") or piece.get("id"))
-
-
-def expand_same_order_product_closure(
-    candidates: list[dict[str, Any]],
-    planned: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    """Add every eligible same-order/same-product peer of selected pieces."""
-    selected_keys = {
-        (_order_identity(piece), _product_identity(piece))
-        for piece in planned
-    }
-    by_id: dict[str, dict[str, Any]] = {}
-    for piece in planned:
-        identity = _piece_identity(piece)
-        if identity:
-            by_id[identity] = piece
-    for piece in candidates:
-        if (_order_identity(piece), _product_identity(piece)) not in selected_keys:
-            continue
-        identity = _piece_identity(piece)
-        if identity and identity not in by_id:
-            by_id[identity] = piece
-    return sorted(by_id.values(), key=_dispatch._piece_sort_key)
-
-
-def _added_order_numbers(
-    planned: list[dict[str, Any]],
-    expanded: list[dict[str, Any]],
-) -> list[str]:
-    planned_ids = {_piece_identity(piece) for piece in planned}
-    return sorted({
-        _text(piece.get("order_number"))
-        for piece in expanded
-        if _piece_identity(piece) not in planned_ids
-        and _text(piece.get("order_number"))
-    })
 
 
 def _exact_file_selections(
@@ -135,8 +74,6 @@ async def _eligible_employee_candidates(
 
 
 _ORIGINAL_PLAN = _dispatch.plan_piece_selections
-_ORIGINAL_ROUTER_FACTORY = _dispatch.make_preparation_supplier_dispatch_router
-_GUARD_INSTALLED = False
 
 
 def _requested_plan(
@@ -158,22 +95,16 @@ def _requested_plan(
 
 def _preview_result(
     planned: list[dict[str, Any]],
-    expanded: list[dict[str, Any]],
 ) -> dict[str, Any]:
     requested_count = len(planned)
-    suggested_count = len(expanded)
     return {
         "ok": True,
-        "expansion_required": suggested_count > requested_count,
+        "expansion_required": False,
         "requested_piece_count": requested_count,
-        "suggested_piece_count": suggested_count,
-        "affected_order_numbers": _added_order_numbers(planned, expanded),
-        "files": _exact_file_selections(expanded),
-        "message": (
-            f"للحفاظ على طلب العميل كاملًا، هذه الدفعة ستصبح {suggested_count} قطعة."
-            if suggested_count > requested_count
-            else "الكمية المحددة لا تقسّم قطع أي طلب."
-        ),
+        "suggested_piece_count": requested_count,
+        "affected_order_numbers": [],
+        "files": _exact_file_selections(planned),
+        "message": "سيُرسل فقط عدد القطع المحددة.",
         "read_only": True,
         "mezan_only": True,
     }
@@ -193,83 +124,7 @@ async def _plan_for_worker(
         employee_id=employee_id,
     )
     planned = _requested_plan(candidates, files)
-    expanded = expand_same_order_product_closure(candidates, planned)
-    if len(expanded) > _dispatch.MAX_SELECTED_PIECES:
-        raise ValueError("supplier_dispatch_order_group_expansion_limit_exceeded")
-    return planned, expanded, _preview_result(planned, expanded)
-
-
-def install_supplier_dispatch_order_group_guard() -> None:
-    """Install both planner and route-level fail-safe expansion exactly once."""
-    global _GUARD_INSTALLED
-    if _GUARD_INSTALLED:
-        return
-
-    def guarded_plan(
-        pieces: list[dict[str, Any]],
-        selections: list[dict[str, Any]],
-    ) -> list[dict[str, Any]]:
-        planned = _ORIGINAL_PLAN(pieces, selections)
-        expanded = expand_same_order_product_closure(pieces, planned)
-        if len(expanded) > _dispatch.MAX_SELECTED_PIECES:
-            raise ValueError("supplier_dispatch_order_group_expansion_limit_exceeded")
-        return expanded
-
-    def guarded_router_factory(db: Any, current_user: Callable[..., Any]) -> APIRouter:
-        router = _ORIGINAL_ROUTER_FACTORY(db, current_user)
-        for route in router.routes:
-            if getattr(route, "path", "") != "/supplier-dispatch-v1/dispatches":
-                continue
-            original_call = route.dependant.call
-
-            async def guarded_create_dispatch(
-                payload: _dispatch.CreateSupplierDispatchRequest,
-                user: dict,
-                _original_call=original_call,
-            ):
-                user_id = _dispatch._merchant_user_id(user)
-                existing = await db[_dispatch.DISPATCHES].find_one(
-                    {"user_id": user_id, "client_request_id": payload.client_request_id},
-                    {"_id": 1},
-                )
-                if existing:
-                    return await _original_call(payload=payload, user=user)
-                worker = await _dispatch._require_preparation_worker(
-                    db,
-                    user,
-                    permission="preparation.assigned.work",
-                )
-                try:
-                    _, expanded, _ = await _plan_for_worker(
-                        db,
-                        worker=worker,
-                        files=payload.file_requests(),
-                    )
-                except ValueError as exc:
-                    raise HTTPException(
-                        status_code=409,
-                        detail={"code": str(exc)},
-                    ) from exc
-                exact_files = [
-                    _dispatch.SupplierDispatchFileSelection(**row)
-                    for row in _exact_file_selections(expanded)
-                ]
-                expanded_payload = payload.model_copy(update={
-                    "file_number": None,
-                    "selections": None,
-                    "files": exact_files,
-                })
-                return await _original_call(payload=expanded_payload, user=user)
-
-            route.endpoint = guarded_create_dispatch
-            route.dependant.call = guarded_create_dispatch
-            break
-
-        return router
-
-    _dispatch.plan_piece_selections = guarded_plan
-    _dispatch.make_preparation_supplier_dispatch_router = guarded_router_factory
-    _GUARD_INSTALLED = True
+    return planned, planned, _preview_result(planned)
 
 
 def make_supplier_dispatch_order_group_preview_router(
@@ -333,7 +188,5 @@ def make_supplier_dispatch_order_group_preview_router(
 
 __all__ = [
     "SupplierDispatchOrderGroupPreviewRequest",
-    "expand_same_order_product_closure",
-    "install_supplier_dispatch_order_group_guard",
     "make_supplier_dispatch_order_group_preview_router",
 ]
