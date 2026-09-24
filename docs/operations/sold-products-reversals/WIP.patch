@@ -1,0 +1,742 @@
+diff --git a/backend/dashboard_v2_routes.py b/backend/dashboard_v2_routes.py
+index 3549c4bd..9183c018 100644
+--- a/backend/dashboard_v2_routes.py
++++ b/backend/dashboard_v2_routes.py
+@@ -60,6 +60,10 @@ from salla_marketing_attribution import (
+     attach_projected_salla_attribution,
+ )
+ from sold_products_report_v2 import SELECTABLE_STATUSES, load_sold_products, order_matches_status, summarize
++from sold_product_reversals import (
++    collect_archived_removals, collect_reversals,
++    collect_review_snapshot_removals, merge_reversal_evidence,
++)
+ from salla_integration.abandoned_carts import (
+     AbandonedCartScopeError,
+     parse_salla_datetime,
+@@ -1918,18 +1922,54 @@ def make_dashboard_v2_router(
+         if settings.get("hide_inferred_date_orders"):
+             query["order_date_inferred"] = {"$ne": True}
+         orders = await db.unified_orders.find(
+-            query, {"_id": 0, "products": 1, "order_status": 1, "order_status_slug": 1},
++            query, {"_id": 0, "order_number": 1, "products": 1, "order_status": 1,
++                    "order_status_slug": 1, "sold_products_completed_at": 1},
+         ).to_list(length=100000)
+-        orders = [order for order in orders if order_matches_status(
++        selected_orders = [order for order in orders if order_matches_status(
+             order, selected, settings.get("report_included_statuses") or [],
+         )]
+-        rows = await load_sold_products(db, uid, orders)
++        numbers = list({str(order.get("order_number")) for order in orders if order.get("order_number")})
++        adjustments = await db.order_adjustments.find(
++            {"user_id": uid, "order_number": {"$in": numbers}, "items_changed": True},
++            {"_id": 0, "order_number": 1, "items_diff": 1, "removal_stage": 1},
++        ).to_list(length=100000)
++        history = await db.order_activity_events_v2.find(
++            {"user_id": uid, "order_number": {"$in": numbers}},
++            {"_id": 0, "order_number": 1, "title": 1, "occurred_at": 1, "event_type": 1},
++        ).to_list(length=100000)
++        workflows = await db.order_review_workflows.find(
++            {"user_id": uid, "order_number": {"$in": numbers}, "reviewed_at": {"$exists": True}},
++            {"_id": 0, "order_number": 1, "reviewed_at": 1, "items": 1},
++        ).to_list(length=100000)
++        integrations = await db.salla_integrations.find(
++            {"user_id": uid}, {"_id": 0, "store_id": 1},
++        ).to_list(length=100)
++        store_ids = [str(row["store_id"]) for row in integrations if row.get("store_id")]
++        references = numbers + [int(value) for value in numbers if value.isdecimal()]
++        captures = await db.salla_webhook_event_captures.find(
++            {"merchant_id": {"$in": store_ids}, "$or": [
++                {"payload.data.reference_id": {"$in": references}},
++                {"payload.data.order.reference_id": {"$in": references}},
++                {"payload.data.order_number": {"$in": references}},
++                {"payload.data.order.order_number": {"$in": references}},
++            ]},
++            {"_id": 0, "payload": 1, "event": 1, "first_received_at": 1},
++        ).to_list(length=100000) if store_ids and references else []
++        archive = collect_archived_removals(captures, history, orders)
++        reviewed = collect_review_snapshot_removals(orders, workflows)
++        reversals = merge_reversal_evidence(
++            collect_reversals(orders, adjustments, history), archive, reviewed,
++        )
++        rows = await load_sold_products(db, uid, selected_orders, reversals)
+         return {
+             "range": {"from_date": from_date, "to_date": to_date, "statuses": selected},
+             "items": rows, "count": len(rows),
+             "incomplete_count": sum(row["cost_status"] != "complete" for row in rows),
+             "totals": summarize(rows),
+-            "source": "unified_orders.quantity + mezan_v2_then_salla_registered_base_cost",
++            "reversal_coverage": {"unclassified_units": sum(row["units_unclassified"] for row in rows),
++                                  "historical_completeness": "partial",
++                                  "webhook_snapshots": len(captures), "review_snapshots": len(workflows)},
++            "source": "unified_orders.quantity + order_adjustments + order_activity_events_v2 + salla_webhook_event_captures + order_review_workflows + mezan_v2_then_salla_registered_base_cost",
+         }
+ 
+     @router.get("/dashboard-v2/snapchat-accounts-summary")
+diff --git a/backend/orders_db.py b/backend/orders_db.py
+index f216f2ee..830baeb2 100644
+--- a/backend/orders_db.py
++++ b/backend/orders_db.py
+@@ -961,6 +961,11 @@ async def upsert_order(db, user_id: str, order_number: str, incoming: dict,
+         {"user_id": user_id, "order_number": order_number}
+     ) or {}
+     merged = _merge_into(existing, incoming, source)
++    # Retain the first observed execution transition even when Salla later
++    # changes the current status to cancelled/refunded.
++    from sold_product_reversals import _is_completed
++    if _is_completed(merged.get("order_status")) or (not merged.get("order_status") and _is_completed(merged.get("order_status_slug"))):
++        merged.setdefault("sold_products_completed_at", _now())
+     merged["user_id"] = user_id
+     merged["order_number"] = order_number
+     if raw is not None:
+diff --git a/backend/salla_integration/sync.py b/backend/salla_integration/sync.py
+index edc78b21..de21a067 100644
+--- a/backend/salla_integration/sync.py
++++ b/backend/salla_integration/sync.py
+@@ -1644,12 +1644,14 @@ async def resync_single_order(db, user_id: str, order_number: str) -> dict:
+             {
+                 "_id": 0,
+                 "order_status": 1,
++                "sold_products_completed_at": 1,
+                 "payment_status": 1,
+                 "total_amount": 1,
+                 "payment_method": 1,
+                 "updated_at": 1,
+                 "products": 1,
+                 "total_product_cost": 1,
++                "order_status_slug": 1,
+             },
+         )
+ 
+@@ -1777,6 +1779,7 @@ async def resync_single_order(db, user_id: str, order_number: str) -> dict:
+                 "products": 1,
+                 "total_amount": 1,
+                 "total_product_cost": 1,
++                "order_status": 1,
+             },
+         )
+ 
+@@ -1961,6 +1964,13 @@ async def _record_order_adjustment(
+         "items_changed": items_changed,
+         "total_changed": total_changed,
+         "items_diff": items_diff,
++        # Only an already observed completed state proves that the removed
++        # products had reached execution. Older adjustments have no snapshot.
++        "removal_stage": (
++            "after" if before.get("sold_products_completed_at")
++            or str(before.get("order_status") or "").strip() in {"تم التنفيذ", "completed"}
++            else "unknown"
++        ),
+         "created_at": _now(),
+     }
+     await db.order_adjustments.insert_one(row)
+diff --git a/backend/sold_products_report_v2.py b/backend/sold_products_report_v2.py
+index 7b4c9e1f..653a3369 100644
+--- a/backend/sold_products_report_v2.py
++++ b/backend/sold_products_report_v2.py
+@@ -68,26 +68,34 @@ def _decimal(value: Any) -> Decimal | None:
+ 
+ def summarize(rows: list[dict]) -> dict:
+     units = sum((_decimal(row["units_sold"]) or Decimal(0) for row in rows), Decimal(0))
++    cost_units = sum((_decimal(row["units_sold"] + row["units_returned_after"] + row["units_unclassified"]) or Decimal(0) for row in rows), Decimal(0))
+     costed = [row for row in rows if row["total_cost"] is not None]
+     known = sum((_decimal(row["total_cost"]) or Decimal(0) for row in costed), Decimal(0))
+-    missing = len(costed) != len(rows)
++    missing = any(row["total_cost"] is None and row["units_sold"] + row["units_returned_after"] + row["units_unclassified"] for row in rows)
+     return {
+         "units_sold": float(units),
+-        "average_unit_cost": round(float(known / units), 2) if units and not missing else None,
++        "units_costed": float(cost_units),
++        "average_unit_cost": round(float(known / cost_units), 2) if cost_units and not missing else None,
+         "total_cost": round(float(known), 2) if not missing else None,
+         "known_cost_total": round(float(known), 2),
+-        "known_cost_units": sum(row["units_sold"] for row in costed),
++        "known_cost_units": sum(row["units_sold"] + row["units_returned_after"] + row["units_unclassified"] for row in costed),
++        "uncertain_cost_total": round(sum(row["uncertain_cost"] or 0 for row in rows), 2)
++        if all(row["uncertain_cost"] is not None for row in rows) else None,
+     }
+ 
+ 
+ def aggregate_sold_products(
+     orders: list[dict], products: list[dict], profiles: list[dict],
++    reversals: list[dict] | None = None,
+ ) -> list[dict]:
+     by_id, by_variant, by_sku = index_current_catalog_products(products)
+     profile_map = {str(row.get("salla_product_id")): row for row in profiles}
+     aggregated: dict[str, dict] = {}
+-    for order in orders:
+-        for item in order.get("products") or []:
++    entries = [(item, item.get("quantity"), "sold") for order in orders
++               for item in order.get("products") or [] if isinstance(item, dict)]
++    entries.extend((row.get("item"), row.get("quantity"), row.get("stage"))
++                   for row in reversals or [])
++    for item, amount, stage in entries:
+             if not isinstance(item, dict):
+                 continue
+             product = resolve_current_catalog_line_product(
+@@ -103,7 +111,7 @@ def aggregate_sold_products(
+             key = f"{identity}:{variant or sku.casefold()}" if identity else sku.casefold() or name.casefold()
+             if not key:
+                 continue
+-            quantity = _decimal(item.get("quantity"))
++            quantity = _decimal(amount)
+             if quantity is None or quantity <= 0:
+                 continue
+             cost = classify_base_unit_cost(item, profile_map.get(str((product or {}).get("salla_product_id") or "")), product)
+@@ -114,19 +122,39 @@ def aggregate_sold_products(
+                 "catalog_product_found": bool(product),
+                 "image_url": (product or {}).get("main_image") or item.get("image_url") or item.get("image") or "",
+                 "units_sold": Decimal(0), "_known_cost": Decimal(0),
++                "_uncertain_cost": Decimal(0), "_missing_included_cost": False,
++                "_missing_uncertain_cost": False,
++                "units_cancelled_before": Decimal(0), "units_returned_after": Decimal(0),
++                "units_unclassified": Decimal(0),
+                 "unit_cost": None, "cost_status": "complete", "cost_source": "",
+             })
+-            row["units_sold"] += quantity
++            if stage != "sold":
++                field = {"before": "units_cancelled_before", "after": "units_returned_after"}.get(stage, "units_unclassified")
++                row[field] += quantity
++            else:
++                row["units_sold"] += quantity
+             if unit is None:
+-                row["cost_status"] = "incomplete"
++                if stage != "before":
++                    row["cost_status"] = "incomplete"
++                    row["_missing_included_cost"] = True
++                if stage not in {"sold", "before", "after"}:
++                    row["_missing_uncertain_cost"] = True
+             else:
+                 row["unit_cost"] = round(float(unit), 2)
+                 row["cost_source"] = "mezan" if cost["mezan_cost_complete"] else "salla"
+-                row["_known_cost"] += unit * quantity
++                if stage != "before":
++                    row["_known_cost"] += unit * quantity
++                if stage not in {"sold", "before", "after"}:
++                    row["_uncertain_cost"] += unit * quantity
+     rows = list(aggregated.values())
+     for row in rows:
+         row["units_sold"] = float(row["units_sold"])
+-        row["total_cost"] = round(float(row.pop("_known_cost")), 2) if row["cost_status"] == "complete" else None
++        for field in ("units_cancelled_before", "units_returned_after", "units_unclassified"):
++            row[field] = float(row[field])
++        row["total_cost"] = round(float(row.pop("_known_cost")), 2) if not row.pop("_missing_included_cost") else None
++        row["uncertain_cost"] = round(float(row.pop("_uncertain_cost")), 2) if not row.pop("_missing_uncertain_cost") else None
++        if row["unit_cost"] is None:
++            row["cost_status"] = "incomplete"
+         if row["cost_status"] != "complete":
+             row["unit_cost"] = None
+             row["cost_source"] = "missing"
+@@ -134,10 +162,10 @@ def aggregate_sold_products(
+     return rows
+ 
+ 
+-async def load_sold_products(db: Any, user_id: str, orders: list[dict]) -> list[dict]:
++async def load_sold_products(db: Any, user_id: str, orders: list[dict], reversals: list[dict] | None = None) -> list[dict]:
+     products = await db[PRODUCTS].find({"user_id": user_id}, CATALOG_FIELDS).to_list(length=100000)
+     ids = [str(row.get("salla_product_id")) for row in products if row.get("salla_product_id")]
+     profiles = await db[COST_PROFILES].find(
+         {"user_id": user_id, "salla_product_id": {"$in": ids}}, {"_id": 0},
+     ).to_list(length=max(1, len(ids)))
+-    return aggregate_sold_products(orders, products, profiles)
++    return aggregate_sold_products(orders, products, profiles, reversals)
+diff --git a/backend/tests/test_sold_products_report_v2.py b/backend/tests/test_sold_products_report_v2.py
+index 9e4ee7dd..31071032 100644
+--- a/backend/tests/test_sold_products_report_v2.py
++++ b/backend/tests/test_sold_products_report_v2.py
+@@ -1,4 +1,8 @@
+ from sold_products_report_v2 import aggregate_sold_products, order_matches_status, summarize
++from sold_product_reversals import (
++    collect_archived_removals, collect_reversals,
++    collect_review_snapshot_removals, merge_reversal_evidence,
++)
+ 
+ 
+ def test_registered_mezan_cost_and_missing_cost_sort_before_popular_priced_product():
+@@ -21,6 +25,7 @@ def test_registered_mezan_cost_and_missing_cost_sort_before_popular_priced_produ
+     assert summarize(rows) == {
+         "units_sold": 31.0, "average_unit_cost": None, "total_cost": None,
+         "known_cost_total": 450.0, "known_cost_units": 30.0,
++        "units_costed": 31.0, "uncertain_cost_total": 0.0,
+     }
+ 
+ 
+@@ -57,3 +62,117 @@ def test_statuses_default_exclude_cancelled_and_custom_selection_can_include_mul
+     assert order_matches_status(cancelled, ["default"], ["ملغي"])
+     assert not order_matches_status(reviewed, ["default"], ["ملغي"])
+     assert not order_matches_status(cancelled, ["pending_review", "reviewed"], [])
++
++
++def test_deleted_item_is_visible_even_when_absent_from_current_eligible_order():
++    orders = [{"order_number": "100", "order_status": "قيد التنفيذ", "products": []}]
++    adjustments = [{"order_number": "100", "removal_stage": "after", "items_diff": {
++        "removed": [{"sku": "SKU1", "product_id": "p1", "name": "قطعة تالفة", "quantity": 2}]}}]
++    reversals = collect_reversals(orders, adjustments, [])
++    rows = aggregate_sold_products(orders, [{"salla_product_id": "p1", "sku": "SKU1", "cost_price_from_salla": 20}], [], reversals)
++    assert len(rows) == 1
++    assert rows[0]["units_sold"] == 0
++    assert rows[0]["units_returned_after"] == 2
++    assert rows[0]["total_cost"] == 40
++    assert rows[0]["unit_cost"] == 20
++    assert summarize(rows)["total_cost"] == 40
++
++
++def test_net_cost_excludes_only_cancellations_proven_before_execution():
++    products = [{"salla_product_id": "p1", "sku": "SKU1", "cost_price_from_salla": 12}]
++    orders = [{"products": [{"product_id": "p1", "sku": "SKU1", "quantity": 4}]}]
++    reversals = [
++        {"item": {"product_id": "p1", "sku": "SKU1"}, "quantity": 2, "stage": "before"},
++        {"item": {"product_id": "p1", "sku": "SKU1"}, "quantity": 3, "stage": "after"},
++        {"item": {"product_id": "p1", "sku": "SKU1"}, "quantity": 1, "stage": "unknown"},
++    ]
++    row = aggregate_sold_products(orders, products, [], reversals)[0]
++    assert (row["units_sold"], row["units_cancelled_before"], row["units_returned_after"], row["units_unclassified"]) == (4, 2, 3, 1)
++    assert row["total_cost"] == 96  # (4 sold + 3 after + 1 unclassified) * 12
++    assert row["uncertain_cost"] == 12
++    assert summarize([row])["units_costed"] == 8
++    assert summarize([row])["average_unit_cost"] == 12
++
++
++def test_cancelled_before_execution_never_requires_cost_and_later_missing_cost_is_incomplete():
++    reversals = [{"item": {"sku": "UNKNOWN"}, "quantity": 2, "stage": "before"}]
++    before = aggregate_sold_products([], [], [], reversals)[0]
++    assert before["total_cost"] == 0
++    assert summarize([before])["total_cost"] == 0
++    reversals[0]["stage"] = "after"
++    after = aggregate_sold_products([], [], [], reversals)[0]
++    assert after["total_cost"] is None
++    assert summarize([after])["total_cost"] is None
++
++
++def test_historic_adjustment_without_status_evidence_stays_unclassified():
++    orders = [{"order_number": "200", "order_status": "ملغي", "products": [{"sku": "A", "quantity": 3}]}]
++    adjustments = [{"order_number": "200", "items_diff": {
++        "removed": [{"sku": "A", "quantity": 3}]}}]
++    reversals = collect_reversals(orders, adjustments, [{"order_number": "200", "title": "تم التنفيذ", "occurred_at": "2025-02-01"}])
++    assert [(row["stage"], row["quantity"]) for row in reversals] == [("unknown", 3)]
++
++
++def test_terminal_order_keeps_other_lines_while_avoiding_stale_deleted_line():
++    orders = [{"order_number": "201", "order_status": "ملغي", "sold_products_completed_at": "2025-02-01",
++               "products": [{"sku": "A", "quantity": 3}, {"sku": "B", "quantity": 2}]}]
++    adjustments = [{"order_number": "201", "removal_stage": "after", "items_diff": {
++        "removed": [{"sku": "A", "quantity": 3}]}}]
++    rows = collect_reversals(orders, adjustments, [])
++    assert sorted((row["item"]["sku"], row["quantity"]) for row in rows) == [("A", 3), ("B", 2)]
++
++
++def test_full_cancelled_order_uses_timestamped_status_history_for_stage():
++    orders = [{"order_number": "300", "order_status": "مسترجع", "products": [{"sku": "B", "quantity": 2}]}]
++    history = [{"order_number": "300", "title": "تم التنفيذ", "occurred_at": "2025-02-01T12:00:00+03:00"},
++               {"order_number": "300", "title": "مسترجع", "occurred_at": "2025-02-02T12:00:00+03:00"}]
++    assert collect_reversals(orders, [], history)[0]["stage"] == "after"
++    history[0]["occurred_at"] = "2025-02-03T12:00:00+03:00"
++    assert collect_reversals(orders, [], history)[0]["stage"] == "before"
++
++
++def test_cancelled_before_execution_requires_creation_and_cancellation_history():
++    orders = [{"order_number": "400", "order_status": "ملغي", "products": [{"sku": "C", "quantity": 1}]}]
++    history = [{"order_number": "400", "event_type": "order_created", "title": "تم إنشاء الطلب", "occurred_at": "2025-02-01T09:00:00+03:00"},
++               {"order_number": "400", "title": "ملغي", "occurred_at": "2025-02-01T10:00:00+03:00"}]
++    assert collect_reversals(orders, [], history)[0]["stage"] == "before"
++    assert collect_reversals(orders, [], history[1:])[0]["stage"] == "unknown"
++
++
++def test_webhook_snapshots_recover_deleted_product_and_ignore_sparse_status_event():
++    orders = [{"order_number": "500", "order_status": "قيد التنفيذ", "products": []}]
++    captures = [
++        {"event": "order.created", "first_received_at": "2025-02-01T10:00:00Z", "payload": {"data": {"reference_id": 500,
++            "items": [{"quantity": 3, "product": {"id": "p1", "sku": "SKU1", "name": "منتج"}}]}}},
++        {"first_received_at": "2025-02-01T10:15:00Z", "payload": {"data": {"reference_id": 500, "status": "تم التنفيذ"}}},
++        {"event": "order.products.updated", "first_received_at": "2025-02-01T10:30:00Z", "payload": {"data": {"reference_id": 500, "items": []}}},
++    ]
++    history = [{"order_number": "500", "title": "تم التنفيذ", "occurred_at": "2025-02-01 13:15:00"}]
++    result = collect_archived_removals(captures, history, orders)
++    assert [(row["item"]["sku"], row["quantity"], row["stage"]) for row in result] == [("SKU1", 3, "after")]
++
++
++def test_review_snapshot_recovers_missing_lines_without_guessing_removal_time():
++    orders = [{"order_number": "600", "order_status": "مسترجع", "products": [{"sku": "SKU1", "quantity": 1}]}]
++    workflow = [{"order_number": "600", "reviewed_at": "2025-01-01", "items": [
++        {"sku": "SKU1", "quantity": 3, "product_name": "منتج"}]}]
++    reviewed = collect_review_snapshot_removals(orders, workflow)
++    assert len(reviewed) == 1
++    assert reviewed[0]["quantity"] == 2
++    assert reviewed[0]["stage"] == "unknown"
++    saved = [{"order_number": "600", "item": {"sku": "SKU1"}, "quantity": 2, "stage": "after"}]
++    assert merge_reversal_evidence(saved, [], reviewed) == saved
++
++
++def test_sparse_current_active_order_does_not_turn_review_snapshot_into_cancellation():
++    orders = [{"order_number": "601", "order_status": "قيد التنفيذ", "products": []}]
++    workflows = [{"order_number": "601", "reviewed_at": "2025-01-01", "items": [
++        {"sku": "SKU1", "quantity": 2}]}]
++    assert collect_review_snapshot_removals(orders, workflows) == []
++    captures = [
++        {"event": "order.created", "first_received_at": "2025-01-01", "payload": {"data": {
++            "reference_id": 601, "items": [{"sku": "SKU1", "quantity": 2}]}}},
++        {"event": "order.status.updated", "first_received_at": "2025-01-02", "payload": {"data": {
++            "reference_id": 601, "items": []}}},
++    ]
++    assert collect_archived_removals(captures, [], orders) == []
+diff --git a/frontend/src/pages/SoldProducts.jsx b/frontend/src/pages/SoldProducts.jsx
+index 9d809b5a..049d82ab 100644
+--- a/frontend/src/pages/SoldProducts.jsx
++++ b/frontend/src/pages/SoldProducts.jsx
+@@ -14,14 +14,25 @@ const STATUS_OPTIONS = [
+ ];
+ 
+ function CostSummary({ rows, final = false }) {
+-    const units = rows.reduce((sum, row) => sum + row.units_sold, 0);
++    const sold = rows.reduce((sum, row) => sum + row.units_sold, 0);
++    const before = rows.reduce((sum, row) => sum + row.units_cancelled_before, 0);
++    const after = rows.reduce((sum, row) => sum + row.units_returned_after, 0);
++    const unclassified = rows.reduce((sum, row) => sum + row.units_unclassified, 0);
++    const units = sold + after + unclassified;
+     const knownCost = rows.reduce((sum, row) => sum + (row.total_cost ?? 0), 0);
++    const uncertainCost = rows.reduce((sum, row) => sum + (row.uncertain_cost ?? 0), 0);
+     const missing = rows.some(row => row.total_cost == null);
++    const uncertainMissing = rows.some(row => row.uncertain_cost == null);
+     return (
+         <div className="flex flex-wrap gap-x-8 gap-y-2 bg-violet-50 p-4 text-sm font-bold" data-testid={final ? "sold-products-final-totals" : "sold-products-page-totals"}>
+-            <span>{final ? "إجمالي القطع" : "قطع هذه الصفحة"}: {formatInt(units)}</span>
+-            {final && <span>متوسط تكلفة القطعة: {missing ? "غير مكتمل" : units ? `${formatMoney(knownCost / units)} ر.س` : "—"}</span>}
+-            <span>{final ? "إجمالي تكلفة جميع القطع" : "إجمالي تكلفة قطع الصفحة"}: {missing ? "غير مكتمل" : `${formatMoney(knownCost)} ر.س`}</span>
++            <span>المباعة: {formatInt(sold)}</span>
++            <span>الملغاة قبل التنفيذ، مستبعدة: {formatInt(before)}</span>
++            <span>الملغاة أو المسترجعة بعد التنفيذ: {formatInt(after)}</span>
++            <span>غير محسومة المرحلة، محسوبة مؤقتًا: {formatInt(unclassified)}</span>
++            <span>القطع المحتسبة في الصافي: {formatInt(units)}</span>
++            {final && <span>متوسط تكلفة القطعة المحتسبة: {missing ? "غير مكتمل" : units ? `${formatMoney(knownCost / units)} ر.س` : "—"}</span>}
++            <span>{final ? "صافي تكلفة جميع القطع" : "صافي تكلفة قطع الصفحة"}: {missing ? "غير مكتمل" : `${formatMoney(knownCost)} ر.س`}</span>
++            {unclassified > 0 && <span className="text-amber-800">منها تكلفة قطع غير محسومة المرحلة: {uncertainMissing ? "غير مكتملة" : `${formatMoney(uncertainCost)} ر.س`}</span>}
+             {missing && <span className="text-amber-800">التكلفة المسجلة فقط: {formatMoney(knownCost)} ر.س · توجد قطع بلا تكلفة</span>}
+         </div>
+     );
+@@ -29,9 +40,9 @@ function CostSummary({ rows, final = false }) {
+ 
+ function SoldTable({ rows, printable = false }) {
+     return (
+-        <table className="w-full text-sm text-right border-collapse min-w-[760px]">
++        <table className="w-full text-sm text-right border-collapse min-w-[1050px]">
+             <thead className="bg-slate-100 text-slate-700">
+-                <tr>{["صورة المنتج", "اسم المنتج", "الرقم المخزني SKU", "عدد القطع المباعة خلال الفترة", "تكلفة المنتج المسجلة", "إجمالي تكلفة القطع"].map(label =>
++                <tr>{["صورة المنتج", "اسم المنتج", "الرقم المخزني SKU", "عدد القطع المباعة خلال الفترة", "ملغاة قبل التنفيذ", "ملغاة أو مسترجعة بعد التنفيذ", "تعذر تحديد وقت الإلغاء", "تكلفة المنتج المسجلة", "صافي تكلفة القطع عدا الملغاة قبل التنفيذ"].map(label =>
+                     <th key={label} className="p-3 border-b border-slate-200">{label}</th>)}</tr>
+             </thead>
+             <tbody>
+@@ -43,8 +54,11 @@ function SoldTable({ rows, printable = false }) {
+                             : row.name || "بدون اسم"}</td>
+                         <td className="p-3" dir="ltr">{row.sku || "—"}</td>
+                         <td className="p-3 tabular-nums">{formatInt(row.units_sold)}</td>
++                        <td className="p-3 tabular-nums">{formatInt(row.units_cancelled_before)}</td>
++                        <td className="p-3 tabular-nums">{formatInt(row.units_returned_after)}</td>
++                        <td className="p-3 tabular-nums">{formatInt(row.units_unclassified)}</td>
+                         <td className="p-3 tabular-nums">{row.unit_cost == null ? "غير مسجلة" : <>{formatMoney(row.unit_cost)} ر.س <span className="block text-xs text-slate-500">{row.cost_source === "salla" ? "من سلة" : "من ميزان"}</span></>}</td>
+-                        <td className="p-3 tabular-nums">{row.total_cost == null ? "تكلفة غير مكتملة" : `${formatMoney(row.total_cost)} ر.س`}</td>
++                        <td className="p-3 tabular-nums">{row.total_cost == null ? "تكلفة غير مكتملة" : `${formatMoney(row.total_cost)} ر.س`}{row.units_unclassified > 0 && <span className="block text-xs text-amber-700">يشمل {row.uncertain_cost == null ? "تكلفة غير محسومة" : `${formatMoney(row.uncertain_cost)} ر.س`} لقطع غير محسومة المرحلة</span>}</td>
+                     </tr>
+                 ))}
+             </tbody>
+@@ -100,7 +114,7 @@ export default function SoldProducts() {
+     return (
+         <main dir="rtl" className="space-y-5 p-4 sm:p-6" data-testid="sold-products-page">
+             <header className="flex flex-wrap items-center justify-between gap-4">
+-                <div><h1 className="text-2xl font-extrabold">المنتجات الأكثر مبيعًا</h1><p className="text-sm text-slate-500">عدد القطع المباعة × تكلفة ميزان، ثم تكلفة سلة عند غيابها</p></div>
++                <div><h1 className="text-2xl font-extrabold">المنتجات الأكثر مبيعًا</h1><p className="text-sm text-slate-500">صافي تكلفة القطع = تكلفة المباعة والملغاة أو المسترجعة بعد التنفيذ وغير محسومة المرحلة؛ تُستبعد الملغاة قبل التنفيذ. تكلفة ميزان أولًا ثم سلة.</p></div>
+                 <button type="button" onClick={print} disabled={loading || !count} className="rounded-lg bg-violet-700 px-4 py-2 font-bold text-white disabled:opacity-50">طباعة جميع المنتجات / حفظ PDF</button>
+             </header>
+             <form onSubmit={applyRange} className="flex flex-wrap items-end gap-3 rounded-xl bg-white p-4 border border-slate-200">
+@@ -120,6 +134,7 @@ export default function SoldProducts() {
+             {error && <p role="alert" className="text-red-700">{error}</p>}
+             {loading ? <p>جارٍ تحميل المنتجات…</p> : data && <section className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+                 <div className="p-4 text-sm text-slate-600">من {range.from} إلى {range.to} · {selectedStatusLabel} · {count} منتج · بدون تكلفة أولًا، ثم حسب عدد القطع{data.incomplete_count > 0 && ` · ${data.incomplete_count} منتج بتكلفة غير مكتملة`}</div>
++                <p className="px-4 pb-3 text-xs text-amber-800">أعداد الإلغاء والاسترجاع تشمل الطلبات الملغاة حتى إن لم تكن حالتها ضمن تصفية المبيعات. تُستبعد من الصافي القطع المثبت إلغاؤها قبل التنفيذ فقط. تدخل القطع غير محسومة المرحلة في الصافي مؤقتًا وتظهر تكلفتها منفصلة؛ السجلات القديمة قد تكون ناقصة.</p>
+                 {count ? <div className="overflow-x-auto"><SoldTable rows={pageRows} /></div> : <p className="p-8 text-center">لا توجد منتجات في هذه الفترة والحالة.</p>}
+                 {count > 0 && <CostSummary rows={pageRows} />}
+                 {pages > 1 && <nav aria-label="صفحات المنتجات" className="flex flex-wrap justify-center items-center gap-2 p-4">
+@@ -134,6 +149,7 @@ export default function SoldProducts() {
+                     <style>{`@page { size: A4 landscape; margin: 10mm; } @media print { table { width: 100%; min-width: 0 !important; font-size: 8px !important; border-collapse: collapse; } th, td { padding: 2px !important; } thead { display: table-header-group; } tr { break-inside: avoid; height: 24px; } img { width: 20px !important; height: 20px !important; object-fit: cover; } section { break-inside: avoid; } }`}</style>
+                     <h1 className="text-xl font-bold mb-2">المنتجات الأكثر مبيعًا</h1>
+                     <p className="mb-4">من {range.from} إلى {range.to} · {selectedStatusLabel} · {count} منتج · بدون تكلفة أولًا، ثم حسب عدد القطع</p>
++                    <p className="mb-2 text-xs">صافي التكلفة يشمل جميع القطع باستثناء الملغاة المثبتة قبل التنفيذ. تكلفة غير محسومة المرحلة محسوبة مؤقتًا وتظهر منفصلة؛ قد تنقص بعض الحالات التاريخية.</p>
+                     {printPages.map((rows, index) => <section key={index} style={{ breakAfter: index < printPages.length - 1 ? "page" : "auto" }}>
+                         {pages > 1 && <p>صفحة {index + 1} من {pages}</p>}
+                         {rows.length > 0 && <SoldTable rows={rows} printable />}
+diff --git a/backend/sold_product_reversals.py b/backend/sold_product_reversals.py
+new file mode 100644
+index 00000000..fc37d091
+--- /dev/null
++++ b/backend/sold_product_reversals.py
+@@ -0,0 +1,272 @@
++"""Count only order reversals whose product and preparation stage are evidenced.
++
++Historical resync adjustments have no status snapshot. Their removed items are
++retained as unclassified until an explicit stage can be proved; a later current
++status must never be used to infer the stage at the time of removal.
++"""
++from __future__ import annotations
++
++from datetime import datetime, timezone
++from typing import Any
++import unicodedata
++from zoneinfo import ZoneInfo
++
++
++def _norm(value: Any) -> str:
++    value = unicodedata.normalize("NFKC", str(value or "")).casefold()
++    return " ".join(value.translate(str.maketrans({"أ": "ا", "إ": "ا", "آ": "ا"})).replace("_", " ").split())
++
++
++def _is_completed(value: Any) -> bool:
++    return _norm(value) in {"تم التنفيذ", "completed"}
++
++
++def _is_reversed(value: Any) -> bool:
++    text = _norm(value)
++    return any(term in text for term in ("ملغ", "محذوف", "الغاء", "cancel", "deleted", "refunded", "refund", "returned", "restored", "restoring", "مسترج", "استرجاع", "مرتجع"))
++
++
++def _instant(value: Any, *, salla_history: bool = False) -> datetime | None:
++    if isinstance(value, dict):
++        value = value.get("date")
++    if isinstance(value, datetime):
++        parsed = value
++    elif isinstance(value, str) and value:
++        try:
++            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
++        except ValueError:
++            return None
++    else:
++        return None
++    if parsed.tzinfo is None:
++        parsed = parsed.replace(tzinfo=ZoneInfo("Asia/Riyadh") if salla_history else timezone.utc)
++    return parsed.astimezone(timezone.utc)
++
++
++def _stage_at(when: Any, history: list[dict], completed_at: Any = None) -> str:
++    event_at = _instant(when, salla_history=True)
++    if not event_at:
++        return "unknown"
++    completion = [_instant(row.get("occurred_at"), salla_history=True) for row in history if _is_completed(row.get("title"))]
++    stamp = _instant(completed_at)
++    if stamp:
++        completion.append(stamp)
++    completion = [date for date in completion if date]
++    if not completion:
++        # A stored history starting with order creation and reaching the
++        # reversal is affirmative evidence for the pre-execution path.
++        created = [_instant(row.get("occurred_at"), salla_history=True) for row in history
++                   if row.get("event_type") == "order_created" or _norm(row.get("title")) in {"تم انشاء الطلب", "order created"}]
++        if any(date and date <= event_at for date in created):
++            return "before"
++        return "unknown"
++    return "after" if min(completion) <= event_at else "before"
++
++
++def _positive(value: Any) -> float:
++    try:
++        return max(0.0, float(value))
++    except (TypeError, ValueError, OverflowError):
++        return 0.0
++
++
++def _line_key(item: dict) -> str:
++    return _norm(item.get("sku") or item.get("product_id") or item.get("key") or item.get("name"))
++
++
++def archived_order_lines(capture: dict) -> tuple[str, list[dict], Any, str] | None:
++    """Read a complete item list from a verified Salla webhook audit row."""
++    payload = capture.get("payload") or {}
++    data = payload.get("data") if isinstance(payload, dict) else None
++    if not isinstance(data, dict):
++        return None
++    order = data.get("order") if isinstance(data.get("order"), dict) else data
++    items = order.get("items")
++    if not isinstance(items, list):
++        return None  # Sparse status webhooks do not prove that items vanished.
++    reference = str(order.get("reference_id") or order.get("order_number") or
++                    data.get("reference_id") or data.get("order_number") or "")
++    if not reference:
++        return None
++    lines: list[dict] = []
++    for item in items:
++        if not isinstance(item, dict):
++            continue
++        product = item.get("product") if isinstance(item.get("product"), dict) else {}
++        line = {
++            "product_id": product.get("id") or item.get("product_id"),
++            "variant_id": item.get("product_sku_id") or item.get("variant_id"),
++            "sku": product.get("sku") or item.get("sku"),
++            "name": product.get("name") or item.get("name"),
++            "image_url": product.get("image") or item.get("image"),
++            "quantity": _positive(item.get("quantity")),
++        }
++        if _line_key(line) and line["quantity"]:
++            lines.append(line)
++    return reference, lines, capture.get("first_received_at"), str(capture.get("event") or payload.get("event") or "")
++
++
++def collect_archived_removals(
++    captures: list[dict], histories: list[dict], orders: list[dict],
++) -> list[dict]:
++    """Count drops proven by two full snapshots; ignore sparse status events."""
++    history_by_order: dict[str, list[dict]] = {}
++    for row in histories:
++        history_by_order.setdefault(str(row.get("order_number") or ""), []).append(row)
++    orders_by_number = {str(row.get("order_number") or ""): row for row in orders}
++    snapshots: dict[str, list[tuple[dict[str, dict], Any, str]]] = {}
++    for capture in captures:
++        parsed = archived_order_lines(capture)
++        if not parsed or parsed[0] not in orders_by_number:
++            continue
++        number, lines, when, event = parsed
++        grouped: dict[str, dict] = {}
++        for line in lines:
++            key = _line_key(line)
++            if key in grouped:
++                grouped[key]["quantity"] += line["quantity"]
++            else:
++                grouped[key] = dict(line)
++        if event in {"order.created", "order.products.updated"} or (event == "order.updated" and grouped):
++            snapshots.setdefault(number, []).append((grouped, when, event))
++    result: list[dict] = []
++    for number, sequence in snapshots.items():
++        sequence.sort(key=lambda row: _instant(row[1]) or datetime.min.replace(tzinfo=timezone.utc))
++        for (previous, _, _), (current, when, event) in zip(sequence, sequence[1:]):
++            if event != "order.products.updated":
++                # A sparse status/update payload with items=[] is not proof
++                # that any customer product was actually removed.
++                continue
++            for key, line in previous.items():
++                delta = line["quantity"] - current.get(key, {}).get("quantity", 0)
++                if delta > 0:
++                    stage = _stage_at(when, history_by_order.get(number, []),
++                                      orders_by_number[number].get("sold_products_completed_at"))
++                    result.append({"order_number": number, "item": line,
++                                   "quantity": delta, "stage": stage})
++    return result
++
++
++def collect_review_snapshot_removals(
++    orders: list[dict], workflows: list[dict],
++) -> list[dict]:
++    """Recover reviewed product identities missing from the present order."""
++    by_order = {str(row.get("order_number") or ""): row for row in orders}
++    result: list[dict] = []
++    for workflow in workflows:
++        number = str(workflow.get("order_number") or "")
++        order = by_order.get(number)
++        if not order or not workflow.get("reviewed_at") or not (
++            _is_reversed(order.get("order_status")) or _is_reversed(order.get("order_status_slug"))
++        ):
++            continue
++        live: dict[str, float] = {}
++        for line in order.get("products") or []:
++            if isinstance(line, dict):
++                key = _line_key(line)
++                live[key] = live.get(key, 0) + _positive(line.get("quantity"))
++        # The review snapshot proves which pieces existed, but does not date
++        # their removal. A later order cancellation cannot date an earlier edit.
++        stage = "unknown"
++        for snapshot in workflow.get("items") or []:
++            if not isinstance(snapshot, dict):
++                continue
++            item = {**snapshot, "name": snapshot.get("product_name") or snapshot.get("name"),
++                    "image_url": snapshot.get("selected_image_url") or snapshot.get("image_url")}
++            key = _line_key(item)
++            missing = _positive(snapshot.get("quantity")) - live.get(key, 0)
++            if key and missing > 0:
++                result.append({"order_number": number, "item": item, "quantity": missing, "stage": stage})
++                live[key] = 0
++            elif key:
++                live[key] -= _positive(snapshot.get("quantity"))
++    return result
++
++
++def merge_reversal_evidence(
++    current: list[dict], captured: list[dict], reviewed: list[dict],
++) -> list[dict]:
++    """Use the strongest recorded quantity once per order/product."""
++    def group(rows: list[dict]) -> dict[tuple[str, str], list[dict]]:
++        grouped: dict[tuple[str, str], list[dict]] = {}
++        for row in rows:
++            key = (str(row.get("order_number") or ""), _line_key(row.get("item") or {}))
++            if key[0] and key[1]:
++                grouped.setdefault(key, []).append(row)
++        return grouped
++
++    result: list[dict] = []
++    current_group = group(current)
++    captured_group = group(captured)
++    reviewed_group = group(reviewed)
++    for key in current_group.keys() | captured_group.keys() | reviewed_group.keys():
++        base = current_group.get(key, [])
++        archive = captured_group.get(key, [])
++        review = reviewed_group.get(key, [])
++        # A dated pair of complete webhook snapshots supersedes an undated
++        # resync diff when it proves at least as many removed pieces.
++        if archive and sum(row["quantity"] for row in archive) >= sum(row["quantity"] for row in base):
++            base = archive
++        result.extend(base)
++        remaining = sum(row["quantity"] for row in review) - sum(row["quantity"] for row in base)
++        if remaining > 0:
++            result.append({**review[0], "quantity": remaining, "stage": "unknown"})
++    return result
++
++
++def collect_reversals(
++    orders: list[dict], adjustments: list[dict], histories: list[dict],
++) -> list[dict]:
++    """Emit distinct reversed quantities without counting surviving order lines twice."""
++    by_order: dict[str, list[dict]] = {}
++    for row in histories:
++        by_order.setdefault(str(row.get("order_number") or ""), []).append(row)
++    adjustments_by_order: dict[str, list[dict]] = {}
++    for row in adjustments:
++        adjustments_by_order.setdefault(str(row.get("order_number") or ""), []).append(row)
++
++    result: list[dict] = []
++    for order in orders:
++        number = str(order.get("order_number") or "")
++        history = by_order.get(number, [])
++        completed_at = order.get("sold_products_completed_at")
++        removed_snapshots: dict[str, tuple[float, float]] = {}
++        for adjustment in adjustments_by_order.get(number, []):
++            # Historic adjustments cannot be assigned a stage from the *current*
++            # order status or from a completion stamp captured after resync.
++            stage = adjustment.get("removal_stage")
++            if stage not in {"before", "after"}:
++                stage = "unknown"
++            diff = adjustment.get("items_diff") or {}
++            lines = list(diff.get("removed") or [])
++            for removed in diff.get("removed") or []:
++                removed_snapshots[_line_key(removed)] = (_positive(removed.get("quantity")), 0.0)
++            for modified in diff.get("modified") or []:
++                before_qty = _positive((modified.get("before") or {}).get("quantity"))
++                after_qty = _positive((modified.get("after") or {}).get("quantity"))
++                difference = before_qty - after_qty
++                if difference > 0:
++                    removed_snapshots[_line_key(modified)] = (before_qty, after_qty)
++                    lines.append({**modified, "quantity": difference, "sku": modified.get("sku") or modified.get("key")})
++            for line in lines:
++                quantity = _positive(line.get("quantity"))
++                if quantity:
++                    result.append({"order_number": number, "item": line, "quantity": quantity, "stage": stage})
++
++        status = order.get("order_status_slug") or order.get("order_status")
++        if not (_is_reversed(status) or _is_reversed(order.get("order_status"))):
++            continue
++        # An order status history records the actual reversal instant. Without
++        # it, only an already recorded completed transition proves "after".
++        reversed_events = [row for row in history if _is_reversed(row.get("title"))]
++        reversed_events.sort(key=lambda row: str(row.get("occurred_at") or ""))
++        stage = _stage_at(reversed_events[0].get("occurred_at"), history, completed_at) if reversed_events else ("after" if completed_at else "unknown")
++        for line in order.get("products") or []:
++            if isinstance(line, dict) and _positive(line.get("quantity")):
++                snapshot = removed_snapshots.get(_line_key(line))
++                if snapshot and snapshot[0] != snapshot[1] and _positive(line["quantity"]) == snapshot[0]:
++                    # Canonical product arrays can be stale after a removal;
++                    # the recorded deleted quantity already accounts for it.
++                    continue
++                result.append({"order_number": number, "item": line, "quantity": _positive(line["quantity"]), "stage": stage})
++    return result
