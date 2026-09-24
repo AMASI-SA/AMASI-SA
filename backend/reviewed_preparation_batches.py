@@ -672,6 +672,8 @@ def _line_from_batch_storage(
             **dict(row.get("product_options") or {}),
         },
         barcode_payload=barcode_payload,
+        file_spec_fields=list(row.get("file_spec_fields") or []),
+        preparation_note=_text(row.get("preparation_note")) or None,
     )
 
 

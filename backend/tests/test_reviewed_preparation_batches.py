@@ -1,5 +1,6 @@
 import io
 from datetime import datetime, timezone
+import unicodedata
 from types import SimpleNamespace
 
 import fitz
@@ -28,6 +29,7 @@ from preparation_pdf_wrapped_text import (
     generate_wrapped_reference_preparation_pdf,
     wrap_reference_text,
 )
+from preparation_pdf_reference_layout import split_reference_card_rows
 from reviewed_products_catalog import PREPARATION_UNIT_ALLOCATIONS
 from reviewed_preparation_v3 import stable_ready_item_id, stable_ready_unit_id
 from reviewed_preparation_batches import (
@@ -764,6 +766,81 @@ def test_reference_card_uses_full_labels_and_confirmed_field_order():
     assert rows[-3] == ("تاريخ", "2026-08-02")
     assert rows[-2] == ("الكمية", "1")
     assert rows[-1] == ("للتوصيل", "2 - iMile")
+
+
+def test_salla_spec_order_and_full_values_survive_batch_snapshot():
+    fields = [
+        {"spec_key": "اختر مقاس اللوحه", "name": "اختر مقاس اللوحه", "value": "30 طول * 50 عرض (SAR 214.92)"},
+        {"spec_key": "الاسم المبرز", "name": "الاسم المبرز", "value": "مريم لمار"},
+        {"spec_key": "باقي الأسماء على اللوحة", "name": "باقي الأسماء على اللوحة", "value": "محمد ريم عبدالله روان احمد فهيمه"},
+    ]
+    row = {
+        "order_number": "288047865", "order_date": "2026-09-23",
+        "product_name": "لوحة جدارية بالخط العربي مع إطار خشبي فاخر وصف المنتج",
+        "quantity": 1, "total_products_in_order": 1,
+        "file_spec_fields": fields,
+        **_card_field_projection(fields, None),
+    }
+    from reviewed_preparation_batches import _line_from_batch_storage
+    line = _line_from_batch_storage(row)
+    assert reference_card_rows(line)[:3] == [
+        (field["name"], field["value"]) for field in fields
+    ]
+    assert " ".join(wrap_reference_text(
+        fields[-1]["value"], font_name=_register_font()[0],
+        font_size=6.6, first_width=28, continuation_width=65,
+    )) == fields[-1]["value"]
+
+    font_name, font_bold = _register_font()
+    specifications, _order = split_reference_card_rows(line)
+    plan = build_wrapped_specification_plan(
+        specifications, font_name=font_name, font_bold=font_bold,
+        width=76, available_height=55,
+    )
+    assert [field.label for field in plan.fields] == [field["name"] for field in fields]
+    assert [" ".join(field.lines) for field in plan.fields] == [field["value"] for field in fields]
+    assert plan.fields[-1].value_below  # the long label stays inside its column
+    assert plan.physical_line_count * plan.line_height <= 55
+
+    page = fitz.open(
+        stream=generate_wrapped_reference_preparation_pdf([line]), filetype="pdf",
+    )[0]
+    printed = page.get_text()
+    assert "…" not in printed and "..." not in printed
+    # The last line of the long value remains inside the first card.
+    assert max(block[3] for block in page.get_text("blocks")) < page.rect.height / 5
+
+
+def test_mug_order_288180853_prints_each_phrase_in_full():
+    # This order has three distinct custom fields in Salla. The old card
+    # projected every "عبارة" into one shortened ملاحظة field.
+    specs = [
+        {"name": "العبارة خارج الفنجان", "value": "Samaher"},
+        {"name": "العبارة داخل الفنجان على الجانب", "value":
+         "ألا ياغزال في عيونك سهوم الموت وفي مبسمك جنة وفي شوفتك راحه"},
+        {"name": "العبارة داخل الفنجان في الأسفل", "value": "من بعدك ياغزال"},
+    ]
+    from reviewed_preparation_batches import _line_from_batch_storage
+    line = _line_from_batch_storage({
+        "order_number": "288180853", "order_date": "2026-09-23",
+        "product_name": "كوب غزال وزهور 200 مل مخصص بالاسم والعبارات",
+        "quantity": 1, "total_products_in_order": 1,
+        "image_b64": __import__("base64").b64encode(_image_bytes(8)).decode("ascii"),
+        "file_spec_fields": specs,
+        "note": "Samaher | ألا ياغزال في عيونك سهوم الموت | من بعدك ياغزال",
+    })
+    page = fitz.open(
+        stream=generate_wrapped_reference_preparation_pdf([line]), filetype="pdf",
+    )[0]
+    visible = unicodedata.normalize("NFKC", page.get_text())
+    assert len(page.get_images(full=True)) >= 2
+    assert visible.index(specs[0]["name"]) < visible.index(specs[1]["name"])
+    assert visible.index(specs[1]["name"]) < visible.index(specs[2]["name"])
+    for part in ("Samaher", "ألا ياغزال في عيونك سهوم الموت",
+                 "وفي مبسمك جنة وفي شوفتك راحه", "من بعدك ياغزال"):
+        assert part in visible
+    assert "…" not in visible and "..." not in visible
+    assert max(block[3] for block in page.get_text("blocks")) < page.rect.height / 5
 
 
 def test_long_note_wraps_without_ellipsis_or_word_loss():

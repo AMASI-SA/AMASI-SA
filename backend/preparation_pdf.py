@@ -97,6 +97,9 @@ class ProductLine:
     sku: Optional[str] = None
     product_options: dict[str, str] = field(default_factory=dict)
     barcode_payload: Optional[str] = None
+    # Ordered supplier-file fields from Salla (with any explicit replacements).
+    file_spec_fields: list[dict[str, str]] = field(default_factory=list)
+    preparation_note: Optional[str] = None
 
 
     @property

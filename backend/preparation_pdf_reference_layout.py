@@ -72,25 +72,41 @@ def _full_date(value: Any) -> str:
 def reference_card_rows(line: ProductLine) -> list[tuple[str, str]]:
     """Return fields in the exact operational order printed below media."""
     rows: list[tuple[str, str]] = []
-    if line.customer_name:
-        rows.append(("الاسم", _text(line.customer_name)))
-    if line.size:
-        rows.append(("المقاس", _text(line.size)))
-    if line.color:
-        rows.append(("اللون", _text(line.color)))
+    if line.file_spec_fields:
+        # The stored list preserves Salla's option order and original labels.
+        # The legacy typed projection loses both (and can merge long notes).
+        for field in line.file_spec_fields:
+            if not isinstance(field, dict):
+                continue
+            label, value = _text(field.get("name")), _text(field.get("value"))
+            if label and value:
+                rows.append((label, value))
+        if line.preparation_note and _text(line.preparation_note) not in {
+            value for _label, value in rows
+        }:
+            rows.append(("ملاحظة", _text(line.preparation_note)))
+    else:
+        # Historical snapshots and PDFs imported directly from Salla have no
+        # ordered supplier-file fields; keep their existing representation.
+        if line.customer_name:
+            rows.append(("الاسم", _text(line.customer_name)))
+        if line.size:
+            rows.append(("المقاس", _text(line.size)))
+        if line.color:
+            rows.append(("اللون", _text(line.color)))
 
-    reserved = {
-        "الاسم", "اسم", "المقاس", "مقاس", "اللون", "لون",
-        "name", "size", "color", "colour",
-    }
-    for name, value in (line.product_options or {}).items():
-        label = _text(name)
-        field_value = _text(value)
-        if not label or not field_value or label.casefold() in reserved:
-            continue
-        rows.append((label, field_value))
-    if line.note:
-        rows.append(("ملاحظة", _text(line.note)))
+        reserved = {
+            "الاسم", "اسم", "المقاس", "مقاس", "اللون", "لون",
+            "name", "size", "color", "colour",
+        }
+        for name, value in (line.product_options or {}).items():
+            label = _text(name)
+            field_value = _text(value)
+            if not label or not field_value or label.casefold() in reserved:
+                continue
+            rows.append((label, field_value))
+        if line.note:
+            rows.append(("ملاحظة", _text(line.note)))
 
     rows.extend([
         ("ط", _text(line.order_number)),
