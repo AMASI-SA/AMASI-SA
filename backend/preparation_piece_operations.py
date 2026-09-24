@@ -1939,7 +1939,12 @@ async def _assembly_progress(
     ready_count = sum(
         1 for piece in pieces if _text(piece.get("assembly_status")) == "ready"
     )
-    completed = bool(total_count and total_count == ready_count)
+    # A partially received order may assemble individual pieces, but it must
+    # not create a shipment until the complete order leaves preparation.
+    completed = bool(
+        total_count and total_count == ready_count
+        and _text(workflow.get("stage")) in {"ready_to_ship", "completed"}
+    )
     batch_id = _text(
         workflow.get("shipping_print_batch_id")
     )
@@ -2005,7 +2010,10 @@ async def _assembly_progress(
         {
             "user_id": user_id,
             "order_number": order_number,
-            "stage": {"$in": ["ready_to_ship", "completed"]},
+            "$or": [
+                {"stage": {"$in": ["ready_to_ship", "completed"]}},
+                {"stage": "in_progress"},
+            ],
         },
         {"$set": workflow_patch, "$inc": {"revision": 1}},
     )
@@ -2014,7 +2022,7 @@ async def _assembly_progress(
         "ready_count": ready_count,
         "total_count": total_count,
         "order_completed": completed,
-        "stage": "completed" if completed else "ready_to_ship",
+        "stage": "completed" if completed else _text(workflow.get("stage")),
         "print_batch_id": batch_id or None,
     }
 
@@ -2046,24 +2054,9 @@ async def _assembly_search(
             detail={"code": "assembly_search_required"},
         )
     workflow = await db[WORKFLOWS].find_one(
-        {
-            "user_id": user_id,
-            "order_number": order_number,
-            "$or": [
-                {"stage": "ready_to_ship"},
-                {
-                    "assembly_status": "completed",
-                    "stage": {"$in": ["completed", "delivering", "delivered"]},
-                },
-            ],
-        },
+        {"user_id": user_id, "order_number": order_number},
         {"_id": 0},
     )
-    if not workflow:
-        raise HTTPException(
-            status_code=409,
-            detail={"code": "assembly_order_not_ready"},
-        )
     pieces = await db[PIECES].find(
         {
             "user_id": user_id,
@@ -2076,6 +2069,22 @@ async def _assembly_search(
         },
         {"_id": 0, "image_b64": 0},
     ).to_list(1000)
+    standard_stage = bool(workflow and (
+        _text(workflow.get("stage")) == "ready_to_ship"
+        or (
+            _text(workflow.get("stage")) in {"completed", "delivering", "delivered"}
+            and _text(workflow.get("assembly_status")) == "completed"
+        )
+    ))
+    partial_receipt = bool(workflow and (
+        _text(workflow.get("stage")) == "in_progress"
+        and any(_piece_has_completed_preparation_receipt(piece) for piece in pieces)
+    ))
+    if not (standard_stage or partial_receipt):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "assembly_order_not_ready"},
+        )
     pieces.extend(
         _workflow_assembly_pieces(
             workflow,
@@ -2101,7 +2110,12 @@ async def _assembly_search(
         _text(row.get("piece_id")),
     ))
     ready_count = sum(1 for row in rows if row["assembly_ready"])
-    completed = bool(rows and ready_count == len(rows))
+    completed = bool(
+        rows and ready_count == len(rows)
+        and _text(workflow.get("stage")) in {
+            "ready_to_ship", "completed", "delivering", "delivered",
+        }
+    )
     carrier_label = {
         "ready": bool(workflow.get("carrier_label_ready")),
         "label_url": workflow.get("carrier_label_url"),
@@ -2399,7 +2413,10 @@ async def _mark_assembly_piece_ready(
         {
             "user_id": user_id,
             "order_number": order_number,
-            "stage": {"$in": ["ready_to_ship", "completed"]},
+            "$or": [
+                {"stage": {"$in": ["ready_to_ship", "completed"]}},
+                {"stage": "in_progress"},
+            ],
         },
         {"_id": 0, "stage": 1, "assembly_status": 1},
     )

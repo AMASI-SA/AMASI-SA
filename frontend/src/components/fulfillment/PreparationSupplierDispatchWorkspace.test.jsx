@@ -284,6 +284,7 @@ test("my products overview uses the approved four account-wide counters", () => 
             waiting_review_pieces: 22,
             in_progress_pieces: 73,
             received_pieces_awaiting_branch_handoff: 33,
+            supplier_received_pieces_awaiting_handoff: 34,
             waiting_review_products: 21,
             in_progress_products: 74,
             received_orders_awaiting_branch_handoff: 33,
@@ -294,6 +295,7 @@ test("my products overview uses the approved four account-wide counters", () => 
             file_title: "ملف أحمد 024",
             piece_count: 24,
             received_quantity: 9,
+            supplier_received_quantity: 11,
             sent_quantity: 4,
             ready_quantity: 0,
             products: [],
@@ -312,7 +314,8 @@ test("my products overview uses the approved four account-wide counters", () => 
     expect(markup).toContain("قيد التنفيذ");
     expect(markup).toContain("تم الاستلام");
     expect(markup).toContain("إجمالي القطع المسندة");
-    ["22", "73", "33", "128"].forEach((value) => expect(markup).toContain(`>${value}<`));
+    ["22", "73", "34", "128"].forEach((value) => expect(markup).toContain(`>${value}<`));
+    expect(markup).toContain("11 مستلمة من المورد");
     expect(markup).toContain("ملخص العمل العام");
     expect(markup).not.toContain("ملخص العمل اليوم");
     expect(markup).toContain("إدارة المنتجات المسندة لك ومتابعة الموردين");
@@ -356,6 +359,38 @@ test("received card renders assigned received products even without a supplier a
     expect(markup).toContain("سلسال جاهز للاستلام");
     expect(markup).toContain("قطعة مستلمة");
     expect(markup).not.toContain("لا توجد قطع مستلمة");
+});
+
+
+test("supplier invoice with three pieces shows all receipts and distinguishes pending services", () => {
+    const markup = renderToStaticMarkup(<ReceivedView
+        data={{
+            summary: {
+                supplier_received_orders_awaiting_handoff: 1,
+                supplier_received_pieces_awaiting_handoff: 3,
+                received_pieces_awaiting_branch_handoff: 1,
+            },
+            files: [{
+                file_number: "PF-THREE",
+                products: [
+                    { group_key: "piece:ready", product_name: "قطعة مكتملة", supplier_received_quantity: 1, received_quantity: 1 },
+                    { group_key: "piece:pending-1", product_name: "قطعة تنتظر ١", supplier_received_quantity: 1, received_quantity: 0 },
+                    { group_key: "piece:pending-2", product_name: "قطعة تنتظر ٢", supplier_received_quantity: 1, received_quantity: 0 },
+                ],
+            }],
+        }}
+        loading={false}
+        error=""
+        onRefresh={() => {}}
+        onBack={() => {}}
+    />);
+
+    expect(markup).toContain(">3<");
+    expect(markup).toContain("قطعة مكتملة");
+    expect(markup).toContain("قطعة تنتظر ١");
+    expect(markup).toContain("قطعة تنتظر ٢");
+    expect(markup).toContain("جاهزة للتسليم للفرع");
+    expect(markup).toContain("بانتظار استكمال خدمات أخرى");
 });
 
 

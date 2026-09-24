@@ -350,6 +350,16 @@ def _piece_selector_group_key(piece: dict[str, Any]) -> str:
     return f"piece:{piece_id}" if piece_id else _piece_dispatch_group_key(piece)
 
 
+def _supplier_receipt_awaiting_handoff(piece: dict[str, Any]) -> bool:
+    """A supplier invoice records a physical receipt even if services remain."""
+    return (
+        _text(piece.get("supplier_dispatch_status")) in {
+            DISPATCH_STATUS_PARTIAL, DISPATCH_STATUS_RECEIVED,
+        }
+        or _text(piece.get("status")) == PIECE_STATUS_RECEIVED
+    ) and not _text(piece.get("branch_handoff_at"))
+
+
 def plan_piece_selections(
     pieces: list[dict[str, Any]],
     selections: list[dict[str, Any]],
@@ -617,6 +627,7 @@ def _group_piece_products(pieces: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "sent_quantity": 0,
             "ready_quantity": 0,
             "received_quantity": 0,
+            "supplier_received_quantity": 0,
             "order_numbers": [],
         })
         for field in ("selected_image_url", "resolved_image_url", "image_url"):
@@ -639,6 +650,8 @@ def _group_piece_products(pieces: list[dict[str, Any]]) -> list[dict[str, Any]]:
             or status == PIECE_STATUS_RECEIVED
         ) and not _text(piece.get("branch_handoff_at")):
             row["received_quantity"] += 1
+        if _supplier_receipt_awaiting_handoff(piece):
+            row["supplier_received_quantity"] += 1
     for row in grouped.values():
         row["order_numbers"].sort()
     return sorted(
@@ -853,6 +866,7 @@ def _piece_products(pieces: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 )
                 and not _text(piece.get("branch_handoff_at"))
             ) else 0,
+            "supplier_received_quantity": int(_supplier_receipt_awaiting_handoff(piece)),
             "order_numbers": (
                 [_text(piece.get("order_number"))]
                 if _text(piece.get("order_number"))
@@ -886,6 +900,9 @@ def _file_view(
         "sent_quantity": sum(row["sent_quantity"] for row in products),
         "ready_quantity": sum(row["ready_quantity"] for row in products),
         "received_quantity": sum(row["received_quantity"] for row in products),
+        "supplier_received_quantity": sum(
+            row["supplier_received_quantity"] for row in products
+        ),
         "is_new": any(row["available_quantity"] > 0 for row in products),
         "products": products,
     }
@@ -930,6 +947,9 @@ def employee_workspace_summary(
             and not _text(row.get("branch_handoff_at"))
         )
     ]
+    supplier_received = [
+        row for row in pieces if _supplier_receipt_awaiting_handoff(row)
+    ]
     received_order_numbers = {
         _text(row.get("order_number"))
         for row in received_awaiting_handoff
@@ -949,6 +969,11 @@ def employee_workspace_summary(
         "in_progress_products": in_progress_products,
         "received_orders_awaiting_branch_handoff": len(received_order_numbers),
         "received_pieces_awaiting_branch_handoff": len(received_awaiting_handoff),
+        "supplier_received_pieces_awaiting_handoff": len(supplier_received),
+        "supplier_received_orders_awaiting_handoff": len({
+            _text(row.get("order_number")) for row in supplier_received
+            if _text(row.get("order_number"))
+        }),
         "total_assigned_pieces": sum(
             1 for row in pieces if not _text(row.get("branch_handoff_at"))
         ),
@@ -1098,6 +1123,7 @@ async def _employee_workspace(
             "sent_quantity": 0,
             "ready_quantity": 0,
             "received_quantity": 0,
+            "supplier_received_quantity": 0,
             "products": [],
         })
         dispatch_status = _text(piece.get("supplier_dispatch_status"))
@@ -1111,6 +1137,8 @@ async def _employee_workspace(
             or status == PIECE_STATUS_RECEIVED
         ) and not _text(piece.get("branch_handoff_at")):
             account["received_quantity"] += 1
+        if _supplier_receipt_awaiting_handoff(piece):
+            account["supplier_received_quantity"] += 1
     for supplier_id, account in supplier_rows.items():
         account_pieces = [
             row for row in pieces
