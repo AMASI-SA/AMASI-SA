@@ -7,11 +7,6 @@ import { formatMoney, formatInt } from "../lib/format";
 import DateInput, { isValidISODate } from "../components/DateInput";
 
 const PAGE_SIZE = 20;
-const STATUS_OPTIONS = [
-    { value: "pending_review", label: "انتظار المراجعة" },
-    { value: "reviewed", label: "تم المراجعة" },
-    { value: "in_progress", label: "قيد التنفيذ" },
-];
 
 function CostSummary({ rows, final = false }) {
     const units = rows.reduce((sum, row) => sum + row.units_sold, 0);
@@ -58,7 +53,9 @@ export default function SoldProducts() {
     const [to, setTo] = useState(searchParams.get("to") || todaySA());
     const [filterByStatus, setFilterByStatus] = useState(false);
     const [selectedStatuses, setSelectedStatuses] = useState([]);
-    const [range, setRange] = useState({ from: searchParams.get("from") || addDaysISO(todaySA(), -29), to: searchParams.get("to") || todaySA(), statuses: "default" });
+    const [statusOptions, setStatusOptions] = useState([]);
+    const [statusError, setStatusError] = useState("");
+    const [range, setRange] = useState({ from: searchParams.get("from") || addDaysISO(todaySA(), -29), to: searchParams.get("to") || todaySA(), statusNames: null });
     const [page, setPage] = useState(1);
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -68,9 +65,20 @@ export default function SoldProducts() {
 
     useEffect(() => {
         let active = true;
+        api.get("/order-statuses")
+            .then(({ data: result }) => {
+                if (active) setStatusOptions((result.statuses || []).filter(option => typeof option.name === "string" && option.name.trim()));
+            })
+            .catch(() => { if (active) setStatusError("تعذر تحميل حالات الطلب. أعد فتح الصفحة للمحاولة."); });
+        return () => { active = false; };
+    }, []);
+
+    useEffect(() => {
+        let active = true;
         setLoading(true);
         setError("");
-        api.get("/dashboard-v2/sold-products", { params: { from_date: range.from, to_date: range.to, statuses: range.statuses } })
+        api.get("/dashboard-v2/sold-products", { params: { from_date: range.from, to_date: range.to,
+            statuses: "default", ...(range.statusNames ? { status_names: JSON.stringify(range.statusNames) } : {}) } })
             .then(({ data: result }) => { if (active) setData(result); })
             .catch(() => { if (active) { setData(null); setError("تعذر تحميل المبيعات. حاول مرة أخرى."); } })
             .finally(() => { if (active) setLoading(false); });
@@ -91,9 +99,9 @@ export default function SoldProducts() {
             return;
         }
         setPage(1);
-        setRange({ from, to, statuses: filterByStatus ? selectedStatuses.join(",") : "default" });
+        setRange({ from, to, statusNames: filterByStatus ? [...selectedStatuses] : null });
     };
-    const selectedStatusLabel = range.statuses === "default" ? "حالات التقرير الافتراضية" : STATUS_OPTIONS.filter(option => range.statuses.split(",").includes(option.value)).map(option => option.label).join("، ");
+    const selectedStatusLabel = range.statusNames ? range.statusNames.join("، ") : "حالات التقرير الافتراضية";
     const pageRows = data?.items?.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE) || [];
     const printPages = Array.from({ length: pages }, (_, index) => data?.items?.slice(index * PAGE_SIZE, (index + 1) * PAGE_SIZE) || []);
 
@@ -109,10 +117,19 @@ export default function SoldProducts() {
                 <fieldset className="min-w-44 flex-1 text-sm font-semibold">
                     <legend>حالات الطلب · بدون تفعيل تُستخدم حالات التقرير الافتراضية</legend>
                     <label className="flex items-center gap-2 py-2"><input type="checkbox" checked={filterByStatus} onChange={e => setFilterByStatus(e.target.checked)} /> تفعيل البحث حسب حالة الطلب</label>
-                    {filterByStatus && <div className="flex flex-wrap gap-3">
-                        {STATUS_OPTIONS.map(option => <label key={option.value} className="flex items-center gap-1">
-                            <input type="checkbox" checked={selectedStatuses.includes(option.value)} onChange={e => setSelectedStatuses(current => e.target.checked ? [...current, option.value] : current.filter(value => value !== option.value))} /> {option.label}
-                        </label>)}
+                    {filterByStatus && <div className="space-y-1">
+                        {statusError && <p role="alert" className="text-red-700">{statusError}</p>}
+                        <details className="relative">
+                            <summary className="cursor-pointer rounded-lg border border-slate-300 bg-white px-3 py-2" aria-label="اختر حالات الطلب">
+                                {selectedStatuses.length ? `الحالات المحددة: ${selectedStatuses.length}` : "اختر حالات الطلب من القائمة"}
+                            </summary>
+                            <div role="group" aria-label="جميع حالات الطلب" className="absolute z-20 max-h-72 min-w-64 overflow-y-auto rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
+                                {statusOptions.length ? statusOptions.map(option => <label key={option.name} className="flex items-center gap-2 py-1">
+                                    <input type="checkbox" checked={selectedStatuses.includes(option.name)} onChange={e => setSelectedStatuses(current => e.target.checked ? [...current, option.name] : current.filter(value => value !== option.name))} />
+                                    <span>{option.name}</span><span className="text-xs text-slate-500">({option.count})</span>
+                                </label>) : <span className="text-slate-500">{statusError || "لا توجد حالات طلب متاحة"}</span>}
+                            </div>
+                        </details>
                     </div>}
                 </fieldset>
                 <button className="rounded-lg bg-slate-900 px-5 py-3 text-white font-bold" type="submit">عرض المبيعات</button>
