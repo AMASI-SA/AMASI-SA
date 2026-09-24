@@ -843,6 +843,45 @@ def test_mug_order_288180853_prints_each_phrase_in_full():
     assert max(block[3] for block in page.get_text("blocks")) < page.rect.height / 5
 
 
+def test_employee_product_file_uses_final_a4_renderer_and_keeps_ordered_fields():
+    from preparation_pdf_amasi_a4_layout import _card_origin
+    from reportlab.lib.pagesizes import A4
+
+    fields = [
+        {"name": "اختر مقاس اللوحه", "value": "30 طول * 50 عرض (SAR 214.92)"},
+        {"name": "الاسم المبرز", "value": "مريم لمار"},
+        {"name": "باقي الأسماء على اللوحة", "value": "محمد ريم عبدالله روان احمد فهيمه"},
+    ]
+    pdf = batch_module.render_preparation_batch_pdf({
+        "id": "batch-print", "file_number": "PF-96", "lines": [{
+            "order_number": "288047865", "order_date": "2026-09-23",
+            "order_item_id": "item-print", "unit_index": 1,
+            "product_name": "لوحة جدارية بالخط العربي مع إطار خشبي فاخر",
+            "image_b64": __import__("base64").b64encode(_image_bytes(8)).decode("ascii"),
+            "file_spec_fields": fields,
+        }],
+    })
+    with fitz.open(stream=pdf, filetype="pdf") as document:
+        page = document[0]
+        printed = unicodedata.normalize("NFKC", page.get_text())
+        assert len(page.get_images(full=True)) >= 2
+        assert [printed.index(field["name"]) for field in fields] == sorted(
+            printed.index(field["name"]) for field in fields
+        )
+        assert "(SAR 214.92)" in printed
+        assert "مريم لمار" in printed
+        assert "محمد\nريم عبدالله روان احمد فهيمه" in printed
+        assert "…" not in printed and "..." not in printed
+        x, y, width, height = _card_origin(0, *A4)
+        # Text below the image stays on this card, inside its detail column.
+        detail_blocks = [block for block in page.get_text("blocks")
+                         if "فهيمه" in unicodedata.normalize("NFKC", block[4])]
+        assert detail_blocks
+        assert all(x <= block[0] and block[2] <= x + width and
+                   page.rect.height - y - height <= block[1] and
+                   block[3] <= page.rect.height - y for block in detail_blocks)
+
+
 def test_long_note_wraps_without_ellipsis_or_word_loss():
     note = "تجربة ملف تجهيز طويلة للتأكد من ظهور الملاحظة كاملة دون اختفاء أي كلمة داخل البطاقة"
     font_name, font_bold = _register_font()

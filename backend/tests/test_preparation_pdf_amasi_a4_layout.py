@@ -25,6 +25,7 @@ def _line(index: int) -> ProductLine:
         order_date="2026-08-20T02:00:00+03:00",
         product_name=f"منتج {index}",
         customer_name="ماما حنان",
+        note=None,
         quantity=1,
         total_products_in_order=5,
         item_index=index,

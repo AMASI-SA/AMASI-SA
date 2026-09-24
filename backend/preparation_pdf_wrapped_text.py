@@ -139,6 +139,7 @@ def build_wrapped_specification_plan(
     font_bold: str,
     width: float,
     available_height: float,
+    max_font_size: float = MAX_BODY_FONT_SIZE,
 ) -> WrappedSpecificationPlan:
     """Choose the largest font that preserves every specification character."""
     def make_plan(font_size: float) -> WrappedSpecificationPlan:
@@ -168,7 +169,7 @@ def build_wrapped_specification_plan(
         )
 
     sizes: list[float] = []
-    size = MAX_BODY_FONT_SIZE
+    size = min(MAX_BODY_FONT_SIZE, max_font_size)
     while size >= MIN_BODY_FONT_SIZE - 0.001:
         sizes.append(round(size, 2))
         size -= BODY_FONT_STEP

@@ -28,6 +28,7 @@ from reportlab.pdfgen import canvas
 from preparation_pdf import ProductLine, _ar, _register_font
 import preparation_pdf_card_file_number as numbering
 import preparation_pdf_reference_layout as reference
+from preparation_pdf_wrapped_text import build_wrapped_specification_plan
 
 AMASI_MAROON = HexColor("#74102F")
 AMASI_GOLD = HexColor("#CDA14A")
@@ -219,6 +220,39 @@ def generate_amasi_product_file_pdf(
         pdf.setFont(font_name, size)
         pdf.drawRightString(value_right, y, _fit(clean, font_name, size, max(8, width - label_width - 2)))
 
+    def draw_specifications(line: ProductLine, right: float, top: float, width: float, bottom: float) -> None:
+        rows = _spec_rows(line)
+        if not rows:
+            return
+        plan = build_wrapped_specification_plan(
+            rows, font_name=font_name, font_bold=font_bold,
+            width=width, available_height=top - bottom,
+            max_font_size=5.45,
+        )
+        cursor = top
+        for field in plan.fields:
+            if field.value_below:
+                for label_line in field.label_lines:
+                    pdf.setFont(font_bold, plan.font_size)
+                    pdf.setFillColor(RED)
+                    pdf.drawRightString(right, cursor, _ar(label_line))
+                    cursor -= plan.line_height
+                value_right = right
+            else:
+                label_visual = _ar(field.label_lines[0])
+                pdf.setFont(font_bold, plan.font_size)
+                pdf.setFillColor(RED)
+                pdf.drawRightString(right, cursor, label_visual)
+                value_right = right - pdfmetrics.stringWidth(
+                    label_visual, font_bold, plan.font_size,
+                ) - 2.2
+            for value_line in field.lines:
+                pdf.setFont(font_name, plan.font_size)
+                pdf.setFillColor(TEXT)
+                pdf.drawRightString(value_right, cursor, _ar(value_line))
+                cursor -= plan.line_height
+                value_right = right
+
     def draw_card(index: int, line: ProductLine, serial: int) -> None:
         x, y, card_width, card_height = _card_origin(index, page_width, page_height)
         pdf.setStrokeColor(BORDER)
@@ -271,12 +305,7 @@ def generate_amasi_product_file_pdf(
             label_value(label_name, value, left_half_right, order_y, half, 5.6 if label_name else 5.8)
             order_y -= 6.7
 
-        spec_y = detail_top
-        for label_name, value in _spec_rows(line):
-            if spec_y < detail_bottom:
-                break
-            label_value(label_name, value, right_half_right, spec_y, half, 5.45)
-            spec_y -= 6.5
+        draw_specifications(line, right_half_right, detail_top, half, detail_bottom)
 
     for page_start in range(0, len(lines), CARDS_PER_PAGE):
         page_lines = lines[page_start:page_start + CARDS_PER_PAGE]
