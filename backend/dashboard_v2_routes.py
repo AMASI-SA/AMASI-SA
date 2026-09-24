@@ -60,6 +60,10 @@ from salla_marketing_attribution import (
     attach_projected_salla_attribution,
 )
 from sold_products_report_v2 import SELECTABLE_STATUSES, load_sold_products, order_matches_status, summarize
+from sold_product_reversals import (
+    collect_archived_removals, collect_reversals,
+    collect_review_snapshot_removals, merge_reversal_evidence,
+)
 from salla_integration.abandoned_carts import (
     AbandonedCartScopeError,
     parse_salla_datetime,
@@ -1918,18 +1922,54 @@ def make_dashboard_v2_router(
         if settings.get("hide_inferred_date_orders"):
             query["order_date_inferred"] = {"$ne": True}
         orders = await db.unified_orders.find(
-            query, {"_id": 0, "products": 1, "order_status": 1, "order_status_slug": 1},
+            query, {"_id": 0, "order_number": 1, "products": 1, "order_status": 1,
+                    "order_status_slug": 1, "sold_products_completed_at": 1},
         ).to_list(length=100000)
-        orders = [order for order in orders if order_matches_status(
+        selected_orders = [order for order in orders if order_matches_status(
             order, selected, settings.get("report_included_statuses") or [],
         )]
-        rows = await load_sold_products(db, uid, orders)
+        numbers = list({str(order.get("order_number")) for order in orders if order.get("order_number")})
+        adjustments = await db.order_adjustments.find(
+            {"user_id": uid, "order_number": {"$in": numbers}, "items_changed": True},
+            {"_id": 0, "order_number": 1, "items_diff": 1, "removal_stage": 1},
+        ).to_list(length=100000)
+        history = await db.order_activity_events_v2.find(
+            {"user_id": uid, "order_number": {"$in": numbers}},
+            {"_id": 0, "order_number": 1, "title": 1, "occurred_at": 1, "event_type": 1},
+        ).to_list(length=100000)
+        workflows = await db.order_review_workflows.find(
+            {"user_id": uid, "order_number": {"$in": numbers}, "reviewed_at": {"$exists": True}},
+            {"_id": 0, "order_number": 1, "reviewed_at": 1, "items": 1},
+        ).to_list(length=100000)
+        integrations = await db.salla_integrations.find(
+            {"user_id": uid}, {"_id": 0, "store_id": 1},
+        ).to_list(length=100)
+        store_ids = [str(row["store_id"]) for row in integrations if row.get("store_id")]
+        references = numbers + [int(value) for value in numbers if value.isdecimal()]
+        captures = await db.salla_webhook_event_captures.find(
+            {"merchant_id": {"$in": store_ids}, "$or": [
+                {"payload.data.reference_id": {"$in": references}},
+                {"payload.data.order.reference_id": {"$in": references}},
+                {"payload.data.order_number": {"$in": references}},
+                {"payload.data.order.order_number": {"$in": references}},
+            ]},
+            {"_id": 0, "payload": 1, "event": 1, "first_received_at": 1},
+        ).to_list(length=100000) if store_ids and references else []
+        archive = collect_archived_removals(captures, history, orders)
+        reviewed = collect_review_snapshot_removals(orders, workflows)
+        reversals = merge_reversal_evidence(
+            collect_reversals(orders, adjustments, history), archive, reviewed,
+        )
+        rows = await load_sold_products(db, uid, selected_orders, reversals)
         return {
             "range": {"from_date": from_date, "to_date": to_date, "statuses": selected},
             "items": rows, "count": len(rows),
             "incomplete_count": sum(row["cost_status"] != "complete" for row in rows),
             "totals": summarize(rows),
-            "source": "unified_orders.quantity + mezan_v2_then_salla_registered_base_cost",
+            "reversal_coverage": {"unclassified_units": sum(row["units_unclassified"] for row in rows),
+                                  "historical_completeness": "partial",
+                                  "webhook_snapshots": len(captures), "review_snapshots": len(workflows)},
+            "source": "unified_orders.quantity + order_adjustments + order_activity_events_v2 + salla_webhook_event_captures + order_review_workflows + mezan_v2_then_salla_registered_base_cost",
         }
 
     @router.get("/dashboard-v2/snapchat-accounts-summary")

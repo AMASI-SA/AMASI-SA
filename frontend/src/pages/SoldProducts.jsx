@@ -14,14 +14,25 @@ const STATUS_OPTIONS = [
 ];
 
 function CostSummary({ rows, final = false }) {
-    const units = rows.reduce((sum, row) => sum + row.units_sold, 0);
+    const sold = rows.reduce((sum, row) => sum + row.units_sold, 0);
+    const before = rows.reduce((sum, row) => sum + row.units_cancelled_before, 0);
+    const after = rows.reduce((sum, row) => sum + row.units_returned_after, 0);
+    const unclassified = rows.reduce((sum, row) => sum + row.units_unclassified, 0);
+    const units = sold + after + unclassified;
     const knownCost = rows.reduce((sum, row) => sum + (row.total_cost ?? 0), 0);
+    const uncertainCost = rows.reduce((sum, row) => sum + (row.uncertain_cost ?? 0), 0);
     const missing = rows.some(row => row.total_cost == null);
+    const uncertainMissing = rows.some(row => row.uncertain_cost == null);
     return (
         <div className="flex flex-wrap gap-x-8 gap-y-2 bg-violet-50 p-4 text-sm font-bold" data-testid={final ? "sold-products-final-totals" : "sold-products-page-totals"}>
-            <span>{final ? "إجمالي القطع" : "قطع هذه الصفحة"}: {formatInt(units)}</span>
-            {final && <span>متوسط تكلفة القطعة: {missing ? "غير مكتمل" : units ? `${formatMoney(knownCost / units)} ر.س` : "—"}</span>}
-            <span>{final ? "إجمالي تكلفة جميع القطع" : "إجمالي تكلفة قطع الصفحة"}: {missing ? "غير مكتمل" : `${formatMoney(knownCost)} ر.س`}</span>
+            <span>المباعة: {formatInt(sold)}</span>
+            <span>الملغاة قبل التنفيذ، مستبعدة: {formatInt(before)}</span>
+            <span>الملغاة أو المسترجعة بعد التنفيذ: {formatInt(after)}</span>
+            <span>غير محسومة المرحلة، محسوبة مؤقتًا: {formatInt(unclassified)}</span>
+            <span>القطع المحتسبة في الصافي: {formatInt(units)}</span>
+            {final && <span>متوسط تكلفة القطعة المحتسبة: {missing ? "غير مكتمل" : units ? `${formatMoney(knownCost / units)} ر.س` : "—"}</span>}
+            <span>{final ? "صافي تكلفة جميع القطع" : "صافي تكلفة قطع الصفحة"}: {missing ? "غير مكتمل" : `${formatMoney(knownCost)} ر.س`}</span>
+            {unclassified > 0 && <span className="text-amber-800">منها تكلفة قطع غير محسومة المرحلة: {uncertainMissing ? "غير مكتملة" : `${formatMoney(uncertainCost)} ر.س`}</span>}
             {missing && <span className="text-amber-800">التكلفة المسجلة فقط: {formatMoney(knownCost)} ر.س · توجد قطع بلا تكلفة</span>}
         </div>
     );
@@ -29,9 +40,9 @@ function CostSummary({ rows, final = false }) {
 
 function SoldTable({ rows, printable = false }) {
     return (
-        <table className="w-full text-sm text-right border-collapse min-w-[760px]">
+        <table className="w-full text-sm text-right border-collapse min-w-[1050px]">
             <thead className="bg-slate-100 text-slate-700">
-                <tr>{["صورة المنتج", "اسم المنتج", "الرقم المخزني SKU", "عدد القطع المباعة خلال الفترة", "تكلفة المنتج المسجلة", "إجمالي تكلفة القطع"].map(label =>
+                <tr>{["صورة المنتج", "اسم المنتج", "الرقم المخزني SKU", "عدد القطع المباعة خلال الفترة", "ملغاة قبل التنفيذ", "ملغاة أو مسترجعة بعد التنفيذ", "تعذر تحديد وقت الإلغاء", "تكلفة المنتج المسجلة", "صافي تكلفة القطع عدا الملغاة قبل التنفيذ"].map(label =>
                     <th key={label} className="p-3 border-b border-slate-200">{label}</th>)}</tr>
             </thead>
             <tbody>
@@ -43,8 +54,11 @@ function SoldTable({ rows, printable = false }) {
                             : row.name || "بدون اسم"}</td>
                         <td className="p-3" dir="ltr">{row.sku || "—"}</td>
                         <td className="p-3 tabular-nums">{formatInt(row.units_sold)}</td>
+                        <td className="p-3 tabular-nums">{formatInt(row.units_cancelled_before)}</td>
+                        <td className="p-3 tabular-nums">{formatInt(row.units_returned_after)}</td>
+                        <td className="p-3 tabular-nums">{formatInt(row.units_unclassified)}</td>
                         <td className="p-3 tabular-nums">{row.unit_cost == null ? "غير مسجلة" : <>{formatMoney(row.unit_cost)} ر.س <span className="block text-xs text-slate-500">{row.cost_source === "salla" ? "من سلة" : "من ميزان"}</span></>}</td>
-                        <td className="p-3 tabular-nums">{row.total_cost == null ? "تكلفة غير مكتملة" : `${formatMoney(row.total_cost)} ر.س`}</td>
+                        <td className="p-3 tabular-nums">{row.total_cost == null ? "تكلفة غير مكتملة" : `${formatMoney(row.total_cost)} ر.س`}{row.units_unclassified > 0 && <span className="block text-xs text-amber-700">يشمل {row.uncertain_cost == null ? "تكلفة غير محسومة" : `${formatMoney(row.uncertain_cost)} ر.س`} لقطع غير محسومة المرحلة</span>}</td>
                     </tr>
                 ))}
             </tbody>
@@ -100,7 +114,7 @@ export default function SoldProducts() {
     return (
         <main dir="rtl" className="space-y-5 p-4 sm:p-6" data-testid="sold-products-page">
             <header className="flex flex-wrap items-center justify-between gap-4">
-                <div><h1 className="text-2xl font-extrabold">المنتجات الأكثر مبيعًا</h1><p className="text-sm text-slate-500">عدد القطع المباعة × تكلفة ميزان، ثم تكلفة سلة عند غيابها</p></div>
+                <div><h1 className="text-2xl font-extrabold">المنتجات الأكثر مبيعًا</h1><p className="text-sm text-slate-500">صافي تكلفة القطع = تكلفة المباعة والملغاة أو المسترجعة بعد التنفيذ وغير محسومة المرحلة؛ تُستبعد الملغاة قبل التنفيذ. تكلفة ميزان أولًا ثم سلة.</p></div>
                 <button type="button" onClick={print} disabled={loading || !count} className="rounded-lg bg-violet-700 px-4 py-2 font-bold text-white disabled:opacity-50">طباعة جميع المنتجات / حفظ PDF</button>
             </header>
             <form onSubmit={applyRange} className="flex flex-wrap items-end gap-3 rounded-xl bg-white p-4 border border-slate-200">
@@ -120,6 +134,7 @@ export default function SoldProducts() {
             {error && <p role="alert" className="text-red-700">{error}</p>}
             {loading ? <p>جارٍ تحميل المنتجات…</p> : data && <section className="rounded-xl border border-slate-200 bg-white overflow-hidden">
                 <div className="p-4 text-sm text-slate-600">من {range.from} إلى {range.to} · {selectedStatusLabel} · {count} منتج · بدون تكلفة أولًا، ثم حسب عدد القطع{data.incomplete_count > 0 && ` · ${data.incomplete_count} منتج بتكلفة غير مكتملة`}</div>
+                <p className="px-4 pb-3 text-xs text-amber-800">أعداد الإلغاء والاسترجاع تشمل الطلبات الملغاة حتى إن لم تكن حالتها ضمن تصفية المبيعات. تُستبعد من الصافي القطع المثبت إلغاؤها قبل التنفيذ فقط. تدخل القطع غير محسومة المرحلة في الصافي مؤقتًا وتظهر تكلفتها منفصلة؛ السجلات القديمة قد تكون ناقصة.</p>
                 {count ? <div className="overflow-x-auto"><SoldTable rows={pageRows} /></div> : <p className="p-8 text-center">لا توجد منتجات في هذه الفترة والحالة.</p>}
                 {count > 0 && <CostSummary rows={pageRows} />}
                 {pages > 1 && <nav aria-label="صفحات المنتجات" className="flex flex-wrap justify-center items-center gap-2 p-4">
@@ -134,6 +149,7 @@ export default function SoldProducts() {
                     <style>{`@page { size: A4 landscape; margin: 10mm; } @media print { table { width: 100%; min-width: 0 !important; font-size: 8px !important; border-collapse: collapse; } th, td { padding: 2px !important; } thead { display: table-header-group; } tr { break-inside: avoid; height: 24px; } img { width: 20px !important; height: 20px !important; object-fit: cover; } section { break-inside: avoid; } }`}</style>
                     <h1 className="text-xl font-bold mb-2">المنتجات الأكثر مبيعًا</h1>
                     <p className="mb-4">من {range.from} إلى {range.to} · {selectedStatusLabel} · {count} منتج · بدون تكلفة أولًا، ثم حسب عدد القطع</p>
+                    <p className="mb-2 text-xs">صافي التكلفة يشمل جميع القطع باستثناء الملغاة المثبتة قبل التنفيذ. تكلفة غير محسومة المرحلة محسوبة مؤقتًا وتظهر منفصلة؛ قد تنقص بعض الحالات التاريخية.</p>
                     {printPages.map((rows, index) => <section key={index} style={{ breakAfter: index < printPages.length - 1 ? "page" : "auto" }}>
                         {pages > 1 && <p>صفحة {index + 1} من {pages}</p>}
                         {rows.length > 0 && <SoldTable rows={rows} printable />}
