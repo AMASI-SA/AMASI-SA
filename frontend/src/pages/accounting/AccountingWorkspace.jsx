@@ -4,10 +4,12 @@ import { toast } from "sonner";
 import { useOptionalAuth } from "../../context/AuthContext";
 import { getAccountingAccess, getAccountingModuleStatus } from "../../services/accountingModule";
 import AccountingCourierBankBindings from "./AccountingCourierBankBindings";
-import AccountingHome from "./AccountingHome";
+import AccountingDailyWorkspace from "./AccountingDailyWorkspace";
+import AccountingReports from "./AccountingReports";
 import AccountingPermissionsDialog from "./AccountingPermissionsDialog";
-import AccountingSettlementRegister from "./AccountingSettlementRegister";
 import AccountingSettlements from "./AccountingSettlements";
+import AccountingBankReceipts from "./AccountingBankReceipts";
+import AccountingCustomerAdvances from "./AccountingCustomerAdvances";
 import {
     AccessDenied,
     AccountingHeader,
@@ -70,15 +72,26 @@ export default function AccountingWorkspace() {
     if (page.id === "home") {
         content = statusLoading
             ? <LoadingBlock />
-            : <AccountingHome status={status} user={user} accountingPermissions={permissions} />;
+            : (
+                <AccountingDailyWorkspace
+                    status={status}
+                    user={user}
+                    accountingPermissions={permissions}
+                    canManagePermissions={access?.is_owner === true}
+                    onOpenPermissions={() => setPermissionsOpen(true)}
+                />
+            );
     } else if (page.id === "settlements") {
         content = (
             <div className="space-y-5">
                 <AccountingSettlements accountingPermissions={permissions} />
-                <AccountingSettlementRegister accountingPermissions={permissions} />
                 <AccountingCourierBankBindings accountingPermissions={permissions} />
             </div>
         );
+    } else if (page.id === "financial-movements") {
+        content = <><AccountingBankReceipts accountingPermissions={permissions} /><AccountingCustomerAdvances accountingPermissions={permissions} /></>;
+    } else if (page.id === "journals-reports") {
+        content = <AccountingReports />;
     } else if (page.id === "opening-balances") {
         content = statusLoading ? <LoadingBlock /> : <OpeningBalancesBlocked status={status} />;
     } else {
@@ -87,7 +100,13 @@ export default function AccountingWorkspace() {
 
     return (
         <div className="space-y-5" dir="rtl" data-testid="accounting-workspace">
-            <AccountingHeader page={page} canManagePermissions={access?.is_owner === true} onOpenPermissions={() => setPermissionsOpen(true)} />
+            {page.id !== "home" && (
+                <AccountingHeader
+                    page={page}
+                    canManagePermissions={access?.is_owner === true}
+                    onOpenPermissions={() => setPermissionsOpen(true)}
+                />
+            )}
             {content}
             <AccountingPermissionsDialog open={permissionsOpen} onClose={() => setPermissionsOpen(false)} />
         </div>

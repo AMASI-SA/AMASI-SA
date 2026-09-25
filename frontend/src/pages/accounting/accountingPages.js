@@ -3,7 +3,7 @@ export const ACCOUNTING_OPERATION_ID = "MZ2-FIN-CUTOVER-001";
 export const ACCOUNTING_PAGES = [
     {
         id: "home",
-        label: "الرئيسية المحاسبية",
+        label: "المحاسبة اليومية",
         permission: "accounting.home.view",
         to: "/integrations-v2?workspace=financial&page=home",
         implementationStatus: "implemented",
@@ -60,6 +60,9 @@ export const ACCOUNTING_PAGES = [
 ];
 
 export const ACCOUNTING_ACTIONS = [
+    { id: "refund-recognize", label: "اعتماد استحقاق العميل وإثبات التزام الاسترداد", permission: "accounting.refunds.recognize" },
+    { id: "receipt-create", label: "تسجيل مبلغ واصل من منصة", permission: "accounting.receipts.create" },
+    { id: "receivable-post", label: "إثبات ذمم الطلبات المؤهلة", permission: "accounting.receivables.post" },
     { id: "draft-create", label: "إنشاء وحفظ مسودة مالية", permission: "accounting.drafts.create" },
     { id: "settlement-post", label: "اعتماد وترحيل تسوية", permission: "accounting.settlements.post" },
     { id: "rules-manage", label: "تعديل قواعد العمولات والحسابات", permission: "accounting.rules.manage" },
