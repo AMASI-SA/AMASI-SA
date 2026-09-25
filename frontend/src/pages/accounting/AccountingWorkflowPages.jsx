@@ -27,11 +27,6 @@ const PAGE_LINKS = {
         { to: "/recurring-obligations", label: "الالتزامات والمصاريف الدورية" },
         { to: "/employees-ledger", label: "دفتر الموظفين" },
     ],
-    "journals-reports": [
-        { to: "/transactions", label: "القيود اليومية" },
-        { to: "/financial-position-ledger", label: "المركز المالي من القيود" },
-        { to: "/accounting/reconciliation", label: "تقرير المطابقة" },
-    ],
 };
 
 export function PartialWorkflowPage({ page }) {

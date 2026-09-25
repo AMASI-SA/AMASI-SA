@@ -200,5 +200,16 @@ def test_router_registers_readiness_and_permission_contract_paths():
         "/financial-provider-apps/accounting-module/permissions/catalogue",
         "/financial-provider-apps/accounting-module/permissions/users",
         "/financial-provider-apps/accounting-module/permissions/users/{user_id}",
+        "/financial-provider-apps/accounting-module/opening-balances",
+        "/financial-provider-apps/accounting-module/opening-balances/preview",
+        "/financial-provider-apps/accounting-module/opening-balances/approve",
+        "/financial-provider-apps/accounting-module/opening-balances/activate",
+        "/financial-provider-apps/accounting-module/daily-movements/context",
+        "/financial-provider-apps/accounting-module/daily-movements",
+        "/financial-provider-apps/accounting-module/daily-movements/upload",
+        "/financial-provider-apps/accounting-module/daily-movements/{movement_id}/confirm-provider",
+        "/financial-provider-apps/accounting-module/payroll/context",
+        "/financial-provider-apps/accounting-module/payroll/accrue",
+        "/financial-provider-apps/accounting-module/payroll/movements/{movement_id}/classify",
     }
     assert expected <= {path for path, _methods in routes}
