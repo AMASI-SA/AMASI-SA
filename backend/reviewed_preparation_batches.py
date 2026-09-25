@@ -788,10 +788,9 @@ async def refresh_and_repair_batch_customer_options(
 ) -> dict[str, Any]:
     """Refresh Salla reads and rebuild batch option snapshots before PDF use.
 
-    New files only refresh orders whose frozen lines do not yet contain
-    customer fields.  The historical repair action refreshes every order in
-    the file.  Both paths use the same identity reconciliation and never write
-    an order status back to Salla.
+    New files and historical repairs refresh every selected order before
+    rebuilding option fields. Both paths use the same identity reconciliation
+    and never write an order status back to Salla.
     """
     source_lines = [dict(row) for row in lines if isinstance(row, dict)]
     order_numbers = sorted({
