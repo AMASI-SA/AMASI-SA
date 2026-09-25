@@ -1,0 +1,1097 @@
+{
+  "schema_version": 1,
+  "classification": "SYNTHETIC_DESIGN_EXPECTATIONS_NOT_APPLICATION_ACCEPTANCE",
+  "production_configuration": false,
+  "base_sha": "ebf92e6606a810a1e3f0a0e2026984a5482f71bc",
+  "p01_contract_sha": "e9d05b2be67a5ca54eb4e1b99a3a2a6fb16cf203",
+  "balance_convention": "Debit positive, credit negative. Initial balances are selected preconditions, not generated opening journals; unlisted accounts are unchanged.",
+  "assumptions": [
+    "All amounts SAR; dates2030 are fictional and not cutoff decisions.",
+    "Input VAT eligible only as synthetic assumption; actual tax policy belongs to approved core.",
+    "Core AR is a reviewed original receivable, not a new suspense account or sales posting.",
+    "Expected journals are proposals, not a new posting service."
+  ],
+  "tiers": [
+    {
+      "min": "1.00",
+      "min_inclusive": true,
+      "max": "1000.00",
+      "max_inclusive": true,
+      "percent": "0.02",
+      "fixed": "0.00",
+      "vat_percent": "15.00"
+    },
+    {
+      "min": "1000.00",
+      "min_inclusive": false,
+      "max": "3000.00",
+      "max_inclusive": true,
+      "percent": "0.03",
+      "fixed": "0.00",
+      "vat_percent": "15.00"
+    },
+    {
+      "min": "3000.00",
+      "min_inclusive": false,
+      "max": "6000.00",
+      "max_inclusive": true,
+      "percent": "0.05",
+      "fixed": "5.00",
+      "vat_percent": "15.00"
+    }
+  ],
+  "cases": [
+    {
+      "id": "S01",
+      "scenario": "Prepaid delivered by driver D1: fee only",
+      "owner": "fixture-owner-A",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "currency": "SAR",
+      "application_test_status": "PLANNED_NOT_RUN",
+      "initial_balances": {},
+      "expected_journals": [
+        {
+          "event_key": "fee:S1",
+          "accounting_at": "2030-01-15T12:00:00+03:00",
+          "debits": {
+            "expense:delivery": "20.00"
+          },
+          "credits": {
+            "payable:D1": "20.00"
+          }
+        }
+      ],
+      "expected_balances": {
+        "expense:delivery": "20.00",
+        "payable:D1": "-20.00"
+      },
+      "expected_cod": "0.00",
+      "no_revenue_or_sales_vat": true
+    },
+    {
+      "id": "S02",
+      "scenario": "Separate drivers; core AR previously recognized; custody reclassification only",
+      "owner": "fixture-owner-A",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "currency": "SAR",
+      "application_test_status": "PLANNED_NOT_RUN",
+      "initial_balances": {
+        "core:AR:O1": "100.00",
+        "core:AR:O2": "200.00"
+      },
+      "expected_journals": [
+        {
+          "event_key": "collection:S2a",
+          "accounting_at": "2030-01-15T12:00:00+03:00",
+          "debits": {
+            "COD:D1": "100.00"
+          },
+          "credits": {
+            "core:AR:O1": "100.00"
+          }
+        },
+        {
+          "event_key": "fee:S2a",
+          "accounting_at": "2030-01-15T12:00:00+03:00",
+          "debits": {
+            "expense:delivery": "20.00"
+          },
+          "credits": {
+            "payable:D1": "20.00"
+          }
+        },
+        {
+          "event_key": "collection:S2b",
+          "accounting_at": "2030-01-15T12:00:00+03:00",
+          "debits": {
+            "COD:D2": "200.00"
+          },
+          "credits": {
+            "core:AR:O2": "200.00"
+          }
+        },
+        {
+          "event_key": "fee:S2b",
+          "accounting_at": "2030-01-15T12:00:00+03:00",
+          "debits": {
+            "expense:delivery": "25.00"
+          },
+          "credits": {
+            "payable:D2": "25.00"
+          }
+        }
+      ],
+      "expected_balances": {
+        "core:AR:O1": "0.00",
+        "core:AR:O2": "0.00",
+        "COD:D1": "100.00",
+        "COD:D2": "200.00",
+        "expense:delivery": "45.00",
+        "payable:D1": "-20.00",
+        "payable:D2": "-25.00"
+      },
+      "expected_views": {
+        "D1": {
+          "ours": "100.00",
+          "theirs": "20.00",
+          "net": "80.00"
+        },
+        "D2": {
+          "ours": "200.00",
+          "theirs": "25.00",
+          "net": "175.00"
+        }
+      }
+    },
+    {
+      "id": "S03",
+      "scenario": "Duplicate delivery returns prior group without new legs",
+      "owner": "fixture-owner-A",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "currency": "SAR",
+      "application_test_status": "PLANNED_NOT_RUN",
+      "initial_balances": {
+        "COD:D1": "100.00",
+        "payable:D1": "-20.00"
+      },
+      "expected_journals": [],
+      "expected_balances": {
+        "COD:D1": "100.00",
+        "payable:D1": "-20.00"
+      },
+      "prior_event": "delivered:S3",
+      "repeat_count": 2,
+      "expected_result": "already_posted"
+    },
+    {
+      "id": "S04",
+      "scenario": "Confirmed old assignment keeps rate20 after new rate25; new assignment gets25",
+      "owner": "fixture-owner-A",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "currency": "SAR",
+      "application_test_status": "PLANNED_NOT_RUN",
+      "initial_balances": {},
+      "expected_journals": [
+        {
+          "event_key": "fee:old-assignment",
+          "accounting_at": "2030-01-15T12:00:00+03:00",
+          "debits": {
+            "expense:delivery": "20.00"
+          },
+          "credits": {
+            "payable:D1": "20.00"
+          }
+        },
+        {
+          "event_key": "fee:new-assignment",
+          "accounting_at": "2030-01-15T12:00:00+03:00",
+          "debits": {
+            "expense:delivery": "25.00"
+          },
+          "credits": {
+            "payable:D1": "25.00"
+          }
+        }
+      ],
+      "expected_balances": {
+        "expense:delivery": "45.00",
+        "payable:D1": "-45.00"
+      },
+      "rates": [
+        {
+          "version": "fixture-v1",
+          "effective_from": "2030-01-01T00:00:00+03:00",
+          "amount": "20.00"
+        },
+        {
+          "version": "fixture-v2",
+          "effective_from": "2030-01-10T00:00:00+03:00",
+          "amount": "25.00"
+        }
+      ],
+      "snapshots": {
+        "old": "fixture-v1",
+        "new": "fixture-v2"
+      }
+    },
+    {
+      "id": "S05",
+      "scenario": "Synthetic tier boundary 1000.00",
+      "owner": "fixture-owner-A",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "currency": "SAR",
+      "application_test_status": "PLANNED_NOT_RUN",
+      "initial_balances": {},
+      "expected_journals": [
+        {
+          "event_key": "cod-fee:S05",
+          "accounting_at": "2030-01-15T12:00:00+03:00",
+          "debits": {
+            "expense:COD_fee": "20.00",
+            "VAT:COD": "3.00"
+          },
+          "credits": {
+            "payable:C1": "23.00"
+          }
+        }
+      ],
+      "expected_balances": {
+        "expense:COD_fee": "20.00",
+        "VAT:COD": "3.00",
+        "payable:C1": "-23.00"
+      },
+      "cod_amount": "1000.00",
+      "expected_fee": "20.00",
+      "expected_fee_vat": "3.00",
+      "rate_version": "fixture-tiers-v1",
+      "tax_recoverability": "ASSUMED_SYNTHETIC_ONLY",
+      "fee_event_key": "cod-fee:S05",
+      "counterparty_id": "C1"
+    },
+    {
+      "id": "S06",
+      "scenario": "Synthetic tier boundary 1000.01",
+      "owner": "fixture-owner-A",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "currency": "SAR",
+      "application_test_status": "PLANNED_NOT_RUN",
+      "initial_balances": {},
+      "expected_journals": [
+        {
+          "event_key": "cod-fee:S06",
+          "accounting_at": "2030-01-15T12:00:00+03:00",
+          "debits": {
+            "expense:COD_fee": "30.00",
+            "VAT:COD": "4.50"
+          },
+          "credits": {
+            "payable:C1": "34.50"
+          }
+        }
+      ],
+      "expected_balances": {
+        "expense:COD_fee": "30.00",
+        "VAT:COD": "4.50",
+        "payable:C1": "-34.50"
+      },
+      "cod_amount": "1000.01",
+      "expected_fee": "30.00",
+      "expected_fee_vat": "4.50",
+      "rate_version": "fixture-tiers-v1",
+      "tax_recoverability": "ASSUMED_SYNTHETIC_ONLY",
+      "fee_event_key": "cod-fee:S06",
+      "counterparty_id": "C1"
+    },
+    {
+      "id": "S07",
+      "scenario": "Synthetic tier boundary 3000.00",
+      "owner": "fixture-owner-A",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "currency": "SAR",
+      "application_test_status": "PLANNED_NOT_RUN",
+      "initial_balances": {},
+      "expected_journals": [
+        {
+          "event_key": "cod-fee:S07",
+          "accounting_at": "2030-01-15T12:00:00+03:00",
+          "debits": {
+            "expense:COD_fee": "90.00",
+            "VAT:COD": "13.50"
+          },
+          "credits": {
+            "payable:C1": "103.50"
+          }
+        }
+      ],
+      "expected_balances": {
+        "expense:COD_fee": "90.00",
+        "VAT:COD": "13.50",
+        "payable:C1": "-103.50"
+      },
+      "cod_amount": "3000.00",
+      "expected_fee": "90.00",
+      "expected_fee_vat": "13.50",
+      "rate_version": "fixture-tiers-v1",
+      "tax_recoverability": "ASSUMED_SYNTHETIC_ONLY",
+      "fee_event_key": "cod-fee:S07",
+      "counterparty_id": "C1"
+    },
+    {
+      "id": "S08",
+      "scenario": "Synthetic tier boundary 3000.01",
+      "owner": "fixture-owner-A",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "currency": "SAR",
+      "application_test_status": "PLANNED_NOT_RUN",
+      "initial_balances": {},
+      "expected_journals": [
+        {
+          "event_key": "cod-fee:S08",
+          "accounting_at": "2030-01-15T12:00:00+03:00",
+          "debits": {
+            "expense:COD_fee": "155.00",
+            "VAT:COD": "23.25"
+          },
+          "credits": {
+            "payable:C1": "178.25"
+          }
+        }
+      ],
+      "expected_balances": {
+        "expense:COD_fee": "155.00",
+        "VAT:COD": "23.25",
+        "payable:C1": "-178.25"
+      },
+      "cod_amount": "3000.01",
+      "expected_fee": "155.00",
+      "expected_fee_vat": "23.25",
+      "rate_version": "fixture-tiers-v1",
+      "tax_recoverability": "ASSUMED_SYNTHETIC_ONLY",
+      "fee_event_key": "cod-fee:S08",
+      "counterparty_id": "C1"
+    },
+    {
+      "id": "S09",
+      "scenario": "Synthetic tier boundary 6000.00",
+      "owner": "fixture-owner-A",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "currency": "SAR",
+      "application_test_status": "PLANNED_NOT_RUN",
+      "initial_balances": {},
+      "expected_journals": [
+        {
+          "event_key": "cod-fee:S09",
+          "accounting_at": "2030-01-15T12:00:00+03:00",
+          "debits": {
+            "expense:COD_fee": "305.00",
+            "VAT:COD": "45.75"
+          },
+          "credits": {
+            "payable:C1": "350.75"
+          }
+        }
+      ],
+      "expected_balances": {
+        "expense:COD_fee": "305.00",
+        "VAT:COD": "45.75",
+        "payable:C1": "-350.75"
+      },
+      "cod_amount": "6000.00",
+      "expected_fee": "305.00",
+      "expected_fee_vat": "45.75",
+      "rate_version": "fixture-tiers-v1",
+      "tax_recoverability": "ASSUMED_SYNTHETIC_ONLY",
+      "fee_event_key": "cod-fee:S09",
+      "counterparty_id": "C1"
+    },
+    {
+      "id": "S10",
+      "scenario": "Tier gaps and unspecified upper tier are review, never free",
+      "owner": "fixture-owner-A",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "currency": "SAR",
+      "application_test_status": "PLANNED_NOT_RUN",
+      "initial_balances": {},
+      "expected_journals": [],
+      "expected_balances": {},
+      "inputs": [
+        "0.99",
+        "6000.01"
+      ],
+      "expected_result": "needs_review",
+      "calculated_fee": null
+    },
+    {
+      "id": "S11",
+      "scenario": "Overlapping inclusive boundary rejects rule draft",
+      "owner": "fixture-owner-A",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "currency": "SAR",
+      "application_test_status": "PLANNED_NOT_RUN",
+      "initial_balances": {},
+      "expected_journals": [],
+      "expected_balances": {},
+      "inputs": {
+        "left_max": 1000,
+        "left_inclusive": true,
+        "right_min": 1000,
+        "right_inclusive": true
+      },
+      "expected_result": "validation_rejected"
+    },
+    {
+      "id": "S12",
+      "scenario": "Partial cash remittance",
+      "owner": "fixture-owner-A",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "currency": "SAR",
+      "application_test_status": "PLANNED_NOT_RUN",
+      "initial_balances": {
+        "COD:D1": "1000.00",
+        "payable:D1": "-20.00",
+        "bank:B1": "0.00"
+      },
+      "expected_journals": [
+        {
+          "event_key": "receipt:BANK-S12",
+          "accounting_at": "2030-01-15T12:00:00+03:00",
+          "debits": {
+            "bank:B1": "400.00"
+          },
+          "credits": {
+            "COD:D1": "400.00"
+          }
+        }
+      ],
+      "expected_balances": {
+        "COD:D1": "600.00",
+        "payable:D1": "-20.00",
+        "bank:B1": "400.00"
+      },
+      "statement_ref": "ST-S12",
+      "bank_reference": "BANK-S12",
+      "expected_views": {
+        "D1": {
+          "ours": "600.00",
+          "theirs": "20.00",
+          "net": "580.00"
+        }
+      }
+    },
+    {
+      "id": "S13",
+      "scenario": "Full gross remittance then separate fee payment",
+      "owner": "fixture-owner-A",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "currency": "SAR",
+      "application_test_status": "PLANNED_NOT_RUN",
+      "initial_balances": {
+        "COD:D1": "1000.00",
+        "payable:D1": "-20.00",
+        "bank:B1": "0.00"
+      },
+      "expected_journals": [
+        {
+          "event_key": "receipt:BANK-S13",
+          "accounting_at": "2030-01-15T12:00:00+03:00",
+          "debits": {
+            "bank:B1": "1000.00"
+          },
+          "credits": {
+            "COD:D1": "1000.00"
+          }
+        },
+        {
+          "event_key": "fee-payment:S13",
+          "accounting_at": "2030-01-15T12:00:00+03:00",
+          "debits": {
+            "payable:D1": "20.00"
+          },
+          "credits": {
+            "bank:B1": "20.00"
+          }
+        }
+      ],
+      "expected_balances": {
+        "COD:D1": "0.00",
+        "payable:D1": "0.00",
+        "bank:B1": "980.00"
+      },
+      "no_expense_legs": true
+    },
+    {
+      "id": "S14",
+      "scenario": "Explicit net settlement after fee accrued",
+      "owner": "fixture-owner-A",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "currency": "SAR",
+      "application_test_status": "PLANNED_NOT_RUN",
+      "initial_balances": {
+        "COD:D1": "1000.00",
+        "payable:D1": "-20.00",
+        "expense:delivery": "20.00"
+      },
+      "expected_journals": [
+        {
+          "event_key": "net:S14",
+          "accounting_at": "2030-01-15T12:00:00+03:00",
+          "debits": {
+            "bank:B1": "980.00",
+            "payable:D1": "20.00"
+          },
+          "credits": {
+            "COD:D1": "1000.00"
+          }
+        }
+      ],
+      "expected_balances": {
+        "COD:D1": "0.00",
+        "payable:D1": "0.00",
+        "expense:delivery": "20.00",
+        "bank:B1": "980.00"
+      },
+      "gross_cod_cleared": "1000.00",
+      "fee_offset": "20.00",
+      "bank_received": "980.00",
+      "no_expense_legs": true,
+      "settlement_event_key": "net:S14",
+      "counterparty_id": "D1",
+      "settlement_type": "net_inflow",
+      "statement_ref": "ST-S14",
+      "bank_reference": "BANK-S14",
+      "bank_account_id": "B1"
+    },
+    {
+      "id": "S15",
+      "scenario": "Documented zero-net offset; no receipt or bank leg",
+      "owner": "fixture-owner-A",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "currency": "SAR",
+      "application_test_status": "PLANNED_NOT_RUN",
+      "initial_balances": {
+        "COD:C1": "19.55",
+        "payable:C1": "-19.55"
+      },
+      "expected_journals": [
+        {
+          "event_key": "offset:ST-S15",
+          "accounting_at": "2030-01-15T12:00:00+03:00",
+          "debits": {
+            "payable:C1": "19.55"
+          },
+          "credits": {
+            "COD:C1": "19.55"
+          }
+        }
+      ],
+      "expected_balances": {
+        "COD:C1": "0.00",
+        "payable:C1": "0.00"
+      },
+      "statement_ref": "ST-S15",
+      "bank_reference": null,
+      "bank_receipt_id": null,
+      "bank_received": "0.00",
+      "no_bank_legs": true,
+      "no_expense_legs": true,
+      "settlement_event_key": "offset:ST-S15",
+      "counterparty_id": "C1",
+      "settlement_type": "explicit_offset",
+      "gross_cod_cleared": "19.55",
+      "fee_offset": "19.55"
+    },
+    {
+      "id": "S16",
+      "scenario": "Carrier fee and service VAT already accrued, then net settlement",
+      "owner": "fixture-owner-A",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "currency": "SAR",
+      "application_test_status": "PLANNED_NOT_RUN",
+      "initial_balances": {
+        "COD:C1": "115.00",
+        "expense:shipping": "15.00",
+        "VAT:shipping": "2.25",
+        "expense:COD_fee": "2.00",
+        "VAT:COD": "0.30",
+        "payable:C1": "-19.55"
+      },
+      "expected_journals": [
+        {
+          "event_key": "net:ST-S16",
+          "accounting_at": "2030-01-15T12:00:00+03:00",
+          "debits": {
+            "bank:B1": "95.45",
+            "payable:C1": "19.55"
+          },
+          "credits": {
+            "COD:C1": "115.00"
+          }
+        }
+      ],
+      "expected_balances": {
+        "COD:C1": "0.00",
+        "expense:shipping": "15.00",
+        "VAT:shipping": "2.25",
+        "expense:COD_fee": "2.00",
+        "VAT:COD": "0.30",
+        "payable:C1": "0.00",
+        "bank:B1": "95.45"
+      },
+      "no_expense_legs": true,
+      "no_tax_legs": true,
+      "statement_ref": "ST-S16",
+      "bank_reference": "BANK-S16",
+      "settlement_event_key": "net:ST-S16",
+      "counterparty_id": "C1",
+      "settlement_type": "net_inflow",
+      "gross_cod_cleared": "115.00",
+      "fee_offset": "19.55",
+      "bank_received": "95.45",
+      "bank_account_id": "B1"
+    },
+    {
+      "id": "S17",
+      "scenario": "Same statement exported with a new filename/request ID",
+      "owner": "fixture-owner-A",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "currency": "SAR",
+      "application_test_status": "PLANNED_NOT_RUN",
+      "initial_balances": {
+        "COD:C1": "115.00",
+        "payable:C1": "-19.55"
+      },
+      "expected_journals": [],
+      "expected_balances": {
+        "COD:C1": "115.00",
+        "payable:C1": "-19.55"
+      },
+      "expected_result": "duplicate_or_identity_conflict"
+    },
+    {
+      "id": "S18",
+      "scenario": "Bank receipt already consumed via another channel",
+      "owner": "fixture-owner-A",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "currency": "SAR",
+      "application_test_status": "PLANNED_NOT_RUN",
+      "initial_balances": {
+        "COD:C1": "115.00",
+        "payable:C1": "-19.55"
+      },
+      "expected_journals": [],
+      "expected_balances": {
+        "COD:C1": "115.00",
+        "payable:C1": "-19.55"
+      },
+      "expected_result": "evidence_already_consumed"
+    },
+    {
+      "id": "S19",
+      "scenario": "Actor owner B attempts owner A's shipment/bank",
+      "owner": "fixture-owner-A",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "currency": "SAR",
+      "application_test_status": "PLANNED_NOT_RUN",
+      "initial_balances": {
+        "COD:C1": "115.00",
+        "payable:C1": "-19.55"
+      },
+      "expected_journals": [],
+      "expected_balances": {
+        "COD:C1": "115.00",
+        "payable:C1": "-19.55"
+      },
+      "expected_result": "scope_rejected"
+    },
+    {
+      "id": "S20",
+      "scenario": "Posting permission revoked after preview",
+      "owner": "fixture-owner-A",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "currency": "SAR",
+      "application_test_status": "PLANNED_NOT_RUN",
+      "initial_balances": {
+        "COD:C1": "115.00",
+        "payable:C1": "-19.55"
+      },
+      "expected_journals": [],
+      "expected_balances": {
+        "COD:C1": "115.00",
+        "payable:C1": "-19.55"
+      },
+      "expected_result": "403"
+    },
+    {
+      "id": "S21",
+      "scenario": "Accounting month closed despite later receipt time",
+      "owner": "fixture-owner-A",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "currency": "SAR",
+      "application_test_status": "PLANNED_NOT_RUN",
+      "initial_balances": {
+        "COD:C1": "115.00",
+        "payable:C1": "-19.55"
+      },
+      "expected_journals": [],
+      "expected_balances": {
+        "COD:C1": "115.00",
+        "payable:C1": "-19.55"
+      },
+      "expected_result": "409_accounting_period_closed"
+    },
+    {
+      "id": "S22",
+      "scenario": "Writes paused: durable evidence allowed, no financial write",
+      "owner": "fixture-owner-A",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "currency": "SAR",
+      "application_test_status": "PLANNED_NOT_RUN",
+      "initial_balances": {
+        "COD:C1": "115.00",
+        "payable:C1": "-19.55"
+      },
+      "expected_journals": [],
+      "expected_balances": {
+        "COD:C1": "115.00",
+        "payable:C1": "-19.55"
+      },
+      "expected_result": "423_or_durable_deferred"
+    },
+    {
+      "id": "S23",
+      "scenario": "Same economic event ID with changed amount",
+      "owner": "fixture-owner-A",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "currency": "SAR",
+      "application_test_status": "PLANNED_NOT_RUN",
+      "initial_balances": {
+        "COD:C1": "115.00",
+        "payable:C1": "-19.55"
+      },
+      "expected_journals": [],
+      "expected_balances": {
+        "COD:C1": "115.00",
+        "payable:C1": "-19.55"
+      },
+      "expected_result": "source_conflict_needs_review"
+    },
+    {
+      "id": "S24",
+      "scenario": "Resume/retry after transaction abort; two deliveries of same event commit once",
+      "owner": "fixture-owner-A",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "currency": "SAR",
+      "application_test_status": "PLANNED_NOT_RUN",
+      "initial_balances": {
+        "core:AR:O24": "115.00"
+      },
+      "expected_journals": [
+        {
+          "event_key": "collection:S24",
+          "accounting_at": "2030-01-15T12:00:00+03:00",
+          "debits": {
+            "COD:C1": "115.00"
+          },
+          "credits": {
+            "core:AR:O24": "115.00"
+          }
+        },
+        {
+          "event_key": "fee:S24",
+          "accounting_at": "2030-01-15T12:00:00+03:00",
+          "debits": {
+            "expense:shipping": "15.00",
+            "VAT:shipping": "2.25"
+          },
+          "credits": {
+            "payable:C1": "17.25"
+          }
+        }
+      ],
+      "expected_balances": {
+        "core:AR:O24": "0.00",
+        "COD:C1": "115.00",
+        "expense:shipping": "15.00",
+        "VAT:shipping": "2.25",
+        "payable:C1": "-17.25"
+      },
+      "attempts": [
+        "abort:no_legs_no_claim_consumption",
+        "retry:commit",
+        "lost_response_retry:return_same_groups"
+      ],
+      "no_revenue_or_sales_vat": true
+    },
+    {
+      "id": "S25",
+      "scenario": "Two shipments one order split collectable70/45; not115 each",
+      "owner": "fixture-owner-A",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "currency": "SAR",
+      "application_test_status": "PLANNED_NOT_RUN",
+      "initial_balances": {
+        "core:AR:O25": "115.00"
+      },
+      "expected_journals": [
+        {
+          "event_key": "collection:S25a",
+          "accounting_at": "2030-01-15T12:00:00+03:00",
+          "debits": {
+            "COD:D1": "70.00"
+          },
+          "credits": {
+            "core:AR:O25": "70.00"
+          }
+        },
+        {
+          "event_key": "collection:S25b",
+          "accounting_at": "2030-01-15T12:00:00+03:00",
+          "debits": {
+            "COD:D1": "45.00"
+          },
+          "credits": {
+            "core:AR:O25": "45.00"
+          }
+        },
+        {
+          "event_key": "fee:S25a",
+          "accounting_at": "2030-01-15T12:00:00+03:00",
+          "debits": {
+            "expense:delivery": "20.00"
+          },
+          "credits": {
+            "payable:D1": "20.00"
+          }
+        },
+        {
+          "event_key": "fee:S25b",
+          "accounting_at": "2030-01-15T12:00:00+03:00",
+          "debits": {
+            "expense:delivery": "20.00"
+          },
+          "credits": {
+            "payable:D1": "20.00"
+          }
+        }
+      ],
+      "expected_balances": {
+        "core:AR:O25": "0.00",
+        "COD:D1": "115.00",
+        "expense:delivery": "40.00",
+        "payable:D1": "-40.00"
+      },
+      "shipment_ids": [
+        "S25a",
+        "S25b"
+      ],
+      "order_id": "O25"
+    },
+    {
+      "id": "S26",
+      "scenario": "Replacement after return, prepaid replacement has fee but no new COD/revenue",
+      "owner": "fixture-owner-A",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "currency": "SAR",
+      "application_test_status": "PLANNED_NOT_RUN",
+      "initial_balances": {
+        "COD:D1": "115.00",
+        "payable:D1": "-20.00"
+      },
+      "expected_journals": [
+        {
+          "event_key": "fee:replacement-S26",
+          "accounting_at": "2030-01-15T12:00:00+03:00",
+          "debits": {
+            "expense:delivery": "20.00"
+          },
+          "credits": {
+            "payable:D1": "20.00"
+          }
+        }
+      ],
+      "expected_balances": {
+        "COD:D1": "115.00",
+        "payable:D1": "-40.00",
+        "expense:delivery": "20.00"
+      },
+      "parent_shipment": "returned-S26",
+      "shipment_id": "replacement-S26",
+      "prior_cash_not_refunded": true,
+      "no_revenue_or_sales_vat": true
+    },
+    {
+      "id": "S27",
+      "scenario": "Unverified legacy copy cannot post",
+      "owner": "fixture-owner-A",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "currency": "SAR",
+      "application_test_status": "PLANNED_NOT_RUN",
+      "initial_balances": {},
+      "expected_journals": [],
+      "expected_balances": {},
+      "config_source": "legacy_copy",
+      "verification_status": "unverified",
+      "expected_result": "needs_review"
+    },
+    {
+      "id": "S28",
+      "scenario": "Legacy disabled; approved MZ2 rate and shipment still work",
+      "owner": "fixture-owner-A",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "currency": "SAR",
+      "application_test_status": "PLANNED_NOT_RUN",
+      "initial_balances": {},
+      "expected_journals": [
+        {
+          "event_key": "fee:S28",
+          "accounting_at": "2030-01-15T12:00:00+03:00",
+          "debits": {
+            "expense:delivery": "20.00"
+          },
+          "credits": {
+            "payable:D1": "20.00"
+          }
+        }
+      ],
+      "expected_balances": {
+        "expense:delivery": "20.00",
+        "payable:D1": "-20.00"
+      },
+      "legacy_reads_allowed": 0,
+      "legacy_runtime": "unavailable",
+      "rate_source": "MZ2_verified",
+      "expected_legacy_queries": 0
+    },
+    {
+      "id": "S29",
+      "scenario": "Legacy disabled and MZ2 rate missing: review, no fallback",
+      "owner": "fixture-owner-A",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "currency": "SAR",
+      "application_test_status": "PLANNED_NOT_RUN",
+      "initial_balances": {},
+      "expected_journals": [],
+      "expected_balances": {},
+      "legacy_reads_allowed": 0,
+      "legacy_runtime": "unavailable",
+      "expected_result": "needs_review"
+    },
+    {
+      "id": "S30",
+      "scenario": "Mixed inbound/outbound transportation charge has one payable and VAT",
+      "owner": "fixture-owner-A",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "currency": "SAR",
+      "application_test_status": "PLANNED_NOT_RUN",
+      "initial_balances": {},
+      "expected_journals": [
+        {
+          "event_key": "charge:TRANSPORT-S30",
+          "accounting_at": "2030-01-15T12:00:00+03:00",
+          "debits": {
+            "acquisition:clearing": "20.00",
+            "expense:delivery": "10.00",
+            "VAT:shipping": "4.50"
+          },
+          "credits": {
+            "payable:C1": "34.50"
+          },
+          "cost_origin_key": "fixture-owner-A:invoice-S30:line-1",
+          "contract_role": "shipping_cost_origin"
+        },
+        {
+          "event_key": "inventory-allocation:TRANSPORT-S30:inbound",
+          "accounting_at": "2030-01-15T12:00:00+03:00",
+          "debits": {
+            "inventory:value": "20.00"
+          },
+          "credits": {
+            "acquisition:clearing": "20.00"
+          },
+          "cost_origin_key": "fixture-owner-A:invoice-S30:line-1",
+          "contract_role": "external_consumer_expectation",
+          "consumer": "P03"
+        }
+      ],
+      "expected_balances": {
+        "acquisition:clearing": "0.00",
+        "expense:delivery": "10.00",
+        "VAT:shipping": "4.50",
+        "payable:C1": "-34.50",
+        "inventory:value": "20.00"
+      },
+      "cost_origin_key": "fixture-owner-A:invoice-S30:line-1",
+      "purpose_allocations": {
+        "inbound_acquisition": "20.00",
+        "outbound_customer_delivery": "10.00"
+      },
+      "source_net_cost": "30.00",
+      "source_transport_vat": "4.50",
+      "counterparty_id": "C1",
+      "source_charge_event_key": "charge:TRANSPORT-S30"
+    },
+    {
+      "id": "S31",
+      "scenario": "Excess allocation or cross-driver netting rejected",
+      "owner": "fixture-owner-A",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "currency": "SAR",
+      "application_test_status": "PLANNED_NOT_RUN",
+      "initial_balances": {
+        "COD:D1": "100.00",
+        "payable:D2": "-20.00"
+      },
+      "expected_journals": [],
+      "expected_balances": {
+        "COD:D1": "100.00",
+        "payable:D2": "-20.00"
+      },
+      "expected_result": "allocation_or_counterparty_conflict"
+    },
+    {
+      "id": "S32",
+      "scenario": "Carrier prepaid service consumption after separate prepayment",
+      "owner": "fixture-owner-A",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "currency": "SAR",
+      "application_test_status": "PLANNED_NOT_RUN",
+      "initial_balances": {
+        "prepayment:C1": "17.25"
+      },
+      "expected_journals": [
+        {
+          "event_key": "service-consumed:S32",
+          "accounting_at": "2030-01-15T12:00:00+03:00",
+          "debits": {
+            "expense:shipping": "15.00",
+            "VAT:shipping": "2.25"
+          },
+          "credits": {
+            "prepayment:C1": "17.25"
+          }
+        }
+      ],
+      "expected_balances": {
+        "prepayment:C1": "0.00",
+        "expense:shipping": "15.00",
+        "VAT:shipping": "2.25"
+      },
+      "no_bank_legs": true,
+      "tax_recoverability": "ASSUMED_AT_SERVICE_EVIDENCE_ONLY_NOT_ALREADY_RECOGNIZED"
+    },
+    {
+      "id": "S33",
+      "scenario": "Statement corrects prior service base15 to16: difference only",
+      "owner": "fixture-owner-A",
+      "operation_id": "MZ2-FIN-CUTOVER-001",
+      "currency": "SAR",
+      "application_test_status": "PLANNED_NOT_RUN",
+      "initial_balances": {
+        "expense:shipping": "15.00",
+        "VAT:shipping": "2.25",
+        "payable:C1": "-17.25"
+      },
+      "expected_journals": [
+        {
+          "event_key": "charge-adjustment:S33",
+          "accounting_at": "2030-01-15T12:00:00+03:00",
+          "debits": {
+            "expense:shipping": "1.00",
+            "VAT:shipping": "0.15"
+          },
+          "credits": {
+            "payable:C1": "1.15"
+          }
+        }
+      ],
+      "expected_balances": {
+        "expense:shipping": "16.00",
+        "VAT:shipping": "2.40",
+        "payable:C1": "-18.40"
+      },
+      "original_charge_key": "charge:S33",
+      "statement_ref": "ST-S33",
+      "snapshot_unchanged": true
+    }
+  ]
+}
