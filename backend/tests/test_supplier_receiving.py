@@ -123,6 +123,21 @@ def test_receiving_rejects_duplicate_cancelled_and_blocked_pieces():
         )["code"]
         == "supplier_piece_already_received"
     )
+    previous_receipt = {
+        "received_by_name": "عرفات", "session_reference": "SR-previous",
+    }
+    inconsistent_complete = piece_scan_blocker({
+        "status": PIECE_STATUS_IN_PROGRESS,
+        "supplier_receiving_history": [previous_receipt],
+        "services": [{"status": "completed", "required_quantity": 1}],
+    })
+    assert inconsistent_complete["code"] == "supplier_piece_already_received"
+    assert inconsistent_complete["session_reference"] == "SR-previous"
+    assert piece_scan_blocker({
+        "status": PIECE_STATUS_IN_PROGRESS,
+        "supplier_receiving_history": [previous_receipt],
+        "services": [{"status": "pending", "required_quantity": 1}],
+    }) is None
     assert piece_scan_blocker(
         {
             "status": PIECE_STATUS_CANCELLED,

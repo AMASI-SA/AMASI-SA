@@ -1351,7 +1351,15 @@ def make_fulfillment_v2_router(
                 user_id=context["merchant_id"],
                 workflow=workflow,
             )
-            if row and _is_current_completed_salla_status(row):
+            workflow_salla_status = _text(workflow.get("salla_order_status"))
+            if (
+                row
+                and _is_current_completed_salla_status(row)
+                and (
+                    not workflow_salla_status
+                    or _is_current_completed_salla_status({"order_status": workflow_salla_status})
+                )
+            ):
                 items.append(row)
             if len(items) >= limit:
                 break

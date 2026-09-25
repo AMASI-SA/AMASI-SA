@@ -835,13 +835,23 @@ async def _supplier_invoice_for_actor(
 def piece_scan_blocker(piece: dict[str, Any]) -> dict[str, Any] | None:
     """Return an explicit fail-closed reason for a non-receivable piece."""
     status = _text(piece.get("status")) or PIECE_STATUS_ASSIGNED
-    if status == PIECE_STATUS_RECEIVED or piece.get("received_at"):
+    history = list(piece.get("supplier_receiving_history") or [])
+    services = [row for row in piece.get("services") or [] if isinstance(row, dict)]
+    # A legacy/inconsistent status must never reopen a fully invoiced piece.
+    # Partial receipts remain eligible only while a service is unfinished.
+    fully_received_in_history = bool(history) and status not in {
+        PIECE_STATUS_BLOCKED, PIECE_STATUS_CANCELLED,
+    } and not any(
+        not _service_is_complete(service) for service in services
+    )
+    if status == PIECE_STATUS_RECEIVED or piece.get("received_at") or fully_received_in_history:
+        last_receipt = history[-1] if history and isinstance(history[-1], dict) else {}
         return {
             "code": "supplier_piece_already_received",
             "message": "تم استلام هذه القطعة سابقًا؛ لم تُسجّل مرة ثانية.",
-            "received_at": piece.get("received_at"),
-            "received_by_name": piece.get("received_by_name"),
-            "session_reference": piece.get("supplier_receiving_reference"),
+            "received_at": piece.get("received_at") or last_receipt.get("received_at"),
+            "received_by_name": piece.get("received_by_name") or last_receipt.get("received_by_name"),
+            "session_reference": piece.get("supplier_receiving_reference") or last_receipt.get("session_reference"),
         }
     if status in ELIGIBLE_PIECE_STATUSES:
         return None
