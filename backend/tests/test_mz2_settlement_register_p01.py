@@ -46,7 +46,7 @@ def test_register_item_links_posted_settlement_to_ledger_detail():
         "ledger_txn_group_id": "txn-group-1",
         "source_snapshot": {"filename": "tabby.xlsx"},
     })
-    assert item["journal_href"] == "/transactions?txn_group_id=txn-group-1"
+    assert item["journal_href"] == "/integrations-v2?workspace=financial&page=journals-reports"
     assert item["reported_net"] == 120.5
     assert item["source_filename"] == "tabby.xlsx"
 
