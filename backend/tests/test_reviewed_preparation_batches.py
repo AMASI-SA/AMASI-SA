@@ -768,6 +768,26 @@ def test_reference_card_uses_full_labels_and_confirmed_field_order():
     assert rows[-1] == ("للتوصيل", "2 - iMile")
 
 
+def test_bag_order_288457267_prints_all_customer_choices():
+    fields = [
+        {"name": "اختر", "value": "اسود"},
+        {"name": "هل ترغب بإضافة كرت اهداء برسالة مخصصة؟", "value": "نعم"},
+        {"name": "الكلام على الكرت", "value": "لانك تستحقين لولو"},
+    ]
+    pdf = render_preparation_batch_pdf({
+        "id": "bag-print", "lines": [{
+            "order_number": "288457267", "order_item_id": "bag-line",
+            "order_date": "2026-09-24", "unit_index": 1,
+            "product_name": "شنطة أنيقة شيك ليدي", "file_spec_fields": fields,
+            "image_b64": __import__("base64").b64encode(_image_bytes(7)).decode("ascii"),
+        }],
+    })
+    with fitz.open(stream=pdf, filetype="pdf") as document:
+        printed = unicodedata.normalize("NFKC", document[0].get_text())
+        for text in ("اختر", "اسود", "هل ترغب بإضافة كرت", "نعم", "الكلام على الكرت", "لانك تستحقين لولو"):
+            assert text in printed.replace("\n", " ")
+
+
 def test_salla_spec_order_and_full_values_survive_batch_snapshot():
     fields = [
         {"spec_key": "اختر مقاس اللوحه", "name": "اختر مقاس اللوحه", "value": "30 طول * 50 عرض (SAR 214.92)"},
