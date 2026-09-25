@@ -166,7 +166,7 @@ def build_accounting_module_status(
             {"page": "inventory-purchases", "status": "partial_existing_workflows"},
             {"page": "financial-movements", "status": "partial_existing_workflows"},
             {"page": "payroll-obligations", "status": "partial_existing_workflows"},
-            {"page": "opening-balances", "status": "blocked_not_implemented"},
+            {"page": "opening-balances", "status": "implemented"},
             {"page": "journals-reports", "status": "partial_existing_workflows"},
         ],
     }
