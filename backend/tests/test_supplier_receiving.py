@@ -6,6 +6,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi import HTTPException
 
+import supplier_receiving_routes as supplier_receiving_routes_module
+
 from preparation_piece_barcode import (
     BARCODE_PREFIX,
     parse_preparation_piece_barcode,
@@ -57,6 +59,59 @@ def _identity():
         "unit_index": 2,
     }
 
+
+
+@pytest.mark.asyncio
+async def test_mobile_merchant_principal_restores_real_employee_draft_identity(monkeypatch):
+    async def fake_base_context(_db, _user):
+        return {
+            "actor_id": "owner-1",
+            "merchant_id": "owner-1",
+            "is_owner": True,
+            "permissions": {"owner.permission"},
+            "warehouse_ids": None,
+            "workplace_warehouse_id": None,
+            "responsibilities": set(),
+        }
+
+    monkeypatch.setattr(
+        supplier_receiving_routes_module,
+        "_base_actor_context",
+        fake_base_context,
+    )
+    mobile_principal = {
+        "id": "owner-1",
+        "name": "مالك المتجر",
+        "role": "owner",
+        "_session_client": supplier_receiving_routes_module.MOBILE_APP_CLIENT,
+        "_mobile_owner_id": "owner-1",
+        "_mobile_actor_id": "employee-7",
+        "_mobile_actor_name": "موظف الاستلام",
+        "_mobile_actor_email": "receiver@example.test",
+        "_mobile_app_permissions": [
+            supplier_receiving_routes_module.MOBILE_MY_PRODUCTS_PAGE_PERMISSION,
+        ],
+    }
+
+    context = await supplier_receiving_routes_module._actor_context(
+        None,
+        mobile_principal,
+    )
+
+    assert context["merchant_id"] == "owner-1"
+    assert context["actor_id"] == "employee-7"
+    assert context["is_owner"] is False
+    assert context["mobile_actor_identity_restored"] is True
+    assert supplier_receiving_routes_module.RECEIVE_PERMISSION in context["permissions"]
+    assert "owner.permission" not in context["permissions"]
+    assert (
+        supplier_receiving_routes_module.EDIT_PRODUCT_PRICE_PERMISSION
+        not in context["permissions"]
+    )
+    assert (
+        supplier_receiving_routes_module._actor_name(mobile_principal)
+        == "موظف الاستلام"
+    )
 
 def test_piece_barcode_round_trips_the_materialized_piece_identity():
     payload = preparation_piece_barcode(**_identity())
