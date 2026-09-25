@@ -115,18 +115,34 @@ RECEIPT_PIECE_FIELDS = (
 
 
 async def _actor_context(db: Any, user: dict[str, Any]) -> dict[str, Any]:
-    """Resolve Mezan access plus native-only grants for this mobile workflow.
+    """Resolve the real receiving employee behind a native merchant principal.
 
-    Native grants are accepted only from a signed ``amasi_mobile`` JWT. They
-    are translated locally for this workflow and never enter the account's
-    Mezan effective-permission set, so the same employee remains at zero in the
-    browser while the selected app page and actions work normally.
+    mobile_app_request_user scopes native employee requests to the merchant owner
+    for tenant-safe reads while preserving the authenticated employee in the
+    server-owned _mobile_actor_* fields. Supplier receiving is employee-owned
+    state: an open draft, invoice attribution and custody transfer must use the
+    real employee id, never the temporary merchant principal. Browser and genuine
+    owner sessions keep their normal identity.
     """
     context = await _base_actor_context(db, user)
     if user.get("_session_client") != MOBILE_APP_CLIENT:
         return context
-    mobile_access = await mobile_app_access_for_user(db, user)
-    granted = set(mobile_access.get("permissions") or [])
+
+    mobile_actor_id = _text(user.get("_mobile_actor_id"))
+    if mobile_actor_id:
+        # Permissions were resolved from the authenticated employee before the
+        # request was rewritten to the merchant principal. Re-resolving from the
+        # owner here would silently grant every employee owner permissions.
+        granted = {
+            _text(value)
+            for value in (user.get("_mobile_app_permissions") or [])
+            if _text(value)
+        }
+    else:
+        # A genuine owner mobile session is not rewritten and has no mobile actor.
+        mobile_access = await mobile_app_access_for_user(db, user)
+        granted = set(mobile_access.get("permissions") or [])
+
     translated: set[str] = set()
     if MOBILE_MY_PRODUCTS_PAGE_PERMISSION in granted:
         translated.add(RECEIVE_PERMISSION)
@@ -136,12 +152,31 @@ async def _actor_context(db: Any, user: dict[str, Any]) -> dict[str, Any]:
         translated.add(EDIT_SERVICE_PRICE_PERMISSION)
     if MOBILE_ADD_PRODUCT_SERVICE_PERMISSION in granted:
         translated.add(ADD_PRODUCT_SERVICE_PERMISSION)
+
+    if not mobile_actor_id:
+        return {
+            **context,
+            "permissions": sorted(set(context.get("permissions") or []) | translated),
+            "mobile_app_permission_translation": sorted(translated),
+        }
+
+    merchant_id = _text(user.get("_mobile_owner_id")) or _text(context.get("merchant_id"))
+    if not merchant_id:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "employee_store_not_linked"},
+        )
     return {
         **context,
-        "permissions": sorted(set(context.get("permissions") or []) | translated),
+        "actor_id": mobile_actor_id,
+        "merchant_id": merchant_id,
+        "is_owner": False,
+        # Native supplier-receiving actions use only the authenticated employee
+        # app grants. Do not inherit the rewritten owner full permission set.
+        "permissions": sorted(translated),
         "mobile_app_permission_translation": sorted(translated),
+        "mobile_actor_identity_restored": True,
     }
-
 
 class SupplierReceivingSessionCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -208,8 +243,12 @@ def _text(value: Any) -> str:
 
 
 def _actor_name(user: dict[str, Any]) -> str:
-    return _text(user.get("name") or user.get("email"))
-
+    return _text(
+        user.get("_mobile_actor_name")
+        or user.get("_mobile_actor_email")
+        or user.get("name")
+        or user.get("email")
+    )
 
 def _share_evidence_signature_matches(content_type: str, content: bytes) -> bool:
     if content_type == "image/jpeg":
