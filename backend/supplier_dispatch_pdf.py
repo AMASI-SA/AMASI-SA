@@ -14,7 +14,11 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 
-from order_review_routes import _merchant_user_id, _text
+from order_engine.repository import MongoOrderRepository
+from order_engine.service import OrderNotFoundError, get_order
+from order_item_engine.mapper import map_order_item_identities
+from order_review_routes import WORKFLOWS, _merchant_user_id, _text
+from order_review_spec_replacements import canonical_spec_key, supplier_file_spec_fields
 from preparation_pdf_amasi_a4_layout import generate_amasi_product_file_pdf
 from preparation_supplier_dispatch import (
     DISPATCHES,
@@ -148,6 +152,44 @@ def _assert_saved_customer_options_preserved(
         )
 
 
+def _assert_order_customer_options_preserved(
+    source: dict[str, Any],
+    identity: Any,
+    state: dict[str, Any],
+    *,
+    piece: dict[str, Any],
+) -> None:
+    """Check the actual order line, not just the PDF's own frozen snapshot."""
+    expected = {
+        canonical_spec_key(field.get("spec_key") or field.get("name")): _text(field.get("value"))
+        for field in supplier_file_spec_fields(identity, state)
+        if _text(field.get("value"))
+    }
+    saved = {
+        canonical_spec_key(field.get("spec_key") or field.get("name")): _text(field.get("value"))
+        for field in source.get("file_spec_fields") or []
+        if isinstance(field, dict) and _text(field.get("value"))
+    }
+    if expected != saved:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "supplier_dispatch_customer_options_source_mismatch",
+                "message": (
+                    "خيارات العميل في ملف المورد لا تطابق الطلب. "
+                    "أصلح خيارات ملف التجهيز قبل الطباعة."
+                ),
+                "order_number": _text(source.get("order_number")),
+                "order_item_id": _text(source.get("order_item_id")),
+                "piece_id": _text(piece.get("piece_id")),
+                "mismatched_spec_keys": sorted(
+                    key for key in expected.keys() | saved.keys()
+                    if expected.get(key) != saved.get(key)
+                ),
+            },
+        )
+
+
 async def build_supplier_dispatch_pdf(db: Any, *, user_id: str, dispatch: dict[str, Any]) -> bytes:
     piece_ids = [_text(value) for value in dispatch.get("piece_ids") or [] if _text(value)]
     if not piece_ids:
@@ -170,6 +212,8 @@ async def build_supplier_dispatch_pdf(db: Any, *, user_id: str, dispatch: dict[s
     by_batch = {_text(row.get("id")): row for row in batches}
 
     lines = []
+    orders: dict[str, dict[str, Any]] = {}
+    repository = MongoOrderRepository(db)
     for piece in ordered:
         batch = by_batch.get(_text(piece.get("batch_id")))
         if not batch:
@@ -177,6 +221,40 @@ async def build_supplier_dispatch_pdf(db: Any, *, user_id: str, dispatch: dict[s
         source = _line_match(piece, list(batch.get("lines") or []))
         if not source:
             raise HTTPException(status_code=409, detail={"code": "supplier_dispatch_line_snapshot_missing"})
+        order_number = _text(source.get("order_number"))
+        if order_number not in orders:
+            try:
+                order = await get_order(repository, user_id=user_id, order_number=order_number)
+            except OrderNotFoundError as exc:
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "supplier_dispatch_order_options_unverifiable"},
+                ) from exc
+            workflow = await db[WORKFLOWS].find_one(
+                {"user_id": user_id, "order_number": order_number}, {"_id": 0},
+            ) or {}
+            orders[order_number] = {
+                "identities": {
+                    _text(identity.order_item_id): identity
+                    for identity in map_order_item_identities(order)
+                },
+                "states": {
+                    _text(row.get("order_item_id")): row
+                    for row in workflow.get("items") or []
+                    if isinstance(row, dict)
+                },
+            }
+        identity = orders[order_number]["identities"].get(_text(source.get("order_item_id")))
+        if identity is None:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "supplier_dispatch_order_options_unverifiable"},
+            )
+        _assert_order_customer_options_preserved(
+            source, identity,
+            orders[order_number]["states"].get(_text(source.get("order_item_id")), {}),
+            piece=piece,
+        )
         unit_row = deepcopy(source)
         unit_row["unit_index"] = int(piece.get("unit_index") or 1)
         unit_row["unit_indices"] = [unit_row["unit_index"]]

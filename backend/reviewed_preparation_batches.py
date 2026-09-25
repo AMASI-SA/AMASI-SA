@@ -740,6 +740,15 @@ def repair_batch_line_customer_options(
         state = states.get(_text(getattr(identity, "order_item_id", None)), {})
         spec_fields = supplier_file_spec_fields(identity, state)
         if not spec_fields:
+            # A previously captured customer choice cannot disappear merely
+            # because a later Salla/order projection is sparse. A genuinely
+            # optionless line has no choices in either source.
+            if (
+                row.get("file_spec_fields")
+                or row.get("product_options")
+                or any(row.get(key) for key in ("customer_name", "size", "color"))
+            ):
+                unresolved.append(f"{order_number}:{order_item_id}")
             repaired.append(row)
             continue
         card_fields = _card_field_projection(
@@ -1623,7 +1632,9 @@ def make_reviewed_preparation_batches_router(
                 db,
                 user_id=user_id,
                 lines=batch_lines,
-                refresh_only_missing=True,
+                # A partially populated snapshot is just as unsafe as an
+                # empty one: refresh every selected order before freezing it.
+                refresh_only_missing=False,
             )
             if option_repair["refresh_failures"] or option_repair["unresolved"]:
                 raise HTTPException(
@@ -1801,6 +1812,16 @@ def make_reviewed_preparation_batches_router(
         repaired_count = repair_result["repaired_line_count"]
         unresolved = repair_result["unresolved"]
         refresh_failures = repair_result["refresh_failures"]
+        if unresolved or refresh_failures:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "preparation_customer_options_verification_failed",
+                    "message": "تعذّر التحقق من خيارات بعض القطع؛ لم يُستبدل الملف القديم.",
+                    "unresolved": unresolved,
+                    "refresh_failures": refresh_failures,
+                },
+            )
         repaired_batch = {**batch, "lines": repaired_lines}
         pdf_bytes = render_preparation_batch_pdf(repaired_batch)
         now = _now()

@@ -1219,6 +1219,66 @@ async def test_auto_option_repair_force_refreshes_missing_line_before_pdf(monkey
 
 
 @pytest.mark.asyncio
+async def test_preparation_file_rechecks_partially_saved_bag_options(monkeypatch):
+    identity = SimpleNamespace(
+        order_item_id="bag-line", line_index=0, sku="AMS13152",
+        options=[
+            SimpleNamespace(name="اختر", value="اسود"),
+            SimpleNamespace(name="هل ترغب بإضافة كرت اهداء برسالة مخصصة؟", value="نعم"),
+            SimpleNamespace(name="الكلام على الكرت", value="لانك تستحقين لولو"),
+        ],
+        custom_fields=[], color=None, size=None, material=None,
+    )
+    calls = []
+
+    async def refresh(_db, user_id, order_number, **kwargs):
+        calls.append(order_number)
+        return {"ok": True, "found": True}
+
+    async def canonical_order(*_args, **_kwargs):
+        return SimpleNamespace(order_number="288457267")
+
+    monkeypatch.setattr(batch_module, "refresh_order_from_salla", refresh)
+    monkeypatch.setattr(batch_module, "MongoOrderRepository", lambda _db: object())
+    monkeypatch.setattr(batch_module, "get_order", canonical_order)
+    monkeypatch.setattr(batch_module, "map_order_item_identities", lambda _order: [identity])
+
+    result = await batch_module.refresh_and_repair_batch_customer_options(
+        _DB(None, []), user_id="owner-1",
+        lines=[{
+            "order_number": "288457267", "order_item_id": "bag-line",
+            "line_index": 0, "sku": "AMS13152",
+            "file_spec_fields": [{"spec_key": "اختر", "name": "اختر", "value": "اسود"}],
+        }],
+        refresh_only_missing=False,
+    )
+    assert calls == ["288457267"]
+    assert result["unresolved"] == result["refresh_failures"] == []
+    assert [(field["name"], field["value"]) for field in result["lines"][0]["file_spec_fields"]] == [
+        ("اختر", "اسود"),
+        ("هل ترغب بإضافة كرت اهداء برسالة مخصصة؟", "نعم"),
+        ("الكلام على الكرت", "لانك تستحقين لولو"),
+    ]
+
+
+def test_preparation_file_does_not_silently_erase_known_customer_choices():
+    identity = SimpleNamespace(
+        order_item_id="bag-line", line_index=0, sku="AMS13152",
+        options=[], options_normalized={}, options_raw=[], custom_fields=[],
+        color=None, size=None, material=None,
+    )
+    _lines, _count, unresolved = repair_batch_line_customer_options(
+        [{
+            "order_number": "288457267", "order_item_id": "bag-line",
+            "file_spec_fields": [{"spec_key": "اختر", "name": "اختر", "value": "اسود"}],
+        }],
+        identities_by_order={"288457267": [identity]},
+        workflows_by_order={"288457267": {"items": []}},
+    )
+    assert unresolved == ["288457267:bag-line"]
+
+
+@pytest.mark.asyncio
 async def test_auto_option_repair_skips_salla_when_snapshot_is_complete(monkeypatch):
     async def unexpected_refresh(*_args, **_kwargs):
         raise AssertionError("complete option snapshots must not refresh Salla")

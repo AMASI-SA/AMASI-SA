@@ -5,9 +5,23 @@ import inspect
 from pathlib import Path
 
 import order_review_routes
+from fulfillment_v2_routes import _is_current_completed_salla_status
 
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_completed_label_queue_requires_current_salla_completed_status():
+    assert _is_current_completed_salla_status({
+        "order_status": "completed", "order_status_native": "تم التنفيذ",
+    })
+    assert not _is_current_completed_salla_status({
+        "order_status": "cancelled", "order_status_native": "ملغي",
+    })
+    # The Arabic status is authoritative when an older slug is still cached.
+    assert not _is_current_completed_salla_status({
+        "order_status": "completed", "order_status_native": "ملغي",
+    })
 
 
 def test_pending_review_queue_schedules_safe_incremental_salla_ingestion():

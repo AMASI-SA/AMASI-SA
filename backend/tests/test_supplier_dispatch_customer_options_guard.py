@@ -7,6 +7,7 @@ import pytest
 from fastapi import HTTPException
 
 from supplier_dispatch_pdf import (
+    _assert_order_customer_options_preserved,
     _assert_saved_customer_options_preserved,
     build_supplier_dispatch_pdf,
 )
@@ -65,15 +66,79 @@ def test_supplier_guard_blocks_partial_supplier_pdf():
     assert "note" in exc.value.detail["missing_fields"]
 
 
+def test_supplier_guard_rejects_blank_snapshot_for_bag_with_three_order_choices():
+    identity = SimpleNamespace(
+        options=[
+            SimpleNamespace(name="اختر", value="اسود"),
+            SimpleNamespace(name="هل ترغب بإضافة كرت اهداء برسالة مخصصة؟", value="نعم"),
+            SimpleNamespace(name="الكلام على الكرت", value="لانك تستحقين لولو"),
+        ],
+        options_raw=[], options_normalized={}, custom_fields=[],
+        color=None, size=None, material=None,
+    )
+    source = {
+        "order_number": "288457267", "order_item_id": "item-1", "file_spec_fields": [],
+    }
+    with pytest.raises(HTTPException) as exc:
+        _assert_order_customer_options_preserved(source, identity, {}, piece=_piece())
+    assert exc.value.status_code == 409
+    assert len(exc.value.detail["mismatched_spec_keys"]) == 3
+
+
+def test_supplier_guard_accepts_genuinely_optionless_order_line():
+    identity = SimpleNamespace(
+        options=[], options_raw=[], options_normalized={}, custom_fields=[],
+        color=None, size=None, material=None,
+    )
+    _assert_order_customer_options_preserved(
+        {"order_number": "100", "order_item_id": "item-1", "file_spec_fields": []},
+        identity, {}, piece=_piece(),
+    )
+
+
+def test_supplier_guard_accepts_all_three_saved_bag_choices():
+    options = [
+        SimpleNamespace(name="اختر", value="اسود"),
+        SimpleNamespace(name="هل ترغب بإضافة كرت اهداء برسالة مخصصة؟", value="نعم"),
+        SimpleNamespace(name="الكلام على الكرت", value="لانك تستحقين لولو"),
+    ]
+    identity = SimpleNamespace(
+        options=options, options_raw=[], options_normalized={}, custom_fields=[],
+        color=None, size=None, material=None,
+    )
+    _assert_order_customer_options_preserved(
+        {"order_number": "288457267", "order_item_id": "item-1", "file_spec_fields": [
+            {"name": option.name, "value": option.value} for option in options
+        ]},
+        identity, {}, piece=_piece(),
+    )
+
+
 @pytest.mark.asyncio
-async def test_supplier_pdf_prints_all_saved_fields_in_salla_order_without_ellipsis():
+async def test_supplier_pdf_prints_all_saved_fields_in_salla_order_without_ellipsis(monkeypatch):
     fields = [
         {"name": "العبارة خارج الفنجان", "value": "Samaher"},
         {"name": "العبارة داخل الفنجان على الجانب", "value":
          "ألا ياغزال في عيونك سهوم الموت وفي مبسمك جنة وفي شوفتك راحه"},
         {"name": "العبارة داخل الفنجان في الأسفل", "value": "من بعدك ياغزال"},
     ]
-    db = {PIECES: MagicMock(), BATCHES: MagicMock()}
+    import supplier_dispatch_pdf as supplier_pdf_module
+    monkeypatch.setattr(supplier_pdf_module, "MongoOrderRepository", lambda _db: object())
+    async def canonical_order(*_args, **_kwargs):
+        return SimpleNamespace(order_number="288180853")
+    monkeypatch.setattr(supplier_pdf_module, "get_order", canonical_order)
+    monkeypatch.setattr(supplier_pdf_module, "map_order_item_identities", lambda _order: [
+        SimpleNamespace(
+            order_item_id="item-one", options=[
+                SimpleNamespace(name=field["name"], value=field["value"])
+                for field in fields
+            ], options_raw=[], options_normalized={}, custom_fields=[],
+            color=None, size=None, material=None,
+        ),
+    ])
+    from order_review_routes import WORKFLOWS
+    db = {PIECES: MagicMock(), BATCHES: MagicMock(), WORKFLOWS: MagicMock()}
+    db[WORKFLOWS].find_one = AsyncMock(return_value={"items": []})
     db[PIECES].find.return_value.to_list = AsyncMock(return_value=[{
         "user_id": "merchant", "piece_id": "piece-one", "batch_id": "batch-one",
         "order_item_id": "item-one", "unit_index": 1,
