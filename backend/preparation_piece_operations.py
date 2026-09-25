@@ -1837,11 +1837,60 @@ def assembly_piece_blocker(piece: dict[str, Any]) -> str | None:
     """Return why a received piece cannot be completed in assembly."""
     if _text(piece.get("assembly_status")) == "ready":
         return "assembly_piece_already_ready"
+    supplier_status = _text(piece.get("supplier_dispatch_status"))
+    if supplier_status and supplier_status != "received":
+        return "assembly_piece_supplier_receipt_required"
     if _text(piece.get("status")) != PIECE_STATUS_READY_FOR_ASSEMBLY:
         return "assembly_piece_preparation_receipt_required"
     if piece.get("active_hold_id"):
         return "assembly_piece_stopped"
     return None
+
+
+def _assembly_piece_route(piece: dict[str, Any]) -> tuple[str, list[dict[str, Any]]]:
+    """Describe recorded custody milestones without inferring missing receipts."""
+    steps: list[dict[str, Any]] = []
+    if piece.get("virtual_kind"):
+        label = "جاهز من التجميع والعنونة" if _text(piece.get("assembly_status")) == "ready" else "في التجميع والعنونة"
+        return label, [{"label": label, "actor_name": None, "at": piece.get("assembly_ready_at")}]
+    supplier_status = _text(piece.get("supplier_dispatch_status"))
+    supplier_name = _text(piece.get("supplier_name"))
+    employee_name = _text(piece.get("responsible_employee_name"))
+    if supplier_status or piece.get("sent_to_supplier_at"):
+        supplier_received = bool(piece.get("received_at") or supplier_status == "received")
+        supplier_label = (
+            "تم الاستلام من المورد" if supplier_received
+            else "جاهز لدى المورد" if supplier_status == "ready"
+            else "لدى المورد"
+        )
+        steps.append({
+            "label": supplier_label,
+            "actor_name": supplier_name or None,
+            "at": piece.get("received_at") if supplier_received else piece.get("sent_to_supplier_at"),
+        })
+    if employee_name and employee_name != "—" and (
+        not steps or supplier_status == "received" or piece.get("received_at")
+    ):
+        steps.append({
+            "label": "لدى موظف التجهيز",
+            "actor_name": employee_name,
+            "at": piece.get("reassigned_at") or piece.get("started_at") or piece.get("assigned_at"),
+        })
+    if piece.get("preparation_received_at") or _piece_has_completed_preparation_receipt(piece):
+        steps.append({
+            "label": "تم الاستلام من موظف التجهيز",
+            "actor_name": _text(piece.get("preparation_received_by_name")) or None,
+            "at": piece.get("preparation_received_at"),
+        })
+    if _text(piece.get("assembly_status")) == "ready":
+        steps.append({
+            "label": "جاهز من التجميع والعنونة",
+            "actor_name": _text(piece.get("assembly_ready_by_name")) or None,
+            "at": piece.get("assembly_ready_at"),
+        })
+    if piece.get("active_hold_id") or _text(piece.get("status")) == PIECE_STATUS_BLOCKED:
+        return "المنتج متوقف", steps
+    return (steps[-1]["label"] if steps else "بانتظار التجهيز"), steps
 
 
 def _assembly_piece_public(
@@ -1852,6 +1901,7 @@ def _assembly_piece_public(
     piece_id = _text(piece.get("piece_id") or piece.get("id"))
     assembly_ready = _text(piece.get("assembly_status")) == "ready"
     blocker = assembly_piece_blocker(piece)
+    stage_label, route_steps = _assembly_piece_route(piece)
     services = []
     for service in piece.get("services") or []:
         if not isinstance(service, dict):
@@ -1891,6 +1941,8 @@ def _assembly_piece_public(
         ),
         "can_mark_ready": blocker is None,
         "assembly_blocker_code": blocker,
+        "current_stage_label": stage_label,
+        "route_steps": route_steps,
         "search_match": bool(
             matched_piece_id and piece_id == matched_piece_id
         ),
@@ -2069,22 +2121,9 @@ async def _assembly_search(
         },
         {"_id": 0, "image_b64": 0},
     ).to_list(1000)
-    standard_stage = bool(workflow and (
-        _text(workflow.get("stage")) == "ready_to_ship"
-        or (
-            _text(workflow.get("stage")) in {"completed", "delivering", "delivered"}
-            and _text(workflow.get("assembly_status")) == "completed"
-        )
-    ))
-    partial_receipt = bool(workflow and (
-        _text(workflow.get("stage")) == "in_progress"
-        and any(_piece_has_completed_preparation_receipt(piece) for piece in pieces)
-    ))
-    if not (standard_stage or partial_receipt):
-        raise HTTPException(
-            status_code=409,
-            detail={"code": "assembly_order_not_ready"},
-        )
+    # Searching is observational: piece custody, even at the supplier, must
+    # remain visible. The write endpoint still enforces each piece's receipt.
+    workflow = workflow or {}
     pieces.extend(
         _workflow_assembly_pieces(
             workflow,
@@ -2103,6 +2142,18 @@ async def _assembly_search(
         )
         for piece in pieces
     ]
+    can_act_in_stage = (
+        _text(workflow.get("stage")) in {"in_progress", "ready_to_ship"}
+        or (
+            _text(workflow.get("stage")) == "completed"
+            and _text(workflow.get("assembly_status")) == "completed"
+        )
+    )
+    if not can_act_in_stage:
+        for row in rows:
+            if row["can_mark_ready"]:
+                row["can_mark_ready"] = False
+                row["assembly_blocker_code"] = "assembly_order_not_ready"
     rows.sort(key=lambda row: (
         0 if row["search_match"] else 1,
         0 if not row["assembly_ready"] else 1,

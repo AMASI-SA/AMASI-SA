@@ -1,4 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
+import { act } from "react";
+import { createRoot } from "react-dom/client";
 
 jest.mock("react-router-dom", () => ({
     Link: ({ children, to, ...props }) => <a href={to} {...props}>{children}</a>,
@@ -90,6 +92,53 @@ test("a ready product no longer exposes a second ready action", () => {
 
     expect(markup).toContain("تم — جاهز");
     expect(markup).not.toContain('data-testid="mark-assembly-piece-ready"');
+});
+
+test("an unreceived supplier product remains visible with custody trace and a frozen ready button", () => {
+    const markup = renderToStaticMarkup(
+        <AssemblyProductCard
+            piece={{
+                piece_id: "pending-1",
+                product_name: "لوحة جدارية",
+                current_stage_label: "لدى المورد",
+                route_steps: [{ label: "لدى المورد", actor_name: "مورد الرياض" }],
+                can_mark_ready: false,
+                assembly_blocker_code: "assembly_piece_supplier_receipt_required",
+            }}
+            busy={false}
+            onReady={() => {}}
+        />,
+    );
+    expect(markup).toContain("لوحة جدارية");
+    expect(markup).toContain("المرحلة الحالية: لدى المورد");
+    expect(markup).toContain("مسار تتبع المنتج");
+    expect(markup).toContain("مورد الرياض");
+    expect(markup).toContain("استلم المنتج من المورد أولًا، ثم من موظف التجهيز");
+    expect(markup).toContain('data-testid="mark-assembly-piece-ready-frozen"');
+    expect(markup).toContain('aria-disabled="true"');
+    expect(markup).not.toContain('data-testid="mark-assembly-piece-ready"');
+});
+
+test("pressing frozen ready reports the unfinished product without submitting readiness", () => {
+    const previousActEnvironment = globalThis.IS_REACT_ACT_ENVIRONMENT;
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const onBlocked = jest.fn();
+    const onReady = jest.fn();
+    const piece = {
+        piece_id: "pending-1",
+        product_name: "لوحة جدارية",
+        can_mark_ready: false,
+        assembly_blocker_code: "assembly_piece_supplier_receipt_required",
+    };
+    act(() => root.render(<AssemblyProductCard piece={piece} busy={false} onReady={onReady} onBlocked={onBlocked} />));
+    act(() => container.querySelector('[data-testid="mark-assembly-piece-ready-frozen"]').click());
+    expect(container.querySelector('[role="alert"]').textContent).toContain("المنتج لم يجهز بعد");
+    expect(onBlocked).toHaveBeenCalledWith(piece);
+    expect(onReady).not.toHaveBeenCalled();
+    act(() => root.unmount());
+    globalThis.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
 });
 
 test("store courier assembly card prints then confirms the attached QR", () => {

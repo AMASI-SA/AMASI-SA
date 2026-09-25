@@ -31,6 +31,7 @@ function errorMessage(error, fallback) {
         assembly_order_not_ready: "هذا الطلب غير جاهز للتجميع والعنونة بعد.",
         assembly_order_products_not_found: "لم نجد منتجات هذا الطلب داخل التجميع والعنونة.",
         assembly_piece_preparation_receipt_required: "استلم المنتج من موظف التجهيز أولًا.",
+        assembly_piece_supplier_receipt_required: "المنتج لم يجهز بعد. استلمه من المورد ثم من موظف التجهيز.",
         assembly_piece_stopped: "هذا المنتج متوقف ولا يمكن إكماله.",
         assembly_piece_ready_conflict: "تغيرت حالة المنتج. افتح الطلب مرة أخرى.",
     };

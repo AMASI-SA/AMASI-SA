@@ -679,6 +679,76 @@ async def test_received_piece_can_enter_assembly_before_other_order_pieces():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("scan_piece", [False, True])
+async def test_assembly_search_shows_unreceived_pieces_with_frozen_actions(scan_piece):
+    piece_id = "0123456789abcdef0123456789abcdef"
+    waiting = {
+        "piece_id": piece_id,
+        "order_number": "288407431",
+        "status": PIECE_STATUS_IN_PROGRESS,
+        "supplier_dispatch_status": "sent",
+        "supplier_name": "مورد الرياض",
+        "sent_to_supplier_at": "2026-09-24T10:00:00Z",
+        "responsible_employee_name": "محمد",
+    }
+    workflows = _AssemblySearchCollection(row={
+        "order_number": "288407431", "stage": "in_progress",
+    })
+    pieces = _AssemblySearchCollection(row=waiting, rows=[waiting])
+
+    result = await _assembly_search(
+        {WORKFLOWS: workflows, PIECES: pieces},
+        user_id="merchant-1",
+        query=piece_id.upper() if scan_piece else "288407431",
+    )
+
+    assert result["summary"] == {
+        "total": 1, "ready": 0, "remaining": 1, "all_ready": False,
+    }
+    card = result["pieces"][0]
+    assert card["search_match"] is scan_piece
+    assert card["can_mark_ready"] is False
+    assert card["assembly_blocker_code"] == "assembly_piece_supplier_receipt_required"
+    assert card["current_stage_label"] == "لدى المورد"
+    assert card["route_steps"][-1]["label"] == "لدى المورد"
+
+
+def test_assembly_route_advances_only_after_recorded_supplier_and_preparation_receipts():
+    piece = {
+        "piece_id": "piece-1", "status": PIECE_STATUS_IN_PROGRESS,
+        "supplier_dispatch_status": "received", "supplier_name": "مورد الرياض",
+        "received_at": "2026-09-24T10:00:00Z",
+        "responsible_employee_name": "محمد",
+    }
+    with_employee = _assembly_piece_public(piece)
+    assert with_employee["current_stage_label"] == "لدى موظف التجهيز"
+    assert [step["label"] for step in with_employee["route_steps"]] == [
+        "تم الاستلام من المورد", "لدى موظف التجهيز",
+    ]
+    assert with_employee["assembly_blocker_code"] == (
+        "assembly_piece_preparation_receipt_required"
+    )
+
+    received = _assembly_piece_public({
+        **piece, "status": PIECE_STATUS_READY_FOR_ASSEMBLY,
+        "preparation_received_at": "2026-09-24T11:00:00Z",
+        "preparation_received_by_name": "فاطمة",
+    })
+    assert received["can_mark_ready"] is True
+    assert received["current_stage_label"] == "تم الاستلام من موظف التجهيز"
+    assert received["route_steps"][-1]["actor_name"] == "فاطمة"
+
+    inconsistent = _assembly_piece_public({
+        **piece, "status": PIECE_STATUS_READY_FOR_ASSEMBLY,
+        "supplier_dispatch_status": "sent",
+    })
+    assert inconsistent["can_mark_ready"] is False
+    assert inconsistent["assembly_blocker_code"] == (
+        "assembly_piece_supplier_receipt_required"
+    )
+
+
+@pytest.mark.asyncio
 async def test_partial_order_can_mark_received_piece_ready(monkeypatch):
     from unittest.mock import AsyncMock, MagicMock
     import preparation_piece_operations as operations
