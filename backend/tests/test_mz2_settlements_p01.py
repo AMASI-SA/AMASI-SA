@@ -130,27 +130,55 @@ def test_statement_reference_period_and_provider_aliases_are_stable():
     assert key1 == key2
 
 
+# These focused tests cover the service body; real transaction/crash behavior
+# is exercised by test_mz2_atomic_recovery.py on a replica set.
 class _Collection:
-    def __init__(self, document=None):
+    def __init__(self, document=None, rows=()):
         self.document = document
+        self.rows = list(rows)
 
     async def find_one(self, *_args, **_kwargs):
         return self.document
 
+    def find(self, query):
+        return _Cursor([
+            row for row in self.rows
+            if all(row.get(key) == value for key, value in query.items())
+        ])
+
+
+class _Cursor:
+    def __init__(self, rows):
+        self.rows = rows
+
+    async def to_list(self, length):
+        return self.rows[:length]
+
 
 class _Db:
-    def __init__(self, *, bank=None, existing_ledger=None):
+    def __init__(self, *, bank=None, existing_ledger=None, refund_links=()):
         self.accounts = _Collection(bank)
         self.general_ledger = _Collection(existing_ledger)
+        self.settlement_entries = _Collection(rows=[{
+            "id": "refund-row-1", "user_id": "owner-1", "file_id": "file-1",
+            "order_number": "synthetic-order-1",
+            "actual_refund_amount": 80, "actual_partial_refund_amount": 20,
+        }])
+        self.mz2_statement_refund_links = _Collection(rows=refund_links)
 
 
 @pytest.mark.asyncio
-async def test_post_snapshots_bank_and_uses_one_balanced_group(monkeypatch):
+@pytest.mark.parametrize("linked_amount", ["100.00", None, "99.00"],
+                         ids=["matched-refund", "missing-refund-link", "partial-refund-link"])
+async def test_post_snapshots_bank_and_uses_one_balanced_group(monkeypatch, linked_amount):
     db = _Db(bank={
         "id": "bank-1",
         "name": "الراجحي",
         "account_type": "bank",
-    })
+    }, refund_links=[] if linked_amount is None else [{
+        "user_id": "owner-1", "draft_id": "draft-1", "entry_id": "refund-row-1",
+        "amount": linked_amount, "txn_group_id": "approved-daily-refund-group",
+    }])
     captured = {}
 
     async def fake_balance(*_args, **_kwargs):
@@ -172,7 +200,7 @@ async def test_post_snapshots_bank_and_uses_one_balanced_group(monkeypatch):
     monkeypatch.setattr(service, "post_txn_group", fake_post)
     monkeypatch.setattr(service, "write_audit", fake_audit)
 
-    result = await service.post_reviewed_settlement(
+    posting = service._post_reviewed_settlement_transaction(
         db,
         owner_id="owner-1",
         actor={"id": "accountant-1", "name": "المحاسب"},
@@ -189,6 +217,15 @@ async def test_post_snapshots_bank_and_uses_one_balanced_group(monkeypatch):
             "review_reasons": [],
         },
     )
+    if linked_amount != "100.00":
+        with pytest.raises(HTTPException) as error:
+            await posting
+        assert error.value.status_code == 409
+        assert error.value.detail["code"] == "refund_reconciliation_required"
+        assert error.value.detail["reasons"][0]["code"] == "refund_identity_review:refund-row-1"
+        assert captured == {}
+        return
+    result = await posting
     assert result["txn_group_id"] == "group-1"
     assert result["bank_snapshot"] == {
         "id": "bank-1",
@@ -221,7 +258,7 @@ async def test_post_rejects_insufficient_canonical_provider_receivable(monkeypat
     monkeypatch.setattr(service, "compute_balance", fake_balance)
 
     with pytest.raises(HTTPException) as error:
-        await service.post_reviewed_settlement(
+        await service._post_reviewed_settlement_transaction(
             db,
             owner_id="owner-1",
             actor={"id": "accountant-1"},
@@ -259,3 +296,4 @@ def test_router_registers_full_p01_settlement_contract():
         "/financial-provider-apps/accounting-module/settlements/drafts/{draft_id}/reject",
         "/financial-provider-apps/accounting-module/settlements/drafts/{draft_id}/post",
     } <= paths
+
