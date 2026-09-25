@@ -186,6 +186,7 @@ export default function CompletedFulfillmentOrders() {
                 setHandoffShipments([]);
             }
         } catch (loadError) {
+            setOrders([]);
             setError(loadError.message);
         } finally {
             if (!background) setLoading(false);
@@ -193,6 +194,11 @@ export default function CompletedFulfillmentOrders() {
     }, []);
 
     useEffect(() => { void load(); }, [load]);
+
+    useEffect(() => {
+        const timer = window.setInterval(() => { void load({ background: true }); }, 30000);
+        return () => window.clearInterval(timer);
+    }, [load]);
 
     useEffect(() => {
         if (!permissions.can_handoff_scan) return undefined;
