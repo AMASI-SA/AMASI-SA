@@ -34,8 +34,10 @@ import ShippingBarcodeScanner from "./ShippingBarcodeScanner";
 import { shippingScanFeedback } from "./shippingScanFeedback";
 
 const ASSEMBLY_BLOCKERS = {
+    assembly_piece_supplier_receipt_required: "استلم المنتج من المورد أولًا، ثم من موظف التجهيز",
     assembly_piece_preparation_receipt_required: "استلم المنتج من موظف التجهيز أولًا",
     assembly_piece_stopped: "المنتج متوقف",
+    assembly_order_not_ready: "مرحلة الطلب لا تسمح بإكمال المنتج الآن",
 };
 
 const SHIPMENT_STATE_LABELS = {
@@ -65,7 +67,9 @@ function ProductImage({ piece }) {
     );
 }
 
-export function AssemblyProductCard({ piece, busy, onReady, onUpdated }) {
+export function AssemblyProductCard({ piece, busy, onReady, onBlocked, onUpdated }) {
+    const [blockedNotice, setBlockedNotice] = useState(false);
+    const blockerMessage = ASSEMBLY_BLOCKERS[piece.assembly_blocker_code] || "المنتج غير جاهز";
     return (
         <article
             className={`overflow-hidden rounded-3xl border-2 bg-white shadow-sm ${piece.search_match ? "border-violet-500 ring-4 ring-violet-100" : piece.assembly_ready ? "border-emerald-300" : "border-slate-200"}`}
@@ -86,6 +90,7 @@ export function AssemblyProductCard({ piece, busy, onReady, onUpdated }) {
                         <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-700">
                             <UserCircle size={15} weight="fill" /> جهّزه: {piece.responsible_employee_name || "—"}
                         </div>
+                        <div className="mt-2 text-xs font-black text-violet-800" data-testid="assembly-piece-stage">المرحلة الحالية: {piece.current_stage_label || piece.status_label || "بانتظار التجهيز"}</div>
                     </div>
                 </div>
 
@@ -120,6 +125,19 @@ export function AssemblyProductCard({ piece, busy, onReady, onUpdated }) {
 
                 <div className="mt-3"><CustomerServiceInstructionBanner instructions={piece.customer_service_instructions || []} stage="assembly_labeling" onUpdated={onUpdated} /></div>
 
+                {!!piece.route_steps?.length && (
+                    <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3" data-testid="assembly-piece-route">
+                        <div className="text-xs font-black text-slate-700">مسار تتبع المنتج</div>
+                        <ol className="mt-2 space-y-2 text-xs font-bold text-slate-600">
+                            {piece.route_steps.map((step, index) => (
+                                <li key={`${step.label}-${index}`} className="flex flex-wrap gap-1 rounded-xl bg-slate-50 px-3 py-2">
+                                    <span>{step.label}</span>{step.actor_name && <span>· {step.actor_name}</span>}
+                                </li>
+                            ))}
+                        </ol>
+                    </div>
+                )}
+
                 {piece.can_mark_ready ? (
                     <button
                         type="button"
@@ -136,8 +154,12 @@ export function AssemblyProductCard({ piece, busy, onReady, onUpdated }) {
                         <CheckCircle size={25} weight="fill" /> تم — جاهز
                     </div>
                 ) : (
-                    <div className="mt-4 flex min-h-14 items-center justify-center gap-2 rounded-2xl bg-amber-50 px-4 text-center text-sm font-black text-amber-900">
-                        <WarningCircle size={22} weight="fill" /> {ASSEMBLY_BLOCKERS[piece.assembly_blocker_code] || "المنتج غير جاهز"}
+                    <div className="mt-4 space-y-2">
+                        <button type="button" aria-disabled="true" onClick={() => { setBlockedNotice(true); onBlocked?.(piece); }} className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-slate-200 px-4 text-lg font-black text-slate-500" data-testid="mark-assembly-piece-ready-frozen">جاهز · مجمّد</button>
+                        {blockedNotice && <div role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-center text-sm font-black text-rose-900">المنتج لم يجهز بعد. {blockerMessage}</div>}
+                        <div className="flex items-center justify-center gap-2 rounded-2xl bg-amber-50 px-4 py-3 text-center text-sm font-black text-amber-900" role="status">
+                            <WarningCircle size={22} weight="fill" /> {blockerMessage}
+                        </div>
                     </div>
                 )}
             </div>
@@ -417,8 +439,7 @@ export default function ReadyToShipOrders() {
 
     const completed = Boolean(
         result?.progress?.order_completed
-        || result?.summary?.all_ready
-        || result?.stage === "completed",
+        || result?.summary?.all_ready,
     );
     const carrierLabel = result?.carrier_label || {};
 
@@ -428,7 +449,7 @@ export default function ReadyToShipOrders() {
                 <div className="bg-violet-700 px-4 py-5 text-white sm:px-6">
                     <div className="text-xs font-black text-violet-100">المرحلة الثالثة</div>
                     <h2 className="mt-1 text-2xl font-black">التجميع والعنونة</h2>
-                    <p className="mt-2 text-sm font-bold leading-6 text-violet-100">افتح طلبًا جاهزًا أو صوّر أي منتج؛ ستظهر كل منتجات الطلب ومعلوماتها.</p>
+                    <p className="mt-2 text-sm font-bold leading-6 text-violet-100">ابحث عن الطلب أو صوّر أي منتج؛ ستظهر كل منتجات الطلب ومراحلها حتى قبل جاهزيتها.</p>
                 </div>
                 <div className="grid grid-cols-3 border-b border-slate-100 bg-slate-50 text-center text-[10px] font-black sm:text-xs">
                     <div className="px-2 py-3 text-slate-500"><CheckCircle className="mx-auto mb-1" size={18} weight="fill" />الاستلام من التجهيز</div>
@@ -470,6 +491,7 @@ export default function ReadyToShipOrders() {
                         <div><div className="text-[10px] font-black text-slate-400">الطلب</div><div className="text-xl font-black">#{result.order_number}</div></div>
                         <div className="text-left"><div className="text-[10px] font-black text-slate-400">جاهز</div><div className="text-base font-black text-emerald-700">{result.summary?.ready || 0} من {result.summary?.total || 0}</div></div>
                     </div>
+                    <div className="rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm font-black text-violet-800">مسار تتبع الطلب وقطعه: تظهر المرحلة الحالية وسجل الاستلام لكل منتج أدناه.</div>
 
                     {completed && (
                         <CompletedAssemblyOrderCard
@@ -484,7 +506,7 @@ export default function ReadyToShipOrders() {
                     )}
 
                     {result.pieces?.map((piece) => (
-                        <AssemblyProductCard key={piece.piece_id} piece={piece} busy={busy === `ready:${piece.piece_id}`} onReady={handleReady} onUpdated={() => openOrder(result.order_number)} />
+                        <AssemblyProductCard key={piece.piece_id} piece={piece} busy={busy === `ready:${piece.piece_id}`} onReady={handleReady} onBlocked={(blocked) => setError(`المنتج لم يجهز بعد. ${ASSEMBLY_BLOCKERS[blocked.assembly_blocker_code] || "راجع مرحلة المنتج الحالية."}`)} onUpdated={() => openOrder(result.order_number)} />
                     ))}
                 </div>
             )}
