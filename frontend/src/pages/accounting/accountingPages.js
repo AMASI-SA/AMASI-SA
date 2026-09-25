@@ -41,14 +41,14 @@ export const ACCOUNTING_PAGES = [
         label: "الرواتب والالتزامات",
         permission: "accounting.payroll.view",
         to: "/integrations-v2?workspace=financial&page=payroll-obligations",
-        implementationStatus: "partial_existing_workflows",
+        implementationStatus: "implemented",
     },
     {
         id: "opening-balances",
         label: "الأرصدة الافتتاحية",
         permission: "accounting.opening_balances.view",
         to: "/integrations-v2?workspace=financial&page=opening-balances",
-        implementationStatus: "blocked_not_implemented",
+        implementationStatus: "implemented",
     },
     {
         id: "journals-reports",
@@ -60,6 +60,10 @@ export const ACCOUNTING_PAGES = [
 ];
 
 export const ACCOUNTING_ACTIONS = [
+    { id: "refund-recognize", label: "اعتماد استحقاق العميل وإثبات التزام الاسترداد", permission: "accounting.refunds.recognize" },
+    { id: "receipt-create", label: "تسجيل مبلغ واصل من منصة", permission: "accounting.receipts.create" },
+    { id: "movement-import", label: "رفع كشف البنك والحركات اليومية", permission: "accounting.movements.import" },
+    { id: "receivable-post", label: "إثبات ذمم الطلبات المؤهلة", permission: "accounting.receivables.post" },
     { id: "draft-create", label: "إنشاء وحفظ مسودة مالية", permission: "accounting.drafts.create" },
     { id: "settlement-post", label: "اعتماد وترحيل تسوية", permission: "accounting.settlements.post" },
     { id: "rules-manage", label: "تعديل قواعد العمولات والحسابات", permission: "accounting.rules.manage" },

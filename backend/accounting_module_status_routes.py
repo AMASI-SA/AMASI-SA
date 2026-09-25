@@ -48,7 +48,7 @@ async def fresh_accounting_user(db, user: dict[str, Any]) -> dict[str, Any]:
 
 async def _provider_summary(db, owner_id: str) -> dict[str, int]:
     invoice_summaries = await _invoice_summaries(db, owner_id)
-    merchant_settings = await ensure_user_settings(db, owner_id)
+    merchant_settings = await db.settings.find_one({"user_id": owner_id}) or {}
     apps = build_provider_catalog(
         merchant_settings,
         invoice_summary=invoice_summaries,
@@ -85,7 +85,8 @@ def install_accounting_status_routes(router, db, current_user: Callable):
         page: str = Query(default="home", pattern="^(home|opening-balances)$"),
         user: dict = Depends(current_user),
     ):
-        fresh = await fresh_accounting_user(db, user)
+        from accounting_write_control import fresh_actor
+        fresh = await fresh_actor(db, user)
         required = (
             "accounting.opening_balances.view"
             if page == "opening-balances"
