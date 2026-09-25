@@ -59,10 +59,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if git ls-remote --exit-code --heads origin "refs/heads/$TARGET_BRANCH" >/dev/null 2>&1; then
-            echo "TARGET_BRANCH_ALREADY_EXISTS"
-            exit 1
-          fi
+          remote_target="$(git ls-remote --heads origin "refs/heads/$TARGET_BRANCH" | awk '{print $1}')"
+          test "$remote_target" = "$SOURCE_SHA"
           git checkout --detach "$SOURCE_SHA"
           test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
           git switch -c "$TARGET_BRANCH"
