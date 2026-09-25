@@ -1,0 +1,83 @@
+name: Audit stage supplier-receiving intent-only branch
+
+on:
+  push:
+    branches:
+      - audit/freeze-supplier-receiving-intent-20260926
+    paths:
+      - .github/workflows/audit-stage-supplier-receiving-intent.yml
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: audit-stage-supplier-receiving-intent
+  cancel-in-progress: false
+
+jobs:
+  stage:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    env:
+      SOURCE_SHA: 85a9a3e16a92f37d4af4bdfd1965567860afc24a
+      SOURCE_BASE_SHA: b414b7fca518147e22ad4c63a8e0f48e789ee978
+      ARTIFACT_ID: "10891961479"
+      INTENT_SHA256: 3704c55e59745eb1b15f67af61dd24629f84254a785e9cd5f0e6a81a864ac3f8
+      TARGET_BRANCH: release/supplier-receiving-intent-20260926
+    steps:
+      - name: Checkout audit trigger with push credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Download exact verified intent artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/intent"
+          curl --fail --location --silent --show-error             -H "Authorization: Bearer $GH_TOKEN"             -H "Accept: application/vnd.github+json"             "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/$ARTIFACT_ID/zip"             -o "$RUNNER_TEMP/intent.zip"
+          unzip -q "$RUNNER_TEMP/intent.zip" -d "$RUNNER_TEMP/intent"
+          candidate="$RUNNER_TEMP/intent/release-intent-reviewed-85a9.json"
+          test -s "$candidate"
+          test "$(sha256sum "$candidate" | awk '{print $1}')" = "$INTENT_SHA256"
+          python - "$candidate" <<'PY'
+          import json, os, sys
+          from pathlib import Path
+          payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          assert payload["schema_version"] == 2
+          assert payload["source_git_sha"] == os.environ["SOURCE_SHA"]
+          assert payload["source_base_git_sha"] == os.environ["SOURCE_BASE_SHA"]
+          assert payload["branch"] == "hotfix/prod-snap-meta-final"
+          print("VERIFIED_INTENT_ARTIFACT")
+          PY
+
+      - name: Create intent-only branch from exact staged source
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --heads origin "refs/heads/$TARGET_BRANCH" >/dev/null 2>&1; then
+            echo "TARGET_BRANCH_ALREADY_EXISTS"
+            exit 1
+          fi
+          git checkout --detach "$SOURCE_SHA"
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          git switch -c "$TARGET_BRANCH"
+          cp "$RUNNER_TEMP/intent/release-intent-reviewed-85a9.json"             release/release-intent-v5.json
+
+          mapfile -t changed < <(git status --short | awk '{print $2}')
+          test "${#changed[@]}" -eq 1
+          test "${changed[0]}" = "release/release-intent-v5.json"
+
+          git add release/release-intent-v5.json
+          git diff --cached --quiet && { echo "INTENT_DID_NOT_CHANGE"; exit 1; }
+          git diff --cached --quiet -- . ':(exclude)release/release-intent-v5.json'
+
+          git config user.name "AMASI release audit"
+          git config user.email "amasi.jewelery@gmail.com"
+          git commit -m "release: bind staged supplier receiving source intent"
+          git push origin "HEAD:refs/heads/$TARGET_BRANCH"
+          echo "INTENT_BRANCH_HEAD=$(git rev-parse HEAD)"
