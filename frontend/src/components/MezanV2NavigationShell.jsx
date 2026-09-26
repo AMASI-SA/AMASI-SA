@@ -8,7 +8,7 @@ import LegacyMezanV2NavigationShell, {
     isNavigationItemActive,
     navigationSectionsForDisplay,
 } from "./MezanV2NavigationShellLegacy";
-import { accountingNavItems } from "../pages/accounting/accountingPages";
+import { accountingNavItems, userCanAccessAccounting } from "../pages/accounting/accountingPages";
 
 const LEGACY_SECTION_SNAPSHOT = MEZAN_V2_NAV_SECTIONS.map((section) => ({
     ...section,
@@ -38,9 +38,12 @@ function accountingPermissionSet(access) {
 
 export function navigationSectionsForAccountingAccess(access) {
     const permissions = accountingPermissionSet(access);
-    const owner = access?.is_owner === true;
     const accountingItems = accountingNavItems().filter(
-        (item) => owner || permissions.has(item.permission),
+        (item) => userCanAccessAccounting(
+            { is_owner: access?.is_owner === true, role: access?.role },
+            item.permission,
+            [...permissions],
+        ),
     );
 
     return LEGACY_SECTION_SNAPSHOT.flatMap((section) => {

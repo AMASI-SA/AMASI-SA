@@ -191,11 +191,16 @@ test("Mezan 2 exposes an independent suppliers section", () => {
     expect(activeNavigationSection({ pathname: "/suppliers-v2", search: "" })?.id).toBe("suppliers");
 });
 
-test("accounting owns exactly the approved eight pages and is removed from apps", () => {
-    const accounting = MEZAN_V2_NAV_SECTIONS.find((section) => section.id === "accounting");
+test("accounting owns exactly the approved nine pages and is removed from apps", () => {
+    const sections = navigationSectionsForAccountingAccess({
+        is_owner: true,
+        permissions: ["accounting.financial_accounts.view", "accounting.opening_balances.view"],
+    });
+    const accounting = sections.find((section) => section.id === "accounting");
     expect(accounting.label).toBe("المحاسبة");
     expect(accounting.items.map((item) => item.label)).toEqual([
-        "الرئيسية المحاسبية",
+        "المحاسبة اليومية",
+        "الصناديق والحسابات المالية",
         "التسويات",
         "الشحن والتحصيل",
         "المخزون والمشتريات",
@@ -212,11 +217,19 @@ test("accounting owns exactly the approved eight pages and is removed from apps"
     );
     expect(activeItems.map((item) => item.label)).toEqual(["الشحن والتحصيل"]);
 
-    const apps = MEZAN_V2_NAV_SECTIONS.find((section) => section.id === "apps");
+    const apps = sections.find((section) => section.id === "apps");
     expect(apps.items.some((item) => item.to.includes("workspace=financial"))).toBe(false);
 });
 
-test("employees see only explicitly assigned accounting pages", () => {
+test("owners and employees see explicit accounting pages only when assigned", () => {
+    const ownerWithoutExplicit = navigationSectionsForAccountingAccess({
+        is_owner: true,
+        permissions: [],
+    });
+    const ownerAccounting = ownerWithoutExplicit.find((section) => section.id === "accounting");
+    expect(ownerAccounting.items.map((item) => item.label)).not.toContain("الصناديق والحسابات المالية");
+    expect(ownerAccounting.items.map((item) => item.label)).not.toContain("الأرصدة الافتتاحية");
+
     const none = navigationSectionsForAccountingAccess({
         is_owner: false,
         permissions: [],

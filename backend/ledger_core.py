@@ -83,6 +83,13 @@ REASON_CODES: dict[str, str] = {
 }
 
 ENTRY_TYPES = (
+    "customer_advance_capture",
+    "customer_advance_cancellation",
+    "customer_advance_payment",
+    "customer_refund_due",
+    "customer_refund_payment",
+    "bank_transfer_advance",
+    "bank_transfer_sale",
     # Generic
     "spend", "topup", "payment", "adjustment", "reversal",
     "settlement", "writeoff", "accrual", "opening_balance",
@@ -114,6 +121,9 @@ ENTRY_TYPES = (
     # Mezan 2 store drivers — individual driver sub-ledgers.
     "store_delivery_accrual",    # توصيل ناجح: عهدة COD + أجرة الموصل
     "store_delivery_settlement", # توريد COD / دفع الأجرة / المقاصة الصريحة
+    "cod_sale",                  # بيع COD مثبت من دليل تحصيل P02
+    "shipping_fee_accrual",      # استحقاق شحن/أجرة مستقل بلا إيراد
+    "shipping_settlement",       # سداد/توريد/مقاصة شحن من دليل بنك MZ2
     # ── Phase 3 (Iter-196) — manual employee correction ──
     "correction",           # تصحيح: نقل أثر بين كيانَين دون مساس بالبنك/الصندوق
     # ── Iter-219 — BNPL bridge (Tabby/Tamara) ──
@@ -231,6 +241,23 @@ async def post_ledger_entry(
         the same business event (mandatory for grouped operations
         posted via post_txn_group).
     """
+    from accounting_atomic import SessionDatabase, atomic_owner
+    from accounting_write_control import AccountingDatabase
+    current_db = db.current() if isinstance(db, AccountingDatabase) else db
+    if not isinstance(current_db, SessionDatabase):
+        async def operation(scoped):
+            return await post_ledger_entry(
+                scoped,
+                user_id=user_id, actor_id=actor_id, actor_name=actor_name,
+                entity_type=entity_type, entity_id=entity_id,
+                entry_type=entry_type, amount=amount, side=side,
+                sub_account=sub_account, txn_group_id=txn_group_id,
+                reason_code=reason_code, notes=notes, metadata=metadata,
+                status=status, reverses_entry_id=reverses_entry_id,
+            )
+        return await atomic_owner(db, user_id, operation)
+    from accounting_writer_transition import assert_writer_allowed
+    await assert_writer_allowed(db, user_id, "legacy")
     if entry_type not in ENTRY_TYPES:
         raise HTTPException(400, f"entry_type غير صحيح: {entry_type}")
     if side not in SIDES:
@@ -378,6 +405,20 @@ async def post_txn_group(
         "credit_total": float,
     }
     """
+    from accounting_atomic import SessionDatabase, atomic_owner
+    from accounting_write_control import AccountingDatabase
+    current_db = db.current() if isinstance(db, AccountingDatabase) else db
+    if not isinstance(current_db, SessionDatabase):
+        async def operation(scoped):
+            return await post_txn_group(
+                scoped,
+                user_id=user_id, actor_id=actor_id, actor_name=actor_name,
+                entries=entries, txn_type=txn_type, reason_code=reason_code,
+                notes=notes, metadata=metadata,
+            )
+        return await atomic_owner(db, user_id, operation)
+    from accounting_writer_transition import assert_writer_allowed
+    await assert_writer_allowed(db, user_id, "legacy")
     if not entries or len(entries) < 2:
         raise HTTPException(400, "كل حركة محاسبية تحتاج قيدين على الأقل")
     debit_total = round(sum(float(e["amount"]) for e in entries
@@ -436,6 +477,11 @@ async def reverse_entry(
     )
     if not orig:
         raise HTTPException(404, "القيد غير موجود")
+    if str((orig.get("metadata") or {}).get("operation_id") or "").startswith("MZ2-"):
+        # A single-leg legacy reversal bypasses the owner barrier and would
+        # invalidate refund/payment evidence. MZ2 corrections require an
+        # explicitly reviewed balanced workflow; that phase is not enabled.
+        raise HTTPException(409, "mz2_balanced_correction_workflow_required")
     if orig.get("status") != "posted":
         raise HTTPException(
             400, "يمكن عكس القيود المعتمدة فقط (status=posted)",

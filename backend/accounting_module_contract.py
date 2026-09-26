@@ -10,6 +10,7 @@ OPERATION_ID = "MZ2-FIN-CUTOVER-001"
 
 ACCOUNTING_PAGES: tuple[dict[str, str], ...] = (
     {"id": "home", "label": "الرئيسية المحاسبية", "permission": "accounting.home.view"},
+    {"id": "financial-accounts", "label": "الصناديق والحسابات المالية", "permission": "accounting.financial_accounts.view"},
     {"id": "settlements", "label": "التسويات", "permission": "accounting.settlements.view"},
     {"id": "shipping-cod", "label": "الشحن والتحصيل", "permission": "accounting.shipping.view"},
     {"id": "inventory-purchases", "label": "المخزون والمشتريات", "permission": "accounting.inventory.view"},
@@ -20,9 +21,28 @@ ACCOUNTING_PAGES: tuple[dict[str, str], ...] = (
 )
 
 ACCOUNTING_ACTIONS: tuple[dict[str, str], ...] = (
+    {"id": "advance-recognize", "label": "إثبات تحصيل مقدم موثق قبل الإيراد", "permission": "accounting.advances.recognize"},
+    {"id": "advance-refund", "label": "اعتماد إلغاء وسداد تحصيل مقدم", "permission": "accounting.advances.refund"},
+    {"id": "refund-create", "label": "تسجيل مستحق وتحويل استرداد كمسودة", "permission": "accounting.refunds.create"},
+    {"id": "refund-recognize", "label": "اعتماد استحقاق العميل وإثبات التزام الاسترداد", "permission": "accounting.refunds.recognize"},
+    {"id": "refund-payment-post", "label": "اعتماد حركة استرداد منفذة", "permission": "accounting.refunds.pay"},
+    {"id": "receipt-create", "label": "تسجيل مبلغ واصل من منصة", "permission": "accounting.receipts.create"},
+    {"id": "movement-import", "label": "رفع كشف البنك والحركات اليومية", "permission": "accounting.movements.import"},
+    {"id": "receivable-post", "label": "إثبات ذمم الطلبات المؤهلة", "permission": "accounting.receivables.post"},
     {"id": "draft-create", "label": "إنشاء وحفظ مسودة مالية", "permission": "accounting.drafts.create"},
     {"id": "settlement-post", "label": "اعتماد وترحيل تسوية", "permission": "accounting.settlements.post"},
     {"id": "rules-manage", "label": "تعديل قواعد العمولات والحسابات", "permission": "accounting.rules.manage"},
+    {"id": "financial-accounts-manage", "label": "إدارة الصناديق والحسابات المالية", "permission": "accounting.financial_accounts.manage"},
+    {"id": "opening-drafts-manage", "label": "إدارة مسودات الأرصدة الافتتاحية", "permission": "accounting.opening_balances.drafts.manage"},
+    {"id": "opening-review", "label": "مراجعة الأرصدة الافتتاحية", "permission": "accounting.opening_balances.review"},
+    {"id": "opening-post", "label": "ترحيل الأرصدة الافتتاحية", "permission": "accounting.opening_balances.post"},
+    {
+        "id": "ledger-transition-manage",
+        "label": "إدارة انتقال الدفتر المحاسبي",
+        "permission": "accounting.ledger_transition.manage",
+    },
+    # Owner-approved registry key; every user still needs an explicit grant.
+    {"id": "shipping-contract-review", "label": "مراجعة واعتماد عقد شركة الشحن", "permission": "accounting.shipping.contracts.review"},
     {"id": "purchase-post", "label": "ترحيل فاتورة شراء وتحديث المخزون", "permission": "accounting.purchases.post"},
     {"id": "payroll-post", "label": "اعتماد وترحيل الرواتب والالتزامات", "permission": "accounting.payroll.post"},
     {"id": "opening-approve", "label": "اعتماد القيد الافتتاحي", "permission": "accounting.opening_balances.approve"},
@@ -34,6 +54,30 @@ ACCOUNTING_PAGE_PERMISSION_KEYS = frozenset(row["permission"] for row in ACCOUNT
 ACCOUNTING_PERMISSION_KEYS = frozenset(
     row["permission"] for row in (*ACCOUNTING_PAGES, *ACCOUNTING_ACTIONS)
 )
+
+# The existing registry is the single authority. No role/owner-only substitute
+# and no separate hardcoded allowlist in the shipping service.
+SHIPPING_CONTRACT_PERMISSIONS = {
+    "view": "accounting.shipping.view",
+    "manage": "accounting.rules.manage",
+    "review": "accounting.shipping.contracts.review",
+    "post": "accounting.settlements.post",
+}
+
+# These authorities are never added implicitly, including to owners.  The
+# legacy ``opening_balances.approve`` key is intentionally not an alias for
+# any part of the new draft/review/post workflow.
+ACCOUNTING_EXPLICIT_GRANT_KEYS = frozenset({
+    SHIPPING_CONTRACT_PERMISSIONS["review"],
+    "accounting.financial_accounts.view",
+    "accounting.financial_accounts.manage",
+    "accounting.opening_balances.view",
+    "accounting.opening_balances.drafts.manage",
+    "accounting.opening_balances.review",
+    "accounting.opening_balances.post",
+    "accounting.journals.reverse",
+    "accounting.ledger_transition.manage",
+})
 
 EVIDENCE_SECTIONS: tuple[dict[str, str], ...] = (
     {"id": "banks_cash", "label": "البنوك والصندوق"},
@@ -77,11 +121,11 @@ def accounting_owner_id(user: dict[str, Any]) -> str | None:
 
 
 def accounting_permissions_for_user(user: dict[str, Any]) -> list[str]:
-    """Owner gets all; every other role gets only dedicated assignments."""
+    """Preserve old owner authority; new contract review always needs a grant."""
+    assigned = set(user.get("accounting_permissions") or []) & ACCOUNTING_PERMISSION_KEYS
     if is_owner(user):
-        return sorted(ACCOUNTING_PERMISSION_KEYS)
-    assigned = set(user.get("accounting_permissions") or [])
-    return sorted(assigned & ACCOUNTING_PERMISSION_KEYS)
+        return sorted((ACCOUNTING_PERMISSION_KEYS - ACCOUNTING_EXPLICIT_GRANT_KEYS) | assigned)
+    return sorted(assigned)
 
 
 def require_owner(user: dict[str, Any]) -> None:

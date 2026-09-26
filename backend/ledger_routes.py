@@ -61,7 +61,9 @@ def make_ledger_router(db) -> APIRouter:
         entry_id: str,
         user: dict = Depends(current_user),
     ):
+        from accounting_writer_transition import assert_writer_allowed
         from ledger_core import _now
+        await assert_writer_allowed(db, user["id"], "legacy")
         orig = await db.general_ledger.find_one(
             {"id": entry_id, "user_id": user["id"]},
         )

@@ -68,6 +68,32 @@ async def mirror_account_txn_to_ledger(
 
     Returns: { "skipped": bool, "txn_group_id": str, "reason"?: str }
     """
+    from accounting_atomic import SessionDatabase, atomic_owner
+    from accounting_write_control import AccountingDatabase
+    current_db = db.current() if isinstance(db, AccountingDatabase) else db
+    if not isinstance(current_db, SessionDatabase):
+        async def operation(scoped):
+            return await mirror_account_txn_to_ledger(
+                scoped,
+                user_id=user_id, account_id=account_id,
+                account_transaction_id=account_transaction_id, amount=amount,
+                direction=direction, transaction_type=transaction_type,
+                transaction_date=transaction_date, description=description,
+                counter_entity_type=counter_entity_type,
+                counter_entity_id=counter_entity_id,
+                created_by_endpoint=created_by_endpoint,
+                idempotency_key=idempotency_key,
+                paired_account_transaction_id=paired_account_transaction_id,
+                currency=currency,
+            )
+        return await atomic_owner(db, user_id, operation)
+
+    from accounting_writer_transition import assert_writer_allowed
+
+    # Manual movements and retries reach the legacy ledger through this
+    # helper.  Fence every invocation before its idempotency read so the
+    # transition state has the same meaning for every ingress channel.
+    await assert_writer_allowed(db, user_id, "legacy")
     if not account_transaction_id or amount is None or amount == 0:
         return {"skipped": True, "reason": "missing id or zero amount"}
 

@@ -256,6 +256,8 @@ def install_accounting_settlement_bank_match_routes(router, db, current_user):
         draft = await _draft(db, owner_id, draft_id)
         if draft.get("status") not in EDITABLE_STATUSES:
             raise HTTPException(409, "لا يمكن تغيير مطابقة البنك بعد إرسال المسودة للمراجعة")
+        if draft.get("bank_receipt_id"):
+            raise HTTPException(409, "settlement_already_has_receipt")
         transaction_id = str(payload.bank_transaction_id or "").strip()
         before = {
             "bank_transaction_id": draft.get("bank_transaction_id"),
@@ -339,6 +341,7 @@ def install_accounting_settlement_bank_match_routes(router, db, current_user):
                     "id": draft_id,
                     "user_id": owner_id,
                     "status": {"$in": list(EDITABLE_STATUSES)},
+                    "bank_receipt_id": {"$in": [None, ""]},
                 },
                 mongo_update,
             )
