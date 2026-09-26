@@ -2860,34 +2860,41 @@ async def manual_send_one(
                 f"استجابة غير ناجحة من قيود ({exc.status_code})",
                 exc.to_dict())
 
-    # ── Guard G1c — Qoyod-side safety net (invoice with same ref) ──
-    try:
-        existing_inv = await client.find_invoice_by_reference(
-            str(order_number))
-    except ManualQoyodError as exc:
-        # An unavailable/unauthorized lookup is UNKNOWN, never evidence that
-        # the reference is absent. Fail closed before any customer, product,
-        # invoice, or payment write. A later retry must reconcile first.
-        await _finalize_lock(
-            db,
-            order_number=str(order_number),
-            user_id=user_id,
-            lock_id=lock_id,
-            status="failed",
-            error={
-                "code": "qoyod_http_error",
-                "message": (
-                    f"تعذر التأكد من مرجع الفاتورة في قيود "
-                    f"({exc.status_code})"
-                ),
-                "detail": exc.to_dict(),
-            },
-        )
-        raise ManualSendRefused(
-            "qoyod_http_error",
-            f"تعذر التأكد من مرجع الفاتورة في قيود ({exc.status_code})",
-            exc.to_dict(),
-        ) from exc
+    # Automatic backlog recovery relies on the local idempotency lock and
+    # persisted invoice/payment markers above. It must keep moving when Qoyod's
+    # reference-search endpoint is unavailable or stale. Manual sends retain
+    # the remote safety-net lookup.
+    automatic_backlog_send = str(actor or "").startswith("auto-plan-b:")
+    if automatic_backlog_send:
+        existing_inv = None
+    else:
+        try:
+            existing_inv = await client.find_invoice_by_reference(
+                str(order_number))
+        except ManualQoyodError as exc:
+            # An unavailable/unauthorized lookup is UNKNOWN, never evidence that
+            # the reference is absent. Fail closed before any customer, product,
+            # invoice, or payment write. A later retry must reconcile first.
+            await _finalize_lock(
+                db,
+                order_number=str(order_number),
+                user_id=user_id,
+                lock_id=lock_id,
+                status="failed",
+                error={
+                    "code": "qoyod_http_error",
+                    "message": (
+                        f"تعذر التأكد من مرجع الفاتورة في قيود "
+                        f"({exc.status_code})"
+                    ),
+                    "detail": exc.to_dict(),
+                },
+            )
+            raise ManualSendRefused(
+                "qoyod_http_error",
+                f"تعذر التأكد من مرجع الفاتورة في قيود ({exc.status_code})",
+                exc.to_dict(),
+            ) from exc
     if existing_inv:
         eid = _to_int(existing_inv.get("id"))
         await _finalize_lock(
