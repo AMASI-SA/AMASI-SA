@@ -1,0 +1,51 @@
+name: Build20 component category contract (no deployment)
+
+on:
+  push:
+    branches: [fix/build20-component-category-links-20260926]
+  pull_request:
+    paths:
+      - 'backend/component_*'
+      - 'backend/tests/test_component_*'
+      - '.github/workflows/build20-component-categories.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  source-evidence:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Retain tracked code only, without environment or credentials
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, pathlib, subprocess, zipfile
+          root = pathlib.Path('.')
+          paths = subprocess.check_output(['git', 'ls-files', '-z']).decode().split('\0')
+          selected = []
+          for name in paths:
+              p = pathlib.Path(name)
+              if not name or any(x.startswith('.env') for x in p.parts) or p.name in {'secrets.py', 'credentials.py'}:
+                  continue
+              if (name.startswith('backend/') and p.suffix == '.py') or name.startswith('docs/adr/') or name in {'AGENTS.md', 'docs/PROJECT_DECISIONS.md', 'backend/requirements.txt'}:
+                  selected.append(name)
+          manifest = {'head': subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode().strip(), 'tree': subprocess.check_output(['git', 'rev-parse', 'HEAD^{tree}']).decode().strip(), 'files': {}}
+          with zipfile.ZipFile('/tmp/component-category-sources.zip', 'w', zipfile.ZIP_DEFLATED) as archive:
+              for name in selected:
+                  data = (root / name).read_bytes()
+                  manifest['files'][name] = hashlib.sha256(data).hexdigest()
+                  archive.writestr(name, data)
+              archive.writestr('source-manifest.json', json.dumps(manifest, indent=2))
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: component-category-sources-${{ github.event.pull_request.head.sha || github.sha }}
+          path: /tmp/component-category-sources.zip
+          retention-days: 14
+          if-no-files-found: error
