@@ -1,0 +1,44 @@
+name: Build20 reviewed invoice source object
+on:
+  push:
+    branches: [fix/build20-supplier-invoice-integrity-20260926]
+    paths: ['tools/build20_invoice_patch.py', '.github/workflows/build20-invoice-materialize.yml']
+permissions:
+  contents: write
+jobs:
+  source-object:
+    if: github.repository == 'AMASI-SA/AMASI-SA'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Apply exact reviewed edits without executing application
+        run: |
+          python3 tools/build20_invoice_patch.py
+          git diff --check
+      - name: Store one reviewed Git blob, no branch or deployment mutation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, subprocess, urllib.request
+          path = 'backend/supplier_receiving_routes.py'
+          assert subprocess.check_output(['git','diff','--name-only']).decode().splitlines() == [path]
+          data = pathlib.Path(path).read_bytes()
+          sha = hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
+          assert sha == '4ae13f405c140b20481861141ac4f8bb6bac82c0', 'Reviewed output hash mismatch'
+          req = urllib.request.Request('https://api.github.com/repos/AMASI-SA/AMASI-SA/git/blobs', data=json.dumps({'content':data.decode(),'encoding':'utf-8'}).encode(), method='POST', headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Content-Type':'application/json','Accept':'application/vnd.github+json'})
+          with urllib.request.urlopen(req, timeout=30) as response:
+              saved = json.load(response)
+          assert saved['sha'] == sha
+          pathlib.Path('invoice-source-object.json').write_text(json.dumps({'path':path,'sha':sha,'source_head':os.environ['GITHUB_SHA'],'application_executed':False,'branch_updated':False}))
+          print('Verified Git blob: '+sha)
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: invoice-source-object-${{ github.sha }}
+          path: invoice-source-object.json
+          retention-days: 7
+          if-no-files-found: error
