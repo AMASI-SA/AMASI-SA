@@ -221,3 +221,174 @@ export async function getAccountingSettlementRegisterDetail(draftId) {
     );
     return data;
 }
+
+
+export async function getAccountingOpeningBalances() {
+    const { data } = await api.get(`${BASE}/opening-balances`);
+    return data;
+}
+
+export async function previewAccountingOpeningBalances(payload) {
+    const { data } = await api.post(`${BASE}/opening-balances/preview`, payload);
+    return data;
+}
+
+export async function approveAccountingOpeningBalances(previewId) {
+    const { data } = await api.post(`${BASE}/opening-balances/approve`, {
+        preview_id: previewId,
+        confirmation: "APPROVE_OPENING_BALANCE",
+    });
+    return data;
+}
+
+export async function activateAccountingP01(activationRef) {
+    const { data } = await api.post(`${BASE}/opening-balances/activate`, {
+        activation_ref: activationRef,
+        confirmation: "ACTIVATE_MZ2_P01",
+    });
+    return data;
+}
+
+
+export async function getAccountingDailyMovementContext() {
+    const { data } = await api.get(`${BASE}/daily-movements/context`);
+    return data;
+}
+
+export async function getAccountingDailyMovements(params = {}) {
+    const { data } = await api.get(`${BASE}/daily-movements`, {
+        params: compactParams(params),
+    });
+    return data;
+}
+
+export async function uploadAccountingDailyMovements({ bankAccountId, file }) {
+    const form = new FormData();
+    form.append("bank_account_id", bankAccountId);
+    form.append("file", file);
+    const { data } = await api.post(`${BASE}/daily-movements/upload`, form, {
+        headers: { "Content-Type": "multipart/form-data" },
+    });
+    return data;
+}
+
+export async function confirmAccountingDailyMovementProvider(movementId, provider, reason) {
+    const { data } = await api.post(
+        `${BASE}/daily-movements/${encodeURIComponent(movementId)}/confirm-provider`,
+        { provider, reason },
+    );
+    return data;
+}
+
+
+export async function getAccountingPayrollContext() {
+    const { data } = await api.get(`${BASE}/payroll/context`);
+    return data;
+}
+
+export async function accrueAccountingPayroll(payload) {
+    const { data } = await api.post(`${BASE}/payroll/accrue`, payload);
+    return data;
+}
+
+export async function classifyAccountingEmployeeMovement(movementId, payload) {
+    const { data } = await api.post(
+        `${BASE}/payroll/movements/${encodeURIComponent(movementId)}/classify`,
+        payload,
+    );
+    return data;
+}
+
+
+export async function getAccountingOrderEvidence(params = {}) {
+    const { data } = await api.get(`${BASE}/order-evidence`, {
+        params: compactParams(params),
+    });
+    return data;
+}
+
+export async function uploadAccountingOrderEvidence(file) {
+    const form = new FormData();
+    form.append("file", file);
+    const { data } = await api.post(`${BASE}/order-evidence/upload`, form, {
+        headers: { "Content-Type": "multipart/form-data" },
+    });
+    return data;
+}
+
+export async function getAccountingOrderRecognitionQueue(limit = 100) {
+    const { data } = await api.get(`${BASE}/order-recognition/queue`, {
+        params: { limit },
+    });
+    return data;
+}
+
+export async function recognizeAccountingReadyOrders({ limit = 100, dryRun = true } = {}) {
+    const { data } = await api.post(`${BASE}/order-recognition/recognize-ready`, {
+        limit,
+        dry_run: dryRun,
+    });
+    return data;
+}
+
+export async function getAccountingShippingRates() {
+    const { data } = await api.get(`${BASE}/shipping-p02/rates`);
+    return data;
+}
+
+export async function saveAccountingShippingRate(payload) {
+    const { data } = await api.put(`${BASE}/shipping-p02/rates`, payload);
+    return data;
+}
+
+export async function processAccountingStoreDriverPending({ limit = 100, dryRun = true } = {}) {
+    const { data } = await api.post(`${BASE}/shipping-p02/store-driver/process-pending`, {
+        limit,
+        dry_run: dryRun,
+    });
+    return data;
+}
+
+export async function previewAccountingShippingSettlement(payload) {
+    const { data } = await api.post(`${BASE}/shipping-p02/settlements/preview`, payload);
+    return data;
+}
+
+export async function postAccountingShippingSettlement(payload) {
+    const { data } = await api.post(`${BASE}/shipping-p02/settlements/post`, payload);
+    return data;
+}
+
+
+export async function getAccountingShippingContext() {
+    const { data } = await api.get(`${BASE}/shipping-p02/context`);
+    return data;
+}
+
+
+export async function processAccountingCourierPending({ limit = 100, dryRun = true } = {}) {
+    const { data } = await api.post(`${BASE}/shipping-p02/courier/process-pending`, {
+        limit,
+        dry_run: dryRun,
+    });
+    return data;
+}
+
+
+export async function getAccountingBankTransferReviews(limit = 100) {
+    const { data } = await api.get(`${BASE}/bank-transfer-reviews`, {
+        params: { limit },
+    });
+    return data;
+}
+
+export async function approveAccountingBankTransferReview(evidenceId, movementId) {
+    const { data } = await api.post(
+        `${BASE}/bank-transfer-reviews/${encodeURIComponent(evidenceId)}/approve`,
+        {
+            movement_id: movementId,
+            confirmation: "APPROVE_BANK_TRANSFER_RECEIPT",
+        },
+    );
+    return data;
+}

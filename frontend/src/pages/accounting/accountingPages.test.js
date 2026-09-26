@@ -8,7 +8,7 @@ import {
 
 test("accounting module exposes the exact approved eight pages in order", () => {
     expect(ACCOUNTING_PAGES.map((page) => page.label)).toEqual([
-        "الرئيسية المحاسبية",
+        "المحاسبة اليومية",
         "التسويات",
         "الشحن والتحصيل",
         "المخزون والمشتريات",
@@ -22,15 +22,15 @@ test("accounting module exposes the exact approved eight pages in order", () => 
     expect(accountingNavItems().every((item) => item.to.includes("workspace=financial"))).toBe(true);
 });
 
-test("only P00 home and P01 settlements are implemented at this phase", () => {
+test("P01 home, settlements and opening balances are implemented", () => {
     const implemented = ACCOUNTING_PAGES
         .filter((page) => page.implementationStatus === "implemented")
         .map((page) => page.id);
-    expect(implemented).toEqual(["home", "settlements"]);
+    expect(implemented).toEqual(["home", "settlements", "payroll-obligations", "opening-balances"]);
     expect(ACCOUNTING_PAGES.find((page) => page.id === "shipping-cod")?.implementationStatus)
         .toBe("partial_existing_workflows");
     expect(ACCOUNTING_PAGES.find((page) => page.id === "opening-balances")?.implementationStatus)
-        .toBe("blocked_not_implemented");
+        .toBe("implemented");
 });
 
 test("unknown or missing page query fails safely to accounting home", () => {
@@ -57,6 +57,7 @@ test("all non-owner roles are denied until dedicated accounting assignment arriv
 test("sensitive actions remain separate from page access", () => {
     const actionPermissions = ACCOUNTING_ACTIONS.map((action) => action.permission);
     expect(actionPermissions).toContain("accounting.opening_balances.approve");
+    expect(actionPermissions).toContain("accounting.movements.import");
     expect(actionPermissions).toContain("accounting.journals.manual_create");
     expect(actionPermissions).toContain("accounting.journals.reverse");
     expect(actionPermissions).not.toContain("accounting.opening_balances.view");
