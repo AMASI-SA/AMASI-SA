@@ -1056,6 +1056,67 @@ async def test_worker_candidate_loader_reports_full_set_not_batch_limit(
     assert await db.qoyod_manual_auto_runs.count_documents({}) == 0
     assert await db.integration_inbox.count_documents({}) == 0
 
+@pytest.mark.asyncio
+async def test_worker_candidate_loader_is_globally_oldest_first_across_statuses(
+    db, monkeypatch,
+):
+    await db.unified_orders.insert_many([
+        _unified_order(
+            "completed-newer",
+            stored_date="2026-08-19",
+            status="completed",
+        ),
+        _unified_order(
+            "delivered-oldest",
+            stored_date="2026-08-16",
+            status="delivered",
+        ),
+        _unified_order(
+            "completed-middle",
+            stored_date="2026-08-18",
+            status="completed",
+        ),
+        _unified_order(
+            "delivered-older",
+            stored_date="2026-08-17",
+            status="delivered",
+        ),
+    ])
+    actual_audit = build_candidate_audit
+
+    async def snapshot_at_fixed_time(inner_db, **kwargs):
+        kwargs.update({
+            "from_date": FROM_DATE,
+            "to_date": TO_DATE,
+            "now": NOW,
+        })
+        return await actual_audit(inner_db, **kwargs)
+
+    monkeypatch.setattr(
+        auto_send,
+        "build_candidate_audit",
+        snapshot_at_fixed_time,
+    )
+
+    candidates, counts = await auto_send._load_candidate_rows(
+        db,
+        settings={
+            "invoice_trigger_statuses": ["completed", "delivered"],
+        },
+        orders_user_id=ORDERS_OWNER,
+        batch_limit=4,
+    )
+
+    assert [row["order_number"] for row in candidates] == [
+        "delivered-oldest",
+        "delivered-older",
+        "completed-middle",
+        "completed-newer",
+    ]
+    assert counts["batch_candidate_count"] == 4
+    assert counts["selection_order"] == "oldest_first"
+
+
 
 @pytest.mark.asyncio
 async def test_live_worker_uses_resynced_owner_row_without_compatibility_write(

@@ -1621,3 +1621,75 @@ async def test_unknown_qoyod_reference_lookup_never_reaches_a_write(
     assert captured.value.code == "qoyod_http_error"
     assert captured.value.extra["status_code"] == status_code
     invoice_post.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_auto_plan_b_skips_remote_reference_precheck_but_keeps_local_lock(
+    db,
+):
+    order_number = "AUTO-NO-REMOTE-PRECHECK"
+    await _seed_settings(db)
+    await _seed_credentials(db)
+    await db.integration_inbox.insert_one(
+        _inbox_row(order_number=order_number, total=115.0, sku="SKU-AUTO")
+    )
+
+    reference_lookup = AsyncMock(
+        side_effect=AssertionError(
+            "automatic backlog sends must not run the remote reference precheck"
+        )
+    )
+    invoice_post = AsyncMock(return_value={
+        "invoice": {
+            "id": 9501,
+            "number": "INV-9501",
+            "reference": order_number,
+            "total": 115.0,
+        },
+    })
+    payment_post = AsyncMock(return_value={
+        "invoice_payment": {"id": 9801},
+    })
+
+    with patch(
+        "integrations.qoyod_manual.client.ManualQoyodClient."
+        "find_invoice_by_reference",
+        new=reference_lookup,
+    ), patch(
+        "integrations.qoyod_manual.client.ManualQoyodClient."
+        "find_customers_by_phone",
+        new=AsyncMock(return_value=[{"id": 33}]),
+    ), patch(
+        "integrations.qoyod_manual.client.ManualQoyodClient."
+        "find_product_by_sku",
+        new=AsyncMock(return_value={"id": 77, "sku": "SKU-AUTO"}),
+    ), patch(
+        "integrations.qoyod_manual.client.ManualQoyodClient.create_invoice",
+        new=invoice_post,
+    ), patch(
+        "integrations.qoyod_manual.client.ManualQoyodClient."
+        "create_invoice_payment",
+        new=payment_post,
+    ):
+        result = await manual_send_one(
+            db,
+            user_id=TENANT,
+            order_number=order_number,
+            actor="auto-plan-b:test-run",
+        )
+
+    reference_lookup.assert_not_awaited()
+    assert result["ok"] is True
+    assert result["invoice_id"] == 9501
+    assert result["payment_id"] == 9801
+
+    inbox_row = await db.integration_inbox.find_one({
+        "salla_order_number": order_number,
+    })
+    assert inbox_row["manual_qoyod_invoice_id"] == "9501"
+    assert inbox_row["manual_qoyod_payment_id"] == "9801"
+
+    lock = await db.qoyod_manual_send_locks.find_one({
+        "order_number": order_number,
+    })
+    assert lock["status"] == "succeeded"

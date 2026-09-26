@@ -104,19 +104,17 @@ async def _load_candidate_rows_oldest_first(
 
     candidates: list[dict[str, Any]] = []
     seen: set[str] = set()
-    max_group_size = max((len(group) for group in candidate_groups), default=0)
-    for index in range(max_group_size):
-        for group in candidate_groups:
-            if index >= len(group):
-                continue
-            row = group[index]
-            order_number = str(row.get("order_number") or "")
-            if not order_number or order_number in seen:
-                continue
-            seen.add(order_number)
-            candidates.append(row)
-            if len(candidates) >= max(1, int(batch_limit)):
-                break
+    for row in runnable_candidates:
+        if not any(
+            auto_send_module._pending_row_matches_status(row, pending_status)
+            for pending_status in pending_statuses
+        ):
+            continue
+        order_number = str(row.get("order_number") or "")
+        if not order_number or order_number in seen:
+            continue
+        seen.add(order_number)
+        candidates.append(row)
         if len(candidates) >= max(1, int(batch_limit)):
             break
 
