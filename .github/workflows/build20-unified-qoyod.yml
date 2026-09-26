@@ -20,8 +20,7 @@ jobs:
           python-version: "3.11"
       - name: Install backend and test dependencies
         run: |
-          python -m pip install -r backend/requirements.txt
-          python -m pip install pytest pytest-asyncio mongomock-motor
+          python -m pip install pytest pytest-asyncio mongomock-motor fastapi httpx cryptography aiohttp python-dotenv
       - name: Run Qoyod backlog and manual send tests
         env:
           PYTHONPATH: backend
