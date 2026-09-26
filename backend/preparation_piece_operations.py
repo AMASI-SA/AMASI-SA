@@ -2081,6 +2081,23 @@ async def _assembly_progress(
     }
 
 
+async def _current_assembly_order(
+    db: Any,
+    *,
+    user_id: str,
+    order_number: str,
+) -> Any | None:
+    repository = MongoOrderRepository(db)
+    try:
+        return await get_order(
+            repository,
+            user_id=user_id,
+            order_number=order_number,
+        )
+    except OrderNotFoundError:
+        return None
+
+
 async def _assembly_search(
     db: Any,
     *,
@@ -2144,7 +2161,17 @@ async def _assembly_search(
         )
         for piece in pieces
     ]
+    current_order = await _current_assembly_order(
+        db,
+        user_id=user_id,
+        order_number=order_number,
+    )
+    current_order_status = _text(
+        current_order.status if current_order else ""
+    ).casefold()
     can_act_in_stage = (
+        current_order_status == "in_progress"
+        or 
         _text(workflow.get("stage")) in {"in_progress", "ready_to_ship"}
         or (
             _text(workflow.get("stage")) == "completed"
@@ -2201,15 +2228,7 @@ async def _assembly_search(
         workflow.get("carrier_label_print_confirmed")
         or _text(workflow.get("stage")) in {"delivering", "delivered"}
     )
-    repository = MongoOrderRepository(db)
-    try:
-        order = await get_order(
-            repository,
-            user_id=user_id,
-            order_number=order_number,
-        )
-    except OrderNotFoundError:
-        order = None
+    order = current_order
     return {
         "order_number": order_number,
         "order_created_at": order.created_at if order else None,
@@ -2433,7 +2452,20 @@ async def _mark_virtual_assembly_piece_ready(
     if not workflow:
         return None
     order_number = _text(workflow.get("order_number"))
-    if _text(workflow.get("stage")) not in {"ready_to_ship", "completed"}:
+    current_order = await _current_assembly_order(
+        db,
+        user_id=user_id,
+        order_number=order_number,
+    )
+    current_order_status = _text(
+        current_order.status if current_order else ""
+    ).casefold()
+    if (
+        _text(workflow.get("stage")) not in {
+            "in_progress", "ready_to_ship", "completed"
+        }
+        and current_order_status != "in_progress"
+    ):
         raise HTTPException(
             status_code=409,
             detail={"code": "assembly_order_not_ready"},
@@ -2550,7 +2582,7 @@ async def _mark_virtual_assembly_piece_ready(
             "user_id": user_id,
             "order_number": order_number,
             "revision": revision,
-            "stage": {"$in": ["ready_to_ship", "completed"]},
+            "stage": {"$in": ["in_progress", "ready_to_ship", "completed"]},
         },
         {
             "$set": {
@@ -2663,9 +2695,18 @@ async def _mark_assembly_piece_ready(
         },
         {"_id": 0, "stage": 1, "assembly_status": 1},
     )
+    current_order = await _current_assembly_order(
+        db,
+        user_id=user_id,
+        order_number=order_number,
+    )
+    current_order_status = _text(
+        current_order.status if current_order else ""
+    ).casefold()
     if not workflow or (
         _text(workflow.get("stage")) == "completed"
         and _text(workflow.get("assembly_status")) != "completed"
+        and current_order_status != "in_progress"
     ):
         raise HTTPException(
             status_code=409,
