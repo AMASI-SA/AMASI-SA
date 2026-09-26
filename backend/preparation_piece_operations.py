@@ -2201,8 +2201,23 @@ async def _assembly_search(
         workflow.get("carrier_label_print_confirmed")
         or _text(workflow.get("stage")) in {"delivering", "delivered"}
     )
+    repository = MongoOrderRepository(db)
+    try:
+        order = await get_order(
+            repository,
+            user_id=user_id,
+            order_number=order_number,
+        )
+    except OrderNotFoundError:
+        order = None
     return {
         "order_number": order_number,
+        "order_created_at": order.created_at if order else None,
+        "shipping_company": (
+            order.shipping.company if order else None
+        ) or _text(workflow.get("carrier_name")) or None,
+        "order_status": order.status if order else None,
+        "order_status_native": order.status_native if order else None,
         "stage": _text(workflow.get("stage")),
         "history_only": history_only,
         "matched_piece_id": matched_piece_id or None,
