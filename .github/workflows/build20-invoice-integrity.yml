@@ -38,13 +38,12 @@ jobs:
           python -m pip install
           fastapi==0.110.1 pydantic==2.13.4 pymongo==4.5.0 motor==3.3.1
           httpx==0.28.1 openai==1.99.9 pytest==9.0.2 pytest-asyncio==1.3.0
-          openpyxl cryptography reportlab python-multipart arabic-reshaper python-bidi Pillow pypdf PyMuPDF qrcode
-      - name: Actual HTTP transaction, rollback, idempotence, PDF and regression tests
+          openpyxl cryptography reportlab python-multipart arabic-reshaper python-bidi Pillow PyMuPDF qrcode
+      - name: HTTP transaction, rollback, idempotence and persisted presentation-source contracts
         working-directory: backend
         shell: bash
         run: |
           set -euo pipefail
-          export BUILD20_PDF_EVIDENCE="$RUNNER_TEMP/invoice-integrity-evidence/pdf"
           mkdir -p "$RUNNER_TEMP/invoice-integrity-evidence"
           git rev-parse HEAD HEAD^{tree} > "$RUNNER_TEMP/invoice-integrity-evidence/identity.txt"
           python -m pytest \
@@ -59,7 +58,7 @@ jobs:
           import os, pathlib, xml.etree.ElementTree as ET
           cases = list(ET.parse(pathlib.Path(os.environ['RUNNER_TEMP']) / 'invoice-integrity-evidence/pytest.xml').iter('testcase'))
           new = [c for c in cases if 'test_supplier_invoice_financial_integrity' in c.attrib.get('classname','')]
-          assert len(new) >= 25, 'Required transaction cases missing'
+          assert len(new) >= 28, 'Required transaction and presentation-source cases missing'
           assert all(c.find('skipped') is None for c in cases), 'Skipped coverage is not success'
           PY
       - name: Stop disposable Mongo

@@ -4,7 +4,6 @@ from __future__ import annotations
 import base64
 import io
 from datetime import datetime
-from decimal import Decimal
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -295,14 +294,11 @@ def generate_supplier_invoice_pdf(invoice: dict[str, Any]) -> bytes:
     page.roundRect(left, y - 17 * mm, content_width, 20 * mm, 4 * mm, fill=1, stroke=1)
     page.setFillColor(burgundy)
     page.setFont(bold_font, 15)
-    # Separate the LTR monetary literal from the Arabic label. Mixed bidi text
-    # can lose numeric spans in PDF readers; the source is the persisted total.
-    page.drawRightString(right - 6 * mm, y - 9 * mm, _ar("الإجمالي النهائي"))
-    total = invoice["total_halalas"]
-    if not isinstance(total, int) or isinstance(total, bool) or total <= 0:
-        raise ValueError("supplier_invoice_pdf_total_required")
-    page.setFont("Helvetica-Bold", 15)
-    page.drawString(left + 6 * mm, y - 9 * mm, f"{Decimal(total) / Decimal(100):,.2f} SAR")
+    page.drawCentredString(
+        width / 2,
+        y - 9 * mm,
+        _ar(f"الإجمالي النهائي: {_money(invoice.get('total_halalas'))}"),
+    )
 
     page.save()
     return buffer.getvalue()

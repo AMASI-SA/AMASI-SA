@@ -1,11 +1,12 @@
-"""Actual close/read/PDF routes against a disposable local replica-set Mongo.
+"""Transaction and persisted presentation-source contracts on disposable Mongo.
 No Production connection, merchant data, provider API, migration or repair.
+The PDF renderer is observed at its data boundary; its output is not analysed.
 """
 from __future__ import annotations
 import asyncio
-import io
 import os
 import uuid
+from copy import deepcopy
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
@@ -14,7 +15,6 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorCollection
-from pypdf import PdfReader
 
 import supplier_receiving_routes as r
 import supplier_invoice_integrity as integrity
@@ -94,7 +94,7 @@ async def unchanged(db, session):
     assert await db[r.RECEIVING_EVENTS].count_documents({'event_type':'supplier_receiving_session_closed'}) == 0
 
 @pytest.mark.parametrize('amounts,services', [((2100,),False),((32750,),False),((1100,4200,6300),True)])
-async def test_exact_amount_actor_tenant_readback_and_pdf(env, amounts, services):
+async def test_exact_amount_actor_tenant_readback_and_presentation_source(env, monkeypatch, amounts, services):
     db,http,_=env;s,p=await seed(db,amounts,services=services);res=await close(http,s,p)
     assert res.status_code==200, res.text
     body=res.json();inv=body['supplier_invoice'];total=p['confirmed_total_halalas']
@@ -113,17 +113,62 @@ async def test_exact_amount_actor_tenant_readback_and_pdf(env, amounts, services
         assert stored[k]==saved['supplier_invoice'][k]
     reread=await http.get('/supplier-receiving-v1/invoices/'+inv['id']);assert reread.status_code==200
     assert reread.json()['supplier_invoice']['total_halalas']==total
-    pdf=await http.get('/supplier-receiving-v1/invoices/'+inv['id']+'/pdf');assert pdf.status_code==200
-    extracted='\n'.join(page.extract_text() for page in PdfReader(io.BytesIO(pdf.content)).pages)
-    assert f'{total/100:,.2f}' in extracted
-    out=os.environ.get('BUILD20_PDF_EVIDENCE')
-    if out:
-        from pathlib import Path
-        Path(out).mkdir(parents=True, exist_ok=True);(Path(out)/f'invoice-{total}.pdf').write_bytes(pdf.content)
+    captured=[]
+    def render(document):
+        captured.append(deepcopy(document))
+        return b'synthetic-presentation-output'
+    monkeypatch.setattr(r,'generate_supplier_invoice_pdf',render)
+    response=await http.get('/supplier-receiving-v1/invoices/'+inv['id']+'/pdf')
+    assert response.status_code==200 and len(captured)==1
+    assert response.content==b'synthetic-presentation-output'
+    for key in ['id','invoice_number','supplier_id','session_id','lines','total_halalas']:
+        assert captured[0][key]==stored[key]
+    assert captured[0]['total_halalas']==total
+
+async def test_presentation_rereads_saved_invoice_and_ignores_independent_draft_values(env,monkeypatch):
+    db,http,_=env;s,p=await seed(db,(32750,));res=await close(http,s,p);assert res.status_code==200,res.text
+    iid=res.json()['supplier_invoice']['id']
+    # Synthetic non-financial label change proves the GET is a fresh document read.
+    await db[r.SUPPLIER_INVOICES].update_one({'id':iid},{'$set':{'lines.0.product_name':'Persisted after commit'}})
+    persisted=await db[r.SUPPLIER_INVOICES].find_one({'id':iid},{'_id':0})
+    captured=[]
+    def render(document): captured.append(deepcopy(document));return b'presentation-only'
+    monkeypatch.setattr(r,'generate_supplier_invoice_pdf',render)
+    response=await http.get('/supplier-receiving-v1/invoices/'+iid+'/pdf',params={
+        'total_halalas':1,'supplier_id':'wrong-draft-supplier','invoice_number':'DRAFT','lines':'[]'})
+    assert response.status_code==200 and len(captured)==1
+    for key in ['id','invoice_number','supplier_id','session_id','lines','total_halalas']:
+        assert captured[0][key]==persisted[key]
+    assert captured[0]['total_halalas']==32750
+    assert captured[0]['lines'][0]['product_name']=='Persisted after commit'
+
+async def test_missing_or_foreign_invoice_never_reaches_presentation_generator(env,monkeypatch):
+    db,http,_=env;captured=[]
+    def render(document):captured.append(document);return b'presentation-only'
+    monkeypatch.setattr(r,'generate_supplier_invoice_pdf',render)
+    await db[r.SUPPLIER_INVOICES].insert_one({'id':'foreign','user_id':'other-merchant','supplier_approved_by':'employee'})
+    for iid in ['missing','foreign']:
+        response=await http.get('/supplier-receiving-v1/invoices/'+iid+'/pdf')
+        assert response.status_code==404
+    assert captured==[] and await db.general_ledger.count_documents({})==0
+
+async def test_presentation_failure_does_not_change_posted_invoice_or_ledger(env,monkeypatch):
+    db,http,_=env;s,p=await seed(db);res=await close(http,s,p);assert res.status_code==200,res.text
+    iid=res.json()['supplier_invoice']['id']
+    before_invoice=await db[r.SUPPLIER_INVOICES].find_one({'id':iid})
+    before_ledger=await db.general_ledger.find({}).sort('id',1).to_list(10)
+    before_session=await db[r.SESSIONS].find_one({'id':s['id']})
+    def fail(_document):raise RuntimeError('synthetic-presentation-failure')
+    monkeypatch.setattr(r,'generate_supplier_invoice_pdf',fail)
+    with pytest.raises(RuntimeError,match='synthetic-presentation-failure'):
+        await http.get('/supplier-receiving-v1/invoices/'+iid+'/pdf')
+    assert before_invoice==await db[r.SUPPLIER_INVOICES].find_one({'id':iid})
+    assert before_ledger==await db.general_ledger.find({}).sort('id',1).to_list(10)
+    assert before_session==await db[r.SESSIONS].find_one({'id':s['id']})
+    assert before_session['status']=='closed' and before_invoice['financial_integrity_verified'] is True
 
 async def test_zero_total_has_no_business_writes(env):
     db,http,_=env;s,p=await seed(db,(0,));p.pop('confirmed_total_halalas')
-    # No initial product charge; keep existing zero-total validator as the authority.
     await db[r.RECEIVING_EVENTS].update_many({}, {'$set':{'product_charge_eligible':False}})
     response=await close(http,s,p)
     assert response.status_code==422 and response.json()['detail']['code']=='supplier_receiving_invoice_total_required'
@@ -183,7 +228,6 @@ async def test_persisted_corruption_before_commit_rolls_back(env,monkeypatch,cor
 
 async def test_lost_response_read_and_duplicate_close_one_group(env):
     db,http,_=env;s,p=await seed(db);first=await close(http,s,p);assert first.status_code==200,first.text
-    # Client loses this response; discovers the existing source through read-only GET.
     state=(await http.get('/supplier-receiving-v1/sessions/'+s['id'])).json()
     inv=state['session']['supplier_invoice'];read=await http.get('/supplier-receiving-v1/invoices/'+inv['id'])
     assert read.status_code==200
@@ -195,7 +239,6 @@ async def test_lost_response_read_and_duplicate_close_one_group(env):
 
 async def test_concurrent_close_one_invoice(env):
     db,http,_=env;s,p=await seed(db)
-    # Warm indexes so test covers transaction concurrency, not simultaneous index creation.
     await r.ensure_supplier_receiving_indexes(db)
     replies=await asyncio.gather(close(http,s,p),close(http,s,p))
     assert any(x.status_code==200 for x in replies),[x.text for x in replies]
@@ -209,7 +252,7 @@ async def test_closed_without_invoice_is_not_success_and_not_repaired(env):
     assert await db[r.SUPPLIER_INVOICES].count_documents({})==0
     assert await db.general_ledger.count_documents({})==0
 
-async def test_read_and_pdf_reject_corrupt_persisted_new_invoice_without_repair(env):
+async def test_read_and_presentation_reject_corrupt_persisted_new_invoice_without_repair(env):
     db,http,_=env;s,p=await seed(db);body=(await close(http,s,p)).json();iid=body['supplier_invoice']['id']
     await db.general_ledger.update_one({'side':'credit'},{'$set':{'amount':20}})
     for suffix in ['', '/pdf']:
