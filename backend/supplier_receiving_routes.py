@@ -190,6 +190,10 @@ class SupplierReceivingSessionCreateRequest(BaseModel):
 class SupplierPieceScanRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    # Optional for Build19 compatibility. Build20 always sends a stable ID for
+    # one physical mutation attempt so a lost HTTP response can be recovered
+    # without re-posting the scan.
+    client_request_id: str | None = Field(default=None, min_length=8, max_length=160)
     barcode: str = Field(min_length=1, max_length=500)
     quantity: int | None = Field(default=None, ge=1, le=5000)
     confirm_supplier_reassignment: bool = False
@@ -2049,6 +2053,16 @@ async def ensure_supplier_receiving_indexes(db: Any) -> None:
         name="ix_supplier_receiving_session_events_v1",
     )
     await db[RECEIVING_EVENTS].create_index(
+        [
+            ("user_id", ASCENDING),
+            ("session_id", ASCENDING),
+            ("client_request_id", ASCENDING),
+            ("event_type", ASCENDING),
+            ("scan_request_index", ASCENDING),
+        ],
+        name="ix_supplier_receiving_scan_request_v1",
+    )
+    await db[RECEIVING_EVENTS].create_index(
         [("user_id", ASCENDING), ("piece_id", ASCENDING), ("event_type", ASCENDING)],
         unique=True,
         partialFilterExpression={"event_type": "supplier_piece_scanned"},
@@ -2366,6 +2380,221 @@ async def _recent_session_events(
                 )
             row.update(dict(product_price_cache[cache_key]))
     return rows
+
+
+def _scan_request_shape(payload: SupplierPieceScanRequest) -> dict[str, Any]:
+    return {
+        "barcode": _text(payload.barcode),
+        "quantity": payload.quantity,
+        "confirm_supplier_reassignment": bool(payload.confirm_supplier_reassignment),
+    }
+
+
+def _scan_request_event_shape(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "barcode": _text(row.get("scan_request_barcode")),
+        "quantity": row.get("scan_request_quantity"),
+        "confirm_supplier_reassignment": bool(
+            row.get("scan_request_confirm_supplier_reassignment")
+        ),
+    }
+
+
+def _scan_request_public_event(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in row.items()
+        if key not in {
+            "_id",
+            "user_id",
+            "previous_piece_state",
+            "previous_piece_present_fields",
+        }
+    }
+
+
+async def _scan_request_recovery(
+    db: Any,
+    *,
+    user_id: str,
+    session_id: str,
+    client_request_id: str,
+    expected_payload: SupplierPieceScanRequest | None = None,
+) -> dict[str, Any]:
+    """Read-only proof for one Build20 scan attempt.
+
+    The event set, not SKU/product matching, is the durable recovery authority.
+    A request is committed only when the exact event cardinality and physical
+    piece links are complete.
+    """
+    request_id = _text(client_request_id)
+    session = await db[SESSIONS].find_one(
+        {"user_id": user_id, "id": session_id},
+        {"_id": 0},
+    )
+    rows = (
+        await db[RECEIVING_EVENTS]
+        .find(
+            {
+                "user_id": user_id,
+                "session_id": session_id,
+                "event_type": "supplier_piece_scanned",
+                "client_request_id": request_id,
+            },
+            {
+                "_id": 0,
+                "user_id": 0,
+                "previous_piece_state": 0,
+                "previous_piece_present_fields": 0,
+            },
+        )
+        .sort([("scan_request_index", 1), ("occurred_at", 1), ("piece_id", 1)])
+        .limit(MAX_SESSION_SCANS)
+        .to_list(MAX_SESSION_SCANS)
+    )
+    if not rows:
+        return {
+            "ok": True,
+            "found": False,
+            "committed": False,
+            "client_request_id": request_id,
+            "session": _public_session(session) if session else None,
+            "piece": None,
+            "pieces": [],
+            "scan": None,
+            "scans": [],
+            "selected_quantity": 0,
+            "idempotent": True,
+            "recovered": True,
+        }
+
+    stored_shape = _scan_request_event_shape(rows[0])
+    if any(_scan_request_event_shape(row) != stored_shape for row in rows):
+        return {
+            "ok": True,
+            "found": True,
+            "committed": False,
+            "client_request_id": request_id,
+            "session": _public_session(session) if session else None,
+            "piece": None,
+            "pieces": [],
+            "scan": None,
+            "scans": [_scan_request_public_event(row) for row in rows],
+            "selected_quantity": len(rows),
+            "idempotent": True,
+            "recovered": True,
+            "integrity_error": "scan_request_payload_inconsistent",
+        }
+    if expected_payload is not None and stored_shape != _scan_request_shape(expected_payload):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "supplier_receiving_scan_request_conflict",
+                "client_request_id": request_id,
+                "stored": stored_shape,
+                "requested": _scan_request_shape(expected_payload),
+            },
+        )
+
+    sizes = {int(row.get("scan_request_size") or 0) for row in rows}
+    indexes = [int(row.get("scan_request_index") or 0) for row in rows]
+    piece_ids = [_text(row.get("piece_id")) for row in rows]
+    expected_size = next(iter(sizes)) if len(sizes) == 1 else 0
+    cardinality_ok = (
+        expected_size > 0
+        and expected_size == len(rows)
+        and indexes == list(range(1, expected_size + 1))
+        and all(piece_ids)
+        and len(set(piece_ids)) == len(piece_ids)
+    )
+    pieces: list[dict[str, Any]] = []
+    if cardinality_ok:
+        piece_rows = await db[PIECES].find(
+            {"user_id": user_id, "piece_id": {"$in": piece_ids}},
+            {"_id": 0},
+        ).to_list(expected_size)
+        by_id = {_text(row.get("piece_id")): row for row in piece_rows}
+        pieces = [by_id[piece_id] for piece_id in piece_ids if piece_id in by_id]
+        cardinality_ok = (
+            len(pieces) == expected_size
+            and all(
+                _text(piece.get("supplier_receiving_session_id")) == session_id
+                and _text(piece.get("receipt_event_id")) == _text(rows[index].get("id"))
+                for index, piece in enumerate(pieces)
+            )
+        )
+    public_rows = [_scan_request_public_event(row) for row in rows]
+    return {
+        "ok": True,
+        "found": True,
+        "committed": bool(cardinality_ok),
+        "client_request_id": request_id,
+        "session": _public_session(session) if session else None,
+        "piece": _public_piece(pieces[0]) if cardinality_ok else None,
+        "pieces": [_public_piece(row) for row in pieces] if cardinality_ok else [],
+        "scan": public_rows[0] if cardinality_ok else None,
+        "scans": public_rows,
+        "selected_quantity": expected_size if cardinality_ok else len(rows),
+        "requires_quantity_selection": False,
+        "idempotent": True,
+        "recovered": True,
+    }
+
+
+async def _same_session_piece_scan_recovery(
+    db: Any,
+    *,
+    user_id: str,
+    session: dict[str, Any],
+    piece: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Recover one exact physical piece already reserved by this session."""
+    session_id = _text(session.get("id"))
+    if _text(piece.get("supplier_receiving_session_id")) != session_id:
+        return None
+    event_id = _text(piece.get("receipt_event_id"))
+    if not event_id:
+        return None
+    event = await db[RECEIVING_EVENTS].find_one(
+        {
+            "user_id": user_id,
+            "session_id": session_id,
+            "event_type": "supplier_piece_scanned",
+            "id": event_id,
+            "piece_id": _text(piece.get("piece_id")),
+        },
+        {
+            "_id": 0,
+            "user_id": 0,
+            "previous_piece_state": 0,
+            "previous_piece_present_fields": 0,
+        },
+    )
+    if not event:
+        return None
+    public_event = _scan_request_public_event(event)
+    return {
+        "ok": True,
+        "found": True,
+        "committed": True,
+        "same_session": True,
+        "same_session_recovery": True,
+        "idempotent": True,
+        "recovered": True,
+        "client_request_id": _text(event.get("client_request_id")) or None,
+        "session": _public_session(session),
+        "piece": _public_piece(piece),
+        "pieces": [_public_piece(piece)],
+        "scan": public_event,
+        "scans": [public_event],
+        "selected_quantity": 1,
+        "requires_quantity_selection": False,
+        "draft_piece_reserved": True,
+        "financial_invoice_created": False,
+        "liability_created": False,
+        "salla_updated": False,
+        "qoyod_updated": False,
+    }
 
 
 async def _cancellable_session_events(
@@ -3155,6 +3384,27 @@ def make_supplier_receiving_router(
             "refreshed": True,
         }
 
+
+    @router.get("/sessions/{session_id}/scan-requests/{client_request_id}")
+    async def get_scan_request(
+        session_id: str,
+        client_request_id: str,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        context = await _actor_context(db, user)
+        _require_permission(context, RECEIVE_PERMISSION)
+        await _session_for_actor(
+            db,
+            context=context,
+            session_id=session_id,
+        )
+        return await _scan_request_recovery(
+            db,
+            user_id=context["merchant_id"],
+            session_id=session_id,
+            client_request_id=client_request_id,
+        )
+
     @router.post("/sessions/{session_id}/scan")
     async def scan_piece(
         session_id: str,
@@ -3173,6 +3423,26 @@ def make_supplier_receiving_router(
                 status_code=409,
                 detail={"code": "supplier_receiving_session_closed"},
             )
+        barcode = _text(payload.barcode)
+        client_request_id = _text(payload.client_request_id)
+        if client_request_id:
+            existing_request = await _scan_request_recovery(
+                db,
+                user_id=context["merchant_id"],
+                session_id=session_id,
+                client_request_id=client_request_id,
+                expected_payload=payload,
+            )
+            if existing_request["found"]:
+                if existing_request["committed"]:
+                    return existing_request
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "supplier_receiving_scan_request_incomplete",
+                        "client_request_id": client_request_id,
+                    },
+                )
         if int(session.get("scan_count") or 0) >= MAX_SESSION_SCANS:
             raise HTTPException(
                 status_code=409,
@@ -3204,6 +3474,16 @@ def make_supplier_receiving_router(
             return_document=ReturnDocument.AFTER,
         )
         if not session:
+            if client_request_id:
+                existing_request = await _scan_request_recovery(
+                    db,
+                    user_id=context["merchant_id"],
+                    session_id=session_id,
+                    client_request_id=client_request_id,
+                    expected_payload=payload,
+                )
+                if existing_request["found"] and existing_request["committed"]:
+                    return existing_request
             latest = await db[SESSIONS].find_one(
                 {"user_id": context["merchant_id"], "id": session_id},
                 {"_id": 0, "status": 1},
@@ -3214,7 +3494,6 @@ def make_supplier_receiving_router(
                 else "supplier_receiving_scan_busy"
             )
             raise HTTPException(status_code=409, detail={"code": code})
-        barcode = _text(payload.barcode)
         reserved_rows: list[tuple[dict[str, Any], dict[str, Any]]] = []
         inserted_event_ids: list[str] = []
         session_incremented = 0
@@ -3225,6 +3504,33 @@ def make_supplier_receiving_router(
                 user_id=context["merchant_id"],
                 barcode=barcode,
             )
+            scanned_blocker = piece_scan_blocker(scanned_piece)
+            if scanned_blocker:
+                raise HTTPException(status_code=409, detail=scanned_blocker)
+            scanned_reserved_session_id = _text(
+                scanned_piece.get("supplier_receiving_session_id")
+            )
+            if scanned_reserved_session_id:
+                if scanned_reserved_session_id == session_id:
+                    same_session_result = await _same_session_piece_scan_recovery(
+                        db,
+                        user_id=context["merchant_id"],
+                        session=session,
+                        piece=scanned_piece,
+                    )
+                    if same_session_result is not None:
+                        return same_session_result
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "supplier_piece_already_in_receiving_session",
+                        "session_id": scanned_reserved_session_id,
+                        "same_session": scanned_reserved_session_id == session_id,
+                        "piece_id": _text(scanned_piece.get("piece_id")),
+                        "receipt_event_id": _text(scanned_piece.get("receipt_event_id"))
+                        or None,
+                    },
+                )
             candidates = await supplier_scan_group_candidates(
                 db,
                 user_id=context["merchant_id"],
@@ -3604,6 +3910,17 @@ def make_supplier_receiving_router(
                     "salla_updated": False,
                     "qoyod_updated": False,
                 }
+                if client_request_id:
+                    event.update({
+                        "client_request_id": client_request_id,
+                        "scan_request_barcode": barcode,
+                        "scan_request_quantity": payload.quantity,
+                        "scan_request_confirm_supplier_reassignment": bool(
+                            payload.confirm_supplier_reassignment
+                        ),
+                        "scan_request_index": len(events) + 1,
+                        "scan_request_size": selected_quantity,
+                    })
                 if _text(updated_piece.get("experiment_run_id")):
                     event.update({
                         "experiment_mode": True,
@@ -3704,6 +4021,9 @@ def make_supplier_receiving_router(
         } for event in events]
         return {
             "ok": True,
+            "client_request_id": client_request_id or None,
+            "idempotent": False,
+            "recovered": False,
             "piece": _public_piece(reserved_rows[0][1]),
             "pieces": [_public_piece(row) for _before, row in reserved_rows],
             "session": _public_session(session),
