@@ -1,0 +1,31 @@
+name: Build20 Unified Qoyod Backlog and Manual Send
+on:
+  pull_request:
+    paths:
+      - .github/workflows/build20-unified-qoyod.yml
+      - backend/integrations/qoyod_manual/send.py
+      - backend/qoyod_auto_unified/queue_select.py
+      - backend/tests/test_qoyod_manual_send_plan_b.py
+      - backend/tests/test_qoyod_unified_backlog_20260822.py
+  workflow_dispatch:
+jobs:
+  backlog-manual-send:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install backend and test dependencies
+        run: |
+          python -m pip install -r backend/requirements.txt
+          python -m pip install pytest pytest-asyncio mongomock-motor
+      - name: Run Qoyod backlog and manual send tests
+        env:
+          PYTHONPATH: backend
+          QOYOD_API_BASE: https://example.invalid
+        run: |
+          export QOYOD_TOKEN_ENC_KEY="$(python -c 'import base64,os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())')"
+          python -m pytest -q --tb=short backend/tests/test_qoyod_manual_send_plan_b.py backend/tests/test_qoyod_unified_backlog_20260822.py

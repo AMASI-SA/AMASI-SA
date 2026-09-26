@@ -10,3 +10,4 @@ Remote checkpoint: branch pushed; full CI and final source freeze pending.
 The inherited release/release-intent-v5.json is stale for this combined candidate and must not be used to publish.
 Next: Draft PR, full combined CI, final source commit, then a new intent-only commit.
 Production changed by this task: no. No Release Guard prepare or Re-publish.
+Qoyod exact-head backlog/manual CI workflow added; outcome pending on Draft PR #1163.
