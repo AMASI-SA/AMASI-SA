@@ -51,6 +51,7 @@ from product_option_cost_routes import AUDIT, BINDINGS, RESOURCES
 from product_v2_details_routes import COST_PROFILES
 from product_v2_routes import PRODUCTS
 from supplier_invoice_pdf import generate_supplier_invoice_pdf
+from supplier_invoice_integrity import CONTRACT as INVOICE_INTEGRITY_CONTRACT, require as require_invoice_integrity, verify_persisted_supplier_invoice
 from tz_utils import riyadh_now_aware
 
 SUPPLIERS = MEZAN_SUPPLIERS_V2
@@ -214,6 +215,9 @@ class SupplierReceivingInvoiceLineRequest(BaseModel):
 
 class SupplierReceivingSessionCloseRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+    confirmed_total_halalas: int | None = Field(default=None, gt=0, le=9_007_199_254_740_991, strict=True)
+    expected_supplier_id: str | None = Field(default=None, min_length=1, max_length=160)
 
     note: str | None = Field(default=None, max_length=1000)
     invoice_lines: list[SupplierReceivingInvoiceLineRequest] = Field(
@@ -793,6 +797,8 @@ def _public_session(row: dict[str, Any] | None) -> dict[str, Any] | None:
         "reference": _text(row.get("reference")),
         "status": _text(row.get("status")),
         "supplier": dict(row.get("supplier_snapshot") or {}),
+        "supplier_id": row.get("supplier_id"),
+        "financial_integrity_verified": row.get("financial_integrity_verified"),
         "supplier_context_only": False,
         "supplier_operational_linked": True,
         "supplier_service_link_status": _text(row.get("supplier_service_link_status"))
@@ -835,7 +841,7 @@ def _public_supplier_invoice(row: dict[str, Any] | None) -> dict[str, Any] | Non
     public = {
         key: value
         for key, value in row.items()
-        if key not in {"_id", "user_id", "ledger_entry_ids"}
+        if key not in {"_id", "user_id"}
     }
     evidence_id = _text(public.get("share_evidence_id"))
     public["share_evidence_url"] = (
@@ -1303,7 +1309,7 @@ async def _post_supplier_invoice_ledger(
     mongo_session: Any,
 ) -> dict[str, Any]:
     """Post the balanced payable legs inside the caller's Mongo transaction."""
-    amount = round(int(invoice["total_halalas"]) / 100, 2)
+    amount = float(Decimal(int(invoice["total_halalas"])) / Decimal(100))
     if amount <= 0:
         raise HTTPException(
             status_code=422,
@@ -2687,6 +2693,11 @@ def make_supplier_receiving_router(
             context=context,
             invoice_id=invoice_id,
         )
+        if invoice.get("financial_integrity_contract") == INVOICE_INTEGRITY_CONTRACT:
+            invoice = await verify_persisted_supplier_invoice(
+                db, user_id=context["merchant_id"], invoice_id=invoice_id,
+                session_id=invoice.get("session_id"), supplier_id=invoice.get("supplier_id"),
+            )
         return {"ok": True, "supplier_invoice": _public_supplier_invoice(invoice)}
 
     @router.get("/invoices/{invoice_id}/pdf")
@@ -2701,6 +2712,11 @@ def make_supplier_receiving_router(
             context=context,
             invoice_id=invoice_id,
         )
+        if invoice.get("financial_integrity_contract") == INVOICE_INTEGRITY_CONTRACT:
+            invoice = await verify_persisted_supplier_invoice(
+                db, user_id=context["merchant_id"], invoice_id=invoice_id,
+                session_id=invoice.get("session_id"), supplier_id=invoice.get("supplier_id"),
+            )
         # Historical invoices may predate the persisted selected image URL.
         # Enrich a copy at download time from the current Mezan V2 catalog so
         # reprints and newly-created invoices both show the product thumbnail.
@@ -3975,30 +3991,35 @@ def make_supplier_receiving_router(
             context=context,
             session_id=session_id,
         )
-        if _text(session.get("status")) == "closed":
-            saved_invoice = await db[SUPPLIER_INVOICES].find_one(
-                {
-                    "user_id": context["merchant_id"],
-                    "session_id": session_id,
-                },
-                {"_id": 0},
+        effective_actor = {**user, "id": context["actor_id"], "name": _actor_name(user)}
+
+        async def closed_result(closed: dict[str, Any], tx: Any = None) -> dict[str, Any]:
+            kw = {"session": tx} if tx is not None else {}
+            saved = await db[SUPPLIER_INVOICES].find_one(
+                {"user_id": context["merchant_id"], "session_id": session_id}, {"_id": 0}, **kw,
             )
+            require_invoice_integrity(isinstance(saved, dict), "closed_session_without_invoice")
+            if saved.get("experiment_mode") is not True:
+                saved = await verify_persisted_supplier_invoice(
+                    db, user_id=context["merchant_id"], invoice_id=saved.get("id"),
+                    session_id=session_id, supplier_id=closed.get("supplier_id"),
+                    expected_total=payload.confirmed_total_halalas, actor_id=context["actor_id"], mongo_session=tx,
+                )
+            if payload.expected_supplier_id is not None:
+                require_invoice_integrity(saved.get("supplier_id") == payload.expected_supplier_id, "selected_supplier_mismatch")
             return {
-                "ok": True,
-                "session": _public_session(session),
-                "supplier_invoice": _public_supplier_invoice(saved_invoice),
-                "financial_invoice_created": bool(
-                    (saved_invoice or {}).get("financial_invoice_created")
-                ),
-                "liability_created": bool(
-                    (saved_invoice or {}).get("liability_created")
-                ),
-                "experiment_mode": bool((saved_invoice or {}).get("experiment_mode")),
-                "experiment_run_id": _text(
-                    (saved_invoice or {}).get("experiment_run_id")
-                ) or None,
-                "qoyod_updated": False,
+                "ok": True, "session": _public_session(closed),
+                "supplier_invoice": _public_supplier_invoice(saved),
+                "financial_invoice_created": saved.get("financial_invoice_created"),
+                "liability_created": saved.get("liability_created"),
+                "financial_integrity_verified": saved.get("financial_integrity_verified") is True,
+                "experiment_mode": saved.get("experiment_mode"),
+                "experiment_run_id": saved.get("experiment_run_id"),
+                "idempotent": True, "qoyod_updated": False, "salla_updated": False,
             }
+
+        if _text(session.get("status")) == "closed":
+            return await closed_result(session)
         if _text(session.get("status")) != "open":
             raise HTTPException(
                 status_code=409,
@@ -4022,6 +4043,8 @@ def make_supplier_receiving_router(
                 {"_id": 0},
                 session=mongo_session,
             )
+            if fresh_session and _text(fresh_session.get("status")) == "closed":
+                return await closed_result(fresh_session, mongo_session)
             if not fresh_session or _text(fresh_session.get("status")) != "open":
                 raise HTTPException(
                     status_code=409,
@@ -4119,6 +4142,14 @@ def make_supplier_receiving_router(
                 permissions=set(context["permissions"]),
                 service_catalog=service_catalog,
             )
+            require_invoice_integrity(
+                bool(fresh_session.get("supplier_id")) and fresh_session.get("supplier_id")
+                == (fresh_session.get("supplier_snapshot") or {}).get("id"), "session_supplier_snapshot_mismatch",
+            )
+            if payload.expected_supplier_id is not None:
+                require_invoice_integrity(fresh_session["supplier_id"] == payload.expected_supplier_id, "selected_supplier_mismatch")
+            if payload.confirmed_total_halalas is not None:
+                require_invoice_integrity(draft["total_halalas"] == payload.confirmed_total_halalas, "confirmed_amount_mismatch")
             invoice_id = f"msiv2_{uuid.uuid5(uuid.NAMESPACE_URL, f'{merchant_id}:{session_id}').hex}"
             invoice_number = _text(fresh_session.get("reference")).replace(
                 "SR-", "SI-TEST-" if is_experiment else "SI-", 1
@@ -4140,6 +4171,9 @@ def make_supplier_receiving_router(
                 "outstanding_halalas": 0 if is_experiment else int(draft["total_halalas"]),
                 "supplier_approved_at": now,
                 "supplier_approved_by": context["actor_id"],
+                "approved_by": context["actor_id"],
+                "financial_integrity_contract": INVOICE_INTEGRITY_CONTRACT if not is_experiment else None,
+                "financial_integrity_verified": not is_experiment,
                 "supplier_approved_by_name": _actor_name(user),
                 "payable_posted_at": None if is_experiment else now,
                 "approved_at": now,
@@ -4185,7 +4219,7 @@ def make_supplier_receiving_router(
                 ledger = await _post_supplier_invoice_ledger(
                     db,
                     user_id=merchant_id,
-                    actor=user,
+                    actor=effective_actor,
                     invoice=invoice,
                     mongo_session=mongo_session,
                 )
@@ -4351,7 +4385,7 @@ def make_supplier_receiving_router(
                         piece=piece,
                         invoice_line=line,
                         session=fresh_session,
-                        actor=user,
+                        actor=effective_actor,
                         invoice_id=invoice_id,
                         completed_at=now,
                     ),
@@ -4415,6 +4449,12 @@ def make_supplier_receiving_router(
 
             invoice_summary = {
                 "id": invoice_id,
+                "supplier_id": invoice["supplier_id"],
+                "session_id": session_id,
+                "ledger_entry_ids": invoice["ledger_entry_ids"],
+                "financial_invoice_created": not is_experiment,
+                "liability_created": not is_experiment,
+                "financial_integrity_verified": not is_experiment,
                 "invoice_number": invoice_number,
                 "status": "experiment_completed" if is_experiment else "payable_posted",
                 "currency": "SAR",
@@ -4451,6 +4491,8 @@ def make_supplier_receiving_router(
                         ),
                         "supplier_invoice_id": invoice_id,
                         "supplier_invoice": invoice_summary,
+                        "financial_integrity_contract": INVOICE_INTEGRITY_CONTRACT if not is_experiment else None,
+                        "financial_integrity_verified": not is_experiment,
                         "financial_invoice_created": not is_experiment,
                         "liability_created": not is_experiment,
                         "experiment_mode": is_experiment,
@@ -4564,8 +4606,15 @@ def make_supplier_receiving_router(
                     merchant_id,
                     session=mongo_session,
                 )
+            if not is_experiment:
+                invoice = await verify_persisted_supplier_invoice(
+                    db, user_id=merchant_id, invoice_id=invoice_id, session_id=session_id,
+                    supplier_id=fresh_session["supplier_id"], expected_total=draft["total_halalas"],
+                    actor_id=context["actor_id"], mongo_session=mongo_session,
+                )
             return {
                 "ok": True,
+                "financial_integrity_verified": not is_experiment,
                 "session": _public_session(updated),
                 "supplier_invoice": _public_supplier_invoice(invoice),
                 "next_step": (
@@ -4598,8 +4647,8 @@ def make_supplier_receiving_router(
                 detail={
                     "code": "supplier_receiving_accounting_transaction_failed",
                     "message": (
-                        "تعذّر اعتماد فاتورة المورد محاسبيًا؛ بقيت الجلسة "
-                        "مفتوحة ولم تُحفظ الفاتورة. حاول مرة أخرى."
+                        "تعذّر تأكيد نتيجة الإغلاق. تحقق من سجل الجلسة والفاتورة "
+                        "قبل إعادة المحاولة؛ قد يكون الخادم أكمل الحفظ."
                     ),
                 },
             ) from exc
