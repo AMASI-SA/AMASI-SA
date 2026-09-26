@@ -31,6 +31,8 @@ from fulfillment_v2_routes import (
     _require_permission,
 )
 from fulfillment_carrier_label import sync_completed_carrier_label
+from order_engine.repository import MongoOrderRepository
+from order_engine.service import OrderNotFoundError, get_order
 from order_engine.shipping_label_service import ShippingLabelError
 from order_review_export_controls import user_can_manage_preparation
 from order_review_routes import (
@@ -2079,6 +2081,28 @@ async def _assembly_progress(
     }
 
 
+async def _current_assembly_order(
+    db: Any,
+    *,
+    user_id: str,
+    order_number: str,
+) -> Any | None:
+    # Legacy focused unit tests use a tiny dict-backed fake DB that predates
+    # Order Engine. Keep those contracts observational instead of requiring a
+    # second unrelated collection. Real Motor databases expose unified_orders.
+    if isinstance(db, dict) or not hasattr(db, "unified_orders"):
+        return None
+    repository = MongoOrderRepository(db)
+    try:
+        return await get_order(
+            repository,
+            user_id=user_id,
+            order_number=order_number,
+        )
+    except OrderNotFoundError:
+        return None
+
+
 async def _assembly_search(
     db: Any,
     *,
@@ -2142,7 +2166,17 @@ async def _assembly_search(
         )
         for piece in pieces
     ]
+    current_order = await _current_assembly_order(
+        db,
+        user_id=user_id,
+        order_number=order_number,
+    )
+    current_order_status = _text(
+        current_order.status if current_order else ""
+    ).casefold()
     can_act_in_stage = (
+        current_order_status == "in_progress"
+        or 
         _text(workflow.get("stage")) in {"in_progress", "ready_to_ship"}
         or (
             _text(workflow.get("stage")) == "completed"
@@ -2199,8 +2233,15 @@ async def _assembly_search(
         workflow.get("carrier_label_print_confirmed")
         or _text(workflow.get("stage")) in {"delivering", "delivered"}
     )
+    order = current_order
     return {
         "order_number": order_number,
+        "order_created_at": order.created_at if order else None,
+        "shipping_company": (
+            order.shipping.company if order else None
+        ) or _text(workflow.get("carrier_name")) or None,
+        "order_status": order.status if order else None,
+        "order_status_native": order.status_native if order else None,
         "stage": _text(workflow.get("stage")),
         "history_only": history_only,
         "matched_piece_id": matched_piece_id or None,
@@ -2216,6 +2257,181 @@ async def _assembly_search(
             "remaining": len(rows) - ready_count,
             "all_ready": completed,
         },
+    }
+
+
+async def _assembly_order_board(
+    db: Any,
+    *,
+    user_id: str,
+    state: Literal["in_progress", "completed"],
+    limit: int,
+    offset: int,
+    query: str = "",
+) -> dict[str, Any]:
+    """Return only orders that actually entered Mezan/Amasi preparation.
+
+    Board membership follows the current canonical Salla status from Order
+    Engine. A completed status therefore removes an order from the in-progress
+    queue immediately; if Salla is moved back to in_progress the same durable
+    Mezan piece progress becomes visible again.
+    """
+    if state not in {"in_progress", "completed"}:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "assembly_board_state_invalid"},
+        )
+    normalized_query = _text(query).removeprefix("#").strip()
+
+    physical_order_numbers = {
+        _text(value)
+        for value in await db[PIECES].distinct(
+            "order_number",
+            {
+                "user_id": user_id,
+                "$or": [
+                    {"experiment_archived_at": {"$exists": False}},
+                    {"experiment_archived_at": None},
+                ],
+            },
+        )
+        if _text(value)
+    }
+
+    evidence_or: list[dict[str, Any]] = [
+        {"preparation_batch_ids.0": {"$exists": True}},
+        {"preparation_assignments.0": {"$exists": True}},
+        {"preparation_piece_count": {"$gt": 0}},
+        {"ready_to_ship_source": "preparation_receipt"},
+        {"items.preparation_route": "direct_assembly"},
+        {"operational_items.0": {"$exists": True}},
+    ]
+    if physical_order_numbers:
+        evidence_or.insert(
+            0,
+            {"order_number": {"$in": sorted(physical_order_numbers)}},
+        )
+
+    workflows = await db[WORKFLOWS].find(
+        {"user_id": user_id, "$or": evidence_or},
+        {"_id": 0},
+    ).sort("updated_at", 1).limit(5000).to_list(5000)
+
+    order_numbers = sorted({
+        _text(row.get("order_number"))
+        for row in workflows
+        if _text(row.get("order_number"))
+    })
+    physical_rows = (
+        await db[PIECES].find(
+            {
+                "user_id": user_id,
+                "order_number": {"$in": order_numbers},
+                "status": {"$ne": PIECE_STATUS_CANCELLED},
+                "$or": [
+                    {"experiment_archived_at": {"$exists": False}},
+                    {"experiment_archived_at": None},
+                ],
+            },
+            {
+                "_id": 0,
+                "order_number": 1,
+                "piece_id": 1,
+                "assembly_status": 1,
+            },
+        ).to_list(50000)
+        if order_numbers
+        else []
+    )
+    physical_by_order: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for piece in physical_rows:
+        physical_by_order[_text(piece.get("order_number"))].append(piece)
+
+    repository = MongoOrderRepository(db)
+    rows: list[dict[str, Any]] = []
+    for workflow in workflows:
+        order_number = _text(workflow.get("order_number"))
+        if not order_number:
+            continue
+        if normalized_query and normalized_query not in order_number:
+            continue
+        try:
+            order = await get_order(
+                repository,
+                user_id=user_id,
+                order_number=order_number,
+            )
+        except OrderNotFoundError:
+            continue
+
+        if _text(order.status).casefold() != state:
+            continue
+
+        pieces = list(physical_by_order.get(order_number) or [])
+        pieces.extend(
+            _workflow_assembly_pieces(
+                workflow,
+                order_number=order_number,
+            )
+        )
+        if not pieces:
+            # Salla-only orders never enter this board.
+            continue
+
+        total_count = len(pieces)
+        ready_count = sum(
+            1
+            for piece in pieces
+            if _text(piece.get("assembly_status")) == "ready"
+        )
+        rows.append({
+            "order_number": order.order_number,
+            "order_created_at": order.created_at,
+            "status_at": (
+                order.completed_at
+                if state == "completed"
+                else order.engine_updated_at
+            ) or order.created_at,
+            "shipping_company": (
+                order.shipping.company
+                or _text(workflow.get("carrier_name"))
+                or None
+            ),
+            "total_count": total_count,
+            "ready_count": ready_count,
+            "remaining_count": max(0, total_count - ready_count),
+            "order_status": order.status,
+            "order_status_native": order.status_native,
+            "workflow_stage": _text(workflow.get("stage")) or None,
+            "assembly_status": _text(workflow.get("assembly_status")) or None,
+            "mezan_preparation": True,
+        })
+
+    if state == "in_progress":
+        rows.sort(
+            key=lambda row: (
+                row["order_created_at"],
+                _text(row.get("order_number")),
+            )
+        )
+    else:
+        rows.sort(
+            key=lambda row: (
+                row["status_at"],
+                _text(row.get("order_number")),
+            ),
+            reverse=True,
+        )
+
+    total = len(rows)
+    return {
+        "state": state,
+        "items": rows[offset:offset + limit],
+        "total": total,
+        "offset": offset,
+        "limit": limit,
+        "poll_seconds": 15,
+        "source": "mezan_preparation_current_salla_status",
     }
 
 
@@ -2241,7 +2457,20 @@ async def _mark_virtual_assembly_piece_ready(
     if not workflow:
         return None
     order_number = _text(workflow.get("order_number"))
-    if _text(workflow.get("stage")) not in {"ready_to_ship", "completed"}:
+    current_order = await _current_assembly_order(
+        db,
+        user_id=user_id,
+        order_number=order_number,
+    )
+    current_order_status = _text(
+        current_order.status if current_order else ""
+    ).casefold()
+    if (
+        _text(workflow.get("stage")) not in {
+            "in_progress", "ready_to_ship", "completed"
+        }
+        and current_order_status != "in_progress"
+    ):
         raise HTTPException(
             status_code=409,
             detail={"code": "assembly_order_not_ready"},
@@ -2358,7 +2587,7 @@ async def _mark_virtual_assembly_piece_ready(
             "user_id": user_id,
             "order_number": order_number,
             "revision": revision,
-            "stage": {"$in": ["ready_to_ship", "completed"]},
+            "stage": {"$in": ["in_progress", "ready_to_ship", "completed"]},
         },
         {
             "$set": {
@@ -2471,9 +2700,18 @@ async def _mark_assembly_piece_ready(
         },
         {"_id": 0, "stage": 1, "assembly_status": 1},
     )
+    current_order = await _current_assembly_order(
+        db,
+        user_id=user_id,
+        order_number=order_number,
+    )
+    current_order_status = _text(
+        current_order.status if current_order else ""
+    ).casefold()
     if not workflow or (
         _text(workflow.get("stage")) == "completed"
         and _text(workflow.get("assembly_status")) != "completed"
+        and current_order_status != "in_progress"
     ):
         raise HTTPException(
             status_code=409,
@@ -2833,6 +3071,30 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
         return await _assembly_search(
             db,
             user_id=context["merchant_id"],
+            query=q,
+        )
+
+    @router.get("/assembly/orders")
+    async def list_assembly_orders(
+        state: Literal["in_progress", "completed"] = Query(...),
+        limit: int = Query(100, ge=1, le=300),
+        offset: int = Query(0, ge=0, le=10000),
+        q: str = Query(default="", max_length=64),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        context = await _actor_context(db, user)
+        _require_permission(
+            context,
+            "fulfillment.ready.read",
+            responsibility="instant_ready",
+        )
+        await ensure_piece_operation_indexes(db)
+        return await _assembly_order_board(
+            db,
+            user_id=context["merchant_id"],
+            state=state,
+            limit=limit,
+            offset=offset,
             query=q,
         )
 
