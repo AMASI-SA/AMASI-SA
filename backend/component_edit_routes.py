@@ -6,6 +6,7 @@ from typing import Any, Callable
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 
+from component_category_policy import validate_category_ids, validate_category_change
 from component_edit_policy import component_cost_metadata
 from component_status_policy import COMPONENT_STATUS_ACTIVE, require_active_component
 from product_cost_revision import bump_product_cost_revision
@@ -52,6 +53,11 @@ def make_component_edit_router(db: Any, current_user: Callable[..., Any]) -> API
         amount = _number(payload.get("unit_cost"))
         if amount is not None and amount < 0:
             raise HTTPException(status_code=422, detail={"code": "invalid_cost"})
+        category_patch = {}
+        if "category_ids" in payload:
+            category_patch["category_ids"] = await validate_category_ids(
+                db, user_id=user_id, values=payload["category_ids"],
+            )
         now = _now()
         row = {
             "id": uuid.uuid4().hex,
@@ -61,6 +67,7 @@ def make_component_edit_router(db: Any, current_user: Callable[..., Any]) -> API
             "kind": kind,
             "unit": unit,
             "category": _text(payload.get("category")) or "other",
+            **category_patch,
             "description": _text(payload.get("description")),
             "track_inventory": track_inventory,
             "requires_preparation": _requires_preparation(
@@ -101,6 +108,12 @@ def make_component_edit_router(db: Any, current_user: Callable[..., Any]) -> API
         if amount is not None and amount < 0:
             raise HTTPException(status_code=422, detail={"code": "invalid_cost"})
         purchase_cost = _number(before.get("unit_cost")) if before.get("cost_source") == "purchase_invoice" and track_inventory else None
+        category_patch = {}
+        if "category_ids" in payload:
+            category_ids = await validate_category_change(
+                db, user_id=user_id, resource_id=resource_id, values=payload["category_ids"],
+            )
+            category_patch["category_ids"] = category_ids
         now = _now()
         patch = {
             "name": name,
@@ -108,6 +121,7 @@ def make_component_edit_router(db: Any, current_user: Callable[..., Any]) -> API
             "kind": kind,
             "unit": unit,
             "category": _text(payload.get("category")) or _text(before.get("category")) or "other",
+            **category_patch,
             "description": _text(payload.get("description")) if "description" in payload else _text(before.get("description")),
             "track_inventory": track_inventory,
             "requires_preparation": _requires_preparation(
@@ -131,8 +145,8 @@ def make_component_edit_router(db: Any, current_user: Callable[..., Any]) -> API
             "user_id": user_id,
             "event_type": "resource_updated",
             "resource_id": resource_id,
-            "before": {key: before.get(key) for key in ("name", "code", "kind", "unit", "unit_cost", "initial_unit_cost", "cost_source", "requires_preparation")},
-            "after": {key: patch.get(key) for key in ("name", "code", "kind", "unit", "unit_cost", "initial_unit_cost", "cost_source", "requires_preparation")},
+            "before": {key: before.get(key) for key in ("name", "code", "kind", "unit", "unit_cost", "initial_unit_cost", "cost_source", "requires_preparation", "category_ids")},
+            "after": {key: {**before, **patch}.get(key) for key in ("name", "code", "kind", "unit", "unit_cost", "initial_unit_cost", "cost_source", "requires_preparation", "category_ids")},
             "impacted_bindings": impacted,
             "impacted_option_bindings": option_impacted,
             "impacted_product_bindings": product_impacted,
