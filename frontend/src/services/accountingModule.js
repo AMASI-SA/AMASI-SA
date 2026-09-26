@@ -221,3 +221,80 @@ export async function getAccountingSettlementRegisterDetail(draftId) {
     );
     return data;
 }
+
+
+export async function getAccountingOpeningBalances() {
+    const { data } = await api.get(`${BASE}/opening-balances`);
+    return data;
+}
+
+export async function previewAccountingOpeningBalances(payload) {
+    const { data } = await api.post(`${BASE}/opening-balances/preview`, payload);
+    return data;
+}
+
+export async function approveAccountingOpeningBalances(previewId) {
+    const { data } = await api.post(`${BASE}/opening-balances/approve`, {
+        preview_id: previewId,
+        confirmation: "APPROVE_OPENING_BALANCE",
+    });
+    return data;
+}
+
+export async function activateAccountingP01(activationRef) {
+    const { data } = await api.post(`${BASE}/opening-balances/activate`, {
+        activation_ref: activationRef,
+        confirmation: "ACTIVATE_MZ2_P01",
+    });
+    return data;
+}
+
+
+export async function getAccountingDailyMovementContext() {
+    const { data } = await api.get(`${BASE}/daily-movements/context`);
+    return data;
+}
+
+export async function getAccountingDailyMovements(params = {}) {
+    const { data } = await api.get(`${BASE}/daily-movements`, {
+        params: compactParams(params),
+    });
+    return data;
+}
+
+export async function uploadAccountingDailyMovements({ bankAccountId, file }) {
+    const form = new FormData();
+    form.append("bank_account_id", bankAccountId);
+    form.append("file", file);
+    const { data } = await api.post(`${BASE}/daily-movements/upload`, form, {
+        headers: { "Content-Type": "multipart/form-data" },
+    });
+    return data;
+}
+
+export async function confirmAccountingDailyMovementProvider(movementId, provider, reason) {
+    const { data } = await api.post(
+        `${BASE}/daily-movements/${encodeURIComponent(movementId)}/confirm-provider`,
+        { provider, reason },
+    );
+    return data;
+}
+
+
+export async function getAccountingPayrollContext() {
+    const { data } = await api.get(`${BASE}/payroll/context`);
+    return data;
+}
+
+export async function accrueAccountingPayroll(payload) {
+    const { data } = await api.post(`${BASE}/payroll/accrue`, payload);
+    return data;
+}
+
+export async function classifyAccountingEmployeeMovement(movementId, payload) {
+    const { data } = await api.post(
+        `${BASE}/payroll/movements/${encodeURIComponent(movementId)}/classify`,
+        payload,
+    );
+    return data;
+}

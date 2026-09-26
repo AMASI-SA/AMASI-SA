@@ -117,7 +117,7 @@ async def _find_bank(db, owner_id: str, bank_id: str) -> dict[str, Any] | None:
 
 
 async def _catalog(db, owner_id: str) -> list[dict[str, Any]]:
-    settings = await ensure_user_settings(db, owner_id)
+    settings = await db.settings.find_one({"user_id": owner_id}) or {}
     rows = settings.get("shipping_companies") or DEFAULT_SHIPPING_COMPANIES
     return external_courier_catalog_from_rows(rows)
 

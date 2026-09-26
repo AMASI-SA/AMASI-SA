@@ -11,6 +11,8 @@ const fmt = (n) => Number(n || 0).toLocaleString(
     "en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const ASSET_LABELS = {
+    banks: "النقدية والبنوك",
+    payment_platforms_remaining: "مستحقات لدى مزودي الدفع",
     bank: "النقدية والبنوك",
     employee_advance: "سلف موظفين (مستحقة منهم)",
     employee_custody: "عهد موظفين",
@@ -21,6 +23,11 @@ const ASSET_LABELS = {
 };
 
 const LIABILITY_LABELS = {
+    customer_refund_payable: "التزام استرداد العملاء",
+    customer_advance: "تحصيلات العملاء المقدمة",
+    sales_vat_payable: "ضريبة المبيعات المستحقة",
+    salaries_unpaid: "رواتب مستحقة للموظفين",
+    ad_accounts_unpaid: "مديونيات الحسابات الإعلانية",
     employee_salary_payable: "رواتب مستحقة للموظفين",
     supplier_payable: "مستحقات للموردين",
     courier_payable: "مستحقات لشركات الشحن",
@@ -31,19 +38,20 @@ const LIABILITY_LABELS = {
 export default function FinancialPositionLedger() {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [asOf, setAsOf] = useState("");
 
     const load = async () => {
         setLoading(true);
         try {
-            const { data: d } = await api.get("/accounting/financial-position");
+            const { data: d } = await api.get("/accounting/financial-position", { params: asOf ? { as_of: asOf } : {} });
             setData(d);
         } catch (e) {
-            toast.error("فشل تحميل المركز المالي");
+            toast.error("فشل تحميل المركز المالي: تحقق من التاريخ وصلاحية تواريخ القيود");
         } finally { setLoading(false); }
     };
     useEffect(() => { load(); }, []);
 
-    if (loading || !data) {
+    if (!data) {
         return <div className="p-8 text-center text-slate-400">جاري التحميل...</div>;
     }
 
@@ -53,10 +61,16 @@ export default function FinancialPositionLedger() {
                 <h1 className="text-2xl font-extrabold text-slate-900 mb-1">
                     💰 المركز المالي (Ledger)
                 </h1>
-                <p className="text-xs text-slate-500 mb-6">
-                    كل الأرصدة محسوبة حصراً من <code className="bg-slate-100 px-1 rounded">general_ledger</code> — Phase 4.
-                    المصدر: <span className="font-bold">{data.source}</span>
+                <p className="text-xs text-slate-500 mb-4">
+                    {data.ledger_only ? `أرصدة القيود حتى نهاية ${data.as_of} بتوقيت الرياض. لا تتضمن أرصدة حالية غير مثبتة بقيود.` : "المركز المالي الحالي"}
                 </p>
+                <form className="flex items-end gap-3 mb-6" onSubmit={(event) => { event.preventDefault(); load(); }}>
+                    <label className="text-sm">التاريخ المحاسبي حتى نهاية اليوم
+                        <input aria-label="التاريخ المحاسبي للتقرير" type="date" value={asOf} onChange={(event) => setAsOf(event.target.value)} className="block border rounded p-2" />
+                    </label>
+                    <button type="submit" disabled={loading} className="border rounded px-4 py-2">{loading ? "جاري التحميل" : "عرض المركز المالي"}</button>
+                    <span className="text-xs text-slate-500">اترك التاريخ فارغًا للمركز الحالي</span>
+                </form>
 
                 <div className="grid grid-cols-3 gap-4 mb-6">
                     <div className="bg-emerald-50 border-2 border-emerald-300 rounded-xl p-4">
