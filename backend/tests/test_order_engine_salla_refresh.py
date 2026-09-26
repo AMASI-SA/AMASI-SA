@@ -34,8 +34,24 @@ class _DB:
         self.unified_orders = _UnifiedOrders(row)
 
 
+@pytest.fixture
+def local_refresh_collaborators(monkeypatch):
+    """These unit cases verify provider/address projection, not transactions.
+
+    The real source fence and lifecycle run against Mongo in
+    test_g47_component_lifecycle_integration.py; retain the local persistence
+    callback here so all existing canonical/raw/upsert assertions still run.
+    """
+    async def persist_snapshot(db, *, persist, **_kwargs):
+        return await persist(db)
+
+    monkeypatch.setattr("fulfillment_v2_routes.persist_component_source_snapshot", persist_snapshot)
+    monkeypatch.setattr("fulfillment_v2_routes.auto_route_instant_order", AsyncMock(return_value={"promoted": False}))
+    monkeypatch.setattr("order_engine.service.get_order", AsyncMock(return_value=SimpleNamespace(order_number="unit-test")))
+
+
 @pytest.mark.asyncio
-async def test_refresh_reads_shipping_from_order_details_and_items_only():
+async def test_refresh_reads_shipping_from_order_details_and_items_only(local_refresh_collaborators):
     db = _DB({
         "user_id": "owner-1",
         "order_number": "274682897",
@@ -148,7 +164,7 @@ async def test_refresh_reads_shipping_from_order_details_and_items_only():
 
 
 @pytest.mark.asyncio
-async def test_refresh_preserves_richer_existing_raw_when_light_details_omit_it():
+async def test_refresh_preserves_richer_existing_raw_when_light_details_omit_it(local_refresh_collaborators):
     db = _DB({
         "user_id": "owner-1",
         "order_number": "274724433",

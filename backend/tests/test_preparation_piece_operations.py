@@ -773,6 +773,11 @@ async def test_partial_order_can_mark_received_piece_ready(monkeypatch):
     })
     db[operations.PIECE_EVENTS].insert_one = AsyncMock()
     monkeypatch.setattr(operations, "enforce_stage_instructions", AsyncMock())
+    # This unit test characterizes the production partial-assembly body. The
+    # real owner transaction and stock consumption are covered together by the
+    # G47 Mongo integration test for an in_progress order.
+    consume_components = AsyncMock()
+    monkeypatch.setattr(operations, "_consume_piece_components", consume_components)
     monkeypatch.setattr(operations, "_assembly_progress", AsyncMock(return_value={
         "ready_count": 1,
         "total_count": 3,
@@ -781,7 +786,7 @@ async def test_partial_order_can_mark_received_piece_ready(monkeypatch):
         "print_batch_id": None,
     }))
 
-    result = await operations._mark_assembly_piece_ready(
+    result = await operations._mark_assembly_piece_ready_in_transaction(
         db,
         user_id="merchant-1",
         piece_id=piece_id,
@@ -797,6 +802,9 @@ async def test_partial_order_can_mark_received_piece_ready(monkeypatch):
         "stage": "in_progress",
     }
     collection.update_one.assert_awaited_once()
+    consume_components.assert_awaited_once_with(
+        db, user_id="merchant-1", piece=piece, actor_id="assembly-worker",
+    )
 
 
 @pytest.mark.asyncio
