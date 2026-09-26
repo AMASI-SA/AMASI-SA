@@ -2228,6 +2228,7 @@ async def _assembly_order_board(
     state: Literal["in_progress", "completed"],
     limit: int,
     offset: int,
+    query: str = "",
 ) -> dict[str, Any]:
     """Return only orders that actually entered Mezan/Amasi preparation.
 
@@ -2241,6 +2242,7 @@ async def _assembly_order_board(
             status_code=422,
             detail={"code": "assembly_board_state_invalid"},
         )
+    normalized_query = _text(query).removeprefix("#").strip()
 
     physical_order_numbers = {
         _text(value)
@@ -2311,6 +2313,8 @@ async def _assembly_order_board(
     for workflow in workflows:
         order_number = _text(workflow.get("order_number"))
         if not order_number:
+            continue
+        if normalized_query and normalized_query not in order_number:
             continue
         try:
             order = await get_order(
@@ -3014,6 +3018,7 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
         state: Literal["in_progress", "completed"] = Query(...),
         limit: int = Query(100, ge=1, le=300),
         offset: int = Query(0, ge=0, le=10000),
+        q: str = Query(default="", max_length=64),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         context = await _actor_context(db, user)
@@ -3029,6 +3034,7 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             state=state,
             limit=limit,
             offset=offset,
+            query=q,
         )
 
     @router.post("/assembly/pieces/{piece_id}/ready")
