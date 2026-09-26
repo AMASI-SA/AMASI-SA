@@ -14,6 +14,7 @@ from preparation_piece_operations import (
     WORKFLOWS,
     FileSchedulePatchRequest,
     _assembly_batch_id,
+    _assembly_order_board,
     _assembly_piece_public,
     _assembly_progress,
     _assembly_search,
@@ -357,6 +358,7 @@ def test_router_registers_work_receiving_manager_start_and_schedule_routes():
         "POST",
     ) in routes
     assert ("/preparation-work-v1/assembly/search", "GET") in routes
+    assert ("/preparation-work-v1/assembly/orders", "GET") in routes
     assert (
         "/preparation-work-v1/assembly/pieces/{piece_id}/ready",
         "POST",
@@ -364,6 +366,39 @@ def test_router_registers_work_receiving_manager_start_and_schedule_routes():
     assert ("/preparation-work-v1/manager/summary", "GET") in routes
     assert ("/preparation-work-v1/files/{file_number}/start", "POST") in routes
     assert ("/preparation-work-v1/files/{file_number}/schedule", "PUT") in routes
+
+
+
+def test_assembly_board_uses_live_salla_status_and_mezan_evidence():
+    source = inspect.getsource(_assembly_order_board)
+
+    assert 'if _text(order.status).casefold() != state' in source
+    assert '"preparation_batch_ids.0": {"$exists": True}' in source
+    assert '"preparation_assignments.0": {"$exists": True}' in source
+    assert '"preparation_piece_count": {"$gt": 0}' in source
+    assert '"ready_to_ship_source": "preparation_receipt"' in source
+    assert '_workflow_assembly_pieces(' in source
+    assert 'if not pieces:' in source
+    assert 'rows.sort(' in source
+    assert 'row["order_created_at"]' in source
+    assert 'normalized_query' in source
+    assert '"source": "mezan_preparation_current_salla_status"' in source
+
+
+
+
+def test_assembly_search_reopens_work_when_current_salla_status_returns_in_progress():
+    module = __import__("preparation_piece_operations")
+    search_source = inspect.getsource(module._assembly_search)
+    physical_source = inspect.getsource(module._mark_assembly_piece_ready)
+    virtual_source = inspect.getsource(module._mark_virtual_assembly_piece_ready)
+
+    assert 'current_order_status == "in_progress"' in search_source
+    assert 'and current_order_status != "in_progress"' in physical_source
+    assert '"in_progress", "ready_to_ship", "completed"' in virtual_source
+    assert '"order_created_at": order.created_at if order else None' in search_source
+    assert '"shipping_company": (' in search_source
+
 
 
 def test_my_work_discovers_reassigned_pieces_before_registry_employee_filter():
