@@ -24,6 +24,7 @@ from typing import Any, Callable, Iterable, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo import ASCENDING, DESCENDING
+from accounting_atomic import atomic_owner
 
 from fulfillment_v2_routes import (
     BATCHES as SHIPPING_BATCHES,
@@ -2287,6 +2288,7 @@ async def _mark_virtual_assembly_piece_ready(
             "updated_by": actor_id,
         })
 
+    await _consume_piece_components(db, user_id=user_id, piece=piece, actor_id=actor_id)
     revision = int(workflow.get("revision") or 0)
     result = await db[WORKFLOWS].update_one(
         {
@@ -2359,7 +2361,34 @@ async def _mark_virtual_assembly_piece_ready(
     }
 
 
+async def _consume_piece_components(db: Any, *, user_id: str, piece: dict[str, Any], actor_id: str) -> None:
+    # Internal operational annotations have no product or material demand.
+    if piece.get("virtual_kind") == "operational":
+        return
+    from stock_component_consumption_service import consume_component_stock
+    line_id = _text(piece.get("order_item_id"))
+    unit_index = int(piece.get("unit_index") or 0)
+    if not line_id or unit_index < 1:
+        raise HTTPException(409, detail={"code": "component_piece_identity_required"})
+    await consume_component_stock(
+        db, merchant_id=user_id, order_id=_text(piece.get("order_number")),
+        units={line_id: [unit_index]}, actor_id=actor_id,
+    )
+
+
 async def _mark_assembly_piece_ready(
+    db: Any, *, user_id: str, piece_id: str, client_request_id: str,
+    actor_id: str, actor_name: str,
+) -> dict[str, Any]:
+    async def complete(scoped):
+        return await _mark_assembly_piece_ready_in_transaction(
+            scoped, user_id=user_id, piece_id=piece_id,
+            client_request_id=client_request_id, actor_id=actor_id, actor_name=actor_name,
+        )
+    return await atomic_owner(db, user_id, complete)
+
+
+async def _mark_assembly_piece_ready_in_transaction(
     db: Any,
     *,
     user_id: str,
@@ -2439,6 +2468,7 @@ async def _mark_assembly_piece_ready(
         stage="assembly_labeling",
         actor_id=actor_id,
     )
+    await _consume_piece_components(db, user_id=user_id, piece=piece, actor_id=actor_id)
     result = await db[PIECES].update_one(
         {
             "user_id": user_id,

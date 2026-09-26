@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import io
+import hashlib
+import json
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable
@@ -40,12 +42,15 @@ from product_inventory_rules import (
 from product_option_cost_routes import BINDINGS, RESOURCES
 from product_v2_routes import PRODUCTS
 from warehouse_location_routes import LOCATIONS
+from accounting_atomic import SessionDatabase, atomic_owner
+from product_fulfillment_rules import order_is_active, payment_is_eligible
 
 
 WORKFLOWS = "order_review_workflows"
 BATCHES = "mezan_fulfillment_batches_v2"
 EVENTS = "mezan_fulfillment_events_v2"
 INVENTORY_RESERVATIONS = "mezan_inventory_reservations_v2"
+COMPONENT_LIFECYCLES = "mezan_component_order_lifecycle_v1"
 TERMINAL_WORKFLOW_STAGES = {
     "completed",
     "delivering",
@@ -82,6 +87,8 @@ class CarrierBarcodeRequest(BaseModel):
 
 
 async def ensure_fulfillment_indexes(db: Any) -> None:
+    if isinstance(db, SessionDatabase):
+        return  # Indexes are prepared before entering the owner transaction.
     await db[WORKFLOWS].create_index(
         [("user_id", ASCENDING), ("order_number", ASCENDING)],
         unique=True,
@@ -154,6 +161,8 @@ def _inventory_rows(locations: list[dict[str, Any]]) -> list[dict[str, Any]]:
             continue
         occupancy = location.get("occupancy") or {}
         for index, item in enumerate(occupancy.get("items") or []):
+            if item.get("resource_id") or _text(item.get("item_type")).casefold() == "stock_component":
+                continue
             quantity = float(item.get("quantity") or 0)
             if quantity <= 0:
                 continue
@@ -853,11 +862,224 @@ async def build_order_fulfillment_decision(
     return decision
 
 
+def component_source_time(value: Any) -> str | None:
+    """Accept comparable provider timestamps only; never invent a cutoff/version."""
+    if isinstance(value, dict):
+        value = value.get("date") or value.get("updated_at")
+    try:
+        parsed = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed.astimezone(timezone.utc).isoformat(timespec="microseconds")
+
+
+def component_provider_version(payload: dict[str, Any]) -> str | None:
+    date = payload.get("date") if isinstance(payload.get("date"), dict) else {}
+    return component_source_time(payload.get("updated_at") or date.get("updated"))
+
+
+async def record_component_intake_failure(
+    db: Any, *, user_id: str, order_number: str, source_updated_at: Any,
+) -> None:
+    """A transport ACK must not erase a failed operational callback."""
+    identity = hashlib.sha256(f"{user_id}:{order_number}".encode()).hexdigest()
+    version = component_source_time(source_updated_at)
+    async def record(scoped):
+        current = await scoped[COMPONENT_LIFECYCLES].find_one({"_id": identity}) or {}
+        if current.get("cancelled") or (current.get("source_updated_at") and (not version or version < current["source_updated_at"])):
+            return
+        await scoped[COMPONENT_LIFECYCLES].update_one(
+            {"_id": identity},
+            {"$set": {"user_id": user_id, "order_number": order_number,
+                      "source_updated_at": version, "state": "blocked", "accepted": False,
+                      "retry_required": True, "error_code": "component_intake_retry_required", "updated_at": _now()},
+             "$setOnInsert": {"generation": 0}}, upsert=True,
+        )
+    await atomic_owner(db, user_id, record)
+
+
+def _component_order_cancelled(order: Any) -> bool:
+    markers = {"cancel", "cancelled", "canceled", "refunded", "ملغي", "ملغى"}
+    return any(
+        marker in _text(getattr(order, key, None)).casefold()
+        for key in ("status", "status_native") for marker in markers
+    )
+
+
+def _component_order_lines(order: Any, decision: dict[str, Any]) -> list[dict[str, Any]]:
+    decisions = {str(row.get("order_item_id")): row for row in decision.get("lines") or []}
+    lines = []
+    for item in order.items:
+        row = item.model_dump(mode="json") if hasattr(item, "model_dump") else dict(vars(item))
+        line_id = _text(row.get("order_item_id"))
+        if not line_id:
+            raise HTTPException(409, detail={"code": "component_order_line_identity_required"})
+        selected = decisions.get(line_id, {})
+        lines.append({
+            **row, "order_line_id": line_id, "product_id": _product_id(item),
+            "options_raw": row.get("options_raw") or row.get("options") or [],
+            "prebuilt_receipts": [
+                {"receipt_id": allocation.get("receipt_id"), "quantity": allocation.get("quantity")}
+                for allocation in selected.get("inventory_allocations") or []
+            ] if selected.get("preparation_satisfied_by_ready_stock") or selected.get("direct_assembly") else [],
+        })
+    return lines
+
+
+async def reconcile_component_order_lifecycle(
+    db: Any, *, user_id: str, order: Any, source_updated_at: Any = None,
+    actor_id: str = "system", decision: dict[str, Any] | None = None,
+    strict: bool = False,
+) -> dict[str, Any]:
+    """Persist intake before retryable work; component service owns stock/state.
+
+    This is called on ingestion and explicit review, never by a bulk backfill.
+    An acknowledged webhook may leave a visible blocked intent, never a claim
+    that component acceptance succeeded. Replaying that event retries the intent.
+    """
+    from stock_component_consumption_service import PLANS, reserve_component_stock, release_component_stock
+    order_number = _text(order.order_number)
+    identity = hashlib.sha256(f"{user_id}:{order_number}".encode()).hexdigest()
+    cancelled = _component_order_cancelled(order)
+    eligible = order_is_active(order) and payment_is_eligible(order.payment)
+    created_at = component_source_time(getattr(order, "created_at", None))
+    version = component_source_time(source_updated_at)
+    lines = _component_order_lines(order, decision or {})
+    fingerprint = hashlib.sha256(json.dumps({
+        "cancelled": cancelled, "eligible": eligible,
+        "lines": [{key: row.get(key) for key in (
+            "order_line_id", "product_id", "quantity", "options_raw", "options_normalized", "custom_fields",
+        )} for row in lines],
+    }, sort_keys=True, default=str, ensure_ascii=False).encode()).hexdigest()
+
+    async def register(scoped):
+        previous = await scoped[COMPONENT_LIFECYCLES].find_one({"_id": identity}) or {}
+        previous_version = previous.get("source_updated_at")
+        # A stale provider response cannot supersede a newer intake or cancel.
+        if version and previous_version and version < previous_version:
+            return {**previous, "stale": True}
+        if version and previous_version and version == previous_version and previous.get("cancelled") and not cancelled:
+            return {**previous, "stale": True}
+        if version and version == previous_version and previous.get("source_fingerprint") not in {None, fingerprint} and not cancelled:
+            return {**previous, "stale": True}
+        if not version and previous_version and not strict and not cancelled:
+            return {**previous, "stale": True}
+        if previous.get("source_fingerprint") == fingerprint and (not version or version == previous_version):
+            return previous
+        generation = int(previous.get("generation") or 0) + 1
+        row = {
+            "_id": identity, "user_id": user_id, "order_number": order_number,
+            "generation": generation, "source_updated_at": version or previous_version,
+            "source_created_at": created_at, "source_fingerprint": fingerprint,
+            "cancelled": cancelled or bool(previous.get("cancelled")),
+            "eligible": eligible, "state": "pending", "retry_required": True,
+            "updated_at": _now(), "plan_id": previous.get("plan_id"),
+        }
+        await scoped[COMPONENT_LIFECYCLES].replace_one({"_id": identity}, row, upsert=True)
+        return row
+
+    intent = await atomic_owner(db, user_id, register)
+    if intent.get("stale"):
+        if strict:
+            raise HTTPException(409, detail={"code": "component_source_event_stale"})
+        return {"state": "stale_ignored", "accepted": False, "generation": intent["generation"]}
+
+    async def apply(scoped):
+        current = await scoped[COMPONENT_LIFECYCLES].find_one({"_id": identity})
+        if current["generation"] != intent["generation"]:
+            raise HTTPException(409, detail={"code": "component_lifecycle_changed"})
+        if current.get("cancelled"):
+            result = await release_component_stock(
+                scoped, merchant_id=user_id, order_id=order_number,
+                source_version=current["generation"], actor_id=actor_id,
+            )
+            state = "reconciliation_required" if result.get("reconciliation_required") else "cancelled"
+        elif not eligible:
+            result, state = {}, "awaiting_eligibility"
+        else:
+            frozen_plan = await scoped[PLANS].find_one({"user_id": user_id, "order_id": order_number})
+            settings = await scoped.settings.find_one({"user_id": user_id}) or {}
+            cutoff = component_source_time((settings.get("g47_inventory") or {}).get("component_lifecycle_starts_at"))
+            if not frozen_plan:
+                if not cutoff:
+                    raise HTTPException(409, detail={"code": "component_configuration_required"})
+                if not created_at or created_at < cutoff:
+                    raise HTTPException(409, detail={"code": "component_historical_order_requires_review"})
+                if not version and not strict:
+                    raise HTTPException(409, detail={"code": "component_source_version_required"})
+            frozen_lines = {row["order_line_id"]: row for row in (frozen_plan or {}).get("lines") or []}
+            acceptance_lines = [
+                {**row, "prebuilt_receipts": frozen_lines[row["order_line_id"]].get("prebuilt_receipts") or []}
+                if row["order_line_id"] in frozen_lines else row for row in lines
+            ]
+            result = await reserve_component_stock(
+                scoped, merchant_id=user_id, order_id=order_number, lines=acceptance_lines,
+                source_version=current["generation"], actor_id=actor_id,
+                source_created_at=created_at,
+                warehouse_ids=(decision or {}).get("warehouse_ids") or None,
+            )
+            state = "reserved"
+        ticket = {
+            "identity": identity, "generation": current["generation"],
+            "plan_id": result.get("plan_id"), "state": state,
+            "accepted": state == "reserved", "retry_required": False,
+        }
+        await scoped[COMPONENT_LIFECYCLES].update_one(
+            {"_id": identity, "generation": current["generation"]},
+            {"$set": {**ticket, "updated_at": _now()}, "$unset": {"error_code": ""}},
+        )
+        return ticket
+
+    try:
+        if eligible and not intent.get("cancelled") and decision is None:
+            workflow = await db[WORKFLOWS].find_one({"user_id": user_id, "order_number": order_number}) or {}
+            decision = await build_order_fulfillment_decision(
+                db, user_id=user_id, order=order,
+                operational_items=workflow.get("operational_items") or [],
+                review_items=workflow.get("items") or [],
+            )
+            lines = _component_order_lines(order, decision)
+        result = await atomic_owner(db, user_id, apply)
+    except Exception as exc:
+        detail = getattr(exc, "detail", None)
+        code = detail.get("code") if isinstance(detail, dict) else "component_lifecycle_retry_required"
+        # Separate durable evidence survives rollback of every stock mutation.
+        await db[COMPONENT_LIFECYCLES].update_one(
+            {"_id": identity, "generation": intent["generation"]},
+            {"$set": {"state": "blocked", "accepted": False, "retry_required": True,
+                      "error_code": code, "updated_at": _now()}},
+        )
+        if strict:
+            raise
+        return {"state": "blocked", "accepted": False, "retry_required": True, "error_code": code}
+    if strict and result.get("accepted") is not True:
+        raise HTTPException(409, detail={"code": "component_order_not_eligible", "state": result["state"]})
+    return {**result, "decision": decision}
+
+
+async def assert_component_acceptance(db: Any, *, ticket: dict[str, Any]) -> None:
+    current = await db[COMPONENT_LIFECYCLES].find_one({"_id": ticket["identity"]}) or {}
+    if current.get("generation") != ticket.get("generation") or current.get("state") != "reserved" or current.get("cancelled"):
+        raise HTTPException(409, detail={"code": "component_acceptance_changed"})
+
+
 async def auto_route_instant_order(
+    db: Any, *, user_id: str, order: Any, source_updated_at: Any = None,
+) -> dict[str, Any]:
+    await ensure_fulfillment_indexes(db)
+    return await _auto_route_instant_order(
+        db, user_id=user_id, order=order, source_updated_at=source_updated_at,
+    )
+
+
+async def _auto_route_instant_order(
     db: Any,
     *,
     user_id: str,
     order: Any,
+    source_updated_at: Any = None,
 ) -> dict[str, Any]:
     """Promote a newly ingested eligible order without human preparation.
 
@@ -871,6 +1093,12 @@ async def auto_route_instant_order(
         {"_id": 0},
     )
     current_stage = _text((workflow or {}).get("stage")) or "pending_review"
+    component_lifecycle = await reconcile_component_order_lifecycle(
+        db, user_id=user_id, order=order, source_updated_at=source_updated_at,
+    )
+    if component_lifecycle.get("accepted") is not True:
+        return {"promoted": False, "reverted": False, "stage": current_stage,
+                "component_lifecycle": component_lifecycle, "reason": "component_acceptance_blocked"}
     if workflow and (
         current_stage in TERMINAL_WORKFLOW_STAGES
         or workflow.get("claim_batch_id")
@@ -891,6 +1119,19 @@ async def auto_route_instant_order(
         ),
         review_items=list((workflow or {}).get("items") or []),
     )
+    async def apply(scoped):
+        await assert_component_acceptance(scoped, ticket=component_lifecycle)
+        return await _apply_auto_route_decision(
+            scoped, user_id=user_id, order=order, workflow=workflow,
+            current_stage=current_stage, decision=decision,
+        )
+    return await atomic_owner(db, user_id, apply)
+
+
+async def _apply_auto_route_decision(
+    db: Any, *, user_id: str, order: Any, workflow: dict[str, Any] | None,
+    current_stage: str, decision: dict[str, Any],
+) -> dict[str, Any]:
     if decision.get("ready_to_ship") is not True:
         if (
             workflow

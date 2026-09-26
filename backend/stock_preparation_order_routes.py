@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo import ASCENDING, DESCENDING
 from pymongo.errors import DuplicateKeyError
+from accounting_atomic import atomic_owner
 
 from ai_store_access_control import effective_permissions
 from ai_store_access_contract import find_role_assignments
@@ -736,11 +737,19 @@ def make_stock_preparation_order_router(
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         context = await _actor_context(db, user)
+        await ensure_stock_preparation_indexes(db)
+        async def create(scoped):
+            return await _create_stock_preparation_order(scoped, payload, user)
+        return await atomic_owner(db, context["merchant_id"], create)
+
+    async def _create_stock_preparation_order(
+        db: Any, payload: StockPreparationOrderCreateRequest, user: dict,
+    ) -> dict[str, Any]:
+        context = await _actor_context(db, user)
         _require_permission(
             context,
             "inventory.preparation.create",
         )
-        await ensure_stock_preparation_indexes(db)
         merchant_id = context["merchant_id"]
         warehouse_id = _text(payload.destination_warehouse_id)
         if not _warehouse_allowed(context, [warehouse_id]):
@@ -1022,6 +1031,19 @@ def make_stock_preparation_order_router(
             "updated_at": now,
             "updated_by": context["actor_id"],
         }
+        from stock_component_consumption_service import reserve_component_stock
+        component_plan = await reserve_component_stock(
+            db, merchant_id=merchant_id, order_id=f"stock-preparation:{order_id}",
+            source_version=1, source_created_at=now, actor_id=context["actor_id"],
+            warehouse_ids=[warehouse_id],
+            lines=[{
+                "order_line_id": row["id"],
+                "product_id": row.get("salla_product_id") or row.get("mezan_product_id"),
+                "quantity": row["quantity"], "options_raw": row.get("salla_option_selections") or [],
+                "options_normalized": row.get("specifications") or {},
+            } for row in order_items],
+        )
+        order["component_plan_id"] = component_plan["plan_id"]
         try:
             await db[STOCK_PREPARATION_ORDERS].insert_one(dict(order))
         except DuplicateKeyError as exc:
@@ -1082,6 +1104,14 @@ def make_stock_preparation_order_router(
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         context = await _actor_context(db, user)
+        async def transition(scoped):
+            return await _transition_stock_preparation_order(scoped, order_id, payload, user)
+        return await atomic_owner(db, context["merchant_id"], transition)
+
+    async def _transition_stock_preparation_order(
+        db: Any, order_id: str, payload: StockPreparationActionRequest, user: dict,
+    ) -> dict[str, Any]:
+        context = await _actor_context(db, user)
         _require_permission(
             context,
             "inventory.preparation.work",
@@ -1135,6 +1165,13 @@ def make_stock_preparation_order_router(
                 detail={"code": str(exc)},
             ) from exc
         now = _now()
+        if payload.action == "cancel":
+            from stock_component_consumption_service import release_component_stock
+            await release_component_stock(
+                db, merchant_id=merchant_id, order_id=f"stock-preparation:{order_id}",
+                source_version=int(order.get("revision") or 0) + 1,
+                actor_id=context["actor_id"],
+            )
         update = await db[STOCK_PREPARATION_ORDERS].update_one(
             {
                 "id": order_id,
@@ -1207,11 +1244,19 @@ def make_stock_preparation_order_router(
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         context = await _actor_context(db, user)
+        await ensure_inventory_receipt_indexes(db)
+        async def receive(scoped):
+            return await _receive_prepared_stock(scoped, order_id, payload, user)
+        return await atomic_owner(db, context["merchant_id"], receive)
+
+    async def _receive_prepared_stock(
+        db: Any, order_id: str, payload: StockPreparationReceiptRequest, user: dict,
+    ) -> dict[str, Any]:
+        context = await _actor_context(db, user)
         _require_permission(
             context,
             "inventory.preparation.receive",
         )
-        await ensure_inventory_receipt_indexes(db)
         merchant_id = context["merchant_id"]
         actor_id = context["actor_id"]
         order = await db[STOCK_PREPARATION_ORDERS].find_one(
@@ -1223,7 +1268,7 @@ def make_stock_preparation_order_router(
                 status_code=404,
                 detail={"code": "stock_preparation_order_not_found"},
             )
-        if order.get("status") != STOCK_PREPARATION_STATUS_READY:
+        if order.get("status") not in {STOCK_PREPARATION_STATUS_READY, STOCK_PREPARATION_STATUS_RECEIVED}:
             raise HTTPException(
                 status_code=409,
                 detail={
@@ -1473,7 +1518,16 @@ def make_stock_preparation_order_router(
                 },
             )
 
+        from stock_component_consumption_service import consume_component_stock
+        consumption = await consume_component_stock(
+            db, merchant_id=merchant_id, order_id=f"stock-preparation:{order_id}",
+            units={payload.item_id: list(range(posted_quantity + 1, posted_quantity + payload.quantity + 1))},
+            actor_id=actor_id,
+        )
+        receipt["component_provenance"] = consumption["component_provenance"]
         inventory_item = {
+            "item_type": "product",
+            "component_provenance": consumption["component_provenance"],
             "receipt_id": receipt_id,
             "product_id": (
                 item.get("salla_product_id")

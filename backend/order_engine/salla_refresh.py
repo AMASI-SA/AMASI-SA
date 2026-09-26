@@ -565,7 +565,7 @@ async def refresh_order_from_salla(
                 "reason": "evaluation_failed",
             }
             try:
-                from fulfillment_v2_routes import auto_route_instant_order
+                from fulfillment_v2_routes import auto_route_instant_order, component_provider_version
                 from order_engine.repository import MongoOrderRepository
                 from order_engine.service import get_order
 
@@ -578,10 +578,17 @@ async def refresh_order_from_salla(
                     db,
                     user_id=str(user_id),
                     order=canonical_order,
+                    source_updated_at=component_provider_version(details),
                 )
                 auto_fulfillment["attempted"] = True
             except Exception as exc:
-                auto_fulfillment["error"] = str(exc)[:300]
+                from fulfillment_v2_routes import record_component_intake_failure, component_provider_version
+                await record_component_intake_failure(
+                    db, user_id=str(user_id), order_number=normalized,
+                    source_updated_at=component_provider_version(details),
+                )
+                auto_fulfillment.update({"accepted": False, "retry_required": True,
+                                         "error_code": "component_intake_retry_required"})
 
         return {
             "ok": True,

@@ -404,6 +404,7 @@ async def sync_order_from_verified_webhook(
         "order.created",
         "order.updated",
         "order.status.updated",
+        "order.cancelled",
     }:
         return {"attempted": False, "reason": "not_order_snapshot_event"}
 
@@ -427,6 +428,8 @@ async def sync_order_from_verified_webhook(
     if not payload:
         return {"attempted": True, "synced": False, "reason": "missing_order_payload"}
 
+    if event_name == "order.cancelled":
+        payload = {**payload, "status": {"slug": "canceled", "name": "ملغي"}}
     try:
         doc = _salla_order_to_doc(payload)
         order_number = _text(doc.get("order_number")) or _order_reference(payload)
@@ -498,7 +501,7 @@ async def sync_order_from_verified_webhook(
             "reason": "evaluation_failed",
         }
         try:
-            from fulfillment_v2_routes import auto_route_instant_order
+            from fulfillment_v2_routes import auto_route_instant_order, component_provider_version
             from order_engine.repository import MongoOrderRepository
             from order_engine.service import get_order
 
@@ -511,10 +514,17 @@ async def sync_order_from_verified_webhook(
                 db,
                 user_id=user_id,
                 order=canonical_order,
+                source_updated_at=component_provider_version(payload),
             )
             auto_fulfillment["attempted"] = True
         except Exception as exc:
-            auto_fulfillment["error"] = str(exc)[:300]
+            from fulfillment_v2_routes import record_component_intake_failure, component_provider_version
+            await record_component_intake_failure(
+                db, user_id=user_id, order_number=order_number,
+                source_updated_at=component_provider_version(payload),
+            )
+            auto_fulfillment.update({"accepted": False, "retry_required": True,
+                                     "error_code": "component_intake_retry_required"})
         return {
             "attempted": True,
             "synced": True,

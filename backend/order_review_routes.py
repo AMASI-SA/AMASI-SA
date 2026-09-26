@@ -14,6 +14,7 @@ from typing import Any, Callable, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo.errors import DuplicateKeyError
+from accounting_atomic import atomic_owner
 
 from order_engine.models import OrderDTO
 from order_engine.repository import MongoOrderRepository
@@ -1190,6 +1191,24 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
                 "revision": int(states.get(item.order_item_id, {}).get("revision") or 0) + 1,
             })
 
+        # Component acceptance is a hard local gate before any provider change.
+        # Its durable reservation is retryable if Salla fails; cancellation and
+        # final acceptance serialize on the same existing owner transaction.
+        from fulfillment_v2_routes import (
+            assert_component_acceptance,
+            build_order_fulfillment_decision,
+            reconcile_component_order_lifecycle,
+        )
+        fulfillment_decision = await build_order_fulfillment_decision(
+            db, user_id=user_id, order=order,
+            operational_items=list((workflow or {}).get("operational_items") or []),
+            review_items=frozen_items,
+        )
+        component_ticket = await reconcile_component_order_lifecycle(
+            db, user_id=user_id, order=order, actor_id=actor_id,
+            decision=fulfillment_decision, strict=True,
+        )
+
         # The order must remain visible in stage one when Salla rejects or
         # cannot confirm the status transition.  The employee can retry
         # without losing any previously saved images or notes.
@@ -1211,42 +1230,6 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
                     "reason": sync_error,
                 },
             )
-        # Product V2 owns the fulfillment classification.  Only an explicitly
-        # configured, fully eligible instant order may skip preparation and
-        # enter the shipping/labeling queue automatically.  Any missing local
-        # fact fails closed and leaves the order in the reviewed stage.
-        try:
-            from fulfillment_v2_routes import build_order_fulfillment_decision
-
-            fulfillment_decision = await build_order_fulfillment_decision(
-                db,
-                user_id=user_id,
-                order=order,
-                operational_items=list(
-                    (workflow or {}).get("operational_items") or []
-                ),
-                review_items=frozen_items,
-            )
-        except Exception as exc:
-            fulfillment_decision = {
-                "order_number": order.order_number,
-                "order_type": "unknown",
-                "route_stage": "reviewed",
-                "ready_to_ship": False,
-                "preparation_stages_required": True,
-                "blockers": ["fulfillment_evaluation_failed"],
-                "error": str(exc)[:300],
-                "evaluated_at": _now(),
-                "external_calls_made": False,
-            }
-            await db[EVENTS].insert_one({
-                "user_id": user_id,
-                "order_number": order.order_number,
-                "event_type": "fulfillment_evaluation_failed",
-                "error": str(exc)[:500],
-                "occurred_at": _now(),
-                "actor_id": actor_id,
-            })
         next_stage = (
             "ready_to_ship"
             if fulfillment_decision.get("ready_to_ship") is True
@@ -1266,23 +1249,26 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         new_doc.pop("_id", None)
         if next_stage == "ready_to_ship":
             new_doc["ready_to_ship_at"] = now
-        if workflow:
-            result = await db[WORKFLOWS].replace_one(
-                {"user_id": user_id, "order_number": order.order_number, "revision": revision}, new_doc
-            )
-            if not result.matched_count:
-                raise HTTPException(status_code=409, detail={"code": "review_revision_conflict"})
-        else:
-            new_doc["created_at"] = now
-            try:
-                await db[WORKFLOWS].insert_one(new_doc)
-            except DuplicateKeyError as exc:
-                raise HTTPException(status_code=409, detail={"code": "review_revision_conflict"}) from exc
-        await db[EVENTS].insert_one({
-            "user_id": user_id, "order_number": order.order_number,
-            "event_type": "order_review_completed", "item_count": len(frozen_items),
-            "occurred_at": now, "actor_id": actor_id,
-        })
+        async def finalize_acceptance(scoped):
+            await assert_component_acceptance(scoped, ticket=component_ticket)
+            if workflow:
+                result = await scoped[WORKFLOWS].replace_one(
+                    {"user_id": user_id, "order_number": order.order_number, "revision": revision}, new_doc
+                )
+                if not result.matched_count:
+                    raise HTTPException(status_code=409, detail={"code": "review_revision_conflict"})
+            else:
+                new_doc["created_at"] = now
+                try:
+                    await scoped[WORKFLOWS].insert_one(new_doc)
+                except DuplicateKeyError as exc:
+                    raise HTTPException(status_code=409, detail={"code": "review_revision_conflict"}) from exc
+            await scoped[EVENTS].insert_one({
+                "user_id": user_id, "order_number": order.order_number,
+                "event_type": "order_review_completed", "item_count": len(frozen_items),
+                "occurred_at": now, "actor_id": actor_id,
+            })
+        await atomic_owner(db, user_id, finalize_acceptance)
         return {
             "ok": True, "order_number": order.order_number, "stage": next_stage,
             "reviewed_item_count": len(frozen_items), "salla_status_sync": "sent",
