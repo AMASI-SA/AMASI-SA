@@ -15,7 +15,6 @@ jobs:
     timeout-minutes: 15
     env:
       BUILD20_INVOICE_TEST_MONGO_URL: mongodb://127.0.0.1:27017/?replicaSet=rs0
-      BUILD20_PDF_EVIDENCE: ${{ runner.temp }}/invoice-integrity-evidence/pdf
     steps:
       - name: Checkout exact candidate HEAD
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -45,6 +44,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          export BUILD20_PDF_EVIDENCE="$RUNNER_TEMP/invoice-integrity-evidence/pdf"
           mkdir -p "$RUNNER_TEMP/invoice-integrity-evidence"
           git rev-parse HEAD HEAD^{tree} > "$RUNNER_TEMP/invoice-integrity-evidence/identity.txt"
           python -m pytest \
