@@ -14,13 +14,16 @@ from typing import Any, Callable, Literal
 from fastapi import APIRouter, Body, Depends, HTTPException
 from pymongo import ASCENDING
 
+from component_category_policy import (
+    COMPONENT_CATEGORIES,
+    COMPONENT_GROUPS,
+    unique_category_ids as _unique_ids,
+    validate_category_change,
+)
 from component_status_policy import component_is_active, component_status
 from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS
 from product_option_cost_routes import BINDINGS, RESOURCES, _serialize, ensure_indexes
 from product_v2_routes import PRODUCTS, _number, _text
-
-COMPONENT_CATEGORIES = "mezan_component_categories_v2"
-COMPONENT_GROUPS = "mezan_component_groups_v2"
 
 
 def _current_cost(resource: dict[str, Any]) -> float | None:
@@ -44,17 +47,6 @@ def _current_cost(resource: dict[str, Any]) -> float | None:
 
 def _normalized(value: Any) -> str:
     return re.sub(r"\s+", " ", _text(value)).strip().casefold()
-
-
-def _unique_ids(values: Any) -> list[str]:
-    output: list[str] = []
-    seen: set[str] = set()
-    for value in values if isinstance(values, list) else []:
-        item_id = _text(value)
-        if item_id and item_id not in seen:
-            seen.add(item_id)
-            output.append(item_id)
-    return output
 
 
 def _resource_group_kind(resource: dict[str, Any]) -> Literal["service", "component"]:
@@ -398,33 +390,9 @@ def make_component_workspace_cost_compat_router(
         )
         if not resource:
             raise HTTPException(status_code=404, detail={"code": "component_not_found"})
-        categories = await db[COMPONENT_CATEGORIES].find(
-            {"user_id": user_id, "id": {"$in": category_ids}}, {"_id": 0, "id": 1}
-        ).to_list(length=500)
-        found = {_text(row.get("id")) for row in categories}
-        missing = [category_id for category_id in category_ids if category_id not in found]
-        if missing:
-            raise HTTPException(
-                status_code=422,
-                detail={"code": "component_category_not_found", "category_ids": missing},
-            )
-        protected = await db[COMPONENT_GROUPS].find_one(
-            {
-                "user_id": user_id,
-                "resource_ids": _text(resource_id),
-                "category_id": {"$nin": category_ids},
-            },
-            {"_id": 0, "id": 1, "category_id": 1},
+        category_ids = await validate_category_change(
+            db, user_id=user_id, resource_id=_text(resource_id), values=category_ids,
         )
-        if protected:
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "code": "component_category_used_by_group",
-                    "group_id": protected.get("id"),
-                    "category_id": protected.get("category_id"),
-                },
-            )
         await db[RESOURCES].update_one(
             {"user_id": user_id, "id": _text(resource_id)},
             {"$set": {"category_ids": category_ids}},

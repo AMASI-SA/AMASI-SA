@@ -12,6 +12,12 @@ from typing import Any, Callable
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 
+from component_category_policy import (
+    unique_category_ids as _unique_ids,
+    validate_category_ids,
+    validate_category_change,
+    protect_group_categories as _protect_group_categories,
+)
 from component_edit_policy import component_cost_metadata
 from component_status_policy import (
     COMPONENT_STATUSES,
@@ -27,17 +33,6 @@ from product_cost_revision import bump_product_cost_revision
 from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS
 from product_option_cost_routes import AUDIT, BINDINGS, RESOURCES, _now, ensure_indexes
 from product_v2_routes import _number, _text
-
-
-def _unique_ids(values: Any) -> list[str]:
-    result: list[str] = []
-    seen: set[str] = set()
-    for value in values if isinstance(values, list) else []:
-        item_id = _text(value)
-        if item_id and item_id not in seen:
-            seen.add(item_id)
-            result.append(item_id)
-    return result
 
 
 def _kind_fields(
@@ -82,57 +77,11 @@ async def _validated_category_ids(
     user_id: str,
     values: Any,
 ) -> list[str]:
-    category_ids = _unique_ids(values)
-    if not category_ids:
-        raise HTTPException(
-            status_code=422,
-            detail={"code": "component_category_required"},
-        )
-    rows = await db[COMPONENT_CATEGORIES].find(
-        {
-            "user_id": user_id,
-            "id": {"$in": category_ids},
-            "status": {"$ne": "inactive"},
-        },
-        {"_id": 0, "id": 1},
-    ).to_list(length=500)
-    found = {_text(row.get("id")) for row in rows}
-    missing = [category_id for category_id in category_ids if category_id not in found]
-    if missing:
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "code": "component_category_not_found",
-                "category_ids": missing,
-            },
-        )
-    return category_ids
-
-
-async def _protect_group_categories(
-    db: Any,
-    *,
-    user_id: str,
-    resource_id: str,
-    category_ids: list[str],
-) -> None:
-    protected = await db[COMPONENT_GROUPS].find_one(
-        {
-            "user_id": user_id,
-            "resource_ids": resource_id,
-            "category_id": {"$nin": category_ids},
-        },
-        {"_id": 0, "id": 1, "category_id": 1},
+    # Preserve the newer required/active-only rule while sharing validation and
+    # the exact group guard with the central edit and /categories endpoints.
+    return await validate_category_ids(
+        db, user_id=user_id, values=values, required=True, active_only=True,
     )
-    if protected:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "code": "component_category_used_by_group",
-                "group_id": protected.get("id"),
-                "category_id": protected.get("category_id"),
-            },
-        )
 
 
 def make_component_category_required_router(
@@ -228,20 +177,13 @@ def make_component_category_required_router(
                 status_code=409,
                 detail={"code": "component_code_exists"},
             )
-        category_ids = await _validated_category_ids(
-            db,
-            user_id=user_id,
-            values=(
-                payload.get("category_ids")
-                if "category_ids" in payload
-                else before.get("category_ids")
-            ),
-        )
-        await _protect_group_categories(
+        category_ids = await validate_category_change(
             db,
             user_id=user_id,
             resource_id=_text(resource_id),
-            category_ids=category_ids,
+            values=payload.get("category_ids") if "category_ids" in payload else before.get("category_ids"),
+            required=True,
+            active_only=True,
         )
         kind, unit, track_inventory = _kind_fields(payload, before)
         requested_cost = payload.get(
@@ -431,16 +373,9 @@ def make_component_category_required_router(
                 status_code=404,
                 detail={"code": "component_not_found"},
             )
-        category_ids = await _validated_category_ids(
-            db,
-            user_id=user_id,
-            values=payload.get("category_ids"),
-        )
-        await _protect_group_categories(
-            db,
-            user_id=user_id,
-            resource_id=resource_id,
-            category_ids=category_ids,
+        category_ids = await validate_category_change(
+            db, user_id=user_id, resource_id=resource_id,
+            values=payload.get("category_ids"), required=True, active_only=True,
         )
         await db[RESOURCES].update_one(
             {"user_id": user_id, "id": resource_id},
