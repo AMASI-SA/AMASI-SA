@@ -51,6 +51,7 @@ from preparation_piece_operations import (
     PIECE_STATUS_RECEIVED,
 )
 from reviewed_preparation_batches import BATCHES
+from supplier_dispatch_waiting_policy import annotate_waiting_pieces, require_current_under_review
 
 
 DISPATCHES = "mezan_supplier_dispatches_v1"
@@ -600,7 +601,9 @@ def supplier_receiving_dispatch_blocker(
     return None
 
 
-def _group_piece_products(pieces: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _group_piece_products(
+    pieces: list[dict[str, Any]], *, waiting_only: bool = False,
+) -> list[dict[str, Any]]:
     grouped: dict[str, dict[str, Any]] = {}
     for piece in pieces:
         group_key = _piece_dispatch_group_key(piece)
@@ -622,6 +625,9 @@ def _group_piece_products(pieces: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 for service in piece.get("services") or []
                 if _text(service.get("service_id"))
             ],
+            "order_status": piece.get("order_status"),
+            "order_status_native": piece.get("order_status_native"),
+            "waiting_review_eligible": piece.get("waiting_review_eligible") is True,
             "quantity": 0,
             "available_quantity": 0,
             "sent_quantity": 0,
@@ -637,9 +643,19 @@ def _group_piece_products(pieces: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if order_number and order_number not in row["order_numbers"]:
             row["order_numbers"].append(order_number)
         row["quantity"] += 1
+        # Mixed operational rows are not an eligible waiting card. The separate
+        # waiting_products projection below contains only eligible pieces.
+        row["waiting_review_eligible"] = (
+            row["waiting_review_eligible"] and piece.get("waiting_review_eligible") is True
+        )
+        for field in ("order_status", "order_status_native"):
+            if row.get(field) != piece.get(field):
+                row[field] = None
         dispatch_status = _text(piece.get("supplier_dispatch_status"))
         status = _text(piece.get("status"))
-        if piece_is_available_for_supplier_dispatch(piece):
+        if piece_is_available_for_supplier_dispatch(piece) and (
+            not waiting_only or piece.get("waiting_review_eligible") is True
+        ):
             row["available_quantity"] += 1
         if dispatch_status == DISPATCH_STATUS_SENT:
             row["sent_quantity"] += 1
@@ -820,7 +836,9 @@ def _hydrate_piece_print_facts_from_batches(
             )
 
 
-def _piece_products(pieces: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _piece_products(
+    pieces: list[dict[str, Any]], *, waiting_only: bool = False,
+) -> list[dict[str, Any]]:
     """Expose one database-backed row per physical piece for native clients."""
     rows: list[dict[str, Any]] = []
     for piece in sorted(pieces, key=_piece_sort_key):
@@ -852,8 +870,13 @@ def _piece_products(pieces: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 piece.get("service_specifications_snapshot") or []
             ),
             "product_options": dict(piece.get("product_options_snapshot") or {}),
+            "order_status": piece.get("order_status"),
+            "order_status_native": piece.get("order_status_native"),
+            "waiting_review_eligible": piece.get("waiting_review_eligible") is True,
             "quantity": 1,
-            "available_quantity": 1 if piece_is_available_for_supplier_dispatch(piece) else 0,
+            "available_quantity": int(piece_is_available_for_supplier_dispatch(piece) and (
+                not waiting_only or piece.get("waiting_review_eligible") is True
+            )),
             "sent_quantity": 1 if dispatch_status == DISPATCH_STATUS_SENT else 0,
             "ready_quantity": 1 if (
                 dispatch_status == DISPATCH_STATUS_READY
@@ -884,8 +907,14 @@ def _file_view(
     pieces: list[dict[str, Any]],
     *,
     piece_grain: bool = False,
+    waiting_only: bool = False,
 ) -> dict[str, Any]:
-    products = _piece_products(pieces) if piece_grain else _group_piece_products(pieces)
+    project = _piece_products if piece_grain else _group_piece_products
+    products = project(pieces, waiting_only=waiting_only)
+    waiting_products = project([piece for piece in pieces
+                                if piece.get("waiting_review_eligible") is True
+                                and piece_is_available_for_supplier_dispatch(piece)],
+                               waiting_only=True)
     return {
         "file_number": _text(registry.get("file_number"))
         or _text((pieces[0] if pieces else {}).get("file_number")),
@@ -905,6 +934,7 @@ def _file_view(
         ),
         "is_new": any(row["available_quantity"] > 0 for row in products),
         "products": products,
+        "waiting_products": waiting_products,
     }
 
 
@@ -1045,6 +1075,7 @@ async def _employee_workspace(
         },
         {"_id": 0, "user_id": 0, "image_b64": 0},
     ).sort("updated_at", -1).limit(50000).to_list(50000)
+    pieces = await annotate_waiting_pieces(db, user_id=user_id, pieces=pieces)
     batch_ids = sorted({
         _text(row.get("batch_id")) for row in pieces if _text(row.get("batch_id"))
     })
@@ -1099,6 +1130,7 @@ async def _employee_workspace(
             registry_by_batch.get(batch_id, {}),
             rows,
             piece_grain=piece_grain,
+            waiting_only=True,
         )
         for batch_id, rows in pieces_by_batch.items()
     ]
@@ -1417,7 +1449,6 @@ def make_preparation_supplier_dispatch_router(
         )
         user_id = _merchant_user_id(worker)
         employee_id = _actor_id(worker)
-        await ensure_supplier_dispatch_indexes(db)
         existing = await db[DISPATCHES].find_one(
             {"user_id": user_id, "client_request_id": payload.client_request_id},
             {"_id": 0, "user_id": 0},
@@ -1495,6 +1526,8 @@ def make_preparation_supplier_dispatch_router(
                 ) from exc
             selected_by_file[file_number] = file_selected
             selected.extend(file_selected)
+        await require_current_under_review(db, user_id=user_id, pieces=selected)
+        await ensure_supplier_dispatch_indexes(db)
         for piece in selected:
             await enforce_stage_instructions(
                 db,

@@ -51,6 +51,7 @@ from product_option_cost_routes import AUDIT, BINDINGS, RESOURCES
 from product_v2_details_routes import COST_PROFILES
 from product_v2_routes import PRODUCTS
 from supplier_invoice_pdf import generate_supplier_invoice_pdf
+from supplier_invoice_integrity import CONTRACT as INVOICE_INTEGRITY_CONTRACT, require as require_invoice_integrity, verify_persisted_supplier_invoice
 from tz_utils import riyadh_now_aware
 
 SUPPLIERS = MEZAN_SUPPLIERS_V2
@@ -189,6 +190,10 @@ class SupplierReceivingSessionCreateRequest(BaseModel):
 class SupplierPieceScanRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    # Optional for Build19 compatibility. Build20 always sends a stable ID for
+    # one physical mutation attempt so a lost HTTP response can be recovered
+    # without re-posting the scan.
+    client_request_id: str | None = Field(default=None, min_length=8, max_length=160)
     barcode: str = Field(min_length=1, max_length=500)
     quantity: int | None = Field(default=None, ge=1, le=5000)
     confirm_supplier_reassignment: bool = False
@@ -214,6 +219,9 @@ class SupplierReceivingInvoiceLineRequest(BaseModel):
 
 class SupplierReceivingSessionCloseRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+    confirmed_total_halalas: int | None = Field(default=None, gt=0, le=9_007_199_254_740_991, strict=True)
+    expected_supplier_id: str | None = Field(default=None, min_length=1, max_length=160)
 
     note: str | None = Field(default=None, max_length=1000)
     invoice_lines: list[SupplierReceivingInvoiceLineRequest] = Field(
@@ -793,6 +801,8 @@ def _public_session(row: dict[str, Any] | None) -> dict[str, Any] | None:
         "reference": _text(row.get("reference")),
         "status": _text(row.get("status")),
         "supplier": dict(row.get("supplier_snapshot") or {}),
+        "supplier_id": row.get("supplier_id"),
+        "financial_integrity_verified": row.get("financial_integrity_verified"),
         "supplier_context_only": False,
         "supplier_operational_linked": True,
         "supplier_service_link_status": _text(row.get("supplier_service_link_status"))
@@ -835,7 +845,7 @@ def _public_supplier_invoice(row: dict[str, Any] | None) -> dict[str, Any] | Non
     public = {
         key: value
         for key, value in row.items()
-        if key not in {"_id", "user_id", "ledger_entry_ids"}
+        if key not in {"_id", "user_id"}
     }
     evidence_id = _text(public.get("share_evidence_id"))
     public["share_evidence_url"] = (
@@ -875,10 +885,13 @@ def piece_scan_blocker(piece: dict[str, Any]) -> dict[str, Any] | None:
     """Return an explicit fail-closed reason for a non-receivable piece."""
     status = _text(piece.get("status")) or PIECE_STATUS_ASSIGNED
     if status == PIECE_STATUS_RECEIVED or piece.get("received_at"):
+        received_at = piece.get("received_at")
+        if hasattr(received_at, "isoformat"):
+            received_at = received_at.isoformat()
         return {
             "code": "supplier_piece_already_received",
             "message": "تم استلام هذه القطعة سابقًا؛ لم تُسجّل مرة ثانية.",
-            "received_at": piece.get("received_at"),
+            "received_at": received_at,
             "received_by_name": piece.get("received_by_name"),
             "session_reference": piece.get("supplier_receiving_reference"),
         }
@@ -1303,7 +1316,7 @@ async def _post_supplier_invoice_ledger(
     mongo_session: Any,
 ) -> dict[str, Any]:
     """Post the balanced payable legs inside the caller's Mongo transaction."""
-    amount = round(int(invoice["total_halalas"]) / 100, 2)
+    amount = float(Decimal(int(invoice["total_halalas"])) / Decimal(100))
     if amount <= 0:
         raise HTTPException(
             status_code=422,
@@ -2043,6 +2056,16 @@ async def ensure_supplier_receiving_indexes(db: Any) -> None:
         name="ix_supplier_receiving_session_events_v1",
     )
     await db[RECEIVING_EVENTS].create_index(
+        [
+            ("user_id", ASCENDING),
+            ("session_id", ASCENDING),
+            ("client_request_id", ASCENDING),
+            ("event_type", ASCENDING),
+            ("scan_request_index", ASCENDING),
+        ],
+        name="ix_supplier_receiving_scan_request_v1",
+    )
+    await db[RECEIVING_EVENTS].create_index(
         [("user_id", ASCENDING), ("piece_id", ASCENDING), ("event_type", ASCENDING)],
         unique=True,
         partialFilterExpression={"event_type": "supplier_piece_scanned"},
@@ -2360,6 +2383,221 @@ async def _recent_session_events(
                 )
             row.update(dict(product_price_cache[cache_key]))
     return rows
+
+
+def _scan_request_shape(payload: SupplierPieceScanRequest) -> dict[str, Any]:
+    return {
+        "barcode": _text(payload.barcode),
+        "quantity": payload.quantity,
+        "confirm_supplier_reassignment": bool(payload.confirm_supplier_reassignment),
+    }
+
+
+def _scan_request_event_shape(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "barcode": _text(row.get("scan_request_barcode")),
+        "quantity": row.get("scan_request_quantity"),
+        "confirm_supplier_reassignment": bool(
+            row.get("scan_request_confirm_supplier_reassignment")
+        ),
+    }
+
+
+def _scan_request_public_event(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in row.items()
+        if key not in {
+            "_id",
+            "user_id",
+            "previous_piece_state",
+            "previous_piece_present_fields",
+        }
+    }
+
+
+async def _scan_request_recovery(
+    db: Any,
+    *,
+    user_id: str,
+    session_id: str,
+    client_request_id: str,
+    expected_payload: SupplierPieceScanRequest | None = None,
+) -> dict[str, Any]:
+    """Read-only proof for one Build20 scan attempt.
+
+    The event set, not SKU/product matching, is the durable recovery authority.
+    A request is committed only when the exact event cardinality and physical
+    piece links are complete.
+    """
+    request_id = _text(client_request_id)
+    session = await db[SESSIONS].find_one(
+        {"user_id": user_id, "id": session_id},
+        {"_id": 0},
+    )
+    rows = (
+        await db[RECEIVING_EVENTS]
+        .find(
+            {
+                "user_id": user_id,
+                "session_id": session_id,
+                "event_type": "supplier_piece_scanned",
+                "client_request_id": request_id,
+            },
+            {
+                "_id": 0,
+                "user_id": 0,
+                "previous_piece_state": 0,
+                "previous_piece_present_fields": 0,
+            },
+        )
+        .sort([("scan_request_index", 1), ("occurred_at", 1), ("piece_id", 1)])
+        .limit(MAX_SESSION_SCANS)
+        .to_list(MAX_SESSION_SCANS)
+    )
+    if not rows:
+        return {
+            "ok": True,
+            "found": False,
+            "committed": False,
+            "client_request_id": request_id,
+            "session": _public_session(session) if session else None,
+            "piece": None,
+            "pieces": [],
+            "scan": None,
+            "scans": [],
+            "selected_quantity": 0,
+            "idempotent": True,
+            "recovered": True,
+        }
+
+    stored_shape = _scan_request_event_shape(rows[0])
+    if any(_scan_request_event_shape(row) != stored_shape for row in rows):
+        return {
+            "ok": True,
+            "found": True,
+            "committed": False,
+            "client_request_id": request_id,
+            "session": _public_session(session) if session else None,
+            "piece": None,
+            "pieces": [],
+            "scan": None,
+            "scans": [_scan_request_public_event(row) for row in rows],
+            "selected_quantity": len(rows),
+            "idempotent": True,
+            "recovered": True,
+            "integrity_error": "scan_request_payload_inconsistent",
+        }
+    if expected_payload is not None and stored_shape != _scan_request_shape(expected_payload):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "supplier_receiving_scan_request_conflict",
+                "client_request_id": request_id,
+                "stored": stored_shape,
+                "requested": _scan_request_shape(expected_payload),
+            },
+        )
+
+    sizes = {int(row.get("scan_request_size") or 0) for row in rows}
+    indexes = [int(row.get("scan_request_index") or 0) for row in rows]
+    piece_ids = [_text(row.get("piece_id")) for row in rows]
+    expected_size = next(iter(sizes)) if len(sizes) == 1 else 0
+    cardinality_ok = (
+        expected_size > 0
+        and expected_size == len(rows)
+        and indexes == list(range(1, expected_size + 1))
+        and all(piece_ids)
+        and len(set(piece_ids)) == len(piece_ids)
+    )
+    pieces: list[dict[str, Any]] = []
+    if cardinality_ok:
+        piece_rows = await db[PIECES].find(
+            {"user_id": user_id, "piece_id": {"$in": piece_ids}},
+            {"_id": 0},
+        ).to_list(expected_size)
+        by_id = {_text(row.get("piece_id")): row for row in piece_rows}
+        pieces = [by_id[piece_id] for piece_id in piece_ids if piece_id in by_id]
+        cardinality_ok = (
+            len(pieces) == expected_size
+            and all(
+                _text(piece.get("supplier_receiving_session_id")) == session_id
+                and _text(piece.get("receipt_event_id")) == _text(rows[index].get("id"))
+                for index, piece in enumerate(pieces)
+            )
+        )
+    public_rows = [_scan_request_public_event(row) for row in rows]
+    return {
+        "ok": True,
+        "found": True,
+        "committed": bool(cardinality_ok),
+        "client_request_id": request_id,
+        "session": _public_session(session) if session else None,
+        "piece": _public_piece(pieces[0]) if cardinality_ok else None,
+        "pieces": [_public_piece(row) for row in pieces] if cardinality_ok else [],
+        "scan": public_rows[0] if cardinality_ok else None,
+        "scans": public_rows,
+        "selected_quantity": expected_size if cardinality_ok else len(rows),
+        "requires_quantity_selection": False,
+        "idempotent": True,
+        "recovered": True,
+    }
+
+
+async def _same_session_piece_scan_recovery(
+    db: Any,
+    *,
+    user_id: str,
+    session: dict[str, Any],
+    piece: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Recover one exact physical piece already reserved by this session."""
+    session_id = _text(session.get("id"))
+    if _text(piece.get("supplier_receiving_session_id")) != session_id:
+        return None
+    event_id = _text(piece.get("receipt_event_id"))
+    if not event_id:
+        return None
+    event = await db[RECEIVING_EVENTS].find_one(
+        {
+            "user_id": user_id,
+            "session_id": session_id,
+            "event_type": "supplier_piece_scanned",
+            "id": event_id,
+            "piece_id": _text(piece.get("piece_id")),
+        },
+        {
+            "_id": 0,
+            "user_id": 0,
+            "previous_piece_state": 0,
+            "previous_piece_present_fields": 0,
+        },
+    )
+    if not event:
+        return None
+    public_event = _scan_request_public_event(event)
+    return {
+        "ok": True,
+        "found": True,
+        "committed": True,
+        "same_session": True,
+        "same_session_recovery": True,
+        "idempotent": True,
+        "recovered": True,
+        "client_request_id": _text(event.get("client_request_id")) or None,
+        "session": _public_session(session),
+        "piece": _public_piece(piece),
+        "pieces": [_public_piece(piece)],
+        "scan": public_event,
+        "scans": [public_event],
+        "selected_quantity": 1,
+        "requires_quantity_selection": False,
+        "draft_piece_reserved": True,
+        "financial_invoice_created": False,
+        "liability_created": False,
+        "salla_updated": False,
+        "qoyod_updated": False,
+    }
 
 
 async def _cancellable_session_events(
@@ -2687,6 +2925,11 @@ def make_supplier_receiving_router(
             context=context,
             invoice_id=invoice_id,
         )
+        if invoice.get("financial_integrity_contract") == INVOICE_INTEGRITY_CONTRACT:
+            invoice = await verify_persisted_supplier_invoice(
+                db, user_id=context["merchant_id"], invoice_id=invoice_id,
+                session_id=invoice.get("session_id"), supplier_id=invoice.get("supplier_id"),
+            )
         return {"ok": True, "supplier_invoice": _public_supplier_invoice(invoice)}
 
     @router.get("/invoices/{invoice_id}/pdf")
@@ -2701,6 +2944,11 @@ def make_supplier_receiving_router(
             context=context,
             invoice_id=invoice_id,
         )
+        if invoice.get("financial_integrity_contract") == INVOICE_INTEGRITY_CONTRACT:
+            invoice = await verify_persisted_supplier_invoice(
+                db, user_id=context["merchant_id"], invoice_id=invoice_id,
+                session_id=invoice.get("session_id"), supplier_id=invoice.get("supplier_id"),
+            )
         # Historical invoices may predate the persisted selected image URL.
         # Enrich a copy at download time from the current Mezan V2 catalog so
         # reprints and newly-created invoices both show the product thumbnail.
@@ -3139,6 +3387,27 @@ def make_supplier_receiving_router(
             "refreshed": True,
         }
 
+
+    @router.get("/sessions/{session_id}/scan-requests/{client_request_id}")
+    async def get_scan_request(
+        session_id: str,
+        client_request_id: str,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        context = await _actor_context(db, user)
+        _require_permission(context, RECEIVE_PERMISSION)
+        await _session_for_actor(
+            db,
+            context=context,
+            session_id=session_id,
+        )
+        return await _scan_request_recovery(
+            db,
+            user_id=context["merchant_id"],
+            session_id=session_id,
+            client_request_id=client_request_id,
+        )
+
     @router.post("/sessions/{session_id}/scan")
     async def scan_piece(
         session_id: str,
@@ -3157,6 +3426,26 @@ def make_supplier_receiving_router(
                 status_code=409,
                 detail={"code": "supplier_receiving_session_closed"},
             )
+        barcode = _text(payload.barcode)
+        client_request_id = _text(payload.client_request_id)
+        if client_request_id:
+            existing_request = await _scan_request_recovery(
+                db,
+                user_id=context["merchant_id"],
+                session_id=session_id,
+                client_request_id=client_request_id,
+                expected_payload=payload,
+            )
+            if existing_request["found"]:
+                if existing_request["committed"]:
+                    return existing_request
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "supplier_receiving_scan_request_incomplete",
+                        "client_request_id": client_request_id,
+                    },
+                )
         if int(session.get("scan_count") or 0) >= MAX_SESSION_SCANS:
             raise HTTPException(
                 status_code=409,
@@ -3188,6 +3477,16 @@ def make_supplier_receiving_router(
             return_document=ReturnDocument.AFTER,
         )
         if not session:
+            if client_request_id:
+                existing_request = await _scan_request_recovery(
+                    db,
+                    user_id=context["merchant_id"],
+                    session_id=session_id,
+                    client_request_id=client_request_id,
+                    expected_payload=payload,
+                )
+                if existing_request["found"] and existing_request["committed"]:
+                    return existing_request
             latest = await db[SESSIONS].find_one(
                 {"user_id": context["merchant_id"], "id": session_id},
                 {"_id": 0, "status": 1},
@@ -3198,7 +3497,6 @@ def make_supplier_receiving_router(
                 else "supplier_receiving_scan_busy"
             )
             raise HTTPException(status_code=409, detail={"code": code})
-        barcode = _text(payload.barcode)
         reserved_rows: list[tuple[dict[str, Any], dict[str, Any]]] = []
         inserted_event_ids: list[str] = []
         session_incremented = 0
@@ -3209,6 +3507,33 @@ def make_supplier_receiving_router(
                 user_id=context["merchant_id"],
                 barcode=barcode,
             )
+            scanned_blocker = piece_scan_blocker(scanned_piece)
+            if scanned_blocker:
+                raise HTTPException(status_code=409, detail=scanned_blocker)
+            scanned_reserved_session_id = _text(
+                scanned_piece.get("supplier_receiving_session_id")
+            )
+            if scanned_reserved_session_id:
+                if scanned_reserved_session_id == session_id:
+                    same_session_result = await _same_session_piece_scan_recovery(
+                        db,
+                        user_id=context["merchant_id"],
+                        session=session,
+                        piece=scanned_piece,
+                    )
+                    if same_session_result is not None:
+                        return same_session_result
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "supplier_piece_already_in_receiving_session",
+                        "session_id": scanned_reserved_session_id,
+                        "same_session": scanned_reserved_session_id == session_id,
+                        "piece_id": _text(scanned_piece.get("piece_id")),
+                        "receipt_event_id": _text(scanned_piece.get("receipt_event_id"))
+                        or None,
+                    },
+                )
             candidates = await supplier_scan_group_candidates(
                 db,
                 user_id=context["merchant_id"],
@@ -3588,6 +3913,17 @@ def make_supplier_receiving_router(
                     "salla_updated": False,
                     "qoyod_updated": False,
                 }
+                if client_request_id:
+                    event.update({
+                        "client_request_id": client_request_id,
+                        "scan_request_barcode": barcode,
+                        "scan_request_quantity": payload.quantity,
+                        "scan_request_confirm_supplier_reassignment": bool(
+                            payload.confirm_supplier_reassignment
+                        ),
+                        "scan_request_index": len(events) + 1,
+                        "scan_request_size": selected_quantity,
+                    })
                 if _text(updated_piece.get("experiment_run_id")):
                     event.update({
                         "experiment_mode": True,
@@ -3688,6 +4024,9 @@ def make_supplier_receiving_router(
         } for event in events]
         return {
             "ok": True,
+            "client_request_id": client_request_id or None,
+            "idempotent": False,
+            "recovered": False,
             "piece": _public_piece(reserved_rows[0][1]),
             "pieces": [_public_piece(row) for _before, row in reserved_rows],
             "session": _public_session(session),
@@ -3975,30 +4314,35 @@ def make_supplier_receiving_router(
             context=context,
             session_id=session_id,
         )
-        if _text(session.get("status")) == "closed":
-            saved_invoice = await db[SUPPLIER_INVOICES].find_one(
-                {
-                    "user_id": context["merchant_id"],
-                    "session_id": session_id,
-                },
-                {"_id": 0},
+        effective_actor = {**user, "id": context["actor_id"], "name": _actor_name(user)}
+
+        async def closed_result(closed: dict[str, Any], tx: Any = None) -> dict[str, Any]:
+            kw = {"session": tx} if tx is not None else {}
+            saved = await db[SUPPLIER_INVOICES].find_one(
+                {"user_id": context["merchant_id"], "session_id": session_id}, {"_id": 0}, **kw,
             )
+            require_invoice_integrity(isinstance(saved, dict), "closed_session_without_invoice")
+            if saved.get("experiment_mode") is not True:
+                saved = await verify_persisted_supplier_invoice(
+                    db, user_id=context["merchant_id"], invoice_id=saved.get("id"),
+                    session_id=session_id, supplier_id=closed.get("supplier_id"),
+                    expected_total=payload.confirmed_total_halalas, actor_id=context["actor_id"], mongo_session=tx,
+                )
+            if payload.expected_supplier_id is not None:
+                require_invoice_integrity(saved.get("supplier_id") == payload.expected_supplier_id, "selected_supplier_mismatch")
             return {
-                "ok": True,
-                "session": _public_session(session),
-                "supplier_invoice": _public_supplier_invoice(saved_invoice),
-                "financial_invoice_created": bool(
-                    (saved_invoice or {}).get("financial_invoice_created")
-                ),
-                "liability_created": bool(
-                    (saved_invoice or {}).get("liability_created")
-                ),
-                "experiment_mode": bool((saved_invoice or {}).get("experiment_mode")),
-                "experiment_run_id": _text(
-                    (saved_invoice or {}).get("experiment_run_id")
-                ) or None,
-                "qoyod_updated": False,
+                "ok": True, "session": _public_session(closed),
+                "supplier_invoice": _public_supplier_invoice(saved),
+                "financial_invoice_created": saved.get("financial_invoice_created"),
+                "liability_created": saved.get("liability_created"),
+                "financial_integrity_verified": saved.get("financial_integrity_verified") is True,
+                "experiment_mode": saved.get("experiment_mode"),
+                "experiment_run_id": saved.get("experiment_run_id"),
+                "idempotent": True, "qoyod_updated": False, "salla_updated": False,
             }
+
+        if _text(session.get("status")) == "closed":
+            return await closed_result(session)
         if _text(session.get("status")) != "open":
             raise HTTPException(
                 status_code=409,
@@ -4022,6 +4366,8 @@ def make_supplier_receiving_router(
                 {"_id": 0},
                 session=mongo_session,
             )
+            if fresh_session and _text(fresh_session.get("status")) == "closed":
+                return await closed_result(fresh_session, mongo_session)
             if not fresh_session or _text(fresh_session.get("status")) != "open":
                 raise HTTPException(
                     status_code=409,
@@ -4119,6 +4465,14 @@ def make_supplier_receiving_router(
                 permissions=set(context["permissions"]),
                 service_catalog=service_catalog,
             )
+            require_invoice_integrity(
+                bool(fresh_session.get("supplier_id")) and fresh_session.get("supplier_id")
+                == (fresh_session.get("supplier_snapshot") or {}).get("id"), "session_supplier_snapshot_mismatch",
+            )
+            if payload.expected_supplier_id is not None:
+                require_invoice_integrity(fresh_session["supplier_id"] == payload.expected_supplier_id, "selected_supplier_mismatch")
+            if payload.confirmed_total_halalas is not None:
+                require_invoice_integrity(draft["total_halalas"] == payload.confirmed_total_halalas, "confirmed_amount_mismatch")
             invoice_id = f"msiv2_{uuid.uuid5(uuid.NAMESPACE_URL, f'{merchant_id}:{session_id}').hex}"
             invoice_number = _text(fresh_session.get("reference")).replace(
                 "SR-", "SI-TEST-" if is_experiment else "SI-", 1
@@ -4140,6 +4494,9 @@ def make_supplier_receiving_router(
                 "outstanding_halalas": 0 if is_experiment else int(draft["total_halalas"]),
                 "supplier_approved_at": now,
                 "supplier_approved_by": context["actor_id"],
+                "approved_by": context["actor_id"],
+                "financial_integrity_contract": INVOICE_INTEGRITY_CONTRACT if not is_experiment else None,
+                "financial_integrity_verified": not is_experiment,
                 "supplier_approved_by_name": _actor_name(user),
                 "payable_posted_at": None if is_experiment else now,
                 "approved_at": now,
@@ -4185,7 +4542,7 @@ def make_supplier_receiving_router(
                 ledger = await _post_supplier_invoice_ledger(
                     db,
                     user_id=merchant_id,
-                    actor=user,
+                    actor=effective_actor,
                     invoice=invoice,
                     mongo_session=mongo_session,
                 )
@@ -4351,7 +4708,7 @@ def make_supplier_receiving_router(
                         piece=piece,
                         invoice_line=line,
                         session=fresh_session,
-                        actor=user,
+                        actor=effective_actor,
                         invoice_id=invoice_id,
                         completed_at=now,
                     ),
@@ -4415,6 +4772,12 @@ def make_supplier_receiving_router(
 
             invoice_summary = {
                 "id": invoice_id,
+                "supplier_id": invoice["supplier_id"],
+                "session_id": session_id,
+                "ledger_entry_ids": invoice["ledger_entry_ids"],
+                "financial_invoice_created": not is_experiment,
+                "liability_created": not is_experiment,
+                "financial_integrity_verified": not is_experiment,
                 "invoice_number": invoice_number,
                 "status": "experiment_completed" if is_experiment else "payable_posted",
                 "currency": "SAR",
@@ -4451,6 +4814,8 @@ def make_supplier_receiving_router(
                         ),
                         "supplier_invoice_id": invoice_id,
                         "supplier_invoice": invoice_summary,
+                        "financial_integrity_contract": INVOICE_INTEGRITY_CONTRACT if not is_experiment else None,
+                        "financial_integrity_verified": not is_experiment,
                         "financial_invoice_created": not is_experiment,
                         "liability_created": not is_experiment,
                         "experiment_mode": is_experiment,
@@ -4564,8 +4929,15 @@ def make_supplier_receiving_router(
                     merchant_id,
                     session=mongo_session,
                 )
+            if not is_experiment:
+                invoice = await verify_persisted_supplier_invoice(
+                    db, user_id=merchant_id, invoice_id=invoice_id, session_id=session_id,
+                    supplier_id=fresh_session["supplier_id"], expected_total=draft["total_halalas"],
+                    actor_id=context["actor_id"], mongo_session=mongo_session,
+                )
             return {
                 "ok": True,
+                "financial_integrity_verified": not is_experiment,
                 "session": _public_session(updated),
                 "supplier_invoice": _public_supplier_invoice(invoice),
                 "next_step": (
@@ -4598,8 +4970,8 @@ def make_supplier_receiving_router(
                 detail={
                     "code": "supplier_receiving_accounting_transaction_failed",
                     "message": (
-                        "تعذّر اعتماد فاتورة المورد محاسبيًا؛ بقيت الجلسة "
-                        "مفتوحة ولم تُحفظ الفاتورة. حاول مرة أخرى."
+                        "تعذّر تأكيد نتيجة الإغلاق. تحقق من سجل الجلسة والفاتورة "
+                        "قبل إعادة المحاولة؛ قد يكون الخادم أكمل الحفظ."
                     ),
                 },
             ) from exc
