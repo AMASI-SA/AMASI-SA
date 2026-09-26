@@ -1,0 +1,37 @@
+name: Read Build20 product supplier contracts only
+on:
+  push:
+    branches: ['audit/build20-cost-contracts-20260926']
+    paths: ['.github/workflows/build20-cost-contract-read.yml']
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 0922d7b67f3bb1f3b610a237a4ef758f2ae59f2f
+          persist-credentials: false
+      - run: |
+          python3 <<'PY'
+          import json,os,subprocess,zipfile,hashlib
+          from pathlib import Path
+          out=Path(os.environ['RUNNER_TEMP'])/'contract-source';out.mkdir()
+          keys=('supplier_receiving','product_v2','product_option','product_fulfillment','product_cost_revision','mobile_app','order_option_cost')
+          files=[]
+          with zipfile.ZipFile(out/'source.zip','w',zipfile.ZIP_DEFLATED) as z:
+            for s in subprocess.check_output(['git','ls-files','-z'],text=True).split('\0'):
+              p=Path(s)
+              if not s.startswith('backend/') or p.suffix!='.py' or not any(k in p.name for k in keys):continue
+              if not p.is_file() or p.is_symlink():continue
+              b=p.read_bytes();z.writestr(s,b);files.append({'path':s,'sha256':hashlib.sha256(b).hexdigest()})
+          (out/'identity.json').write_text(json.dumps({'source_sha':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'files':files},indent=2))
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: backend-cost-contracts-0922d7b
+          path: ${{ runner.temp }}/contract-source
+          if-no-files-found: error
+          retention-days: 7
