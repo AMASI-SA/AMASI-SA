@@ -39,6 +39,7 @@ from .service import (
     list_orders,
 )
 from .search import search_orders
+from .preparation_tracking import install_preparation_tracking_read_route
 
 
 class OrderListResponse(BaseModel):
@@ -564,4 +565,8 @@ def make_order_engine_router(
                 },
             ) from exc
 
+    install_preparation_tracking_read_route(
+        router, db=db, current_user=current_user, require_owner=_require_owner,
+        get_order=get_order, repository=repository, not_found_error=OrderNotFoundError,
+    )
     return router
