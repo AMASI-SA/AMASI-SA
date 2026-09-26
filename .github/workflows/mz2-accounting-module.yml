@@ -4,12 +4,20 @@ on:
   pull_request:
     branches:
       - hotfix/prod-snap-meta-final
+      - chatgpt/mz2-ad-financial-accounts-opening-balances-20260922
     types:
       - opened
       - synchronize
       - reopened
       - ready_for_review
     paths:
+      - "backend/purchase_*.py"
+      - "backend/supplier_payment*.py"
+      - "backend/supplier_identity*.py"
+      - "backend/opening_inventory*.py"
+      - "backend/stock_component_consumption_service.py"
+      - "backend/tests/test_g47*.py"
+      - "backend/tests/test_stock_component_consumption.py"
       - "backend/accounting_module_*.py"
       - "backend/accounting_daily_movements.py"
       - "backend/accounting_employee_finance.py"
@@ -81,6 +89,8 @@ jobs:
         working-directory: backend
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -162,6 +172,8 @@ jobs:
         working-directory: backend
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -220,6 +232,8 @@ jobs:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: "22"

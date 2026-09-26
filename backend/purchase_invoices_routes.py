@@ -10,6 +10,8 @@ from accounting_atomic import atomic_owner
 from accounting_source_files import MAX_BYTES, preserve_original
 from auth import get_current_user_from_db
 from component_status_policy import component_is_active
+from supplier_identity_service import require_linked_supplier
+from supplier_payment_service import SupplierPaymentRequest, payment_context, pay_supplier, supplier_statement_balance
 from purchase_receiving_service import (
     SCHEMA, PRODUCTS, RESOURCES, OPERATIONS, actor_scope, approve_and_receive,
     approved_account_mappings, fail, invoice_public, now, purchase_amounts, resolve_line, stable_id, stored_number,
@@ -62,10 +64,7 @@ class PurchaseApproval(StrictModel):
     receipts: list[ReceiptLine] = Field(min_length=1, max_length=100)
 
 async def _supplier(db, owner, supplier_id):
-    row = await db.counterparties.find_one({"user_id": owner, "id": supplier_id, "kind": {"$in": ["supplier", "general"]}})
-    if not row:
-        fail("purchase_supplier_not_found", 404)
-    return row
+    return await require_linked_supplier(db, owner, supplier_id)
 
 async def _write_actor(db, user, owner):
     actor, current_owner = await actor_scope(db, user, "accounting.purchases.post")
@@ -86,7 +85,7 @@ async def _draft_values(db, owner, payload):
     amounts = purchase_amounts(lines, values["tax_amount"], values["tax_treatment"])
     for line in lines:
         line["line_total"] = stored_number(amounts["net_line_costs"][line["id"]])
-    values.update(lines=lines, supplier_name=supplier["name"], subtotal=stored_number(amounts["subtotal"]),
+    values.update(lines=lines, supplier_name=supplier["name"], supplier_entity_id=supplier["entity_id"], subtotal=stored_number(amounts["subtotal"]),
                   tax_amount=stored_number(amounts["tax_amount"]), total=stored_number(amounts["total"]), currency="SAR")
     return values
 
@@ -141,7 +140,15 @@ def attach_purchase_invoice_routes(parent_router: APIRouter, db):
             if loc.get("warehouse_id") and _warehouse_allowed(context, [loc["warehouse_id"]]):
                 locations.append({"id": loc["id"], "code": loc.get("code"), "barcode": loc.get("barcode_value") or loc.get("code"), "warehouse_id": loc["warehouse_id"]})
         _, mappings = await approved_account_mappings(db, owner)
-        return {"products": products, "components": components, "categories": categories, "locations": locations, "account_mappings": mappings}
+        identities = []
+        for mapping in mappings["supplier"]:
+            from fastapi import HTTPException
+            try:
+                identities.append(await require_linked_supplier(db, owner, mapping["entity_id"]))
+            except HTTPException:
+                continue
+        return {"products": products, "components": components, "categories": categories, "locations": locations,
+                "account_mappings": mappings, "supplier_identities": identities}
 
     @router.post("/tax-evidence")
     async def tax_evidence(file: UploadFile = File(...), supplier_counterparty_id: str = Form(...),
@@ -202,14 +209,32 @@ def attach_purchase_invoice_routes(parent_router: APIRouter, db):
         supplier = await _supplier(db, owner, cp_id)
         rows = []
         async for doc in db.purchase_invoices.find({"user_id": owner, "supplier_counterparty_id": cp_id}):
-            if doc.get("schema_version") == SCHEMA and doc.get("state") != "approved":
+            if doc.get("schema_version") != SCHEMA or doc.get("state") != "approved":
                 continue
             rows.append(await _public(db, owner, doc))
         invoiced = round(sum(r["total"] for r in rows), 2)
         paid = round(sum(r["paid_amount"] for r in rows), 2)
+        balance = await supplier_statement_balance(db, owner, cp_id)
         return {"supplier": {k: supplier.get(k) for k in ("id", "name", "kind")},
-                "totals": {"total_invoiced": invoiced, "total_paid": paid, "balance_owed": max(0, round(invoiced - paid, 2))},
-                "invoices": rows, "generated_at": now()}
+                "totals": {"total_invoiced": invoiced, "total_paid": paid, "balance_owed": balance["payable"]},
+                "invoices": rows, "generated_at": now(), "ledger_backend": "v2", "supplier_entity_id": cp_id,
+                "unallocated_payable_amount": balance["unallocated_payable_amount"]}
+
+    @router.get("/supplier/{cp_id}/payment-context")
+    async def supplier_context(cp_id: str, user=Depends(current_user)):
+        return await payment_context(db, user=user, supplier_id=cp_id)
+
+    @router.post("/supplier/{cp_id}/payments")
+    async def supplier_pay(cp_id: str, payload: SupplierPaymentRequest, user=Depends(current_user)):
+        return await pay_supplier(db, user=user, supplier_id=cp_id, payload=payload.model_dump(mode="json"))
+
+    @router.get("/{inv_id}/payment-context")
+    async def invoice_payment_context(inv_id: str, user=Depends(current_user)):
+        return await payment_context(db, user=user, invoice_id=inv_id)
+
+    @router.post("/{inv_id}/payments")
+    async def invoice_pay(inv_id: str, payload: SupplierPaymentRequest, user=Depends(current_user)):
+        return await pay_supplier(db, user=user, invoice_id=inv_id, payload=payload.model_dump(mode="json"))
 
     @router.get("/{inv_id}")
     async def get_invoice(inv_id: str, user=Depends(current_user)):

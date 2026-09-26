@@ -1,7 +1,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import PurchaseInvoices, {
-    ApprovalDialog, InvoiceDialog, buildFullPurchaseApproval, buildPurchaseDraft,
+    ApprovalDialog, InvoiceDialog, PaymentDialog, SupplierStatement, buildSupplierPayment, buildFullPurchaseApproval, buildPurchaseDraft,
     isManagedDraft, purchasableComponents, updatePurchaseLine,
 } from "./PurchaseInvoices";
 import api from "../lib/api";
@@ -16,6 +16,7 @@ jest.mock("react-router-dom", () => ({
 }));
 
 const catalog = {
+    supplier_identities: [{counterparty_id: "supplier", entity_id: "supplier", name: "مورد"}],
     products: [
         { product_id: "p-one", name: "منتج أول", sku: "SAME", variants: [], variants_required: false },
         { product_id: "p-two", name: "منتج ثان", sku: "SAME", variants_required: true,
@@ -32,7 +33,7 @@ const catalog = {
     locations: [{ id: "loc", code: "A1", barcode: "LOC-A1", warehouse_id: "warehouse" }],
     account_mappings: {
         inventory: [{ entity_id: "inventory-account", label: "المخزون" }],
-        supplier: [{ entity_id: "supplier-account", label: "الموردون" }],
+        supplier: [{ entity_id: "supplier", label: "الموردون" }],
         input_vat: [{ entity_id: "vat-account", label: "الضريبة" }],
     },
 };
@@ -45,7 +46,7 @@ function form(overrides = {}) {
         supplier_counterparty_id: "supplier", invoice_number: "INV-1", invoice_date: "2026-09-26",
         due_date: "", tax_amount: "0", tax_treatment: "none", tax_evidence_ref: "",
         tax_evidence_verified: false, inventory_account_id: "inventory-account",
-        input_vat_account_id: "", supplier_account_id: "supplier-account", notes: "",
+        input_vat_account_id: "", supplier_account_id: "supplier", notes: "",
         lines: [{ ...productLine }, { ...componentLine }], ...overrides,
     };
 }
@@ -161,7 +162,7 @@ test("new draft UI writes only the draft endpoint with canonical identities and 
     await change(byTest("pinv-line-0-quantity"), "3");
     await change(byTest("pinv-line-0-total"), "36");
     await change(field("حساب المخزون"), "inventory-account");
-    await change(field("حساب ذمة المورد"), "supplier-account");
+    await change(field("حساب ذمة المورد"), "supplier");
     await submit();
     expect(api.post).toHaveBeenCalledTimes(1);
     expect(api.post.mock.calls[0][0]).toBe("/purchase-invoices");
@@ -307,4 +308,104 @@ test("list offers approval only for new drafts, never legacy mutations", async (
     expect(byTest("pinv-approve-legacy")).toBeNull();
     expect(byTest("pinv-approve-approved")).toBeNull();
     expect(container.querySelector('[data-testid^="pinv-delete"]')).toBeNull();
+});
+
+const paymentContext = {
+    operation_id: "stable-payment-attempt", expected_payment_revision: 0, remaining_amount: "100.00",
+    supplier_entity_id: "supplier", banks: [{ id: "bank", name: "البنك", balance: "500.00" }],
+};
+const paymentForm = { amount: "40.25", paid_from_account_id: "bank", payment_date: "2026-09-26", notes: "دفعة أولى" };
+test("supplier payment keeps the server operation, exact amount and bank identity", () => {
+    expect(buildSupplierPayment(paymentContext, paymentForm)).toEqual({
+        ...paymentForm, operation_id: "stable-payment-attempt", expected_payment_revision: 0,
+    });
+});
+test("unlinked supplier and mismatched supplier account cannot produce a purchase draft", () => {
+    expect(() => buildPurchaseDraft(form(), { ...catalog, supplier_identities: [] })).toThrow();
+    expect(() => buildPurchaseDraft(form({ supplier_account_id: "another-supplier" }), catalog)).toThrow();
+});
+test.each([
+    { amount: "100.01" }, { amount: "-1" }, { amount: "0" }, { amount: "1.001" },
+    { paid_from_account_id: "unapproved-bank" }, { payment_date: "" },
+])("invalid supplier payment is rejected before submit: %j", (change) => {
+    expect(() => buildSupplierPayment(paymentContext, { ...paymentForm, ...change })).toThrow();
+});
+test("supplier payment rejects insufficient displayed bank funds and missing operation identity", () => {
+    expect(() => buildSupplierPayment({ ...paymentContext, banks: [{ id: "bank", balance: "10" }] }, paymentForm)).toThrow();
+    expect(() => buildSupplierPayment({ ...paymentContext, operation_id: null }, paymentForm)).toThrow();
+});
+test("partial payment uses the invoice V2 route and closes only after committed success", async () => {
+    api.get.mockResolvedValue({ data: paymentContext });
+    api.post.mockResolvedValue({ data: { ok: true, operation: { status: "succeeded" } } });
+    const onSaved = jest.fn(), onClose = jest.fn();
+    await render(<PaymentDialog invoiceId="invoice-1" onSaved={onSaved} onClose={onClose} />);
+    expect(api.get).toHaveBeenCalledWith("/purchase-invoices/invoice-1/payment-context");
+    await change(byTest("pinv-payment-amount"), "40.25");
+    await change(byTest("pinv-payment-bank"), "bank");
+    await change(byTest("pinv-payment-date"), "2026-09-26");
+    await submit();
+    expect(api.post).toHaveBeenCalledWith("/purchase-invoices/invoice-1/payments", expect.objectContaining({
+        operation_id: "stable-payment-attempt", amount: "40.25", expected_payment_revision: 0,
+        paid_from_account_id: "bank", payment_date: "2026-09-26",
+    }));
+    expect(onSaved).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+});
+test("lost payment response retries the same operation and immutable fields without reloading context", async () => {
+    api.get.mockResolvedValue({ data: paymentContext });
+    api.post.mockRejectedValueOnce(new Error("response lost")).mockResolvedValueOnce({
+        data: { ok: true, operation: { status: "succeeded" } },
+    });
+    const onSaved = jest.fn();
+    await render(<PaymentDialog invoiceId="invoice-1" onSaved={onSaved} onClose={jest.fn()} />);
+    await change(byTest("pinv-payment-bank"), "bank");
+    await submit();
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(byTest("pinv-payment-bank").closest("fieldset").disabled).toBe(true);
+    await submit();
+    expect(api.post.mock.calls[0]).toEqual(api.post.mock.calls[1]);
+    expect(api.get).toHaveBeenCalledTimes(1);
+    expect(onSaved).toHaveBeenCalledTimes(1);
+});
+test("unallocated supplier payable uses supplier identity without a name fallback", async () => {
+    api.get.mockResolvedValue({ data: paymentContext });
+    api.post.mockResolvedValue({ data: { ok: true, operation: { status: "succeeded" } } });
+    await render(<PaymentDialog supplierId="supplier/id" onSaved={jest.fn()} onClose={jest.fn()} />);
+    await change(byTest("pinv-payment-bank"), "bank");
+    await submit();
+    expect(api.get).toHaveBeenCalledWith("/purchase-invoices/supplier/supplier%2Fid/payment-context");
+    expect(api.post.mock.calls[0][0]).toBe("/purchase-invoices/supplier/supplier%2Fid/payments");
+});
+test("denied payment context and unconfirmed result never claim a payment succeeded", async () => {
+    api.get.mockRejectedValueOnce(new Error("permission denied"));
+    const onSaved = jest.fn();
+    await render(<PaymentDialog invoiceId="invoice-1" onSaved={onSaved} onClose={jest.fn()} />);
+    expect(byTest("pinv-payment-submit").disabled).toBe(true);
+    await submit();
+    expect(api.post).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
+});
+test("pending payment response retains the attempt and does not announce completion", async () => {
+    api.get.mockResolvedValue({ data: paymentContext });
+    api.post.mockResolvedValue({ data: { ok: true, operation: { status: "pending" } } });
+    const onSaved = jest.fn(), onClose = jest.fn();
+    await render(<PaymentDialog invoiceId="invoice-1" onSaved={onSaved} onClose={onClose} />);
+    await change(byTest("pinv-payment-bank"), "bank");
+    await submit();
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("لم يتأكد اكتمال السداد");
+});
+test("V2 supplier statement offers unallocated payment and cannot retain another supplier's stale data", async () => {
+    api.get.mockResolvedValueOnce({ data: { supplier: { name: "المورد الأول" }, ledger_backend: "v2",
+        unallocated_payable_amount: "30", totals: { total_invoiced: 100, total_paid: 70, balance_owed: 30 }, invoices: [] } });
+    const onPayment = jest.fn();
+    await render(<SupplierStatement cpId="one" open onClose={jest.fn()} onPayment={onPayment} />);
+    await act(async () => byTest("pinv-pay-opening").click());
+    expect(onPayment).toHaveBeenCalledWith("one");
+    api.get.mockRejectedValueOnce(new Error("identity unavailable"));
+    await render(<SupplierStatement cpId="two" open onClose={jest.fn()} onPayment={onPayment} />);
+    expect(container.textContent).not.toContain("المورد الأول");
+    expect(byTest("pinv-pay-opening")).toBeNull();
+    expect(container.textContent).toContain("identity unavailable");
 });

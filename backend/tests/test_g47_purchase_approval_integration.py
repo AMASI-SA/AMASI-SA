@@ -112,6 +112,7 @@ class PurchaseApprovalMongoIntegration(unittest.IsolatedAsyncioTestCase):
     async def seed(self, db):
         await db.users.insert_one(dict(self.actor))
         await db.counterparties.insert_one({"id": "supplier", "user_id": "owner", "kind": "supplier", "name": "Synthetic supplier"})
+        await db.suppliers.insert_one({"id": "supplier", "user_id": "owner", "company_name": "Synthetic supplier", "status": "active"})
         await db.mezan_component_categories_v2.insert_one({"id": "metal", "user_id": "owner", "name": "Synthetic metal"})
         await db.mezan_cost_resources_v2.insert_many([
             {"id": "component-A", "user_id": "owner", "name": "Synthetic component", "code": "COMP-A", "category_ids": ["metal"], "track_inventory": True, "kind": "stock_component", "status": "active", "initial_unit_cost": 99, "unit_cost": 99, "cost_authoritative": False},
@@ -139,6 +140,9 @@ class PurchaseApprovalMongoIntegration(unittest.IsolatedAsyncioTestCase):
             "opening_balance_txn_group_id": pointer, "opening_active_txn_group_id": pointer, "opening_root_txn_group_id": pointer,
         }
         mappings = [("inventory_asset", "asset", "inventory", "inventory"), ("supplier_payable", "supplier", "supplier", "payable"), ("input_vat", "tax", "input-vat", "input_vat")]
+        cutover["opening_balance_zero_accounts"] = [{"entity_type": entity_type, "entity_id": entity_id,
+            "sub_account": subaccount, "accounting_at": cutover_at, "opening_balance_txn_group_id": pointer,
+            "evidence_ref": "SYNTHETIC-ZERO-"+entity_id} for _, entity_type, entity_id, subaccount in mappings]
         await db.mz2_opening_balance_drafts.insert_one({
             "id": "synthetic-opening", "user_id": "owner", "status": "posted", "zero_only": True,
             "txn_group_id": pointer, "opening_root_txn_group_id": pointer, "cutover_at": cutover_at,

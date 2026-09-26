@@ -92,6 +92,8 @@ function mappingExists(catalog, kind, id) {
 
 export function buildPurchaseDraft(form, catalog) {
     if (!form.supplier_counterparty_id) throw new Error("اختر المورد.");
+    const supplierIdentity = (catalog.supplier_identities || []).find((row) => row.counterparty_id === form.supplier_counterparty_id);
+    if (!supplierIdentity || supplierIdentity.entity_id !== form.supplier_account_id) throw new Error("المورد يحتاج ربط هوية محاسبية مثبتًا وقابلًا للسداد.");
     if (!form.invoice_date) throw new Error("حدد تاريخ الفاتورة.");
     if (!form.lines.length) throw new Error("أضف بندًا واحدًا على الأقل.");
     const lines = form.lines.map((line) => {
@@ -193,6 +195,9 @@ export function InvoiceDialog({ suppliers, catalog, editing, onClose, onSaved })
     const saving = useRef(false);
     const set = (key, value) => setForm((current) => ({
         ...current, [key]: value,
+        ...(key === "supplier_counterparty_id" ? {
+            supplier_account_id: (catalog.supplier_identities || []).find((row) => row.counterparty_id === value)?.entity_id || "",
+        } : {}),
         ...(["supplier_counterparty_id", "invoice_number"].includes(key)
             ? { tax_evidence_ref: "", tax_evidence_verified: false } : {}),
     }));
@@ -294,7 +299,7 @@ export function InvoiceDialog({ suppliers, catalog, editing, onClose, onSaved })
                 {form.tax_treatment === "deductible" && <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={form.tax_evidence_verified === true} disabled={!form.tax_evidence_ref} onChange={(event) => set("tax_evidence_verified", event.target.checked)} data-testid="pinv-tax-attestation" />راجعت المستند وأؤكد أنه فاتورة ضريبية صحيحة تخص هذا المورد وهذه الفاتورة.</label>}
                 <div className="grid gap-3 md:grid-cols-3">
                     <MappingSelect label="حساب المخزون" kind="inventory" catalog={catalog} value={form.inventory_account_id} onChange={(value) => set("inventory_account_id", value)} />
-                    <MappingSelect label="حساب ذمة المورد" kind="supplier" catalog={catalog} value={form.supplier_account_id} onChange={(value) => set("supplier_account_id", value)} />
+                    <MappingSelect label="حساب ذمة المورد" kind="supplier" catalog={catalog} value={form.supplier_account_id} onChange={(value) => set("supplier_account_id", value)} disabled />
                     {form.tax_treatment === "deductible" && <MappingSelect label="حساب ضريبة المدخلات" kind="input_vat" catalog={catalog} value={form.input_vat_account_id} onChange={(value) => set("input_vat_account_id", value)} />}
                 </div>
                 <Field label="ملاحظات"><textarea className={inputCls} value={form.notes} onChange={(event) => set("notes", event.target.value)} /></Field>
@@ -311,17 +316,20 @@ const STATUS_LABEL = {
     paid: { label: "مسددة", tone: "bg-emerald-50 text-emerald-800 border-emerald-200" },
 };
 
-function SupplierStatement({ cpId, open, onClose }) {
+export function SupplierStatement({ cpId, open, onClose, onPayment }) {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState("");
 
     useEffect(() => {
         if (!open || !cpId) return;
-        setLoading(true);
-        api.get(`/purchase-invoices/supplier/${cpId}/statement`)
-            .then((r) => setData(r.data))
-            .catch((e) => toast.error(formatApiErrorDetail(e.response?.data?.detail)))
-            .finally(() => setLoading(false));
+        let active = true;
+        setLoading(true); setData(null); setError("");
+        api.get(`/purchase-invoices/supplier/${encodeURIComponent(cpId)}/statement`)
+            .then((r) => { if (active) setData(r.data); })
+            .catch((e) => { if (active) setError(failureMessage(e, "تعذر تحميل كشف المورد.")); })
+            .finally(() => { if (active) setLoading(false); });
+        return () => { active = false; };
     }, [open, cpId]);
 
     if (!open) return null;
@@ -336,13 +344,15 @@ function SupplierStatement({ cpId, open, onClose }) {
                     <button onClick={onClose} className="text-slate-500 hover:text-slate-900 text-2xl">×</button>
                 </div>
                 <div className="p-5">
-                    {loading || !data ? (
+                    {error ? <p role="alert" className="text-rose-800">{error}</p> : loading || !data ? (
                         <div className="text-center text-slate-500 text-sm py-8">جاري التحميل…</div>
                     ) : (
                         <>
                             <div className="mb-4">
                                 <div className="text-xs text-slate-500">المورد</div>
                                 <div className="text-base font-extrabold text-slate-900">{data.supplier.name}</div>
+                                {data.ledger_backend === "v2" && <p className="mt-2 text-sm">الرصيد المستحق من الدفتر المحاسبي المعتمد، ويشمل الرصيد الافتتاحي. إجماليات الفواتير أدناه تخص فواتير الشراء المعتمدة في الدورة الحالية.</p>}
+                                {data.ledger_backend === "v2" && Number(data.unallocated_payable_amount) > 0 && <button type="button" className={buttonCls + " mt-3"} onClick={() => onPayment(cpId)} data-testid="pinv-pay-opening">سداد رصيد المورد غير المرتبط بفواتير الشراء</button>}
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
                                 <div className="rounded-lg bg-slate-50 border border-slate-200 p-3">
@@ -396,6 +406,76 @@ function SupplierStatement({ cpId, open, onClose }) {
             </div>
         </div>
     );
+}
+
+export function buildSupplierPayment(context, form) {
+    if (!context?.operation_id || !Number.isInteger(context.expected_payment_revision)) throw new Error("أعد تحميل بيانات السداد.");
+    const amount = String(form.amount || "").trim();
+    if (!/^\d+(\.\d{1,2})?$/.test(amount) || Number(amount) <= 0) throw new Error("أدخل مبلغًا موجبًا بدقة هللتين.");
+    if (Number(amount) > Number(context.remaining_amount)) throw new Error("المبلغ يتجاوز الرصيد المستحق.");
+    const bank = (context.banks || []).find((row) => row.id === form.paid_from_account_id);
+    if (!bank) throw new Error("اختر حساب السداد المعتمد.");
+    if (Number(amount) > Number(bank.balance)) throw new Error("رصيد حساب السداد غير كافٍ.");
+    if (!form.payment_date) throw new Error("حدد تاريخ السداد.");
+    return {
+        operation_id: context.operation_id, expected_payment_revision: context.expected_payment_revision,
+        amount, paid_from_account_id: bank.id, payment_date: form.payment_date, notes: form.notes.trim(),
+    };
+}
+
+export function PaymentDialog({ invoiceId, supplierId, onClose, onSaved }) {
+    const base = supplierId
+        ? "/purchase-invoices/supplier/" + encodeURIComponent(supplierId)
+        : "/purchase-invoices/" + encodeURIComponent(invoiceId);
+    const [context, setContext] = useState(null);
+    const [form, setForm] = useState({ amount: "", paid_from_account_id: "", payment_date: todaySA(), notes: "" });
+    const [request, setRequest] = useState(null);
+    const [error, setError] = useState("");
+    const [busy, setBusy] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const saving = useRef(false);
+    useEffect(() => {
+        let active = true;
+        api.get(base + "/payment-context").then(({ data }) => {
+            if (active) { setContext(data); setForm((old) => ({ ...old, amount: String(data.remaining_amount) })); }
+        }).catch((err) => { if (active) setError(failureMessage(err, "تعذر التحقق من رصيد المورد.")); })
+            .finally(() => { if (active) setLoading(false); });
+        return () => { active = false; };
+    }, [base]);
+    const submitPayment = async (event) => {
+        event.preventDefault();
+        if (saving.current || !context || loading) return;
+        let payload = request;
+        try { payload = payload || buildSupplierPayment(context, form); }
+        catch (err) { setError(err.message); return; }
+        // Keep the exact operation and fields after an uncertain response.
+        // A retry must never create a new payment or change its amount.
+        setRequest(payload); saving.current = true; setBusy(true); setError("");
+        try {
+            const { data } = await api.post(base + "/payments", payload);
+            if (data.ok !== true || data.operation?.status !== "succeeded") throw new Error("لم يتأكد اكتمال السداد. أعد محاولة العملية نفسها.");
+            toast.success("تم تسجيل سداد المورد.");
+            await onSaved();
+            onClose();
+        } catch (err) { setError(failureMessage(err, "تعذر تأكيد نتيجة السداد. إعادة المحاولة تستخدم العملية نفسها.")); }
+        finally { saving.current = false; setBusy(false); }
+    };
+    return <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 p-4" data-testid="pinv-payment-dialog">
+        <form onSubmit={submitPayment} className="mx-auto my-6 max-w-xl space-y-4 rounded-xl bg-white p-5" dir="rtl">
+            <div className="flex items-center justify-between"><h2 className="text-xl font-black">سداد المورد</h2><button type="button" onClick={onClose} disabled={busy}>إغلاق</button></div>
+            {loading && <p>جارٍ التحقق من رصيد المورد والحسابات…</p>}
+            {error && <p role="alert" className="rounded bg-rose-50 p-3 text-rose-800">{error}</p>}
+            {context && <p>المستحق: {fmt(context.remaining_amount)} SAR</p>}
+            <fieldset className="space-y-3" disabled={!context || busy || !!request}>
+                <Field label="مبلغ السداد"><input className={inputCls} inputMode="decimal" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} data-testid="pinv-payment-amount" /></Field>
+                <Field label="حساب السداد"><select className={inputCls} value={form.paid_from_account_id} onChange={(e) => setForm({ ...form, paid_from_account_id: e.target.value })} data-testid="pinv-payment-bank"><option value="">اختر الحساب</option>{(context?.banks || []).map((bank) => <option key={bank.id} value={bank.id}>{bank.name} — {fmt(bank.balance)} SAR</option>)}</select></Field>
+                <Field label="تاريخ السداد"><input className={inputCls} type="date" value={form.payment_date} onChange={(e) => setForm({ ...form, payment_date: e.target.value })} data-testid="pinv-payment-date" /></Field>
+                <Field label="ملاحظات"><input className={inputCls} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></Field>
+            </fieldset>
+            {request && error && <p className="text-sm">بيانات المحاولة محفوظة. إعادة المحاولة لا تنشئ سدادًا ثانيًا.</p>}
+            <button className={buttonCls} type="submit" disabled={!context || busy || Number(context?.remaining_amount) <= 0} data-testid="pinv-payment-submit">{busy ? "جارٍ تأكيد السداد…" : request ? "إعادة محاولة السداد نفسه" : "تأكيد السداد"}</button>
+        </form>
+    </div>;
 }
 
 
@@ -499,6 +579,7 @@ export default function PurchaseInvoices() {
     const [error, setError] = useState("");
     const [dialog, setDialog] = useState(null);
     const [approval, setApproval] = useState(null);
+    const [payment, setPayment] = useState(null);
     const [statementSupplier, setStatementSupplier] = useState(null);
     const [search, setSearch] = useState("");
     const load = async () => {
@@ -509,7 +590,8 @@ export default function PurchaseInvoices() {
                 api.get("/purchase-invoices/catalog"),
             ]);
             setInvoices(inv.data.items || []);
-            setSuppliers((cp.data.items || []).filter((row) => row.kind === "supplier" || row.kind === "general"));
+            const linked = new Set((cat.data.supplier_identities || []).map((row) => row.counterparty_id));
+            setSuppliers((cp.data.items || []).filter((row) => linked.has(row.id)));
             setCatalog({ ...EMPTY_CATALOG, ...cat.data });
         } catch (err) { setError(failureMessage(err, "تعذر تحميل فواتير الشراء.")); }
         finally { setLoading(false); }
@@ -542,15 +624,17 @@ export default function PurchaseInvoices() {
             <thead><tr>{["الفاتورة", "المورد", "التاريخ", "الإجمالي SAR", "الحالة", "الإجراءات"].map((label) => <th key={label} className="p-3">{label}</th>)}</tr></thead>
             <tbody>{filtered.map((row) => <tr key={row.id} className="border-t" data-testid={"pinv-row-" + row.id}>
                 <td className="p-3">{row.invoice_number || "—"}</td><td className="p-3"><button className="text-violet-700 underline" onClick={() => setStatementSupplier(row.supplier_counterparty_id)}>{row.supplier_name || "—"}</button></td><td className="p-3">{row.invoice_date}</td><td className="p-3">{fmt(row.total)}</td>
-                <td className="p-3">{invoiceStateLabel(row)}{operationStatus(row) && <div className="text-xs">{operationStatus(row)}</div>}</td>
+                <td className="p-3">{invoiceStateLabel(row)}{row.state === "approved" && <div className="text-xs">{STATUS_LABEL[row.payment_status || row.status]?.label || "غير مسددة"} · المتبقي {fmt(row.remaining_amount)}</div>}{operationStatus(row) && <div className="text-xs">{operationStatus(row)}</div>}</td>
                 <td className="flex flex-wrap gap-2 p-3"><button className="rounded border px-3 py-2" onClick={() => setDialog({ invoice: row })} data-testid={"pinv-open-" + row.id}><FileText className="inline" size={16} /> {isManagedDraft(row) ? "تعديل المسودة" : "عرض"}</button>
                     {isManagedDraft(row) && <button className={buttonCls} onClick={() => openApproval(row)} data-testid={"pinv-approve-" + row.id}>اعتماد واستلام كامل</button>}
+                    {row.schema_version === "g47-v1" && row.state === "approved" && Number(row.remaining_amount) > 0 && <button className={buttonCls} onClick={() => setPayment({ invoiceId: row.id })} data-testid={"pinv-pay-" + row.id}>سداد المورد</button>}
                     {row.schema_version === "g47-v1" && !["draft", "approved"].includes(row.state) && <button className="rounded border px-3 py-2" onClick={() => openApproval(row)}>متابعة حالة الاعتماد</button>}
                 </td>
             </tr>)}</tbody>
         </table>{!filtered.length && <p className="p-8 text-center">لا توجد فواتير مطابقة.</p>}</div>}
         {dialog && <InvoiceDialog suppliers={suppliers} catalog={catalog} editing={dialog.invoice} onClose={() => setDialog(null)} onSaved={load} />}
         {approval && <ApprovalDialog invoice={approval} catalog={catalog} onClose={() => setApproval(null)} onSaved={load} />}
-        <SupplierStatement cpId={statementSupplier} open={!!statementSupplier} onClose={() => setStatementSupplier(null)} />
+        <SupplierStatement cpId={statementSupplier} open={!!statementSupplier} onClose={() => setStatementSupplier(null)} onPayment={(supplierId) => { setStatementSupplier(null); setPayment({ supplierId }); }} />
+        {payment && <PaymentDialog {...payment} onClose={() => setPayment(null)} onSaved={load} />}
     </div>;
 }

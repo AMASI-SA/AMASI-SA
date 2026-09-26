@@ -15,7 +15,7 @@ from fastapi import HTTPException
 from pymongo.errors import PyMongoError
 
 from accounting_atomic import atomic_owner
-from accounting_ledger_v2 import AccountingLedgerV2Error, post_journal_v2, verify_active_opening_v2
+from accounting_ledger_v2 import AccountingLedgerV2Error, post_journal_v2, query_entries_v2, verify_active_opening_v2
 from accounting_module_contract import accounting_owner_id, require_accounting_permission
 from accounting_module_readiness import build_accounting_module_status
 from accounting_periods import assert_open_journal_periods
@@ -25,6 +25,7 @@ from component_status_policy import component_is_active
 from inventory_receipt_service import InventoryLocationCapacityError, place_inventory_receipt
 from product_cost_revision import bump_product_cost_revision
 from product_inventory_rules import build_inventory_configuration_key, canonical_specifications
+from supplier_identity_service import require_linked_supplier
 
 SCHEMA = "g47-v1"
 COST_POLICY = "moving-weighted-average-v1"
@@ -196,6 +197,42 @@ async def approved_account_mappings(db, owner):
     return cutover, mappings
 
 
+async def assert_opening_inventory_initialized(db, owner, cutover):
+    """Positive opening inventory must be initialized before operational journals.
+
+    Otherwise posting an unrelated first purchase/payment would make the isolated
+    opening import ineligible while leaving old stock without authoritative cost.
+    """
+    active = cutover.get("opening_active_txn_group_id")
+    balances, after = {}, None
+    while True:
+        rows = await query_entries_v2(db, user_id=owner, txn_group_id=active,
+            entity_type="asset", sub_account="inventory", after_entry_no=after, limit=1000)
+        for row in rows:
+            key = row["entity_id"]
+            balances[key] = balances.get(key, Decimal(0)) + number(row["amount"]) * (1 if row["side"] == "debit" else -1)
+        if len(rows) < 1000:
+            break
+        after = rows[-1]["entry_no"]
+    if any(value > 0 for value in balances.values()):
+        marker = await db.mz2_opening_inventory_initializations.find_one({"_id": owner, "user_id": owner,
+            "state": "approved", "opening_txn_group_id": active})
+        if not marker:
+            fail("opening_inventory_initialization_required")
+    # A zero-valued opening cannot silently legitimize positive uncosted stock.
+    # Check every occupied identity, including those unrelated to this invoice.
+    costs = [row async for row in db[COST_STATES].find({"user_id": owner, "authoritative": True, "cost_policy_version": COST_POLICY})]
+    async for location in db[LOCATIONS].find({"user_id": owner}):
+        for item in (location.get("occupancy") or {}).get("items") or []:
+            if number(item.get("quantity") or 0) <= 0:
+                continue
+            candidates = [row for row in costs if row.get("inventory_identity") and same_identity(item, row["inventory_identity"])]
+            if (len(candidates) != 1 or candidates[0].get("average_cost") is None or
+                    candidates[0].get("_id") != identity_key(owner, candidates[0]["inventory_identity"])):
+                fail("inventory_cost_reconciliation_required")
+            number(candidates[0]["average_cost"])
+
+
 async def _validate_posting(db, owner, actor, invoice):
     require_accounting_permission(actor, "accounting.purchases.post")
     cutover, mappings = await approved_account_mappings(db, owner)
@@ -205,10 +242,12 @@ async def _validate_posting(db, owner, actor, invoice):
     status = build_accounting_module_status(cutover, opening_posted_verified=verified)
     if not status["cutover"]["safe_active"]:
         fail("purchase_accounting_not_safe_active")
+    await assert_opening_inventory_initialized(db, owner, cutover)
     for key, field in [("inventory", "inventory_account_id"), ("supplier", "supplier_account_id")]:
         if invoice.get(field) not in {r["entity_id"] for r in mappings[key]}:
             fail("purchase_account_mapping_required", account=key)
-    if invoice.get("supplier_account_id") != invoice.get("supplier_counterparty_id"):
+    supplier = await require_linked_supplier(db, owner, invoice.get("supplier_counterparty_id"))
+    if invoice.get("supplier_account_id") != supplier["entity_id"] or invoice.get("supplier_entity_id") != supplier["entity_id"]:
         fail("purchase_supplier_account_identity_mismatch")
     if invoice["tax_treatment"] == "deductible":
         if invoice.get("input_vat_account_id") not in {r["entity_id"] for r in mappings["input_vat"]}:
@@ -388,7 +427,7 @@ async def approve_and_receive(db, *, user, invoice_id, payload):
         group_id = journal["group"]["txn_group_id"]
         liability_id = stable_id("purchase-liability", operation_id)
         await scoped.liabilities.insert_one({"_id": liability_id, "id": liability_id, "user_id": owner, "kind": "supplier",
-            "counterparty_id": invoice["supplier_counterparty_id"], "supplier_name": invoice["supplier_name"],
+            "counterparty_id": invoice["supplier_counterparty_id"], "supplier_entity_id": invoice["supplier_entity_id"], "supplier_name": invoice["supplier_name"],
             "expected_amount": stored_number(amounts["total"]), "paid_amount": 0, "status": "unpaid", "source": "purchase_invoice",
             "schema_version": SCHEMA, "purchase_invoice_id": invoice_id, "accounting_txn_group_id": group_id,
             "due_date": invoice.get("due_date") or invoice["invoice_date"], "created_at": timestamp, "updated_at": timestamp})
