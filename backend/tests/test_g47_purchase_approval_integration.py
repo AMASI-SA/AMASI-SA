@@ -31,6 +31,7 @@ from accounting_module_readiness import build_accounting_module_status
 from purchase_invoices_routes import attach_purchase_invoice_routes, ensure_purchase_invoices_indexes
 import purchase_invoices_routes as invoice_routes
 import purchase_receiving_service as receiving
+import stock_component_consumption_service as consumption
 
 
 def local_uri(name: str, default: str | None = None) -> str:
@@ -230,6 +231,10 @@ class PurchaseApprovalMongoIntegration(unittest.IsolatedAsyncioTestCase):
         receipts = await self.db[receiving.RECEIPTS].find({}).to_list(10)
         self.assertEqual(len(receipts), 2)
         self.assertEqual(set(result["receipt_ids"]), {row["id"] for row in receipts})
+        for receipt in receipts:
+            self.assertEqual(receipt["source_type"], "purchase_invoice")
+            self.assertEqual(receipt["source_id"], invoice["id"])
+            self.assertEqual(receipt["source_line_id"], receipt["line_id"])
         product = next(row for row in receipts if row["item_type"] == "product")
         self.assertEqual((product["product_id"], product["variant_id"], product["sku"]), ("product-A", "variant-A", "SHARED-SKU"))
         component = await self.db.mezan_cost_resources_v2.find_one({"id": "component-A"})
@@ -294,6 +299,98 @@ class PurchaseApprovalMongoIntegration(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(operation["id"], invoice["approval_operation_id"])
         await self.assert_success(await self.approve(invoice))
         self.assertEqual(await self.db[receiving.OPERATIONS].count_documents({}), 1)
+
+    async def test_fault_after_real_sealed_journal_aborts_financial_and_inventory_effects(self):
+        invoice = await self.draft()
+        original = receiving.post_journal_v2
+        verified_uncommitted = []
+
+        async def fail_after_real_journal(db, **kwargs):
+            result = await original(db, **kwargs)
+            proof = await verify_journal_v2(db, user_id="owner", txn_group_id=result["group"]["txn_group_id"], mongo_session=kwargs["mongo_session"])
+            self.assertTrue(proof["verified"], proof)
+            verified_uncommitted.append(result["group"]["txn_group_id"])
+            raise HTTPException(503, detail={"code": "synthetic_after_sealed_journal"})
+
+        with patch.object(receiving, "post_journal_v2", fail_after_real_journal):
+            response = await self.approve(invoice)
+        self.assertEqual(response.status_code, 503, response.text)
+        self.assertEqual(len(verified_uncommitted), 1)
+        await self.assert_no_effects()
+        for location in await self.db.warehouse_locations.find({}).to_list(10):
+            self.assertEqual(location["occupancy"], {"items": [], "total_quantity": 0})
+        component = await self.db.mezan_cost_resources_v2.find_one({"id": "component-A"})
+        self.assertEqual(component["unit_cost"], 99)
+        self.assertFalse(component["cost_authoritative"])
+        operation = await self.db[receiving.OPERATIONS].find_one({"id": invoice["approval_operation_id"]})
+        self.assertEqual(operation["status"], "failed")
+        self.assertEqual(operation["error_code"], "synthetic_after_sealed_journal")
+        result = await self.assert_success(await self.approve(invoice))
+        self.assertEqual(result["operation"]["id"], invoice["approval_operation_id"])
+        self.assertEqual(await self.db[receiving.OPERATIONS].count_documents({}), 1)
+
+    async def test_approved_and_failed_approving_invoices_reject_put_and_delete(self):
+        approved = await self.draft()
+        await self.assert_success(await self.approve(approved))
+        failed = await self.draft(self.payload(inventory_account_id="unapproved-account"))
+        response = await self.approve(failed)
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertEqual(response.json()["detail"]["code"], "purchase_account_mapping_required")
+        self.assertEqual((await self.db.purchase_invoices.find_one({"id": failed["id"]}))["state"], "approving")
+        self.assertEqual((await self.db[receiving.OPERATIONS].find_one({"id": failed["approval_operation_id"]}))["status"], "failed")
+        collections = ["purchase_invoices", receiving.OPERATIONS, receiving.RECEIPTS, receiving.COST_STATES,
+                       "warehouse_locations", "liabilities", "accounting_journal_groups_v2", "accounting_general_ledger_v2"]
+        before = {name: await self.db[name].find({}).sort("_id", 1).to_list(100) for name in collections}
+        for invoice in [approved, failed]:
+            with self.subTest(invoice_state="approved" if invoice is approved else "approving_failed"):
+                put = await self.client.put(f"/api/purchase-invoices/{invoice['id']}", json=self.payload(expected_revision=invoice["revision"], notes="Must remain locked"))
+                delete = await self.client.delete(f"/api/purchase-invoices/{invoice['id']}?expected_revision={invoice['revision']}")
+                for response in [put, delete]:
+                    self.assertEqual(response.status_code, 409, response.text)
+                    self.assertEqual(response.json()["detail"]["code"], "purchase_draft_locked_or_revision_conflict")
+        after = {name: await self.db[name].find({}).sort("_id", 1).to_list(100) for name in collections}
+        self.assertEqual(after, before)
+
+    async def test_historical_liability_invoice_and_old_per_line_receipt_are_read_only(self):
+        from product_inventory_receipt_routes import make_product_inventory_receipt_router
+
+        legacy = {"_id": "legacy-invoice", "id": "legacy-invoice", "user_id": "owner", "supplier_counterparty_id": "supplier",
+                  "supplier_name": "Synthetic supplier", "invoice_number": "SYNTHETIC-LEGACY", "invoice_date": "2026-08-01",
+                  "lines": [{"id": "legacy-line", "sku": "SHARED-SKU", "quantity": 2, "unit_cost": 10}],
+                  "subtotal": 20, "tax_amount": 0, "total": 20, "currency": "SAR", "liability_id": "legacy-liability"}
+        liability = {"_id": "legacy-liability", "id": "legacy-liability", "user_id": "owner", "kind": "supplier",
+                     "counterparty_id": "supplier", "expected_amount": 20, "paid_amount": 5, "status": "partial", "source": "purchase_invoice"}
+        await self.db.purchase_invoices.insert_one(legacy)
+        await self.db.liabilities.insert_one(liability)
+        read = await self.client.get("/api/purchase-invoices/legacy-invoice")
+        self.assertEqual(read.status_code, 200, read.text)
+        self.assertTrue(read.json()["legacy_read_only"])
+        self.assertEqual((read.json()["paid_amount"], read.json()["remaining_amount"]), (5, 15))
+        put = await self.client.put("/api/purchase-invoices/legacy-invoice", json=self.payload(expected_revision=1))
+        delete = await self.client.delete("/api/purchase-invoices/legacy-invoice?expected_revision=1")
+        for response in [put, delete]:
+            self.assertEqual(response.status_code, 409, response.text)
+            self.assertEqual(response.json()["detail"]["code"], "legacy_purchase_requires_reconciliation")
+
+        async def authenticated_owner():
+            return dict(self.actor)
+
+        legacy_app = FastAPI()
+        legacy_app.include_router(make_product_inventory_receipt_router(self.db, authenticated_owner), prefix="/api")
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=legacy_app), base_url="http://synthetic.local") as client:
+            response = await client.post("/api/inventory-v2/purchase-receipts", json={
+                "idempotency_key": "synthetic-legacy-attempt", "purchase_invoice_id": "legacy-invoice",
+                "purchase_invoice_line_id": "legacy-line", "product_id": "product-A", "variant_id": "variant-A",
+                "location_id": "location-product", "scanned_barcode": "LOC-P", "quantity": 2,
+                "preparation_state": "ready_complete", "specifications": []})
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertEqual(response.json()["detail"]["code"], "purchase_full_approval_required")
+        self.assertEqual(await self.db.purchase_invoices.find_one({"id": "legacy-invoice"}), legacy)
+        self.assertEqual(await self.db.liabilities.find_one({"id": "legacy-liability"}), liability)
+        for name in [receiving.RECEIPTS, receiving.COST_STATES, receiving.OPERATIONS, "accounting_journal_groups_v2", "accounting_general_ledger_v2", "general_ledger"]:
+            self.assertEqual(await self.db[name].count_documents({}), 0, name)
+        for location in await self.db.warehouse_locations.find({}).to_list(10):
+            self.assertEqual(location["occupancy"], {"items": [], "total_quantity": 0})
 
     async def test_nondeductible_tax_is_capitalized_and_not_input_vat(self):
         invoice = await self.draft(self.payload(tax_amount=4.5, tax_treatment="non_deductible"))
@@ -430,6 +527,63 @@ class PurchaseApprovalMongoIntegration(unittest.IsolatedAsyncioTestCase):
         await self.assert_success(await self.approve(invoice), total_minor=201, debit_legs={"inventory": 201})
         receipts = await self.db[receiving.RECEIPTS].find({}).sort("line_id", 1).to_list(10)
         self.assertEqual([row["total_purchase_cost"] for row in receipts], ["1.01", "1.00"])
+
+    async def test_purchased_receipt_is_reserved_then_physically_consumed_without_another_journal(self):
+        from datetime import datetime
+        from fulfillment_v2_routes import _component_order_lines, reconcile_component_order_lifecycle
+        from order_engine.models import OrderDTO, OrderItemDTO, OrderSourceDTO, PaymentDTO, ShippingDTO, AddressDTO
+
+        invoice = await self.draft()
+        await self.assert_success(await self.approve(invoice))
+        receipt = await self.db[receiving.RECEIPTS].find_one({"line_id": "line-component"})
+        purchased_ready = await self.db[receiving.RECEIPTS].find_one({"line_id": "line-product"})
+        self.assertEqual(purchased_ready["source_type"], "purchase_invoice")
+        self.assertEqual(purchased_ready["source_id"], invoice["id"])
+        self.assertEqual(purchased_ready["source_line_id"], "line-product")
+        before_groups = await self.db.accounting_journal_groups_v2.find({}).to_list(10)
+        before_legs = await self.db.accounting_general_ledger_v2.find({}).sort("entry_no", 1).to_list(20)
+        before_location = await self.db.warehouse_locations.find_one({"id": "location-component"})
+        self.assertEqual(before_location["occupancy"]["total_quantity"], 4)
+        self.assertEqual(before_location["occupancy"]["items"][0]["receipt_id"], receipt["id"])
+        await self.db.settings.update_one({"user_id": "owner"}, {"$set": {
+            "g47_inventory.component_lifecycle_starts_at": "2026-09-01T00:00:00+00:00"}})
+        await self.db[consumption.PRODUCT_BINDINGS].insert_one({"id": "synthetic-product-recipe", "user_id": "owner", "salla_product_id": "1001", "resource_id": "component-A", "quantity": 2})
+        await consumption.ensure_component_consumption_indexes(self.db)
+        stamp = "2026-09-26T12:00:00+00:00"
+        order = OrderDTO(order_id="synthetic-new-order", order_number="synthetic-new-order",
+            created_at=datetime.fromisoformat(stamp), source=OrderSourceDTO(source_order_id="synthetic-new-order"),
+            status="under_review", payment=PaymentDTO(method="cod"),
+            shipping=ShippingDTO(address=AddressDTO(city="Synthetic city", street="Synthetic street")),
+            items=[OrderItemDTO(order_item_id="order-line", product_id="1001", name="Synthetic selected product", sku="SHARED-SKU", quantity=1)])
+        decision = {"warehouse_ids": ["warehouse"], "lines": [{"order_item_id": "order-line", "preparation_satisfied_by_ready_stock": True,
+            "inventory_allocations": [{"receipt_id": purchased_ready["id"], "quantity": 1}]}]}
+        candidates = _component_order_lines(order, decision)
+        self.assertEqual(candidates[0]["prebuilt_receipts"], [{"receipt_id": purchased_ready["id"], "quantity": 1, "source_type": None}])
+        # The actual intake must classify this real purchase receipt and remove
+        # the manufacturing exemption before calling the real reserve service.
+        reserved = await reconcile_component_order_lifecycle(self.db, user_id="owner", order=order,
+            source_updated_at=stamp, actor_id="owner", decision=decision, strict=True)
+        self.assertEqual(reserved["state"], "reserved")
+        self.assertEqual((await self.db.warehouse_locations.find_one({"id": "location-component"}))["occupancy"], before_location["occupancy"])
+        unit = await self.db[consumption.UNITS].find_one({"order_id": "synthetic-new-order"})
+        self.assertIsNone(unit["prebuilt"])
+        self.assertEqual(unit["state"], "reserved")
+        self.assertEqual(len(unit["allocations"]), 1)
+        self.assertEqual(unit["allocations"][0]["lot_id"], receipt["id"])
+        self.assertEqual(unit["allocations"][0]["resource_id"], "component-A")
+        self.assertEqual(unit["allocations"][0]["quantity"], "2")
+        consumed = await consumption.consume_component_stock(self.db, merchant_id="owner", order_id="synthetic-new-order", actor_id="owner")
+        self.assertEqual(consumed["units"][0]["state"], "consumed")
+        location = await self.db.warehouse_locations.find_one({"id": "location-component"})
+        self.assertEqual(location["occupancy"]["total_quantity"], 2)
+        self.assertEqual(location["occupancy"]["items"][0]["quantity"], 2)
+        self.assertEqual(location["occupancy"]["items"][0]["receipt_id"], receipt["id"])
+        duplicate = await consumption.consume_component_stock(self.db, merchant_id="owner", order_id="synthetic-new-order", actor_id="owner")
+        self.assertTrue(duplicate["duplicate"])
+        self.assertEqual((await self.db.warehouse_locations.find_one({"id": "location-component"}))["occupancy"], location["occupancy"])
+        self.assertEqual(await self.db.accounting_journal_groups_v2.find({}).to_list(10), before_groups)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.find({}).sort("entry_no", 1).to_list(20), before_legs)
+        self.assertEqual(await self.db[receiving.RECEIPTS].find_one({"id": receipt["id"]}), receipt)
 
     async def test_real_standalone_rejects_before_any_draft_or_posting_write(self):
         uri = local_uri("MZ2_TEST_STANDALONE_URI", "mongodb://127.0.0.1:28148/?directConnection=true")

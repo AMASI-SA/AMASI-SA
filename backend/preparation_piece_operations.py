@@ -2366,7 +2366,11 @@ async def _consume_piece_components(db: Any, *, user_id: str, piece: dict[str, A
     # Internal operational annotations have no product or material demand.
     if piece.get("virtual_kind") == "operational":
         return
-    from stock_component_consumption_service import consume_component_stock
+    from stock_component_consumption_service import PLANS, consume_component_stock
+    from fulfillment_v2_routes import assert_component_execution
+    plan = await db[PLANS].find_one({"user_id": user_id, "order_id": _text(piece.get("order_number"))})
+    if plan:
+        await assert_component_execution(db, user_id=user_id, order_number=_text(piece.get("order_number")), plan=plan)
     line_id = _text(piece.get("order_item_id"))
     unit_index = int(piece.get("unit_index") or 0)
     if not line_id or unit_index < 1:
@@ -2383,6 +2387,8 @@ async def _assert_ready_piece_components(db: Any, *, user_id: str, piece: dict[s
     from stock_component_consumption_service import PLANS, UNITS
     plan = await db[PLANS].find_one({"user_id": user_id, "order_id": _text(piece.get("order_number"))})
     if plan:
+        from fulfillment_v2_routes import assert_component_execution
+        await assert_component_execution(db, user_id=user_id, order_number=_text(piece.get("order_number")), plan=plan)
         unit = await db[UNITS].find_one({"user_id": user_id, "plan_id": plan["_id"],
             "order_line_id": _text(piece.get("order_item_id")), "unit_index": int(piece.get("unit_index") or 0)})
         if plan.get("state") == "cancelled" or not unit or unit.get("state") != "consumed":

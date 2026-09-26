@@ -210,9 +210,13 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.db[PLANS].count_documents({}), 0)
 
     async def test_manufacturing_receipt_and_prebuilt_virtual_completion_do_not_consume_twice(self):
+        await self.db[PRODUCTS].update_one({"id": "p"}, {"$set": {
+            "options": [{"id": "color", "name": "اللون", "required": True, "values": [{"id": "gold", "name": "ذهبي"}]}],
+            "custom_fields": [{"id": "engraving", "name": "الاسم", "required": True, "type": "text", "values": []}],
+        }})
         response = await self.client.post("/inventory-v2/stock-preparation-orders", json={
             "idempotency_key": "manufacture-synthetic", "supplier_id": "supplier", "assigned_employee_id": "owner",
-            "destination_warehouse_id": "wh", "items": [{"product_id": "mp", "quantity": 2, "specifications": []}],
+            "destination_warehouse_id": "wh", "items": [{"product_id": "mp", "quantity": 2, "specifications": [{"name": "اللون", "value": "ذهبي"}, {"name": "الاسم", "value": "AbC"}]}],
         })
         self.assertEqual(response.status_code, 201, response.text)
         work = response.json()["order"]
@@ -238,7 +242,13 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.on_hand(), 16)
         await self.db[fulfillment.WORKFLOWS].insert_one({"user_id": "owner", "order_number": "prebuilt-sale", "stage": "pending_review",
             "revision": 0, "items": [{"order_item_id": "line-1", "preparation_route": "direct_assembly", "product_id": "p", "quantity": 1}]})
-        response, _ = await self.accept(self.order(number="prebuilt-sale", quantity=1))
+        order = self.order(number="prebuilt-sale", quantity=1)
+        order.items[0] = order.items[0].model_copy(update={
+            "options_raw": [{"id": "color", "name": "اللون", "value": {"id": "gold", "name": "ذهبي"}}],
+            "options_normalized": {"اللون": "ذهبي"},
+            "custom_fields": [{"id": "engraving", "name": "الاسم", "value": "AbC"}],
+        })
+        response, _ = await self.accept(order)
         self.assertEqual(response.status_code, 200, response.text)
         workflow = await self.db[fulfillment.WORKFLOWS].find_one({"order_number": "prebuilt-sale"})
         piece_id = workflow["items"][0]["direct_assembly_piece_ids"][0]
@@ -250,6 +260,25 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(unit["state"], "consumed")
         product_rows = fulfillment._inventory_rows(await self.db[LOCATIONS].find({}).to_list(10))
         self.assertFalse(any(row["location_id"] == "materials" for row in product_rows))
+        await self.db[manufacturing.INVENTORY_RECEIPTS].insert_one({"id": "base-purchase", "user_id": "owner",
+            "source_type": "purchase_invoice", "status": "posted", "quantity": 1})
+        await self.db[LOCATIONS].insert_one({"id": "base", "user_id": "owner", "warehouse_id": "wh", "state": "occupied",
+            "occupancy": {"total_quantity": 1, "items": [{"receipt_id": "base-purchase", "source_type": "purchase_invoice",
+                "product_id": "mp", "sku": "SYN-P", "quantity": 1, "preparation_state": "requires_preparation", "specifications": {}}]}})
+        await self.db[fulfillment.WORKFLOWS].insert_one({"user_id": "owner", "order_number": "mixed-sale", "stage": "pending_review",
+            "revision": 0, "items": [{"order_item_id": "line-1", "preparation_route": "direct_assembly", "product_id": "p", "quantity": 2}]})
+        mixed_order = order.model_copy(update={"order_id": "mixed-sale", "order_number": "mixed-sale",
+            "items": [order.items[0].model_copy(update={"quantity": 2})]})
+        result, _ = await self.accept(mixed_order)
+        self.assertEqual(result.status_code, 200, result.text)
+        mixed_units = await self.db[UNITS].find({"order_id": "mixed-sale"}).to_list(10)
+        self.assertEqual(sum(bool(unit.get("prebuilt")) for unit in mixed_units), 1)
+        self.assertEqual(await self.on_hand(), 16)
+        mixed_workflow = await self.db[fulfillment.WORKFLOWS].find_one({"order_number": "mixed-sale"})
+        for unit_id in mixed_workflow["items"][0]["direct_assembly_piece_ids"]:
+            result = await self.mark_piece(unit_id)
+            self.assertEqual(result.status_code, 200, result.text)
+        self.assertEqual(await self.on_hand(), 14)
 
 
     def source_payload(self, number="intake-order", version=WHEN, status="under_review"):
@@ -350,11 +379,11 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
         await self.seed_batch("intake-order")
         result = await self.client.post("/fulfillment-v2/batches/batch/pack", json={})
         self.assertEqual(result.status_code, 409, result.text)
-        self.assertEqual(result.json()["detail"]["code"], "component_configuration_required")
+        self.assertEqual(result.json()["detail"]["code"], "component_execution_blocked")
         await self.db.settings.update_one({"user_id": "owner"}, {"$set": {"g47_inventory.component_lifecycle_starts_at": "2026-09-01T00:00:00+00:00"}})
         result = await self.client.post("/fulfillment-v2/batches/batch/pack", json={})
         self.assertEqual(result.status_code, 409, result.text)
-        self.assertEqual(result.json()["detail"]["code"], "component_reservation_missing")
+        self.assertEqual(result.json()["detail"]["code"], "component_execution_blocked")
         self.assertTrue((await self.webhook(self.source_payload()))["synced"])
         result = await self.client.post("/fulfillment-v2/batches/batch/pack", json={})
         self.assertEqual(result.status_code, 200, result.text)
@@ -363,3 +392,135 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.status_code, 409, result.text)
         self.assertEqual((await self.db[fulfillment.BATCHES].find_one({"id": "batch"}))["status"], "packed")
         self.assertEqual(await self.on_hand(), 16)
+
+
+    async def test_changed_newer_intake_blocks_old_plan_piece_and_pack_execution(self):
+        self.assertTrue((await self.webhook(self.source_payload()))["synced"])
+        await self.seed_physical("intake-order")
+        await self.seed_batch("intake-order")
+        changed = self.source_payload(version=LATER)
+        changed["items"][0]["quantity"] = 3
+        result = await self.webhook(changed, "order.updated")
+        self.assertTrue(result["synced"], result)
+        intent = await self.db[fulfillment.COMPONENT_LIFECYCLES].find_one({})
+        self.assertEqual(intent["state"], "blocked", result)
+        self.assertEqual(intent["error_code"], "component_plan_conflict")
+        for result in (await self.mark_piece("piece-1"), await self.client.post("/fulfillment-v2/batches/batch/pack", json={})):
+            self.assertEqual(result.status_code, 409, result.text)
+            self.assertEqual(result.json()["detail"]["code"], "component_execution_blocked")
+        self.assertEqual(await self.on_hand(), 20)
+        self.assertEqual(await self.db[UNITS].count_documents({"state": "consumed"}), 0)
+
+    async def test_unversioned_cancel_blocks_execution_until_authoritative_refresh(self):
+        payload = self.source_payload()
+        self.assertTrue((await self.webhook(payload))["synced"])
+        await self.seed_batch("intake-order")
+        ambiguous = dict(payload)
+        ambiguous.pop("updated_at")
+        result = await self.webhook(ambiguous, "order.cancelled")
+        self.assertFalse(result["synced"], result)
+        self.assertTrue(result["retry_required"])
+        self.assertEqual(result["error_code"], "component_cancellation_version_required")
+        review_result, provider = await self.accept(self.order(number="intake-order"))
+        self.assertEqual(review_result.status_code, 409, review_result.text)
+        self.assertEqual(review_result.json()["detail"]["code"], "component_authoritative_refresh_required")
+        provider.assert_not_awaited()
+        self.assertEqual((await self.client.post("/fulfillment-v2/batches/batch/pack", json={})).status_code, 409)
+        # A repeated old accepted webhook cannot resolve an undated cancellation.
+        self.assertFalse((await self.webhook(payload))["synced"])
+        result = await self.refresh(self.source_payload(version=LATER, status="canceled"))
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(await self.db[UNITS].count_documents({"state": "released"}), 2)
+        self.assertEqual(await self.on_hand(), 20)
+
+    async def test_cancellation_releases_existing_plan_without_line_identity(self):
+        self.assertEqual((await self.accept())[0].status_code, 200)
+        order = self.order(status="canceled").model_copy(update={"items": [{"quantity": 2}]})
+        result = await fulfillment.auto_route_instant_order(self.db, user_id="owner", order=order, source_updated_at=LATER)
+        self.assertEqual(result["component_lifecycle"]["state"], "cancelled")
+        self.assertEqual(await self.db[UNITS].count_documents({"state": "released"}), 2)
+
+    async def test_purchased_ready_product_reserves_recipe_without_manufacturing_exemption(self):
+        await self.db[manufacturing.INVENTORY_RECEIPTS].insert_one({"id": "purchased-finished", "user_id": "owner",
+            "source_type": "purchase_invoice", "status": "posted", "quantity": 1, "product_id": "mp"})
+        await self.db[LOCATIONS].update_one({"id": "finished"}, {"$set": {"state": "occupied", "occupancy": {
+            "total_quantity": 1, "items": [{"receipt_id": "purchased-finished", "item_type": "product", "product_id": "mp",
+                "salla_product_id": "p", "sku": "SYN-P", "quantity": 1, "preparation_state": "ready_complete", "specifications": {}}]}}})
+        await self.db[fulfillment.WORKFLOWS].insert_one({"user_id": "owner", "order_number": "purchased-sale", "stage": "pending_review",
+            "revision": 0, "items": [{"order_item_id": "line-1", "preparation_route": "direct_assembly", "product_id": "p", "quantity": 1}]})
+        response, _ = await self.accept(self.order(number="purchased-sale", quantity=1))
+        self.assertEqual(response.status_code, 200, response.text)
+        unit = await self.db[UNITS].find_one({"order_id": "purchased-sale"})
+        self.assertFalse(unit.get("prebuilt"))
+        self.assertEqual(len(unit["resource_demands"]), 1)
+        workflow = await self.db[fulfillment.WORKFLOWS].find_one({"order_number": "purchased-sale"})
+        response = await self.mark_piece(workflow["items"][0]["direct_assembly_piece_ids"][0])
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(await self.on_hand(), 18)
+
+
+    async def test_new_snapshot_during_provider_call_blocks_acceptance_before_callback(self):
+        order = self.order()
+        async def newer_snapshot_without_callback(*args):
+            async def persist(scoped):
+                await scoped.unified_orders.update_one({"user_id": "owner", "order_number": "order-1"},
+                    {"$set": {"order_status_slug": "canceled"}}, upsert=True)
+                return {"created": False}
+            await fulfillment.persist_component_source_snapshot(self.db, user_id="owner", order_number="order-1",
+                payload=self.source_payload(number="order-1", version=LATER, status="canceled"), persist=persist)
+            return "sent", None
+        result, _ = await self.accept(order, AsyncMock(side_effect=newer_snapshot_without_callback))
+        self.assertEqual(result.status_code, 409, result.text)
+        self.assertEqual(result.json()["detail"]["code"], "component_acceptance_changed")
+        self.assertEqual(await self.db[fulfillment.WORKFLOWS].count_documents({"stage": "reviewed"}), 0)
+
+
+    async def test_stale_review_dto_cannot_adopt_newer_snapshot_revision(self):
+        order = self.order()
+        async def change_source_after_read(_db, _user, _order):
+            async def persist(scoped):
+                await scoped.unified_orders.update_one({"user_id": "owner", "order_number": "order-1"},
+                    {"$set": {"order_status_slug": "canceled"}}, upsert=True)
+                return {"created": False}
+            await fulfillment.persist_component_source_snapshot(self.db, user_id="owner", order_number="order-1",
+                payload=self.source_payload(number="order-1", version=LATER, status="canceled"), persist=persist)
+            return map_order_item_identities(order)
+        provider = AsyncMock(return_value=("sent", None))
+        with patch.object(review, "get_order", AsyncMock(return_value=order)), \
+             patch.object(review, "_review_item_identities", change_source_after_read), \
+             patch.object(review, "_sync_salla_reviewed", provider):
+            result = await self.client.post("/order-reviews-v1/order-1/complete", json={"expected_revision": 0})
+        self.assertEqual(result.status_code, 409, result.text)
+        provider.assert_not_awaited()
+        self.assertEqual(result.json()["detail"]["code"], "component_source_event_stale")
+        self.assertEqual(await self.db[PLANS].count_documents({}), 0)
+
+
+    async def test_historical_no_plan_quarantine_blocks_pack_without_backfill(self):
+        payload = self.source_payload(number="historical-batch")
+        payload["date"] = "2020-01-01T00:00:00+00:00"
+        from orders_db import upsert_order
+        from salla_integration.sync import _salla_order_to_doc
+        await upsert_order(self.db, "owner", "historical-batch", _salla_order_to_doc(payload), source="salla_direct", raw=payload)
+        await self.seed_batch("historical-batch")
+        # Proven pre-cutoff stock work can close without creating any plan.
+        result = await self.client.post("/fulfillment-v2/batches/batch/pack", json={})
+        self.assertEqual(result.status_code, 200, result.text)
+        self.assertEqual(await self.db[PLANS].count_documents({}), 0)
+        payload.pop("updated_at")
+        self.assertTrue((await self.webhook(payload, "order.cancelled"))["blocked"])
+        result = await self.client.post("/fulfillment-v2/batches/batch/handoff", json={})
+        self.assertEqual(result.status_code, 409, result.text)
+        self.assertEqual(result.json()["detail"]["code"], "component_execution_blocked")
+        self.assertEqual(await self.db[PLANS].count_documents({}), 0)
+        self.assertEqual(await self.on_hand(), 20)
+
+
+    def test_manufacturing_provenance_projection_is_per_allocation_not_line_flag(self):
+        lines = fulfillment._component_order_lines(self.order(), {"lines": [{"order_item_id": "line-1",
+            "direct_assembly": False, "preparation_satisfied_by_ready_stock": False,
+            "inventory_allocations": [{"receipt_id": "manufactured", "source_type": "stock_preparation_order", "quantity": 1},
+                                      {"receipt_id": "purchased", "source_type": "purchase_invoice", "quantity": 1}]}]})
+        self.assertEqual(lines[0]["prebuilt_receipts"], [
+            {"receipt_id": "manufactured", "source_type": "stock_preparation_order", "quantity": 1},
+            {"receipt_id": "purchased", "source_type": "purchase_invoice", "quantity": 1}])

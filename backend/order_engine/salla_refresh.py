@@ -549,7 +549,10 @@ async def refresh_order_from_salla(
             return result
         result = await persist_component_source_snapshot(
             db, user_id=str(user_id), order_number=normalized, payload=details, persist=persist_snapshot,
+            authoritative_refresh=True,
         )
+        if result.get("blocked"):
+            return {"ok": False, "found": True, "updated": False, "order_number": normalized, **result}
         if result.get("stale"):
             return {"ok": True, "found": True, "updated": False, "skipped": True,
                     "reason": "stale_salla_snapshot", "order_number": normalized,
@@ -580,6 +583,7 @@ async def refresh_order_from_salla(
                     user_id=str(user_id),
                     order=canonical_order,
                     source_updated_at=component_provider_version(details),
+                    source_revision=result.get("snapshot_revision"),
                 )
                 auto_fulfillment["attempted"] = True
             except Exception as exc:
@@ -587,6 +591,7 @@ async def refresh_order_from_salla(
                 await record_component_intake_failure(
                     db, user_id=str(user_id), order_number=normalized,
                     source_updated_at=component_provider_version(details),
+                    source_revision=result.get("snapshot_revision"),
                 )
                 auto_fulfillment.update({"accepted": False, "retry_required": True,
                                          "error_code": "component_intake_retry_required"})

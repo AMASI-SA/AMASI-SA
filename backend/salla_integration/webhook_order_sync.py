@@ -453,6 +453,8 @@ async def sync_order_from_verified_webhook(
             db, user_id=user_id, order_number=order_number, payload=payload,
             persist=persist_snapshot, created_event=event_name == "order.created",
         )
+        if result.get("blocked"):
+            return {"attempted": True, "synced": False, "order_number": order_number, **result}
         if result.get("stale"):
             return {"attempted": True, "synced": False, "reason": "stale_salla_snapshot",
                     "order_number": order_number, "no_salla_api_calls": True, "no_qoyod_calls": True}
@@ -517,6 +519,7 @@ async def sync_order_from_verified_webhook(
                 user_id=user_id,
                 order=canonical_order,
                 source_updated_at=component_provider_version(payload, created_event=event_name == "order.created"),
+                source_revision=result.get("snapshot_revision"),
             )
             auto_fulfillment["attempted"] = True
         except Exception as exc:
@@ -524,6 +527,7 @@ async def sync_order_from_verified_webhook(
             await record_component_intake_failure(
                 db, user_id=user_id, order_number=order_number,
                 source_updated_at=component_provider_version(payload, created_event=event_name == "order.created"),
+                source_revision=result.get("snapshot_revision"),
             )
             auto_fulfillment.update({"accepted": False, "retry_required": True,
                                      "error_code": "component_intake_retry_required"})

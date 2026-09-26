@@ -191,6 +191,7 @@ def _inventory_rows(locations: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "on_hand": quantity,
                 "remaining": quantity,
                 "receipt_id": receipt_id or None,
+                "source_type": item.get("source_type"),
                 "salla_variant_id": (
                     _text(item.get("salla_variant_id")) or None
                 ),
@@ -763,6 +764,9 @@ async def build_order_fulfillment_decision(
                 "configuration_keys"
             ]
             inventory_allocations = selection["allocations"]
+            source_types = {row["key"]: row.get("source_type") for row in stock_rows}
+            inventory_allocations = [{**row, "source_type": source_types.get(row.get("inventory_row_key"))}
+                                     for row in inventory_allocations]
             preparation_satisfied_by_ready_stock = selection[
                 "preparation_satisfied_by_ready_stock"
             ]
@@ -894,7 +898,7 @@ def component_provider_version(payload: dict[str, Any], *, created_event: bool =
 
 async def persist_component_source_snapshot(
     db: Any, *, user_id: str, order_number: str, payload: dict[str, Any],
-    persist: Any, created_event: bool = False,
+    persist: Any, created_event: bool = False, authoritative_refresh: bool = False,
 ) -> dict[str, Any]:
     """Fence the canonical write, not merely its later fulfillment callback.
 
@@ -915,26 +919,45 @@ async def persist_component_source_snapshot(
         raw = (current.get("raw_by_source") or {}).get("salla_direct") or {}
         previous_version = watermark.get("source_updated_at") or component_provider_version(raw, created_event=True)
         previous_cancelled = bool(watermark.get("cancelled")) or _text(current.get("order_status_slug")).lower() in {"canceled", "cancelled"}
+        if (cancelled and not version) or (watermark.get("requires_authoritative_refresh") and not authoritative_refresh):
+            # An undated cancellation is ambiguous, never proven stale. Keep
+            # the last canonical snapshot and stop execution pending refresh.
+            await scoped.unified_orders.update_one(query, {"$set": {"g47_salla_snapshot": {
+                **watermark, "revision": int(watermark.get("revision") or 0) + 1,
+                "component_pending": True, "requires_authoritative_refresh": True,
+            }}}, upsert=True)
+            identity = hashlib.sha256(f"{user_id}:{order_number}".encode()).hexdigest()
+            await scoped[COMPONENT_LIFECYCLES].update_one({"_id": identity}, {"$set": {
+                "user_id": user_id, "order_number": order_number, "state": "blocked", "accepted": False,
+                "retry_required": True, "error_code": "component_cancellation_version_required", "updated_at": _now(),
+            }, "$setOnInsert": {"generation": 0}}, upsert=True)
+            return {"blocked": True, "retry_required": True, "error_code": "component_cancellation_version_required"}
         if previous_version and (not version or version < previous_version or (
             version == previous_version and previous_cancelled and not cancelled
         )):
             return {"stale": True, "created": False}
         result = await persist(scoped)
+        revision = int(watermark.get("revision") or 0) + 1
         await scoped.unified_orders.update_one(query, {"$set": {"g47_salla_snapshot": {
             "source_updated_at": version, "cancelled": cancelled,
+            "revision": revision, "component_pending": True,
         }}})
-        return result
+        return {**result, "snapshot_revision": revision}
 
     return await atomic_owner(db, user_id, write)
 
 
 async def record_component_intake_failure(
-    db: Any, *, user_id: str, order_number: str, source_updated_at: Any,
+    db: Any, *, user_id: str, order_number: str, source_updated_at: Any, source_revision: int | None = None,
 ) -> None:
     """A transport ACK must not erase a failed operational callback."""
     identity = hashlib.sha256(f"{user_id}:{order_number}".encode()).hexdigest()
     version = component_source_time(source_updated_at)
     async def record(scoped):
+        snapshot = await scoped.unified_orders.find_one({"user_id": user_id, "order_number": order_number}) or {}
+        watermark = snapshot.get("g47_salla_snapshot") or {}
+        if source_revision is not None and (source_revision != watermark.get("revision") or not watermark.get("component_pending")):
+            return
         current = await scoped[COMPONENT_LIFECYCLES].find_one({"_id": identity}) or {}
         if current.get("cancelled") or (current.get("source_updated_at") and (not version or version < current["source_updated_at"])):
             return
@@ -969,9 +992,11 @@ def _component_order_lines(order: Any, decision: dict[str, Any]) -> list[dict[st
             **row, "order_line_id": line_id, "product_id": _product_id(item),
             "options_raw": row.get("options_raw") or row.get("options") or [],
             "prebuilt_receipts": [
-                {"receipt_id": allocation.get("receipt_id"), "quantity": allocation.get("quantity")}
+                {"receipt_id": allocation.get("receipt_id"), "quantity": allocation.get("quantity"),
+                 "source_type": allocation.get("source_type")}
                 for allocation in selected.get("inventory_allocations") or []
-            ] if selected.get("preparation_satisfied_by_ready_stock") or selected.get("direct_assembly") else [],
+                if allocation.get("receipt_id")
+            ],
         })
     return lines
 
@@ -979,7 +1004,7 @@ def _component_order_lines(order: Any, decision: dict[str, Any]) -> list[dict[st
 async def reconcile_component_order_lifecycle(
     db: Any, *, user_id: str, order: Any, source_updated_at: Any = None,
     actor_id: str = "system", decision: dict[str, Any] | None = None,
-    strict: bool = False,
+    strict: bool = False, source_revision: int | None = None,
 ) -> dict[str, Any]:
     """Persist intake before retryable work; component service owns stock/state.
 
@@ -994,16 +1019,22 @@ async def reconcile_component_order_lifecycle(
     eligible = order_is_active(order) and payment_is_eligible(order.payment)
     created_at = component_source_time(getattr(order, "created_at", None))
     version = component_source_time(source_updated_at)
-    lines = _component_order_lines(order, decision or {})
+    lines = [] if cancelled else _component_order_lines(order, decision or {})
     fingerprint = hashlib.sha256(json.dumps({
         "cancelled": cancelled, "eligible": eligible,
         "lines": [{key: row.get(key) for key in (
-            "order_line_id", "product_id", "quantity", "options_raw", "options_normalized", "custom_fields",
+            "order_line_id", "product_id", "variant_id", "quantity", "options_raw", "options_normalized", "custom_fields",
         )} for row in lines],
     }, sort_keys=True, default=str, ensure_ascii=False).encode()).hexdigest()
 
     async def register(scoped):
         previous = await scoped[COMPONENT_LIFECYCLES].find_one({"_id": identity}) or {}
+        snapshot = await scoped.unified_orders.find_one({"user_id": user_id, "order_number": order_number}) or {}
+        watermark = snapshot.get("g47_salla_snapshot") or {}
+        if watermark.get("requires_authoritative_refresh"):
+            raise HTTPException(409, detail={"code": "component_authoritative_refresh_required"})
+        if source_revision is not None and source_revision != int(watermark.get("revision") or 0):
+            return {**previous, "stale": True}
         previous_version = previous.get("source_updated_at")
         # A stale provider response cannot supersede a newer intake or cancel.
         if version and previous_version and version < previous_version:
@@ -1015,7 +1046,7 @@ async def reconcile_component_order_lifecycle(
         if not version and previous_version and not strict and not cancelled:
             return {**previous, "stale": True}
         if previous.get("source_fingerprint") == fingerprint and (not version or version == previous_version):
-            return previous
+            return {**previous, "snapshot_revision": watermark.get("revision")}
         generation = int(previous.get("generation") or 0) + 1
         row = {
             "_id": identity, "user_id": user_id, "order_number": order_number,
@@ -1026,18 +1057,21 @@ async def reconcile_component_order_lifecycle(
             "updated_at": _now(), "plan_id": previous.get("plan_id"),
         }
         await scoped[COMPONENT_LIFECYCLES].replace_one({"_id": identity}, row, upsert=True)
-        return row
+        return {**row, "snapshot_revision": watermark.get("revision")}
 
     intent = await atomic_owner(db, user_id, register)
     if intent.get("stale"):
         if strict:
             raise HTTPException(409, detail={"code": "component_source_event_stale"})
-        return {"state": "stale_ignored", "accepted": False, "generation": intent["generation"]}
+        return {"state": "stale_ignored", "accepted": False, "generation": intent.get("generation")}
 
     async def apply(scoped):
         current = await scoped[COMPONENT_LIFECYCLES].find_one({"_id": identity})
         if current["generation"] != intent["generation"]:
             raise HTTPException(409, detail={"code": "component_lifecycle_changed"})
+        snapshot = await scoped.unified_orders.find_one({"user_id": user_id, "order_number": order_number}) or {}
+        if (snapshot.get("g47_salla_snapshot") or {}).get("revision") != intent.get("snapshot_revision"):
+            raise HTTPException(409, detail={"code": "component_source_event_stale"})
         if current.get("cancelled"):
             result = await release_component_stock(
                 scoped, merchant_id=user_id, order_id=order_number,
@@ -1058,6 +1092,19 @@ async def reconcile_component_order_lifecycle(
                 if not version and not strict:
                     raise HTTPException(409, detail={"code": "component_source_version_required"})
             frozen_lines = {row["order_line_id"]: row for row in (frozen_plan or {}).get("lines") or []}
+            if not frozen_plan:
+                from product_inventory_receipt_routes import INVENTORY_RECEIPTS
+                for line in lines:
+                    exemptions = []
+                    for candidate in line.get("prebuilt_receipts") or []:
+                        receipt = await scoped[INVENTORY_RECEIPTS].find_one({"user_id": user_id, "id": candidate["receipt_id"]}) or {}
+                        # Purchased finished goods carry no manufacturing
+                        # consumption proof: reserve their current recipe.
+                        # Unknown/malformed manufacturing proof stays fail-closed.
+                        if (receipt.get("source_type") == "stock_preparation_order"
+                                or candidate.get("source_type") == "stock_preparation_order"):
+                            exemptions.append({"receipt_id": candidate["receipt_id"], "quantity": candidate["quantity"]})
+                    line["prebuilt_receipts"] = exemptions
             acceptance_lines = [
                 {**row, "prebuilt_receipts": frozen_lines[row["order_line_id"]].get("prebuilt_receipts") or []}
                 if row["order_line_id"] in frozen_lines else row for row in lines
@@ -1071,6 +1118,7 @@ async def reconcile_component_order_lifecycle(
             state = "reserved"
         ticket = {
             "identity": identity, "generation": current["generation"],
+            "snapshot_revision": intent.get("snapshot_revision"),
             "plan_id": result.get("plan_id"), "state": state,
             "accepted": state == "reserved", "retry_required": False,
         }
@@ -1078,6 +1126,10 @@ async def reconcile_component_order_lifecycle(
             {"_id": identity, "generation": current["generation"]},
             {"$set": {**ticket, "updated_at": _now()}, "$unset": {"error_code": ""}},
         )
+        if intent.get("snapshot_revision") is not None:
+            await scoped.unified_orders.update_one({"user_id": user_id, "order_number": order_number,
+                "g47_salla_snapshot.revision": intent["snapshot_revision"]},
+                {"$set": {"g47_salla_snapshot.component_pending": False}})
         return ticket
 
     try:
@@ -1111,6 +1163,23 @@ async def assert_component_acceptance(db: Any, *, ticket: dict[str, Any]) -> Non
     current = await db[COMPONENT_LIFECYCLES].find_one({"_id": ticket["identity"]}) or {}
     if current.get("generation") != ticket.get("generation") or current.get("state") != "reserved" or current.get("cancelled"):
         raise HTTPException(409, detail={"code": "component_acceptance_changed"})
+    snapshot = await db.unified_orders.find_one({"user_id": current.get("user_id"), "order_number": current.get("order_number")}) or {}
+    watermark = snapshot.get("g47_salla_snapshot") or {}
+    if watermark.get("requires_authoritative_refresh") or watermark.get("component_pending") or watermark.get("revision") != ticket.get("snapshot_revision"):
+        raise HTTPException(409, detail={"code": "component_acceptance_changed"})
+
+
+async def assert_component_execution(db: Any, *, user_id: str, order_number: str, plan: dict[str, Any]) -> None:
+    """An accepted old stock plan cannot authorize a blocked newer order."""
+    intent = await db[COMPONENT_LIFECYCLES].find_one({"user_id": user_id, "order_number": order_number}) or {}
+    snapshot = await db.unified_orders.find_one({"user_id": user_id, "order_number": order_number}) or {}
+    source_version = plan.get("source_version") or {}
+    if (intent.get("state") != "reserved" or intent.get("accepted") is not True
+            or intent.get("cancelled") or intent.get("retry_required")
+            or source_version.get("value") != intent.get("generation")
+            or (snapshot.get("g47_salla_snapshot") or {}).get("component_pending")
+            or (snapshot.get("g47_salla_snapshot") or {}).get("requires_authoritative_refresh")):
+        raise HTTPException(409, detail={"code": "component_execution_blocked"})
 
 
 async def _consume_batch_components(db: Any, *, user_id: str, batch: dict[str, Any], actor_id: str) -> None:
@@ -1121,6 +1190,12 @@ async def _consume_batch_components(db: Any, *, user_id: str, batch: dict[str, A
     for number in batch.get("order_numbers") or []:
         plan = await db[PLANS].find_one({"user_id": user_id, "order_id": str(number)})
         if not plan:
+            snapshot = await db.unified_orders.find_one({"user_id": user_id, "order_number": str(number)}) or {}
+            watermark = snapshot.get("g47_salla_snapshot") or {}
+            intent = await db[COMPONENT_LIFECYCLES].find_one({"user_id": user_id, "order_number": str(number)}) or {}
+            if (watermark.get("component_pending") or watermark.get("requires_authoritative_refresh")
+                    or intent.get("cancelled") or intent.get("state") in {"pending", "blocked", "cancelled", "reconciliation_required"}):
+                raise HTTPException(409, detail={"code": "component_execution_blocked"})
             # No plan alone is never a historical exemption. Prove the source
             # order predates the explicit rollout; configuration failure blocks.
             settings = await db.settings.find_one({"user_id": user_id}) or {}
@@ -1132,17 +1207,18 @@ async def _consume_batch_components(db: Any, *, user_id: str, batch: dict[str, A
             if created and created < cutoff:
                 continue
             raise HTTPException(409, detail={"code": "component_reservation_missing"})
+        await assert_component_execution(db, user_id=user_id, order_number=str(number), plan=plan)
         result = await consume_component_stock(db, merchant_id=user_id, order_id=str(number), actor_id=actor_id)
         if any(unit.get("state") != "consumed" for unit in result.get("units") or []):
             raise HTTPException(409, detail={"code": "component_execution_incomplete"})
 
 
 async def auto_route_instant_order(
-    db: Any, *, user_id: str, order: Any, source_updated_at: Any = None,
+    db: Any, *, user_id: str, order: Any, source_updated_at: Any = None, source_revision: int | None = None,
 ) -> dict[str, Any]:
     await ensure_fulfillment_indexes(db)
     return await _auto_route_instant_order(
-        db, user_id=user_id, order=order, source_updated_at=source_updated_at,
+        db, user_id=user_id, order=order, source_updated_at=source_updated_at, source_revision=source_revision,
     )
 
 
@@ -1152,6 +1228,7 @@ async def _auto_route_instant_order(
     user_id: str,
     order: Any,
     source_updated_at: Any = None,
+    source_revision: int | None = None,
 ) -> dict[str, Any]:
     """Promote a newly ingested eligible order without human preparation.
 
@@ -1166,7 +1243,7 @@ async def _auto_route_instant_order(
     )
     current_stage = _text((workflow or {}).get("stage")) or "pending_review"
     component_lifecycle = await reconcile_component_order_lifecycle(
-        db, user_id=user_id, order=order, source_updated_at=source_updated_at,
+        db, user_id=user_id, order=order, source_updated_at=source_updated_at, source_revision=source_revision,
     )
     if component_lifecycle.get("accepted") is not True:
         return {"promoted": False, "reverted": False, "stage": current_stage,

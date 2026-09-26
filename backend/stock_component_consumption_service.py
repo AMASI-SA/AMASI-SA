@@ -254,6 +254,7 @@ def _lines(lines: list[dict]) -> list[dict]:
                 or len({r["receipt_id"] for r in prebuilt}) != len(prebuilt)):
             _fail("provenance_invalid")
         result.append({"order_line_id": key, "product_id": product, "quantity": qty,
+                       "variant_id": _text(line.get("variant_id") or line.get("salla_variant_id")) or None,
                        "selected_context": selection_tokens(line),
                        "prebuilt_receipts": sorted(prebuilt, key=lambda r: r["receipt_id"])})
     if sum(row["quantity"] for row in result) > MAX_UNITS:
@@ -293,7 +294,8 @@ async def _recipe(db: Any, owner: str, line: dict, *, include_demands: bool = Tr
         binding_id = _text(binding.get("id")) or _id("binding", source, product_id, resource_id,
                                                         binding.get("option_id"), binding.get("value_id"))
         demands.append({"binding_id": source + ":" + binding_id, "resource_id": resource_id,
-                        "quantity": str(qty), "selected_context_hash": _digest(line["selected_context"])})
+                        "quantity": str(qty), "selected_context_hash": _digest({
+                            "options": line["selected_context"], "variant_id": line["variant_id"]})})
     return product_id, sorted(demands, key=lambda row: (row["binding_id"], row["resource_id"]))
 
 
@@ -345,6 +347,9 @@ async def _prebuilt(db: Any, owner: str, plan_id: str, line: dict, product_id: s
                 or source_order != "stock-preparation:" + _text(receipt.get("source_id"))
                 or provenance.get("plan_id") != _id("component_plan", owner, source_order)):
             _fail("provenance_invalid")
+        receipt_variant = _text(receipt.get("salla_variant_id") or receipt.get("variant_id")) or None
+        if receipt_variant is not None and receipt_variant != line["variant_id"]:
+            _fail("provenance_invalid")
         references = provenance.get("units")
         if (not isinstance(references, list) or len(references) != _whole(receipt.get("quantity"))
                 or entry["quantity"] > len(references)):
@@ -363,6 +368,7 @@ async def _prebuilt(db: Any, owner: str, plan_id: str, line: dict, product_id: s
             if (not source or source.get("plan_id") != provenance["plan_id"]
                     or source.get("consumption_id") != reference.get("consumption_id")
                     or source.get("product_id") != product_id
+                    or (_text(source.get("variant_id")) or None) != line["variant_id"]
                     or source.get("selected_context") != line["selected_context"]
                     or source.get("prebuilt")):
                 _fail("provenance_invalid")
@@ -384,7 +390,7 @@ async def _prebuilt(db: Any, owner: str, plan_id: str, line: dict, product_id: s
 async def _public(db: Any, owner: str, plan: dict, *, duplicate: bool = False, proof_unit_ids: set | None = None) -> dict:
     rows = await _rows(db[UNITS], {"user_id": owner, "plan_id": plan["_id"]})
     rows.sort(key=lambda row: (row["order_line_id"], row["unit_index"]))
-    units = [{key: row.get(key) for key in ("order_line_id", "unit_index", "state", "consumption_id", "resource_demands", "prebuilt")} for row in rows]
+    units = [{key: row.get(key) for key in ("order_line_id", "unit_index", "variant_id", "state", "consumption_id", "resource_demands", "prebuilt")} for row in rows]
     consumed = [row for row in rows if row["state"] == "consumed" and (proof_unit_ids is None or row["_id"] in proof_unit_ids)]
     return {"plan_id": plan["_id"], "order_id": plan["order_id"], "state": plan["state"],
             "source_version": plan["source_version"]["value"], "duplicate": duplicate,
@@ -452,7 +458,7 @@ async def reserve_component_stock(db: Any, *, merchant_id: str, order_id: str,
                         _fail("insufficient_stock", resource_id=demand["resource_id"], missing_quantity=str(remaining))
                 await scoped[UNITS].insert_one({"_id": unit_id, "user_id": owner, "plan_id": plan_id, "order_id": order,
                                                "order_line_id": line["order_line_id"], "unit_index": index,
-                                               "product_id": product_id, "selected_context": line["selected_context"],
+                                               "product_id": product_id, "variant_id": line["variant_id"], "selected_context": line["selected_context"],
                                                "resource_demands": unit_demands, "allocations": allocations,
                                                "prebuilt": proof, "state": "reserved",
                                                "consumption_id": _id("component_consumption", unit_id, unit_demands), "created_at": _now()})

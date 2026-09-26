@@ -181,6 +181,32 @@ class ComponentMongoTests(unittest.IsolatedAsyncioTestCase):
         await self.assertCode("plan_conflict", self.reserve(lines=[changed], source_version=2))
         self.assertEqual(await self.stock(), 8)
 
+    async def test_variant_change_cannot_reuse_frozen_unit(self):
+        await self.db[service.PRODUCTS].update_one({"id": "p"}, {"$set": {"variants": [{"id": "small"}, {"id": "large"}]}})
+        initial = await self.reserve(lines=[self.line(1, variant_id="small")])
+        self.assertEqual(initial["units"][0]["variant_id"], "small")
+        # The canonical alias normalizes to the same original identity.
+        self.assertTrue((await self.reserve(lines=[self.line(1, salla_variant_id="small")]))["duplicate"])
+        await self.consume()
+        await self.assertCode("plan_conflict", self.reserve(lines=[self.line(1, variant_id="large")], source_version=2))
+        self.assertEqual(await self.stock(), 8)
+
+    async def test_prebuilt_proof_cannot_substitute_another_variant(self):
+        source_order = "stock-preparation:variant-manufacture"
+        await self.reserve(source_order, lines=[self.line(1, salla_variant_id="small")])
+        proof = (await self.consume(source_order))["component_provenance"]
+        await self.db[service.RECEIPTS].insert_one({"user_id": "owner", "id": "variant-receipt", "status": "posted",
+            "source_type": "stock_preparation_order", "source_id": "variant-manufacture", "source_line_id": "line",
+            "quantity": 1, "salla_variant_id": "small", "component_provenance": proof})
+        refs = [{"receipt_id": "variant-receipt", "quantity": 1}]
+        await self.assertCode("provenance_invalid", self.reserve("wrong-variant", lines=[self.line(1, variant_id="large", prebuilt_receipts=refs)]))
+        self.assertEqual(await self.db[service.CLAIMS].count_documents({}), 0)
+        self.assertEqual(await self.db[service.PLANS].count_documents({"order_id": "wrong-variant"}), 0)
+        result = await self.reserve("matching-variant", lines=[self.line(1, variant_id="small", prebuilt_receipts=refs)])
+        self.assertEqual(result["units"][0]["variant_id"], "small")
+        await self.consume("matching-variant")
+        self.assertEqual(await self.stock(), 8)
+
     async def test_option_quantities_and_services_are_excluded(self):
         await self.db[service.RESOURCES].insert_one({"user_id": "owner", "id": "service", "kind": "service", "track_inventory": True})
         await self.db[service.PRODUCT_BINDINGS].insert_one({"id": "service-binding", "user_id": "owner", "salla_product_id": "p", "resource_id": "service", "quantity": 99})

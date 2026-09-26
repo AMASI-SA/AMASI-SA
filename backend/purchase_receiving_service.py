@@ -346,6 +346,7 @@ async def approve_and_receive(db, *, user, invoice_id, payload):
             immutable = {"_id": receipt_id, "id": receipt_id, "receipt_id": receipt_id, "user_id": owner,
                 "schema_version": SCHEMA, "status": "posted", "invoice_id": invoice_id, "line_id": line["id"],
                 "purchase_invoice_id": invoice_id, "purchase_invoice_line_id": line["id"],
+                "source_type": "purchase_invoice", "source_id": invoice_id, "source_line_id": line["id"],
                 "operation_id": operation_id, "quantity": float(quantity), "unit_purchase_cost": format(unit_purchase_cost, "f"),
                 "total_purchase_cost": format(capitalized_total, "f"), "net_purchase_cost": format(amounts["net_line_costs"][line["id"]], "f"),
                 "tax_treatment": invoice["tax_treatment"], "occurred_at": op["occurred_at"], "posted_at": op["occurred_at"],

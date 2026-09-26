@@ -1059,6 +1059,12 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             actor_id=actor_id,
             order_wide=True,
         )
+        source_snapshot = await db.unified_orders.find_one(
+            {"user_id": user_id, "order_number": order_number}, {"g47_salla_snapshot": 1},
+        ) or {}
+        source_watermark = source_snapshot.get("g47_salla_snapshot") or {}
+        if source_watermark.get("requires_authoritative_refresh"):
+            raise HTTPException(409, detail={"code": "component_authoritative_refresh_required"})
         try:
             order = await get_order(repository, user_id=user_id, order_number=order_number)
         except OrderNotFoundError as exc:
@@ -1207,6 +1213,8 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         component_ticket = await reconcile_component_order_lifecycle(
             db, user_id=user_id, order=order, actor_id=actor_id,
             decision=fulfillment_decision, strict=True,
+            source_revision=int(source_watermark.get("revision") or 0),
+            source_updated_at=source_watermark.get("source_updated_at"),
         )
 
         # The order must remain visible in stage one when Salla rejects or

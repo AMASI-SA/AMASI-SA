@@ -417,6 +417,7 @@ def _stock_component_lines(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
                   for value in selected if value.get("source") == "custom_field"]
         lines.append({
             "order_line_id": row["id"], "product_id": row.get("salla_product_id") or row.get("mezan_product_id"),
+            "variant_id": row.get("salla_variant_id"),
             "quantity": row["quantity"], "options_raw": options, "custom_fields": fields,
             "options_normalized": {value["option_name"]: value["value_name"] for value in options},
         })
