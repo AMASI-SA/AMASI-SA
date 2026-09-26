@@ -768,6 +768,26 @@ def test_reference_card_uses_full_labels_and_confirmed_field_order():
     assert rows[-1] == ("للتوصيل", "2 - iMile")
 
 
+def test_bag_order_288457267_prints_all_customer_choices():
+    fields = [
+        {"name": "اختر", "value": "اسود"},
+        {"name": "هل ترغب بإضافة كرت اهداء برسالة مخصصة؟", "value": "نعم"},
+        {"name": "الكلام على الكرت", "value": "لانك تستحقين لولو"},
+    ]
+    pdf = render_preparation_batch_pdf({
+        "id": "bag-print", "lines": [{
+            "order_number": "288457267", "order_item_id": "bag-line",
+            "order_date": "2026-09-24", "unit_index": 1,
+            "product_name": "شنطة أنيقة شيك ليدي", "file_spec_fields": fields,
+            "image_b64": __import__("base64").b64encode(_image_bytes(7)).decode("ascii"),
+        }],
+    })
+    with fitz.open(stream=pdf, filetype="pdf") as document:
+        printed = unicodedata.normalize("NFKC", document[0].get_text())
+        for text in ("اختر", "اسود", "هل ترغب بإضافة كرت", "نعم", "الكلام على الكرت", "لانك تستحقين لولو"):
+            assert text in printed.replace("\n", " ")
+
+
 def test_salla_spec_order_and_full_values_survive_batch_snapshot():
     fields = [
         {"spec_key": "اختر مقاس اللوحه", "name": "اختر مقاس اللوحه", "value": "30 طول * 50 عرض (SAR 214.92)"},
@@ -1216,6 +1236,66 @@ async def test_auto_option_repair_force_refreshes_missing_line_before_pdf(monkey
     assert result["lines"][0]["product_options"] == {
         "هل تريد إضافة الاسم؟": "نعم",
     }
+
+
+@pytest.mark.asyncio
+async def test_preparation_file_rechecks_partially_saved_bag_options(monkeypatch):
+    identity = SimpleNamespace(
+        order_item_id="bag-line", line_index=0, sku="AMS13152",
+        options=[
+            SimpleNamespace(name="اختر", value="اسود"),
+            SimpleNamespace(name="هل ترغب بإضافة كرت اهداء برسالة مخصصة؟", value="نعم"),
+            SimpleNamespace(name="الكلام على الكرت", value="لانك تستحقين لولو"),
+        ],
+        custom_fields=[], color=None, size=None, material=None,
+    )
+    calls = []
+
+    async def refresh(_db, user_id, order_number, **kwargs):
+        calls.append(order_number)
+        return {"ok": True, "found": True}
+
+    async def canonical_order(*_args, **_kwargs):
+        return SimpleNamespace(order_number="288457267")
+
+    monkeypatch.setattr(batch_module, "refresh_order_from_salla", refresh)
+    monkeypatch.setattr(batch_module, "MongoOrderRepository", lambda _db: object())
+    monkeypatch.setattr(batch_module, "get_order", canonical_order)
+    monkeypatch.setattr(batch_module, "map_order_item_identities", lambda _order: [identity])
+
+    result = await batch_module.refresh_and_repair_batch_customer_options(
+        _DB(None, []), user_id="owner-1",
+        lines=[{
+            "order_number": "288457267", "order_item_id": "bag-line",
+            "line_index": 0, "sku": "AMS13152",
+            "file_spec_fields": [{"spec_key": "اختر", "name": "اختر", "value": "اسود"}],
+        }],
+        refresh_only_missing=False,
+    )
+    assert calls == ["288457267"]
+    assert result["unresolved"] == result["refresh_failures"] == []
+    assert [(field["name"], field["value"]) for field in result["lines"][0]["file_spec_fields"]] == [
+        ("اختر", "اسود"),
+        ("هل ترغب بإضافة كرت اهداء برسالة مخصصة؟", "نعم"),
+        ("الكلام على الكرت", "لانك تستحقين لولو"),
+    ]
+
+
+def test_preparation_file_does_not_silently_erase_known_customer_choices():
+    identity = SimpleNamespace(
+        order_item_id="bag-line", line_index=0, sku="AMS13152",
+        options=[], options_normalized={}, options_raw=[], custom_fields=[],
+        color=None, size=None, material=None,
+    )
+    _lines, _count, unresolved = repair_batch_line_customer_options(
+        [{
+            "order_number": "288457267", "order_item_id": "bag-line",
+            "file_spec_fields": [{"spec_key": "اختر", "name": "اختر", "value": "اسود"}],
+        }],
+        identities_by_order={"288457267": [identity]},
+        workflows_by_order={"288457267": {"items": []}},
+    )
+    assert unresolved == ["288457267:bag-line"]
 
 
 @pytest.mark.asyncio

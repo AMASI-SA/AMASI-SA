@@ -53,6 +53,14 @@ TERMINAL_WORKFLOW_STAGES = {
 }
 
 
+def _is_current_completed_salla_status(row: dict[str, Any]) -> bool:
+    """A completed workflow does not override the current Salla order status."""
+    native = _text(row.get("order_status_native")).casefold()
+    if native:
+        return native in {"تم التنفيذ", "completed"}
+    return _text(row.get("order_status")).casefold() in {"completed", "تم التنفيذ"}
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -1343,7 +1351,15 @@ def make_fulfillment_v2_router(
                 user_id=context["merchant_id"],
                 workflow=workflow,
             )
-            if row:
+            workflow_salla_status = _text(workflow.get("salla_order_status"))
+            if (
+                row
+                and _is_current_completed_salla_status(row)
+                and (
+                    not workflow_salla_status
+                    or _is_current_completed_salla_status({"order_status": workflow_salla_status})
+                )
+            ):
                 items.append(row)
             if len(items) >= limit:
                 break
