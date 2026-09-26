@@ -386,6 +386,21 @@ def test_assembly_board_uses_live_salla_status_and_mezan_evidence():
 
 
 
+
+def test_assembly_search_reopens_work_when_current_salla_status_returns_in_progress():
+    module = __import__("preparation_piece_operations")
+    search_source = inspect.getsource(module._assembly_search)
+    physical_source = inspect.getsource(module._mark_assembly_piece_ready)
+    virtual_source = inspect.getsource(module._mark_virtual_assembly_piece_ready)
+
+    assert 'current_order_status == "in_progress"' in search_source
+    assert 'and current_order_status != "in_progress"' in physical_source
+    assert '"in_progress", "ready_to_ship", "completed"' in virtual_source
+    assert '"order_created_at": order.created_at if order else None' in search_source
+    assert '"shipping_company": (' in search_source
+
+
+
 def test_my_work_discovers_reassigned_pieces_before_registry_employee_filter():
     source = inspect.getsource(__import__("preparation_piece_operations")._my_work_view)
 
