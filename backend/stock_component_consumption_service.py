@@ -54,12 +54,20 @@ def _filled(value: Any) -> bool:
 
 
 def _digest(value: Any) -> str:
-    return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False,
-                                    separators=(",", ":"), allow_nan=False).encode()).hexdigest()
+    try:
+        encoded = json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+    except (TypeError, ValueError):
+        _fail("identity_payload_invalid")
+    return hashlib.sha256(encoded.encode()).hexdigest()
 
 
 def _id(kind: str, *parts: Any) -> str:
     return kind + "_" + _digest(parts)
+
+
+def _context_hash(value: Any) -> str:
+    # Match the receipt contract's outer-whitespace normalization, retain case.
+    return _digest(value.strip() if isinstance(value, str) else value)
 
 
 def _now() -> str:
@@ -171,14 +179,21 @@ def selection_tokens(line: dict[str, Any]) -> list[list[str]]:
                     tokens.add(("id:" + _text(oid), "id:filled"))
                 if name:
                     tokens.add(("name:" + _norm(name), "filled"))
+                if vid in (None, "", "filled"):
+                    actual = label if _filled(label) else row.get("text", row.get("answer"))
+                    context_key = "id:" + _text(oid) if oid not in (None, "") else "name:" + _norm(name)
+                    tokens.add(("option-context:" + context_key, _context_hash(actual)))
     normalized = line.get("options_normalized") or {}
     if not isinstance(normalized, dict):
         _fail("selected_context_invalid")
+    raw_names = {key for key, value in tokens if key.startswith("name:")}
     for key, value in normalized.items():
         for part in value if isinstance(value, list) else [value]:
             if _filled(part):
                 tokens.add(("name:" + _norm(key), "name:" + _norm(part)))
                 tokens.add(("name:" + _norm(key), "filled"))
+                if "name:" + _norm(key) not in raw_names:
+                    tokens.add(("normalized-context:name:" + _norm(key), _context_hash(part)))
     for row in line.get("custom_fields") or []:
         if not isinstance(row, dict):
             _fail("selected_context_invalid")
@@ -191,6 +206,11 @@ def selection_tokens(line: dict[str, Any]) -> list[list[str]]:
                 tokens.add(("id:field:" + _text(fid), "id:filled"))
             if name:
                 tokens.add(("name:" + _norm(name), "filled"))
+            # Filled decides demand eligibility; the actual choice freezes the
+            # unit and prevents a differently personalized item reusing proof.
+            # Store a hash, not customer text/uploads in inventory allocations.
+            context_key = "id:" + _text(fid) if fid not in (None, "") else "name:" + _norm(name)
+            tokens.add(("field-context:" + context_key, _context_hash(value)))
     return [list(pair) for pair in sorted(tokens)]
 
 
@@ -478,10 +498,18 @@ async def _deduct(db: Any, owner: str, allocations: list[dict]) -> None:
                 _fail("insufficient_stock", resource_id=demand["resource_id"])
             item["quantity"] = _stored(remainder)
             total_taken += taken
-        total = quantity_decimal(before.get("total_quantity")) - total_taken
-        if total < 0:
+        before_sum = sum((quantity_decimal(item.get("quantity")) for item in before.get("items", [])), Decimal(0))
+        cache = before.get("total_quantity")
+        try:
+            cached_total = cache.to_decimal() if isinstance(cache, Decimal128) else Decimal(str(cache))
+        except (InvalidOperation, ValueError, TypeError):
             _fail("stock_total_invalid")
-        after["total_quantity"] = _stored(total)
+        # Mongo's existing receipt writer $inc's the BSON double cache. Items
+        # are the authority: tolerate only sub-micro-unit binary roundoff in
+        # that cache, never round or forgive an invalid physical lot quantity.
+        if not cached_total.is_finite() or abs(cached_total - before_sum) > Decimal("0.0000005"):
+            _fail("stock_total_invalid")
+        after["total_quantity"] = _stored(before_sum - total_taken)
         result = await db[LOCATIONS].update_one({"user_id": owner, "id": location_id, "occupancy": before},
                                               {"$set": {"occupancy": after, "updated_at": _now()}})
         if result.matched_count != 1:

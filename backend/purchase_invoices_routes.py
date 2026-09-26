@@ -12,7 +12,7 @@ from auth import get_current_user_from_db
 from component_status_policy import component_is_active
 from purchase_receiving_service import (
     SCHEMA, PRODUCTS, RESOURCES, OPERATIONS, actor_scope, approve_and_receive,
-    approved_account_mappings, fail, invoice_public, now, purchase_amounts, resolve_line, stable_id,
+    approved_account_mappings, fail, invoice_public, now, purchase_amounts, resolve_line, stable_id, stored_number,
 )
 
 class StrictModel(BaseModel):
@@ -67,6 +67,12 @@ async def _supplier(db, owner, supplier_id):
         fail("purchase_supplier_not_found", 404)
     return row
 
+async def _write_actor(db, user, owner):
+    actor, current_owner = await actor_scope(db, user, "accounting.purchases.post")
+    if current_owner != owner:
+        fail("purchase_actor_scope_changed", 403)
+    return actor
+
 async def _draft_values(db, owner, payload):
     values = payload.model_dump(mode="json", exclude={"expected_revision"})
     supplier = await _supplier(db, owner, values["supplier_counterparty_id"])
@@ -79,9 +85,9 @@ async def _draft_values(db, owner, payload):
         lines.append(line)
     amounts = purchase_amounts(lines, values["tax_amount"], values["tax_treatment"])
     for line in lines:
-        line["line_total"] = float(amounts["net_line_costs"][line["id"]])
-    values.update(lines=lines, supplier_name=supplier["name"], subtotal=float(amounts["subtotal"]),
-                  tax_amount=float(amounts["tax_amount"]), total=float(amounts["total"]), currency="SAR")
+        line["line_total"] = stored_number(amounts["net_line_costs"][line["id"]])
+    values.update(lines=lines, supplier_name=supplier["name"], subtotal=stored_number(amounts["subtotal"]),
+                  tax_amount=stored_number(amounts["tax_amount"]), total=stored_number(amounts["total"]), currency="SAR")
     return values
 
 async def _public(db, owner, doc):
@@ -112,6 +118,8 @@ def attach_purchase_invoice_routes(parent_router: APIRouter, db):
         actor, owner = await actor_scope(db, user)
         from fulfillment_v2_routes import _actor_context, _warehouse_allowed
         context = await _actor_context(db, await db.users.find_one({"id": actor["id"]}))
+        if context["merchant_id"] != owner:
+            fail("purchase_actor_scope_changed", 403)
         products = []
         for row in await db[PRODUCTS].find({"user_id": owner, "archived": {"$ne": True}}).to_list(10001):
             variants = [{"variant_id": str(v["id"]), "name": v.get("name") or v.get("sku") or str(v["id"]),
@@ -146,7 +154,7 @@ def attach_purchase_invoice_routes(parent_router: APIRouter, db):
             fail("purchase_tax_evidence_file_invalid", 422)
         file_id = stable_id("purchase-tax-file", owner, supplier_counterparty_id, invoice_number, hashlib.sha256(content).hexdigest())
         async def preserve(scoped):
-            await actor_scope(scoped, user, "accounting.purchases.post")
+            await _write_actor(scoped, user, owner)
             digest = await preserve_original(scoped, owner, file_id, content)
             await scoped.mz2_purchase_tax_evidence.update_one({"_id": file_id}, {"$setOnInsert": {
                 "user_id": owner, "file_id": file_id, "supplier_counterparty_id": supplier_counterparty_id,
@@ -159,7 +167,7 @@ def attach_purchase_invoice_routes(parent_router: APIRouter, db):
         _, owner = await actor_scope(db, user, "accounting.purchases.post")
         inv_id = str(uuid.uuid4())
         async def create(scoped):
-            await actor_scope(scoped, user, "accounting.purchases.post")
+            await _write_actor(scoped, user, owner)
             values = await _draft_values(scoped, owner, payload)
             stamp = now()
             doc = {**values, "_id": stable_id("purchase-invoice", owner, inv_id), "id": inv_id, "user_id": owner,
@@ -215,7 +223,7 @@ def attach_purchase_invoice_routes(parent_router: APIRouter, db):
     async def update_invoice(inv_id: str, payload: PurchaseInvoiceUpdate, user=Depends(current_user)):
         _, owner = await actor_scope(db, user, "accounting.purchases.post")
         async def update(scoped):
-            await actor_scope(scoped, user, "accounting.purchases.post")
+            await _write_actor(scoped, user, owner)
             doc = await scoped.purchase_invoices.find_one({"user_id": owner, "id": inv_id})
             if not doc or doc.get("schema_version") != SCHEMA:
                 fail("legacy_purchase_requires_reconciliation")
@@ -232,7 +240,7 @@ def attach_purchase_invoice_routes(parent_router: APIRouter, db):
     async def delete_invoice(inv_id: str, expected_revision: int = Query(..., ge=1), user=Depends(current_user)):
         _, owner = await actor_scope(db, user, "accounting.purchases.post")
         async def delete(scoped):
-            await actor_scope(scoped, user, "accounting.purchases.post")
+            await _write_actor(scoped, user, owner)
             doc = await scoped.purchase_invoices.find_one({"user_id": owner, "id": inv_id})
             if not doc or doc.get("schema_version") != SCHEMA:
                 fail("legacy_purchase_requires_reconciliation")

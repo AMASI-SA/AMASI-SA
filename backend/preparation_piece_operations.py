@@ -2197,6 +2197,7 @@ async def _mark_virtual_assembly_piece_ready(
         return None
     now = _now()
     if _text(piece.get("assembly_status")) == "ready":
+        await _assert_ready_piece_components(db, user_id=user_id, piece=piece)
         progress = await _assembly_progress(
             db,
             user_id=user_id,
@@ -2376,6 +2377,18 @@ async def _consume_piece_components(db: Any, *, user_id: str, piece: dict[str, A
     )
 
 
+async def _assert_ready_piece_components(db: Any, *, user_id: str, piece: dict[str, Any]) -> None:
+    if piece.get("virtual_kind") == "operational":
+        return
+    from stock_component_consumption_service import PLANS, UNITS
+    plan = await db[PLANS].find_one({"user_id": user_id, "order_id": _text(piece.get("order_number"))})
+    if plan:
+        unit = await db[UNITS].find_one({"user_id": user_id, "plan_id": plan["_id"],
+            "order_line_id": _text(piece.get("order_item_id")), "unit_index": int(piece.get("unit_index") or 0)})
+        if plan.get("state") == "cancelled" or not unit or unit.get("state") != "consumed":
+            raise HTTPException(409, detail={"code": "component_ready_state_requires_reconciliation"})
+
+
 async def _mark_assembly_piece_ready(
     db: Any, *, user_id: str, piece_id: str, client_request_id: str,
     actor_id: str, actor_name: str,
@@ -2442,6 +2455,7 @@ async def _mark_assembly_piece_ready_in_transaction(
         )
     now = _now()
     if _text(piece.get("assembly_status")) == "ready":
+        await _assert_ready_piece_components(db, user_id=user_id, piece=piece)
         progress = await _assembly_progress(
             db,
             user_id=user_id,

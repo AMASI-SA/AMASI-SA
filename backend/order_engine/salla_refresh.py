@@ -525,15 +525,6 @@ async def refresh_order_from_salla(
         doc["order_id"] = str(internal_id)
         doc["order_number"] = normalized
 
-        result = await upsert_order(
-            db,
-            str(user_id),
-            normalized,
-            doc,
-            source="salla_direct",
-            raw=merged_raw,
-        )
-
         now = datetime.now(timezone.utc)
         canonical_updates: dict[str, Any] = {
             REFRESH_TIMESTAMP_FIELD: now.isoformat(),
@@ -549,10 +540,20 @@ async def refresh_order_from_salla(
             if key == "shipping_address_found" or _present(value):
                 canonical_updates[key] = deepcopy(value)
 
-        await db.unified_orders.update_one(
-            {"user_id": str(user_id), "order_number": normalized},
-            {"$set": canonical_updates},
+        from fulfillment_v2_routes import persist_component_source_snapshot
+        async def persist_snapshot(scoped):
+            result = await upsert_order(scoped, str(user_id), normalized, doc, source="salla_direct", raw=merged_raw)
+            await scoped.unified_orders.update_one(
+                {"user_id": str(user_id), "order_number": normalized}, {"$set": canonical_updates},
+            )
+            return result
+        result = await persist_component_source_snapshot(
+            db, user_id=str(user_id), order_number=normalized, payload=details, persist=persist_snapshot,
         )
+        if result.get("stale"):
+            return {"ok": True, "found": True, "updated": False, "skipped": True,
+                    "reason": "stale_salla_snapshot", "order_number": normalized,
+                    "no_shipments_api_calls": True, "no_qoyod_calls": True}
         auto_fulfillment = {
             "attempted": False,
             "promoted": False,

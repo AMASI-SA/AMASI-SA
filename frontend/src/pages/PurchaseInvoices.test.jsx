@@ -237,7 +237,27 @@ test("failed transport is reconciled before retry, and retry uses the same full 
     expect(api.post.mock.calls[0][1]).toEqual(api.post.mock.calls[1][1]);
     expect(api.post.mock.calls[0][1].receipts.map((row) => row.quantity)).toEqual([3, 1.5]);
 });
-test("pending operation prevents a second approval and preserves its server identity", async () => {
+test.each(["pending", "failed", "recovery_required"])("saved %s operation retries its immutable server request", async (status) => {
+    const request = buildFullPurchaseApproval(draft(), receipts(), catalog);
+    api.post.mockResolvedValue({ data: draft({ state: "approved", operation: { status: "succeeded" } }) });
+    await render(<ApprovalDialog invoice={draft({ state: "approving", operation: { status, request } })} catalog={catalog} onClose={jest.fn()} onSaved={jest.fn()} />);
+    expect(byTest("pinv-receipt-0-location").closest("fieldset").disabled).toBe(true);
+    expect(byTest("pinv-resume-approval").disabled).toBe(false);
+    await submit();
+    expect(api.post).toHaveBeenCalledWith("/purchase-invoices/invoice-1/approve-receive", request);
+});
+
+test("product search finds a variant barcode without substituting product identity", async () => {
+    const searchable = { ...catalog, products: catalog.products.map((p) => p.product_id === "p-two" ? { ...p, variants: [{ ...p.variants[0], barcode: "998877" }] } : p) };
+    await render(<InvoiceDialog suppliers={[{ id: "supplier", name: "Supplier" }]} catalog={searchable} editing={null} onClose={jest.fn()} onSaved={jest.fn()} />);
+    await change(byTest("pinv-line-0-search"), "998877");
+    const options = Array.from(byTest("pinv-line-0-product").options).map((option) => option.value);
+    expect(options).toEqual(["", "p-two"]);
+    await change(byTest("pinv-line-0-product"), "p-two");
+    expect(byTest("pinv-line-0-variant").value).toBe("");
+});
+
+test("pending operation without a persisted request prevents a second approval", async () => {
     api.post.mockResolvedValue({ data: { invoice: draft(), operation: { status: "pending" } } });
     api.get.mockResolvedValue({ data: draft({ operation: { status: "pending" } }) });
     await render(<ApprovalDialog invoice={draft()} catalog={catalog} onClose={jest.fn()} onSaved={jest.fn()} />);

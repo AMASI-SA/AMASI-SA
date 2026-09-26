@@ -6,6 +6,7 @@ import hashlib
 import json
 import uuid
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from typing import Any, Callable
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
@@ -89,6 +90,8 @@ class CarrierBarcodeRequest(BaseModel):
 async def ensure_fulfillment_indexes(db: Any) -> None:
     if isinstance(db, SessionDatabase):
         return  # Indexes are prepared before entering the owner transaction.
+    from stock_component_consumption_service import ensure_component_consumption_indexes
+    await ensure_component_consumption_indexes(db)
     await db[WORKFLOWS].create_index(
         [("user_id", ASCENDING), ("order_number", ASCENDING)],
         unique=True,
@@ -864,6 +867,7 @@ async def build_order_fulfillment_decision(
 
 def component_source_time(value: Any) -> str | None:
     """Accept comparable provider timestamps only; never invent a cutoff/version."""
+    source_zone = value.get("timezone") if isinstance(value, dict) else None
     if isinstance(value, dict):
         value = value.get("date") or value.get("updated_at")
     try:
@@ -871,13 +875,57 @@ def component_source_time(value: Any) -> str | None:
     except (TypeError, ValueError):
         return None
     if parsed.tzinfo is None:
-        return None
+        if not source_zone:
+            return None
+        try:
+            parsed = parsed.replace(tzinfo=ZoneInfo(source_zone))
+        except (ZoneInfoNotFoundError, TypeError, ValueError):
+            return None
     return parsed.astimezone(timezone.utc).isoformat(timespec="microseconds")
 
 
-def component_provider_version(payload: dict[str, Any]) -> str | None:
+def component_provider_version(payload: dict[str, Any], *, created_event: bool = False) -> str | None:
     date = payload.get("date") if isinstance(payload.get("date"), dict) else {}
-    return component_source_time(payload.get("updated_at") or date.get("updated"))
+    value = payload.get("updated_at") or date.get("updated")
+    if value is None and created_event:
+        value = payload.get("created_at") or date.get("created") or payload.get("date")
+    return component_source_time(value)
+
+
+async def persist_component_source_snapshot(
+    db: Any, *, user_id: str, order_number: str, payload: dict[str, Any],
+    persist: Any, created_event: bool = False,
+) -> dict[str, Any]:
+    """Fence the canonical write, not merely its later fulfillment callback.
+
+    Provider I/O has already completed. The persistence callback contains only
+    local writes and joins the same owner transaction as the source watermark.
+    Equal-version cancellation wins; an unversioned snapshot cannot replace a
+    versioned one. Replays still reach fulfillment to retry a durable intent.
+    """
+    version = component_provider_version(payload, created_event=created_event)
+    status = payload.get("status") or {}
+    status = status.get("slug") or status.get("name") if isinstance(status, dict) else status
+    cancelled = _text(status).lower() in {"cancel", "cancelled", "canceled", "refunded", "ملغي", "ملغى"}
+
+    async def write(scoped):
+        query = {"user_id": user_id, "order_number": order_number}
+        current = await scoped.unified_orders.find_one(query) or {}
+        watermark = current.get("g47_salla_snapshot") or {}
+        raw = (current.get("raw_by_source") or {}).get("salla_direct") or {}
+        previous_version = watermark.get("source_updated_at") or component_provider_version(raw, created_event=True)
+        previous_cancelled = bool(watermark.get("cancelled")) or _text(current.get("order_status_slug")).lower() in {"canceled", "cancelled"}
+        if previous_version and (not version or version < previous_version or (
+            version == previous_version and previous_cancelled and not cancelled
+        )):
+            return {"stale": True, "created": False}
+        result = await persist(scoped)
+        await scoped.unified_orders.update_one(query, {"$set": {"g47_salla_snapshot": {
+            "source_updated_at": version, "cancelled": cancelled,
+        }}})
+        return result
+
+    return await atomic_owner(db, user_id, write)
 
 
 async def record_component_intake_failure(
@@ -1018,7 +1066,7 @@ async def reconcile_component_order_lifecycle(
                 scoped, merchant_id=user_id, order_id=order_number, lines=acceptance_lines,
                 source_version=current["generation"], actor_id=actor_id,
                 source_created_at=created_at,
-                warehouse_ids=(decision or {}).get("warehouse_ids") or None,
+                warehouse_ids=(frozen_plan.get("warehouse_ids") if frozen_plan else (decision or {}).get("warehouse_ids")) or None,
             )
             state = "reserved"
         ticket = {
@@ -1047,7 +1095,7 @@ async def reconcile_component_order_lifecycle(
         code = detail.get("code") if isinstance(detail, dict) else "component_lifecycle_retry_required"
         # Separate durable evidence survives rollback of every stock mutation.
         await db[COMPONENT_LIFECYCLES].update_one(
-            {"_id": identity, "generation": intent["generation"]},
+            {"_id": identity, "generation": intent["generation"], "state": {"$in": ["pending", "blocked"]}},
             {"$set": {"state": "blocked", "accepted": False, "retry_required": True,
                       "error_code": code, "updated_at": _now()}},
         )
@@ -1063,6 +1111,30 @@ async def assert_component_acceptance(db: Any, *, ticket: dict[str, Any]) -> Non
     current = await db[COMPONENT_LIFECYCLES].find_one({"_id": ticket["identity"]}) or {}
     if current.get("generation") != ticket.get("generation") or current.get("state") != "reserved" or current.get("cancelled"):
         raise HTTPException(409, detail={"code": "component_acceptance_changed"})
+
+
+async def _consume_batch_components(db: Any, *, user_id: str, batch: dict[str, Any], actor_id: str) -> None:
+    """Close no-assembly paths under the same transaction as packing/handoff."""
+    from stock_component_consumption_service import PLANS, consume_component_stock
+    from order_engine.repository import MongoOrderRepository
+    from order_engine.service import get_order
+    for number in batch.get("order_numbers") or []:
+        plan = await db[PLANS].find_one({"user_id": user_id, "order_id": str(number)})
+        if not plan:
+            # No plan alone is never a historical exemption. Prove the source
+            # order predates the explicit rollout; configuration failure blocks.
+            settings = await db.settings.find_one({"user_id": user_id}) or {}
+            cutoff = component_source_time((settings.get("g47_inventory") or {}).get("component_lifecycle_starts_at"))
+            if not cutoff:
+                raise HTTPException(409, detail={"code": "component_configuration_required"})
+            order = await get_order(MongoOrderRepository(db), user_id=user_id, order_number=str(number))
+            created = component_source_time(getattr(order, "created_at", None))
+            if created and created < cutoff:
+                continue
+            raise HTTPException(409, detail={"code": "component_reservation_missing"})
+        result = await consume_component_stock(db, merchant_id=user_id, order_id=str(number), actor_id=actor_id)
+        if any(unit.get("state") != "consumed" for unit in result.get("units") or []):
+            raise HTTPException(409, detail={"code": "component_execution_incomplete"})
 
 
 async def auto_route_instant_order(
@@ -2133,23 +2205,18 @@ def make_fulfillment_v2_router(
         }
         if not context["is_owner"]:
             query["claimed_by"] = context["actor_id"]
-        now = _now()
-        result = await db[BATCHES].update_one(
-            query,
-            {"$set": {
-                "status": "packed",
-                "packed_at": now,
-                "packed_by": context["actor_id"],
-                "packing_note": _text(payload.note) or None,
-                "updated_at": now,
-            }},
-        )
-        if not result.modified_count:
-            raise HTTPException(
-                status_code=409,
-                detail={"code": "batch_must_be_printed_before_packing"},
-            )
-        return {"ok": True, "batch_id": batch_id, "status": "packed"}
+        async def pack(scoped):
+            batch = await scoped[BATCHES].find_one(query)
+            if not batch or batch.get("status") in {"handed_off", "inventory_consuming"}:
+                raise HTTPException(409, detail={"code": "batch_must_be_printed_before_packing"})
+            await _consume_batch_components(scoped, user_id=context["merchant_id"], batch=batch, actor_id=context["actor_id"])
+            now = _now()
+            await scoped[BATCHES].update_one(query, {"$set": {
+                "status": "packed", "packed_at": now, "packed_by": context["actor_id"],
+                "packing_note": _text(payload.note) or None, "updated_at": now,
+            }})
+            return {"ok": True, "batch_id": batch_id, "status": "packed"}
+        return await atomic_owner(db, context["merchant_id"], pack)
 
     @router.post("/batches/{batch_id}/handoff")
     async def confirm_carrier_handoff(
@@ -2170,83 +2237,29 @@ def make_fulfillment_v2_router(
         }
         if not context["is_owner"]:
             query["claimed_by"] = context["actor_id"]
-        batch = await db[BATCHES].find_one(query, {"_id": 0})
-        if not batch:
-            raise HTTPException(
-                status_code=409,
-                detail={"code": "batch_must_be_packed_before_handoff"},
+        async def handoff(scoped):
+            batch = await scoped[BATCHES].find_one(query)
+            if not batch:
+                raise HTTPException(409, detail={"code": "batch_must_be_packed_before_handoff"})
+            # Revalidate cancellation and execution even when packing already
+            # consumed the material. All local finalization rolls back together.
+            await _consume_batch_components(scoped, user_id=context["merchant_id"], batch=batch, actor_id=context["actor_id"])
+            consumed_reservations = await _consume_order_inventory_reservations(
+                scoped, user_id=context["merchant_id"],
+                order_numbers=list(batch.get("order_numbers") or []),
+                actor_id=context["actor_id"], batch_id=batch_id,
             )
-        now = _now()
-        lock = await db[BATCHES].update_one(
-            query,
-            {"$set": {
-                "status": "inventory_consuming",
-                "updated_at": now,
-            }},
-        )
-        if not lock.modified_count:
-            raise HTTPException(
-                status_code=409,
-                detail={"code": "batch_handoff_conflict_refresh_required"},
-            )
-        try:
-            consumed_reservations = (
-                await _consume_order_inventory_reservations(
-                    db,
-                    user_id=context["merchant_id"],
-                    order_numbers=list(batch.get("order_numbers") or []),
-                    actor_id=context["actor_id"],
-                    batch_id=batch_id,
-                )
-            )
-        except Exception:
-            await db[BATCHES].update_one(
-                {
-                    "id": batch_id,
-                    "user_id": context["merchant_id"],
-                    "status": "inventory_consuming",
-                },
-                {
-                    "$set": {
-                        "status": "inventory_reconciliation_required",
-                        "inventory_reconciliation_required_at": _now(),
-                        "updated_at": _now(),
-                    },
-                },
-            )
-            raise
-        handed_off_at = _now()
-        await db[BATCHES].update_one(
-            {
-                "id": batch_id,
-                "user_id": context["merchant_id"],
-                "status": "inventory_consuming",
-            },
-            {
-                "$set": {
-                    "status": "handed_off",
-                    "handed_off_at": handed_off_at,
-                    "handed_off_by": context["actor_id"],
-                    "handoff_note": _text(payload.note) or None,
-                    "inventory_reservations_consumed": consumed_reservations,
-                    "updated_at": handed_off_at,
-                },
-            },
-        )
-        await db[WORKFLOWS].update_many(
-            {
-                "user_id": context["merchant_id"],
-                "claim_batch_id": batch_id,
-                "stage": "ready_to_ship",
-            },
-            {"$set": {
-                "stage": "completed",
-                "completed_at": handed_off_at,
-                "carrier_handoff_at": handed_off_at,
-                "updated_at": handed_off_at,
-            }},
-        )
-        return {"ok": True, "batch_id": batch_id, "status": "handed_off"}
+            now = _now()
+            await scoped[BATCHES].update_one(query, {"$set": {
+                "status": "handed_off", "handed_off_at": now,
+                "handed_off_by": context["actor_id"], "handoff_note": _text(payload.note) or None,
+                "inventory_reservations_consumed": consumed_reservations, "updated_at": now,
+            }})
+            await scoped[WORKFLOWS].update_many({
+                "user_id": context["merchant_id"], "claim_batch_id": batch_id, "stage": "ready_to_ship",
+            }, {"$set": {"stage": "completed", "completed_at": now, "carrier_handoff_at": now, "updated_at": now}})
+            return {"ok": True, "batch_id": batch_id, "status": "handed_off"}
+        return await atomic_owner(db, context["merchant_id"], handoff)
 
     return router
 

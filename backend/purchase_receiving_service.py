@@ -61,6 +61,20 @@ def number(value, *, nonnegative=True) -> Decimal:
     return result
 
 
+def stored_number(value) -> float:
+    """Keep existing numeric readers without silently changing exact amounts."""
+    try:
+        decimal = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        fail("purchase_invalid_number", 422)
+    if not decimal.is_finite() or decimal < 0 or decimal > Decimal("1000000000000000000"):
+        fail("purchase_invalid_number", 422)
+    stored = float(decimal)
+    if Decimal(str(stored)) != decimal:
+        fail("purchase_numeric_precision_loss", 422)
+    return stored
+
+
 def moving_average(previous_quantity, previous_cost, quantity, unit_cost) -> Decimal:
     previous = number(previous_quantity)
     received = number(quantity)
@@ -82,12 +96,15 @@ def purchase_amounts(lines, tax_amount, treatment):
     amounts = {}
     for line in lines:
         quantity = number(line["quantity"])
-        if quantity <= 0 or quantity != quantity.quantize(PRECISION):
+        if quantity <= 0 or quantity > Decimal("1000000000") or quantity != quantity.quantize(PRECISION):
             fail("purchase_quantity_invalid", 422)
         key = line["id"]
         if key in amounts:
             fail("purchase_duplicate_line", 422)
-        amounts[key] = (quantity * number(line["unit_cost"])).quantize(MONEY, rounding=ROUND_HALF_UP)
+        unit_cost = number(line["unit_cost"])
+        if unit_cost != unit_cost.quantize(PRECISION):
+            fail("purchase_cost_precision_invalid", 422)
+        amounts[key] = (quantity * unit_cost).quantize(MONEY, rounding=ROUND_HALF_UP)
     subtotal = sum(amounts.values(), Decimal(0))
     if subtotal <= 0:
         fail("purchase_total_invalid", 422)
@@ -246,6 +263,9 @@ async def approve_and_receive(db, *, user, invoice_id, payload):
     request_hash = stable_id("purchase-request", request)
 
     async def prepare(scoped):
+        _, current_owner = await actor_scope(scoped, user, "accounting.purchases.post")
+        if current_owner != owner:
+            fail("purchase_actor_scope_changed", 403)
         invoice = await scoped.purchase_invoices.find_one({"user_id": owner, "id": invoice_id})
         if not invoice or invoice.get("schema_version") != SCHEMA:
             fail("legacy_purchase_requires_reconciliation")
@@ -345,7 +365,7 @@ async def approve_and_receive(db, *, user, invoice_id, payload):
                 "average_cost": format(average, "f"), "authoritative": True, "cost_policy_version": COST_POLICY,
                 "last_receipt_id": receipt_id, "updated_at": op["occurred_at"]}}, upsert=True)
             if identity["item_type"] == "stock_component":
-                metadata = component_cost_metadata(track_inventory=True, amount=catalog.get("initial_unit_cost"), purchase_cost=float(average))
+                metadata = component_cost_metadata(track_inventory=True, amount=catalog.get("initial_unit_cost"), purchase_cost=stored_number(average))
                 await scoped[RESOURCES].update_one({"user_id": owner, "id": identity["resource_id"]}, {"$set": {
                     **metadata, "cost_policy_version": COST_POLICY, "cost_receipt_id": receipt_id, "updated_at": op["occurred_at"]}})
             written_receipts.append(receipt_id)
@@ -368,7 +388,7 @@ async def approve_and_receive(db, *, user, invoice_id, payload):
         liability_id = stable_id("purchase-liability", operation_id)
         await scoped.liabilities.insert_one({"_id": liability_id, "id": liability_id, "user_id": owner, "kind": "supplier",
             "counterparty_id": invoice["supplier_counterparty_id"], "supplier_name": invoice["supplier_name"],
-            "expected_amount": float(amounts["total"]), "paid_amount": 0, "status": "unpaid", "source": "purchase_invoice",
+            "expected_amount": stored_number(amounts["total"]), "paid_amount": 0, "status": "unpaid", "source": "purchase_invoice",
             "schema_version": SCHEMA, "purchase_invoice_id": invoice_id, "accounting_txn_group_id": group_id,
             "due_date": invoice.get("due_date") or invoice["invoice_date"], "created_at": timestamp, "updated_at": timestamp})
         await bump_product_cost_revision(scoped, owner)

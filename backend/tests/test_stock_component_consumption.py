@@ -65,6 +65,15 @@ class ComponentRulesTests(unittest.TestCase):
         self.assertFalse(service.binding_selected({"option_id": "field:empty", "value_id": "filled"}, tokens))
         self.assertTrue(service.binding_selected({"option_id": "colour", "value_id": "__option__"}, tokens))
 
+    def test_stock_preparation_projection_matches_original_customer_context(self):
+        prepared = {"options_raw": [{"option_id": "colour", "option_name": "Colour", "value_id": "red", "value_name": "Red", "value": "Red"}],
+            "options_normalized": {"Colour": "Red"}, "custom_fields": [{"field_id": "text", "field_name": "Engraving", "value": "actual customer text"}]}
+        customer = {"options_raw": [{"id": "colour", "name": "Colour", "value": {"id": "red", "name": "Red"}}],
+            "options_normalized": {"Colour": "Red"}, "custom_fields": [{"id": "text", "name": "Engraving", "value": " actual customer text "}]}
+        self.assertEqual(service.selection_tokens(prepared), service.selection_tokens(customer))
+        prepared["custom_fields"][0]["value"] = "different personalization"
+        self.assertNotEqual(service.selection_tokens(prepared), service.selection_tokens(customer))
+
     def test_rejects_ambiguous_line_and_noninteger_units(self):
         for rows in ([{"product_id": "p", "quantity": 1}], [{"order_line_id": "l", "product_id": "p", "quantity": 1.5}],
                      [{"order_line_id": "l", "product_id": "p", "quantity": 1}] * 2):
@@ -163,6 +172,14 @@ class ComponentMongoTests(unittest.IsolatedAsyncioTestCase):
         await self.consume()
         self.assertEqual(await self.stock(), 4)
         await self.assertCode("plan_conflict", self.reserve(qty=2, source_version=3))
+
+    async def test_custom_field_change_cannot_reuse_frozen_unit(self):
+        line = self.line(1, custom_fields=[{"field_id": "text", "name": "Engraving", "value": "first"}])
+        await self.reserve(lines=[line])
+        await self.consume()
+        changed = self.line(1, custom_fields=[{"field_id": "text", "name": "Engraving", "value": "different"}])
+        await self.assertCode("plan_conflict", self.reserve(lines=[changed], source_version=2))
+        self.assertEqual(await self.stock(), 8)
 
     async def test_option_quantities_and_services_are_excluded(self):
         await self.db[service.RESOURCES].insert_one({"user_id": "owner", "id": "service", "kind": "service", "track_inventory": True})
@@ -265,6 +282,25 @@ class ComponentMongoTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([r["consumption_id"] for r in plan["units"]], [r["consumption_id"] for r in replay["units"]])
         self.assertEqual(await self.stock(), 4)
 
+    @unittest.skipUnless(os.environ.get("MZ2_TEST_STANDALONE_URI"), "requires isolated local standalone Mongo")
+    async def test_standalone_refuses_before_any_component_effect(self):
+        uri = os.environ["MZ2_TEST_STANDALONE_URI"]
+        self.assertIn(urlsplit(uri).hostname, {"localhost", "127.0.0.1", "::1"})
+        client = AsyncIOMotorClient(uri, serverSelectionTimeoutMS=3000)
+        db = client[self.db.name]
+        try:
+            with self.assertRaises(HTTPException) as error:
+                await service.reserve_component_stock(db, merchant_id="owner", order_id="order",
+                    lines=[self.line()], source_version=1, source_created_at=CREATED)
+            self.assertEqual(error.exception.status_code, 503)
+            self.assertEqual(error.exception.detail, "accounting_requires_transactional_replica_set")
+            for collection in (service.PLANS, service.UNITS, service.CLAIMS, service.LOCATIONS, "mz2_atomic_owners"):
+                self.assertEqual(await db[collection].count_documents({}), 0)
+        finally:
+            self.assertTrue(db.name.startswith("g47_component_test_"))
+            await client.drop_database(db.name)
+            client.close()
+
     async def test_cutoff_no_historical_backfill_and_existing_replay(self):
         await self.db.settings.delete_many({})
         await self.assertCode("configuration_required", self.reserve())
@@ -284,6 +320,19 @@ class ComponentMongoTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.stock(), 0)
         self.assertEqual((await self.occupancy())["total_quantity"], 4)
 
+    async def test_real_receipt_increment_roundoff_does_not_block_valid_items(self):
+        from inventory_receipt_service import place_inventory_receipt
+        for receipt, amount in [("fraction-one", 0.1), ("fraction-two", 0.2)]:
+            await place_inventory_receipt(self.db, merchant_id="owner", location_id="loc", receipt_id=receipt,
+                inventory_item={"item_type": "stock_component", "resource_id": "r", "receipt_id": receipt, "quantity": amount},
+                quantity=amount, scanned_barcode="synthetic", occurred_at=CREATED)
+        await self.db[service.PRODUCT_BINDINGS].update_one({"id": "b"}, {"$set": {"quantity": 0.1}})
+        await self.reserve(qty=1)
+        await self.consume()
+        items = (await self.occupancy())["items"]
+        self.assertEqual(sum(Decimal(str(item["quantity"])) for item in items), Decimal("14.2"))
+        self.assertEqual((await self.occupancy())["total_quantity"], 14.2)
+
     async def test_outside_stock_change_cannot_consume_another_orders_reserve(self):
         await self.reserve("one", 2)
         await self.reserve("two", 2)
@@ -302,7 +351,7 @@ class ComponentMongoTests(unittest.IsolatedAsyncioTestCase):
             "component_provenance": proof})
         line = self.line(2, prebuilt_receipts=[{"receipt_id": "finished-receipt", "quantity": 2}])
         # Later recipe changes do not charge a manufactured item again.
-        await self.db[service.PRODUCT_BINDINGS].update_one({"id": "b"}, {"$set": {"quantity": 50}})
+        await self.db[service.PRODUCT_BINDINGS].delete_many({"user_id": "owner"})
         await self.reserve("customer-one", lines=[line])
         await self.assertCode("provenance_already_claimed", self.reserve("customer-two", lines=[line]))
         await self.cancel("customer-one")

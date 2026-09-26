@@ -17,7 +17,7 @@ const valueId = (value) => String(value ?? "");
 const money = (value) => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
 const freshLine = () => ({
     item_type: "PRODUCT", product_id: "", variant_id: "", resource_id: "", category_id: "",
-    product_name: "", sku: "", quantity: "1", unit_cost: "", cost_basis: "unit", line_total: "",
+    product_name: "", sku: "", catalog_query: "", quantity: "1", unit_cost: "", cost_basis: "unit", line_total: "",
 });
 const freshForm = () => ({
     supplier_counterparty_id: "", invoice_number: "", invoice_date: todaySA(), due_date: "",
@@ -182,6 +182,7 @@ export function InvoiceDialog({ suppliers, catalog, editing, onClose, onSaved })
         notes: editing.notes || "", invoice_number: editing.invoice_number || "",
         lines: (editing.lines || []).map((line) => updatePurchaseLine({
             ...freshLine(), ...line, quantity: String(line.quantity),
+            sku: line.code || line.sku || "",
             unit_cost: String(line.unit_cost ?? line.unit_price ?? ""),
         }, "unit_cost", String(line.unit_cost ?? line.unit_price ?? ""))),
     } : freshForm());
@@ -262,10 +263,11 @@ export function InvoiceDialog({ suppliers, catalog, editing, onClose, onSaved })
                         {readOnly ? <p>{line.product_name} · {line.sku || "بدون SKU"}</p> : <div className="grid gap-3 md:grid-cols-3">
                             <Field label="نوع البند"><select className={inputCls} value={line.item_type} data-testid={"pinv-line-" + index + "-type"} onChange={(event) => replaceLine(index, (old) => ({ ...freshLine(), ...(old.id ? { id: old.id } : {}), item_type: event.target.value }))}><option value="PRODUCT">منتج</option><option value="STOCK_COMPONENT">مكوّن مخزني</option></select></Field>
                             {line.item_type === "PRODUCT" ? <>
+                                <Field label="بحث بالاسم أو SKU أو barcode"><input className={inputCls} value={line.catalog_query || ""} data-testid={"pinv-line-" + index + "-search"} onChange={(event) => replaceLine(index, (old) => ({ ...old, catalog_query: event.target.value }))} /></Field>
                                 <Field label="المنتج"><select className={inputCls} value={line.product_id || ""} data-testid={"pinv-line-" + index + "-product"} onChange={(event) => replaceLine(index, (old) => {
                                     const row = catalog.products.find((item) => valueId(item.product_id ?? item.id) === event.target.value);
                                     return { ...old, product_id: event.target.value, variant_id: "", product_name: row?.name || "", sku: row?.sku || "" };
-                                })}><option value="">اختر المنتج</option>{catalog.products.map((row) => <option key={row.product_id ?? row.id} value={row.product_id ?? row.id}>{row.name} · {row.sku || "بدون SKU"}</option>)}</select></Field>
+                                })}><option value="">اختر المنتج</option>{catalog.products.filter((row) => valueId(row.product_id ?? row.id) === valueId(line.product_id) || [row.name, row.sku, row.barcode, ...(row.variants || []).flatMap((variant) => [variant.name, variant.sku, variant.barcode])].some((value) => String(value || "").toLowerCase().includes((line.catalog_query || "").trim().toLowerCase()))).map((row) => <option key={row.product_id ?? row.id} value={row.product_id ?? row.id}>{row.name} · {row.sku || "بدون SKU"} · {row.barcode || ""}</option>)}</select></Field>
                                 {(product?.variants_required || product?.variants?.length > 0) && <Field label="خيار المنتج"><select className={inputCls} value={line.variant_id || ""} data-testid={"pinv-line-" + index + "-variant"} onChange={(event) => replaceLine(index, (old) => ({ ...old, variant_id: event.target.value, sku: product.variants.find((row) => valueId(row.variant_id) === event.target.value)?.sku || "" }))}><option value="">اختر الخيار المحدد</option>{(product.variants || []).map((row) => <option key={row.variant_id} value={row.variant_id}>{row.name || row.sku || row.variant_id}</option>)}</select></Field>}
                             </> : <>
                                 <Field label="تصنيف المكوّن"><select className={inputCls} value={line.category_id || ""} data-testid={"pinv-line-" + index + "-category"} onChange={(event) => replaceLine(index, (old) => ({ ...old, category_id: event.target.value, resource_id: "", product_name: "", sku: "" }))}><option value="">اختر التصنيف</option>{catalog.categories.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></Field>
@@ -412,7 +414,7 @@ function invoiceStateLabel(invoice) {
 
 export function ApprovalDialog({ invoice: initialInvoice, catalog, onClose, onSaved }) {
     const [invoice, setInvoice] = useState(initialInvoice);
-    const [receipts, setReceipts] = useState(() => initialInvoice.lines.map((line) => ({
+    const [receipts, setReceipts] = useState(() => initialInvoice.operation?.request?.receipts || initialInvoice.lines.map((line) => ({
         line_id: line.id, location_id: "", scanned_location_barcode: "", preparation_state: "requires_preparation",
     })));
     const [busy, setBusy] = useState(false);
@@ -420,7 +422,10 @@ export function ApprovalDialog({ invoice: initialInvoice, catalog, onClose, onSa
     const [error, setError] = useState("");
     const submitting = useRef(false);
     const status = operationStatus(invoice);
-    const blockedOperation = uncertain || (!!status && !["failed", "succeeded"].includes(status));
+    const frozenRequest = invoice.operation?.request;
+    const resumable = invoice.state === "approving" && ["pending", "failed", "recovery_required"].includes(status)
+        && frozenRequest?.operation_id === invoice.approval_operation_id && frozenRequest?.expected_revision === invoice.revision;
+    const blockedOperation = uncertain || (!resumable && !!status && !["failed", "succeeded"].includes(status));
     const updateReceipt = (index, key, value) => setReceipts((current) => current.map((row, i) =>
         i === index ? { ...row, [key]: value } : row));
     const refresh = async () => {
@@ -431,14 +436,15 @@ export function ApprovalDialog({ invoice: initialInvoice, catalog, onClose, onSa
             setError("تغيرت مراجعة الفاتورة؛ أغلق هذه النافذة وأعد فتح الفاتورة لمراجعة جميع البنود.");
         } else setUncertain(false);
         setInvoice(latest);
+        if (latest.operation?.request?.receipts) setReceipts(latest.operation.request.receipts);
         await onSaved();
         return latest;
     };
     const submit = async (event) => {
         event.preventDefault();
-        if (submitting.current || blockedOperation || !isManagedDraft(invoice)) return;
+        if (submitting.current || blockedOperation || (!isManagedDraft(invoice) && !resumable)) return;
         let payload;
-        try { payload = buildFullPurchaseApproval(invoice, receipts, catalog); }
+        try { payload = resumable ? frozenRequest : buildFullPurchaseApproval(invoice, receipts, catalog); }
         catch (err) { setError(err.message); return; }
         submitting.current = true; setBusy(true); setError("");
         try {
@@ -466,7 +472,7 @@ export function ApprovalDialog({ invoice: initialInvoice, catalog, onClose, onSa
             {status && <p role="status">حالة العملية: {status}</p>}
             <fieldset disabled={busy || blockedOperation || !isManagedDraft(invoice)} className="space-y-3">
                 {invoice.lines.map((line, index) => <section key={line.id} className="space-y-3 rounded-lg border p-3">
-                    <h3 className="font-bold">{line.product_name} · {line.sku} · الكمية كاملة: {line.quantity}</h3>
+                    <h3 className="font-bold">{line.product_name} · {line.code || line.sku} · الكمية كاملة: {line.quantity}</h3>
                     <div className="grid gap-3 md:grid-cols-3">
                         <Field label={"خانة البند " + (index + 1)}><select className={inputCls} value={receipts[index]?.location_id || ""} onChange={(event) => updateReceipt(index, "location_id", event.target.value)} data-testid={"pinv-receipt-" + index + "-location"}><option value="">اختر الخانة</option>{catalog.locations.map((row) => <option key={row.id} value={row.id}>{row.code} · {row.warehouse_id}</option>)}</select></Field>
                         <Field label={"باركود خانة البند " + (index + 1)}><input className={inputCls} value={receipts[index]?.scanned_location_barcode || ""} onChange={(event) => updateReceipt(index, "scanned_location_barcode", event.target.value)} data-testid={"pinv-receipt-" + index + "-barcode"} /></Field>
@@ -475,6 +481,7 @@ export function ApprovalDialog({ invoice: initialInvoice, catalog, onClose, onSa
                 </section>)}
                 <button type="submit" className={buttonCls} data-testid="pinv-approve-receive">اعتماد واستلام جميع البنود</button>
             </fieldset>
+            {resumable && <button type="submit" className={buttonCls} disabled={busy || blockedOperation} data-testid="pinv-resume-approval">إعادة محاولة العملية المحفوظة دون تغيير البنود أو الخانات</button>}
             <button type="button" disabled={busy} className="rounded-lg border px-4 py-2" onClick={async () => {
                 setBusy(true);
                 try { await refresh(); } catch (err) { setUncertain(true); setError(failureMessage(err, "تعذر التحقق من العملية.")); }

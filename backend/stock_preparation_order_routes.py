@@ -333,6 +333,10 @@ def stock_preparation_order_fingerprint(
                         for row in item.specifications
                     ]
                 ),
+                "exact_specifications": {
+                    normalize_specification_name(row.name): _text(row.value)
+                    for row in item.specifications
+                },
             }
             for item in payload.items
         ],
@@ -399,6 +403,26 @@ def apply_received_quantities(
     }
 
 
+def _stock_component_lines(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Preserve the verified Salla option identities, not PDF display text."""
+    lines = []
+    for row in items:
+        selected = row.get("salla_option_selections") or []
+        options = [{"option_id": value.get("field_id"), "option_name": value.get("field_name"),
+                    "value_id": value.get("value_id"), "value_name": value.get("value_name"),
+                    "value": value.get("value_name")}
+                   for value in selected if value.get("source") == "option"]
+        fields = [{"field_id": value.get("field_id"), "field_name": value.get("field_name"),
+                   "value": value.get("actual_value", value.get("value_name"))}
+                  for value in selected if value.get("source") == "custom_field"]
+        lines.append({
+            "order_line_id": row["id"], "product_id": row.get("salla_product_id") or row.get("mezan_product_id"),
+            "quantity": row["quantity"], "options_raw": options, "custom_fields": fields,
+            "options_normalized": {value["option_name"]: value["value_name"] for value in options},
+        })
+    return lines
+
+
 def next_stock_preparation_status(
     *,
     current_status: str,
@@ -433,6 +457,8 @@ def next_stock_preparation_status(
 
 
 async def ensure_stock_preparation_indexes(db: Any) -> None:
+    from stock_component_consumption_service import ensure_component_consumption_indexes
+    await ensure_component_consumption_indexes(db)
     await db[STOCK_PREPARATION_ORDERS].create_index(
         [("user_id", ASCENDING), ("id", ASCENDING)],
         unique=True,
@@ -942,6 +968,12 @@ def make_stock_preparation_order_router(
                         "value": exc.value,
                     },
                 ) from exc
+            # Canonical inventory matching case-folds labels; personalized
+            # provenance must retain the actual requested text independently.
+            exact_specs = {normalize_specification_name(row.name): _text(row.value) for row in requested.specifications}
+            for selection in salla_selections:
+                if selection.get("source") == "custom_field":
+                    selection["actual_value"] = exact_specs.get(normalize_specification_name(selection["field_name"]))
             inventory_sku = _text(
                 (selected_variant or {}).get("sku")
                 or product.get("sku")
@@ -1036,12 +1068,7 @@ def make_stock_preparation_order_router(
             db, merchant_id=merchant_id, order_id=f"stock-preparation:{order_id}",
             source_version=1, source_created_at=now, actor_id=context["actor_id"],
             warehouse_ids=[warehouse_id],
-            lines=[{
-                "order_line_id": row["id"],
-                "product_id": row.get("salla_product_id") or row.get("mezan_product_id"),
-                "quantity": row["quantity"], "options_raw": row.get("salla_option_selections") or [],
-                "options_normalized": row.get("specifications") or {},
-            } for row in order_items],
+            lines=_stock_component_lines(order_items),
         )
         order["component_plan_id"] = component_plan["plan_id"]
         try:
