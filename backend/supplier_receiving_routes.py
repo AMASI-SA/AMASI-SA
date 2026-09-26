@@ -885,10 +885,13 @@ def piece_scan_blocker(piece: dict[str, Any]) -> dict[str, Any] | None:
     """Return an explicit fail-closed reason for a non-receivable piece."""
     status = _text(piece.get("status")) or PIECE_STATUS_ASSIGNED
     if status == PIECE_STATUS_RECEIVED or piece.get("received_at"):
+        received_at = piece.get("received_at")
+        if hasattr(received_at, "isoformat"):
+            received_at = received_at.isoformat()
         return {
             "code": "supplier_piece_already_received",
             "message": "تم استلام هذه القطعة سابقًا؛ لم تُسجّل مرة ثانية.",
-            "received_at": piece.get("received_at"),
+            "received_at": received_at,
             "received_by_name": piece.get("received_by_name"),
             "session_reference": piece.get("supplier_receiving_reference"),
         }
