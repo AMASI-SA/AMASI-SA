@@ -12,12 +12,13 @@ from fastapi import HTTPException
 from order_engine import service as order_service
 from order_engine.repository import MongoOrderRepository
 
-_UNDER_REVIEW = frozenset({
-    "under review", "waiting review", "pending review",
-    "بانتظار المراجعة", "بإنتظار المراجعة", "انتظار المراجعة",
-    # Salla can expose slug=under_review while the localized current label is
-    # "تم المراجعة". Treat both Arabic variants as the same waiting state.
-    "تم المراجعة", "تمت المراجعة",
+_WAITING_REVIEW_ELIGIBLE = frozenset({
+    # Business rule for the first "بانتظار المراجعة" stage in AMASI:
+    # only orders whose CURRENT Salla status is reviewed or processing may
+    # remain actionable here. The internal stage name must never be confused
+    # with Salla's pre-review under_review status.
+    "reviewed", "تم المراجعة", "تمت المراجعة",
+    "processing", "in progress", "قيد التنفيذ", "جاري التنفيذ",
 })
 
 
@@ -29,12 +30,15 @@ def order_waiting_fields(order: Any) -> dict[str, Any]:
     status = _text(getattr(order, "status", None))
     native = _text(getattr(order, "status_native", None))
     # Order Engine's native field applies current/custom status precedence.
-    # Never let an old parent `under_review` override a current native status.
+    # Eligibility is intentionally limited to the two current Salla workflow
+    # states approved for this AMASI stage: reviewed or processing.
     effective = " ".join((native or status).replace("_", " ").casefold().split())
     return {
         "order_status": status or None,
         "order_status_native": native or None,
-        "waiting_review_eligible": bool(order is not None and effective in _UNDER_REVIEW),
+        "waiting_review_eligible": bool(
+            order is not None and effective in _WAITING_REVIEW_ELIGIBLE
+        ),
     }
 
 
