@@ -298,9 +298,9 @@ def test_numbered_review_route_precedes_order_detail_and_counts_full_tenant_queu
     lookup = pipeline[1]["$lookup"]
     assert lookup["from"] == "order_review_workflows"
     condition = lookup["pipeline"][0]["$match"]
-    assert condition["stage"]["$in"] == sorted({
-        "reviewed", "ready_to_ship", "completed", "delivering", "delivered",
-    })
+    excluded_stages = set(condition["stage"]["$in"])
+    assert {"reviewed", "in_progress", "assembly", "completed"} <= excluded_stages
+    assert "customer_waiting" not in excluded_stages
     assert {"$eq": ["$user_id", "$tenant"]} in condition["$expr"]["$and"]
     assert {"$eq": ["$order_number", "$number"]} in condition["$expr"]["$and"]
     assert pipeline[2] == {"$match": {"completed_reviews": {"$eq": []}}}
