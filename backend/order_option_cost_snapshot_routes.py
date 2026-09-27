@@ -72,6 +72,11 @@ def selected_option_tokens(item: Any) -> set[tuple[str, str]]:
         )
         for selected_value in selected_values:
             if isinstance(selected_value, dict):
+                # Multi-select canonical values carry an independent identity
+                # per selection, not a single row-level value_id.
+                selected_id = selected_value.get("id") or selected_value.get("value_id")
+                if option_id not in (None, "") and selected_id not in (None, ""):
+                    tokens.add((f"id:{option_id}", f"id:{selected_id}"))
                 selected_value = (
                     selected_value.get("name")
                     or selected_value.get("value")

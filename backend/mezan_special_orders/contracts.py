@@ -110,12 +110,15 @@ class OptionRule(Contract):
     label: Text
     required: bool = True
     choices: tuple[Text, ...] = ()  # Empty means customer-specified text.
+    choice_ids: tuple[tuple[Text, Key], ...] = ()
+    source_option_id: Key | None = None
+    selection_mode: Literal["single", "multi"] = "single"
     max_length: Annotated[StrictInt, Field(ge=1, le=3000)] = 300
 
 
 class OptionValue(Contract):
     key: Key
-    value: Annotated[str, Field(min_length=1, max_length=3000)]
+    value: Annotated[str, Field(min_length=1, max_length=3000)] | Annotated[tuple[Text, ...], Field(min_length=1, max_length=100)]
 
 
 class Product(Contract):
@@ -123,11 +126,14 @@ class Product(Contract):
     tenant_id: Key
     product_id: Key
     variant_id: Key | None = None
-    sku: Text
+    sku: Text | None = None
     name: Text
+    barcode: Text | None = None
+    image_urls: Annotated[tuple[Annotated[str, Field(min_length=1, max_length=2048)], ...], Field(max_length=30)] = ()
     image_url: str | None = Field(default=None, max_length=2048)
     option_rules: tuple[OptionRule, ...] = ()
     requires_options: bool = False
+    variant_selections: tuple[OptionValue, ...] = ()
     catalog_revision: Text
 
     @model_validator(mode="after")
@@ -137,6 +143,14 @@ class Product(Contract):
             raise ValueError("duplicate_option_rule")
         if self.requires_options and not self.option_rules:
             raise ValueError("option_schema_unavailable")
+        names = [r.label.casefold() for r in self.option_rules]
+        if len(names) != len(set(names)):
+            raise ValueError("ambiguous_option_label")
+        fixed_keys = [v.key for v in self.variant_selections]
+        if len(fixed_keys) != len(set(fixed_keys)) or set(fixed_keys) - set(keys):
+            raise ValueError("invalid_variant_option_binding")
+        if self.variant_selections and not self.variant_id:
+            raise ValueError("variant_selection_without_variant")
         return self
 
 
@@ -166,7 +180,7 @@ class Selection(Contract):
     variant_id: Key | None = None
     quantity: Quantity = 1
     # None inherits the original; empty explicitly requests no options.
-    options: tuple[OptionValue, ...] | None = None
+    options: Annotated[tuple[OptionValue, ...], Field(max_length=100)] | None = None
     substitution_reason: str | None = Field(default=None, min_length=3, max_length=500)
     customer_charge_minor: Minor = 0  # Total for this entire line, NOT unit price.
 

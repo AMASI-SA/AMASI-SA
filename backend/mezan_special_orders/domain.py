@@ -49,6 +49,9 @@ def validated_options(product: Product, values: tuple[OptionValue, ...]) -> list
         raise DomainError("duplicate_option", 422)
     if set(selected) - set(rules):
         raise DomainError("unknown_option", 422)
+    for fixed in product.variant_selections:
+        if selected.get(fixed.key) != fixed.value:
+            raise DomainError("selected_options_do_not_match_variant", 422)
     out = []
     for rule in product.option_rules:  # Preserve source display order for printing.
         value = selected.get(rule.key)
@@ -56,9 +59,23 @@ def validated_options(product: Product, values: tuple[OptionValue, ...]) -> list
             if rule.required:
                 raise DomainError("required_option_missing", 422)
             continue
-        if len(value) > rule.max_length or (rule.choices and value not in rule.choices):
+        values = list(value) if isinstance(value, tuple) else [value]
+        if rule.selection_mode == "single" and len(values) != 1:
+            raise DomainError("multiple_values_for_single_option", 422)
+        if len(values) != len(set(values)):
+            raise DomainError("duplicate_selected_option_value", 422)
+        if any(len(v) > rule.max_length or (rule.choices and v not in rule.choices) for v in values):
             raise DomainError("invalid_option_value", 422)
-        out.append({"key": rule.key, "name": rule.label, "value": value})
+        selected_value = values if rule.selection_mode == "multi" else values[0]
+        row = {"key": rule.key, "name": rule.label, "value": selected_value}
+        if rule.source_option_id:
+            row["option_id"] = rule.source_option_id
+        choice_ids = dict(rule.choice_ids)
+        if rule.selection_mode == "single" and values[0] in choice_ids:
+            row["value_id"] = choice_ids[values[0]]
+        elif rule.selection_mode == "multi":
+            row["values"] = [{"name": v, "id": choice_ids[v]} if v in choice_ids else {"name": v} for v in values]
+        out.append(row)
     return out
 
 

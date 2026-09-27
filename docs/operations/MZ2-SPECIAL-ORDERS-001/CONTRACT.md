@@ -107,3 +107,50 @@ owner release authorization. Creating a Draft PR or passing nucleus tests is not
 - Pydantic frozen models are not deep immutability; nested contract collections are
   tuples and repository boundary values are deep-copied:
   https://pydantic.dev/docs/validation/2.12/concepts/models/
+
+
+## R2 — actual read adapters and canonical compatibility (activation remains off)
+
+Implemented additions:
+- `ExistingCatalogAdapter` reads the existing tenant-scoped `mezan_products_v2`
+  cache and the canonical original-order reader. It preserves real choice IDs,
+  free text, multi-select choices, product/variant IDs, SKU, barcode and galleries.
+  Variant choices are validated against the catalog; an unknown/incomplete schema
+  fails closed instead of exporting a product without required options. File-upload
+  product options require a separate secure option-evidence binding and remain
+  explicitly unsupported in this adapter. No catalog refresh/provider write occurs.
+- Canonical `OrderSourceDTO` and `OrderItemSourceDTO` accept `mezan` additively;
+  default is still `salla`. Canonical order purpose/original/local ID are explicit.
+  Special metadata is omitted from ordinary Salla wire payloads to preserve
+  backward compatibility with clients that reject unknown fields.
+- `MongoOrderRepository(db, include_mezan=True)` is an explicit read opt-in, NOT a
+  production activation. Existing application factories do not pass it and retain
+  Salla-only behavior. Get/batch/list and numbered pending-review discovery support
+  both real sources without inserting a fake local order into `unified_orders`.
+- Local read queues derive current stage from `order_review_workflows`, not an
+  asynchronous copied stage, while checking order identity and frozen-source
+  integrity. Shared `in_progress` maps to canonical processing. Cursor ordering and
+  pagination remain stable across the two sources and tenant-scoped.
+- Current local option snapshots travel through the real OrderItem mapper, the
+  real inventory specification helper and the real option-cost binding helper.
+  All selected values remain present once in display/print data. The shared cost
+  helper now recognizes each ID in a genuine multi-select value list; its existing
+  single-value and name-based behavior is preserved.
+
+R2 does not mount a route, enable a factory, issue a carrier label, or claim the
+existing state-changing workflow/MZ2/Android integration is complete. Shared
+review/preparation status mutations still need source-aware integration before
+any local order may be created operationally. These are real implementation and
+release blockers, not merely a request to run more tests.
+
+R2 local evidence: 176 passed, 7 skipped (all real-Mongo cases), compileall and
+`git diff --check` exit 0. Frozen ordinary-order baseline: 77 passed; the candidate
+passed the same 77 plus 99 nucleus/source/HTTP tests. The local source fixture does
+not include the frontend. Its one frontend-source assertion is scheduled in CI
+with a complete repository checkout, not counted as a local pass.
+
+An initial attempt ran the two static contract tests from the repository root,
+producing two file-path failures on BOTH baseline and candidate. Rerunning from
+`backend/` resolved the backend assertion; the frontend assertion cannot run on
+this backend-only fixture. The test was not weakened; CI runs both from the
+correct directory with the original frontend present. No production data used.

@@ -299,6 +299,12 @@ async def list_orders(
         status_exact=normalized_status_exact,
     )
 
+    if getattr(repository, "supports_mezan_orders", False) is True:
+        return await _merge_local_page(repository, rows, user_id=str(user_id),
+            safe_limit=safe_limit, fetch_limit=fetch_limit,
+            before_order_date=before_order_date, before_order_number=before_order_number,
+            status_group=normalized_status_group, status_exact=normalized_status_exact)
+
     items: list[OrderDTO] = []
     skipped_invalid = 0
     last_valid_order_date: Optional[str] = None
@@ -325,6 +331,13 @@ async def get_order(repository: OrderRepository, *, user_id: str, order_number: 
     normalized_order_number = str(order_number or "").strip()
     if not normalized_order_number:
         raise OrderNotFoundError("order not found")
+    if getattr(repository, "supports_mezan_orders", False) is True:
+        from mezan_special_orders.canonical_adapter import is_local_order_number, to_canonical_order
+        if is_local_order_number(normalized_order_number):
+            local = await repository.get_mezan_order(user_id=str(user_id), order_number=normalized_order_number)
+            if local is None:
+                raise OrderNotFoundError("local order not found")
+            return to_canonical_order(local, tenant_id=str(user_id))
     row = await repository.get_salla_order(user_id=str(user_id), order_number=normalized_order_number)
     if row is None:
         raise OrderNotFoundError(f"order not found: {normalized_order_number}")
@@ -348,10 +361,15 @@ async def get_orders(
     ))
     if not normalized:
         return {}
+    local_numbers = []
+    if getattr(repository, "supports_mezan_orders", False) is True:
+        from mezan_special_orders.canonical_adapter import is_local_order_number
+        local_numbers = [number for number in normalized if is_local_order_number(number)]
+    salla_numbers = [number for number in normalized if number not in set(local_numbers)]
     rows = await repository.get_salla_orders(
         user_id=str(user_id),
-        order_numbers=normalized,
-    )
+        order_numbers=salla_numbers,
+    ) if salla_numbers else []
     result: dict[str, OrderDTO] = {}
     for row in rows:
         try:
@@ -361,4 +379,38 @@ async def get_orders(
             )
         except OrderMappingError:
             continue
+    if local_numbers:
+        from mezan_special_orders.canonical_adapter import to_canonical_order
+        local_rows = await repository.get_mezan_orders(user_id=str(user_id), order_numbers=local_numbers)
+        for local in local_rows:
+            dto = to_canonical_order(local, tenant_id=str(user_id))
+            result[dto.order_number] = dto
     return result
+
+
+async def _merge_local_page(repository, salla_rows, *, user_id, safe_limit, fetch_limit,
+                            before_order_date, before_order_number, status_group, status_exact):
+    """One stable cursor over two real sources, not synthetic Salla documents."""
+    from mezan_special_orders.canonical_adapter import to_canonical_order
+    local_rows = await repository.list_mezan_orders(user_id=user_id, limit=fetch_limit,
+        before_order_date=before_order_date, before_order_number=before_order_number,
+        status_group=status_group, status_exact=status_exact)
+    candidates = [(r.order_date, r.order_number, "salla", r) for r in salla_rows]
+    candidates.extend((r["created_at"], r["order_number"], "mezan", r) for r in local_rows)
+    candidates.sort(key=lambda row: (row[0], row[1]), reverse=True)
+    items, skipped = [], 0
+    last_key = None
+    for date, number, provider, row in candidates:
+        try:
+            dto = to_canonical_order(row, tenant_id=user_id) if provider == "mezan" else _map_row(row.salla_raw, current_status=row.current_status)
+        except OrderMappingError:
+            skipped += 1
+            continue
+        # Invalid local snapshots raise explicitly, rather than silently hiding a
+        # customer order or falsely attributing it to Salla.
+        items.append(dto)
+        last_key = (date, number)
+        if len(items) == safe_limit:
+            break
+    next_cursor = _encode_cursor(*last_key) if last_key and len(items) == safe_limit else None
+    return OrderPage(items=items, next_cursor=next_cursor, skipped_invalid=skipped)

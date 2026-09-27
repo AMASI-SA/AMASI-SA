@@ -1,33 +1,55 @@
 {
   "task_id": "MZ2-SPECIAL-ORDERS-001",
-  "checkpoint": "R1_ISOLATED_NUCLEUS",
+  "checkpoint": "R2_CANONICAL_SOURCE_READS",
   "status": "IN_PROGRESS_NOT_READY_TO_DEPLOY",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "feature/mezan-special-orders-core-20260927",
   "base_sha": "1cbeccd84d58fb3397dcd42822d5feb92de06275",
   "base_tree": "5fc352584a79d3af700772af2ae4405c25cbca91",
   "ui_pr_preserved": 1167,
-  "scope": "New isolated package, opt-in unmounted router, tests and contract; existing runtime sources unchanged.",
+  "scope": "Core plus actual catalog/read adapters and five additive existing backend changes. Runtime factories remain Salla-only by default; no route activation or financial posting.",
   "local_verification": {
-    "command": "PYTHONPATH=backend python -m pytest -q backend/mezan_special_orders/tests",
+    "command": "cd backend && PYTHONPATH=/mnt/data/mezan-test-deps:. python -m pytest -q mezan_special_orders/tests <documented ordinary-order subset>",
     "exit_code": 0,
-    "passed": 70,
-    "skipped": 4,
-    "skipped_reason": "Dedicated isolated Mongo test URI not supplied",
+    "passed": 176,
+    "skipped": 7,
+    "skipped_reason": "Dedicated real Mongo unavailable locally",
     "compileall_exit_code": 0,
+    "diff_check_exit_code": 0,
     "python": "3.13.5",
-    "dependencies": {
-      "pydantic": "2.13.4",
-      "fastapi": "0.128.2",
-      "httpx": "0.28.1",
-      "pytest": "9.0.2"
-    }
+    "fixture": "Verified backend-only source archive; pure installed-driver Python files from isolated CI. Not a full application checkout."
   },
-  "real_mongo_ci": "NOT_YET_OBSERVED",
-  "full_repo_regression": "NOT_RUN",
+  "real_mongo_ci": {
+    "status": "PASS",
+    "workflow_run_id": 36345453610,
+    "job_id": 108693597122,
+    "source_sha": "ce792b863f1224c5dbf3a2e0dd15bdaeb7967ad0",
+    "checked_out_pr_merge_sha": "97468105c13ac226918b62b257c447d2145688e5",
+    "verified_tested_tree": "19392dd5404654cb720d3a8af2f2430140392767",
+    "source_and_pr_merge_trees_match": true,
+    "passed": 74,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "pytest_warnings": 1,
+    "python": "3.11.16",
+    "mongo": "7.0.43",
+    "artifact_id": 10939649265,
+    "artifact_zip_sha256": "dd8f19838753332932aa2ee96444cba1b39d1f8e745006419dc63e54c808ed52",
+    "junit_xml_sha256": "0ea6c4644d05fe6e29fcc18597a2c9c1adff27f2c2e97132e4217bd9fa739e7f",
+    "artifact_downloaded_and_xml_counts_verified": true,
+    "note": "74 tests include 4 real-Mongo storage tests. Actual Salla, MZ2, fulfillment, Android and report integrations are not exercised."
+  },
+  "full_repo_regression": "NOT_RUN; documented ordinary-order subset only",
   "actual_fulfillment_and_mz2_e2e": "NOT_IMPLEMENTED_OR_RUN",
   "android_compatibility": "NOT_TESTED",
-  "live_source_adapters": "UNBOUND_FAIL_CLOSED",
+  "live_source_adapters": {
+    "catalog": "IMPLEMENTED_SCOPED_READ_ONLY",
+    "canonical_order_read": "IMPLEMENTED_EXPLICIT_OPT_IN",
+    "evidence": "UNBOUND",
+    "MZ2": "UNBOUND",
+    "fulfillment_mutations": "NOT_IMPLEMENTED"
+  },
   "router_registered": false,
   "creation_enabled": false,
   "commands_enabled": false,
@@ -39,13 +61,24 @@
   "production_changed_by_this_task": false,
   "release_guard_or_intent_changed": false,
   "remaining": [
-    "Real canonical order/catalog/evidence adapters",
-    "Existing review and fulfillment source routing and freeze handshake",
-    "Actual MZ2 ledger movement proof and posting-owner integration",
-    "Supplier/assembly/label and mobile parity",
-    "Persisted Salla balance sidecar and collection integration",
-    "KPI report consumers",
-    "Full baseline/candidate regression and rollback drill"
+    "Source-aware shared review/preparation mutations and freeze handshake",
+    "Private evidence upload/read and actual carrier-label/courier print binding",
+    "MZ2 payment and expense posting-owner integration with read-back proof",
+    "Persisted Salla balance sidecar, collection and remittance integration",
+    "Actual report consumers, supplier/assembly/Android parity",
+    "Full ordinary-order lifecycle regression, UAT and rollback drill"
   ],
-  "next_safe_action": "Review isolated core; run dedicated real-Mongo CI; bind audited adapters without activating production. Do not merge UI PR #1167 or deploy this checkpoint."
+  "next_safe_action": "Verify R2 real-Mongo and ordinary-order CI, then implement shared workflow mutation/evidence/MZ2/labels/mobile/report bindings while activation stays off. No merge or deploy.",
+  "pull_request": 1171,
+  "implementation_sha": "ce792b863f1224c5dbf3a2e0dd15bdaeb7967ad0",
+  "implementation_tree": "19392dd5404654cb720d3a8af2f2430140392767",
+  "pr_number": 1171,
+  "ordinary_order_local_baseline": {
+    "passed": 77,
+    "failed": 0,
+    "candidate_same_tests_passed": 77,
+    "frontend_static_case": "CI_ONLY_FULL_CHECKOUT_REQUIRED"
+  },
+  "r2_ci": "NOT_YET_OBSERVED",
+  "runtime_factories_include_mezan": false
 }

@@ -36,7 +36,7 @@ class CanonicalDTO(BaseModel):
 class OrderSourceDTO(CanonicalDTO):
     """Traceability and marketing attribution without raw provider payloads."""
 
-    provider: Literal["salla"] = "salla"
+    provider: Literal["salla", "mezan"] = "salla"
     source_order_id: Optional[str] = None
     source_reference: Optional[str] = None
     source_event: Optional[str] = None
@@ -257,6 +257,12 @@ class OrderDTO(CanonicalDTO):
     status_native: Optional[str] = None
     is_new: bool = False
     is_gift: bool = False
+    # Local special orders are operational orders, not additional Salla sales.
+    order_purpose: Literal["sale", "replacement", "gift", "creator", "marketing"] = Field(
+        default="sale", exclude_if=lambda value: value == "sale",
+    )
+    original_order_number: Optional[str] = Field(default=None, exclude_if=lambda value: value is None)
+    special_order_id: Optional[str] = Field(default=None, exclude_if=lambda value: value is None)
 
     completed_at: Optional[datetime] = None
     cancelled_at: Optional[datetime] = None
