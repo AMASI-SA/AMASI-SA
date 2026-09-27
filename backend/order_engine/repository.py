@@ -418,6 +418,86 @@ class MongoOrderRepository:
                 rows.append(mapped)
         return rows
 
+    async def numbered_pending_review_order_numbers(
+        self,
+        *,
+        user_id: str,
+        page: int,
+        limit: int,
+        workflow_collection: str,
+        completed_stages: set[str],
+    ) -> tuple[list[str], int]:
+        """Page and count the same tenant-scoped review queue in one DB snapshot.
+
+        The status expression matches list_salla_orders.  Exclude workflows
+        before both the page slice and the count, so each page has the same
+        membership and the badge is the full pending-review count.
+        """
+        if page < 1 or not 1 <= limit <= 50:
+            raise ValueError("invalid review page or limit")
+
+        pipeline = [
+            {
+                "$match": {
+                    "user_id": str(user_id),
+                    "raw_by_source.salla_direct": {"$type": "object"},
+                    "order_number": {"$type": "string", "$ne": ""},
+                    "order_date": {"$type": "string", "$ne": ""},
+                    "$expr": {
+                        "$regexMatch": {
+                            "input": {"$toString": _effective_status_expression()},
+                            "regex": _STATUS_PATTERNS["under_review"],
+                            "options": "i",
+                        },
+                    },
+                },
+            },
+            {
+                "$lookup": {
+                    "from": workflow_collection,
+                    "let": {"tenant": "$user_id", "number": "$order_number"},
+                    "pipeline": [
+                        {
+                            "$match": {
+                                "stage": {"$in": sorted(completed_stages)},
+                                "$expr": {
+                                    "$and": [
+                                        {"$eq": ["$user_id", "$tenant"]},
+                                        {"$eq": ["$order_number", "$number"]},
+                                    ],
+                                },
+                            },
+                        },
+                        {"$limit": 1},
+                        {"$project": {"_id": 1}},
+                    ],
+                    "as": "completed_reviews",
+                },
+            },
+            {"$match": {"completed_reviews": {"$eq": []}}},
+            {
+                "$facet": {
+                    "items": [
+                        {"$sort": {"order_date": -1, "order_number": -1}},
+                        {"$skip": (page - 1) * limit},
+                        {"$limit": limit},
+                        {"$project": {"_id": 0, "order_number": 1}},
+                    ],
+                    "count": [{"$count": "value"}],
+                },
+            },
+        ]
+        results = await self._collection.aggregate(pipeline).to_list(length=1)
+        result = results[0] if results else {}
+        numbers = [
+            str(row["order_number"])
+            for row in result.get("items", [])
+            if row.get("order_number")
+        ]
+        count = result.get("count", [])
+        total = int(count[0]["value"]) if count else 0
+        return numbers, total
+
     async def get_salla_order(
         self,
         *,

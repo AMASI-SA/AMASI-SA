@@ -1,6 +1,8 @@
 """Stage-one review invariants: image learning, RBAC and status lookup."""
 
 from datetime import datetime, timezone
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 import inspect
 from unittest.mock import AsyncMock, patch
 
@@ -196,6 +198,128 @@ async def test_exact_search_hides_orders_already_completed_in_mezan():
         )
 
     assert found is None
+
+
+class _NumberedAggregateCursor:
+    def __init__(self, result):
+        self.result = result
+
+    async def to_list(self, length):
+        assert length == 1
+        return [self.result]
+
+
+class _NumberedFindCursor:
+    def __init__(self, rows):
+        self.rows = rows
+
+    async def __aiter__(self):
+        for row in self.rows:
+            yield row
+
+
+class _NumberedOrdersCollection:
+    def __init__(self):
+        self.pipeline = None
+        self.rows = {}
+        for index in range(1, 24):
+            number = str(1000 + index)
+            self.rows[number] = {
+                "user_id": "owner-1",
+                "order_number": number,
+                "order_date": f"2026-09-{index:02d}",
+                "order_status": "بانتظار المراجعة",
+                "raw_by_source": {"salla_direct": {
+                    "id": f"source-{number}",
+                    "reference_id": number,
+                    "date": f"2026-09-{index:02d}T12:00:00+03:00",
+                    "status": {"slug": "under_review", "name": "بانتظار المراجعة"},
+                    "customer": {"full_name": "عميل اختبار"},
+                    "amounts": {"total": {"amount": 100, "currency": "SAR"}},
+                    "items": [{"id": f"item-{number}", "product_id": "p1",
+                               "name": "منتج اختبار", "quantity": 1}],
+                }},
+            }
+
+    def aggregate(self, pipeline):
+        self.pipeline = pipeline
+        page_steps = pipeline[-1]["$facet"]["items"]
+        skip = next(step["$skip"] for step in page_steps if "$skip" in step)
+        limit = next(step["$limit"] for step in page_steps if "$limit" in step)
+        numbers = list(reversed(self.rows))
+        result = {
+            "items": [{"order_number": number} for number in numbers[skip:skip + limit]],
+            "count": [{"value": len(numbers)}],
+        }
+        return _NumberedAggregateCursor(result)
+
+    def find(self, query, _projection):
+        assert query["user_id"] == "owner-1"
+        requested = set(query["order_number"]["$in"])
+        return _NumberedFindCursor([
+            row for number, row in self.rows.items() if number in requested
+        ])
+
+
+class _NumberedDB:
+    def __init__(self):
+        self.unified_orders = _NumberedOrdersCollection()
+
+
+def _numbered_review_client(user):
+    db = _NumberedDB()
+
+    async def current_user():
+        return user
+
+    app = FastAPI()
+    app.include_router(make_order_review_router(db, current_user), prefix="/api")
+    return TestClient(app), db
+
+
+def test_numbered_review_route_precedes_order_detail_and_counts_full_tenant_queue():
+    client, db = _numbered_review_client({
+        "id": "employee-1", "created_by": "owner-1", "role": "operations",
+    })
+    with patch("order_review_routes.schedule_salla_auto_sync"):
+        response = client.get("/api/order-reviews-v1/pages?page=2&limit=10")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["page"] == 2
+    assert payload["total_count"] == 23
+    assert [row["order_number"] for row in payload["items"]] == [
+        str(number) for number in range(1013, 1003, -1)
+    ]
+
+    pipeline = db.unified_orders.pipeline
+    assert pipeline[0]["$match"]["user_id"] == "owner-1"
+    assert pipeline[0]["$match"]["$expr"]["$regexMatch"]["regex"].startswith("^")
+    lookup = pipeline[1]["$lookup"]
+    assert lookup["from"] == "order_review_workflows"
+    condition = lookup["pipeline"][0]["$match"]
+    excluded_stages = set(condition["stage"]["$in"])
+    assert {"reviewed", "in_progress", "assembly", "completed"} <= excluded_stages
+    assert "customer_waiting" not in excluded_stages
+    assert {"$eq": ["$user_id", "$tenant"]} in condition["$expr"]["$and"]
+    assert {"$eq": ["$order_number", "$number"]} in condition["$expr"]["$and"]
+    assert pipeline[2] == {"$match": {"completed_reviews": {"$eq": []}}}
+    assert pipeline[-1]["$facet"]["count"] == [{"$count": "value"}]
+
+
+def test_numbered_review_route_rejects_unauthorized_and_invalid_pages():
+    viewer, db = _numbered_review_client({"id": "viewer-1", "role": "viewer"})
+    assert viewer.get("/api/order-reviews-v1/pages").status_code == 403
+    assert viewer.get("/api/order-reviews-v1/pages?page=0").status_code == 422
+    assert viewer.get("/api/order-reviews-v1/pages?limit=51").status_code == 422
+    assert db.unified_orders.pipeline is None
+
+    owner, _ = _numbered_review_client({"id": "owner-1", "role": "owner"})
+    with patch("order_review_routes.schedule_salla_auto_sync"):
+        response = owner.get("/api/order-reviews-v1/pages?page=4&limit=10")
+    assert response.status_code == 200
+    assert response.json()["items"] == []
+    assert response.json()["total_count"] == 23
 
 
 class _GalleryCursor:

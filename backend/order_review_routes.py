@@ -18,7 +18,7 @@ from pymongo.errors import DuplicateKeyError
 from order_engine.models import OrderDTO
 from order_engine.repository import MongoOrderRepository
 from order_engine.salla_refresh import refresh_order_from_salla
-from order_engine.service import InvalidOrderCursorError, OrderNotFoundError, get_order, list_orders
+from order_engine.service import InvalidOrderCursorError, OrderNotFoundError, get_order, get_orders, list_orders
 from order_item_engine.mapper import map_order_item_identities
 from order_engine.product_image_enrichment import enrich_order_item_images
 from order_engine.product_identity_enrichment import enrich_order_item_identity
@@ -596,6 +596,33 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             "items": [order.model_dump(mode="json") for order in page.items if order.order_number not in completed],
             "next_cursor": page.next_cursor,
             "skipped_invalid": page.skipped_invalid,
+        }
+
+    @router.get("/pages")
+    async def list_pending_review_pages(
+        page: int = Query(1, ge=1, le=100_000),
+        limit: int = Query(10, ge=1, le=50),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        reviewer = _require_reviewer(user)
+        merchant_id = _merchant_user_id(reviewer)
+        schedule_salla_auto_sync(db, merchant_id)
+        numbers, total_count = await repository.numbered_pending_review_order_numbers(
+            user_id=merchant_id,
+            page=page,
+            limit=limit,
+            workflow_collection=WORKFLOWS,
+            completed_stages=REVIEW_COMPLETED_STAGES,
+        )
+        orders = await get_orders(repository, user_id=merchant_id, order_numbers=numbers)
+        return {
+            "items": [
+                orders[number].model_dump(mode="json")
+                for number in numbers
+                if number in orders
+            ],
+            "page": page,
+            "total_count": total_count,
         }
 
     @router.get("/reviewed")
