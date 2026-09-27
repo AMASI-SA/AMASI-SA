@@ -21,7 +21,7 @@ from carrier_handoff import (
 )
 from fulfillment_batch_pdf import generate_shipping_batch_pdf
 from fulfillment_carrier_label import sync_completed_carrier_label
-from order_engine.cod_collection import cod_expected_due
+from cod_collection import cod_expected_due
 from order_engine.repository import MongoOrderRepository
 from order_engine.service import OrderNotFoundError, get_order
 from order_engine.shipping_label_service import ShippingLabelError
