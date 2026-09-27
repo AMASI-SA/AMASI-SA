@@ -391,7 +391,7 @@ async def test_remove_exact_piece_from_hundred_piece_draft_and_rescan(env):
 async def test_remove_requires_current_actor_and_exact_preview_without_financial_writes(env):
     db, http, identity = env
     session, pieces = await seed(env, 2)
-    scanned = await post_scan(http, session["id"], pieces[0], "scan-request-guarded")
+    scanned = await post_scan(http, session["id"], pieces[0], "scan-request-guarded", 1)
     assert scanned.status_code == 200
     preview = await http.get(
         f"/supplier-receiving-v1/sessions/{session['id']}/scans/lookup",
