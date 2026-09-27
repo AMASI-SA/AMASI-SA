@@ -16,11 +16,11 @@ import preparation_supplier_dispatch as dispatch
 import supplier_dispatch_waiting_policy as policy
 
 OWNER = {"id": "waiting-owner", "role": "owner", "name": "Synthetic owner"}
-ALIASES = ["under_review", "under review", "waiting_review", "waiting review",
+ELIGIBLE = ["reviewed", "تم المراجعة", "تمت المراجعة",
+            "processing", "in_progress", "قيد التنفيذ", "جاري التنفيذ"]
+BLOCKED = ["under_review", "under review", "waiting_review", "waiting review",
            "pending_review", "pending review", "بانتظار المراجعة", "بإنتظار المراجعة", "انتظار المراجعة",
-           "تم المراجعة", "تمت المراجعة"]
-BLOCKED = ["reviewed", "processing", "in_progress", "قيد التنفيذ",
-           "جاري التنفيذ", "completed", "تم التنفيذ", "تم التوصيل", "shipping", "shipped",
+           "completed", "تم التنفيذ", "تم التوصيل", "shipping", "shipped",
            "جاري التوصيل", "cancelled", "ملغي", "ملغى", "refunded", "returned", "مسترجع", "", "mystery"]
 
 
@@ -68,7 +68,7 @@ async def db():
         client.close()
 
 
-async def seed_order(db, number="A", current="under_review", raw_status=None, raw_name=None, tenant=None):
+async def seed_order(db, number="A", current="reviewed", raw_status=None, raw_name=None, tenant=None):
     raw_status = current if raw_status is None else raw_status
     raw_name = raw_status if raw_name is None else raw_name
     row = {"user_id": tenant or OWNER["id"], "order_number": number,
@@ -115,7 +115,7 @@ def payload(*numbers):
             "file_number": "PF-1", "selections": [{"group_key": "piece:piece-" + n, "quantity": 1} for n in numbers]}
 
 
-@pytest.mark.parametrize("status", ALIASES + BLOCKED)
+@pytest.mark.parametrize("status", ELIGIBLE + BLOCKED)
 @pytest.mark.asyncio
 async def test_workspace_current_status_only_not_piece_snapshot(db, status):
     await seed_order(db, current=status)
@@ -124,7 +124,7 @@ async def test_workspace_current_status_only_not_piece_snapshot(db, status):
     assert reply.status_code == 200, reply.text
     work = reply.json()
     row = work["files"][0]["products"][0]
-    expected = status in ALIASES
+    expected = status in ELIGIBLE
     assert row["waiting_review_eligible"] is expected
     assert row["available_quantity"] == int(expected)
     assert work["summary"]["waiting_review_pieces"] == int(expected)
@@ -160,17 +160,32 @@ async def test_salla_under_review_slug_with_reviewed_arabic_label_stays_visible(
 
 
 @pytest.mark.asyncio
-async def test_distinct_english_reviewed_status_remains_blocked(db):
+@pytest.mark.parametrize("current,raw_status,raw_name", [
+    ("قيد التنفيذ", "processing", "قيد التنفيذ"),
+    ("جاري التنفيذ", "in_progress", "جاري التنفيذ"),
+])
+@pytest.mark.asyncio
+async def test_processing_aliases_remain_eligible_for_first_stage(db, current, raw_status, raw_name):
+    await seed_order(db, current=current, raw_status=raw_status, raw_name=raw_name)
+    await seed_piece(db)
+    work = (await request(db)).json()
+    row = work["files"][0]["products"][0]
+    assert row["waiting_review_eligible"] is True
+    assert row["available_quantity"] == 1
+    assert work["summary"]["waiting_review_pieces"] == 1
+
+
+@pytest.mark.asyncio
+async def test_pre_review_under_review_status_remains_blocked(db):
     await seed_order(
         db,
-        current="reviewed",
-        raw_status="reviewed",
-        raw_name="Reviewed",
+        current="under_review",
+        raw_status="under_review",
+        raw_name="بانتظار المراجعة",
     )
     await seed_piece(db)
     work = (await request(db)).json()
     row = work["files"][0]["products"][0]
-    assert row["order_status"] == "reviewed"
     assert row["waiting_review_eligible"] is False
     assert row["available_quantity"] == 0
     assert work["summary"]["waiting_review_pieces"] == 0
@@ -188,14 +203,14 @@ async def test_missing_or_foreign_order_fails_closed(db):
     assert query["user_id"] == OWNER["id"]
 
 
-@pytest.mark.parametrize("away", ["reviewed", "processing"])
+@pytest.mark.parametrize("away", ["completed", "cancelled"])
 @pytest.mark.asyncio
 async def test_transition_and_return_reuses_same_piece_and_assignment(db, away):
     await seed_order(db)
     before = await seed_piece(db)
     first = (await request(db)).json()
     assert first["summary"]["waiting_review_pieces"] == 1
-    await seed_order(db, current=away, raw_status="under_review")
+    await seed_order(db, current=away, raw_status=away)
     second = (await request(db)).json()
     assert second["files"][0]["products"][0]["waiting_review_eligible"] is False
     assert second["summary"]["available_to_send"] == 0
@@ -210,8 +225,8 @@ async def test_transition_and_return_reuses_same_piece_and_assignment(db, away):
 @pytest.mark.parametrize("grain", ["piece", "product"])
 @pytest.mark.asyncio
 async def test_mixed_product_file_filtered_before_waiting_aggregation(db, grain):
-    await seed_order(db, "A"); await seed_piece(db, "A")
-    await seed_order(db, "B", "processing"); await seed_piece(db, "B")
+    await seed_order(db, "A", "reviewed"); await seed_piece(db, "A")
+    await seed_order(db, "B", "completed"); await seed_piece(db, "B")
     result = (await request(db, grain=grain)).json()
     file = result["files"][0]
     assert file["piece_count"] == 2 and sum(p["quantity"] for p in file["products"]) == 2
@@ -240,7 +255,7 @@ async def test_operational_progress_supplier_accounts_and_history_unchanged(db):
     assert account["sent_quantity"] == account["ready_quantity"] == account["received_quantity"] == 1
 
 
-@pytest.mark.parametrize("status", ["reviewed", "processing", "completed", "cancelled", "refunded", "mystery", "", None])
+@pytest.mark.parametrize("status", ["under_review", "completed", "cancelled", "refunded", "mystery", "", None])
 @pytest.mark.parametrize("mixed", [False, True])
 @pytest.mark.asyncio
 async def test_dispatch_revalidates_and_rejects_entire_request_with_zero_writes(db, monkeypatch, status, mixed):
