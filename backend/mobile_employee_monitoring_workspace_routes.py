@@ -21,6 +21,11 @@ def _text(value: Any) -> str:
     return str(value or "").strip()
 
 
+def monitored_work_account_id(employee: dict[str, Any]) -> str:
+    """Use the login identity that preparation assignment and My Products use."""
+    return _text(employee.get("account_user_id")) or _text(employee.get("id"))
+
+
 async def _monitoring_owner_scope(
     db: Any,
     user: dict[str, Any],
@@ -60,7 +65,8 @@ async def _resolve_monitored_employee(
     """
     employee = await db[EMPLOYEES].find_one(
         {"user_id": owner_id, "id": employee_id},
-        {"_id": 0, "id": 1, "display_name": 1, "status": 1},
+        {"_id": 0, "id": 1, "account_user_id": 1, "display_name": 1,
+         "job_title": 1, "department": 1, "status": 1},
     )
     if employee:
         return employee
@@ -114,7 +120,7 @@ def make_mobile_employee_monitoring_workspace_router(
         workspace = await _employee_workspace(
             db,
             user_id=owner_id,
-            employee_id=employee_id,
+            employee_id=monitored_work_account_id(employee),
             limit=100,
             piece_grain=True,
         )
@@ -136,5 +142,6 @@ def make_mobile_employee_monitoring_workspace_router(
 
 __all__ = [
     "_resolve_monitored_employee",
+    "monitored_work_account_id",
     "make_mobile_employee_monitoring_workspace_router",
 ]
