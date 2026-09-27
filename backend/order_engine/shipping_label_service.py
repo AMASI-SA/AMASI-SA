@@ -15,7 +15,7 @@ from reportlab.graphics import renderSVG
 from reportlab.graphics.barcode.qr import QrCodeWidget
 from reportlab.graphics.shapes import Drawing
 
-from order_engine.cod_collection import cod_expected_due, is_cash_on_delivery
+from cod_collection import cod_expected_due, is_cash_on_delivery
 from salla_integration.service import SallaError, call_salla
 from salla_integration.sync import resync_single_order
 
