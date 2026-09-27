@@ -478,6 +478,7 @@ async def test_numbered_review_page_counts_after_tenant_status_and_workflow_filt
 @pytest.mark.asyncio
 async def test_numbered_review_api_returns_global_count_and_excludes_customer_waiting():
     db = _SearchDB()
+    db.unified_orders = object()
     router = make_order_review_router(db, lambda: {"id": "owner-1", "role": "owner"})
     endpoint = next(
         route.endpoint for route in router.routes
