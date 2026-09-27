@@ -236,6 +236,13 @@ class SupplierReceivingSessionCancelRequest(BaseModel):
     note: str | None = Field(default=None, max_length=1000)
 
 
+class SupplierReceivingPieceRemoveRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    barcode: str = Field(min_length=1, max_length=500)
+    expected_event_id: str = Field(min_length=1, max_length=160)
+
+
 class SupplierInvoiceShareConfirmRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -885,15 +892,23 @@ def piece_scan_blocker(piece: dict[str, Any]) -> dict[str, Any] | None:
     """Return an explicit fail-closed reason for a non-receivable piece."""
     status = _text(piece.get("status")) or PIECE_STATUS_ASSIGNED
     if status == PIECE_STATUS_RECEIVED or piece.get("received_at"):
-        received_at = piece.get("received_at")
+        history = list(piece.get("supplier_receiving_history") or [])
+        last_receipt = history[-1] if history and isinstance(history[-1], dict) else {}
+        received_at = last_receipt.get("received_at") or piece.get("received_at")
         if hasattr(received_at, "isoformat"):
             received_at = received_at.isoformat()
         return {
             "code": "supplier_piece_already_received",
             "message": "تم استلام هذه القطعة سابقًا؛ لم تُسجّل مرة ثانية.",
             "received_at": received_at,
-            "received_by_name": piece.get("received_by_name"),
-            "session_reference": piece.get("supplier_receiving_reference"),
+            "received_by_name": _text(last_receipt.get("received_by_name"))
+            or _text(piece.get("received_by_name")) or None,
+            "supplier_name": _text(last_receipt.get("supplier_name"))
+            or _text(piece.get("supplier_name")) or None,
+            "invoice_id": _text(last_receipt.get("invoice_id")) or None,
+            "session_reference": _text(last_receipt.get("session_reference"))
+            or _text(piece.get("supplier_receiving_reference")) or None,
+            "receipt_scope": "previous_invoice" if last_receipt else "previous_receipt",
         }
     if status in ELIGIBLE_PIECE_STATUSES:
         return None
@@ -979,13 +994,10 @@ def supplier_receipt_piece_patch(
         "supplier_receiving_session_id": _text(session.get("id")),
         "supplier_receiving_reference": _text(session.get("reference")),
         "supplier_receiving_scanned_barcode": _text(barcode),
-        "receipt_event_id": uuid.uuid5(
-            uuid.NAMESPACE_URL,
-            (
-                f"supplier-receiving:{session.get('user_id')}:"
-                f"{session.get('id')}:{_text(piece_id)}"
-            ),
-        ).hex,
+        # An open draft can release and re-scan the same physical piece. Each
+        # attempt needs its own event identity while the cancelled event remains
+        # in the audit log. Lost-response retries resolve by client_request_id.
+        "receipt_event_id": uuid.uuid4().hex,
         "updated_at": received_at,
         "mezan_only": True,
         "salla_updated": False,
@@ -2416,6 +2428,17 @@ def _scan_request_public_event(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _draft_receipt_provenance(event: dict[str, Any], *, scope: str) -> dict[str, Any]:
+    supplier = dict(event.get("supplier_context") or {})
+    return {
+        "receipt_scope": scope,
+        "received_at": event.get("occurred_at"),
+        "received_by_name": _text(event.get("receiving_employee_name")) or None,
+        "supplier_name": _text(supplier.get("company_name")) or None,
+        "session_reference": _text(event.get("session_reference")) or None,
+    }
+
+
 async def _scan_request_recovery(
     db: Any,
     *,
@@ -2456,10 +2479,20 @@ async def _scan_request_recovery(
         .to_list(MAX_SESSION_SCANS)
     )
     if not rows:
+        cancelled = await db[RECEIVING_EVENTS].find_one(
+            {
+                "user_id": user_id,
+                "session_id": session_id,
+                "event_type": "supplier_piece_scan_cancelled",
+                "client_request_id": request_id,
+            },
+            {"_id": 0},
+        )
         return {
             "ok": True,
-            "found": False,
+            "found": cancelled is not None,
             "committed": False,
+            "cancelled": cancelled is not None,
             "client_request_id": request_id,
             "session": _public_session(session) if session else None,
             "piece": None,
@@ -2590,6 +2623,9 @@ async def _same_session_piece_scan_recovery(
         "pieces": [_public_piece(piece)],
         "scan": public_event,
         "scans": [public_event],
+        "receipt_provenance": _draft_receipt_provenance(
+            event, scope="current_draft"
+        ),
         "selected_quantity": 1,
         "requires_quantity_selection": False,
         "draft_piece_reserved": True,
@@ -2626,6 +2662,67 @@ async def _cancellable_session_events(
         .limit(MAX_SESSION_SCANS)
         .to_list(MAX_SESSION_SCANS)
     )
+
+
+async def _draft_scan_for_barcode(
+    db: Any,
+    *,
+    user_id: str,
+    session_id: str,
+    barcode: str,
+    expected_event_id: str | None = None,
+    mongo_session: Any = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Resolve one exact physical QR currently reserved by this open draft."""
+    piece_id = parse_preparation_piece_barcode(_text(barcode))
+    if not piece_id:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "supplier_receiving_unique_piece_barcode_required"},
+        )
+    kwargs = {"session": mongo_session} if mongo_session is not None else {}
+    piece = await db[PIECES].find_one(
+        {"user_id": user_id, "piece_id": piece_id}, {"_id": 0}, **kwargs
+    )
+    event = await db[RECEIVING_EVENTS].find_one(
+        {
+            "user_id": user_id,
+            "session_id": session_id,
+            "piece_id": piece_id,
+            "event_type": "supplier_piece_scanned",
+        },
+        {"_id": 0},
+        **kwargs,
+    )
+    if not piece or not event or (
+        _text(piece.get("supplier_receiving_session_id")) != session_id
+        or _text(piece.get("receipt_event_id")) != _text(event.get("id"))
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "supplier_receiving_piece_not_in_current_draft"},
+        )
+    if expected_event_id is not None and _text(event.get("id")) != expected_event_id:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "supplier_receiving_piece_changed_since_preview"},
+        )
+    if (
+        _text(piece.get("status")) not in ELIGIBLE_PIECE_STATUSES
+        or _text(piece.get("active_hold_id"))
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "supplier_receiving_piece_changed_since_preview"},
+        )
+    if not isinstance(event.get("previous_piece_state"), dict) or not isinstance(
+        event.get("previous_piece_present_fields"), list
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "supplier_receiving_cancel_rollback_unavailable"},
+        )
+    return piece, event
 
 
 def make_supplier_receiving_router(
@@ -3442,7 +3539,11 @@ def make_supplier_receiving_router(
                 raise HTTPException(
                     status_code=409,
                     detail={
-                        "code": "supplier_receiving_scan_request_incomplete",
+                        "code": (
+                            "supplier_receiving_scan_request_cancelled"
+                            if existing_request.get("cancelled")
+                            else "supplier_receiving_scan_request_incomplete"
+                        ),
                         "client_request_id": client_request_id,
                     },
                 )
@@ -3523,6 +3624,16 @@ def make_supplier_receiving_router(
                     )
                     if same_session_result is not None:
                         return same_session_result
+                reserved_event = await db[RECEIVING_EVENTS].find_one(
+                    {
+                        "user_id": context["merchant_id"],
+                        "session_id": scanned_reserved_session_id,
+                        "piece_id": _text(scanned_piece.get("piece_id")),
+                        "id": _text(scanned_piece.get("receipt_event_id")),
+                        "event_type": "supplier_piece_scanned",
+                    },
+                    {"_id": 0},
+                )
                 raise HTTPException(
                     status_code=409,
                     detail={
@@ -3532,6 +3643,14 @@ def make_supplier_receiving_router(
                         "piece_id": _text(scanned_piece.get("piece_id")),
                         "receipt_event_id": _text(scanned_piece.get("receipt_event_id"))
                         or None,
+                        **(
+                            _draft_receipt_provenance(
+                                reserved_event, scope="current_draft"
+                                if scanned_reserved_session_id == session_id
+                                else "other_draft",
+                            )
+                            if reserved_event else {}
+                        ),
                     },
                 )
             candidates = await supplier_scan_group_candidates(
@@ -3845,6 +3964,10 @@ def make_supplier_receiving_router(
 
             events: list[dict[str, Any]] = []
             for original_piece, updated_piece in reserved_rows:
+                history = list(original_piece.get("supplier_receiving_history") or [])
+                previous_receipt = (
+                    history[-1] if history and isinstance(history[-1], dict) else {}
+                )
                 event = {
                     "id": _text(updated_piece.get("receipt_event_id")),
                     "user_id": context["merchant_id"],
@@ -3884,6 +4007,13 @@ def make_supplier_receiving_router(
                         updated_piece.get("remaining_service_count") or 0
                     ),
                     "supplier_context": dict(session.get("supplier_snapshot") or {}),
+                    "prior_receipt": {
+                        "invoice_id": _text(previous_receipt.get("invoice_id")) or None,
+                        "session_reference": _text(previous_receipt.get("session_reference")) or None,
+                        "supplier_name": _text(previous_receipt.get("supplier_name")) or None,
+                        "received_by_name": _text(previous_receipt.get("received_by_name")) or None,
+                        "received_at": previous_receipt.get("received_at"),
+                    } if previous_receipt else None,
                     "supplier_service_link_status": "draft_not_recorded",
                     "supplier_assigned_at_receipt": bool(
                         updated_piece.get("supplier_assigned_at_receipt") is True
@@ -4045,6 +4175,255 @@ def make_supplier_receiving_router(
             "salla_updated": False,
             "qoyod_updated": False,
         }
+
+    @router.get("/sessions/{session_id}/scans/lookup")
+    async def lookup_draft_scan(
+        session_id: str,
+        barcode: str = Query(min_length=1, max_length=500),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        """Preview one exact draft reservation before the employee confirms removal."""
+        context = await _actor_context(db, user)
+        _require_permission(context, RECEIVE_PERMISSION)
+        session = await _session_for_actor(
+            db, context=context, session_id=session_id,
+        )
+        if _text(session.get("status")) != "open":
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "supplier_receiving_session_not_open"},
+            )
+        piece, event = await _draft_scan_for_barcode(
+            db,
+            user_id=context["merchant_id"],
+            session_id=session_id,
+            barcode=barcode,
+        )
+        return {
+            "ok": True,
+            "piece_id": _text(piece.get("piece_id")),
+            "event_id": _text(event.get("id")),
+            "product_name": _text(event.get("product_name")) or "منتج",
+            "sku": _text(event.get("sku")) or None,
+            "order_number": _text(event.get("order_number")) or None,
+            "receipt_provenance": _draft_receipt_provenance(
+                event, scope="current_draft",
+            ),
+        }
+
+    @router.post("/sessions/{session_id}/scans/remove")
+    async def remove_draft_scan(
+        session_id: str,
+        payload: SupplierReceivingPieceRemoveRequest,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        """Atomically release one scanned piece, leaving the open draft intact."""
+        context = await _actor_context(db, user)
+        _require_permission(context, RECEIVE_PERMISSION)
+        session = await _session_for_actor(
+            db, context=context, session_id=session_id,
+        )
+        if _text(session.get("status")) != "open":
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "supplier_receiving_session_not_open"},
+            )
+        piece_id = parse_preparation_piece_barcode(_text(payload.barcode))
+        if not piece_id:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "supplier_receiving_unique_piece_barcode_required"},
+            )
+        mongo_client = getattr(db, "client", None)
+        if mongo_client is None or not hasattr(mongo_client, "start_session"):
+            raise HTTPException(
+                status_code=503,
+                detail={"code": "supplier_receiving_atomic_transaction_required"},
+            )
+
+        async def remove_one(tx: Any) -> dict[str, Any]:
+            merchant_id = context["merchant_id"]
+            now = _now()
+            lock_token = uuid.uuid4().hex
+            locked = await db[SESSIONS].find_one_and_update(
+                {
+                    "user_id": merchant_id,
+                    "id": session_id,
+                    "status": "open",
+                    "opened_by": context["actor_id"],
+                    "$or": [
+                        {"scan_lock_token": {"$exists": False}},
+                        {"scan_lock_token": None},
+                        {"scan_lock_expires_at": {"$lte": now}},
+                    ],
+                },
+                {
+                    "$set": {
+                        "scan_lock_token": lock_token,
+                        "scan_lock_expires_at": now + timedelta(seconds=SCAN_LOCK_SECONDS),
+                        "updated_at": now,
+                    },
+                },
+                return_document=ReturnDocument.AFTER,
+                session=tx,
+            )
+            if not locked:
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "supplier_receiving_scan_busy"},
+                )
+            piece = await db[PIECES].find_one(
+                {"user_id": merchant_id, "piece_id": piece_id},
+                {"_id": 0}, session=tx,
+            )
+            # A lost response can safely return the result of the same
+            # cancellation, provided the piece has not been re-scanned here.
+            if piece and _text(piece.get("supplier_receiving_session_id")) != session_id:
+                cancelled_event = await db[RECEIVING_EVENTS].find_one(
+                    {
+                        "user_id": merchant_id,
+                        "session_id": session_id,
+                        "piece_id": piece_id,
+                        "id": payload.expected_event_id,
+                        "event_type": "supplier_piece_scan_cancelled",
+                    },
+                    {"_id": 0}, session=tx,
+                )
+                if cancelled_event:
+                    await db[SESSIONS].update_one(
+                        {
+                            "user_id": merchant_id, "id": session_id,
+                            "status": "open", "scan_lock_token": lock_token,
+                        },
+                        {"$unset": {
+                            "scan_lock_token": "", "scan_lock_expires_at": "",
+                        }},
+                        session=tx,
+                    )
+                    return {
+                        "ok": True, "removed": True, "idempotent": True,
+                        "piece_id": piece_id, "session": _public_session(locked),
+                        "financial_invoice_created": False,
+                        "liability_created": False,
+                        "salla_updated": False, "qoyod_updated": False,
+                    }
+            piece, event = await _draft_scan_for_barcode(
+                db,
+                user_id=merchant_id,
+                session_id=session_id,
+                barcode=payload.barcode,
+                expected_event_id=payload.expected_event_id,
+                mongo_session=tx,
+            )
+            result = await db[PIECES].update_one(
+                {
+                    "user_id": merchant_id,
+                    "piece_id": piece_id,
+                    "supplier_receiving_session_id": session_id,
+                    "receipt_event_id": payload.expected_event_id,
+                    "status": {"$in": sorted(ELIGIBLE_PIECE_STATUSES)},
+                    "active_hold_id": {"$in": [None, ""]},
+                },
+                supplier_receipt_piece_rollback_update(event),
+                session=tx,
+            )
+            if result.modified_count != 1:
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "supplier_receiving_piece_changed_since_preview"},
+                )
+            cancelled = {
+                "event_type": "supplier_piece_scan_cancelled",
+                "original_event_type": "supplier_piece_scanned",
+                "rolled_back": True,
+                "rolled_back_at": now,
+                "rolled_back_by": context["actor_id"],
+                "rolled_back_by_name": _actor_name(user),
+                "financial_invoice_created": False,
+                "liability_created": False,
+                "salla_updated": False,
+                "qoyod_updated": False,
+            }
+            for collection in (RECEIVING_EVENTS, PIECE_EVENTS):
+                event_update = await db[collection].update_one(
+                    {
+                        "user_id": merchant_id,
+                        "session_id": session_id,
+                        "piece_id": piece_id,
+                        "id": payload.expected_event_id,
+                        "event_type": "supplier_piece_scanned",
+                    },
+                    {"$set": cancelled},
+                    session=tx,
+                )
+                if event_update.modified_count != 1:
+                    raise HTTPException(
+                        status_code=409,
+                        detail={"code": "supplier_receiving_piece_changed_since_preview"},
+                    )
+            remaining = await db[RECEIVING_EVENTS].find(
+                {
+                    "user_id": merchant_id,
+                    "session_id": session_id,
+                    "event_type": "supplier_piece_scanned",
+                },
+                {
+                    "_id": 0,
+                    "order_number": 1,
+                    "file_number": 1,
+                    "preparation_employee_id": 1,
+                    "occurred_at": 1,
+                },
+                session=tx,
+            ).to_list(MAX_SESSION_SCANS)
+            summary = {
+                "scan_count": len(remaining),
+                "order_numbers": sorted({
+                    _text(row.get("order_number")) for row in remaining
+                    if _text(row.get("order_number"))
+                }),
+                "file_numbers": sorted({
+                    _text(row.get("file_number")) for row in remaining
+                    if _text(row.get("file_number"))
+                }),
+                "preparation_employee_ids": sorted({
+                    _text(row.get("preparation_employee_id")) for row in remaining
+                    if _text(row.get("preparation_employee_id"))
+                }),
+                "last_scanned_at": max(
+                    (row["occurred_at"] for row in remaining if row.get("occurred_at")),
+                    default=None,
+                ),
+                "updated_at": now,
+            }
+            updated = await db[SESSIONS].find_one_and_update(
+                {
+                    "user_id": merchant_id, "id": session_id,
+                    "status": "open", "opened_by": context["actor_id"],
+                    "scan_lock_token": lock_token,
+                },
+                {
+                    "$set": summary,
+                    "$unset": {"scan_lock_token": "", "scan_lock_expires_at": ""},
+                },
+                return_document=ReturnDocument.AFTER,
+                session=tx,
+            )
+            if not updated:
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "supplier_receiving_piece_changed_since_preview"},
+                )
+            return {
+                "ok": True, "removed": True, "idempotent": False,
+                "piece_id": piece_id, "session": _public_session(updated),
+                "financial_invoice_created": False,
+                "liability_created": False,
+                "salla_updated": False, "qoyod_updated": False,
+            }
+
+        async with await mongo_client.start_session() as tx:
+            return await tx.with_transaction(remove_one)
 
     @router.post("/sessions/{session_id}/cancel")
     async def cancel_session(
