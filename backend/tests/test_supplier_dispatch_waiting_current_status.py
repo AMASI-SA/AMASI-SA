@@ -141,7 +141,7 @@ async def test_workspace_current_status_only_not_piece_snapshot(db, status):
 async def test_salla_under_review_slug_with_reviewed_arabic_label_stays_visible(db, localized_name):
     await seed_order(
         db,
-        current="under_review",
+        current=localized_name,
         raw_status="under_review",
         raw_name=localized_name,
     )
