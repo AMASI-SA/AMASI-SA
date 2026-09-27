@@ -393,7 +393,12 @@ async def test_remove_requires_current_actor_and_exact_preview_without_financial
     session, pieces = await seed(env, 2)
     scanned = await post_scan(http, session["id"], pieces[0], "scan-request-guarded")
     assert scanned.status_code == 200
-    event_id = scanned.json()["scan"]["id"]
+    preview = await http.get(
+        f"/supplier-receiving-v1/sessions/{session['id']}/scans/lookup",
+        params={"barcode": barcode(pieces[0])},
+    )
+    assert preview.status_code == 200, preview.text
+    event_id = preview.json()["event_id"]
     path = f"/supplier-receiving-v1/sessions/{session['id']}/scans/remove"
     wrong = await http.post(path, json={
         "barcode": barcode(pieces[1]), "expected_event_id": event_id,
