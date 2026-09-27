@@ -30,7 +30,7 @@ function paymentText(order) {
 
 function rowTone(order) {
     const method = paymentText(order).toLowerCase();
-    if (method === "cod" || method.includes("cash on delivery") || method.includes("الدفع عند الاستلام")) {
+    if (method === "cod" || method.includes("cash on delivery") || method.includes("الدفع عند الاستلام") || method.includes("دفع عند الاستلام")) {
         return "bg-rose-50 hover:bg-rose-100/70";
     }
     if (method.includes("bank transfer") || method.includes("تحويل بنكي") || method.includes("حوالة بنكية")) {
