@@ -260,6 +260,9 @@ jobs:
           httpx
           pytest
           pytest-asyncio
+          bcrypt==4.1.3
+          PyJWT
+          email-validator
           openpyxl
           cryptography
           reportlab
