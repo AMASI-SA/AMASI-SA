@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - hotfix/prod-snap-meta-final
+      - chatgpt/mz2-ad-financial-accounts-opening-balances-20260922
   push:
     branches:
       - hotfix/prod-snap-meta-final
@@ -31,6 +32,8 @@ jobs:
       PYTHONDONTWRITEBYTECODE: "1"
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
