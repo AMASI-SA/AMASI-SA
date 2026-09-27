@@ -336,7 +336,7 @@ def _store_courier_print_data(
     }
     amounts = order.get("amounts")
     amounts = amounts if isinstance(amounts, dict) else {}
-    total = shipment.get("total") or amounts.get("total") or order.get("total")
+    total = amounts.get("total") or order.get("total") or shipment.get("total")
     payment_actions = order.get("payment_actions")
     payment_actions = payment_actions if isinstance(payment_actions, dict) else {}
     remaining_action = payment_actions.get("remaining_action")
@@ -345,11 +345,11 @@ def _store_courier_print_data(
     )
     refund_action = payment_actions.get("refund_action")
     refund_action = refund_action if isinstance(refund_action, dict) else {}
-    raw_paid = (
-        remaining_action.get("paid_amount")
-        or refund_action.get("paid_amount")
-        or order.get("paid_amount")
-    )
+    raw_paid = next((value for value in (
+        remaining_action.get("paid_amount"),
+        refund_action.get("paid_amount"),
+        order.get("paid_amount"),
+    ) if value is not None and value != ""), None)
     raw_remaining = remaining_action.get("remaining_amount")
     if raw_remaining is None:
         raw_remaining = order.get("remaining_amount")
