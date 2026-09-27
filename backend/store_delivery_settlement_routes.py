@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from store_delivery_domain import money, normalize_text
 from store_delivery_accounting import (
     post_settlement_journal,
+    require_p02_shipping_financial_writes,
     store_driver_ledger_balances,
 )
 from store_delivery_driver_app_routes import DRIVER_COLLECTIONS, DRIVER_EARNINGS
@@ -167,6 +168,7 @@ def make_store_delivery_settlement_router(db: Any, current_user: Callable[..., A
 
     async def _post(driver_id: str, settlement_type: SettlementType, payload: SettlementCreate, actor: dict[str, Any]) -> dict[str, Any]:
         user_id = _merchant_user_id(actor)
+        await require_p02_shipping_financial_writes(db, user_id=user_id)
         driver = await _driver_or_404(db, user_id, driver_id)
         await ensure_store_delivery_settlement_indexes(db)
         totals = await _totals(db, user_id, driver_id)

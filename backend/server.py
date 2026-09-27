@@ -4246,6 +4246,8 @@ attach_settlement_cycle_routes(api, db)
 attach_liabilities_routes(api, db)
 attach_counterparties_routes(api, db)
 attach_purchase_invoice_routes(api, db)
+from opening_inventory_routes import make_opening_inventory_router
+api.include_router(make_opening_inventory_router(db, current_user))
 attach_custom_app_routes(api, db)
 attach_ad_account_routes(api, db)
 attach_bnpl_routes(api, db)
