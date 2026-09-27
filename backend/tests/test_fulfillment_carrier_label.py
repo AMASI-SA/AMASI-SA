@@ -72,6 +72,102 @@ def test_store_courier_qr_contains_order_number_only(monkeypatch):
     assert result["order_number"] == "276628330"
 
 
+def test_store_courier_label_collects_unpaid_cod_when_salla_balance_is_null(monkeypatch):
+    monkeypatch.setattr(shipping, "_qr_data_uri", lambda _: "data:image/svg+xml;base64,QR")
+
+    label = shipping._store_courier_print_data(
+        "example-order",
+        {
+            "payment_method": {"slug": "cod", "name": "الدفع عند الاستلام"},
+            "payment_actions": {
+                "remaining_action": {
+                    "paid_amount": {"amount": 0, "currency": "SAR"},
+                    "remaining_amount": None,
+                    "has_remaining_amount": False,
+                },
+            },
+            "amounts": {"total": {"amount": 741.40, "currency": "SAR"}},
+        },
+        {"courier_name": "مندوب المتجر"},
+        {"name": "متجر أماسي"},
+    )
+
+    assert label["remaining_amount"] == {"amount": 741.40, "currency": "SAR"}
+
+
+@pytest.mark.parametrize(
+    ("remaining", "paid", "payment_status", "expected"),
+    [
+        ({"amount": 0, "currency": "SAR"}, 0, "unpaid", 0),
+        ({"amount": 199.50, "currency": "SAR"}, 0, "unpaid", 199.50),
+        (None, 100, "partial", 641.40),
+        (None, 741.40, "paid", 0),
+    ],
+)
+def test_store_courier_label_respects_collection_evidence(
+    monkeypatch, remaining, paid, payment_status, expected,
+):
+    monkeypatch.setattr(shipping, "_qr_data_uri", lambda _: "qr")
+    order = {
+        "payment": {
+            "method": {"slug": "cod"},
+            "status": payment_status,
+        },
+        "payment_actions": {
+            "remaining_action": {
+                "remaining_amount": remaining,
+                "paid_amount": {"amount": paid, "currency": "SAR"},
+                "has_remaining_amount": False,
+            },
+        },
+        "amounts": {"total": {"amount": 741.40, "currency": "SAR"}},
+    }
+
+    label = shipping._store_courier_print_data("example", order, {}, {})
+
+    assert label["remaining_amount"] == {"amount": expected, "currency": "SAR"}
+
+
+def test_store_courier_label_does_not_infer_cod_for_prepaid_order(monkeypatch):
+    monkeypatch.setattr(shipping, "_qr_data_uri", lambda _: "qr")
+    order = {
+        "payment_method": {"slug": "credit_card"},
+        "amounts": {"total": {"amount": 741.40, "currency": "SAR"}},
+    }
+
+    label = shipping._store_courier_print_data("example", order, {}, {})
+
+    assert label["remaining_amount"] == {"amount": 0, "currency": "SAR"}
+
+
+@pytest.mark.parametrize(
+    ("paid", "total", "collection_status"),
+    [
+        (None, {"amount": 741.40, "currency": "SAR"}, None),
+        ({"amount": 0, "currency": "USD"}, {"amount": 741.40, "currency": "SAR"}, None),
+        ({"amount": 0, "currency": "SAR"}, None, None),
+        (None, {"amount": 741.40, "currency": "SAR"}, "partial"),
+    ],
+)
+def test_store_courier_label_rejects_ambiguous_cod_balance(
+    monkeypatch, paid, total, collection_status,
+):
+    monkeypatch.setattr(shipping, "_qr_data_uri", lambda _: "qr")
+    order = {
+        "payment_method": {"slug": "cod"},
+        "payment_collection_status": collection_status,
+        "payment_actions": {
+            "remaining_action": {"remaining_amount": None, "paid_amount": paid},
+        },
+        "amounts": {"total": total},
+    }
+
+    with pytest.raises(shipping.ShippingLabelError) as exc:
+        shipping._store_courier_print_data("example", order, {}, {})
+
+    assert exc.value.code == "cod_balance_unavailable"
+
+
 def test_workflow_snapshot_distinguishes_store_courier_label():
     patch = _workflow_patch(
         {

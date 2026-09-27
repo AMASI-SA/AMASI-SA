@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import base64
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any
 
 from reportlab.graphics import renderSVG
@@ -312,6 +313,85 @@ def _order_date(order: dict[str, Any]) -> str:
     return _text(value).split(" ", 1)[0]
 
 
+def _cod_balance_when_salla_omits_remaining(
+    order: dict[str, Any],
+    remaining_action: dict[str, Any],
+) -> dict[str, Any]:
+    """Derive only a provable COD balance; Salla can return null for unpaid COD."""
+    payment = order.get("payment")
+    payment = payment if isinstance(payment, dict) else {}
+    amounts = order.get("amounts")
+    amounts = amounts if isinstance(amounts, dict) else {}
+    total = amounts.get("total") or order.get("total")
+    currency = _text(_money(total).get("currency")).upper()
+
+    def fail() -> None:
+        raise ShippingLabelError(
+            "cod_balance_unavailable",
+            "تعذّر التحقق من المبلغ المتبقي للدفع عند الاستلام؛ لم نطبع بوليصة بمبلغ غير مؤكد.",
+        )
+
+    def amount(value: Any) -> Decimal:
+        raw = value.get("amount") if isinstance(value, dict) else value
+        if isinstance(value, dict):
+            source_currency = _text(value.get("currency")).upper()
+            if source_currency and source_currency != currency:
+                fail()
+        if isinstance(raw, bool) or raw in (None, ""):
+            fail()
+        try:
+            result = Decimal(str(raw)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        except (InvalidOperation, ValueError):
+            fail()
+        if not result.is_finite() or result < 0:
+            fail()
+        return result
+
+    if total is None:
+        fail()
+    order_total = amount(total)
+    if not currency:
+        fail()
+    paid = next(
+        (value for value in (
+            order.get("paid_amount"),
+            payment.get("paid_amount"),
+            remaining_action.get("paid_amount"),
+        ) if value is not None),
+        None,
+    )
+    collection_status = _status(
+        order.get("payment_collection_status") or payment.get("collection_status")
+    )
+    payment_status = _status(order.get("payment_status") or payment.get("status"))
+
+    if payment_status in {"refunded", "refund", "cancelled", "canceled"}:
+        fail()
+
+    if paid is None:
+        if collection_status == "unpaid" or payment_status == "unpaid":
+            paid_amount = Decimal("0.00")
+        elif collection_status == "paid" or payment_status in {"paid", "completed"}:
+            paid_amount = order_total
+        else:
+            fail()
+    else:
+        paid_amount = amount(paid)
+    if paid_amount > order_total:
+        fail()
+    if (
+        collection_status == "paid" or payment_status in {"paid", "completed"}
+    ) and paid_amount != order_total:
+        fail()
+    if (collection_status == "partial" or payment_status == "partial") and (
+        paid_amount <= 0 or paid_amount >= order_total
+    ):
+        fail()
+    if (collection_status == "unpaid" or payment_status == "unpaid") and paid_amount > 0:
+        fail()
+    return {"amount": float(order_total - paid_amount), "currency": currency}
+
+
 def _store_courier_print_data(
     order_number: str,
     order: dict[str, Any],
@@ -342,10 +422,13 @@ def _store_courier_print_data(
     remaining_action = (
         remaining_action if isinstance(remaining_action, dict) else {}
     )
-    remaining = remaining_action.get("remaining_amount") or {
-        "amount": 0,
-        "currency": _money(total).get("currency") or "SAR",
-    }
+    remaining = remaining_action.get("remaining_amount")
+    if remaining is None:
+        remaining = (
+            _cod_balance_when_salla_omits_remaining(order, remaining_action)
+            if _payment_method(shipment, order) == "cod"
+            else {"amount": 0, "currency": _money(total).get("currency") or "SAR"}
+        )
     ship_from = shipment.get("ship_from")
     ship_from = ship_from if isinstance(ship_from, dict) else {}
     return {
@@ -705,7 +788,9 @@ def _payment_method(
     shipment: dict[str, Any],
     order: dict[str, Any],
 ) -> str:
-    raw = shipment.get("payment_method") or order.get("payment_method")
+    payment = order.get("payment")
+    payment = payment if isinstance(payment, dict) else {}
+    raw = shipment.get("payment_method") or order.get("payment_method") or payment.get("method")
     if isinstance(raw, dict):
         raw = raw.get("slug") or raw.get("name") or raw.get("code")
     normalized = _status(raw)

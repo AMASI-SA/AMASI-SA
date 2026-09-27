@@ -19,3 +19,13 @@ test("store courier label is A6 and uses order/customer facts", () => {
     expect(html).toContain("حي العود");
     expect(html).toContain("سلسال × 1");
 });
+
+test("store courier label shows the COD balance with two decimals", () => {
+    const html = storeCourierLabelHtml({
+        order_number: "test-order",
+        remaining_amount: { amount: 741.4, currency: "SAR" },
+    });
+
+    expect(html).toContain("المبلغ المتبقي:");
+    expect(html).toContain("741.40 SAR");
+});
