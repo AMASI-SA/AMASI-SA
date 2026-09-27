@@ -33,6 +33,7 @@ from pymongo.errors import DuplicateKeyError
 
 from carrier_handoff import advance_carrier_handoff_from_salla_status
 from order_currency import salla_order_currency_fields
+from order_engine.cod_collection import cod_expected_due
 
 from salla_marketing_attribution import promoted_salla_attribution
 
@@ -625,15 +626,26 @@ def _salla_order_to_doc(salla_order: dict) -> dict:
     if not isinstance(refund_action, dict):
         refund_action = {}
 
-    paid_amount = _money(
+    raw_paid = (
         remaining_action.get("paid_amount")
         or refund_action.get("paid_amount")
         or salla_order.get("paid_amount")
     )
-    remaining_amount = _money(
+    raw_remaining = (
         remaining_action.get("remaining_amount")
         or salla_order.get("remaining_amount")
     )
+    paid_amount = _money(raw_paid)
+    remaining_amount = _money(raw_remaining)
+    cod_due = cod_expected_due(
+        payment_method_obj or payment_method,
+        total=total_obj,
+        paid=raw_paid,
+        remaining=raw_remaining,
+        payment_status=payment_status,
+    )
+    if cod_due is not None:
+        remaining_amount = cod_due
     has_remaining_amount = bool(
         remaining_action.get("has_remaining_amount")
         or remaining_amount > 0
