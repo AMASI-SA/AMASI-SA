@@ -7,7 +7,7 @@ from copy import deepcopy
 import pytest
 
 import fulfillment_v2_routes as fulfillment
-from order_engine.cod_collection import cod_expected_due
+from cod_collection import cod_expected_due
 from order_engine.mapper import map_salla_order
 from order_engine.shipping_label_service import _store_courier_print_data
 from salla_integration.sync import _salla_order_to_doc
