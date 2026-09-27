@@ -15,6 +15,7 @@ from typing import Any, Callable
 from bson.binary import Binary
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 
+from order_engine.cod_collection import cod_expected_due
 from store_delivery_domain import StoreDeliveryRuleError, money, normalize_text
 from store_delivery_driver_routes import STORE_DRIVERS
 from store_delivery_handover_routes import ASSIGNMENTS, ORDERS
@@ -41,9 +42,21 @@ def _detected_type(data: bytes) -> str | None:
 def authoritative_outstanding_amount(order: dict[str, Any]) -> float:
     """Return the current remaining amount from the order SSOT.
 
-    Zero is a valid explicit value. If no authoritative fields exist we fail
-    closed instead of letting a driver type an arbitrary amount.
+    Zero is valid except for an unpaid COD order whose Salla checkout balance
+    is empty while its total and paid amount prove a collection due. If the
+    required facts are unavailable, never let a driver invent an amount.
     """
+    cod_due = cod_expected_due(
+        order.get("payment_method"),
+        total=order.get("total_amount"),
+        paid=order.get("paid_amount"),
+        remaining=order.get("remaining_amount"),
+        payment_status=order.get("payment_status"),
+        collection_status=order.get("payment_collection_status"),
+    )
+    if cod_due is not None:
+        return cod_due
+
     if "remaining_amount" in order and order.get("remaining_amount") is not None:
         return float(money(order.get("remaining_amount")))
 
