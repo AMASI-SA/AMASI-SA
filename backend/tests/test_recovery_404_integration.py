@@ -121,9 +121,23 @@ class Integration(unittest.IsolatedAsyncioTestCase):
         row = next(r for r in result.json()["results"] if r["reference"] == TARGET)
         self.assertEqual((row["state"], row["reason"]), ("review", "outcome_unknown"))
         self.assertEqual(row["read_diagnostic"]["stage"], "observe")
-        self.assertFalse(result.json()["can_activate"])
+        self.assertTrue(result.json()["can_activate"])
         self.assertEqual((self.provider.invoice_posts, self.provider.payment_posts), (0, 0))
         self.assertEqual((await self.db.qoyod_404_attempts.find_one({"_id": f"main:{TARGET}"}))["proof"], "keep")
+
+    async def test_finalized_quarantine_allows_activation_but_running_blocks(self):
+        await self.prepare()
+        for state in ("blocked", "unknown", "review"):
+            await self.db.qoyod_404_outcomes.update_one(
+                {"reference": TARGET},
+                {"$set": {"state": state, "reason": "outcome_unknown"}},
+            )
+            self.assertTrue((await self.http.get(BASE)).json()["can_activate"], state)
+        await self.db.qoyod_404_outcomes.update_one(
+            {"reference": TARGET},
+            {"$set": {"state": "running", "reason": "refreshing_salla"}},
+        )
+        self.assertFalse((await self.http.get(BASE)).json()["can_activate"])
 
     async def test_audit_requeues_only_preclaim_provider_page_404(self):
         await self.prepare()
@@ -291,16 +305,23 @@ class Integration(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 409)
         self.assertEqual((self.provider.invoice_posts, self.provider.payment_posts), (0, 0))
 
-    async def test_response_loss_and_restart_audit_never_repeat_invoice_or_payment(self):
+    async def test_response_loss_is_quarantined_and_next_order_proceeds_without_retry(self):
         await self.activate(); self.provider.timeout = True
         await c.tick(self.db, self.factory)
-        self.assertEqual((await c.report(self.db))["state"], "paused")
-        # A new route/worker instance shares the durable DB and provider ledger.
-        result = await self.http.post(BASE + "/audit")
-        self.assertEqual(result.status_code, 200, result.text)
-        self.assertEqual(result.json()["verified"], 3)
+        first = await c.report(self.db)
+        self.assertEqual(first["state"], "active")
+        self.assertIsNone(first["cursor"])
+        failed = next(r for r in first["results"] if r["reference"] == TARGET)
+        self.assertEqual((failed["state"], failed["reason"]), ("unknown", "outcome_unknown"))
         self.assertEqual((self.provider.invoice_posts, self.provider.payment_posts), (1, 1))
         self.assertEqual(await self.db.qoyod_404_attempts.count_documents({}), 1)
+        self.provider.timeout = False
+        await c.tick(self.db, self.factory)
+        self.assertEqual((self.provider.invoice_posts, self.provider.payment_posts), (2, 2))
+        self.assertEqual(await self.db.qoyod_404_attempts.count_documents({}), 2)
+        failed_after = await self.db.qoyod_404_outcomes.find_one({"reference": TARGET})
+        self.assertEqual((failed_after["state"], failed_after["reason"]),
+                         ("unknown", "outcome_unknown"))
 
     async def test_restart_with_stale_cursor_only_audits(self):
         await self.activate()
@@ -310,10 +331,14 @@ class Integration(unittest.IsolatedAsyncioTestCase):
             "cursor": TARGET, "busy": True, "lease_until": c.now() - timedelta(seconds=1)}})
         await self.db.qoyod_404_outcomes.update_one({"reference": TARGET}, {"$set": {"state": "running"}})
         await c.tick(self.db, self.factory)
-        self.assertEqual((await c.report(self.db))["state"], "paused")
+        first = await c.report(self.db)
+        self.assertEqual(first["state"], "active")
+        self.assertIsNone(first["cursor"])
         self.assertEqual(self.provider.invoice_posts, 0)
         self.assertEqual((await self.db.qoyod_404_outcomes.find_one({"reference": TARGET}))["reason"],
                          "submitted_invoice_not_found_do_not_retry")
+        await c.tick(self.db, self.factory)
+        self.assertEqual(self.provider.invoice_posts, 1)
 
     async def test_two_workers_cannot_write_twice(self):
         await self.activate(); self.provider.hold = asyncio.Event()
@@ -449,8 +474,14 @@ class Integration(unittest.IsolatedAsyncioTestCase):
         inv = Invoice(TARGET, "existing", "403.11", "0", "403.11", "SAR")
         self.provider.invoices[TARGET] = [inv]
         await c.tick(self.db, self.factory)
-        self.assertEqual((await c.report(self.db))["state"], "paused")
+        report = await c.report(self.db)
+        self.assertEqual(report["state"], "active")
+        failed = next(r for r in report["results"] if r["reference"] == TARGET)
+        self.assertEqual((failed["state"], failed["reason"]),
+                         ("blocked", "provider_settlement_incomplete"))
         self.assertEqual(self.provider.payment_posts, 0)
+        await c.tick(self.db, self.factory)
+        self.assertEqual((self.provider.invoice_posts, self.provider.payment_posts), (1, 1))
 
     async def test_production_adapter_uses_fresh_raw_total_not_merged_old_value(self):
         await self.prepare()
@@ -582,6 +613,8 @@ class Integration(unittest.IsolatedAsyncioTestCase):
     async def test_audit_lock_prevents_activation_until_readback_finishes(self):
         await self.activate(); self.provider.timeout=True
         await c.tick(self.db,self.factory)
+        self.assertEqual((await c.report(self.db))["state"], "active")
+        await c.pause(self.db)
         release = asyncio.Event()
         original_facts = self.provider.facts
         async def hold_facts(ref):

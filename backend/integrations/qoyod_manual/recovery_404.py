@@ -180,8 +180,18 @@ def verified_invoice(reference: str, facts: Facts, evidence: Observation) -> Inv
     return invoice
 
 
-async def recover_one(scope: Scope, reference: str, ports: Ports) -> Outcome:
-    """At most one financial attempt, followed by independent verification."""
+async def recover_one(
+    scope: Scope,
+    reference: str,
+    ports: Ports,
+    *,
+    pause_on_failure: bool = True,
+) -> Outcome:
+    """At most one financial attempt, followed by independent verification.
+
+    The reviewed campaign may quarantine a finalized per-order failure and
+    continue. Other callers retain the fail-closed pause by default.
+    """
     sent = False
     try:
         if reference not in scope.references or reference in scope.excluded:
@@ -244,8 +254,10 @@ async def recover_one(scope: Scope, reference: str, ports: Ports) -> Outcome:
                 pass
         result = Outcome(reference, "unknown" if sent else "blocked", reason,
                          read_diagnostic=getattr(exc, "_recovery_read_diagnostic", None))
-        # Pause before finish: a local persistence failure must not permit more sends.
-        await ports.pause(reason)
+        # Direct/batch callers remain fail-closed. The durable campaign worker
+        # opts out only so this finalized row cannot stop unrelated later rows.
+        if pause_on_failure:
+            await ports.pause(reason)
         await ports.finish(result)
         return result
 
