@@ -15,6 +15,9 @@ from order_engine.repository import MongoOrderRepository
 _UNDER_REVIEW = frozenset({
     "under review", "waiting review", "pending review",
     "بانتظار المراجعة", "بإنتظار المراجعة", "انتظار المراجعة",
+    # Salla can expose slug=under_review while the localized current label is
+    # "تم المراجعة". Treat both Arabic variants as the same waiting state.
+    "تم المراجعة", "تمت المراجعة",
 })
 
 
