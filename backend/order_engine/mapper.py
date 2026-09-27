@@ -31,6 +31,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from order_currency import salla_order_currency_fields
 
+from .cod_collection import cod_expected_due
 from .models import (
     AddressDTO,
     CustomerDTO,
@@ -1058,21 +1059,38 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
     remaining_action = _dict(payment_actions.get("remaining_action"))
     refund_action = _dict(payment_actions.get("refund_action"))
 
-    paid_amount = _number(
-        _first(
-            raw_order.get("paid_amount"),
-            payment_raw.get("paid_amount"),
-            remaining_action.get("paid_amount"),
-            refund_action.get("paid_amount"),
-        )
+    amounts = _dict(raw_order.get("amounts"))
+    total_obj = _first(
+        amounts.get("total"),
+        raw_order.get("total"),
+        raw_order.get("total_amount"),
     )
-    remaining_amount = _number(
-        _first(
-            raw_order.get("remaining_amount"),
-            payment_raw.get("remaining_amount"),
-            remaining_action.get("remaining_amount"),
-        )
+    raw_paid = _first(
+        raw_order.get("paid_amount"),
+        payment_raw.get("paid_amount"),
+        remaining_action.get("paid_amount"),
+        refund_action.get("paid_amount"),
     )
+    raw_remaining = _first(
+        raw_order.get("remaining_amount"),
+        payment_raw.get("remaining_amount"),
+        remaining_action.get("remaining_amount"),
+    )
+    paid_amount = _number(raw_paid)
+    remaining_amount = _number(raw_remaining)
+    cod_due = cod_expected_due(
+        payment_method_raw,
+        total=total_obj,
+        paid=raw_paid,
+        remaining=raw_remaining,
+        payment_status=payment_raw.get("status"),
+        collection_status=_first(
+            raw_order.get("payment_collection_status"),
+            payment_raw.get("collection_status"),
+        ),
+    )
+    if cod_due is not None:
+        remaining_amount = cod_due
     has_remaining_amount = bool(
         _first(
             raw_order.get("has_remaining_amount"),
@@ -1094,6 +1112,9 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
             collection_status = "paid"
         else:
             collection_status = "unknown"
+    if cod_due is not None:
+        has_remaining_amount = True
+        collection_status = "partial" if paid_amount > 0 else "unpaid"
     checkout_url = _text(
         _first(
             raw_order.get("payment_checkout_url"),
@@ -1113,13 +1134,6 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
         or _media_url(payment_raw.get("transfer_receipt_url"))
         or _media_url(bank_raw.get("receipt_url"))
         or _media_url(bank_raw.get("receipt_image"))
-    )
-
-    amounts = _dict(raw_order.get("amounts"))
-    total_obj = _first(
-        amounts.get("total"),
-        raw_order.get("total"),
-        raw_order.get("total_amount"),
     )
 
     currency = _text(
