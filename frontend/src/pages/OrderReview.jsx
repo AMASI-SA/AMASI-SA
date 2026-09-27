@@ -23,7 +23,9 @@ function money(value, currency = "SAR") {
 }
 
 function paymentText(order) {
-    return String(order?.payment?.method_native || order?.payment?.method || "غير محدد").trim();
+    const method = String(order?.payment?.method_native || order?.payment?.method || "غير محدد").trim();
+    return ["cod", "cash on delivery", "الدفع عند الاستلام", "دفع عند الاستلام"].includes(method.toLowerCase())
+        ? "دفع عند الاستلام" : method;
 }
 
 function rowTone(order) {
@@ -42,11 +44,11 @@ function copy(value, label = "القيمة") {
     toast.success(`تم نسخ ${label}`);
 }
 
-function Field({ label, value, dir }) {
+function Field({ label, value, dir, danger = false }) {
     return (
-        <div className="rounded-xl bg-slate-50 p-3">
-            <div className="text-xs font-bold text-slate-400">{label}</div>
-            <div className="mt-1 break-words font-semibold text-slate-800" dir={dir}>{value || "—"}</div>
+        <div className={`rounded-xl p-3 ${danger ? "bg-rose-50" : "bg-slate-50"}`}>
+            <div className={`text-xs font-bold ${danger ? "text-red-700" : "text-slate-400"}`}>{label}</div>
+            <div className={`mt-1 break-words font-semibold ${danger ? "text-red-700" : "text-slate-800"}`} dir={dir}>{value || "—"}</div>
         </div>
     );
 }
@@ -571,12 +573,12 @@ function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
 
                         <div className="grid gap-5 lg:grid-cols-2">
                             <section className="rounded-2xl border bg-white p-4">
-                                <h3 className="mb-3 text-lg font-extrabold">معلومات الدفع</h3>
+                                <h3 className={`mb-3 text-lg font-extrabold ${rowTone(order).includes("rose") ? "text-red-700" : ""}`}>معلومات الدفع</h3>
                                 <div className="grid gap-3 sm:grid-cols-2">
-                                    <Field label="طريقة الدفع" value={paymentText(order)} />
-                                    <Field label="إجمالي الطلب" value={money(order.totals?.total, order.totals?.currency)} dir="ltr" />
-                                    <Field label="المبلغ المدفوع" value={money(payment.paid_amount, order.totals?.currency)} dir="ltr" />
-                                    <Field label="المبلغ المتبقي" value={money(payment.remaining_amount, order.totals?.currency)} dir="ltr" />
+                                    <Field label="طريقة الدفع" value={paymentText(order)} danger={rowTone(order).includes("rose")} />
+                                    <Field label="إجمالي الطلب" value={money(order.totals?.total, order.totals?.currency)} dir="ltr" danger={rowTone(order).includes("rose")} />
+                                    <Field label="المبلغ المدفوع" value={money(payment.paid_amount, order.totals?.currency)} dir="ltr" danger={rowTone(order).includes("rose")} />
+                                    <Field label="المبلغ المتبقي" value={money(payment.remaining_amount, order.totals?.currency)} dir="ltr" danger={rowTone(order).includes("rose")} />
                                     {payment.receiving_bank_name && <Field label="البنك المستلم" value={payment.receiving_bank_name} />}
                                     {payment.receipt_url ? (
                                         <div className="sm:col-span-2"><PaymentReceiptCard receiptUrl={payment.receipt_url} /></div>
