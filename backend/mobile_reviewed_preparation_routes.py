@@ -35,6 +35,7 @@ from preparation_file_registry import (
     preparation_file_name,
     preparation_file_number,
 )
+from preparation_piece_operations import PIECES, materialize_preparation_pieces
 from preparation_pdf import generate_preparation_pdf
 from reviewed_products_catalog import PREPARATION_UNIT_ALLOCATIONS
 from tz_utils import riyadh_now_aware
@@ -240,6 +241,36 @@ def _file_response(batch: dict[str, Any], registry: dict[str, Any]) -> dict[str,
     }
 
 
+async def _ensure_assigned_pieces(
+    db: Any, *, user_id: str, batch: dict[str, Any], registry: dict[str, Any],
+) -> None:
+    """Make a successful mobile assignment visible to the assignee immediately.
+
+    A ready file with a missing or partial piece registry may be retried. Never
+    overwrite an already progressed or reassigned piece during recovery.
+    """
+    batch_id = _text(batch.get("id"))
+    if not batch_id or _text(registry.get("batch_id")) != batch_id:
+        raise HTTPException(status_code=409, detail={"code": "preparation_file_registry_missing"})
+    expected = int(batch.get("allocated_quantity") or 0)
+    existing = await db[PIECES].find(
+        {"user_id": user_id, "batch_id": batch_id},
+        {"_id": 0, "status": 1, "responsible_employee_id": 1,
+         "supplier_dispatch_status": 1, "branch_handoff_at": 1},
+    ).limit(expected + 1).to_list(expected + 1)
+    if len(existing) == expected and _text(registry.get("piece_registry_status")) == "ready":
+        return
+    if len(existing) > expected or any(
+        _text(row.get("responsible_employee_id")) != _text(registry.get("responsible_employee_id"))
+        or _text(row.get("status")) != "assigned"
+        or _text(row.get("supplier_dispatch_status"))
+        or _text(row.get("branch_handoff_at"))
+        for row in existing
+    ):
+        raise HTTPException(status_code=409, detail={"code": "preparation_piece_recovery_requires_review"})
+    await materialize_preparation_pieces(db, user_id=user_id, registry=registry)
+
+
 
 def make_mobile_reviewed_preparation_router(
     db: Any,
@@ -302,6 +333,9 @@ def make_mobile_reviewed_preparation_router(
                 },
                 {"_id": 0},
             ) or {}
+            await _ensure_assigned_pieces(
+                db, user_id=user_id, batch=existing_batch, registry=existing_registry,
+            )
             return _file_response(existing_batch, existing_registry)
 
         context = await catalog_module.load_reviewed_product_context(
@@ -531,7 +565,6 @@ def make_mobile_reviewed_preparation_router(
                 "salla_updated": False,
                 "qoyod_updated": False,
             })
-            return _file_response(batch, registry)
         except HTTPException:
             await _rollback_build(
                 db,
@@ -554,6 +587,12 @@ def make_mobile_reviewed_preparation_router(
                     "message": "تعذّر إنشاء ملف التجهيز؛ أُعيدت الحجوزات وبقيت الطلبات في تمت المراجعة.",
                 },
             ) from exc
+
+        # The file is already durable. On a piece-materialization error keep
+        # the ready file for a guarded retry; never claim assignment success
+        # while the employee workspace has no physical pieces.
+        await _ensure_assigned_pieces(db, user_id=user_id, batch=batch, registry=registry)
+        return _file_response(batch, registry)
 
     @router.post("/files/{batch_id}/print-link")
     async def create_print_link(
