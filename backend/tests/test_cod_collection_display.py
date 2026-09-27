@@ -72,6 +72,12 @@ def test_explicit_positive_remaining_and_prepaid_zero_are_preserved():
     assert cod_expected_due("cod", total=180.52, paid=0, payment_status="paid") is None
 
 
+def test_numeric_zero_paid_is_preserved_in_salla_projection():
+    raw = cod_order()
+    raw["payment_actions"]["remaining_action"]["paid_amount"] = 0
+    assert _salla_order_to_doc(raw)["remaining_amount"] == 180.52
+
+
 def test_legacy_zero_canonical_order_uses_cod_due_at_driver_handover():
     stale = {
         "payment_method": "cod", "payment_status": "pending",
