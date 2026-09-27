@@ -31,7 +31,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from order_currency import salla_order_currency_fields
 
-from .cod_collection import cod_expected_due
+from cod_collection import cod_expected_due
 from .models import (
     AddressDTO,
     CustomerDTO,
