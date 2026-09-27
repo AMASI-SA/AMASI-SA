@@ -1,0 +1,51 @@
+name: Mezan Special Orders Core
+on:
+  pull_request:
+    paths:
+      - 'backend/mezan_special_orders/**'
+      - '.github/workflows/mezan-special-orders-core.yml'
+  push:
+    branches: ['feature/mezan-special-orders-core-20260927']
+    paths:
+      - 'backend/mezan_special_orders/**'
+      - '.github/workflows/mezan-special-orders-core.yml'
+permissions:
+  contents: read
+jobs:
+  isolated-core-and-mongo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      mongo:
+        image: mongo:7.0
+        ports: ['27017:27017']
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ping:1})'"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install only nucleus test dependencies from the repository lock
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          names = {'pydantic', 'fastapi', 'httpx', 'pytest', 'motor', 'pymongo'}
+          rows = [r for r in Path('backend/requirements.txt').read_text().splitlines() if r.split('==')[0] in names]
+          assert len(rows) == len(names), 'Required exact pins must exist in backend/requirements.txt'
+          Path('/tmp/special-order-test-requirements.txt').write_text('\n'.join(rows) + '\n')
+          PY
+          python -m pip install -r /tmp/special-order-test-requirements.txt
+      - name: Compile and test isolated core plus disposable Mongo database
+        env:
+          PYTHONPATH: backend
+          MEZAN_SPECIAL_TEST_MONGO_URI: mongodb://127.0.0.1:27017
+        run: |
+          python -m compileall -q backend/mezan_special_orders
+          python -m pytest -q backend/mezan_special_orders/tests --junitxml=special-order-tests.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mezan-special-order-test-results
+          path: special-order-tests.xml
