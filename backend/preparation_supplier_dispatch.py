@@ -1010,6 +1010,23 @@ def employee_workspace_summary(
     }
 
 
+def employee_workspace_stage_summary(pieces: list[dict[str, Any]]) -> dict[str, int]:
+    """Project the same current physical-piece counts as the employee workspace.
+
+    Callers must pass the employee's active pieces after
+    ``annotate_waiting_pieces``. No registry or image reads are needed for stage
+    counts; grouping by batch keeps the employee workspace's exact projection.
+    """
+    pieces_by_batch: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for piece in pieces:
+        pieces_by_batch[_text(piece.get("batch_id"))].append(piece)
+    files = [
+        _file_view({}, rows, piece_grain=True, waiting_only=True)
+        for rows in pieces_by_batch.values()
+    ]
+    return employee_workspace_summary(files, pieces)
+
+
 async def ensure_supplier_dispatch_indexes(db: Any) -> None:
     await db[DISPATCHES].create_index(
         [("user_id", ASCENDING), ("client_request_id", ASCENDING)],
