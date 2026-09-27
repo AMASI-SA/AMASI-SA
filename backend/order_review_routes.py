@@ -15,10 +15,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo.errors import DuplicateKeyError
 
+from order_engine.mapper import OrderMappingError
 from order_engine.models import OrderDTO
 from order_engine.repository import MongoOrderRepository
 from order_engine.salla_refresh import refresh_order_from_salla
-from order_engine.service import InvalidOrderCursorError, OrderNotFoundError, get_order, list_orders
+from order_engine.service import InvalidOrderCursorError, OrderNotFoundError, _map_row, get_order, list_orders
 from order_item_engine.mapper import map_order_item_identities
 from order_engine.product_image_enrichment import enrich_order_item_images
 from order_engine.product_identity_enrichment import enrich_order_item_identity
@@ -596,6 +597,41 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             "items": [order.model_dump(mode="json") for order in page.items if order.order_number not in completed],
             "next_cursor": page.next_cursor,
             "skipped_invalid": page.skipped_invalid,
+        }
+
+    @router.get("/pages")
+    async def list_pending_review_pages(
+        page: int = Query(1, ge=1, le=100000),
+        limit: int = Query(10, ge=1, le=50),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        reviewer = _require_reviewer(user)
+        merchant_id = _merchant_user_id(reviewer)
+        schedule_salla_auto_sync(db, merchant_id)
+        count, rows = await repository.list_salla_review_page(
+            user_id=merchant_id,
+            page=page,
+            limit=limit,
+            excluded_workflow_stages=sorted(
+                REVIEW_COMPLETED_STAGES | {"waiting_customer_review"}
+            ),
+        )
+        items = []
+        skipped_invalid = 0
+        for row in rows:
+            try:
+                order = _map_row(row.salla_raw, current_status=row.current_status)
+            except OrderMappingError:
+                skipped_invalid += 1
+                continue
+            items.append(order.model_dump(mode="json"))
+        return {
+            "items": items,
+            "page": page,
+            "page_size": limit,
+            "total_count": count,
+            "total_pages": (count + limit - 1) // limit,
+            "skipped_invalid": skipped_invalid,
         }
 
     @router.get("/reviewed")
