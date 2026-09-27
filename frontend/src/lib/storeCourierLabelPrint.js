@@ -17,7 +17,10 @@ export function storeCourierLabelHtml(data = {}) {
     ].filter(Boolean).join("، ");
     const shortAddress = address.short_address || "—";
     const remaining = data.remaining_amount || {};
-    const remainingText = `${remaining.amount ?? 0} ${remaining.currency || "SAR"}`;
+    const remainingValue = Number(remaining.amount);
+    const remainingText = Number.isFinite(remainingValue) && remaining.amount != null
+        ? `${remainingValue.toFixed(2)} ${remaining.currency || "SAR"}`
+        : "—";
     const items = (data.items || []).map((item) => (
         `<li>${escapePrintHtml(item.name || "منتج")} × ${escapePrintHtml(item.quantity || 1)}</li>`
     )).join("");
