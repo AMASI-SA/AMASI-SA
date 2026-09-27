@@ -1,12 +1,18 @@
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
+import mobile_operations_monitoring_routes as monitoring
+
 from mobile_operations_monitoring_routes import (
+    _live_preparation_metrics,
     courier_live_sort_key,
     preparation_workload_sort_key,
     resolve_monitoring_range,
     summarize_courier,
     summarize_preparation_employee,
 )
+from preparation_supplier_dispatch import employee_workspace_stage_summary
 from preparation_piece_operations import (
     PIECE_STATUS_ASSIGNED,
     PIECE_STATUS_IN_PROGRESS,
@@ -141,6 +147,100 @@ def test_pending_review_excludes_piece_already_sent_to_supplier():
     )
     assert result["pending_review_count"] == 1
     assert result["current_held_pieces"] == 3
+
+
+def test_monitoring_live_stages_equal_employee_workspace_including_new_assignments():
+    pieces = [
+        {"id": "new-1", "batch_id": "new-file", "status": PIECE_STATUS_ASSIGNED,
+         "waiting_review_eligible": True},
+        {"id": "new-2", "batch_id": "new-file", "status": PIECE_STATUS_ASSIGNED,
+         "waiting_review_eligible": True},
+        {"id": "old-order", "batch_id": "old-file", "status": PIECE_STATUS_ASSIGNED,
+         "waiting_review_eligible": False},
+        {"id": "sent", "batch_id": "active-file", "status": PIECE_STATUS_IN_PROGRESS,
+         "supplier_dispatch_status": "sent"},
+        {"id": "received", "batch_id": "active-file", "status": "received",
+         "supplier_dispatch_status": "received"},
+        {"id": "finished", "batch_id": "finished-file", "status": PIECE_STATUS_READY_FOR_ASSEMBLY,
+         "completed_at": _dt(12), "started_at": _dt(11)},
+    ]
+    workspace = employee_workspace_stage_summary(pieces)
+    monitored = _live_preparation_metrics(pieces, start=_dt(1), end=_dt(22))
+
+    assert monitored["pending_review_count"] == workspace["waiting_review_pieces"] == 2
+    assert monitored["in_progress_count"] == workspace["in_progress_pieces"] == 1
+    assert monitored["received_count"] == workspace["received_pieces_awaiting_branch_handoff"] == 1
+    assert monitored["completed_count"] == 1  # Performance history is not a live stage.
+    assert monitored["current_held_pieces"] == 4
+
+
+@pytest.mark.asyncio
+async def test_preparation_overview_reads_new_assignee_account_not_employee_record(monkeypatch):
+    class Cursor:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def sort(self, *_args):
+            return self
+
+        def limit(self, *_args):
+            return self
+
+        async def to_list(self, _limit):
+            return self.rows
+
+    class Collection:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def find(self, query, _projection):
+            if "responsible_employee_id" in query:
+                assert query["responsible_employee_id"]["$in"] == ["account-new", "owner-1"]
+                assert query["experiment_archived_at"] is None
+            return Cursor(self.rows)
+
+        async def find_one(self, *_args):
+            return self.rows[0] if self.rows else None
+
+    class DB:
+        users = Collection([{"id": "owner-1", "name": "Owner"}])
+
+        def __getitem__(self, name):
+            if name == monitoring.MOBILE_APP_ACCESS:
+                return Collection([{
+                    "user_id": "account-new", "enabled": True,
+                    "permissions": ["app.page.my_products", "app.page.operations_monitoring"],
+                }])
+            if name == monitoring.EMPLOYEES:
+                return Collection([{
+                    "id": "empv2-new", "account_user_id": "account-new",
+                    "display_name": "New employee", "status": "active",
+                }])
+            if name == monitoring.PIECES:
+                return Collection([{
+                    "id": "assigned-1", "batch_id": "file-1",
+                    "responsible_employee_id": "account-new", "status": "assigned",
+                    "waiting_review_eligible": True,
+                }])
+            raise AssertionError(name)
+
+    async def access(*_args, **_kwargs):
+        return {"permissions": [monitoring.MONITORING_PERMISSION]}
+
+    async def annotate(_db, *, user_id, pieces):
+        assert user_id == "owner-1"
+        return pieces
+
+    monkeypatch.setattr(monitoring, "mobile_app_access_for_user", access)
+    monkeypatch.setattr(monitoring, "annotate_waiting_pieces", annotate)
+    router = monitoring.make_mobile_operations_monitoring_router(DB(), lambda: None)
+    endpoint = next(route.endpoint for route in router.routes if route.path == "/mobile/operations-monitoring/preparation")
+
+    response = await endpoint(from_at=_dt(1).isoformat(), to_at=_dt(22).isoformat(),
+                              user={"id": "owner-1", "role": "owner"})
+    assignee = next(row for row in response["employees"] if row["employee_id"] == "empv2-new")
+    assert assignee["pending_review_count"] == 1
+    assert assignee["current_held_pieces"] == 1
 
 
 def test_courier_average_uses_out_for_delivery_to_delivered_only():
