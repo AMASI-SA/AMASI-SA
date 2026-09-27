@@ -626,15 +626,16 @@ def _salla_order_to_doc(salla_order: dict) -> dict:
     if not isinstance(refund_action, dict):
         refund_action = {}
 
-    raw_paid = (
-        remaining_action.get("paid_amount")
-        or refund_action.get("paid_amount")
-        or salla_order.get("paid_amount")
-    )
-    raw_remaining = (
-        remaining_action.get("remaining_amount")
-        or salla_order.get("remaining_amount")
-    )
+    # Numeric zero is an explicit Salla payment fact; do not discard it via `or`.
+    raw_paid = next((value for value in (
+        remaining_action.get("paid_amount"),
+        refund_action.get("paid_amount"),
+        salla_order.get("paid_amount"),
+    ) if value is not None and value != ""), None)
+    raw_remaining = next((value for value in (
+        remaining_action.get("remaining_amount"),
+        salla_order.get("remaining_amount"),
+    ) if value is not None and value != ""), None)
     paid_amount = _money(raw_paid)
     remaining_amount = _money(raw_remaining)
     cod_due = cod_expected_due(
