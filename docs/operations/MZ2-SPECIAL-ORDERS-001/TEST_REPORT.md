@@ -105,3 +105,21 @@ producing two file-path failures on BOTH baseline and candidate. Rerunning from
 `backend/` resolved the backend assertion; the frontend assertion cannot run on
 this backend-only fixture. The test was not weakened; CI runs both from the
 correct directory with the original frontend present. No production data used.
+
+
+## R2 subsequent CI — verified, not live release acceptance
+
+The R2 local result above (176 pass / 7 Mongo skips) is historical. Dedicated
+GitHub run **36349065001**, job **108704030454** subsequently completed with
+**184 passed, 1 deprecation warning**, zero failures/errors/skips. The frozen
+ordinary-order baseline passed **78 tests**, and the same 78 pass in the candidate.
+The full CI checkout also runs the frontend-source assertion unavailable in the
+local backend-only fixture. All seven real-Mongo tests executed successfully.
+
+Source `9e3c551fb987c78b85bfca3f6d1c3a69ea09467d` and the tested GitHub merge
+`80e51a6b2ad91c6a6f25ba8ac47832e43ba979b6` both have tree
+`b817bc4f45783e79642efca112e739d51fd8ebce`, independently read back.
+Artifact **10941469074** was downloaded; its archive digest and both XML counters
+were recomputed. Full identities, digests and remaining implementation blockers
+are in **R2_CI_EVIDENCE.md**. This is not completion of shared fulfillment mutations,
+MZ2 posting, actual labels, Android, reports or release acceptance.
