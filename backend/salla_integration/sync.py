@@ -33,7 +33,7 @@ from pymongo.errors import DuplicateKeyError
 
 from carrier_handoff import advance_carrier_handoff_from_salla_status
 from order_currency import salla_order_currency_fields
-from order_engine.cod_collection import cod_expected_due
+from cod_collection import cod_expected_due
 
 from salla_marketing_attribution import promoted_salla_attribution
 
