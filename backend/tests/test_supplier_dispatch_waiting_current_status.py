@@ -17,8 +17,9 @@ import supplier_dispatch_waiting_policy as policy
 
 OWNER = {"id": "waiting-owner", "role": "owner", "name": "Synthetic owner"}
 ALIASES = ["under_review", "under review", "waiting_review", "waiting review",
-           "pending_review", "pending review", "بانتظار المراجعة", "بإنتظار المراجعة", "انتظار المراجعة"]
-BLOCKED = ["reviewed", "تم المراجعة", "تمت المراجعة", "processing", "in_progress", "قيد التنفيذ",
+           "pending_review", "pending review", "بانتظار المراجعة", "بإنتظار المراجعة", "انتظار المراجعة",
+           "تم المراجعة", "تمت المراجعة"]
+BLOCKED = ["reviewed", "processing", "in_progress", "قيد التنفيذ",
            "جاري التنفيذ", "completed", "تم التنفيذ", "تم التوصيل", "shipping", "shipped",
            "جاري التوصيل", "cancelled", "ملغي", "ملغى", "refunded", "returned", "مسترجع", "", "mystery"]
 
@@ -67,14 +68,15 @@ async def db():
         client.close()
 
 
-async def seed_order(db, number="A", current="under_review", raw_status=None, tenant=None):
+async def seed_order(db, number="A", current="under_review", raw_status=None, raw_name=None, tenant=None):
     raw_status = current if raw_status is None else raw_status
+    raw_name = raw_status if raw_name is None else raw_name
     row = {"user_id": tenant or OWNER["id"], "order_number": number,
            "order_date": "2026-09-26T08:00:00+00:00", "order_status": current,
            "raw_by_source": {"salla_direct": {
                "id": "salla-" + number, "reference_id": number,
                "date": {"date": "2026-09-26T08:00:00+00:00"},
-               "status": {"slug": raw_status, "name": raw_status},
+               "status": {"slug": raw_status, "name": raw_name},
                "customer": {"full_name": "Synthetic customer"},
                "amounts": {"total": {"amount": 10, "currency": "SAR"}},
                "items": [{"id": "line-" + number, "quantity": 1,
@@ -132,6 +134,46 @@ async def test_workspace_current_status_only_not_piece_snapshot(db, status):
     assert len([x for x in db.reads if x[0] == "unified_orders"]) == 1
     saved = await db.raw[dispatch.PIECES].find_one({"piece_id": original["piece_id"]}, {"_id": 0})
     assert saved == original, "Workspace must not mutate stored pieces or their history"
+
+
+@pytest.mark.parametrize("localized_name", ["تم المراجعة", "تمت المراجعة"])
+@pytest.mark.asyncio
+async def test_salla_under_review_slug_with_reviewed_arabic_label_stays_visible(db, localized_name):
+    await seed_order(
+        db,
+        current="under_review",
+        raw_status="under_review",
+        raw_name=localized_name,
+    )
+    original = await seed_piece(db)
+    reply = await request(db)
+    assert reply.status_code == 200, reply.text
+    work = reply.json()
+    row = work["files"][0]["products"][0]
+    assert row["piece_id"] == original["piece_id"]
+    assert row["order_status"] == "under_review"
+    assert row["order_status_native"] == localized_name
+    assert row["waiting_review_eligible"] is True
+    assert row["available_quantity"] == 1
+    assert work["summary"]["waiting_review_pieces"] == 1
+    assert work["summary"]["waiting_review_products"] == 1
+
+
+@pytest.mark.asyncio
+async def test_distinct_english_reviewed_status_remains_blocked(db):
+    await seed_order(
+        db,
+        current="reviewed",
+        raw_status="reviewed",
+        raw_name="Reviewed",
+    )
+    await seed_piece(db)
+    work = (await request(db)).json()
+    row = work["files"][0]["products"][0]
+    assert row["order_status"] == "reviewed"
+    assert row["waiting_review_eligible"] is False
+    assert row["available_quantity"] == 0
+    assert work["summary"]["waiting_review_pieces"] == 0
 
 
 @pytest.mark.asyncio
