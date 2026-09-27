@@ -71,16 +71,113 @@ def _internal_id(row: Any) -> str:
     return str(row.get("id") or "").strip()
 
 
+def _customized_status_name(raw_status: dict[str, Any]) -> str:
+    """Return the merchant-visible child/custom status when Salla provides one."""
+    customized = raw_status.get("customized")
+    if isinstance(customized, dict):
+        for key in ("name", "label", "title", "slug"):
+            value = str(customized.get(key) or "").strip()
+            if value:
+                return value
+        return ""
+    return str(customized or "").strip()
+
+
 def _status_values(row: Any) -> tuple[str, str, dict[str, Any]]:
     if not isinstance(row, dict):
         return "", "", {}
     raw_status = row.get("status") or {}
     if isinstance(raw_status, dict):
-        name = str(raw_status.get("name") or raw_status.get("customized") or "").strip()
+        # Salla keeps the canonical parent in status.name/slug and the actual
+        # merchant workflow state in status.customized.  The customized child
+        # must win, otherwise "تم المراجعة" is misread as "بإنتظار المراجعة".
+        name = _customized_status_name(raw_status) or str(
+            raw_status.get("name") or ""
+        ).strip()
         slug = str(raw_status.get("slug") or "").strip().lower()
         return name, slug, dict(raw_status)
     name = str(raw_status or "").strip()
     return name, "", {"name": name} if name else {}
+
+
+async def _reconcile_existing_order_status(
+    db,
+    user_id: str,
+    order_number: str,
+    light_order: dict[str, Any],
+    *,
+    local: dict[str, Any] | None = None,
+) -> bool:
+    """Apply only the current Salla status to an existing Mezan order.
+
+    This is deliberately status-only. Product lines, costs, payment facts,
+    shipping facts, preparation pieces and assignments are never replaced by
+    a reduced format=light payload.
+    """
+    if local is None:
+        local = await db.unified_orders.find_one(
+            {
+                "user_id": str(user_id),
+                "order_number": str(order_number),
+                "raw_by_source.salla_direct": {"$exists": True},
+            },
+            {
+                "_id": 0,
+                "order_number": 1,
+                "order_status": 1,
+                "order_status_slug": 1,
+            },
+        )
+    if not local:
+        return False
+
+    status_name, status_slug, raw_status = _status_values(light_order)
+    if not status_name and not status_slug:
+        return False
+
+    old_name = str(local.get("order_status") or "").strip()
+    old_slug = str(local.get("order_status_slug") or "").strip().lower()
+    if old_name == status_name and old_slug == status_slug:
+        return False
+
+    reconciled_at = _utcnow()
+    patch: dict[str, Any] = {
+        "last_salla_direct_status_reconciled_at": reconciled_at,
+        "raw_by_source.salla_direct.status": raw_status,
+    }
+    if status_name:
+        patch["order_status"] = status_name
+    if status_slug:
+        patch["order_status_slug"] = status_slug
+
+    provider_updated_at = light_order.get("updated_at")
+    if provider_updated_at is not None:
+        patch["raw_by_source.salla_direct.updated_at"] = provider_updated_at
+
+    await db.unified_orders.update_one(
+        {"user_id": str(user_id), "order_number": str(order_number)},
+        {"$set": patch},
+    )
+
+    # Keep the read-only status snapshot aligned. This path never calls Qoyod.
+    try:
+        await _refresh_plan_b_status_snapshot(
+            db,
+            str(user_id),
+            str(order_number),
+            {
+                "order_status": status_name or status_slug,
+                "order_status_slug": status_slug or status_name,
+            },
+        )
+    except Exception:
+        log.exception(
+            "salla.auto_sync.status_snapshot_failed user_id=%s order_number=%s",
+            user_id,
+            order_number,
+        )
+
+    return True
 
 
 async def _discover_recent_orders(db, user_id: str) -> list[dict]:
@@ -128,9 +225,10 @@ async def _sync_light_order(db, user_id: str, light_order: dict) -> bool:
     if not order_number or not internal_id:
         return False
 
-    # Webhooks are the primary source for existing orders. The light Orders API
-    # is only a discovery fallback for an order that Mezan has not received yet.
-    # Never replace a webhook-backed order with a reduced format=light snapshot.
+    # Webhooks are the primary source for full order facts.  The light Orders
+    # API may still carry a newer status for an order Mezan already knows.
+    # Reconcile that status only; never replace a webhook-backed order with the
+    # reduced format=light payload.
     existing = await db.unified_orders.find_one(
         {
             "user_id": str(user_id),
@@ -139,9 +237,18 @@ async def _sync_light_order(db, user_id: str, light_order: dict) -> bool:
         {
             "_id": 0,
             "order_number": 1,
+            "order_status": 1,
+            "order_status_slug": 1,
         },
     )
     if existing:
+        await _reconcile_existing_order_status(
+            db,
+            user_id,
+            order_number,
+            light_order,
+            local=existing,
+        )
         return True
 
     items = await _fetch_salla_order_items(db, user_id, internal_id)
@@ -247,59 +354,18 @@ async def _reconcile_status_page(
     }
 
     changed = 0
-    reconciled_at = _utcnow()
     for order_number, light_order in normalized_rows.items():
         local = local_by_number.get(order_number)
         if not local:
             continue
-
-        status_name, status_slug, raw_status = _status_values(light_order)
-        if not status_name and not status_slug:
-            continue
-
-        old_name = str(local.get("order_status") or "").strip()
-        old_slug = str(local.get("order_status_slug") or "").strip().lower()
-        if old_name == status_name and old_slug == status_slug:
-            continue
-
-        patch: dict[str, Any] = {
-            "last_salla_direct_status_reconciled_at": reconciled_at,
-            "raw_by_source.salla_direct.status": raw_status,
-        }
-        if status_name:
-            patch["order_status"] = status_name
-        if status_slug:
-            patch["order_status_slug"] = status_slug
-
-        provider_updated_at = light_order.get("updated_at")
-        if provider_updated_at is not None:
-            patch["raw_by_source.salla_direct.updated_at"] = provider_updated_at
-
-        await db.unified_orders.update_one(
-            {"user_id": str(user_id), "order_number": order_number},
-            {"$set": patch},
-        )
-
-        # Update the read-only status snapshot only when the status actually
-        # changed. This performs no Qoyod API call and remains ineligible to send.
-        try:
-            await _refresh_plan_b_status_snapshot(
-                db,
-                str(user_id),
-                order_number,
-                {
-                    "order_status": status_name or status_slug,
-                    "order_status_slug": status_slug or status_name,
-                },
-            )
-        except Exception:
-            log.exception(
-                "salla.auto_sync.status_snapshot_failed user_id=%s order_number=%s",
-                user_id,
-                order_number,
-            )
-
-        changed += 1
+        if await _reconcile_existing_order_status(
+            db,
+            user_id,
+            order_number,
+            light_order,
+            local=local,
+        ):
+            changed += 1
 
     exhausted = len(rows) < STATUS_RECONCILE_PER_PAGE
     return len(normalized_rows), changed, exhausted
