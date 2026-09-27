@@ -418,6 +418,76 @@ class MongoOrderRepository:
                 rows.append(mapped)
         return rows
 
+    async def list_salla_review_page(
+        self,
+        *,
+        user_id: str,
+        page: int,
+        limit: int,
+        excluded_workflow_stages: list[str],
+    ) -> tuple[int, list[OrderDiscoveryRow]]:
+        """Count and load one numbered review page with the same tenant/status scope.
+
+        Workflow exclusions are applied before count and skip, so a page of
+        customer-waiting/reviewed orders cannot inflate the tab or leave gaps.
+        """
+        query = {
+            "user_id": str(user_id),
+            "raw_by_source.salla_direct": {"$type": "object"},
+            "order_number": {"$type": "string", "$ne": ""},
+            "order_date": {"$type": "string", "$ne": ""},
+            "$expr": {
+                "$regexMatch": {
+                    "input": {"$toString": _effective_status_expression()},
+                    "regex": _STATUS_PATTERNS["under_review"],
+                    "options": "i",
+                }
+            },
+        }
+        projection = {
+            "_id": 0,
+            "order_number": 1,
+            "order_date": 1,
+            "order_status": 1,
+            "raw_by_source.salla_direct": 1,
+            **{field: 1 for field in _V2_CANONICAL_ROOT_FIELDS},
+        }
+        pipeline = [
+            {"$match": query},
+            {"$lookup": {
+                "from": "order_review_workflows",
+                "let": {"merchant": "$user_id", "number": "$order_number"},
+                "pipeline": [
+                    {"$match": {"$expr": {"$and": [
+                        {"$eq": ["$user_id", "$merchant"]},
+                        {"$eq": ["$order_number", "$number"]},
+                    ]}}},
+                    {"$match": {"stage": {"$in": excluded_workflow_stages}}},
+                    {"$limit": 1},
+                ],
+                "as": "blocked_review",
+            }},
+            {"$match": {"blocked_review.0": {"$exists": False}}},
+            {"$facet": {
+                "counts": [{"$count": "total"}],
+                "items": [
+                    {"$sort": {"order_date": -1, "order_number": -1}},
+                    {"$skip": (page - 1) * limit},
+                    {"$limit": limit},
+                    {"$project": projection},
+                ],
+            }},
+        ]
+        buckets = await self._collection.aggregate(pipeline).to_list(length=1)
+        bucket = buckets[0] if buckets else {}
+        counts = bucket.get("counts") or []
+        total = int(counts[0].get("total") or 0) if counts else 0
+        rows = [
+            row for raw in (bucket.get("items") or [])
+            if (row := self._to_discovery_row(raw)) is not None
+        ]
+        return total, rows
+
     async def get_salla_order(
         self,
         *,

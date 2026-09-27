@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from order_engine.repository import MongoOrderRepository, OrderDiscoveryRow
 from order_engine.mapper import map_salla_order
 from order_engine.product_identity_enrichment import enrich_order_item_identity
 from salla_integration.sync import _fetch_salla_shipment_details
@@ -21,6 +22,7 @@ from order_review_routes import (
     _merchant_user_id,
     _review_item_identities,
     _reviewed_status_id,
+    REVIEW_COMPLETED_STAGES,
     build_image_preference_identity,
     make_order_review_router,
 )
@@ -412,3 +414,99 @@ async def test_current_shipment_merges_embedded_address_without_reviving_stale_l
     assert rows[0]["shipping_address"]["street"] == "شارع الأمير"
     assert rows[0]["tracking_number"] == "CURRENT-TRACKING"
     assert "label_url" not in rows[0]
+
+
+class _NumberedReviewAggregate:
+    def __init__(self, rows):
+        self.rows = rows
+
+    async def to_list(self, length):
+        assert length == 1
+        return self.rows
+
+
+class _NumberedReviewCollection:
+    def __init__(self, rows):
+        self.rows = rows
+        self.pipeline = None
+
+    def aggregate(self, pipeline):
+        self.pipeline = pipeline
+        return _NumberedReviewAggregate(self.rows)
+
+
+@pytest.mark.asyncio
+async def test_numbered_review_page_counts_after_tenant_status_and_workflow_filters():
+    raw = {
+        "order_number": "9001",
+        "order_date": "2026-09-27T00:00:00+00:00",
+        "raw_by_source": {"salla_direct": {
+            "id": 1,
+            "reference_id": "9001",
+            "date": "2026-09-27T00:00:00+00:00",
+            "status": {"slug": "under_review"},
+            "amounts": {"total": {"amount": 100, "currency": "SAR"}},
+        }},
+    }
+    collection = _NumberedReviewCollection([{
+        "counts": [{"total": 1005}], "items": [raw],
+    }])
+    db = type("ReviewDB", (), {"unified_orders": collection})()
+    total, rows = await MongoOrderRepository(db).list_salla_review_page(
+        user_id="owner-1",
+        page=101,
+        limit=10,
+        excluded_workflow_stages=["reviewed", "waiting_customer_review"],
+    )
+    assert total == 1005
+    assert [row.order_number for row in rows] == ["9001"]
+    pipeline = collection.pipeline
+    assert pipeline[0]["$match"]["user_id"] == "owner-1"
+    assert pipeline[0]["$match"]["$expr"]["$regexMatch"]["regex"]
+    lookup = pipeline[1]["$lookup"]
+    assert lookup["from"] == "order_review_workflows"
+    assert lookup["let"] == {"merchant": "$user_id", "number": "$order_number"}
+    assert lookup["pipeline"][1] == {"$match": {
+        "stage": {"$in": ["reviewed", "waiting_customer_review"]},
+    }}
+    assert pipeline[2] == {"$match": {"blocked_review.0": {"$exists": False}}}
+    assert pipeline[3]["$facet"]["counts"] == [{"$count": "total"}]
+    assert pipeline[3]["$facet"]["items"][1:3] == [
+        {"$skip": 1000}, {"$limit": 10},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_numbered_review_api_returns_global_count_and_excludes_customer_waiting():
+    db = _SearchDB()
+    db.unified_orders = object()
+    router = make_order_review_router(db, lambda: {"id": "owner-1", "role": "owner"})
+    endpoint = next(
+        route.endpoint for route in router.routes
+        if route.path == "/order-reviews-v1/pages"
+    )
+    sample = OrderDiscoveryRow(
+        order_number="9001",
+        order_date="2026-09-27T00:00:00+00:00",
+        salla_raw={},
+    )
+    with (
+        patch(
+            "order_engine.repository.MongoOrderRepository.list_salla_review_page",
+            new=AsyncMock(return_value=(1005, [sample])),
+        ) as fetch,
+        patch("order_review_routes._map_row", return_value=_search_order()) as mapped,
+        patch("order_review_routes.schedule_salla_auto_sync"),
+    ):
+        result = await endpoint(page=101, limit=10, user={"id": "owner-1", "role": "owner"})
+    fetch.assert_awaited_once_with(
+        user_id="owner-1",
+        page=101,
+        limit=10,
+        excluded_workflow_stages=sorted(REVIEW_COMPLETED_STAGES | {"waiting_customer_review"}),
+    )
+    mapped.assert_called_once_with({}, current_status=None)
+    assert result["page"] == 101
+    assert result["total_count"] == 1005
+    assert result["total_pages"] == 101
+    assert result["items"][0]["order_number"] == _search_order().order_number

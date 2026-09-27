@@ -21,6 +21,7 @@ from carrier_handoff import (
 )
 from fulfillment_batch_pdf import generate_shipping_batch_pdf
 from fulfillment_carrier_label import sync_completed_carrier_label
+from cod_collection import cod_expected_due
 from order_engine.repository import MongoOrderRepository
 from order_engine.service import OrderNotFoundError, get_order
 from order_engine.shipping_label_service import ShippingLabelError
@@ -1141,6 +1142,29 @@ async def _order_view(
         )
     except OrderNotFoundError:
         return None
+    print_data = workflow.get("carrier_label_print_data")
+    if (
+        workflow.get("carrier_label_type") == "store_courier"
+        and isinstance(print_data, dict)
+    ):
+        currency = order.totals.currency
+        cod_due = cod_expected_due(
+            order.payment.method or order.payment.method_native,
+            total={"amount": order.totals.total, "currency": currency},
+            paid={"amount": order.payment.paid_amount, "currency": currency},
+            remaining=print_data.get("remaining_amount"),
+            payment_status=order.payment.status,
+            collection_status=order.payment.collection_status,
+        )
+        if cod_due is not None:
+            # Repair old print snapshots in the response without changing
+            # stored workflow evidence or triggering another label issuance.
+            print_data = {
+                **print_data,
+                "payment_method": "cod",
+                "paid_amount": {"amount": order.payment.paid_amount, "currency": currency},
+                "remaining_amount": {"amount": cod_due, "currency": currency},
+            }
     return {
         "order_number": order.order_number,
         "order_id": order.order_id,
@@ -1196,7 +1220,7 @@ async def _order_view(
         "carrier_label_ready": bool(workflow.get("carrier_label_ready")),
         "carrier_label_url": workflow.get("carrier_label_url"),
         "carrier_label_type": workflow.get("carrier_label_type"),
-        "carrier_label_print_data": workflow.get("carrier_label_print_data"),
+        "carrier_label_print_data": print_data,
         "carrier_name": workflow.get("carrier_name") or order.shipping.company,
         "carrier_tracking_number": workflow.get("carrier_tracking_number"),
         "carrier_label_message": workflow.get("carrier_label_message"),

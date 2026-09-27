@@ -52,6 +52,8 @@ on:
       - "backend/tests/test_customer_history_complete_lookup.py"
       - "backend/tests/test_customer_history_route.py"
       - "backend/tests/test_fulfillment_v2_contract.py"
+      - "backend/tests/test_cod_collection_display.py"
+      - "backend/cod_collection.py"
       - "backend/tests/test_carrier_handoff.py"
       - "backend/tests/test_fulfillment_carrier_label.py"
       - "tests/test_order_review_image_modes_contract.py"
@@ -170,6 +172,8 @@ on:
       - "backend/tests/test_customer_history_complete_lookup.py"
       - "backend/tests/test_customer_history_route.py"
       - "backend/tests/test_fulfillment_v2_contract.py"
+      - "backend/tests/test_cod_collection_display.py"
+      - "backend/cod_collection.py"
       - "backend/tests/test_carrier_handoff.py"
       - "backend/tests/test_fulfillment_carrier_label.py"
       - "tests/test_order_review_image_modes_contract.py"
@@ -256,6 +260,9 @@ jobs:
           httpx
           pytest
           pytest-asyncio
+          bcrypt==4.1.3
+          PyJWT
+          email-validator
           openpyxl
           cryptography
           reportlab
@@ -288,6 +295,7 @@ jobs:
           tests/test_customer_history_complete_lookup.py
           tests/test_customer_history_route.py
           tests/test_fulfillment_v2_contract.py
+          tests/test_cod_collection_display.py
           tests/test_carrier_handoff.py
           tests/test_fulfillment_carrier_label.py
           -q --tb=short

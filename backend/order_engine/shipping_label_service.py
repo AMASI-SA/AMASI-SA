@@ -15,6 +15,7 @@ from reportlab.graphics import renderSVG
 from reportlab.graphics.barcode.qr import QrCodeWidget
 from reportlab.graphics.shapes import Drawing
 
+from cod_collection import cod_expected_due, is_cash_on_delivery
 from salla_integration.service import SallaError, call_salla
 from salla_integration.sync import resync_single_order
 
@@ -335,17 +336,41 @@ def _store_courier_print_data(
     }
     amounts = order.get("amounts")
     amounts = amounts if isinstance(amounts, dict) else {}
-    total = shipment.get("total") or amounts.get("total") or order.get("total")
+    total = amounts.get("total") or order.get("total") or shipment.get("total")
     payment_actions = order.get("payment_actions")
     payment_actions = payment_actions if isinstance(payment_actions, dict) else {}
     remaining_action = payment_actions.get("remaining_action")
     remaining_action = (
         remaining_action if isinstance(remaining_action, dict) else {}
     )
-    remaining = remaining_action.get("remaining_amount") or {
-        "amount": 0,
-        "currency": _money(total).get("currency") or "SAR",
-    }
+    refund_action = payment_actions.get("refund_action")
+    refund_action = refund_action if isinstance(refund_action, dict) else {}
+    raw_paid = next((value for value in (
+        remaining_action.get("paid_amount"),
+        refund_action.get("paid_amount"),
+        order.get("paid_amount"),
+    ) if value is not None and value != ""), None)
+    raw_remaining = remaining_action.get("remaining_amount")
+    if raw_remaining is None:
+        raw_remaining = order.get("remaining_amount")
+    method = order.get("payment_method") or shipment.get("payment_method")
+    cod_due = cod_expected_due(
+        method,
+        total=total,
+        paid=raw_paid,
+        remaining=raw_remaining,
+        payment_status=(order.get("payment") or {}).get("status")
+        if isinstance(order.get("payment"), dict) else None,
+    )
+    remaining = (
+        {"amount": cod_due, "currency": _money(total)["currency"]}
+        if cod_due is not None else raw_remaining
+    )
+    if remaining is None:
+        remaining = {
+            "amount": 0,
+            "currency": _money(total).get("currency") or "SAR",
+        }
     ship_from = shipment.get("ship_from")
     ship_from = ship_from if isinstance(ship_from, dict) else {}
     return {
@@ -366,6 +391,8 @@ def _store_courier_print_data(
         or _text(customer.get("mobile")),
         "address": address,
         "total": _money(total),
+        "payment_method": "cod" if is_cash_on_delivery(method) else _text(method),
+        "paid_amount": _money(raw_paid) if raw_paid is not None else None,
         "remaining_amount": _money(remaining),
         "items": [
             {
