@@ -49,3 +49,26 @@ jobs:
         with:
           name: mezan-special-order-test-results
           path: special-order-tests.xml
+      - name: Retain pinned tracked source for isolated integration audit
+        if: github.head_ref == 'feature/mezan-special-orders-core-20260927' || github.ref_name == 'feature/mezan-special-orders-core-20260927'
+        run: |
+          python - <<'PY'
+          import hashlib, json, subprocess, zipfile
+          from pathlib import Path
+          paths = subprocess.check_output(['git', 'ls-files', '-z', 'backend', 'AGENTS.md', 'docs/MEZAN_OS_ARCHITECTURE.md', 'docs/PROJECT_DECISIONS.md', 'docs/ORDER_CAPABILITY_AUDIT.md']).decode().split('\0')
+          paths = [p for p in paths if p and (p.endswith(('.py', '.md')) or p == 'backend/requirements.txt') and '/.env' not in p]
+          manifest = {'commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(), 'tree': subprocess.check_output(['git', 'rev-parse', 'HEAD^{tree}'], text=True).strip(), 'files': {}}
+          with zipfile.ZipFile('special-order-backend-source.zip', 'w', zipfile.ZIP_DEFLATED) as archive:
+              for path in paths:
+                  data = Path(path).read_bytes()
+                  manifest['files'][path] = hashlib.sha256(data).hexdigest()
+                  archive.writestr(path, data)
+              archive.writestr('SOURCE_MANIFEST.json', json.dumps(manifest, sort_keys=True, indent=2))
+          print('Tracked backend source files:', len(paths))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: github.head_ref == 'feature/mezan-special-orders-core-20260927' || github.ref_name == 'feature/mezan-special-orders-core-20260927'
+        with:
+          name: mezan-special-order-pinned-backend-source
+          path: special-order-backend-source.zip
+          retention-days: 3
