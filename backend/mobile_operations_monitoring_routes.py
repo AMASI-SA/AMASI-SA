@@ -13,6 +13,10 @@ from typing import Any, Callable
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from employees_v2_routes import EMPLOYEES
+from mobile_employee_monitoring_workspace_routes import (
+    _resolve_monitored_employee,
+    monitored_work_account_id,
+)
 from mobile_app_permissions import (
     MOBILE_APP_ACCESS,
     MOBILE_APP_ACCESS_OWNER_FIELD,
@@ -29,6 +33,11 @@ from preparation_piece_operations import (
     PIECE_STATUS_BLOCKED,
     PIECE_STATUS_CANCELLED,
 )
+from preparation_supplier_dispatch import (
+    _piece_products,
+    employee_workspace_stage_summary,
+)
+from supplier_dispatch_waiting_policy import annotate_waiting_pieces
 from store_delivery_driver_routes import STORE_DRIVERS
 from store_delivery_handover_routes import ASSIGNMENTS
 
@@ -156,6 +165,44 @@ def summarize_preparation_employee(
         "average_preparation_seconds": average_seconds,
         "measured_count": measured_count,
     }
+
+
+def _live_preparation_metrics(
+    pieces: list[dict[str, Any]], *, start: datetime, end: datetime,
+) -> dict[str, Any]:
+    """Match the employee's My Products counters while retaining period performance."""
+    metrics = summarize_preparation_employee(pieces, start=start, end=end)
+    current = employee_workspace_stage_summary(pieces)
+    waiting = current["waiting_review_pieces"]
+    progress = current["in_progress_pieces"]
+    received = current["received_pieces_awaiting_branch_handoff"]
+    return {
+        **metrics,
+        "pending_review_count": waiting,
+        "in_progress_count": progress,
+        "received_count": received,
+        "current_held_pieces": waiting + progress + received,
+        "ready_not_handed_off_pieces": current["ready"] + received,
+    }
+
+
+async def _active_preparation_pieces(
+    db: Any, *, owner_id: str, account_ids: list[str], limit: int,
+) -> list[dict[str, Any]]:
+    if not account_ids:
+        return []
+    pieces = await db[PIECES].find(
+        {
+            "user_id": owner_id,
+            "responsible_employee_id": {"$in": account_ids},
+            "experiment_archived_at": None,
+            "status": {"$ne": PIECE_STATUS_CANCELLED},
+        },
+        {"_id": 0},
+    ).limit(limit + 1).to_list(limit + 1)
+    if len(pieces) > limit:
+        raise HTTPException(status_code=409, detail={"code": "monitoring_piece_limit_exceeded"})
+    return await annotate_waiting_pieces(db, user_id=owner_id, pieces=pieces)
 
 
 def summarize_courier(
@@ -375,11 +422,10 @@ def make_mobile_operations_monitoring_router(
                 "department": None,
                 "status": "active",
             })
-        employee_ids = [_text(row.get("id")) for row in employees if _text(row.get("id"))]
-        pieces = await db[PIECES].find(
-            {"user_id": owner_id, "responsible_employee_id": {"$in": employee_ids}},
-            {"_id": 0},
-        ).to_list(20000)
+        account_ids = sorted({monitored_work_account_id(row) for row in employees})
+        pieces = await _active_preparation_pieces(
+            db, owner_id=owner_id, account_ids=account_ids, limit=50000,
+        )
         by_employee: dict[str, list[dict[str, Any]]] = {}
         for piece in pieces:
             by_employee.setdefault(_text(piece.get("responsible_employee_id")), []).append(piece)
@@ -393,8 +439,8 @@ def make_mobile_operations_monitoring_router(
                 "job_title": _text(employee.get("job_title")) or None,
                 "department": _text(employee.get("department")) or None,
                 "status": _text(employee.get("status")) or None,
-                **summarize_preparation_employee(
-                    by_employee.get(employee_id, []),
+                **_live_preparation_metrics(
+                    by_employee.get(monitored_work_account_id(employee), []),
                     start=start,
                     end=end,
                 ),
@@ -415,9 +461,8 @@ def make_mobile_operations_monitoring_router(
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         owner_id, _ = await require_monitoring_access(user)
-        employee = await db[EMPLOYEES].find_one(
-            {"user_id": owner_id, "id": employee_id},
-            {"_id": 0, "id": 1, "display_name": 1, "job_title": 1, "department": 1, "status": 1},
+        employee = await _resolve_monitored_employee(
+            db, owner_id=owner_id, employee_id=employee_id,
         )
         if not employee:
             raise HTTPException(status_code=404, detail={"code": "employee_not_found"})
@@ -426,11 +471,13 @@ def make_mobile_operations_monitoring_router(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail={"code": str(exc)}) from exc
 
-        pieces = await db[PIECES].find(
-            {"user_id": owner_id, "responsible_employee_id": employee_id},
-            {"_id": 0},
-        ).sort("assigned_at", -1).to_list(5000)
-        summary = summarize_preparation_employee(pieces, start=start, end=end)
+        pieces = await _active_preparation_pieces(
+            db,
+            owner_id=owner_id,
+            account_ids=[monitored_work_account_id(employee)],
+            limit=50000,
+        )
+        summary = _live_preparation_metrics(pieces, start=start, end=end)
         buckets = {
             "pending": [],
             "in_progress": [],
@@ -438,16 +485,17 @@ def make_mobile_operations_monitoring_router(
             "received": [],
             "completed": [],
         }
-        for piece in pieces:
+        for piece in sorted(pieces, key=lambda row: str(row.get("assigned_at") or ""), reverse=True)[:5000]:
             status = _text(piece.get("status"))
             view = _monitoring_piece_view(piece)
-            if _piece_waiting_for_supplier_dispatch(piece):
+            projected = _piece_products([piece], waiting_only=True)[0]
+            if projected["available_quantity"]:
                 buckets["pending"].append(view)
-            elif status == PIECE_STATUS_IN_PROGRESS:
+            elif projected["sent_quantity"]:
                 buckets["in_progress"].append(view)
-            elif status == PIECE_STATUS_READY_FOR_RECEIPT:
+            elif projected["ready_quantity"]:
                 buckets["ready_for_receipt"].append(view)
-            elif status == PIECE_STATUS_RECEIVED:
+            elif projected["received_quantity"]:
                 buckets["received"].append(view)
             elif status == PIECE_STATUS_READY_FOR_ASSEMBLY or piece.get("completed_at"):
                 if _inside(piece.get("completed_at"), start, end):
