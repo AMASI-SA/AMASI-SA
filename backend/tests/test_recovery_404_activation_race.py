@@ -57,7 +57,9 @@ class ActivationAuditRace(unittest.IsolatedAsyncioTestCase):
         current = await c.report(self.db)
         self.assertEqual(current["state"], "active" if strip_lease_guard and operation == "activate" else "paused")
         self.assertEqual(current["release_identity"], "new-release" if strip_lease_guard and operation == "review-release" else "test-release")
-        self.assertFalse(current["can_activate"])
+        # A finalized review is quarantined and no longer blocks activation.
+        # An already-active campaign is naturally not activatable again.
+        self.assertEqual(current["can_activate"], current["state"] == "paused")
         row = next(row for row in current["results"] if row["reference"] == TARGET)
         self.assertEqual(row["state"], "review")
         self.assertEqual(row["reason"], "submitted_invoice_not_found_do_not_retry")
