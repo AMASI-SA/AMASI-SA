@@ -329,3 +329,115 @@ async def test_recovery_route_uses_same_actor_session_authorization(env):
     )
     assert response.status_code == 403
     assert response.json()["detail"]["code"] == "supplier_receiving_session_owner_required"
+
+
+async def test_remove_exact_piece_from_hundred_piece_draft_and_rescan(env):
+    db, http, _ = env
+    session, pieces = await seed(env, 100)
+    scanned = await post_scan(http, session["id"], pieces[0], "scan-request-hundred", 100)
+    assert scanned.status_code == 200, scanned.text
+    assert len(scanned.json()["scans"]) == 100
+    target = pieces[47]
+    url = f"/supplier-receiving-v1/sessions/{session['id']}/scans"
+    before = await db[r.RECEIVING_EVENTS].count_documents({})
+
+    preview = await http.get(f"{url}/lookup", params={"barcode": barcode(target)})
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["piece_id"] == target["piece_id"]
+    assert preview.json()["receipt_provenance"]["received_by_name"] == "Synthetic receiver"
+    event_id = preview.json()["event_id"]
+    assert await db[r.RECEIVING_EVENTS].count_documents({}) == before
+    assert (await db[r.SESSIONS].find_one({"id": session["id"]}))["scan_count"] == 100
+
+    removed = await http.post(f"{url}/remove", json={
+        "barcode": barcode(target), "expected_event_id": event_id,
+    })
+    assert removed.status_code == 200, removed.text
+    assert removed.json()["session"]["scan_count"] == 99
+    assert (await db[r.PIECES].find_one({"piece_id": target["piece_id"]})).get(
+        "supplier_receiving_session_id"
+    ) is None
+    assert await db[r.RECEIVING_EVENTS].count_documents(
+        {"event_type": "supplier_piece_scanned"}
+    ) == 99
+    assert await db[r.RECEIVING_EVENTS].count_documents(
+        {"event_type": "supplier_piece_scan_cancelled"}
+    ) == 1
+    assert await db[r.PIECE_EVENTS].count_documents(
+        {"id": event_id, "event_type": "supplier_piece_scan_cancelled"}
+    ) == 1
+
+    retry = await http.post(f"{url}/remove", json={
+        "barcode": barcode(target), "expected_event_id": event_id,
+    })
+    assert retry.status_code == 200, retry.text
+    assert retry.json()["idempotent"] is True
+    assert await db[r.RECEIVING_EVENTS].count_documents({}) == before
+
+    fresh = await post_scan(http, session["id"], target, "scan-request-after-cancel")
+    assert fresh.status_code == 200, fresh.text
+    assert fresh.json()["scan"]["id"] != event_id
+    assert (await db[r.SESSIONS].find_one({"id": session["id"]}))["scan_count"] == 100
+    assert await db[r.RECEIVING_EVENTS].count_documents(
+        {"event_type": "supplier_piece_scanned"}
+    ) == 100
+    stale = await http.post(f"{url}/remove", json={
+        "barcode": barcode(target), "expected_event_id": event_id,
+    })
+    assert stale.status_code == 409
+    assert stale.json()["detail"]["code"] == "supplier_receiving_piece_changed_since_preview"
+
+
+async def test_remove_requires_current_actor_and_exact_preview_without_financial_writes(env):
+    db, http, identity = env
+    session, pieces = await seed(env, 2)
+    scanned = await post_scan(http, session["id"], pieces[0], "scan-request-guarded")
+    assert scanned.status_code == 200
+    event_id = scanned.json()["scan"]["id"]
+    path = f"/supplier-receiving-v1/sessions/{session['id']}/scans/remove"
+    wrong = await http.post(path, json={
+        "barcode": barcode(pieces[1]), "expected_event_id": event_id,
+    })
+    assert wrong.status_code == 409
+    assert wrong.json()["detail"]["code"] == "supplier_receiving_piece_not_in_current_draft"
+    forged = await http.post(path, json={
+        "barcode": barcode(pieces[0]), "expected_event_id": "stale-event",
+    })
+    assert forged.status_code == 409
+    assert forged.json()["detail"]["code"] == "supplier_receiving_piece_changed_since_preview"
+    legacy = await http.post(path, json={
+        "barcode": "SKU-1", "expected_event_id": event_id,
+    })
+    assert legacy.status_code == 422
+    identity["id"] = "different-employee"
+    denied = await http.post(path, json={
+        "barcode": barcode(pieces[0]), "expected_event_id": event_id,
+    })
+    assert denied.status_code == 403
+    assert (await db[r.SESSIONS].find_one({"id": session["id"]}))["scan_count"] == 1
+    assert await db[r.SUPPLIER_INVOICES].count_documents({}) == 0
+    assert await db[r.RECEIVING_EVENTS].count_documents({"event_type": "supplier_piece_scanned"}) == 1
+
+
+async def test_duplicate_receipt_explains_prior_invoice_and_employee(env):
+    db, http, _ = env
+    session, pieces = await seed(env)
+    received_at = datetime(2026, 9, 20, 11, 30, tzinfo=timezone.utc)
+    await db[r.PIECES].update_one(
+        {"piece_id": pieces[0]["piece_id"]},
+        {"$set": {"status": r.PIECE_STATUS_RECEIVED, "received_at": received_at,
+                  "supplier_receiving_history": [{
+                      "invoice_id": "invoice-previous", "session_reference": "SR-OLD",
+                      "supplier_name": "Synthetic old supplier", "received_by_name": "Earlier receiver",
+                      "received_at": received_at,
+                  }]}},
+    )
+    response = await post_scan(http, session["id"], pieces[0], "scan-request-prior-invoice")
+    assert response.status_code == 409
+    detail = response.json()["detail"]
+    assert detail["code"] == "supplier_piece_already_received"
+    assert detail["receipt_scope"] == "previous_invoice"
+    assert detail["invoice_id"] == "invoice-previous"
+    assert detail["supplier_name"] == "Synthetic old supplier"
+    assert detail["received_by_name"] == "Earlier receiver"
+    assert detail["received_at"].startswith("2026-09-20T11:30:00")

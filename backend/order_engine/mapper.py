@@ -1135,6 +1135,30 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
         fallback_currency=currency,
     )
 
+    # Salla reports ``remaining_action.remaining_amount: null`` and
+    # ``has_remaining_amount: false`` for an uncollected COD order.  A root
+    # snapshot may also carry a synthesized zero from that null value.  For
+    # an order still under review, and only when Salla reports no collection,
+    # the amount due on delivery is the source order total.  Keep explicit
+    # remaining values and paid/partially paid orders authoritative.
+    if (
+        (method or "").casefold().replace("-", "_") in {"cod", "cash_on_delivery"}
+        and (status or "").casefold().replace(" ", "_") in {"under_review", "waiting_review", "pending_review"}
+        and remaining_action
+        and remaining_action.get("remaining_amount") is None
+        and remaining_action.get("has_remaining_amount") is False
+        and paid_amount == 0
+        and remaining_amount == 0
+        and currency == "SAR"
+        and _number(total_obj) > 0
+        and (_text(payment_raw.get("status")) or "").casefold() not in {"paid", "completed", "refunded"}
+        and (_text(raw_order.get("payment_status")) or "").casefold() not in {"paid", "completed", "refunded"}
+        and collection_status not in {"paid", "partial"}
+    ):
+        remaining_amount = _money_round(_number(total_obj))
+        has_remaining_amount = True
+        collection_status = "unpaid"
+
     shipments = _list(raw_order.get("shipments"))
     first_shipment = _dict(shipments[0]) if shipments else {}
     shipping_label_url = (
