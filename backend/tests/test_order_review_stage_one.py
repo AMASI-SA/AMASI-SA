@@ -22,6 +22,7 @@ from order_review_routes import (
     _merchant_user_id,
     _review_item_identities,
     _reviewed_status_id,
+    REVIEW_COMPLETED_STAGES,
     build_image_preference_identity,
     make_order_review_router,
 )
@@ -502,10 +503,7 @@ async def test_numbered_review_api_returns_global_count_and_excludes_customer_wa
         user_id="owner-1",
         page=101,
         limit=10,
-        excluded_workflow_stages=sorted(
-            ["reviewed", "ready_to_ship", "completed", "delivering", "delivered",
-             "waiting_customer_review"]
-        ),
+        excluded_workflow_stages=sorted(REVIEW_COMPLETED_STAGES | {"waiting_customer_review"}),
     )
     mapped.assert_called_once_with({}, current_status=None)
     assert result["page"] == 101
