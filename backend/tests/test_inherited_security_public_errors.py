@@ -8,6 +8,19 @@ from fastapi import APIRouter, FastAPI, HTTPException
 
 CANARY = "db-driver CANARY_PRIVATE token=synthetic-only /srv/private/source.py Traceback customer@example.invalid"
 
+
+def test_public_error_never_formats_exception_or_unknown_detail():
+    from security_public_errors import public_error
+
+    class SensitiveError(Exception):
+        def __str__(self):
+            raise AssertionError("public boundary must not format exceptions")
+
+    assert public_error(SensitiveError()) == "operation_failed"
+    assert public_error(CANARY) == "operation_failed"
+    assert public_error({"error": CANARY}) == "operation_failed"
+    assert public_error("diagnostic_failed") == "diagnostic_failed"
+
 CASES = [
     ("bnpl.auto_sync_routes", "attach_bnpl_auto_sync_routes", "get_auto_sync_status", "GET", "/bnpl/auto-sync/status"),
     ("bnpl.refund_audit_routes", "attach_bnpl_refund_audit_routes", "_audit_provider", "GET", "/bnpl/refund-audit"),
@@ -77,4 +90,3 @@ async def test_status_success_contract_unchanged(monkeypatch):
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://offline.test") as client:
         response = await client.get("/bnpl/auto-sync/status")
     assert response.json() == {"success": True, "enabled": False, "providers": [], "interval_seconds": module.SYNC_INTERVAL_SECONDS}
-

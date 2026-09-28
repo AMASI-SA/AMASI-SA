@@ -107,3 +107,41 @@ async def test_employee_diagnostic_no_cross_tenant_or_unbounded_metadata():
     assert "PRIVATE_" not in response.text
     assert len(response.json()["section_1_id_hits_by_collection"]["employees"]) == 1
 
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role,expected", [("owner", 200), ("employee", 403), ("admin", 403)])
+async def test_refund_repair_authority_precedes_mutation(monkeypatch, role, expected):
+    from fastapi import APIRouter
+    import bnpl.auto_sync_routes as module
+    db = AsyncMongoMockClient().offline
+    await db.users.insert_one({"id": "actor", "role": role})
+    mutation = AsyncMock(side_effect=RuntimeError("PRIVATE_DRIVER_TRACE /srv/private token=synthetic-only"))
+    monkeypatch.setattr(module, "_propagate_refunds_to_unified", mutation)
+    async def current():
+        return {"id": "actor", "role": "owner"}
+    app, router = FastAPI(), APIRouter()
+    module.attach_bnpl_auto_sync_routes(router, db=db, get_current_user=current)
+    app.include_router(router)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://offline.test") as client:
+        response = await client.post("/bnpl/auto-sync/fix-unified-refunds")
+    assert response.status_code == expected
+    assert "PRIVATE_" not in response.text
+    if expected == 200:
+        assert response.json() == {"success": False, "error": "operation_failed"}
+        mutation.assert_awaited_once_with(db, "actor", "tabby")
+    else:
+        mutation.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_employee_probe_failures_do_not_return_exception_details(monkeypatch):
+    import employee_lookup_diagnostic_routes as module
+    db = AsyncMongoMockClient().offline
+    await db.users.insert_one({"id": "owner-a", "role": "owner"})
+    monkeypatch.setattr(module, "_safe_find", AsyncMock(side_effect=RuntimeError("PRIVATE_DRIVER_TRACE")))
+    async with await employee_client(db, {"id": "owner-a"}) as client:
+        response = await client.get("/audit/employee-lookup?entity_id=target")
+    assert response.status_code == 200
+    assert "PRIVATE_" not in response.text
+    assert set(response.json()["probe_errors"]) == {"diagnostic_failed"}
+

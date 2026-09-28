@@ -36,6 +36,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+from security_public_errors import public_error
+
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
@@ -409,7 +411,7 @@ def attach_custom_app_routes(parent_router: APIRouter, db) -> None:
                     "created": up["created"], "items": items_count,
                 })
             except Exception as e:
-                results.append({"ok": False, "order_number": order_number, "error": str(e)})
+                results.append({"ok": False, "order_number": order_number, "error": public_error("order_ingest_failed")})
 
         ok_n = sum(1 for r in results if r["ok"])
         err_n = len(results) - ok_n

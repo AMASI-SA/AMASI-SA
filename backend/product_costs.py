@@ -40,6 +40,9 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Any, Optional
 
+from security_public_errors import public_error
+from security_sensitive_routes import require_product_permission
+
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field, model_validator
 
@@ -655,6 +658,7 @@ def _build_router(db, current_user_dep) -> APIRouter:
         ),
         user: dict = Depends(current_user_dep),
     ):
+        merchant_id = await require_product_permission(db, user, "products.cost.write")
         try:
             from openpyxl import load_workbook
         except ImportError:
@@ -670,7 +674,7 @@ def _build_router(db, current_user_dep) -> APIRouter:
             )
         except Exception as exc:
             raise HTTPException(status_code=400,
-                                detail=f"تعذر قراءة الملف: {exc}")
+                                detail=public_error("invalid_import_file"))
         try:
             ws = wb.active
             rows = []
@@ -739,7 +743,7 @@ def _build_router(db, current_user_dep) -> APIRouter:
             if h and h not in _MAPPED_HEADERS and i != idx_image:
                 meta_cols.append((i, headers_raw[i]))
 
-        uid = user["id"]
+        uid = merchant_id
         now = _now_iso()
         created = 0
         updated = 0
@@ -876,7 +880,7 @@ def _build_router(db, current_user_dep) -> APIRouter:
                     if product_id_norm:
                         reprocess_pids.add(product_id_norm)
             except Exception as exc:
-                errors.append({"row": row_num, "error": str(exc)[:200]})
+                errors.append({"row": row_num, "error": public_error("import_row_failed")})
 
         # Iteration 25: ONE targeted reprocess pass for all keys with real
         # cost — flips affected past orders from incomplete → complete.
