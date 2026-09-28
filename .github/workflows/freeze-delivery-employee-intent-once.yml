@@ -1,0 +1,72 @@
+name: Freeze combined delivery employee intent once
+
+on:
+  push:
+    branches:
+      - automation/freeze-delivery-employee-intent-20260928
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  freeze:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout reviewed-B target branch
+        uses: actions/checkout@v4
+        with:
+          ref: integration/delivery-employee-server-reviewed-b-20260928
+          fetch-depth: 0
+
+      - name: Verify target is exact source A
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "7375623bbad0cfc3627051ffa224a519af9c7791"
+          test "$(git rev-parse HEAD^{tree})" = "fcbb5a3b4732db962605a6522e699379e7428070"
+          test -z "$(git status --short)"
+
+      - name: Download exact governed intent artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/intent"
+          gh run download 36463939155             --repo AMASI-SA/AMASI-SA             --name release-v5-reviewed-intent-candidate             --dir "$RUNNER_TEMP/intent"
+          test -s "$RUNNER_TEMP/intent/release-intent-v5.json"
+          echo "5963f11f29c03a0590e38a13fc3cadc5b3cc1282f18669a062716180b71b07a2  $RUNNER_TEMP/intent/release-intent-v5.json" | sha256sum -c -
+
+      - name: Validate and freeze intent-only B
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - "$RUNNER_TEMP/intent/release-intent-v5.json" <<'PY'
+          import json, sys
+          p=json.load(open(sys.argv[1],encoding="utf-8"))
+          assert p["schema_version"] == 2
+          assert p["protocol_version"] == 5
+          assert p["source_git_sha"] == "7375623bbad0cfc3627051ffa224a519af9c7791"
+          assert p["source_base_git_sha"] == "a7bcb1626e2ad4defba2260d4a113417f91f3120"
+          assert p["branch"] == "hotfix/prod-snap-meta-final"
+          assert p["runtime_identity"]["release_id"] == "rg5-5e1fff990611f027e1ba8036e532edcd701bbe68a617ab4da866bcb9f3ccdf18"
+          PY
+          cp "$RUNNER_TEMP/intent/release-intent-v5.json" release/release-intent-v5.json
+          test "$(git diff --name-only)" = "release/release-intent-v5.json"
+          git diff --quiet 7375623bbad0cfc3627051ffa224a519af9c7791 -- . ':(exclude)release/release-intent-v5.json'
+          ! git diff --quiet 7375623bbad0cfc3627051ffa224a519af9c7791 -- release/release-intent-v5.json
+
+      - name: Commit exact intent-only B
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "ChatGPT Release Integrator"
+          git config user.email "noreply@openai.com"
+          git add release/release-intent-v5.json
+          git commit -m "chore(release): freeze combined server reviewed intent"
+          parent="$(git rev-parse HEAD^)"
+          test "$parent" = "7375623bbad0cfc3627051ffa224a519af9c7791"
+          test "$(git diff --name-only HEAD^ HEAD)" = "release/release-intent-v5.json"
+          git diff --quiet HEAD^ HEAD -- . ':(exclude)release/release-intent-v5.json'
+          git push origin HEAD:integration/delivery-employee-server-reviewed-b-20260928
