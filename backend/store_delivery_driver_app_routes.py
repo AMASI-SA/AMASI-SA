@@ -43,7 +43,6 @@ from store_delivery_payment_evidence_routes import (
     validate_receipt_reference,
 )
 from store_delivery_accounting import financial_cutover_is_active, post_delivery_journal
-from salla_integration.service import SallaError, call_salla
 
 DRIVER_EARNINGS = "store_delivery_driver_earnings"
 DRIVER_COLLECTIONS = "store_delivery_collections"
@@ -120,6 +119,34 @@ def _salla_order_id(order: dict[str, Any], assignment: dict[str, Any]) -> str:
     )
 
 
+class DriverSallaStatusError(RuntimeError):
+    def __init__(self, message: str, *, status_code: int = 502, needs_reauth: bool = False):
+        super().__init__(message)
+        self.status_code = status_code
+        self.needs_reauth = needs_reauth
+
+
+async def _call_salla(
+    db: Any,
+    user_id: str,
+    method: str,
+    path: str,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    # Lazy import keeps the focused Store Delivery test job purpose-bound and
+    # avoids loading the full Salla router/crypto stack merely to import this
+    # driver module.
+    from salla_integration.service import SallaError, call_salla
+    try:
+        return await call_salla(db, user_id, method, path, **kwargs)
+    except DriverSallaStatusError as exc:
+        raise DriverSallaStatusError(
+            str(exc),
+            status_code=exc.status_code,
+            needs_reauth=bool(exc.needs_reauth),
+        ) from exc
+
+
 async def _push_salla_delivery_status(
     db: Any,
     *,
@@ -132,14 +159,14 @@ async def _push_salla_delivery_status(
     if not salla_order_id:
         raise HTTPException(status_code=409, detail={"code": "salla_order_id_missing"})
     try:
-        await call_salla(
+        await _call_salla(
             db,
             user_id,
             "POST",
             f"/orders/{salla_order_id}/status",
             json={"slug": slug, "send_status_sms": False},
         )
-        readback = await call_salla(
+        readback = await _call_salla(
             db,
             user_id,
             "GET",
