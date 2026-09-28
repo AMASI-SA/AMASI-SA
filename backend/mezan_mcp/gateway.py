@@ -366,16 +366,15 @@ def make_mezan_mcp_router(
         try:
             payload = await invoke_tool(tools, tool_name, principal.tenant_id, arguments)
             result = _tool_result(payload)
-        except (KeyError, ValueError, LookupError) as exc:
+        except (KeyError, ValueError, LookupError):
             outcome = "rejected"
-            result = _tool_result({"error": str(exc)}, is_error=True)
-        except HTTPException:
-            outcome = "rejected"
-            raise
-        except Exception as exc:
+            result = _tool_result(
+                {"error": "The read-only diagnostic tool failed"}, is_error=True
+            )
+        except Exception:
             outcome = "failed"
             result = _tool_result(
-                {"error": "The read-only diagnostic tool failed", "error_type": type(exc).__name__},
+                {"error": "The read-only diagnostic tool failed"},
                 is_error=True,
             )
         finally:

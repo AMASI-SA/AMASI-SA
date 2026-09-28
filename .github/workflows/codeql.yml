@@ -7,6 +7,8 @@ on:
   pull_request:
     branches:
       - hotfix/prod-snap-meta-final
+      - chatgpt/mz2-ad-financial-accounts-opening-balances-20260922
+  workflow_dispatch:
   schedule:
     - cron: "23 2 * * 1"
 

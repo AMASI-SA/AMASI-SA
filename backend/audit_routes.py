@@ -29,6 +29,9 @@ Everything is READ-ONLY. The endpoint never modifies any data.
 """
 from __future__ import annotations
 
+from security_public_errors import public_error
+from security_sensitive_routes import require_security_owner
+
 from fastapi import APIRouter, Depends
 
 
@@ -894,6 +897,7 @@ def make_tabby_phase2_router(db, current_user):
 
     @router.get("/tabby-phase2")
     async def tabby_phase2(user: dict = Depends(current_user)):
+        user = await require_security_owner(db, user)
         from collections import defaultdict
         uid = user["id"]
         provider = "tabby"
@@ -1154,7 +1158,7 @@ def make_tabby_phase2_router(db, current_user):
             bnpl_balance = float(canon.get("balance") or 0)
             bnpl_components = canon.get("components") or {}
         except Exception as exc:  # noqa: BLE001
-            bnpl_components = {"error": str(exc)}
+            bnpl_components = {"error": public_error("diagnostic_failed")}
 
         current_balance_sum = round(
             sum(a["current_balance"] for a in tabby_accounts), 2)

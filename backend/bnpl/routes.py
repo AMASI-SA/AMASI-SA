@@ -15,6 +15,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+from security_public_errors import public_error
+from security_sensitive_routes import require_security_owner
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from auth import get_current_user_from_db
@@ -341,6 +344,7 @@ def attach_bnpl_routes(parent_router: APIRouter, db) -> None:
         the merchant knows whether to contact Tabby support or fix the
         key locally.
         """
+        user = await require_security_owner(db, user)
         uid = user["id"]
         secrets = await get_raw_secrets(db, uid, "tabby")
         masked = await get_settings(db, uid, "tabby")
@@ -369,7 +373,7 @@ def attach_bnpl_routes(parent_router: APIRouter, db) -> None:
             raw = await cli._get("/api/v2/payments", params={"limit": 10})  # noqa: SLF001
         except TabbyError as exc:
             report["ok"] = False
-            report["error"] = str(exc)
+            report["error"] = public_error("provider_operation_failed")
             report["diagnosis"] = (
                 f"Tabby rejected the request with status {exc.status}. "
                 "This is an authentication / authorization issue at "
@@ -419,7 +423,7 @@ def attach_bnpl_routes(parent_router: APIRouter, db) -> None:
                     "sample_dates": [p.get("created_at") for p in payments2[:10]],
                 }
             except TabbyError as exc:
-                report["with_date_filter"] = {"error": str(exc)}
+                report["with_date_filter"] = {"error": public_error("provider_operation_failed")}
 
         # ── Probe C: scan ALL Tabby statuses one-by-one to find hidden
         # payments (CREATED / REJECTED / EXPIRED don't show in default).

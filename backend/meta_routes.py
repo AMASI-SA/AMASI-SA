@@ -36,6 +36,9 @@ from datetime import datetime, timezone, timedelta, date as _date
 from typing import Optional, List
 
 import httpx
+from security_public_errors import public_error
+from security_sensitive_routes import require_security_owner
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
@@ -790,6 +793,7 @@ def attach_meta_routes(parent_router, db):
     # ── Iter-159l — Diagnose Meta billing API permissions ────────────────
     @router.get("/diagnose-billing-permissions")
     async def diagnose_billing_permissions(user: dict = Depends(current_user)):
+        user = await require_security_owner(db, user)
         conn = await _get_conn(user["id"])
         if not conn or not conn.get("access_token"):
             return {
@@ -828,12 +832,12 @@ def attach_meta_routes(parent_router, db):
                     checks.append({
                         "name": "صلاحيات التوكن (debug_token)",
                         "status": f"❌ HTTP {resp.status_code}",
-                        "detail": resp.text[:200],
+                        "detail": public_error("provider_operation_failed"),
                         "ok": False,
                     })
             except Exception as e:
                 checks.append({"name": "صلاحيات التوكن",
-                                "status": f"❌ خطأ: {e}", "ok": False})
+                                "status": public_error("diagnostic_failed"), "ok": False})
 
             # 2) List ad accounts (requires ads_read)
             try:
@@ -859,7 +863,7 @@ def attach_meta_routes(parent_router, db):
                         "name": "قراءة الحسابات الإعلانية",
                         "endpoint": "/me/adaccounts",
                         "status": f"❌ ممنوع (HTTP {resp.status_code})",
-                        "detail": resp.text[:200],
+                        "detail": public_error("provider_operation_failed"),
                         "ok": False,
                         "missing_scope": "ads_read",
                     })
@@ -871,7 +875,7 @@ def attach_meta_routes(parent_router, db):
                     })
             except Exception as e:
                 checks.append({"name": "قراءة الحسابات الإعلانية",
-                                "status": f"❌ خطأ: {e}", "ok": False})
+                                "status": public_error("diagnostic_failed"), "ok": False})
 
             # 3) Billing / spend cap fields (uses ads_management for some)
             if ad_account_id:
@@ -899,12 +903,12 @@ def attach_meta_routes(parent_router, db):
                         checks.append({
                             "name": "قراءة الرصيد والمصروف",
                             "status": f"❌ HTTP {resp.status_code}",
-                            "detail": resp.text[:200],
+                            "detail": public_error("provider_operation_failed"),
                             "ok": False,
                         })
                 except Exception as e:
                     checks.append({"name": "قراءة الرصيد والمصروف",
-                                    "status": f"❌ خطأ: {e}", "ok": False})
+                                    "status": public_error("diagnostic_failed"), "ok": False})
 
         # Build summary
         ads_read_ok = any(
